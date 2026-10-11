@@ -36,6 +36,15 @@ namespace
     return label;
   }
 
+  // Newer system colors are sent by selector, so these pins run on hosts that
+  // predate them; the fallback order restates the ruling's priority.
+  NSColor *hostColor(SEL selector, NSColor *fallback)
+  {
+    if ([NSColor respondsToSelector:selector])
+      return (NSColor *)[NSColor performSelector:selector];
+    return fallback;
+  }
+
   // A separate expectation table makes every generated vocabulary row require
   // an explicit pin when the vocabulary grows. No RGB conversion is permitted.
   NSColor *expected(TextColor color)
@@ -47,23 +56,23 @@ namespace
     case TEXT_COLOR_PRIMARY:
       return loka::macos::MacTextRoleColor();
     case TEXT_COLOR_SECONDARY:
-      return [NSColor secondaryLabelColor];
+      return hostColor(@selector(secondaryLabelColor), [NSColor disabledControlTextColor]);
     case TEXT_COLOR_BLACK:
       return [NSColor blackColor];
     case TEXT_COLOR_WHITE:
       return [NSColor whiteColor];
     case TEXT_COLOR_RED:
-      return [NSColor systemRedColor];
+      return hostColor(@selector(systemRedColor), [NSColor redColor]);
     case TEXT_COLOR_GREEN:
-      return [NSColor systemGreenColor];
+      return hostColor(@selector(systemGreenColor), [NSColor greenColor]);
     case TEXT_COLOR_BLUE:
-      return [NSColor systemBlueColor];
+      return hostColor(@selector(systemBlueColor), [NSColor blueColor]);
     case TEXT_COLOR_CYAN:
-      return [NSColor systemCyanColor];
+      return hostColor(@selector(systemCyanColor), hostColor(@selector(systemTealColor), [NSColor cyanColor]));
     case TEXT_COLOR_MAGENTA:
-      return [NSColor systemPurpleColor];
+      return hostColor(@selector(systemPurpleColor), [NSColor magentaColor]);
     case TEXT_COLOR_YELLOW:
-      return [NSColor systemYellowColor];
+      return hostColor(@selector(systemYellowColor), [NSColor yellowColor]);
     }
     return nil;
   }
@@ -166,8 +175,16 @@ namespace
         LOKA_VERIFY((Text("dynamic") + styles[i]).applyPropsToNode(&node));
         NSColor *installed = [label textColor];
         LOKA_VERIFY(installed == expected(styles[i].color_) || [installed isEqual:expected(styles[i].color_)]);
-        RGB light = resolve(installed, [NSAppearance appearanceNamed:NSAppearanceNameAqua], legacy);
-        RGB dark = resolve(installed, [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua], legacy);
+        // DarkAqua arrived in 10.14; the name is spelled out so older hosts
+        // reach the skip instead of a missing symbol.
+        NSAppearance *darkAqua = [NSAppearance appearanceNamed:@"NSAppearanceNameDarkAqua"];
+        if (!darkAqua)
+        {
+          std::printf("[skip] %s light/dark resolution: the host has no dark appearance (10.14+)\n", names[i]);
+          continue;
+        }
+        RGB light = resolve(installed, [NSAppearance appearanceNamed:@"NSAppearanceNameAqua"], legacy);
+        RGB dark = resolve(installed, darkAqua, legacy);
         std::printf("[dynamic] %s %s light=(%.6f %.6f %.6f %.6f) dark=(%.6f %.6f %.6f %.6f)\n",
                     names[i],
                     legacy ? "legacy" : "drawing",
@@ -224,14 +241,17 @@ void testMacTextColorTable()
 void testMacTextColorFallbacks()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  // Positive controls establish selector visibility before injecting refusal.
-  LOKA_VERIFY([NSColor respondsToSelector:@selector(systemCyanColor)]);
-  LOKA_VERIFY([NSColor respondsToSelector:@selector(systemTealColor)]);
+  // The cyan-only refusal needs both newer selectors present on the host.
+  if ([NSColor respondsToSelector:@selector(systemCyanColor)] &&
+      [NSColor respondsToSelector:@selector(systemTealColor)])
   {
+    NSColor *teal = (NSColor *)[NSColor performSelector:@selector(systemTealColor)];
     LegacyColors legacy(true);
     LOKA_VERIFY(![NSColor respondsToSelector:@selector(systemCyanColor)]);
-    verifyAnswer(TEXT_COLOR_CYAN, [NSColor systemTealColor]);
+    verifyAnswer(TEXT_COLOR_CYAN, teal);
   }
+  else
+    std::printf("[skip] cyan-only refusal: the host lacks systemCyanColor (macOS 12) or systemTealColor (10.12)\n");
   {
     LegacyColors legacy(false);
     LOKA_VERIFY(![NSColor respondsToSelector:@selector(systemTealColor)]);
@@ -244,8 +264,7 @@ void testMacTextColorFallbacks()
     verifyAnswer(TEXT_COLOR_CYAN, [NSColor cyanColor]);
     verifyAnswer(TEXT_COLOR_MAGENTA, [NSColor magentaColor]);
   }
-  LOKA_VERIFY([NSColor respondsToSelector:@selector(systemCyanColor)]);
-  verifyAnswer(TEXT_COLOR_CYAN, [NSColor systemCyanColor]);
+  verifyAnswer(TEXT_COLOR_CYAN, expected(TEXT_COLOR_CYAN));
   [pool drain];
 }
 
