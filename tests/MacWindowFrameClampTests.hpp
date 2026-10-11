@@ -3,4 +3,6 @@
 
 void testMacWindowDeclaredFrameStaysInsideVisibleFrame();
 
+void testMacWindowEditedMarkProjectsDocumentEdited();
+
 #endif

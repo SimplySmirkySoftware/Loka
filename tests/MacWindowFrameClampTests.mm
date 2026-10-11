@@ -7,6 +7,9 @@
 #include "MacScenePlatformController.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "testing/MacWindowTestAccess.hpp"
+#include "testing/app/WindowTestAccess.hpp"
+#include "core/Operation.hpp"
+#include "core/util/StateTrackerGuard.hpp"
 
 namespace
 {
@@ -101,6 +104,37 @@ void testMacWindowDeclaredFrameStaysInsideVisibleFrame()
     verifyPlacedFrame(window, expectedContent.size);
     LOKA_VERIFY(window.nativeFrame().get().width < width);
     LOKA_VERIFY(window.nativeFrame().get().height < height);
+  }
+  [pool drain];
+}
+
+void testMacWindowEditedMarkProjectsDocumentEdited()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  {
+    NullPlatformContext context;
+    WindowProps props;
+    props.frame(40, 40, 257, 163).visible(true);
+    MacWindow window(&context, props);
+    NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+    LOKA_VERIFY(native != nil);
+
+    for (int pass = 0; pass < 2; ++pass)
+    {
+      const bool edited = pass == 0;
+      {
+        loka::core::Operation turn;
+        {
+          loka::core::StateTrackerGuard guard(window.getTracker());
+          loka::app::testing::WindowTestAccess::applyDocumentFacts(
+              window, loka::app::DocumentFacts(loka::core::String("Doc"), edited));
+        }
+        turn.settle();
+        turn.close();
+      }
+      LOKA_VERIFY([native isDocumentEdited] == (edited ? YES : NO));
+    }
   }
   [pool drain];
 }

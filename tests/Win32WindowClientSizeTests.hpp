@@ -13,4 +13,6 @@ void testWin32DisplayScaleProjectsLogicalEdges();
 void testWin32DpiChangeAcceptsSuggestedWindowRect();
 void testWin32WindowFrameIsClampedToWorkArea();
 
+void testWin32WindowEditedMarkPrefixesTheNativeTitle();
+
 #endif // LOKA_WIN32_WINDOW_CLIENT_SIZE_TESTS_HPP
