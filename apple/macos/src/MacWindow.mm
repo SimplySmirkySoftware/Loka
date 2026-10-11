@@ -570,10 +570,14 @@ void MacWindow::handleWindowWillClose()
     return;
   }
   closing_ = true;
-  App *app = app_;
+  MacApp *app = app_;
   NSWindow *window = (NSWindow *)window_;
   id contentView = (id)contentView_;
   id delegate = (id)delegate_;
+  // Revoke the menu borrow while its route exists. The deferred Scene teardown
+  // finds the attachment through the delegate cleared below (#1242).
+  if (app)
+    app->menuAttachment().releaseFrom(this->scene());
   if (window)
   {
     [window setDelegate:nil];
