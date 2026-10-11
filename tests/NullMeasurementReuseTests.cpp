@@ -163,8 +163,8 @@ void testNullMeasurementInputPublications()
   }
   plain.layout(&platform, state);
   LOKA_VERIFY(NullTextMeasurementAccess::builds(*p) == 5);
-  std::fprintf(stderr, "color-only style publication: measurement builds 4 -> %u\n",
-               NullTextMeasurementAccess::builds(*p));
+  std::fprintf(
+      stderr, "color-only style publication: measurement builds 4 -> %u\n", NullTextMeasurementAccess::builds(*p));
   owner.clearObservedStateEntries();
 }
 

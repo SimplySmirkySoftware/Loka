@@ -111,19 +111,33 @@ def generate_cpp(vocab):
         "#define LOKA_APP_STYLE_STYLE_VOCAB_NAMES_HPP",
         "",
         "/** Opt-in decoder names; include Style.hpp before requesting this section. */",
-        "namespace loka { namespace app { namespace detail {",
+        "namespace loka",
+        "{",
+        "  namespace app",
+        "  {",
+        "    namespace detail",
+        "    {",
     ]
-    for kind, enum, prefix in ENUMS:
+    for index, (kind, enum, prefix) in enumerate(ENUMS):
+        if index:
+            lines.append("")
         lines += [
-            "  struct %sName" % enum,
-            "  {", "    const char *name;", "    %s value;" % enum, "  };",
-            "  static const %sName StyleVocabulary%s[] = {" % (enum, kind.title()),
+            "      struct %sName" % enum,
+            "      {", "        const char *name;", "        %s value;" % enum, "      };",
+            "      static const %sName StyleVocabulary%s[] = {" % (enum, kind.title()),
         ]
         for key in vocab[kind]:
             value = "%s_%s" % (prefix, key)
-            lines.append('    {"%s", %s},' % (key.lower(), value))
-        lines += ["  };", ""]
-    lines += ["} } } // namespace loka::app::detail", "", "#endif // generated vocabulary names", ""]
+            lines.append('          {"%s", %s},' % (key.lower(), value))
+        lines.append("      };")
+    lines += [
+        "    } // namespace detail",
+        "  } // namespace app",
+        "} // namespace loka",
+        "",
+        "#endif // generated vocabulary names",
+        "",
+    ]
     return "\n".join(lines)
 
 

@@ -1216,7 +1216,7 @@ namespace
       smirkycard::ScriptRuntime runtime;
       loka::core::String error;
       const std::string source = std::string("card('first',class{compose(){return Text('a',{color:'")
-          + detail::StyleVocabularyColors[i].name + "',weight:'bold'}).TEST_ID('Color')}});";
+                                 + detail::StyleVocabularyColors[i].name + "',weight:'bold'}).TEST_ID('Color')}});";
       LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
       NullPlatformContext context;
       NullScenePlatformController platform;
@@ -1435,9 +1435,11 @@ namespace
       {
         smirkycard::ScriptRuntime runtime;
         loka::core::String result, error;
-        const std::string immediate = std::string("(()=>{try{Text('a',") + styles[i]
+        const std::string immediate =
+            std::string("(()=>{try{Text('a',") + styles[i]
             + ")}catch(e){return e instanceof TypeError && e.message==='Invalid Text style value'}return false})()";
-        LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Utf8(immediate.c_str(), immediate.size()), result, error));
+        LOKA_VERIFY(
+            runtime.evaluateToString(loka::core::String::Utf8(immediate.c_str(), immediate.size()), result, error));
         LOKA_VERIFY(result.equals(loka::core::String::Literal("true")));
       }
     }

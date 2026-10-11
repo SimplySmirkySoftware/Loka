@@ -1048,8 +1048,7 @@ namespace smirkycard
     }
   } // namespace
 
-  template <typename Row, size_t N>
-  const Row *findStyleName(const char *name, size_t length, const Row (&values)[N])
+  template <typename Row, size_t N> const Row *findStyleName(const char *name, size_t length, const Row (&values)[N])
   {
     for (size_t i = 0; name && i < N; ++i)
       if (length == strlen(values[i].name) && !memcmp(name, values[i].name, length))
@@ -1115,8 +1114,7 @@ namespace smirkycard
         }
         if (weight)
         {
-          const detail::TextWeightName *entry =
-              findStyleName(valueName, valueLength, detail::StyleVocabularyWeights);
+          const detail::TextWeightName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyWeights);
           if (entry)
           {
             result.weight(entry->value);
@@ -1125,8 +1123,7 @@ namespace smirkycard
         }
         else if (color)
         {
-          const detail::TextColorName *entry =
-              findStyleName(valueName, valueLength, detail::StyleVocabularyColors);
+          const detail::TextColorName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyColors);
           if (entry)
           {
             result.color(entry->value);
@@ -1181,8 +1178,7 @@ namespace smirkycard
       bool accepted = false;
       if (isAlign)
       {
-        const detail::TextAlignName *entry =
-            findStyleName(name, length, detail::StyleVocabularyAlign);
+        const detail::TextAlignName *entry = findStyleName(name, length, detail::StyleVocabularyAlign);
         if (entry)
         {
           result.align(entry->value);
@@ -1191,8 +1187,7 @@ namespace smirkycard
       }
       else if (isWrap)
       {
-        const detail::TextWrapName *entry =
-            findStyleName(name, length, detail::StyleVocabularyWrap);
+        const detail::TextWrapName *entry = findStyleName(name, length, detail::StyleVocabularyWrap);
         if (entry)
         {
           result.wrap(entry->value);
@@ -1201,8 +1196,7 @@ namespace smirkycard
       }
       else if (isTruncation)
       {
-        const detail::TextTruncationName *entry =
-            findStyleName(name, length, detail::StyleVocabularyTruncation);
+        const detail::TextTruncationName *entry = findStyleName(name, length, detail::StyleVocabularyTruncation);
         if (entry)
         {
           result.truncation(entry->value);
