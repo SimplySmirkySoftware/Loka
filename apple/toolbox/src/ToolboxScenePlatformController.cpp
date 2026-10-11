@@ -414,7 +414,9 @@ ToolboxScenePlatformController::ToolboxScenePlatformController(ToolboxWindow *wi
       debugStats_(),
       activeLayoutBoundary_(0)
 {
-  RegisterToolboxPlatformLayoutHandlers(this->layoutHandlerRegistry_);
+  const bool layoutHandlersRegistered = RegisterToolboxPlatformLayoutHandlers(this->layoutHandlerRegistry_);
+  (void)layoutHandlersRegistered;
+  assert(layoutHandlersRegistered && "Toolbox layout handler registration failed at boot");
   const bool builtInsRegistered = RegisterToolboxBuiltInSupport(*this);
   (void)builtInsRegistered;
   // A refused HandlerEntry allocation would leave that node kind silently

@@ -55,6 +55,11 @@ void SectRgn(RgnHandle, RgnHandle, RgnHandle);
 void SetClip(RgnHandle);
 bool RectInRgn(const Rect *, RgnHandle);
 void EraseRect(const Rect *);
+bool EqualRect(const Rect *, const Rect *);
+bool SectRect(const Rect *, const Rect *, Rect *);
+void SetEmptyRgn(RgnHandle);
+void UnionRgn(RgnHandle, RgnHandle, RgnHandle);
+void PaintRect(const Rect *);
 void BackColor(long);
 void ClipRect(const Rect *);
 struct Picture
