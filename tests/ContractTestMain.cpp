@@ -88,6 +88,7 @@
 #ifdef __APPLE__
 #include "MacWindowAdmissionTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
+#include "MacWindowResizeTests.hpp"
 #endif
 #include "WindowFrameStateTests.hpp"
 #include "WindowIdleTests.hpp"

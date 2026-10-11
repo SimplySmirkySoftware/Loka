@@ -85,7 +85,7 @@ void MacApp::run()
   }
 
   App::run();
-  if (this->group_ && this->group_->getComponents().size() == 0)
+  if (this->windowlessAfterLaunch())
     return;
   mach_timebase_info(&idleTimebase_);
   lastIdleTick_ = mach_absolute_time();

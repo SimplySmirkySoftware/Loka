@@ -36,8 +36,9 @@ namespace
     }
     const loka::macos::MacProjection projection(
         NativeAccess::contentView(window), loka::macos::DefaultRailMetrics());
-    const loka::core::Frame actual(static_cast<int>(content.origin.x),
-                                   static_cast<int>(top - (content.origin.y + content.size.height)),
+    // The origin places the outer frame, the exact inverse of the intent (#526).
+    const loka::core::Frame actual(static_cast<int>(frame.origin.x),
+                                   static_cast<int>(top - (frame.origin.y + frame.size.height)),
                                    projection.clientCapacityToLu(content.size.width),
                                    projection.clientCapacityToLu(content.size.height));
     LOKA_VERIFY(window.nativeFrame().get() == actual);

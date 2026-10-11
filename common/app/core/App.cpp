@@ -72,14 +72,11 @@ void App::run()
       if (window && !this->windowAdopted(window))
         this->bootstrapWindowRefused(window);
     }
-    // A launch factory may open another document; that entry waits for the
-    // next walk. Walk until one attempts nothing before reading the group, so
-    // a refused first document with a pending second cannot read as windowless.
-    // Every attempted id is adopted or dropped (A′), so it is not attempted again.
-    while (this->admitDocumentWindows(ADOPT_AT_LAUNCH) != 0)
-    {
-    }
-    if (this->group_->getComponents().size() == 0)
+    // Launch walks the seeded documents once. A document a launch factory
+    // opened stays pending for the runtime admission clock, so the walk count
+    // needs no bound and a refused seed with a pending child is not windowless.
+    this->admitDocumentWindows(ADOPT_AT_LAUNCH);
+    if (this->windowlessAfterLaunch())
       this->bootstrapWindowless();
   }
   projectInitialVisibilityChunks();
@@ -113,6 +110,13 @@ unsigned short App::admitDocumentWindows(AdoptionPhase phase)
     if (!window)
     {
       roster.windowGone(id);
+      // A runtime refusal that empties the roster beside an empty group is the
+      // last window gone: the same decision requestWindowClose takes for a
+      // close. Launch answers through windowlessAfterLaunch instead, because
+      // quit() before a rail's loop exists is a no-op on macOS and Toolbox.
+      if (phase == ADOPT_RUNNING && quitWhenLastWindowClosed_
+          && this->group_->getComponents().size() == 0 && roster.count() == 0)
+        this->quit();
       continue;
     }
     this->group_->adopt(window, id);
@@ -252,6 +256,12 @@ void App::projectInitialVisibilityChunks()
       }
     }
   }
+}
+
+bool App::windowlessAfterLaunch() const
+{
+  return this->group_ && this->group_->getComponents().size() == 0
+         && (!this->windowSeat_ || this->windowSeat_->roster().count() == 0);
 }
 
 bool App::hasPendingWindowAdmission() const
