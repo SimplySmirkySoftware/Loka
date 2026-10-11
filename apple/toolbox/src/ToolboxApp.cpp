@@ -189,6 +189,11 @@ void ToolboxApp::bootstrapWindowRefused(Window *)
   loka::toolbox::QuitForOutOfMemory();
 }
 
+void ToolboxApp::bootstrapWindowless()
+{
+  loka::toolbox::QuitForOutOfMemory();
+}
+
 void ToolboxApp::run()
 {
   InitGraf(&qd.thePort);

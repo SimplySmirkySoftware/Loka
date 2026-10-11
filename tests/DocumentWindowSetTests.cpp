@@ -145,6 +145,7 @@ namespace
     DocumentRoster<Document, 4> roster;
     RootFacts roots[4];
     int factories;
+    ItemId factoryIds[16];
     int refuseValue;
     bool reenter;
     bool staticFirst;
@@ -163,10 +164,11 @@ namespace
         c << WindowDef(WindowProps());
       c << DocumentWindows(this->roster, &Config::documentWindow, this);
     }
-    static WindowProps documentWindow(const Document &entry, void *data)
+    static WindowProps documentWindow(ItemId id, const Document &entry, void *data)
     {
       Config &config = *static_cast<Config *>(data);
-      ++config.factories;
+      LOKA_VERIFY(config.factories < 16);
+      config.factoryIds[config.factories++] = id;
       const int value = entry.value;
       if (config.reenter)
       {
@@ -176,9 +178,9 @@ namespace
       }
       if (!config.closeDuringFactory.isNone())
       {
-        const ItemId id = config.closeDuringFactory;
+        const ItemId closing = config.closeDuringFactory;
         config.closeDuringFactory = ItemId::none();
-        LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+        LOKA_VERIFY(config.roster.close(closing) == EDIT_OK);
       }
       WindowProps props;
       props.scene(new Scene(BoundaryDefinition<DocumentProps, DocumentRoot>(DocumentProps(config.roots[value]))));
@@ -187,10 +189,23 @@ namespace
       return props;
     }
   };
+  class StaticWindowConfig : public AppConfigurable
+  {
+  public:
+    explicit StaticWindowConfig(PlatformContext &context) : AppConfigurable(&context) {}
+    virtual void compose(AppComposition &c) { c << WindowDef(WindowProps()); }
+  };
+  class QuittingNullApp : public NullApp
+  {
+  public:
+    explicit QuittingNullApp(AppConfigurable &config) : NullApp(&config) {}
+  protected:
+    virtual void bootstrapWindowless() { App::bootstrapWindowless(); }
+  };
   class TestApp : public NullApp
   {
   public:
-    explicit TestApp(Config &config) : NullApp(&config) {}
+    explicit TestApp(AppConfigurable &config) : NullApp(&config) {}
     using App::admitAndApplyWindows;
     using App::reclaimWindows;
     using App::hasPendingWindowAdmission;
@@ -215,6 +230,21 @@ namespace
       return false;
     }
   };
+}
+
+// Mutation: pass ItemId::none() to the factory instead of the row id.
+void testDocumentWindowFactoryReceivesTheDocumentId()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId id = config.roster.open(Document(0));
+  app.tail();
+  LOKA_VERIFY(config.factories == 1);
+  LOKA_VERIFY(config.factoryIds[0] == id);
+  const Document *entry = config.roster.find(config.factoryIds[0]);
+  LOKA_VERIFY(entry && entry == config.roster.find(id) && entry->value == 0);
 }
 
 // Pin 1 mutation: skip the runtime walk.
@@ -619,4 +649,109 @@ void testDocumentWindowCloseAllAndReopenInOneTurn()
   for (int i = 0; i < 4; ++i)
     LOKA_VERIFY(app.window(newIds[i]) && !app.window(oldIds[i]));
   LOKA_VERIFY(!app.quitRequested() && config.factories == 8);
+}
+
+// c2 pin 1 mutation: remove the unconditional launch door from App::run.
+void testBootstrapWithEveryStaticWindowRefusedReportsWindowless()
+{
+  TrackingContext context;
+  StaticWindowConfig config(context);
+  TestApp app(config);
+  context.refuseNextCreate = true;
+  app.run();
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
+  LOKA_VERIFY(app.bootstrapWindowlessReported());
+  LOKA_VERIFY(app.bootstrapRefusedWindows().empty());
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// c2 pin 2 mutation: move the launch check behind the seat/key guard.
+// This pin stays green while pin 1 goes red: a no-seat launch must also report.
+void testBootstrapWithTheSeededDocumentRefusedReportsWindowless()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  config.refuseValue = 0;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
+  LOKA_VERIFY(config.roster.count() == 0);
+  LOKA_VERIFY(app.bootstrapWindowlessReported());
+  LOKA_VERIFY(app.bootstrapRefusedWindows().empty());
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// c2 pin 3 characterization: a successful launch does not report windowless.
+void testBootstrapWithOneWindowDoesNotReportWindowless()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(app.group().getComponents().size() == 1);
+  LOKA_VERIFY(!app.bootstrapWindowlessReported());
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// c2 pin 3 characterization: the Null record leaves runtime-open fixtures usable.
+void testBootstrapWithAnEmptyRosterReportsWindowlessAndNullRecords()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
+  LOKA_VERIFY(app.bootstrapWindowlessReported());
+  LOKA_VERIFY(!app.quitRequested());
+  const ItemId id = config.roster.open(Document(0));
+  LOKA_VERIFY(!id.isNone());
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(id));
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// c2 pin 4 mutation: empty the default bootstrapWindowless body.
+void testBootstrapWindowlessDefaultQuits()
+{
+  TrackingContext context;
+  Config config(context);
+  QuittingNullApp app(config);
+  app.run();
+  LOKA_VERIFY(app.quitRequested());
+}
+
+// c2 pin 5 characterization: refused adoption retains a row at launch.
+void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  RefusingNullApp app(config);
+  app.refuseAt = 1;
+  app.run();
+  LOKA_VERIFY(app.refused && app.bootstrapRefusedWindows().size() == 1);
+  LOKA_VERIFY(app.bootstrapRefusedWindows()[0] == app.refused);
+  LOKA_VERIFY(app.group().getComponents().size() == 1);
+  LOKA_VERIFY(app.window(config.initial) == app.refused);
+  LOKA_VERIFY(!app.bootstrapWindowlessReported());
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// c2 pin 7 mutation: walk once at launch instead of until a walk creates nothing.
+void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  config.reenter = true;
+  config.refuseValue = 0;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(config.factories == 2);
+  LOKA_VERIFY(!config.roster.find(config.initial) && config.roster.find(config.reentrant));
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(config.reentrant));
+  LOKA_VERIFY(!app.bootstrapWindowlessReported() && !app.quitRequested());
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
 }

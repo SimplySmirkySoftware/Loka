@@ -1,6 +1,7 @@
 #ifndef LOKA_DOCUMENT_WINDOW_SET_TESTS_HPP
 #define LOKA_DOCUMENT_WINDOW_SET_TESTS_HPP
 
+void testDocumentWindowFactoryReceivesTheDocumentId();
 void testDocumentWindowOpenAddsKeyedRow();
 void testDocumentWindowExistingRootDoesNotRecompose();
 void testDocumentWindowCreateRefusalDropsDocument();
@@ -21,5 +22,13 @@ void testDocumentWindowCloseThenOpenInOneTurnDoesNotQuit();
 void testDocumentWindowCloseAfterNativeCloseIsNotFound();
 void testDocumentWindowCloseDuringWalkTakesNextWalk();
 void testDocumentWindowCloseAllAndReopenInOneTurn();
+
+void testBootstrapWithEveryStaticWindowRefusedReportsWindowless();
+void testBootstrapWithTheSeededDocumentRefusedReportsWindowless();
+void testBootstrapWithOneWindowDoesNotReportWindowless();
+void testBootstrapWithAnEmptyRosterReportsWindowlessAndNullRecords();
+void testBootstrapWindowlessDefaultQuits();
+void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless();
+void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless();
 
 #endif

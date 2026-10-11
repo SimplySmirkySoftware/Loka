@@ -72,7 +72,15 @@ void App::run()
       if (window && !this->windowAdopted(window))
         this->bootstrapWindowRefused(window);
     }
-    this->admitDocumentWindows(ADOPT_AT_LAUNCH);
+    // A launch factory may open another document; that entry waits for the
+    // next walk. Walk until one attempts nothing before reading the group, so
+    // a refused first document with a pending second cannot read as windowless.
+    // Every attempted id is adopted or dropped (A′), so it is not attempted again.
+    while (this->admitDocumentWindows(ADOPT_AT_LAUNCH) != 0)
+    {
+    }
+    if (this->group_->getComponents().size() == 0)
+      this->bootstrapWindowless();
   }
   projectInitialVisibilityChunks();
   this->projectMenuSources();
@@ -82,10 +90,10 @@ void App::run()
     pass, every macOS flush tick). When the revision moved, (a) walks desired x
     group rows and (b) walks group rows x desired once per stale row plus one
     final full scan; both over this App's group and its own seat's desired copy. */
-void App::admitDocumentWindows(AdoptionPhase phase)
+unsigned short App::admitDocumentWindows(AdoptionPhase phase)
 {
   if (!this->windowSeat_ || this->windowSeat_->key().matches())
-    return;
+    return 0;
   loka::app::WindowSeat &seat = *this->windowSeat_;
   loka::app::DocumentRosterBase &roster = seat.roster();
   const loka::core::ListRevision start = roster.revision().get();
@@ -93,12 +101,14 @@ void App::admitDocumentWindows(AdoptionPhase phase)
   // stable and commit only its starting revision, leaving later edits pending.
   const unsigned short n = seat.snapshotDesired();
   this->group_->reserve(n);
+  unsigned short attempted = 0;
   // (a) increase before decrease, so replacing the last document cannot quit.
   for (unsigned short i = 0; i < n; ++i)
   {
     const loka::core::ItemId id = seat.desiredAt(i);
     if (this->group_->find(id))
       continue;
+    ++attempted;
     Window *window = seat.createWindow(id, this->config_->getPlatformContext());
     if (!window)
     {
@@ -152,6 +162,7 @@ void App::admitDocumentWindows(AdoptionPhase phase)
     (void)key;
   }
   seat.key_ = loka::app::scene::KeySnapshot<loka::core::ListRevision>(&roster.revision(), start);
+  return attempted;
 }
 
 bool App::windowAdopted(Window *)
@@ -161,6 +172,11 @@ bool App::windowAdopted(Window *)
 
 void App::bootstrapWindowRefused(Window *)
 {
+}
+
+void App::bootstrapWindowless()
+{
+  this->quit();
 }
 
 loka::app::IdlePolicy App::idlePolicy() const
