@@ -434,7 +434,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     case WM_CTLCOLORSTATIC:
     {
       return reinterpret_cast<LRESULT>(
-          loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam)));
+          loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
     }
     case WM_ERASEBKGND:
       Win32ScenePlatformController::noteNativePaint(hwnd, Win32ScenePlatformController::NATIVE_PAINT_ROOT, true);

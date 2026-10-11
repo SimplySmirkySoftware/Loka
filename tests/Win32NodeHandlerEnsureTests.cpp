@@ -1389,3 +1389,62 @@ void testWin32NaturalWidthDirectRow()
   }
   LOKA_VERIFY(DestroyWindow(root));
 }
+
+void testWin32AttributedTextInksAndAdditivity()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    HDC source = GetDC(root);
+    LOKA_VERIFY(source != NULL);
+    HDC dc = CreateCompatibleDC(source);
+    HBITMAP bitmap = CreateCompatibleBitmap(source, 400, 60);
+    LOKA_VERIFY(dc && bitmap);
+    HGDIOBJ previous = SelectObject(dc, bitmap);
+    LOKA_VERIFY(previous && previous != HGDI_ERROR);
+    const RECT rect = {0, 0, 400, 60};
+    LOKA_VERIFY(FillRect(dc, &rect, GetSysColorBrush(COLOR_BTNFACE)));
+    const COLORREF sentinel = RGB(1, 2, 3);
+    SetTextColor(dc, sentinel);
+    Win32AttributedTextTable table;
+    const TextStyle font = FontSize<24>();
+    const AttributedString runs = Styled("MMMM", font + Red) + Styled("MMMM", font) + Styled("MMMM", font + Blue);
+    LOKA_VERIFY(table.build(runs, BlockStyle(), 400, dc, controller));
+    LOKA_VERIFY(table.draw(dc, rect, BlockStyle()));
+    LOKA_VERIFY(GetTextColor(dc) == sentinel);
+    const int runWidth = measureSpan(root, controller.textFont(font), L"MMMM", 4);
+    const COLORREF inks[] = {RGB(0xC4, 0x2B, 0x1C), GetSysColor(COLOR_BTNTEXT), RGB(0x0F, 0x6C, 0xBD)};
+    for (int run = 0; run < 3; ++run)
+    {
+      int count = 0;
+      for (int y = 0; y < table.height(); ++y)
+        for (int x = run * runWidth; x < (run + 1) * runWidth; ++x)
+          if (GetPixel(dc, x, y) == inks[run])
+            ++count;
+      std::printf("AttributedText run %d ink pixels=%d\n", run, count);
+      LOKA_VERIFY(count > 0);
+    }
+    Win32AttributedTextTable split, uniform;
+    const AttributedString splitValue = Styled("AV", Red) + Styled("AWAY", TextStyle());
+    const AttributedString uniformValue = Styled("AVAWAY", TextStyle());
+    LOKA_VERIFY(split.build(splitValue, BlockStyle(), 400, dc, controller));
+    LOKA_VERIFY(uniform.build(uniformValue, BlockStyle(), 400, dc, controller));
+    std::printf("GDI color-only additivity: split=%d uniform=%d\n", split.width(), uniform.width());
+    LOKA_VERIFY(split.width() == uniform.width());
+    const int narrow = measureSpan(root, controller.displayFont(), L"AVA", 3);
+    const BlockStyle wrap = BlockStyle().wrap(TEXT_WRAP_CHAR);
+    LOKA_VERIFY(split.build(splitValue, wrap, narrow, dc, controller));
+    LOKA_VERIFY(uniform.build(uniformValue, wrap, narrow, dc, controller));
+    std::wstring splitLines, uniformLines;
+    LOKA_VERIFY(split.joinLines(splitLines));
+    LOKA_VERIFY(uniform.joinLines(uniformLines));
+    LOKA_VERIFY(splitLines.find(L'\n') != std::wstring::npos);
+    LOKA_VERIFY(splitLines == uniformLines);
+    SelectObject(dc, previous);
+    DeleteObject(bitmap);
+    DeleteDC(dc);
+    ReleaseDC(root, source);
+  }
+  DestroyWindow(root);
+}

@@ -126,3 +126,7 @@ LOKA_TEST(testWin32WindowAndViewportGroundRoles)
 LOKA_TEST(testWin32CellGroundAndTextRoles)
 LOKA_TEST(testWin32RectSurfaceGroundAndSpriteRoles)
 LOKA_TEST(testWin32LiveGroundLegibility)
+
+LOKA_TEST(testWin32StaticTextInks)
+LOKA_TEST(testWin32StaticTextColorChangeResidue)
+LOKA_TEST(testWin32AttributedTextInksAndAdditivity)

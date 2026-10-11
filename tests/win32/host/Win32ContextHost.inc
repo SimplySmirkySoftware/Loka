@@ -121,8 +121,15 @@ BOOL IsRectEmpty(const RECT *r)
 {
   return r->right <= r->left || r->bottom <= r->top;
 }
+namespace win32_host
+{
+  bool refuseProperty = false;
+  int colorInvalidations = 0;
+  std::vector<DirtySubtree> dirtySubtrees;
+} // namespace win32_host
 BOOL InvalidateRect(HWND, const RECT *, BOOL)
 {
+  ++win32_host::colorInvalidations;
   return TRUE;
 }
 BOOL ShowWindow(HWND, int)
@@ -329,6 +336,7 @@ HWND Win32ScenePlatformController::createNativeChildWindow(DWORD,
 void Win32ScenePlatformController::queueNativeRetirement(HWND h)
 {
   win32_host::windows.erase(std::find(win32_host::windows.begin(), win32_host::windows.end(), h));
+  LOKA_VERIFY(GetPropW(h, L"Loka.Text.Color") == 0);
   delete h;
 }
 namespace loka
@@ -347,3 +355,26 @@ namespace loka
     }
   } // namespace win32
 } // namespace loka
+
+BOOL SetPropW(HWND hwnd, LPCWSTR name, void *value)
+{
+  if (win32_host::refuseProperty)
+    return FALSE;
+  hwnd->properties[name] = value;
+  return TRUE;
+}
+void *GetPropW(HWND hwnd, LPCWSTR name)
+{
+  return hwnd ? hwnd->properties[name] : 0;
+}
+void *RemovePropW(HWND hwnd, LPCWSTR name)
+{
+  void *old = GetPropW(hwnd, name);
+  if (hwnd)
+    hwnd->properties.erase(name);
+  return old;
+}
+COLORREF GetTextColor(HDC dc)
+{
+  return dc->textColor;
+}

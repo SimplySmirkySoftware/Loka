@@ -1,4 +1,8 @@
 #include "Win32TextHost.hpp"
+#include "Win32PaintGround.hpp"
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
 #include "context/Win32AttributedTextTable.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LokaAllocFailure.hpp"
@@ -76,7 +80,7 @@ int SetBkMode(HDC dc, int mode)
 COLORREF GetSysColor(int index)
 {
   // Distinct test-only roles discriminate a wrong index, unlike light themes.
-  LOKA_VERIFY(index == COLOR_BTNTEXT || index == COLOR_WINDOWTEXT);
+  LOKA_VERIFY(index == COLOR_BTNTEXT || index == COLOR_WINDOWTEXT || index == COLOR_GRAYTEXT);
   return index == COLOR_BTNTEXT ? 0x123456 : 0x654321;
 }
 COLORREF SetTextColor(HDC dc, COLORREF color)
@@ -101,6 +105,20 @@ BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *, const WCHAR *te
   return TRUE;
 }
 #include "Win32MeasurementPins.inc"
+namespace loka
+{
+  namespace testing
+  {
+    class Win32TextColorAccess
+    {
+    public:
+      static bool applyStyle(Win32TextContext &context)
+      {
+        return context.applyStyle();
+      }
+    };
+  } // namespace testing
+} // namespace loka
 
 static void pinPlainWrappedLines()
 {
@@ -145,6 +163,10 @@ static void pinPlainWrappedLines()
   context->layout(&controller, state);
   const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
+  node.props.textStyle_ = Red;
+  context->onPropsApplied();
+  context->layout(&controller, state);
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
 }
 
 static void pinAttributedTextGroundText()
@@ -154,7 +176,7 @@ static void pinAttributedTextGroundText()
   Win32ScenePlatformController controller;
   HostWindow root;
   controller.rootHwnd_ = &root;
-  AttributedTextProps props(Styled("MMMMMMMMMMMM", Bold));
+  AttributedTextProps props(Styled("R", Red) + Styled("U", TextStyle()) + Styled("BBBBBBBBBBBB", Blue));
   props.blockStyle_.wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS);
   AttributedTextNode node(props);
   node.setContext(new Win32AttributedTextContext(&controller, &root, 0, 0, 32, 24, &node));
@@ -169,10 +191,25 @@ static void pinAttributedTextGroundText()
   LOKA_VERIFY(win32_host::draws.size() >= 2);
   LOKA_VERIFY(win32_host::draws.front().units != L"...");
   LOKA_VERIFY(win32_host::draws.back().units == L"...");
-  for (std::size_t i = 0; i < win32_host::draws.size(); ++i)
-    LOKA_VERIFY(win32_host::draws[i].textColor == GetSysColor(COLOR_BTNTEXT));
+  LOKA_VERIFY(win32_host::draws.size() == 4);
+  LOKA_VERIFY(win32_host::draws[0].textColor == RGB(0xC4, 0x2B, 0x1C));
+  LOKA_VERIFY(win32_host::draws[1].textColor == GetSysColor(COLOR_BTNTEXT));
+  LOKA_VERIFY(win32_host::draws[2].textColor == RGB(0x0F, 0x6C, 0xBD));
+  LOKA_VERIFY(win32_host::draws[3].textColor == RGB(0x0F, 0x6C, 0xBD));
   LOKA_VERIFY(child->dc.textColor == sentinel);
-  std::printf("AttributedText runs/ellipsis use WINDOW text and restore DC color\n");
+  // Only Red fits before the dots: the ellipsis must actively switch to Blue,
+  // not inherit the preceding painted fragment's ink.
+  state.width = 16;
+  node.layout(&controller, state);
+  win32_host::reset();
+  SendMessageW(child, WM_PAINT, 0, 0);
+  LOKA_VERIFY(win32_host::draws.size() == 2);
+  LOKA_VERIFY(win32_host::draws[0].units == L"R");
+  LOKA_VERIFY(win32_host::draws[0].textColor == RGB(0xC4, 0x2B, 0x1C));
+  LOKA_VERIFY(win32_host::draws[1].units == L"...");
+  LOKA_VERIFY(win32_host::draws[1].textColor == RGB(0x0F, 0x6C, 0xBD));
+  LOKA_VERIFY(child->dc.textColor == sentinel);
+  std::printf("AttributedText runs Red/unset/Blue, Blue ellipsis, restore DC color\n");
 }
 
 static void pinRectSurfaceGroundBrushes()
@@ -198,13 +235,93 @@ static void pinRectSurfaceGroundBrushes()
   std::printf("RectSurface direct-target ground/sprite use system brushes\n");
 }
 
+static void pinStaticTextColor()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  Win32ScenePlatformController controller;
+  HostWindow root;
+  controller.rootHwnd_ = &root;
+  TextProps props("ink");
+  props.textStyle_ = Red;
+  TextNode node(props);
+  node.setContext(new Win32TextContext(&controller, &root, 0, 0, 100, 20, &node));
+  HWND child = win32_host::windows.back();
+  Win32TextContext *context = static_cast<Win32TextContext *>(node.getContext());
+  LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_RED);
+  loka::win32::Win32StaticTextColors(&child->dc, child);
+  LOKA_VERIFY(child->dc.textColor == RGB(0xC4, 0x2B, 0x1C));
+  const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+  context->onPropsApplied();
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
+  node.props.textStyle_ = Blue;
+  win32_host::colorInvalidations = 0;
+  win32_host::dirtySubtrees.clear();
+  LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(*context));
+  LOKA_VERIFY(win32_host::dirtySubtrees.size() == 1);
+  LOKA_VERIFY(win32_host::dirtySubtrees[0].parent == &root);
+  const RECT &dirty = win32_host::dirtySubtrees[0].rect;
+  LOKA_VERIFY(dirty.left == child->rect.left && dirty.top == child->rect.top);
+  LOKA_VERIFY(dirty.right == child->rect.right && dirty.bottom == child->rect.bottom);
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+  node.props.textStyle_ = Red;
+  context->onPropsApplied();
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+  node.props.textStyle_ = Blue;
+  context->onPropsApplied();
+  LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_BLUE);
+  win32_host::refuseProperty = true;
+  node.props.textStyle_ = Red;
+  LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(*context));
+  LOKA_VERIFY(GetPropW(child, L"Loka.Text.Color") == 0);
+  loka::win32::Win32StaticTextColors(&child->dc, child);
+  LOKA_VERIFY(child->dc.textColor == GetSysColor(COLOR_BTNTEXT));
+  win32_host::refuseProperty = false;
+  LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(*context));
+  LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_RED);
+  node.props.textStyle_ = TextStyle();
+  context->onPropsApplied();
+  LOKA_VERIFY(GetPropW(child, L"Loka.Text.Color") == 0);
+  loka::win32::Win32StaticTextColors(&child->dc, child);
+  LOKA_VERIFY(child->dc.textColor == GetSysColor(COLOR_BTNTEXT));
+  node.props.textStyle_ = Red;
+  context->onPropsApplied();
+  context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+  LOKA_VERIFY(GetPropW(child, L"Loka.Text.Color") == 0);
+  win32_host::dirtySubtrees.clear();
+  win32_host::colorInvalidations = 0;
+  context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+  LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_RED);
+  LOKA_VERIFY(win32_host::dirtySubtrees.empty());
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  LOKA_VERIFY(!Win32TextColorProperty::apply(child, TEXT_COLOR_RED));
+  LOKA_VERIFY(Win32TextColorProperty::apply(child, TEXT_COLOR_BLUE));
+  LOKA_VERIFY(win32_host::dirtySubtrees.empty());
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  Win32TextColorProperty::detach(child);
+  win32_host::refuseProperty = true;
+  LOKA_VERIFY(!Win32TextColorProperty::apply(child, TEXT_COLOR_RED));
+  win32_host::refuseProperty = false;
+  for (unsigned i = 0;
+       i < sizeof(loka::app::detail::StyleVocabularyColors) / sizeof(loka::app::detail::StyleVocabularyColors[0]);
+       ++i)
+  {
+    const TextColor color = loka::app::detail::StyleVocabularyColors[i].value;
+    node.props.textStyle_ = TextStyle().color(color);
+    LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(*context));
+    LOKA_VERIFY(Win32TextColorProperty::read(child) == color);
+  }
+}
+
 int main(int argc, char **)
 {
+  pinStaticTextColor();
+  pinPlainWrappedLines();
   pinAttributedTextGroundText();
   pinRectSurfaceGroundBrushes();
   if (argc > 1)
   {
-    pinPlainWrappedLines();
     pinMeasurement(true);
     pinMeasurement(false);
     return 0;

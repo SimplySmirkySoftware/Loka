@@ -3,14 +3,18 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <map>
 typedef unsigned long COLORREF;
 #define COLOR_WINDOW 5
 #define COLOR_WINDOWTEXT 8
 #define COLOR_BTNFACE 15
 #define COLOR_BTNTEXT 18
+#define COLOR_GRAYTEXT 17
+#define RGB(r, g, b) (static_cast<COLORREF>(r) | (static_cast<COLORREF>(g) << 8) | (static_cast<COLORREF>(b) << 16))
 COLORREF GetSysColor(int);
 struct HostDC;
 COLORREF SetTextColor(HostDC *, COLORREF);
+COLORREF GetTextColor(HostDC *);
 typedef int BOOL;
 typedef unsigned int UINT;
 // Host wchar_t holds the same UTF-16 unit values; this fixture is not an ABI test.
@@ -111,7 +115,22 @@ struct HostWindow
   WNDPROC proc;
   HWND parent;
   std::wstring text;
+  std::map<std::wstring, void *> properties;
 };
+namespace win32_host
+{
+  extern bool refuseProperty;
+  extern int colorInvalidations;
+  struct DirtySubtree
+  {
+    HWND parent;
+    RECT rect;
+  };
+  extern std::vector<DirtySubtree> dirtySubtrees;
+} // namespace win32_host
+BOOL SetPropW(HWND, LPCWSTR, void *);
+void *GetPropW(HWND, LPCWSTR);
+void *RemovePropW(HWND, LPCWSTR);
 struct WNDCLASSW
 {
   UINT style;

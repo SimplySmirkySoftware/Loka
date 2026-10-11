@@ -1,5 +1,10 @@
 #include "Win32GroundTests.hpp"
 #include "../win32/src/Win32Ground.hpp"
+#include "../win32/src/Win32TextInk.hpp"
+#include "app/style/Style.hpp"
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
 #include "support/ContrastRatio.hpp"
 #include "support/TestVerify.hpp"
 #include <cstdio>
@@ -16,6 +21,14 @@ namespace
     const char *name;
     unsigned long buttonFace, buttonText, window, windowText;
   };
+
+  // Fixed shipped light-theme values from #1199 page 2's frozen 2026-10-10
+  // ruling (BTNFACE / BTNTEXT / WINDOW / WINDOWTEXT, sRGB). Luna blue and olive
+  // share a row. High contrast and user-composed colors are page 3, out of scope.
+  const Theme themes[] = {{"Vista+", 0xF0F0F0, 0, 0xFFFFFF, 0},
+                          {"XP Luna blue/olive", 0xECE9D8, 0, 0xFFFFFF, 0},
+                          {"XP Luna silver", 0xE0DFE3, 0, 0xFFFFFF, 0},
+                          {"Windows Classic 2000/XP", 0xD4D0C8, 0, 0xFFFFFF, 0}};
 
   double themeLuminance(const Theme &theme, int index)
   {
@@ -53,14 +66,6 @@ void testWin32GroundRoles()
 
 void testWin32GroundLegibility()
 {
-  // Fixed shipped light-theme values from #1199 page 2's frozen 2026-10-10
-  // ruling (BTNFACE / BTNTEXT / WINDOW / WINDOWTEXT, sRGB). Luna blue and olive
-  // share a row. High contrast and user-composed colors are page 3, out of scope.
-  const Theme themes[] = {
-      {"Vista+", 0xF0F0F0, 0, 0xFFFFFF, 0},
-      {"XP Luna blue/olive", 0xECE9D8, 0, 0xFFFFFF, 0},
-      {"XP Luna silver", 0xE0DFE3, 0, 0xFFFFFF, 0},
-      {"Windows Classic 2000/XP", 0xD4D0C8, 0, 0xFFFFFF, 0}};
   for (unsigned t = 0; t < sizeof(themes) / sizeof(themes[0]); ++t)
     for (unsigned g = 0; g < sizeof(grounds) / sizeof(grounds[0]); ++g)
       for (unsigned r = 0; r < sizeof(grounds) / sizeof(grounds[0]); ++r)
@@ -73,4 +78,49 @@ void testWin32GroundLegibility()
         std::printf("%s text=%d ground=%d contrast=%.3f\n", themes[t].name, text, index, ratio);
         LOKA_VERIFY(ratio >= 4.5);
       }
+}
+
+void testWin32TextInks()
+{
+  const unsigned long fixed[] = {0x000000, 0xFFFFFF, 0xC42B1C, 0x0F7B0F, 0x0F6CBD, 0x00748F, 0xAF33A1, 0x9D5D00};
+  for (unsigned g = 0; g < sizeof(grounds) / sizeof(grounds[0]); ++g)
+  {
+    const Win32TextInk unset = ResolveWin32TextInk(TEXT_COLOR_UNSET, grounds[g]);
+    LOKA_VERIFY(unset.kind() == Win32TextInk::SYSTEM);
+    LOKA_VERIFY(unset.value() == static_cast<unsigned long>(Win32TextRoleColor(grounds[g])));
+    for (unsigned c = 0; c < sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]); ++c)
+    {
+      const TextColor color = detail::StyleVocabularyColors[c].value;
+      const Win32TextInk ink = ResolveWin32TextInk(color, grounds[g]);
+      if (color == TEXT_COLOR_PRIMARY || color == TEXT_COLOR_SECONDARY)
+      {
+        LOKA_VERIFY(ink.kind() == Win32TextInk::SYSTEM);
+        LOKA_VERIFY(ink.value()
+                    == static_cast<unsigned long>(color == TEXT_COLOR_PRIMARY ? Win32TextRoleColor(grounds[g])
+                                                                              : WIN32_SYSTEM_COLOR_GRAYTEXT));
+      }
+      else
+      {
+        LOKA_VERIFY(color >= TEXT_COLOR_BLACK && color <= TEXT_COLOR_YELLOW);
+        LOKA_VERIFY(ink.kind() == Win32TextInk::FIXED);
+        LOKA_VERIFY(ink.value() == fixed[color - TEXT_COLOR_BLACK]);
+        if (g != 0)
+          continue;
+        const unsigned long rgb = ink.value();
+        const double luminance =
+            loka_test::RelativeLuminance(((rgb >> 16) & 255) / 255.0, ((rgb >> 8) & 255) / 255.0, (rgb & 255) / 255.0);
+        for (unsigned t = 0; t < sizeof(themes) / sizeof(themes[0]); ++t)
+        {
+          const unsigned long face = themes[t].buttonFace;
+          const double ground = loka_test::RelativeLuminance(
+              ((face >> 16) & 255) / 255.0, ((face >> 8) & 255) / 255.0, (face & 255) / 255.0);
+          std::printf("ink=%s theme=%s BTNFACE contrast=%.3f WINDOW contrast=%.3f (informational)\n",
+                      detail::StyleVocabularyColors[c].name,
+                      themes[t].name,
+                      loka_test::ContrastRatio(luminance, ground),
+                      loka_test::ContrastRatio(luminance, 1.0));
+        }
+      }
+    }
+  }
 }

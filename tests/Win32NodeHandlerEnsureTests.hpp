@@ -17,4 +17,5 @@ void testWin32ButtonNaturalWidthAnswer();
 void testWin32RibbonNaturalWidthTraversal();
 void testWin32NaturalWidthDirectRow();
 
+void testWin32AttributedTextInksAndAdditivity();
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP

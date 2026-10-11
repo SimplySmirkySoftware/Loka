@@ -65,13 +65,22 @@ public:
   static void requestDirtyRect(HWND, const RECT *, BOOL) {}
   static void redrawDirtySubtreeNow(HWND, const RECT *, BOOL) {}
   void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *) {}
-  static void requestDirtySubtree(HWND, const RECT *, BOOL) {}
+  static void requestDirtySubtree(HWND parent, const RECT *rect, BOOL)
+  {
+    const win32_host::DirtySubtree dirty = {parent, *rect};
+    win32_host::dirtySubtrees.push_back(dirty);
+  }
   // Acceptance twin of the production controller door. This measurement host
   // has no native repaint queue; pixel delivery is pinned on Win32.
   static bool requestTransparentChildRepaint(HWND child)
   {
     RECT rect;
-    return child && GetParent(child) && GetWindowRect(child, &rect);
+    HWND parent = child ? GetParent(child) : 0;
+    if (!parent || !GetWindowRect(child, &rect))
+      return false;
+    MapWindowPoints(NULL, parent, reinterpret_cast<POINT *>(&rect), 2);
+    requestDirtySubtree(parent, &rect, FALSE);
+    return true;
   }
   enum
   {
