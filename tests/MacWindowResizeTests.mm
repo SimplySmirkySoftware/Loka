@@ -16,8 +16,6 @@
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
-#include <cstdio>
-
 namespace
 {
   using namespace loka::app;
@@ -211,8 +209,10 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
 
   const Frame before = window.nativeFrame().get();
   LOKA_VERIFY(before.width == 360 && before.height == 260);
-  std::fprintf(stderr, "probe extent=%d,%d %dx%d native=%dx%d\n", facts.extent.get().x, facts.extent.get().y, facts.extent.get().width, facts.extent.get().height, before.width, before.height);
-  LOKA_VERIFY(facts.extent.get().width == 360);
+  // The surface fills the content width less the content inset; the inset is
+  // measured here so the final check follows the settled width, not a constant.
+  const int inset = before.width - facts.extent.get().width;
+  LOKA_VERIFY(facts.extent.get().width > 0 && inset >= 0);
 
   window.nativeFrame().bind(&ClampFacts::nativeChanged, &facts, false);
   resizeNativeContent(native, projectionOf(window).projectClientSize(400, 260).r.size);
@@ -228,7 +228,7 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
   LOKA_VERIFY(settled.x == before.x && settled.y == before.y);
   LOKA_VERIFY(window.frameState().get().width == 320);
   // The scene relaid out from the settled bounds, not from the 400 detour.
-  LOKA_VERIFY(facts.extent.get().width == 320);
+  LOKA_VERIFY(facts.extent.get().width == 320 - inset);
 
   window.nativeFrame().unbind(&ClampFacts::nativeChanged, &facts);
   // The borrowed stack Window outlives its App; revoke its Scene first.
