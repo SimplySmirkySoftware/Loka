@@ -3117,7 +3117,7 @@ namespace
     static void count(void *data)
     {
       SeatDocumentCommit &self = *static_cast<SeatDocumentCommit *>(data);
-      const PushStateTracker::StateList &dirty = self.tracker.committedDirtyStates();
+      const PushStateTracker::StateList &dirty = self.tracker.committedSet().identities();
       for (size_t i = 0; i < dirty.size(); ++i)
       {
         if (dirty[i] == self.cursor) ++self.cursorCommits;

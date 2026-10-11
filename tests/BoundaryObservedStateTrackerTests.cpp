@@ -525,7 +525,7 @@ void testUnobservedCommitDoesNotDirtyBoundary()
     boundary->privateCount.set(3);
     loka::core::testing::PushStateTrackerTestAccess::defer(*boundary->tracker(), &RemoveCommittedState::run, &removal);
   }
-  LOKA_VERIFY(removal.tracker->committedDirtyStates().empty());
+  LOKA_VERIFY(removal.tracker->committedSet().identities().empty());
   LOKA_VERIFY(SceneTestAccess::director(scene).pendingDirtyFlagsForBoundary(boundary) ==
               static_cast<NodeDirtyFlags>(NODE_DIRTY_LAYOUT | NODE_DIRTY_PROPS));
   scene.flushInvalidation();
@@ -543,8 +543,8 @@ void testUnobservedCommitDoesNotDirtyBoundary()
     boundary->paint.set(false);
     loka::core::testing::PushStateTrackerTestAccess::defer(*boundary->tracker(), &RemoveCommittedState::run, &partialRemoval);
   }
-  LOKA_VERIFY(!partialRemoval.tracker->committedDirtyStates().empty());
-  LOKA_VERIFY(!partialRemoval.tracker->committedIdentitiesComplete());
+  LOKA_VERIFY(!partialRemoval.tracker->committedSet().identities().empty());
+  LOKA_VERIFY(!partialRemoval.tracker->committedSet().complete());
   LOKA_VERIFY(SceneTestAccess::director(scene).pendingDirtyFlagsForBoundary(boundary) ==
               static_cast<NodeDirtyFlags>(NODE_DIRTY_LAYOUT | NODE_DIRTY_PROPS));
   scene.flushInvalidation();
