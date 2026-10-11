@@ -84,6 +84,7 @@ printf 'ok: mame-dev-disk supports zero or more plain-data files\n'
 # Exercise the real batch writer against a complete, isolated example tree.
 mkdir -p "$SANDBOX/repo/scripts" "$SANDBOX/repo/example/SmirkyCard"
 cp "$SUBJECT" "$SANDBOX/repo/scripts/mame-dev-disk.sh"
+cp "$REPO_DIR/scripts/hfs-disk.sh" "$SANDBOX/repo/scripts/"
 cp "$REPO_DIR/scripts/retro68-env.sh" "$SANDBOX/repo/scripts/"
 cp "$REPO_DIR/scripts/env-file.sh" "$SANDBOX/repo/scripts/"
 for app in HelloWorld/LokaHello MineSweeper/LokaMine SimpleViewer/LokaSimpleViewer SimpleText/LokaSimpleText FloppyBird/LokaFloppyBird SmirkBench/LokaSmirkBench LazyList/LokaLazyList Tutorial/LokaTutorial ScrapbookUI/ScrapbookUI SmirkyCard/LokaSmirkyCard; do
