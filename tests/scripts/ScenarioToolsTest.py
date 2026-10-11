@@ -2,6 +2,7 @@
 """Characterization tests for the OS-neutral scenario runner tools."""
 
 import json
+import shutil
 import os
 import re
 import pathlib
@@ -19,6 +20,19 @@ PNG_TOOL = os.path.join(SCENARIO_DIR, "pngtool.py")
 
 sys.path.insert(0, os.path.join(PROJECT_DIR, "scripts", "rig"))
 import golden_identity_guard  # noqa: E402
+
+
+def resolve_preset_cache(presets, name):
+    """CMake unions caches; the first parent wins conflicts, then the child."""
+    preset = presets[name]
+    parents = preset.get("inherits", [])
+    if isinstance(parents, str):
+        parents = [parents]
+    cache = {}
+    for parent in reversed(parents):
+        cache.update(resolve_preset_cache(presets, parent))
+    cache.update(preset.get("cacheVariables", {}))
+    return cache
 
 
 def run_tool(*arguments):
@@ -575,16 +589,57 @@ class PresetFlagSeedingTest(unittest.TestCase):
 
     def test_winxp_presets_seed_the_xp_target_through_init(self):
         presets = {p["name"]: p for p in self.load_configure_presets()}
-        for name in ("win32-xp-debug", "win32-xp-release"):
-            cache = presets[name].get("cacheVariables", {})
-            for lang_flags in ("CMAKE_C_FLAGS_INIT", "CMAKE_CXX_FLAGS_INIT"):
-                self.assertIn("/D_WIN32_WINNT=0x0501", cache.get(lang_flags, ""), name)
-                self.assertIn("/DWINVER=0x0501", cache.get(lang_flags, ""), name)
-            self.assertIn(
-                "/SUBSYSTEM:WINDOWS,5.01",
-                cache.get("CMAKE_EXE_LINKER_FLAGS_INIT", ""),
-                name,
-            )
+        flags = {
+            "CMAKE_C_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
+            "CMAKE_CXX_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
+            "CMAKE_EXE_LINKER_FLAGS_INIT": "/SUBSYSTEM:WINDOWS,5.01",
+        }
+        self.assertTrue(presets["win32-xp-target"]["hidden"])
+        self.assertEqual(presets["win32-xp-target"]["cacheVariables"], flags)
+        for name in ("win32-xp-debug", "win32-xp-release",
+                     "win32-standalone-x86-xp-release"):
+            cache = resolve_preset_cache(presets, name)
+            for key, value in flags.items():
+                self.assertEqual(cache[key], value, name)
+        for name, preset in presets.items():
+            if name != "win32-xp-target" and name.startswith("win32"):
+                self.assertTrue(flags.keys().isdisjoint(preset.get("cacheVariables", {})), name)
+
+    def test_xp_standalone_presets(self):
+        with open(os.path.join(PROJECT_DIR, "CMakePresets.json")) as handle:
+            document = json.load(handle)
+        presets = {p["name"]: p for p in document["configurePresets"]}
+        name = "win32-standalone-x86-xp-release"
+        self.assertEqual(presets[name]["inherits"],
+                         ["win32-standalone-x86-release", "win32-xp-target"])
+        self.assertEqual(presets[name]["binaryDir"],
+                         "build/win32/standalone/presentation/x86-xp/Release")
+        cache = resolve_preset_cache(presets, name)
+        for key, value in {"CMAKE_BUILD_TYPE": "Release",
+                           "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+                           "LOKA_WARNINGS_AS_ERRORS": "ON",
+                           "LOKA_ENABLE_STANDALONE_TARGETS": "ON"}.items():
+            self.assertEqual(cache[key], value)
+        builds = {p["name"]: p for p in document["buildPresets"]}
+        for vehicle in ("flow", "loop"):
+            build = builds["win32-standalone-{}-x86-xp-release".format(vehicle)]
+            self.assertEqual(build["configurePreset"], name)
+            self.assertEqual(build["targets"],
+                             ["LokaStandalone{}Win32All".format(vehicle.title())])
+
+    def test_win32_profile_decisions(self):
+        # PowerShell 7 only: under WSL, powershell.exe resolves to Windows
+        # PowerShell, which cannot open this Linux path. Windows CI runs the
+        # same test through Win32PresentationStageTest.ps1.
+        shell = shutil.which("pwsh")
+        if not shell:
+            self.skipTest("[skip] pwsh unavailable; Windows runs Win32StandaloneProfileTest.ps1 "
+                          "through Win32PresentationStageTest.ps1")
+        result = subprocess.run([shell, "-NoProfile", "-File", os.path.join(
+            PROJECT_DIR, "tests/scripts/Win32StandaloneProfileTest.ps1")],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout)
+
 
 
 class StandaloneDebugEntryPointTest(unittest.TestCase):
@@ -662,8 +717,8 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
                 "build/macos/Standalone/Release",
             ),
             "scripts/win32-standalone-flow.ps1": (
-                "win32-standalone-$Architecture-release",
-                "build/win32/standalone/presentation/$Architecture/Release",
+                "win32-standalone-$profileArchitecture-release",
+                "build/win32/standalone/presentation/$profileArchitecture/Release",
             ),
             "scripts/toolbox-standalone-flow.sh": (
                 'CONFIGURE_PRESET="retro68-$CLASSIC_CPU-standalone-release"',
