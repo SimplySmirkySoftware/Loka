@@ -27,7 +27,8 @@ namespace loka
     /** Config-owned documents and their tracker. The config outlives the App.
         List edits supply their own transaction guard, joining the active turn
         or using the standalone fallback before launch. Attachment refusal
-        leaves an empty detached roster whose open door returns none. */
+        leaves an empty detached roster whose open door returns none and whose
+        close door returns the list's refusal. */
     template <class T, unsigned short N> class DocumentRoster : public DocumentRosterBase
     {
     public:
@@ -39,6 +40,10 @@ namespace loka
         if (this->documents_.insert(this->count(), entry, &id) != loka::core::EDIT_OK)
           return loka::core::ItemId::none();
         return id;
+      }
+      loka::core::ListEditResult close(loka::core::ItemId id)
+      {
+        return this->documents_.remove(id);
       }
       const T *find(loka::core::ItemId id) const
       {

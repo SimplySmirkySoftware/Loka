@@ -150,6 +150,7 @@ namespace
     bool staticFirst;
     ItemId initial;
     ItemId reentrant;
+    ItemId closeDuringFactory;
     explicit Config(PlatformContext &context, bool bootstrap = false)
         : AppConfigurable(&context), factories(0), refuseValue(-1), reenter(false), staticFirst(bootstrap)
     {
@@ -173,6 +174,12 @@ namespace
         config.reentrant = config.roster.open(Document(2));
         LOKA_VERIFY(!config.reentrant.isNone());
       }
+      if (!config.closeDuringFactory.isNone())
+      {
+        const ItemId id = config.closeDuringFactory;
+        config.closeDuringFactory = ItemId::none();
+        LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+      }
       WindowProps props;
       props.scene(new Scene(BoundaryDefinition<DocumentProps, DocumentRoot>(DocumentProps(config.roots[value]))));
       if (value == config.refuseValue)
@@ -187,6 +194,7 @@ namespace
     using App::admitAndApplyWindows;
     using App::reclaimWindows;
     using App::hasPendingWindowAdmission;
+    using App::isWindowClosePending;
     AppComponentGroup &group() { return *this->group_; }
     NullWindow *window(ItemId id) { return static_cast<NullWindow *>(this->group_->find(id)); }
     void tail() { RunWindowAdmissionOperation(*this); }
@@ -353,9 +361,8 @@ void testDocumentWindowBootstrapStaticBeforeKeyed()
   LOKA_VERIFY(rows[0] == app.adoptedWindows()[0] && rows[1] == app.adoptedWindows()[1]);
 }
 
-// Pin 9 states a limit, so has no required mutation: after the last admission,
-// an open alone is not pending admission work and waits for the next event.
-void testDocumentWindowOpenAfterLastAdmissionWaitsForNextEvent()
+// Pin 9 / c0 pin 5 mutation: drop the pending-admission KeySnapshot compare.
+void testDocumentWindowRosterEditAfterLastAdmissionIsPendingWork()
 {
   TrackingContext context;
   Config config(context);
@@ -372,9 +379,22 @@ void testDocumentWindowOpenAfterLastAdmissionWaitsForNextEvent()
     id = config.roster.open(Document(0));
     app.reclaimWindows();
   }
-  LOKA_VERIFY(!app.hasPendingWindowAdmission() && config.factories == 0);
+  LOKA_VERIFY(app.hasPendingWindowAdmission() && config.factories == 0);
   app.tail();
   LOKA_VERIFY(config.factories == 1 && app.window(id));
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    app.reconcileFocus();
+    app.admitAndApplyWindows();
+    turn.close();
+    LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+    app.reclaimWindows();
+  }
+  LOKA_VERIFY(app.hasPendingWindowAdmission() && app.window(id));
+  app.tail();
+  LOKA_VERIFY(!app.window(id) && config.factories == 1);
 }
 
 // Pin 10 mutation: enumerate live desired keys/count rather than the copied set.
@@ -470,4 +490,133 @@ void testDocumentWindowOpenDuringSceneRunIsAdmittedInTheSameAdmission()
   LOKA_VERIFY(app.window(first) && app.window(facts.openedId));
   LOKA_VERIFY(config.factories == factories + 1 && facts.compositions == 1);
   LOKA_VERIFY(facts.openerCompositions == 1);
+}
+
+// c0 pin 1 mutation: remove the decrease branch.
+void testDocumentWindowCloseRemovesRowNextTail()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId first = config.roster.open(Document(0));
+  const ItemId second = config.roster.open(Document(1));
+  app.tail();
+  LOKA_VERIFY(config.roster.close(second) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(first));
+  LOKA_VERIFY(!app.window(second) && config.roster.count() == 1);
+  LOKA_VERIFY(config.roots[1].detaches == 1 && config.roots[1].detachedInsideTurn);
+  LOKA_VERIFY(!context.destroyed[1] && !app.quitRequested());
+  LOKA_VERIFY(config.factories == 2);
+  app.tail();
+  LOKA_VERIFY(context.destroyed[1] && !context.destroyed[0]);
+  LOKA_VERIFY(config.roots[1].detaches == 1 && !app.hasPendingWindowAdmission());
+  LOKA_VERIFY(config.factories == 2);
+}
+
+// c0 pin 2 mutation: decrease before increase empties the group and quits (#1209 P2).
+void testDocumentWindowCloseThenOpenInOneTurnDoesNotQuit()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId first = config.roster.open(Document(0));
+  app.tail();
+  Window *old = app.window(first);
+  ItemId second;
+  {
+    Operation turn;
+    LOKA_VERIFY(config.roster.close(first) == EDIT_OK);
+    second = config.roster.open(Document(1));
+  }
+  LOKA_VERIFY(!second.isNone());
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(second));
+  LOKA_VERIFY(!app.window(first) && app.isWindowClosePending(old));
+  LOKA_VERIFY(!app.quitRequested() && config.factories == 2);
+}
+
+// c0 pin 3 characterization: native removal already happened; page 2 pin 5
+// owns the structural mutation that drops requestWindowClose's roster call.
+void testDocumentWindowCloseAfterNativeCloseIsNotFound()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId first = config.roster.open(Document(0));
+  const ItemId second = config.roster.open(Document(1));
+  app.tail();
+  app.window(second)->simulateNativeClose();
+  const ListRevision revision = config.roster.revision().get();
+  LOKA_VERIFY(config.roster.close(second) == EDIT_ID_NOT_FOUND);
+  LOKA_VERIFY(config.roster.revision().get() == revision);
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(first));
+  LOKA_VERIFY(!app.window(second) && config.factories == 2);
+  LOKA_VERIFY(config.roots[0].detaches == 0 && config.roots[1].detaches == 1);
+  LOKA_VERIFY(!app.hasPendingWindowAdmission() && !app.quitRequested());
+}
+
+// c0 pin 4 mutation: decrease reads live roster identities instead of desiredAt.
+void testDocumentWindowCloseDuringWalkTakesNextWalk()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId first = config.roster.open(Document(0));
+  app.tail();
+  ItemId second;
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    // As in page 2 pin 10, mutate during the second admission of this tail.
+    second = config.roster.open(Document(1));
+    config.closeDuringFactory = first;
+    app.reconcileFocus();
+    app.admitAndApplyWindows();
+    turn.close();
+    app.reclaimWindows();
+  }
+  LOKA_VERIFY(app.group().getComponents().size() == 2 && app.window(first));
+  LOKA_VERIFY(app.window(second) && !config.roster.find(first));
+  LOKA_VERIFY(app.hasPendingWindowAdmission() && config.factories == 2);
+  LOKA_VERIFY(config.roots[0].detaches == 0);
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(second));
+  LOKA_VERIFY(!app.window(first) && config.roots[0].detaches == 1);
+  app.tail();
+  LOKA_VERIFY(config.factories == 2 && !app.hasPendingWindowAdmission());
+}
+
+// c0 pin 6 characterization: the row bound includes all stale rows at capacity.
+void testDocumentWindowCloseAllAndReopenInOneTurn()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  ItemId oldIds[4], newIds[4];
+  for (int i = 0; i < 4; ++i)
+    oldIds[i] = config.roster.open(Document(i));
+  app.tail();
+  {
+    Operation turn;
+    for (int i = 0; i < 4; ++i)
+      LOKA_VERIFY(config.roster.close(oldIds[i]) == EDIT_OK);
+    for (int i = 0; i < 4; ++i)
+    {
+      newIds[i] = config.roster.open(Document(i));
+      LOKA_VERIFY(!newIds[i].isNone());
+    }
+  }
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 4 && config.roster.count() == 4);
+  for (int i = 0; i < 4; ++i)
+    LOKA_VERIFY(app.window(newIds[i]) && !app.window(oldIds[i]));
+  LOKA_VERIFY(!app.quitRequested() && config.factories == 8);
 }

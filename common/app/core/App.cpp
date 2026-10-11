@@ -78,10 +78,12 @@ void App::run()
   this->projectMenuSources();
 }
 
+/** One ListRevision compare per admission (two per Win32 tail, every Toolbox
+    pass, every macOS flush tick). When the revision moved, (a) walks desired x
+    group rows and (b) walks group rows x desired once per stale row plus one
+    final full scan; both over this App's group and its own seat's desired copy. */
 void App::admitDocumentWindows(AdoptionPhase phase)
 {
-  // One revision compare per admission (twice per Win32 tail, every Toolbox
-  // pass). A changed revision walks desired x group rows owned by this App.
   if (!this->windowSeat_ || this->windowSeat_->key().matches())
     return;
   loka::app::WindowSeat &seat = *this->windowSeat_;
@@ -91,6 +93,7 @@ void App::admitDocumentWindows(AdoptionPhase phase)
   // stable and commit only its starting revision, leaving later edits pending.
   const unsigned short n = seat.snapshotDesired();
   this->group_->reserve(n);
+  // (a) increase before decrease, so replacing the last document cannot quit.
   for (unsigned short i = 0; i < n; ++i)
   {
     const loka::core::ItemId id = seat.desiredAt(i);
@@ -110,6 +113,43 @@ void App::admitDocumentWindows(AdoptionPhase phase)
       else
         this->requestWindowClose(window);
     }
+  }
+  // (b) decrease: a keyed row whose id is not in this walk's desired copy is
+  // closed through the same door a native close takes. Restart the scan after
+  // each close because requestWindowClose removes the row; it always removes a
+  // row it finds, so the loop is bounded by the row count at entry.
+  const size_t rowsAtEntry = this->group_->getComponents().size();
+  for (size_t guard = rowsAtEntry; guard-- > 0;)
+  {
+    Window *stale = 0;
+    const AppComponentGroup::Components rows = this->group_->getComponents();
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+      Window *window = rows[i] ? rows[i]->asWindow() : 0;
+      const loka::core::ItemId key = this->group_->keyOf(window);
+      if (key.isNone())
+        continue;
+      bool desired = false;
+      for (unsigned short j = 0; j < n; ++j)
+      {
+        if (seat.desiredAt(j) == key)
+        {
+          desired = true;
+          break;
+        }
+      }
+      if (!desired)
+      {
+        stale = window;
+        break;
+      }
+    }
+    if (!stale)
+      break;
+    const loka::core::ItemId key = this->group_->keyOf(stale);
+    this->requestWindowClose(stale);
+    assert(!this->group_->find(key));
+    (void)key;
   }
   seat.key_ = loka::app::scene::KeySnapshot<loka::core::ListRevision>(&roster.revision(), start);
 }
@@ -201,6 +241,8 @@ void App::projectInitialVisibilityChunks()
 bool App::hasPendingWindowAdmission() const
 {
   if (!this->pendingWindowClosures_.empty())
+    return true;
+  if (this->windowSeat_ && !this->windowSeat_->key().matches())
     return true;
   if (!this->group_)
     return false;
@@ -322,8 +364,8 @@ void App::admitAndApplyWindows()
   }
   for (size_t i = 0; i < admitted.size(); ++i)
     this->pendingReclaim_.remember(admitted[i]);
-  // An open after the last admission (turn.close/reclaimWindows) is not
-  // counted by hasPendingWindowAdmission and waits for the next event.
+  // A roster edit after the last admission (turn.close/reclaimWindows)
+  // remains pending window admission work for the next tail.
   this->admitDocumentWindows(ADOPT_RUNNING);
   // Detach is observable work and belongs before the turn closes. Reclaim
   // keeps the Window alive until then. Mirror drainWindowClosures' busy skip.
@@ -441,6 +483,8 @@ void App::requestWindowClose(Window *window)
   {
     this->quit();
   }
+  // When the close came from the roster, windowGone returns EDIT_ID_NOT_FOUND
+  // without advancing the revision, so an application close costs exactly one walk.
   if (!key.isNone() && this->windowSeat_)
     this->windowSeat_->roster().windowGone(key);
 }
