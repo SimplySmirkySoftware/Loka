@@ -305,6 +305,22 @@ namespace
           return 0;
         }
       }
+      // The hand-routed leaf must refuse before its context narrows the seat
+      // or consumes layout inputs. Scroll refusal also stops later siblings;
+      // outside a ScrollView the same unrepresentable seat still refuses.
+      const int right = static_cast<int>(projectedState.x) + resolvedWidth;
+      const int bottom = static_cast<int>(projectedState.y) + resolvedHeight;
+      const int nextY = bottom + projectedState.spacing;
+      if (right < SHRT_MIN || right > SHRT_MAX
+          || bottom < SHRT_MIN || bottom > SHRT_MAX
+          || nextY < SHRT_MIN || nextY > SHRT_MAX)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        traversal.refuseLayoutResultY(right);
+        traversal.refuseLayoutResultY(bottom);
+        traversal.refuseLayoutResultY(nextY);
+        return 0;
+      }
       const loka::app::scene::Node::LayoutInputsCheckpoint inputs(*node);
       short width = node->layout(controller, projectedState);
       if (controller && !controller->restoreProjectedLayoutState(projectedState))
