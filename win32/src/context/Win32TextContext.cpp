@@ -60,13 +60,13 @@ namespace
       creation default (SS_LEFT), so a retained style removal restores it. */
   DWORD TextControlTypeFor(const loka::app::TextProps &props)
   {
-    return props.hasDeclaredStyle() ? TextControlType(props.blockStyle_) : SS_LEFT;
+    return props.hasDeclaredLayoutStyle() ? TextControlType(props.blockStyle_) : SS_LEFT;
   }
 
   HFONT ResolveTextFont(const loka::app::TextNode *text,
                         const Win32ScenePlatformController *controller)
   {
-    if (!text || !controller || !text->props.hasDeclaredStyle())
+    if (!text || !controller || !text->props.hasDeclaredLayoutStyle())
       return 0;
     const loka::app::TextStyle style = text->props.resolvedTextStyle();
     return style.hasFontSize_ || style.hasWeight_ || style.hasItalic_
@@ -174,7 +174,7 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
       textDelivery_(loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN))
 {
   DWORD style = WS_VISIBLE | WS_CHILD | SS_LEFT | SS_NOPREFIX;
-  if (node_ && node_->props.hasDeclaredStyle())
+  if (node_ && node_->props.hasDeclaredLayoutStyle())
   {
     const loka::app::BlockStyle &attr = node_->props.blockStyle_;
     const bool truncEllipsis = attr.hasTruncation_ && attr.truncation_ == loka::app::TEXT_TRUNCATION_ELLIPSIS;
@@ -224,7 +224,7 @@ loka::app::scene::PaintAnswer Win32TextContext::queryPaintDamage(const loka::app
   RECT placement;
   if (query.placement != PLACEMENT_ELIGIBLE || !GetClientRect(this->hwnd_, &placement) || IsRectEmpty(&placement))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
-  if (!this->node_ || (!this->node_->props.ownsText && this->node_->props.text_ != this->textState_))
+  if (!this->node_ || (!this->node_->props.ownsText() && this->node_->props.text_ != this->textState_))
     return PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   PaintAnswer answer = this->textDelivery_;
   if (answer.kind == PAINT_ANSWER_EXACT)
@@ -311,7 +311,7 @@ void Win32TextContext::onPropsApplied()
   {
     return;
   }
-  if (this->node_->props.ownsText)
+  if (this->node_->props.ownsText())
   {
     // Props-owned text is not a live source (TextNode::declareDirtySources
     // classifies ownsText as non-live): a literal-to-literal apply rewrites the
@@ -433,7 +433,7 @@ void Win32TextContext::bindText()
   }
   // Subscribe only to a borrowed live State; props-owned text is applied as a
   // snapshot (see onPropsApplied) and never subscribed to.
-  textState_ = node_->props.ownsText ? 0 : static_cast<loka::core::State<loka::core::String> *>(node_->props.text_);
+  textState_ = node_->props.ownsText() ? 0 : static_cast<loka::core::State<loka::core::String> *>(node_->props.text_);
   if (textState_)
   {
     textState_->bind(&Win32TextContext::TextChangedThunk, this, false);

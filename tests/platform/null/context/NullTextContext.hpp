@@ -15,12 +15,13 @@ namespace loka
   }
 } // namespace loka
 
-/** Resolved, pointer-free layout inputs; live font state is read when captured. */
+/** Resolved, pointer-free paint inputs; live style state is read when captured. */
 struct NullTextPaintStyle
 {
   NullTextPaintStyle()
       : fontSize(12),
         weight(loka::app::TEXT_WEIGHT_NORMAL),
+        color(loka::app::TEXT_COLOR_UNSET),
         italic(false),
         wrap(loka::app::TEXT_WRAP_NONE),
         truncation(loka::app::TEXT_TRUNCATION_NONE),
@@ -30,11 +31,12 @@ struct NullTextPaintStyle
   explicit NullTextPaintStyle(const loka::app::TextProps &props);
   bool operator==(const NullTextPaintStyle &other) const
   {
-    return fontSize == other.fontSize && weight == other.weight && italic == other.italic
+    return fontSize == other.fontSize && weight == other.weight && italic == other.italic && color == other.color
            && wrap == other.wrap && truncation == other.truncation && align == other.align;
   }
   int fontSize;
   loka::app::TextWeight weight;
+  loka::app::TextColor color;
   bool italic;
   loka::app::TextWrap wrap;
   loka::app::TextTruncation truncation;
@@ -72,10 +74,10 @@ public:
 
 private:
   friend struct loka::app::testing::NullTextMeasurementAccess;
-  unsigned measurementBuilds_;
   loka::app::scene::PaintFact<loka::core::String> presented_;
   NullPaintPlacement placement_;
   NullTextPaintStyle placedStyle_;
+  unsigned measurementBuilds_;
   loka::app::TextNode *node_;
   NullTextMeasurement measurement_;
 };

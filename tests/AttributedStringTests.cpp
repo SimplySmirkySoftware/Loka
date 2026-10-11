@@ -155,6 +155,13 @@ void testAttributedStringOrdering()
 void testAttributedStringStyleDirections()
 {
   using namespace loka::app;
+  const AttributedString colored = Styled("a", Red) + Styled("b", TextStyle());
+  LOKA_VERIFY(colored != (Styled("a", Blue) + Styled("b", TextStyle())));
+  LOKA_VERIFY(colored.compare(Styled("a", Blue) + Styled("b", TextStyle())) < 0);
+  LOKA_VERIFY((Blue + colored).segment(0).style == Red);
+  LOKA_VERIFY((Blue + colored).segment(1).style == Blue);
+  LOKA_VERIFY((colored + Blue).segment(0).style == Blue);
+  LOKA_VERIFY((colored + Blue).segment(1).style == Blue);
   const AttributedString small = Styled("a", FontSize<12>());
   LOKA_VERIFY((small + FontSize<24>()) == Styled("a", FontSize<24>()));
   LOKA_VERIFY((FontSize<24>() + small) == Styled("a", FontSize<12>()));

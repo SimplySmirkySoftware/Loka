@@ -157,6 +157,14 @@ void testNullMeasurementInputPublications()
   plain.layout(&platform, state);
   attributed.layout(&platform, state);
   LOKA_VERIFY(NullTextMeasurementAccess::builds(*p) == 4 && NullTextMeasurementAccess::builds(*a) == 4);
+  {
+    StateTrackerGuard guard(&tracker);
+    style.set(SizeOf(24) + Red);
+  }
+  plain.layout(&platform, state);
+  LOKA_VERIFY(NullTextMeasurementAccess::builds(*p) == 5);
+  std::fprintf(
+      stderr, "color-only style publication: measurement builds 4 -> %u\n", NullTextMeasurementAccess::builds(*p));
   owner.clearObservedStateEntries();
 }
 

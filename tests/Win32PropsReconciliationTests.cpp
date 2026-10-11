@@ -121,7 +121,7 @@ void testWin32RetainedTextRebindsToNewState()
     declaration = Text("lit1");
     applyProps(scene, declaration);
     assert(root(scene)->childrenHead() == text && text->getContext() == context);
-    assert(text->props.ownsText);
+    assert(text->props.ownsText());
     textIs(hwnd, L"lit1");
     assert(writes.count() == 2);
     declaration = Text("lit2");

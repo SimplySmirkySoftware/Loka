@@ -183,7 +183,7 @@ bool MacTextContext::applyStyle(bool initial)
     mode = NSLineBreakByTruncatingTail;
   // An undeclared Text keeps AppKit's defaults (#814); the block configuration
   // below runs only once a style field was declared.
-  if (this->node_->props.hasDeclaredStyle()
+  if (this->node_->props.hasDeclaredLayoutStyle()
       && (initial || [cell wraps] != wraps || [cell isScrollable] != !wraps || [cell lineBreakMode] != mode))
   {
     SetUsesSingleLineModeCompat(label, !wraps);
@@ -197,7 +197,7 @@ bool MacTextContext::applyStyle(bool initial)
     // Reconciled on every apply: an undeclared style asks for AppKit's default
     // (natural), so a retained style removal restores it.
     NSTextAlignment alignment = LOKA_MAC_TEXT_ALIGNMENT_NATURAL;
-    if (this->node_->props.hasDeclaredStyle())
+    if (this->node_->props.hasDeclaredLayoutStyle())
     {
       switch (attr.hasAlign_ ? attr.align_ : loka::app::TEXT_ALIGN_LEFT)
       {
@@ -341,7 +341,7 @@ void MacTextContext::bindText()
   textStateBound_ = false;
   if (textState_)
   {
-    if (!node_->props.ownsText)
+    if (!node_->props.ownsText())
     {
       textState_->deferBind(&MacTextContext::TextChangedThunk, this);
       textStateBound_ = true;

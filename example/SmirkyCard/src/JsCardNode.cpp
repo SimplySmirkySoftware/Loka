@@ -1,3 +1,8 @@
+#include "app/style/Style.hpp"
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
+
 #include "CardNodes.hpp"
 #include "JsClickNode.hpp"
 #include "JsOwnProperties.hpp"
@@ -1043,6 +1048,14 @@ namespace smirkycard
     }
   } // namespace
 
+  template <typename Row, size_t N> const Row *findStyleName(const char *name, size_t length, const Row (&values)[N])
+  {
+    for (size_t i = 0; name && i < N; ++i)
+      if (length == strlen(values[i].name) && !memcmp(name, values[i].name, length))
+        return &values[i];
+    return 0;
+  }
+
   bool readTextStyle(JSContext *ctx, JSValueConst dict, loka::app::TextStyle &out)
   {
     using namespace loka::app;
@@ -1065,9 +1078,10 @@ namespace smirkycard
       }
       const bool size = length == 4 && !memcmp(name, "size", 4);
       const bool weight = length == 6 && !memcmp(name, "weight", 6);
+      const bool color = length == 5 && !memcmp(name, "color", 5);
       const bool italic = length == 6 && !memcmp(name, "italic", 6);
       JS_FreeCString(ctx, name);
-      if (!size && !weight && !italic)
+      if (!size && !weight && !italic && !color)
       {
         JS_ThrowTypeError(ctx, "Unknown Text style key");
         return false;
@@ -1091,27 +1105,32 @@ namespace smirkycard
       }
       else if (JS_IsString(value))
       {
-        // StyleVocab.hpp supplies enums but no name-to-enum table (#939).
-        const struct WeightName
-        {
-          const char *name;
-          TextWeight value;
-        } weights[] = {{"normal", TEXT_WEIGHT_NORMAL}, {"bold", TEXT_WEIGHT_BOLD}};
-        size_t weightLength = 0;
-        const char *weightName = JS_ToCStringLen(ctx, &weightLength, value);
-        if (!weightName)
+        size_t valueLength = 0;
+        const char *valueName = JS_ToCStringLen(ctx, &valueLength, value);
+        if (!valueName)
         {
           JS_FreeValue(ctx, value);
           return false;
         }
-        for (size_t j = 0; j < sizeof(weights) / sizeof(weights[0]); ++j)
-          if (weightLength == strlen(weights[j].name) && !memcmp(weightName, weights[j].name, weightLength))
+        if (weight)
+        {
+          const detail::TextWeightName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyWeights);
+          if (entry)
           {
-            result.weight(weights[j].value);
+            result.weight(entry->value);
             accepted = true;
-            break;
           }
-        JS_FreeCString(ctx, weightName);
+        }
+        else if (color)
+        {
+          const detail::TextColorName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyColors);
+          if (entry)
+          {
+            result.color(entry->value);
+            accepted = true;
+          }
+        }
+        JS_FreeCString(ctx, valueName);
       }
       JS_FreeValue(ctx, value);
       if (!accepted)
@@ -1132,31 +1151,16 @@ namespace smirkycard
     if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
       return false;
     BlockStyle result;
-    // StyleVocab.hpp supplies enums but no name-to-enum table (#951, like weights).
-    const struct BlockName
-    {
-      const char *key;
-      const char *name;
-      BlockStyle style;
-    } values[] = {{"align", "left", BlockStyle().align(TEXT_ALIGN_LEFT)},
-                  {"align", "center", BlockStyle().align(TEXT_ALIGN_CENTER)},
-                  {"align", "right", BlockStyle().align(TEXT_ALIGN_RIGHT)},
-                  {"wrap", "none", BlockStyle().wrap(TEXT_WRAP_NONE)},
-                  {"wrap", "word", BlockStyle().wrap(TEXT_WRAP_WORD)},
-                  {"wrap", "char", BlockStyle().wrap(TEXT_WRAP_CHAR)},
-                  {"truncation", "none", BlockStyle().truncation(TEXT_TRUNCATION_NONE)},
-                  {"truncation", "clip", BlockStyle().truncation(TEXT_TRUNCATION_CLIP)},
-                  {"truncation", "ellipsis", BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS)}};
     for (uint32_t i = 0; i < names.count(); ++i)
     {
       JSValue key = JS_AtomToValue(ctx, names.atom(i));
       size_t keyLength = 0;
       const char *keyName = JS_IsString(key) ? JS_ToCStringLen(ctx, &keyLength, key) : 0;
       JS_FreeValue(ctx, key);
-      bool known = false;
-      for (size_t j = 0; keyName && j < sizeof(values) / sizeof(values[0]); ++j)
-        if (keyLength == strlen(values[j].key) && !memcmp(keyName, values[j].key, keyLength))
-          known = true;
+      const bool isAlign = keyName && keyLength == 5 && !memcmp(keyName, "align", 5);
+      const bool isWrap = keyName && keyLength == 4 && !memcmp(keyName, "wrap", 4);
+      const bool isTruncation = keyName && keyLength == 10 && !memcmp(keyName, "truncation", 10);
+      const bool known = isAlign || isWrap || isTruncation;
       if (!known)
       {
         JS_FreeCString(ctx, keyName);
@@ -1172,14 +1176,33 @@ namespace smirkycard
       size_t length = 0;
       const char *name = JS_IsString(value) ? JS_ToCStringLen(ctx, &length, value) : 0;
       bool accepted = false;
-      for (size_t j = 0; name && j < sizeof(values) / sizeof(values[0]); ++j)
-        if (keyLength == strlen(values[j].key) && !memcmp(keyName, values[j].key, keyLength)
-            && length == strlen(values[j].name) && !memcmp(name, values[j].name, length))
+      if (isAlign)
+      {
+        const detail::TextAlignName *entry = findStyleName(name, length, detail::StyleVocabularyAlign);
+        if (entry)
         {
-          result = result + values[j].style;
+          result.align(entry->value);
           accepted = true;
-          break;
         }
+      }
+      else if (isWrap)
+      {
+        const detail::TextWrapName *entry = findStyleName(name, length, detail::StyleVocabularyWrap);
+        if (entry)
+        {
+          result.wrap(entry->value);
+          accepted = true;
+        }
+      }
+      else if (isTruncation)
+      {
+        const detail::TextTruncationName *entry = findStyleName(name, length, detail::StyleVocabularyTruncation);
+        if (entry)
+        {
+          result.truncation(entry->value);
+          accepted = true;
+        }
+      }
       JS_FreeCString(ctx, name);
       JS_FreeCString(ctx, keyName);
       JS_FreeValue(ctx, value);
