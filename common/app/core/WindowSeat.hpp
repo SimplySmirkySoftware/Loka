@@ -33,11 +33,13 @@ namespace loka
 
     /** Typed factory and one walk's identity copy. The callback target (the
         config) outlives the App, as in RunApp; userData is a borrowed target,
-        never an owner. No retry, decrease, or refusal ledger is kept here. */
+        never an owner. No retry, decrease, or refusal ledger is kept here.
+        The id is the document's own identity in the roster, the same key
+        find resolves; a window that keeps it can close its own document. */
     template <class T, unsigned short N> class DocumentWindowSeat : public WindowSeat
     {
     public:
-      typedef WindowProps (*Factory)(const T &, void *);
+      typedef WindowProps (*Factory)(loka::core::ItemId, const T &, void *);
       DocumentWindowSeat(DocumentRoster<T, N> &roster, Factory factory, void *userData)
           : WindowSeat(roster), factory_(factory), userData_(userData)
       {
@@ -46,7 +48,7 @@ namespace loka
       virtual Window *createWindow(loka::core::ItemId id, PlatformContext *context) const
       {
         const T *entry = static_cast<DocumentRoster<T, N> &>(this->roster()).find(id);
-        return entry ? WindowDef(this->factory_(*entry, this->userData_)).create(context) : 0;
+        return entry ? WindowDef(this->factory_(id, *entry, this->userData_)).create(context) : 0;
       }
       virtual unsigned short snapshotDesired()
       {
@@ -93,7 +95,7 @@ namespace loka
 
     template <class T, unsigned short N>
     DocumentWindowSeatDefinition<T, N> DocumentWindows(
-        DocumentRoster<T, N> &roster, WindowProps (*factory)(const T &, void *), void *userData)
+        DocumentRoster<T, N> &roster, WindowProps (*factory)(loka::core::ItemId, const T &, void *), void *userData)
     {
       return DocumentWindowSeatDefinition<T, N>(roster, factory, userData);
     }
