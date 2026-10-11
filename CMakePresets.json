@@ -96,16 +96,23 @@
       }
     },
     {
+      "name": "win32-xp-target",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
+        "CMAKE_CXX_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
+        "CMAKE_EXE_LINKER_FLAGS_INIT": "/SUBSYSTEM:WINDOWS,5.01"
+      }
+    },
+    {
       "name": "win32-xp-debug",
       "displayName": "Win32 XP Debug (Ninja)",
+      "inherits": "win32-xp-target",
       "generator": "Ninja",
       "binaryDir": "build/winxp/Debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_C_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
-        "CMAKE_CXX_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
-        "CMAKE_EXE_LINKER_FLAGS_INIT": "/SUBSYSTEM:WINDOWS,5.01",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebug",
         "LOKA_WARNINGS_AS_ERRORS": "ON"
       },
@@ -118,13 +125,11 @@
     {
       "name": "win32-xp-release",
       "displayName": "Win32 XP Release (Ninja)",
+      "inherits": "win32-xp-target",
       "generator": "Ninja",
       "binaryDir": "build/winxp/Release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_C_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
-        "CMAKE_CXX_FLAGS_INIT": "/D_WIN32_WINNT=0x0501 /DWINVER=0x0501",
-        "CMAKE_EXE_LINKER_FLAGS_INIT": "/SUBSYSTEM:WINDOWS,5.01",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
         "LOKA_WARNINGS_AS_ERRORS": "ON"
       },
@@ -186,6 +191,15 @@
       "cacheVariables": {
         "LOKA_ENABLE_STANDALONE_TARGETS": "ON"
       }
+    },
+    {
+      "name": "win32-standalone-x86-xp-release",
+      "displayName": "Win32 x86 XP Standalone Release (Ninja, static CRT)",
+      "inherits": [
+        "win32-standalone-x86-release",
+        "win32-xp-target"
+      ],
+      "binaryDir": "build/win32/standalone/presentation/x86-xp/Release"
     },
     {
       "name": "retro68-release-base",
@@ -541,6 +555,13 @@
       ]
     },
     {
+      "name": "win32-standalone-flow-x86-xp-release",
+      "configurePreset": "win32-standalone-x86-xp-release",
+      "targets": [
+        "LokaStandaloneFlowWin32All"
+      ]
+    },
+    {
       "name": "win32-standalone-loop-arm64-release",
       "configurePreset": "win32-standalone-arm64-release",
       "targets": [
@@ -557,6 +578,13 @@
     {
       "name": "win32-standalone-loop-x86-release",
       "configurePreset": "win32-standalone-x86-release",
+      "targets": [
+        "LokaStandaloneLoopWin32All"
+      ]
+    },
+    {
+      "name": "win32-standalone-loop-x86-xp-release",
+      "configurePreset": "win32-standalone-x86-xp-release",
       "targets": [
         "LokaStandaloneLoopWin32All"
       ]
