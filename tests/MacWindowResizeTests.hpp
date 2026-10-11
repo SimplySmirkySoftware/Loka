@@ -1,0 +1,7 @@
+#ifndef LOKA_MAC_WINDOW_RESIZE_TESTS_HPP
+#define LOKA_MAC_WINDOW_RESIZE_TESTS_HPP
+
+void testMacWindowUserResizeStoresNativeFrameWithoutEchoingIntent();
+void testMacWindowNativeFrameClampReentersAndRelayouts();
+
+#endif
