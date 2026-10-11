@@ -118,7 +118,7 @@ For declaration ownership and replacement sequencing, see
 - Win32 path policy: never hand a path flattened to UTF-8 to a narrow CRT call (`fopen`, `_open`, `stat`); go through `loka::platform::file::OpenRead` or another seam that materializes the native path. The Toolbox preference for `fopen`/`fread` under Performance And Retro Targets is about Classic paths and does not license a narrow open on Win32.
 
 ## Performance And Retro Targets
-- Cost lines are part of a door's definition (see Shape Review Gates): name the caller, frequency, and owner of the rows walked. [LazyFlex cost lines](docs/KeyedSeatDesign.md#from-agentsmd)
+- Cost lines are part of a door's definition (see Shape Review Gates): name the caller, frequency, and owner of the rows walked. [LazyView cost lines](docs/KeyedSeatDesign.md#from-agentsmd)
 - Toolbox/68k binary size policy: avoid `std::fstream`/iostream-based file I/O in Classic paths because it pulls large libstdc++ locale/stream machinery; prefer C stdio (`fopen`/`fread`) or platform file APIs.
 - Prefer intrusive linked lists over `std::vector` when elements are heap-allocated anyway; adding a `next_` pointer avoids separate allocations and reallocation costs. On 68k, this primitive approach often outperforms "smart" containers.
 - When users report performance issues or ask for speedups, first measure or propose a measurement plan; profiling support already exists in the codebase.
