@@ -1,9 +1,10 @@
 #include "ToolboxNodeDispatch.hpp"
+#include <cassert>
+#include <climits>
 #include "app/layout/CanvasLayout.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "app/RectSurface.hpp"
-#include "app/layout/LayoutHeuristics.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -16,6 +17,7 @@
                        ToolboxScenePlatformController *controller,
                        loka::app::scene::BoundaryNode *currentBoundary)
   {
+    assert(controller && "Toolbox layout requires a controller");
     if (!nestable)
     {
       return 0;
@@ -122,6 +124,7 @@ namespace
                    const loka::app::layout::LazyWindow *range,
                    loka::app::layout::StackSpans *spans)
   {
+    assert(controller && "Toolbox layout requires a controller");
     if (!node)
     {
       return 0;
@@ -183,56 +186,6 @@ namespace
             *controller->layoutHandlerRegistry(), *stack, state, traversal, width, range, spans);
       }
       if (!usedHandler && spans) spans->invalidate();
-      if (!usedHandler && stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
-      {
-        loka::app::StackNode *column = stack;
-        short currentY = state.y;
-        loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
-        for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-        {
-          loka::app::scene::LayoutState childState = state;
-          childState.y = currentY;
-          if (state.height > 0)
-          {
-            childState.height =
-                static_cast<short>(loka::app::layout::remainingChildHeightForColumn(state.height, state.y, currentY));
-          }
-          short childWidth = state.width;
-          short childOffset = 0;
-          if (column->props.hasHorizontalAlignment_)
-          {
-            childWidth = static_cast<short>(
-                loka::app::layout::preferredChildWidthForColumn(child, state.width));
-            short remain = static_cast<short>(state.width - childWidth);
-            if (remain > 0)
-            {
-              if (column->props.horizontalAlignment_ == loka::app::HORIZONTAL_ALIGNMENT_CENTER)
-              {
-                childOffset = static_cast<short>(remain / 2);
-              }
-              else if (column->props.horizontalAlignment_ == loka::app::HORIZONTAL_ALIGNMENT_TRAILING)
-              {
-                childOffset = remain;
-              }
-            }
-          }
-          childState.x = static_cast<short>(state.x + childOffset);
-          childState.width = childWidth;
-          short childUsedWidth = LayoutNode(child, childState, controller, activeBoundary);
-          if (childUsedWidth > width)
-          {
-            width = childUsedWidth;
-          }
-          currentY = childState.y;
-        }
-        state.y = currentY;
-      }
-      else if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxRowLayout(stack, state, &traversal));
-        state.y = traversal.layoutResultY();
-      }
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
@@ -243,18 +196,11 @@ namespace
     {
       loka::app::BoxNode *box = static_cast<loka::app::BoxNode *>(node);
       short width = 0;
-      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
+        ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *box, state, traversal, width);
-      }
-      if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxBoxLayout(box, state, &traversal));
-        state.y = traversal.layoutResultY();
       }
       if (boundary)
       {
@@ -266,40 +212,12 @@ namespace
     {
       loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
       short maxWidth = 0;
-      short maxY = state.y;
-      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
+        ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *stack, state, traversal, maxWidth);
-        if (usedHandler)
-        {
-          maxY = state.y;
-        }
       }
-      if (!usedHandler)
-      {
-        loka::app::scene::LayoutState childState = state;
-        if (loka::app::scene::INestable *nestable = stack->asNestable())
-        {
-          loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-          for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-          {
-            childState = state;
-            short width = LayoutNode(child, childState, controller, activeBoundary);
-            if (width > maxWidth)
-            {
-              maxWidth = width;
-            }
-            if (childState.y > maxY)
-            {
-              maxY = childState.y;
-            }
-          }
-        }
-      }
-      state.y = maxY;
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, maxWidth, static_cast<short>(state.y - startY));
@@ -310,18 +228,11 @@ namespace
     {
       loka::app::GridNode *grid = static_cast<loka::app::GridNode *>(node);
       short maxWidth = 0;
-      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
+        ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *grid, state, traversal, maxWidth);
-      }
-      if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        maxWidth = static_cast<short>(ComputeToolboxGridLayout(grid, state, &traversal));
-        state.y = traversal.layoutResultY();
       }
       if (boundary)
       {

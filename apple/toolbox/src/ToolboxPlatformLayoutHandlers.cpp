@@ -470,10 +470,11 @@ bool ApplyToolboxPlatformLayoutHandler(
   return true;
 }
 
-void RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
+bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
 {
-  registry.registerHandler(new ToolboxBoxLayoutHandler());
-  registry.registerHandler(new ToolboxZStackLayoutHandler());
-  registry.registerHandler(new ToolboxStackLayoutHandler());
-  registry.registerHandler(new ToolboxGridLayoutHandler());
+  bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
+  ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
+  ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
+  ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;
+  return ok;
 }

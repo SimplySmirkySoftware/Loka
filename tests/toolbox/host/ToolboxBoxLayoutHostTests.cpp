@@ -4,7 +4,12 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/ImageView.hpp"
+#include <cstdio>
 #include <cstring>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 namespace
 {
@@ -178,12 +183,45 @@ namespace
   }
 
 }
+// A null controller is a contract violation at both layout entries (#562):
+// there is no registry to reach the single layout landing through.
+static void nullControllerPin()
+{
+#if !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+  for (int entry = 0; entry != 2; ++entry)
+  {
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (!child)
+    {
+      StackNode column((StackProps(STACK_AXIS_COLUMN)));
+      LayoutState state;
+      if (entry == 0) LayoutNode(&column, state, 0, 0);
+      else LayoutChildren(&column, state, 0, 0);
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+  }
+#else
+  std::printf("[skip] null-controller layout pin requires a debug build without ASan.\n");
+#endif
+}
+
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 3 || argc == 4);
+  if (std::strcmp(argv[1], "null-controller") == 0)
+  {
+    nullControllerPin();
+    return 0;
+  }
+  LOKA_VERIFY(std::strcmp(argv[1], "handler") == 0);
   ToolboxScenePlatformController controller;
-  const bool handler = std::strcmp(argv[1], "handler") == 0;
-  if (handler) RegisterToolboxPlatformLayoutHandlers(controller.registry);
+  const bool handler = true;
+  const bool registered = RegisterToolboxPlatformLayoutHandlers(controller.registry);
+  LOKA_VERIFY(registered);
   const char *mode = argv[2];
   if (argc == 4)
   {
@@ -229,7 +267,7 @@ int main(int argc, char **argv)
   if (fixed) props.setSize(100, 60);
   BoxNode *box = new BoxNode(props);
   column.addChild(box);
-  // An empty registry forces the actual dispatch fallback, including nested Boxes.
+  // Nested Boxes use the same registered handlers as their enclosing Column.
   LOKA_VERIFY((controller.registry.find(box) != 0) == handler);
   Probe *child = 0;
   if (!empty)

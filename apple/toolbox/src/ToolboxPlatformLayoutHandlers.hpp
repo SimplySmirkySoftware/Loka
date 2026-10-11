@@ -41,6 +41,6 @@ bool ApplyToolboxPlatformLayoutHandler(
     const loka::app::layout::LazyWindow *range = 0,
     loka::app::layout::StackSpans *spans = 0);
 
-void RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry);
+bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry);
 
 #endif // LOKA_TOOLBOX_PLATFORM_LAYOUT_HANDLERS_HPP

@@ -515,19 +515,18 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxBoxLayoutTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxBoxLayoutTests)
   set_target_properties(LokaToolboxBoxLayoutTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_box_path handler fallback)
-    foreach(_box_case normal nested fixed empty small equal zero negative scroll-refusal scroll-limit natural-row)
-      add_test(NAME testToolboxBox_${_box_path}_${_box_case}
-        COMMAND LokaToolboxBoxLayoutTests ${_box_path} ${_box_case})
-    endforeach()
+  # The registered handlers are Toolbox's single layout landing (#562).
+  foreach(_box_case normal nested fixed empty small equal zero negative scroll-refusal scroll-limit natural-row)
+    add_test(NAME testToolboxBox_handler_${_box_case}
+      COMMAND LokaToolboxBoxLayoutTests handler ${_box_case})
   endforeach()
+  add_test(NAME testToolboxLayout_null-controller
+    COMMAND LokaToolboxBoxLayoutTests null-controller abort)
 
   foreach(_range_case scroll-refusal scroll-limit)
-    foreach(_range_path handler fallback)
-      foreach(_range_kind row row-advance row-offset grid)
-        add_test(NAME testToolboxResult_${_range_kind}_${_range_path}_${_range_case}
-          COMMAND LokaToolboxBoxLayoutTests ${_range_path} ${_range_kind} ${_range_case})
-      endforeach()
+    foreach(_range_kind row row-advance row-offset grid)
+      add_test(NAME testToolboxResult_${_range_kind}_handler_${_range_case}
+        COMMAND LokaToolboxBoxLayoutTests handler ${_range_kind} ${_range_case})
     endforeach()
     add_test(NAME testToolboxResult_band_handler_${_range_case}
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
