@@ -7,6 +7,8 @@
 #include "platform/null/NullPlatformContext.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
 #include "support/TestVerify.hpp"
+#include "testing/app/WindowTestAccess.hpp"
+#include "support/NullWindowTestAccess.hpp"
 
 namespace
 {
@@ -816,4 +818,64 @@ void testBootstrapWalksOnceWhenTheFactoryReopensOnEveryRefusal()
   app.tail(); // two admissions per tail, one factory call each
   LOKA_VERIFY(config.factories == 3 && config.roster.count() == 1);
   LOKA_VERIFY(app.group().getComponents().size() == 0 && app.hasPendingWindowAdmission());
+}
+
+namespace
+{
+  void ApplyEditedFacts(void *data)
+  {
+    Window &window = *static_cast<Window *>(data);
+    loka::core::StateTrackerGuard guard(window.getTracker());
+    LOKA_VERIFY(window.editedState().trackerOwner() == window.getTracker());
+    loka::app::testing::WindowTestAccess::applyDocumentFacts(window,
+                                                             loka::app::DocumentFacts(loka::core::String("Doc"), true));
+    LOKA_VERIFY(window.editedState().get());
+    LOKA_VERIFY(window.titleState().get().equals(loka::core::String("Doc")));
+  }
+  void ApplyEqualEditedFacts(void *data)
+  {
+    Window &window = *static_cast<Window *>(data);
+    loka::core::StateTrackerGuard guard(window.getTracker());
+    LOKA_VERIFY(window.editedState().trackerOwner() == window.getTracker());
+    loka::app::testing::WindowTestAccess::applyDocumentFacts(window,
+                                                             loka::app::DocumentFacts(loka::core::String("Doc"), true));
+  }
+} // namespace
+
+void testWindowDocumentFactsProjectAtTurnClose()
+{
+  NullPlatformContext context;
+  NullWindow window(&context, WindowProps());
+  WindowAdmissionTestApp app(window);
+  app.operationLoop(&ApplyEditedFacts, &window);
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::projectedEdited(window));
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == 1);
+}
+
+void testWindowDocumentFactsEqualApplyDoesNotProjectAgain()
+{
+  NullPlatformContext context;
+  NullWindow window(&context, WindowProps());
+  WindowAdmissionTestApp app(window);
+  app.operationLoop(&ApplyEditedFacts, &window);
+  // Separate turns discriminate equality suppression from per-turn coalescing.
+  app.operationLoop(&ApplyEqualEditedFacts, &window);
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::projectedEdited(window));
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == 1);
+}
+
+void testWindowPlainDefaultsToUneditedWithoutProjection()
+{
+  loka::app::DocumentFacts facts;
+  LOKA_VERIFY(!facts.edited);
+  LOKA_VERIFY(facts.title.empty());
+  facts = loka::app::DocumentFacts(loka::core::String("Doc"), true);
+  LOKA_VERIFY(facts.edited && facts.title.equals(loka::core::String("Doc")));
+  NullPlatformContext context;
+  NullWindow window(&context, WindowProps());
+  WindowAdmissionTestApp app(window);
+  app.operationLoop();
+  LOKA_VERIFY(!window.editedState().get());
+  LOKA_VERIFY(!loka::app::testing::NullWindowTestAccess::projectedEdited(window));
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == 0);
 }

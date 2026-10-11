@@ -7,24 +7,36 @@
 #include "app/scene/Scene.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      class NullWindowTestAccess;
+    }
+  } // namespace app
+} // namespace loka
+
 class NullWindow : public Window
 {
 public:
   /** Concrete rail owns enrollment; App sees only its admission interface. */
   loka::app::DialogResultTransport &dialogResults() { return this->dialogResults_; }
-  NullWindow(PlatformContext *context,
-             const WindowProps &props,
-             NullScenePlatformController *borrowedController = 0)
+  NullWindow(PlatformContext *context, const WindowProps &props, NullScenePlatformController *borrowedController = 0)
       : Window(context, props),
         app_(0),
         controller_(borrowedController),
         ownsController_(borrowedController == 0),
-        mountedScene_(false)
+        mountedScene_(false),
+        projectedEdited_(false),
+        editedProjectionCount_(0)
   {
     if (!this->controller_)
     {
       this->controller_ = new NullScenePlatformController();
     }
+    this->observeNativeState(this->editedState(), &NullWindow::EditedChangedThunk, this);
     this->dialogResults().open(*this);
     this->mountScene();
   }
@@ -40,6 +52,7 @@ public:
 
   virtual ~NullWindow()
   {
+    this->detachNativeStateObservers();
     this->destroyScenePlatform();
   }
 
@@ -136,6 +149,13 @@ protected:
   }
 
 private:
+  friend class loka::app::testing::NullWindowTestAccess;
+  static void EditedChangedThunk(void *data)
+  {
+    NullWindow *self = static_cast<NullWindow *>(data);
+    self->projectedEdited_ = self->editedState().get();
+    ++self->editedProjectionCount_;
+  }
   virtual void closeDialogResults() { this->dialogResults_.close(); }
   // Deliberate Win32/Null counterparts: stable service across native recreation.
   virtual loka::app::DialogResultDelivery *dialogResultDelivery()
@@ -170,6 +190,8 @@ private:
   NullScenePlatformController *controller_;
   bool ownsController_;
   bool mountedScene_;
+  bool projectedEdited_;
+  unsigned editedProjectionCount_;
 
   NullWindow(const NullWindow &);
   NullWindow &operator=(const NullWindow &);

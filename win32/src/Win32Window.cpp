@@ -156,6 +156,7 @@ Win32Window::Win32Window(PlatformContext *context, const WindowProps &props)
 {
   // Track logical states and project them into native Win32 state.
   this->observeNativeState(this->displayTitleState(), &Win32Window::TitleChangedThunk, this);
+  this->observeNativeState(this->editedState(), &Win32Window::TitleChangedThunk, this);
   this->observeNativeState(this->frameState(), &Win32Window::FrameChangedThunk, this);
 }
 
@@ -327,6 +328,8 @@ void Win32Window::TitleChangedThunk(void *userData)
     std::wstring wide;
     if (loka::win32::MaterializeWideString(self->displayTitleState().get(), wide))
     {
+      if (self->editedState().get())
+        wide.insert(0, 1, L'*');
       SetWindowTextW(self->hwnd_, wide.c_str());
     }
     else

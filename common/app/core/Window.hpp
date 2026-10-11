@@ -2,6 +2,7 @@
 #define LOKA_WINDOW_HPP
 
 #include "app/core/DialogResultDelivery.hpp"
+#include "app/core/DocumentFacts.hpp"
 
 #include <cassert>
 #include <new>
@@ -36,6 +37,7 @@ namespace loka
   } // namespace app
 } // namespace loka
 
+class App;
 class PlatformContext;
 
 // Forward declarations for platform-specific windows (for asXxx methods)
@@ -473,6 +475,7 @@ public:
       : context_(context),
         tracker_(0),
         titleStorage_(),
+        editedStorage_(false),
         visibilityStorage_(true),
         frameState_(),
         nativeFrame_(),
@@ -506,6 +509,7 @@ public:
     loka::core::PushStateTracker *pushTracker = new loka::core::PushStateTracker();
     pushTracker->addState(title_);
     pushTracker->addState(displayTitle_);
+    pushTracker->addState(&this->editedStorage_);
     pushTracker->addState(visibility_);
     pushTracker->addState(frameStatePtr_);
     pushTracker->addState(&nativeFrame_);
@@ -576,7 +580,14 @@ protected:
   virtual bool hasLiveScenePlatform() const { return false; }
 
 private:
-  friend class App;
+  friend class ::App;
+  /** App admission supplies the surrounding StateTracker transaction. */
+  void applyDocumentFacts(const loka::app::DocumentFacts &facts)
+  {
+    this->titleStorage_.set(facts.title);
+    this->editedStorage_.set(facts.edited);
+  }
+
   /** App completion only, after admission has left its flushing gate. */
   void reconcileFocus();
   /** Rails without deferred dialog delivery carry no transport storage. */
@@ -623,6 +634,11 @@ public:
   const loka::core::State<loka::core::String> &displayTitleState() const
   {
     return *displayTitle_;
+  }
+  /** The edited mark projected by the rails; written only by App admission. */
+  const loka::core::State<bool> &editedState() const
+  {
+    return this->editedStorage_;
   }
   /** Application-intent content frame. Its size is in logical display units;
       its top-level origin is a platform desktop-placement coordinate. */
@@ -843,6 +859,7 @@ protected:
   loka::core::StateTracker *tracker_;
   SceneManager sceneManager_;
   loka::core::MutableState<loka::core::String> titleStorage_;
+  loka::core::MutableState<bool> editedStorage_;
   loka::core::MutableState<bool> visibilityStorage_;
   loka::core::MutableState<loka::core::Frame> frameState_;
   loka::core::MutableState<loka::core::Frame> nativeFrame_;

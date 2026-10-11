@@ -112,6 +112,7 @@ MacWindow::MacWindow(PlatformContext *context, const WindowProps &props)
   // synchronous; subsequent visibility changes enter through App admission.
   this->applyNativeVisibility();
   this->observeNativeState(this->displayTitleState(), &MacWindow::TitleChangedThunk, this);
+  this->observeNativeState(this->editedState(), &MacWindow::EditedChangedThunk, this);
   this->observeNativeState(this->frameState(), &MacWindow::FrameChangedThunk, this);
 }
 
@@ -183,6 +184,15 @@ void MacWindow::applyNativeVisibility()
     this->onHide();
     this->destroyNativeWindow();
   }
+}
+
+void MacWindow::EditedChangedThunk(void *userData)
+{
+  MacWindow *self = static_cast<MacWindow *>(userData);
+  if (!self || !self->window_)
+    return;
+  NSWindow *window = (NSWindow *)self->window_;
+  [window setDocumentEdited:self->editedState().get() ? YES : NO];
 }
 
 void MacWindow::TitleChangedThunk(void *userData)
@@ -396,6 +406,8 @@ void MacWindow::createNativeWindow()
   {
     [window setTitle:@""];
   }
+
+  [window setDocumentEdited:this->editedState().get() ? YES : NO];
 
   LokaFlippedView *contentView = [[LokaFlippedView alloc] initWithFrame:content.r];
   [window setContentView:contentView];

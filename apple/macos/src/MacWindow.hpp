@@ -80,6 +80,7 @@ private:
   virtual bool hasPendingNativeVisibility() const;
   virtual void applyNativeVisibility();
   static void TitleChangedThunk(void *userData);
+  static void EditedChangedThunk(void *userData);
   static void FrameChangedThunk(void *userData);
   virtual bool mountReplacementScene(loka::app::scene::Scene *next);
   // Deliberate rail counterpart of mountReplacementScene's resource checks.
