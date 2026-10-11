@@ -79,7 +79,10 @@ function Invoke-Profile([string[]]$Arguments, [string]$ExpectedError = "") {
         $ErrorActionPreference = $previous
     }
     if ($ExpectedError) {
-        if ($code -eq 0 -or ($output | Out-String) -notmatch $ExpectedError) {
+        # One line per record: Windows PowerShell 5.1's Out-String wraps error
+        # records at the console width, splitting the expected phrase.
+        $text = (@($output) | ForEach-Object { "$_" }) -join " "
+        if ($code -eq 0 -or $text -notmatch $ExpectedError) {
             throw "Expected '$ExpectedError', exit=$code output=$output"
         }
     } elseif ($code -ne 0) {
