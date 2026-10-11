@@ -30,7 +30,7 @@ created with `git tag -a`, with the release notes recorded in the tag message.
 
 ---
 
-## v0.0.5 (current)
+## v0.0.5
 
 Core-hardening and runtime milestone — 203 commits since 0.0.4. See the
 [release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.5).
