@@ -40,4 +40,4 @@ loka_stage_standalone_release \
   "${ARCHS}" \
   UB2 \
   modern
-echo "Staged five autonomous UB2 loops plus SimpleViewer (${ARCHS}): ${STAGE_ROOT}"
+echo "Staged UB2 standalone release (${ARCHS}): ${STAGE_ROOT}"

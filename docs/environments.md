@@ -120,9 +120,9 @@ This is the environment where binaries are actually built.
   Runtime on a PowerPC Mac remains a separate verification step.
   On Big Sur or newer with an Apple Silicon-capable Xcode, run
   `scripts/macos-standalone-release-ub2.sh` for the corresponding
-  `arm64;x86_64` autonomous set. It stages the same five loops plus SimpleViewer
-  under `build/release/macos-ub2` only after every executable contains both
-  slices. The default deployment target is macOS 11.0.
+  `arm64;x86_64` autonomous set. Like UB1, it stages five loops plus interactive
+  SimpleViewer and SimpleText under `build/release/macos-ub2` only after every
+  executable contains both slices. The default deployment target is macOS 11.0.
 - For a presentation that keeps moving without a host controller, use the
   TEST-only HelloWorld and MineSweeper loop reels. Each application shows every
   registered cell for its example, wraps to the first, and continues until the
@@ -204,13 +204,14 @@ This is the environment where binaries are actually built.
   `-Action Stage`. It writes `build/release/win32-<architecture>` with five
   autonomous loop directories (`scrapbook`, `helloworld`, `tutorial`,
   `minesweeper`, `floppybird`), a `simpleviewer` directory containing
-  `LokaSimpleViewerWin32.exe`, and a shared README. Keep each executable in its
+  `LokaSimpleViewerWin32.exe`, a `simpletext` directory containing
+  `LokaSimpleTextWin32.exe`, and a shared README. Keep each executable in its
   directory; ScrapbookUI's `ASSETS.LRP` and each app's `LOG.TXT` belong there.
   The CMake Standalone Flow/Loop build outputs use the same catalog-key
   directories, so direct launches also keep sidecars separate. Each loop keeps its App and native Window;
   a completed pass receives a fresh scenario rail and a re-armed Scene.
   Closing it manually does not relaunch it.
-  SimpleViewer remains interactive and is not started by either audit
+  SimpleViewer and SimpleText remain interactive and are not started by either audit
   verification or Release staging.
   In **Standalone: Win32 Build / Stage / Verify / Release**, choose Release for the equivalent
   VS Code action;

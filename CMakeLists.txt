@@ -162,7 +162,7 @@ add_subdirectory(example/LazyList)
 add_subdirectory(example/Tutorial)
 
 if(WIN32 AND TARGET LokaStandaloneLoopWin32All)
-  add_dependencies(LokaStandaloneLoopWin32All LokaSimpleViewerWin32)
+  add_dependencies(LokaStandaloneLoopWin32All LokaSimpleViewerWin32 LokaSimpleTextWin32)
 endif()
 if(APPLE AND TARGET LokaStandaloneLoopMacOSAll)
   add_dependencies(LokaStandaloneLoopMacOSAll LokaSimpleViewerMacOS)

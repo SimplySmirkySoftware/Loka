@@ -10,7 +10,7 @@ loka_target_manifest() {
     "LokaHelloMacOS|default|executable|example/HelloWorld/LokaHelloMacOS" \
     "LokaMineMacOS|default|executable|example/MineSweeper/LokaMineMacOS" \
     "LokaSimpleViewerMacOS|default,standalone-release|bundle|example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS" \
-    "LokaSimpleTextMacOS|default|bundle|example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS" \
+    "LokaSimpleTextMacOS|default,standalone-release|bundle|example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS" \
     "LokaSmirkBenchMacOS|default|executable|example/SmirkBench/LokaSmirkBenchMacOS" \
     "LokaLazyListMacOS|default|executable|example/LazyList/LokaLazyListMacOS" \
     "ScrapbookUIMacOS|default|bundle|example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS" \

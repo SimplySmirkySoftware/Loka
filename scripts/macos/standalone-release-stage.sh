@@ -99,8 +99,8 @@ loka_populate_standalone_release_stage() {
     count=$((count + 1))
   done
 
-  if [[ "${count}" -ne 6 ]]; then
-    echo "The ${LOKA_STANDALONE_FORMAT_NAME} standalone release must contain five loops plus SimpleViewer; found ${count}." >&2
+  if [[ "${count}" -ne 7 ]]; then
+    echo "The ${LOKA_STANDALONE_FORMAT_NAME} standalone release must contain five loops plus SimpleViewer and SimpleText; found ${count}." >&2
     return 1
   fi
   local source_version
@@ -112,7 +112,7 @@ loka_populate_standalone_release_stage() {
     "Architectures: ${LOKA_STANDALONE_STAGED_ARCHS}" \
     '' \
     'The five StandaloneLoop applications run their UI tour repeatedly.' \
-    'Quit a loop application to stop it. LokaSimpleViewerMacOS remains interactive.' \
+    'Quit a loop application to stop it. LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' \
     >"${destination}/README.txt"
 }
 

@@ -189,8 +189,8 @@ and it is already the default for the modern builds that serve 11 and later.
 
 - `scripts/macos-standalone-release-ub1.sh tiger|leopard`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
-    SimpleViewer through the same per-architecture build and failure-atomic
-    `lipo` merge used by `build-10_4.sh` and `build-10_5.sh`.
+    SimpleViewer and SimpleText through the same per-architecture build and
+    failure-atomic `lipo` merge used by `build-10_4.sh` and `build-10_5.sh`.
   - `tiger` selects `ppc;i386` and stages the completed set under
     `build/release/macos-tiger-ub1`.
   - `leopard` selects `ppc;i386;x86_64` and stages the completed set under
@@ -199,7 +199,7 @@ and it is already the default for the modern builds that serve 11 and later.
     `ppc7400 i386 x86_64`.
   - Run this with the Xcode 3.2.6 build environment after selecting the same
     SDK and compiler variables required by the underlying build script. The
-    stage is published only after all six applications contain every expected
+    stage is published only after all seven applications contain every expected
     architecture; Scrapbook's `ASSETS.LRP` remains inside its bundle.
   - Before SimpleViewer was converted to an `.app` bundle, the complete
     autonomous sets were build-verified through the Mavericks 10.9.5 + Xcode
@@ -210,8 +210,8 @@ and it is already the default for the modern builds that serve 11 and later.
 
 - `scripts/macos-standalone-release-ub2.sh`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
-    SimpleViewer as `arm64;x86_64`, then stages the complete set under
-    `build/release/macos-ub2`.
+    SimpleViewer and SimpleText as `arm64;x86_64`, then stages the complete set
+    under `build/release/macos-ub2`.
   - Uses the modern UB2 build path with deployment target 11.0 and publishes
     only after every executable contains both required slices. Scrapbook's
     `ASSETS.LRP` remains inside its bundle.

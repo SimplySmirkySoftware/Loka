@@ -15,10 +15,10 @@ ACTUAL_TARGETS="$(loka_known_targets)"
 [[ "${ACTUAL_TARGETS}" == "${EXPECTED_TARGETS}" ]] ||
   fail "default target manifest does not contain the nine shipping examples"
 
-EXPECTED_STANDALONE_RELEASE_TARGETS=$'LokaSimpleViewerMacOS\nLokaScrapbookStandaloneLoopMacOS\nLokaHelloWorldStandaloneLoopMacOS\nLokaTutorialStandaloneLoopMacOS\nLokaMineSweeperStandaloneLoopMacOS\nLokaFloppyBirdStandaloneLoopMacOS'
+EXPECTED_STANDALONE_RELEASE_TARGETS=$'LokaSimpleViewerMacOS\nLokaSimpleTextMacOS\nLokaScrapbookStandaloneLoopMacOS\nLokaHelloWorldStandaloneLoopMacOS\nLokaTutorialStandaloneLoopMacOS\nLokaMineSweeperStandaloneLoopMacOS\nLokaFloppyBirdStandaloneLoopMacOS'
 ACTUAL_STANDALONE_RELEASE_TARGETS="$(loka_targets_for_selection standalone-release)"
 [[ "${ACTUAL_STANDALONE_RELEASE_TARGETS}" == "${EXPECTED_STANDALONE_RELEASE_TARGETS}" ]] ||
-  fail "standalone-release target set does not contain five loops plus SimpleViewer"
+  fail "standalone-release target set does not contain five loops plus SimpleViewer and SimpleText"
 
 SCRAPBOOK_REL_PATH="example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS"
 [[ "$(loka_target_rel_path ScrapbookUIMacOS)" == "${SCRAPBOOK_REL_PATH}" ]] ||
@@ -211,6 +211,8 @@ loka_merge_requested_or_known_targets_two_arch \
 unset TARGET_SET
 [[ "$(cat "${STANDALONE_ROOT}/universal/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS")" == "universal" ]] ||
   fail "standalone-release merge omitted SimpleViewer"
+[[ "$(cat "${STANDALONE_ROOT}/universal/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS")" == "universal" ]] ||
+  fail "standalone-release merge omitted SimpleText"
 [[ "$(cat "${STANDALONE_ROOT}/universal/LokaHelloWorldStandaloneLoopMacOS.app/Contents/MacOS/LokaHelloWorldStandaloneLoopMacOS")" == "universal" ]] ||
   fail "standalone-release merge omitted an autonomous loop bundle"
 [[ "$(cat "${STANDALONE_ROOT}/universal/LokaScrapbookStandaloneLoopMacOS.app/Contents/Resources/ASSETS.LRP")" == "assets-ppc" ]] ||
