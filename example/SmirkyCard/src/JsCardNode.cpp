@@ -1,3 +1,8 @@
+#include "app/style/Style.hpp"
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
+
 #include "CardNodes.hpp"
 #include "JsClickNode.hpp"
 #include "JsOwnProperties.hpp"
@@ -1065,9 +1070,10 @@ namespace smirkycard
       }
       const bool size = length == 4 && !memcmp(name, "size", 4);
       const bool weight = length == 6 && !memcmp(name, "weight", 6);
+      const bool color = length == 5 && !memcmp(name, "color", 5);
       const bool italic = length == 6 && !memcmp(name, "italic", 6);
       JS_FreeCString(ctx, name);
-      if (!size && !weight && !italic)
+      if (!size && !weight && !italic && !color)
       {
         JS_ThrowTypeError(ctx, "Unknown Text style key");
         return false;
@@ -1091,27 +1097,36 @@ namespace smirkycard
       }
       else if (JS_IsString(value))
       {
-        // StyleVocab.hpp supplies enums but no name-to-enum table (#939).
-        const struct WeightName
-        {
-          const char *name;
-          TextWeight value;
-        } weights[] = {{"normal", TEXT_WEIGHT_NORMAL}, {"bold", TEXT_WEIGHT_BOLD}};
-        size_t weightLength = 0;
-        const char *weightName = JS_ToCStringLen(ctx, &weightLength, value);
-        if (!weightName)
+        size_t valueLength = 0;
+        const char *valueName = JS_ToCStringLen(ctx, &valueLength, value);
+        if (!valueName)
         {
           JS_FreeValue(ctx, value);
           return false;
         }
-        for (size_t j = 0; j < sizeof(weights) / sizeof(weights[0]); ++j)
-          if (weightLength == strlen(weights[j].name) && !memcmp(weightName, weights[j].name, weightLength))
-          {
-            result.weight(weights[j].value);
-            accepted = true;
-            break;
-          }
-        JS_FreeCString(ctx, weightName);
+        if (weight)
+        {
+          for (size_t j = 0; j < sizeof(detail::StyleVocabularyWeights) / sizeof(detail::StyleVocabularyWeights[0]); ++j)
+            if (valueLength == strlen(detail::StyleVocabularyWeights[j].name)
+                && !memcmp(valueName, detail::StyleVocabularyWeights[j].name, valueLength))
+            {
+              result.weight(detail::StyleVocabularyWeights[j].value);
+              accepted = true;
+              break;
+            }
+        }
+        else if (color)
+        {
+          for (size_t j = 0; j < sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]); ++j)
+            if (valueLength == strlen(detail::StyleVocabularyColors[j].name)
+                && !memcmp(valueName, detail::StyleVocabularyColors[j].name, valueLength))
+            {
+              result.color(detail::StyleVocabularyColors[j].value);
+              accepted = true;
+              break;
+            }
+        }
+        JS_FreeCString(ctx, valueName);
       }
       JS_FreeValue(ctx, value);
       if (!accepted)
@@ -1132,7 +1147,7 @@ namespace smirkycard
     if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
       return false;
     BlockStyle result;
-    // StyleVocab.hpp supplies enums but no name-to-enum table (#951, like weights).
+    // Block name tables remain local; the generated names section covers weights and colors.
     const struct BlockName
     {
       const char *key;

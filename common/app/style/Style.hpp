@@ -13,6 +13,7 @@ namespace loka
       TextStyle()
           : fontSize_(0),
             weight_(TEXT_WEIGHT_NORMAL),
+            color_(TEXT_COLOR_UNSET),
             italic_(false),
             hasFontSize_(false),
             hasWeight_(false),
@@ -24,6 +25,13 @@ namespace loka
       {
         this->weight_ = value;
         this->hasWeight_ = true;
+        return *this;
+      }
+
+      /** UNSET restores the component's native default and is transparent in merges. */
+      TextStyle &color(TextColor value)
+      {
+        this->color_ = value;
         return *this;
       }
 
@@ -52,6 +60,8 @@ namespace loka
           result.italic_ = right.italic_;
           result.hasItalic_ = true;
         }
+        if (right.color_ != TEXT_COLOR_UNSET)
+          result.color_ = right.color_;
         return result;
       }
 
@@ -62,7 +72,8 @@ namespace loka
                && this->italic_ == other.italic_
                && this->hasFontSize_ == other.hasFontSize_
                && this->hasWeight_ == other.hasWeight_
-               && this->hasItalic_ == other.hasItalic_;
+               && this->hasItalic_ == other.hasItalic_
+               && this->color_ == other.color_;
       }
 
       bool operator!=(const TextStyle &other) const
@@ -82,11 +93,16 @@ namespace loka
           return this->hasFontSize_ < other.hasFontSize_;
         if (this->hasWeight_ != other.hasWeight_)
           return this->hasWeight_ < other.hasWeight_;
-        return this->hasItalic_ < other.hasItalic_;
+        if (this->hasItalic_ != other.hasItalic_)
+          return this->hasItalic_ < other.hasItalic_;
+        return this->color_ < other.color_;
       }
 
       int fontSize_;
       TextWeight weight_;
+      /** Color carries its own absence in UNSET. Existing fields keep has* flags
+          because their value domains have no distinct unset member. */
+      TextColor color_;
       bool italic_;
       bool hasFontSize_;
       bool hasWeight_;

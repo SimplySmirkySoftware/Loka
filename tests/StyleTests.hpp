@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_STYLE_TESTS_HPP
 #define LOKA_TESTS_STYLE_TESTS_HPP
 
+void testTextColorVocabularyAndMerge();
 void testTextStyleMergeAndSizeVocabulary();
 void testTextPropsDeclaredStyleGuardsNativeLabelConfiguration();
 void testBlockStyleNamedAlignmentsEqualTheirDeclarations();

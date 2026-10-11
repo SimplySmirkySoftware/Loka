@@ -40,6 +40,10 @@
 #include <signal.h>
 #endif
 
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
+
 namespace smirkycard
 {
   namespace testing
@@ -1201,7 +1205,32 @@ namespace
     // #814: a Text with no style fields must not count as declared, or the
     // rails configure their native label and the goldens drift.
     loka::app::scene::Node *plain = find(root, "Plain");
-    LOKA_VERIFY(plain && plain->asTextNode() && !plain->asTextNode()->props.hasDeclaredStyle());
+    LOKA_VERIFY(plain && plain->asTextNode() && !plain->asTextNode()->props.hasDeclaredLayoutStyle());
+  }
+
+  void checkTextColors()
+  {
+    using namespace loka::app;
+    for (size_t i = 0; i < sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]); ++i)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      const std::string source = std::string("card('first',class{compose(){return Text('a',{color:'")
+          + detail::StyleVocabularyColors[i].name + "',weight:'bold'}).TEST_ID('Color')}});";
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      loka::app::scene::Node *node = find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Color");
+      LOKA_VERIFY(node && node->asTextNode());
+      const TextStyle style = node->asTextNode()->props.resolvedTextStyle();
+      LOKA_VERIFY(style.color_ == detail::StyleVocabularyColors[i].value);
+      LOKA_VERIFY(style.hasWeight_ && style.weight_ == TEXT_WEIGHT_BOLD);
+    }
   }
 
   void checkLifecycleHooks()
@@ -1376,6 +1405,12 @@ namespace
   {
     const char *styles[] = {"{colour:1}",
                             "{size:'big'}",
+                            "{color:1}",
+                            "{color:'purple'}",
+                            "{color:'Red'}",
+                            "{color:'unset'}",
+                            "{color:''}",
+                            "{color:'red\\u0000'}",
                             "{weight:1}",
                             "{weight:'heavy'}",
                             "{italic:1}",
@@ -1396,6 +1431,15 @@ namespace
       const std::string source =
           std::string("card('first',class{constructor(c){this.c=c;}compose(){return Text('a',") + styles[i] + ")}});";
       checkComposeRefusal(source.c_str(), "TypeError");
+      if (!std::strncmp(styles[i], "{color:", 7) || !std::strncmp(styles[i], "{weight:", 8))
+      {
+        smirkycard::ScriptRuntime runtime;
+        loka::core::String result, error;
+        const std::string immediate = std::string("(()=>{try{Text('a',") + styles[i]
+            + ")}catch(e){return e instanceof TypeError && e.message==='Invalid Text style value'}return false})()";
+        LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Utf8(immediate.c_str(), immediate.size()), result, error));
+        LOKA_VERIFY(result.equals(loka::core::String::Literal("true")));
+      }
     }
   }
 
@@ -4090,6 +4134,7 @@ int main(int argc, char **argv)
   checkRegistry();
   checkCounterAndRefusals();
   checkTextStyle();
+  checkTextColors();
   checkMarkupParser();
   checkMarkup();
   checkBlockStyle();

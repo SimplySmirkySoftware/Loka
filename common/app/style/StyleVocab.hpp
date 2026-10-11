@@ -12,6 +12,21 @@ namespace loka
       TEXT_WEIGHT_BOLD = 1
     };
 
+    enum TextColor
+    {
+      TEXT_COLOR_UNSET = 0,
+      TEXT_COLOR_PRIMARY = 1,
+      TEXT_COLOR_SECONDARY = 2,
+      TEXT_COLOR_BLACK = 3,
+      TEXT_COLOR_WHITE = 4,
+      TEXT_COLOR_RED = 5,
+      TEXT_COLOR_GREEN = 6,
+      TEXT_COLOR_BLUE = 7,
+      TEXT_COLOR_CYAN = 8,
+      TEXT_COLOR_MAGENTA = 9,
+      TEXT_COLOR_YELLOW = 10
+    };
+
     enum TextWrap
     {
       TEXT_WRAP_NONE = 0,
@@ -106,6 +121,17 @@ namespace loka
       }
     };
 
+    /** Standard-palette roles and inks, initialized per TU like Bold. */
+    static const TextStyle Primary = TextStyle().color(TEXT_COLOR_PRIMARY);
+    static const TextStyle Secondary = TextStyle().color(TEXT_COLOR_SECONDARY);
+    static const TextStyle Black = TextStyle().color(TEXT_COLOR_BLACK);
+    static const TextStyle White = TextStyle().color(TEXT_COLOR_WHITE);
+    static const TextStyle Red = TextStyle().color(TEXT_COLOR_RED);
+    static const TextStyle Green = TextStyle().color(TEXT_COLOR_GREEN);
+    static const TextStyle Blue = TextStyle().color(TEXT_COLOR_BLUE);
+    static const TextStyle Cyan = TextStyle().color(TEXT_COLOR_CYAN);
+    static const TextStyle Magenta = TextStyle().color(TEXT_COLOR_MAGENTA);
+    static const TextStyle Yellow = TextStyle().color(TEXT_COLOR_YELLOW);
   } // namespace app
 } // namespace loka
 
@@ -128,3 +154,40 @@ namespace loka
 } // namespace loka
 
 #endif // generated vocabulary storage
+
+#if defined(LOKA_STYLE_VOCAB_DEFINE_NAMES) && !defined(LOKA_APP_STYLE_STYLE_VOCAB_NAMES_HPP)
+#define LOKA_APP_STYLE_STYLE_VOCAB_NAMES_HPP
+
+/** Opt-in decoder names; include Style.hpp before requesting this section. */
+namespace loka { namespace app { namespace detail {
+  struct TextWeightName
+  {
+    const char *name;
+    TextWeight value;
+  };
+  static const TextWeightName StyleVocabularyWeights[] = {
+    {"normal", TEXT_WEIGHT_NORMAL},
+    {"bold", TEXT_WEIGHT_BOLD},
+  };
+
+  struct TextColorName
+  {
+    const char *name;
+    TextColor value;
+  };
+  static const TextColorName StyleVocabularyColors[] = {
+    {"primary", Primary.color_},
+    {"secondary", Secondary.color_},
+    {"black", Black.color_},
+    {"white", White.color_},
+    {"red", Red.color_},
+    {"green", Green.color_},
+    {"blue", Blue.color_},
+    {"cyan", Cyan.color_},
+    {"magenta", Magenta.color_},
+    {"yellow", Yellow.color_},
+  };
+
+} } } // namespace loka::app::detail
+
+#endif // generated vocabulary names

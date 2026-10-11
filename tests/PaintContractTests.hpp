@@ -18,6 +18,7 @@ void testPaintPolicyScopeAndLifecycleInvalidation();
 void testPaintPlanEmptyCapacityAndScopeValues();
 void testUnrenderableTextNeverBecomesPresented();
 void testRefusedReprojectionInvalidatesPlacement();
+void testColorOnlyApplyRecoversTextHistory();
 void testStyleOnlyApplyRecoversTextHistory();
 void testPaintAnswersHandOverWrittenResident();
 void testPaintAnswersRefusalDisablesGate();

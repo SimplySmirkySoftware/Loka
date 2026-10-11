@@ -1,11 +1,17 @@
 #include "StyleTests.hpp"
 
 #include <climits>
+#include "core/State.hpp"
+#include "core/util/StateTrackerGuard.hpp"
 
 #include "app/nodes/Text.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 #include "support/TestVerify.hpp"
+
+#define LOKA_STYLE_VOCAB_DEFINE_NAMES
+#include "app/style/StyleVocab.hpp"
+#undef LOKA_STYLE_VOCAB_DEFINE_NAMES
 
 namespace
 {
@@ -125,17 +131,51 @@ void testTextPropsDeclaredStyleGuardsNativeLabelConfiguration()
 {
   using namespace loka::app;
   // The rails configure their native label (single-line mode, clipping,
-  // SS_LEFTNOWORDWRAP) only when a style field was declared; an undeclared
+  // SS_LEFTNOWORDWRAP) only when a layout style field was declared; an undeclared
   // Text keeps the platform defaults (#814).
-  LOKA_VERIFY(!TextProps("plain").hasDeclaredStyle());
-  LOKA_VERIFY((Text("x") + Bold).props.hasDeclaredStyle());
-  LOKA_VERIFY((Text("x") + Italic).props.hasDeclaredStyle());
-  LOKA_VERIFY((Text("x") + FontSize<12>()).props.hasDeclaredStyle());
-  LOKA_VERIFY((Text("x") + BlockStyle().wrap(TEXT_WRAP_WORD)).props.hasDeclaredStyle());
-  LOKA_VERIFY((Text("x") + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS)).props.hasDeclaredStyle());
+  LOKA_VERIFY(!TextProps("plain").hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Text("x") + Bold).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Text("x") + Italic).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Text("x") + FontSize<12>()).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Text("x") + BlockStyle().wrap(TEXT_WRAP_WORD)).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Text("x") + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS)).props.hasDeclaredLayoutStyle());
   loka::core::MutableState<TextStyle> live;
-  LOKA_VERIFY((Text("x") + &live).props.hasDeclaredStyle());
+  LOKA_VERIFY((Text("x") + &live).props.hasDeclaredLayoutStyle());
   // An unset field on a declared style does not undeclare it, and merging an
   // empty style over nothing declares nothing.
-  LOKA_VERIFY(!(Text("x") + TextStyle()).props.hasDeclaredStyle());
+  LOKA_VERIFY(!(Text("x") + TextStyle()).props.hasDeclaredLayoutStyle());
+}
+
+void testTextColorVocabularyAndMerge()
+{
+  using namespace loka::app;
+  LOKA_VERIFY(TEXT_COLOR_UNSET == 0);
+  LOKA_VERIFY(TextStyle().color_ == TEXT_COLOR_UNSET);
+  for (unsigned i = 0; i < sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]); ++i)
+  {
+    // The generated table reads each named constant, in the frozen palette order.
+    LOKA_VERIFY(detail::StyleVocabularyColors[i].value == static_cast<TextColor>(i + 1));
+  }
+  LOKA_VERIFY(Red + Blue == Blue);
+  LOKA_VERIFY(Red + TextStyle() == Red);
+  const TextStyle warning = Bold + Red;
+  LOKA_VERIFY((warning + Primary).color_ == TEXT_COLOR_PRIMARY);
+  LOKA_VERIFY((warning + Primary).weight_ == TEXT_WEIGHT_BOLD);
+  LOKA_VERIFY(Red != Blue);
+  LOKA_VERIFY(Red < Blue);
+  LOKA_VERIFY(!(Blue < Red));
+  LOKA_VERIFY(!(Red < Red));
+  LOKA_VERIFY(!((Text("x") + Red).props.hasDeclaredLayoutStyle()));
+  LOKA_VERIFY((Text("x") + Red).props.resolvedTextStyle().color_ == TEXT_COLOR_RED);
+  loka::core::PushStateTracker tracker;
+  loka::core::MutableState<TextStyle> live(Red);
+  tracker.addState(&live);
+  const TextDefinitionWithAttr text = Text("x") + &live;
+  LOKA_VERIFY(text.props.resolvedTextStyle().color_ == TEXT_COLOR_RED);
+  {
+    loka::core::StateTrackerGuard guard(&tracker);
+    live.set(TextStyle());
+  }
+  LOKA_VERIFY(text.props.resolvedTextStyle().color_ == TEXT_COLOR_UNSET);
+  tracker.removeState(&live);
 }

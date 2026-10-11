@@ -60,13 +60,13 @@ namespace
       creation default (SS_LEFT), so a retained style removal restores it. */
   DWORD TextControlTypeFor(const loka::app::TextProps &props)
   {
-    return props.hasDeclaredStyle() ? TextControlType(props.blockStyle_) : SS_LEFT;
+    return props.hasDeclaredLayoutStyle() ? TextControlType(props.blockStyle_) : SS_LEFT;
   }
 
   HFONT ResolveTextFont(const loka::app::TextNode *text,
                         const Win32ScenePlatformController *controller)
   {
-    if (!text || !controller || !text->props.hasDeclaredStyle())
+    if (!text || !controller || !text->props.hasDeclaredLayoutStyle())
       return 0;
     const loka::app::TextStyle style = text->props.resolvedTextStyle();
     return style.hasFontSize_ || style.hasWeight_ || style.hasItalic_
@@ -174,7 +174,7 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
       textDelivery_(loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN))
 {
   DWORD style = WS_VISIBLE | WS_CHILD | SS_LEFT | SS_NOPREFIX;
-  if (node_ && node_->props.hasDeclaredStyle())
+  if (node_ && node_->props.hasDeclaredLayoutStyle())
   {
     const loka::app::BlockStyle &attr = node_->props.blockStyle_;
     const bool truncEllipsis = attr.hasTruncation_ && attr.truncation_ == loka::app::TEXT_TRUNCATION_ELLIPSIS;

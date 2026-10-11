@@ -252,6 +252,16 @@ void testAttributedTextDirtySeatsAndEditorPresentation()
   const PaintQuery query = {controller.paintScope(), PLACEMENT_ELIGIBLE};
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
   LOKA_VERIFY(context->queryPaintDamage(query).damage.width == 0);
+  const unsigned beforeColor = controller.commits;
+  {
+    StateTrackerGuard guard(SceneTestAccess::rootBoundary(scene)->tracker());
+    live.set(Styled("var ", Bold + Red) + Styled("x", Italic) + Styled(" = 1;", TextStyle()));
+  }
+  settle(scene);
+  LOKA_VERIFY(controller.commits > beforeColor);
+  LOKA_VERIFY(context->measurement().width() == 40 && context->measurement().height() == 12);
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
+  LOKA_VERIFY(context->queryPaintDamage(query).damage.width == 0);
   const unsigned before = controller.commits;
   {
     StateTrackerGuard guard(SceneTestAccess::rootBoundary(scene)->tracker());
@@ -665,6 +675,15 @@ void testNullTextShapingDispatch()
 
 void testTextSpanTable()
 {
+  const SyntheticTextWidthSource colors(Styled("a", Red) + Styled("b", Red) + Styled("c", Blue));
+  LOKA_VERIFY(colors.valid() && colors.spanCount() == 2);
+  LOKA_VERIFY(colors.spanStyle(0) == Red && colors.spanStyle(1) == Blue);
+  const TextLineBreaker colorLines(colors, BlockStyle(), 100);
+  LOKA_VERIFY(colorLines.valid() && colorLines.lineCount() == 1);
+  LOKA_VERIFY(colorLines.line(0).fragmentCount == 2);
+  LOKA_VERIFY(colorLines.fragment(0).start == 0 && colorLines.fragment(0).end == 2);
+  LOKA_VERIFY(colorLines.fragment(1).start == 2 && colorLines.fragment(1).end == 3);
+
   const AttributedString value = Styled("", Italic) + Styled("ab", Bold) + Styled("", Italic) + Styled("cd", Bold)
                                  + Styled("e", Italic) + Styled("f", Bold);
   const SyntheticTextWidthSource source(value);
