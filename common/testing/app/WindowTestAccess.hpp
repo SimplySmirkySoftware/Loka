@@ -21,6 +21,10 @@ namespace loka
         {
           return window.publishedFocusContext();
         }
+        static void applyDocumentFacts(::Window &window, const DocumentFacts &facts)
+        {
+          window.applyDocumentFacts(facts);
+        }
         static void reconcileFocus(::Window &window) { window.reconcileFocus(); }
 
         static void storeNativeFrame(::Window &window, const loka::core::Frame &frame)

@@ -33,4 +33,8 @@ void testBootstrapLeavesReentrantOpensPendingInsteadOfDeclaringWindowless();
 void testBootstrapWalksOnceWhenTheFactoryReopensOnEveryRefusal();
 void testRuntimeRefusalOfTheDeferredLastDocumentQuits();
 
+void testWindowDocumentFactsProjectAtTurnClose();
+void testWindowDocumentFactsEqualApplyDoesNotProjectAgain();
+void testWindowPlainDefaultsToUneditedWithoutProjection();
+
 #endif

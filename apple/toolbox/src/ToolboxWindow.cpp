@@ -108,6 +108,7 @@ ToolboxWindow::ToolboxWindow(PlatformContext *context, const WindowProps &props)
       ToolboxWindowContext::CAP_NONE
 #endif
   );
+  // Toolbox draws no edited mark by the #1245 ruling.
   this->observeNativeState(this->displayTitleState(), &ToolboxWindow::TitleChangedThunk, this);
   this->observeNativeState(this->frameState(), &ToolboxWindow::FrameChangedThunk, this);
 }

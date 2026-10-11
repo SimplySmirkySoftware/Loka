@@ -3,9 +3,12 @@
 #include "support/TestVerify.hpp"
 #include <cassert>
 #include <cstdio>
+#include <cwchar>
 #include <windows.h>
 #include "Win32App.hpp"
 #include "Win32Window.hpp"
+#include "Win32PlatformContext.hpp"
+#include "testing/app/WindowTestAccess.hpp"
 #include "Win32ScenePlatformController.hpp"
 #include "app/Menu.hpp"
 #include "core/State.hpp"
@@ -638,4 +641,34 @@ void testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification()
   LOKA_VERIFY(!menuRemaining);
   window.frameState().deferUnbind(&CountFrameNotification, &frameNotifications);
   printf("==== [testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification] PASSED ====\n");
+}
+
+void testWin32WindowEditedMarkPrefixesTheNativeTitle()
+{
+  Win32PlatformContext context;
+  WindowProps props;
+  props.frame(40, 40, 257, 163).visible(false);
+  Win32Window window(&context, props);
+  setWindowVisibility(window, true);
+  LOKA_VERIFY(window.hwnd() != NULL);
+
+  for (int pass = 0; pass < 2; ++pass)
+  {
+    const bool edited = pass == 0;
+    {
+      loka::core::Operation turn;
+      {
+        loka::core::StateTrackerGuard guard(window.getTracker());
+        loka::app::testing::WindowTestAccess::applyDocumentFacts(
+            window, loka::app::DocumentFacts(loka::core::String("Doc"), edited));
+      }
+      turn.settle();
+      turn.close();
+    }
+    // The second pass changes only edited, so title observation alone cannot pass.
+    wchar_t title[16] = {};
+    LOKA_VERIFY(GetWindowTextW(window.hwnd(), title, 16) == (edited ? 4 : 3));
+    LOKA_VERIFY(std::wcscmp(title, edited ? L"*Doc" : L"Doc") == 0);
+  }
+  setWindowVisibility(window, false);
 }
