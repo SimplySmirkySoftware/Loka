@@ -130,7 +130,8 @@ if(WIN32)
   target_link_libraries(LokaTestsWin32 PRIVATE LokaWin32WideApiContract ole32 windowscodecs)
 
   if(MSVC)
-    target_compile_options(LokaTestsWin32 PRIVATE /utf-8)
+    # tests/FlowDslTests.cpp outgrew the default COFF section limit (C1128).
+    target_compile_options(LokaTestsWin32 PRIVATE /utf-8 /bigobj)
   endif()
 
   add_executable(LokaWin32StandaloneAuditFixture EXCLUDE_FROM_ALL

@@ -486,6 +486,10 @@ public:
         onKeyPressFn_(props.onKeyPressFn),
         onKeyPressUserData_(props.onKeyPressUserData)
   {
+    // An idle handler needs a cadence (#663): the policy defaults to none,
+    // and App::consumeIdle returns before handleIdle under none, so the
+    // handler would compile and never run.
+    assert(!props.onIdleFn || props.idlePolicyValue.mode != loka::app::IDLE_MODE_NONE);
     if (props.titleStatePtr)
     {
       title_ = props.titleStatePtr;

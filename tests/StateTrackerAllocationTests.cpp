@@ -286,8 +286,8 @@ void testStateTrackerReservedPropagation()
         assert(commit.get() == c.get());
         LOKA_VERIFY(settleWrite.calls == beforeSettle + 200);
         LOKA_VERIFY(commitWrite.calls == beforeCommit + 200);
-        LOKA_VERIFY(tracker.committedDirtyStates().size() == 1);
-        LOKA_VERIFY(tracker.committedDirtyStates()[0] == &commit);
+        LOKA_VERIFY(tracker.committedSet().identities().size() == 1);
+        LOKA_VERIFY(tracker.committedSet().identities()[0] == &commit);
       }
     }
   }
@@ -343,7 +343,7 @@ void testStateTrackerCycleAndDiamond()
 
   assert(a.calls == 1);
   assert(b.calls == 1);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 2);
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 2);
 
   // Removal invalidates old edges. Reuse the state in an acyclic diamond;
   // a shared descendant with dependents must not be mistaken for a cycle.
@@ -361,7 +361,7 @@ void testStateTrackerCycleAndDiamond()
   assert(b.calls == 2);
   assert(c.calls == 1);
   assert(d.calls == 1);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 4);
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 4);
 #if defined(__linux__)
   LOKA_VERIFY(std::fflush(stderr) == 0);
   LOKA_VERIFY(dup2(saved, fileno(stderr)) >= 0);
@@ -394,12 +394,12 @@ void testStateTrackerRemovesSettlementBorrow()
   LOKA_VERIFY(tracker.end());
   assert(removed.calls == 0);
   assert(survivor.calls == 1);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 2);
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 2);
   tracker.begin();
   tracker.markDirty(&survivor);
   LOKA_VERIFY(tracker.end());
   assert(survivor.calls == 2);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 1);
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 1);
 }
 
 void testStateTrackerVisitPassWrapsPastZero()
@@ -435,7 +435,7 @@ void testStateTrackerVisitPassWrapsPastZero()
   assert(b.calls == 1);
   assert(c.calls == 1);
   assert(d.calls == 1);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 4);
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 4);
 #if defined(__linux__)
   LOKA_VERIFY(std::fflush(stderr) == 0);
   LOKA_VERIFY(dup2(saved, fileno(stderr)) >= 0);

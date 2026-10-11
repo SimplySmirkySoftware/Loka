@@ -90,6 +90,7 @@
 #include "MacWindowFrameClampTests.hpp"
 #endif
 #include "WindowFrameStateTests.hpp"
+#include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
 #include "NodeMatchTests.hpp"
 #include "AttrDslTests.hpp"

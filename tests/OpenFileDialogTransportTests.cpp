@@ -415,7 +415,7 @@ namespace
       CommitProbe &probe = *static_cast<CommitProbe *>(data);
       const loka::core::TrackerPhase phase = probe.tracker->phase();
       LOKA_VERIFY(phase == loka::core::TRACKER_COMMIT);
-      const loka::core::PushStateTracker::StateList &dirty = probe.tracker->committedDirtyStates();
+      const loka::core::PushStateTracker::StateList &dirty = probe.tracker->committedSet().identities();
       if (probe.commits->empty())
       {
         probe.commits->push_back(1);
