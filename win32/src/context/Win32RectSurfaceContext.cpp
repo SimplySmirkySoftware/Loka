@@ -1,3 +1,4 @@
+#include "../Win32PaintGround.hpp"
 #include "Win32RectSurfaceContext.hpp"
 #include <cassert>
 #include "../Win32ScenePlatformController.hpp"
@@ -286,10 +287,11 @@ void Win32RectSurfaceContext::draw(HDC hdc, const RECT &rect)
   HGDIOBJ previous = bitmap ? SelectObject(memoryDC, bitmap) : NULL;
   const bool buffered = previous && previous != HGDI_ERROR;
   HDC target = buffered ? memoryDC : hdc;
-  bool painted = FillRect(target, &rect, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH))) != 0;
+  const loka::app::SurfaceGround ground = loka::app::GroundForKind(loka::app::scene::NODE_KIND_RECT_SURFACE);
+  bool painted = loka::win32::Win32PaintGround(target, ground, rect);
   if (this->node_ && this->modelState_)
   {
-    HBRUSH blackBrush = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    HBRUSH spriteBrush = GetSysColorBrush(loka::win32::Win32TextRoleColor(ground));
     for (short i = 0; i < model.rectCount; ++i)
     {
       RECT spriteRect;
@@ -299,7 +301,7 @@ void Win32RectSurfaceContext::draw(HDC hdc, const RECT &rect)
                                           model.rects[i].height);
       // DPI only, no space scale: these are decoded sprite pixels.
       spriteRect = this->controller()->displayScale().projectDeviceOnly(logicalRect).r;
-      if (!FillRect(target, &spriteRect, blackBrush))
+      if (!FillRect(target, &spriteRect, spriteBrush))
         painted = false;
     }
   }

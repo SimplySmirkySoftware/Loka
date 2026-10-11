@@ -1,3 +1,7 @@
+#include "Win32PaintGround.hpp"
+#include "app/nodes/controls/Cell.hpp"
+#include "context/Win32CellContext.hpp"
+#include "support/ContrastRatio.hpp"
 #include "Win32InputDoor.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "context/Win32EditTextContext.hpp"
@@ -128,7 +132,7 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
   Win32ScenePlatformController controller(rootHwnd, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
   RegisterWin32BuiltInSupport(controller);
 
-  // RectSurface's palette is white ground and black sprites. Keep B black
+  // RectSurface pairs DOCUMENT ground and its text-role sprites. Keep B black
   // while adding or removing A's sprite.
   RectSurfaceModel black;
   black.rectCount = 1;
@@ -269,9 +273,9 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
                 stats.rootEraseCount,
                 stats.rectSurfacePaintCount);
     std::fflush(stdout);
-    LOKA_VERIFY(bPixel == RGB(0, 0, 0) && "paint-only root delivery must preserve the sibling under ScrollView");
+    LOKA_VERIFY(bPixel == GetSysColor(COLOR_WINDOWTEXT) && "paint-only root delivery must preserve the sibling under ScrollView");
     const bool blackA = removeSprites ? phase == 0 : phase == 1;
-    const COLORREF expectedA = blackA ? RGB(0, 0, 0) : RGB(255, 255, 255);
+    const COLORREF expectedA = blackA ? GetSysColor(COLOR_WINDOWTEXT) : GetSysColor(COLOR_WINDOW);
     LOKA_VERIFY(aPixel == expectedA);
   }
   SceneAccess::unmount(scene);
@@ -604,13 +608,13 @@ void testWin32TextOverlapPinsSiblingRepaint()
       const COLORREF below = GetPixel(pixels, 80, 60);
       const COLORREF overlap = GetPixel(pixels, 150, 12);
       const COLORREF ground = GetPixel(pixels, 200, 100);
-      // Font smoothing can render the glyph without pure-black pixels (#829).
+      // Font smoothing can render the glyph without pure text-role pixels (#829).
       int inkPixels = 0;
       for (int y = 0; y < 24; ++y)
       {
         for (int x = 0; x < 160; ++x)
         {
-          if (GetPixel(pixels, x, y) != RGB(255, 255, 255))
+          if (GetPixel(pixels, x, y) != GetSysColor(COLOR_WINDOW))
           {
             ++inkPixels;
           }
@@ -620,14 +624,14 @@ void testWin32TextOverlapPinsSiblingRepaint()
       DeleteDC(pixels);
       std::printf("#598 ZStack capture %d: below=%08lX overlap=%08lX ground=%08lX; window=%08lX ink=%d; SPI_GETFONTSMOOTHING=%d SPI_GETFONTSMOOTHINGTYPE=%u\n",
                   phase, static_cast<unsigned long>(below), static_cast<unsigned long>(overlap),
-                  static_cast<unsigned long>(ground), static_cast<unsigned long>(GetSysColor(COLOR_WINDOW)), inkPixels,
+                  static_cast<unsigned long>(ground), static_cast<unsigned long>(GetSysColor(COLOR_BTNFACE)), inkPixels,
                   static_cast<int>(fontSmoothing), static_cast<unsigned int>(fontSmoothingType));
       std::fflush(stdout);
-      LOKA_VERIFY(below == RGB(0, 0, 0));
+      LOKA_VERIFY(below == GetSysColor(COLOR_WINDOWTEXT));
       // Win32 sibling-repaint path pin, not a cross-rail overlap promise.
-      LOKA_VERIFY(overlap == RGB(255, 255, 255));
+      LOKA_VERIFY(overlap == GetSysColor(COLOR_WINDOW));
       LOKA_VERIFY(inkPixels > 0);
-      LOKA_VERIFY(ground == GetSysColor(COLOR_WINDOW) && ground != RGB(0, 0, 0));
+      LOKA_VERIFY(ground == GetSysColor(COLOR_BTNFACE));
     }
 
     text.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
@@ -741,19 +745,19 @@ void testWin32AttributedTextTransparentOverSprite()
   flushTransparentPaint(controller, root);
   // Native ZStack arrangement, just like the Text pin above. This is a Win32
   // sibling-path pin, not a promise of cross-rail RectSurface overlays.
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == RGB(0, 0, 0));
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOWTEXT));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(RectSurfaceModel());
   }
   flushTransparentPaint(controller, root);
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == RGB(255, 255, 255));
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOW));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(initial);
   }
   flushTransparentPaint(controller, root);
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == RGB(0, 0, 0));
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOWTEXT));
   text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   surface.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
@@ -789,7 +793,7 @@ namespace
       {
         const COLORREF pixel = GetPixel(dc, x, y);
         LOKA_VERIFY(pixel != CLR_INVALID);
-        if (pixel != GetSysColor(COLOR_WINDOW))
+        if (pixel != GetSysColor(COLOR_BTNFACE))
         {
           oldInk.x = x;
           oldInk.y = y;
@@ -807,7 +811,7 @@ namespace
     text.layout(&controller, state);
     LOKA_VERIFY(state.height == height);
     flushTransparentPaint(controller, root);
-    LOKA_VERIFY(windowPixel(text.paintHwnd(), oldInk.x, oldInk.y) == GetSysColor(COLOR_WINDOW));
+    LOKA_VERIFY(windowPixel(text.paintHwnd(), oldInk.x, oldInk.y) == GetSysColor(COLOR_BTNFACE));
     text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
     controller.drainNativeRetirements();
   }
@@ -836,11 +840,11 @@ namespace
         image.set(loka::core::resource::Image::Empty());
       }
       flushTransparentPaint(controller, root);
-      LOKA_VERIFY(windowPixel(child, 16, 8) == GetSysColor(COLOR_WINDOW));
+      LOKA_VERIFY(windowPixel(child, 16, 8) == GetSysColor(COLOR_BTNFACE));
     }
     else
     {
-      LOKA_VERIFY(windowPixel(child, 120, 60) == GetSysColor(COLOR_WINDOW));
+      LOKA_VERIFY(windowPixel(child, 120, 60) == GetSysColor(COLOR_BTNFACE));
       // A fit change uses relayout, independently of the image observer.
       node.props.attr_.fit(IMAGE_FIT_STRETCH);
       context.relayout(0, 0, 160, 80);
@@ -849,7 +853,7 @@ namespace
       node.props.attr_.fit(IMAGE_FIT_NONE);
       context.relayout(0, 0, 160, 80);
       flushTransparentPaint(controller, root);
-      LOKA_VERIFY(windowPixel(child, 120, 60) == GetSysColor(COLOR_WINDOW));
+      LOKA_VERIFY(windowPixel(child, 120, 60) == GetSysColor(COLOR_BTNFACE));
     }
     context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
     controller.drainNativeRetirements();
@@ -906,4 +910,211 @@ void testWin32ScrollViewImageRemovalRestoresGround()
   exerciseImageTransparency(controller, viewport.hwnd(), true);
   viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
+}
+
+namespace loka
+{
+  namespace testing
+  {
+    /** Test-only access to the existing Cell drawer; no production getter. */
+    class Win32CellPaintAccess
+    {
+    public:
+      static void draw(Win32CellContext &cell, HDC dc, const RECT &rect)
+      {
+        cell.drawCell(dc, rect);
+      }
+    };
+  }
+}
+
+namespace
+{
+  void verifyStaticColors(HWND parent, HWND child)
+  {
+    HDC dc = CreateCompatibleDC(NULL);
+    LOKA_VERIFY(dc != NULL);
+    const COLORREF sentinel = RGB(1, 2, 3);
+    if (sentinel == GetSysColor(COLOR_BTNTEXT))
+      std::printf("[skip] STATIC sentinel equals live BTNTEXT; text mutation not discriminated\n");
+    SetTextColor(dc, sentinel);
+    SetBkMode(dc, OPAQUE);
+    const HBRUSH direct = loka::win32::Win32StaticTextColors(dc);
+    LOKA_VERIFY(direct == GetStockObject(NULL_BRUSH));
+    LOKA_VERIFY(GetTextColor(dc) == GetSysColor(COLOR_BTNTEXT));
+    LOKA_VERIFY(GetBkMode(dc) == TRANSPARENT);
+    // Reset before dispatch: the direct helper call cannot mask missing wiring.
+    SetTextColor(dc, sentinel);
+    SetBkMode(dc, OPAQUE);
+    const LRESULT brush = SendMessageW(parent, WM_CTLCOLORSTATIC,
+        reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(child));
+    LOKA_VERIFY(reinterpret_cast<HBRUSH>(brush) == GetStockObject(NULL_BRUSH));
+    LOKA_VERIFY(GetTextColor(dc) == GetSysColor(COLOR_BTNTEXT));
+    LOKA_VERIFY(GetBkMode(dc) == TRANSPARENT);
+    DeleteDC(dc);
+  }
+
+  void noteEqualSystemColors(int first, int second, const char *pin)
+  {
+    if (GetSysColor(first) == GetSysColor(second))
+      std::printf("[skip] %s: system indices %d/%d equal; substitution not discriminated\n", pin, first, second);
+  }
+}
+
+void testWin32WindowAndViewportGroundRoles()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  ScrollViewNode scrollNode((ScrollViewProps()));
+  Win32ScrollViewContext viewport(&controller, root, 10, 10, 180, 120, &scrollNode);
+  LOKA_VERIFY(viewport.isValid());
+  TextNode rootText((TextProps("root")));
+  TextNode viewportText((TextProps("viewport")));
+  Win32TextContext first(&controller, root, 0, 150, 80, 24, &rootText);
+  Win32TextContext second(&controller, viewport.hwnd(), 0, 0, 80, 24, &viewportText);
+  HWND firstHwnd = FindWindowExW(root, NULL, L"STATIC", L"root");
+  HWND secondHwnd = FindWindowExW(viewport.hwnd(), NULL, L"STATIC", L"viewport");
+  LOKA_VERIFY(firstHwnd != NULL && secondHwnd != NULL);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  flushTransparentPaint(controller, root);
+  noteEqualSystemColors(COLOR_BTNFACE, COLOR_WINDOW, "root/viewport ground");
+  LOKA_VERIFY(windowPixel(root, 220, 100) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(viewport.hwnd(), 120, 60) == GetSysColor(COLOR_BTNFACE));
+  verifyStaticColors(root, firstHwnd);
+  verifyStaticColors(viewport.hwnd(), secondHwnd);
+  first.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  second.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
+}
+
+void testWin32CellGroundAndTextRoles()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  CellNode node(CellProps().text("MMMM"));
+  Win32CellContext cell(&controller, root, 0, 0, 160, 48, &node);
+  HWND child = FindWindowExW(root, NULL, L"LOKA_CELL", NULL);
+  LOKA_VERIFY(child != NULL);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(windowPixel(child, 4, 4) == GetSysColor(COLOR_BTNFACE));
+
+  HDC source = GetDC(root);
+  LOKA_VERIFY(source != NULL);
+  HDC actual = CreateCompatibleDC(source), expected = CreateCompatibleDC(source);
+  HBITMAP actualBitmap = CreateCompatibleBitmap(source, 160, 48);
+  HBITMAP expectedBitmap = CreateCompatibleBitmap(source, 160, 48);
+  LOKA_VERIFY(actual && expected && actualBitmap && expectedBitmap);
+  HGDIOBJ oldActual = SelectObject(actual, actualBitmap);
+  HGDIOBJ oldExpected = SelectObject(expected, expectedBitmap);
+  LOKA_VERIFY(oldActual && oldActual != HGDI_ERROR && oldExpected && oldExpected != HGDI_ERROR);
+  const RECT rect = {0, 0, 160, 48};
+  const COLORREF sentinel = RGB(1, 2, 3);
+  if (sentinel == GetSysColor(COLOR_BTNTEXT))
+    std::printf("[skip] Cell sentinel equals live BTNTEXT; text mutation not discriminated\n");
+  SetTextColor(actual, sentinel);
+  SetBkMode(actual, OPAQUE);
+  loka::testing::Win32CellPaintAccess::draw(cell, actual, rect);
+  LOKA_VERIFY(GetTextColor(actual) == sentinel);
+  LOKA_VERIFY(GetBkMode(actual) == OPAQUE);
+  LOKA_VERIFY(FillRect(expected, &rect, GetSysColorBrush(COLOR_BTNFACE)));
+  HGDIOBJ oldFont = NULL;
+  if (controller.displayFont())
+    oldFont = SelectObject(expected, controller.displayFont());
+  SetTextColor(expected, GetSysColor(COLOR_BTNTEXT));
+  SetBkMode(expected, TRANSPARENT);
+  RECT label = rect;
+  LOKA_VERIFY(DrawTextW(expected, L"MMMM", 4, &label,
+      DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX));
+  int ink = 0;
+  // Compare GDI's same-font reference, including antialiasing. Exclude the
+  // Cell's black frame: it is explicitly a non-role color (#1208).
+  for (int y = 1; y < 47; ++y)
+    for (int x = 1; x < 159; ++x)
+    {
+      const COLORREF reference = GetPixel(expected, x, y);
+      LOKA_VERIFY(reference != CLR_INVALID);
+      LOKA_VERIFY(GetPixel(actual, x, y) == reference);
+      if (reference != GetSysColor(COLOR_BTNFACE))
+        ++ink;
+    }
+  noteEqualSystemColors(COLOR_BTNTEXT, COLOR_BTNFACE, "Cell glyph visibility");
+  if (GetSysColor(COLOR_BTNTEXT) != GetSysColor(COLOR_BTNFACE))
+    LOKA_VERIFY(ink > 0);
+  if (oldFont) SelectObject(expected, oldFont);
+  SelectObject(actual, oldActual);
+  SelectObject(expected, oldExpected);
+  DeleteObject(actualBitmap);
+  DeleteObject(expectedBitmap);
+  DeleteDC(actual);
+  DeleteDC(expected);
+  ReleaseDC(root, source);
+  cell.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
+}
+
+void testWin32RectSurfaceGroundAndSpriteRoles()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  RectSurfaceModel value;
+  value.rectCount = 1;
+  value.rects[0] = RectSprite(8, 8, 16, 16);
+  loka::core::MutableState<RectSurfaceModel> model(value);
+  RectSurfaceProps props;
+  props.model(&model).size(100, 60);
+  RectSurfaceNode node(props);
+  Win32RectSurfaceContext context(&controller, root, 0, 0, 100, 60, &node);
+  HWND child = FindWindowExW(root, NULL, L"LOKA_RECT_SURFACE", NULL);
+  LOKA_VERIFY(child != NULL);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  flushTransparentPaint(controller, root);
+  noteEqualSystemColors(COLOR_WINDOW, COLOR_BTNFACE, "RectSurface ground");
+  noteEqualSystemColors(COLOR_WINDOWTEXT, COLOR_BTNTEXT, "RectSurface sprite text role");
+  // A shipped light theme cannot distinguish the old stock brushes. Report
+  // this VM coverage limit explicitly; the host brush-identity pin kills
+  // both stock-brush reversions independently of the live theme.
+  LOGBRUSH oldGround, oldSprite;
+  LOKA_VERIFY(GetObjectW(GetStockObject(WHITE_BRUSH), sizeof(oldGround), &oldGround) != 0);
+  LOKA_VERIFY(GetObjectW(GetStockObject(BLACK_BRUSH), sizeof(oldSprite), &oldSprite) != 0);
+  if (GetSysColor(COLOR_WINDOW) == oldGround.lbColor)
+    std::printf("[skip] RectSurface stock WHITE_BRUSH reversion equals live WINDOW\n");
+  if (GetSysColor(COLOR_WINDOWTEXT) == oldSprite.lbColor)
+    std::printf("[skip] RectSurface stock BLACK_BRUSH reversion equals live WINDOWTEXT\n");
+  LOKA_VERIFY(windowPixel(child, 60, 40) == GetSysColor(COLOR_WINDOW));
+  LOKA_VERIFY(windowPixel(child, 12, 12) == GetSysColor(COLOR_WINDOWTEXT));
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
+}
+
+void testWin32LiveGroundLegibility()
+{
+  using namespace loka::app;
+  using namespace loka::win32;
+  // Only the live theme's fact. High contrast/user-composed colors (page 3)
+  // are outside the shipped-light-theme acceptance run.
+  const SurfaceGround roles[] = {SURFACE_GROUND_WINDOW, SURFACE_GROUND_DOCUMENT, SURFACE_GROUND_CONTROL};
+  for (unsigned g = 0; g < sizeof(roles) / sizeof(roles[0]); ++g)
+    for (unsigned t = 0; t < sizeof(roles) / sizeof(roles[0]); ++t)
+    {
+      int index = -1;
+      LOKA_VERIFY(QueryWin32GroundColor(roles[g], index));
+      const int text = Win32TextRoleColor(roles[t]);
+      const COLORREF bg = GetSysColor(index), fg = GetSysColor(text);
+      const double ratio = loka_test::ContrastRatio(
+          loka_test::RelativeLuminance(GetRValue(bg) / 255.0, GetGValue(bg) / 255.0, GetBValue(bg) / 255.0),
+          loka_test::RelativeLuminance(GetRValue(fg) / 255.0, GetGValue(fg) / 255.0, GetBValue(fg) / 255.0));
+      std::printf("live Win32 text=%d ground=%d contrast=%.3f\n", text, index, ratio);
+      LOKA_VERIFY(ratio >= 4.5);
+    }
 }

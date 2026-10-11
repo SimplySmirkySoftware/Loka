@@ -11,6 +11,7 @@
 #include "platform/Win32DisplayFont.hpp"
 #include "Win32TextEnvironment.hpp"
 #include "core/resource/Image.hpp"
+#include "app/RectSurface.hpp"
 class Win32ScenePlatformController : public loka::app::scene::IPlatformController
 {
 public:
@@ -62,6 +63,8 @@ public:
   }
   void destroy() {}
   static void requestDirtyRect(HWND, const RECT *, BOOL) {}
+  static void redrawDirtySubtreeNow(HWND, const RECT *, BOOL) {}
+  void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *) {}
   static void requestDirtySubtree(HWND, const RECT *, BOOL) {}
   // Acceptance twin of the production controller door. This measurement host
   // has no native repaint queue; pixel delivery is pinned on Win32.

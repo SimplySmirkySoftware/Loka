@@ -120,3 +120,8 @@ LOKA_TEST(testWin32ImageDecodeRetainsOutputOwnedBlob)
 LOKA_TEST(testWin32ButtonNaturalWidthAnswer)
 LOKA_TEST(testWin32RibbonNaturalWidthTraversal)
 LOKA_TEST(testWin32NaturalWidthDirectRow)
+
+LOKA_TEST(testWin32WindowAndViewportGroundRoles)
+LOKA_TEST(testWin32CellGroundAndTextRoles)
+LOKA_TEST(testWin32RectSurfaceGroundAndSpriteRoles)
+LOKA_TEST(testWin32LiveGroundLegibility)

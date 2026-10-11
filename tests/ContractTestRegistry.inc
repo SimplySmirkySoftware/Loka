@@ -1213,3 +1213,6 @@ LOKA_TEST(testCommandSetCallbackFamilyCollision)
 
 LOKA_TEST(testToolboxGroundRoles)
 LOKA_TEST(testToolboxGroundLegibility)
+
+LOKA_TEST(testWin32GroundRoles)
+LOKA_TEST(testWin32GroundLegibility)

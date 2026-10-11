@@ -1,3 +1,4 @@
+#include "../Win32Ground.hpp"
 #include "Win32AttributedTextContext.hpp"
 #include "../Win32ScenePlatformController.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -247,9 +248,13 @@ void Win32AttributedTextContext::draw(HDC dc, const RECT &rect)
   if (!this->table_.valid() || !this->node_ || !this->node_->props.text_
       || this->table_.value() != this->node_->props.text_->get())
     return;
-  // Text's WM_CTLCOLORSTATIC path preserves the DC's default text colour.
+  // Like Text's WM_CTLCOLORSTATIC path, pair transparent text with WINDOW.
+  // The table uses this color for both runs and ellipsis; restore the caller's DC.
+  const COLORREF previousText = SetTextColor(
+      dc, GetSysColor(loka::win32::Win32TextRoleColor(loka::app::SURFACE_GROUND_WINDOW)));
   if (this->table_.draw(dc, rect, this->node_->props.blockStyle_) && complete)
     this->presented_.commit(this->table_.value(), paintScope());
+  SetTextColor(dc, previousText);
 }
 void RegisterWin32AttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
 {

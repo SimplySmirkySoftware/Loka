@@ -1,3 +1,4 @@
+#include "../Win32PaintGround.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32CellContext.hpp"
 #include <cassert>
@@ -11,7 +12,6 @@
 namespace
 {
   const wchar_t kCellClassName[] = L"LOKA_CELL";
-  const COLORREF kCellFillColor = RGB(235, 235, 235);
 
   class Win32CellNodeHandler
       : public loka::app::scene::RetainedNodeHandler<Win32CellNodeHandler,
@@ -257,9 +257,8 @@ void Win32CellContext::applyText()
 
 void Win32CellContext::drawCell(HDC hdc, const RECT &rect)
 {
-  HBRUSH fill = CreateSolidBrush(kCellFillColor);
-  FillRect(hdc, &rect, fill);
-  DeleteObject(fill);
+  const loka::app::SurfaceGround ground = loka::app::GroundForKind(loka::app::scene::NODE_KIND_CELL);
+  loka::win32::Win32PaintGround(hdc, ground, rect);
   FrameRect(hdc, &rect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
   if (!text_.empty())
   {
@@ -268,13 +267,16 @@ void Win32CellContext::drawCell(HDC hdc, const RECT &rect)
     {
       previousFont = SelectObject(hdc, this->controller()->displayFont());
     }
-    SetBkMode(hdc, TRANSPARENT);
+    const int previousBackground = SetBkMode(hdc, TRANSPARENT);
+    const COLORREF previousText = SetTextColor(hdc, GetSysColor(loka::win32::Win32TextRoleColor(ground)));
     RECT textRect = rect;
     DrawTextW(hdc,
               text_.c_str(),
               static_cast<int>(text_.size()),
               &textRect,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SetTextColor(hdc, previousText);
+    SetBkMode(hdc, previousBackground);
     if (previousFont)
     {
       SelectObject(hdc, previousFont);

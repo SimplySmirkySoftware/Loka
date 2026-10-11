@@ -3,6 +3,14 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+typedef unsigned long COLORREF;
+#define COLOR_WINDOW 5
+#define COLOR_WINDOWTEXT 8
+#define COLOR_BTNFACE 15
+#define COLOR_BTNTEXT 18
+COLORREF GetSysColor(int);
+struct HostDC;
+COLORREF SetTextColor(HostDC *, COLORREF);
 typedef int BOOL;
 typedef unsigned int UINT;
 // Host wchar_t holds the same UTF-16 unit values; this fixture is not an ABI test.
@@ -18,6 +26,7 @@ struct HostDC
   HFONT font;
   UINT alignment;
   int background;
+  COLORREF textColor;
 };
 typedef HostDC *HDC;
 struct RECT
@@ -54,6 +63,7 @@ namespace win32_host
   {
     int x, y;
     HFONT font;
+    COLORREF textColor;
     std::wstring units;
   };
   extern int selections, measures, metrics;
@@ -78,6 +88,7 @@ typedef void *HINSTANCE;
 typedef void *HMENU;
 typedef void *HCURSOR;
 typedef void *HBRUSH;
+typedef void *HBITMAP;
 typedef void *HMODULE;
 typedef void *HMONITOR;
 typedef void *PVOID;
@@ -108,6 +119,7 @@ struct WNDCLASSW
   HINSTANCE hInstance;
   HCURSOR hCursor;
   LPCWSTR lpszClassName;
+  HBRUSH hbrBackground;
 };
 struct CREATESTRUCTW { void *lpCreateParams; };
 struct PAINTSTRUCT { int unused; };
@@ -135,6 +147,9 @@ struct PAINTSTRUCT { int unused; };
 #define CS_VREDRAW 1
 #define IDC_ARROW L"arrow"
 #define WHITE_BRUSH 0
+#define BLACK_BRUSH 4
+#define NULL_BRUSH 5
+#define SRCCOPY 0x00CC0020
 #define SIMPLEREGION 2
 #define DT_LEFT 0
 #define DT_NOPREFIX 2048
@@ -143,6 +158,7 @@ struct PAINTSTRUCT { int unused; };
 #define DT_EDITCONTROL 8192
 #define ZeroMemory(p,n) std::memset(p,0,n)
 #define SetWindowLongPtr SetWindowLongPtrW
+#define GetWindowLongPtr GetWindowLongPtrW
 #define MONITOR_DEFAULTTONEAREST 2
 #define FAILED(x) ((x)<0)
 #define LOGPIXELSX 88
@@ -169,6 +185,11 @@ BOOL EndPaint(HWND,const PAINTSTRUCT *);
 int GetClipBox(HDC,RECT *);
 BOOL EqualRect(const RECT *,const RECT *);
 int FillRect(HDC,const RECT *,HBRUSH);
+HBRUSH GetSysColorBrush(int);
+HDC CreateCompatibleDC(HDC);
+HBITMAP CreateCompatibleBitmap(HDC,int,int);
+BOOL DeleteDC(HDC);
+BOOL BitBlt(HDC,int,int,int,int,HDC,int,int,DWORD);
 HGDIOBJ GetStockObject(int);
 int DrawTextW(HDC,LPCWSTR,int,RECT *,UINT);
 int GetWindowTextLengthW(HWND);

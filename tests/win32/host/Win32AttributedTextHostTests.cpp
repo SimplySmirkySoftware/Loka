@@ -73,6 +73,18 @@ int SetBkMode(HDC dc, int mode)
   dc->background = mode;
   return old;
 }
+COLORREF GetSysColor(int index)
+{
+  // Distinct test-only roles discriminate a wrong index, unlike light themes.
+  LOKA_VERIFY(index == COLOR_BTNTEXT || index == COLOR_WINDOWTEXT);
+  return index == COLOR_BTNTEXT ? 0x123456 : 0x654321;
+}
+COLORREF SetTextColor(HDC dc, COLORREF color)
+{
+  const COLORREF old = dc->textColor;
+  dc->textColor = color;
+  return old;
+}
 BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *, const WCHAR *text, UINT count, const int *dx)
 {
   LOKA_VERIFY(flags == ETO_CLIPPED && !dx && count <= 8192);
@@ -83,6 +95,7 @@ BOOL ExtTextOutW(HDC dc, int x, int y, UINT flags, const RECT *, const WCHAR *te
   draw.x = x;
   draw.y = y;
   draw.font = dc->font;
+  draw.textColor = dc->textColor;
   draw.units.assign(text, count);
   win32_host::draws.push_back(draw);
   return TRUE;
@@ -134,8 +147,61 @@ static void pinPlainWrappedLines()
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
 }
 
+static void pinAttributedTextGroundText()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  Win32ScenePlatformController controller;
+  HostWindow root;
+  controller.rootHwnd_ = &root;
+  AttributedTextProps props(Styled("MMMMMMMMMMMM", Bold));
+  props.blockStyle_.wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS);
+  AttributedTextNode node(props);
+  node.setContext(new Win32AttributedTextContext(&controller, &root, 0, 0, 32, 24, &node));
+  HWND child = win32_host::windows.back();
+  LayoutState state;
+  state.width = 32;
+  node.layout(&controller, state);
+  const COLORREF sentinel = 0x010203;
+  child->dc.textColor = sentinel;
+  win32_host::reset();
+  SendMessageW(child, WM_PAINT, 0, 0);
+  LOKA_VERIFY(win32_host::draws.size() >= 2);
+  LOKA_VERIFY(win32_host::draws.front().units != L"...");
+  LOKA_VERIFY(win32_host::draws.back().units == L"...");
+  for (std::size_t i = 0; i < win32_host::draws.size(); ++i)
+    LOKA_VERIFY(win32_host::draws[i].textColor == GetSysColor(COLOR_BTNTEXT));
+  LOKA_VERIFY(child->dc.textColor == sentinel);
+  std::printf("AttributedText runs/ellipsis use WINDOW text and restore DC color\n");
+}
+
+static void pinRectSurfaceGroundBrushes()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  Win32ScenePlatformController controller;
+  HostWindow root;
+  controller.rootHwnd_ = &root;
+  RectSurfaceModel value;
+  value.rectCount = 1;
+  value.rects[0] = RectSprite(8, 8, 16, 16);
+  loka::core::MutableState<RectSurfaceModel> model(value);
+  RectSurfaceNode node(RectSurfaceProps().model(&model));
+  node.setContext(new Win32RectSurfaceContext(&controller, &root, 0, 0, 100, 60, &node));
+  HWND child = win32_host::windows.back();
+  win32_host::fills.clear();
+  SendMessageW(child, WM_PAINT, 0, 0);
+  LOKA_VERIFY(win32_host::fills.size() == 2);
+  // System and stock brush identities differ even on a white/black theme.
+  LOKA_VERIFY(win32_host::fills[0] == GetSysColorBrush(COLOR_WINDOW));
+  LOKA_VERIFY(win32_host::fills[1] == GetSysColorBrush(COLOR_WINDOWTEXT));
+  std::printf("RectSurface direct-target ground/sprite use system brushes\n");
+}
+
 int main(int argc, char **)
 {
+  pinAttributedTextGroundText();
+  pinRectSurfaceGroundBrushes();
   if (argc > 1)
   {
     pinPlainWrappedLines();
@@ -147,7 +213,7 @@ int main(int argc, char **)
   using namespace loka::core::testing;
   Win32ScenePlatformController controller;
   HostFont original = {7, 1, 0, 3};
-  HostDC dc = {&original, 2, 2};
+  HostDC dc = {&original, 2, 2, 0};
   failLokaAllocRaw("Win32AttributedText", "Break", 0);
   {
     Win32AttributedTextTable table;

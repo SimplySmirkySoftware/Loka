@@ -3,6 +3,7 @@
 #include "context/Win32RetirableContext.cpp"
 #include "context/Win32AttributedTextContext.cpp"
 #include "context/Win32TextContext.cpp"
+#include "context/Win32RectSurfaceContext.cpp"
 #include <algorithm>
 
 namespace win32_host
@@ -11,7 +12,8 @@ namespace win32_host
   int styleReads = 0, fontReads = 0, positions = 0;
   bool failDC = false, failMetrics = false, failConversion = false;
   std::vector<HWND> windows;
-  WNDPROC attributedProc = 0;
+  WNDPROC attributedProc = 0, rectSurfaceProc = 0;
+  std::vector<HBRUSH> fills;
 } // namespace win32_host
 // Deliberate platform-seam twin: keep this sequence in step with
 // Win32ScenePlatformController::updateDisplayScale / ensureDisplayFont and
@@ -137,7 +139,10 @@ HCURSOR LoadCursorW(HINSTANCE, LPCWSTR)
 }
 int RegisterClassW(const WNDCLASSW *wc)
 {
-  win32_host::attributedProc = wc->lpfnWndProc;
+  if (std::wcscmp(wc->lpszClassName, L"LOKA_RECT_SURFACE") == 0)
+    win32_host::rectSurfaceProc = wc->lpfnWndProc;
+  else
+    win32_host::attributedProc = wc->lpfnWndProc;
   return 1;
 }
 LRESULT DefWindowProcW(HWND, UINT, WPARAM, LPARAM)
@@ -162,13 +167,28 @@ BOOL EqualRect(const RECT *a, const RECT *b)
 {
   return std::memcmp(a, b, sizeof(*a)) == 0;
 }
-int FillRect(HDC, const RECT *, HBRUSH)
+int FillRect(HDC, const RECT *, HBRUSH brush)
 {
+  win32_host::fills.push_back(brush);
   return 1;
 }
-HGDIOBJ GetStockObject(int)
+HGDIOBJ GetStockObject(int index)
 {
-  return 0;
+  return reinterpret_cast<HGDIOBJ>(static_cast<intptr_t>(index + 1));
+}
+HBRUSH GetSysColorBrush(int index)
+{
+  return reinterpret_cast<HBRUSH>(static_cast<intptr_t>(index + 100));
+}
+// Exercise the real RectSurface direct-target fallback; native buffering and
+// pixels remain VM pins. These deliberately refuse allocation, not paint.
+HDC CreateCompatibleDC(HDC) { return 0; }
+HBITMAP CreateCompatibleBitmap(HDC, int, int) { return 0; }
+BOOL DeleteDC(HDC) { return TRUE; }
+BOOL BitBlt(HDC, int, int, int, int, HDC, int, int, DWORD)
+{
+  LOKA_VERIFY(false && "buffered drawing is outside this host fixture");
+  return FALSE;
 }
 int DrawTextW(HDC dc, LPCWSTR text, int, RECT *r, UINT flags)
 {
@@ -292,10 +312,12 @@ HWND Win32ScenePlatformController::createNativeChildWindow(DWORD,
   h->dc.font = this->displayFont();
   h->dc.alignment = 0;
   h->dc.background = 0;
+  h->dc.textColor = 0;
   h->data = 0;
   h->style = style;
   h->parent = parent;
-  h->proc = std::wcscmp(name, L"STATIC") == 0 ? 0 : win32_host::attributedProc;
+  h->proc = std::wcscmp(name, L"STATIC") == 0 ? 0 :
+      (std::wcscmp(name, L"LOKA_RECT_SURFACE") == 0 ? win32_host::rectSurfaceProc : win32_host::attributedProc);
   win32_host::windows.push_back(h);
   if (h->proc)
   {

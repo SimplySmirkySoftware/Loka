@@ -1,3 +1,4 @@
+#include "Win32PaintGround.hpp"
 #include "Win32Window.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32ScenePlatformController.hpp"
@@ -472,7 +473,7 @@ bool Win32ScenePlatformController::requestTransparentChildRepaint(HWND child)
 
 void Win32ScenePlatformController::paintWindowGround(HDC dc, const RECT &rect)
 {
-  FillRect(dc, &rect, reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1));
+  loka::win32::Win32PaintGround(dc, loka::app::SURFACE_GROUND_WINDOW, rect);
 }
 
 void Win32ScenePlatformController::redrawDirtySubtreeNow(HWND targetHwnd, const RECT *rect, BOOL eraseBackground)

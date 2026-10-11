@@ -26,6 +26,14 @@ namespace loka
   } // namespace app
 } // namespace loka
 
+namespace loka
+{
+  namespace testing
+  {
+    class Win32CellPaintAccess;
+  }
+}
+
 class Win32ScenePlatformController;
 
 class Win32CellContext : public Win32RetirableContext
@@ -50,6 +58,7 @@ public:
 
 private:
   friend class Win32InputDoor;
+  friend class loka::testing::Win32CellPaintAccess;
   void handleClick();
   void applyAttachedPresentation();
   void applyDetachedPresentation();
