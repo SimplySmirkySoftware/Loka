@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "StandalonePerformanceConfig.hpp"
+#include "StandaloneScenarioSupport.hpp"
 #include "app/PlatformContext.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "app/core/App.hpp"
@@ -22,7 +23,19 @@ namespace loka
     {
       template <class Config> int RunPass(PlatformContext *platformContext, NativeModuleHandle hInstance, int nCmdShow)
       {
+#if defined(LOKA_RETRO68)
+        // Classic keeps its existing refusal path until the generic alert component (#1237).
         Config config(platformContext);
+#else
+        const platform::file::FileHandle auditFile = ResolveStandaloneAuditFile();
+        const char *refusal = StandaloneAuditRefusal(auditFile);
+        if (refusal)
+        {
+          ShowStandaloneAuditRefusal(refusal);
+          return 1;
+        }
+        Config config(platformContext, &auditFile);
+#endif
         if (config.exitCode() != 0)
         {
           return config.exitCode();

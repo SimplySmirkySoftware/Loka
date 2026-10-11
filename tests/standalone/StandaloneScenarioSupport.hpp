@@ -25,6 +25,13 @@ namespace loka
     /** Resolves the application-side audit file shared by presentation apps. */
     platform::file::FileHandle ResolveStandaloneAuditFile();
 
+    /** Returns the startup refusal text for an unresolved audit sidecar, or null
+        for a resolved location. This does not diagnose later open/write failures. */
+    const char *StandaloneAuditRefusal(const platform::file::FileHandle &auditFile);
+
+    /** Shows a modal startup refusal before an App exists (native entry seam). */
+    void ShowStandaloneAuditRefusal(const char *message);
+
     /** Owns the bounded startup wait and terminal App control shared by the
         TEST-only Standalone Flow presentations. A refused MainNode mount
         produces one diagnostic, requests shutdown, and remains terminal. */
