@@ -39,6 +39,17 @@ namespace loka
       return result;
     }
 
+    const char *StandaloneAuditRefusal(const platform::file::FileHandle &auditFile)
+    {
+      if (!auditFile.displayPath.empty())
+      {
+        return 0;
+      }
+      return "The audit sidecar LOG.TXT could not be resolved beside the application. "
+             "Move the application to a writable folder (for example, out of Downloads into Applications), "
+             "or remove the quarantine attribute, then try again.";
+    }
+
     StandaloneRunControl::StandaloneRunControl(const char *applicationName,
                                                const scenario_tests::ScenarioCellTable &cells,
                                                std::FILE *diagnostics,

@@ -1,5 +1,6 @@
 #include "testing/scene/SceneTestFlow.hpp"
 #include "StartupScenarioTests.hpp"
+#include "standalone/StandaloneScenarioSupport.hpp"
 
 #include "support/TestVerify.hpp"
 
@@ -165,4 +166,22 @@ void testFloppyBirdStartupHoldsSettledInitialScreenAndMatchesAudit()
                      "tests/scenarios/expected/floppybird/startup.audit",
                      &game);
   std::printf("testFloppyBirdStartupHoldsSettledInitialScreenAndMatchesAudit passed\n");
+}
+
+void testStandaloneStartupRefusesOnlyUnresolvedAuditLocation()
+{
+  loka::platform::file::FileHandle unresolved;
+  const char *message = loka::standalone_tests::StandaloneAuditRefusal(unresolved);
+  LOKA_VERIFY(message != 0);
+  LOKA_VERIFY(std::string(message)
+              == "The audit sidecar LOG.TXT could not be resolved beside the application. "
+                 "Move the application to a writable folder (for example, out of Downloads into Applications), "
+                 "or remove the quarantine attribute, then try again.");
+
+  loka::platform::file::FileHandle resolved;
+  resolved.displayPath = loka::core::String::Literal("/missing-folder/LOG.TXT");
+  resolved.kind = loka::file::File::KIND_FILE;
+  // Resolution is a location fact, not proof that a later open/write succeeds.
+  LOKA_VERIFY(loka::standalone_tests::StandaloneAuditRefusal(resolved) == 0);
+  std::printf("testStandaloneStartupRefusesOnlyUnresolvedAuditLocation passed\n");
 }

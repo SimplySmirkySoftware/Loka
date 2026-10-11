@@ -279,16 +279,20 @@ namespace
     {
       return loka::core::Frame();
     }
-    const NSRect contentRect = [window contentRectForFrameRect:[window frame]];
+    const NSRect frameRect = [window frame];
+    const NSRect contentRect = [window contentRectForFrameRect:frameRect];
     NSScreen *screen = [window screen];
     if (!screen)
     {
       screen = [NSScreen mainScreen];
     }
-    // Desktop origin stays native; only client capacity crosses into lu.
-    return loka::core::Frame(static_cast<int>(contentRect.origin.x),
+    // The origin is the exact inverse of FrameRectForContent: x and y place
+    // the outer frame (y is its top's offset below the visible top), as the
+    // intent does, so frameState().set(nativeFrame().get()) does not move the
+    // window (#526). The size is the content's; only it crosses into lu.
+    return loka::core::Frame(static_cast<int>(frameRect.origin.x),
                              static_cast<int>(VisibleTopForScreen(screen)
-                                              - (contentRect.origin.y + contentRect.size.height)),
+                                              - (frameRect.origin.y + frameRect.size.height)),
                              projection.clientCapacityToLu(contentRect.size.width),
                              projection.clientCapacityToLu(contentRect.size.height));
   }
