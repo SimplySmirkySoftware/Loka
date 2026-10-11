@@ -16,6 +16,8 @@
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
+#include <cstdio>
+
 namespace
 {
   using namespace loka::app;
@@ -225,6 +227,7 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
   LOKA_VERIFY(projectionOf(window).clientCapacityToLu(content.size.width) == 320);
   const Frame settled = window.nativeFrame().get();
   LOKA_VERIFY(settled.width == 320 && settled.height == 260);
+  std::fprintf(stderr, "probe before=%d,%d settled=%d,%d intent=%d,%d\n", before.x, before.y, settled.x, settled.y, window.frameState().get().x, window.frameState().get().y);
   LOKA_VERIFY(settled.x == before.x && settled.y == before.y);
   LOKA_VERIFY(window.frameState().get().width == 320);
   // The scene relaid out from the settled bounds, not from the 400 detour.
