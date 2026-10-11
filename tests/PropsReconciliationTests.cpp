@@ -64,12 +64,6 @@ void testRetainedPropsApplicationNotifiesContextExactlyOnce()
   CountingContext *context = static_cast<CountingContext *>(button->getContext());
   LOKA_VERIFY(context != 0);
   LOKA_VERIFY(context->calls() == 0);
-  LOKA_VERIFY(declaration.repointRetainedNodeDefinition(button));
-  {
-    Node *head = root(scene)->childrenHead();
-    LOKA_VERIFY(head == button && button->getContext() == context);
-  }
-  LOKA_VERIFY(context->calls() == 0);
   declaration = Button(&b);
   applyProps(scene, declaration);
   {
@@ -77,8 +71,6 @@ void testRetainedPropsApplicationNotifiesContextExactlyOnce()
     LOKA_VERIFY(head == button && button->getContext() == context);
   }
   assert(button->props.text_ == &b);
-  LOKA_VERIFY(context->calls() == 1);
-  LOKA_VERIFY(declaration.repointRetainedNodeDefinition(button));
   LOKA_VERIFY(context->calls() == 1);
   declaration = Button(&a);
   applyProps(scene, declaration);

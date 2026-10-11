@@ -8,7 +8,6 @@ void testForFactoryCloneFailureLeavesParentUnchanged();
 void testForFactoryCloneRefusalReportsToDeclarationWindow();
 void testForSuccessfulDeclarationDoesNotReportRefusal();
 void testUniqueTaggedSiblingListRejectsAnonymousSibling();
-void testForDerivedKeysRetainItemSeatAcrossRemoval();
 void testForVectorBuilderReadsCurrentContentsAtAppend();
 void testForWindowBuildsHandWrittenSubrange();
 void testForWindowClampsToLastValidStart();

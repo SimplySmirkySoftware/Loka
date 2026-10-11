@@ -1,9 +1,10 @@
 #include "ToolboxNodeDispatch.hpp"
+#include <cassert>
+#include <climits>
 #include "app/layout/CanvasLayout.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "app/RectSurface.hpp"
-#include "app/layout/LayoutHeuristics.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -16,6 +17,7 @@
                        ToolboxScenePlatformController *controller,
                        loka::app::scene::BoundaryNode *currentBoundary)
   {
+    assert(controller && "Toolbox layout requires a controller");
     if (!nestable)
     {
       return 0;
@@ -122,6 +124,7 @@ namespace
                    const loka::app::layout::LazyWindow *range,
                    loka::app::layout::StackSpans *spans)
   {
+    assert(controller && "Toolbox layout requires a controller");
     if (!node)
     {
       return 0;
@@ -183,54 +186,17 @@ namespace
             *controller->layoutHandlerRegistry(), *stack, state, traversal, width, range, spans);
       }
       if (!usedHandler && spans) spans->invalidate();
-      if (!usedHandler && stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
-      {
-        loka::app::StackNode *column = stack;
-        short currentY = state.y;
-        loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
-        for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-        {
-          loka::app::scene::LayoutState childState = state;
-          childState.y = currentY;
-          if (state.height > 0)
-          {
-            childState.height =
-                static_cast<short>(loka::app::layout::remainingChildHeightForColumn(state.height, state.y, currentY));
-          }
-          short childWidth = state.width;
-          short childOffset = 0;
-          if (column->props.hasHorizontalAlignment_)
-          {
-            childWidth = static_cast<short>(
-                loka::app::layout::preferredChildWidthForColumn(child, state.width));
-            short remain = static_cast<short>(state.width - childWidth);
-            if (remain > 0)
-            {
-              if (column->props.horizontalAlignment_ == loka::app::HORIZONTAL_ALIGNMENT_CENTER)
-              {
-                childOffset = static_cast<short>(remain / 2);
-              }
-              else if (column->props.horizontalAlignment_ == loka::app::HORIZONTAL_ALIGNMENT_TRAILING)
-              {
-                childOffset = remain;
-              }
-            }
-          }
-          childState.x = static_cast<short>(state.x + childOffset);
-          childState.width = childWidth;
-          short childUsedWidth = LayoutNode(child, childState, controller, activeBoundary);
-          if (childUsedWidth > width)
-          {
-            width = childUsedWidth;
-          }
-          currentY = childState.y;
-        }
-        state.y = currentY;
-      }
-      else if (!usedHandler)
+      if (!usedHandler)
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxRowLayout(stack, state, &traversal));
+        if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
+        {
+          width = static_cast<short>(ComputeToolboxColumnLayout(stack, state, &traversal));
+        }
+        else
+        {
+          width = static_cast<short>(ComputeToolboxRowLayout(stack, state, &traversal));
+        }
         state.y = traversal.layoutResultY();
       }
       if (boundary)
@@ -266,40 +232,19 @@ namespace
     {
       loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
       short maxWidth = 0;
-      short maxY = state.y;
       bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
         usedHandler = ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *stack, state, traversal, maxWidth);
-        if (usedHandler)
-        {
-          maxY = state.y;
-        }
       }
       if (!usedHandler)
       {
-        loka::app::scene::LayoutState childState = state;
-        if (loka::app::scene::INestable *nestable = stack->asNestable())
-        {
-          loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-          for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-          {
-            childState = state;
-            short width = LayoutNode(child, childState, controller, activeBoundary);
-            if (width > maxWidth)
-            {
-              maxWidth = width;
-            }
-            if (childState.y > maxY)
-            {
-              maxY = childState.y;
-            }
-          }
-        }
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        maxWidth = static_cast<short>(ComputeToolboxZStackLayout(stack, state, &traversal));
+        state.y = traversal.layoutResultY();
       }
-      state.y = maxY;
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, maxWidth, static_cast<short>(state.y - startY));
@@ -359,6 +304,22 @@ namespace
         {
           return 0;
         }
+      }
+      // The hand-routed leaf must refuse before its context narrows the seat
+      // or consumes layout inputs. Scroll refusal also stops later siblings;
+      // outside a ScrollView the same unrepresentable seat still refuses.
+      const int right = static_cast<int>(projectedState.x) + resolvedWidth;
+      const int bottom = static_cast<int>(projectedState.y) + resolvedHeight;
+      const int nextY = bottom + projectedState.spacing;
+      if (right < SHRT_MIN || right > SHRT_MAX
+          || bottom < SHRT_MIN || bottom > SHRT_MAX
+          || nextY < SHRT_MIN || nextY > SHRT_MAX)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        traversal.refuseLayoutResultY(right);
+        traversal.refuseLayoutResultY(bottom);
+        traversal.refuseLayoutResultY(nextY);
+        return 0;
       }
       const loka::app::scene::Node::LayoutInputsCheckpoint inputs(*node);
       short width = node->layout(controller, projectedState);

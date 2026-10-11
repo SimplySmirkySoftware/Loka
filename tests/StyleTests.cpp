@@ -80,8 +80,7 @@ void testTextPropsItalicParticipatesInDefinitionEquivalence()
   using namespace loka::app;
   const TextDefinition plain = Text("same");
   const TextDefinitionWithAttr italic = Text("same") + Italic;
-  LOKA_VERIFY(!plain.hasEquivalentProps(italic));
-  LOKA_VERIFY(!italic.hasEquivalentProps(plain));
+  LOKA_VERIFY((plain.props < italic.props) || (italic.props < plain.props));
 }
 
 namespace

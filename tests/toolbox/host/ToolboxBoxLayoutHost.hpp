@@ -3,18 +3,23 @@
 
 // Compile production dispatch with inert non-Box platform neighbors.
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#ifndef LOKA_HOST_RECT_SURFACE
 #define LOKA_TOOLBOX_RECT_SURFACE_CONTEXT_HPP
+#endif
 #include "app/scene/projection/PlatformController.hpp"
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 #include "app/scene/projection/ProjectionParentScope.hpp"
 #include "app/RectSurface.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
+#ifdef LOKA_HOST_RECT_SURFACE
+#include "Quickdraw.h"
+#endif
 
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController
 {
 public:
-  // Deterministic answer exercises the production traversal on both dispatch paths.
+  // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }
@@ -34,7 +39,18 @@ public:
   void setActiveLayoutBoundary(loka::app::scene::BoundaryNode *) {}
   bool restoreProjectedLayoutState(loka::app::scene::LayoutState &) { return true; }
   bool projectLayoutState(loka::app::scene::LayoutState &) { return true; }
+#ifdef LOKA_HOST_RECT_SURFACE
+  unsigned extentRecords;
+  ToolboxScenePlatformController() : extentRecords(0) {}
+  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { ++this->extentRecords; }
+  void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *) {}
+  void requestStructurePresent() {}
+  // RectSurface owns no controller-ledger handles; Node deletes its context.
+  void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint) {}
+  bool intersectWithProjectionClip(const Rect &rect, Rect &out) const { out = rect; return !EmptyRect(&out); }
+#else
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { LOKA_VERIFY(false); }
+#endif
   short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &,
                         loka::app::scene::BoundaryNode *) { LOKA_VERIFY(false); return 0; }
   void renderScrollView(loka::app::ScrollViewNode *) { LOKA_VERIFY(false); }
@@ -43,6 +59,7 @@ public:
   virtual bool hasPendingSync() const { return false; }
   virtual void destroy() {}
 };
+#ifndef LOKA_HOST_RECT_SURFACE
 class ToolboxRectSurfaceContext : public loka::app::scene::NodeContext
 {
 public:
@@ -50,4 +67,5 @@ public:
 };
 inline void EnsureToolboxRectSurfaceContext(loka::app::RectSurfaceNode *, ToolboxScenePlatformController *)
 { LOKA_VERIFY(false); }
+#endif
 #endif

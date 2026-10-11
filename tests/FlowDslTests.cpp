@@ -123,7 +123,8 @@ namespace
     LOKA_VERIFY(expected->propsBase());
     LOKA_VERIFY(actual->propsBase());
     LOKA_VERIFY(expected->propsBase()->propsTypeId() == actual->propsBase()->propsTypeId());
-    LOKA_VERIFY(expected->hasEquivalentProps(*actual));
+    LOKA_VERIFY(!(*expected->propsBase() < *actual->propsBase()));
+    LOKA_VERIFY(!(*actual->propsBase() < *expected->propsBase()));
 
     loka::app::scene::IBranchSeatDefinition *expectedSeat = expected->asBranchSeatDefinition();
     loka::app::scene::IBranchSeatDefinition *actualSeat = actual->asBranchSeatDefinition();
@@ -131,6 +132,8 @@ namespace
     if (expectedSeat)
     {
       assert(expectedSeat->branchCondition() == actualSeat->branchCondition());
+      LOKA_VERIFY(expectedSeat->armPolicies(1).destroyOnDetach ==
+                  actualSeat->armPolicies(1).destroyOnDetach);
       assertEquivalentDefinitionStructure(expectedSeat->branchDefinition(false), actualSeat->branchDefinition(false));
       assertEquivalentDefinitionStructure(expectedSeat->branchDefinition(true), actualSeat->branchDefinition(true));
     }

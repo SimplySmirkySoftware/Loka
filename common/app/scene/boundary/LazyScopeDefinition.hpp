@@ -102,20 +102,6 @@ namespace loka
         {
           return &this->props_;
         }
-        virtual bool hasEquivalentProps(const NodeDefinitionBase &other) const
-        {
-          const PropsBase *otherProps = other.propsBase();
-          if (!otherProps || otherProps->propsTypeId() != this->props_.propsTypeId())
-          {
-            return false;
-          }
-          const LazyScopeProps<K, NodeT> &matchProps = static_cast<const LazyScopeProps<K, NodeT> &>(*otherProps);
-          return this->props_.state == matchProps.state;
-        }
-        virtual bool repointRetainedNodeDefinition(Node *) const
-        {
-          return false;
-        }
         virtual bool applyPropsToNode(Node *) const
         {
           return false;

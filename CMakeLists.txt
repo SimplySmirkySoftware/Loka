@@ -533,6 +533,35 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
   endforeach()
 
+  foreach(_layout_path handler fallback)
+    add_test(NAME testToolboxLayout_${_layout_path}_zstack
+      COMMAND LokaToolboxBoxLayoutTests ${_layout_path} zstack)
+  endforeach()
+  foreach(_stack_axis column row)
+    add_test(NAME testToolboxLayout_derived-${_stack_axis}
+      COMMAND LokaToolboxBoxLayoutTests handler derived-${_stack_axis})
+  endforeach()
+  add_test(NAME testToolboxLayout_null-controller
+    COMMAND LokaToolboxBoxLayoutTests null-controller abort)
+
+  add_executable(LokaToolboxRectSurfaceTests
+    tests/toolbox/host/ToolboxRectSurfaceHostTests.cpp
+    apple/toolbox/src/ToolboxNodeDispatch.cpp
+    apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp
+    apple/toolbox/src/context/ToolboxProjectedNodeContext.cpp
+    apple/toolbox/src/context/ToolboxRectSurfaceContext.cpp
+    tests/TestingHooks.cpp)
+  target_include_directories(LokaToolboxRectSurfaceTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxRectSurfaceTests PRIVATE LOKA_HOST_RECT_SURFACE)
+  target_compile_options(LokaToolboxRectSurfaceTests PRIVATE
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxBoxLayoutHost.hpp)
+  target_link_libraries(LokaToolboxRectSurfaceTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxRectSurfaceTests)
+  set_target_properties(LokaToolboxRectSurfaceTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_surface_case bottom right spacing limit normal scroll-bottom sprite-overflow sprite-normal sprite-outside sprite-negative dirty-current dirty-history region)
+    add_test(NAME testToolboxRectSurface_${_surface_case} COMMAND LokaToolboxRectSurfaceTests ${_surface_case})
+  endforeach()
+
   # Production QuickDraw projection against a deterministic host OS fixture.
   add_executable(LokaToolboxAttributedTextTests
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp

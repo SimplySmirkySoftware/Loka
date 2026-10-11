@@ -94,18 +94,6 @@ namespace loka
       {
         return 0;
       }
-      virtual bool hasEquivalentProps(const scene::NodeDefinitionBase &other) const
-      {
-        const scene::IBranchPolicyScopeDefinition *scope =
-            const_cast<scene::NodeDefinitionBase &>(other).asBranchPolicyScopeDefinition();
-        if (!scope)
-        {
-          return false;
-        }
-        const scene::BranchPolicies otherPolicies = scope->branchPolicies();
-        return this->policies_.destroyOnDetach == otherPolicies.destroyOnDetach &&
-               this->policies_.deliverWhileDetached == otherPolicies.deliverWhileDetached;
-      }
       virtual bool applyPropsToNode(scene::Node *) const
       {
         assert(false && "PolicyScope has no runtime props target");

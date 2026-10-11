@@ -96,6 +96,7 @@ short ToolboxRectSurfaceContext::layout(loka::app::scene::IPlatformController *,
   {
     return 0;
   }
+  // LayoutNode validates both far edges and the spaced result before dispatch.
   rect_.left = state.x;
   rect_.top = static_cast<short>(state.y);
   rect_.right = static_cast<short>(state.x + state.width);
@@ -201,112 +202,52 @@ bool ToolboxRectSurfaceContext::dirtyRect(Rect &outRect) const
   }
   const loka::app::RectSurfaceModel model = node_->props.model_->get();
   bool hasBounds = false;
-  if (model.rectCount > 0)
+  const loka::app::RectSurfaceModel *models[] = {
+      &model, &this->presented_.value()};
+  for (unsigned m = 0; m < sizeof(models) / sizeof(models[0]); ++m)
   {
-    outRect.left = static_cast<short>(rect_.left + model.rects[0].x);
-    outRect.top = static_cast<short>(rect_.top + model.rects[0].y);
-    outRect.right = static_cast<short>(outRect.left + model.rects[0].width);
-    outRect.bottom = static_cast<short>(outRect.top + model.rects[0].height);
-    hasBounds = true;
-  }
-  for (short i = 1; i < model.rectCount; ++i)
-  {
-    const short left = static_cast<short>(rect_.left + model.rects[i].x);
-    const short top = static_cast<short>(rect_.top + model.rects[i].y);
-    const short right = static_cast<short>(left + model.rects[i].width);
-    const short bottom = static_cast<short>(top + model.rects[i].height);
-    if (!hasBounds)
+    for (short i = 0; i < models[m]->rectCount; ++i)
     {
-      outRect.left = left;
-      outRect.top = top;
-      outRect.right = right;
-      outRect.bottom = bottom;
-      hasBounds = true;
-      continue;
-    }
-    if (left < outRect.left)
-    {
-      outRect.left = left;
-    }
-    if (top < outRect.top)
-    {
-      outRect.top = top;
-    }
-    if (right > outRect.right)
-    {
-      outRect.right = right;
-    }
-    if (bottom > outRect.bottom)
-    {
-      outRect.bottom = bottom;
-    }
-  }
-  if (this->presented_.isKnown())
-  {
-    for (short i = 0; i < this->presented_.value().rectCount; ++i)
-    {
-      const short left = static_cast<short>(rect_.left + this->presented_.value().rects[i].x);
-      const short top = static_cast<short>(rect_.top + this->presented_.value().rects[i].y);
-      const short right = static_cast<short>(left + this->presented_.value().rects[i].width);
-      const short bottom = static_cast<short>(top + this->presented_.value().rects[i].height);
+      const Rect spriteRect = this->rectForSprite(models[m]->rects[i]);
+      if (EmptyRect(&spriteRect))
+        continue;
       if (!hasBounds)
       {
-        outRect.left = left;
-        outRect.top = top;
-        outRect.right = right;
-        outRect.bottom = bottom;
+        outRect = spriteRect;
         hasBounds = true;
         continue;
       }
-      if (left < outRect.left)
-      {
-        outRect.left = left;
-      }
-      if (top < outRect.top)
-      {
-        outRect.top = top;
-      }
-      if (right > outRect.right)
-      {
-        outRect.right = right;
-      }
-      if (bottom > outRect.bottom)
-      {
-        outRect.bottom = bottom;
-      }
+      if (spriteRect.left < outRect.left) outRect.left = spriteRect.left;
+      if (spriteRect.top < outRect.top) outRect.top = spriteRect.top;
+      if (spriteRect.right > outRect.right) outRect.right = spriteRect.right;
+      if (spriteRect.bottom > outRect.bottom) outRect.bottom = spriteRect.bottom;
     }
   }
   if (!hasBounds)
   {
-    outRect = rect_;
-    return true;
-  }
-  if (outRect.left < rect_.left)
-  {
-    outRect.left = rect_.left;
-  }
-  if (outRect.top < rect_.top)
-  {
-    outRect.top = rect_.top;
-  }
-  if (outRect.right > rect_.right)
-  {
-    outRect.right = rect_.right;
-  }
-  if (outRect.bottom > rect_.bottom)
-  {
-    outRect.bottom = rect_.bottom;
+    outRect = this->rect_;
+    // Preserve the empty-model fallback without repainting off-seat sprites.
+    return model.rectCount == 0 && this->presented_.value().rectCount == 0;
   }
   return outRect.left < outRect.right && outRect.top < outRect.bottom;
 }
 
 Rect ToolboxRectSurfaceContext::rectForSprite(const loka::app::RectSprite &sprite) const
 {
+  const long left = static_cast<long>(this->rect_.left) + sprite.x;
+  const long top = static_cast<long>(this->rect_.top) + sprite.y;
+  const long right = left + sprite.width;
+  const long bottom = top + sprite.height;
+  const long clippedLeft = left > this->rect_.left ? left : this->rect_.left;
+  const long clippedTop = top > this->rect_.top ? top : this->rect_.top;
+  const long clippedRight = right < this->rect_.right ? right : this->rect_.right;
+  const long clippedBottom = bottom < this->rect_.bottom ? bottom : this->rect_.bottom;
   Rect rect;
-  rect.left = static_cast<short>(rect_.left + sprite.x);
-  rect.top = static_cast<short>(rect_.top + sprite.y);
-  rect.right = static_cast<short>(rect.left + sprite.width);
-  rect.bottom = static_cast<short>(rect.top + sprite.height);
+  if (clippedLeft >= clippedRight || clippedTop >= clippedBottom)
+    SetRect(&rect, 0, 0, 0, 0);
+  else
+    SetRect(&rect, static_cast<short>(clippedLeft), static_cast<short>(clippedTop),
+            static_cast<short>(clippedRight), static_cast<short>(clippedBottom));
   return rect;
 }
 
@@ -335,11 +276,7 @@ void ToolboxRectSurfaceContext::unionSpriteRectsIntoRegion(const loka::app::Rect
   }
   for (short i = 0; i < model.rectCount; ++i)
   {
-    Rect spriteRect;
-    spriteRect.left = static_cast<short>(rect_.left + model.rects[i].x);
-    spriteRect.top = static_cast<short>(rect_.top + model.rects[i].y);
-    spriteRect.right = static_cast<short>(spriteRect.left + model.rects[i].width);
-    spriteRect.bottom = static_cast<short>(spriteRect.top + model.rects[i].height);
+    const Rect spriteRect = this->rectForSprite(model.rects[i]);
     Rect clippedRect = spriteRect;
     if (!SectRect(&clippedRect, &dirtyRect, &clippedRect))
     {
