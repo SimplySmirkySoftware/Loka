@@ -178,6 +178,15 @@ It declares `NSHighResolutionCapable` explicitly for legacy and modern SDKs.
 The legacy build evidence below predates this template change; the updated
 metadata still needs legacy build verification and Retina runtime verification.
 
+The template also declares `NSRequiresAquaSystemAppearance` as false (#421).
+AppKit keeps applications linked against SDKs older than 10.14 in the light
+appearance, and macOS 10.14 and 10.15 are served by the legacy builds, which
+link older SDKs. The key declares the opt-in; whether AppKit honors it for
+those binaries is not runtime-verified, so on 10.14 and 10.15 a Loka
+application may still render light while the system is dark. That is a known
+limitation, not a drawing defect. The key is unknown to 10.13 and earlier,
+and it is already the default for the modern builds that serve 11 and later.
+
 - `scripts/macos-standalone-release-ub1.sh tiger|leopard`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
     SimpleViewer through the same per-architecture build and failure-atomic
