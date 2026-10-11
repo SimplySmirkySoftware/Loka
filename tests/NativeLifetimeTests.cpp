@@ -138,8 +138,10 @@ void testConditionalAndShowDefinitionsCarryNativeLifetimeHint()
       loka::app::scene::ConditionalProps(&otherCondition, 0, 0));
   LOKA_VERIFY(conditional.propsBase());
   LOKA_VERIFY(conditional.propsBase()->propsTypeId() == equivalentConditional.propsBase()->propsTypeId());
-  LOKA_VERIFY(conditional.hasEquivalentProps(equivalentConditional));
-  LOKA_VERIFY(!conditional.hasEquivalentProps(differentConditional));
+  LOKA_VERIFY(conditional.branchCondition() == equivalentConditional.branchCondition());
+  LOKA_VERIFY(conditional.armPolicies(1).destroyOnDetach ==
+              equivalentConditional.armPolicies(1).destroyOnDetach);
+  LOKA_VERIFY(conditional.branchCondition() != differentConditional.branchCondition());
   conditional.setNativeLifetimeHint(loka::app::scene::NATIVE_HINT_EAGER_RELEASE);
   loka::app::scene::NodeDefinitionBase *conditionalCopy = conditional.clone();
   assert(conditionalCopy);
@@ -153,9 +155,11 @@ void testConditionalAndShowDefinitionsCarryNativeLifetimeHint()
   show << branchContents;
   LOKA_VERIFY(show.propsBase());
   LOKA_VERIFY(show.propsBase()->propsTypeId() == equivalentShow.propsBase()->propsTypeId());
-  LOKA_VERIFY(show.hasEquivalentProps(equivalentShow) &&
-         "rebuilt Show branch contents do not participate in props equivalence");
-  LOKA_VERIFY(!show.hasEquivalentProps(updatedShow));
+  LOKA_VERIFY(show.branchCondition() == equivalentShow.branchCondition() &&
+         "Show branch contents do not change the condition source");
+  LOKA_VERIFY(show.armPolicies(1).destroyOnDetach ==
+              equivalentShow.armPolicies(1).destroyOnDetach);
+  LOKA_VERIFY(show.branchCondition() != updatedShow.branchCondition());
   branchContents.setNativeLifetimeHint(loka::app::scene::NATIVE_HINT_DESIRE_STAY);
   loka::app::scene::Node *contentNode = branchContents.create();
   assert(contentNode);

@@ -133,22 +133,6 @@ namespace loka
           {
             return &this->props_;
           }
-          virtual bool hasEquivalentProps(const NodeDefinitionBase &other) const
-          {
-            const PropsBase *otherProps = other.propsBase();
-            if (!otherProps || otherProps->propsTypeId() != this->props_.propsTypeId())
-            {
-              return false;
-            }
-            const ProbeArmSeatProps &probe =
-                static_cast<const ProbeArmSeatProps &>(*otherProps);
-            return this->props_.selection == probe.selection &&
-                   this->props_.armCount == probe.armCount;
-          }
-          virtual bool repointRetainedNodeDefinition(Node *) const
-          {
-            return false;
-          }
           virtual bool applyPropsToNode(Node *) const
           {
             return false;

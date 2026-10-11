@@ -19,7 +19,6 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "app/scene/Scene.hpp"
-#include "app/scene/composition/NodeCompositionCompare.hpp"
 #include "app/scene/node/ComponentNode.hpp"
 #include "core/State.hpp"
 #include "core/Vector.hpp"
@@ -275,7 +274,8 @@ namespace
     LOKA_VERIFY(expected->propsBase() && actual->propsBase());
     LOKA_VERIFY(expected->propsBase()->propsTypeId() ==
                 actual->propsBase()->propsTypeId());
-    LOKA_VERIFY(expected->hasEquivalentProps(*actual));
+    LOKA_VERIFY(!(*expected->propsBase() < *actual->propsBase()));
+    LOKA_VERIFY(!(*actual->propsBase() < *expected->propsBase()));
 
     loka::app::scene::INestableDefinition *expectedNestable =
         const_cast<loka::app::scene::NodeDefinitionBase *>(expected)
@@ -302,47 +302,6 @@ namespace
       actualChild = actualChild->nextInComposition;
     }
     LOKA_VERIFY(!expectedChild && !actualChild);
-  }
-
-  loka::app::scene::NodeCompositionDiff::Entry *findDiffEntry(
-      loka::app::scene::NodeCompositionDiff &diff,
-      loka::app::scene::NodeTag tag)
-  {
-    for (loka::app::scene::NodeCompositionDiff::Entry *entry =
-             diff.entriesHead();
-         entry;
-         entry = entry->nextInComposition)
-    {
-      if (entry->tag == tag)
-      {
-        return entry;
-      }
-    }
-    return 0;
-  }
-
-  void declareForComposition(
-      const loka::Vector<ForItem> &items,
-      bool derivedKeys,
-      loka::app::scene::NodeComposition &composition)
-  {
-    loka::app::Fragment root;
-    if (derivedKeys)
-    {
-      typedef loka::app::ForBuilder<
-          ForItem,
-          ForTextFactory,
-          loka::dsl::Expr<int, loka::dsl::IndexExpr> > DefaultBuilder;
-      ForTextFactory factory;
-      DefaultBuilder builder = loka::app::For(100, items, factory);
-      root << builder.key(builder.slot.member<int, &ForItem::id>());
-    }
-    else
-    {
-      root << loka::app::For(100, items, ForTextFactory());
-    }
-
-    composition.declare(root);
   }
 } // namespace
 
@@ -497,53 +456,6 @@ void testUniqueTaggedSiblingListRejectsAnonymousSibling()
   LOKA_VERIFY(WIFSIGNALED(status));
   LOKA_VERIFY(WTERMSIG(status) == SIGABRT);
 #endif
-}
-
-void testForDerivedKeysRetainItemSeatAcrossRemoval()
-{
-  loka::Vector<ForItem> beforeItems;
-  beforeItems.push_back(ForItem(1, "a"));
-  beforeItems.push_back(ForItem(2, "b"));
-  beforeItems.push_back(ForItem(3, "c"));
-  loka::Vector<ForItem> afterItems;
-  afterItems.push_back(ForItem(1, "a"));
-  afterItems.push_back(ForItem(3, "c"));
-
-  loka::app::scene::NodeComposition derivedBefore;
-  loka::app::scene::NodeComposition derivedAfter;
-  declareForComposition(beforeItems, true, derivedBefore);
-  declareForComposition(afterItems, true, derivedAfter);
-
-  loka::app::scene::NodeCompositionDiff derivedDiff;
-  LOKA_VERIFY(loka::app::scene::detail::buildChildDiffByTag(
-      derivedBefore.root()->asNestableDefinition(), derivedAfter.root()->asNestableDefinition(), derivedDiff));
-  loka::app::scene::NodeCompositionDiff::Entry *derivedC =
-      findDiffEntry(derivedDiff, 103);
-  LOKA_VERIFY(derivedC);
-  LOKA_VERIFY(derivedC->action ==
-              loka::app::scene::NodeCompositionDiff::ACTION_RETAIN);
-  LOKA_VERIFY(derivedC->previousIndex == 2 && derivedC->currentIndex == 1);
-
-  loka::app::scene::NodeComposition indexBefore;
-  loka::app::scene::NodeComposition indexAfter;
-  declareForComposition(beforeItems, false, indexBefore);
-  declareForComposition(afterItems, false, indexAfter);
-
-  loka::app::scene::NodeCompositionDiff indexDiff;
-  LOKA_VERIFY(loka::app::scene::detail::buildChildDiffByTag(
-      indexBefore.root()->asNestableDefinition(), indexAfter.root()->asNestableDefinition(), indexDiff));
-  loka::app::scene::NodeCompositionDiff::Entry *oldCSeat =
-      findDiffEntry(indexDiff, 102);
-  LOKA_VERIFY(oldCSeat);
-  LOKA_VERIFY(oldCSeat->action ==
-              loka::app::scene::NodeCompositionDiff::ACTION_RETIRE);
-  loka::app::scene::NodeCompositionDiff::Entry *shiftedCSeat =
-      findDiffEntry(indexDiff, 101);
-  LOKA_VERIFY(shiftedCSeat);
-  LOKA_VERIFY(shiftedCSeat->action ==
-              loka::app::scene::NodeCompositionDiff::ACTION_RETAIN);
-  LOKA_VERIFY(shiftedCSeat->previousIndex == 1 &&
-              shiftedCSeat->currentIndex == 1);
 }
 
 void testForVectorBuilderReadsCurrentContentsAtAppend()

@@ -2520,14 +2520,11 @@ namespace
     {
       BoundaryLocalRebuildPlan plan;
       if (!this->buildParkedBranchReentryPlan(context, &root, *root.asNestable(),
-              desired, plan, RETAINED_CHILD_PLAN_PRESERVE_MATCHES))
+              desired, plan))
         return false;
       std::vector<Node *> retained;
       return this->applyLocalRebuildPlan(context, *root.asNestable(), plan, retained);
     }
-    bool applyLive(ComponentContext &context, Node &root,
-                   FragmentDefinition &previous, FragmentDefinition &desired)
-    { return this->applyRetainedDefinitionTree(context, &root, &previous, &desired); }
   };
 
   void verifyRebuildOrder(Node &root, const NodeTag *tags, size_t count)
@@ -2686,7 +2683,7 @@ void testLocalRebuildLiveRefusalKeepsFocusReachable()
           << EditText(EditTextProps().focusedAs(focus, 7u)).tag(7403)
           << Fragment().tag(7404);
   loka::app::testing::failLocalRebuildProbeProps(1);
-  const bool applied = owner.applyLive(context, *root, previous, desired);
+  const bool applied = owner.rebuild(context, *root, desired);
   loka::app::testing::failLocalRebuildProbeProps(0);
   LOKA_VERIFY(!applied);
   const bool reachable = findStrandTag(SceneTestAccess::rootNode(scene), 7403) == editor;

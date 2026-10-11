@@ -256,21 +256,6 @@ namespace loka
       {
         return &this->props_;
       }
-      virtual bool hasEquivalentProps(const scene::NodeDefinitionBase &other) const
-      {
-        const scene::PropsBase *otherProps = other.propsBase();
-        if (!otherProps || otherProps->propsTypeId() != this->props_.propsTypeId())
-        {
-          return false;
-        }
-        const MatchProps<T> &matchProps =
-            static_cast<const MatchProps<T> &>(*otherProps);
-        return this->props_.state == matchProps.state;
-      }
-      virtual bool repointRetainedNodeDefinition(scene::Node *) const
-      {
-        return false;
-      }
       virtual bool applyPropsToNode(scene::Node *) const
       {
         return false;

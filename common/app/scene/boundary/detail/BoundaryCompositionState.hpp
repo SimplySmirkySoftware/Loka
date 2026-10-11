@@ -3,8 +3,6 @@
 
 #include <vector>
 #include "app/scene/Node.hpp"
-#include "app/scene/composition/NodeCompositionCompare.hpp"
-#include "app/scene/composition/NodeCompositionDiff.hpp"
 #include "app/scene/boundary/BoundaryStateTypes.hpp"
 #include "app/scene/boundary/detail/BoundaryBranchSeatState.hpp"
 
