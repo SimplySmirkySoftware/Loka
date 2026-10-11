@@ -79,6 +79,29 @@ namespace loka
     public:
       typedef void (*InvalidateFn)(void *);
       typedef std::vector<StateBase *> StateList;
+      /** One commit's surviving identities and whether any were erased.
+          Readers borrow this value until the next step, begin, or removal. */
+      class CommittedSet
+      {
+      public:
+        CommittedSet() : identities_(), complete_(true) {}
+        const StateList &identities() const { return this->identities_; }
+        bool complete() const { return this->complete_; }
+        /** Null means identities are unavailable: empty or partially erased. */
+        const StateList *knownIdentities() const
+        {
+          return this->complete_ && !this->identities_.empty() ? &this->identities_ : 0;
+        }
+        void reserve(size_t count) { this->identities_.reserve(count); }
+        void clear();
+        void add(StateBase *state);
+        void removeState(StateBase *state);
+
+      private:
+        StateList identities_;
+        bool complete_;
+      };
+
       PushStateTracker(const std::vector<StateBase *> &states, LedgerPolicy policy = LEDGER_JOINS);
       PushStateTracker(LedgerPolicy policy = LEDGER_JOINS);
       /** Begins a transaction. A guard opened while this tracker is settling
@@ -99,20 +122,15 @@ namespace loka
       /** Returns whether the current (or just-ended) transaction marked any state dirty. */
       bool transactionDirty() const
       {
-        return transaction_.anyDirty;
+        return this->transaction_.dirty();
       }
       /** Returns whether committed dirt is waiting to be acknowledged. */
       bool peekDirty() const;
       /** Returns and acknowledges committed dirt. */
       bool consumeDirty();
-      const StateList &committedDirtyStates() const
+      const CommittedSet &committedSet() const
       {
-        return transaction_.committedDirtyStates;
-      }
-      /** False once deferred removal erased a committed identity. */
-      bool committedIdentitiesComplete() const
-      {
-        return !transaction_.committedIdentitiesErased;
+        return this->transaction_.committed;
       }
       void setInvalidateCallback(InvalidateFn fn, void *userData)
       {
@@ -198,18 +216,22 @@ namespace loka
         TransactionIntake()
             : dirtyStates(),
               deferred(),
-              dirty(false)
+              dirty_(false)
         {
         }
 
         void clear();
         bool hasWork() const;
+        void markDirty() { this->dirty_ = true; }
+        bool dirty() const { return this->dirty_; }
+        void finishCommit() { this->dirty_ = false; }
         void removeState(StateBase *state);
         void swap(TransactionIntake &other);
 
         StateList dirtyStates;
         DeferredList deferred;
-        bool dirty;
+      private:
+        bool dirty_;
       };
 
       /** Owns the current transaction, its snapshot, and next-commit intake. */
@@ -218,14 +240,15 @@ namespace loka
         TrackerTransaction()
             : current(),
               next(),
-              committedDirtyStates(),
-              committedIdentitiesErased(false),
-              anyDirty(false)
+              committed(),
+              anyDirty_(false)
         {
         }
 
         void begin();
         TransactionIntake &intake(TrackerPhase phase);
+        TransactionIntake &markDirty(TrackerPhase phase);
+        bool dirty() const { return this->anyDirty_; }
         void advance();
         /** Opens a fresh commit snapshot without touching either intake. */
         void beginCommit();
@@ -233,11 +256,11 @@ namespace loka
 
         TransactionIntake current;
         TransactionIntake next;
-        StateList committedDirtyStates;
-        /** Deferred removal erased a committed identity: the list is no longer
-            the complete commit set and readers must treat it as unknown. */
-        bool committedIdentitiesErased;
-        bool anyDirty;
+        CommittedSet committed;
+
+      private:
+        /** Transaction history survives drained intakes and fresh snapshots. */
+        bool anyDirty_;
       };
 
       const LedgerPolicy policy_;

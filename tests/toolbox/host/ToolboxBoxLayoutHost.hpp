@@ -19,7 +19,7 @@
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController
 {
 public:
-  // Deterministic answer exercises the production traversal on both dispatch paths.
+  // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }

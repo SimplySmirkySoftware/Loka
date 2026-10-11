@@ -109,7 +109,8 @@ protected:
   /** Convenience tail with no intervening work: admit/apply, then reclaim.
       Rails call the two doors separately around their completion work. */
   void flushWindowInvalidations();
-  /** Pre-wait progress: close rows or serviceable Window completion work. */
+  /** Pre-wait progress: close rows, a moved roster revision, or serviceable
+      Window completion work. */
   bool hasPendingWindowAdmission() const;
   /** Completion rails skip windows whose close has already been requested. */
   bool isWindowClosePending(Window *window) const;

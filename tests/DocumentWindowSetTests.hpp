@@ -9,11 +9,17 @@ void testDocumentWindowNativeCloseDoesNotResurrect();
 void testDocumentWindowContentUpdateCreatesNothing();
 void testDocumentWindowHookInstallsNativeCloseBackPointer();
 void testDocumentWindowBootstrapStaticBeforeKeyed();
-void testDocumentWindowOpenAfterLastAdmissionWaitsForNextEvent();
+void testDocumentWindowRosterEditAfterLastAdmissionIsPendingWork();
 void testDocumentWindowReentrantOpenUsesNextWalk();
 void testDocumentWindowLaunchRefusalUsesBootstrapDoor();
 void testDocumentWindowRosterCapacity();
 
 void testDocumentWindowOpenDuringSceneRunIsAdmittedInTheSameAdmission();
+
+void testDocumentWindowCloseRemovesRowNextTail();
+void testDocumentWindowCloseThenOpenInOneTurnDoesNotQuit();
+void testDocumentWindowCloseAfterNativeCloseIsNotFound();
+void testDocumentWindowCloseDuringWalkTakesNextWalk();
+void testDocumentWindowCloseAllAndReopenInOneTurn();
 
 #endif

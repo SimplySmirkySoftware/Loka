@@ -97,6 +97,7 @@
 #include "DerivedNodeStateTests.hpp"
 #include "WriteSeatTests.hpp"
 #include "WindowFrameStateTests.hpp"
+#include "WindowIdleTests.hpp"
 #include "DefinitionCloneTests.hpp"
 #include "FlowDslTests.hpp"
 #include "OwnershipDumpTests.hpp"

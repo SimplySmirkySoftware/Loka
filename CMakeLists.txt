@@ -533,6 +533,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
   endforeach()
 
+  foreach(_layout_path handler fallback)
+    add_test(NAME testToolboxLayout_${_layout_path}_zstack
+      COMMAND LokaToolboxBoxLayoutTests ${_layout_path} zstack)
+  endforeach()
+  foreach(_stack_axis column row)
+    add_test(NAME testToolboxLayout_derived-${_stack_axis}
+      COMMAND LokaToolboxBoxLayoutTests handler derived-${_stack_axis})
+  endforeach()
+  add_test(NAME testToolboxLayout_null-controller
+    COMMAND LokaToolboxBoxLayoutTests null-controller abort)
+
   add_executable(LokaToolboxRectSurfaceTests
     tests/toolbox/host/ToolboxRectSurfaceHostTests.cpp
     apple/toolbox/src/ToolboxNodeDispatch.cpp
@@ -814,6 +825,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/ToolboxStandaloneRunnerTest.sh)
     add_test(NAME scriptRetro68Environment
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68EnvironmentTest.sh)
+    add_test(NAME scriptRetro68ToolchainFlavor
+      COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68ToolchainFlavorTest.sh)
     add_test(NAME scriptCiPaths
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/CiPathsTest.py)
     add_test(NAME scriptRetro68SizeReport
