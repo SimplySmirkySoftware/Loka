@@ -102,6 +102,18 @@ next tail. Closing is a decided fact here; a close that can be refused (a dirty
 document, a native close box that asks first) is Window rally page 3b and has no
 door yet.
 
+**Window-less launch.** Every static `WindowDef` can be refused, a roster whose
+attach was refused can seed nothing, or every launch document create can be
+refused. After static hooks and launch admission, `App::run` checks the group
+once, whether or not a document seat exists, and calls `bootstrapWindowless()`
+only when it is empty (#1215, extending the refused-adoption door of #1186).
+The default quits. Toolbox treats this as out of memory and uses the existing
+#1107 Stop alert before quitting without returning. macOS does not enter its
+run loop; living without windows is deferred until a reopen path exists.
+A multi-window static app with one refused `WindowDef` and others created stays
+silent today and after; that is not #1215's claim. Runtime emptiness is answered
+by `requestWindowClose`, where the last-window quit check remains (A′).
+
 ## Review risk profile
 
 Four flags require explicit review under AGENTS.md: new definition ownership

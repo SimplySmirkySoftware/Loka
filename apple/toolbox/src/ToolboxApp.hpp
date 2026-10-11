@@ -83,6 +83,7 @@ public:
 protected:
   virtual bool windowAdopted(Window *window);
   virtual void bootstrapWindowRefused(Window *window);
+  virtual void bootstrapWindowless();
 
 private:
   friend class CursorOwner;
