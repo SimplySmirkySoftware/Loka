@@ -295,11 +295,14 @@ void testShowDestroyModifierCopiesTrueArmOnly()
   IBranchPolicyScopeDefinition *scope = original.armDefinition(1)->asBranchPolicyScopeDefinition();
   LOKA_VERIFY(scope == 0);
   ShowDefinition retained = Show(condition);
-  LOKA_VERIFY(!original.hasEquivalentProps(retained));
+  LOKA_VERIFY(original.armPolicies(1).destroyOnDetach !=
+              retained.armPolicies(1).destroyOnDetach);
   ConditionalDefinition conditional(ConditionalProps(&condition, 0, 0));
-  LOKA_VERIFY(!conditional.hasEquivalentProps(original));
-  LOKA_VERIFY(!original.hasEquivalentProps(conditional));
-  LOKA_VERIFY(conditional.hasEquivalentProps(retained));
+  LOKA_VERIFY(conditional.armPolicies(1).destroyOnDetach !=
+              original.armPolicies(1).destroyOnDetach);
+  LOKA_VERIFY(conditional.branchCondition() == retained.branchCondition());
+  LOKA_VERIFY(conditional.armPolicies(1).destroyOnDetach ==
+              retained.armPolicies(1).destroyOnDetach);
   LOKA_VERIFY(!original.armPolicies(1).deliverWhileDetached);
 }
 

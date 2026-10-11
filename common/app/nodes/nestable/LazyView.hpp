@@ -72,10 +72,6 @@ namespace loka
         // A temporary factory's props pointer would dangle on return.
         return &this->list_->at(this->index_).value;
       }
-      virtual bool hasEquivalentProps(const scene::NodeDefinitionBase &other) const
-      {
-        return this->factory().hasEquivalentProps(other);
-      }
       virtual bool applyPropsToNode(scene::Node *node) const
       {
         return this->factory().applyPropsToNode(node);

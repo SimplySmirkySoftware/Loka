@@ -107,22 +107,6 @@ namespace loka
         return copy;
       }
 
-      bool ConditionalDefinition::hasEquivalentProps(const NodeDefinitionBase &other) const
-      {
-        const PropsBase *otherProps = other.propsBase();
-        if (!otherProps || otherProps->propsTypeId() != this->props.propsTypeId())
-        {
-          return false;
-        }
-        const ConditionalProps &otherConditionalProps =
-            static_cast<const ConditionalProps &>(*otherProps);
-        IBranchSeatDefinition *otherSeat =
-            const_cast<NodeDefinitionBase &>(other).asBranchSeatDefinition();
-        // Show shares ConditionalProps; a direct destroy policy changes equivalence.
-        return this->props.condition == otherConditionalProps.condition && otherSeat &&
-               !otherSeat->armPolicies(1).destroyOnDetach;
-      }
-
       ConditionalDefinition::~ConditionalDefinition()
       {
         delete this->ownedTrueDef;
