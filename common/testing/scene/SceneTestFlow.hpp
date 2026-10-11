@@ -1567,6 +1567,7 @@ namespace loka
         return CaptureSceneAdapter(testName, stepName, tick, scenarioVersion);
       }
 
+      /** Resolved capture payload, borrowed only during one capture invocation. */
       struct ViewCaptureTarget
       {
         ViewCaptureTarget()
@@ -1585,30 +1586,53 @@ namespace loka
         std::string testId;
       };
 
+      /** A scheduled capture carries a key, never a descendant node or context.
+          The scene must outlive the scenario. Resolve only inside the consuming
+          step; the resulting pointers are borrowed for that invocation. */
+      class ViewCaptureKey
+      {
+      public:
+        ViewCaptureKey() : scene_(0), testId_() {}
+        ViewCaptureKey(::loka::app::scene::Scene *scene, const std::string &testId)
+            : scene_(scene), testId_(testId) {}
+
+        StepRunStatus resolve(ViewCaptureTarget &out, FlowError &error) const
+        {
+          ::loka::app::scene::Node *node = 0;
+          StepRunStatus status = LookupNodeById< ::loka::app::scene::Node>(
+              this->scene_, this->testId_, node, error);
+          if (status != FLOW_STEP_SUCCEEDED)
+          {
+            return status;
+          }
+          out.node = node;
+          out.hasContext = node->getContext() != 0;
+          out.capturableBitmap = node->getContext() ? node->getContext()->asCapturableBitmap() : 0;
+          out.kind = static_cast<long>(node->kind());
+          out.testId = node->testId();
+          return FLOW_STEP_SUCCEEDED;
+        }
+
+      private:
+        ::loka::app::scene::Scene *scene_;
+        std::string testId_;
+      };
+
+      /** Selects a capture key. Target existence is checked at consumption. */
       class CaptureViewTargetAdapter
       {
       public:
         typedef ::loka::app::scene::Scene *In;
-        typedef ViewCaptureTarget Out;
+        typedef ViewCaptureKey Out;
 
         explicit CaptureViewTargetAdapter(const char *testId)
             : testId_(testId ? testId : "")
         {
         }
 
-        StepRunStatus run(In const &in, Out &out, FlowError &error) const
+        StepRunStatus run(In const &in, Out &out, FlowError &) const
         {
-          ::loka::app::scene::Node *node = 0;
-          StepRunStatus lookupStatus = LookupNodeById< ::loka::app::scene::Node>(in, testId_, node, error);
-          if (lookupStatus != FLOW_STEP_SUCCEEDED)
-          {
-            return lookupStatus;
-          }
-          out.node = node;
-          out.hasContext = node && node->getContext() != 0;
-          out.capturableBitmap = (node && node->getContext()) ? node->getContext()->asCapturableBitmap() : 0;
-          out.kind = node ? static_cast<long>(node->kind()) : 0;
-          out.testId = node ? node->testId() : std::string();
+          out = ViewCaptureKey(in, this->testId_);
           return FLOW_STEP_SUCCEEDED;
         }
 
@@ -1624,7 +1648,7 @@ namespace loka
       class CaptureViewTargetSnapAdapter
       {
       public:
-        typedef ViewCaptureTarget In;
+        typedef ViewCaptureKey In;
         typedef SnapRecord Out;
 
         CaptureViewTargetSnapAdapter(const char *testName,
@@ -1640,13 +1664,13 @@ namespace loka
         {
         }
 
-        StepRunStatus run(In const &in, Out &out, FlowError &error) const
+        StepRunStatus run(In const &key, Out &out, FlowError &error) const
         {
-          if (!in.node)
+          ViewCaptureTarget in;
+          const StepRunStatus status = key.resolve(in, error);
+          if (status != FLOW_STEP_SUCCEEDED)
           {
-            error.kind = FLOW_ERROR_KIND_SCENE_SCENARIO;
-            error.code = FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND;
-            return FLOW_STEP_FAILED;
+            return status;
           }
 
           BuildSnapV1RecordAdapter base(testName_.c_str(),
@@ -1713,7 +1737,7 @@ namespace loka
       class CaptureViewBitmapAdapter
       {
       public:
-        typedef ViewCaptureTarget In;
+        typedef ViewCaptureKey In;
         typedef ViewBitmapCapture Out;
         typedef bool (*CaptureFn)(const ViewCaptureTarget &target,
                                   ViewBitmapCapture &out,
@@ -1726,13 +1750,13 @@ namespace loka
         {
         }
 
-        StepRunStatus run(In const &in, Out &out, FlowError &error) const
+        StepRunStatus run(In const &key, Out &out, FlowError &error) const
         {
-          if (!in.node)
+          ViewCaptureTarget in;
+          const StepRunStatus status = key.resolve(in, error);
+          if (status != FLOW_STEP_SUCCEEDED)
           {
-            error.kind = FLOW_ERROR_KIND_SCENE_SCENARIO;
-            error.code = FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND;
-            return FLOW_STEP_FAILED;
+            return status;
           }
           if (!this->captureFn_)
           {
@@ -1765,16 +1789,16 @@ namespace loka
       class CaptureViewBitmapFromPlatformAdapter
       {
       public:
-        typedef ViewCaptureTarget In;
+        typedef ViewCaptureKey In;
         typedef ViewBitmapCapture Out;
 
-        StepRunStatus run(In const &in, Out &out, FlowError &error) const
+        StepRunStatus run(In const &key, Out &out, FlowError &error) const
         {
-          if (!in.node)
+          ViewCaptureTarget in;
+          const StepRunStatus status = key.resolve(in, error);
+          if (status != FLOW_STEP_SUCCEEDED)
           {
-            error.kind = FLOW_ERROR_KIND_SCENE_SCENARIO;
-            error.code = FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND;
-            return FLOW_STEP_FAILED;
+            return status;
           }
           if (!in.capturableBitmap)
           {

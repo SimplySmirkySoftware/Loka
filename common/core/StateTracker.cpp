@@ -328,9 +328,7 @@ namespace loka
 
     void PushStateTracker::propagateDirty(StateBase *state, unsigned long pass)
     {
-      TransactionIntake &intake = transaction_.intake(phase_);
-      intake.dirty = true;
-      transaction_.anyDirty = true;
+      TransactionIntake &intake = this->transaction_.markDirty(this->phase_);
       pendingDirty_ = true;
       DependencyMap::iterator it = dependents.find(state);
       if (it != dependents.end())
@@ -506,7 +504,7 @@ namespace loka
       }
       transaction_.current.dirtyStates.reserve(count);
       transaction_.next.dirtyStates.reserve(count);
-      transaction_.committedDirtyStates.reserve(count);
+      this->transaction_.committed.reserve(count);
       this->scratch_.reserve(count);
       allocateEntries(count);
     }
@@ -566,9 +564,9 @@ namespace loka
         this->transaction_.current.deferred[i].first(
             this->transaction_.current.deferred[i].second);
       this->transaction_.current.deferred.clear();
-      if (this->transaction_.current.dirty && this->invalidateFn_)
+      if (this->transaction_.current.dirty() && this->invalidateFn_)
         this->invalidateFn_(this->invalidateUserData_);
-      this->transaction_.current.dirty = false;
+      this->transaction_.current.finishCommit();
       this->phase_ = TRACKER_PRECOMMIT;
       return STEP_DONE;
     }
@@ -642,21 +640,7 @@ namespace loka
           StateBase *state = this->scratch_[i];
           if (!state)
             continue;
-          bool alreadyCommitted = false;
-          for (size_t committedIndex = 0;
-               committedIndex < transaction_.committedDirtyStates.size();
-               ++committedIndex)
-          {
-            if (transaction_.committedDirtyStates[committedIndex] == state)
-            {
-              alreadyCommitted = true;
-              break;
-            }
-          }
-          if (!alreadyCommitted)
-          {
-            transaction_.committedDirtyStates.push_back(state);
-          }
+          this->transaction_.committed.add(state);
           if (!state->recompute())
           {
             continue;
@@ -678,25 +662,57 @@ namespace loka
       return transaction_.current.dirtyStates.empty();
     }
 
+    void PushStateTracker::CommittedSet::clear()
+    {
+      this->identities_.clear();
+      this->complete_ = true;
+    }
+
+    void PushStateTracker::CommittedSet::add(StateBase *state)
+    {
+      for (size_t i = 0; i < this->identities_.size(); ++i)
+      {
+        if (this->identities_[i] == state)
+          return;
+      }
+      this->identities_.push_back(state);
+    }
+
+    void PushStateTracker::CommittedSet::removeState(StateBase *state)
+    {
+      for (size_t i = 0; i < this->identities_.size();)
+      {
+        if (this->identities_[i] == state)
+        {
+          this->identities_.erase(this->identities_.begin() + i);
+          this->complete_ = false;
+        }
+        else
+        {
+          ++i;
+        }
+      }
+    }
+
     void PushStateTracker::TransactionIntake::clear()
     {
-      dirtyStates.clear();
-      deferred.clear();
-      dirty = false;
+      this->dirtyStates.clear();
+      this->deferred.clear();
+      this->finishCommit();
     }
 
     bool PushStateTracker::TransactionIntake::hasWork() const
     {
-      return dirty || !dirtyStates.empty() || !deferred.empty();
+      return this->dirty_ || !this->dirtyStates.empty() || !this->deferred.empty();
     }
 
     void PushStateTracker::TransactionIntake::removeState(StateBase *state)
     {
-      for (size_t i = 0; i < dirtyStates.size();)
+      for (size_t i = 0; i < this->dirtyStates.size();)
       {
-        if (dirtyStates[i] == state)
+        if (this->dirtyStates[i] == state)
         {
-          dirtyStates.erase(dirtyStates.begin() + i);
+          this->dirtyStates.erase(this->dirtyStates.begin() + i);
         }
         else
         {
@@ -707,58 +723,54 @@ namespace loka
 
     void PushStateTracker::TransactionIntake::swap(TransactionIntake &other)
     {
-      dirtyStates.swap(other.dirtyStates);
-      deferred.swap(other.deferred);
-      const bool otherDirty = other.dirty;
-      other.dirty = dirty;
-      dirty = otherDirty;
+      this->dirtyStates.swap(other.dirtyStates);
+      this->deferred.swap(other.deferred);
+      const bool otherDirty = other.dirty_;
+      other.dirty_ = this->dirty_;
+      this->dirty_ = otherDirty;
     }
 
     void PushStateTracker::TrackerTransaction::begin()
     {
-      current.clear();
-      next.clear();
-      committedDirtyStates.clear();
-      committedIdentitiesErased = false;
-      anyDirty = false;
+      this->current.clear();
+      this->next.clear();
+      this->beginCommit();
+      this->anyDirty_ = false;
     }
 
     PushStateTracker::TransactionIntake &
     PushStateTracker::TrackerTransaction::intake(TrackerPhase phase)
     {
-      return phase == TRACKER_COMMIT ? next : current;
+      return phase == TRACKER_COMMIT ? this->next : this->current;
+    }
+
+    PushStateTracker::TransactionIntake &
+    PushStateTracker::TrackerTransaction::markDirty(TrackerPhase phase)
+    {
+      TransactionIntake &result = this->intake(phase);
+      result.markDirty();
+      this->anyDirty_ = true;
+      return result;
     }
 
     void PushStateTracker::TrackerTransaction::advance()
     {
-      current.clear();
-      current.swap(next);
-      next.clear();
+      this->current.clear();
+      this->current.swap(this->next);
+      this->next.clear();
       this->beginCommit();
     }
 
     void PushStateTracker::TrackerTransaction::beginCommit()
     {
-      committedDirtyStates.clear();
-      committedIdentitiesErased = false;
+      this->committed.clear();
     }
 
     void PushStateTracker::TrackerTransaction::removeState(StateBase *state)
     {
-      current.removeState(state);
-      next.removeState(state);
-      for (size_t i = 0; i < committedDirtyStates.size();)
-      {
-        if (committedDirtyStates[i] == state)
-        {
-          committedDirtyStates.erase(committedDirtyStates.begin() + i);
-          committedIdentitiesErased = true;
-        }
-        else
-        {
-          ++i;
-        }
-      }
+      this->current.removeState(state);
+      this->next.removeState(state);
+      this->committed.removeState(state);
     }
 
     PushStateTracker::StateEntry *PushStateTracker::allocateEntry(StateBase *state)

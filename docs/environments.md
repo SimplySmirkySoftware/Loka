@@ -102,6 +102,11 @@ This is the environment where binaries are actually built.
   project-owned `cmake/macos/MacOSXBundleInfo.plist.in`. The legacy build
   evidence below predates this template change; the updated bundle metadata
   still needs legacy build verification and Retina runtime verification.
+  The same template opts the bundles into the dark appearance
+  (`NSRequiresAquaSystemAppearance` false, #421); on macOS 10.14 and 10.15,
+  served by legacy builds linked against older SDKs, that opt-in is not
+  runtime-verified, and the application may still render light. See
+  `scripts/macos/README.md`.
   In an Xcode 3.2.6 build environment, use
   `scripts/macos-standalone-release-ub1.sh tiger` for a `ppc;i386` set or
   `scripts/macos-standalone-release-ub1.sh leopard` for a
