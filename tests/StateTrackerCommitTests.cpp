@@ -63,7 +63,7 @@ namespace
     TrackerCommitProbe *probe = static_cast<TrackerCommitProbe *>(userData);
     ++probe->invalidations;
     const loka::core::PushStateTracker::StateList &committed =
-        probe->tracker->committedDirtyStates();
+        probe->tracker->committedSet().identities();
     if (probe->invalidations == 1)
     {
       (void)committed;
@@ -506,8 +506,8 @@ void testStateTrackerLegacyEndPreservesCompletedSnapshot()
   const bool settled = tracker.end();
   (void)settled;
   assert(settled);
-  assert(tracker.committedDirtyStates().size() == 1);
-  assert(tracker.committedDirtyStates()[0] == &source);
+  assert(tracker.committedSet().identities().size() == 1);
+  assert(tracker.committedSet().identities()[0] == &source);
   assert(tracker.transactionDirty());
   assert(tracker.peekDirty());
 }

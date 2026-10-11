@@ -79,6 +79,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DerivedStateTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DerivedNodeStateTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/WindowFrameStateTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/WindowIdleTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/DefinitionCloneTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/NodeMatchTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/SceneOwnershipTests.cpp
