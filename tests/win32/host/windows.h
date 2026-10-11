@@ -121,6 +121,12 @@ namespace win32_host
 {
   extern bool refuseProperty;
   extern int colorInvalidations;
+  struct DirtySubtree
+  {
+    HWND parent;
+    RECT rect;
+  };
+  extern std::vector<DirtySubtree> dirtySubtrees;
 } // namespace win32_host
 BOOL SetPropW(HWND, LPCWSTR, void *);
 void *GetPropW(HWND, LPCWSTR);

@@ -17,6 +17,7 @@
 #include "Win32RectSurfaceRedrawTests.hpp"
 #include "support/TestVerify.hpp"
 #include <cstdio>
+#include <vector>
 #include <windows.h>
 #include "Win32ScenePlatformController.hpp"
 #include "Win32Window.hpp"
@@ -1180,7 +1181,7 @@ namespace
     verifyInkPixels(child, RGB(0xC4, 0x2B, 0x1C), GetSysColor(COLOR_BTNTEXT));
 
     // Apply style alone without layout or WM_SETTEXT invalidating independently.
-    // Validate first so removing the color invalidation cannot pass accidentally.
+    // Settle first so only the color change can queue the parent rectangle.
     RECT before, after;
     LOKA_VERIFY(GetWindowRect(child, &before));
     ValidateRect(child, NULL);
@@ -1188,7 +1189,13 @@ namespace
     LayoutState state;
     state.width = 150;
     LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(text));
-    LOKA_VERIFY(GetUpdateRect(child, NULL, FALSE));
+    RECT expected = before;
+    MapWindowPoints(NULL, parent, reinterpret_cast<POINT *>(&expected), 2);
+    RedrawAccess::PendingInvalidationSnapshot pending;
+    LOKA_VERIFY(RedrawAccess::queryPendingInvalidation(controller, 0, pending));
+    LOKA_VERIFY(pending.hwnd == parent && EqualRect(&pending.rect, &expected));
+    LOKA_VERIFY(pending.includeChildren && !pending.fullWindow && !pending.eraseBackground);
+    LOKA_VERIFY(!GetUpdateRect(child, NULL, FALSE));
     flushTransparentPaint(controller, root);
     UpdateWindow(child);
     if (GetSysColor(COLOR_GRAYTEXT) == GetSysColor(COLOR_BTNTEXT))
@@ -1234,4 +1241,58 @@ void testWin32StaticTextInks()
   exerciseStaticInk(controller, root, viewport.hwnd());
   viewport.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
+}
+
+void testWin32StaticTextColorChangeResidue()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  std::vector<COLORREF> changed;
+  int partial = 0;
+  // Both presentations use the same position, font and ground. Read existing
+  // pixels with windowPixel; capture must not trigger a compensating repaint.
+  for (int fresh = 0; fresh < 2; ++fresh)
+  {
+    TextProps props("MMMM color residue");
+    props.textStyle_ = FontSize<24>() + (fresh ? Blue : Red);
+    TextNode node(props);
+    Win32TextContext text(&controller, root, 10, 10, 280, 48, &node);
+    HWND child = FindWindowExW(root, NULL, L"STATIC", L"MMMM color residue");
+    LOKA_VERIFY(child != NULL);
+    flushTransparentPaint(controller, root);
+    if (!fresh)
+    {
+      verifyInkPixels(child, RGB(0xC4, 0x2B, 0x1C), RGB(0x0F, 0x6C, 0xBD));
+      node.props.textStyle_ = FontSize<24>() + Blue;
+      // Isolate color: WM_SETTEXT independently queues the correct parent route.
+      LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(text));
+      flushTransparentPaint(controller, root);
+    }
+    RECT rect;
+    LOKA_VERIFY(GetClientRect(child, &rect));
+    std::vector<COLORREF> pixels;
+    for (int y = 0; y < rect.bottom; ++y)
+      for (int x = 0; x < rect.right; ++x)
+      {
+        const COLORREF pixel = windowPixel(child, x, y);
+        pixels.push_back(pixel);
+        if (fresh && pixel != GetSysColor(COLOR_BTNFACE) && pixel != RGB(0x0F, 0x6C, 0xBD))
+          ++partial;
+      }
+    if (!fresh)
+      changed.swap(pixels);
+    else if (!partial)
+      std::printf("[skip] color-change residue: no antialiased pixels in this session\n");
+    else
+    {
+      std::printf("color-change residue: partial coverage pixels=%d\n", partial);
+      LOKA_VERIFY(changed == pixels);
+    }
+    text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    controller.drainNativeRetirements();
+  }
 }

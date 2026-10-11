@@ -22,14 +22,15 @@ public:
   {
     RemovePropW(hwnd, name());
   }
-  static void apply(HWND hwnd, loka::app::TextColor color)
+  static bool apply(HWND hwnd, loka::app::TextColor color)
   {
-    if (read(hwnd) == color)
-      return;
+    const loka::app::TextColor previous = read(hwnd);
+    if (previous == color)
+      return false;
     detach(hwnd);
     if (color != loka::app::TEXT_COLOR_UNSET)
       SetPropW(hwnd, name(), reinterpret_cast<void *>(static_cast<LONG_PTR>(color)));
-    InvalidateRect(hwnd, NULL, TRUE);
+    return read(hwnd) != previous;
   }
 
 private:

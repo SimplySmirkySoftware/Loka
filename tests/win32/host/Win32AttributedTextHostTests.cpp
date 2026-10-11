@@ -163,6 +163,10 @@ static void pinPlainWrappedLines()
   context->layout(&controller, state);
   const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
+  node.props.textStyle_ = Red;
+  context->onPropsApplied();
+  context->layout(&controller, state);
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
 }
 
 static void pinAttributedTextGroundText()
@@ -247,10 +251,25 @@ static void pinStaticTextColor()
   LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_RED);
   loka::win32::Win32StaticTextColors(&child->dc, child);
   LOKA_VERIFY(child->dc.textColor == RGB(0xC4, 0x2B, 0x1C));
+  const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+  context->onPropsApplied();
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_EXACT);
   node.props.textStyle_ = Blue;
   win32_host::colorInvalidations = 0;
+  win32_host::dirtySubtrees.clear();
   LOKA_VERIFY(!loka::testing::Win32TextColorAccess::applyStyle(*context));
-  LOKA_VERIFY(win32_host::colorInvalidations == 1);
+  LOKA_VERIFY(win32_host::dirtySubtrees.size() == 1);
+  LOKA_VERIFY(win32_host::dirtySubtrees[0].parent == &root);
+  const RECT &dirty = win32_host::dirtySubtrees[0].rect;
+  LOKA_VERIFY(dirty.left == child->rect.left && dirty.top == child->rect.top);
+  LOKA_VERIFY(dirty.right == child->rect.right && dirty.bottom == child->rect.bottom);
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+  node.props.textStyle_ = Red;
+  context->onPropsApplied();
+  LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+  node.props.textStyle_ = Blue;
+  context->onPropsApplied();
   LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_BLUE);
   win32_host::refuseProperty = true;
   node.props.textStyle_ = Red;
@@ -270,8 +289,20 @@ static void pinStaticTextColor()
   context->onPropsApplied();
   context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
   LOKA_VERIFY(GetPropW(child, L"Loka.Text.Color") == 0);
+  win32_host::dirtySubtrees.clear();
+  win32_host::colorInvalidations = 0;
   context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
   LOKA_VERIFY(Win32TextColorProperty::read(child) == TEXT_COLOR_RED);
+  LOKA_VERIFY(win32_host::dirtySubtrees.empty());
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  LOKA_VERIFY(!Win32TextColorProperty::apply(child, TEXT_COLOR_RED));
+  LOKA_VERIFY(Win32TextColorProperty::apply(child, TEXT_COLOR_BLUE));
+  LOKA_VERIFY(win32_host::dirtySubtrees.empty());
+  LOKA_VERIFY(win32_host::colorInvalidations == 0);
+  Win32TextColorProperty::detach(child);
+  win32_host::refuseProperty = true;
+  LOKA_VERIFY(!Win32TextColorProperty::apply(child, TEXT_COLOR_RED));
+  win32_host::refuseProperty = false;
   for (unsigned i = 0;
        i < sizeof(loka::app::detail::StyleVocabularyColors) / sizeof(loka::app::detail::StyleVocabularyColors[0]);
        ++i)
@@ -286,11 +317,11 @@ static void pinStaticTextColor()
 int main(int argc, char **)
 {
   pinStaticTextColor();
+  pinPlainWrappedLines();
   pinAttributedTextGroundText();
   pinRectSurfaceGroundBrushes();
   if (argc > 1)
   {
-    pinPlainWrappedLines();
     pinMeasurement(true);
     pinMeasurement(false);
     return 0;

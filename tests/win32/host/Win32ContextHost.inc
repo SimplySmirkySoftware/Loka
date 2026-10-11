@@ -125,6 +125,7 @@ namespace win32_host
 {
   bool refuseProperty = false;
   int colorInvalidations = 0;
+  std::vector<DirtySubtree> dirtySubtrees;
 } // namespace win32_host
 BOOL InvalidateRect(HWND, const RECT *, BOOL)
 {
