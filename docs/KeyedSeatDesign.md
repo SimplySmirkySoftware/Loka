@@ -76,11 +76,19 @@ or per-source reference counts describe the pass.
 
 The App's window seat is a keyed consumer under the same snapshot rule above;
 its driver is App admission. A config-owned `DocumentRoster<T, N>` owns the list
-and its tracker. The seat only adds windows and always advances its snapshot to
-the revision read at the start of the walk. It copies desired identities first,
-so documents opened during a factory or mount wait for a following admission.
-An open after the last admission of a tail is not pending window admission work
-and waits for the next event.
+and its tracker. The application removes a document with `DocumentRoster::close`.
+Within one walk the seat adds windows for new documents, then closes the windows
+of documents that left the roster, through the same `requestWindowClose` a native
+close takes. This order keeps a close-then-open replacement from emptying the
+group between the two. The seat always advances its snapshot to the revision
+read at the start of the walk. It copies desired identities first, so edits
+during a factory or mount wait for a following admission. A moved roster revision
+is pending window admission work, including an edit after a tail's last admission.
+
+Cost: one ListRevision compare per admission (two per Win32 tail, every Toolbox
+pass, every macOS flush tick); when the revision moved, increase walks desired x
+group rows and decrease walks group rows x desired once per stale row plus one
+final full scan, all over this App's group and its own seat's desired copy.
 
 A document whose window cannot be created or adopted at runtime is dropped from
 the roster, never retried; the application observes removal as a list fact
@@ -88,8 +96,9 @@ the roster, never retried; the application observes removal as a list fact
 takes the bootstrap door (#1186). A native close of a keyed window removes its
 document. Runtime refusal uses the existing close batching: group removal and
 scene detach occur in the refusal tail, while the Window is reclaimed at the
-next tail. Removing a document from the application to close its window is
-page 3 and has no door yet.
+next tail. Closing is a decided fact here; a close that can be refused (a dirty
+document, a native close box that asks first) is Window rally page 3b and has no
+door yet.
 
 ## Review risk profile
 
