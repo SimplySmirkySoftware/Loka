@@ -23,4 +23,12 @@ void testDocumentWindowCloseAfterNativeCloseIsNotFound();
 void testDocumentWindowCloseDuringWalkTakesNextWalk();
 void testDocumentWindowCloseAllAndReopenInOneTurn();
 
+void testBootstrapWithEveryStaticWindowRefusedReportsWindowless();
+void testBootstrapWithTheSeededDocumentRefusedReportsWindowless();
+void testBootstrapWithOneWindowDoesNotReportWindowless();
+void testBootstrapWithAnEmptyRosterReportsWindowlessAndNullRecords();
+void testBootstrapWindowlessDefaultQuits();
+void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless();
+void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless();
+
 #endif

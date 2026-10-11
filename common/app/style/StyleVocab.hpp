@@ -12,6 +12,21 @@ namespace loka
       TEXT_WEIGHT_BOLD = 1
     };
 
+    enum TextColor
+    {
+      TEXT_COLOR_UNSET = 0,
+      TEXT_COLOR_PRIMARY = 1,
+      TEXT_COLOR_SECONDARY = 2,
+      TEXT_COLOR_BLACK = 3,
+      TEXT_COLOR_WHITE = 4,
+      TEXT_COLOR_RED = 5,
+      TEXT_COLOR_GREEN = 6,
+      TEXT_COLOR_BLUE = 7,
+      TEXT_COLOR_CYAN = 8,
+      TEXT_COLOR_MAGENTA = 9,
+      TEXT_COLOR_YELLOW = 10
+    };
+
     enum TextWrap
     {
       TEXT_WRAP_NONE = 0,
@@ -106,6 +121,17 @@ namespace loka
       }
     };
 
+    /** Standard-palette roles and inks, initialized per TU like Bold. */
+    static const TextStyle Primary = TextStyle().color(TEXT_COLOR_PRIMARY);
+    static const TextStyle Secondary = TextStyle().color(TEXT_COLOR_SECONDARY);
+    static const TextStyle Black = TextStyle().color(TEXT_COLOR_BLACK);
+    static const TextStyle White = TextStyle().color(TEXT_COLOR_WHITE);
+    static const TextStyle Red = TextStyle().color(TEXT_COLOR_RED);
+    static const TextStyle Green = TextStyle().color(TEXT_COLOR_GREEN);
+    static const TextStyle Blue = TextStyle().color(TEXT_COLOR_BLUE);
+    static const TextStyle Cyan = TextStyle().color(TEXT_COLOR_CYAN);
+    static const TextStyle Magenta = TextStyle().color(TEXT_COLOR_MAGENTA);
+    static const TextStyle Yellow = TextStyle().color(TEXT_COLOR_YELLOW);
   } // namespace app
 } // namespace loka
 
@@ -128,3 +154,79 @@ namespace loka
 } // namespace loka
 
 #endif // generated vocabulary storage
+
+#if defined(LOKA_STYLE_VOCAB_DEFINE_NAMES) && !defined(LOKA_APP_STYLE_STYLE_VOCAB_NAMES_HPP)
+#define LOKA_APP_STYLE_STYLE_VOCAB_NAMES_HPP
+
+/** Opt-in decoder names; include Style.hpp before requesting this section. */
+namespace loka
+{
+  namespace app
+  {
+    namespace detail
+    {
+      struct TextWeightName
+      {
+        const char *name;
+        TextWeight value;
+      };
+      static const TextWeightName StyleVocabularyWeights[] = {
+          {"normal", TEXT_WEIGHT_NORMAL},
+          {"bold", TEXT_WEIGHT_BOLD},
+      };
+
+      struct TextColorName
+      {
+        const char *name;
+        TextColor value;
+      };
+      static const TextColorName StyleVocabularyColors[] = {
+          {"primary", TEXT_COLOR_PRIMARY},
+          {"secondary", TEXT_COLOR_SECONDARY},
+          {"black", TEXT_COLOR_BLACK},
+          {"white", TEXT_COLOR_WHITE},
+          {"red", TEXT_COLOR_RED},
+          {"green", TEXT_COLOR_GREEN},
+          {"blue", TEXT_COLOR_BLUE},
+          {"cyan", TEXT_COLOR_CYAN},
+          {"magenta", TEXT_COLOR_MAGENTA},
+          {"yellow", TEXT_COLOR_YELLOW},
+      };
+
+      struct TextWrapName
+      {
+        const char *name;
+        TextWrap value;
+      };
+      static const TextWrapName StyleVocabularyWrap[] = {
+          {"none", TEXT_WRAP_NONE},
+          {"word", TEXT_WRAP_WORD},
+          {"char", TEXT_WRAP_CHAR},
+      };
+
+      struct TextTruncationName
+      {
+        const char *name;
+        TextTruncation value;
+      };
+      static const TextTruncationName StyleVocabularyTruncation[] = {
+          {"none", TEXT_TRUNCATION_NONE},
+          {"clip", TEXT_TRUNCATION_CLIP},
+          {"ellipsis", TEXT_TRUNCATION_ELLIPSIS},
+      };
+
+      struct TextAlignName
+      {
+        const char *name;
+        TextAlign value;
+      };
+      static const TextAlignName StyleVocabularyAlign[] = {
+          {"left", TEXT_ALIGN_LEFT},
+          {"center", TEXT_ALIGN_CENTER},
+          {"right", TEXT_ALIGN_RIGHT},
+      };
+    } // namespace detail
+  } // namespace app
+} // namespace loka
+
+#endif // generated vocabulary names

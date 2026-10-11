@@ -141,8 +141,8 @@ void testBlockStyleAlignmentValue()
   LOKA_VERIFY(none != left && none < left && !(left < none));
   LOKA_VERIFY(left != center && left < center && !(center < left));
   LOKA_VERIFY(center != right && center < right && !(right < center));
-  LOKA_VERIFY((Text("x") + center).props.hasDeclaredStyle());
-  LOKA_VERIFY(!(Text("x") + none).props.hasDeclaredStyle());
+  LOKA_VERIFY((Text("x") + center).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY(!(Text("x") + none).props.hasDeclaredLayoutStyle());
   LOKA_VERIFY((center + BlockStyle().wrap(TEXT_WRAP_WORD)).align_ == TEXT_ALIGN_CENTER);
 }
 
