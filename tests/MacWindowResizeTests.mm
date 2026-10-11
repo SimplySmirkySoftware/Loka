@@ -16,6 +16,8 @@
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
+#include <cstdio>
+
 namespace
 {
   using namespace loka::app;
@@ -209,6 +211,7 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
 
   const Frame before = window.nativeFrame().get();
   LOKA_VERIFY(before.width == 360 && before.height == 260);
+  std::fprintf(stderr, "probe extent=%d,%d %dx%d native=%dx%d\n", facts.extent.get().x, facts.extent.get().y, facts.extent.get().width, facts.extent.get().height, before.width, before.height);
   LOKA_VERIFY(facts.extent.get().width == 360);
 
   window.nativeFrame().bind(&ClampFacts::nativeChanged, &facts, false);
