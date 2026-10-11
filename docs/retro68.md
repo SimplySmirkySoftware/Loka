@@ -187,11 +187,11 @@ that stop requires an explicit ruling, not an acknowledgment flag.
 
 ### Small-object pool
 
-Every target linking `ToolboxOperatorNew.cpp` (Retro68, RetroPPC, RetroCarbon)
+Every target linking `ToolboxOperatorNew.cpp` (Retro68 and RetroPPC)
 serves allocations up to 256 bytes from process-lifetime, 2 KiB size-class
 chunks backed by the Classic memory source (`ToolboxMemorySource.hpp`).
 Each size class is a multiple of 8, and the Source declares the target's
-maximum fundamental alignment (8 on PowerPC/Carbon, 4 on 68K), so pooled slots
+maximum fundamental alignment (8 on PowerPC, 4 on 68K), so pooled slots
 are aligned at least as strictly as any type they can hold.
 On 68K the source itself guarantees that alignment: pre-7.5 Memory Managers
 can hand `NewPtr` blocks back at 2-mod-4 addresses (System 7.0 on a Plus/SE
@@ -199,8 +199,8 @@ class machine), so the source asks for `size + 4`, advances 1..4 bytes to the
 next 4-aligned address, stores that distance in the byte just before the
 returned pointer, and recovers the native block from that byte at release.
 Every source block — a 2 KiB chunk, or a large/direct/fallback request above
-256 bytes — carries that one recovery byte; pooled slots never do. PowerPC and
-Carbon keep the 8-aligned `NewPtr` pass-through with no prefix. Sizes that
+256 bytes — carries that one recovery byte; pooled slots never do. PowerPC
+keeps the 8-aligned `NewPtr` pass-through with no prefix. Sizes that
 would overflow the Memory Manager's signed `Size` after the +4 are refused
 before allocating.
 Chunk refusal retries the single request; nothrow forms return 0 on refusal,
@@ -300,7 +300,10 @@ process environment:
   other preset family fail; prefer `RETRO68_BUILD_DIR` for shared 68K and PPC
   use.
 - `RETRO68_CPU`: target CPU (`m68k` or `ppc`). Defaults to `m68k`.
-- `RETRO68_PPC_FLAVOR`: `retroppc` or `retrocarbon` (when `RETRO68_CPU=ppc`).
+- `RETRO68_PPC_FLAVOR`: `retroppc` (when `RETRO68_CPU=ppc`). Configure refuses
+  any other value. RetroCarbon is not supported: the Toolbox rail reads
+  QuickDraw and Dialog Manager fields that Carbon makes opaque, and no preset
+  or CI job builds it (#1191).
 
 The host-local file intentionally accepts only the location variables listed
 under Host configuration. CPU and flavor remain owned by the selected preset.

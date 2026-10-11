@@ -795,6 +795,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/ToolboxStandaloneRunnerTest.sh)
     add_test(NAME scriptRetro68Environment
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68EnvironmentTest.sh)
+    add_test(NAME scriptRetro68ToolchainFlavor
+      COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68ToolchainFlavorTest.sh)
     add_test(NAME scriptCiPaths
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/CiPathsTest.py)
     add_test(NAME scriptRetro68SizeReport
