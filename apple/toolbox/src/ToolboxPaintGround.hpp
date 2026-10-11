@@ -12,6 +12,36 @@ namespace loka
     typedef char PlanarWhiteMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_WHITE) == whiteColor) ? 1 : -1];
     typedef char PlanarBlackMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_BLACK) == blackColor) ? 1 : -1];
 
+    typedef char PlanarRedMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_RED) == redColor) ? 1 : -1];
+    typedef char PlanarGreenMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_GREEN) == greenColor) ? 1 : -1];
+    typedef char PlanarBlueMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_BLUE) == blueColor) ? 1 : -1];
+    typedef char PlanarCyanMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_CYAN) == cyanColor) ? 1 : -1];
+    typedef char PlanarMagentaMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_MAGENTA) == magentaColor) ? 1 : -1];
+    typedef char PlanarYellowMustMatchQuickDraw[(static_cast<long>(TOOLBOX_PLANAR_YELLOW) == yellowColor) ? 1 : -1];
+
+    /** One non-yielding glyph paint in the current basic port. The caller keeps
+        that port current through destruction; no Color QuickDraw is needed. */
+    class ToolboxTextInkScope
+    {
+    public:
+      explicit ToolboxTextInkScope(long ink)
+      {
+        GrafPtr port;
+        GetPort(&port);
+        this->saved_ = port->fgColor;
+        ForeColor(ink);
+      }
+      ~ToolboxTextInkScope()
+      {
+        ForeColor(this->saved_);
+      }
+
+    private:
+      long saved_;
+      ToolboxTextInkScope(const ToolboxTextInkScope &);
+      ToolboxTextInkScope &operator=(const ToolboxTextInkScope &);
+    };
+
     /** Sets the current port's background to the window ground. Every Loka
         window port keeps this background between paints, so a plain EraseRect
         restores the window ground beneath transparent kinds. */

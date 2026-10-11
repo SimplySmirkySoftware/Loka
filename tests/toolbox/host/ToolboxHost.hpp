@@ -122,6 +122,7 @@ public:
     port.txFont = 3;
     port.txSize = 12;
     port.txFace = 0;
+    port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
   }
   void requestInvalidate() { ++toolbox_host::invalidations; }
@@ -468,11 +469,12 @@ namespace toolbox_host
     Style face;
     int length;
     std::string bytes;
+    long ink;
   };
   extern std::vector<Draw> draws;
   extern std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   extern int erases, widths, measures, fonts, metrics;
-  extern std::vector<long> backgroundColors;
+  extern std::vector<long> backgroundColors, foregroundColors;
   /** Remaining NewRgn calls to refuse with a null handle (Classic memory pressure). */
   extern int failRegions;
   /** NewRgn attempts, including refused ones. */

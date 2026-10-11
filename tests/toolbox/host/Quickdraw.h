@@ -7,6 +7,7 @@ enum
 {
   whiteColor = 30,
   blackColor = 33,
+  redColor = 205, greenColor = 341, blueColor = 409, cyanColor = 273, magentaColor = 137, yellowColor = 69,
   bold = 1,
   italic = 2
 };
@@ -24,6 +25,7 @@ struct GrafPort
 {
   short txFont, txSize;
   Style txFace;
+  long fgColor;
 };
 typedef GrafPort *GrafPtr;
 struct FontInfo
@@ -61,6 +63,7 @@ void SetEmptyRgn(RgnHandle);
 void UnionRgn(RgnHandle, RgnHandle, RgnHandle);
 void PaintRect(const Rect *);
 void BackColor(long);
+void ForeColor(long);
 void ClipRect(const Rect *);
 struct Picture
 {
