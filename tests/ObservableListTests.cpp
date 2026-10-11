@@ -192,8 +192,8 @@ void testObservableListPublishesCompletedRevisions()
   probe.expect(4, 1, LIST_REMOVE, 1, 1, 1, 30);
   LOKA_VERIFY(list.remove(a) == EDIT_OK);
   LOKA_VERIFY(probe.calls == 5 && allocCalls == 2);
-  LOKA_VERIFY(tracker.committedDirtyStates().size() == 1);
-  LOKA_VERIFY(tracker.committedDirtyStates()[0] == &list.revision());
+  LOKA_VERIFY(tracker.committedSet().identities().size() == 1);
+  LOKA_VERIFY(tracker.committedSet().identities()[0] == &list.revision());
 }
 
 void testObservableListCapacityAndAtomicBatch()
