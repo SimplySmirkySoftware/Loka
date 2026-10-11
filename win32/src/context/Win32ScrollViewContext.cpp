@@ -1,3 +1,4 @@
+#include "../Win32PaintGround.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32ScrollViewContext.hpp"
 
@@ -343,6 +344,10 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
     self = static_cast<Win32ScrollViewContext *>(create->lpCreateParams);
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
   }
+
+  if (msg == WM_CTLCOLORSTATIC)
+    return reinterpret_cast<LRESULT>(
+        loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam)));
 
   // Match Win32Window: paint-only subtree requests must restore the ground
   // even without RDW_ERASE, and erasure must not be a separate clearing pass.

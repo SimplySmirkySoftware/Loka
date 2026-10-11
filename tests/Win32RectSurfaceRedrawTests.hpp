@@ -21,4 +21,9 @@ void testWin32ImageViewRemovalRestoresGround();
 void testWin32ScrollViewAttributedTextShrinkRestoresGround();
 void testWin32ScrollViewImageRemovalRestoresGround();
 
+void testWin32WindowAndViewportGroundRoles();
+void testWin32CellGroundAndTextRoles();
+void testWin32RectSurfaceGroundAndSpriteRoles();
+void testWin32LiveGroundLegibility();
+
 #endif

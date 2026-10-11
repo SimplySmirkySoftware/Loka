@@ -1,3 +1,4 @@
+#include "Win32PaintGround.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32Window.hpp"
 #include "Win32App.hpp"
@@ -429,16 +430,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       break;
     case WM_CTLCOLORSTATIC:
     {
-      HDC hdc = reinterpret_cast<HDC>(wParam);
-      if (hdc)
-      {
-        SetBkMode(hdc, TRANSPARENT);
-      }
-      // A STATIC stays transparent so a ZStack Text overlaps the sibling it
-      // sits on (HelloWorld's decoration); the root paints the ground under
-      // it whenever the root itself is invalidated. A surface tick no longer
-      // invalidates the root, which is what removed the per-tick flicker.
-      return reinterpret_cast<LRESULT>(GetStockObject(NULL_BRUSH));
+      return reinterpret_cast<LRESULT>(
+          loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam)));
     }
     case WM_ERASEBKGND:
       Win32ScenePlatformController::noteNativePaint(hwnd, Win32ScenePlatformController::NATIVE_PAINT_ROOT, true);

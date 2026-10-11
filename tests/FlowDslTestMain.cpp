@@ -142,6 +142,7 @@
 #include "ToolboxLayoutContractTests.hpp"
 #include "ToolboxRectSurfaceRepaintPlanTests.hpp"
 #include "ToolboxGroundTests.hpp"
+#include "Win32GroundTests.hpp"
 #include "ToolboxScenePlatformContractTests.hpp"
 #include "ToolboxScrollViewContractTests.hpp"
 #include "NullTextLayoutTests.hpp"
