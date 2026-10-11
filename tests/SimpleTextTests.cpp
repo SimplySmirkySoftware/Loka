@@ -342,6 +342,25 @@ void testSimpleTextCloseCommandClosesItsOwnWindow()
   LOKA_VERIFY(!app.quitRequested());
 }
 
+// Mutation: require EDIT_OK from the second Close (debug assert).
+void testSimpleTextCloseTwiceBeforeAdmissionClosesOnce()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId first = config.documents().idAt(0);
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::NEW_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 2 && config.documents().count() == 2);
+  SimpleTextTestAccess::commands(app.main(1)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  SimpleTextTestAccess::commands(app.main(1)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  LOKA_VERIFY(config.documents().count() == 1 && app.group().getComponents().size() == 2);
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && config.documents().count() == 1);
+  LOKA_VERIFY(config.documents().find(first) && !app.quitRequested());
+}
+
 // Characterization: frozen A-prime keeps today's last-window quit rule.
 void testSimpleTextCloseOfTheLastWindowQuits()
 {

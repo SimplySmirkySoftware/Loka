@@ -295,8 +295,10 @@ namespace simpletext
       if (this->operation_.get() == NONE)
       {
         loka::core::StateTrackerGuard guard(this->tracker());
+        // A second Close before the next admission (Win32 drains queued
+        // accelerators before its tail) finds the document already gone.
         const loka::core::ListEditResult result = this->props.documents()->close(this->props.document());
-        assert(result == loka::core::EDIT_OK);
+        assert(result == loka::core::EDIT_OK || result == loka::core::EDIT_ID_NOT_FOUND);
         (void)result;
       }
     }
