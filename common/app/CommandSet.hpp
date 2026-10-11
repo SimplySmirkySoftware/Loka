@@ -23,11 +23,13 @@ namespace loka
         return &this->slots_[Id];
       }
 
-      loka::core::EmitterState *emitter(E id)
+      // Not named `id`: GCC 4.0's Objective-C++ reads `id <` as a protocol
+      // qualifier in every .mm that includes this header (Tiger UB1).
+      loka::core::EmitterState *emitter(E command)
       {
-        if (id < 0 || id >= N)
+        if (command < 0 || command >= N)
           return 0;
-        return &this->slots_[id];
+        return &this->slots_[command];
       }
 
       static unsigned count() { return N; }
