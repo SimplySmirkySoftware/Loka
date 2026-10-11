@@ -270,8 +270,9 @@ void ToolboxApp::run()
       // An OS update event arrives in every phase -- another window exposing
       // part of a background Loka window still needs that region repainted,
       // and skipping BeginUpdate/EndUpdate would leave the update region
-      // pending so WaitNextEvent returns the same event forever. Only
-      // mutation-driven presentation defers to foreground (present()).
+      // pending so WaitNextEvent returns the same event forever. Mutation-driven
+      // window presentation also runs in every phase (#503); present() keeps
+      // pending dialogs and focus reconciliation foreground-only.
       WindowPtr target = reinterpret_cast<WindowPtr>(event.message);
       if (target && group_)
       {

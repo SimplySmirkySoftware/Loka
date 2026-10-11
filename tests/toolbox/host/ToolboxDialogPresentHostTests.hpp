@@ -345,6 +345,11 @@ static void PresentPin(const char *name)
     }
     else app.tick(!std::strcmp(name, "background") ? ACTIVATION_BACKGROUND : ACTIVATION_FOREGROUND);
     LOKA_VERIFY(getCalls + putCalls == 0 && !Access::empty(window.controller.pendingDialogs()));
+    if (!std::strcmp(name, "background"))
+    {
+      // #503: window presentation runs even while the pending dialog waits.
+      LOKA_VERIFY(flushedWindows == 1);
+    }
     app.running_ = true;
     window.hasController = true;
     app.tick();
