@@ -8835,6 +8835,15 @@ void testSceneRunOnceAuditOwnsEscapedBoundedMessage()
   text = "replaced after failure";
   LOKA_VERIFY(once.run(input, output, error) == FLOW_STEP_FAILED);
   LOKA_VERIFY(std::string(once.diagnostic()) == bounded);
+  // The detector answers by name lookup, not by a sizeof of the call: that form said
+  // every adapter had diagnostic() on GCC 4.2 and Apple clang up to Xcode 10 (#1248).
+  typedef char HasDiagnosticSeesDeclared[scenario_step_detail::HasDiagnostic<OnceDiagnosticAdapter>::value ? 1 : -1];
+  typedef char
+      HasDiagnosticSeesInherited[scenario_step_detail::HasDiagnostic<OnceInheritedDiagnosticAdapter>::value ? 1 : -1];
+  typedef char HasDiagnosticRefusesPlain[scenario_step_detail::HasDiagnostic<OnceRecursiveAdapter>::value ? -1 : 1];
+  (void)sizeof(HasDiagnosticSeesDeclared);
+  (void)sizeof(HasDiagnosticSeesInherited);
+  (void)sizeof(HasDiagnosticRefusesPlain);
   // waitUntil wraps the action; the wrapper must forward its diagnostic (#1038 review).
   ProjectionWaitAdapter<RunOnceAdapter<OnceDiagnosticAdapter> > wait(once, ProjectionEvent::APPLIED);
   const char *forwarded =
