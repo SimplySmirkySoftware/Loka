@@ -26,8 +26,8 @@ checks = [
 core = (root / "common/app/core/App.cpp").read_text()
 checks.append(re.search(r"if \(window && !this->windowAdopted\(window\)\)\s*"
                         r"this->bootstrapWindowRefused\(window\);\s*\}\s*"
-                        r"(?://[^\n]*\n\s*)*while \(this->admitDocumentWindows\(ADOPT_AT_LAUNCH\) != 0\)\s*\{\s*\}\s*"
-                        r"if \(this->group_->getComponents\(\).size\(\) == 0\)\s*"
+                        r"(?://[^\n]*\n\s*)*this->admitDocumentWindows\(ADOPT_AT_LAUNCH\);\s*"
+                        r"if \(this->windowlessAfterLaunch\(\)\)\s*"
                         r"this->bootstrapWindowless\(\);\s*\}\s*"
                         r"projectInitialVisibilityChunks\(\);\s*this->projectMenuSources\(\);", core))
 # Match the complete loop by braces, then require the check at its tail.

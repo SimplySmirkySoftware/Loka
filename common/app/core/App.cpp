@@ -72,14 +72,11 @@ void App::run()
       if (window && !this->windowAdopted(window))
         this->bootstrapWindowRefused(window);
     }
-    // A launch factory may open another document; that entry waits for the
-    // next walk. Walk until one attempts nothing before reading the group, so
-    // a refused first document with a pending second cannot read as windowless.
-    // Every attempted id is adopted or dropped (A′), so it is not attempted again.
-    while (this->admitDocumentWindows(ADOPT_AT_LAUNCH) != 0)
-    {
-    }
-    if (this->group_->getComponents().size() == 0)
+    // Launch walks the seeded documents once. A document a launch factory
+    // opened stays pending for the runtime admission clock, so the walk count
+    // needs no bound and a refused seed with a pending child is not windowless.
+    this->admitDocumentWindows(ADOPT_AT_LAUNCH);
+    if (this->windowlessAfterLaunch())
       this->bootstrapWindowless();
   }
   projectInitialVisibilityChunks();
@@ -252,6 +249,12 @@ void App::projectInitialVisibilityChunks()
       }
     }
   }
+}
+
+bool App::windowlessAfterLaunch() const
+{
+  return this->group_ && this->group_->getComponents().size() == 0
+         && (!this->windowSeat_ || this->windowSeat_->roster().count() == 0);
 }
 
 bool App::hasPendingWindowAdmission() const

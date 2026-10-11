@@ -29,6 +29,7 @@ void testBootstrapWithOneWindowDoesNotReportWindowless();
 void testBootstrapWithAnEmptyRosterReportsWindowlessAndNullRecords();
 void testBootstrapWindowlessDefaultQuits();
 void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless();
-void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless();
+void testBootstrapLeavesReentrantOpensPendingInsteadOfDeclaringWindowless();
+void testBootstrapWalksOnceWhenTheFactoryReopensOnEveryRefusal();
 
 #endif

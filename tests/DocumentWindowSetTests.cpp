@@ -148,12 +148,16 @@ namespace
     ItemId factoryIds[16];
     int refuseValue;
     bool reenter;
+    /** Opens another Document(value) on every call, for the factory that
+        never settles (#1233). */
+    bool reenterEveryCall;
     bool staticFirst;
     ItemId initial;
     ItemId reentrant;
     ItemId closeDuringFactory;
     explicit Config(PlatformContext &context, bool bootstrap = false)
-        : AppConfigurable(&context), factories(0), refuseValue(-1), reenter(false), staticFirst(bootstrap)
+        : AppConfigurable(&context), factories(0), refuseValue(-1), reenter(false), reenterEveryCall(false),
+          staticFirst(bootstrap)
     {
       if (bootstrap)
         this->initial = this->roster.open(Document(0));
@@ -174,6 +178,11 @@ namespace
       {
         config.reenter = false;
         config.reentrant = config.roster.open(Document(2));
+        LOKA_VERIFY(!config.reentrant.isNone());
+      }
+      else if (config.reenterEveryCall)
+      {
+        config.reentrant = config.roster.open(Document(value));
         LOKA_VERIFY(!config.reentrant.isNone());
       }
       if (!config.closeDuringFactory.isNone())
@@ -209,6 +218,7 @@ namespace
     using App::admitAndApplyWindows;
     using App::reclaimWindows;
     using App::hasPendingWindowAdmission;
+    using App::windowlessAfterLaunch;
     using App::isWindowClosePending;
     AppComponentGroup &group() { return *this->group_; }
     NullWindow *window(ItemId id) { return static_cast<NullWindow *>(this->group_->find(id)); }
@@ -739,8 +749,10 @@ void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless()
   LOKA_VERIFY(!app.quitRequested());
 }
 
-// c2 pin 7 mutation: walk once at launch instead of until a walk creates nothing.
-void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless()
+// #1233 pin 1 mutation: drop the roster-count check from windowlessAfterLaunch.
+// A launch factory's re-entrant open is pending, not windowless; the runtime
+// clock admits it on the first tail.
+void testBootstrapLeavesReentrantOpensPendingInsteadOfDeclaringWindowless()
 {
   TrackingContext context;
   Config config(context, true);
@@ -749,9 +761,35 @@ void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless()
   config.refuseValue = 0;
   TestApp app(config);
   app.run();
-  LOKA_VERIFY(config.factories == 2);
+  LOKA_VERIFY(config.factories == 1);
   LOKA_VERIFY(!config.roster.find(config.initial) && config.roster.find(config.reentrant));
-  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(config.reentrant));
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
   LOKA_VERIFY(!app.bootstrapWindowlessReported() && !app.quitRequested());
+  LOKA_VERIFY(app.hasPendingWindowAdmission() && !app.windowlessAfterLaunch());
+  app.tail();
+  LOKA_VERIFY(config.factories == 2 && app.window(config.reentrant));
   LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}
+
+// #1233 pin 2 mutation: walk at launch until a walk attempts nothing. A factory
+// that opens a new document on every refused create then never returns from
+// run(); with one launch walk it costs one factory call per admission and the
+// App reaches its rail's loop with the admission pending (the #1194 shape).
+void testBootstrapWalksOnceWhenTheFactoryReopensOnEveryRefusal()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  config.reenterEveryCall = true;
+  config.refuseValue = 0;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(config.factories == 1);
+  LOKA_VERIFY(config.roster.count() == 1 && !config.roster.find(config.initial));
+  LOKA_VERIFY(app.group().getComponents().size() == 0);
+  LOKA_VERIFY(!app.bootstrapWindowlessReported() && !app.quitRequested());
+  LOKA_VERIFY(app.hasPendingWindowAdmission());
+  app.tail(); // two admissions per tail, one factory call each
+  LOKA_VERIFY(config.factories == 3 && config.roster.count() == 1);
+  LOKA_VERIFY(app.group().getComponents().size() == 0 && app.hasPendingWindowAdmission());
 }
