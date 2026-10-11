@@ -77,6 +77,8 @@ or per-source reference counts describe the pass.
 The App's window seat is a keyed consumer under the same snapshot rule above;
 its driver is App admission. A config-owned `DocumentRoster<T, N>` owns the list
 and its tracker. The application removes a document with `DocumentRoster::close`.
+The factory receives the document's `ItemId` so the window's content can close its
+own document with `close`.
 Within one walk the seat adds windows for new documents, then closes the windows
 of documents that left the roster, through the same `requestWindowClose` a native
 close takes. This order keeps a close-then-open replacement from emptying the

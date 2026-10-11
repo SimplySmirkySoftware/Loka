@@ -115,7 +115,7 @@ namespace
       this->directory = created;
       this->context.setApplicationDirectory(String(this->directory));
       simpletext::MainProps props;
-      props.platformContext(&this->context).documents(&this->config.documents());
+      props.platformContext(&this->context).documents(&this->config.documents()).document(this->config.documents().idAt(0));
       this->scene = new scene::Scene(scene::Boundary<simpletext::MainNode>(props).clone());
       this->scene->mount(&this->platform);
       loka::dsl::testing::SceneTestAccess::updateAttached(*this->scene, true);
@@ -318,6 +318,61 @@ void testSimpleTextClosingAWindowDropsItsDocument()
   app.tail();
   LOKA_VERIFY(app.group().getComponents().size() == 0 && config.documents().count() == 0);
   LOKA_VERIFY(app.quitRequested());
+}
+
+// Mutation: close idAt(0) instead of the window's own Props identity.
+void testSimpleTextCloseCommandClosesItsOwnWindow()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  simpletext::MainNode *firstMain = &app.main(0);
+  Window *firstWindow = &app.window(0);
+  const ItemId first = config.documents().idAt(0);
+  SimpleTextTestAccess::commands(*firstMain).slot<simpletext::NEW_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 2 && config.documents().count() == 2);
+  const ItemId second = config.documents().idAt(1);
+  SimpleTextTestAccess::commands(app.main(1)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && config.documents().count() == 1);
+  LOKA_VERIFY(config.documents().find(first) && !config.documents().find(second));
+  LOKA_VERIFY(app.group().find(first) == firstWindow && &app.main(0) == firstMain);
+  LOKA_VERIFY(!app.quitRequested());
+}
+
+// Characterization: frozen A-prime keeps today's last-window quit rule.
+void testSimpleTextCloseOfTheLastWindowQuits()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 0 && config.documents().count() == 0);
+  LOKA_VERIFY(app.quitRequested());
+}
+
+// Mutation: remove closeDocument's operation guard.
+void testSimpleTextCloseDuringAChooserDoesNothing()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId id = config.documents().idAt(0);
+  Window *window = &app.window(0);
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::OPEN_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(SimpleTextTestAccess::operation(app.main(0)) == simpletext::OPEN);
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && config.documents().count() == 1);
+  LOKA_VERIFY(config.documents().find(id) && app.group().find(id) == window);
+  LOKA_VERIFY(SimpleTextTestAccess::operation(app.main(0)) == simpletext::OPEN);
+  LOKA_VERIFY(!app.quitRequested());
 }
 
 void testSimpleTextLaunchWindowTakesTheSeat()
@@ -534,27 +589,30 @@ void testSimpleTextMenuAndDialogProps()
   LOKA_VERIFY(itemAt(*app, 1)->isSeparator);
   LOKA_VERIFY(itemAt(*app, 2)->action == MENU_ACTION_QUIT_APP);
   const MenuDefinition *file = bar->menuAt(1);
-  LOKA_VERIFY(file && !file->isAppMenu && file->itemsCount() == 6);
+  LOKA_VERIFY(file && !file->isAppMenu && file->itemsCount() == 7);
   LOKA_VERIFY(file->title.equals(String("File")));
-  const char *titles[] = {"New", "Open...", "Save", "Save As...", "", "Quit"};
-  for (int i = 0; i < 6; ++i)
+  const char *titles[] = {"New", "Open...", "Close", "Save", "Save As...", "", "Quit"};
+  for (int i = 0; i < 7; ++i)
   {
     const MenuItemDefinition *item = itemAt(*file, i);
     LOKA_VERIFY(item && item->title.equals(String(titles[i])));
     LOKA_VERIFY(item->titleState == 0);
-    LOKA_VERIFY(item->isSeparator == (i == 4));
-    LOKA_VERIFY(item->hasShortcut == (i == 1 || i == 2));
+    LOKA_VERIFY(item->isSeparator == (i == 5));
+    LOKA_VERIFY(item->hasShortcut == (i == 1 || i == 2 || i == 3));
   }
-  LOKA_VERIFY(itemAt(*file, 1)->shortcutKey == 'o' && itemAt(*file, 2)->shortcutKey == 's');
-  LOKA_VERIFY(itemAt(*file, 5)->action == MENU_ACTION_QUIT_APP);
+  LOKA_VERIFY(itemAt(*file, 1)->shortcutKey == 'o' && itemAt(*file, 3)->shortcutKey == 's');
+  LOKA_VERIFY(itemAt(*file, 6)->action == MENU_ACTION_QUIT_APP);
   LOKA_VERIFY(itemAt(*file, 0)->onClickState
               == SimpleTextTestAccess::commands(h.main()).slot<simpletext::NEW_DOCUMENT>());
   LOKA_VERIFY(itemAt(*file, 1)->onClickState
               == SimpleTextTestAccess::commands(h.main()).slot<simpletext::OPEN_DOCUMENT>());
-  LOKA_VERIFY(itemAt(*file, 2)->onClickState
-              == SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_DOCUMENT>());
   LOKA_VERIFY(itemAt(*file, 3)->onClickState
+              == SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_DOCUMENT>());
+  LOKA_VERIFY(itemAt(*file, 4)->onClickState
               == SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_AS_DOCUMENT>());
+  LOKA_VERIFY(itemAt(*file, 2)->shortcutKey == 'w');
+  LOKA_VERIFY(itemAt(*file, 2)->onClickState
+              == SimpleTextTestAccess::commands(h.main()).slot<simpletext::CLOSE_DOCUMENT>());
   MenuBarDefinition defaultBar;
   MenuComposition defaultComposition(&defaultBar);
   h.config.composeDefaultMenu(defaultComposition);
@@ -568,7 +626,7 @@ void testSimpleTextMenuAndDialogProps()
   LOKA_VERIFY(open && open->props.options_.purpose() == FILE_DIALOG_OPEN);
   LOKA_VERIFY(open->props.options_.filterPolicy() == FILE_DIALOG_FILTER_ALL_FILES_TEXT);
   h.choose(false, FileChooserResult::Canceled());
-  attachment.dispatch(kAppMenuItems + 4);
+  attachment.dispatch(kAppMenuItems + 5);
   h.flush();
   OpenFileDialogNode *save = static_cast<OpenFileDialogNode *>(find(&h.main(), "SimpleText.Save"));
   LOKA_VERIFY(save && save->props.options_.purpose() == FILE_DIALOG_SAVE);
@@ -577,7 +635,7 @@ void testSimpleTextMenuAndDialogProps()
   LOKA_VERIFY(find(&h.main(), "SimpleText.Editor") && find(&h.main(), "SimpleText.Error"));
   h.choose(true, FileChooserResult::File(h.file("first.txt")));
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("saved through menu")) == EDIT_OK);
-  attachment.dispatch(kAppMenuItems + 3);
+  attachment.dispatch(kAppMenuItems + 4);
   LOKA_VERIFY(SimpleTextTestAccess::operation(h.main()) == simpletext::NONE);
   LOKA_VERIFY(h.bytes("first.txt") == "saved through menu");
   attachment.dispatch(kAppMenuItems + 1);
@@ -666,7 +724,7 @@ void testSimpleTextMenuDisconnectsOnUnmount()
   LOKA_VERIFY(attachment.applied() == 0 && attachment.subscriptionCount() == 0);
   // Main and its slots are gone. Dispatch only through the released table.
   // Fixture-owned emitter withdrawal is pinned by testCommandSetWithdrawsOnDetach.
-  for (unsigned id = kAppMenuItems + 1; id <= kAppMenuItems + 4; ++id)
+  for (unsigned id = kAppMenuItems + 1; id <= kAppMenuItems + 5; ++id)
     attachment.dispatch(id);
   LOKA_VERIFY(!attachment.connected());
 }

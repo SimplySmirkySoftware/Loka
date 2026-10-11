@@ -36,6 +36,7 @@ namespace simpletext
   {
     NEW_DOCUMENT,
     OPEN_DOCUMENT,
+    CLOSE_DOCUMENT,
     SAVE_DOCUMENT,
     SAVE_AS_DOCUMENT,
     FILE_COMMAND_COUNT
@@ -75,13 +76,29 @@ namespace simpletext
       return static_cast<loka::app::DocumentRoster<Document, kMaxDocuments> *>(
           const_cast<void *>(this->keys_.get(DOCUMENTS)));
     }
+    MainProps &document(loka::core::ItemId value)
+    {
+      this->document_ = value;
+      return *this;
+    }
+    loka::core::ItemId document() const
+    {
+      return this->document_;
+    }
     void assertInitialized() const
     {
       assert(this->keys_.complete());
     }
     bool operator<(const loka::app::scene::PropsBase &rhs) const
     {
-      return rhs.propsTypeId() == this->propsTypeId() && this->keys_ < static_cast<const MainProps &>(rhs).keys_;
+      if (rhs.propsTypeId() != this->propsTypeId())
+        return false;
+      const MainProps &other = static_cast<const MainProps &>(rhs);
+      if (!(this->keys_ == other.keys_))
+        return this->keys_ < other.keys_;
+      if (this->document_.generation != other.document_.generation)
+        return this->document_.generation < other.document_.generation;
+      return this->document_.seq < other.document_.seq;
     }
 
   private:
@@ -92,6 +109,7 @@ namespace simpletext
       KEY_COUNT
     };
     loka::app::scene::BorrowedKeys<KEY_COUNT> keys_;
+    loka::core::ItemId document_;
   };
 
   /** One document owner; chooser facts arrive through separate rail-written channels. */
@@ -201,6 +219,7 @@ namespace simpletext
                 << (Menu("File")
                     << MenuItem("New").onClick(this->commands_.slot<simpletext::NEW_DOCUMENT>())
                     << MenuItem("Open...").shortcut('o').onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
+                    << MenuItem("Close").shortcut('w').onClick(this->commands_.slot<simpletext::CLOSE_DOCUMENT>())
                     << MenuItem("Save").shortcut('s').onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
                     << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())
                     << MenuSeparator()
@@ -248,6 +267,9 @@ namespace simpletext
       case simpletext::OPEN_DOCUMENT:
         this->openDocument();
         break;
+      case simpletext::CLOSE_DOCUMENT:
+        this->closeDocument();
+        break;
       case simpletext::SAVE_DOCUMENT:
         this->saveDocument();
         break;
@@ -266,6 +288,16 @@ namespace simpletext
         loka::core::StateTrackerGuard guard(this->tracker());
         if (this->props.documents()->open(Document()).isNone())
           this->error_.set(loka::core::String::Literal("Cannot open another document window."));
+      }
+    }
+    void closeDocument()
+    {
+      if (this->operation_.get() == NONE)
+      {
+        loka::core::StateTrackerGuard guard(this->tracker());
+        const loka::core::ListEditResult result = this->props.documents()->close(this->props.document());
+        assert(result == loka::core::EDIT_OK);
+        (void)result;
       }
     }
     void openDocument()

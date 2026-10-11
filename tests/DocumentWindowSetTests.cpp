@@ -145,6 +145,7 @@ namespace
     DocumentRoster<Document, 4> roster;
     RootFacts roots[4];
     int factories;
+    ItemId factoryIds[16];
     int refuseValue;
     bool reenter;
     bool staticFirst;
@@ -163,10 +164,11 @@ namespace
         c << WindowDef(WindowProps());
       c << DocumentWindows(this->roster, &Config::documentWindow, this);
     }
-    static WindowProps documentWindow(const Document &entry, void *data)
+    static WindowProps documentWindow(ItemId id, const Document &entry, void *data)
     {
       Config &config = *static_cast<Config *>(data);
-      ++config.factories;
+      LOKA_VERIFY(config.factories < 16);
+      config.factoryIds[config.factories++] = id;
       const int value = entry.value;
       if (config.reenter)
       {
@@ -215,6 +217,21 @@ namespace
       return false;
     }
   };
+}
+
+// Mutation: pass ItemId::none() to the factory instead of the row id.
+void testDocumentWindowFactoryReceivesTheDocumentId()
+{
+  TrackingContext context;
+  Config config(context);
+  TestApp app(config);
+  app.run();
+  const ItemId id = config.roster.open(Document(0));
+  app.tail();
+  LOKA_VERIFY(config.factories == 1);
+  LOKA_VERIFY(config.factoryIds[0] == id);
+  const Document *entry = config.roster.find(config.factoryIds[0]);
+  LOKA_VERIFY(entry && entry == config.roster.find(id) && entry->value == 0);
 }
 
 // Pin 1 mutation: skip the runtime walk.
