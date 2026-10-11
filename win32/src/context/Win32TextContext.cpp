@@ -1,4 +1,5 @@
 #include "Win32TextContext.hpp"
+#include "Win32TextColorProperty.hpp"
 #include "Win32AttributedTextTable.hpp"
 #include <cassert>
 #include "../Win32ScenePlatformController.hpp"
@@ -269,6 +270,13 @@ bool Win32TextContext::applyStyle()
 {
   if (!this->hwnd_ || !this->node_ || !this->controller())
     return false;
+  if (Win32TextColorProperty::apply(this->hwnd_, this->node_->props.resolvedTextStyle().color_))
+  {
+    this->textDelivery_ =
+        Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_)
+            ? loka::app::scene::PaintAnswer::nativeScheduled()
+            : loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_PROPS_UNRECONCILED);
+  }
   bool changed = false;
   {
     // Reconciled on every apply, declared or not: a retained change back to an
@@ -305,8 +313,6 @@ bool Win32TextContext::applyStyle()
 void Win32TextContext::onPropsApplied()
 {
   this->measurement_.invalidate();
-  if (this->applyStyle())
-    this->controller()->requestRelayout();
   if (!this->node_)
   {
     return;
@@ -318,15 +324,18 @@ void Win32TextContext::onPropsApplied()
     // same owned State without notifying. Treat it as an applied snapshot.
     this->unbindText();
     this->applyText();
-    return;
   }
-  if (this->node_->props.text_ != this->textState_)
+  else if (this->node_->props.text_ != this->textState_)
   {
     this->unbindText();
     this->bindText();
   }
   else
     this->applyText();
+  // Reconcile style last: unchanged text must not replace a color repaint's
+  // native-scheduled answer with exact empty damage.
+  if (this->applyStyle())
+    this->controller()->requestRelayout();
 }
 
 void Win32TextContext::applyAttachedPresentation()
@@ -334,6 +343,9 @@ void Win32TextContext::applyAttachedPresentation()
   this->measurement_.invalidate();
   if (hwnd_)
   {
+    // Detached presentation removed the color property; restore it only.
+    Win32TextColorProperty::apply(
+        hwnd_, this->node_ ? this->node_->props.resolvedTextStyle().color_ : loka::app::TEXT_COLOR_UNSET);
     ShowWindow(hwnd_, SW_SHOW);
   }
 }
@@ -342,6 +354,7 @@ void Win32TextContext::applyDetachedPresentation()
 {
   if (hwnd_)
   {
+    Win32TextColorProperty::detach(this->hwnd_);
     ShowWindow(hwnd_, SW_HIDE);
   }
 }
@@ -386,6 +399,7 @@ short Win32TextContext::layout(loka::app::scene::IPlatformController *, loka::ap
     bool measured = MinimumTextHeight(this->hwnd_, font, this->controller(), height);
     if (measured && this->node_ && GeneratesLines(this->node_->props))
     {
+      const loka::app::scene::PaintAnswer styleDelivery = this->textDelivery_;
       this->textDelivery_ = loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN);
       Win32AttributedTextTable table;
       std::wstring wide;
@@ -399,6 +413,9 @@ short Win32TextContext::layout(loka::app::scene::IPlatformController *, loka::ap
       measured = measured && MeasureTextHeightForWidth(this->hwnd_, this->controller(), wide,
                                                        constraint.width, constraint.font, height)
                  && this->writeText(wide);
+      // Generated lines can be unchanged while style has queued native paint.
+      if (measured && styleDelivery.kind == loka::app::scene::PAINT_ANSWER_NATIVE_SCHEDULED)
+        this->textDelivery_ = styleDelivery;
     }
     if (!measured)
     {

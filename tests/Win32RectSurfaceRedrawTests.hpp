@@ -26,4 +26,6 @@ void testWin32CellGroundAndTextRoles();
 void testWin32RectSurfaceGroundAndSpriteRoles();
 void testWin32LiveGroundLegibility();
 
+void testWin32StaticTextInks();
+void testWin32StaticTextColorChangeResidue();
 #endif

@@ -1,5 +1,6 @@
 #include "app/layout/AlignedLineOffset.hpp"
 #include "Win32AttributedTextTable.hpp"
+#include "../Win32PaintTextInk.hpp"
 #include "../Win32ScenePlatformController.hpp"
 #include <climits>
 
@@ -251,6 +252,7 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
   if (!this->valid())
     return false;
   FontSelection selection(dc);
+  const COLORREF previousText = GetTextColor(dc);
   const UINT alignment = GetTextAlign(dc);
   const int background = SetBkMode(dc, TRANSPARENT);
   SetTextAlign(dc, TA_BASELINE | TA_LEFT);
@@ -325,6 +327,7 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
     {
       const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
       const std::size_t end = fragment.end < paintedEnd ? fragment.end : paintedEnd;
+      SetTextColor(dc, loka::win32::Win32PaintTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
       painted = selection.select(this->fonts_[fragment.span]);
       std::size_t start = fragment.start;
       while (painted && start < end)
@@ -350,10 +353,14 @@ bool Win32AttributedTextTable::draw(HDC dc, const RECT &clip, const BlockStyle &
         break;
     }
     if (painted && ellipsis)
+    {
+      SetTextColor(dc, loka::win32::Win32PaintTextInk(this->spans_[lastSpan].style.color_, SURFACE_GROUND_WINDOW));
       painted = selection.select(this->fonts_[lastSpan])
                 && ExtTextOutW(dc, x, y + line.metrics.ascent, ETO_CLIPPED, &clip, L"...", 3, NULL);
+    }
     y += line.metrics.ascent + line.metrics.descent + line.metrics.leading;
   }
+  SetTextColor(dc, previousText);
   SetTextAlign(dc, alignment);
   SetBkMode(dc, background);
   return painted;
