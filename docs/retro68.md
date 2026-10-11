@@ -199,8 +199,8 @@ class machine), so the source asks for `size + 4`, advances 1..4 bytes to the
 next 4-aligned address, stores that distance in the byte just before the
 returned pointer, and recovers the native block from that byte at release.
 Every source block — a 2 KiB chunk, or a large/direct/fallback request above
-256 bytes — carries that one recovery byte; pooled slots never do. PowerPC and
-Carbon keep the 8-aligned `NewPtr` pass-through with no prefix. Sizes that
+256 bytes — carries that one recovery byte; pooled slots never do. PowerPC
+keeps the 8-aligned `NewPtr` pass-through with no prefix. Sizes that
 would overflow the Memory Manager's signed `Size` after the +4 are refused
 before allocating.
 Chunk refusal retries the single request; nothrow forms return 0 on refusal,
