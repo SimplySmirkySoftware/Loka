@@ -10,6 +10,7 @@ namespace loka
     class StackNode;
     class BoxNode;
     class GridNode;
+    class ZStackNode;
   }
 } // namespace loka
 
@@ -22,6 +23,18 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
 int ComputeToolboxRowLayout(loka::app::StackNode *row,
                             const loka::app::scene::LayoutState &state,
                             loka::app::scene::IPlatformLayoutTraversal *traversal);
+
+/** Applies Toolbox Column layout, optionally selecting or recording child spans. */
+int ComputeToolboxColumnLayout(loka::app::StackNode *column,
+                               const loka::app::scene::LayoutState &state,
+                               loka::app::scene::IPlatformLayoutTraversal *traversal,
+                               const loka::app::layout::LazyWindow *range = 0,
+                               loka::app::layout::StackSpans *spans = 0);
+
+/** Applies Toolbox ZStack layout through the supplied traversal. */
+int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
+                               const loka::app::scene::LayoutState &state,
+                               loka::app::scene::IPlatformLayoutTraversal *traversal);
 
 /** Applies Toolbox Grid layout through the supplied traversal. */
 int ComputeToolboxGridLayout(loka::app::GridNode *grid,

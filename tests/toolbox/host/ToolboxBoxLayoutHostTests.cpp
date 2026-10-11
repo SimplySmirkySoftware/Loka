@@ -3,6 +3,7 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "app/nodes/ImageView.hpp"
 #include <cstdio>
 #include <cstring>
@@ -31,6 +32,70 @@ namespace
       return 23;
     }
   };
+
+  class DirectStack : public StackNode
+  {
+  public:
+    explicit DirectStack(const StackProps &props) : StackNode(props) {}
+    virtual const void *nodeTypeKey() const { return NodeTypeToken<DirectStack>(); }
+  };
+
+  void derivedStackPin(ToolboxScenePlatformController &controller, bool row)
+  {
+    StackProps props(row ? STACK_AXIS_ROW : STACK_AXIS_COLUMN);
+    props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+    StackNode plain(props);
+    DirectStack derived(props);
+    LOKA_VERIFY(controller.registry.find(&plain) != 0);
+    LOKA_VERIFY(controller.registry.find(&derived) == 0);
+    Probe *expected[2] = {new Probe(7), new Probe(11)};
+    Probe *actual[2] = {new Probe(7), new Probe(11)};
+    for (int i = 0; i != 2; ++i)
+    {
+      plain.addChild(expected[i]);
+      derived.addChild(actual[i]);
+    }
+    LayoutState baseline;
+    baseline.x = 10; baseline.y = 20; baseline.width = 240;
+    baseline.height = 80; baseline.spacing = 6;
+    LayoutState state = baseline;
+    const short expectedWidth = LayoutNode(&plain, baseline, &controller, 0);
+    const short actualWidth = LayoutNode(&derived, state, &controller, 0);
+    std::printf("derived-%s: plain calls=%u/%u width=%d Y=%d; derived calls=%u/%u width=%d Y=%d\n",
+                row ? "row" : "column", expected[0]->calls, expected[1]->calls,
+                expectedWidth, baseline.y, actual[0]->calls, actual[1]->calls, actualWidth, state.y);
+    std::fflush(stdout);
+    for (int i = 0; i != 2; ++i)
+    {
+      LOKA_VERIFY(expected[i]->calls == 1);
+      LOKA_VERIFY(actual[i]->calls == expected[i]->calls);
+      LOKA_VERIFY(actual[i]->offer.x == expected[i]->offer.x);
+      LOKA_VERIFY(actual[i]->offer.y == expected[i]->offer.y);
+      LOKA_VERIFY(actual[i]->offer.width == expected[i]->offer.width);
+      LOKA_VERIFY(actual[i]->offer.height == expected[i]->offer.height);
+    }
+    LOKA_VERIFY(actualWidth == expectedWidth);
+    LOKA_VERIFY(state.y == baseline.y);
+  }
+
+  void zStackPin(ToolboxScenePlatformController &controller, bool handler)
+  {
+    ZStackNode stack((ZStackProps()));
+    Probe *a = new Probe(7);
+    Probe *b = new Probe(11);
+    stack.addChild(a);
+    stack.addChild(b);
+    LOKA_VERIFY((controller.registry.find(&stack) != 0) == handler);
+    LayoutState state;
+    state.x = 10; state.y = 20; state.width = 80; state.height = 60;
+    const short width = LayoutNode(&stack, state, &controller, 0);
+    LOKA_VERIFY(a->calls == 1 && b->calls == 1);
+    LOKA_VERIFY(a->offer.x == 10 && b->offer.x == 10);
+    LOKA_VERIFY(a->offer.y == 20 && b->offer.y == 20);
+    LOKA_VERIFY(a->offer.width == 80 && b->offer.width == 80);
+    LOKA_VERIFY(a->offer.height == 60 && b->offer.height == 60);
+    LOKA_VERIFY(width == 23 && state.y == 31);
+  }
 
   void scrollRangePin(ToolboxScenePlatformController &controller, bool handler, bool refuses)
   {
@@ -217,12 +282,25 @@ int main(int argc, char **argv)
     nullControllerPin();
     return 0;
   }
-  LOKA_VERIFY(std::strcmp(argv[1], "handler") == 0);
+  LOKA_VERIFY(std::strcmp(argv[1], "handler") == 0 || std::strcmp(argv[1], "fallback") == 0);
   ToolboxScenePlatformController controller;
-  const bool handler = true;
-  const bool registered = RegisterToolboxPlatformLayoutHandlers(controller.registry);
-  LOKA_VERIFY(registered);
+  const bool handler = std::strcmp(argv[1], "handler") == 0;
+  if (handler)
+  {
+    const bool registered = RegisterToolboxPlatformLayoutHandlers(controller.registry);
+    LOKA_VERIFY(registered);
+  }
   const char *mode = argv[2];
+  if (std::strcmp(mode, "derived-column") == 0 || std::strcmp(mode, "derived-row") == 0)
+  {
+    derivedStackPin(controller, std::strcmp(mode, "derived-row") == 0);
+    return 0;
+  }
+  if (std::strcmp(mode, "zstack") == 0)
+  {
+    zStackPin(controller, handler);
+    return 0;
+  }
   if (argc == 4)
   {
     const bool refuses = std::strcmp(argv[3], "scroll-refusal") == 0;
@@ -267,7 +345,7 @@ int main(int argc, char **argv)
   if (fixed) props.setSize(100, 60);
   BoxNode *box = new BoxNode(props);
   column.addChild(box);
-  // Nested Boxes use the same registered handlers as their enclosing Column.
+  // Nested Boxes use the same handler/fallback path as their enclosing Column.
   LOKA_VERIFY((controller.registry.find(box) != 0) == handler);
   Probe *child = 0;
   if (!empty)

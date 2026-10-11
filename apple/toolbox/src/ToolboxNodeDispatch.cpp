@@ -186,6 +186,19 @@ namespace
             *controller->layoutHandlerRegistry(), *stack, state, traversal, width, range, spans);
       }
       if (!usedHandler && spans) spans->invalidate();
+      if (!usedHandler)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
+        {
+          width = static_cast<short>(ComputeToolboxColumnLayout(stack, state, &traversal));
+        }
+        else
+        {
+          width = static_cast<short>(ComputeToolboxRowLayout(stack, state, &traversal));
+        }
+        state.y = traversal.layoutResultY();
+      }
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
@@ -196,11 +209,18 @@ namespace
     {
       loka::app::BoxNode *box = static_cast<loka::app::BoxNode *>(node);
       short width = 0;
+      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        ApplyToolboxPlatformLayoutHandler(
+        usedHandler = ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *box, state, traversal, width);
+      }
+      if (!usedHandler)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        width = static_cast<short>(ComputeToolboxBoxLayout(box, state, &traversal));
+        state.y = traversal.layoutResultY();
       }
       if (boundary)
       {
@@ -212,11 +232,18 @@ namespace
     {
       loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
       short maxWidth = 0;
+      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        ApplyToolboxPlatformLayoutHandler(
+        usedHandler = ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *stack, state, traversal, maxWidth);
+      }
+      if (!usedHandler)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        maxWidth = static_cast<short>(ComputeToolboxZStackLayout(stack, state, &traversal));
+        state.y = traversal.layoutResultY();
       }
       if (boundary)
       {
@@ -228,11 +255,18 @@ namespace
     {
       loka::app::GridNode *grid = static_cast<loka::app::GridNode *>(node);
       short maxWidth = 0;
+      bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        ApplyToolboxPlatformLayoutHandler(
+        usedHandler = ApplyToolboxPlatformLayoutHandler(
             *controller->layoutHandlerRegistry(), *grid, state, traversal, maxWidth);
+      }
+      if (!usedHandler)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        maxWidth = static_cast<short>(ComputeToolboxGridLayout(grid, state, &traversal));
+        state.y = traversal.layoutResultY();
       }
       if (boundary)
       {
