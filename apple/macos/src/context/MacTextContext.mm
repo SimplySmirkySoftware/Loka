@@ -3,6 +3,7 @@
 #include <cmath>
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
+#include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -163,6 +164,20 @@ bool MacTextContext::applyStyle(bool initial)
   NSTextField *label = (NSTextField *)this->label_;
   if (!this->node_ || !label)
     return false;
+  NSColor *color = nil;
+  if (!loka::macos::QueryMacTextColor(this->node_->props.resolvedTextStyle().color_, color))
+  {
+    // A fresh initWithFrame label already has this native default. Retained
+    // set -> unset must restore it (fresh-label equality is pinned in tests).
+    if (!initial)
+      color = loka::macos::MacLabelTextColor();
+  }
+  if (color && ![[label textColor] isEqual:color])
+  {
+    [label setTextColor:color];
+    [label setNeedsDisplay:YES];
+  }
+  // The return value reports geometry changes only; color needs just display.
   NSTextFieldCell *cell = [label cell];
   const TextGeometry geometry = ResolveTextGeometry(this->node_->props.resolvedTextStyle(), this->controller());
   NSFont *font = geometry.font ? geometry.font : (NSFont *)this->originalFont_;

@@ -1,6 +1,7 @@
 #include "MacAttributedTextContext.hpp"
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
+#include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -142,12 +143,19 @@ bool MacAttributedTextContext::Projection::build(const loka::app::AttributedStri
   NSUInteger offset = 0;
   for (std::size_t index = 0; index < value.segmentCount();)
   {
-    NSFont *font = (NSFont *)controller.textFont(value.segment(index).style);
+    const loka::app::TextStyle &style = value.segment(index).style;
+    NSFont *font = (NSFont *)controller.textFont(style);
+    // An unset run carries the label's native default explicitly, so it never
+    // depends on how an AppKit version fills attributes the string leaves out.
+    NSColor *color = nil;
+    if (!loka::macos::QueryMacTextColor(style.color_, color))
+      color = loka::macos::MacLabelTextColor();
     NSString *run = NextRun(value, index);
     if (!font || !run)
       return false;
     const NSUInteger length = [run length];
     [result addAttribute:NSFontAttributeName value:font range:NSMakeRange(offset, length)];
+    [result addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(offset, length)];
     offset += length;
   }
   NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
