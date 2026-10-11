@@ -452,9 +452,12 @@ namespace loka
           action's requested projection has crossed the selected milestone. */
       namespace scenario_step_detail
       {
-        /** True when AdapterT (or a base) declares a member named diagnostic. Detected by
+        /** True when AdapterT (or a base) declares any member named diagnostic. Detected by
             name ambiguity against a probe base, because the sizeof-of-call form answered
-            true for every type on GCC 4.2 and Apple clang up to Xcode 10 (#1248). */
+            true for every type on GCC 4.2 and Apple clang up to Xcode 10 (#1248). The name
+            is the contract: a member of that name with another shape (a data member, a
+            non-const method, one taking arguments) fails to compile at Diagnostic::get
+            instead of being silently treated as absent. */
         template <class AdapterT> class HasDiagnostic
         {
           typedef char Yes;
