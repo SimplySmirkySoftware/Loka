@@ -306,7 +306,9 @@ void testDocumentWindowCreateRefusalDropsDocument()
   app.tail();
   LOKA_VERIFY(config.roster.count() == 0 && !config.roster.find(id));
   LOKA_VERIFY(app.group().getComponents().size() == 0 && context.creates == 0);
-  LOKA_VERIFY(!app.quitRequested() && !app.hasPendingWindowAdmission());
+  // The refusal emptied roster and group at runtime: the last window is gone
+  // and the App quits (#1236 P1); the drop itself is what this pin holds.
+  LOKA_VERIFY(app.quitRequested() && !app.hasPendingWindowAdmission());
   LOKA_VERIFY(config.factories == 1);
   app.tail();
   LOKA_VERIFY(config.factories == 1);
@@ -769,6 +771,28 @@ void testBootstrapLeavesReentrantOpensPendingInsteadOfDeclaringWindowless()
   app.tail();
   LOKA_VERIFY(config.factories == 2 && app.window(config.reentrant));
   LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}
+
+// #1233 pin 3 mutation: drop the runtime refusal quit in admitDocumentWindows.
+// A seed refused at launch whose factory opened one replacement, refused in
+// turn at the first tail, leaves no window and no document: that is the last
+// window gone and the App quits, as the launch drain used to answer (PR #1236
+// review P1).
+void testRuntimeRefusalOfTheDeferredLastDocumentQuits()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  config.reenter = true;
+  config.refuseValue = 0;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(config.factories == 1 && !app.quitRequested());
+  context.refuseNextCreate = true;
+  app.tail();
+  LOKA_VERIFY(config.factories == 2);
+  LOKA_VERIFY(config.roster.count() == 0 && app.group().getComponents().size() == 0);
+  LOKA_VERIFY(app.quitRequested() && !app.bootstrapWindowlessReported());
 }
 
 // #1233 pin 2 mutation: walk at launch until a walk attempts nothing. A factory

@@ -31,5 +31,6 @@ void testBootstrapWindowlessDefaultQuits();
 void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless();
 void testBootstrapLeavesReentrantOpensPendingInsteadOfDeclaringWindowless();
 void testBootstrapWalksOnceWhenTheFactoryReopensOnEveryRefusal();
+void testRuntimeRefusalOfTheDeferredLastDocumentQuits();
 
 #endif

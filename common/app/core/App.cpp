@@ -110,6 +110,13 @@ unsigned short App::admitDocumentWindows(AdoptionPhase phase)
     if (!window)
     {
       roster.windowGone(id);
+      // A runtime refusal that empties the roster beside an empty group is the
+      // last window gone: the same decision requestWindowClose takes for a
+      // close. Launch answers through windowlessAfterLaunch instead, because
+      // quit() before a rail's loop exists is a no-op on macOS and Toolbox.
+      if (phase == ADOPT_RUNNING && quitWhenLastWindowClosed_
+          && this->group_->getComponents().size() == 0 && roster.count() == 0)
+        this->quit();
       continue;
     }
     this->group_->adopt(window, id);
