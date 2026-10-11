@@ -10,6 +10,10 @@
 
 namespace loka
 {
+  namespace testing
+  {
+    class Win32TextColorAccess;
+  }
   namespace core
   {
     template <typename T> class State;
@@ -64,6 +68,7 @@ public:
   void relayout(int x, int y, int width, int height);
 
 private:
+  friend class loka::testing::Win32TextColorAccess;
   Win32TextEnvironment::Subscription textEnvironmentSubscription_;
   /** Plain measurement is keyed by the native width the STATIC receives
       (edges projected at the placement), so a placement whose rounding

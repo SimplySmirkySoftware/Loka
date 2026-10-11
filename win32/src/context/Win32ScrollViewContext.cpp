@@ -347,7 +347,7 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
 
   if (msg == WM_CTLCOLORSTATIC)
     return reinterpret_cast<LRESULT>(
-        loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam)));
+        loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
 
   // Match Win32Window: paint-only subtree requests must restore the ground
   // even without RDW_ERASE, and erasure must not be a separate clearing pass.

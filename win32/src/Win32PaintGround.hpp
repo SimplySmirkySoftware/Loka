@@ -2,6 +2,8 @@
 #define LOKA_WIN32_PAINT_GROUND_HPP
 
 #include "Win32Ground.hpp"
+#include "Win32PaintTextInk.hpp"
+#include "context/Win32TextColorProperty.hpp"
 #include <windows.h>
 
 namespace loka
@@ -12,6 +14,9 @@ namespace loka
     typedef char SystemColorWindowTextMustMatchWindows[(static_cast<int>(WIN32_SYSTEM_COLOR_WINDOWTEXT) == COLOR_WINDOWTEXT) ? 1 : -1];
     typedef char SystemColorButtonFaceMustMatchWindows[(static_cast<int>(WIN32_SYSTEM_COLOR_BTNFACE) == COLOR_BTNFACE) ? 1 : -1];
     typedef char SystemColorButtonTextMustMatchWindows[(static_cast<int>(WIN32_SYSTEM_COLOR_BTNTEXT) == COLOR_BTNTEXT) ? 1 : -1];
+
+    typedef char
+        SystemColorGrayTextMustMatchWindows[(static_cast<int>(WIN32_SYSTEM_COLOR_GRAYTEXT) == COLOR_GRAYTEXT) ? 1 : -1];
 
     // Deliberate platform-seam twin of ToolboxPaintGround/MacPaintGround.
     /** Paints with a system-owned brush (never deleted). Declining roles assert
@@ -31,12 +36,12 @@ namespace loka
         paints the ground under it whenever the parent itself is invalidated.
         A surface tick no longer invalidates the root, which is what removed
         the per-tick flicker. */
-    inline HBRUSH Win32StaticTextColors(HDC dc)
+    inline HBRUSH Win32StaticTextColors(HDC dc, HWND child)
     {
       if (dc)
       {
         SetBkMode(dc, TRANSPARENT);
-        SetTextColor(dc, GetSysColor(Win32TextRoleColor(app::SURFACE_GROUND_WINDOW)));
+        SetTextColor(dc, Win32PaintTextInk(Win32TextColorProperty::read(child), app::SURFACE_GROUND_WINDOW));
       }
       return static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
     }

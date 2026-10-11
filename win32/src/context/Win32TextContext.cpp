@@ -1,4 +1,5 @@
 #include "Win32TextContext.hpp"
+#include "Win32TextColorProperty.hpp"
 #include "Win32AttributedTextTable.hpp"
 #include <cassert>
 #include "../Win32ScenePlatformController.hpp"
@@ -269,6 +270,7 @@ bool Win32TextContext::applyStyle()
 {
   if (!this->hwnd_ || !this->node_ || !this->controller())
     return false;
+  Win32TextColorProperty::apply(this->hwnd_, this->node_->props.resolvedTextStyle().color_);
   bool changed = false;
   {
     // Reconciled on every apply, declared or not: a retained change back to an
@@ -334,6 +336,9 @@ void Win32TextContext::applyAttachedPresentation()
   this->measurement_.invalidate();
   if (hwnd_)
   {
+    // Detached presentation removed the color property; restore it only.
+    Win32TextColorProperty::apply(
+        hwnd_, this->node_ ? this->node_->props.resolvedTextStyle().color_ : loka::app::TEXT_COLOR_UNSET);
     ShowWindow(hwnd_, SW_SHOW);
   }
 }
@@ -342,6 +347,7 @@ void Win32TextContext::applyDetachedPresentation()
 {
   if (hwnd_)
   {
+    Win32TextColorProperty::detach(this->hwnd_);
     ShowWindow(hwnd_, SW_HIDE);
   }
 }
