@@ -45,7 +45,7 @@ namespace
     {
       SnapshotTrace &trace = *static_cast<SnapshotTrace *>(data);
       ++trace.ledger->invalidations;
-      trace.snapshots.push_back(trace.ledger->tracker.committedDirtyStates());
+      trace.snapshots.push_back(trace.ledger->tracker.committedSet().identities());
     }
   };
 
@@ -341,7 +341,7 @@ void testOperationOneWriteSettlesInOneRound()
   LOKA_VERIFY(outcome.status == OPERATION_SETTLED && outcome.rounds == 1);
   verifyClosed(ledger);
   assert(ledger.invalidations == 1);
-  assert(ledger.tracker.committedDirtyStates().size() == 1);
+  assert(ledger.tracker.committedSet().identities().size() == 1);
 }
 
 void testOperationChainLimitClosesAllLedgers()
@@ -1034,7 +1034,7 @@ void testRegimeStandaloneLedgerWithoutClockStaysSynchronous()
   Operation::Regime regime;
   seat.writeSeat().set(1);
   LOKA_VERIFY(ledger.source.get() == 1 && ledger.invalidations == 1);
-  const std::vector<StateBase *> &committed = ledger.tracker.committedDirtyStates();
+  const std::vector<StateBase *> &committed = ledger.tracker.committedSet().identities();
   LOKA_VERIFY(committed.size() == 1 && committed[0] == &ledger.source);
   LOKA_VERIFY(Operation::openActive(&ledger.tracker) == OPEN_REFUSED_STANDALONE);
   verifyClosed(ledger);

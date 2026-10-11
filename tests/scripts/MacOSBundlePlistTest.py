@@ -15,6 +15,8 @@ def check_bundles(build_root):
             info = plistlib.load(source)
         if info.get("NSHighResolutionCapable") is not True:
             raise ValueError(str(bundle) + ": high-resolution capability is not true")
+        if info.get("NSRequiresAquaSystemAppearance") is not False:
+            raise ValueError(str(bundle) + ": dark appearance opt-in is not declared")
         if info.get("CFBundleExecutable") != bundle.stem:
             raise ValueError(str(bundle) + ": executable metadata does not match target")
         if info.get("CFBundlePackageType") != "APPL":
