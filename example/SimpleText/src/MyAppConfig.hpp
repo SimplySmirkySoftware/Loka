@@ -12,6 +12,7 @@ public:
   explicit SimpleTextAppConfig(PlatformContext *context)
       : AppConfigurable(context)
   {
+    // A refused seed is reported by App::bootstrapWindowless after launch admission.
     this->documents_.open(simpletext::Document());
   }
   loka::app::DocumentRoster<simpletext::Document, simpletext::kMaxDocuments> &documents()

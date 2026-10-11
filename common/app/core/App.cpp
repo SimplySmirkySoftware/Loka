@@ -73,6 +73,8 @@ void App::run()
         this->bootstrapWindowRefused(window);
     }
     this->admitDocumentWindows(ADOPT_AT_LAUNCH);
+    if (this->group_->getComponents().size() == 0)
+      this->bootstrapWindowless();
   }
   projectInitialVisibilityChunks();
   this->projectMenuSources();
@@ -161,6 +163,11 @@ bool App::windowAdopted(Window *)
 
 void App::bootstrapWindowRefused(Window *)
 {
+}
+
+void App::bootstrapWindowless()
+{
+  this->quit();
 }
 
 loka::app::IdlePolicy App::idlePolicy() const

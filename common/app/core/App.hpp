@@ -96,6 +96,12 @@ protected:
   /** Bootstrap-only consequence of refused adoption. The default does nothing;
       Toolbox reports out of memory and quits without returning. */
   virtual void bootstrapWindowRefused(Window *window);
+  /** The bootstrap opened no window at all: every static WindowDef was refused,
+      the roster seeded nothing, or every launch create was refused. Called once,
+      after launch admission, whether or not a document seat exists. The default
+      quits (quit()); Toolbox reports out of memory and quits without returning;
+      a rail that cannot post a quit before its loop exists answers in its own run. */
+  virtual void bootstrapWindowless();
 
   void projectInitialVisibilityChunks();
   /** Admits seats before Scene runs. The first admission of a tail captures

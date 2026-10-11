@@ -19,12 +19,16 @@ checks = [
               r"loka::toolbox::QuitIfOutOfMemoryReserveSpent\(\);\s*return true;\s*\}", app),
     re.search(r"void ToolboxApp::bootstrapWindowRefused\(Window \*\)\s*"
               r"\{\s*loka::toolbox::QuitForOutOfMemory\(\);\s*\}", app),
+    re.search(r"void ToolboxApp::bootstrapWindowless\(\)\s*"
+              r"\{\s*loka::toolbox::QuitForOutOfMemory\(\);\s*\}", app),
 ]
 # Refusal must reach the fatal rail policy inline before initial projection.
 core = (root / "common/app/core/App.cpp").read_text()
 checks.append(re.search(r"if \(window && !this->windowAdopted\(window\)\)\s*"
                         r"this->bootstrapWindowRefused\(window\);\s*\}\s*"
-                        r"this->admitDocumentWindows\(ADOPT_AT_LAUNCH\);\s*\}\s*"
+                        r"this->admitDocumentWindows\(ADOPT_AT_LAUNCH\);\s*"
+                        r"if \(this->group_->getComponents\(\).size\(\) == 0\)\s*"
+                        r"this->bootstrapWindowless\(\);\s*\}\s*"
                         r"projectInitialVisibilityChunks\(\);\s*this->projectMenuSources\(\);", core))
 # Match the complete loop by braces, then require the check at its tail.
 loop_start = app.index("while (running_)")
