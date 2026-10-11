@@ -70,7 +70,8 @@ namespace
   void layoutPin(const char *mode)
   {
     ToolboxScenePlatformController controller;
-    RectSurfaceNode node((RectSurfaceProps()));
+    loka::core::MutableState<RectSurfaceModel> model((RectSurfaceModel()));
+    RectSurfaceNode node(RectSurfaceProps().model(&model));
     LayoutState state;
     state.x = 10; state.y = 20; state.width = 100; state.height = 50; state.spacing = 3;
     const bool normal = std::strcmp(mode, "normal") == 0;
@@ -90,6 +91,9 @@ namespace
     {
       LOKA_VERIFY(width == 100 && state.y == (normal ? 73 : SHRT_MAX));
       LOKA_VERIFY(controller.extentRecords == 1);
+      Rect bounds;
+      LOKA_VERIFY(static_cast<ToolboxRectSurfaceContext *>(node.getContext())->dirtyRect(bounds));
+      checkRect(bounds, 10, 20, 110, normal ? 70 : SHRT_MAX);
     }
     else
     {
@@ -147,7 +151,12 @@ namespace
       LOKA_VERIFY(!unions.empty());
       checkRect(unions[0], 20, 20, 120, 120);
     }
-    else if (outside) LOKA_VERIFY(paints.empty());
+    else if (outside)
+    {
+      LOKA_VERIFY(paints.empty());
+      Rect dirty;
+      LOKA_VERIFY(!ctx->dirtyRect(dirty));
+    }
     else
     {
       LOKA_VERIFY(paints.size() == 1);
