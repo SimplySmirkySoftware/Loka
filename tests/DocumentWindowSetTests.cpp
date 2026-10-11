@@ -178,9 +178,9 @@ namespace
       }
       if (!config.closeDuringFactory.isNone())
       {
-        const ItemId id = config.closeDuringFactory;
+        const ItemId closing = config.closeDuringFactory;
         config.closeDuringFactory = ItemId::none();
-        LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+        LOKA_VERIFY(config.roster.close(closing) == EDIT_OK);
       }
       WindowProps props;
       props.scene(new Scene(BoundaryDefinition<DocumentProps, DocumentRoot>(DocumentProps(config.roots[value]))));
