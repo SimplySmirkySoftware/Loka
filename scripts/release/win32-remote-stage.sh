@@ -38,10 +38,12 @@ import base64, pathlib, sys
 mode, work, arch, profile, environment = sys.argv[1:]
 def literal(value):
     return "'" + value.replace("'", "''") + "'"
+# Progress records would otherwise reach stderr as CLIXML noise.
+script = "$ProgressPreference = 'SilentlyContinue'\n"
 if mode == 'Prepare':
-    script = '& {\n' + pathlib.Path('scripts/release/win32-remote-stage.ps1').read_text() + '\n}'
+    script += '& {\n' + pathlib.Path('scripts/release/win32-remote-stage.ps1').read_text() + '\n}'
 else:
-    script = '& ' + literal(work + '/remote.ps1')
+    script += '& ' + literal(work + '/remote.ps1')
 script += ' -Mode ' + literal(mode) + ' -WorkDirectory ' + literal(work)
 script += ' -Architecture ' + literal(arch) + ' -TargetProfile ' + literal(profile)
 script += ' -EnvironmentCommand ' + literal(environment) + '\nexit $LASTEXITCODE\n'
