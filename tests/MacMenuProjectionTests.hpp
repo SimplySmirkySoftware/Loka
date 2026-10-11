@@ -7,6 +7,7 @@ void testMacMenuAttachmentProjectsOnceForEqualBar();
 void testMacMenuDoorSkipsProjectionDuringTracking();
 void testMacMenuAttachmentDisconnectStripsTargetAndAction();
 void testMacSceneDetachReleasesMenu();
+void testMacNativeCloseReleasesMenuBeforeReclaim();
 void testMacAppShutdownReleasesMenuBeforeAttachmentDestruction();
 void testMacMenuAttachmentCloneRefusalClearsBaseline();
 void testMacMenuAttachmentDispatchMayDisconnect();
