@@ -224,7 +224,7 @@ loka::app::scene::PaintAnswer Win32TextContext::queryPaintDamage(const loka::app
   RECT placement;
   if (query.placement != PLACEMENT_ELIGIBLE || !GetClientRect(this->hwnd_, &placement) || IsRectEmpty(&placement))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
-  if (!this->node_ || (!this->node_->props.ownsText && this->node_->props.text_ != this->textState_))
+  if (!this->node_ || (!this->node_->props.ownsText() && this->node_->props.text_ != this->textState_))
     return PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   PaintAnswer answer = this->textDelivery_;
   if (answer.kind == PAINT_ANSWER_EXACT)
@@ -311,7 +311,7 @@ void Win32TextContext::onPropsApplied()
   {
     return;
   }
-  if (this->node_->props.ownsText)
+  if (this->node_->props.ownsText())
   {
     // Props-owned text is not a live source (TextNode::declareDirtySources
     // classifies ownsText as non-live): a literal-to-literal apply rewrites the
@@ -433,7 +433,7 @@ void Win32TextContext::bindText()
   }
   // Subscribe only to a borrowed live State; props-owned text is applied as a
   // snapshot (see onPropsApplied) and never subscribed to.
-  textState_ = node_->props.ownsText ? 0 : static_cast<loka::core::State<loka::core::String> *>(node_->props.text_);
+  textState_ = node_->props.ownsText() ? 0 : static_cast<loka::core::State<loka::core::String> *>(node_->props.text_);
   if (textState_)
   {
     textState_->bind(&Win32TextContext::TextChangedThunk, this, false);

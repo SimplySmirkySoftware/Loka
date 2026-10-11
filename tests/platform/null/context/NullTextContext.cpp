@@ -76,6 +76,9 @@ namespace
 
 NullTextContext::NullTextContext(loka::app::TextNode *node)
     : loka::app::scene::NativeNodeContext(),
+      presented_(),
+      placement_(),
+      placedStyle_(),
       measurementBuilds_(0),
       node_(node),
       measurement_()

@@ -560,7 +560,7 @@ void testRetainedTextRebindsToNewStateAndCompares()
   root->markViewDirty(NODE_DIRTY_PROPS);
   settle(scene);
   LOKA_VERIFY(find(root, NODE_KIND_TEXT) == text && text->getContext() == context);
-  LOKA_VERIFY(text->asTextNode()->props.ownsText);
+  LOKA_VERIFY(text->asTextNode()->props.ownsText());
   exactOne(platform);
   platform.beginApplyCycle();
   score(scene, data.b, "FFFF");

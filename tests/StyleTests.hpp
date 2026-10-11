@@ -10,4 +10,6 @@ void testTextPropsItalicParticipatesInDefinitionEquivalence();
 void testNullTextLayoutUsesResolvedFontSize();
 void testTextStyleDslPreservesDefinitionPolicies();
 
+void testTextPropsOwnedAndBorrowedStorage();
+
 #endif // LOKA_TESTS_STYLE_TESTS_HPP

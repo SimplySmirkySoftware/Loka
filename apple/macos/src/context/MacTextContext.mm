@@ -341,7 +341,7 @@ void MacTextContext::bindText()
   textStateBound_ = false;
   if (textState_)
   {
-    if (!node_->props.ownsText)
+    if (!node_->props.ownsText())
     {
       textState_->deferBind(&MacTextContext::TextChangedThunk, this);
       textStateBound_ = true;

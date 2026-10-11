@@ -23,14 +23,12 @@ namespace loka
       typedef TextNode NodeType;
       loka::core::State<loka::core::String> *text_;
       loka::core::MutableState<loka::core::String> ownedText;
-      bool ownsText;
       TextStyle textStyle_;
       BlockStyle blockStyle_;
       loka::core::State<TextStyle> *textStyleState_;
       TextProps()
           : text_(0),
             ownedText(),
-            ownsText(false),
             textStyle_(),
             blockStyle_(),
             textStyleState_(0)
@@ -39,7 +37,6 @@ namespace loka
       TextProps(loka::core::State<loka::core::String> *state)
           : text_(state),
             ownedText(),
-            ownsText(false),
             textStyle_(),
             blockStyle_(),
             textStyleState_(0)
@@ -48,7 +45,6 @@ namespace loka
       TextProps(const loka::core::String &value)
           : text_(0),
             ownedText(value),
-            ownsText(true),
             textStyle_(),
             blockStyle_(),
             textStyleState_(0)
@@ -58,7 +54,6 @@ namespace loka
       TextProps(const char *value)
           : text_(0),
             ownedText(loka::core::String::Literal(value)),
-            ownsText(true),
             textStyle_(),
             blockStyle_(),
             textStyleState_(0)
@@ -69,12 +64,11 @@ namespace loka
           : scene::NodePropsBase<TextProps>(other),
             text_(other.text_),
             ownedText(other.ownedText),
-            ownsText(other.ownsText),
             textStyle_(other.textStyle_),
             blockStyle_(other.blockStyle_),
             textStyleState_(other.textStyleState_)
       {
-        if (ownsText)
+        if (other.ownsText())
         {
           text_ = &ownedText;
         }
@@ -85,11 +79,10 @@ namespace loka
         {
           text_ = other.text_;
           ownedText = other.ownedText;
-          ownsText = other.ownsText;
           textStyle_ = other.textStyle_;
           blockStyle_ = other.blockStyle_;
           textStyleState_ = other.textStyleState_;
-          if (ownsText)
+          if (other.ownsText())
           {
             text_ = &ownedText;
           }
@@ -99,19 +92,23 @@ namespace loka
       TextProps &text(loka::core::State<loka::core::String> *state)
       {
         this->text_ = state;
-        ownsText = false;
         return *this;
       }
       TextProps &text(const loka::core::String &value)
       {
         ownedText = loka::core::MutableState<loka::core::String>(value);
         this->text_ = &ownedText;
-        ownsText = true;
         return *this;
       }
       TextProps &text(const char *value)
       {
         return text(loka::core::String::Literal(value));
+      }
+
+      /** Whether text points at this props value's own constant storage. */
+      bool ownsText() const
+      {
+        return this->text_ == &this->ownedText;
       }
 
       /** True when a field changing font or block geometry was declared, or a
@@ -133,9 +130,9 @@ namespace loka
         if (rhs.propsTypeId() != propsTypeId())
           return false;
         const TextProps &other = static_cast<const TextProps &>(rhs);
-        if (ownsText != other.ownsText)
-          return ownsText < other.ownsText;
-        if (ownsText)
+        if (this->ownsText() != other.ownsText())
+          return this->ownsText() < other.ownsText();
+        if (this->ownsText())
         {
           const int textCompare =
               ownedText.get().compare(other.ownedText.get());
@@ -191,7 +188,7 @@ namespace loka
       }
       virtual void declareDirtySources(scene::DirtySourceRegistrar &registrar)
       {
-        if (this->props.text_ && !this->props.ownsText)
+        if (this->props.text_ && !this->props.ownsText())
         {
           scene::NodeDirtyFlags textFlags = scene::NODE_DIRTY_PROPS;
           if (this->props.blockStyle_.hasWrap_ && this->props.blockStyle_.wrap_ != TEXT_WRAP_NONE)

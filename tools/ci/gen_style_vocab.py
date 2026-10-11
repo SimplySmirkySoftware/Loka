@@ -8,6 +8,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# Every vocabulary enum gets its decoder names from this same inventory.
+ENUMS = (
+    ("weights", "TextWeight", "TEXT_WEIGHT"),
+    ("colors", "TextColor", "TEXT_COLOR"),
+    ("wrap", "TextWrap", "TEXT_WRAP"),
+    ("truncation", "TextTruncation", "TEXT_TRUNCATION"),
+    ("align", "TextAlign", "TEXT_ALIGN"),
+)
+
 
 def enum_lines(name, prefix, entries):
     lines = ["    enum %s" % name, "    {"]
@@ -30,11 +39,9 @@ def generate_cpp(vocab):
         "  namespace app",
         "  {",
     ]
-    lines += enum_lines("TextWeight", "TEXT_WEIGHT", vocab["weights"])
-    lines += enum_lines("TextColor", "TEXT_COLOR", {"UNSET": 0, **vocab["colors"]})
-    lines += enum_lines("TextWrap", "TEXT_WRAP", vocab["wrap"])
-    lines += enum_lines("TextTruncation", "TEXT_TRUNCATION", vocab["truncation"])
-    lines += enum_lines("TextAlign", "TEXT_ALIGN", vocab["align"])
+    for kind, enum, prefix in ENUMS:
+        entries = {"UNSET": 0, **vocab[kind]} if kind == "colors" else vocab[kind]
+        lines += enum_lines(enum, prefix, entries)
     sizes = ", ".join(str(value) for value in vocab["sizes"])
     lines += [
         "    template <int N> struct FontSize;",
@@ -106,15 +113,14 @@ def generate_cpp(vocab):
         "/** Opt-in decoder names; include Style.hpp before requesting this section. */",
         "namespace loka { namespace app { namespace detail {",
     ]
-    for kind, enum, prefix in (("weights", "TextWeight", "TEXT_WEIGHT"),
-                               ("colors", "TextColor", "TEXT_COLOR")):
+    for kind, enum, prefix in ENUMS:
         lines += [
             "  struct %sName" % enum,
             "  {", "    const char *name;", "    %s value;" % enum, "  };",
             "  static const %sName StyleVocabulary%s[] = {" % (enum, kind.title()),
         ]
         for key in vocab[kind]:
-            value = "%s.color_" % key.title() if kind == "colors" else "%s_%s" % (prefix, key)
+            value = "%s_%s" % (prefix, key)
             lines.append('    {"%s", %s},' % (key.lower(), value))
         lines += ["  };", ""]
     lines += ["} } } // namespace loka::app::detail", "", "#endif // generated vocabulary names", ""]

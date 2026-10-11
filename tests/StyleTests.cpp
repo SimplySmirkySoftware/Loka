@@ -151,9 +151,13 @@ void testTextColorVocabularyAndMerge()
   using namespace loka::app;
   LOKA_VERIFY(TEXT_COLOR_UNSET == 0);
   LOKA_VERIFY(TextStyle().color_ == TEXT_COLOR_UNSET);
+  const TextStyle colors[] = {Primary, Secondary, Black, White, Red, Green, Blue, Cyan, Magenta, Yellow};
+  LOKA_VERIFY(sizeof(colors) / sizeof(colors[0])
+              == sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]));
   for (unsigned i = 0; i < sizeof(detail::StyleVocabularyColors) / sizeof(detail::StyleVocabularyColors[0]); ++i)
   {
-    // The generated table reads each named constant, in the frozen palette order.
+    // Enum rows and named styles are independent generated sources.
+    LOKA_VERIFY(colors[i].color_ == detail::StyleVocabularyColors[i].value);
     LOKA_VERIFY(detail::StyleVocabularyColors[i].value == static_cast<TextColor>(i + 1));
   }
   LOKA_VERIFY(Red + Blue == Blue);
@@ -178,4 +182,46 @@ void testTextColorVocabularyAndMerge()
   }
   LOKA_VERIFY(text.props.resolvedTextStyle().color_ == TEXT_COLOR_UNSET);
   tracker.removeState(&live);
+}
+
+void testTextPropsOwnedAndBorrowedStorage()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  PushStateTracker tracker;
+  MutableState<String> external(String::Literal("external"));
+  TextProps original("owned");
+  TextProps copied(original);
+  LOKA_VERIFY(copied.text_ == &copied.ownedText);
+  tracker.addState(&original.ownedText);
+  {
+    StateTrackerGuard guard(&tracker);
+    original.ownedText.set(String::Literal("changed"));
+  }
+  LOKA_VERIFY(copied.text_->get().compare(String::Literal("owned")) == 0);
+  tracker.removeState(&original.ownedText);
+
+  TextProps borrowed(&external);
+  TextProps borrowedCopy(borrowed);
+  LOKA_VERIFY(borrowedCopy.text_ == &external);
+
+  TextProps assigned(&external);
+  assigned = original;
+  LOKA_VERIFY(assigned.text_ == &assigned.ownedText);
+  LOKA_VERIFY(assigned.text_->get().compare(String::Literal("changed")) == 0);
+  assigned = borrowed;
+  LOKA_VERIFY(assigned.text_ == &external);
+  assigned.text("x");
+  LOKA_VERIFY(assigned.text_ == &assigned.ownedText);
+  LOKA_VERIFY(assigned.text_->get().compare(String::Literal("x")) == 0);
+  assigned.text(&external);
+  LOKA_VERIFY(assigned.text_ == &external);
+  assigned.text("again");
+  LOKA_VERIFY(assigned.text_ == &assigned.ownedText);
+  LOKA_VERIFY(assigned.text_->get().compare(String::Literal("again")) == 0);
+
+  LOKA_VERIFY(borrowed < original);
+  LOKA_VERIFY(!(original < borrowed));
+  LOKA_VERIFY(!(borrowed < borrowedCopy));
+  LOKA_VERIFY(!(copied < TextProps("owned")));
 }
