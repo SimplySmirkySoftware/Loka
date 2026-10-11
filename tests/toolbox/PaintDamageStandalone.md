@@ -5,6 +5,8 @@ the rig descriptor's boot template), with a byte-identical `LOG.TXT` across
 runs and across the Universal Interfaces and Multiversal builds (#1126).
 B2 (#1199) adds four arms: 139 PASS / 0 FAIL on the same rig, with a
 byte-identical `LOG.TXT` from the Universal Interfaces and Multiversal builds.
+A2 (#1196) adds six arms: 145 PASS / 0 FAIL on the same rig, with a
+byte-identical `LOG.TXT` from both builds (#1240).
 Owns: Toolbox native paint-damage pins that need real QuickDraw and the
 Control Manager: exact versus whole-window delivery, presentation history,
 control and popup geometry, and busy-cursor borrows.
@@ -80,12 +82,10 @@ the sample black. The three new vacated phases also shift the six later
 
 ## Text ink pins (#1196 A2)
 
-Six new arms are predicted, pending MAME verification on both header builds.
+Six arms, runtime-verified at 145 PASS / 0 FAIL on both header builds (#1240).
 `ink-white-empty`, `ink-black-visible`, and `ink-unset-visible` paint the same
 `MMMM` Text into a cleared scratch seat and count black pixels. At 1 bit white
 leaves none; black and the window pair leave ink. This exercises real ForeColor.
 The additivity arms compare uniform `MMMM` against `M` and `MMM` runs split only by
-Red, logging both measured widths (predicted Chicago 12: 36), then compare line
-widths and ending offsets when wrapping at 18 pixels. The existing 139-arm
-runtime evidence remains valid for the old baseline; the predicted new log has
-145 PASS arms and requires renewal by the delegator.
+Red, logging both measured widths (Chicago 12 measured `uniform=36 split=36`),
+then compare line widths and ending offsets when wrapping at 18 pixels.
