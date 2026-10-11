@@ -738,3 +738,20 @@ void testBootstrapRefusedAdoptionDoesNotAlsoReportWindowless()
   LOKA_VERIFY(!app.bootstrapWindowlessReported());
   LOKA_VERIFY(!app.quitRequested());
 }
+
+// c2 pin 7 mutation: walk once at launch instead of until a walk creates nothing.
+void testBootstrapDrainsReentrantOpensBeforeDeclaringWindowless()
+{
+  TrackingContext context;
+  Config config(context, true);
+  config.staticFirst = false;
+  config.reenter = true;
+  config.refuseValue = 0;
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(config.factories == 2);
+  LOKA_VERIFY(!config.roster.find(config.initial) && config.roster.find(config.reentrant));
+  LOKA_VERIFY(app.group().getComponents().size() == 1 && app.window(config.reentrant));
+  LOKA_VERIFY(!app.bootstrapWindowlessReported() && !app.quitRequested());
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}

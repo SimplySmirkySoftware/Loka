@@ -126,7 +126,10 @@ protected:
 
 private:
   enum AdoptionPhase { ADOPT_AT_LAUNCH, ADOPT_RUNNING };
-  void admitDocumentWindows(AdoptionPhase phase);
+  /** Returns how many window creates this walk attempted; 0 when it did not
+      walk. A walk that attempted nothing ran no factory or mount, so no roster
+      edit could have left its snapshot mismatched. */
+  unsigned short admitDocumentWindows(AdoptionPhase phase);
   loka::app::WindowSeat *windowSeat_;
 
   /** Borrowed rows remain owned by the App group or close queue. */
