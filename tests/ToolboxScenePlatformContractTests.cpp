@@ -220,7 +220,7 @@ void testToolboxTextSubscriptionMovesLiveOwnedLive()
   LOKA_VERIFY(ToolboxTextProjectionChanged(sink.projected_, props.text_));
   loka::core::State<loka::core::String> *previous = sink.projected_;
   sink.projected_ = props.text_;
-  ReconcileToolboxTextSubscription(sink, previous, ToolboxLiveTextSource(props.text_, props.ownsText));
+  ReconcileToolboxTextSubscription(sink, previous, ToolboxLiveTextSource(props.text_, props.ownsText()));
   LOKA_VERIFY(sink.lastBound_ == &oldText);
   {
     loka::core::StateTrackerGuard transaction(&tracker);
@@ -232,7 +232,7 @@ void testToolboxTextSubscriptionMovesLiveOwnedLive()
   props = loka::app::TextProps(&newText);
   LOKA_VERIFY(ToolboxTextProjectionChanged(previous, props.text_));
   sink.projected_ = props.text_;
-  ReconcileToolboxTextSubscription(sink, previous, ToolboxLiveTextSource(props.text_, props.ownsText));
+  ReconcileToolboxTextSubscription(sink, previous, ToolboxLiveTextSource(props.text_, props.ownsText()));
   LOKA_VERIFY(sink.lastBound_ == &newText);
   {
     loka::core::StateTrackerGuard transaction(&tracker);

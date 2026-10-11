@@ -66,7 +66,7 @@ public:
   short visibleWidth();
   loka::core::State<loka::core::String> *liveTextState() const
   {
-    return this->node_ ? ToolboxLiveTextSource(this->text_, this->node_->props.ownsText) : 0;
+    return this->node_ ? ToolboxLiveTextSource(this->text_, this->node_->props.ownsText()) : 0;
   }
   void draw(ToolboxScenePlatformController *controller);
   virtual loka::core::State<loka::core::String> *projectedTextState()

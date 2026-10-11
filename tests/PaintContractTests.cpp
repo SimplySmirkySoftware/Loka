@@ -560,7 +560,7 @@ void testRetainedTextRebindsToNewStateAndCompares()
   root->markViewDirty(NODE_DIRTY_PROPS);
   settle(scene);
   LOKA_VERIFY(find(root, NODE_KIND_TEXT) == text && text->getContext() == context);
-  LOKA_VERIFY(text->asTextNode()->props.ownsText);
+  LOKA_VERIFY(text->asTextNode()->props.ownsText());
   exactOne(platform);
   platform.beginApplyCycle();
   score(scene, data.b, "FFFF");
@@ -719,6 +719,8 @@ void testPaintPolicyScopeAndLifecycleInvalidation()
   }
   settle(scene);
   LOKA_VERIFY(only(platform).precision() == APPLY_PAINT_NONE);
+  text->props.textStyle_ = Red;
+  LOKA_VERIFY(textContext->queryPaintDamage(query(platform)).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
   text->props.textStyle_ = Bold;
   LOKA_VERIFY(textContext->queryPaintDamage(query(platform)).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
   text->props.textStyle_ = TextStyle();
@@ -847,7 +849,7 @@ void testRefusedReprojectionInvalidatesPlacement()
   loka::dsl::testing::SceneTestAccess::unmount(scene);
 }
 
-void testStyleOnlyApplyRecoversTextHistory()
+static void checkStyleOnlyApplyRecoversTextHistory(const TextStyle &style)
 {
   // A retained Text whose resolved style changes through a props-only apply has
   // no layout pass to refresh its placed style. The query refuses (widen), and
@@ -855,7 +857,7 @@ void testStyleOnlyApplyRecoversTextHistory()
   // history, instead of refusing forever until an unrelated layout.
   TreeData data;
   data.count = 0;
-  TextDefinitionWithAttr replacement = Text(&data.a) + Bold;
+  TextDefinitionWithAttr replacement = Text(&data.a) + style;
   PaintPlatform platform;
   Scene scene(Boundary<PaintTree>(TreeProps(&data)));
   mount(scene, platform);
@@ -870,6 +872,16 @@ void testStyleOnlyApplyRecoversTextHistory()
   score(scene, data.a, "GGGG");
   exactOne(platform);
   loka::dsl::testing::SceneTestAccess::unmount(scene);
+}
+
+void testStyleOnlyApplyRecoversTextHistory()
+{
+  checkStyleOnlyApplyRecoversTextHistory(Bold);
+}
+
+void testColorOnlyApplyRecoversTextHistory()
+{
+  checkStyleOnlyApplyRecoversTextHistory(Red);
 }
 
 namespace

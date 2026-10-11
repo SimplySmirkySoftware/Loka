@@ -76,6 +76,9 @@ namespace
 
 NullTextContext::NullTextContext(loka::app::TextNode *node)
     : loka::app::scene::NativeNodeContext(),
+      presented_(),
+      placement_(),
+      placedStyle_(),
       measurementBuilds_(0),
       node_(node),
       measurement_()
@@ -136,12 +139,14 @@ void RegisterNullTextNodeHandler(NullScenePlatformController &controller)
 NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
     : fontSize(kDefaultFontSize),
       weight(loka::app::TEXT_WEIGHT_NORMAL),
+      color(loka::app::TEXT_COLOR_UNSET),
       italic(false),
       wrap(loka::app::TEXT_WRAP_NONE),
       truncation(loka::app::TEXT_TRUNCATION_NONE),
       align(loka::app::TEXT_ALIGN_LEFT)
 {
   const loka::app::TextStyle textStyle = props.resolvedTextStyle();
+  this->color = textStyle.color_;
   if (textStyle.hasFontSize_)
     fontSize = textStyle.fontSize_;
   if (textStyle.hasWeight_)
