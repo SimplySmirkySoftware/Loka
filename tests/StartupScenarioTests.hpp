@@ -6,4 +6,6 @@ void testTutorialStartupHoldsSettledInitialScreenAndMatchesAudit();
 void testMineSweeperStartupHoldsSettledInitialScreenAndMatchesAudit();
 void testFloppyBirdStartupHoldsSettledInitialScreenAndMatchesAudit();
 
+void testStandaloneStartupRefusesOnlyUnresolvedAuditLocation();
+
 #endif // LOKA_TESTS_STARTUP_SCENARIO_TESTS_HPP
