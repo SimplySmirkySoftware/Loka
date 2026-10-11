@@ -2117,6 +2117,60 @@ namespace
     FlowTestCapturableBitmap bitmap_;
   };
 
+  class CurrentTargetBitmap : public loka::app::scene::ICapturableBitmap
+  {
+  public:
+    explicit CurrentTargetBitmap(loka::app::scene::Scene &scene) : scene_(scene) {}
+
+    virtual bool captureBitmap(loka::core::resource::Image &out) const
+    {
+      loka::app::scene::Node *current = 0;
+      loka::dsl::FlowError error;
+      LOKA_VERIFY(loka::dsl::testing::LookupNodeById<loka::app::scene::Node>(
+                      &this->scene_, "Target", current, error) == loka::dsl::FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(current->getContext() != 0);
+      // Compare against a fresh lookup before using any captured context.
+      LOKA_VERIFY(current->getContext()->asCapturableBitmap() == this);
+      out = loka::core::resource::Image::FromNative(
+          reinterpret_cast<void *>(0x2), 80, 40, &FlowTestPlatformContext::ReleaseNativeNoop, 0);
+      return out.isValid();
+    }
+
+    static bool capture(const loka::dsl::testing::ViewCaptureTarget &target,
+                        loka::dsl::testing::ViewBitmapCapture &out,
+                        loka::dsl::FlowError &error, void *user)
+    {
+      loka::app::scene::Scene *scene = static_cast<loka::app::scene::Scene *>(user);
+      loka::app::scene::Node *current = 0;
+      LOKA_VERIFY(loka::dsl::testing::LookupNodeById<loka::app::scene::Node>(
+                      scene, "Target", current, error) == loka::dsl::FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(target.node == current);
+      LOKA_VERIFY(target.capturableBitmap == current->getContext()->asCapturableBitmap());
+      if (!target.capturableBitmap->captureBitmap(out.image))
+      {
+        return false;
+      }
+      out.captured = out.image.isValid();
+      out.width = out.image.width();
+      out.height = out.image.height();
+      return out.captured;
+    }
+
+  private:
+    loka::app::scene::Scene &scene_;
+  };
+
+  class BorrowedCaptureContext : public loka::app::scene::NodeContext
+  {
+  public:
+    explicit BorrowedCaptureContext(CurrentTargetBitmap &bitmap) : bitmap_(bitmap) {}
+    virtual loka::app::scene::ICapturableBitmap *asCapturableBitmap() { return &this->bitmap_; }
+    virtual const loka::app::scene::ICapturableBitmap *asCapturableBitmap() const { return &this->bitmap_; }
+
+  private:
+    CurrentTargetBitmap &bitmap_;
+  };
+
   struct StateNotifyDeleteCtx
   {
     loka::core::EmitterState *state;
@@ -3237,6 +3291,88 @@ void testLokaFlowDslV1Core()
     assert(order.size() == 2);
     assert(order[0] == 1402);
     assert(order[1] == 1499);
+  }
+
+  {
+    using namespace loka::app;
+    using namespace loka::app::scene;
+    using namespace loka::dsl;
+    using namespace loka::dsl::testing;
+
+    FlowScenePlatformController platform;
+    loka::core::MutableState<bool> visible(true);
+    loka::core::MutableState<bool> replacementVisible(false);
+    NodeComposition composition;
+    BoxDefinition &root = composition.declare(Box());
+    root << (Show(visible) << Button("Capture").testId("Target"));
+    root << (Show(replacementVisible) << Text("Replacement").testId("Target"));
+    NodeDefinitionBase *definition = composition.root()->clone();
+    LOKA_VERIFY(definition != 0);
+    Scene scene(definition);
+    // Bitmaps outlive both context generations, so the red pin compares identity
+    // safely even after the first context has been detached and reclaimed.
+    CurrentTargetBitmap originalBitmap(scene);
+    CurrentTargetBitmap replacementBitmap(scene);
+    scene.mount(&platform);
+    SceneTestAccess::updateAttached(scene, true);
+    Scene *input = &scene;
+    Scene *output = 0;
+    Node *original = 0;
+    FlowError error;
+    LOKA_VERIFY(LookupNodeById<Node>(&scene, "Target", original, error) == FLOW_STEP_SUCCEEDED);
+    original->setContext(new BorrowedCaptureContext(originalBitmap));
+
+    ScenarioClock clock;
+    ViewBitmapCapture bitmap;
+    FlowChain<Scene *, ViewBitmapCapture> chain = Flow()
+        | Step(1, AtTick(clock, 2, CaptureViewTarget("Target"))).input(&input)
+        | Step(2, AtTick(clock, 32, CaptureViewBitmapFromPlatform())).onSuccess(&bitmap);
+    ViewBitmapCapture callbackBitmap;
+    FlowChain<Scene *, ViewBitmapCapture> callbackChain = Flow()
+        | Step(1, AtTick(clock, 2, CaptureViewTarget("Target"))).input(&input)
+        | Step(2, AtTick(clock, 32, CaptureViewBitmap(&CurrentTargetBitmap::capture, &scene)))
+              .onSuccess(&callbackBitmap);
+    SnapRecord metadata;
+    FlowChain<Scene *, SnapRecord> metadataChain = Flow()
+        | Step(1, AtTick(clock, 2, CaptureViewTarget("Target"))).input(&input)
+        | Step(2, AtTick(clock, 32, CaptureView("Replacement", "capture", 32, 1))).onSuccess(&metadata);
+    clock.advanceTo(2);
+    LOKA_VERIFY(chain.runResult() == FLOW_RUN_PENDING);
+    LOKA_VERIFY(callbackChain.runResult() == FLOW_RUN_PENDING);
+    LOKA_VERIFY(metadataChain.runResult() == FLOW_RUN_PENDING);
+    LOKA_VERIFY(!bitmap.captured);
+    clock.advanceTo(16);
+    LOKA_VERIFY(SetBoolStateAndFlush(&visible, false).run(input, output, error) == FLOW_STEP_SUCCEEDED);
+    Node *missing = 0;
+    LOKA_VERIFY(LookupNodeById<Node>(&scene, "Target", missing, error) == FLOW_STEP_FAILED);
+    LOKA_VERIFY(SetBoolStateAndFlush(&replacementVisible, true).run(input, output, error) == FLOW_STEP_SUCCEEDED);
+    Node *replacement = 0;
+    LOKA_VERIFY(LookupNodeById<Node>(&scene, "Target", replacement, error) == FLOW_STEP_SUCCEEDED);
+    LOKA_VERIFY(replacement != original);
+    replacement->setContext(new BorrowedCaptureContext(replacementBitmap));
+    clock.advanceTo(32);
+    LOKA_VERIFY(chain.runResult() == FLOW_RUN_SUCCEEDED);
+    LOKA_VERIFY(bitmap.captured && bitmap.width == 80 && bitmap.height == 40);
+    LOKA_VERIFY(callbackChain.runResult() == FLOW_RUN_SUCCEEDED);
+    LOKA_VERIFY(callbackBitmap.captured);
+    LOKA_VERIFY(metadataChain.runResult() == FLOW_RUN_SUCCEEDED);
+    long kind = 0;
+    const bool hasKind = metadata.getInt("view.node.kind", kind);
+    LOKA_VERIFY(hasKind);
+    LOKA_VERIFY(kind == static_cast<long>(replacement->kind()));
+
+    // Cache the key while the target exists; all consumers must reject removal.
+    ViewCaptureKey key;
+    LOKA_VERIFY(CaptureViewTarget("Target").run(input, key, error) == FLOW_STEP_SUCCEEDED);
+    LOKA_VERIFY(SetBoolStateAndFlush(&replacementVisible, false).run(input, output, error) == FLOW_STEP_SUCCEEDED);
+    LOKA_VERIFY(CaptureViewBitmapFromPlatform().run(key, bitmap, error) == FLOW_STEP_FAILED);
+    LOKA_VERIFY(error.code == FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND);
+    LOKA_VERIFY(CaptureViewBitmap(&CurrentTargetBitmap::capture, &scene).run(key, callbackBitmap, error)
+                == FLOW_STEP_FAILED);
+    LOKA_VERIFY(error.code == FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND);
+    LOKA_VERIFY(CaptureView("Replacement", "absent", 33, 1).run(key, metadata, error) == FLOW_STEP_FAILED);
+    LOKA_VERIFY(error.code == FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND);
+    SceneTestAccess::unmount(scene);
   }
 
   {
