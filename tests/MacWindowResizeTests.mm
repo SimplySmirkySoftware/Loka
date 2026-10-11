@@ -16,8 +16,6 @@
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
-#include <cstdio>
-
 namespace
 {
   using namespace loka::app;
@@ -169,6 +167,9 @@ void testMacWindowUserResizeStoresNativeFrameWithoutEchoingIntent()
   const Frame declared = window.frameState().get();
   const Frame before = window.nativeFrame().get();
   LOKA_VERIFY(before.width == 360 && before.height == 260);
+  // An unclamped placement reads back as declared: the fact's origin is the
+  // exact inverse of the intent's, so writing it back does not move the window.
+  LOKA_VERIFY(before.x == declared.x && before.y == declared.y);
 
   State<Frame> &nativeFrame = window.nativeFrame();
   DerivedState<bool> narrow(&nativeFrame, new WidthIsNarrow(&nativeFrame));
@@ -227,7 +228,6 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
   LOKA_VERIFY(projectionOf(window).clientCapacityToLu(content.size.width) == 320);
   const Frame settled = window.nativeFrame().get();
   LOKA_VERIFY(settled.width == 320 && settled.height == 260);
-  std::fprintf(stderr, "probe before=%d,%d settled=%d,%d intent=%d,%d\n", before.x, before.y, settled.x, settled.y, window.frameState().get().x, window.frameState().get().y);
   LOKA_VERIFY(settled.x == before.x && settled.y == before.y);
   LOKA_VERIFY(window.frameState().get().width == 320);
   // The scene relaid out from the settled bounds, not from the 400 detour.
