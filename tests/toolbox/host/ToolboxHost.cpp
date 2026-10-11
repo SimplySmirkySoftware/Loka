@@ -14,7 +14,7 @@ namespace toolbox_host
   std::vector<std::string> controlTitles, menuTitles, menuAppends, menuInserts, menuSets, disposedMenuItems;
   std::vector<Draw> draws;
   std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
-  std::vector<long> backgroundColors;
+  std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
   unsigned invalidations = 0;
   GrafPtr activationPort = 0, deactivationPort = 0;
@@ -24,6 +24,7 @@ namespace toolbox_host
   void reset()
   {
     draws.clear();
+    foregroundColors.clear();
     pascalDraws.clear();
     widthPayloads.clear();
     measurePayloads.clear();
@@ -46,7 +47,7 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {7, 12, 0};
+  GrafPort initialPort = {7, 12, 0, blackColor};
   GrafPtr port = &initialPort;
   Rect clip = {-30000, -30000, 30000, 30000};
   short penX, penY;
@@ -127,8 +128,13 @@ void MoveTo(short x, short y)
 }
 void DrawText(const void *bytes, short offset, short length)
 {
-  const toolbox_host::Draw draw = {
-      penX, penY, port->txSize, port->txFace, length, std::string(static_cast<const char *>(bytes) + offset, length)};
+  const toolbox_host::Draw draw = {penX,
+                                   penY,
+                                   port->txSize,
+                                   port->txFace,
+                                   length,
+                                   std::string(static_cast<const char *>(bytes) + offset, length),
+                                   port->fgColor};
   toolbox_host::draws.push_back(draw);
 }
 void SetRect(Rect *out, short l, short t, short r, short b)
@@ -460,4 +466,10 @@ void ToolboxScenePlatformController::renderDirty(const Rect &) { this->render();
 short ToolboxScenePlatformController::measureTextWidth(const loka::core::String &value) const
 {
   return this->measureTextWidth(value, ToolboxTextFontDescriptor());
+}
+
+void ForeColor(long ink)
+{
+  port->fgColor = ink;
+  toolbox_host::foregroundColors.push_back(ink);
 }

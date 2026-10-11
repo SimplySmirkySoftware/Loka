@@ -5,7 +5,7 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
 {
   turn.settle();
   this->admitAndApplyWindows();
-  if (phase != ACTIVATION_FOREGROUND || !group_)
+  if (!this->group_)
   {
     turn.close();
     this->reclaimWindows();
@@ -20,6 +20,13 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
     {
       toolboxWindow->flushInvalidate();
     }
+  }
+  // #503: windows present in every phase; dialogs and focus stay foreground-only.
+  if (phase != ACTIVATION_FOREGROUND)
+  {
+    turn.close();
+    this->reclaimWindows();
+    return;
   }
   if (this->hasPendingDialogs())
   {

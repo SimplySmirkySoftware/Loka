@@ -125,6 +125,7 @@ void ToolboxCellContext::draw(ToolboxScenePlatformController *controller)
     short textX = static_cast<short>(drawRect.left + (rectWidth - textWidth) / 2);
     short textY = static_cast<short>(drawRect.top + (rectHeight - textHeight) / 2 + info.ascent);
     MoveTo(textX, textY);
+    loka::toolbox::ToolboxTextInkScope ink(loka::toolbox::ToolboxTextRoleColor(loka::app::SURFACE_GROUND_CONTROL));
     DrawString(text);
   }
   if (completes)
