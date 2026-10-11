@@ -533,6 +533,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
   endforeach()
 
+  foreach(_layout_path handler fallback)
+    add_test(NAME testToolboxLayout_${_layout_path}_zstack
+      COMMAND LokaToolboxBoxLayoutTests ${_layout_path} zstack)
+  endforeach()
+  foreach(_stack_axis column row)
+    add_test(NAME testToolboxLayout_derived-${_stack_axis}
+      COMMAND LokaToolboxBoxLayoutTests handler derived-${_stack_axis})
+  endforeach()
+  add_test(NAME testToolboxLayout_null-controller
+    COMMAND LokaToolboxBoxLayoutTests null-controller abort)
+
   # Production QuickDraw projection against a deterministic host OS fixture.
   add_executable(LokaToolboxAttributedTextTests
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
