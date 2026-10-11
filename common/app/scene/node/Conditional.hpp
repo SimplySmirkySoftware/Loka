@@ -83,11 +83,6 @@ namespace loka
         {
           return &this->props;
         }
-        virtual bool hasEquivalentProps(const NodeDefinitionBase &other) const;
-        virtual bool repointRetainedNodeDefinition(Node *) const
-        {
-          return false;
-        }
         virtual bool applyPropsToNode(Node *) const
         {
           return false;

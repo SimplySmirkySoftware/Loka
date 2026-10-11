@@ -1153,29 +1153,6 @@ namespace loka
         virtual NodeDefinitionBase *clone() const = 0;
         virtual NodeKind nodeKind() const = 0;
         virtual const PropsBase *propsBase() const = 0;
-        virtual bool hasEquivalentProps(const NodeDefinitionBase &other) const
-        {
-          const PropsBase *props = this->propsBase();
-          const PropsBase *otherProps = other.propsBase();
-          if (!props || !otherProps ||
-              props->propsTypeId() != otherProps->propsTypeId())
-          {
-            return false;
-          }
-          return !(*props < *otherProps) && !(*otherProps < *props);
-        }
-        /** Refreshes definition-generation borrows for a retained runtime node
-            without applying changed prop values. */
-        virtual bool repointRetainedNodeDefinition(Node *node) const
-        {
-          if (!this->isCompatibleWithNode(node))
-          {
-            return false;
-          }
-          node->setNodeTag(this->nodeTag());
-          node->setNativeLifetimeHint(this->nativeLifetimeHint());
-          return true;
-        }
         virtual bool applyPropsToNode(Node *node) const = 0;
         virtual bool isCompatibleWithNode(const Node *node) const
         {

@@ -855,277 +855,6 @@ namespace loka
           return root ? root->asNestable() : 0;
         }
 
-        static NodeDefinitionBase *definitionAtIndex(
-            NodeDefinitionBase *root,
-            int index)
-        {
-          if (!root || index < 0)
-          {
-            return 0;
-          }
-          INestableDefinition *nestable = root->asNestableDefinition();
-          if (!nestable)
-          {
-            return index == 0 ? root : 0;
-          }
-          NodeDefinitionBase *definition = nestable->childrenHead();
-          while (definition && index > 0)
-          {
-            definition = definition->nextInComposition;
-            --index;
-          }
-          return definition;
-        }
-
-        static Node *nodeAtIndex(INestable *parent, int index)
-        {
-          if (!parent || index < 0)
-          {
-            return 0;
-          }
-          Node *node = parent->childrenHead();
-          while (node && index > 0)
-          {
-            node = node->nextInComposition;
-            --index;
-          }
-          return node;
-        }
-
-        static bool applyRetainedNodeDefinition(
-            Node *liveNode,
-            NodeDefinitionBase *previousDefinition,
-            NodeDefinitionBase *currentDefinition)
-        {
-          const bool equivalentProps =
-              previousDefinition->hasEquivalentProps(*currentDefinition);
-          return equivalentProps
-                     ? currentDefinition->repointRetainedNodeDefinition(liveNode)
-                     : currentDefinition->applyPropsToNode(liveNode);
-        }
-
-        static bool repointDeepEquivalentSiblings(
-            Node *liveNode,
-            NodeDefinitionBase *currentDefinition)
-        {
-          while (liveNode && currentDefinition)
-          {
-            NodeDefinitionBase *nextCurrent =
-                currentDefinition->nextInComposition;
-            IBranchPolicyScopeDefinition *scope =
-                currentDefinition->asBranchPolicyScopeDefinition();
-            if (scope)
-            {
-              currentDefinition = scope->scopedBranchDefinition();
-            }
-            if (!currentDefinition)
-            {
-              return false;
-            }
-            if (!currentDefinition->asBranchSeatDefinition())
-            {
-              if (!currentDefinition->repointRetainedNodeDefinition(liveNode))
-              {
-                return false;
-              }
-              if (!currentDefinition->isBoundary())
-              {
-                INestable *liveNestable = liveNode->asNestable();
-                INestableDefinition *currentNestable =
-                    currentDefinition->asNestableDefinition();
-                if ((liveNestable == 0) != (currentNestable == 0))
-                {
-                  return false;
-                }
-                if (liveNestable &&
-                    !repointDeepEquivalentSiblings(
-                        liveNestable->childrenHead(),
-                        currentNestable->childrenHead()))
-                {
-                  return false;
-                }
-              }
-            }
-            liveNode = liveNode->nextInComposition;
-            currentDefinition = nextCurrent;
-          }
-          return liveNode == 0 && currentDefinition == 0;
-        }
-
-        bool applyRetainedDefinitionTree(ComponentContext &context,
-                                         Node *liveNode,
-                                         NodeDefinitionBase *previousDefinition,
-                                         NodeDefinitionBase *currentDefinition)
-        {
-          if (!liveNode || !previousDefinition || !currentDefinition)
-          {
-            return false;
-          }
-          if (currentDefinition->asBranchSeatDefinition())
-          {
-            return true;
-          }
-          if (currentDefinition->isBoundary() || liveNode->asBoundary())
-          {
-            return applyRetainedNodeDefinition(
-                liveNode, previousDefinition, currentDefinition);
-          }
-
-          // Descendant reconciliation uses definitions and the retained child
-          // chain, not this node's current props. Every successful descent
-          // applies this node last so a child refusal leaves it untouched.
-          INestable *liveNestable = liveNode->asNestable();
-          INestableDefinition *previousNestable =
-              previousDefinition->asNestableDefinition();
-          INestableDefinition *currentNestable =
-              currentDefinition->asNestableDefinition();
-          if (!liveNestable || !previousNestable || !currentNestable)
-          {
-            return liveNestable == 0 &&
-                   previousNestable == 0 &&
-                   currentNestable == 0 &&
-                   applyRetainedNodeDefinition(
-                       liveNode, previousDefinition, currentDefinition);
-          }
-
-          NodeCompositionDiff childDiff;
-          if (!detail::buildChildDiffByTag(previousNestable,
-                                           currentNestable,
-                                           childDiff))
-          {
-            if (detail::haveDeepEquivalentChildren(previousNestable,
-                                                   currentNestable))
-            {
-              if (!repointDeepEquivalentSiblings(
-                      liveNestable->childrenHead(),
-                      currentNestable->childrenHead()))
-              {
-                return false;
-              }
-              return applyRetainedNodeDefinition(
-                  liveNode, previousDefinition, currentDefinition);
-            }
-
-            BoundaryLocalRebuildPlan replaceAllPlan;
-            if (!this->buildParkedBranchReentryPlan(
-                    context,
-                    liveNode,
-                    *liveNestable,
-                    *currentNestable,
-                    replaceAllPlan,
-                    RETAINED_CHILD_PLAN_REPLACE_ALL))
-            {
-              return false;
-            }
-            std::vector<Node *> retainedChildren;
-            if (!this->applyLocalRebuildPlan(
-                    context,
-                    *liveNestable,
-                    replaceAllPlan,
-                    retainedChildren,
-                    false))
-            {
-              return false;
-            }
-            return applyRetainedNodeDefinition(
-                liveNode, previousDefinition, currentDefinition);
-          }
-          if (childDiff.empty())
-          {
-            return applyRetainedNodeDefinition(
-                liveNode, previousDefinition, currentDefinition);
-          }
-
-          if (childDiff.isCompatibleRetainOnly())
-          {
-            for (NodeCompositionDiff::Entry *entry = childDiff.entriesHead();
-                 entry;
-                 entry = entry->nextInComposition)
-            {
-              NodeDefinitionBase *previousChild = definitionAtIndex(
-                  previousDefinition, entry->previousIndex);
-              NodeDefinitionBase *currentChild = definitionAtIndex(
-                  currentDefinition, entry->currentIndex);
-              if (!previousChild || !currentChild)
-              {
-                return false;
-              }
-              if (currentChild->asBranchSeatDefinition())
-              {
-                continue;
-              }
-              Node *liveChild = nodeAtIndex(
-                  liveNestable, entry->currentIndex);
-              if (!this->applyRetainedDefinitionTree(
-                      context, liveChild, previousChild, currentChild))
-              {
-                return false;
-              }
-            }
-            return applyRetainedNodeDefinition(
-                liveNode, previousDefinition, currentDefinition);
-          }
-
-          BoundaryLocalRebuildPlan plan;
-          if (!this->buildParkedBranchReentryPlan(
-                  context,
-                  liveNode,
-                  *liveNestable,
-                  *currentNestable,
-                  plan,
-                  RETAINED_CHILD_PLAN_PRESERVE_MATCHES))
-          {
-            return false;
-          }
-          std::vector<Node *> retainedChildren;
-          if (!this->applyLocalRebuildPlan(
-                  context, *liveNestable, plan, retainedChildren, false))
-          {
-            return false;
-          }
-
-          for (NodeCompositionDiff::Entry *entry = childDiff.entriesHead();
-               entry;
-               entry = entry->nextInComposition)
-          {
-            if (entry->action != NodeCompositionDiff::ACTION_RETAIN)
-            {
-              continue;
-            }
-            NodeDefinitionBase *previousChild = definitionAtIndex(
-                previousDefinition, entry->previousIndex);
-            NodeDefinitionBase *currentChild = definitionAtIndex(
-                currentDefinition, entry->currentIndex);
-            if (!previousChild || !currentChild ||
-                currentChild->asBranchSeatDefinition())
-            {
-              if (currentChild && currentChild->asBranchSeatDefinition())
-              {
-                continue;
-              }
-              return false;
-            }
-            if (entry->currentIndex < 0 ||
-                static_cast<size_t>(entry->currentIndex) >= plan.entries.size())
-            {
-              return false;
-            }
-            BoundaryLocalRebuildPlanEntry &planEntry =
-                plan.entries[static_cast<size_t>(entry->currentIndex)];
-            if (!planEntry.keepsLiveNode() ||
-                !this->applyRetainedDefinitionTree(
-                    context,
-                    planEntry.node,
-                    previousChild,
-                    currentChild))
-            {
-              return false;
-            }
-          }
-          return applyRetainedNodeDefinition(
-              liveNode, previousDefinition, currentDefinition);
-        }
-
         /** Local rebuilds allocate heap nodes but retain the caller's logical
             owner and this Boundary's storage/lifetime context. Refusal never
             yields a publishable partial root. */
@@ -1277,12 +1006,10 @@ namespace loka
         bool applyLocalRebuildPlan(ComponentContext &context,
                                    INestable &root,
                                    BoundaryLocalRebuildPlan &plan,
-                                   std::vector<Node *> &retainedChildren,
-                                   bool applyRetainedDefinitions = true)
+                                   std::vector<Node *> &retainedChildren)
         {
-          // Structure self-report: the root-level diff cannot see what this
-          // plan is about to do, so any entry that materializes or retires a
-          // node must be declared here or the cycle's apply claims paint-only
+          // Any plan entry that materializes or retires a node must report
+          // structure work here or the cycle's apply claims paint-only
           // and skip-capable platforms never run the ensure pass (#277).
           for (size_t i = 0; i < plan.entries.size(); ++i)
           {
@@ -1318,7 +1045,7 @@ namespace loka
               {
                 return false;
               }
-              if (!reconciled && applyRetainedDefinitions &&
+              if (!reconciled &&
                   !retainedDefinition->asBranchSeatDefinition() &&
                   !retainedDefinition->applyPropsToNode(plan.entries[i].node))
               {
@@ -1366,18 +1093,11 @@ namespace loka
           return true;
         }
 
-        enum RetainedChildPlanMode
-        {
-          RETAINED_CHILD_PLAN_PRESERVE_MATCHES,
-          RETAINED_CHILD_PLAN_REPLACE_ALL
-        };
-
         bool buildParkedBranchReentryPlan(ComponentContext &context,
                                           Node *runtimeParent,
                                           INestable &root,
                                           INestableDefinition &desiredRoot,
                                           BoundaryLocalRebuildPlan &plan,
-                                          RetainedChildPlanMode mode,
                                           BoundaryBranchSeatState *seatScope = 0)
         {
           plan.clear();
@@ -1410,12 +1130,8 @@ namespace loka
             BoundaryBranchSeatRuntimeEntry seatRuntime;
             const bool hasSeatRuntime =
                 seatPlan && this->branchSeats_.queryRuntime(seatPlan->key, seatRuntime);
-            Node *existing =
-                mode == RETAINED_CHILD_PLAN_REPLACE_ALL
-                    ? (slot < liveChildren.size() ? liveChildren[slot] : 0)
-                    : (hasSeatRuntime ? seatRuntime.active : 0);
-            if (mode == RETAINED_CHILD_PLAN_PRESERVE_MATCHES &&
-                !seatPlan && !existing &&
+            Node *existing = hasSeatRuntime ? seatRuntime.active : 0;
+            if (!seatPlan && !existing &&
                 effectiveDefinition->nodeTag() != NODE_TAG_NONE)
             {
               for (size_t i = 0; i < liveChildren.size(); ++i)
@@ -1428,14 +1144,13 @@ namespace loka
                 }
               }
             }
-            else if (mode == RETAINED_CHILD_PLAN_PRESERVE_MATCHES &&
-                     !seatPlan && !existing && slot < liveChildren.size() &&
+            else if (!seatPlan && !existing && slot < liveChildren.size() &&
                      liveChildren[slot] && liveChildren[slot]->nodeTag() == NODE_TAG_NONE)
             {
               existing = liveChildren[slot];
             }
 
-            if (mode == RETAINED_CHILD_PLAN_PRESERVE_MATCHES && existing &&
+            if (existing &&
                 (seatPlan || effectiveDefinition->isCompatibleWithNode(existing)))
             {
               plan.entries.push_back(
@@ -1540,7 +1255,7 @@ namespace loka
 
           BoundaryLocalRebuildPlan plan;
           if (!this->buildParkedBranchReentryPlan(
-                  context, node, *root, *desiredRoot, plan, RETAINED_CHILD_PLAN_PRESERVE_MATCHES, seatScope))
+                  context, node, *root, *desiredRoot, plan, seatScope))
           {
             return false;
           }

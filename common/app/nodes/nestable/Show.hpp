@@ -86,25 +86,6 @@ namespace loka
       {
         return &this->props_;
       }
-      virtual bool hasEquivalentProps(const scene::NodeDefinitionBase &other) const
-      {
-        const scene::PropsBase *otherProps = other.propsBase();
-        if (!otherProps || otherProps->propsTypeId() != this->props_.propsTypeId())
-        {
-          return false;
-        }
-        const scene::ConditionalProps &otherConditionalProps =
-            static_cast<const scene::ConditionalProps &>(*otherProps);
-        scene::IBranchSeatDefinition *otherSeat =
-            const_cast<scene::NodeDefinitionBase &>(other).asBranchSeatDefinition();
-        return this->props_.condition == otherConditionalProps.condition && otherSeat &&
-               this->truePolicies_.destroyOnDetach == otherSeat->armPolicies(1).destroyOnDetach;
-      }
-      virtual bool repointRetainedNodeDefinition(scene::Node *node) const
-      {
-        (void)node;
-        return false;
-      }
       virtual bool applyPropsToNode(scene::Node *node) const
       {
         (void)node;

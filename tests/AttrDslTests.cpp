@@ -598,8 +598,8 @@ void testLokaAttrDslV1Core()
     loka::app::Stack first(&firstAxis);
     loka::app::Stack same(&firstAxis);
     loka::app::Stack different(&secondAxis);
-    const bool sameSource = first.hasEquivalentProps(same);
-    const bool differentSource = first.hasEquivalentProps(different);
+    const bool sameSource = !(first.props < same.props) && !(same.props < first.props);
+    const bool differentSource = !(first.props < different.props) && !(different.props < first.props);
     const loka::app::StackAxis liveAxis = first.props.effectiveAxis();
     LOKA_VERIFY(sameSource);
     LOKA_VERIFY(!differentSource);
@@ -613,8 +613,8 @@ void testLokaAttrDslV1Core()
     loka::app::Box box = loka::app::Box().width(&firstWidth);
     loka::app::Box copied(box);
     loka::app::Box other = loka::app::Box().width(&secondWidth);
-    const bool sameWidthSource = box.hasEquivalentProps(copied);
-    const bool differentWidthSource = box.hasEquivalentProps(other);
+    const bool sameWidthSource = !(box.props < copied.props) && !(copied.props < box.props);
+    const bool differentWidthSource = !(box.props < other.props) && !(other.props < box.props);
     const int liveWidth = copied.props.effectiveWidth();
     LOKA_VERIFY(sameWidthSource);
     LOKA_VERIFY(!differentWidthSource);
