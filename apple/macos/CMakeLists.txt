@@ -132,6 +132,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/MacApp.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowAdmissionTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowFrameClampTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacWindowResizeTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacOpenFileDialogTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacWindow.mm
     ${PROJECT_SOURCE_DIR}/apple/common/cocoa/src/AppleString.mm

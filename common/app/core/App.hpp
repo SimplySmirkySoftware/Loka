@@ -98,7 +98,7 @@ protected:
   virtual void bootstrapWindowRefused(Window *window);
   /** The bootstrap opened no window at all: every static WindowDef was refused,
       the roster seeded nothing, or every launch create was refused. Called once,
-      after launch admission, whether or not a document seat exists. The default
+      after the single launch walk, when windowlessAfterLaunch() holds. The default
       quits (quit()); Toolbox reports out of memory and quits without returning;
       a rail that cannot post a quit before its loop exists answers in its own run. */
   virtual void bootstrapWindowless();
@@ -118,6 +118,15 @@ protected:
   /** Pre-wait progress: close rows, a moved roster revision, or serviceable
       Window completion work. */
   bool hasPendingWindowAdmission() const;
+  /** The launch walk left no window and no document that could become one.
+      Read by run() to report through bootstrapWindowless and by a rail that
+      must not enter its loop for nothing (macOS); one home so the two cannot
+      disagree. A document a launch factory opened is pending, not windowless:
+      the runtime admission clock admits it (#1233). The roster count is the
+      fact, not the seat key: a refused seed drops itself through windowGone,
+      which moves the revision past the walk's snapshot, so the key reports a
+      re-walk that would attempt nothing. */
+  bool windowlessAfterLaunch() const;
   /** Completion rails skip windows whose close has already been requested. */
   bool isWindowClosePending(Window *window) const;
   /** Drains one queue snapshot outside an open split tail; requests made during
