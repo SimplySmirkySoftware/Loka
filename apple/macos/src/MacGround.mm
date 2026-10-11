@@ -89,6 +89,11 @@ namespace loka
       return false;
     }
 
+    NSColor *MacLabelTextColor()
+    {
+      return [NSColor controlTextColor];
+    }
+
     void MacPaintGround(app::SurfaceGround ground, NSRect rect)
     {
       NSColor *color = nil;

@@ -145,15 +145,17 @@ bool MacAttributedTextContext::Projection::build(const loka::app::AttributedStri
   {
     const loka::app::TextStyle &style = value.segment(index).style;
     NSFont *font = (NSFont *)controller.textFont(style);
+    // An unset run carries the label's native default explicitly, so it never
+    // depends on how an AppKit version fills attributes the string leaves out.
     NSColor *color = nil;
-    const bool hasColor = loka::macos::QueryMacTextColor(style.color_, color);
+    if (!loka::macos::QueryMacTextColor(style.color_, color))
+      color = loka::macos::MacLabelTextColor();
     NSString *run = NextRun(value, index);
     if (!font || !run)
       return false;
     const NSUInteger length = [run length];
     [result addAttribute:NSFontAttributeName value:font range:NSMakeRange(offset, length)];
-    if (hasColor)
-      [result addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(offset, length)];
+    [result addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(offset, length)];
     offset += length;
   }
   NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];

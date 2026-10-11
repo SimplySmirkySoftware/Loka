@@ -217,7 +217,8 @@ namespace
     NSAttributedString *value = [label attributedStringValue];
     LOKA_VERIFY([[value string] isEqualToString:@"RUB"]);
     LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0] isEqual:expected(first)]);
-    LOKA_VERIFY([value attribute:NSForegroundColorAttributeName atIndex:1 effectiveRange:0] == nil);
+    LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:1
+                   effectiveRange:0] isEqual:loka::macos::MacLabelTextColor()]);
     LOKA_VERIFY([[value attribute:NSForegroundColorAttributeName atIndex:2
                    effectiveRange:0] isEqual:expected(TEXT_COLOR_BLUE)]);
   }
@@ -282,7 +283,7 @@ void testMacTextColorStaticTransition()
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
   NSColor *nativeDefault = [freshLabel() textColor];
-  LOKA_VERIFY([nativeDefault isEqual:[NSColor controlTextColor]]);
+  LOKA_VERIFY([nativeDefault isEqual:loka::macos::MacLabelTextColor()]);
   std::printf("[default] fresh label=%s\n", [[nativeDefault description] UTF8String]);
   NSView *parent = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 160, 100)];
   NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 160, 100)

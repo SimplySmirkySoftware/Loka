@@ -170,7 +170,7 @@ bool MacTextContext::applyStyle(bool initial)
     // A fresh initWithFrame label already has this native default. Retained
     // set -> unset must restore it (fresh-label equality is pinned in tests).
     if (!initial)
-      color = [NSColor controlTextColor];
+      color = loka::macos::MacLabelTextColor();
   }
   if (color && ![[label textColor] isEqual:color])
   {

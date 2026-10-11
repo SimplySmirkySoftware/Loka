@@ -21,6 +21,11 @@ namespace loka
     /** Standard palette text row, resolved by AppKit in the drawing appearance. */
     NSColor *MacTextRoleColor();
 
+    /** The text color a fresh Loka label (initWithFrame:, unbezeled, no
+        background) starts with. Unset text re-applies it, on plain labels and
+        as the explicit foreground of unset attributed runs. */
+    NSColor *MacLabelTextColor();
+
     /** Paints an answering ground. Declining roles assert in debug and paint
         nothing in release. */
     void MacPaintGround(app::SurfaceGround ground, NSRect rect);
