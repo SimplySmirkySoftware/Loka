@@ -64,7 +64,13 @@ int main()
   cell.layout(&controller, seat); sibling.layout(&controller, other);
   const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
   LOKA_VERIFY(cell.queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+  SetPort(&window.port);
+  window.port.fgColor = redColor;
   cell.draw(&controller); sibling.draw(&controller);
+  LOKA_VERIFY(toolbox_host::draws.size() == 2);
+  LOKA_VERIFY(toolbox_host::draws[0].ink == blackColor);
+  LOKA_VERIFY(toolbox_host::draws[1].ink == blackColor);
+  LOKA_VERIFY(window.port.fgColor == redColor);
   PaintQuery unsettled = query;
   unsettled.placement = PLACEMENT_PENDING;
   LOKA_VERIFY(cell.queryPaintDamage(unsettled).kind == PAINT_ANSWER_REFUSED);

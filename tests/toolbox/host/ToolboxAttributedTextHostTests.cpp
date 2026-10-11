@@ -109,6 +109,31 @@ namespace
     std::printf("[pin] %s\n", name);
     std::fflush(stdout);
   }
+  void InkPins()
+  {
+    Pin("AttributedSpanInkAndEllipsisRestore");
+    ToolboxWindow window;
+    ToolboxScenePlatformController controller(&window);
+    window.port.fgColor = greenColor;
+    ToolboxAttributedTextTable table;
+    const AttributedString value = Styled("Red", Red) + Styled("unset", TextStyle()) + Styled("Blue", Blue);
+    toolbox_host::reset();
+    LOKA_VERIFY(table.build(value, BlockStyle(), 200, controller));
+    LOKA_VERIFY(table.draw(0, 0, controller, BlockStyle(), 200));
+    LOKA_VERIFY(toolbox_host::draws.size() == 3);
+    LOKA_VERIFY(toolbox_host::draws[0].ink == redColor);
+    LOKA_VERIFY(toolbox_host::draws[1].ink == blackColor);
+    LOKA_VERIFY(toolbox_host::draws[2].ink == blueColor);
+    LOKA_VERIFY(window.port.fgColor == greenColor);
+    toolbox_host::reset();
+    const BlockStyle ellipsis = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    LOKA_VERIFY(table.build(value, ellipsis, 36, controller));
+    LOKA_VERIFY(table.draw(0, 0, controller, ellipsis, 36));
+    LOKA_VERIFY(!toolbox_host::draws.empty());
+    LOKA_VERIFY(toolbox_host::draws.back().bytes == "...");
+    LOKA_VERIFY(toolbox_host::draws.back().ink == blueColor);
+    LOKA_VERIFY(window.port.fgColor == greenColor);
+  }
   void EncodingPins()
   {
     Pin("AttributedNativeStyleWrapAndMalformedMarkup");
@@ -308,6 +333,12 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 1 || (argc > 1 && std::string(argv[1]) == "ink"))
+  {
+    InkPins();
+    if (argc > 1)
+      return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "encoding") { EncodingPins(); return 0; }
   if (argc > 1 && std::string(argv[1]) == "paint-recovery") { PaintRecoveryPins(); return 0; }
   if (argc == 1) { EncodingPins(); PaintRecoveryPins(); MemoryPin(); }

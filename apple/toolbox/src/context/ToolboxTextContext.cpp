@@ -1,3 +1,4 @@
+#include "ToolboxPaintGround.hpp"
 #include "ToolboxPropsRefresh.hpp"
 #include "app/layout/AlignedLineOffset.hpp"
 #include "app/layout/TextLineBreaker.hpp"
@@ -12,13 +13,18 @@
 namespace
 {
   /** Twin: attributed text aligns fitted lines from its cached native widths. */
-  void DrawPascalAt(short x, short y, const unsigned char *text,
-                    short availableWidth, const loka::app::BlockStyle &block)
+  void DrawPascalAt(short x,
+                    short y,
+                    const unsigned char *text,
+                    short availableWidth,
+                    const loka::app::BlockStyle &block,
+                    loka::app::TextColor color)
   {
     const loka::app::TextAlign align = block.hasAlign_ ? block.align_ : loka::app::TEXT_ALIGN_LEFT;
     const int aligned = x + (align == loka::app::TEXT_ALIGN_LEFT ? 0
         : loka::app::AlignedLineOffset(availableWidth, StringWidth(text), align));
     MoveTo(static_cast<short>(aligned > SHRT_MAX ? SHRT_MAX : aligned), y);
+    loka::toolbox::ToolboxTextInkScope ink(loka::toolbox::ToolboxTextInk(color, loka::app::SURFACE_GROUND_WINDOW));
     DrawString(text);
   }
 } // namespace
@@ -56,7 +62,12 @@ public:
   {
     return static_cast<short>(this->ranges_.size() * this->pitch_);
   }
-  void draw(const ToolboxNativeText &native, short x, short baseline, short availableWidth, const loka::app::BlockStyle &block) const
+  void draw(const ToolboxNativeText &native,
+            short x,
+            short baseline,
+            short availableWidth,
+            const loka::app::BlockStyle &block,
+            loka::app::TextColor color) const
   {
     for (std::size_t i = 0; i < this->ranges_.size(); ++i)
     {
@@ -64,7 +75,7 @@ public:
       Str255 text;
       native.copyPascal(range.start, range.end, text);
       const int y = baseline + static_cast<int>(i) * this->pitch_;
-      DrawPascalAt(x, static_cast<short>(y > SHRT_MAX ? SHRT_MAX : y), text, availableWidth, block);
+      DrawPascalAt(x, static_cast<short>(y > SHRT_MAX ? SHRT_MAX : y), text, availableWidth, block, color);
     }
   }
 
@@ -389,8 +400,12 @@ void ToolboxTextContext::paint(bool erase)
   if (this->truncationMode_ != loka::app::TEXT_TRUNCATION_ELLIPSIS
       && this->measurement_.extent().lines.isValid())
   {
-    this->measurement_.extent().lines->draw(this->projection_, this->textX_, this->textY_,
-        this->maxWidth_, this->node_->props.blockStyle_);
+    this->measurement_.extent().lines->draw(this->projection_,
+                                            this->textX_,
+                                            this->textY_,
+                                            this->maxWidth_,
+                                            this->node_->props.blockStyle_,
+                                            this->node_->props.resolvedTextStyle().color_);
     painted = true;
   }
   else if (this->wrapMode_ == loka::app::TEXT_WRAP_NONE || this->maxWidth_ <= 0
@@ -398,7 +413,12 @@ void ToolboxTextContext::paint(bool erase)
   {
     Str255 text;
     PlainDisplay(this->projection_, this->maxWidth_, this->truncationMode_, text);
-    DrawPascalAt(this->textX_, this->textY_, text, this->maxWidth_, this->node_->props.blockStyle_);
+    DrawPascalAt(this->textX_,
+                 this->textY_,
+                 text,
+                 this->maxWidth_,
+                 this->node_->props.blockStyle_,
+                 this->node_->props.resolvedTextStyle().color_);
     painted = true;
   }
   if (painted && completes)

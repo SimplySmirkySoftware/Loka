@@ -1,3 +1,4 @@
+#include "ToolboxPaintGround.hpp"
 #include "app/layout/AlignedLineOffset.hpp"
 #include "context/ToolboxAttributedTextTable.hpp"
 #include "platform/StringUTF8.hpp"
@@ -378,6 +379,8 @@ bool ToolboxAttributedTextTable::draw(short x,
       const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
       const std::size_t end = fragment.end < paintedEnd ? fragment.end : paintedEnd;
       measure.select(this->fonts_[fragment.span]);
+      loka::toolbox::ToolboxTextInkScope ink(
+          loka::toolbox::ToolboxTextInk(this->spans_[fragment.span].style.color_, SURFACE_GROUND_WINDOW));
       std::size_t start = fragment.start;
       while (start < end)
       {
@@ -399,6 +402,8 @@ bool ToolboxAttributedTextTable::draw(short x,
     {
       measure.select(this->fonts_[lastSpan]);
       MoveTo(Coordinate(cursor), Coordinate(y + line.metrics.ascent));
+      loka::toolbox::ToolboxTextInkScope ink(
+          loka::toolbox::ToolboxTextInk(this->spans_[lastSpan].style.color_, SURFACE_GROUND_WINDOW));
       DrawText("...", 0, 3);
     }
     y = Coordinate(y + line.metrics.ascent + line.metrics.descent + line.metrics.leading);

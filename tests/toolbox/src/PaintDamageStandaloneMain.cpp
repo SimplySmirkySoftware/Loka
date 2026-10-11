@@ -1,3 +1,4 @@
+#include "context/ToolboxAttributedTextTable.hpp"
 #include <cstdio>
 #include <cstring>
 #include <Fonts.h>
@@ -2509,6 +2510,56 @@ namespace
       }
     }
 
+    void checkTextInks(ToolboxScenePlatformController &controller)
+    {
+      Rect scratch;
+      SetRect(&scratch, 12, 80, 100, 112);
+      const loka::app::TextStyle inks[] = {
+          loka::app::TextStyle(White), loka::app::TextStyle(Black), loka::app::TextStyle()};
+      const char *names[] = {"ink-white-empty", "ink-black-visible", "ink-unset-visible"};
+      for (unsigned i = 0; i < 3; ++i)
+      {
+        EraseRect(&scratch);
+        TextNode text((Text("MMMM") + FontSize<12>() + inks[i]).props);
+        ToolboxTextContext context(&text, &controller);
+        LayoutState seat;
+        seat.x = 12;
+        seat.y = 80;
+        seat.width = 88;
+        seat.lineHeight = 16;
+        context.layout(&controller, seat);
+        context.repaint();
+        const int pixels = CountTextStyleInk(scratch);
+        this->recordArm(names[i], i == 0 ? pixels == 0 : pixels > 0, TEXT_WIDTH_WRITE);
+      }
+      EraseRect(&scratch);
+      // Chicago's known M advance also gives a deterministic expected log.
+      const AttributedString uniform = Styled("MMMM", FontSize<12>());
+      const AttributedString split = Styled("M", FontSize<12>() + Red) + Styled("MMM", FontSize<12>());
+      ToolboxAttributedTextTable whole, colored;
+      const bool built =
+          whole.build(uniform, BlockStyle(), 88, controller) && colored.build(split, BlockStyle(), 88, controller);
+      this->recordArm("ink-additivity-build", built, TEXT_WIDTH_WRITE);
+      if (!built)
+        return;
+      std::fprintf(
+          this->log_, "ink-widths uniform=%d split=%d\r", whole.lines().line(0).width, colored.lines().line(0).width);
+      this->recordArm(
+          "ink-additivity-width", whole.lines().line(0).width == colored.lines().line(0).width, TEXT_WIDTH_WRITE);
+      const BlockStyle wrap = BlockStyle().wrap(TEXT_WRAP_CHAR);
+      const bool wrapped = whole.build(uniform, wrap, 18, controller) && colored.build(split, wrap, 18, controller);
+      bool same = wrapped && whole.lines().lineCount() == colored.lines().lineCount();
+      if (same)
+        for (std::size_t i = 0; i < whole.lines().lineCount(); ++i)
+        {
+          const TextLineRecord &a = whole.lines().line(i), &b = colored.lines().line(i);
+          const TextFragment &ae = whole.lines().fragment(a.firstFragment + a.fragmentCount - 1);
+          const TextFragment &be = colored.lines().fragment(b.firstFragment + b.fragmentCount - 1);
+          same = same && a.width == b.width && ae.end == be.end;
+        }
+      this->recordArm("ink-additivity-wrap", same && whole.lines().lineCount() == 2, TEXT_WIDTH_WRITE);
+    }
+
     void checkTextFonts(ToolboxScenePlatformController &controller, GrafPtr port)
     {
       this->checkFontCursor(controller, port);
@@ -2616,6 +2667,7 @@ namespace
       Rect scratch;
       SetRect(&scratch, 12, 80, 76, 148);
       EraseRect(&scratch);
+      this->checkTextInks(controller);
       MoveTo(previousPen.h, previousPen.v);
     }
 

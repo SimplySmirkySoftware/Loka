@@ -25,18 +25,20 @@ namespace
     {
       this->state(this->text, String::Literal("V"));
       this->state(this->enabled, true);
+      this->state(this->style, TextStyle(Red));
       this->state(this->selection, 0);
       this->state(this->attributed, AttributedString(Styled("V", Bold)));
     }
     virtual void composeNode(NodeComposition &c)
     {
       c.declare(Column() << Cell(this->text.state()).TEST_ID("cell")
-          << Text(this->text.state()).TEST_ID("text")
-          << EditText(this->text).TEST_ID("edit")
-          << Button(this->text.state()).enabled(this->enabled.state()).TEST_ID("button")
-          << PopupMenu().selectedIndex(this->selection).enabled(this->enabled.state()).TEST_ID("popup")
-          << AttributedText(this->attributed.state()).TEST_ID("attributed"));
+                         << (Text(this->text.state()) + this->style.state()).TEST_ID("text")
+                         << EditText(this->text).TEST_ID("edit")
+                         << Button(this->text.state()).enabled(this->enabled.state()).TEST_ID("button")
+                         << PopupMenu().selectedIndex(this->selection).enabled(this->enabled.state()).TEST_ID("popup")
+                         << AttributedText(this->attributed.state()).TEST_ID("attributed"));
     }
+    NodeState<TextStyle> style;
     NodeState<String> text;
     NodeState<bool> enabled;
     NodeState<int> selection;
@@ -103,6 +105,85 @@ int main(int argc, char **argv)
   if (id == "edit") context = new ToolboxEditTextContext(node->asEditTextNode(), &controller);
   LOKA_VERIFY(context);
   node->setContext(context);
+  if (std::strcmp(mode, "text-ink") == 0)
+  {
+    window.port.fgColor = greenColor;
+    const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+    LayoutState seat = Seat();
+    node->layout(&controller, seat);
+    toolbox_host::reset();
+    context->render(&controller);
+    LOKA_VERIFY(toolbox_host::draws.size() == 1);
+    LOKA_VERIFY(toolbox_host::draws.back().ink == redColor);
+    LOKA_VERIFY(window.port.fgColor == greenColor);
+    const unsigned before = toolbox_host::invalidations;
+    {
+      StateTrackerGuard guard(root.tracker());
+      root.style.set(TextStyle());
+    }
+    scene.flushInvalidation();
+    LOKA_VERIFY(toolbox_host::invalidations > before);
+    LOKA_VERIFY(Access::lastApplyPlan(scene).hasLayoutWork());
+    seat = Seat();
+    node->layout(&controller, seat);
+    toolbox_host::reset();
+    context->render(&controller);
+    LOKA_VERIFY(toolbox_host::draws.size() == 1);
+    LOKA_VERIFY(toolbox_host::draws.back().ink == blackColor);
+    LOKA_VERIFY(window.port.fgColor == greenColor);
+    const TextStyle styles[] = {TextStyle(Blue), TextStyle(), TextStyle(Red)};
+    const long inks[] = {blueColor, blackColor, redColor};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      const TextDefinitionWithAttr replacement = Text(root.text.state()) + styles[i];
+      LOKA_VERIFY(replacement.applyPropsToNode(node));
+      LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+      const NodeDirtyFlags inputs = node->takeLayoutInputs();
+      LOKA_VERIFY((inputs & NODE_DIRTY_LAYOUT) != 0);
+      node->requeueLayoutInputs(inputs);
+      const unsigned beforeStatic = toolbox_host::invalidations;
+      // Retained props apply has completed; exercise the real rail completion.
+      BoundaryLocalApplyInfo info;
+      info.hasLayoutWork = true;
+      info.paintKind = LOCAL_APPLY_PAINT_GENERIC;
+      PlatformApplyPlan plan;
+      plan.layoutChanged = true;
+      plan.paintKind = PlatformApplyPlan::PAINT_LOCAL;
+      plan.setPrimaryRoot(&root);
+      controller.onBoundaryApply(&root, &root, info, plan);
+      LOKA_VERIFY(toolbox_host::invalidations > beforeStatic);
+      seat = Seat();
+      node->layout(&controller, seat);
+      toolbox_host::reset();
+      context->render(&controller);
+      LOKA_VERIFY(toolbox_host::draws.size() == 1);
+      LOKA_VERIFY(toolbox_host::draws.back().ink == inks[i]);
+      LOKA_VERIFY(window.port.fgColor == greenColor);
+    }
+    // Both cached wrapped lines and the capped/ellipsis path reach the ink door.
+    for (unsigned modeIndex = 0; modeIndex < 2; ++modeIndex)
+    {
+      const BlockStyle block =
+          modeIndex == 0 ? BlockStyle().wrap(TEXT_WRAP_CHAR) : BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+      const TextDefinitionWithAttr replacement = Text("MMMMMMMM") + Blue + block;
+      LOKA_VERIFY(replacement.applyPropsToNode(node));
+      seat = Seat();
+      seat.width = 20;
+      node->layout(&controller, seat);
+      toolbox_host::reset();
+      context->render(&controller);
+      LOKA_VERIFY(!toolbox_host::draws.empty());
+      if (modeIndex == 0)
+        LOKA_VERIFY(toolbox_host::draws.size() > 1);
+      else
+        LOKA_VERIFY(toolbox_host::draws.back().bytes.find("...") != std::string::npos);
+      for (unsigned i = 0; i < toolbox_host::draws.size(); ++i)
+        LOKA_VERIFY(toolbox_host::draws[i].ink == blueColor);
+      LOKA_VERIFY(window.port.fgColor == greenColor);
+    }
+    Access::unmount(scene);
+    return 0;
+  }
   if (std::strcmp(mode, "cell-encoding") == 0)
   {
     { StateTrackerGuard guard(root.tracker()); root.text.set(String::Literal("Open\xE2\x80\xA6 \xC3\xA9")); }

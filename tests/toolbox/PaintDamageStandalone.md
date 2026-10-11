@@ -77,3 +77,15 @@ sample at image-local (30, 40) is white again, with dirty flush/replay
 counters advancing and no full repaint. Removing the image path's erase leaves
 the sample black. The three new vacated phases also shift the six later
 `column_phase` audit values from 58–63 to 61–66.
+
+## Text ink pins (#1196 A2)
+
+Six new arms are predicted, pending MAME verification on both header builds.
+`ink-white-empty`, `ink-black-visible`, and `ink-unset-visible` paint the same
+`MMMM` Text into a cleared scratch seat and count black pixels. At 1 bit white
+leaves none; black and the window pair leave ink. This exercises real ForeColor.
+The additivity arms compare uniform `MMMM` against `M` and `MMM` runs split only by
+Red, logging both measured widths (predicted Chicago 12: 36), then compare line
+widths and ending offsets when wrapping at 18 pixels. The existing 139-arm
+runtime evidence remains valid for the old baseline; the predicted new log has
+145 PASS arms and requires renewal by the delegator.
