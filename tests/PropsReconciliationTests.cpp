@@ -46,7 +46,69 @@ namespace
       return node->getContext();
     }
   };
+
+  /** Exposes the existing local retained-tree path without recomposing a Boundary. */
+  class MetadataRetainedBoundary : public BoundaryNodeFor<MetadataRetainedBoundary>
+  {
+  public:
+    explicit MetadataRetainedBoundary(const BoundaryPropsFor<MetadataRetainedBoundary> &props)
+        : BoundaryNodeFor<MetadataRetainedBoundary>(props)
+    {
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(Button());
+    }
+    bool reconcile(ComponentContext &context, Button &previous, Button &current)
+    {
+      return this->applyRetainedDefinitionTree(
+          context, this->childrenHead(), &previous, &current);
+    }
+  };
 } // namespace
+
+void testMetadataOnlyRetainedReconciliationRefreshesDefinitionMetadata()
+{
+  Button previous;
+  Button current;
+  current.tag(442);
+  current.lifetimeHint(NATIVE_HINT_DESIRE_STAY);
+  LOKA_VERIFY(previous.hasEquivalentProps(current));
+  LOKA_VERIFY(current.hasEquivalentProps(previous));
+
+  ButtonHandler handler;
+  NullScenePlatformController platform;
+  LOKA_VERIFY(platform.registerNodeHandler(&handler));
+  Scene scene((Boundary<MetadataRetainedBoundary>()));
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  settle(scene);
+  MetadataRetainedBoundary *boundary = static_cast<MetadataRetainedBoundary *>(root(scene));
+  ButtonNode *button = boundary->childrenHead()->asButtonNode();
+  LOKA_VERIFY(button != 0);
+  CountingContext *context = static_cast<CountingContext *>(button->getContext());
+  LOKA_VERIFY(context != 0);
+  LOKA_VERIFY(context->calls() == 0);
+  LOKA_VERIFY(button->nodeTag() == previous.nodeTag());
+  LOKA_VERIFY(button->nativeLifetimeHint() == previous.nativeLifetimeHint());
+  LOKA_VERIFY(button->nodeTag() != current.nodeTag());
+  LOKA_VERIFY(button->nativeLifetimeHint() != current.nativeLifetimeHint());
+
+  ComponentContext componentContext;
+  componentContext.setBoundary(boundary);
+  componentContext.setStateOwner(boundary);
+  componentContext.setScene(&scene);
+  componentContext.setPlatformController(&platform);
+  // Use the reconciliation decision, not direct apply/repoint: equivalent Props
+  // must skip onPropsApplied while refreshing definition-only metadata (#442).
+  LOKA_VERIFY(boundary->reconcile(componentContext, previous, current));
+  LOKA_VERIFY(boundary->childrenHead() == button);
+  LOKA_VERIFY(button->getContext() == context);
+  LOKA_VERIFY(context->calls() == 0);
+  LOKA_VERIFY(button->nativeLifetimeHint() == current.nativeLifetimeHint());
+  LOKA_VERIFY(button->nodeTag() == current.nodeTag());
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+}
 
 void testRetainedPropsApplicationNotifiesContextExactlyOnce()
 {
