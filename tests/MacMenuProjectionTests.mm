@@ -2,6 +2,7 @@
 #include "support/TestVerify.hpp"
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
+#include "testing/MacWindowTestAccess.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -281,6 +282,24 @@ void testMacSceneDetachReleasesMenu()
   LOKA_VERIFY(fixture.observation.detaches == 1);
   LOKA_VERIFY(!fixture.observation.attachment->dispatch(fixture.observation.tag));
   LOKA_VERIFY(fixture.observation.calls == 1);
+}
+
+void testMacNativeCloseReleasesMenuBeforeReclaim()
+{
+  CocoaHost host;
+  Mounted fixture;
+  NSWindow *native = (NSWindow *)loka::dsl::testing::MacWindowTestAccess::nativeWindow(*fixture.window);
+  LOKA_VERIFY(native != nil);
+  LOKA_VERIFY(fixture.observation.attachment->dispatch(fixture.observation.tag));
+  LOKA_VERIFY(fixture.observation.calls == 1);
+  // AppKit delivers windowWillClose: to the Loka delegate. The close clears
+  // the delegate route while the Scene teardown waits for reclamation, so the
+  // close itself must release the borrowed States (#1242).
+  [native close];
+  LOKA_VERIFY(fixture.observation.detaches == 0);
+  LOKA_VERIFY(!fixture.observation.attachment->dispatch(fixture.observation.tag));
+  LOKA_VERIFY(fixture.observation.calls == 1);
+  // ~Mounted reclaims the window; Root::detachNode verifies the stripped item.
 }
 
 namespace
