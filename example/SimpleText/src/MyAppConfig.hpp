@@ -12,6 +12,7 @@ public:
   explicit SimpleTextAppConfig(PlatformContext *context)
       : AppConfigurable(context)
   {
+    // A refused seed is reported by App::bootstrapWindowless after launch admission.
     this->documents_.open(simpletext::Document());
   }
   loka::app::DocumentRoster<simpletext::Document, simpletext::kMaxDocuments> &documents()
@@ -26,7 +27,7 @@ public:
 private:
   loka::app::DocumentRoster<simpletext::Document, simpletext::kMaxDocuments> documents_;
 
-  static WindowProps documentWindow(const simpletext::Document &, void *userData)
+  static WindowProps documentWindow(loka::core::ItemId id, const simpletext::Document &, void *userData)
   {
     using namespace simpletext;
     SimpleTextAppConfig *config = static_cast<SimpleTextAppConfig *>(userData);
@@ -36,7 +37,7 @@ private:
         .title("LokaSimpleText")
         .visible(true)
         .scene(loka::app::scene::Boundary<MainNode>( //
-            MainProps().platformContext(config->getPlatformContext()).documents(&config->documents_)));
+            MainProps().platformContext(config->getPlatformContext()).documents(&config->documents_).document(id)));
   }
 };
 #endif

@@ -9,7 +9,8 @@ class NullApp : public App
 public:
   explicit NullApp(AppConfigurable *config)
       : App(config),
-        quitRequested_(false)
+        quitRequested_(false),
+        bootstrapWindowlessReported_(false)
   {
   }
 
@@ -34,6 +35,8 @@ public:
   const std::vector<Window *> &adoptedWindows() const { return this->adopted_; }
   const std::vector<Window *> &bootstrapRefusedWindows() const { return this->bootstrapRefused_; }
 
+  bool bootstrapWindowlessReported() const { return this->bootstrapWindowlessReported_; }
+
 protected:
   virtual bool windowAdopted(Window *window)
   {
@@ -44,8 +47,11 @@ protected:
   }
   virtual void bootstrapWindowRefused(Window *window) { this->bootstrapRefused_.push_back(window); }
 
+  virtual void bootstrapWindowless() { this->bootstrapWindowlessReported_ = true; }
+
 private:
   bool quitRequested_;
+  bool bootstrapWindowlessReported_;
   std::vector<Window *> adopted_;
   std::vector<Window *> bootstrapRefused_;
 };
