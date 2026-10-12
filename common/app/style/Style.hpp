@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_STYLE_STYLE_HPP
 #define LOKA_APP_STYLE_STYLE_HPP
 
+#include "app/style/TextSizeValue.hpp"
 #include "app/style/StyleVocab.hpp"
 
 namespace loka
@@ -11,11 +12,10 @@ namespace loka
     struct TextStyle
     {
       TextStyle()
-          : fontSize_(0),
+          : size_(),
             weight_(TEXT_WEIGHT_NORMAL),
             color_(TEXT_COLOR_UNSET),
             italic_(false),
-            hasFontSize_(false),
             hasWeight_(false),
             hasItalic_(false)
       {
@@ -45,11 +45,8 @@ namespace loka
       TextStyle operator+(const TextStyle &right) const
       {
         TextStyle result(*this);
-        if (right.hasFontSize_)
-        {
-          result.fontSize_ = right.fontSize_;
-          result.hasFontSize_ = true;
-        }
+        if (right.size_.isSet())
+          result.size_ = right.size_;
         if (right.hasWeight_)
         {
           result.weight_ = right.weight_;
@@ -67,12 +64,8 @@ namespace loka
 
       bool operator==(const TextStyle &other) const
       {
-        return this->fontSize_ == other.fontSize_
-               && this->weight_ == other.weight_
-               && this->italic_ == other.italic_
-               && this->hasFontSize_ == other.hasFontSize_
-               && this->hasWeight_ == other.hasWeight_
-               && this->hasItalic_ == other.hasItalic_
+        return this->size_ == other.size_ && this->weight_ == other.weight_ && this->italic_ == other.italic_
+               && this->hasWeight_ == other.hasWeight_ && this->hasItalic_ == other.hasItalic_
                && this->color_ == other.color_;
       }
 
@@ -83,14 +76,19 @@ namespace loka
 
       bool operator<(const TextStyle &other) const
       {
-        if (this->fontSize_ != other.fontSize_)
-          return this->fontSize_ < other.fontSize_;
+        // Preserve the numeric-first style order, including raw zero/negative points.
+        int points = 0;
+        int otherPoints = 0;
+        this->size_.queryPoints(points);
+        other.size_.queryPoints(otherPoints);
+        if (points != otherPoints)
+          return points < otherPoints;
         if (this->weight_ != other.weight_)
           return this->weight_ < other.weight_;
         if (this->italic_ != other.italic_)
           return this->italic_ < other.italic_;
-        if (this->hasFontSize_ != other.hasFontSize_)
-          return this->hasFontSize_ < other.hasFontSize_;
+        if (!(this->size_ == other.size_))
+          return this->size_ < other.size_;
         if (this->hasWeight_ != other.hasWeight_)
           return this->hasWeight_ < other.hasWeight_;
         if (this->hasItalic_ != other.hasItalic_)
@@ -98,13 +96,12 @@ namespace loka
         return this->color_ < other.color_;
       }
 
-      int fontSize_;
+      TextSizeValue size_;
       TextWeight weight_;
-      /** Color carries its own absence in UNSET. Existing fields keep has* flags
+      /** Color carries its own absence in UNSET. Weight and italic keep has* flags
           because their value domains have no distinct unset member. */
       TextColor color_;
       bool italic_;
-      bool hasFontSize_;
       bool hasWeight_;
       bool hasItalic_;
     };

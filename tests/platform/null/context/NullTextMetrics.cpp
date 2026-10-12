@@ -8,7 +8,9 @@ bool MeasureNullText(const loka::app::TextStyle &style,
                      const loka::app::scene::LayoutState &state,
                      NullTextMeasurement &out)
 {
-  out = NullTextMeasurement(0, static_cast<short>(style.hasFontSize_ ? style.fontSize_ : 12), 1);
+  int points = 12;
+  style.size_.queryPoints(points);
+  out = NullTextMeasurement(0, static_cast<short>(points), 1);
   if (RefuseNullTextMeasurement())
     return false;
   const loka::app::SyntheticTextWidthSource source(value ? *value : loka::core::String(), style);

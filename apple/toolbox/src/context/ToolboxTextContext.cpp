@@ -217,7 +217,7 @@ namespace
     if (!measure.valid())
       return false;
     const bool wraps = state.width > 0 && wrap != loka::app::TEXT_WRAP_NONE;
-    if (!style.hasFontSize_)
+    if (!style.size_.isSet())
     {
       geometry = TextGeometry(
           static_cast<short>(state.lineHeight - ToolboxLayoutMetrics::kControlAscentInset
@@ -237,11 +237,11 @@ namespace
       geometry.lines = ToolboxPlainTextLines::Build(native, state.width, geometry.linePitch, wrap, measure);
       if (!geometry.lines.isValid())
         return false;
-      const int extra = geometry.lines->height() - (style.hasFontSize_ ? geometry.linePitch : state.lineHeight);
+      const int extra = geometry.lines->height() - (style.size_.isSet() ? geometry.linePitch : state.lineHeight);
       if (geometry.height + extra > SHRT_MAX)
         return false;
       geometry.height = static_cast<short>(geometry.height + extra);
-      if (!style.hasFontSize_ && truncation == loka::app::TEXT_TRUNCATION_ELLIPSIS)
+      if (!style.size_.isSet() && truncation == loka::app::TEXT_TRUNCATION_ELLIPSIS)
         geometry.baselineOffset = static_cast<short>(geometry.baselineOffset + extra);
     }
     return true;

@@ -22,9 +22,11 @@ public:
   }
   short size(short portSize) const
   {
-    return this->style_.hasFontSize_
-               ? static_cast<short>(loka::app::SizeOf(this->style_.fontSize_).fontSize_)
-               : portSize;
+    int points = 0;
+    if (!this->style_.size_.queryPoints(points))
+      return portSize;
+    loka::app::SizeOf(points).size_.queryPoints(points);
+    return static_cast<short>(points);
   }
   Style face(Style portFace) const
   {
