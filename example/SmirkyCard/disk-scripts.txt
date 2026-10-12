@@ -3,6 +3,8 @@
 # Keep the readers in scripts/mame-*-disk*, scripts/release/classic-disks.py,
 # scripts/win32-standalone-flow.ps1, scripts/macos/standalone-release-stage.sh
 # and CMakeLists.txt parallel.
+# Every script stays 7-bit ASCII so Classic LokaSimpleText can open it;
+# CMakeLists.txt refuses a non-ASCII byte at configure.
 MAIN.JS
 MINES.JS
 VIEWER.JS
