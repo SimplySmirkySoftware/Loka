@@ -1,7 +1,9 @@
 #ifndef LOKA_TOOLBOX_LAYOUT_METRICS_HPP
 #define LOKA_TOOLBOX_LAYOUT_METRICS_HPP
 
-/** Toolbox-native geometry shared by layout projections and control painters. */
+/** Toolbox-native geometry shared by layout projections and control painters.
+    Each member has its out-of-class definition in
+    ToolboxPlatformLayoutHandlers.cpp; a new member adds one there too. */
 struct ToolboxLayoutMetrics
 {
   static const short kDefaultLineHeight = 12;
