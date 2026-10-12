@@ -187,7 +187,7 @@ namespace simpletext
     explicit MainNode(const MainProps &props)
         : loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>(props),
           saved_(&this->lines_.revision()),
-          answered_(&props.documents()->closeAsked()),
+          answered_(&props.documents()->closeAsked(), loka::app::CloseAsk::none()),
           openFlow_(*this),
           saveFlow_(*this)
     {
@@ -223,8 +223,11 @@ namespace simpletext
     {
       this->props.assertInitialized();
       t.actions(this->commands_, this, &MainNode::onCommand);
+      // Immediate: a request published before this node mounted (a document
+      // opened and asked to close in one turn, a Quit that reached a row whose
+      // window was not admitted yet) is answered at attach, not lost.
       t.watch(const_cast<loka::core::State<loka::app::CloseAsk> &>(this->props.documents()->closeAsked()),
-              this, &MainNode::onCloseAsked);
+              this, &MainNode::onCloseAsked, true);
       t.watch(const_cast<loka::core::State<loka::core::ListRevision> &>(this->lines_.revision()),
               this,
               static_cast<void (MainNode::*)()>(&MainNode::publishFacts));

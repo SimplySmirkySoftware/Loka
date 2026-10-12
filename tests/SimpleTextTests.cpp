@@ -961,6 +961,24 @@ void testSimpleTextCloseAskedWhileBusyIsDeclined()
   LOKA_VERIFY(config.documents().count() == 0);
 }
 
+void testSimpleTextQuitAskedBeforeMountIsAnsweredAtAttach()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId first = config.documents().idAt(0);
+  // In one turn: a new clean document is opened, the mounted one is closed by
+  // hand, and Quit asks the first row, whose window is not admitted yet.
+  const ItemId second = config.documents().open(simpletext::Document());
+  LOKA_VERIFY(!second.isNone() && config.documents().close(first) == EDIT_OK);
+  app.requestQuit();
+  LOKA_VERIFY(config.documents().closeAsked().get().id == second);
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.documents().count() == 0 && app.quitRequested());
+}
+
 void testSimpleTextCloseAskedEditedDeclinesInD0()
 {
   NullPlatformContext context;
