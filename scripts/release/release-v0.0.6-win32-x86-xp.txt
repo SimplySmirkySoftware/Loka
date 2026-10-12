@@ -1,5 +1,6 @@
 # v0.0.6 Windows x86 XP-profile standalone release allowlist (owner
-# decision 4, 2026-10-11): the same seven applications as the x64 archive,
+# decision 4, 2026-10-11): the same applications as the x64 archive,
+# SmirkyCard included (#1262 makes it build with v141),
 # built with Visual Studio 2017's v141 toolset and the xp profile (#1251),
 # subsystem 5.01 and static CRT, by scripts/release/win32-remote-stage.sh
 # (x86, xp). Windows XP is a build target; runtime on XP is claimed only where
@@ -13,4 +14,8 @@ build	build/release/win32-x86-xp/tutorial/LokaTutorialStandaloneLoopWin32.exe	Wi
 build	build/release/win32-x86-xp/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x86-XP/simpleviewer/LokaSimpleViewerWin32.exe
 build	build/release/win32-x86-xp/simpletext/LokaSimpleTextWin32.exe	Windows-x86-XP/simpletext/LokaSimpleTextWin32.exe
 git	example/ScrapbookUI/assets/ASSETS-modern.LRP	Windows-x86-XP/scrapbook/ASSETS.LRP
+build	build/release/win32-x86-xp/smirkycard/LokaSmirkyCardWin32.exe	Windows-x86-XP/smirkycard/LokaSmirkyCardWin32.exe
+git	example/SmirkyCard/MAIN.JS	Windows-x86-XP/smirkycard/MAIN.JS
+git	example/SmirkyCard/MINES.JS	Windows-x86-XP/smirkycard/MINES.JS
+git	example/SmirkyCard/VIEWER.JS	Windows-x86-XP/smirkycard/VIEWER.JS
 build	build/release/win32-x86-xp.toolchain.txt	Windows-x86-XP/TOOLCHAIN.txt
