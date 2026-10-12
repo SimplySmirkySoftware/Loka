@@ -161,7 +161,10 @@ namespace loka
           separators (isNameSeparator), trailing ones ignored. Relative text
           takes precedence over the path base. No component, an unlocated
           BASE_NONE, or refusal answers empty; application-relative items need
-          no resolution. A captured Classic name keeps a '/' inside it. */
+          no resolution. A captured Classic name keeps a '/' inside it. The
+          component travels through UTF-8, so a Win32 name holding an unpaired
+          surrogate (invalid UTF-16) comes back with U+FFFD in its place; the
+          locator itself still opens that file. */
       loka::core::String name() const
       {
         if (this->base_ == BASE_REFUSED || (this->base_ == BASE_NONE && this->locator_.empty()))
@@ -177,6 +180,11 @@ namespace loka
         std::size_t start = end;
         while (start && !isNameSeparator(bytes[start - 1]))
           --start;
+#if defined(_WIN32)
+        // A drive root ("C:" after trimming its backslash) has no component.
+        if (start == 0 && end == 2 && bytes[1] == ':')
+          return loka::core::String();
+#endif
         return loka::core::String::Utf8(bytes + start, end - start);
       }
 

@@ -244,5 +244,7 @@ void testWin32FileNameIsTheLastBackslashComponent()
   LOKA_VERIFY(loka::win32::FileFromWidePath(kTrailing, sizeof(kTrailing) / sizeof(kTrailing[0]) - 1)
                   .name()
                   .equals(loka::core::String::Literal("folder")));
+  const wchar_t kRoot[] = L"C:\\";
+  LOKA_VERIFY(loka::win32::FileFromWidePath(kRoot, sizeof(kRoot) / sizeof(kRoot[0]) - 1).name().empty());
   printf("==== [testWin32FileNameIsTheLastBackslashComponent] PASSED ====\n");
 }
