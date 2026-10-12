@@ -16,6 +16,18 @@ foreach(line IN LISTS smirkycard_disk_lines)
   endif()
 endforeach()
 
+# Classic LokaSimpleText opens 7-bit ASCII text only (TEXT_DOCUMENT_NON_ASCII),
+# and these scripts exist to be edited there, so configure refuses any byte
+# outside printable ASCII, tab, CR and LF.
+foreach(script IN LISTS SMIRKYCARD_DISK_SCRIPTS)
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${script}")
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/${script}" smirkycard_script_bytes)
+  string(REGEX MATCH "[^\t\r\n -~]" smirkycard_script_non_ascii "${smirkycard_script_bytes}")
+  if(NOT smirkycard_script_non_ascii STREQUAL "")
+    message(FATAL_ERROR "SmirkyCard disk script ${script} holds a non-ASCII byte; Classic LokaSimpleText could not open it")
+  endif()
+endforeach()
+
 set(SMIRKYCARD_BUILTIN_MAIN_JS ${CMAKE_CURRENT_SOURCE_DIR}/MAIN.JS)
 set(SMIRKYCARD_BUILTIN_MAIN_HEADER ${CMAKE_CURRENT_BINARY_DIR}/BuiltinMainJs.inc)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${SMIRKYCARD_BUILTIN_MAIN_JS})

@@ -1,4 +1,4 @@
-// MAIN.JS — the built-in cards. Each card is a class: the constructor
+// MAIN.JS - the built-in cards. Each card is a class: the constructor
 // declares its seats with c.state(initial); compose() returns the card's
 // tree using the Loka Node DSL names.
 card('first', class {
