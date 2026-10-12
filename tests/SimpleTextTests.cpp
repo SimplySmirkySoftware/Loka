@@ -112,7 +112,12 @@ namespace
     virtual bool openFile(const File &file, loka::platform::file::FileHandle &out) const
     {
       ++this->resolutions;
-      return NullPlatformContext::openFile(file, out);
+      if (!NullPlatformContext::openFile(file, out))
+        return false;
+      // A rail may report punctuation as part of a native display name.
+      if (file.relativePath().equals(String("punctuation.txt")))
+        out.displayPath = String("folder:name/part:leaf.txt");
+      return true;
     }
     mutable unsigned resolutions;
   };
@@ -461,16 +466,24 @@ void testSimpleTextLaunchWindowTakesTheSeat()
 
 void testSimpleTextOpenSaveAndSaveAs()
 {
-  LOKA_VERIFY(utf8(simpletext::baseName(String())) == "Untitled");
-  LOKA_VERIFY(utf8(simpletext::baseName(String("disk:folder/file\\name.txt"))) == "name.txt");
-  LOKA_VERIFY(utf8(simpletext::baseName(String("disk:folder:ReadMe"))) == "ReadMe");
-  LOKA_VERIFY(utf8(simpletext::baseName(String("/tmp/日本語.txt"))) == "日本語.txt");
   Harness h;
   LOKA_VERIFY(utf8(h.facts().title) == "Untitled" && !h.facts().edited);
   LOKA_VERIFY(h.facts().file.kind == FileChooserResult::RESULT_NONE);
+  loka::platform::file::FileHandle first, second, punctuation;
+  LOKA_VERIFY(h.context.openFile(h.file("first.txt"), first));
+  LOKA_VERIFY(h.context.openFile(h.file("second.txt"), second));
+  const File named = h.file("punctuation.txt");
+  LOKA_VERIFY(h.context.openFile(named, punctuation));
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult::File(named));
+  LOKA_VERIFY(h.facts().title.equals(punctuation.displayPath));
+  LOKA_VERIFY(utf8(h.facts().title) == "folder:name/part:leaf.txt");
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult::File(File("unresolved")));
+  LOKA_VERIFY(utf8(h.facts().title) == "Untitled");
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult());
+  LOKA_VERIFY(utf8(h.facts().title) == "Untitled");
   h.put("first.txt", "alpha\nbeta\n");
   h.open("first.txt");
-  LOKA_VERIFY(utf8(h.facts().title) == "first.txt" && !h.facts().edited);
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath) && !h.facts().edited);
   LOKA_VERIFY(h.lines().size() == 3 && h.row(0) == "alpha" && h.row(1) == "beta" && h.row(2).empty());
   h.currentIs("first.txt");
   LOKA_VERIFY(!h.hasError());
@@ -480,25 +493,25 @@ void testSimpleTextOpenSaveAndSaveAs()
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("edited")) == EDIT_OK);
   h.flush();
   LOKA_VERIFY(h.facts().edited);
-  LOKA_VERIFY(utf8(h.facts().title) == "first.txt");
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath));
   LOKA_VERIFY(h.context.resolutions == resolutions);
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_AS_DOCUMENT>()->emit();
   h.flush();
   h.choose(true, FileChooserResult::File(h.file("second.txt")));
   h.currentIs("second.txt");
-  LOKA_VERIFY(utf8(h.facts().title) == "second.txt" && !h.facts().edited);
+  LOKA_VERIFY(h.facts().title.equals(second.displayPath) && !h.facts().edited);
   LOKA_VERIFY(h.bytes("second.txt") == "edited\nbeta\n");
   LOKA_VERIFY(h.bytes("first.txt") == "alpha\nbeta\n");
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("again")) == EDIT_OK);
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();
   LOKA_VERIFY(h.bytes("second.txt") == "again\nbeta\n");
   h.flush();
-  LOKA_VERIFY(!h.facts().edited && utf8(h.facts().title) == "second.txt");
+  LOKA_VERIFY(!h.facts().edited && h.facts().title.equals(second.displayPath));
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("dirty before open")) == EDIT_OK);
   h.flush();
   LOKA_VERIFY(h.facts().edited);
   h.open("first.txt");
-  LOKA_VERIFY(utf8(h.facts().title) == "first.txt" && !h.facts().edited);
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath) && !h.facts().edited);
 
   // Use the actual admission path to pin both edges of the projected mark.
   SimpleTextAppConfig config(&h.context);
@@ -513,7 +526,7 @@ void testSimpleTextOpenSaveAndSaveAs()
   SimpleTextTestAccess::choose(main, true, FileChooserResult::File(h.file("second.txt")));
   app.tail();
   LOKA_VERIFY(!app.window(0).editedState().get());
-  LOKA_VERIFY(utf8(app.window(0).titleState().get()) == "second.txt");
+  LOKA_VERIFY(app.window(0).titleState().get().equals(second.displayPath));
   LOKA_VERIFY(lines.update(lines.at(0).id, String("window edit again")) == EDIT_OK);
   app.tail();
   LOKA_VERIFY(app.window(0).editedState().get());
@@ -543,10 +556,12 @@ void testSimpleTextNewAndSaveWithoutDestination()
   }
   {
     Harness keyed;
+    loka::platform::file::FileHandle resolved;
+    LOKA_VERIFY(keyed.context.openFile(keyed.file("first.txt"), resolved));
     const unsigned resolutions = keyed.context.resolutions;
     SimpleTextTestAccess::publish(keyed.main(), FileChooserResult::File(keyed.file("first.txt")));
     LOKA_VERIFY(keyed.context.resolutions > resolutions);
-    LOKA_VERIFY(utf8(keyed.facts().title) == "first.txt");
+    LOKA_VERIFY(keyed.facts().title.equals(resolved.displayPath));
     LOKA_VERIFY(keyed.config.documents().close(keyed.main().props.document()) == EDIT_OK);
     LOKA_VERIFY(SimpleTextTestAccess::current(keyed.main()).kind == FileChooserResult::RESULT_NONE);
     SimpleTextTestAccess::commands(keyed.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();

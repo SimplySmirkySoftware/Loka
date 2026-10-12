@@ -28,18 +28,6 @@ namespace simpletext
 {
   typedef loka::app::FileChooserResult Choice;
 
-  static loka::core::String baseName(const loka::core::String &displayPath)
-  {
-    const loka::core::StringBuffer text = displayPath.bufferWithEncoding(loka::core::StringEncodingUtf8);
-    std::size_t start = 0;
-    for (std::size_t i = 0; i < text.length(); ++i)
-      if (text.characterAt(i) == '/' || text.characterAt(i) == '\\' || text.characterAt(i) == ':')
-        start = i + 1;
-    if (start == text.length())
-      return loka::core::String::Literal("Untitled");
-    return loka::core::String::Utf8(static_cast<const char *>(text.data()) + start, text.length() - start);
-  }
-
   /** The roster owns the destination and its window's chrome facts. */
   struct Document : loka::app::DocumentFacts
   {
@@ -470,7 +458,7 @@ namespace simpletext
         {
           loka::platform::file::FileHandle handle;
           if (this->props.platformContext()->openFile(file.item, handle))
-            title = baseName(handle.displayPath);
+            title = handle.displayPath;
         }
       }
       const loka::core::ListEditResult result =
