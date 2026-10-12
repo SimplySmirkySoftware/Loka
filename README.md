@@ -1,9 +1,9 @@
 # Loka
 
-[![Linux CI](https://github.com/cubenoy22/Loka/actions/workflows/linux.yml/badge.svg)](https://github.com/cubenoy22/Loka/actions/workflows/linux.yml)
-[![macOS CI](https://github.com/cubenoy22/Loka/actions/workflows/macos.yml/badge.svg)](https://github.com/cubenoy22/Loka/actions/workflows/macos.yml)
-[![Windows CI](https://github.com/cubenoy22/Loka/actions/workflows/windows.yml/badge.svg)](https://github.com/cubenoy22/Loka/actions/workflows/windows.yml)
-[![Toolbox Build CI](https://github.com/cubenoy22/Loka/actions/workflows/toolbox.yml/badge.svg)](https://github.com/cubenoy22/Loka/actions/workflows/toolbox.yml)
+[![Linux CI](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/linux.yml/badge.svg)](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/linux.yml)
+[![macOS CI](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/macos.yml/badge.svg)](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/macos.yml)
+[![Windows CI](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/windows.yml/badge.svg)](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/windows.yml)
+[![Toolbox Build CI](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/toolbox.yml/badge.svg)](https://github.com/SimplySmirkySoftware/Loka/actions/workflows/toolbox.yml)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/Hero-dark.svg">
@@ -13,7 +13,7 @@
 
 > [!IMPORTANT]
 > The current release is
-> [v0.0.6](https://github.com/cubenoy22/Loka/releases/tag/v0.0.6), a text
+> [v0.0.6](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.6), a text
 > release with TextEditor on every rail, styled and attributed text,
 > Scene-owned menus and commands, one window per document, and text color.
 > SimpleText, a one-document-per-window plain-text editor, joins the examples.
@@ -101,9 +101,9 @@ Status terms:
 
 | Environment | Status | Notes |
 | --- | --- | --- |
-| Modern Windows / Win32 | `active` | Native Win32 projection path. The 0.0.6 candidate's x86 XP archive was runtime-verified on Windows XP on a Sony VAIO P (real hardware, 2026-10-12; [#1259](https://github.com/cubenoy22/Loka/pull/1259)). |
-| macOS / Cocoa | `active` | Native macOS projection path. Mac OS X 10.4 Tiger or newer and PowerPC G3 or newer are supported targets. The 0.0.6 candidate's UB1 archive was runtime-verified on Tiger on a PowerBook G3 “Pismo” (real hardware, 2026-10-12; [#1259](https://github.com/cubenoy22/Loka/pull/1259)). See the [scoped macOS evidence](docs/environments.md#verification-status-by-target), including the 10.13 Japanese-input crash. |
-| Classic Mac OS / Toolbox | `active` | Built through Retro68 for System 7 or later on 68k and PowerPC-style Classic targets.<br>Practical mainstream target: 68030-class systems and later (and PPC601 / 603e-class PowerPC Macs). Low-end 68k (68000 / 68020) stays an important constraint and validation path.<br>The 0.0.1-generation examples are all runtime-verified on a 68030 PowerBook 180c (33 MHz, 4 MB RAM) with no 68k-specific optimization pass. The 0.0.5 generation (all examples plus SmirkyCard) was runtime-verified on a PowerBook 180c (68030 / 33 MHz, 8 MB) on 2026-09-16. (The record — candidate, configuration, rig, result, limits — is in the 0.0.5 release notes and its release PR.) The 0.0.6 candidate's Classic sets were runtime-verified on a PowerBook 550c (68040, Mac OS 7.6.1 Japanese), a PowerBook 1400c (PowerPC 603e, Mac OS 8.6) and a PowerBook G3 PDQ (Mac OS 8.6), all real hardware, on 2026-10-12 ([#1259](https://github.com/cubenoy22/Loka/pull/1259)). LazyList, the windowed-list measurement bench, still feels slow on the 68030 180c; treat it as a benchmark, comfortable from PowerPC-class machines. |
+| Modern Windows / Win32 | `active` | Native Win32 projection path. The 0.0.6 candidate's x86 XP archive was runtime-verified on Windows XP on a Sony VAIO P (real hardware, 2026-10-12; [#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)). |
+| macOS / Cocoa | `active` | Native macOS projection path. Mac OS X 10.4 Tiger or newer and PowerPC G3 or newer are supported targets. The 0.0.6 candidate's UB1 archive was runtime-verified on Tiger on a PowerBook G3 “Pismo” (real hardware, 2026-10-12; [#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)). See the [scoped macOS evidence](docs/environments.md#verification-status-by-target), including the 10.13 Japanese-input crash. |
+| Classic Mac OS / Toolbox | `active` | Built through Retro68 for System 7 or later on 68k and PowerPC-style Classic targets.<br>Practical mainstream target: 68030-class systems and later (and PPC601 / 603e-class PowerPC Macs). Low-end 68k (68000 / 68020) stays an important constraint and validation path.<br>The 0.0.1-generation examples are all runtime-verified on a 68030 PowerBook 180c (33 MHz, 4 MB RAM) with no 68k-specific optimization pass. The 0.0.5 generation (all examples plus SmirkyCard) was runtime-verified on a PowerBook 180c (68030 / 33 MHz, 8 MB) on 2026-09-16. (The record — candidate, configuration, rig, result, limits — is in the 0.0.5 release notes and its release PR.) The 0.0.6 candidate's Classic sets were runtime-verified on a PowerBook 550c (68040, Mac OS 7.6.1 Japanese), a PowerBook 1400c (PowerPC 603e, Mac OS 8.6) and a PowerBook G3 PDQ (Mac OS 8.6), all real hardware, on 2026-10-12 ([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)). LazyList, the windowed-list measurement bench, still feels slow on the 68030 180c; treat it as a benchmark, comfortable from PowerPC-class machines. |
 | Linux / WSL | `headless` | Used today for core and Flow DSL tests. Full native UI projection is planned, not part of `0.0.7`. |
 | iOS / iPadOS, Linux desktop UI, Windows Mobile-class systems, game-oriented backends | `planned` | Future ports should reuse the same Node / Boundary / State / Flow model rather than adding platform-specific application models. |
 

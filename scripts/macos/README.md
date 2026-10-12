@@ -177,14 +177,14 @@ macOS bundle targets use the project-owned
 It declares `NSHighResolutionCapable` explicitly for legacy and modern SDKs.
 The 0.0.6 candidate's Tiger UB1 set (`ppc;i386`) is build-verified with this
 template on Mavericks with Xcode 3.2.6, GCC 4.0 and the 10.4u SDK
-([#1253](https://github.com/cubenoy22/Loka/pull/1253),
-[#1262](https://github.com/cubenoy22/Loka/pull/1262)).
+([#1253](https://github.com/SimplySmirkySoftware/Loka/pull/1253),
+[#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262)).
 The owner ran its ppc slice on Mac OS X 10.4 on a PowerBook G3 “Pismo”
 (real hardware) on 2026-10-12. Result: OK.
 The owner exercised the interactive apps by hand.
 On the same date, its ppc slice ran on Mac OS X 10.5.8 on an emulated
 PowerPC G4 (QEMU): runtime-verified for the five loops; the three interactive
-apps startup only ([release PR #1259](https://github.com/cubenoy22/Loka/pull/1259)).
+apps startup only ([release PR #1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
 See the [archive results](../../docs/environments.md#verification-status-by-target)
 for the scope of these checks.
 Retina runtime verification remains separate.
@@ -229,9 +229,9 @@ builds linked against the 10.14 SDK or later.
     At the 0.0.6 candidate, the Tiger profile is build-verified with eight
     bundles, including SimpleViewer, SimpleText and SmirkyCard, each containing
     ppc and i386 slices
-    ([#1253](https://github.com/cubenoy22/Loka/pull/1253),
-    [#1262](https://github.com/cubenoy22/Loka/pull/1262),
-    [release PR #1259](https://github.com/cubenoy22/Loka/pull/1259)).
+    ([#1253](https://github.com/SimplySmirkySoftware/Loka/pull/1253),
+    [#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262),
+    [release PR #1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
     SimpleViewer's new bundle packaging remains pending build verification
     on that route for the Leopard profile. Running the Tiger archive on
     Leopard does not renew the Leopard-profile build evidence.
