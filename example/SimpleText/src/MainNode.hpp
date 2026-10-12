@@ -187,6 +187,7 @@ namespace simpletext
     explicit MainNode(const MainProps &props)
         : loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>(props),
           saved_(&this->lines_.revision()),
+          answered_(&props.documents()->closeAsked()),
           openFlow_(*this),
           saveFlow_(*this)
     {
@@ -222,6 +223,8 @@ namespace simpletext
     {
       this->props.assertInitialized();
       t.actions(this->commands_, this, &MainNode::onCommand);
+      t.watch(const_cast<loka::core::State<loka::app::CloseAsk> &>(this->props.documents()->closeAsked()),
+              this, &MainNode::onCloseAsked);
       t.watch(const_cast<loka::core::State<loka::core::ListRevision> &>(this->lines_.revision()),
               this,
               static_cast<void (MainNode::*)()>(&MainNode::publishFacts));
@@ -288,7 +291,7 @@ namespace simpletext
         this->openDocument();
         break;
       case simpletext::CLOSE_DOCUMENT:
-        this->closeDocument();
+        this->decideClose(loka::app::CloseAsk::none());
         break;
       case simpletext::SAVE_DOCUMENT:
         this->saveDocument();
@@ -310,17 +313,35 @@ namespace simpletext
           this->error_.set(loka::core::String::Literal("Cannot open another document window."));
       }
     }
-    void closeDocument()
+    void onCloseAsked()
     {
-      if (this->operation_.get() == NONE)
+      const loka::app::CloseAsk ask = this->props.documents()->closeAsked().get();
+      if (ask.id != this->props.document() || this->answered_.matches())
+        return;
+      this->answered_ = loka::app::scene::KeySnapshot<loka::app::CloseAsk>(&this->props.documents()->closeAsked());
+      this->decideClose(ask);
+    }
+    void decideClose(const loka::app::CloseAsk &ask)
+    {
+      if (this->operation_.get() != NONE)
       {
-        loka::core::StateTrackerGuard guard(this->tracker());
-        // A second Close before the next admission (Win32 drains queued
-        // accelerators before its tail) finds the document already gone.
-        const loka::core::ListEditResult result = this->props.documents()->close(this->props.document());
-        assert(result == loka::core::EDIT_OK || result == loka::core::EDIT_ID_NOT_FOUND);
-        (void)result;
+        if (!ask.id.isNone())
+          this->props.documents()->declineClose(ask);
+        return;
       }
+      const Document *entry = this->props.documents()->find(this->props.document());
+      if (entry && entry->edited)
+      {
+        // d3 replaces this edited-document decline with CONFIRM_CLOSE.
+        if (!ask.id.isNone())
+          this->props.documents()->declineClose(ask);
+        return;
+      }
+      loka::core::StateTrackerGuard guard(this->tracker());
+      // A second Close before admission finds the document already gone.
+      const loka::core::ListEditResult result = this->props.documents()->close(this->props.document());
+      assert(result == loka::core::EDIT_OK || result == loka::core::EDIT_ID_NOT_FOUND);
+      (void)result;
     }
     void openDocument()
     {
@@ -468,6 +489,7 @@ namespace simpletext
     loka::app::scene::Reported<loka::app::LineCursor> cursor_;
     loka::app::scene::Request<loka::app::LineCursor> caret_;
     loka::app::scene::KeySnapshot<loka::core::ListRevision> saved_;
+    loka::app::scene::KeySnapshot<loka::app::CloseAsk> answered_;
     loka::app::scene::NodeState<Operation> operation_;
     loka::app::scene::NodeState<Choice> openResult_, saveResult_;
     loka::app::scene::NodeState<loka::core::String> error_;

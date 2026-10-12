@@ -2,6 +2,7 @@
 #define LOKA_APP_HPP
 
 #include "app/core/AppComponentGroup.hpp"
+#include "app/core/DocumentRoster.hpp"
 #include "app/core/AppComponent.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/Menu.hpp"
@@ -45,6 +46,10 @@ public:
   /** Rail completion entry; enumerates current live windows after App work. */
   void reconcileFocus();
   virtual void quit() = 0;
+  /** Ask each document in roster order; a node's decline cancels this attempt. */
+  void requestQuit();
+  /** True transfers the close decision to the keyed document's node. */
+  bool closeAsked(Window *window);
   /** Detaches a Window immediately and queues its silent reclaim for the App clock boundary. */
   void requestWindowClose(Window *window);
   virtual bool handleMenuCommand(int commandId, Window *window);
@@ -140,6 +145,17 @@ private:
       edit could have left its snapshot mismatched. */
   unsigned short admitDocumentWindows(AdoptionPhase phase);
   loka::app::WindowSeat *windowSeat_;
+  /** One outstanding quit request, with explicit absence and no parallel flags. */
+  struct QuitAttempt
+  {
+    loka::core::ItemId id;
+    unsigned long seq;
+    QuitAttempt() : id(loka::core::ItemId::none()), seq(0) {}
+    explicit QuitAttempt(const loka::app::CloseAsk &ask) : id(ask.id), seq(ask.seq) {}
+    static QuitAttempt none() { return QuitAttempt(); }
+  };
+  QuitAttempt quitAttempt_;
+  void advanceQuitAttempt();
 
   /** Borrowed rows remain owned by the App group or close queue. */
   struct AdmittedWindow

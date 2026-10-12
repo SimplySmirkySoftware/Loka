@@ -422,6 +422,7 @@ void App::admitAndApplyWindows()
     if (scene && !scene->isBusy())
       window->retireSceneForClose();
   }
+  this->advanceQuitAttempt();
   this->projectMenuSources();
   this->flushingWindowWork_ = false;
 }
@@ -472,6 +473,50 @@ void App::windowClosed(Window *window)
   assert(activeWindow_ != window && "A retired Window cannot remain active at reclaim");
   window->closeDialogResults();
   delete window;
+}
+
+bool App::closeAsked(Window *window)
+{
+  if (!this->group_ || !this->windowSeat_)
+    return false;
+  const loka::core::ItemId key = this->group_->keyOf(window);
+  if (key.isNone())
+    return false;
+  this->windowSeat_->roster().askClose(key);
+  return true;
+}
+
+void App::requestQuit()
+{
+  if (!this->windowSeat_ || this->windowSeat_->roster().count() == 0)
+  {
+    this->quitAttempt_ = QuitAttempt::none();
+    this->quit();
+    return;
+  }
+  loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
+  roster.askClose(roster.idAt(0));
+  this->quitAttempt_ = QuitAttempt(roster.closeAsked().get());
+}
+
+/** Once per admission tail: constant State/count/first-id reads, no row walk.
+    The roster only appends and removes: its asked first row cannot move. */
+void App::advanceQuitAttempt()
+{
+  if (this->quitAttempt_.id.isNone())
+    return;
+  loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
+  if (roster.count() == 0 || roster.idAt(0) != this->quitAttempt_.id)
+  {
+    this->requestQuit();
+    return;
+  }
+  // Any decline of the asked document at or after this attempt's ask cancels
+  // it: a second native ask in the same turn (Win32 drains queued accelerators
+  // before its tail) overwrites the answer box with a later sequence.
+  const loka::app::CloseAnswer answer = roster.closeAnswer().get();
+  if (answer.id == this->quitAttempt_.id && answer.seq >= this->quitAttempt_.seq)
+    this->quitAttempt_ = QuitAttempt::none();
 }
 
 void App::requestWindowClose(Window *window)

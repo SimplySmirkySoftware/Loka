@@ -19,5 +19,8 @@ void testSimpleTextRepeatedOpenAndCaretReplacement();
 void testSimpleTextMenuAndDialogProps();
 void testSimpleTextRibbonFiresTheMenuEmitters();
 void testSimpleTextMenuDisconnectsOnUnmount();
+void testSimpleTextCloseAskedWhileBusyIsDeclined();
+void testSimpleTextCloseAskedEditedDeclinesInD0();
+
 #endif
 #endif
