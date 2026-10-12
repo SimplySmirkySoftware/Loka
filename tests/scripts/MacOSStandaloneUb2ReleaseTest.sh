@@ -27,7 +27,7 @@ BUILD_LOG="${TEST_ROOT}/build.log"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
-  'printf "%s|%s|%s\n" "${TARGET_SET:-}" "${ARCHS:-}" "${BUILD_DIR:-}" >"${LOKA_TEST_BUILD_LOG}"' \
+  'printf "%s|%s|%s|%s\n" "${TARGET_SET:-}" "${ARCHS:-}" "${BUILD_DIR:-}" "${DEPLOYMENT_TARGET:-}" >"${LOKA_TEST_BUILD_LOG}"' \
   >"${FAKE_REPO}/scripts/macos/build-ub2.sh"
 chmod +x \
   "${FAKE_REPO}/scripts/macos-standalone-release-ub2.sh" \
@@ -75,8 +75,8 @@ BUILD_DIR="${BUILD_ROOT}" LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \
   LOKA_LIPO_BIN="${FAKE_LIPO}" \
   "${FAKE_REPO}/scripts/macos-standalone-release-ub2.sh" >/dev/null
 
-[[ "$(cat "${BUILD_LOG}")" == "standalone-release|arm64;x86_64|${BUILD_ROOT}" ]] ||
-  fail "the UB2 build did not select the complete standalone target set"
+[[ "$(cat "${BUILD_LOG}")" == "standalone-release|arm64;x86_64|${BUILD_ROOT}|10.13" ]] ||
+  fail "the UB2 build did not select the complete standalone target set at the 10.13 floor"
 
 RELEASE_ROOT="${FAKE_REPO}/build/release/macos-ub2"
 [[ -x "${RELEASE_ROOT}/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS" ]] ||
@@ -129,5 +129,15 @@ INVALID_STATUS=$?
 set -e
 [[ "${INVALID_STATUS}" -eq 2 && "${INVALID_OUTPUT}" == *'ARCHS=arm64;x86_64'* ]] ||
   fail "a thin UB2 release architecture set was not refused clearly"
+
+set +e
+INVALID_OUTPUT="$(DEPLOYMENT_TARGET=11.0 BUILD_DIR="${BUILD_ROOT}" \
+  LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \
+  LOKA_LIPO_BIN="${FAKE_LIPO}" \
+  "${FAKE_REPO}/scripts/macos-standalone-release-ub2.sh" 2>&1)"
+INVALID_STATUS=$?
+set -e
+[[ "${INVALID_STATUS}" -eq 2 && "${INVALID_OUTPUT}" == *'DEPLOYMENT_TARGET=10.13'* ]] ||
+  fail "a UB2 release floor other than 10.13 was not refused clearly"
 
 echo "MacOSStandaloneUb2ReleaseTest: PASS"
