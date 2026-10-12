@@ -438,6 +438,7 @@ LOKA_TEST(testStateArenaSlabsCrossAllocationGate)
 LOKA_TEST(testNodeArenaSlabCrossesAllocationGate)
 LOKA_TEST(testHeapNodeCrossesAllocationGate)
 LOKA_TEST(testGateAllocatedNodeRejectsUnauthorizedDestruction)
+LOKA_TEST(testLandlordNodesRejectUnauthorizedDestruction)
 LOKA_TEST(testHeapFallbackWhiteFlagFailsBoundaryCompose)
 LOKA_TEST(testSceneRootAllocationRefusalArmsWhiteFlagAndHealsOnRefresh)
 LOKA_TEST(testNestedConditionalSeatInContextlessMaterialization_Probe)
@@ -939,7 +940,7 @@ LOKA_TEST(testStrictNodeRouteLocalRefusal)
 
 LOKA_TEST(testStrictNodeRouteKeyedAttachRefusal)
 
-LOKA_TEST(testStrictNodeRoutePartitionDeleteGuard)
+LOKA_TEST(testStrictNodeRoutePartitionDestroysThroughItsOwnDoor)
 
 LOKA_TEST(testPaintAnswersHandOverWrittenResident)
 LOKA_TEST(testPaintAnswersRefusalDisablesGate)

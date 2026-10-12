@@ -12,6 +12,8 @@
 #include <unistd.h>
 #endif
 #include "app/scene/boundary/detail/BoundaryArena.hpp"
+#include "app/scene/boundary/detail/NodePartition.hpp"
+#include "app/scene/boundary/detail/NodeBuildTicket.hpp"
 #include "app/scene/composition/NodeComposition.hpp"
 #include "app/scene/state/StateBatchBase.hpp"
 #include "core/LokaAlloc.hpp"
@@ -2300,8 +2302,7 @@ namespace
   /** Forks and requires the child to abort. The child installs the counting
       backend so the node's storage really comes from LokaAllocRaw, then ends
       the node's lifetime through a door that is not DestroyHeapNode. Both
-      doors exist in the tree today -- BoundaryArena tears its slabs down with
-      an explicit ~Node() -- so both have to be walled. */
+      unauthorized forms must be walled before storage can be returned. */
   void requireAbortOnGateDestruction(GateDestructionDoor door)
   {
     const pid_t child = fork();
@@ -2329,6 +2330,81 @@ namespace
     LOKA_VERIFY(WIFSIGNALED(status));
     LOKA_VERIFY(WTERMSIG(status) == SIGABRT);
   }
+  enum LandlordDestructionDoor
+  {
+    LANDLORD_DOOR_PLAIN_DELETE,
+    LANDLORD_DOOR_EXPLICIT_DESTRUCTOR,
+    LANDLORD_DOOR_HEAP_DESTROY
+  };
+
+  struct PartitionAbortBuild : loka::app::scene::detail::NodeBuildOperation
+  {
+    PartitionAbortBuild() : node(0) {}
+    loka::app::scene::Node *construct(void *storage)
+    { return new (storage) loka::app::scene::Node(); }
+    virtual bool buildAndAttach(loka::app::scene::detail::NodeBuildTicket &ticket)
+    {
+      this->node = ticket.create<loka::app::scene::Node>(*this);
+      return this->node != 0;
+    }
+    loka::app::scene::Node *node;
+  };
+
+  /** If this destructor runs, the heap door failed to reject foreign storage
+      before beginning destruction. Exit normally so the parent rejects it. */
+  struct HeapDoorAbortProbe : loka::app::scene::Node
+  {
+    virtual ~HeapDoorAbortProbe() { _exit(0); }
+  };
+
+  void requireAbortOnLandlordDestruction(bool partition, LandlordDestructionDoor door)
+  {
+    using namespace loka::app::scene;
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (child == 0)
+    {
+      NodeArena arena;
+      detail::NodePartition bank;
+      PartitionAbortBuild build;
+      Node *node = 0;
+      if (partition)
+      {
+        const detail::NodeSlotLayout layout = detail::NodeSlotLayout::of<Node>(1);
+        LOKA_VERIFY(bank.boot(&layout, 1));
+        LOKA_VERIFY(bank.build(&layout, 1, build));
+        node = build.node;
+        LOKA_VERIFY(node->partitionOwner() == &bank);
+      }
+      else
+      {
+        arena.reserve(sizeof(HeapDoorAbortProbe) + detail::AlignOf<HeapDoorAbortProbe>::value);
+        void *storage = arena.allocate(sizeof(HeapDoorAbortProbe), detail::AlignOf<HeapDoorAbortProbe>::value);
+        LOKA_VERIFY(storage != 0);
+        node = door == LANDLORD_DOOR_HEAP_DESTROY
+                   ? new (storage) HeapDoorAbortProbe() : new (storage) Node();
+        arena.registerNode(node);
+        LOKA_VERIFY(node->arenaOwner() == &arena);
+      }
+      switch (door)
+      {
+      case LANDLORD_DOOR_PLAIN_DELETE:
+        delete node;
+        break;
+      case LANDLORD_DOOR_EXPLICIT_DESTRUCTOR:
+        node->~Node();
+        break;
+      case LANDLORD_DOOR_HEAP_DESTROY:
+        DestroyHeapNode(node);
+        break;
+      }
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status));
+    LOKA_VERIFY(WTERMSIG(status) == SIGABRT);
+  }
 } // namespace
 #endif
 
@@ -2337,6 +2413,19 @@ void testGateAllocatedNodeRejectsUnauthorizedDestruction()
 #if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
   requireAbortOnGateDestruction(GATE_DOOR_PLAIN_DELETE);
   requireAbortOnGateDestruction(GATE_DOOR_EXPLICIT_DESTRUCTOR);
+#endif
+}
+
+void testLandlordNodesRejectUnauthorizedDestruction()
+{
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
+  requireAbortOnLandlordDestruction(false, LANDLORD_DOOR_PLAIN_DELETE);
+  requireAbortOnLandlordDestruction(false, LANDLORD_DOOR_EXPLICIT_DESTRUCTOR);
+  requireAbortOnLandlordDestruction(true, LANDLORD_DOOR_PLAIN_DELETE);
+  requireAbortOnLandlordDestruction(true, LANDLORD_DOOR_EXPLICIT_DESTRUCTOR);
+  requireAbortOnLandlordDestruction(false, LANDLORD_DOOR_HEAP_DESTROY);
+#else
+  std::puts("[skip] landlord destruction abort pins require Linux without ASan or NDEBUG");
 #endif
 }
 
