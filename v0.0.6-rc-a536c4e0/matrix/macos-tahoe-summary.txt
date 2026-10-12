@@ -1,0 +1,45 @@
+rev a536c4e06e7af2e776e021708812afc883122e42 26.7.1 25G241
+screen-lock-flag: <key>CGSSessionScreenIsLocked</key><true/>
+configure exit=0
+build macos-debug exit=0 warnings=0 secs=64
+build macos-scenarios exit=0 warnings=0 secs=90
+build macos-tests exit=0 warnings=0 secs=0
+bin LokaFloppyBirdScenarioMacOS 10-12_12:37:13
+bin LokaHelloWorldScenarioMacOS 10-12_12:37:13
+bin LokaMineSweeperScenarioMacOS 10-12_12:37:13
+bin LokaScrapbookScenarioMacOS 10-12_12:37:13
+bin LokaSmirkBenchScenarioMacOS 10-12_12:37:13
+bin LokaTutorialScenarioMacOS 10-12_12:37:13
+bin LokaTestsMacOS 10-12_12:35:42
+ctest LokaTestsMacOS exit=0 secs=18 100% tests passed, 0 tests failed out of 1
+golden copied: 18 png
+cell floppybird/fixed-step-flaps exit=0 verdict=PASS rerun=no secs=9
+cell floppybird/startup exit=0 verdict=PASS rerun=no secs=4
+cell helloworld/bmi-roundtrip exit=0 verdict=PASS rerun=no secs=7
+cell helloworld/startup exit=0 verdict=PASS rerun=no secs=4
+cell helloworld/toggle-action-probe exit=0 verdict=PASS rerun=no secs=6
+cell minesweeper/new-game-twice exit=0 verdict=PASS rerun=no secs=2
+cell minesweeper/seeded-reveal exit=0 verdict=PASS rerun=no secs=3
+cell minesweeper/startup exit=0 verdict=PASS rerun=no secs=2
+cell scrapbook/flip-forward-back exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell scrapbook/open-first-page-refused exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell scrapbook/open-text-page-refused exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell scrapbook/open-text-page exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell scrapbook/refused-flip-keeps-page exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell scrapbook/startup exit=1 verdict=FAIL(stage stage failed: missing ~/loka-rc006/build/host/lrpc/lrpc; build it with: cmake -S tools/lrpc -B build/host/lrpc && cmake --build build/host/lrpc) rerun=yes(exit=1) secs=0
+cell smirkbench/attributed-editor-line exit=0 verdict=PASS rerun=no secs=8
+cell smirkbench/startup exit=0 verdict=PASS rerun=no secs=7
+cell tutorial/increment-summary-toggle exit=0 verdict=PASS rerun=no secs=6
+cell tutorial/startup exit=0 verdict=PASS rerun=no secs=3
+cells passed 12/18
+ub2 stage exit=0 warnings=0 secs=684
+minos LokaFloppyBirdStandaloneLoopMacOS: x86_64=10.13 arm64=11.0
+minos LokaHelloWorldStandaloneLoopMacOS: x86_64=10.13 arm64=11.0
+minos LokaMineSweeperStandaloneLoopMacOS: x86_64=10.13 arm64=11.0
+minos LokaScrapbookStandaloneLoopMacOS: x86_64=10.13 arm64=11.0
+minos LokaSimpleTextMacOS: x86_64=10.13 arm64=11.0
+minos LokaSimpleViewerMacOS: x86_64=10.13 arm64=11.0
+minos LokaTutorialStandaloneLoopMacOS: x86_64=10.13 arm64=11.0
+MacOSStandaloneUb2ReleaseTest exit=0 MacOSStandaloneUb2ReleaseTest: PASS
+total secs=939
+ALL DONE

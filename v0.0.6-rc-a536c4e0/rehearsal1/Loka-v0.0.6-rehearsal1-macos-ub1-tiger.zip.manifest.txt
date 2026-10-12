@@ -1,0 +1,15 @@
+manifest_version=1
+requested_tag=v0.0.6-rehearsal1
+tag_sha=37a0cb8f0ff2ab919458235ea008886de8bdbca2
+commit_sha=37a0cb8f0ff2ab919458235ea008886de8bdbca2
+checkout_path=/tmp/loka-release-assembly-worktree
+archive=Loka-v0.0.6-rehearsal1-macos-ub1-tiger.zip
+archive_sha256=75830e6927bc90a50baed8f483e2a32db09b5df667572150ddd402d391bbb5e5
+allowlist_sha256=07e6b9aa3d84438a0e0681372008c0f723be629cb4f13099414863c6e98cde8b
+build_command_count=3
+lrpk_provenance_gate=git-tracked-package-file-only
+build_command_1=rsync -a --delete --exclude .git --exclude build ./ mavericks:loka-asm/
+build_command_2=ssh mavericks 'export PATH=/opt/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; unset DEVELOPER_DIR; export MAC_OS_10_4_SYSROOT=/Developer/SDKs/MacOSX10.4u.sdk CC=/Developer/usr/bin/gcc-4.0 CXX=/Developer/usr/bin/g++-4.0; cd ~/loka-asm && rm -rf build && bash scripts/macos-standalone-release-ub1.sh tiger && /usr/bin/ditto -c -k build/release/macos-tiger-ub1 build/release/Loka-macos-standalone-UB1-tiger.zip'
+build_command_3=mkdir -p build/release && rsync -a mavericks:loka-asm/build/release/Loka-macos-standalone-UB1-tiger.zip build/release/
+provenance=build-output:build/release/Loka-macos-standalone-UB1-tiger.zip  macOS/Loka-macos-standalone-UB1-tiger.zip
+artifact_sha256=e150b9b6e889972fbc0f612929f4941a26392156d02d90b08b190b93c6261b90  macOS/Loka-macos-standalone-UB1-tiger.zip

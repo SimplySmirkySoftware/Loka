@@ -1,0 +1,93 @@
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/startup
+lrpc: bag 1 payload [1420, 2828), flipped offset 2124
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/open-first-page-refused
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/flip-forward-back
+lrpc: bag 3 payload [4252, 5648), flipped offset 4950
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/refused-flip-keeps-page
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/open-text-page
+lrpc: bag 5 payload [7108, 7160), flipped offset 7134
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: scrapbook/open-text-page-refused
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: helloworld/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: helloworld/toggle-action-probe
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: helloworld/bmi-roundtrip
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: tutorial/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: tutorial/increment-summary-toggle
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: minesweeper/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: minesweeper/new-game-twice
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: minesweeper/seeded-reveal
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: floppybird/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: floppybird/fixed-step-flaps
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/surface-ticks
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/add-face
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/retained-text-rebind
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/attributed-editor-line
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpleviewer/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpleviewer/open-sun
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpleviewer/open-bulb
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpleviewer/churn-replace
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: smirkbench/text-editor-plain
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpletext/startup
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpletext/open-readme
+compare result: differing pixels: 0; differing columns: 0; max-diff-px: 0; max-diff-columns: unbounded; result: pass
+Scenario passed: simpletext/save-roundtrip
+
+cell | outcome | work dir
+scrapbook/startup | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/startup
+scrapbook/open-first-page-refused | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/open-first-page-refused
+scrapbook/flip-forward-back | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/flip-forward-back
+scrapbook/refused-flip-keeps-page | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/refused-flip-keeps-page
+scrapbook/open-text-page | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/open-text-page
+scrapbook/open-text-page-refused | pass | ~/loka-opus1-rc/build/mame-scenario/scrapbook/open-text-page-refused
+helloworld/startup | pass | ~/loka-opus1-rc/build/mame-scenario/helloworld/startup
+helloworld/toggle-action-probe | pass | ~/loka-opus1-rc/build/mame-scenario/helloworld/toggle-action-probe
+helloworld/bmi-roundtrip | pass | ~/loka-opus1-rc/build/mame-scenario/helloworld/bmi-roundtrip
+tutorial/startup | pass | ~/loka-opus1-rc/build/mame-scenario/tutorial/startup
+tutorial/increment-summary-toggle | pass | ~/loka-opus1-rc/build/mame-scenario/tutorial/increment-summary-toggle
+minesweeper/startup | pass | ~/loka-opus1-rc/build/mame-scenario/minesweeper/startup
+minesweeper/new-game-twice | pass | ~/loka-opus1-rc/build/mame-scenario/minesweeper/new-game-twice
+minesweeper/seeded-reveal | pass | ~/loka-opus1-rc/build/mame-scenario/minesweeper/seeded-reveal
+floppybird/startup | pass | ~/loka-opus1-rc/build/mame-scenario/floppybird/startup
+floppybird/fixed-step-flaps | pass | ~/loka-opus1-rc/build/mame-scenario/floppybird/fixed-step-flaps
+smirkbench/startup | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/startup
+smirkbench/surface-ticks | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/surface-ticks
+smirkbench/add-face | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/add-face
+smirkbench/retained-text-rebind | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/retained-text-rebind
+smirkbench/attributed-editor-line | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/attributed-editor-line
+simpleviewer/startup | pass | ~/loka-opus1-rc/build/mame-scenario/simpleviewer/startup
+simpleviewer/open-sun | pass | ~/loka-opus1-rc/build/mame-scenario/simpleviewer/open-sun
+simpleviewer/open-bulb | pass | ~/loka-opus1-rc/build/mame-scenario/simpleviewer/open-bulb
+simpleviewer/churn-replace | pass | ~/loka-opus1-rc/build/mame-scenario/simpleviewer/churn-replace
+smirkbench/text-editor-plain | pass | ~/loka-opus1-rc/build/mame-scenario/smirkbench/text-editor-plain
+simpletext/startup | pass | ~/loka-opus1-rc/build/mame-scenario/simpletext/startup
+simpletext/open-readme | pass | ~/loka-opus1-rc/build/mame-scenario/simpletext/open-readme
+simpletext/save-roundtrip | pass | ~/loka-opus1-rc/build/mame-scenario/simpletext/save-roundtrip
+bake: possible

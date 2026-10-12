@@ -1,0 +1,9 @@
+lrpc build exit=0 warnings=2 bin=10-12_12:51:00
+cell scrapbook/flip-forward-back exit=0 verdict=PASS rerun=no secs=7
+cell scrapbook/open-first-page-refused exit=0 verdict=PASS rerun=no secs=11
+cell scrapbook/open-text-page-refused exit=0 verdict=PASS rerun=no secs=6
+cell scrapbook/open-text-page exit=0 verdict=PASS rerun=no secs=18
+cell scrapbook/refused-flip-keeps-page exit=0 verdict=PASS rerun=no secs=21
+cell scrapbook/startup exit=0 verdict=PASS rerun=no secs=8
+scrapbook cells passed 6/6
+ALL DONE

@@ -1,0 +1,24 @@
+ub1 stage exit=0 warnings=330 errors=0 secs=818
+slices LokaFloppyBirdStandaloneLoopMacOS: ppc i386 
+slices LokaHelloWorldStandaloneLoopMacOS: ppc i386 
+slices LokaMineSweeperStandaloneLoopMacOS: ppc i386 
+slices LokaScrapbookStandaloneLoopMacOS: ppc i386 
+slices LokaSimpleTextMacOS: ppc i386 
+slices LokaSimpleViewerMacOS: ppc i386 
+slices LokaTutorialStandaloneLoopMacOS: ppc i386 
+LokaFloppyBirdStandaloneLoopMacOS.app
+LokaHelloWorldStandaloneLoopMacOS.app
+LokaMineSweeperStandaloneLoopMacOS.app
+LokaScrapbookStandaloneLoopMacOS.app
+LokaSimpleTextMacOS.app
+LokaSimpleViewerMacOS.app
+LokaTutorialStandaloneLoopMacOS.app
+README.txt
+Loka 0.0.6 UB1 Release applications
+
+Profile: tiger
+Architectures: ppc;i386
+
+The five StandaloneLoop applications run their UI tour repeatedly.
+Quit a loop application to stop it. LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.
+ALL DONE
