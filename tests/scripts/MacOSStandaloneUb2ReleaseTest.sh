@@ -22,6 +22,15 @@ cp "${REPO_DIR}/scripts/apple/lib-xcode.sh" "${FAKE_REPO}/scripts/apple/"
 cp "${REPO_DIR}/scripts/macos/lib-common.sh" "${FAKE_REPO}/scripts/macos/"
 cp "${REPO_DIR}/scripts/macos/standalone-release-stage.sh" \
   "${FAKE_REPO}/scripts/macos/"
+mkdir -p "${FAKE_REPO}/example/SmirkyCard"
+cp "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt" "${FAKE_REPO}/example/SmirkyCard/"
+smirkycard_scripts() {
+  local script
+  while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
+    case "${script}" in ''|\#*) continue ;; esac
+    printf '%s\n' "${script}"
+  done < "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt"
+}
 
 BUILD_LOG="${TEST_ROOT}/build.log"
 printf '%s\n' \
@@ -64,6 +73,11 @@ stage_fake_build() {
         printf '%s\n' "${marker}-assets" \
           >"${bundle_root}/Contents/Resources/ASSETS.LRP"
       fi
+      if [[ "${target_name}" == "LokaSmirkyCardMacOS" ]]; then
+        for script in $(smirkycard_scripts); do
+          printf '%s\n' "${marker}-${script}" >"${bundle_root}/Contents/Resources/${script}"
+        done
+      fi
     fi
   done < <(loka_target_manifest)
 }
@@ -83,8 +97,16 @@ RELEASE_ROOT="${FAKE_REPO}/build/release/macos-ub2"
   fail "the release omitted SimpleText"
 [[ "$(cat "${RELEASE_ROOT}/LokaSimpleTextMacOS.app/Contents/Info.plist")" == "metadata-LokaSimpleTextMacOS" ]] ||
   fail "the release lost SimpleText bundle metadata"
-[[ "$(find "${RELEASE_ROOT}" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" == "7" ]] ||
-  fail "the release did not contain exactly seven application bundles"
+[[ "$(find "${RELEASE_ROOT}" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" == "8" ]] ||
+  fail "the release did not contain exactly eight application bundles"
+[[ -x "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS" ]] ||
+  fail "the release omitted SmirkyCard"
+for script in $(smirkycard_scripts); do
+  [[ "$(cat "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}")" == "custom-${script}" ]] ||
+    fail "the release SmirkyCard bundle lost Resources/${script}"
+done
+grep -Fq 'LokaSmirkyCardMacOS (experimental) loads MAIN.JS from its bundle' "${RELEASE_ROOT}/README.txt" ||
+  fail "the release README omitted SmirkyCard"
 grep -Fq 'LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' "${RELEASE_ROOT}/README.txt" ||
   fail "the release README omitted the interactive applications"
 [[ -x "${RELEASE_ROOT}/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS" ]] ||
@@ -108,6 +130,21 @@ grep -Fq 'Architectures: arm64;x86_64' "${RELEASE_ROOT}/README.txt" ||
 grep -q "^Loka 9.9.9 " "${RELEASE_ROOT}/README.txt" \
   || fail "the staged README does not carry the fixture source version (label must derive from CMakeLists, not a hardcode)"
 cp "${RELEASE_ROOT}/README.txt" "${TEST_ROOT}/previous-readme"
+# A SmirkyCard bundle without one of its manifest scripts is refused.
+LAST_SCRIPT="$(smirkycard_scripts | tail -1)"
+SMIRKY_RESOURCES="${BUILD_ROOT}/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/Resources"
+mv "${SMIRKY_RESOURCES}/${LAST_SCRIPT}" "${TEST_ROOT}/parked-script"
+set +e
+SCRIPT_OUTPUT="$(BUILD_DIR="${BUILD_ROOT}" LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \
+  LOKA_LIPO_BIN="${FAKE_LIPO}" \
+  "${FAKE_REPO}/scripts/macos-standalone-release-ub2.sh" 2>&1)"
+SCRIPT_STATUS=$?
+set -e
+mv "${TEST_ROOT}/parked-script" "${SMIRKY_RESOURCES}/${LAST_SCRIPT}"
+[[ "${SCRIPT_STATUS}" -ne 0 && "${SCRIPT_OUTPUT}" == *"SmirkyCard bundle lacks Resources/${LAST_SCRIPT}"* ]] ||
+  fail "a SmirkyCard bundle without ${LAST_SCRIPT} was not refused clearly"
+cmp -s "${TEST_ROOT}/previous-readme" "${RELEASE_ROOT}/README.txt" ||
+  fail "a refused SmirkyCard bundle replaced the previous release"
 rm -rf "${BUILD_ROOT}/apple/macos/LokaHelloWorldStandaloneLoopMacOS.app"
 set +e
 BUILD_DIR="${BUILD_ROOT}" LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \

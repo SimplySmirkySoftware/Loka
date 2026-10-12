@@ -122,13 +122,14 @@ This is the environment where binaries are actually built.
   On Big Sur or newer with an Apple Silicon-capable Xcode, run
   `scripts/macos-standalone-release-ub2.sh` for the corresponding
   `arm64;x86_64` autonomous set. Like UB1, it stages five loops plus interactive
-  SimpleViewer and SimpleText under `build/release/macos-ub2` only after every
+  SimpleViewer and SimpleText and the experimental SmirkyCard (its card scripts
+  inside the bundle's Resources) under `build/release/macos-ub2` only after every
   executable contains both slices. The release's x86_64 slice targets macOS
   10.13, the current SDK's floor. It serves 10.15, which runs no 32-bit code
   and so cannot open the Tiger UB1 set (`ppc;i386`) the release ships, and
   gives 10.13 and 10.14, which run both, a 64-bit set; the arm64 slice targets
-  macOS 11.0. All seven
-  applications were runtime-verified on macOS 10.14 in the dark appearance
+  macOS 11.0. The seven applications other than SmirkyCard
+  were runtime-verified on macOS 10.14 in the dark appearance
   (2026-10-12, owner's machine). 10.13 and 10.15 have not been verified.
 - For a presentation that keeps moving without a host controller, use the
   TEST-only HelloWorld and MineSweeper loop reels. Each application shows every
@@ -212,14 +213,17 @@ This is the environment where binaries are actually built.
   autonomous loop directories (`scrapbook`, `helloworld`, `tutorial`,
   `minesweeper`, `floppybird`), a `simpleviewer` directory containing
   `LokaSimpleViewerWin32.exe`, a `simpletext` directory containing
-  `LokaSimpleTextWin32.exe`, and a shared README. Keep each executable in its
-  directory; ScrapbookUI's `ASSETS.LRP` and each app's `LOG.TXT` belong there.
+  `LokaSimpleTextWin32.exe`, a `smirkycard` directory containing the
+  experimental `LokaSmirkyCardWin32.exe` with the card scripts listed in
+  `example/SmirkyCard/disk-scripts.txt` beside it, and a shared README. Keep each
+  executable in its directory; ScrapbookUI's `ASSETS.LRP`, SmirkyCard's scripts
+  and each app's `LOG.TXT` belong there.
   The CMake Standalone Flow/Loop build outputs use the same catalog-key
   directories, so direct launches also keep sidecars separate. Each loop keeps its App and native Window;
   a completed pass receives a fresh scenario rail and a re-armed Scene.
   Closing it manually does not relaunch it.
-  SimpleViewer and SimpleText remain interactive and are not started by either audit
-  verification or Release staging.
+  SimpleViewer, SimpleText and SmirkyCard remain interactive and are not started by
+  either audit verification or Release staging.
   In **Standalone: Win32 Build / Stage / Verify / Release**, choose Release for the equivalent
   VS Code action;
   launch VS Code from the matching Visual Studio Developer Command Prompt so

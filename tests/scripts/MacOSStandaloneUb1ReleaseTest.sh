@@ -24,6 +24,15 @@ cp "${REPO_DIR}/scripts/apple/lib-xcode.sh" "${FAKE_REPO}/scripts/apple/"
 cp "${REPO_DIR}/scripts/macos/lib-common.sh" "${FAKE_REPO}/scripts/macos/"
 cp "${REPO_DIR}/scripts/macos/standalone-release-stage.sh" \
   "${FAKE_REPO}/scripts/macos/"
+mkdir -p "${FAKE_REPO}/example/SmirkyCard"
+cp "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt" "${FAKE_REPO}/example/SmirkyCard/"
+smirkycard_scripts() {
+  local script
+  while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
+    case "${script}" in ''|\#*) continue ;; esac
+    printf '%s\n' "${script}"
+  done < "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt"
+}
 
 BUILD_LOG="${TEST_ROOT}/build.log"
 printf '%s\n' \
@@ -73,6 +82,11 @@ while IFS='|' read -r target_name memberships output_shape rel_path; do
       if [[ "${target_name}" == "LokaScrapbookStandaloneLoopMacOS" ]]; then
         printf '%s\n' assets >"${bundle_root}/Contents/Resources/ASSETS.LRP"
       fi
+      if [[ "${target_name}" == "LokaSmirkyCardMacOS" ]]; then
+        for script in $(smirkycard_scripts); do
+          printf '// %s\n' "${script}" >"${bundle_root}/Contents/Resources/${script}"
+        done
+      fi
       ;;
   esac
 done < <(loka_target_manifest)
@@ -90,8 +104,16 @@ RELEASE_ROOT="${FAKE_REPO}/build/release/macos-tiger-ub1"
   fail "the release omitted SimpleText"
 [[ "$(cat "${RELEASE_ROOT}/LokaSimpleTextMacOS.app/Contents/Info.plist")" == "metadata-LokaSimpleTextMacOS" ]] ||
   fail "the release lost SimpleText bundle metadata"
-[[ "$(find "${RELEASE_ROOT}" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" == "7" ]] ||
-  fail "the release did not contain exactly seven application bundles"
+[[ "$(find "${RELEASE_ROOT}" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" == "8" ]] ||
+  fail "the release did not contain exactly eight application bundles"
+[[ -x "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS" ]] ||
+  fail "the release omitted SmirkyCard"
+for script in $(smirkycard_scripts); do
+  [[ -f "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}" ]] ||
+    fail "the release SmirkyCard bundle lost Resources/${script}"
+done
+grep -Fq 'LokaSmirkyCardMacOS (experimental) loads MAIN.JS from its bundle' "${RELEASE_ROOT}/README.txt" ||
+  fail "the release README omitted SmirkyCard"
 grep -Fq 'LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' "${RELEASE_ROOT}/README.txt" ||
   fail "the release README omitted the interactive applications"
 [[ -x "${RELEASE_ROOT}/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS" ]] ||
