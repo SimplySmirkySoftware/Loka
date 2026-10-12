@@ -52,9 +52,10 @@ namespace
   // This rail's answer for each size role, in logical units of the message
   // face. SmallLabel is -10 px at 96 dpi: the smallest size whose kana and
   // kanji stayed legible beside the -12 px body in a window probe of Yu Gothic
-  // UI, Segoe UI and Meiryo UI (2026-10-13). The Toolbox answers Geneva 9
-  // (ToolboxTextFontDescriptor::resolve) and headless answers 9
-  // (SyntheticTextSize) for the same role.
+  // UI, Segoe UI and Meiryo UI (2026-10-13). For the same role the Toolbox
+  // answers Geneva 9 (ToolboxTextFontDescriptor::resolve), macOS the small
+  // system font (MacScenePlatformController.mm) and headless 9
+  // (SyntheticTextSize).
   int RoleLogicalUnits(loka::app::TextSizeRole role)
   {
     switch (role)
