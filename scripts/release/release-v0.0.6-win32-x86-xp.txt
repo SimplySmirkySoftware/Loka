@@ -1,0 +1,16 @@
+# v0.0.6 Windows x86 XP-profile standalone release allowlist (owner
+# decision 4, 2026-10-11): the same seven applications as the x64 archive,
+# built with Visual Studio 2017's v141 toolset and the xp profile (#1251),
+# subsystem 5.01 and static CRT, by scripts/release/win32-remote-stage.sh
+# (x86, xp). Windows XP is a build target; runtime on XP is claimed only where
+# the release PR records a pass (VAIO P).
+build	build/release/win32-x86-xp/README.txt	Windows-x86-XP/README.txt
+build	build/release/win32-x86-xp/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe	Windows-x86-XP/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/helloworld/LokaHelloWorldStandaloneLoopWin32.exe	Windows-x86-XP/helloworld/LokaHelloWorldStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe	Windows-x86-XP/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	Windows-x86-XP/scrapbook/LokaScrapbookStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x86-XP/tutorial/LokaTutorialStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x86-XP/simpleviewer/LokaSimpleViewerWin32.exe
+build	build/release/win32-x86-xp/simpletext/LokaSimpleTextWin32.exe	Windows-x86-XP/simpletext/LokaSimpleTextWin32.exe
+git	example/ScrapbookUI/ASSETS.LRP	Windows-x86-XP/scrapbook/ASSETS.LRP
+build	build/release/win32-x86-xp.toolchain.txt	Windows-x86-XP/TOOLCHAIN.txt

@@ -1,0 +1,17 @@
+# v0.0.6 Windows x64 standalone release allowlist (owner decision 4,
+# 2026-10-11; first Windows archive): five autonomous presentation loops plus
+# the interactive SimpleViewer and SimpleText, built Release on a Windows
+# builder by scripts/release/win32-remote-stage.sh (x64, modern profile,
+# subsystem 6.00) and brought back only after an exact path, size and SHA-256
+# match (#1252). Scrapbook's ASSETS.LRP is the tracked package itself.
+# TOOLCHAIN.txt records the builder's compiler/SDK, CMake, OS and PowerShell.
+build	build/release/win32-x64/README.txt	Windows-x64/README.txt
+build	build/release/win32-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe	Windows-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe
+build	build/release/win32-x64/helloworld/LokaHelloWorldStandaloneLoopWin32.exe	Windows-x64/helloworld/LokaHelloWorldStandaloneLoopWin32.exe
+build	build/release/win32-x64/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe	Windows-x64/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe
+build	build/release/win32-x64/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	Windows-x64/scrapbook/LokaScrapbookStandaloneLoopWin32.exe
+build	build/release/win32-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe
+build	build/release/win32-x64/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x64/simpleviewer/LokaSimpleViewerWin32.exe
+build	build/release/win32-x64/simpletext/LokaSimpleTextWin32.exe	Windows-x64/simpletext/LokaSimpleTextWin32.exe
+git	example/ScrapbookUI/ASSETS.LRP	Windows-x64/scrapbook/ASSETS.LRP
+build	build/release/win32-x64.toolchain.txt	Windows-x64/TOOLCHAIN.txt
