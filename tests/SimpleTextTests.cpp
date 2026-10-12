@@ -34,7 +34,11 @@ public:
   }
   static FileChooserResult current(const simpletext::MainNode &n)
   {
-    return n.currentFile_;
+    return n.currentFile();
+  }
+  static void publish(simpletext::MainNode &n, const FileChooserResult &file)
+  {
+    n.publishFacts(file);
   }
   static simpletext::Operation operation(const simpletext::MainNode &n)
   {
@@ -98,14 +102,34 @@ namespace
       }
     return 0;
   }
+  class ResolvingContext : public NullPlatformContext
+  {
+  public:
+    ResolvingContext()
+        : resolutions(0)
+    {
+    }
+    virtual bool openFile(const File &file, loka::platform::file::FileHandle &out) const
+    {
+      ++this->resolutions;
+      if (!NullPlatformContext::openFile(file, out))
+        return false;
+      // A rail may report punctuation as part of a native display name.
+      if (file.relativePath().equals(String("punctuation.txt")))
+        out.displayPath = String("folder:name/part:leaf.txt");
+      return true;
+    }
+    mutable unsigned resolutions;
+  };
+
   struct Harness
   {
     std::string directory;
-    NullPlatformContext context;
+    ResolvingContext context;
     SimpleTextAppConfig config;
     NullScenePlatformController platform;
     scene::Scene *scene;
-    Harness()
+    explicit Harness(bool keyed = true)
         : config(&this->context),
           scene(0)
     {
@@ -115,7 +139,11 @@ namespace
       this->directory = created;
       this->context.setApplicationDirectory(String(this->directory));
       simpletext::MainProps props;
-      props.platformContext(&this->context).documents(&this->config.documents()).document(this->config.documents().idAt(0));
+      props.platformContext(&this->context).documents(&this->config.documents());
+      if (keyed)
+        props.document(this->config.documents().idAt(0));
+      else
+        LOKA_VERIFY(this->config.documents().close(this->config.documents().idAt(0)) == EDIT_OK);
       this->scene = new scene::Scene(scene::Boundary<simpletext::MainNode>(props).clone());
       this->scene->mount(&this->platform);
       loka::dsl::testing::SceneTestAccess::updateAttached(*this->scene, true);
@@ -184,6 +212,12 @@ namespace
     bool hasError()
     {
       return !SimpleTextTestAccess::error(this->main()).equals(String());
+    }
+    simpletext::Document facts() const
+    {
+      const simpletext::Document *entry = this->config.documents().find(this->main().props.document());
+      LOKA_VERIFY(entry);
+      return *entry;
     }
     void currentIs(const char *name)
     {
@@ -269,7 +303,18 @@ void testSimpleTextNewOpensASecondWindow()
   ObservableList<String> &lines = SimpleTextTestAccess::lines(first);
   LOKA_VERIFY(lines.size() == 1 && lines.at(0).value.empty());
   LOKA_VERIFY(static_cast<CountedMain &>(first).compositions() == 1);
+  LOKA_VERIFY(utf8(config.documents().find(first.props.document())->title) == "Untitled");
+  LOKA_VERIFY(!config.documents().find(first.props.document())->edited);
+  LOKA_VERIFY(!app.window(0).editedState().get());
+  LOKA_VERIFY(app.window(0).frameState().get().x == 16 && app.window(0).frameState().get().y == 16);
   LOKA_VERIFY(lines.update(lines.at(0).id, String("unsaved first document")) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(config.documents().find(first.props.document())->edited);
+  LOKA_VERIFY(app.window(0).editedState().get());
+  const ListRevision dirtyFacts = config.documents().revision().get();
+  LOKA_VERIFY(lines.update(lines.at(0).id, String("unsaved first document")) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(config.documents().revision().get() == dirtyFacts);
   const ListRevision revision = lines.revision().get();
   SimpleTextTestAccess::commands(first).slot<simpletext::NEW_DOCUMENT>()->emit();
   app.tail();
@@ -281,6 +326,8 @@ void testSimpleTextNewOpensASecondWindow()
   ObservableList<String> &second = SimpleTextTestAccess::lines(app.main(1));
   LOKA_VERIFY(second.size() == 1 && second.at(0).value.empty());
   LOKA_VERIFY(static_cast<CountedMain &>(app.main(1)).compositions() == 1);
+  LOKA_VERIFY(app.window(1).frameState().get().x == 40 && app.window(1).frameState().get().y == 40);
+  LOKA_VERIFY(!app.window(1).editedState().get());
 }
 
 void testSimpleTextNewAtCapacitySetsTheError()
@@ -298,6 +345,15 @@ void testSimpleTextNewAtCapacitySetsTheError()
   LOKA_VERIFY(utf8(SimpleTextTestAccess::error(app.main(0))) == "Cannot open another document window.");
   LOKA_VERIFY(app.group().getComponents().size() == simpletext::kMaxDocuments);
   LOKA_VERIFY(config.documents().count() == simpletext::kMaxDocuments);
+  LOKA_VERIFY(config.documents().idAt(7).seq == 8);
+  LOKA_VERIFY(app.window(7).frameState().get().x == 184 && app.window(7).frameState().get().y == 184);
+  LOKA_VERIFY(config.documents().close(config.documents().idAt(7)) == EDIT_OK);
+  app.tail();
+  const ItemId ninth = config.documents().open(simpletext::Document());
+  LOKA_VERIFY(ninth.seq == 9);
+  app.tail();
+  Window *wrapped = static_cast<Window *>(app.group().find(ninth));
+  LOKA_VERIFY(wrapped && wrapped->frameState().get().x == 16 && wrapped->frameState().get().y == 16);
 }
 
 void testSimpleTextClosingAWindowDropsItsDocument()
@@ -411,27 +467,108 @@ void testSimpleTextLaunchWindowTakesTheSeat()
 void testSimpleTextOpenSaveAndSaveAs()
 {
   Harness h;
+  LOKA_VERIFY(utf8(h.facts().title) == "Untitled" && !h.facts().edited);
+  LOKA_VERIFY(h.facts().file.kind == FileChooserResult::RESULT_NONE);
+  loka::platform::file::FileHandle first, second, punctuation;
+  LOKA_VERIFY(h.context.openFile(h.file("first.txt"), first));
+  LOKA_VERIFY(h.context.openFile(h.file("second.txt"), second));
+  const File named = h.file("punctuation.txt");
+  LOKA_VERIFY(h.context.openFile(named, punctuation));
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult::File(named));
+  LOKA_VERIFY(h.facts().title.equals(punctuation.displayPath));
+  LOKA_VERIFY(utf8(h.facts().title) == "folder:name/part:leaf.txt");
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult::File(File("unresolved")));
+  LOKA_VERIFY(utf8(h.facts().title) == "Untitled");
+  SimpleTextTestAccess::publish(h.main(), FileChooserResult());
+  LOKA_VERIFY(utf8(h.facts().title) == "Untitled");
   h.put("first.txt", "alpha\nbeta\n");
   h.open("first.txt");
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath) && !h.facts().edited);
   LOKA_VERIFY(h.lines().size() == 3 && h.row(0) == "alpha" && h.row(1) == "beta" && h.row(2).empty());
   h.currentIs("first.txt");
   LOKA_VERIFY(!h.hasError());
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();
   LOKA_VERIFY(h.bytes("first.txt") == "alpha\nbeta\n");
+  const unsigned resolutions = h.context.resolutions;
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("edited")) == EDIT_OK);
+  h.flush();
+  LOKA_VERIFY(h.facts().edited);
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath));
+  LOKA_VERIFY(h.context.resolutions == resolutions);
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_AS_DOCUMENT>()->emit();
   h.flush();
   h.choose(true, FileChooserResult::File(h.file("second.txt")));
   h.currentIs("second.txt");
+  LOKA_VERIFY(h.facts().title.equals(second.displayPath) && !h.facts().edited);
   LOKA_VERIFY(h.bytes("second.txt") == "edited\nbeta\n");
   LOKA_VERIFY(h.bytes("first.txt") == "alpha\nbeta\n");
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("again")) == EDIT_OK);
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();
   LOKA_VERIFY(h.bytes("second.txt") == "again\nbeta\n");
+  h.flush();
+  LOKA_VERIFY(!h.facts().edited && h.facts().title.equals(second.displayPath));
+  LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("dirty before open")) == EDIT_OK);
+  h.flush();
+  LOKA_VERIFY(h.facts().edited);
+  h.open("first.txt");
+  LOKA_VERIFY(h.facts().title.equals(first.displayPath) && !h.facts().edited);
+
+  // Use the actual admission path to pin both edges of the projected mark.
+  SimpleTextAppConfig config(&h.context);
+  SimpleTextApp app(config);
+  app.run();
+  simpletext::MainNode &main = app.main(0);
+  ObservableList<String> &lines = SimpleTextTestAccess::lines(main);
+  LOKA_VERIFY(lines.update(lines.at(0).id, String("window edit")) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(app.window(0).editedState().get());
+  SimpleTextTestAccess::commands(main).slot<simpletext::SAVE_AS_DOCUMENT>()->emit();
+  SimpleTextTestAccess::choose(main, true, FileChooserResult::File(h.file("second.txt")));
+  app.tail();
+  LOKA_VERIFY(!app.window(0).editedState().get());
+  LOKA_VERIFY(app.window(0).titleState().get().equals(second.displayPath));
+  LOKA_VERIFY(lines.update(lines.at(0).id, String("window edit again")) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(app.window(0).editedState().get());
+  SimpleTextTestAccess::commands(main).slot<simpletext::SAVE_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(!app.window(0).editedState().get());
 }
 
 void testSimpleTextNewAndSaveWithoutDestination()
 {
+  {
+    Harness unkeyed(false);
+    const ListRevision revision = unkeyed.config.documents().revision().get();
+    LOKA_VERIFY(unkeyed.main().props.document().isNone());
+    LOKA_VERIFY(unkeyed.lines().update(unkeyed.lines().at(0).id, String("unkeyed")) == EDIT_OK);
+    unkeyed.flush();
+    SimpleTextTestAccess::commands(unkeyed.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();
+    unkeyed.choose(true, FileChooserResult::File(unkeyed.file("first.txt")));
+    LOKA_VERIFY(unkeyed.bytes("first.txt") == "unkeyed");
+    LOKA_VERIFY(unkeyed.config.documents().count() == 0);
+    LOKA_VERIFY(unkeyed.config.documents().revision().get() == revision);
+    LOKA_VERIFY(SimpleTextTestAccess::current(unkeyed.main()).kind == FileChooserResult::RESULT_NONE);
+    // Positive control below proves that this probe detects title resolution.
+    const unsigned resolutions = unkeyed.context.resolutions;
+    SimpleTextTestAccess::publish(unkeyed.main(), FileChooserResult::File(unkeyed.file("first.txt")));
+    LOKA_VERIFY(unkeyed.context.resolutions == resolutions);
+  }
+  {
+    Harness keyed;
+    loka::platform::file::FileHandle resolved;
+    LOKA_VERIFY(keyed.context.openFile(keyed.file("first.txt"), resolved));
+    const unsigned resolutions = keyed.context.resolutions;
+    SimpleTextTestAccess::publish(keyed.main(), FileChooserResult::File(keyed.file("first.txt")));
+    LOKA_VERIFY(keyed.context.resolutions > resolutions);
+    LOKA_VERIFY(keyed.facts().title.equals(resolved.displayPath));
+    LOKA_VERIFY(keyed.config.documents().close(keyed.main().props.document()) == EDIT_OK);
+    LOKA_VERIFY(SimpleTextTestAccess::current(keyed.main()).kind == FileChooserResult::RESULT_NONE);
+    SimpleTextTestAccess::commands(keyed.main()).slot<simpletext::SAVE_DOCUMENT>()->emit();
+    keyed.flush();
+    LOKA_VERIFY(SimpleTextTestAccess::operation(keyed.main()) == simpletext::SAVE);
+    LOKA_VERIFY(keyed.config.documents().count() == 0);
+  }
   Harness h;
   LOKA_VERIFY(h.lines().size() == 1 && h.row(0).empty());
   LOKA_VERIFY(SimpleTextTestAccess::current(h.main()).kind == FileChooserResult::RESULT_NONE);
