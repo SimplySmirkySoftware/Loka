@@ -5,6 +5,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
+#include <climits>
 #include <cmath>
 #include <string>
 
@@ -15,15 +16,21 @@ namespace
   using namespace loka::dsl;
   using namespace loka::dsl::testing;
 
-  CGFloat referenceCellWidth(NSString *title)
+  // Every test lays out in one client box. MacScenePlatformController::relayout
+  // starts its root kRootInset in from each edge.
+  const int kClientWidth = 640;
+  const int kClientHeight = 160;
+  const int kRootInset = 20;
+  // A seat declared with width(n) instead of a natural width.
+  const int kFixedWidth = 120;
+  // Written before a declined query, which must leave it untouched.
+  const short kUntouched = 17;
+
+  NSView *newRootView()
   {
-    NSButtonCell *cell = [[NSButtonCell alloc] initTextCell:title];
-    LOKA_VERIFY(cell != nil);
-    [cell setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-    [cell setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
-    const CGFloat width = [cell cellSize].width;
-    [cell release];
-    return width;
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, kClientWidth, kClientHeight)];
+    LOKA_VERIFY(root != nil);
+    return root;
   }
 
   NSButton *buttonAt(NSView *root, NSUInteger index)
@@ -33,6 +40,28 @@ namespace
     NSButton *button = (NSButton *)[views objectAtIndex:index];
     LOKA_VERIFY([button isKindOfClass:[NSButton class]]);
     return button;
+  }
+
+  // The reference is the control the rail projects for the node, never a
+  // separately built cell: on macOS 10.14 through 13 a standalone NSButtonCell
+  // reports a narrower size than the NSButton's own cell.
+  CGFloat projectedCellWidth(const ButtonProps &props, NSString *title)
+  {
+    NSView *root = newRootView();
+    CGFloat width = 0;
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      ButtonNode node(props);
+      controller.onChange(&node, NODE_DIRTY_NONE, false);
+      controller.relayout(kClientWidth, kClientHeight);
+      NSButton *button = buttonAt(root, 0);
+      LOKA_VERIFY([[button title] isEqualToString:title]);
+      width = [[button cell] cellSize].width;
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+    return width;
   }
 
   // A different type key bypasses the registered Stack handler while retaining
@@ -49,36 +78,34 @@ namespace
 
   void verifyRibbonFrames(const RailMetrics &metrics)
   {
-    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 800, 240)];
-    LOKA_VERIFY(root != nil);
+    NSView *root = newRootView();
     {
       MacScenePlatformController controller(root, metrics);
       NodeDefinitionBase *definition =
           (RibbonControl() << RibbonItem("New") << RibbonItem("Save As...")
-                           << RibbonItem("Fixed").width(120)).clone();
+                           << RibbonItem("Fixed").width(kFixedWidth)).clone();
       LOKA_VERIFY(definition != 0);
       Scene scene(definition);
       LOKA_VERIFY(scene.mount(&controller));
       SceneTestAccess::updateAttached(scene, true);
-      controller.relayout(640, 160);
+      controller.relayout(kClientWidth, kClientHeight);
       LOKA_VERIFY([[root subviews] count] == 3);
       const loka::macos::MacProjection &projection = controller.projection();
-      int x = 20;
+      int x = kRootInset;
       for (NSUInteger i = 0; i < 3; ++i)
       {
         NSButton *button = buttonAt(root, i);
         NSString *title = i == 0 ? @"New" : i == 1 ? @"Save As..." : @"Fixed";
         LOKA_VERIFY([[button title] isEqualToString:title]);
-        const CGFloat points = referenceCellWidth(title);
-        // The reference cell must match what the rail actually builds,
-        // including AppKit's default font and all implicit cell settings.
-        LOKA_VERIFY([[button cell] cellSize].width == points);
-        const int width = i == 2 ? 120 : projection.measurementToLu(points);
+        // The projected button's own cell, with AppKit's default font and
+        // every implicit setting, is the width the measurement must answer.
+        const CGFloat points = [[button cell] cellSize].width;
+        const int width = i == 2 ? kFixedWidth : projection.measurementToLu(points);
         const NSRect frame = [button frame];
         LOKA_VERIFY(frame.origin.x == projection.projectEdge(x).pt);
         LOKA_VERIFY(frame.size.width == projection.projectLength(x, x + width).pt);
         if (metrics.spaceScale.isUnit())
-          LOKA_VERIFY(frame.size.width == (i == 2 ? 120 : std::ceil(points)));
+          LOKA_VERIFY(frame.size.width == (i == 2 ? kFixedWidth : std::ceil(points)));
         if (i)
           LOKA_VERIFY(frame.origin.x > NSMaxX([buttonAt(root, i - 1) frame]));
         x += width + layout::FallbackControlMetrics::kHorizontalSpacing;
@@ -94,8 +121,7 @@ void testMacButtonNaturalWidthMatchesCell()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
-  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 240)];
-  LOKA_VERIFY(root != nil);
+  NSView *root = newRootView();
   {
     MacScenePlatformController controller(root, RailMetrics());
     ButtonNode newButton(ButtonProps().text(loka::core::String::Literal("New")));
@@ -104,27 +130,24 @@ void testMacButtonNaturalWidthMatchesCell()
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, newWidth));
     LOKA_VERIFY(controller.queryNaturalWidth(&saveButton, saveWidth));
     LOKA_VERIFY(newWidth < saveWidth);
-    LOKA_VERIFY(newWidth == std::ceil(referenceCellWidth(@"New")));
-    LOKA_VERIFY(saveWidth == std::ceil(referenceCellWidth(@"Save As...")));
+    LOKA_VERIFY(newWidth == std::ceil(projectedCellWidth(newButton.props, @"New")));
+    LOKA_VERIFY(saveWidth == std::ceil(projectedCellWidth(saveButton.props, @"Save As...")));
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, repeated));
     LOKA_VERIFY(repeated == newWidth);
     StackNode other((StackProps()));
-    repeated = 17;
+    repeated = kUntouched;
     LOKA_VERIFY(!controller.queryNaturalWidth(&other, repeated));
     LOKA_VERIFY(!controller.queryNaturalWidth(0, repeated));
-    LOKA_VERIFY(repeated == 17);
-    ButtonNode oversized(ButtonProps().text(loka::core::String(std::string(32768, 'W'))));
+    LOKA_VERIFY(repeated == kUntouched);
+    // SHRT_MAX + 1 wide letters measure far past SHRT_MAX lu at any rail scale.
+    ButtonNode oversized(ButtonProps().text(loka::core::String(std::string(SHRT_MAX + 1, 'W'))));
     LOKA_VERIFY(!controller.queryNaturalWidth(&oversized, repeated));
-    LOKA_VERIFY(repeated == 17);
+    LOKA_VERIFY(repeated == kUntouched);
 
+    // With no text prop the projected button keeps NSButton's default title.
     ButtonNode untitled((ButtonProps()));
-    controller.onChange(&untitled, NODE_DIRTY_NONE, false);
-    controller.relayout(640, 160);
-    NSButton *native = buttonAt(root, 0);
-    LOKA_VERIFY([[native title] isEqualToString:@"Button"]);
     LOKA_VERIFY(controller.queryNaturalWidth(&untitled, repeated));
-    LOKA_VERIFY(repeated == std::ceil([[native cell] cellSize].width));
-    controller.onChange(0, NODE_DIRTY_NONE, false);
+    LOKA_VERIFY(repeated == std::ceil(projectedCellWidth(untitled.props, @"Button")));
   }
   [root release];
   [pool drain];
@@ -143,20 +166,19 @@ void testMacDirectRowNaturalWidthFrames()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
-  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 240)];
-  LOKA_VERIFY(root != nil);
+  NSView *root = newRootView();
   {
     MacScenePlatformController controller(root, RailMetrics());
     DirectRow row;
     row.addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("New"))));
     row.addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("Save As..."))));
     controller.onChange(&row, NODE_DIRTY_NONE, false);
-    controller.relayout(640, 160);
+    controller.relayout(kClientWidth, kClientHeight);
     LOKA_VERIFY([[root subviews] count] == 2);
     NSButton *first = buttonAt(root, 0);
     NSButton *second = buttonAt(root, 1);
-    LOKA_VERIFY([first frame].size.width == std::ceil(referenceCellWidth(@"New")));
-    LOKA_VERIFY([second frame].size.width == std::ceil(referenceCellWidth(@"Save As...")));
+    LOKA_VERIFY([first frame].size.width == std::ceil([[first cell] cellSize].width));
+    LOKA_VERIFY([second frame].size.width == std::ceil([[second cell] cellSize].width));
     LOKA_VERIFY([second frame].origin.x == NSMaxX([first frame])
                 + layout::FallbackControlMetrics::kHorizontalSpacing);
     controller.onChange(0, NODE_DIRTY_NONE, false);
@@ -170,8 +192,7 @@ void testMacOrdinaryRowStillSharesWidth()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
-  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 240)];
-  LOKA_VERIFY(root != nil);
+  NSView *root = newRootView();
   {
     MacScenePlatformController controller(root, RailMetrics());
     NodeDefinitionBase *definition = (Row() << Button("New") << Button("Save As...")).clone();
@@ -179,12 +200,12 @@ void testMacOrdinaryRowStillSharesWidth()
     Scene scene(definition);
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
-    controller.relayout(640, 160);
+    controller.relayout(kClientWidth, kClientHeight);
     LOKA_VERIFY([[root subviews] count] == 2);
     const NSRect first = [buttonAt(root, 0) frame];
     const NSRect second = [buttonAt(root, 1) frame];
     const int gap = layout::FallbackControlMetrics::kHorizontalSpacing;
-    LOKA_VERIFY(first.size.width == (640 - 40 - gap) / 2);
+    LOKA_VERIFY(first.size.width == (kClientWidth - 2 * kRootInset - gap) / 2);
     LOKA_VERIFY(second.size.width == first.size.width);
     LOKA_VERIFY(second.origin.x == NSMaxX(first) + gap);
     SceneTestAccess::unmount(scene);
