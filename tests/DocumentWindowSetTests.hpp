@@ -56,6 +56,7 @@ void testQuitWithoutRosterQuitsNow();
 void testQuitAsksSeriallyAndCancelEndsAttempt();
 void testQuitSecondDeclineInSameTurnStillCancelsAttempt();
 void testQuitOtherDocumentDeclineInSameTurnEndsAttempt();
+void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt();
 void testQuitAllAcceptedExitsWithStaticWindow();
 
 #endif

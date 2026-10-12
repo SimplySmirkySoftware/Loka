@@ -1397,6 +1397,28 @@ void testQuitOtherDocumentDeclineInSameTurnEndsAttempt()
   LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
 }
 
+void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  const ItemId second = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk attempt = config.roster.closeAsked().get();
+  LOKA_VERIFY(config.roster.closeAnswer().get() == CloseAnswer(attempt.id, attempt.seq));
+  // The declined document is closed by hand before the tail: its row is gone
+  // and its decline is still published. The decline wins; nobody else is asked.
+  config.roster.close(config.initial);
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == attempt);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
 void testQuitAllAcceptedExitsWithStaticWindow()
 {
   TrackingContext context;

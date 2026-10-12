@@ -506,20 +506,22 @@ void App::advanceQuitAttempt()
   if (this->quitAttempt_.id.isNone())
     return;
   loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
-  if (roster.count() == 0 || roster.idAt(0) != this->quitAttempt_.id)
-  {
-    this->requestQuit();
-    return;
-  }
   // Any decline published at or after this attempt's ask ends it, whichever
   // document declined: the answer box is latest-wins, so a second ask in the
   // same turn (a native close box on another document, or the same one; Win32
   // drains queued accelerators before its tail) overwrites the asked
   // document's own decline. Ending the attempt on any later decline costs the
-  // user one more Quit; keeping it would quit later without being asked.
+  // user one more Quit; keeping it would quit later without being asked. The
+  // decline is read before the row, so a document that declined and was then
+  // closed by hand in the same turn does not read as an acceptance.
   const loka::app::CloseAnswer answer = roster.closeAnswer().get();
   if (!answer.id.isNone() && answer.seq >= this->quitAttempt_.seq)
+  {
     this->quitAttempt_ = QuitAttempt::none();
+    return;
+  }
+  if (roster.count() == 0 || roster.idAt(0) != this->quitAttempt_.id)
+    this->requestQuit();
 }
 
 void App::requestWindowClose(Window *window)
