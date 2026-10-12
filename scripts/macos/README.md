@@ -184,10 +184,10 @@ appearance. The key declares the opt-in; whether AppKit honors it for legacy
 builds, which link older SDKs, is not runtime-verified, so on 10.14 and 10.15
 such a build may still render light while the system is dark. That is a known
 limitation, not a drawing defect. The UB2 release links the current SDK and
-its x86_64 slice starts at 10.13, so on 10.14 and 10.15 it is expected to
-follow the system appearance; that is not runtime-verified either. The key is
-unknown to 10.13 and earlier, and it is already the default for builds linked
-against the 10.14 SDK or later.
+its x86_64 slice starts at 10.13, so on 10.14 and 10.15 it follows the system
+appearance: runtime-verified dark on 10.14 (2026-10-12), not verified on 10.15.
+The key is unknown to 10.13 and earlier, and it is already the default for
+builds linked against the 10.14 SDK or later.
 
 - `scripts/macos-standalone-release-ub1.sh tiger|leopard`
   - Builds the five autonomous Standalone Loop bundles plus the interactive

@@ -104,9 +104,10 @@ This is the environment where binaries are actually built.
   still needs legacy build verification and Retina runtime verification.
   The same template opts the bundles into the dark appearance
   (`NSRequiresAquaSystemAppearance` false, #421); on macOS 10.14 and 10.15 a
-  legacy build linked against an older SDK may still render light, and the UB2
-  release, whose x86_64 slice serves those versions with the current SDK, is
-  not runtime-verified there. See `scripts/macos/README.md`.
+  legacy build linked against an older SDK may still render light, while the
+  UB2 release, whose x86_64 slice serves those versions with the current SDK,
+  was runtime-verified in the dark appearance on 10.14 (10.15 not verified).
+  See `scripts/macos/README.md`.
   In an Xcode 3.2.6 build environment, use
   `scripts/macos-standalone-release-ub1.sh tiger` for a `ppc;i386` set or
   `scripts/macos-standalone-release-ub1.sh leopard` for a
@@ -124,8 +125,9 @@ This is the environment where binaries are actually built.
   SimpleViewer and SimpleText under `build/release/macos-ub2` only after every
   executable contains both slices. The release's x86_64 slice targets macOS
   10.13, so 10.13 through 10.15, which run neither the 32-bit UB1 set nor an
-  11.0 build, are served by it; the arm64 slice targets macOS 11.0. Runtime on
-  10.13 through 10.15 has not been verified.
+  11.0 build, are served by it; the arm64 slice targets macOS 11.0. All seven
+  applications were runtime-verified on macOS 10.14 in the dark appearance
+  (2026-10-12, owner's machine). 10.13 and 10.15 have not been verified.
 - For a presentation that keeps moving without a host controller, use the
   TEST-only HelloWorld and MineSweeper loop reels. Each application shows every
   registered cell for its example, wraps to the first, and continues until the
