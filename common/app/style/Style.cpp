@@ -8,7 +8,7 @@ namespace loka
 {
   namespace app
   {
-    TextStyle SizeOf(int logicalUnits)
+    int detail::SnapTextSizePoints(int logicalUnits)
     {
       int selected = detail::StyleVocabularySizes[0];
       if (logicalUnits > selected)
@@ -28,9 +28,12 @@ namespace loka
           break;
         }
       }
-      TextStyle result;
-      result.size_ = TextSizeValue::points(selected);
-      return result;
+      return selected;
+    }
+
+    TextStyle SizeOf(int logicalUnits)
+    {
+      return TextStyle(TextSizeValue::points(detail::SnapTextSizePoints(logicalUnits)));
     }
 
   } // namespace app

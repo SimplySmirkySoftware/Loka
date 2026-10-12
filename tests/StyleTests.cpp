@@ -30,21 +30,36 @@ void testTextStyleMergeAndSizeVocabulary()
                                  TextSizeValue::points(-1),
                                  TextSizeValue::points(0),
                                  TextSizeValue::points(11),
-                                 TextSizeValue::points(24)};
+                                 TextSizeValue::points(24),
+                                 TextSizeValue::role(TEXT_SIZE_ROLE_SMALL_LABEL)};
   int untouched = 71;
   LOKA_VERIFY(!sizes[0].queryPoints(untouched) && untouched == 71);
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 6; ++i)
   {
     const TextSizeValue copy(sizes[i]);
     LOKA_VERIFY(copy == sizes[i]);
     LOKA_VERIFY(copy.isSet() == (i != 0));
-    for (int j = 0; j < 5; ++j)
+    for (int j = 0; j < 6; ++j)
     {
+      LOKA_VERIFY((sizes[i] == sizes[j]) == (i == j));
       LOKA_VERIFY((sizes[i] == sizes[j]) == (!(sizes[i] < sizes[j]) && !(sizes[j] < sizes[i])));
-      for (int k = 0; k < 5; ++k)
+      for (int k = 0; k < 6; ++k)
         LOKA_VERIFY(!(sizes[i] < sizes[j]) || !(sizes[j] < sizes[k]) || sizes[i] < sizes[k]);
     }
   }
+  LOKA_VERIFY(sizeof(TextSizeValue) == 4);
+  TextSizeRole role = TEXT_SIZE_ROLE_COUNT;
+  LOKA_VERIFY(!sizes[0].queryRole(role) && role == TEXT_SIZE_ROLE_COUNT);
+  LOKA_VERIFY(!sizes[3].queryRole(role) && role == TEXT_SIZE_ROLE_COUNT);
+  LOKA_VERIFY(sizes[5].queryRole(role) && role == TEXT_SIZE_ROLE_SMALL_LABEL);
+  LOKA_VERIFY(!sizes[5].queryPoints(untouched) && untouched == 71);
+  LOKA_VERIFY(FontSize<12>() + SmallLabel == SmallLabel);
+  LOKA_VERIFY(SmallLabel + FontSize<12>() == FontSize<12>());
+  LOKA_VERIFY(SmallLabel + TextStyle() == SmallLabel);
+  LOKA_VERIFY(TextStyle() + SmallLabel == SmallLabel);
+  LOKA_VERIFY(SmallLabel != FontSize<9>() && SmallLabel != TextStyle());
+  LOKA_VERIFY(TextStyle() < SmallLabel && SmallLabel < FontSize<9>());
+  LOKA_VERIFY((Text("x") + SmallLabel).props.hasDeclaredLayoutStyle());
   const TextStyle boldLarge = Bold + FontSize<24>();
   const TextStyle largeBold = FontSize<24>() + Bold;
   LOKA_VERIFY(boldLarge == largeBold);

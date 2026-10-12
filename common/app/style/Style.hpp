@@ -11,8 +11,8 @@ namespace loka
     /** Character-level text style. Unset fields are transparent during merge. */
     struct TextStyle
     {
-      TextStyle()
-          : size_(),
+      explicit TextStyle(TextSizeValue size = TextSizeValue())
+          : size_(size),
             weight_(TEXT_WEIGHT_NORMAL),
             color_(TEXT_COLOR_UNSET),
             italic_(false),
@@ -206,6 +206,12 @@ namespace loka
 {
   namespace app
   {
+    namespace detail
+    {
+      /** Nearest vocabulary point size, ties down, shared by numeric rail projections. */
+      int SnapTextSizePoints(int logicalUnits);
+    } // namespace detail
+
     TextStyle SizeOf(int logicalUnits);
 
     /* Named styles are defined per translation unit (internal linkage) so that a

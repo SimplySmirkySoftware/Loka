@@ -1253,3 +1253,5 @@ LOKA_TEST(testToolboxGroundLegibility)
 LOKA_TEST(testWin32GroundRoles)
 LOKA_TEST(testWin32TextInks)
 LOKA_TEST(testWin32GroundLegibility)
+
+LOKA_TEST(testNullTextSmallLabelMetrics)
