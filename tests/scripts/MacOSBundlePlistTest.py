@@ -19,6 +19,9 @@ def check_bundles(build_root):
             raise ValueError(str(bundle) + ": dark appearance opt-in is not declared")
         if info.get("CFBundleExecutable") != bundle.stem:
             raise ValueError(str(bundle) + ": executable metadata does not match target")
+        # macOS shows an empty name as "" where it names the app (10.13's 32-bit alert).
+        if not info.get("CFBundleName"):
+            raise ValueError(str(bundle) + ": bundle name is empty")
         if info.get("CFBundlePackageType") != "APPL":
             raise ValueError(str(bundle) + ": application package type is missing")
     print("MacOSBundlePlistTest: checked {} bundles".format(len(bundles)))

@@ -225,6 +225,7 @@ function(loka_configure_scenario_test_bundle target bundle_id example_include_di
     CXX_STANDARD_REQUIRED YES
     OBJCXX_STANDARD 98
     OBJCXX_STANDARD_REQUIRED YES
+    MACOSX_BUNDLE_BUNDLE_NAME "${target}"
     MACOSX_BUNDLE_GUI_IDENTIFIER "${bundle_id}"
   )
 endfunction()
