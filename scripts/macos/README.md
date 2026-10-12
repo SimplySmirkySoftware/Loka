@@ -180,12 +180,14 @@ metadata still needs legacy build verification and Retina runtime verification.
 
 The template also declares `NSRequiresAquaSystemAppearance` as false (#421).
 AppKit keeps applications linked against SDKs older than 10.14 in the light
-appearance, and macOS 10.14 and 10.15 are served by the legacy builds, which
-link older SDKs. The key declares the opt-in; whether AppKit honors it for
-those binaries is not runtime-verified, so on 10.14 and 10.15 a Loka
-application may still render light while the system is dark. That is a known
-limitation, not a drawing defect. The key is unknown to 10.13 and earlier,
-and it is already the default for the modern builds that serve 11 and later.
+appearance. The key declares the opt-in; whether AppKit honors it for legacy
+builds, which link older SDKs, is not runtime-verified, so on 10.14 and 10.15
+such a build may still render light while the system is dark. That is a known
+limitation, not a drawing defect. The UB2 release links the current SDK and
+its x86_64 slice starts at 10.13, so on 10.14 and 10.15 it follows the system
+appearance: runtime-verified dark on 10.14 (2026-10-12), not verified on 10.15.
+The key is unknown to 10.13 and earlier, and it is already the default for
+builds linked against the 10.14 SDK or later.
 
 - `scripts/macos-standalone-release-ub1.sh tiger|leopard`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
@@ -212,8 +214,9 @@ and it is already the default for the modern builds that serve 11 and later.
   - Builds the five autonomous Standalone Loop bundles plus the interactive
     SimpleViewer and SimpleText as `arm64;x86_64`, then stages the complete set
     under `build/release/macos-ub2`.
-  - Uses the modern UB2 build path with deployment target 11.0 and publishes
-    only after every executable contains both required slices. Scrapbook's
+  - Uses the modern UB2 build path with deployment target 10.13 (refusing any
+    other), which the arm64 slice raises to 11.0, and publishes only after
+    every executable contains both required slices. Scrapbook's
     `ASSETS.LRP` remains inside its bundle.
 
 - `scripts/macos/build-10_7.sh`
