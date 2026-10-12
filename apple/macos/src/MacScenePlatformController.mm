@@ -103,14 +103,18 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
   std::string utf8;
   if (!loka::platform::CollectUtf8(label, utf8))
     return 0;
-  NSButtonCell *cell = [[NSButtonCell alloc] initTextCell:loka::macos::CreateNSStringFromUtf8(utf8)];
-  if (!cell)
+  // Measure the control MacButtonContext builds, not a standalone cell: on
+  // macOS 10.14 through 13 an NSButtonCell made by initTextCell: reports its
+  // title without the push bezel's padding, in 12 pt instead of the button's
+  // 13 pt, so SimpleText's command band drew every button too narrow.
+  NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
+  if (!button)
     return 0;
-  // Match MacButtonContext's bezel, type and native default cell font.
-  [cell setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-  [cell setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
-  const CGFloat points = [cell cellSize].width;
-  [cell release];
+  [button setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
+  [button setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
+  [button setTitle:loka::macos::CreateNSStringFromUtf8(utf8)];
+  const CGFloat points = [[button cell] cellSize].width;
+  [button release];
   // Bound before the floating-to-integer conversion; NaN also declines.
   const loka::app::Ratio &scale = this->projection_.railMetrics().spaceScale;
   if (!(points > 0 && points <= static_cast<double>(SHRT_MAX) * scale.num / scale.den))

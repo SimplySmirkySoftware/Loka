@@ -15,17 +15,6 @@ namespace
   using namespace loka::dsl;
   using namespace loka::dsl::testing;
 
-  CGFloat referenceCellWidth(NSString *title)
-  {
-    NSButtonCell *cell = [[NSButtonCell alloc] initTextCell:title];
-    LOKA_VERIFY(cell != nil);
-    [cell setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-    [cell setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
-    const CGFloat width = [cell cellSize].width;
-    [cell release];
-    return width;
-  }
-
   NSButton *buttonAt(NSView *root, NSUInteger index)
   {
     NSArray *views = [root subviews];
@@ -33,6 +22,19 @@ namespace
     NSButton *button = (NSButton *)[views objectAtIndex:index];
     LOKA_VERIFY([button isKindOfClass:[NSButton class]]);
     return button;
+  }
+
+  // The reference is the control the rail projects for the node, never a
+  // separately built cell: on macOS 10.14 through 13 a standalone NSButtonCell
+  // reports a narrower size than the NSButton's own cell.
+  CGFloat projectedCellWidth(MacScenePlatformController &controller, NSView *root, ButtonNode &node)
+  {
+    controller.onChange(&node, NODE_DIRTY_NONE, false);
+    controller.relayout(640, 160);
+    const CGFloat width = [[buttonAt(root, 0) cell] cellSize].width;
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+    LOKA_VERIFY([[root subviews] count] == 0);
+    return width;
   }
 
   // A different type key bypasses the registered Stack handler while retaining
@@ -69,10 +71,9 @@ namespace
         NSButton *button = buttonAt(root, i);
         NSString *title = i == 0 ? @"New" : i == 1 ? @"Save As..." : @"Fixed";
         LOKA_VERIFY([[button title] isEqualToString:title]);
-        const CGFloat points = referenceCellWidth(title);
-        // The reference cell must match what the rail actually builds,
-        // including AppKit's default font and all implicit cell settings.
-        LOKA_VERIFY([[button cell] cellSize].width == points);
+        // The projected button's own cell, with AppKit's default font and
+        // every implicit setting, is the width the measurement must answer.
+        const CGFloat points = [[button cell] cellSize].width;
         const int width = i == 2 ? 120 : projection.measurementToLu(points);
         const NSRect frame = [button frame];
         LOKA_VERIFY(frame.origin.x == projection.projectEdge(x).pt);
@@ -104,8 +105,8 @@ void testMacButtonNaturalWidthMatchesCell()
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, newWidth));
     LOKA_VERIFY(controller.queryNaturalWidth(&saveButton, saveWidth));
     LOKA_VERIFY(newWidth < saveWidth);
-    LOKA_VERIFY(newWidth == std::ceil(referenceCellWidth(@"New")));
-    LOKA_VERIFY(saveWidth == std::ceil(referenceCellWidth(@"Save As...")));
+    LOKA_VERIFY(newWidth == std::ceil(projectedCellWidth(controller, root, newButton)));
+    LOKA_VERIFY(saveWidth == std::ceil(projectedCellWidth(controller, root, saveButton)));
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, repeated));
     LOKA_VERIFY(repeated == newWidth);
     StackNode other((StackProps()));
@@ -120,11 +121,10 @@ void testMacButtonNaturalWidthMatchesCell()
     ButtonNode untitled((ButtonProps()));
     controller.onChange(&untitled, NODE_DIRTY_NONE, false);
     controller.relayout(640, 160);
-    NSButton *native = buttonAt(root, 0);
-    LOKA_VERIFY([[native title] isEqualToString:@"Button"]);
-    LOKA_VERIFY(controller.queryNaturalWidth(&untitled, repeated));
-    LOKA_VERIFY(repeated == std::ceil([[native cell] cellSize].width));
+    LOKA_VERIFY([[buttonAt(root, 0) title] isEqualToString:@"Button"]);
     controller.onChange(0, NODE_DIRTY_NONE, false);
+    LOKA_VERIFY(controller.queryNaturalWidth(&untitled, repeated));
+    LOKA_VERIFY(repeated == std::ceil(projectedCellWidth(controller, root, untitled)));
   }
   [root release];
   [pool drain];
@@ -155,8 +155,8 @@ void testMacDirectRowNaturalWidthFrames()
     LOKA_VERIFY([[root subviews] count] == 2);
     NSButton *first = buttonAt(root, 0);
     NSButton *second = buttonAt(root, 1);
-    LOKA_VERIFY([first frame].size.width == std::ceil(referenceCellWidth(@"New")));
-    LOKA_VERIFY([second frame].size.width == std::ceil(referenceCellWidth(@"Save As...")));
+    LOKA_VERIFY([first frame].size.width == std::ceil([[first cell] cellSize].width));
+    LOKA_VERIFY([second frame].size.width == std::ceil([[second cell] cellSize].width));
     LOKA_VERIFY([second frame].origin.x == NSMaxX([first frame])
                 + layout::FallbackControlMetrics::kHorizontalSpacing);
     controller.onChange(0, NODE_DIRTY_NONE, false);
