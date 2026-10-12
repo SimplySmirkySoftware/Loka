@@ -886,7 +886,8 @@ namespace loka
       /** Destroys one heap runtime node through the door its storage came from.
           Gate-resident nodes (NodeDefinition::create) return to the backend
           under NodeHeapAllocationSite(); plain-new nodes use global delete.
-          Arena and partition nodes return through their landlords. Null-safe.
+          Arena and partition nodes return through their landlords; one passed
+          here is refused (asserts in debug, a no-op otherwise). Null-safe.
 
           Provenance is read before destruction, then lowered by
           DestroyNodeInPlace on the gate path. A raised provenance in ~Node
@@ -906,8 +907,13 @@ namespace loka
           loka::core::LokaFreeRaw(node, NodeHeapAllocationSite());
           return;
         }
-        assert(!node->isArenaAllocated() && !node->isPartitionAllocated() &&
-               "arena and partition nodes return through their landlord");
+        if (node->isArenaAllocated() || node->isPartitionAllocated())
+        {
+          // Refused in every build: neither destroyed nor freed. The node
+          // stays in its landlord's ledger, which ends it through its own door.
+          assert(false && "arena and partition nodes return through their landlord");
+          return;
+        }
         delete node;
       }
 

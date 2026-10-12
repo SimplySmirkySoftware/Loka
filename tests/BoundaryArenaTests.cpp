@@ -2429,6 +2429,62 @@ void testLandlordNodesRejectUnauthorizedDestruction()
 #endif
 }
 
+namespace
+{
+  struct RefusalCountingNode : loka::app::scene::Node
+  {
+    explicit RefusalCountingNode(int &deaths) : deaths(deaths) {}
+    virtual ~RefusalCountingNode() { ++this->deaths; }
+    int &deaths;
+  };
+  struct RefusalCountingBuild : loka::app::scene::detail::NodeBuildOperation
+  {
+    RefusalCountingBuild() : deaths(0), node(0) {}
+    RefusalCountingNode *construct(void *storage) { return new (storage) RefusalCountingNode(this->deaths); }
+    virtual bool buildAndAttach(loka::app::scene::detail::NodeBuildTicket &ticket)
+    { this->node = ticket.create<RefusalCountingNode>(*this); return this->node != 0; }
+    int deaths;
+    RefusalCountingNode *node;
+  };
+}
+
+/** #1272: DestroyHeapNode refuses landlord storage in every build. Without
+    NDEBUG the refusal asserts (testLandlordNodesRejectUnauthorizedDestruction);
+    with it the node is neither destroyed nor freed, and its landlord still
+    ends it exactly once through its own door. */
+void testHeapDoorRefusesLandlordNodesInRelease()
+{
+#if defined(NDEBUG)
+  using namespace loka::app::scene;
+  int arenaDeaths = 0;
+  {
+    NodeArena arena;
+    arena.reserve(sizeof(RefusalCountingNode) + detail::AlignOf<RefusalCountingNode>::value);
+    void *storage = arena.allocate(sizeof(RefusalCountingNode), detail::AlignOf<RefusalCountingNode>::value);
+    LOKA_VERIFY(storage != 0);
+    RefusalCountingNode *node = new (storage) RefusalCountingNode(arenaDeaths);
+    arena.registerNode(node);
+    DestroyHeapNode(node);
+    LOKA_VERIFY(arenaDeaths == 0);
+    LOKA_VERIFY(node->arenaOwner() == &arena);
+    LOKA_VERIFY(arena.releaseNode(node));
+    LOKA_VERIFY(arenaDeaths == 1);
+  }
+  detail::NodePartition bank;
+  const detail::NodeSlotLayout layout = detail::NodeSlotLayout::of<RefusalCountingNode>(1);
+  LOKA_VERIFY(bank.boot(&layout, 1));
+  RefusalCountingBuild build;
+  LOKA_VERIFY(bank.build(&layout, 1, build));
+  DestroyHeapNode(build.node);
+  LOKA_VERIFY(build.deaths == 0);
+  LOKA_VERIFY(build.node->partitionOwner() == &bank);
+  LOKA_VERIFY(bank.destroy(build.node, layout));
+  LOKA_VERIFY(build.deaths == 1);
+#else
+  std::puts("[skip] Release heap-door refusal pin requires NDEBUG; debug builds assert on misuse.");
+#endif
+}
+
 /** #132 S3 red test (b): with the owner arena exhausted and the backend
     refusing the gate-routed heap fallback, state creation must raise the
     owner's white flag so the open compose window converts into a failure —

@@ -8,6 +8,7 @@ void testNodeArenaSlabCrossesAllocationGate();
 void testHeapNodeCrossesAllocationGate();
 void testGateAllocatedNodeRejectsUnauthorizedDestruction();
 void testLandlordNodesRejectUnauthorizedDestruction();
+void testHeapDoorRefusesLandlordNodesInRelease();
 void testHeapFallbackWhiteFlagFailsBoundaryCompose();
 void testSceneRootAllocationRefusalArmsWhiteFlagAndHealsOnRefresh();
 void testNestedConditionalSeatInContextlessMaterialization_Probe();
