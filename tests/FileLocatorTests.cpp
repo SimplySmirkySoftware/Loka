@@ -28,6 +28,7 @@ namespace
     LOKA_VERIFY(value.locator().empty());
     LOKA_VERIFY(value.relativePath().empty());
     LOKA_VERIFY(value.toString().empty());
+    LOKA_VERIFY(value.name().empty());
     LOKA_VERIFY(value != File());
     LOKA_VERIFY(!loka::platform::file::ApplicationRelativeIsOpenable(value));
   }
@@ -120,6 +121,42 @@ void testFileLocatorCaptureRefusalIsAtomic()
 
 void testFileLocatorCompositionPrecedence()
 {
+  using loka::core::String;
+  LOKA_VERIFY(File().name().empty());
+  LOKA_VERIFY(File("unlocated").name().empty());
+  LOKA_VERIFY(File::Root().name().empty());
+  LOKA_VERIFY(File::Application().name().empty());
+  LOKA_VERIFY(File::Desktop().name().empty());
+  LOKA_VERIFY(File::Documents().name().empty());
+  LOKA_VERIFY((File::Application() << File("assets") << File("leaf")).name().equals(String("leaf")));
+  LOKA_VERIFY((File::Desktop() << File("leaf")).name().equals(String("leaf")));
+  LOKA_VERIFY((File::Documents() << File("leaf")).name().equals(String("leaf")));
+#if defined(LOKA_RETRO68)
+  LOKA_VERIFY((File::Root() << File("folder:leaf::")).name().equals(String("leaf")));
+  LOKA_VERIFY((File::Root() << File("notes/2026.txt")).name().equals(String("notes/2026.txt")));
+#else
+  LOKA_VERIFY(File::FromPath("/tmp/folder/leaf").name().equals(String("leaf")));
+  LOKA_VERIFY(File::FromPath("/tmp/notes:2026.txt").name().equals(String("notes:2026.txt")));
+#if defined(_WIN32)
+  // Win32 seals dialog paths with backslashes, so a backslash ends a component there.
+  LOKA_VERIFY(File::FromPath("/tmp/notes\\2026.txt").name().equals(String("2026.txt")));
+#else
+  LOKA_VERIFY(File::FromPath("/tmp/notes\\2026.txt").name().equals(String("notes\\2026.txt")));
+#endif
+  LOKA_VERIFY(File::FromPath("/tmp/leaf///").name().equals(String("leaf")));
+  LOKA_VERIFY(File::FromPath("/").name().empty());
+  LOKA_VERIFY(File::FromPath("").name().empty());
+  LOKA_VERIFY((File::FromPath("/tmp/base") << File("folder/child/")).name().equals(String("child")));
+#endif
+  File chosen;
+#if defined(LOKA_RETRO68)
+  const String chosenName("notes/2026.txt");
+#else
+  const String chosenName("notes:2026.txt");
+#endif
+  LOKA_VERIFY(FileLocatorAccess::capture(chosenName, File::KIND_FILE, 0, 0, chosen));
+  LOKA_VERIFY(chosen.name().equals(chosenName));
+  LOKA_VERIFY(Located(0, 0).name().equals(String("same")));
   const unsigned char bytes[] = {0xff};
   const File located = Located(bytes, sizeof(bytes));
   File refused = located << File("child");
