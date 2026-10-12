@@ -1,0 +1,39 @@
+# Tahoe golden leg at RC 39de508f (renewal for #1263), run 2026-10-12 18:36-18:39 JST, tree ~/loka-rc006 (incremental from a536c4e0 build)
+# pre-check: ~/loka main 39de508f git status --short = clean; ~/loka-rc006 status = clean; golden bundle copied from ~/loka/build/macos-scenario/golden (no png newer than 10-12 12:00)
+rev 39de508f766cebd377037160523de01bc36c9f57 26.7.1 25G241
+screen-lock-flag: 
+lrpc build exit=0 warnings=2 bin=10-12_18:36:45
+configure exit=0
+build macos-debug exit=0 warnings=0 secs=4
+build macos-scenarios exit=0 warnings=0 secs=0
+build macos-tests exit=0 warnings=0 secs=0
+bin LokaFloppyBirdScenarioMacOS 10-12_12:37:13 CFBundleName=LokaFloppyBirdScenarioMacOS
+bin LokaHelloWorldScenarioMacOS 10-12_12:37:13 CFBundleName=LokaHelloWorldScenarioMacOS
+bin LokaMineSweeperScenarioMacOS 10-12_12:37:13 CFBundleName=LokaMineSweeperScenarioMacOS
+bin LokaScrapbookScenarioMacOS 10-12_12:37:13 CFBundleName=LokaScrapbookScenarioMacOS
+bin LokaSmirkBenchScenarioMacOS 10-12_12:37:13 CFBundleName=LokaSmirkBenchScenarioMacOS
+bin LokaTutorialScenarioMacOS 10-12_12:37:13 CFBundleName=LokaTutorialScenarioMacOS
+bin LokaTestsMacOS 10-12_12:35:42
+ctest LokaTestsMacOS exit=0 secs=7 100% tests passed, 0 tests failed out of 1
+golden copied: 18 png
+cell floppybird/fixed-step-flaps exit=0 verdict=PASS rerun=no secs=10
+cell floppybird/startup exit=0 verdict=PASS rerun=no secs=5
+cell helloworld/bmi-roundtrip exit=0 verdict=PASS rerun=no secs=7
+cell helloworld/startup exit=0 verdict=PASS rerun=no secs=6
+cell helloworld/toggle-action-probe exit=0 verdict=PASS rerun=no secs=7
+cell minesweeper/new-game-twice exit=0 verdict=PASS rerun=no secs=2
+cell minesweeper/seeded-reveal exit=0 verdict=PASS rerun=no secs=3
+cell minesweeper/startup exit=0 verdict=PASS rerun=no secs=3
+cell scrapbook/flip-forward-back exit=0 verdict=PASS rerun=no secs=7
+cell scrapbook/open-first-page-refused exit=0 verdict=PASS rerun=no secs=5
+cell scrapbook/open-text-page-refused exit=0 verdict=PASS rerun=no secs=5
+cell scrapbook/open-text-page exit=0 verdict=PASS rerun=no secs=5
+cell scrapbook/refused-flip-keeps-page exit=0 verdict=PASS rerun=no secs=6
+cell scrapbook/startup exit=0 verdict=PASS rerun=no secs=5
+cell smirkbench/attributed-editor-line exit=0 verdict=PASS rerun=no secs=10
+cell smirkbench/startup exit=0 verdict=PASS rerun=no secs=9
+cell tutorial/increment-summary-toggle exit=0 verdict=PASS rerun=no secs=6
+cell tutorial/startup exit=0 verdict=PASS rerun=no secs=5
+cells passed 18/18
+total secs=126
+ALL DONE
