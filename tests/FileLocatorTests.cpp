@@ -137,7 +137,12 @@ void testFileLocatorCompositionPrecedence()
 #else
   LOKA_VERIFY(File::FromPath("/tmp/folder/leaf").name().equals(String("leaf")));
   LOKA_VERIFY(File::FromPath("/tmp/notes:2026.txt").name().equals(String("notes:2026.txt")));
+#if defined(_WIN32)
+  // Win32 seals dialog paths with backslashes, so a backslash ends a component there.
+  LOKA_VERIFY(File::FromPath("/tmp/notes\\2026.txt").name().equals(String("2026.txt")));
+#else
   LOKA_VERIFY(File::FromPath("/tmp/notes\\2026.txt").name().equals(String("notes\\2026.txt")));
+#endif
   LOKA_VERIFY(File::FromPath("/tmp/leaf///").name().equals(String("leaf")));
   LOKA_VERIFY(File::FromPath("/").name().empty());
   LOKA_VERIFY(File::FromPath("").name().empty());
