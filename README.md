@@ -193,8 +193,10 @@ It also runs in a Macintosh Plus configuration (68000, 4 MB, System 7.1) on
 claimed, but the memory and the OS are what they say.
 
 This experiment has no screen goldens, does not carry state across a reload,
-and provides eight seats per card. Its build is opt-in at configure time; see
-[the SmirkyCard README](example/SmirkyCard/README.md) for build instructions.
+and provides eight seats per card. Its build is opt-in at configure time; the
+standalone release builds turn it on and stage it beside the other applications
+with its card scripts. See [the SmirkyCard README](example/SmirkyCard/README.md)
+for build instructions.
 
 On Classic Mac OS, `MAIN.JS` must be UTF-8 text. TeachText and SimpleText cannot
 write full-width UTF-8 characters, so use an editor that saves UTF-8. Classic

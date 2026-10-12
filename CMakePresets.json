@@ -171,7 +171,8 @@
       "inherits": "win32-arm64-release",
       "binaryDir": "build/win32/standalone/presentation/arm64/Release",
       "cacheVariables": {
-        "LOKA_ENABLE_STANDALONE_TARGETS": "ON"
+        "LOKA_ENABLE_STANDALONE_TARGETS": "ON",
+        "LOKA_BUILD_SMIRKYCARD": "ON"
       }
     },
     {
@@ -180,7 +181,8 @@
       "inherits": "win32-x64-release",
       "binaryDir": "build/win32/standalone/presentation/x64/Release",
       "cacheVariables": {
-        "LOKA_ENABLE_STANDALONE_TARGETS": "ON"
+        "LOKA_ENABLE_STANDALONE_TARGETS": "ON",
+        "LOKA_BUILD_SMIRKYCARD": "ON"
       }
     },
     {
@@ -189,7 +191,8 @@
       "inherits": "win32-x86-release",
       "binaryDir": "build/win32/standalone/presentation/x86/Release",
       "cacheVariables": {
-        "LOKA_ENABLE_STANDALONE_TARGETS": "ON"
+        "LOKA_ENABLE_STANDALONE_TARGETS": "ON",
+        "LOKA_BUILD_SMIRKYCARD": "ON"
       }
     },
     {

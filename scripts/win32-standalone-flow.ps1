@@ -249,6 +249,37 @@ function Get-StandaloneCatalog([string]$Path) {
     return ,$entries
 }
 
+# SmirkyCard's card scripts, in copy order. This reader stays parallel with
+# example/SmirkyCard/CMakeLists.txt (which places them beside the Win32 exe),
+# scripts/mame-*-disk*, scripts/release/classic-disks.py and
+# scripts/macos/standalone-release-stage.sh: surrounding whitespace is
+# trimmed, blank lines and full-line # comments are skipped.
+function Get-SmirkyCardScripts {
+    $manifest = Join-Path $ProjectDirectory "example/SmirkyCard/disk-scripts.txt"
+    if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+        throw "SmirkyCard script manifest not found: $manifest"
+    }
+    $scripts = @()
+    $names = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($line in [System.IO.File]::ReadAllLines($manifest)) {
+        $name = $line.Trim()
+        if (-not $name -or $name.StartsWith("#")) {
+            continue
+        }
+        if ($name -eq "." -or $name -eq ".." -or $name.IndexOfAny([char[]]"/\:") -ge 0) {
+            throw "Invalid SmirkyCard script name: $name"
+        }
+        if (-not $names.Add($name)) {
+            throw "Duplicate SmirkyCard script: $name"
+        }
+        $scripts += $name
+    }
+    if ($scripts.Count -eq 0) {
+        throw "SmirkyCard script manifest lists no scripts: $manifest"
+    }
+    return ,$scripts
+}
+
 if ($IsPackagedVerifier -and $Action -ne "Verify") {
     throw "The staged verifier supports only the Verify action."
 }
@@ -313,6 +344,9 @@ if ($IsReleasePackage) {
     $loopAssets = Join-Path $loopExecutableRoot "scrapbook/ASSETS.LRP"
     $simpleViewer = Join-Path $buildRoot "example/SimpleViewer/LokaSimpleViewerWin32.exe"
     $simpleText = Join-Path $buildRoot "example/SimpleText/LokaSimpleTextWin32.exe"
+    $smirkyCardRoot = Join-Path $buildRoot "example/SmirkyCard"
+    $smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"
+    $smirkyCardScripts = Get-SmirkyCardScripts
     foreach ($entry in $catalog) {
         $loopTarget = $entry.Target.Replace("StandaloneFlow", "StandaloneLoop")
         $loopExecutable = Get-ApplicationExecutable $loopExecutableRoot $entry.Key $loopTarget
@@ -329,6 +363,16 @@ if ($IsReleasePackage) {
         throw "SimpleText Release executable not found: $simpleText"
     }
     Assert-ExecutableArchitecture $simpleText $Architecture
+    if (-not (Test-Path -LiteralPath $smirkyCard -PathType Leaf)) {
+        throw "SmirkyCard Release executable not found: $smirkyCard"
+    }
+    Assert-ExecutableArchitecture $smirkyCard $Architecture
+    foreach ($name in $smirkyCardScripts) {
+        $smirkyCardScript = Join-Path $smirkyCardRoot $name
+        if (-not (Test-Path -LiteralPath $smirkyCardScript -PathType Leaf)) {
+            throw "SmirkyCard card script not found: $smirkyCardScript"
+        }
+    }
     if (-not (Test-Path -LiteralPath $loopAssets -PathType Leaf)) {
         throw "Autonomous loop assets not found: $loopAssets"
     }
@@ -356,6 +400,21 @@ if ($IsReleasePackage) {
             (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe") $Architecture
         Assert-FileCopy $simpleText `
             (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")
+        # SmirkyCard reads its card scripts from beside the executable, as the
+        # Win32 build places them.
+        New-Item -ItemType Directory -Path (Join-Path $Destination "smirkycard") | Out-Null
+        Copy-Item -LiteralPath $smirkyCard `
+            -Destination (Join-Path $Destination "smirkycard/LokaSmirkyCardWin32.exe")
+        Assert-ExecutableArchitecture `
+            (Join-Path $Destination "smirkycard/LokaSmirkyCardWin32.exe") $Architecture
+        Assert-FileCopy $smirkyCard `
+            (Join-Path $Destination "smirkycard/LokaSmirkyCardWin32.exe")
+        foreach ($name in $smirkyCardScripts) {
+            Copy-Item -LiteralPath (Join-Path $smirkyCardRoot $name) `
+                -Destination (Join-Path $Destination ("smirkycard/" + $name))
+            Assert-FileCopy (Join-Path $smirkyCardRoot $name) `
+                (Join-Path $Destination ("smirkycard/" + $name))
+        }
         Copy-Item -LiteralPath $loopAssets `
             -Destination (Join-Path $Destination "scrapbook/ASSETS.LRP")
         Assert-ExecutableArchitecture `
@@ -376,11 +435,12 @@ if ($IsReleasePackage) {
             "The five StandaloneLoop applications run their UI tour repeatedly.`r`n" +
             "Open an application's folder and launch its executable.`r`n" +
             "Keep each executable with its folder: its LOG.TXT and resources belong there.`r`n" +
-            "Close a loop application's window to stop it. SimpleViewer and SimpleText remain interactive.`r`n")
+            "Close a loop application's window to stop it. SimpleViewer and SimpleText remain interactive.`r`n" +
+            "SmirkyCard (experimental) loads MAIN.JS beside it; its buttons open MINES.JS and VIEWER.JS.`r`n")
     }.GetNewClosure()
     Install-LokaPresentationStageDirectory `
         -StageRoot $stageRoot -Populate $populateRelease
-    Write-Output "Staged five autonomous loops plus SimpleViewer and SimpleText ($Architecture): $stageRoot"
+    Write-Output "Staged five autonomous loops plus SimpleViewer, SimpleText and SmirkyCard ($Architecture): $stageRoot"
     exit 0
 }
 

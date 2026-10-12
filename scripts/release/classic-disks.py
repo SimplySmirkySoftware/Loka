@@ -17,8 +17,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 # (cpu, example, application, files beside it). A None file list means the
 # example's disk-scripts.txt: SmirkyCard ships every card script MAIN.JS can
-# open, and scripts/mame-*-disk* and example/SmirkyCard/CMakeLists.txt read the
-# same manifest. Keep the readers parallel.
+# open, and scripts/mame-*-disk*, example/SmirkyCard/CMakeLists.txt and the
+# Win32/macOS release stages (scripts/win32-standalone-flow.ps1,
+# scripts/macos/standalone-release-stage.sh) read the same manifest. Keep the
+# readers parallel.
 PAYLOADS = (
     ("68k", "ScrapbookUI", "ScrapbookUI68K", ("ASSETS.LRP",)),
     ("ppc", "ScrapbookUI", "ScrapbookUIPPC", ("ASSETS.LRP",)),

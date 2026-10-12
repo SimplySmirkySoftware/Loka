@@ -961,6 +961,10 @@ endif()
 if(LOKA_BUILD_SMIRKYCARD)
   enable_language(C)
   add_subdirectory(example/SmirkyCard)
+  # The standalone release presets turn SmirkyCard on and stage it beside the loops.
+  if(WIN32 AND TARGET LokaStandaloneLoopWin32All)
+    add_dependencies(LokaStandaloneLoopWin32All LokaSmirkyCardWin32)
+  endif()
 endif()
 
 # Pin the target-local warning contract after every platform/example target
