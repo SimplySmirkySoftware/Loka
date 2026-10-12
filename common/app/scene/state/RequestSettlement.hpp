@@ -210,7 +210,10 @@ namespace loka
       /** One reset/overflow boundary for the static histories of a fact type. */
       template <class Fact> class SettleTraceCapture
       {
-        template <class Request, class Value> friend class SettleTrace;
+      public:
+        // Public because SettleTrace names it as a base: GCC 4.0 refused the
+        // private class there even to a befriended SettleTrace (Tiger UB1).
+        // The protected constructor still limits it to derived histories.
         /** Intrusive registration follows the static trace's lifetime. */
         class Trace
         {
@@ -232,6 +235,8 @@ namespace loka
           Trace &operator=(const Trace &);
           Trace *next_;
         };
+
+      private:
         static Trace *&traces()
         {
           static Trace *head = 0;

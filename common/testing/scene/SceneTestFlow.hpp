@@ -41,7 +41,7 @@ namespace loka
         static bool runCountingRefreshes(::loka::app::scene::Scene &scene, int &attempts)
         {
           CountedRefresh probe(scene, attempts);
-          return scene.nextTickTracker_.run(&CountedRefresh::refresh, &CountedRefresh::apply, &probe);
+          return scene.nextTickTracker_.run(&SceneTestAccess::countedRefresh, &SceneTestAccess::countedApply, &probe);
         }
 
       private:
@@ -50,18 +50,21 @@ namespace loka
           ::loka::app::scene::Scene &scene;
           int &attempts;
           CountedRefresh(::loka::app::scene::Scene &value, int &count) : scene(value), attempts(count) {}
-          static bool refresh(void *data)
-          {
-            CountedRefresh &probe = *static_cast<CountedRefresh *>(data);
-            ++probe.attempts;
-            return ::loka::app::scene::Scene::RefreshThunk(&probe.scene);
-          }
-          static void apply(void *data)
-          {
-            CountedRefresh &probe = *static_cast<CountedRefresh *>(data);
-            ::loka::app::scene::Scene::ApplyThunk(&probe.scene);
-          }
         };
+
+        // Members of the friend itself, not of CountedRefresh: a nested class
+        // has no friend access in C++98, which GCC 4.0 enforces (Tiger UB1).
+        static bool countedRefresh(void *data)
+        {
+          CountedRefresh &probe = *static_cast<CountedRefresh *>(data);
+          ++probe.attempts;
+          return ::loka::app::scene::Scene::RefreshThunk(&probe.scene);
+        }
+        static void countedApply(void *data)
+        {
+          CountedRefresh &probe = *static_cast<CountedRefresh *>(data);
+          ::loka::app::scene::Scene::ApplyThunk(&probe.scene);
+        }
 
       public:
         /** Prepare a replacement's logical tree before native projection/install. */
