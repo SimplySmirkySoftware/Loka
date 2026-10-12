@@ -3,7 +3,9 @@
 # the interactive SimpleViewer and SimpleText, built Release on a Windows
 # builder by scripts/release/win32-remote-stage.sh (x64, modern profile,
 # subsystem 6.00) and brought back only after an exact path, size and SHA-256
-# match (#1252). Scrapbook's ASSETS.LRP is the tracked package itself.
+# match (#1252). Scrapbook's ASSETS.LRP is the tracked modern (PNG) package
+# assets/ASSETS-modern.LRP, the one the Windows stage installs; the Classic
+# example/ScrapbookUI/ASSETS.LRP holds PICT pages that WIC cannot decode.
 # TOOLCHAIN.txt records the builder's compiler/SDK, CMake, OS and PowerShell.
 build	build/release/win32-x64/README.txt	Windows-x64/README.txt
 build	build/release/win32-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe	Windows-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe
@@ -13,5 +15,5 @@ build	build/release/win32-x64/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	Win
 build	build/release/win32-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe
 build	build/release/win32-x64/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x64/simpleviewer/LokaSimpleViewerWin32.exe
 build	build/release/win32-x64/simpletext/LokaSimpleTextWin32.exe	Windows-x64/simpletext/LokaSimpleTextWin32.exe
-git	example/ScrapbookUI/ASSETS.LRP	Windows-x64/scrapbook/ASSETS.LRP
+git	example/ScrapbookUI/assets/ASSETS-modern.LRP	Windows-x64/scrapbook/ASSETS.LRP
 build	build/release/win32-x64.toolchain.txt	Windows-x64/TOOLCHAIN.txt

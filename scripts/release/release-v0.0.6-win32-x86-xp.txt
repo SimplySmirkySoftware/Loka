@@ -12,5 +12,5 @@ build	build/release/win32-x86-xp/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	
 build	build/release/win32-x86-xp/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x86-XP/tutorial/LokaTutorialStandaloneLoopWin32.exe
 build	build/release/win32-x86-xp/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x86-XP/simpleviewer/LokaSimpleViewerWin32.exe
 build	build/release/win32-x86-xp/simpletext/LokaSimpleTextWin32.exe	Windows-x86-XP/simpletext/LokaSimpleTextWin32.exe
-git	example/ScrapbookUI/ASSETS.LRP	Windows-x86-XP/scrapbook/ASSETS.LRP
+git	example/ScrapbookUI/assets/ASSETS-modern.LRP	Windows-x86-XP/scrapbook/ASSETS.LRP
 build	build/release/win32-x86-xp.toolchain.txt	Windows-x86-XP/TOOLCHAIN.txt
