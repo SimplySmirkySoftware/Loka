@@ -27,8 +27,8 @@ case "${ARCHS}" in
     exit 2
     ;;
 esac
-# macOS 10.15 runs no 32-bit code, so it opens neither the UB1 set nor an 11.0
-# build. The x86_64 slice starts at 10.13, the floor of the current SDK, which
+# macOS 10.15 runs no 32-bit code, so it opens neither the shipped Tiger UB1 set
+# (ppc;i386) nor an 11.0 build. The x86_64 slice starts at 10.13, the floor of the current SDK, which
 # also covers 10.13 and 10.14; clang raises the arm64 slice to 11.0 by itself.
 export DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET:-10.13}"
 if [[ "${DEPLOYMENT_TARGET}" != "10.13" ]]; then

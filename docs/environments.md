@@ -125,8 +125,9 @@ This is the environment where binaries are actually built.
   SimpleViewer and SimpleText under `build/release/macos-ub2` only after every
   executable contains both slices. The release's x86_64 slice targets macOS
   10.13, the current SDK's floor. It serves 10.15, which runs no 32-bit code
-  and so cannot open the UB1 set, and gives 10.13 and 10.14, which run both, a
-  64-bit set; the arm64 slice targets macOS 11.0. All seven
+  and so cannot open the Tiger UB1 set (`ppc;i386`) the release ships, and
+  gives 10.13 and 10.14, which run both, a 64-bit set; the arm64 slice targets
+  macOS 11.0. All seven
   applications were runtime-verified on macOS 10.14 in the dark appearance
   (2026-10-12, owner's machine). 10.13 and 10.15 have not been verified.
 - For a presentation that keeps moving without a host controller, use the
