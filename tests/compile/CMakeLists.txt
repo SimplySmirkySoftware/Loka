@@ -562,3 +562,13 @@ loka_compile_pin(rect-surface-has-no-clear-background
   REFUSES pins/refuses_rect_surface_clear_background.cpp
   ACCEPTS pins/accepts_rect_surface_ground.cpp
 )
+
+loka_compile_pin(document_window_seat_requires_facts
+  REFUSES pins/refuses_document_window_seat_facts.cpp
+  ACCEPTS pins/accepts_document_window_seat_facts.cpp
+)
+
+loka_compile_pin(document_window_seat_type_requires_facts
+  REFUSES pins/refuses_document_window_seat_type.cpp
+  ACCEPTS pins/accepts_document_window_seat_type.cpp
+)

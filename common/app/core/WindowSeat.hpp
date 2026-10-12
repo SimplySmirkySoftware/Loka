@@ -2,6 +2,7 @@
 #define LOKA_APP_WINDOW_SEAT_HPP
 
 #include "app/core/DocumentRoster.hpp"
+#include "app/core/DocumentFacts.hpp"
 #include "app/core/WindowDefinition.hpp"
 #include "app/scene/KeySnapshot.hpp"
 
@@ -20,6 +21,9 @@ namespace loka
       const scene::KeySnapshot<loka::core::ListRevision> &key() const { return this->key_; }
       DocumentRosterBase &roster() const { return this->roster_; }
       virtual Window *createWindow(loka::core::ItemId id, PlatformContext *context) const = 0;
+      /** Copies by value: any edit can shift the entry in EntryBuffer storage.
+          Returns false when the id is no longer in the roster. */
+      virtual bool copyFacts(loka::core::ItemId id, DocumentFacts &out) const = 0;
       virtual unsigned short snapshotDesired() = 0;
       virtual loka::core::ItemId desiredAt(unsigned short index) const = 0;
 
@@ -38,6 +42,10 @@ namespace loka
         find resolves; a window that keeps it can close its own document. */
     template <class T, unsigned short N> class DocumentWindowSeat : public WindowSeat
     {
+      static char factsConversion(const DocumentFacts *);
+      static long factsConversion(...);
+      typedef char document_requires_facts[sizeof(factsConversion(static_cast<const T *>(0))) == sizeof(char) ? 1 : -1];
+
     public:
       typedef WindowProps (*Factory)(loka::core::ItemId, const T &, void *);
       DocumentWindowSeat(DocumentRoster<T, N> &roster, Factory factory, void *userData)
@@ -48,7 +56,24 @@ namespace loka
       virtual Window *createWindow(loka::core::ItemId id, PlatformContext *context) const
       {
         const T *entry = static_cast<DocumentRoster<T, N> &>(this->roster()).find(id);
-        return entry ? WindowDef(this->factory_(id, *entry, this->userData_)).create(context) : 0;
+        if (!entry)
+          return 0;
+        WindowProps props = this->factory_(id, *entry, this->userData_);
+        assert(!props.titleStatePtr && !props.displayTitleStatePtr && "a keyed window's title is roster-owned (#1245)");
+        // The factory may edit the roster and move EntryBuffer storage.
+        entry = static_cast<DocumentRoster<T, N> &>(this->roster()).find(id);
+        if (!entry)
+          return 0;
+        props.title(entry->title);
+        return WindowDef(props).create(context);
+      }
+      virtual bool copyFacts(loka::core::ItemId id, DocumentFacts &out) const
+      {
+        const T *entry = static_cast<DocumentRoster<T, N> &>(this->roster()).find(id);
+        if (!entry)
+          return false;
+        out = *entry;
+        return true;
       }
       virtual unsigned short snapshotDesired()
       {

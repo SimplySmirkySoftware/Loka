@@ -34,7 +34,6 @@ private:
     // All windows share this frame; cascading belongs to later title/frame work.
     return WindowProps()
         .frame(16, 16, 480, 320)
-        .title("LokaSimpleText")
         .visible(true)
         .scene(loka::app::scene::Boundary<MainNode>( //
             MainProps().platformContext(config->getPlatformContext()).documents(&config->documents_).document(id)));
