@@ -84,13 +84,19 @@ of documents that left the roster, through the same `requestWindowClose` a nativ
 close takes. This order keeps a close-then-open replacement from emptying the
 group between the two. The seat always advances its snapshot to the revision
 read at the start of the walk. It copies desired identities first, so edits
-during a factory or mount wait for a following admission. A moved roster revision
+during a factory or mount leave structural work for a following admission.
+The walk copies identities at its start but reads each entry's facts live at
+apply time and copies them into its Window (#1245). A moved roster revision
 is pending window admission work, including an edit after a tail's last admission.
 
 Cost: one ListRevision compare per admission (two per Win32 tail, every Toolbox
 pass, every macOS flush tick); when the revision moved, increase walks desired x
 group rows and decrease walks group rows x desired once per stale row plus one
 final full scan, all over this App's group and its own seat's desired copy.
+Facts application adds one roster lookup and value copy per desired row with a
+Window, then at most two State sets (equal values are no-ops). A content-only
+revision after the tail's last admission costs one extra Win32 loop iteration,
+not a spin; admission commits the starting revision even without creates (#1245).
 
 A document whose window cannot be created or adopted at runtime is dropped from
 the roster, never retried; the application observes removal as a list fact

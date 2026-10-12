@@ -37,4 +37,16 @@ void testWindowDocumentFactsProjectAtTurnClose();
 void testWindowDocumentFactsEqualApplyDoesNotProjectAgain();
 void testWindowPlainDefaultsToUneditedWithoutProjection();
 
+void testDocumentWindowFactsApplyJoinsTurn();
+void testDocumentWindowFactsLaunchWithoutTurn();
+void testDocumentWindowFactsCopySurvivesRosterEdits();
+void testDocumentWindowTitleSeedAndEqualUpdate();
+void testDocumentWindowBorrowedTitleAsserts();
+void testDocumentWindowMountCloseSkipsLiveFacts();
+void testDocumentWindowPendingFactsAfterNativeClose();
+void testDocumentWindowFactoryEditSeedsLiveEntry();
+void testDocumentWindowMountCloseExistingRowWaitsForNextAdmission();
+void testDocumentWindowAdoptionCallbackCloseSkipsFacts();
+void testDocumentWindowMountRemovesOwnEntrySkipsFacts();
+
 #endif
