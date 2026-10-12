@@ -107,4 +107,4 @@ loka_stage_standalone_release \
   "$(ub1_staged_archs)" \
   UB1 \
   "${PROFILE_NAME}"
-echo "Staged five autonomous UB1 loops plus SimpleViewer ($(ub1_staged_archs)): ${STAGE_ROOT}"
+echo "Staged UB1 standalone release ($(ub1_staged_archs)): ${STAGE_ROOT}"

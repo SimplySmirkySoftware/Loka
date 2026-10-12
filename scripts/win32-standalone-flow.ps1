@@ -312,6 +312,7 @@ if ($IsReleasePackage) {
     $loopExecutableRoot = Join-Path $buildRoot "standalone-loop"
     $loopAssets = Join-Path $loopExecutableRoot "scrapbook/ASSETS.LRP"
     $simpleViewer = Join-Path $buildRoot "example/SimpleViewer/LokaSimpleViewerWin32.exe"
+    $simpleText = Join-Path $buildRoot "example/SimpleText/LokaSimpleTextWin32.exe"
     foreach ($entry in $catalog) {
         $loopTarget = $entry.Target.Replace("StandaloneFlow", "StandaloneLoop")
         $loopExecutable = Get-ApplicationExecutable $loopExecutableRoot $entry.Key $loopTarget
@@ -324,6 +325,10 @@ if ($IsReleasePackage) {
         throw "SimpleViewer Release executable not found: $simpleViewer"
     }
     Assert-ExecutableArchitecture $simpleViewer $Architecture
+    if (-not (Test-Path -LiteralPath $simpleText -PathType Leaf)) {
+        throw "SimpleText Release executable not found: $simpleText"
+    }
+    Assert-ExecutableArchitecture $simpleText $Architecture
     if (-not (Test-Path -LiteralPath $loopAssets -PathType Leaf)) {
         throw "Autonomous loop assets not found: $loopAssets"
     }
@@ -344,6 +349,13 @@ if ($IsReleasePackage) {
         New-Item -ItemType Directory -Path (Join-Path $Destination "simpleviewer") | Out-Null
         Copy-Item -LiteralPath $simpleViewer `
             -Destination (Join-Path $Destination "simpleviewer/LokaSimpleViewerWin32.exe")
+        New-Item -ItemType Directory -Path (Join-Path $Destination "simpletext") | Out-Null
+        Copy-Item -LiteralPath $simpleText `
+            -Destination (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")
+        Assert-ExecutableArchitecture `
+            (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe") $Architecture
+        Assert-FileCopy $simpleText `
+            (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")
         Copy-Item -LiteralPath $loopAssets `
             -Destination (Join-Path $Destination "scrapbook/ASSETS.LRP")
         Assert-ExecutableArchitecture `
@@ -364,11 +376,11 @@ if ($IsReleasePackage) {
             "The five StandaloneLoop applications run their UI tour repeatedly.`r`n" +
             "Open an application's folder and launch its executable.`r`n" +
             "Keep each executable with its folder: its LOG.TXT and resources belong there.`r`n" +
-            "Close a loop application's window to stop it. SimpleViewer remains interactive.`r`n")
+            "Close a loop application's window to stop it. SimpleViewer and SimpleText remain interactive.`r`n")
     }.GetNewClosure()
     Install-LokaPresentationStageDirectory `
         -StageRoot $stageRoot -Populate $populateRelease
-    Write-Output "Staged five autonomous loops plus SimpleViewer ($Architecture): $stageRoot"
+    Write-Output "Staged five autonomous loops plus SimpleViewer and SimpleText ($Architecture): $stageRoot"
     exit 0
 }
 

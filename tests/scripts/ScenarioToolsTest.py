@@ -733,6 +733,34 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
             for fragment in fragments:
                 self.assertIn(fragment, source, relative_path)
 
+    def test_win32_release_includes_simpletext(self):
+        root_cmake = pathlib.Path(PROJECT_DIR, "CMakeLists.txt").read_text()
+        self.assertRegex(
+            root_cmake,
+            r"add_dependencies\(LokaStandaloneLoopWin32All\s+"
+            r"LokaSimpleViewerWin32\s+LokaSimpleTextWin32\)",
+        )
+        source = pathlib.Path(
+            PROJECT_DIR, "scripts/win32-standalone-flow.ps1"
+        ).read_text()
+        release = source.split("if ($IsReleasePackage) {", 1)[1]
+        release = release.split("    exit 0", 1)[0]
+        for fragment in (
+            '$simpleText = Join-Path $buildRoot "example/SimpleText/LokaSimpleTextWin32.exe"',
+            'if (-not (Test-Path -LiteralPath $simpleText -PathType Leaf))',
+            'Assert-ExecutableArchitecture $simpleText $Architecture',
+            'New-Item -ItemType Directory -Path (Join-Path $Destination "simpletext")',
+            'Copy-Item -LiteralPath $simpleText `\n'
+            '            -Destination (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")',
+            'Assert-ExecutableArchitecture `\n'
+            '            (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe") $Architecture',
+            'Assert-FileCopy $simpleText `\n'
+            '            (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")',
+            'SimpleViewer and SimpleText remain interactive.',
+            'Staged five autonomous loops plus SimpleViewer and SimpleText',
+        ):
+            self.assertIn(fragment, release)
+
     def test_debug_presets_cover_flow_and_loop_aggregates(self):
         _, presets, _ = self.load_documents()
         expected = {

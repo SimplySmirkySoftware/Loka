@@ -119,6 +119,9 @@ try {
     $viewer = Join-Path $TestRoot "build/example/SimpleViewer/LokaSimpleViewerWin32.exe"
     New-Item -ItemType Directory -Path (Split-Path -Parent $viewer) -Force | Out-Null
     Write-TestPe $viewer
+    $text = Join-Path $TestRoot "build/example/SimpleText/LokaSimpleTextWin32.exe"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $text) -Force | Out-Null
+    Write-TestPe $text
 
     Invoke-Profile @("-Architecture", "x64") "Profile xp requires architecture x86"
     Invoke-Profile @("-Architecture", "arm64") "Profile xp requires architecture x86"
@@ -133,7 +136,7 @@ try {
     Invoke-Profile @("-Action", "Release")
     Assert-Readme "xp"
 
-    # Each source in both vehicles, including SimpleViewer, must be refused.
+    # Each source in both vehicles, including SimpleViewer and SimpleText, must be refused.
     $executables = @(Get-ChildItem -LiteralPath (Join-Path $TestRoot "build") -Recurse -Filter *.exe)
     foreach ($exe in $executables) {
         Write-TestPe $exe.FullName 6 0

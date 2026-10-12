@@ -79,6 +79,14 @@ BUILD_DIR="${BUILD_ROOT}" LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \
   fail "the UB2 build did not select the complete standalone target set"
 
 RELEASE_ROOT="${FAKE_REPO}/build/release/macos-ub2"
+[[ -x "${RELEASE_ROOT}/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS" ]] ||
+  fail "the release omitted SimpleText"
+[[ "$(cat "${RELEASE_ROOT}/LokaSimpleTextMacOS.app/Contents/Info.plist")" == "metadata-LokaSimpleTextMacOS" ]] ||
+  fail "the release lost SimpleText bundle metadata"
+[[ "$(find "${RELEASE_ROOT}" -maxdepth 1 -name '*.app' | wc -l | tr -d ' ')" == "7" ]] ||
+  fail "the release did not contain exactly seven application bundles"
+grep -Fq 'LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' "${RELEASE_ROOT}/README.txt" ||
+  fail "the release README omitted the interactive applications"
 [[ -x "${RELEASE_ROOT}/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS" ]] ||
   fail "the UB2 release omitted SimpleViewer"
 [[ "$(cat "${RELEASE_ROOT}/LokaSimpleViewerMacOS.app/Contents/Info.plist")" == "metadata-LokaSimpleViewerMacOS" ]] ||

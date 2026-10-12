@@ -81,6 +81,10 @@ try {
     New-Item -ItemType Directory -Path $viewerDirectory | Out-Null
     $viewerExecutable = Join-Path $viewerDirectory "LokaSimpleViewerWin32.exe"
     New-TestPe $viewerExecutable 0x60
+    $textDirectory = Join-Path $BuildRoot "example/SimpleText"
+    New-Item -ItemType Directory -Path $textDirectory | Out-Null
+    $textExecutable = Join-Path $textDirectory "LokaSimpleTextWin32.exe"
+    New-TestPe $textExecutable 0x61
     $loopAssets = Join-Path $BuildRoot "standalone-loop/scrapbook/ASSETS.LRP"
     [System.IO.File]::WriteAllText($loopAssets, "loop assets")
     $builtAssets = Join-Path $builtDirectory "scrapbook/ASSETS.LRP"
@@ -166,7 +170,7 @@ try {
         }
     }
 
-    # Release replaces the finite package atomically and keeps SimpleViewer
+    # Release replaces the finite package atomically and keeps each interactive app
     # in its own folder alongside the five autonomous application folders.
     $lockedAssets = [System.IO.File]::Open(
         $loopAssets, [System.IO.FileMode]::Open,
@@ -201,12 +205,15 @@ try {
     Assert-BytesEqual $viewerExecutable `
         (Join-Path $StageRoot "simpleviewer/LokaSimpleViewerWin32.exe") `
         "Release did not install SimpleViewer in its own directory."
+    Assert-BytesEqual $textExecutable `
+        (Join-Path $StageRoot "simpletext/LokaSimpleTextWin32.exe") `
+        "Release did not install SimpleText in its own directory."
     $rootFiles = @(Get-ChildItem -LiteralPath $StageRoot -File)
     if ($rootFiles.Count -ne 1 -or $rootFiles[0].Name -ne "README.txt") {
         throw "Release retained flat executables, shared sidecars, or stale Stage files."
     }
     $folders = @(Get-ChildItem -LiteralPath $StageRoot -Directory)
-    if ($folders.Count -ne 6) {
+    if ($folders.Count -ne 7) {
         throw "Release must contain one directory per application."
     }
     $transactionResidue = @(Get-ChildItem -LiteralPath $TestRoot -Force | Where-Object {
