@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Package and read back the Classic applications with adjacent release data."""
+"""Package and read back the Classic applications with adjacent release data.
+
+Images are 800 KiB or 1440 KiB floppies when the payload fits with a 128 KiB
+reserve; a larger payload (PPC SmirkyCard) gets a non-floppy image rounded up to
+512 KiB, for an emulator or a PowerPC Mac that mounts disk images.
+"""
 
 import argparse
 import os
@@ -18,8 +23,11 @@ PAYLOADS = (
     ("68k", "ScrapbookUI", "ScrapbookUI68K", ("ASSETS.LRP",)),
     ("ppc", "ScrapbookUI", "ScrapbookUIPPC", ("ASSETS.LRP",)),
     ("68k", "SmirkyCard", "LokaSmirkyCard68K", None),
+    ("ppc", "SmirkyCard", "LokaSmirkyCardPPC", None),
 )
 TOOL_NAMES = ("hformat", "hcopy", "humount", "hmount", "hls", "hattrib")
+FLOPPY_SIZES = (800 * 1024, 1440 * 1024)
+LARGE_IMAGE_STEP = 512 * 1024
 
 
 def payload_files(example, files):
@@ -81,14 +89,19 @@ def macbinary(path):
 
 
 def image_size(binary, data_files):
+    """Pick the smallest floppy that fits, else a 512 KiB-rounded larger image.
+
+    The larger image is not a floppy. It is for an emulator or a PowerPC
+    machine that mounts disk images: PPC SmirkyCard needs about 1.6 MB.
+    """
     # MacBinary's padding/header overcounts the stored forks. Reserve another
     # 128 KiB for allocation rounding, catalog/extent trees and free space.
     required = (binary.stat().st_size + sum(data.stat().st_size for data in data_files)
                 + 128 * 1024)
-    for size in (800 * 1024, 1440 * 1024):
+    for size in FLOPPY_SIZES:
         if required <= size:
             return size
-    raise ValueError(f"Payload does not fit a 1440 KiB image with margin: {binary}")
+    return -(-required // LARGE_IMAGE_STEP) * LARGE_IMAGE_STEP
 
 
 def output_directory():

@@ -41,16 +41,20 @@ The canonical path makes repeated 68K builds use the same embedded source path.
 Follow-up: add `-ffile-prefix-map`-style normalization to the Retro68 build so
 binary hashes can be compared across machines without depending on that path.
 
-After the Retro68 Release builds (including the 68K configure with
+After the Retro68 Release builds (both the 68K and the PPC configure with
 `-DLOKA_BUILD_SMIRKYCARD=ON`), release assembly runs
 `--build-command 'python3 scripts/release/classic-disks.py'` to produce
-`build/release/classic-disks/{ScrapbookUI68K,ScrapbookUIPPC,LokaSmirkyCard68K}.dsk`.
+`build/release/classic-disks/{ScrapbookUI68K,ScrapbookUIPPC,LokaSmirkyCard68K,LokaSmirkyCardPPC}.dsk`.
 Each volume contains its application and the tracked files beside it:
 ScrapbookUI's `ASSETS.LRP`, or every SmirkyCard card script listed in
 `example/SmirkyCard/disk-scripts.txt` (the manifest the development disks and
 the macOS and Win32 builds read), stored as SimpleText text. Packaging reads
 back both application forks and every unchanged data file before publishing
-each image. Plain applications use Retro68's existing disks.
+each image. Each image is the smallest floppy that holds the payload plus a
+128 KiB reserve (800 KiB, then 1440 KiB); a larger payload gets an image
+rounded up to the next 512 KiB, which is not a floppy and is meant for an
+emulator or a PowerPC Mac that mounts disk images (PPC SmirkyCard: 2 MiB).
+Plain applications use Retro68's existing disks.
 
 ## Windows archives via a remote builder
 

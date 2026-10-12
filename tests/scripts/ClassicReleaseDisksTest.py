@@ -76,7 +76,10 @@ class ClassicReleaseDisksTest(unittest.TestCase):
     def test_roundtrip(self):
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(list(self.output.glob("*.dsk"))), 3)
+        self.assertEqual(sorted(p.name for p in self.output.glob("*.dsk")),
+                         sorted(name + ".dsk" for _, _, name, _ in disks.PAYLOADS))
+        self.assertEqual([(cpu, name) for cpu, example, name, _ in disks.PAYLOADS if example == "SmirkyCard"],
+                         [("68k", "LokaSmirkyCard68K"), ("ppc", "LokaSmirkyCardPPC")])
         with tempfile.TemporaryDirectory(dir=self.root / "build") as home:
             env = dict(os.environ, HOME=home)
             for binary, files, (_, example, name, _) in zip(self.binaries, self.files, disks.PAYLOADS):
@@ -125,18 +128,53 @@ class ClassicReleaseDisksTest(unittest.TestCase):
             self.assertIn(message, result.stderr)
             self.assertFalse(self.output.exists())
 
-    def test_size_selection_and_refusal(self):
+    def test_size_tiers(self):
+        # Boundaries of the three tiers: 800 KiB floppy, 1440 KiB floppy, then
+        # a larger image rounded up to a 512 KiB multiple.
+        binary = self.root / "sized.bin"
+        data = self.root / "sized.data"
+        data.write_bytes(b"")
+        kib = 1024
+        for required, expected in ((800 * kib, 800 * kib), (800 * kib + 1, 1440 * kib),
+                                   (1440 * kib, 1440 * kib), (1440 * kib + 1, 1536 * kib),
+                                   (1536 * kib, 1536 * kib), (1536 * kib + 1, 2048 * kib)):
+            binary.write_bytes(b"x" * (required - 128 * kib))
+            self.assertEqual(disks.image_size(binary, [data]), expected, required)
+        # Every data file counts toward the requirement.
+        binary.write_bytes(b"x" * (800 * kib - 128 * kib - 2))
+        extra = self.root / "extra.data"
+        extra.write_bytes(b"ab")
+        self.assertEqual(disks.image_size(binary, [data, extra]), 800 * kib)
+        extra.write_bytes(b"abc")
+        self.assertEqual(disks.image_size(binary, [data, extra]), 1440 * kib)
+
+    def test_size_selection_end_to_end(self):
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / "ScrapbookUI68K.dsk").stat().st_size, 800 * 1024)
         self.binaries[0].write_bytes(fake_macbinary("ScrapbookUI68K", b"x" * (700 * 1024)))
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.output / "ScrapbookUI68K.dsk").stat().st_size, 1440 * 1024)
-        previous = (self.output / "ScrapbookUI68K.dsk").read_bytes()
-        # Fits physically in 1440 KiB but violates the explicit 128 KiB margin.
-        self.binaries[0].write_bytes(fake_macbinary("ScrapbookUI68K", b"x" * (1350 * 1024)))
+        # Fits physically in 1440 KiB but not with the 128 KiB margin, so the
+        # disk becomes a 1536 KiB image (PPC SmirkyCard's case) that still
+        # mounts and reads back.
+        ppc = self.binaries[[name for _, _, name, _ in disks.PAYLOADS].index("LokaSmirkyCardPPC")]
+        ppc.write_bytes(fake_macbinary("LokaSmirkyCardPPC", b"x" * (1350 * 1024)))
         result = self.invoke()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not fit", result.stderr)
-        self.assertEqual((self.output / "ScrapbookUI68K.dsk").read_bytes(), previous)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        image = self.output / "LokaSmirkyCardPPC.dsk"
+        self.assertEqual(image.stat().st_size, 1536 * 1024)
+        self.assertEqual((self.output / "LokaSmirkyCard68K.dsk").stat().st_size, 800 * 1024)
+        with tempfile.TemporaryDirectory(dir=self.root / "build") as home:
+            env = dict(os.environ, HOME=home)
+            subprocess.run([TOOLS["hmount"], str(image)], env=env, check=True, stdout=subprocess.DEVNULL)
+            try:
+                subprocess.run([TOOLS["hcopy"], "-m", ":LokaSmirkyCardPPC", str(Path(home) / "app.bin")],
+                               env=env, check=True)
+                self.assertEqual(disks.macbinary(Path(home) / "app.bin"), disks.macbinary(ppc))
+            finally:
+                subprocess.run([TOOLS["humount"]], env=env, check=True)
 
     def test_readback_refuses_corruption(self):
         result = self.invoke()
