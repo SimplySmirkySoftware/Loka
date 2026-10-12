@@ -157,6 +157,30 @@ namespace loka
           this->kind_ = kind;
       }
 
+      /** Last component of this locator's text, using only its own separator
+          and ignoring trailing separators. Relative text takes precedence over
+          the path base. No component, an unlocated BASE_NONE, or refusal answers
+          empty; application-relative items need no resolution. A captured
+          Classic name preserves '/' as part of the name. */
+      loka::core::String name() const
+      {
+        if (this->base_ == BASE_REFUSED || (this->base_ == BASE_NONE && this->locator_.empty()))
+          return loka::core::String();
+        const loka::core::String &text = this->relative_.empty() ? this->basePath_ : this->relative_;
+        const loka::core::StringBuffer buffer = text.bufferWithEncoding(loka::core::StringEncodingUtf8);
+        const char *bytes = static_cast<const char *>(buffer.data());
+        const char separator = separatorLiteral()[0];
+        std::size_t end = buffer.length();
+        while (end && bytes[end - 1] == separator)
+          --end;
+        if (!end)
+          return loka::core::String();
+        std::size_t start = end;
+        while (start && bytes[start - 1] != separator)
+          --start;
+        return loka::core::String::Utf8(bytes + start, end - start);
+      }
+
       loka::core::String toString() const
       {
         if (this->base_ == BASE_APPLICATION)

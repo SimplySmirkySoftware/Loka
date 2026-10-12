@@ -453,13 +453,9 @@ namespace simpletext
       loka::core::String title = previous.title;
       if (previous.file != file)
       {
-        title = loka::core::String::Literal("Untitled");
-        if (file.kind == Choice::RESULT_FILE)
-        {
-          loka::platform::file::FileHandle handle;
-          if (this->props.platformContext()->openFile(file.item, handle))
-            title = handle.displayPath;
-        }
+        title = file.kind == Choice::RESULT_FILE ? file.item.name() : loka::core::String();
+        if (title.empty())
+          title = loka::core::String::Literal("Untitled");
       }
       const loka::core::ListEditResult result =
           this->props.documents()->update(this->props.document(), Document(file, title, edited));
