@@ -1,7 +1,7 @@
 # Release verification matrix
 
 This document is the release-PR checklist for the verification design frozen in
-[#311](https://github.com/cubenoy22/Loka/issues/311). Replace each applicable
+[#311](https://github.com/SimplySmirkySoftware/Loka/issues/311). Replace each applicable
 empty evidence slot with a link from the release PR; do not mark a cell complete
 without that evidence. `n/a` means that the repository has no application target
 for that leg, not that verification was skipped.
@@ -88,14 +88,14 @@ the Win32 x64 standalone Release set (five autonomous loops plus interactive
 SimpleViewer and SimpleText and the experimental SmirkyCard) on `release/**`
 pushes and manual dispatch.
 It is advisory, not a merge gate; the PR/main path no longer runs that stage
-([#896](https://github.com/cubenoy22/Loka/issues/896)).
+([#896](https://github.com/SimplySmirkySoftware/Loka/issues/896)).
 Linux is a headless host-validation leg and has no GUI example targets. The
 Classic Mac column is one OS leg: L0 covers both configured Retro68 architectures
 (68K and PPC), while L1-L3 use the available 68K MAME or hardware rig. The current
 tree gives `ScrapbookUI` Win32 and macOS target arms;
-[#281](https://github.com/cubenoy22/Loka/issues/281) remains relevant to its full
+[#281](https://github.com/SimplySmirkySoftware/Loka/issues/281) remains relevant to its full
 cross-platform verification, and the missing native ScrollBar arms tracked by
-[#224](https://github.com/cubenoy22/Loka/issues/224) do not make the example
+[#224](https://github.com/SimplySmirkySoftware/Loka/issues/224) do not make the example
 inapplicable because its shared UI uses Previous/Next buttons.
 
 `SmirkyCard` is experimental — no pixel golden cells. It is opt-in at configure
@@ -108,8 +108,8 @@ manual launch check (no scenario runner) rather than a golden.
 | Grade | Meaning | Automation |
 | --- | --- | --- |
 | L0 build | Every example compiles for every applicable OS/architecture. | Win32, macOS, and hosted Retro68 CI application builds. Linux CI validates host code but contributes no example cells. |
-| L1 startup smoke | Launch the example's scene and capture its settled initial screen. Classic, macOS, and Win32 cells run the example's `MainNode` inside a TEST scenario vehicle (shipping binaries carry no audit door), while that vehicle forwards the example-owned production window chrome and menus. Host parity pins compose the same platform-neutral presentation classes used by every rail so those declarations cannot drift unnoticed. | Classic MAME, Win32, and macOS startup paths exist for `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird`; the remaining runners are tracked by [#312](https://github.com/cubenoy22/Loka/issues/312). |
-| L2 scenario completion | Drive a representative Flow/State operation sequence to completion and capture its checkpoints. | Direct Flow/State emission, shared across OS runners. Classic, Win32, and macOS runners cover `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird`; expansion is tracked by [#312](https://github.com/cubenoy22/Loka/issues/312). |
+| L1 startup smoke | Launch the example's scene and capture its settled initial screen. Classic, macOS, and Win32 cells run the example's `MainNode` inside a TEST scenario vehicle (shipping binaries carry no audit door), while that vehicle forwards the example-owned production window chrome and menus. Host parity pins compose the same platform-neutral presentation classes used by every rail so those declarations cannot drift unnoticed. | Classic MAME, Win32, and macOS startup paths exist for `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird`; the remaining runners are tracked by [#312](https://github.com/SimplySmirkySoftware/Loka/issues/312). |
+| L2 scenario completion | Drive a representative Flow/State operation sequence to completion and capture its checkpoints. | Direct Flow/State emission, shared across OS runners. Classic, Win32, and macOS runners cover `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird`; expansion is tracked by [#312](https://github.com/SimplySmirkySoftware/Loka/issues/312). |
 | L3 real hardware / manual | Exercise hands-on behavior and input feel on a real or manually operated target. | Deliberately manual; real input synthesis belongs here and in input-path PR acceptance, not in the standing L2 release gate. |
 
 ## L0 — build
@@ -122,7 +122,7 @@ manual launch check (no scenario runner) rather than a golden.
 | `ScrapbookUI` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ | - [ ] Evidence: _add link_ | 68K: - [ ] Evidence: _add link_<br>PPC: - [ ] Evidence: _add link_ |
 | `SimpleViewer` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ | - [ ] Evidence: _add link_ | 68K: - [ ] Evidence: _add link_<br>PPC: - [ ] Evidence: _add link_ |
 | `Tutorial` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ | - [ ] Evidence: _add link_ | 68K: - [ ] Evidence: _add link_<br>PPC: - [ ] Evidence: _add link_ |
-| `SmirkyCard` (experimental, opt-in) | headless test only: `cmake --preset testing -DLOKA_BUILD_SMIRKYCARD=ON && ctest --preset testing -R smirkyCard` — - [ ] Evidence: _add link_ | `cmake --preset win32-debug -DLOKA_BUILD_SMIRKYCARD=ON` — - [ ] Evidence: _add link_ | `cmake --preset macos-debug -DLOKA_BUILD_SMIRKYCARD=ON` — - [ ] Evidence: _add link_ | 68K: `scripts/retro68-cmake.sh --preset retro68-68k-release -DLOKA_BUILD_SMIRKYCARD=ON` then `--target LokaSmirkyCard68K_APPL` — - [ ] Evidence: _add link_<br>PPC: n/a (not built or claimed) |
+| `SmirkyCard` (experimental, opt-in) | headless test only: `cmake --preset testing -DLOKA_BUILD_SMIRKYCARD=ON && ctest --preset testing -R smirkyCard` — - [ ] Evidence: _add link_ | `cmake --preset win32-debug -DLOKA_BUILD_SMIRKYCARD=ON` — - [ ] Evidence: _add link_ | `cmake --preset macos-debug -DLOKA_BUILD_SMIRKYCARD=ON` — - [ ] Evidence: _add link_ | 68K: `scripts/retro68-cmake.sh --preset retro68-68k-release -DLOKA_BUILD_SMIRKYCARD=ON` then `--target LokaSmirkyCard68K_APPL` — - [ ] Evidence: _add link_<br>PPC: `scripts/retro68-cmake.sh --preset retro68-ppc-release -DLOKA_BUILD_SMIRKYCARD=ON` then `--target LokaSmirkyCardPPC_APPL` — - [ ] Evidence: _add link_ ([#1260](https://github.com/SimplySmirkySoftware/Loka/pull/1260), [#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262)) |
 
 ## L1 — startup smoke
 
@@ -137,7 +137,7 @@ and the goldens are stored per rig. See *How each rail is run* for the full form
 | `HelloWorld` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ (`tests/win32/run-scenario.ps1 helloworld startup`) | - [ ] Evidence: _add link_ (`tests/macos/run-scenario.sh helloworld startup`) | - [ ] Evidence: _add link_ (`tests/toolbox/run-scenario.sh helloworld startup`) |
 | `MineSweeper` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ (`tests/win32/run-scenario.ps1 minesweeper startup`) | - [ ] Evidence: _add link_ (`tests/macos/run-scenario.sh minesweeper startup`) | - [ ] Evidence: _add link_ (`tests/toolbox/run-scenario.sh minesweeper startup`) |
 | `ScrapbookUI` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ (`tests/win32/run-scenario.ps1 scrapbook startup`) | - [ ] Evidence: _add link_ (`tests/macos/run-scenario.sh scrapbook startup`) | - [ ] Evidence: _add link_ (`tests/toolbox/run-scenario.sh scrapbook startup`) |
-| `SimpleViewer` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** |
+| `SimpleViewer` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** | - [ ] Evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** |
 | `SmirkyCard` (experimental, manual) | n/a | - [ ] Evidence: _add link_ (launch `LokaSmirkyCardWin32.exe` with `MAIN.JS` beside it: Card One shows, Run evaluates `1+1`, Reload MAIN.JS re-reads an edited file) | - [ ] Evidence: _add link_ (launch `LokaSmirkyCardMacOS.app`, same three checks; `MAIN.JS` is in `Contents/Resources`) | - [ ] Evidence: _add link_ (stage with `scripts/mame-dev-disk.sh <bin> example/SmirkyCard/MAIN.JS`, same three checks) |
 | `Tutorial` | n/a — no Linux GUI application target | - [ ] Evidence: _add link_ (`tests/win32/run-scenario.ps1 tutorial startup`) | - [ ] Evidence: _add link_ (`tests/macos/run-scenario.sh tutorial startup`) | - [ ] Evidence: _add link_ (`tests/toolbox/run-scenario.sh tutorial startup`) |
 
@@ -153,12 +153,12 @@ representative scenario for each example on every applicable OS.
 
 | Example | Linux host | Win32 | macOS | Classic Mac (68K rig) |
 | --- | --- | --- | --- | --- |
-| `FloppyBird` | n/a — no Linux GUI application target | - [ ] Scenario: `fixed-step-flaps`; evidence: _add link_ (`tests/win32/run-scenario.ps1 floppybird fixed-step-flaps`) | - [ ] Scenario: `fixed-step-flaps`; evidence: _add link_ (`tests/macos/run-scenario.sh floppybird fixed-step-flaps`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** |
+| `FloppyBird` | n/a — no Linux GUI application target | - [ ] Scenario: `fixed-step-flaps`; evidence: _add link_ (`tests/win32/run-scenario.ps1 floppybird fixed-step-flaps`) | - [ ] Scenario: `fixed-step-flaps`; evidence: _add link_ (`tests/macos/run-scenario.sh floppybird fixed-step-flaps`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** |
 | `HelloWorld` | n/a — no Linux GUI application target | - [ ] Scenario: `bmi-roundtrip`; evidence: _add link_ (`tests/win32/run-scenario.ps1 helloworld bmi-roundtrip`) | - [ ] Scenario: `bmi-roundtrip`; evidence: _add link_ (`tests/macos/run-scenario.sh helloworld bmi-roundtrip`) | - [ ] Scenario: `bmi-roundtrip`; evidence: _add link_ (`tests/toolbox/run-scenario.sh helloworld bmi-roundtrip`) |
-| `MineSweeper` | n/a — no Linux GUI application target | - [ ] Scenario: `new-game-twice`; evidence: _add link_ (`tests/win32/run-scenario.ps1 minesweeper new-game-twice`) | - [ ] Scenario: `new-game-twice`; evidence: _add link_ (`tests/macos/run-scenario.sh minesweeper new-game-twice`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** |
+| `MineSweeper` | n/a — no Linux GUI application target | - [ ] Scenario: `new-game-twice`; evidence: _add link_ (`tests/win32/run-scenario.ps1 minesweeper new-game-twice`) | - [ ] Scenario: `new-game-twice`; evidence: _add link_ (`tests/macos/run-scenario.sh minesweeper new-game-twice`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** |
 | `ScrapbookUI` | n/a — no Linux GUI application target | - [ ] Scenario: `flip-forward-back`; evidence: _add link_ (`tests/win32/run-scenario.ps1 scrapbook flip-forward-back`) | - [ ] Scenario: `flip-forward-back`; evidence: _add link_ (`tests/macos/run-scenario.sh scrapbook flip-forward-back`) | - [ ] Scenario: _add name_; evidence: _add link_ |
-| `SimpleViewer` | n/a — no Linux GUI application target | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** |
-| `Tutorial` | n/a — no Linux GUI application target | - [ ] Scenario: `increment-summary-toggle`; evidence: _add link_ (`tests/win32/run-scenario.ps1 tutorial increment-summary-toggle`) | - [ ] Scenario: `increment-summary-toggle`; evidence: _add link_ (`tests/macos/run-scenario.sh tutorial increment-summary-toggle`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/cubenoy22/Loka/issues/312))** |
+| `SimpleViewer` | n/a — no Linux GUI application target | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** |
+| `Tutorial` | n/a — no Linux GUI application target | - [ ] Scenario: `increment-summary-toggle`; evidence: _add link_ (`tests/win32/run-scenario.ps1 tutorial increment-summary-toggle`) | - [ ] Scenario: `increment-summary-toggle`; evidence: _add link_ (`tests/macos/run-scenario.sh tutorial increment-summary-toggle`) | - [ ] Scenario: _add name_; evidence: _add link_; runner **TBD ([#312](https://github.com/SimplySmirkySoftware/Loka/issues/312))** |
 
 ## L3 — real hardware / manual
 
@@ -204,8 +204,8 @@ host must satisfy that preset's toolchain requirements.
 | L2 Win32 `ScrapbookUI` | `$env:LOKA_WIN32_RIG = '<rig>'; powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/win32/run-scenario.ps1 scrapbook flip-forward-back` — shared State-driven scenario, byte-identical tracked audit, two-hash settled `PrintWindow` capture, and rig-local profiled golden |
 | L1/L2 Win32 other scenario examples | `$env:LOKA_WIN32_RIG = '<rig>'; powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/win32/run-scenario.ps1 <example> <scenario>` — shared scene driver, byte-identical tracked audit, two-hash settled `PrintWindow` capture, and rig-local profiled golden; `<rig>` names a descriptor in the local rig directory (`~/.config/loka/rigs/win32/`, override with `LOKA_WIN32_RIG_HOME`) — rig descriptors are not tracked, for the same reason the goldens they pin are not; copy `scripts/rig/win32/rigs/local.example.ini` to start one. The capture environment it declares must match what the run reports |
 | L1/L2 macOS | `LOKA_MACOS_RIG=<rig> tests/macos/run-scenario.sh <example> <scenario>` — tracked expected audit plus settled rig-local pixel golden; `<rig>` names a descriptor in `scripts/rig/macos/rigs/`, and the capture environment it declares must match what the run reports |
-| L1 Classic `SimpleViewer` | **TBD — [#312](https://github.com/cubenoy22/Loka/issues/312)** |
-| L2 Classic examples other than `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird` | **TBD — [#312](https://github.com/cubenoy22/Loka/issues/312)** |
+| L1 Classic `SimpleViewer` | **TBD — [#312](https://github.com/SimplySmirkySoftware/Loka/issues/312)** |
+| L2 Classic examples other than `ScrapbookUI`, `HelloWorld`, `Tutorial`, `MineSweeper`, and `FloppyBird` | **TBD — [#312](https://github.com/SimplySmirkySoftware/Loka/issues/312)** |
 | L3 all OSes | n/a — manual by definition; record the rig/hardware and evidence in the selected matrix cell |
 
 The EditText verification path belongs to HelloWorld rather than Tutorial. For

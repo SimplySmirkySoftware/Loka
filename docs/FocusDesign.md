@@ -239,23 +239,23 @@ additionally rejects a borrowing field whose bundle belongs to another Scene.
 
 ## Known limits
 
-- [#912](https://github.com/cubenoy22/Loka/issues/912): a local-rebuild refusal
+- [#912](https://github.com/SimplySmirkySoftware/Loka/issues/912): a local-rebuild refusal
   can strand children. A stranded published row can keep its fact HELD until
   teardown disconnects it without writing; disconnect does not repair the fact.
-- [#913](https://github.com/cubenoy22/Loka/issues/913): a prepared replacement
+- [#913](https://github.com/SimplySmirkySoftware/Loka/issues/913): a prepared replacement
   Scene can project early. Publication rejects the wrong Scene's rows by
   construction, but whole-sequence safety is not claimed until that fix lands.
 - A refused `attachStateOwner` subtree never joins and cannot publish: this
   failure stays on the safe side of the focus contract.
 - macOS capture/restore carry-key cleanup remains deferred under item 8 of
-  [#911](https://github.com/cubenoy22/Loka/issues/911). Its existing temporary
+  [#911](https://github.com/SimplySmirkySoftware/Loka/issues/911). Its existing temporary
   native restoration state is not another Scene publication record.
 
 ## Cost lines
 
-The amended [#911 ruling](https://github.com/cubenoy22/Loka/issues/911) supplies
+The amended [#911 ruling](https://github.com/SimplySmirkySoftware/Loka/issues/911) supplies
 these doors; the App enumeration and checked app-row conversion reflect the
-landed implementation in [#915](https://github.com/cubenoy22/Loka/pull/915).
+landed implementation in [#915](https://github.com/SimplySmirkySoftware/Loka/pull/915).
 Costs below exclude observer work; debug audit costs are listed separately.
 
 | Door | Caller / frequency | Work and owner of rows visited |
@@ -277,11 +277,11 @@ Exact storage capacity and representations remain in the code.
 
 ## Rejected shapes
 
-- Writing the fact from native notifications: no rail delivers a complete set ([#911](https://github.com/cubenoy22/Loka/issues/911)).
-- One fact per input (`.focused(aFocused)`): "one of them" is not a type, and it dies with a LazyView item ([#911](https://github.com/cubenoy22/Loka/issues/911)).
-- `FocusScope` / `FocusField` seat nodes: a Keyed arm misses the enclosing scope, a wrapper is not layout-transparent, and finding the scope is a multi-hop traversal ([#911](https://github.com/cubenoy22/Loka/issues/911)).
-- A per-node "Scene resident" bit: it carries no Scene identity, so a prepared replacement's rows could not be rejected ([#911](https://github.com/cubenoy22/Loka/issues/911)).
-- A common virtual focus holder implemented once per rail: it repeats the common mechanism across four implementations ([#911](https://github.com/cubenoy22/Loka/issues/911)).
+- Writing the fact from native notifications: no rail delivers a complete set ([#911](https://github.com/SimplySmirkySoftware/Loka/issues/911)).
+- One fact per input (`.focused(aFocused)`): "one of them" is not a type, and it dies with a LazyView item ([#911](https://github.com/SimplySmirkySoftware/Loka/issues/911)).
+- `FocusScope` / `FocusField` seat nodes: a Keyed arm misses the enclosing scope, a wrapper is not layout-transparent, and finding the scope is a multi-hop traversal ([#911](https://github.com/SimplySmirkySoftware/Loka/issues/911)).
+- A per-node "Scene resident" bit: it carries no Scene identity, so a prepared replacement's rows could not be rejected ([#911](https://github.com/SimplySmirkySoftware/Loka/issues/911)).
+- A common virtual focus holder implemented once per rail: it repeats the common mechanism across four implementations ([#911](https://github.com/SimplySmirkySoftware/Loka/issues/911)).
 
 ## Not covered here
 
@@ -305,7 +305,7 @@ Both forms initialize the reported fact to none. Initial focus is a request
 initializer: it waits for the first eligible completion. Declaration does not
 materialize storage early; a constructor `post` is refused while its handles
 are invalid. Post from handlers after connection. This is the owner's
-implementation clarification to the frozen [#960 ruling](https://github.com/cubenoy22/Loka/issues/960).
+implementation clarification to the frozen [#960 ruling](https://github.com/SimplySmirkySoftware/Loka/issues/960).
 
 The declaring owner must be an ancestor in the same Scene as the borrowing
 fields. A component's ordinary states remain backed by its Boundary; retiring

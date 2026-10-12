@@ -175,8 +175,19 @@ while UB2 (`arm64;x86_64`) starts with Apple Silicon-capable Xcode releases.
 macOS bundle targets use the project-owned
 `cmake/macos/MacOSXBundleInfo.plist.in` through CMake's default-template lookup.
 It declares `NSHighResolutionCapable` explicitly for legacy and modern SDKs.
-The legacy build evidence below predates this template change; the updated
-metadata still needs legacy build verification and Retina runtime verification.
+The 0.0.6 candidate's Tiger UB1 set (`ppc;i386`) is build-verified with this
+template on Mavericks with Xcode 3.2.6, GCC 4.0 and the 10.4u SDK
+([#1253](https://github.com/SimplySmirkySoftware/Loka/pull/1253),
+[#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262)).
+The owner ran its ppc slice on Mac OS X 10.4 on a PowerBook G3 “Pismo”
+(real hardware) on 2026-10-12. Result: OK.
+The owner exercised the interactive apps by hand.
+On the same date, its ppc slice ran on Mac OS X 10.5.8 on an emulated
+PowerPC G4 (QEMU): runtime-verified for the five loops; the three interactive
+apps startup only ([release PR #1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
+See the [archive results](../../docs/environments.md#verification-status-by-target)
+for the scope of these checks.
+Retina runtime verification remains separate.
 
 The template also declares `NSRequiresAquaSystemAppearance` as false (#421).
 AppKit keeps applications linked against SDKs older than 10.14 in the light
@@ -185,7 +196,8 @@ builds, which link older SDKs, is not runtime-verified, so on 10.14 and 10.15
 such a build may still render light while the system is dark. That is a known
 limitation, not a drawing defect. The UB2 release links the current SDK and
 its x86_64 slice starts at 10.13, so on 10.14 and 10.15 it follows the system
-appearance: runtime-verified dark on 10.14 (2026-10-12), not verified on 10.15.
+appearance: runtime-verified dark on 10.14 (2026-10-12),
+dark appearance not verified on 10.15.
 The key is unknown to 10.13 and earlier, and it is already the default for
 builds linked against the 10.14 SDK or later.
 
@@ -214,9 +226,15 @@ builds linked against the 10.14 SDK or later.
   - Before SimpleViewer was converted to an `.app` bundle, the complete
     autonomous sets were build-verified through the Mavericks 10.9.5 + Xcode
     3.2.6 CLI route: Tiger as `ppc i386`, Leopard as `ppc7400 i386 x86_64`.
+    At the 0.0.6 candidate, the Tiger profile is build-verified with eight
+    bundles, including SimpleViewer, SimpleText and SmirkyCard, each containing
+    ppc and i386 slices
+    ([#1253](https://github.com/SimplySmirkySoftware/Loka/pull/1253),
+    [#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262),
+    [release PR #1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
     SimpleViewer's new bundle packaging remains pending build verification
-    on that route for both profiles. This is not a runtime-verification claim
-    for either target OS or PowerPC hardware.
+    on that route for the Leopard profile. Running the Tiger archive on
+    Leopard does not renew the Leopard-profile build evidence.
 
 - `scripts/macos-standalone-release-ub2.sh`
   - Builds the five autonomous Standalone Loop bundles plus the interactive

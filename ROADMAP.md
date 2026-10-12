@@ -16,7 +16,7 @@ Versioning follows a pragmatic pre-1.0 scheme:
 The version in the top-level CMake `project(Loka VERSION ... LANGUAGES CXX)`
 call is the canonical source version, and it names the release **under
 development**: the source tree on `main` always carries the next version
-(currently `0.0.6`), so a build from source never claims to be a published
+(currently `0.0.7`), so a build from source never claims to be a published
 artifact it has drifted from. Cutting a release means bringing the
 documentation and release metadata into agreement with that version and
 freezing it with the annotated tag; immediately after tagging, the source
@@ -30,10 +30,51 @@ created with `git tag -a`, with the release notes recorded in the tag message.
 
 ---
 
-## v0.0.5 (current)
+## v0.0.6 (current)
+
+Text milestone — 311 commits since 0.0.5. See the
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.6).
+
+Delivered:
+
+* **TextEditor on every rail**: plain multi-line editing, one range-replacement
+  commit door, caret facts and requests, and app-owned keyboard focus
+* **Styled and attributed text**: `TextStyle` / `BlockStyle`, paragraph
+  alignment, `AttributedString` / `AttributedText` / Markup runs, and text
+  color on all three native rails; macOS bundles opt into dark appearance
+* **Scene-owned menus and commands**: Scene bars merge with the App default,
+  item titles can follow State; command bindings and a ribbon button band
+* **Documents and SimpleText**: `DocumentRoster<T,N>` drives one window per
+  document; the new ASCII plain-text editor has New / Open / Save / Save As
+  through native file dialogs on every rail, a command band and its own menu
+* **Layout and lifetime**: natural button widths, `LazyView` replacing LazyFlex,
+  visible-leaf ScrollView layout on Classic, refusing picture/blob storage,
+  platform-clock image disposal, and failure-atomic Keyed / LazyScope replacement
+* **SmirkyCard (experimental)**: text style and Markup, block alignment, files,
+  images and dialogs, constructor Flows and scene-to-scene values; Minesweeper
+  and SimpleViewer cards and a headless JS scenario runner
+* **Release payloads**: five archives with the same eight applications, including
+  SmirkyCard (experimental): Classic 68K + PPC with a `.dsk` beside every
+  MacBinary, the first Windows x64 and x86 XP archives, macOS UB2
+  (arm64 + x86_64), and macOS UB1 (Tiger ppc + i386)
+* **Owner hardware runs**: the release candidate was runtime-verified on
+  PowerBook 550c (Classic 68K), 1400c and G3 PDQ (Classic PPC), Pismo (Tiger
+  UB1), VAIO P (Windows XP x86), and MacBook Neo (macOS UB2 arm64); all passed
+
+Verification evidence and known issues are recorded on release PR #1259.
+Known ships-with defects: #496 (Win32 MineSweeper bottom rows unpainted on
+real GPUs), #580 (vertical-only ScrollView clips wide images in SimpleViewer),
+#1264 (macOS SimpleText input-method typing can crash), #1265 (Win32 scroll
+bar arrows and track clicks do nothing; wheel and thumb drag work), and #501
+(standalone audit flushes every record to disk on a 68030), dispositioned to
+0.0.7.
+
+---
+
+## v0.0.5
 
 Core-hardening and runtime milestone — 203 commits since 0.0.4. See the
-[release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.5).
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.5).
 
 Delivered:
 
@@ -67,7 +108,7 @@ standalone loops share LOG.TXT when flattened), dispositioned to 0.0.6.
 ## v0.0.4
 
 Verification-hardening and presentation milestone — 58 commits since 0.0.3. See
-the [release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.4).
+the [release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.4).
 
 Delivered:
 
@@ -98,7 +139,7 @@ to 0.0.5.
 ## v0.0.3
 
 Resource and proof-machinery milestone — 159 pull requests since 0.0.2. See the
-[release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.3).
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.3).
 
 Delivered:
 
@@ -127,7 +168,7 @@ Verification evidence and known issues are recorded on release PR #387.
 ## v0.0.2
 
 Reliability milestone — 88 pull requests focused on lifecycle and ownership
-contracts. See the [release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.2).
+contracts. See the [release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.2).
 
 Delivered:
 
