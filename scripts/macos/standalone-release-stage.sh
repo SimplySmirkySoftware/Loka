@@ -19,6 +19,21 @@ loka_source_version() {
   printf '%s\n' "${version}"
 }
 
+# SmirkyCard's card scripts, in copy order. This reader stays parallel with
+# example/SmirkyCard/CMakeLists.txt (which copies them into the bundle's
+# Resources), scripts/mame-*-disk*, scripts/release/classic-disks.py and
+# scripts/win32-standalone-flow.ps1: blank lines and full-line # comments are
+# skipped, surrounding spaces, tabs and CRs are trimmed.
+loka_smirkycard_scripts() {
+  local stage_dir root script
+  stage_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  root="$(cd "${stage_dir}/../.." && pwd)"
+  while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
+    case "${script}" in ''|\#*) continue ;; esac
+    printf '%s\n' "${script}"
+  done < "${root}/example/SmirkyCard/disk-scripts.txt"
+}
+
 loka_populate_standalone_release_stage() {
   local destination="$1"
   local target_name=""
@@ -99,10 +114,25 @@ loka_populate_standalone_release_stage() {
     count=$((count + 1))
   done
 
-  if [[ "${count}" -ne 7 ]]; then
-    echo "The ${LOKA_STANDALONE_FORMAT_NAME} standalone release must contain five loops plus SimpleViewer and SimpleText; found ${count}." >&2
+  if [[ "${count}" -ne 8 ]]; then
+    echo "The ${LOKA_STANDALONE_FORMAT_NAME} standalone release must contain five loops plus SimpleViewer, SimpleText and SmirkyCard; found ${count}." >&2
     return 1
   fi
+  # SmirkyCard loads its card scripts from its own bundle.
+  local script=""
+  local scripts=""
+  scripts="$(loka_smirkycard_scripts)" || return 1
+  if [[ -z "${scripts}" ]]; then
+    echo "The SmirkyCard script manifest lists no scripts." >&2
+    return 1
+  fi
+  # One trimmed manifest line is one filename: no word splitting or globbing.
+  while IFS= read -r script; do
+    if [[ ! -f "${destination}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}" ]]; then
+      echo "Staged ${LOKA_STANDALONE_FORMAT_NAME} SmirkyCard bundle lacks Resources/${script}." >&2
+      return 1
+    fi
+  done <<< "${scripts}"
   local source_version
   source_version="$(loka_source_version)" || return 1
   printf '%s\n' \
@@ -113,6 +143,7 @@ loka_populate_standalone_release_stage() {
     '' \
     'The five StandaloneLoop applications run their UI tour repeatedly.' \
     'Quit a loop application to stop it. LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' \
+    'LokaSmirkyCardMacOS (experimental) loads MAIN.JS from its bundle; its buttons open MINES.JS and VIEWER.JS.' \
     >"${destination}/README.txt"
 }
 

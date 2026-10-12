@@ -122,6 +122,16 @@ try {
     $text = Join-Path $TestRoot "build/example/SimpleText/LokaSimpleTextWin32.exe"
     New-Item -ItemType Directory -Path (Split-Path -Parent $text) -Force | Out-Null
     Write-TestPe $text
+    # SmirkyCard's build places each manifest script beside its executable.
+    $smirkyRoot = Join-Path $TestRoot "build/example/SmirkyCard"
+    New-Item -ItemType Directory -Path $smirkyRoot -Force | Out-Null
+    Write-TestPe (Join-Path $smirkyRoot "LokaSmirkyCardWin32.exe")
+    $smirkyScripts = @([System.IO.File]::ReadAllLines(
+            (Join-Path $ProjectDirectory "example/SmirkyCard/disk-scripts.txt")) |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") })
+    foreach ($name in $smirkyScripts) {
+        [System.IO.File]::WriteAllText((Join-Path $smirkyRoot $name), "// $name")
+    }
 
     Invoke-Profile @("-Architecture", "x64") "Profile xp requires architecture x86"
     Invoke-Profile @("-Architecture", "arm64") "Profile xp requires architecture x86"
@@ -135,8 +145,22 @@ try {
     Assert-Readme "xp"
     Invoke-Profile @("-Action", "Release")
     Assert-Readme "xp"
+    foreach ($name in @("LokaSmirkyCardWin32.exe") + $smirkyScripts) {
+        if (-not (Test-Path -LiteralPath (Join-Path $TestRoot ("stage/smirkycard/" + $name)) -PathType Leaf)) {
+            throw "Release did not stage smirkycard/$name"
+        }
+    }
+    # Release refuses a SmirkyCard whose manifest script the build did not place.
+    $parked = Join-Path $smirkyRoot ($smirkyScripts[-1] + ".parked")
+    Move-Item -LiteralPath (Join-Path $smirkyRoot $smirkyScripts[-1]) -Destination $parked
+    Invoke-Profile @("-Action", "Release") "SmirkyCard card script not found"
+    Move-Item -LiteralPath $parked -Destination (Join-Path $smirkyRoot $smirkyScripts[-1])
+    $smirkyExe = Join-Path $smirkyRoot "LokaSmirkyCardWin32.exe"
+    Move-Item -LiteralPath $smirkyExe -Destination ($smirkyExe + ".parked")
+    Invoke-Profile @("-Action", "Release") "SmirkyCard Release executable not found"
+    Move-Item -LiteralPath ($smirkyExe + ".parked") -Destination $smirkyExe
 
-    # Each source in both vehicles, including SimpleViewer and SimpleText, must be refused.
+    # Each source in both vehicles, including SimpleViewer, SimpleText and SmirkyCard, must be refused.
     $executables = @(Get-ChildItem -LiteralPath (Join-Path $TestRoot "build") -Recurse -Filter *.exe)
     foreach ($exe in $executables) {
         Write-TestPe $exe.FullName 6 0

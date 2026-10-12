@@ -85,7 +85,8 @@ The OS columns come from `CMakePresets.json` and the platform workflows under
 `.github/workflows/` (`linux.yml`, `macos.yml`, `windows.yml`, and
 `toolbox.yml`). The separate `windows-standalone-release.yml` builds and stages
 the Win32 x64 standalone Release set (five autonomous loops plus interactive
-SimpleViewer and SimpleText) on `release/**` pushes and manual dispatch.
+SimpleViewer and SimpleText and the experimental SmirkyCard) on `release/**`
+pushes and manual dispatch.
 It is advisory, not a merge gate; the PR/main path no longer runs that stage
 ([#896](https://github.com/cubenoy22/Loka/issues/896)).
 Linux is a headless host-validation leg and has no GUI example targets. The
