@@ -77,7 +77,8 @@ if [ $# -ge 1 ] && { [ "$1" = "--all" ] || [ "$1" = "-a" ]; }; then
   if [ -f "$SCRAPBOOK_ASSETS" ]; then
     PLAIN_DATA_PATHS+=("$SCRAPBOOK_ASSETS")
   fi
-  # Manifest readers in mame-*-disk* and SmirkyCard/CMakeLists.txt stay parallel.
+  # Manifest readers in mame-*-disk*, release/classic-disks.py and
+  # SmirkyCard/CMakeLists.txt stay parallel.
   while IFS=$' \t\r' read -r script || [ -n "$script" ]; do
     case "$script" in ''|\#*) continue ;; esac
     smirkycard_script="$PROJECT_DIR/example/SmirkyCard/$script"
