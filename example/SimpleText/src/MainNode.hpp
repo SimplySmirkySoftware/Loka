@@ -2,6 +2,7 @@
 #define LOKA_SIMPLE_TEXT_MAIN_NODE_HPP
 
 #include "app/scene/BorrowedKeys.hpp"
+#include "app/core/DocumentFacts.hpp"
 #include "app/core/DocumentRoster.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
@@ -24,8 +25,14 @@ class SimpleTextTestAccess;
 namespace simpletext
 {
   /** Grows when Open takes a window of its own. */
-  struct Document
+  /** The roster entry: the window's title and edited mark come from here (#1245).
+      The file and saved revision join in the next step. */
+  struct Document : loka::app::DocumentFacts
   {
+    Document()
+        : loka::app::DocumentFacts(loka::core::String::Literal("LokaSimpleText"), false)
+    {
+    }
   };
   enum
   {
