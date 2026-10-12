@@ -389,7 +389,7 @@ Owner reports marked “OK” do not imply those automated tour checks.
 | --- | --- |
 | Classic Mac OS, 68030 | Runtime-verified, under emulation and on hardware. The primary leg, and the only one that can be debugged at source level. |
 | Classic Mac OS, 68020 | Emulation only. No hardware, so timing observations are not measurements. |
-| Classic Mac OS, 68040 | Runtime-verified: the owner ran the 0.0.6 candidate's Classic 68K set on a PowerBook 550c (real hardware). Result: OK. |
+| Classic Mac OS, 68040 | Runtime-verified: the owner ran the 0.0.6 candidate's Classic 68K set on a PowerBook 550c (Mac OS 7.6.1, Japanese, real hardware). Result: OK. |
 | Classic Mac OS, PowerPC | Runtime-verified: the owner ran the 0.0.6 candidate's Classic PPC set on a PowerBook 1400c (PowerPC 603e, Mac OS 8.6, real hardware). Result: OK, and loops placed in separate folders kept presenting while in the background ([#1239](https://github.com/cubenoy22/Loka/pull/1239)). |
 | Mac OS X, Tiger 10.4 | Runtime-verified for generated Universal Binary 1 samples. The owner ran the 0.0.6 candidate's UB1 archive (ppc slice) on a PowerBook G3 “Pismo” (real hardware) on 2026-10-12. Result: OK. |
 | Mac OS X, Leopard 10.5 | Build-verified through Xcode 3.x, with native debugging verified on that host. Runtime-verified on 10.5.8: all eight applications from the 0.0.6 candidate's UB1 archive (ppc slice) on an emulated PowerPC G4 (QEMU). |
@@ -407,7 +407,6 @@ Owner reports marked “OK” do not imply those automated tour checks.
 
 Hardware coverage is uneven. The 0.0.6 candidate adds a 68040-class
 PowerBook 550c run to the earlier 68030 hardware evidence.
-No System version was recorded for the 550c run.
 These owner observations do not establish performance measurements.
 The MAME scenario rail passed 29/29 cells at the candidate
 ([#1259](https://github.com/cubenoy22/Loka/pull/1259)).
