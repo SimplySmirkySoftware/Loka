@@ -44,6 +44,11 @@ public:
   void setApp(App *app) { this->app_ = app; }
   App *app() const { return this->app_; }
   /** Deliberate Win32/Null counterpart: WM_DESTROY requests close via the App back-pointer. */
+  void simulateCloseAsked()
+  {
+    if (this->app_ && !this->app_->closeAsked(this))
+      this->app_->requestWindowClose(this);
+  }
   void simulateNativeClose()
   {
     if (this->app_)

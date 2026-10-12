@@ -49,4 +49,14 @@ void testDocumentWindowMountCloseExistingRowWaitsForNextAdmission();
 void testDocumentWindowAdoptionCallbackCloseSkipsFacts();
 void testDocumentWindowMountRemovesOwnEntrySkipsFacts();
 
+void testCloseAskedCleanDocumentCloses();
+void testCloseAskedEditedDocumentRemains();
+void testCloseAskedUnkeyedWindowClosesAsToday();
+void testQuitWithoutRosterQuitsNow();
+void testQuitAsksSeriallyAndCancelEndsAttempt();
+void testQuitSecondDeclineInSameTurnStillCancelsAttempt();
+void testQuitOtherDocumentDeclineInSameTurnEndsAttempt();
+void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt();
+void testQuitAllAcceptedExitsWithStaticWindow();
+
 #endif
