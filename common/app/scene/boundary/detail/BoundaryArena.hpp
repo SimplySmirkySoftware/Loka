@@ -118,7 +118,7 @@ namespace loka
               if (nodes_[i] == node)
               {
                 nodes_[i] = 0;
-                node->~Node();
+                DestroyNodeInPlace(node);
                 return true;
               }
             }
@@ -198,7 +198,7 @@ namespace loka
             {
               Node *node = plan.node(i);
               if (node->isArenaAllocated())
-                node->~Node();
+                DestroyNodeInPlace(node);
               else
                 NodePartition::reclaimDetached(node, returned, owner);
             }
@@ -261,7 +261,7 @@ namespace loka
               Node *node = gen.nodes[i - 1];
               if (node)
               {
-                node->~Node();
+                DestroyNodeInPlace(node);
               }
             }
             freeGeneration(gen);

@@ -837,7 +837,7 @@ namespace loka
 
         void clearChildren()
         {
-          clearChildrenInternal(false);
+          clearChildrenInternal();
         }
 
       protected:
