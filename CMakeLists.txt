@@ -845,6 +845,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/NativeBuildPickerTest.py)
     add_test(NAME scriptReleaseAssembler
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/ReleaseAssemblerTest.py)
+    add_test(NAME scriptWin32RemoteStage
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/Win32RemoteStageTest.py)
+    add_test(NAME scriptWin32RemoteStagePowerShell
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/Win32RemoteStagePowerShellTest.py)
     add_test(NAME scriptPresentationStage
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/PresentationStageTest.py)
     add_test(NAME scriptMacOSStandaloneAuditVerifier
