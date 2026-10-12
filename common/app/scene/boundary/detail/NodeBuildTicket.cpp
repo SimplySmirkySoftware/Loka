@@ -47,7 +47,7 @@ namespace loka
           assert(registered && "strict node construction must register its owner edge");
           if (!registered)
           {
-            node->~Node();
+            DestroyNodeInPlace(node);
             this->partition_.cancel(storage, layout);
             return 0;
           }

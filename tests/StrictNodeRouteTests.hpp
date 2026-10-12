@@ -5,7 +5,7 @@ void testStrictNodeRouteArenaRefusal();
 void testStrictNodeRouteRecursiveRefusal();
 void testStrictNodeRouteLocalRefusal();
 void testStrictNodeRouteKeyedAttachRefusal();
-void testStrictNodeRoutePartitionDeleteGuard();
+void testStrictNodeRoutePartitionDestroysThroughItsOwnDoor();
 void testStrictNodeRouteInitialAttachRetry();
 void testStrictNodeRouteLegacyGenerationPartitionChild();
 void testStrictNodeRoutePlannedGenerationPartitionChild();
