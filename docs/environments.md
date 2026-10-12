@@ -397,7 +397,7 @@ The owner exercised SimpleText, SimpleViewer and SmirkyCard by hand.
 | --- | --- |
 | Classic Mac OS, 68030 | Runtime-verified, under emulation and on hardware. The primary leg, and the only one that can be debugged at source level. |
 | Classic Mac OS, 68020 | Emulation only. No hardware, so timing observations are not measurements. |
-| Classic Mac OS, 68040 | Runtime-verified: the owner ran the 0.0.6 candidate's Classic 68K set on a PowerBook 550c (Mac OS 7.6.1, Japanese, real hardware). Result: OK. The interactive apps were exercised by hand. |
+| Classic Mac OS, 68040 | Runtime-verified: the owner ran the 0.0.6 candidate's Classic 68K set on a PowerBook 550c (full 68040, Mac OS 7.6.1 Japanese, real hardware). Result: OK. The interactive apps were exercised by hand. |
 | Classic Mac OS, PowerPC | Runtime-verified: the owner ran the 0.0.6 candidate's Classic PPC set on a PowerBook 1400c (PowerPC 603e, Mac OS 8.6) and a PowerBook G3 "PDQ" (Mac OS 8.6), both real hardware. Result: OK, and loops placed in separate folders kept presenting while in the background ([#1239](https://github.com/cubenoy22/Loka/pull/1239)). The interactive apps were exercised by hand. |
 | Mac OS X, Tiger 10.4 | Runtime-verified for generated Universal Binary 1 samples. The owner ran the 0.0.6 candidate's UB1 archive (ppc slice) on a PowerBook G3 “Pismo” (Mac OS X 10.4.11, real hardware) on 2026-10-12. Result: OK. The interactive apps were exercised by hand. |
 | Mac OS X, Leopard 10.5 | Build-verified through Xcode 3.x, with native debugging verified on that host. The 0.0.6 candidate's UB1 archive (ppc slice) ran on 10.5.8 on an emulated PowerPC G4 (QEMU): runtime-verified for the five loops; the three interactive apps startup only. |
@@ -413,7 +413,7 @@ The owner exercised SimpleText, SimpleViewer and SmirkyCard by hand.
 | Windows XP class | Runtime-verified on 2026-10-12: the owner ran the 0.0.6 release candidate's x86 XP archive on a Sony VAIO P (real hardware, rehearsal 3). All applications OK. The interactive apps were exercised by hand. |
 | Linux / WSL | Runtime-verified for the headless test suites. |
 
-Hardware coverage is uneven. The 0.0.6 candidate adds a 68040-class
+Hardware coverage is uneven. The 0.0.6 candidate adds a 68040
 PowerBook 550c run to the earlier 68030 hardware evidence.
 These owner observations do not establish performance measurements.
 The MAME scenario rail passed 29/29 cells at the candidate
