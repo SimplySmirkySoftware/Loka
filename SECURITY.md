@@ -8,7 +8,7 @@ updates, suspicious behavior, and proposed fixes.
 If a report contains reproducible exploit details, secrets, private data, or
 other information that could put users at risk if published, do not open a
 public issue or pull request. Use
-[GitHub private vulnerability reporting](https://github.com/cubenoy22/Loka/security/advisories/new)
+[GitHub private vulnerability reporting](https://github.com/SimplySmirkySoftware/Loka/security/advisories/new)
 instead.
 
 Useful reports include the affected release, commit, or branch; the host and

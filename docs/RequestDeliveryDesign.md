@@ -14,7 +14,7 @@ ruling from the #879 review (2026-09-23).
 |---|---|---|---|
 | fact (`cursor`) | `Reported<LineCursor>` | the node's commit seam only (`TextEditorDocument::moveCaret` / `applyReplace`) | app, through `state()` |
 | request (`moveCaretTo`) | app-owned `Request<LineCursor>` (a private `NodeState<LineCursor>`) | app (`set`), rail (last-wins take: snapshot, then `None`) | rail |
-| queue endpoint ([#892](https://github.com/cubenoy22/Loka/issues/892)) | app-owned `RequestQueue<T, N>`: slot + reply + fixed ring | slot: app `post`, binding `consume`/`cancelFrom`; reply: rail; ring: endpoint `post`/advance/clear | slot: rail; reply: app; ring: endpoint only (rails never see it) |
+| queue endpoint ([#892](https://github.com/SimplySmirkySoftware/Loka/issues/892)) | app-owned `RequestQueue<T, N>`: slot + reply + fixed ring | slot: app `post`, binding `consume`/`cancelFrom`; reply: rail; ring: endpoint `post`/advance/clear | slot: rail; reply: app; ring: endpoint only (rails never see it) |
 | reply (optional, `RequestWithReply<LineCursor>::reply()`) | `Reported<Reply<LineCursor>>` inside the request handle | rail, once per take, forced publish | app |
 
 `Reported<T>` has no `set` and no conversion to a mutable handle; Props extract
@@ -25,11 +25,11 @@ nouns (`cursor`, `offset`), requests as verbs (`moveCaretTo`, `scrollTo`).
 
 ## Settle (#882)
 
-The EventCall contract is frozen in [#882](https://github.com/cubenoy22/Loka/issues/882).
-Its implementation series is [#883 (a, common/Null)](https://github.com/cubenoy22/Loka/pull/883),
-[#884 (b, Toolbox)](https://github.com/cubenoy22/Loka/pull/884),
-[#885 (c, Win32)](https://github.com/cubenoy22/Loka/pull/885), and
-[#886 (d, macOS)](https://github.com/cubenoy22/Loka/pull/886).
+The EventCall contract is frozen in [#882](https://github.com/SimplySmirkySoftware/Loka/issues/882).
+Its implementation series is [#883 (a, common/Null)](https://github.com/SimplySmirkySoftware/Loka/pull/883),
+[#884 (b, Toolbox)](https://github.com/SimplySmirkySoftware/Loka/pull/884),
+[#885 (c, Win32)](https://github.com/SimplySmirkySoftware/Loka/pull/885), and
+[#886 (d, macOS)](https://github.com/SimplySmirkySoftware/Loka/pull/886).
 The authoritative common sequence is in
 [`RequestSettlement.hpp`](../common/app/scene/state/RequestSettlement.hpp);
 [`Request.hpp`](../common/app/scene/state/Request.hpp) defines the request/reply boxes.
@@ -54,9 +54,9 @@ by value and, under `TEST_BUILD`, its trace row; `FollowUps` stays local to the
 driver. The existing
 single-seat entry and a two-seat overload share that walk; TextEditor uses the
 two-seat overload for caret then command (#902).
-Sources: [#898, ruling items 1–3](https://github.com/cubenoy22/Loka/issues/898),
-[#900](https://github.com/cubenoy22/Loka/pull/900), and
-[#904](https://github.com/cubenoy22/Loka/pull/904).
+Sources: [#898, ruling items 1–3](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+[#900](https://github.com/SimplySmirkySoftware/Loka/pull/900), and
+[#904](https://github.com/SimplySmirkySoftware/Loka/pull/904).
 The non-template `SettleOwnerBase` opens a `BorrowScope` on the rail's
 controller before native calls or callback-capable work. It borrows the node
 and stores a comparison-only context identity. Both settle overloads require
@@ -117,7 +117,7 @@ the next message. macOS and Toolbox cadence is unchanged.
 
 #### Input-operation door (#977)
 
-The frozen [#977 ruling](https://github.com/cubenoy22/Loka/issues/977)
+The frozen [#977 ruling](https://github.com/SimplySmirkySoftware/Loka/issues/977)
 (2026-09-28, N1–N9) defines the intended all-rail policy below. **Implemented
 coverage as of 2026-09-28 includes Null, Win32, macOS and Toolbox**: Null ScrollBar complete
 gestures and split input entries, plus the TextEditor input adapter, use
@@ -190,7 +190,7 @@ Two consequences require pins on each rail that has the corresponding path:
   `flushIterationTail`. State observers and direct native bindings remain
   immediate; native layout can proceed while an extent-driven Show waits for
   a Scene run. This accepted drag tradeoff and its native repaint/resize timing
-  probe are tracked in [#984](https://github.com/cubenoy22/Loka/issues/984),
+  probe are tracked in [#984](https://github.com/SimplySmirkySoftware/Loka/issues/984),
   not runtime-verified here. Live structural updates, if required, need a
   separate Win32 owner-level native-loop completion design. Other rails need
   no symmetric workaround: macOS registers its timer in default and common
@@ -206,7 +206,7 @@ not the completion path of a still-live take:
    Empty/deferred admission skips the take, but still reaches the epilogue.
    On admission, `consume()` snapshots the request, then clears a last-wins slot
    to `None` or advances a queued slot directly to its next value (or `None`
-   when empty); then check liveness ([#893](https://github.com/cubenoy22/Loka/pull/893)).
+   when empty); then check liveness ([#893](https://github.com/SimplySmirkySoftware/Loka/pull/893)).
 2. `resolve` checks binding currency. Failure is a refusal, not an early return
    that strands the phase.
 3. `validate` asks the seam whether the requested value is valid.
@@ -230,8 +230,8 @@ keeps `Granted`/`Clamped`/`Refused` selection; different request and fact types
 yield `Refused(pending, result)` on failure or `Granted(pending)` on success.
 Replies remain request-typed; #902 adds request/fact-typed trace rows, as
 described below.
-Sources: [#898, ruling item 5](https://github.com/cubenoy22/Loka/issues/898),
-[#900](https://github.com/cubenoy22/Loka/pull/900).
+Sources: [#898, ruling item 5](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+[#900](https://github.com/SimplySmirkySoftware/Loka/pull/900).
 
 `Granted` means the seam accepted that take, not that subscribers left the fact
 unchanged afterward. `Clamped` records requested and applied values; `Refused`
@@ -255,7 +255,7 @@ check liveness/current binding, and publish `Refused(requested, EDITOR_UNAVAILAB
 report, or write the fact. The driver returns the arm result after this tail,
 so native admission stays closed until refusal publication finishes; retirement
 returns `FOLLOW_UP_NONE`. A binding discarded during consumption gets no reply
-([#893](https://github.com/cubenoy22/Loka/pull/893)).
+([#893](https://github.com/SimplySmirkySoftware/Loka/pull/893)).
 
 Under `TEST_BUILD`, `testing::SettleTrace` stores a fixed-capacity history of
 value rows: stimulus, admissions, take results, seam results, and fact delta.
@@ -270,9 +270,9 @@ the failed-arm tail: each contributing candidate's `after` is the fact captured
 at the next contributing candidate's entry, and the last candidate's `after`
 is the owner's final fact.
 Untaken later seats fold backward rather than creating rows (#902 item 8).
-Sources: [#898, ruling item 4](https://github.com/cubenoy22/Loka/issues/898),
-[#900](https://github.com/cubenoy22/Loka/pull/900), and
-[#903](https://github.com/cubenoy22/Loka/pull/903).
+Sources: [#898, ruling item 4](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+[#900](https://github.com/SimplySmirkySoftware/Loka/pull/900), and
+[#903](https://github.com/SimplySmirkySoftware/Loka/pull/903).
 Golden records are grouped per scenario step under each rail's PNG approval;
 timer/retry counts are not golden expectations.
 
@@ -280,20 +280,20 @@ The bound is per seat: **two ordinary takes (each may refuse) plus at most one
 failed-arm refusal-only take**. With one seat this is exactly the #892 bound,
 unchanged. TextEditor's two seats have an aggregate bound of four ordinary
 takes plus two failed-arm refusal-only takes (#902 item 6).
-Sources: [#898, ruling item 7](https://github.com/cubenoy22/Loka/issues/898),
-[#900](https://github.com/cubenoy22/Loka/pull/900).
+Sources: [#898, ruling item 7](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+[#900](https://github.com/SimplySmirkySoftware/Loka/pull/900).
 
 The sourceless `RequestBinding<T>` seat-only constructor, including its default
 reply argument, instantiates `RequestDeclarationWall<T>` and refuses
 non-coalescable or unspecialized types. Queued bindings pass the queue by
 reference alongside the request and reply seats borrowed from that same queue.
-Sources: [#898, PR w](https://github.com/cubenoy22/Loka/issues/898),
-[#899](https://github.com/cubenoy22/Loka/pull/899).
+Sources: [#898, PR w](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+[#899](https://github.com/SimplySmirkySoftware/Loka/pull/899).
 
 ## Endpoint and queue (#892)
 
-The endpoint ruling is [#892](https://github.com/cubenoy22/Loka/issues/892),
-implemented by [#893](https://github.com/cubenoy22/Loka/pull/893).
+The endpoint ruling is [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
+implemented by [#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 `RequestQueue<T, N>` supplies fixed ring storage to the non-virtual
 `RequestQueueBase<T>`, which owns the slot and reply handles. It is an app-owned
 endpoint with one consumer; the rail receives a `RequestBinding<T>` and never
@@ -310,8 +310,8 @@ the ordinary take and the failed-arm refusal-only take. Cancellation uses
 under [Command seat](#command-seat-902). A cancellation subscriber's repost
 consequently enters the emptied endpoint. The caller is
 `TextEditorNode::discardPendingRequest`, on binding change or detach.
-Sources: [#892](https://github.com/cubenoy22/Loka/issues/892),
-[#893](https://github.com/cubenoy22/Loka/pull/893).
+Sources: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
+[#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
 `post()` returns `POST_ACCEPTED`, `POST_QUEUE_FULL`, or `POST_INVALID` (`None`);
 refused posts change neither slot nor ring. `POST_ACCEPTED` promises one reply
@@ -322,8 +322,8 @@ ordinary takes (each may refuse) plus at most one failed-arm refusal-only take**
 Remaining work gets its next delivery opportunity at the next props apply
 within the same flush, subject to admission and caret priority, using slot
 publication to mark props dirty, without a queue timer.
-Source: [#892](https://github.com/cubenoy22/Loka/issues/892),
-[#893](https://github.com/cubenoy22/Loka/pull/893).
+Source: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
+[#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
 `RequestTraits<T>::coalescable` has no permissive primary; `LineCursor` opts in,
 and `EditorCommand` explicitly opts out (#902 item 1).
@@ -336,10 +336,10 @@ C++11+. Cost lines: each plain binding gains one pointer; the settlement driver
 pays one source null check per take. A queued take mutates its endpoint's ring
 and forces publication when advancing to a queued value; discard walks only that endpoint's
 waiting entries on binding change/detach.
-Source: [#892](https://github.com/cubenoy22/Loka/issues/892),
-[#893](https://github.com/cubenoy22/Loka/pull/893).
+Source: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
+[#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
-In [PR #894](https://github.com/cubenoy22/Loka/pull/894), the Toolbox
+In [PR #894](https://github.com/SimplySmirkySoftware/Loka/pull/894), the Toolbox
 `smirkbench/text-editor-plain` cell audit has `settle.<step>.<row>` rows
 **recorded per scenario step** by `tests/scenarios/TextEditorSettleAudit.hpp`.
 Rows carry the stimulus, take outcomes, seam results, and before/after facts;
@@ -350,12 +350,12 @@ not a claim of Win32/macOS scenario golden coverage.
 
 ## Command seat (#902)
 
-The command ruling is [#902](https://github.com/cubenoy22/Loka/issues/902).
-The implementation series is [#903 (a0, runner and trace)](https://github.com/cubenoy22/Loka/pull/903),
-[#904 (a, common/Null)](https://github.com/cubenoy22/Loka/pull/904),
-[#907 (b, Toolbox)](https://github.com/cubenoy22/Loka/pull/907),
-[#906 (c, Win32)](https://github.com/cubenoy22/Loka/pull/906), and
-[#908 (d, macOS)](https://github.com/cubenoy22/Loka/pull/908).
+The command ruling is [#902](https://github.com/SimplySmirkySoftware/Loka/issues/902).
+The implementation series is [#903 (a0, runner and trace)](https://github.com/SimplySmirkySoftware/Loka/pull/903),
+[#904 (a, common/Null)](https://github.com/SimplySmirkySoftware/Loka/pull/904),
+[#907 (b, Toolbox)](https://github.com/SimplySmirkySoftware/Loka/pull/907),
+[#906 (c, Win32)](https://github.com/SimplySmirkySoftware/Loka/pull/906), and
+[#908 (d, macOS)](https://github.com/SimplySmirkySoftware/Loka/pull/908).
 
 ### Residents and app door
 
@@ -481,14 +481,14 @@ row. Single-seat behavior and command-free golden records remain unchanged
   or endpoint ring; the consumption publication (last-wins `None` or direct
   queue advance) marks props dirty, so the next props apply offers delivery
   subject to admission and caret priority.
-  Sources: [#892](https://github.com/cubenoy22/Loka/issues/892),
-  [#898, ruling item 7](https://github.com/cubenoy22/Loka/issues/898),
-  [#900](https://github.com/cubenoy22/Loka/pull/900).
+  Sources: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
+  [#898, ruling item 7](https://github.com/SimplySmirkySoftware/Loka/issues/898),
+  [#900](https://github.com/SimplySmirkySoftware/Loka/pull/900).
 - **Refusal.** A request that cannot be applied (stale line identity, document
   unavailable, missing native resource) is taken and dropped; the fact stays
   unchanged. A last-wins slot reads `None` unless a subscriber reposted; a
   queued slot advances to the next value, or `None` when the ring is empty.
-  Source: [#892](https://github.com/cubenoy22/Loka/issues/892).
+  Source: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892).
 - **Binding change.** When the node's document binding changes (a different
   list or request seat in new Props, the end of the node's attachment), a list
   change or detach discards both seats; a single request-binding change

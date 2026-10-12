@@ -33,7 +33,7 @@ created with `git tag -a`, with the release notes recorded in the tag message.
 ## v0.0.6 (current)
 
 Text milestone — 311 commits since 0.0.5. See the
-[release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.6).
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.6).
 
 Delivered:
 
@@ -74,7 +74,7 @@ bar arrows and track clicks do nothing; wheel and thumb drag work), and #501
 ## v0.0.5
 
 Core-hardening and runtime milestone — 203 commits since 0.0.4. See the
-[release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.5).
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.5).
 
 Delivered:
 
@@ -108,7 +108,7 @@ standalone loops share LOG.TXT when flattened), dispositioned to 0.0.6.
 ## v0.0.4
 
 Verification-hardening and presentation milestone — 58 commits since 0.0.3. See
-the [release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.4).
+the [release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.4).
 
 Delivered:
 
@@ -139,7 +139,7 @@ to 0.0.5.
 ## v0.0.3
 
 Resource and proof-machinery milestone — 159 pull requests since 0.0.2. See the
-[release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.3).
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.3).
 
 Delivered:
 
@@ -168,7 +168,7 @@ Verification evidence and known issues are recorded on release PR #387.
 ## v0.0.2
 
 Reliability milestone — 88 pull requests focused on lifecycle and ownership
-contracts. See the [release notes](https://github.com/cubenoy22/Loka/releases/tag/v0.0.2).
+contracts. See the [release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.2).
 
 Delivered:
 

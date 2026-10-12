@@ -151,7 +151,7 @@ brick. Return that shape for a rail: give the change an owned path and an
 explicit completion point instead of asking the reader to reconstruct control
 flow from incidental calls.
 
-The delivery-site enumeration in [#873](https://github.com/cubenoy22/Loka/issues/873)
+The delivery-site enumeration in [#873](https://github.com/SimplySmirkySoftware/Loka/issues/873)
 and the [#882 settle contract](docs/RequestDeliveryDesign.md#settle-882) are the
 worked example. Named entry operations meet one common completion sequence,
 and its records expose takes and fact changes. The payoff is that differences

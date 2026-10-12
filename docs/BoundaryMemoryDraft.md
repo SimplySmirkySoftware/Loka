@@ -2,7 +2,7 @@
 
 > **Status:** The owner-slot `Held<T>`, `BoundarySection`, nearest-owner state
 > resolution, and ownership-dump portions were implemented by
-> [#36](https://github.com/cubenoy22/Loka/issues/36). This file preserves the
+> [#36](https://github.com/SimplySmirkySoftware/Loka/issues/36). This file preserves the
 > broader design history and still-open directions; it is not the current API
 > contract. See [PHILOSOPHY.md](../PHILOSOPHY.md) and the
 > [English Programming Guide](ProgrammingGuide.en.md) for the canonical
