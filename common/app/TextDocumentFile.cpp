@@ -14,6 +14,9 @@ namespace loka
       class TextReadCapacity : public platform::file::ReadCapacity
       {
       public:
+        // User-provided so a const instance may be default-initialized:
+        // compilers before DR 253 (Xcode 5/6 clang) refuse it otherwise.
+        TextReadCapacity() {}
         virtual bool allows(std::size_t bytes) const
         {
           return bytes <= TextEditorProps::kMaxBytes + TextEditorProps::kMaxLines - 1;

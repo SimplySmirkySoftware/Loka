@@ -149,7 +149,9 @@ namespace loka
     }
     TextLineMetrics SyntheticTextWidthSource::metrics(const TextStyle &style) const
     {
-      return TextLineMetrics(style.hasFontSize_ ? style.fontSize_ : 12);
+      int points = 12;
+      style.size_.queryPoints(points);
+      return TextLineMetrics(points);
     }
     bool SyntheticTextWidthSource::width(std::size_t start, std::size_t end, std::size_t span, int &out) const
     {
@@ -406,7 +408,8 @@ namespace loka
           break;
         case TEXT_TRUNCATION_ELLIPSIS:
         {
-          const int size = SizeOf(line.metrics.ascent + line.metrics.descent).fontSize_;
+          int size = 0;
+          SizeOf(line.metrics.ascent + line.metrics.descent).size_.queryPoints(size);
           const int advance = syntheticAdvance(size);
           const int capacity = availableWidth / advance;
           width = (capacity > 0 ? capacity : 1) * advance;

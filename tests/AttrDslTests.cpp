@@ -639,7 +639,7 @@ void testLokaAttrDslV1Core()
     loka::app::TextStyle b = a;
     a.weight(loka::app::TEXT_WEIGHT_BOLD);
     (void)b;
-    assert(!b.hasFontSize_);
+    assert(!b.size_.isSet());
     assert(a.hasWeight_);
     assert(a.weight_ == loka::app::TEXT_WEIGHT_BOLD);
   }

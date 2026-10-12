@@ -2607,8 +2607,7 @@ namespace
       this->recordArm("font-italic-12-ge-normal", widths[5] >= widths[1], TEXT_WIDTH_WRITE);
 
       loka::app::TextStyle unsnapped;
-      unsnapped.hasFontSize_ = true;
-      unsnapped.fontSize_ = 11;
+      unsnapped.size_ = loka::app::TextSizeValue::points(11);
       this->recordArm("font-size-tie-snaps-down", ToolboxTextFontDescriptor(unsnapped).size(12) == 10,
                       TEXT_WIDTH_WRITE);
       const ToolboxTextFontDescriptor inherited;
@@ -2848,9 +2847,9 @@ namespace
           if (CountTextStyleInk(row) > 0)
             oldInkRow = row;
         }
-        const bool setup = textRect.bottom - textRect.top == 16
-                           && text->props.textStyleState_
-                           && text->props.resolvedTextStyle().fontSize_ == 12
+        int points = 0;
+        const bool setup = textRect.bottom - textRect.top == 16 && text->props.textStyleState_
+                           && text->props.resolvedTextStyle().size_.queryPoints(points) && points == 12
                            && !EmptyRect(&oldInkRow) && CountTextStyleInk(textRect) > 0;
         self->textStyleBefore_ = TextStyleChangeBefore(textRect, siblingRect, oldInkRow, baseline);
         SetPort(previousPort);

@@ -29,8 +29,7 @@ namespace loka
         }
       }
       TextStyle result;
-      result.fontSize_ = selected;
-      result.hasFontSize_ = true;
+      result.size_ = TextSizeValue::points(selected);
       return result;
     }
 
