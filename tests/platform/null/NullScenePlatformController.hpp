@@ -298,6 +298,7 @@ private:
     loka::app::scene::RefusedNodeHandler popupMenu_;
     loka::app::scene::RefusedNodeHandler imageView_;
     loka::app::scene::RefusedNodeHandler openFileDialog_;
+    loka::app::scene::RefusedNodeHandler confirmDialog_;
   };
 
   struct RetiredEntry

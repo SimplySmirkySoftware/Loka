@@ -10,6 +10,7 @@
 
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/OpenFileDialog.hpp"
+#include "app/ConfirmDialog.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/controls/Cell.hpp"
@@ -90,7 +91,8 @@ NullScenePlatformController::RefusedProjectedNodeHandlers::RefusedProjectedNodeH
     : cell_(loka::app::scene::NodeTypeToken<loka::app::CellNode>()),
       popupMenu_(loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>()),
       imageView_(loka::app::scene::NodeTypeToken<loka::app::ImageViewNode>()),
-      openFileDialog_(loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>())
+      openFileDialog_(loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>()),
+      confirmDialog_(loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>())
 {
 }
 
@@ -101,6 +103,7 @@ void NullScenePlatformController::RefusedProjectedNodeHandlers::registerWith(
   controller.registerNodeHandler(&this->popupMenu_);
   controller.registerNodeHandler(&this->imageView_);
   controller.registerNodeHandler(&this->openFileDialog_);
+  controller.registerNodeHandler(&this->confirmDialog_);
 }
 
 unsigned NullScenePlatformController::RefusedProjectedNodeHandlers::cellCount() const
@@ -257,6 +260,7 @@ namespace
     case NODE_KIND_POPUP_MENU:
       return NULL_PAINT_FOREIGN;
     case NODE_KIND_OPEN_FILE_DIALOG:
+    case NODE_KIND_CONFIRM_DIALOG:
     case NODE_KIND_SCROLL_VIEW:
     case NODE_KIND_BOX:
     case NODE_KIND_ZSTACK:

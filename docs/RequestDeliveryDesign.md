@@ -524,6 +524,14 @@ consumption. A native refusal consumes without retry. A field's detach does
 not cancel its ancestor's pending focus request. No slot observer supplies an
 autonomous wake-up, and a post during the take waits for a later completion.
 
+`DialogResultTransport` is the single Window-owned ledger behind the existing
+`DialogResultDelivery` admission door. Its polymorphic entries carry file
+(`OpenFileDialogProps` / `FileChooserResult`) or confirm (`ConfirmDialogProps` /
+`ConfirmResult`) payloads; registration and return ports remain typed per
+payload. Both share one finite delivery batch and the same synchronous
+revocation and silent reclamation paths. Confirm has no native presenter in
+this leg; Toolbox retains the copied file-channel delivery described below.
+
 ### Toolbox file dialog presentation
 
 `ToolboxApp::present` consumes pending file dialogs in its foreground arm,

@@ -572,3 +572,8 @@ loka_compile_pin(document_window_seat_type_requires_facts
   REFUSES pins/refuses_document_window_seat_type.cpp
   ACCEPTS pins/accepts_document_window_seat_type.cpp
 )
+
+loka_compile_pin(dialog_result_cross_payload
+  REFUSES pins/refuses_dialog_result_cross_payload.cpp
+  ACCEPTS pins/accepts_dialog_result_cross_payload.cpp
+)

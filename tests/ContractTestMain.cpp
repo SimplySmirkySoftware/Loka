@@ -144,6 +144,7 @@
 #include "RectSurfaceSeatExtentTests.hpp"
 #include "NullPlatformContractTests.hpp"
 #include "OpenFileDialogTransportTests.hpp"
+#include "ConfirmDialogTransportTests.hpp"
 #include "LifecycleFactTests.hpp"
 #include "LokaAllocTests.hpp"
 #include "core/diag/LifecycleAudit.hpp"
