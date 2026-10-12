@@ -86,7 +86,8 @@ void App::run()
 /** One ListRevision compare per admission (two per Win32 tail, every Toolbox
     pass, every macOS flush tick). When the revision moved, (a) walks desired x
     group rows and (b) walks group rows x desired once per stale row plus one
-    final full scan; both over this App's group and its own seat's desired copy. */
+    final full scan; both over this App's group and its own seat's desired copy.
+    Apply: desired rows x one roster lookup/copy + <=2 sets, same-value no-op. */
 unsigned short App::admitDocumentWindows(AdoptionPhase phase)
 {
   if (!this->windowSeat_ || this->windowSeat_->key().matches())
@@ -103,29 +104,47 @@ unsigned short App::admitDocumentWindows(AdoptionPhase phase)
   for (unsigned short i = 0; i < n; ++i)
   {
     const loka::core::ItemId id = seat.desiredAt(i);
-    if (this->group_->find(id))
-      continue;
-    ++attempted;
-    Window *window = seat.createWindow(id, this->config_->getPlatformContext());
-    if (!window)
+    if (!this->group_->find(id))
     {
-      roster.windowGone(id);
-      // A runtime refusal that empties the roster beside an empty group is the
-      // last window gone: the same decision requestWindowClose takes for a
-      // close. Launch answers through windowlessAfterLaunch instead, because
-      // quit() before a rail's loop exists is a no-op on macOS and Toolbox.
-      if (phase == ADOPT_RUNNING && quitWhenLastWindowClosed_
-          && this->group_->getComponents().size() == 0 && roster.count() == 0)
-        this->quit();
-      continue;
+      ++attempted;
+      Window *window = seat.createWindow(id, this->config_->getPlatformContext());
+      if (!window)
+      {
+        roster.windowGone(id);
+        // A runtime refusal that empties the roster beside an empty group is the
+        // last window gone: the same decision requestWindowClose takes for a
+        // close. Launch answers through windowlessAfterLaunch instead, because
+        // quit() before a rail's loop exists is a no-op on macOS and Toolbox.
+        if (phase == ADOPT_RUNNING && quitWhenLastWindowClosed_ && this->group_->getComponents().size() == 0
+            && roster.count() == 0)
+          this->quit();
+        continue;
+      }
+      this->group_->adopt(window, id);
+      if (!this->windowAdopted(window))
+      {
+        if (phase == ADOPT_AT_LAUNCH)
+          this->bootstrapWindowRefused(window);
+        else
+          this->requestWindowClose(window);
+        continue;
+      }
     }
-    this->group_->adopt(window, id);
-    if (!this->windowAdopted(window))
+    AppComponent *row = this->group_->find(id);
+    Window *window = row ? row->asWindow() : 0;
+    loka::app::DocumentFacts facts;
+    if (window && window->getTracker() && seat.copyFacts(id, facts))
     {
       if (phase == ADOPT_AT_LAUNCH)
-        this->bootstrapWindowRefused(window);
+      {
+        loka::core::StandaloneTransactionGuard _(window->getTracker());
+        window->applyDocumentFacts(facts);
+      }
       else
-        this->requestWindowClose(window);
+      {
+        loka::core::StateTrackerGuard _(window->getTracker());
+        window->applyDocumentFacts(facts);
+      }
     }
   }
   // (b) decrease: a keyed row whose id is not in this walk's desired copy is

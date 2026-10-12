@@ -192,35 +192,34 @@ bool Win32ScrollViewContext::handleVerticalScroll(int command,
   {
   case SB_LINEUP:
     next = next < kLineStepPixels ? 0 : next - kLineStepPixels;
-    this->publishOffset(next);
-    return true;
+    break;
   case SB_LINEDOWN:
     next = maximum - next < kLineStepPixels ? maximum : next + kLineStepPixels;
-    this->publishOffset(next);
-    return true;
+    break;
   case SB_PAGEUP:
     next = next < page ? 0 : next - page;
-    this->publishOffset(next);
-    return true;
+    break;
   case SB_PAGEDOWN:
     next = next > maximum - page ? maximum : next + page;
-    this->publishOffset(next);
-    return true;
+    break;
   case SB_THUMBTRACK:
     this->setVisualPosition(
         this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum));
     return true;
   case SB_THUMBPOSITION:
     next = this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum);
-    this->setVisualPosition(next);
-    this->publishOffset(next);
-    return true;
+    break;
   case SB_ENDSCROLL:
     this->publishOffset(this->clampOffset(this->controller()->displayScale().scrollPositionToLu(info.nPos), maximum));
     return true;
   default:
     return false;
   }
+  // Every settled step moves the native position with the fact: a click's
+  // SB_ENDSCROLL arrives before layout and republishes that position.
+  this->setVisualPosition(next);
+  this->publishOffset(next);
+  return true;
 }
 
 bool Win32ScrollViewContext::readScrollInfo(SCROLLINFO &info) const

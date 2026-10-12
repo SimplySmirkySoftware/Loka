@@ -232,3 +232,19 @@ void testWin32OpenWriteTruncateAcceptsFullWidthPath()
   RemoveDirectoryW(dirWide.c_str());
   printf("==== [testWin32OpenWriteTruncateAcceptsFullWidthPath] end ====\n");
 }
+
+void testWin32FileNameIsTheLastBackslashComponent()
+{
+  printf("\n==== [testWin32FileNameIsTheLastBackslashComponent] start ====\n");
+  // Win32 dialogs hand back backslash paths; FileFromWidePath seals them unchanged.
+  const wchar_t kPath[] = L"C:\\loka\\folder\\leaf.txt";
+  const loka::file::File item = loka::win32::FileFromWidePath(kPath, sizeof(kPath) / sizeof(kPath[0]) - 1);
+  LOKA_VERIFY(item.name().equals(loka::core::String::Literal("leaf.txt")));
+  const wchar_t kTrailing[] = L"C:\\loka\\folder\\";
+  LOKA_VERIFY(loka::win32::FileFromWidePath(kTrailing, sizeof(kTrailing) / sizeof(kTrailing[0]) - 1)
+                  .name()
+                  .equals(loka::core::String::Literal("folder")));
+  const wchar_t kRoot[] = L"C:\\";
+  LOKA_VERIFY(loka::win32::FileFromWidePath(kRoot, sizeof(kRoot) / sizeof(kRoot[0]) - 1).name().empty());
+  printf("==== [testWin32FileNameIsTheLastBackslashComponent] PASSED ====\n");
+}

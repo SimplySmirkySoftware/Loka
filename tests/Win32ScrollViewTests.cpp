@@ -419,6 +419,24 @@ void testWin32ScrollViewMessagePublishesOffsetFact()
            "end scroll must publish the last visual thumb position");
     controller.relayout(300, 140);
 
+    // A click on an arrow or on the track sends its step and then, on release,
+    // SB_ENDSCROLL, with no layout pass in between: the step must survive it.
+    offset.state().set(0);
+    controller.relayout(300, 140);
+    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
+    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
+    assert(offset.state().get() == 16 && "an arrow click's end scroll must keep its line step");
+    const SCROLLINFO clickInfo = scrollInfo(viewport);
+    const int clickMaximum = maximumOffset(clickInfo);
+    const int clickPage =
+        clickInfo.nPage > static_cast<UINT>(clickMaximum) ? clickMaximum : static_cast<int>(clickInfo.nPage);
+    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_PAGEDOWN, 0), 0);
+    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
+    assert(offset.state().get() == (16 > clickMaximum - clickPage ? clickMaximum : 16 + clickPage)
+           && "a track click's end scroll must keep its page step");
+    assert(offset.state().get() > 16 && "the page step must move in this fixture");
+    controller.relayout(300, 140);
+
     const int rangeEnd = maximumOffset(scrollInfo(viewport));
     offset.state().set(rangeEnd);
     controller.relayout(300, 140);
