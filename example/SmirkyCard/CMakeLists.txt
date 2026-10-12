@@ -34,7 +34,8 @@ endif()
 add_library(smirkycard_script STATIC src/ScriptEngine.c src/ScriptAlignedAlloc.c)
 target_link_libraries(smirkycard_script PRIVATE smirkycard_quickjs)
 target_include_directories(smirkycard_script PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set_target_properties(smirkycard_script PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES)
+set_target_properties(smirkycard_script PROPERTIES
+  C_STANDARD ${SMIRKYCARD_C_STANDARD} C_STANDARD_REQUIRED YES)
 if(MSVC)
   target_compile_options(smirkycard_script PRIVATE /W4 /wd4996 /utf-8)
   if(LOKA_WARNINGS_AS_ERRORS)
@@ -108,11 +109,18 @@ elseif(LOKA_MACOS AND LOKA_ENABLE_APPLE)
   endif()
 endif()
 
+# PowerPC loads its PEF code into the heap; SizePPC.r budgets that separately.
+if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
+  set(SMIRKYCARD_SIZE_R SizePPC.r)
+else()
+  set(SMIRKYCARD_SIZE_R Size.r)
+endif()
+
 if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC|Carbon)$")
   set(LOKA_SMIRKYCARD_CLASSIC_TARGET "LokaSmirkyCard${LOKA_CLASSIC_TARGET_SUFFIX}")
   add_application(${LOKA_SMIRKYCARD_CLASSIC_TARGET}
     src/ToolboxMain.cpp
-    Size.r
+    ${SMIRKYCARD_SIZE_R}
   )
   smirkycard_cpp_target(${LOKA_SMIRKYCARD_CLASSIC_TARGET})
   target_link_libraries(${LOKA_SMIRKYCARD_CLASSIC_TARGET} PRIVATE LokaAppleToolboxCore)
@@ -184,7 +192,7 @@ function(smirkycard_add_scenario_runner name)
       message(FATAL_ERROR "${target} is ${target_length} characters; HFS file names allow 31. Shorten the runner name '${name}'.")
     endif()
     loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
-      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp Size.r
+      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp ${SMIRKYCARD_SIZE_R}
       ${PROJECT_SOURCE_DIR}/tests/standalone/StandaloneScenarioSupport.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioReel.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
