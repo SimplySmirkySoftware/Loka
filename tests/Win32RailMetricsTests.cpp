@@ -128,6 +128,36 @@ void testWin32RailMetricsSurviveDpiChange()
   LOKA_VERIFY(controller.displayScale().projectEdge(8) == 12);
 }
 
+void testWin32SmallLabelUsesTheMessageFaceAtTenUnits()
+{
+  using namespace loka::app;
+  using loka::win32::Win32DisplayScale;
+  loka::win32::Win32DisplayFont table;
+  LOKA_VERIFY(table.create(Win32DisplayScale(96)));
+  LOGFONTW body;
+  LOKA_VERIFY(GetObjectW(table.get(), sizeof(body), &body));
+  // The role has its own row: the message face at -10 px, not the default row.
+  const HFONT small = table.find(SmallLabel);
+  LOGFONTW font;
+  LOKA_VERIFY(small && small != table.get());
+  LOKA_VERIFY(GetObjectW(small, sizeof(font), &font));
+  LOKA_VERIFY(font.lfHeight == -10);
+  LOKA_VERIFY(lstrcmpW(font.lfFaceName, body.lfFaceName) == 0);
+  LOKA_VERIFY(font.lfWeight == body.lfWeight);
+  // Weight composes with the role through the row's bold column.
+  const HFONT smallBold = table.find(SmallLabel + Bold);
+  LOKA_VERIFY(smallBold && smallBold != small);
+  LOKA_VERIFY(GetObjectW(smallBold, sizeof(font), &font));
+  LOKA_VERIFY(font.lfHeight == -10 && font.lfWeight == FW_BOLD);
+  // The row follows dpi and the rail's font scale like the numeric rows, and a
+  // table swap carries a borrowed SmallLabel handle to the new table's row.
+  loka::win32::Win32DisplayFont scaled;
+  LOKA_VERIFY(scaled.create(Win32DisplayScale(144, RailMetrics(Ratio(5, 4), Ratio()))));
+  LOKA_VERIFY(GetObjectW(scaled.find(SmallLabel), sizeof(font), &font));
+  LOKA_VERIFY(font.lfHeight == -MulDiv(10, 144 * 5, 96 * 4));
+  LOKA_VERIFY(table.replacementFor(small, scaled) == scaled.find(SmallLabel));
+}
+
 namespace
 {
   void verifyProjectionPolicy()
