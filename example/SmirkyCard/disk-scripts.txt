@@ -1,6 +1,7 @@
 # Editable card scripts staged beside SmirkyCard, in copy order.
 # One filename per line; blank lines and full-line # comments are ignored.
-# Keep the readers in scripts/mame-*-disk* and CMakeLists.txt parallel.
+# Keep the readers in scripts/mame-*-disk*, scripts/release/classic-disks.py
+# and CMakeLists.txt parallel.
 MAIN.JS
 MINES.JS
 VIEWER.JS
