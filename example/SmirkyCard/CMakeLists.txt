@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.18)
 
 include(cmake/QuickJS.cmake)
 
-# Manifest readers in scripts/mame-*-disk* and scripts/release/classic-disks.py
+# Manifest readers in scripts/mame-*-disk*, scripts/release/classic-disks.py,
+# scripts/win32-standalone-flow.ps1 and scripts/macos/standalone-release-stage.sh
 # stay parallel with this reader.
 set(SMIRKYCARD_DISK_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/disk-scripts.txt")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SMIRKYCARD_DISK_MANIFEST}")
