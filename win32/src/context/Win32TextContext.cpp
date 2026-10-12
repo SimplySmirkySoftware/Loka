@@ -70,8 +70,7 @@ namespace
     if (!text || !controller || !text->props.hasDeclaredLayoutStyle())
       return 0;
     const loka::app::TextStyle style = text->props.resolvedTextStyle();
-    return style.hasFontSize_ || style.hasWeight_ || style.hasItalic_
-               ? controller->textFont(style) : 0;
+    return style.size_.isSet() || style.hasWeight_ || style.hasItalic_ ? controller->textFont(style) : 0;
   }
 
   /** A null selected font preserves the historical unstyled height. */

@@ -110,9 +110,10 @@ namespace loka
     {
       const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
       const int italic = style.hasItalic_ && style.italic_ ? 1 : 0;
-      if (!style.hasFontSize_)
+      int logicalUnits = 0;
+      if (!style.size_.queryPoints(logicalUnits))
         return this->fonts_[kDefaultSizeRow][bold][italic];
-      const int logicalUnits = loka::app::SizeOf(style.fontSize_).fontSize_;
+      loka::app::SizeOf(logicalUnits).size_.queryPoints(logicalUnits);
       for (int row = 0; row < kSizeCount; ++row)
         if (loka::app::detail::StyleVocabularySizes[row] == logicalUnits)
           return this->fonts_[row][bold][italic];

@@ -26,14 +26,51 @@ void testTextStyleMergeAndSizeVocabulary()
   using namespace loka::app;
   LOKA_VERIFY(kWarningStyle.hasWeight_ && kWarningStyle.weight_ == TEXT_WEIGHT_BOLD);
   LOKA_VERIFY(kWarningStyle.hasItalic_ && kWarningStyle.italic_);
+  const TextSizeValue sizes[] = {TextSizeValue(),
+                                 TextSizeValue::points(-1),
+                                 TextSizeValue::points(0),
+                                 TextSizeValue::points(11),
+                                 TextSizeValue::points(24)};
+  int untouched = 71;
+  LOKA_VERIFY(!sizes[0].queryPoints(untouched) && untouched == 71);
+  for (int i = 0; i < 5; ++i)
+  {
+    const TextSizeValue copy(sizes[i]);
+    LOKA_VERIFY(copy == sizes[i]);
+    LOKA_VERIFY(copy.isSet() == (i != 0));
+    for (int j = 0; j < 5; ++j)
+    {
+      LOKA_VERIFY((sizes[i] == sizes[j]) == (!(sizes[i] < sizes[j]) && !(sizes[j] < sizes[i])));
+      for (int k = 0; k < 5; ++k)
+        LOKA_VERIFY(!(sizes[i] < sizes[j]) || !(sizes[j] < sizes[k]) || sizes[i] < sizes[k]);
+    }
+  }
   const TextStyle boldLarge = Bold + FontSize<24>();
   const TextStyle largeBold = FontSize<24>() + Bold;
   LOKA_VERIFY(boldLarge == largeBold);
-  LOKA_VERIFY(boldLarge.hasFontSize_ && boldLarge.fontSize_ == 24);
+  int points = 0;
+  LOKA_VERIFY(boldLarge.size_.queryPoints(points) && points == 24);
   LOKA_VERIFY(boldLarge.hasWeight_ && boldLarge.weight_ == TEXT_WEIGHT_BOLD);
 
   const TextStyle replaced = FontSize<12>() + FontSize<24>();
-  LOKA_VERIFY(replaced.hasFontSize_ && replaced.fontSize_ == 24);
+  LOKA_VERIFY(replaced.size_.queryPoints(points) && points == 24);
+  LOKA_VERIFY(TextStyle() + FontSize<12>() == FontSize<12>());
+  LOKA_VERIFY(FontSize<12>() + TextStyle() == FontSize<12>());
+  LOKA_VERIFY(TextStyle() != FontSize<12>());
+  LOKA_VERIFY(TextStyle() < FontSize<12>());
+  LOKA_VERIFY(!(FontSize<12>() < TextStyle()));
+  LOKA_VERIFY(FontSize<12>() < FontSize<24>());
+  LOKA_VERIFY(!(FontSize<12>() < FontSize<12>()));
+  LOKA_VERIFY((TextStyle() + Bold) < FontSize<12>());
+  TextStyle rawZero;
+  rawZero.size_ = TextSizeValue::points(0);
+  TextStyle rawNegative;
+  rawNegative.size_ = TextSizeValue::points(-1);
+  LOKA_VERIFY(rawZero != TextStyle());
+  LOKA_VERIFY(TextStyle() < rawZero);
+  LOKA_VERIFY(rawNegative < TextStyle());
+  LOKA_VERIFY(rawZero < Bold);
+  LOKA_VERIFY(!(Bold < rawZero));
   LOKA_VERIFY(TextStyle() + Bold == Bold);
   LOKA_VERIFY(Bold + TextStyle() == Bold);
   LOKA_VERIFY(Italic.hasItalic_ && Italic.italic_);
@@ -70,8 +107,9 @@ void testSizeOfSnapsToNearestVocabularySizeWithTiesDown()
   for (int i = 0; i < count; ++i)
   {
     const TextStyle style = SizeOf(inputs[i]);
-    LOKA_VERIFY(style.hasFontSize_);
-    LOKA_VERIFY(style.fontSize_ == expected[i]);
+    int points = 0;
+    LOKA_VERIFY(style.size_.queryPoints(points));
+    LOKA_VERIFY(points == expected[i]);
   }
 }
 
