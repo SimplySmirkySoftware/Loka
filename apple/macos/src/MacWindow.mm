@@ -60,6 +60,19 @@
 
 @implementation LokaWindowDelegate
 @synthesize owner = owner_;
+- (BOOL)windowShouldClose:(id)sender
+{
+  (void)sender;
+  if (self.owner)
+  {
+    loka::core::Operation turn;
+    const bool asked = self.owner->handleWindowShouldClose();
+    turn.close();
+    return asked ? NO : YES;
+  }
+  return YES;
+}
+
 - (void)windowWillClose:(NSNotification *)notification
 {
   (void)notification;
@@ -572,6 +585,12 @@ void MacWindow::drainNativeRetirements()
 bool MacWindow::hasPendingScenePlatformSync() const
 {
   return scenePlatformController_ ? scenePlatformController_->hasPendingSync() : false;
+}
+
+bool MacWindow::handleWindowShouldClose()
+{
+  // Same request/terminal split as NullWindow::simulateCloseAsked.
+  return this->app_ && this->app_->closeAsked(static_cast<Window *>(this));
 }
 
 void MacWindow::handleWindowWillClose()

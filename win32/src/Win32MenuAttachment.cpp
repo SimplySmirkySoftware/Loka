@@ -130,7 +130,7 @@ bool Win32MenuAttachment::dispatch(int commandId)
     if (command.action == loka::app::MENU_ACTION_QUIT_APP)
     {
       if (app)
-        app->quit();
+        app->requestQuit();
       return true;
     }
     if (command.emitter)
