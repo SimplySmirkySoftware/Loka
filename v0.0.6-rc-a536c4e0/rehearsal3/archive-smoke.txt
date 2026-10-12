@@ -1,0 +1,72 @@
+Archive smoke, rehearsal 3 (release/0.0.6 9699c15c = main 39de508f + allowlists),
+2026-10-12. Each archive expanded on a rig and every application launched from it:
+loops judged by the audit LOG.TXT beside them (ok = succeeded steps, other = any
+other record); SimpleText, SimpleViewer and SmirkyCard judged by staying alive.
+Owner hardware on the same zips, 2026-10-12: PowerBook 550c (Classic 68K),
+PowerBook 1400c (Classic PPC), PowerBook G3 Pismo on Mac OS X 10.4 (UB1 ppc),
+Sony VAIO P on Windows XP (x86 XP archive), MacBook Neo on macOS 27.0.1 (UB2
+arm64): all OK.
+
+== Windows x86 XP archive, Windows 8.1 VM
+os=Microsoft Windows NT 6.3.9600.0
+assets=3436
+LokaFloppyBirdStandaloneLoopWin32.exe alive=True log=True succeeded=14 other=0 last=[terminal status=succeeded]
+LokaHelloWorldStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaMineSweeperStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaScrapbookStandaloneLoopWin32.exe alive=True log=True succeeded=13 other=0 last=[terminal status=succeeded]
+LokaSimpleTextWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSimpleViewerWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSmirkyCardWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaTutorialStandaloneLoopWin32.exe alive=True log=True succeeded=11 other=0 last=[terminal status=succeeded]
+
+== Windows x64 archive, Windows 11 VM
+os=Microsoft Windows NT 10.0.26200.0
+assets=3436
+LokaFloppyBirdStandaloneLoopWin32.exe alive=True log=True succeeded=14 other=0 last=[terminal status=succeeded]
+LokaHelloWorldStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaMineSweeperStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaScrapbookStandaloneLoopWin32.exe alive=True log=True succeeded=13 other=0 last=[terminal status=succeeded]
+LokaSimpleTextWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSimpleViewerWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSmirkyCardWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaTutorialStandaloneLoopWin32.exe alive=True log=True succeeded=11 other=0 last=[terminal status=succeeded]
+
+== macOS UB2 archive, Catalina VM
+10.15.7
+x86_64
+LokaFloppyBirdStandaloneLoopMacOS alive ok=14 other=0
+LokaHelloWorldStandaloneLoopMacOS alive ok=9 other=0
+LokaMineSweeperStandaloneLoopMacOS alive ok=9 other=0
+LokaScrapbookStandaloneLoopMacOS alive ok=13 other=0
+LokaSimpleTextMacOS alive ok=0 other=0
+LokaSimpleViewerMacOS alive ok=0 other=0
+LokaSmirkyCardMacOS alive ok=0 other=0
+LokaTutorialStandaloneLoopMacOS alive ok=11 other=0
+finished
+
+== macOS UB1 archive, Mavericks VM (i386 slice)
+10.9.5
+x86_64
+LokaFloppyBirdStandaloneLoopMacOS alive ok=14 other=0
+LokaHelloWorldStandaloneLoopMacOS alive ok=9 other=0
+LokaMineSweeperStandaloneLoopMacOS alive ok=9 other=0
+LokaScrapbookStandaloneLoopMacOS alive ok=13 other=0
+LokaSimpleTextMacOS alive ok=0 other=0
+LokaSimpleViewerMacOS alive ok=0 other=0
+LokaSmirkyCardMacOS alive ok=0 other=0
+LokaTutorialStandaloneLoopMacOS alive ok=11 other=0
+finished
+
+== macOS UB1 archive, Leopard on emulated PowerPC G4 (ppc slice)
+10.5.8
+Power Macintosh
+LokaFloppyBirdStandaloneLoopMacOS alive ok=14 other=0
+LokaHelloWorldStandaloneLoopMacOS alive ok=9 other=0
+LokaMineSweeperStandaloneLoopMacOS alive ok=9 other=0
+LokaScrapbookStandaloneLoopMacOS alive ok=13 other=0
+LokaSimpleTextMacOS alive ok=0 other=0
+LokaSimpleViewerMacOS alive ok=0 other=0
+LokaSmirkyCardMacOS alive ok=0 other=0
+LokaTutorialStandaloneLoopMacOS alive ok=11 other=0
+finished
+
