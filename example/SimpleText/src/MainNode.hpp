@@ -2,6 +2,9 @@
 #define LOKA_SIMPLE_TEXT_MAIN_NODE_HPP
 
 #include "app/scene/BorrowedKeys.hpp"
+#include "app/scene/KeySnapshot.hpp"
+#include "platform/file/FileHandle.hpp"
+#include "app/core/DocumentFacts.hpp"
 #include "app/core/DocumentRoster.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
@@ -23,9 +26,22 @@ class SimpleTextTestAccess;
 
 namespace simpletext
 {
-  /** Grows when Open takes a window of its own. */
-  struct Document
+  typedef loka::app::FileChooserResult Choice;
+
+  /** The roster owns the destination and its window's chrome facts. */
+  struct Document : loka::app::DocumentFacts
   {
+    Choice file;
+    Document()
+        : loka::app::DocumentFacts(loka::core::String::Literal("Untitled"), false),
+          file()
+    {
+    }
+    Document(const Choice &fileValue, const loka::core::String &titleValue, bool editedValue)
+        : loka::app::DocumentFacts(titleValue, editedValue),
+          file(fileValue)
+    {
+    }
   };
   enum
   {
@@ -170,6 +186,7 @@ namespace simpletext
     typedef MainTypeTag TypeTag;
     explicit MainNode(const MainProps &props)
         : loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>(props),
+          saved_(&this->lines_.revision()),
           openFlow_(*this),
           saveFlow_(*this)
     {
@@ -205,6 +222,9 @@ namespace simpletext
     {
       this->props.assertInitialized();
       t.actions(this->commands_, this, &MainNode::onCommand);
+      t.watch(const_cast<loka::core::State<loka::core::ListRevision> &>(this->lines_.revision()),
+              this,
+              static_cast<void (MainNode::*)()>(&MainNode::publishFacts));
     }
 
     virtual void composeNode(loka::app::scene::NodeComposition &c)
@@ -316,8 +336,9 @@ namespace simpletext
     {
       if (this->operation_.get() != NONE)
         return;
-      if (this->currentFile_.kind == Choice::RESULT_FILE)
-        this->commitDocument(SAVE_DOCUMENT, this->currentFile_);
+      const Choice file = this->currentFile();
+      if (file.kind == Choice::RESULT_FILE)
+        this->commitDocument(SAVE_DOCUMENT, file);
       else
         this->saveAsDocument();
     }
@@ -402,17 +423,51 @@ namespace simpletext
         this->error_.set(failureText(action, result));
         return;
       }
-      this->currentFile_ = destination;
+      this->saved_ = loka::app::scene::KeySnapshot<loka::core::ListRevision>(&this->lines_.revision());
+      this->publishFacts(destination);
       this->error_.set(loka::core::String());
       if (action != SAVE_DOCUMENT)
         this->caret_.set(LineCursor(this->lines_.at(0).id, 0));
+    }
+
+    Choice currentFile() const
+    {
+      const Document *entry = this->props.documents()->find(this->props.document());
+      return entry ? entry->file : Choice();
+    }
+
+    void publishFacts()
+    {
+      this->publishFacts(this->currentFile());
+    }
+
+    void publishFacts(const Choice &file)
+    {
+      if (this->props.document().isNone())
+        return;
+      const Document *entry = this->props.documents()->find(this->props.document());
+      const Document previous = entry ? *entry : Document();
+      const bool edited = !this->saved_.matches();
+      if (!(previous.file != file) && previous.edited == edited)
+        return;
+      loka::core::String title = previous.title;
+      if (previous.file != file)
+      {
+        title = file.kind == Choice::RESULT_FILE ? file.item.name() : loka::core::String();
+        if (title.empty())
+          title = loka::core::String::Literal("Untitled");
+      }
+      const loka::core::ListEditResult result =
+          this->props.documents()->update(this->props.document(), Document(file, title, edited));
+      assert(result == loka::core::EDIT_OK || result == loka::core::EDIT_ID_NOT_FOUND);
+      (void)result;
     }
 
     loka::app::CommandSet<FileCommand, FILE_COMMAND_COUNT> commands_;
     loka::core::ObservableList<loka::core::String> lines_;
     loka::app::scene::Reported<loka::app::LineCursor> cursor_;
     loka::app::scene::Request<loka::app::LineCursor> caret_;
-    Choice currentFile_;
+    loka::app::scene::KeySnapshot<loka::core::ListRevision> saved_;
     loka::app::scene::NodeState<Operation> operation_;
     loka::app::scene::NodeState<Choice> openResult_, saveResult_;
     loka::app::scene::NodeState<loka::core::String> error_;

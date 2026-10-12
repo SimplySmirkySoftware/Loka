@@ -56,7 +56,19 @@ class SimpleTextTestAccess
 public:
   static simpletext::MainProps props(SimpleTextAppConfig &config)
   {
-    return simpletext::MainProps().platformContext(config.getPlatformContext()).documents(&config.documents());
+    const loka::core::ItemId id = config.documents().open(simpletext::Document());
+    assert(!id.isNone());
+    return simpletext::MainProps()
+        .platformContext(config.getPlatformContext())
+        .documents(&config.documents())
+        .document(id);
+  }
+
+  /** None when the roster refused the entry (Classic release: allocation refusal, no assert). */
+  static loka::app::FileChooserResult currentFile(const SimpleTextAppConfig &config, const simpletext::MainNode &node)
+  {
+    const simpletext::Document *entry = config.documents().find(node.props.document());
+    return entry ? entry->file : loka::app::FileChooserResult();
   }
 
   static void
@@ -82,12 +94,16 @@ public:
     node.saveDocument();
   }
 
-  static bool matches(const simpletext::MainNode &node, unsigned rows, const char *current, const char *error = "")
+  static bool matches(const SimpleTextAppConfig &config,
+                      const simpletext::MainNode &node,
+                      unsigned rows,
+                      const char *current,
+                      const char *error = "")
   {
     if (Utf8(node.error_.get()) != error || node.operation_.get() != simpletext::NONE || node.lines_.size() != rows)
       return false;
-    if (current ? Utf8(node.currentFile_.item.toString()) != current
-                : node.currentFile_.kind != loka::app::FileChooserResult::RESULT_NONE)
+    const loka::app::FileChooserResult file = currentFile(config, node);
+    if (current ? Utf8(file.item.toString()) != current : file.kind != loka::app::FileChooserResult::RESULT_NONE)
       return false;
     for (unsigned i = 0; i < rows; ++i)
       if (Utf8(node.lines_.at(i).value) != (current ? kRows[i] : ""))
@@ -95,12 +111,13 @@ public:
     return true;
   }
 
-  static void capture(const simpletext::MainNode &node, loka::dsl::SnapRecord &record)
+  static void
+  capture(const SimpleTextAppConfig &config, const simpletext::MainNode &node, loka::dsl::SnapRecord &record)
   {
     record.setInt("document.rows", node.lines_.size());
     record.set("document.current",
-               node.currentFile_.kind == loka::app::FileChooserResult::RESULT_FILE
-                   ? Utf8(node.currentFile_.item.toString()).c_str()
+               currentFile(config, node).kind == loka::app::FileChooserResult::RESULT_FILE
+                   ? Utf8(currentFile(config, node).item.toString()).c_str()
                    : "none");
     record.set("document.error", node.error_.get().empty() ? "none" : Utf8(node.error_.get()).c_str());
     record.set("document.caret_row", "none");
@@ -198,7 +215,7 @@ namespace loka
           if (!ToolboxCaptureChosenFile(handle.spec, captured))
             return false;
           SimpleTextTestAccess::complete(*this->borrowedMain_, operation, app::FileChooserResult::File(captured));
-          return SimpleTextTestAccess::matches(*this->borrowedMain_, rows, name);
+          return SimpleTextTestAccess::matches(*this, *this->borrowedMain_, rows, name);
         }
         /** Read a file beside the app raw and record its bytes and Finder info
             under prefix; true when the read succeeded and the bytes match. */
@@ -262,7 +279,7 @@ namespace loka
           this->facts_.set("rail", "toolbox");
           this->facts_.set("checkpoint", "final");
           if (this->borrowedMain_)
-            SimpleTextTestAccess::capture(*this->borrowedMain_, this->facts_);
+            SimpleTextTestAccess::capture(*this, *this->borrowedMain_, this->facts_);
           if (window)
             scenario_tests::SetContentBounds(this->facts_, ContentLocalBounds(QueryCaptureContentBounds(window)));
           (void)this->terminal_.emit(
@@ -306,7 +323,7 @@ namespace loka
           const char *step = "final";
           if (this->scenario_ == "startup")
           {
-            this->finish(window, SimpleTextTestAccess::matches(*this->borrowedMain_, 1, 0));
+            this->finish(window, SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 1, 0));
             return;
           }
           if (this->tick_ == 2)
@@ -327,7 +344,7 @@ namespace loka
             SimpleTextTestAccess::save(*this->borrowedMain_);
             FInfo info = {};
             ok = this->inspect("refused", "ReadMe", Joined(6, '\n'), info)
-                 && SimpleTextTestAccess::matches(*this->borrowedMain_, 6, "ReadMe", kNotText);
+                 && SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 6, "ReadMe", kNotText);
           }
           else if (this->tick_ == 4)
           {
@@ -340,13 +357,14 @@ namespace loka
           {
             step = "shorten";
             ok = SimpleTextTestAccess::shorten(*this->borrowedMain_)
-                 && SimpleTextTestAccess::matches(*this->borrowedMain_, 1, "Saved");
+                 && SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 1, "Saved");
           }
           else if (this->tick_ == 6)
           {
             step = "save-overwrite";
             SimpleTextTestAccess::save(*this->borrowedMain_);
-            ok = this->inspectSaved("saved.2", 1) && SimpleTextTestAccess::matches(*this->borrowedMain_, 1, "Saved");
+            ok = this->inspectSaved("saved.2", 1)
+                 && SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 1, "Saved");
           }
           else if (this->tick_ == 7)
           {

@@ -157,6 +157,37 @@ namespace loka
           this->kind_ = kind;
       }
 
+      /** Last component of this locator's text, split only on this rail's name
+          separators (isNameSeparator), trailing ones ignored. Relative text
+          takes precedence over the path base. No component, an unlocated
+          BASE_NONE, or refusal answers empty; application-relative items need
+          no resolution. A captured Classic name keeps a '/' inside it. The
+          component travels through UTF-8, so a Win32 name holding an unpaired
+          surrogate (invalid UTF-16) comes back with U+FFFD in its place; the
+          locator itself still opens that file. */
+      loka::core::String name() const
+      {
+        if (this->base_ == BASE_REFUSED || (this->base_ == BASE_NONE && this->locator_.empty()))
+          return loka::core::String();
+        const loka::core::String &text = this->relative_.empty() ? this->basePath_ : this->relative_;
+        const loka::core::StringBuffer buffer = text.bufferWithEncoding(loka::core::StringEncodingUtf8);
+        const char *bytes = static_cast<const char *>(buffer.data());
+        std::size_t end = buffer.length();
+        while (end && isNameSeparator(bytes[end - 1]))
+          --end;
+        if (!end)
+          return loka::core::String();
+        std::size_t start = end;
+        while (start && !isNameSeparator(bytes[start - 1]))
+          --start;
+#if defined(_WIN32)
+        // A drive root ("C:" after trimming its backslash) has no component.
+        if (start == 0 && end == 2 && bytes[1] == ':')
+          return loka::core::String();
+#endif
+        return loka::core::String::Utf8(bytes + start, end - start);
+      }
+
       loka::core::String toString() const
       {
         if (this->base_ == BASE_APPLICATION)
@@ -200,6 +231,21 @@ namespace loka
         return ":";
 #else
         return "/";
+#endif
+      }
+
+      /** Which bytes end a name component in this rail's sealed text: ':' on
+          Classic; '/' elsewhere, plus '\\' on Win32 because its dialogs and
+          FileFromWidePath seal native backslash paths unchanged while
+          separatorLiteral stays '/'. */
+      static bool isNameSeparator(char c)
+      {
+#if defined(LOKA_RETRO68)
+        return c == ':';
+#elif defined(_WIN32)
+        return c == '/' || c == '\\';
+#else
+        return c == '/';
 #endif
       }
 

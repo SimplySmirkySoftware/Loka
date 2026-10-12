@@ -5,7 +5,10 @@ Status: implemented narrow design note for PR #416.
 ## Contract
 
 `Window::titleState()` remains the logical, mutable title owned by application
-code. `WindowProps::displayTitleState()` optionally supplies a read-only live
+code for non-keyed windows. A keyed document window's `titleState()` is
+the admission walk's projection target and is roster-owned: its seat refuses
+`titleStatePtr` and `displayTitleStatePtr` (#1245).
+`WindowProps::displayTitleState()` optionally supplies a read-only live
 projection for native chrome. Without that explicit projection, the display
 state is the logical title state, so existing applications and platform
 vehicles keep their previous behavior.
@@ -29,8 +32,8 @@ composed. A change publishes one new display value in the Window tracker
 transaction; an unchanged value does no formatting or State write. A successful
 re-arm publishes the new cell and cycle through the same display state.
 
-Application code remains free to read and write `titleState()` and always sees
-its own logical value. While a loop presentation is installed, the reel
+For non-keyed windows, application code remains free to read and write
+`titleState()` and always sees its own logical value. While a loop presentation is installed, the reel
 guarantees that native chrome displays that value followed by the current cell
 and one-based cycle.
 
@@ -51,8 +54,8 @@ and it adds one borrowed cross-boundary state plus a cleanup owner. Keeping
 those risks in one generic display-title door and one private observer ledger
 avoids a reel-specific platform hook or three hand-maintained teardown pairs.
 
-The idle comparison is intentionally presentation-local. Do not generalize it
-into a second reactive title framework unless a non-reel caller needs composed
-native chrome. If that use appears, evaluate a lifecycle-owned derived State at
-the Window boundary while preserving the logical/display ownership split and
-the observer-ledger teardown contract.
+The idle comparison is intentionally presentation-local. Keyed document windows
+receive roster-owned title and edited facts through admission (#1245); composed
+chrome such as Win32's `*` is projected by the rail, not by a derived Window
+State. The logical/display split for non-keyed presentation owners and the
+observer-ledger teardown contract remain unchanged.

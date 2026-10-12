@@ -9,6 +9,12 @@
 #include "support/TestVerify.hpp"
 #include "testing/app/WindowTestAccess.hpp"
 #include "support/NullWindowTestAccess.hpp"
+#include <cstdio>
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
+#include <sys/wait.h>
+#include <unistd.h>
+#include <csignal>
+#endif
 
 namespace
 {
@@ -16,10 +22,15 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
 
-  struct Document
+  struct Document : DocumentFacts
   {
     int value;
     explicit Document(int v = 0) : value(v) {}
+    Document(const char *title, bool edited)
+        : DocumentFacts(String::Literal(title), edited),
+          value(0)
+    {
+    }
   };
   class DocumentRoot;
   struct RootFacts
@@ -475,7 +486,7 @@ void testDocumentWindowLaunchRefusalUsesBootstrapDoor()
 {
   TrackingContext context;
   Config config(context);
-  const ItemId id = config.roster.open(Document(0));
+  const ItemId id = config.roster.open(Document("Refused", true));
   RefusingNullApp app(config);
   app.refuseAt = 1;
   app.run();
@@ -483,6 +494,8 @@ void testDocumentWindowLaunchRefusalUsesBootstrapDoor()
   LOKA_VERIFY(app.bootstrapRefusedWindows()[0] == app.refused);
   LOKA_VERIFY(app.window(id) == app.refused && config.roster.count() == 1);
   LOKA_VERIFY(!context.destroyed[0] && !app.quitRequested());
+  LOKA_VERIFY(!app.window(id)->editedState().get());
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(*app.window(id)) == 0);
 }
 
 // Pin 12: bounded admission; a second declaration asserts (release: first wins).
@@ -878,4 +891,351 @@ void testWindowPlainDefaultsToUneditedWithoutProjection()
   LOKA_VERIFY(!window.editedState().get());
   LOKA_VERIFY(!loka::app::testing::NullWindowTestAccess::projectedEdited(window));
   LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == 0);
+}
+
+void testDocumentWindowFactsApplyJoinsTurn()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId first = config.roster.open(Document("Seed", false));
+  const ItemId other = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  NullWindow &window = *app.window(first);
+  const unsigned projections = loka::app::testing::NullWindowTestAccess::editedProjectionCount(window);
+  const unsigned otherProjections = loka::app::testing::NullWindowTestAccess::editedProjectionCount(*app.window(other));
+  LOKA_VERIFY(window.titleState().get().equals(String::Literal("Seed")));
+  LOKA_VERIFY(config.roster.update(first, Document("Renamed", true)) == EDIT_OK);
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    LOKA_VERIFY(window.titleState().get().equals(String::Literal("Renamed")));
+    LOKA_VERIFY(window.editedState().get());
+    LOKA_VERIFY(window.getTracker()->phase() != TRACKER_IDLE);
+    turn.close();
+    LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == projections + 1);
+    app.reclaimWindows();
+  }
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::projectedEdited(window));
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(*app.window(other)) == otherProjections);
+  LOKA_VERIFY(!app.window(other)->editedState().get());
+  LOKA_VERIFY(config.roster.update(first, Document("Renamed", true)) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(window) == projections + 1);
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}
+
+void testDocumentWindowFactsLaunchWithoutTurn()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId id = config.roster.open(Document("Launch", true));
+  TestApp app(config);
+  LOKA_VERIFY(!Operation::hasActive());
+  app.run();
+  LOKA_VERIFY(app.window(id)->titleState().get().equals(String::Literal("Launch")));
+  LOKA_VERIFY(app.window(id)->editedState().get());
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::projectedEdited(*app.window(id)));
+  LOKA_VERIFY(loka::app::testing::NullWindowTestAccess::editedProjectionCount(*app.window(id)) == 1);
+}
+
+namespace
+{
+  void recordTitle(void *data)
+  {
+    std::vector<String> &values = *static_cast<std::vector<String> *>(data);
+    values.push_back(String::Literal("notified"));
+  }
+  WindowProps plainDocumentWindow(ItemId, const Document &, void *)
+  {
+    return WindowProps();
+  }
+  WindowProps borrowedDocumentTitle(ItemId, const Document &, void *data)
+  {
+    return WindowProps().titleState(static_cast<MutableState<String> *>(data));
+  }
+  WindowProps borrowedDocumentDisplayTitle(ItemId, const Document &, void *data)
+  {
+    return WindowProps().displayTitleState(static_cast<MutableState<String> *>(data));
+  }
+  class CloseDocumentRoot;
+  struct CloseDocumentProps : NodePropsBase<CloseDocumentProps>
+  {
+    typedef CloseDocumentRoot NodeType;
+    struct TypeTag
+    {
+    };
+    DocumentRoster<Document, 4> *roster;
+    ItemId closing;
+    CloseDocumentProps(DocumentRoster<Document, 4> &r, ItemId id)
+        : roster(&r),
+          closing(id)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      if (rhs.propsTypeId() != this->propsTypeId())
+        return this->propsTypeId() < rhs.propsTypeId();
+      const CloseDocumentProps &other = static_cast<const CloseDocumentProps &>(rhs);
+      if (this->roster != other.roster)
+        return std::less<DocumentRoster<Document, 4> *>()(this->roster, other.roster);
+      if (this->closing.generation != other.closing.generation)
+        return this->closing.generation < other.closing.generation;
+      return this->closing.seq < other.closing.seq;
+    }
+  };
+  class CloseDocumentRoot : public StdCompositionBoundaryNodeBase<CloseDocumentProps>
+  {
+  public:
+    explicit CloseDocumentRoot(const CloseDocumentProps &props)
+        : StdCompositionBoundaryNodeBase<CloseDocumentProps>(props)
+    {
+    }
+    virtual void composeNode(NodeComposition &)
+    {
+      LOKA_VERIFY(this->props.roster->close(this->props.closing) == EDIT_OK);
+    }
+  };
+  class ClosingConfig : public AppConfigurable
+  {
+  public:
+    DocumentRoster<Document, 4> roster;
+    ItemId closing;
+    explicit ClosingConfig(PlatformContext &context)
+        : AppConfigurable(&context)
+    {
+    }
+    virtual void compose(AppComposition &c)
+    {
+      c << DocumentWindows(this->roster, &factory, this);
+    }
+    static WindowProps factory(ItemId, const Document &entry, void *data)
+    {
+      ClosingConfig &config = *static_cast<ClosingConfig *>(data);
+      WindowProps props;
+      if (entry.value == 2)
+        props.scene(new Scene(BoundaryDefinition<CloseDocumentProps, CloseDocumentRoot>(
+            CloseDocumentProps(config.roster, config.closing))));
+      return props;
+    }
+  };
+} // namespace
+
+void testDocumentWindowFactsCopySurvivesRosterEdits()
+{
+  DocumentRoster<Document, 4> roster;
+  const ItemId id = roster.open(Document("Copied", true));
+  DocumentWindowSeat<Document, 4> seat(roster, &plainDocumentWindow, 0);
+  DocumentFacts copy;
+  LOKA_VERIFY(seat.copyFacts(id, copy));
+  LOKA_VERIFY(roster.update(id, Document("Changed", false)) == EDIT_OK);
+  LOKA_VERIFY(roster.close(id) == EDIT_OK);
+  LOKA_VERIFY(copy.title.equals(String::Literal("Copied")) && copy.edited);
+  LOKA_VERIFY(!seat.copyFacts(id, copy));
+  LOKA_VERIFY(copy.title.equals(String::Literal("Copied")) && copy.edited);
+}
+
+void testDocumentWindowTitleSeedAndEqualUpdate()
+{
+  TrackingContext context;
+  DocumentRoster<Document, 4> roster;
+  const ItemId id = roster.open(Document("Seed", false));
+  DocumentWindowSeat<Document, 4> seat(roster, &plainDocumentWindow, 0);
+  Window *seed = seat.createWindow(id, &context);
+  LOKA_VERIFY(seed && seed->titleState().get().equals(String::Literal("Seed")));
+  delete seed;
+
+  Config config(context);
+  const ItemId first = config.roster.open(Document("Seed", false));
+  const ItemId other = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  std::vector<String> firstTitles, otherTitles;
+  app.window(first)->titleState().bind(&recordTitle, &firstTitles, false);
+  app.window(other)->titleState().bind(&recordTitle, &otherTitles, false);
+  LOKA_VERIFY(config.roster.update(first, Document("Renamed", true)) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(firstTitles.size() == 1 && otherTitles.empty());
+  LOKA_VERIFY(config.roster.update(first, Document("Renamed", true)) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(firstTitles.size() == 1 && otherTitles.empty());
+  app.window(first)->titleState().unbind(&recordTitle, &firstTitles);
+  app.window(other)->titleState().unbind(&recordTitle, &otherTitles);
+}
+
+void testDocumentWindowBorrowedTitleAsserts()
+{
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
+  const DocumentWindowSeat<Document, 4>::Factory factories[] = {&borrowedDocumentTitle, &borrowedDocumentDisplayTitle};
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (child == 0)
+    {
+      NullPlatformContext context;
+      DocumentRoster<Document, 4> roster;
+      const ItemId id = roster.open(Document("Owned", false));
+      MutableState<String> title(String::Literal("Borrowed"));
+      DocumentWindowSeat<Document, 4> seat(roster, factories[i], &title);
+      delete seat.createWindow(id, &context);
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+  }
+#else
+  (void)&borrowedDocumentTitle;
+  (void)&borrowedDocumentDisplayTitle;
+  std::puts("[skip] borrowed-title assert probe requires Linux without ASan and NDEBUG");
+#endif
+}
+
+void testDocumentWindowMountCloseSkipsLiveFacts()
+{
+  TrackingContext context;
+  ClosingConfig config(context);
+  const ItemId survivor = config.roster.open(Document("Survivor", false));
+  config.closing = config.roster.open(Document("Old", false));
+  TestApp app(config);
+  app.run();
+  // Put the mounting closer before the removed row in this walk's snapshot:
+  // remove/reopen the victim after the closer is appended.
+  LOKA_VERIFY(config.roster.close(config.closing) == EDIT_OK);
+  const ItemId closer = config.roster.open(Document(2));
+  config.closing = config.roster.open(Document("Pending", true));
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    LOKA_VERIFY(app.window(survivor) && app.window(closer));
+    LOKA_VERIFY(!app.window(config.closing));
+    turn.close();
+    app.reclaimWindows();
+  }
+  app.tail();
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}
+
+void testDocumentWindowPendingFactsAfterNativeClose()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId id = config.roster.open(Document("Old", false));
+  const ItemId survivor = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  NullWindow *window = app.window(id);
+  LOKA_VERIFY(config.roster.update(id, Document("Pending", true)) == EDIT_OK);
+  window->simulateNativeClose();
+  LOKA_VERIFY(!app.window(id) && !config.roster.find(id));
+  LOKA_VERIFY(config.roster.update(id, Document("Too late", true)) == EDIT_ID_NOT_FOUND);
+  app.tail();
+  LOKA_VERIFY(app.window(survivor) && !app.window(id));
+  LOKA_VERIFY(config.factories == 2);
+}
+
+void testDocumentWindowFactoryEditSeedsLiveEntry()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId first = config.roster.open(Document("First", false));
+  const ItemId second = config.roster.open(Document("Second", false));
+  LOKA_VERIFY(!config.roster.open(Document("Third", false)).isNone());
+  DocumentWindowSeat<Document, 4> seat(config.roster, &Config::documentWindow, &config);
+  config.closeDuringFactory = first;
+  Window *window = seat.createWindow(second, &context);
+  LOKA_VERIFY(window && window->titleState().get().equals(String::Literal("Second")));
+  delete window;
+  config.closeDuringFactory = second;
+  LOKA_VERIFY(!seat.createWindow(second, &context));
+}
+
+void testDocumentWindowMountCloseExistingRowWaitsForNextAdmission()
+{
+  TrackingContext context;
+  ClosingConfig config(context);
+  config.closing = config.roster.open(Document("Existing", false));
+  TestApp app(config);
+  app.run();
+  NullWindow *closing = app.window(config.closing);
+  const ItemId closer = config.roster.open(Document(2));
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    LOKA_VERIFY(!config.roster.find(config.closing));
+    LOKA_VERIFY(app.window(config.closing) == closing);
+    LOKA_VERIFY(closing->titleState().get().equals(String::Literal("Existing")));
+    LOKA_VERIFY(!closing->editedState().get());
+    LOKA_VERIFY(app.hasPendingWindowAdmission());
+    turn.close();
+    app.reclaimWindows();
+  }
+  app.tail();
+  LOKA_VERIFY(!app.window(config.closing) && app.window(closer));
+}
+
+/** #1245 t1: the existing State::deferBind dispatch invokes native observers
+    synchronously. Keep the required turn-close contract as a stopped pin;
+    repairing that State/rail door is outside this work item's walls. */
+namespace
+{
+  class ClosingAdoptionApp : public TestApp
+  {
+  public:
+    explicit ClosingAdoptionApp(Config &config)
+        : TestApp(config)
+    {
+    }
+
+  protected:
+    virtual bool windowAdopted(Window *window)
+    {
+      NullApp::windowAdopted(window);
+      this->requestWindowClose(window);
+      return true;
+    }
+  };
+} // namespace
+
+void testDocumentWindowAdoptionCallbackCloseSkipsFacts()
+{
+  TrackingContext context;
+  Config config(context);
+  ClosingAdoptionApp app(config);
+  app.run();
+  const ItemId id = config.roster.open(Document("Closed during adoption", true));
+  app.tail();
+  LOKA_VERIFY(!app.window(id) && !config.roster.find(id));
+  LOKA_VERIFY(config.factories == 1);
+  app.tail();
+  LOKA_VERIFY(context.destroyed[0]);
+}
+
+void testDocumentWindowMountRemovesOwnEntrySkipsFacts()
+{
+  TrackingContext context;
+  ClosingConfig config(context);
+  const ItemId survivor = config.roster.open(Document("Survivor", false));
+  TestApp app(config);
+  app.run();
+  Document closing("Seed survives", true);
+  closing.value = 2;
+  config.closing = config.roster.open(closing);
+  {
+    Operation turn;
+    turn.settle();
+    app.admitAndApplyWindows();
+    LOKA_VERIFY(!config.roster.find(config.closing));
+    LOKA_VERIFY(app.window(config.closing));
+    LOKA_VERIFY(app.window(config.closing)->titleState().get().equals(String::Literal("Seed survives")));
+    LOKA_VERIFY(!app.window(config.closing)->editedState().get());
+    turn.close();
+    app.reclaimWindows();
+  }
+  app.tail();
+  LOKA_VERIFY(!app.window(config.closing) && app.window(survivor));
 }

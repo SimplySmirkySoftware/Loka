@@ -19,6 +19,10 @@ public:
   {
     return this->documents_;
   }
+  const loka::app::DocumentRoster<simpletext::Document, simpletext::kMaxDocuments> &documents() const
+  {
+    return this->documents_;
+  }
   virtual void compose(AppComposition &c)
   {
     c << loka::app::DocumentWindows(this->documents_, &SimpleTextAppConfig::documentWindow, this);
@@ -31,10 +35,9 @@ private:
   {
     using namespace simpletext;
     SimpleTextAppConfig *config = static_cast<SimpleTextAppConfig *>(userData);
-    // All windows share this frame; cascading belongs to later title/frame work.
+    const int offset = 24 * ((id.seq - 1) % kMaxDocuments);
     return WindowProps()
-        .frame(16, 16, 480, 320)
-        .title("LokaSimpleText")
+        .frame(16 + offset, 16 + offset, 480, 320)
         .visible(true)
         .scene(loka::app::scene::Boundary<MainNode>( //
             MainProps().platformContext(config->getPlatformContext()).documents(&config->documents_).document(id)));
