@@ -27,13 +27,23 @@ namespace
   // The reference is the control the rail projects for the node, never a
   // separately built cell: on macOS 10.14 through 13 a standalone NSButtonCell
   // reports a narrower size than the NSButton's own cell.
-  CGFloat projectedCellWidth(MacScenePlatformController &controller, NSView *root, ButtonNode &node)
+  CGFloat projectedCellWidth(const ButtonProps &props, NSString *title)
   {
-    controller.onChange(&node, NODE_DIRTY_NONE, false);
-    controller.relayout(640, 160);
-    const CGFloat width = [[buttonAt(root, 0) cell] cellSize].width;
-    controller.onChange(0, NODE_DIRTY_NONE, false);
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 240)];
+    LOKA_VERIFY(root != nil);
+    CGFloat width = 0;
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      ButtonNode node(props);
+      controller.onChange(&node, NODE_DIRTY_NONE, false);
+      controller.relayout(640, 160);
+      NSButton *button = buttonAt(root, 0);
+      LOKA_VERIFY([[button title] isEqualToString:title]);
+      width = [[button cell] cellSize].width;
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
     LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
     return width;
   }
 
@@ -105,8 +115,8 @@ void testMacButtonNaturalWidthMatchesCell()
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, newWidth));
     LOKA_VERIFY(controller.queryNaturalWidth(&saveButton, saveWidth));
     LOKA_VERIFY(newWidth < saveWidth);
-    LOKA_VERIFY(newWidth == std::ceil(projectedCellWidth(controller, root, newButton)));
-    LOKA_VERIFY(saveWidth == std::ceil(projectedCellWidth(controller, root, saveButton)));
+    LOKA_VERIFY(newWidth == std::ceil(projectedCellWidth(newButton.props, @"New")));
+    LOKA_VERIFY(saveWidth == std::ceil(projectedCellWidth(saveButton.props, @"Save As...")));
     LOKA_VERIFY(controller.queryNaturalWidth(&newButton, repeated));
     LOKA_VERIFY(repeated == newWidth);
     StackNode other((StackProps()));
@@ -118,13 +128,10 @@ void testMacButtonNaturalWidthMatchesCell()
     LOKA_VERIFY(!controller.queryNaturalWidth(&oversized, repeated));
     LOKA_VERIFY(repeated == 17);
 
+    // With no text prop the projected button keeps NSButton's default title.
     ButtonNode untitled((ButtonProps()));
-    controller.onChange(&untitled, NODE_DIRTY_NONE, false);
-    controller.relayout(640, 160);
-    LOKA_VERIFY([[buttonAt(root, 0) title] isEqualToString:@"Button"]);
-    controller.onChange(0, NODE_DIRTY_NONE, false);
     LOKA_VERIFY(controller.queryNaturalWidth(&untitled, repeated));
-    LOKA_VERIFY(repeated == std::ceil(projectedCellWidth(controller, root, untitled)));
+    LOKA_VERIFY(repeated == std::ceil(projectedCellWidth(untitled.props, @"Button")));
   }
   [root release];
   [pool drain];
