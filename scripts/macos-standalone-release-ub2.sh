@@ -27,6 +27,13 @@ case "${ARCHS}" in
     exit 2
     ;;
 esac
+# macOS 10.13 to 10.15 run neither the 32-bit UB1 set nor an 11.0 build, so the
+# x86_64 slice starts at 10.13; clang raises the arm64 slice to 11.0 by itself.
+export DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET:-10.13}"
+if [[ "${DEPLOYMENT_TARGET}" != "10.13" ]]; then
+  echo "The UB2 standalone release requires DEPLOYMENT_TARGET=10.13." >&2
+  exit 2
+fi
 
 BUILD_ROOT="${BUILD_DIR:-${PROJECT_DIR}/build/macos-ub2/${BUILD_TYPE:-Release}}"
 export BUILD_DIR="${BUILD_ROOT}"
