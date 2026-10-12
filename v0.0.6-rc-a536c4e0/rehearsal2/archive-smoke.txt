@@ -1,0 +1,19 @@
+Archive smoke, 2026-10-12: each archive expanded on a VM and every application
+launched from it (loops judged by the audit LOG.TXT beside them, 20 s each;
+SimpleViewer/SimpleText by staying alive 6 s). Script: smoke.ps1 in the
+release session notes.
+
+Windows x86 XP archive, rehearsal 2 (e0af271d), Windows 8.1 VM:
+  assets=3436 (modern PNG package)
+  FloppyBird  succeeded=14 other=0 terminal succeeded
+  HelloWorld  succeeded=9  other=0 terminal succeeded
+  MineSweeper succeeded=9  other=0 terminal succeeded
+  Scrapbook   succeeded=13 other=0 terminal succeeded
+  Tutorial    succeeded=11 other=0 terminal succeeded
+  SimpleText, SimpleViewer alive
+
+Windows x64 archive, rehearsal 2 (e0af271d), Windows 11 VM: identical counts.
+
+Positive control, Windows x86 XP archive, rehearsal 1 (37a0cb8f), Windows 8.1 VM:
+  assets=7160 (Classic PICT package, the allowlist defect)
+  Scrapbook   succeeded=0  other=2  terminal failed   <- the owner's "REFUSED" on the VAIO P
