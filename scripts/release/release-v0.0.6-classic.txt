@@ -6,7 +6,11 @@
 # scripts/release/classic-disks.py builds with ASSETS.LRP or MAIN.JS beside the
 # application (#1250). SimpleText is new in both architectures (#1131, #1254).
 # LazyList and SmirkBench are measurement benches and are not shipped.
-# SmirkyCard stays experimental and 68K-only, beside its MAIN.JS sample.
+# SmirkyCard stays experimental. It ships for 68K and PPC (owner decision 8,
+# 2026-10-12) beside the card scripts in example/SmirkyCard/disk-scripts.txt
+# (MAIN.JS links to MINES.JS and VIEWER.JS); each disk carries the same scripts
+# (#1260). The PPC disk is a 2 MiB image, not a floppy. The PPC configure needs
+# -DLOKA_BUILD_SMIRKYCARD=ON like the 68K one.
 git	example/ScrapbookUI/ASSETS.LRP	ScrapbookUI/ASSETS.LRP
 build	build/retro68/68k/Release/example/ScrapbookUI/ScrapbookUI68K.bin	ScrapbookUI/ScrapbookUI68K.bin
 build	build/release/classic-disks/ScrapbookUI68K.dsk	ScrapbookUI/ScrapbookUI68K.dsk
@@ -37,5 +41,9 @@ build	build/retro68/ppc/Release/example/FloppyBird/LokaFloppyBirdPPC.dsk	PPC/Flo
 build	build/retro68/ppc/Release/example/SimpleText/LokaSimpleTextPPC.bin	PPC/SimpleText/LokaSimpleTextPPC.bin
 build	build/retro68/ppc/Release/example/SimpleText/LokaSimpleTextPPC.dsk	PPC/SimpleText/LokaSimpleTextPPC.dsk
 build	build/retro68/68k/Release/example/SmirkyCard/LokaSmirkyCard68K.bin	experimental/SmirkyCard/LokaSmirkyCard68K.bin
-git	example/SmirkyCard/MAIN.JS	experimental/SmirkyCard/MAIN.JS
 build	build/release/classic-disks/LokaSmirkyCard68K.dsk	experimental/SmirkyCard/LokaSmirkyCard68K.dsk
+build	build/retro68/ppc/Release/example/SmirkyCard/LokaSmirkyCardPPC.bin	experimental/SmirkyCard/LokaSmirkyCardPPC.bin
+build	build/release/classic-disks/LokaSmirkyCardPPC.dsk	experimental/SmirkyCard/LokaSmirkyCardPPC.dsk
+git	example/SmirkyCard/MAIN.JS	experimental/SmirkyCard/MAIN.JS
+git	example/SmirkyCard/MINES.JS	experimental/SmirkyCard/MINES.JS
+git	example/SmirkyCard/VIEWER.JS	experimental/SmirkyCard/VIEWER.JS
