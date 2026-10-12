@@ -1,0 +1,14 @@
+manifest_version=1
+requested_tag=v0.0.6
+tag_sha=b078b345b91001b8c45519c09def79e76dbbb38a
+commit_sha=137cc66a7d14ddc4e1e649d1ebdf09b1688b5363
+checkout_path=/tmp/loka-release-assembly-worktree
+archive=Loka-v0.0.6-macos-ub2.zip
+archive_sha256=3615414a22890d04c0c006f578f138feb9065b813febd3a99f6b643b7164cade
+allowlist_sha256=91eba3ad265405d7a4dedb4dced9d5c48c0610bbf32d38cad276d7af436482eb
+build_command_count=2
+lrpk_provenance_gate=git-tracked-package-file-only
+build_command_1=PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin bash scripts/macos-standalone-release-ub2.sh
+build_command_2=/usr/bin/ditto -c -k --norsrc --noextattr build/release/macos-ub2 build/release/Loka-macos-standalone-UB2.zip
+provenance=build-output:build/release/Loka-macos-standalone-UB2.zip  macOS/Loka-macos-standalone-UB2.zip
+artifact_sha256=b4daad24dd5d32129eceab9f77b6af278bcc5c47b85b40cd7395ac477be5b76c  macOS/Loka-macos-standalone-UB2.zip
