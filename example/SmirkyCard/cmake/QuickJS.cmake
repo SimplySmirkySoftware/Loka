@@ -30,11 +30,16 @@ if(LOKA_CLASSIC_MAC)
   set(smirkycard_quickjs_source_dir "${smirkycard_quickjs_classic_source}")
 endif()
 
-# QuickJS-ng is C11. The legacy release toolchains have no C11 mode (Visual
-# Studio 2017 for the XP profile, GCC 4.0 for Tiger UB1): they build it as C99
-# with QuickJSLegacyC.h supplying what QuickJS takes from C11. Every other
-# compiler keeps C11. smirkycard_script follows the same dialect.
-if("c_std_11" IN_LIST CMAKE_C_COMPILE_FEATURES)
+# QuickJS-ng is C11. The legacy release toolchains have no C11 (Visual Studio
+# 2017 for the XP profile, GCC 4.0 for Tiger UB1): they build it as C99 with
+# QuickJSLegacyC.h supplying what QuickJS takes from C11. Ask the compiler
+# itself: CMake lists c_std_11 for MSVC 19.16, which has no _Alignas. Every
+# other compiler keeps C11; smirkycard_script follows the same dialect.
+include(CheckCSourceCompiles)
+check_c_source_compiles(
+  "struct smirkycard_probe { _Alignas(8) unsigned char bytes[8]; }; int main(void) { return 0; }"
+  SMIRKYCARD_C_HAS_ALIGNAS)
+if(SMIRKYCARD_C_HAS_ALIGNAS)
   set(SMIRKYCARD_C_STANDARD 11)
 else()
   set(SMIRKYCARD_C_STANDARD 99)
