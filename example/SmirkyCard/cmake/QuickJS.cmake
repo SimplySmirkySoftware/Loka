@@ -30,6 +30,16 @@ if(LOKA_CLASSIC_MAC)
   set(smirkycard_quickjs_source_dir "${smirkycard_quickjs_classic_source}")
 endif()
 
+# QuickJS-ng is C11. The legacy release toolchains have no C11 mode (Visual
+# Studio 2017 for the XP profile, GCC 4.0 for Tiger UB1): they build it as C99
+# with QuickJSLegacyC.h supplying what QuickJS takes from C11. Every other
+# compiler keeps C11. smirkycard_script follows the same dialect.
+if("c_std_11" IN_LIST CMAKE_C_COMPILE_FEATURES)
+  set(SMIRKYCARD_C_STANDARD 11)
+else()
+  set(SMIRKYCARD_C_STANDARD 99)
+endif()
+
 # QuickJS-ng v0.16.2. Keep the dependency's C dialect and platform flags local.
 add_library(smirkycard_quickjs STATIC
   ${smirkycard_quickjs_source_dir}/quickjs.c
@@ -37,7 +47,17 @@ add_library(smirkycard_quickjs STATIC
   ${smirkycard_quickjs_source_dir}/libregexp.c
   ${smirkycard_quickjs_source_dir}/libunicode.c
 )
-set_target_properties(smirkycard_quickjs PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES)
+set_target_properties(smirkycard_quickjs PROPERTIES
+  C_STANDARD ${SMIRKYCARD_C_STANDARD} C_STANDARD_REQUIRED YES)
+if(SMIRKYCARD_C_STANDARD EQUAL 99)
+  if(MSVC)
+    target_compile_options(smirkycard_quickjs PRIVATE
+      "/FI${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h")
+  else()
+    target_compile_options(smirkycard_quickjs PRIVATE
+      -include "${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h")
+  endif()
+endif()
 target_include_directories(smirkycard_quickjs SYSTEM PUBLIC ${smirkycard_quickjs_source_dir})
 # The experiment executes synchronously on the main thread; no Atomics/workers.
 target_compile_definitions(smirkycard_quickjs PRIVATE _GNU_SOURCE __STDC_NO_ATOMICS__=1)
@@ -47,10 +67,13 @@ if(MSVC)
 else()
   target_link_libraries(smirkycard_quickjs PRIVATE m)
 endif()
-if(LOKA_CLASSIC_MAC)
+if(LOKA_CLASSIC_MAC OR LOKA_MAC_OS_10_4)
   # quickjs.h uses INT32_MIN/MAX in C++98 inline functions. GCC's stdint.h
-  # requires this opt-in, which must reach every consumer before any include.
+  # (Retro68, and GCC 4.0 for Tiger UB1) requires this opt-in, which must reach
+  # every consumer before any include.
   target_compile_definitions(smirkycard_quickjs PUBLIC __STDC_LIMIT_MACROS)
+endif()
+if(LOKA_CLASSIC_MAC)
   target_compile_definitions(smirkycard_quickjs PRIVATE LOKA_SMIRKYCARD_QUICKJS_68K=1)
   target_include_directories(smirkycard_quickjs PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src")
   if(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES)
