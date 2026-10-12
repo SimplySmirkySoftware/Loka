@@ -399,7 +399,7 @@ Owner reports marked “OK” do not imply those automated tour checks.
 | macOS, High Sierra 10.13 | Scoped observations only: UB2 SimpleText launches and edits on the owner's Intel Mac. Japanese input through an input method crashes it ([#1264](https://github.com/cubenoy22/Loka/issues/1264)). UB1 FloppyBird's loop runs its tour. |
 | macOS, Mojave 10.14 | Runtime-verified in dark appearance: the seven UB2 applications other than SmirkyCard on the owner's Intel Mac. |
 | macOS, Catalina 10.15.7 | Runtime-verified: all eight applications from the 0.0.6 candidate's UB2 archive (x86_64 slice) in an Intel VM. |
-| Modern macOS | Runtime-verified: the full Loka macOS golden matrix on macOS 26 (Apple silicon). The owner ran the 0.0.6 candidate's UB2 archive (arm64 slice) on macOS 27.0.1 on a MacBook Neo (real hardware). Result: OK. |
+| Modern macOS | Runtime-verified: the full Loka macOS golden matrix on macOS 26.7.1 (Intel). The owner ran the 0.0.6 candidate's UB2 archive (arm64 slice) on macOS 27.0.1 on a MacBook Neo (real hardware). Result: OK. |
 | Windows, current | Runtime-verified on Windows 11 for ARM64 with ACP=932. The 0.0.6 candidate's x64 archive was runtime-verified with all eight applications on a Windows 11 VM. |
 | Windows 8.1 | Runtime-verified: all eight applications from the 0.0.6 candidate's x86 XP archive in a VM. |
 | Windows XP class | Runtime-verified on 2026-10-12: the owner ran the 0.0.6 release candidate's x86 XP archive on a Sony VAIO P (real hardware, rehearsal 3). All applications OK. |
