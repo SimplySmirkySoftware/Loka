@@ -93,6 +93,8 @@ set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 include(CTest)
 
 if(NOT WIN32 AND NOT LOKA_CLASSIC_MAC)
+  add_test(NAME scriptClassicReleaseDisks
+    COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/ClassicReleaseDisksTest.py)
   add_test(NAME scriptMameDevDisk
     COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/MameDevDiskTest.sh)
   add_test(NAME scriptMameBootDisk

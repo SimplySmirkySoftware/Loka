@@ -101,35 +101,7 @@ if [ -z "$MAME_HDA" ] || [ ! -f "$MAME_HDA" ]; then
   exit 1
 fi
 
-find_retro68_tool() {
-  local name="$1"
-  local candidate
-
-  if [ -n "${RETRO68_TOOLCHAIN_BIN:-}" ] \
-    && [ -x "$RETRO68_TOOLCHAIN_BIN/$name" ]; then
-    echo "$RETRO68_TOOLCHAIN_BIN/$name"
-    return
-  fi
-  if command -v "$name" >/dev/null 2>&1; then
-    command -v "$name"
-    return
-  fi
-  if [ -n "${RETRO68_BUILD_DIR:-}" ] \
-    && [ -x "$RETRO68_BUILD_DIR/toolchain/bin/$name" ]; then
-    echo "$RETRO68_BUILD_DIR/toolchain/bin/$name"
-    return
-  fi
-  for candidate in \
-    "$HOME/Retro68-build/toolchain/bin/$name" \
-    "$HOME/Documents/Projects/Retro68-build/toolchain/bin/$name"; do
-    if [ -x "$candidate" ]; then
-      echo "$candidate"
-      return
-    fi
-  done
-  echo "Error: Retro68 tool not found: $name" >&2
-  exit 1
-}
+. "$SCRIPT_DIR/hfs-disk.sh"
 
 HFORMAT="$(find_retro68_tool hformat)"
 HCOPY="$(find_retro68_tool hcopy)"
@@ -149,14 +121,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HOME="$HFS_HOME" "$HFORMAT" -l LokaDev "$TEMPORARY_DISK" 1
-for binary in "${MACBINARY_PATHS[@]}"; do
-  HOME="$HFS_HOME" "$HCOPY" -m "$binary" :
-done
-for plain_data_path in "$@"; do
-  HOME="$HFS_HOME" "$HCOPY" -r "$plain_data_path" :
-done
-HOME="$HFS_HOME" "$HUMOUNT"
+hfs_populate "$HFS_HOME" LokaDev "$TEMPORARY_DISK" 1 \
+  "${#MACBINARY_PATHS[@]}" "${MACBINARY_PATHS[@]}" "$@"
 mv -f "$TEMPORARY_DISK" "$MAME_DEV_HDA"
 trap - EXIT
 

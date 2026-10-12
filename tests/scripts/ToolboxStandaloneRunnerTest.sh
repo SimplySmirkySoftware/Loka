@@ -8,7 +8,7 @@ trap 'rm -rf "$SANDBOX"' EXIT
 fail() { echo "ToolboxStandaloneRunnerTest failed: $*" >&2; cat "$SANDBOX/output" >&2; exit 1; }
 mkdir -p "$SANDBOX/repo/tests/toolbox" "$SANDBOX/repo/scripts" "$SANDBOX/tools" "$SANDBOX/inputs"
 cp "$REPO_DIR/tests/toolbox/"{run-standalone.sh,mame-launch.lua} "$SANDBOX/repo/tests/toolbox/"
-cp "$REPO_DIR/scripts/"{mame-boot-copy.sh,mame-dev-disk.sh,retro68-env.sh,env-file.sh} "$SANDBOX/repo/scripts/"
+cp "$REPO_DIR/scripts/"{mame-boot-copy.sh,mame-dev-disk.sh,hfs-disk.sh,retro68-env.sh,env-file.sh} "$SANDBOX/repo/scripts/"
 cat >"$SANDBOX/tools/mame" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail

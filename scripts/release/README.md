@@ -41,6 +41,14 @@ The canonical path makes repeated 68K builds use the same embedded source path.
 Follow-up: add `-ffile-prefix-map`-style normalization to the Retro68 build so
 binary hashes can be compared across machines without depending on that path.
 
+After the Retro68 Release builds (including the 68K configure with
+`-DLOKA_BUILD_SMIRKYCARD=ON`), release assembly runs
+`--build-command 'python3 scripts/release/classic-disks.py'` to produce
+`build/release/classic-disks/{ScrapbookUI68K,ScrapbookUIPPC,LokaSmirkyCard68K}.dsk`.
+Each volume contains its application and the tracked adjacent `ASSETS.LRP` or
+`MAIN.JS`; packaging reads back both application forks and the unchanged data
+before publishing each image. Plain applications use Retro68's existing disks.
+
 ## Windows archives via a remote builder
 
 Run the assembler on WSL with a Windows SSH config alias and an absolute path
