@@ -64,9 +64,11 @@ public:
         .document(id);
   }
 
-  static const simpletext::Document *entry(const SimpleTextAppConfig &config, const simpletext::MainNode &node)
+  /** None when the roster refused the entry (Classic release: allocation refusal, no assert). */
+  static loka::app::FileChooserResult currentFile(const SimpleTextAppConfig &config, const simpletext::MainNode &node)
   {
-    return config.documents().find(node.props.document());
+    const simpletext::Document *entry = config.documents().find(node.props.document());
+    return entry ? entry->file : loka::app::FileChooserResult();
   }
 
   static void
@@ -100,8 +102,8 @@ public:
   {
     if (Utf8(node.error_.get()) != error || node.operation_.get() != simpletext::NONE || node.lines_.size() != rows)
       return false;
-    if (current ? Utf8(entry(config, node)->file.item.toString()) != current
-                : entry(config, node)->file.kind != loka::app::FileChooserResult::RESULT_NONE)
+    const loka::app::FileChooserResult file = currentFile(config, node);
+    if (current ? Utf8(file.item.toString()) != current : file.kind != loka::app::FileChooserResult::RESULT_NONE)
       return false;
     for (unsigned i = 0; i < rows; ++i)
       if (Utf8(node.lines_.at(i).value) != (current ? kRows[i] : ""))
@@ -114,8 +116,8 @@ public:
   {
     record.setInt("document.rows", node.lines_.size());
     record.set("document.current",
-               entry(config, node)->file.kind == loka::app::FileChooserResult::RESULT_FILE
-                   ? Utf8(entry(config, node)->file.item.toString()).c_str()
+               currentFile(config, node).kind == loka::app::FileChooserResult::RESULT_FILE
+                   ? Utf8(currentFile(config, node).item.toString()).c_str()
                    : "none");
     record.set("document.error", node.error_.get().empty() ? "none" : Utf8(node.error_.get()).c_str());
     record.set("document.caret_row", "none");
