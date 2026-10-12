@@ -190,9 +190,10 @@ void *MacScenePlatformController::TextFontTable::find(const loka::app::TextStyle
 {
   const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
   const int italic = style.hasItalic_ && style.italic_ ? 1 : 0;
-  if (!style.hasFontSize_)
+  int points = 0;
+  if (!style.size_.queryPoints(points))
     return this->fonts_[kDefaultSizeRow][bold][italic][fixedPitch ? 1 : 0];
-  const int points = loka::app::SizeOf(style.fontSize_).fontSize_;
+  loka::app::SizeOf(points).size_.queryPoints(points);
   for (int size = 0; size < kSizeCount; ++size)
     if (loka::app::detail::StyleVocabularySizes[size] == points)
       return this->fonts_[size][bold][italic][fixedPitch ? 1 : 0];

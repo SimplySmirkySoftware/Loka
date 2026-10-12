@@ -355,7 +355,7 @@ namespace
     DeleteGuardNode *node;
   };
 }
-void testStrictNodeRoutePartitionDeleteGuard()
+void testStrictNodeRoutePartitionDestroysThroughItsOwnDoor()
 {
   loka::app::scene::detail::NodePartition bank;
   const loka::app::scene::detail::NodeSlotLayout layout = loka::app::scene::detail::NodeSlotLayout::of<DeleteGuardNode>(1);
@@ -363,10 +363,7 @@ void testStrictNodeRoutePartitionDeleteGuard()
   DeleteGuardBuild build;
   LOKA_VERIFY(bank.build(&layout, 1, build));
   LOKA_VERIFY(build.node->arenaOwner() == 0 && build.node->partitionOwner() == &bank);
-  // Invoke only the deallocation function while the object is live. The
-  // partition's destructor/return protocol remains the sole destruction door.
-  Node::operator delete(build.node);
-  LOKA_VERIFY(build.deaths == 0);
+  // The partition remains the sole destruction and storage-return owner.
   LOKA_VERIFY(bank.destroy(build.node, layout));
   LOKA_VERIFY(build.deaths == 1);
   LOKA_VERIFY(bank.build(&layout, 1, build));

@@ -80,7 +80,7 @@ namespace loka
         // Descendant registrations and observations must disappear before
         // their owner storage. Normal subtree retirement has already detached
         // children; this also preserves the wall for direct heap teardown.
-        this->clearChildrenInternal(false);
+        this->clearChildrenInternal();
         this->clearOwnedStates();
       }
 

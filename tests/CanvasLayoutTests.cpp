@@ -65,10 +65,13 @@ namespace
     viewport.set(frame);
   }
 
-  /** C++98 expression SFINAE: the modifier belongs to Show, not all definitions. */
+  /** The modifier belongs to Show, not all definitions. Detected through a
+      member-pointer template argument rather than expression SFINAE, which
+      GCC 4.0/4.2 (Xcode 3.2.6) cannot evaluate in an array bound. */
   template <typename T> struct HasDestroyOnDetach
   {
-    template <typename U> static char probe(char (*)[sizeof(((U *)0)->destroyOnDetach())]);
+    template <typename M, M> struct Signature;
+    template <typename U> static char probe(Signature<U &(U::*)(), &U::destroyOnDetach> *);
     template <typename U> static long probe(...);
     enum
     {

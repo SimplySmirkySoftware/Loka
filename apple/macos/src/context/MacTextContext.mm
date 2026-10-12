@@ -29,7 +29,7 @@ namespace
                                    MacScenePlatformController *controller)
   {
     const int fallback = loka::app::layout::FallbackControlMetrics::kTextHeight;
-    if (!controller || !(style.hasFontSize_ || style.hasWeight_ || style.hasItalic_))
+    if (!controller || !(style.size_.isSet() || style.hasWeight_ || style.hasItalic_))
       return TextGeometry(nil, fallback);
     NSFont *font = (NSFont *)controller->textFont(style);
     const int lineHeight = controller->projection().measurementToLu(

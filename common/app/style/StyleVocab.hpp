@@ -71,8 +71,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 9;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(9);
       }
     };
 
@@ -80,8 +79,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 10;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(10);
       }
     };
 
@@ -89,8 +87,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 12;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(12);
       }
     };
 
@@ -98,8 +95,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 14;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(14);
       }
     };
 
@@ -107,8 +103,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 18;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(18);
       }
     };
 
@@ -116,8 +111,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 24;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(24);
       }
     };
 
