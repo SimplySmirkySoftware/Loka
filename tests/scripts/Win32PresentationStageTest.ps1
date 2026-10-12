@@ -1,4 +1,12 @@
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 4.0 exits 0 from a -File script that throws; see the trap
+# in scripts/win32-standalone-flow.ps1.
+trap {
+    [Console]::Error.WriteLine($_)
+    exit 1
+}
+
+& (Join-Path $PSScriptRoot "Win32StandaloneProfileTest.ps1")
 
 $ProjectDirectory = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Subject = Join-Path $ProjectDirectory "scripts/win32-standalone-flow.ps1"

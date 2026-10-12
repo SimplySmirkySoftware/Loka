@@ -9,10 +9,20 @@ param(
 
     [string]$StageDirectory,
 
-    [int]$TimeoutSeconds = 120
+    [int]$TimeoutSeconds = 120,
+
+    [ValidateSet("modern", "xp")]
+    [string]$TargetProfile = "modern"
 )
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 4.0 (the Windows 8.1 XP build host) ends a -File script
+# that dies on an unhandled terminating error with exit code 0; 5.0 and later
+# return 1. Report the failure explicitly so every caller sees it.
+trap {
+    [Console]::Error.WriteLine($_)
+    exit 1
+}
 
 $ScriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectDirectory = Split-Path -Parent $ScriptDirectory
@@ -59,10 +69,44 @@ function Get-PeArchitecture([string]$Path) {
     }
 }
 
+function Assert-XpSubsystemVersion([string]$Path) {
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open,
+        [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $reader = New-Object System.IO.BinaryReader($stream)
+        # The architecture check has already validated the DOS and PE signatures.
+        $stream.Position = 0x3C
+        $peOffset = $reader.ReadInt32()
+        # The optional header follows the signature and 20-byte COFF header.
+        $optionalHeader = $peOffset + 24
+        $stream.Position = $optionalHeader
+        $magic = $reader.ReadUInt16()
+        if ($magic -ne 0x10B -and $magic -ne 0x20B) {
+            throw "Invalid PE optional header: $Path"
+        }
+        # These offsets are shared by PE32 and PE32+.
+        $stream.Position = $optionalHeader + 48
+        $major = $reader.ReadUInt16()
+        $minor = $reader.ReadUInt16()
+        if ($major -ne 5 -or $minor -ne 1) {
+            throw ("Expected PE subsystem version 5.01 for profile xp, but {0} contains {1}.{2:D2}." -f
+                $Path, $major, $minor)
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Assert-ExecutableArchitecture([string]$Path, [string]$Expected) {
     $actual = Get-PeArchitecture $Path
     if ($actual -ne $Expected) {
         throw ("Expected a {0} PE executable, but {1} contains {2}." -f $Expected, $Path, $actual)
+    }
+    if ($TargetProfile -eq "xp") {
+        if ($actual -ne "x86") {
+            throw "Profile xp requires architecture x86."
+        }
+        Assert-XpSubsystemVersion $Path
     }
 }
 
@@ -96,6 +140,9 @@ function Get-CompilerEnvironmentArchitecture {
 }
 
 function Assert-CompilerEnvironment([string]$Expected) {
+    if ($TargetProfile -eq "xp" -and $env:VCToolsVersion -notlike "14.1*") {
+        throw 'Profile xp requires the v141 toolset: Visual Studio 2017 Build Tools 15.9 with "Windows XP support for C++" installed.'
+    }
     $target = Get-CompilerEnvironmentArchitecture
     if ($target -ne $Expected) {
         throw ("The requested architecture is {0}, but this Visual Studio environment targets {1}." -f
@@ -206,22 +253,30 @@ if ($IsPackagedVerifier -and $Action -ne "Verify") {
     throw "The staged verifier supports only the Verify action."
 }
 
-$configurePreset = if ($Architecture) { "win32-standalone-$Architecture-release" } else { $null }
+# Resolve once before deriving profile-specific preset and directory names.
+if (-not $Architecture -and -not $IsPackagedVerifier) {
+    $Architecture = Get-CompilerEnvironmentArchitecture
+}
+if ($TargetProfile -eq "xp" -and $Architecture -and $Architecture -ne "x86") {
+    throw "Profile xp requires architecture x86."
+}
+$profileArchitecture = if ($TargetProfile -eq "xp") { "$Architecture-xp" } else { $Architecture }
+$configurePreset = if ($Architecture) { "win32-standalone-$profileArchitecture-release" } else { $null }
 $buildPreset = if ($Architecture) {
     if ($IsReleasePackage) {
-        "win32-standalone-loop-$Architecture-release"
+        "win32-standalone-loop-$profileArchitecture-release"
     } else {
-        "win32-standalone-flow-$Architecture-release"
+        "win32-standalone-flow-$profileArchitecture-release"
     }
 } else { $null }
 if (-not $BuildDirectory -and $Architecture) {
-    $BuildDirectory = "build/win32/standalone/presentation/$Architecture/Release"
+    $BuildDirectory = "build/win32/standalone/presentation/$profileArchitecture/Release"
 }
 if (-not $StageDirectory -and $Architecture) {
     $StageDirectory = if ($IsReleasePackage) {
-        "build/release/win32-$Architecture"
+        "build/release/win32-$profileArchitecture"
     } else {
-        "build/presentation/win32-$Architecture-release"
+        "build/presentation/win32-$profileArchitecture-release"
     }
 }
 
@@ -231,29 +286,6 @@ $buildCatalog = if ($buildRoot) { Join-Path $buildRoot $CatalogName } else { $nu
 $catalogPath = if ($IsPackagedVerifier) { $PackagedCatalog } else { $buildCatalog }
 
 if (-not $IsPackagedVerifier) {
-    if (-not $Architecture) {
-        $Architecture = Get-CompilerEnvironmentArchitecture
-        $configurePreset = "win32-standalone-$Architecture-release"
-        $buildPreset = if ($IsReleasePackage) {
-            "win32-standalone-loop-$Architecture-release"
-        } else {
-            "win32-standalone-flow-$Architecture-release"
-        }
-        if (-not $BuildDirectory) {
-            $BuildDirectory = "build/win32/standalone/presentation/$Architecture/Release"
-            $buildRoot = Resolve-ProjectPath $BuildDirectory
-            $buildCatalog = Join-Path $buildRoot $CatalogName
-            $catalogPath = $buildCatalog
-        }
-        if (-not $StageDirectory) {
-            $StageDirectory = if ($IsReleasePackage) {
-                "build/release/win32-$Architecture"
-            } else {
-                "build/presentation/win32-$Architecture-release"
-            }
-            $stageRoot = Resolve-ProjectPath $StageDirectory
-        }
-    }
     Assert-CompilerEnvironment $Architecture
     Push-Location $ProjectDirectory
     try {
@@ -314,6 +346,8 @@ if ($IsReleasePackage) {
             -Destination (Join-Path $Destination "simpleviewer/LokaSimpleViewerWin32.exe")
         Copy-Item -LiteralPath $loopAssets `
             -Destination (Join-Path $Destination "scrapbook/ASSETS.LRP")
+        Assert-ExecutableArchitecture `
+            (Join-Path $Destination "simpleviewer/LokaSimpleViewerWin32.exe") $Architecture
         Assert-FileCopy $simpleViewer `
             (Join-Path $Destination "simpleviewer/LokaSimpleViewerWin32.exe")
         Assert-FileCopy $loopAssets (Join-Path $Destination "scrapbook/ASSETS.LRP")
@@ -326,6 +360,7 @@ if ($IsReleasePackage) {
         [System.IO.File]::WriteAllText(
             (Join-Path $Destination "README.txt"),
             "Loka $sourceVersion Release applications`r`n`r`n" +
+            "Profile: $TargetProfile`r`n`r`n" +
             "The five StandaloneLoop applications run their UI tour repeatedly.`r`n" +
             "Open an application's folder and launch its executable.`r`n" +
             "Keep each executable with its folder: its LOG.TXT and resources belong there.`r`n" +
@@ -382,6 +417,9 @@ if (-not $IsPackagedVerifier) {
         Assert-FileCopy $buildCatalog (Join-Path $Destination $CatalogName)
         Assert-FileCopy $builtAssets (Join-Path $Destination "scrapbook/ASSETS.LRP")
         Assert-FileCopy $sourceVerifier (Join-Path $Destination "Verify-StandaloneFlow.ps1")
+        [System.IO.File]::WriteAllText(
+            (Join-Path $Destination "README.txt"),
+            "Loka Standalone Flow verification`r`nProfile: $TargetProfile`r`n")
     }.GetNewClosure()
     Install-LokaPresentationStageDirectory -StageRoot $stageRoot -Populate $populateStage
 

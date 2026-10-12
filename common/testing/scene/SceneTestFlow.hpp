@@ -455,16 +455,34 @@ namespace loka
           action's requested projection has crossed the selected milestone. */
       namespace scenario_step_detail
       {
+        /** True when AdapterT (or a base) declares any member named diagnostic. Detected by
+            name ambiguity against a probe base, because the sizeof-of-call form answered
+            true for every type on GCC 4.2 and Apple clang up to Xcode 10 (#1248). The name
+            is the contract: a member of that name with another shape (a data member, a
+            non-const method, one taking arguments) fails to compile at Diagnostic::get
+            instead of being silently treated as absent. */
         template <class AdapterT> class HasDiagnostic
         {
-          template <class T>
-          static char test(char (*)[sizeof(static_cast<const char *>(static_cast<const T *>(0)->diagnostic()))]);
-          template <class T> static long test(...);
+          typedef char Yes;
+          struct No
+          {
+            char pad[2];
+          };
+          struct Probe
+          {
+            int diagnostic;
+          };
+          struct Both : AdapterT, Probe
+          {
+          };
+          template <class U, U> struct Check;
+          template <class U> static No test(Check<int Probe::*, &U::diagnostic> *);
+          template <class U> static Yes test(...);
 
         public:
           enum
           {
-            value = sizeof(test<AdapterT>(0)) == sizeof(char)
+            value = sizeof(test<Both>(0)) == sizeof(Yes)
           };
         };
 

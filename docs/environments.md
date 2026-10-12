@@ -196,8 +196,8 @@ This is the environment where binaries are actually built.
   from the application PEs, starts each presentation in its own directory,
   waits for its exact tracked
   audit, stops the final-scene hold, and stores the five target-local verdicts
-  under `actual`. For a VAIO P, build x86 from a VS2017 `x64_x86 Cross Tools`
-  session. **Standalone: Win32 Build / Stage / Verify / Release** is the VS Code shortcut;
+  under `actual`. For the XP target, use the named profile below.
+  **Standalone: Win32 Build / Stage / Verify / Release** is the VS Code shortcut;
   choose Build, Stage, or Verify from its action prompt.
 
   For the standalone application payload, use `-Action Release` instead of
@@ -216,6 +216,43 @@ This is the environment where binaries are actually built.
   VS Code action;
   launch VS Code from the matching Visual Studio Developer Command Prompt so
   the Task inherits the intended compiler architecture.
+
+  The named x86 XP release profile is `-TargetProfile xp` (the default is `modern`).
+  Use the Windows 8.1 build VM with Visual Studio 2017 Build Tools 15.9 and
+  its **Windows XP support for C++** component, CMake 4.2.x (CMake 4.3+
+  requires Windows 10), and Ninja. Initialize the v141 x86 compiler environment
+  with `vcvarsamd64_x86.bat`, then run from the repository root:
+
+  ```bat
+  call "%ProgramFiles(x86)%\Microsoft Visual Studio\2017\BuildTools\VC\Auxiliary\Build\vcvarsamd64_x86.bat"
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\win32-standalone-flow.ps1 -Action Release -Architecture x86 -TargetProfile xp
+  ```
+
+  This selects `win32-standalone-x86-xp-release` and its Loop build preset.
+  The profile has its own cache at
+  `build/win32/standalone/presentation/x86-xp/Release` and stages to
+  `build/release/win32-x86-xp`. The script refuses non-x86 targets or a
+  compiler environment outside v141, checks every executable for PE subsystem
+  version 5.01, and records `Profile: xp` in the README. Start with a fresh
+  profile cache: the XP flags seed CMake's initial flags, rather than replacing
+  an existing cache's completed flags.
+
+  For the five-app audit package, use the same command with `-Action Stage`;
+  it selects the Flow build preset and stages to
+  `build/presentation/win32-x86-xp-release`. Run its packaged verifier with
+  `-TargetProfile xp` to retain the XP header checks; it needs no compiler:
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File build/presentation/win32-x86-xp-release/Verify-StandaloneFlow.ps1 -TargetProfile xp
+  ```
+
+  Evidence source: the owner's 2026-10-11 release decision and 2026-10-12
+  Windows 8.1 probe (VS2017 15.9 / MSVC 14.16.27023, CMake 4.2.8, Ninja
+  1.13.2, Windows PowerShell 4.0). That probe built the existing XP preset and
+  hand-configured standalone payload, with all five packaged audits passing
+  on Windows 8.1. It does not verify this named profile or runtime on XP.
+  The [XP support-matrix row](RELEASE_MATRIX.md) remains a build target;
+  XP runtime evidence awaits the owner's VAIO P run.
 
   To verify application-sidecar isolation in an interactive Windows session,
   use a freshly staged Release package and a new evidence directory:
