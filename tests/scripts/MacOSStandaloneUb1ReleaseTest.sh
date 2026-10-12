@@ -31,7 +31,7 @@ smirkycard_scripts() {
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
     printf '%s\n' "${script}"
-  done < "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt"
+  done < "${FAKE_REPO}/example/SmirkyCard/disk-scripts.txt"
 }
 
 BUILD_LOG="${TEST_ROOT}/build.log"
@@ -83,9 +83,9 @@ while IFS='|' read -r target_name memberships output_shape rel_path; do
         printf '%s\n' assets >"${bundle_root}/Contents/Resources/ASSETS.LRP"
       fi
       if [[ "${target_name}" == "LokaSmirkyCardMacOS" ]]; then
-        for script in $(smirkycard_scripts); do
+        while IFS= read -r script; do
           printf '// %s\n' "${script}" >"${bundle_root}/Contents/Resources/${script}"
-        done
+        done < <(smirkycard_scripts)
       fi
       ;;
   esac
@@ -108,10 +108,10 @@ RELEASE_ROOT="${FAKE_REPO}/build/release/macos-tiger-ub1"
   fail "the release did not contain exactly eight application bundles"
 [[ -x "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS" ]] ||
   fail "the release omitted SmirkyCard"
-for script in $(smirkycard_scripts); do
+while IFS= read -r script; do
   [[ -f "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}" ]] ||
     fail "the release SmirkyCard bundle lost Resources/${script}"
-done
+done < <(smirkycard_scripts)
 grep -Fq 'LokaSmirkyCardMacOS (experimental) loads MAIN.JS from its bundle' "${RELEASE_ROOT}/README.txt" ||
   fail "the release README omitted SmirkyCard"
 grep -Fq 'LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' "${RELEASE_ROOT}/README.txt" ||

@@ -29,7 +29,7 @@ smirkycard_scripts() {
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
     printf '%s\n' "${script}"
-  done < "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt"
+  done < "${FAKE_REPO}/example/SmirkyCard/disk-scripts.txt"
 }
 
 BUILD_LOG="${TEST_ROOT}/build.log"
@@ -74,9 +74,9 @@ stage_fake_build() {
           >"${bundle_root}/Contents/Resources/ASSETS.LRP"
       fi
       if [[ "${target_name}" == "LokaSmirkyCardMacOS" ]]; then
-        for script in $(smirkycard_scripts); do
+        while IFS= read -r script; do
           printf '%s\n' "${marker}-${script}" >"${bundle_root}/Contents/Resources/${script}"
-        done
+        done < <(smirkycard_scripts)
       fi
     fi
   done < <(loka_target_manifest)
@@ -101,10 +101,10 @@ RELEASE_ROOT="${FAKE_REPO}/build/release/macos-ub2"
   fail "the release did not contain exactly eight application bundles"
 [[ -x "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS" ]] ||
   fail "the release omitted SmirkyCard"
-for script in $(smirkycard_scripts); do
+while IFS= read -r script; do
   [[ "$(cat "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}")" == "custom-${script}" ]] ||
     fail "the release SmirkyCard bundle lost Resources/${script}"
-done
+done < <(smirkycard_scripts)
 grep -Fq 'LokaSmirkyCardMacOS (experimental) loads MAIN.JS from its bundle' "${RELEASE_ROOT}/README.txt" ||
   fail "the release README omitted SmirkyCard"
 grep -Fq 'LokaSimpleViewerMacOS and LokaSimpleTextMacOS remain interactive.' "${RELEASE_ROOT}/README.txt" ||
@@ -129,6 +129,21 @@ grep -Fq 'Architectures: arm64;x86_64' "${RELEASE_ROOT}/README.txt" ||
 
 grep -q "^Loka 9.9.9 " "${RELEASE_ROOT}/README.txt" \
   || fail "the staged README does not carry the fixture source version (label must derive from CMakeLists, not a hardcode)"
+# One trimmed manifest line is one filename, as for CMake and the Win32 reader:
+# a name with a space and a glob character is checked whole, not split.
+printf '  %s  \n' 'CARD [ONE].JS' >>"${FAKE_REPO}/example/SmirkyCard/disk-scripts.txt"
+printf '%s\n' custom-card >"${BUILD_ROOT}/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/Resources/CARD [ONE].JS"
+set +e
+SPACED_OUTPUT="$(BUILD_DIR="${BUILD_ROOT}" LOKA_TEST_BUILD_LOG="${BUILD_LOG}" \
+  LOKA_LIPO_BIN="${FAKE_LIPO}" \
+  "${FAKE_REPO}/scripts/macos-standalone-release-ub2.sh" 2>&1)"
+SPACED_STATUS=$?
+set -e
+[[ "${SPACED_STATUS}" -eq 0 ]] ||
+  fail "a manifest filename with a space and a glob character was split: ${SPACED_OUTPUT}"
+[[ "$(cat "${RELEASE_ROOT}/LokaSmirkyCardMacOS.app/Contents/Resources/CARD [ONE].JS")" == "custom-card" ]] ||
+  fail "the release SmirkyCard bundle lost Resources/CARD [ONE].JS"
+
 cp "${RELEASE_ROOT}/README.txt" "${TEST_ROOT}/previous-readme"
 # A SmirkyCard bundle without one of its manifest scripts is refused.
 LAST_SCRIPT="$(smirkycard_scripts | tail -1)"

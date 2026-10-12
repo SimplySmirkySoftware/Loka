@@ -126,12 +126,13 @@ loka_populate_standalone_release_stage() {
     echo "The SmirkyCard script manifest lists no scripts." >&2
     return 1
   fi
-  for script in ${scripts}; do
+  # One trimmed manifest line is one filename: no word splitting or globbing.
+  while IFS= read -r script; do
     if [[ ! -f "${destination}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}" ]]; then
       echo "Staged ${LOKA_STANDALONE_FORMAT_NAME} SmirkyCard bundle lacks Resources/${script}." >&2
       return 1
     fi
-  done
+  done <<< "${scripts}"
   local source_version
   source_version="$(loka_source_version)" || return 1
   printf '%s\n' \
