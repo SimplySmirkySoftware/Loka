@@ -30,6 +30,21 @@ if(LOKA_CLASSIC_MAC)
   set(smirkycard_quickjs_source_dir "${smirkycard_quickjs_classic_source}")
 endif()
 
+# QuickJS-ng is C11. The legacy release toolchains have no C11 (Visual Studio
+# 2017 for the XP profile, GCC 4.0 for Tiger UB1): they build it as C99 with
+# QuickJSLegacyC.h supplying the one C11 keyword QuickJS uses. Ask the compiler
+# itself: CMake lists c_std_11 for MSVC 19.16, which has no _Alignas. Every
+# other compiler keeps C11; smirkycard_script follows the same dialect.
+include(CheckCSourceCompiles)
+check_c_source_compiles(
+  "struct smirkycard_probe { _Alignas(8) unsigned char bytes[8]; }; int main(void) { return 0; }"
+  SMIRKYCARD_C_HAS_ALIGNAS)
+if(SMIRKYCARD_C_HAS_ALIGNAS)
+  set(SMIRKYCARD_C_STANDARD 11)
+else()
+  set(SMIRKYCARD_C_STANDARD 99)
+endif()
+
 # QuickJS-ng v0.16.2. Keep the dependency's C dialect and platform flags local.
 add_library(smirkycard_quickjs STATIC
   ${smirkycard_quickjs_source_dir}/quickjs.c
@@ -37,7 +52,30 @@ add_library(smirkycard_quickjs STATIC
   ${smirkycard_quickjs_source_dir}/libregexp.c
   ${smirkycard_quickjs_source_dir}/libunicode.c
 )
-set_target_properties(smirkycard_quickjs PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED YES)
+set_target_properties(smirkycard_quickjs PROPERTIES
+  C_STANDARD ${SMIRKYCARD_C_STANDARD} C_STANDARD_REQUIRED YES)
+if(SMIRKYCARD_C_STANDARD EQUAL 99)
+  if(MSVC)
+    target_compile_options(smirkycard_quickjs PRIVATE
+      "/FI${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h")
+  else()
+    # SHELL: keeps -include paired with its file; CMake de-duplicates bare
+    # options, which would orphan the second header's path.
+    target_compile_options(smirkycard_quickjs PRIVATE
+      "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h\"")
+  endif()
+endif()
+# A separate question from the dialect: does the configured Apple SDK declare
+# the monotonic clock QuickJS reads? The 10.4u SDK does not, with GCC 4.0 or
+# with clang; SDKs from 10.12 do, and keep their own clock_gettime.
+if(APPLE)
+  include(CheckSymbolExists)
+  check_symbol_exists(CLOCK_MONOTONIC "time.h" SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
+  if(NOT SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
+    target_compile_options(smirkycard_quickjs PRIVATE
+      "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSMachClock.h\"")
+  endif()
+endif()
 target_include_directories(smirkycard_quickjs SYSTEM PUBLIC ${smirkycard_quickjs_source_dir})
 # The experiment executes synchronously on the main thread; no Atomics/workers.
 target_compile_definitions(smirkycard_quickjs PRIVATE _GNU_SOURCE __STDC_NO_ATOMICS__=1)
@@ -47,10 +85,13 @@ if(MSVC)
 else()
   target_link_libraries(smirkycard_quickjs PRIVATE m)
 endif()
-if(LOKA_CLASSIC_MAC)
+if(LOKA_CLASSIC_MAC OR LOKA_MAC_OS_10_4)
   # quickjs.h uses INT32_MIN/MAX in C++98 inline functions. GCC's stdint.h
-  # requires this opt-in, which must reach every consumer before any include.
+  # (Retro68, and GCC 4.0 for Tiger UB1) requires this opt-in, which must reach
+  # every consumer before any include.
   target_compile_definitions(smirkycard_quickjs PUBLIC __STDC_LIMIT_MACROS)
+endif()
+if(LOKA_CLASSIC_MAC)
   target_compile_definitions(smirkycard_quickjs PRIVATE LOKA_SMIRKYCARD_QUICKJS_68K=1)
   target_include_directories(smirkycard_quickjs PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src")
   if(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES)

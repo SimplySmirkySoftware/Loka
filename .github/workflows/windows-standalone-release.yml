@@ -23,6 +23,6 @@ jobs:
         with:
           arch: x64
       # Exercise the same clean Release entry point used to prepare portable
-      # device builds: five autonomous loops, SimpleViewer, SimpleText, and their assets.
+      # device builds: five autonomous loops, SimpleViewer, SimpleText, SmirkyCard, and their assets.
       - name: Build and stage Win32 standalone Release set
         run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/win32-standalone-flow.ps1 -Action Release -Architecture x64

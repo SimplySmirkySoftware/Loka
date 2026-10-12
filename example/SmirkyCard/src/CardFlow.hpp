@@ -120,6 +120,10 @@ namespace smirkycard
       Canceled
     };
     CallResult invoke(JSValueConst fn, JSValueConst input, JSValue &output);
+    // Admission::Execution reaches ScriptRuntime and JsCardNode through these:
+    // GCC 4.0 (Tiger UB1) does not extend CardFlow's friendship to its nested classes.
+    static uint32_t issueExecutionSerial(CardFlow &flow);
+    static void refuseExhaustedSerial(CardFlow &flow);
     bool live() const;
     JsCardNode &card_;
     JSContext *const context_;

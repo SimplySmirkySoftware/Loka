@@ -43,14 +43,24 @@ class ClassicReleaseDisksTest(unittest.TestCase):
             shutil.copy2(ROOT / "scripts" / name, target)
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         self.binaries = []
-        for cpu, example, name, filename in disks.PAYLOADS:
+        self.files = []
+        for cpu, example, name, files in disks.PAYLOADS:
             binary = self.root / f"build/retro68/{cpu}/Release/example/{example}/{name}.bin"
             binary.parent.mkdir(parents=True, exist_ok=True)
             binary.write_bytes(fake_macbinary(name))
             self.binaries.append(binary)
-            data = self.root / "example" / example / filename
-            data.parent.mkdir(parents=True, exist_ok=True)
-            data.write_bytes(b"original\0bytes\r\n\x80\xff\n")
+            if files is None:
+                # The shell and CMake readers skip comments and blank lines and
+                # trim space, tab and CR; this reader must agree.
+                files = ("MAIN.JS", "MINES.JS", "VIEWER.JS")
+                manifest = self.root / "example" / example / "disk-scripts.txt"
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                manifest.write_bytes(b"# Card scripts\r\n\r\n  MAIN.JS \r\n#NOTES.JS\nMINES.JS\t\n\n\tVIEWER.JS\r\n")
+            self.files.append(files)
+            for index, filename in enumerate(files):
+                data = self.root / "example" / example / filename
+                data.parent.mkdir(parents=True, exist_ok=True)
+                data.write_bytes(b"original\0bytes\r\n\x80\xff\n" + filename.encode("ascii") * (index + 1))
         self.output = self.root / "build/release/classic-disks"
         self.tools = self.root / "tools"
         self.tools.mkdir()
@@ -66,50 +76,105 @@ class ClassicReleaseDisksTest(unittest.TestCase):
     def test_roundtrip(self):
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(list(self.output.glob("*.dsk"))), 3)
+        self.assertEqual(sorted(p.name for p in self.output.glob("*.dsk")),
+                         sorted(name + ".dsk" for _, _, name, _ in disks.PAYLOADS))
+        self.assertEqual([(cpu, name) for cpu, example, name, _ in disks.PAYLOADS if example == "SmirkyCard"],
+                         [("68k", "LokaSmirkyCard68K"), ("ppc", "LokaSmirkyCardPPC")])
         with tempfile.TemporaryDirectory(dir=self.root / "build") as home:
             env = dict(os.environ, HOME=home)
-            for binary, (_, example, name, filename) in zip(self.binaries, disks.PAYLOADS):
+            for binary, files, (_, example, name, _) in zip(self.binaries, self.files, disks.PAYLOADS):
                 image = self.output / (name + ".dsk")
                 self.assertEqual(image.stat().st_size, 800 * 1024)
                 mounted = subprocess.check_output([TOOLS["hmount"], str(image)], env=env, text=True)
                 self.assertIn(name, mounted)
                 try:
                     listing = subprocess.check_output([TOOLS["hls"], "-1a", ":"], env=env, text=True)
-                    self.assertEqual(sorted(listing.splitlines()), sorted((name, filename)))
-                    for hfs_name, local in ((name, "app.bin"), (filename, "data.bin")):
-                        subprocess.run([TOOLS["hcopy"], "-m", ":" + hfs_name, str(Path(home) / local)], env=env, check=True)
+                    self.assertEqual(sorted(listing.splitlines()), sorted((name, *files)))
+                    subprocess.run([TOOLS["hcopy"], "-m", ":" + name, str(Path(home) / "app.bin")], env=env, check=True)
                     self.assertEqual(disks.macbinary(Path(home) / "app.bin"), disks.macbinary(binary))
-                    data = disks.macbinary(Path(home) / "data.bin")
-                    self.assertEqual(data[2], (self.root / "example" / example / filename).read_bytes())
-                    self.assertEqual(data[3], b"")
-                    self.assertEqual(data[1], b"TEXTttxt" if filename == "MAIN.JS" else b"????UNIX")
+                    for filename in files:
+                        local = Path(home) / (filename + ".bin")
+                        subprocess.run([TOOLS["hcopy"], "-m", ":" + filename, str(local)], env=env, check=True)
+                        data = disks.macbinary(local)
+                        self.assertEqual(data[2], (self.root / "example" / example / filename).read_bytes())
+                        self.assertEqual(data[3], b"")
+                        self.assertEqual(data[1], b"TEXTttxt" if filename.endswith(".JS") else b"????UNIX")
                 finally:
                     subprocess.run([TOOLS["humount"]], env=env, check=True)
 
     def test_missing_input_preflight(self):
+        smirky = self.root / "example/SmirkyCard"
         for path in [*self.binaries, self.root / "example/ScrapbookUI/ASSETS.LRP",
-                     self.root / "example/SmirkyCard/MAIN.JS"]:
+                     smirky / "disk-scripts.txt", smirky / "MAIN.JS", smirky / "MINES.JS",
+                     smirky / "VIEWER.JS"]:
             original = path.read_bytes()
             path.unlink()
             result = self.invoke()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Missing input:", result.stderr)
+            self.assertIn(path.name, result.stderr)
             self.assertFalse(self.output.exists())
             path.write_bytes(original)
 
-    def test_size_selection_and_refusal(self):
+    def test_manifest_refusals(self):
+        manifest = self.root / "example/SmirkyCard/disk-scripts.txt"
+        for content, message in ((b"MAIN.JS\n../MINES.JS\n", "not a flat file name"),
+                                 (b"MAIN.JS\nCARDS:MINES.JS\n", "not a flat file name"),
+                                 (b"MAIN.JS\nMINES.JS\n MAIN.JS\n", "Duplicate card script"),
+                                 (b"# nothing\n\n", "No card scripts")):
+            manifest.write_bytes(content)
+            result = self.invoke()
+            self.assertNotEqual(result.returncode, 0, content)
+            self.assertIn(message, result.stderr)
+            self.assertFalse(self.output.exists())
+
+    def test_size_tiers(self):
+        # Boundaries of the three tiers: 800 KiB floppy, 1440 KiB floppy, then
+        # a larger image rounded up to a 512 KiB multiple.
+        binary = self.root / "sized.bin"
+        data = self.root / "sized.data"
+        data.write_bytes(b"")
+        kib = 1024
+        for required, expected in ((800 * kib, 800 * kib), (800 * kib + 1, 1440 * kib),
+                                   (1440 * kib, 1440 * kib), (1440 * kib + 1, 1536 * kib),
+                                   (1536 * kib, 1536 * kib), (1536 * kib + 1, 2048 * kib)):
+            binary.write_bytes(b"x" * (required - 128 * kib))
+            self.assertEqual(disks.image_size(binary, [data]), expected, required)
+        # Every data file counts toward the requirement.
+        binary.write_bytes(b"x" * (800 * kib - 128 * kib - 2))
+        extra = self.root / "extra.data"
+        extra.write_bytes(b"ab")
+        self.assertEqual(disks.image_size(binary, [data, extra]), 800 * kib)
+        extra.write_bytes(b"abc")
+        self.assertEqual(disks.image_size(binary, [data, extra]), 1440 * kib)
+
+    def test_size_selection_end_to_end(self):
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.output / "ScrapbookUI68K.dsk").stat().st_size, 800 * 1024)
         self.binaries[0].write_bytes(fake_macbinary("ScrapbookUI68K", b"x" * (700 * 1024)))
         result = self.invoke()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.output / "ScrapbookUI68K.dsk").stat().st_size, 1440 * 1024)
-        previous = (self.output / "ScrapbookUI68K.dsk").read_bytes()
-        # Fits physically in 1440 KiB but violates the explicit 128 KiB margin.
-        self.binaries[0].write_bytes(fake_macbinary("ScrapbookUI68K", b"x" * (1350 * 1024)))
+        # Fits physically in 1440 KiB but not with the 128 KiB margin, so the
+        # disk becomes a 1536 KiB image (PPC SmirkyCard's case) that still
+        # mounts and reads back.
+        ppc = self.binaries[[name for _, _, name, _ in disks.PAYLOADS].index("LokaSmirkyCardPPC")]
+        ppc.write_bytes(fake_macbinary("LokaSmirkyCardPPC", b"x" * (1350 * 1024)))
         result = self.invoke()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not fit", result.stderr)
-        self.assertEqual((self.output / "ScrapbookUI68K.dsk").read_bytes(), previous)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        image = self.output / "LokaSmirkyCardPPC.dsk"
+        self.assertEqual(image.stat().st_size, 1536 * 1024)
+        self.assertEqual((self.output / "LokaSmirkyCard68K.dsk").stat().st_size, 800 * 1024)
+        with tempfile.TemporaryDirectory(dir=self.root / "build") as home:
+            env = dict(os.environ, HOME=home)
+            subprocess.run([TOOLS["hmount"], str(image)], env=env, check=True, stdout=subprocess.DEVNULL)
+            try:
+                subprocess.run([TOOLS["hcopy"], "-m", ":LokaSmirkyCardPPC", str(Path(home) / "app.bin")],
+                               env=env, check=True)
+                self.assertEqual(disks.macbinary(Path(home) / "app.bin"), disks.macbinary(ppc))
+            finally:
+                subprocess.run([TOOLS["humount"]], env=env, check=True)
 
     def test_readback_refuses_corruption(self):
         result = self.invoke()
@@ -142,6 +207,28 @@ class ClassicReleaseDisksTest(unittest.TestCase):
             self.assertRegex(result.stderr, "differs|differ|Unexpected root")
             self.assertEqual((self.output / "ScrapbookUI68K.dsk").read_bytes(), previous)
             self.assertFalse(list(self.output.glob(".stage-*")))
+
+    def test_readback_checks_every_card_script(self):
+        # A wrong last script, written under its own name, must be caught too.
+        wrong = self.root / "wrong" / "VIEWER.JS"
+        wrong.parent.mkdir()
+        wrong.write_bytes(b"wrong card script")
+        wrapper = self.tools / "hcopy"
+        wrapper.unlink()
+        wrapper.write_text('#!/usr/bin/env python3\n' +
+            'import subprocess, sys\n' +
+            f'real = {TOOLS["hcopy"]!r}\n' +
+            'args = sys.argv[1:]\n' +
+            'if args[0] == "-r" and args[-1] == ":" and args[1].endswith("/SmirkyCard/VIEWER.JS"):\n' +
+            f'    args[1] = {str(wrong)!r}\n' +
+            'subprocess.run([real, *args], check=True)\n')
+        wrapper.chmod(0o755)
+        result = self.invoke()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Data readback differs", result.stderr)
+        self.assertIn("VIEWER.JS", result.stderr)
+        self.assertFalse((self.output / "LokaSmirkyCard68K.dsk").exists())
+        self.assertFalse(list(self.output.glob(".stage-*")))
 
     def test_output_walls(self):
         self.output.parent.mkdir(parents=True)

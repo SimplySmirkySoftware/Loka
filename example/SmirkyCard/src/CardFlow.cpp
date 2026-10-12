@@ -314,7 +314,7 @@ namespace smirkycard
 
   CardFlow::Admission::Execution::Execution(Admission &door, CardFlow &flow, bool watching)
       : door_(0), flow_(flow),
-        serial_(door.active_ ? 0 : flow.card_.props.runtime->executionSerial_.issue()), occupied_(0)
+        serial_(door.active_ ? 0 : CardFlow::issueExecutionSerial(flow)), occupied_(0)
   {
     if (door.active_)
     {
@@ -328,13 +328,23 @@ namespace smirkycard
     if (!this->serial_)
     {
       std::fputs("CardFlow: execution serial exhausted; admission refused\n", stderr);
-      loka::core::StateTrackerGuard transaction(flow.card_.tracker());
-      flow.card_.error_.set(loka::core::String::Literal("CardFlow execution serial exhausted"));
+      CardFlow::refuseExhaustedSerial(flow);
       return;
     }
     this->door_ = &door;
     this->door_->active_ = this;
   }
+  uint32_t CardFlow::issueExecutionSerial(CardFlow &flow)
+  {
+    return flow.card_.props.runtime->executionSerial_.issue();
+  }
+
+  void CardFlow::refuseExhaustedSerial(CardFlow &flow)
+  {
+    loka::core::StateTrackerGuard transaction(flow.card_.tracker());
+    flow.card_.error_.set(loka::core::String::Literal("CardFlow execution serial exhausted"));
+  }
+
   CardFlow::Admission::Execution::~Execution()
   {
     if (this->door_)

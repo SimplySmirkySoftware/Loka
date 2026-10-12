@@ -191,8 +191,9 @@ builds linked against the 10.14 SDK or later.
 
 - `scripts/macos-standalone-release-ub1.sh tiger|leopard`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
-    SimpleViewer and SimpleText through the same per-architecture build and
-    failure-atomic `lipo` merge used by `build-10_4.sh` and `build-10_5.sh`.
+    SimpleViewer and SimpleText and the experimental SmirkyCard through the same
+    per-architecture build and failure-atomic `lipo` merge used by
+    `build-10_4.sh` and `build-10_5.sh`.
   - `tiger` selects `ppc;i386` and stages the completed set under
     `build/release/macos-tiger-ub1`.
   - `leopard` selects `ppc;i386;x86_64` and stages the completed set under
@@ -201,8 +202,15 @@ builds linked against the 10.14 SDK or later.
     `ppc7400 i386 x86_64`.
   - Run this with the Xcode 3.2.6 build environment after selecting the same
     SDK and compiler variables required by the underlying build script. The
-    stage is published only after all seven applications contain every expected
-    architecture; Scrapbook's `ASSETS.LRP` remains inside its bundle.
+    stage is published only after all eight applications contain every expected
+    architecture and SmirkyCard's bundle holds every card script listed in
+    `example/SmirkyCard/disk-scripts.txt`; Scrapbook's `ASSETS.LRP` remains
+    inside its bundle.
+  - SmirkyCard's QuickJS engine is downloaded at configure time. On a host
+    whose TLS stack cannot reach the pinned archive (the Mavericks route), set
+    `LOKA_QUICKJS_SOURCE_DIR` to an unpacked copy of the archive named in
+    `example/SmirkyCard/cmake/QuickJS.cmake`; `build.sh` passes it as
+    `FETCHCONTENT_SOURCE_DIR_SMIRKYCARD_QUICKJS`.
   - Before SimpleViewer was converted to an `.app` bundle, the complete
     autonomous sets were build-verified through the Mavericks 10.9.5 + Xcode
     3.2.6 CLI route: Tiger as `ppc i386`, Leopard as `ppc7400 i386 x86_64`.
@@ -212,8 +220,8 @@ builds linked against the 10.14 SDK or later.
 
 - `scripts/macos-standalone-release-ub2.sh`
   - Builds the five autonomous Standalone Loop bundles plus the interactive
-    SimpleViewer and SimpleText as `arm64;x86_64`, then stages the complete set
-    under `build/release/macos-ub2`.
+    SimpleViewer and SimpleText and the experimental SmirkyCard as
+    `arm64;x86_64`, then stages the complete set under `build/release/macos-ub2`.
   - Uses the modern UB2 build path with deployment target 10.13 (refusing any
     other), which the arm64 slice raises to 11.0, and publishes only after
     every executable contains both required slices. Scrapbook's

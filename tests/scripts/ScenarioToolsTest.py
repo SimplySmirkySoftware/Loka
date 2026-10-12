@@ -757,7 +757,44 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
             'Assert-FileCopy $simpleText `\n'
             '            (Join-Path $Destination "simpletext/LokaSimpleTextWin32.exe")',
             'SimpleViewer and SimpleText remain interactive.',
-            'Staged five autonomous loops plus SimpleViewer and SimpleText',
+            'Staged five autonomous loops plus SimpleViewer, SimpleText',
+        ):
+            self.assertIn(fragment, release)
+
+    def test_win32_release_includes_smirkycard(self):
+        root_cmake = pathlib.Path(PROJECT_DIR, "CMakeLists.txt").read_text()
+        self.assertRegex(
+            root_cmake,
+            r"add_subdirectory\(example/SmirkyCard\)\s+"
+            r"#[^\n]*\n\s+if\(WIN32 AND TARGET LokaStandaloneLoopWin32All\)\s+"
+            r"add_dependencies\(LokaStandaloneLoopWin32All LokaSmirkyCardWin32\)",
+        )
+        presets = json.loads(
+            pathlib.Path(PROJECT_DIR, "CMakePresets.json").read_text())
+        by_name = {p["name"]: p for p in presets["configurePresets"]}
+        for name in ("win32-standalone-arm64-release",
+                     "win32-standalone-x64-release",
+                     "win32-standalone-x86-release"):
+            self.assertEqual(
+                by_name[name]["cacheVariables"].get("LOKA_BUILD_SMIRKYCARD"), "ON", name)
+        # The XP release inherits the x86 one, so it stages SmirkyCard too.
+        self.assertIn("win32-standalone-x86-release",
+                      by_name["win32-standalone-x86-xp-release"]["inherits"])
+        source = pathlib.Path(
+            PROJECT_DIR, "scripts/win32-standalone-flow.ps1"
+        ).read_text()
+        release = source.split("if ($IsReleasePackage) {", 1)[1]
+        release = release.split("    exit 0", 1)[0]
+        for fragment in (
+            '$smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"',
+            '$smirkyCardScripts = Get-SmirkyCardScripts',
+            'throw "SmirkyCard card script not found: $smirkyCardScript"',
+            'Assert-ExecutableArchitecture $smirkyCard $Architecture',
+            'New-Item -ItemType Directory -Path (Join-Path $Destination "smirkycard")',
+            'Assert-FileCopy $smirkyCard `\n'
+            '            (Join-Path $Destination "smirkycard/LokaSmirkyCardWin32.exe")',
+            'SmirkyCard (experimental) loads MAIN.JS beside it',
+            'Staged five autonomous loops plus SimpleViewer, SimpleText and SmirkyCard',
         ):
             self.assertIn(fragment, release)
 

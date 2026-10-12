@@ -419,7 +419,7 @@ namespace smirkycard
   void JsCardNode::onLifecycleFactChanged(loka::app::scene::NodeLifecycleFact previous,
                                           loka::app::scene::NodeLifecycleFact next)
   {
-    StdCompositionBoundaryNodeBase<JsCardProps>::onLifecycleFactChanged(previous, next);
+    loka::app::scene::StdCompositionBoundaryNodeBase<JsCardProps>::onLifecycleFactChanged(previous, next);
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       this->phase_ = Detaching;
@@ -824,7 +824,7 @@ namespace smirkycard
   }
   void JsCardNode::attachNode(loka::app::scene::NodeComposition &composition)
   {
-    StdCompositionBoundaryNodeBase<JsCardProps>::attachNode(composition);
+    loka::app::scene::StdCompositionBoundaryNodeBase<JsCardProps>::attachNode(composition);
 #ifdef TEST_BUILD
     if (this->scenario_)
       this->scenario_->attach(static_cast<CardScene *>(this->scene()));
@@ -871,7 +871,7 @@ namespace smirkycard
     }
     else
       this->revoke();
-    StdCompositionBoundaryNodeBase<JsCardProps>::detachNode(composition);
+    loka::app::scene::StdCompositionBoundaryNodeBase<JsCardProps>::detachNode(composition);
 #ifdef TEST_BUILD
     if (this->scenario_)
       this->scenario_->finishDetach();

@@ -85,6 +85,16 @@ try {
     New-Item -ItemType Directory -Path $textDirectory | Out-Null
     $textExecutable = Join-Path $textDirectory "LokaSimpleTextWin32.exe"
     New-TestPe $textExecutable 0x61
+    $smirkyDirectory = Join-Path $BuildRoot "example/SmirkyCard"
+    New-Item -ItemType Directory -Path $smirkyDirectory | Out-Null
+    $smirkyExecutable = Join-Path $smirkyDirectory "LokaSmirkyCardWin32.exe"
+    New-TestPe $smirkyExecutable 0x62
+    $smirkyScripts = @([System.IO.File]::ReadAllLines(
+            (Join-Path $ProjectDirectory "example/SmirkyCard/disk-scripts.txt")) |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") })
+    foreach ($name in $smirkyScripts) {
+        [System.IO.File]::WriteAllText((Join-Path $smirkyDirectory $name), "// $name")
+    }
     $loopAssets = Join-Path $BuildRoot "standalone-loop/scrapbook/ASSETS.LRP"
     [System.IO.File]::WriteAllText($loopAssets, "loop assets")
     $builtAssets = Join-Path $builtDirectory "scrapbook/ASSETS.LRP"
@@ -208,12 +218,20 @@ try {
     Assert-BytesEqual $textExecutable `
         (Join-Path $StageRoot "simpletext/LokaSimpleTextWin32.exe") `
         "Release did not install SimpleText in its own directory."
+    Assert-BytesEqual $smirkyExecutable `
+        (Join-Path $StageRoot "smirkycard/LokaSmirkyCardWin32.exe") `
+        "Release did not install SmirkyCard in its own directory."
+    foreach ($name in $smirkyScripts) {
+        Assert-BytesEqual (Join-Path $smirkyDirectory $name) `
+            (Join-Path $StageRoot ("smirkycard/" + $name)) `
+            "Release did not install SmirkyCard's $name beside it."
+    }
     $rootFiles = @(Get-ChildItem -LiteralPath $StageRoot -File)
     if ($rootFiles.Count -ne 1 -or $rootFiles[0].Name -ne "README.txt") {
         throw "Release retained flat executables, shared sidecars, or stale Stage files."
     }
     $folders = @(Get-ChildItem -LiteralPath $StageRoot -Directory)
-    if ($folders.Count -ne 7) {
+    if ($folders.Count -ne 8) {
         throw "Release must contain one directory per application."
     }
     $transactionResidue = @(Get-ChildItem -LiteralPath $TestRoot -Force | Where-Object {
