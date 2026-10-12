@@ -1368,6 +1368,35 @@ void testQuitSecondDeclineInSameTurnStillCancelsAttempt()
   LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
 }
 
+void testQuitOtherDocumentDeclineInSameTurnEndsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  Document editedSecond(1);
+  editedSecond.edited = true;
+  const ItemId second = config.roster.open(editedSecond);
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk attempt = config.roster.closeAsked().get();
+  LOKA_VERIFY(attempt.id == config.initial);
+  // The asked document declined synchronously; a native close box on the
+  // other edited document before the tail overwrites that answer.
+  app.window(second)->simulateCloseAsked();
+  const CloseAsk other = config.roster.closeAsked().get();
+  LOKA_VERIFY(other.id == second && config.roster.closeAnswer().get() == CloseAnswer(other.id, other.seq));
+  app.tail();
+  LOKA_VERIFY(!app.quitRequested() && config.roster.count() == 2);
+  // The attempt ended: closing the first document by hand asks nobody else.
+  config.roster.close(config.initial);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == other);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
 void testQuitAllAcceptedExitsWithStaticWindow()
 {
   TrackingContext context;

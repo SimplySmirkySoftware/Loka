@@ -46,7 +46,7 @@ public:
   /** Rail completion entry; enumerates current live windows after App work. */
   void reconcileFocus();
   virtual void quit() = 0;
-  /** Ask each document in roster order; a node's decline cancels this attempt. */
+  /** Ask each document in roster order; any decline published after the ask ends this attempt. */
   void requestQuit();
   /** True transfers the close decision to the keyed document's node. */
   bool closeAsked(Window *window);

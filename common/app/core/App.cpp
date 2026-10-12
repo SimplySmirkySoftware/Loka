@@ -511,11 +511,14 @@ void App::advanceQuitAttempt()
     this->requestQuit();
     return;
   }
-  // Any decline of the asked document at or after this attempt's ask cancels
-  // it: a second native ask in the same turn (Win32 drains queued accelerators
-  // before its tail) overwrites the answer box with a later sequence.
+  // Any decline published at or after this attempt's ask ends it, whichever
+  // document declined: the answer box is latest-wins, so a second ask in the
+  // same turn (a native close box on another document, or the same one; Win32
+  // drains queued accelerators before its tail) overwrites the asked
+  // document's own decline. Ending the attempt on any later decline costs the
+  // user one more Quit; keeping it would quit later without being asked.
   const loka::app::CloseAnswer answer = roster.closeAnswer().get();
-  if (answer.id == this->quitAttempt_.id && answer.seq >= this->quitAttempt_.seq)
+  if (!answer.id.isNone() && answer.seq >= this->quitAttempt_.seq)
     this->quitAttempt_ = QuitAttempt::none();
 }
 

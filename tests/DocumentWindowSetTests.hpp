@@ -55,6 +55,7 @@ void testCloseAskedUnkeyedWindowClosesAsToday();
 void testQuitWithoutRosterQuitsNow();
 void testQuitAsksSeriallyAndCancelEndsAttempt();
 void testQuitSecondDeclineInSameTurnStillCancelsAttempt();
+void testQuitOtherDocumentDeclineInSameTurnEndsAttempt();
 void testQuitAllAcceptedExitsWithStaticWindow();
 
 #endif
