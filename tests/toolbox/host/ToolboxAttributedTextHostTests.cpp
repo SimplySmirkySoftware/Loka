@@ -333,6 +333,14 @@ namespace
 
 int main(int argc, char **argv)
 {
+  const ToolboxTextFontDescriptor smallLabel(SmallLabel);
+  LOKA_VERIFY(smallLabel.font(0) == 3 && smallLabel.font(4) == 3);
+  LOKA_VERIFY(smallLabel.size(12) == 9 && smallLabel.size(24) == 9);
+  LOKA_VERIFY(smallLabel.face(bold | italic) == (bold | italic));
+  LOKA_VERIFY(ToolboxTextFontDescriptor(TextStyle(TextSizeValue::points(11))).size(12) == 10);
+  LOKA_VERIFY(ToolboxTextFontDescriptor().size(17) == 17);
+  LOKA_VERIFY(ToolboxTextFontDescriptor().font(4) == 4);
+  LOKA_VERIFY(ToolboxTextFontDescriptor(SmallLabel + FontSize<12>()).font(4) == 4);
   if (argc == 1 || (argc > 1 && std::string(argv[1]) == "ink"))
   {
     InkPins();

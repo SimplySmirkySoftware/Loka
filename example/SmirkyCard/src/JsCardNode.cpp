@@ -1090,7 +1090,7 @@ namespace smirkycard
       if (JS_IsException(value))
         return false;
       bool accepted = false;
-      if (size)
+      if (size && !JS_IsString(value))
       {
         int32_t number = 0;
         accepted = integerNumber(ctx, value, number);
@@ -1112,7 +1112,17 @@ namespace smirkycard
           JS_FreeValue(ctx, value);
           return false;
         }
-        if (weight)
+        if (size)
+        {
+          const detail::TextSizeRoleName *entry =
+              findStyleName(valueName, valueLength, detail::StyleVocabularySizeRoles);
+          if (entry)
+          {
+            result.size_ = TextSizeValue::role(entry->value);
+            accepted = true;
+          }
+        }
+        else if (weight)
         {
           const detail::TextWeightName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyWeights);
           if (entry)
