@@ -32,7 +32,7 @@ endif()
 
 # QuickJS-ng is C11. The legacy release toolchains have no C11 (Visual Studio
 # 2017 for the XP profile, GCC 4.0 for Tiger UB1): they build it as C99 with
-# QuickJSLegacyC.h supplying what QuickJS takes from C11. Ask the compiler
+# QuickJSLegacyC.h supplying the one C11 keyword QuickJS uses. Ask the compiler
 # itself: CMake lists c_std_11 for MSVC 19.16, which has no _Alignas. Every
 # other compiler keeps C11; smirkycard_script follows the same dialect.
 include(CheckCSourceCompiles)
@@ -59,8 +59,21 @@ if(SMIRKYCARD_C_STANDARD EQUAL 99)
     target_compile_options(smirkycard_quickjs PRIVATE
       "/FI${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h")
   else()
+    # SHELL: keeps -include paired with its file; CMake de-duplicates bare
+    # options, which would orphan the second header's path.
     target_compile_options(smirkycard_quickjs PRIVATE
-      -include "${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h")
+      "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h\"")
+  endif()
+endif()
+# A separate question from the dialect: does the configured Apple SDK declare
+# the monotonic clock QuickJS reads? The 10.4u SDK does not, with GCC 4.0 or
+# with clang; SDKs from 10.12 do, and keep their own clock_gettime.
+if(APPLE)
+  include(CheckSymbolExists)
+  check_symbol_exists(CLOCK_MONOTONIC "time.h" SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
+  if(NOT SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
+    target_compile_options(smirkycard_quickjs PRIVATE
+      "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSMachClock.h\"")
   endif()
 endif()
 target_include_directories(smirkycard_quickjs SYSTEM PUBLIC ${smirkycard_quickjs_source_dir})
