@@ -78,11 +78,12 @@ Visual Studio tools do not override that selection. Installation paths and SDK
 selection belong in that rig-local script.
 
 The command refuses a dirty or non-root checkout, archives HEAD, and stages in
-`C:\loka-release\<full-sha>-<arch>-<profile>`. It removes a previous remote
-work directory of that name before starting; do not run the same tuple on one
-host concurrently. Failed work is retained there for inspection; successful
-work is removed. Files return through a temporary directory and are checked
-against the remote relative-path, size and SHA-256 inventory before publication.
+`C:\loka-release\<sha12>-<arch>-<profile>`, where `<sha12>` is the first 12
+hex digits of HEAD. It removes a previous remote work directory of that name
+before starting; do not run the same tuple on one host concurrently. Failed
+work is retained there for inspection; successful work is removed. Files return
+through a temporary directory and are checked against the remote relative-path,
+size and SHA-256 inventory before publication.
 Existing local output is preserved on transfer/verification failure, with
 rollback on publication I/O failure; publication is not crash-atomic and expects
 one local writer.
