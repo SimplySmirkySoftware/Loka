@@ -40,3 +40,57 @@ tracked-input rule by hand for each listed package.
 The canonical path makes repeated 68K builds use the same embedded source path.
 Follow-up: add `-ffile-prefix-map`-style normalization to the Retro68 build so
 binary hashes can be compared across machines without depending on that path.
+
+After the Retro68 Release builds (including the 68K configure with
+`-DLOKA_BUILD_SMIRKYCARD=ON`), release assembly runs
+`--build-command 'python3 scripts/release/classic-disks.py'` to produce
+`build/release/classic-disks/{ScrapbookUI68K,ScrapbookUIPPC,LokaSmirkyCard68K}.dsk`.
+Each volume contains its application and the tracked adjacent `ASSETS.LRP` or
+`MAIN.JS`; packaging reads back both application forks and the unchanged data
+before publishing each image. Plain applications use Retro68's existing disks.
+
+## Windows archives via a remote builder
+
+Run the assembler on WSL with a Windows SSH config alias and an absolute path
+to a rig-local `.cmd` environment script. For the two Windows allowlist runs,
+use these build commands respectively, with `X64_BUILDER` and `X86_BUILDER`
+set to the caller's SSH config aliases. The inner quotes preserve the Windows
+path through the assembler's POSIX shell:
+
+```sh
+--build-command "bash scripts/release/win32-remote-stage.sh $X64_BUILDER x64 modern 'C:\loka-setup\release-env-x64.cmd'"
+--build-command "bash scripts/release/win32-remote-stage.sh $X86_BUILDER x86 xp 'C:\loka-setup\release-env-x86-xp.cmd'"
+```
+
+The local prerequisites are Bash, Git, Python 3 and key-authenticated `ssh`/`scp`.
+The host argument is an SSH config alias. Environment paths may contain letters,
+digits, spaces, dots, underscores and dashes. The remote helper uses Windows
+PowerShell and .NET ZipFile; the builder does not need Git or Python.
+
+The rig-local environment script is called in the same `cmd /c` process that
+launches the release stage. It must return nonzero on failure and leave `cl`,
+`cmake`, `ninja`, the selected compiler/SDK variables (including
+`VCToolsVersion` and `WindowsSDKVersion`), and compiler include/library paths
+ready for the requested architecture/profile. Use `exit /b`, not `exit`, and
+do not discard the environment with `setlocal`. Put the chosen CMake and Ninja
+on PATH **after** calling the Visual Studio environment batch file, so bundled
+Visual Studio tools do not override that selection. Installation paths and SDK
+selection belong in that rig-local script.
+
+The command refuses a dirty or non-root checkout, archives HEAD, and stages in
+`C:\loka-release\<sha12>-<arch>-<profile>`, where `<sha12>` is the first 12
+hex digits of HEAD. It removes a previous remote work directory of that name
+before starting; do not run the same tuple on one host concurrently. Failed
+work is retained there for inspection; successful work is removed. Files return
+through a temporary directory and are checked against the remote relative-path,
+size and SHA-256 inventory before publication.
+Existing local output is preserved on transfer/verification failure, with
+rollback on publication I/O failure; publication is not crash-atomic and expects
+one local writer.
+
+Modern output is `build/release/win32-x64/` and XP-profile output is
+`build/release/win32-x86-xp/`. Their adjacent `*.toolchain.txt` files record the
+compiler/SDK environment, CMake version, OS version and PowerShell version.
+Include those files as `build` entries in the corresponding allowlists. The
+archive manifest records the build command; `*.toolchain.txt` records the
+builder's toolchain identity. Neither is runtime compatibility evidence.
