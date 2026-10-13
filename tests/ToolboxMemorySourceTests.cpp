@@ -1,6 +1,7 @@
 #include "ToolboxMemorySource.hpp"
 #include "app/FileImageSource.hpp"
 #include "core/SmallObjectPool.hpp"
+#include "support/AutomaticPool.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
 #include <cstring>
@@ -56,7 +57,7 @@ namespace
    * the host pool's sizeof(void*) constraint without changing Classic's ABI.
    */
   struct HostPoolSource : Source { enum { kAlignment = 8 }; };
-  typedef loka::core::SmallObjectPool<HostPoolSource> Pool;
+  typedef loka::testing::AutomaticPool<HostPoolSource> Pool;
 
   void checkPayload(void *p, size_t size)
   {
@@ -67,7 +68,7 @@ namespace
   void testPoolPaths()
   {
     FakeMemoryManager memory;
-    Pool pool = Pool();
+    Pool pool;
     const size_t sizes[] = {8, 16, 24, 32, 48, 64, 96, 128, 192, 256};
     for (unsigned int c = 0; c < 10; ++c)
       for (size_t i = 0; i < 2048 / sizes[c]; ++i)

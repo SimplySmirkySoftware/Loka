@@ -3,6 +3,7 @@
 #include "app/scene/boundary/Boundary.hpp"
 #include "app/scene/boundary/detail/NodeBuildTicket.hpp"
 #include "core/SmallObjectPool.hpp"
+#include "support/AutomaticPool.hpp"
 #include <cstdlib>
 #include <cstring>
 
@@ -69,7 +70,7 @@ namespace
   };
   bool Source::denied = false;
   void *Source::chunks[128] = {};
-  typedef loka::core::SmallObjectPool<Source> Pool;
+  typedef loka::testing::AutomaticPool<Source> Pool;
   Pool *activePool = 0;
   int backingFrees = 0;
   int heapNodeFrees = 0;
@@ -90,7 +91,6 @@ namespace
   {
     Pool pool;
     Backend()
-        : pool()
     {
       activePool = &this->pool;
       backingFrees = 0;
