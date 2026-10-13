@@ -6,6 +6,12 @@ namespace loka
 {
   namespace app
   {
+    enum TextSizeRole
+    {
+      TEXT_SIZE_ROLE_SMALL_LABEL = 0,
+      TEXT_SIZE_ROLE_COUNT = 1
+    };
+
     enum TextWeight
     {
       TEXT_WEIGHT_NORMAL = 0,
@@ -115,6 +121,8 @@ namespace loka
       }
     };
 
+    /** Semantic font roles, initialized per TU like Bold. */
+    static const TextStyle SmallLabel = TextStyle(TextSizeValue::role(TEXT_SIZE_ROLE_SMALL_LABEL));
     /** Standard-palette roles and inks, initialized per TU like Bold. */
     static const TextStyle Primary = TextStyle().color(TEXT_COLOR_PRIMARY);
     static const TextStyle Secondary = TextStyle().color(TEXT_COLOR_SECONDARY);
@@ -159,6 +167,15 @@ namespace loka
   {
     namespace detail
     {
+      struct TextSizeRoleName
+      {
+        const char *name;
+        TextSizeRole value;
+      };
+      static const TextSizeRoleName StyleVocabularySizeRoles[] = {
+          {"smallLabel", TEXT_SIZE_ROLE_SMALL_LABEL},
+      };
+
       struct TextWeightName
       {
         const char *name;

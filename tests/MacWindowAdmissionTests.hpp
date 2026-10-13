@@ -3,4 +3,7 @@
 
 void testMacWindowVisibilityAdmissionAndDelegateClose();
 
+void testMacPerformCloseAsksKeyedWindowWithoutClosing();
+void testMacPerformCloseClosesUnkeyedWindowAsToday();
+
 #endif

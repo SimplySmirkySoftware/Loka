@@ -1,4 +1,6 @@
 #include "support/WindowAdmissionTestApp.hpp"
+#include "support/NativeCloseTestConfig.hpp"
+#include "testing/app/AppTestAccess.hpp"
 #include "Win32WindowClientSizeTests.hpp"
 #include "support/TestVerify.hpp"
 #include <cassert>
@@ -671,4 +673,62 @@ void testWin32WindowEditedMarkPrefixesTheNativeTitle()
     LOKA_VERIFY(std::wcscmp(title, edited ? L"*Doc" : L"Doc") == 0);
   }
   setWindowVisibility(window, false);
+}
+
+namespace
+{
+  class CloseAskedWin32App : public Win32App
+  {
+  public:
+    explicit CloseAskedWin32App(AppConfigurable &config)
+        : Win32App(&config, GetModuleHandle(NULL), SW_SHOW) {}
+    virtual void quit() {}
+    using App::admitAndApplyWindows;
+    using App::reclaimWindows;
+    Win32Window *firstWindow()
+    {
+      LOKA_VERIFY(this->group_ != 0);
+      LOKA_VERIFY(this->group_->getComponents().size() == 1);
+      return this->group_->getComponents()[0]->asWindow()->asWin32Window();
+    }
+  };
+}
+
+void testWin32WmCloseAsksKeyedWindowWithoutDestroying()
+{
+  NativeCloseTestContext<Win32Window> context;
+  NativeCloseTestConfig config(context, true);
+  const loka::core::ItemId key = config.roster.open(loka::app::DocumentFacts());
+  LOKA_VERIFY(!key.isNone());
+  CloseAskedWin32App app(config);
+  app.App::run();
+  // The HWND is created by admission, not by run(): the Null model of Win32App's tail.
+  RunWindowAdmissionOperation(app);
+  Win32Window *window = app.firstWindow();
+  LOKA_VERIFY(window != 0);
+  const HWND hwnd = window->hwnd();
+  LOKA_VERIFY(hwnd && IsWindow(hwnd));
+  const size_t pending = loka::app::testing::AppTestAccess::pendingWindowCloseCount(app);
+  SendMessageW(hwnd, WM_CLOSE, 0, 0);
+  LOKA_VERIFY(IsWindow(hwnd));
+  LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == pending);
+  LOKA_VERIFY(config.roster.closeAsked().get().id == key);
+}
+
+void testWin32WmCloseDestroysUnkeyedWindowAsToday()
+{
+  NativeCloseTestContext<Win32Window> context;
+  NativeCloseTestConfig config(context, false);
+  CloseAskedWin32App app(config);
+  app.App::run();
+  // The HWND is created by admission, not by run(): the Null model of Win32App's tail.
+  RunWindowAdmissionOperation(app);
+  Win32Window *window = app.firstWindow();
+  LOKA_VERIFY(window != 0);
+  const HWND hwnd = window->hwnd();
+  LOKA_VERIFY(hwnd && IsWindow(hwnd));
+  LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 0);
+  SendMessageW(hwnd, WM_CLOSE, 0, 0);
+  LOKA_VERIFY(!IsWindow(hwnd));
+  LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 1);
 }

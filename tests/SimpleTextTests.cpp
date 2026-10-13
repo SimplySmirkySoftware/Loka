@@ -28,6 +28,7 @@ using loka::file::File;
 class SimpleTextTestAccess
 {
 public:
+  static void replayClose(simpletext::MainNode &n) { n.onCloseAsked(); }
   static ObservableList<String> &lines(simpletext::MainNode &n)
   {
     return n.lines_;
@@ -929,6 +930,74 @@ void testSimpleTextEditorReceivesRemainingWindow()
     LOKA_VERIFY(probe.editor.height > 80);
     LOKA_VERIFY(probe.editor.y + probe.editor.height == viewport.y + viewport.height);
   }
+}
+
+
+void testSimpleTextCloseAskedWhileBusyIsDeclined()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId id = config.documents().idAt(0);
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::OPEN_DOCUMENT>()->emit();
+  app.tail();
+  app.window(0).simulateCloseAsked();
+  const CloseAsk ask = config.documents().closeAsked().get();
+  app.tail();
+  LOKA_VERIFY(config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+  LOKA_VERIFY(config.documents().find(id));
+  {
+    StateTrackerGuard guard(app.main(0).tracker());
+    SimpleTextTestAccess::choose(app.main(0), false, FileChooserResult::Canceled());
+  }
+  app.tail();
+  LOKA_VERIFY(SimpleTextTestAccess::operation(app.main(0)) == simpletext::NONE);
+  SimpleTextTestAccess::replayClose(app.main(0));
+  app.tail();
+  LOKA_VERIFY(config.documents().find(id) && !app.quitRequested());
+  app.window(0).simulateCloseAsked();
+  app.tail();
+  LOKA_VERIFY(config.documents().count() == 0);
+}
+
+void testSimpleTextQuitAskedBeforeMountIsAnsweredAtAttach()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId first = config.documents().idAt(0);
+  // In one turn: a new clean document is opened, the mounted one is closed by
+  // hand, and Quit asks the first row, whose window is not admitted yet.
+  const ItemId second = config.documents().open(simpletext::Document());
+  LOKA_VERIFY(!second.isNone() && config.documents().close(first) == EDIT_OK);
+  app.requestQuit();
+  LOKA_VERIFY(config.documents().closeAsked().get().id == second);
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.documents().count() == 0 && app.quitRequested());
+}
+
+void testSimpleTextCloseAskedEditedDeclinesInD0()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId id = config.documents().idAt(0);
+  ObservableList<String> &lines = SimpleTextTestAccess::lines(app.main(0));
+  LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
+  app.tail();
+  app.window(0).simulateCloseAsked();
+  const CloseAsk ask = config.documents().closeAsked().get();
+  app.tail();
+  LOKA_VERIFY(config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+  LOKA_VERIFY(config.documents().find(id) && !app.quitRequested());
+  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  app.tail();
+  LOKA_VERIFY(config.documents().find(id));
+  LOKA_VERIFY(config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
 }
 
 #endif
