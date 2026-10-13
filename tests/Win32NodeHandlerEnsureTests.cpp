@@ -1403,7 +1403,8 @@ void testWin32TextNaturalWidthAnswer()
   HWND refusedRoot = CreateWindowExW(
       0, L"STATIC", L"refused-text", WS_POPUP, 0, 0, 100, 100, NULL, NULL, GetModuleHandleW(NULL), NULL);
   LOKA_VERIFY(refusedRoot != NULL);
-  Win32ScenePlatformController refusedController(refusedRoot);
+  Win32ScenePlatformController refusedController(refusedRoot,
+                                                 loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
   LOKA_VERIFY(DestroyWindow(refusedRoot));
   LOKA_VERIFY(GetDC(refusedRoot) == NULL);
   TextNode text(TextProps("No DC"));
@@ -1415,7 +1416,7 @@ void testWin32TextNaturalWidthAnswer()
 void testWin32SmallLabelNaturalWidth()
 {
   using namespace loka::app;
-  Win32ScenePlatformController controller(NULL);
+  Win32ScenePlatformController controller(NULL, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
   TextNode body(TextProps("Alignment sample WWW"));
   TextProps captionProps("Alignment sample WWW");
   captionProps.textStyle_ = SmallLabel;
