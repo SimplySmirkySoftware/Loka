@@ -1,6 +1,7 @@
 #ifndef LOKA_TOOLBOX_CONFIRM_DIALOG_CONTEXT_HPP
 #define LOKA_TOOLBOX_CONFIRM_DIALOG_CONTEXT_HPP
 #include "context/ToolboxDialogContext.hpp"
+#include "app/scene/projection/PlatformNodeHandler.hpp"
 
 class ToolboxConfirmDialogContext
     : public ToolboxTypedDialogContext<loka::app::ConfirmDialogProps, loka::app::ConfirmResult>
