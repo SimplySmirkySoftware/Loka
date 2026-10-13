@@ -26,8 +26,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedMacConfirmDialog(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>());
   // Mac has no ScrollBar context yet: a known unsupported kind must take the
   // typed-refusal path, not trip the accidental-miss assert. ScrollView is a
   // controller-owned projection-parent arm and does not use this leaf ensure
@@ -76,5 +74,4 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   RegisterMacOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacScrollBar);
   RegisterMacConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacConfirmDialog);
 }
