@@ -683,6 +683,8 @@ namespace
     explicit CloseAskedWin32App(AppConfigurable &config)
         : Win32App(&config, GetModuleHandle(NULL), SW_SHOW) {}
     virtual void quit() {}
+    using App::admitAndApplyWindows;
+    using App::reclaimWindows;
     Win32Window *firstWindow()
     {
       LOKA_VERIFY(this->group_ != 0);
@@ -700,6 +702,8 @@ void testWin32WmCloseAsksKeyedWindowWithoutDestroying()
   LOKA_VERIFY(!key.isNone());
   CloseAskedWin32App app(config);
   app.App::run();
+  // The HWND is created by admission, not by run(): the Null model of Win32App's tail.
+  RunWindowAdmissionOperation(app);
   Win32Window *window = app.firstWindow();
   LOKA_VERIFY(window != 0);
   const HWND hwnd = window->hwnd();
@@ -717,6 +721,8 @@ void testWin32WmCloseDestroysUnkeyedWindowAsToday()
   NativeCloseTestConfig config(context, false);
   CloseAskedWin32App app(config);
   app.App::run();
+  // The HWND is created by admission, not by run(): the Null model of Win32App's tail.
+  RunWindowAdmissionOperation(app);
   Win32Window *window = app.firstWindow();
   LOKA_VERIFY(window != 0);
   const HWND hwnd = window->hwnd();
