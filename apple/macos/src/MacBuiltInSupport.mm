@@ -19,14 +19,13 @@
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacImageViewContext.hpp"
 #include "context/MacOpenFileDialogContext.hpp"
+#include "context/MacConfirmDialogContext.hpp"
 #include "context/MacPopupMenuContext.hpp"
 #include "context/MacTextContext.hpp"
 #include "context/MacAttributedTextContext.hpp"
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedMacConfirmDialog(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>());
   // Mac has no ScrollBar context yet: a known unsupported kind must take the
   // typed-refusal path, not trip the accidental-miss assert. ScrollView is a
   // controller-owned projection-parent arm and does not use this leaf ensure
@@ -74,5 +73,5 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   RegisterMacCellNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacScrollBar);
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacConfirmDialog);
+  RegisterMacConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
 }

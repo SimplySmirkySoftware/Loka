@@ -16,94 +16,10 @@
 - (NSURL *)URL;
 @end
 
-@interface LokaMacOpenFileDialogDeferredPresenter : NSObject
-{
-@private
-  MacOpenFileDialogContext *owner_;
-  NSTimer *timer_;
-}
-- (id)initWithOwner:(MacOpenFileDialogContext *)owner;
-- (void)schedulePresent;
-- (void)cancelPresent;
-- (void)detachOwner;
-- (void)onTimer:(NSTimer *)timer;
-#ifdef TEST_BUILD
-@property(nonatomic, assign, readonly) NSTimer *scheduledTimerForTesting;
-#endif
-@end
-
-@implementation LokaMacOpenFileDialogDeferredPresenter
-#ifdef TEST_BUILD
-- (NSTimer *)scheduledTimerForTesting
-{
-  return timer_;
-}
-#endif
-- (id)initWithOwner:(MacOpenFileDialogContext *)owner
-{
-  self = [super init];
-  if (self)
-  {
-    owner_ = owner;
-    timer_ = nil;
-  }
-  return self;
-}
-
-- (void)dealloc
-{
-  [self cancelPresent];
-  [super dealloc];
-}
-
-- (void)schedulePresent
-{
-  if (timer_)
-  {
-    return;
-  }
-  timer_ = [[NSTimer scheduledTimerWithTimeInterval:0.0
-                                             target:self
-                                           selector:@selector(onTimer:)
-                                           userInfo:nil
-                                            repeats:NO] retain];
-}
-
-- (void)cancelPresent
-{
-  if (!timer_)
-  {
-    return;
-  }
-  [timer_ invalidate];
-  [timer_ release];
-  timer_ = nil;
-}
-
-- (void)detachOwner
-{
-  owner_ = 0;
-}
-
-- (void)onTimer:(NSTimer *)timer
-{
-  if (timer != timer_)
-  {
-    return;
-  }
-  [timer_ release];
-  timer_ = nil;
-  if (owner_)
-  {
-    owner_->presentDeferred();
-  }
-}
-@end
-
 #ifdef TEST_BUILD
 void *MacOpenFileDialogContext::scheduledTimerForTesting() const
 {
-  return [(LokaMacOpenFileDialogDeferredPresenter *)this->deferredPresenter_ scheduledTimerForTesting];
+  return [(LokaMacDeferredDialogPresenter *)this->deferredPresenter_ scheduledTimerForTesting];
 }
 #endif
 
@@ -156,7 +72,7 @@ MacOpenFileDialogContext::MacOpenFileDialogContext(MacScenePlatformController *c
 {
   MacWindow *window = MacWindow::fromRootView(parentView);
   this->transport_ = window ? &window->dialogResults() : 0;
-  deferredPresenter_ = [[LokaMacOpenFileDialogDeferredPresenter alloc] initWithOwner:this];
+  deferredPresenter_ = [[LokaMacDeferredDialogPresenter alloc] initWithOwner:this];
 }
 
 MacOpenFileDialogContext::~MacOpenFileDialogContext()
@@ -187,7 +103,8 @@ void MacOpenFileDialogContext::onFactChanged(loka::app::scene::NodeLifecycleFact
     this->applyDetachedPresentation();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
-      [(LokaMacOpenFileDialogDeferredPresenter *)this->deferredPresenter_ detachOwner];
+      // Same terminal pair as MacConfirmDialogContext; timer mechanics are shared.
+      [(LokaMacDeferredDialogPresenter *)this->deferredPresenter_ detachOwner];
       this->retireNativeObject(this->deferredPresenter_);
       this->node_ = 0;
     }
@@ -204,7 +121,7 @@ void MacOpenFileDialogContext::applyDetachedPresentation()
   presentation_.markDetached();
   if (deferredPresenter_)
   {
-    [(LokaMacOpenFileDialogDeferredPresenter *)deferredPresenter_ cancelPresent];
+    [(LokaMacDeferredDialogPresenter *)deferredPresenter_ cancelPresent];
   }
   this->disposeDialog();
 }
@@ -234,7 +151,7 @@ void MacOpenFileDialogContext::presentIfNeeded()
   }
   if (this->deferredPresenter_)
   {
-    [(LokaMacOpenFileDialogDeferredPresenter *)this->deferredPresenter_ schedulePresent];
+    [(LokaMacDeferredDialogPresenter *)this->deferredPresenter_ schedulePresent];
     return;
   }
   this->presentDialog();
