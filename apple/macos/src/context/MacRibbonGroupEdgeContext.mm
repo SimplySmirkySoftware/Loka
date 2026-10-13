@@ -61,11 +61,15 @@ namespace
 {
   (void)dirtyRect;
   const NSRect bounds = [self bounds];
-  NSColor *edge = [NSColor controlShadowColor];
   NSColor *ground = nil;
   loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground);
+  // The legacy spellings keep the Tiger-era APIs usable with the new SDKs.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  NSColor *edge = [NSColor controlShadowColor];
   NSColor *edgeRGB = [edge colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
   NSColor *groundRGB = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+#pragma clang diagnostic pop
   if ([self edge] == loka::app::RIBBON_GROUP_EDGE_BOTTOM || !edgeRGB || !groundRGB)
   {
     [edge setFill];

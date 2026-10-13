@@ -148,6 +148,10 @@ namespace
     }
   }
 
+  // controlShadowColor and colorUsingColorSpaceName: are the Tiger-era spellings
+  // the edge view draws with; newer SDKs deprecate them.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   void checkRibbonGroupEdge(bool dark)
   {
     (void)dark;
@@ -193,6 +197,8 @@ namespace
     LOKA_VERIFY([[parent subviews] count] == 0);
     [parent release];
   }
+
+#pragma clang diagnostic pop
 
   void checkCell(bool dark)
   {
