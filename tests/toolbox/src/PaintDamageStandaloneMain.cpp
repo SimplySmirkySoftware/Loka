@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Ribbon.hpp"
 #include "context/ToolboxAttributedTextTable.hpp"
 #include <cstdio>
 #include <cstring>
@@ -715,6 +716,22 @@ namespace
     bool label_[128];
   };
 
+  class RibbonFrameNode;
+  typedef BoundaryPropsFor<RibbonFrameNode> RibbonFrameProps;
+  class RibbonFrameNode : public StdCompositionBoundaryNodeBase<RibbonFrameProps>
+  {
+  public:
+    typedef RibbonFrameProps::TypeTag TypeTag;
+    explicit RibbonFrameNode(const RibbonFrameProps &props)
+        : StdCompositionBoundaryNodeBase<RibbonFrameProps>(props)
+    {
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(RibbonControl().testId("Ribbon.Frame") << (RibbonGroup("Caption") << RibbonItem("Button")));
+    }
+  };
+
   class SurfaceBoundsNode;
   typedef BoundaryPropsFor<SurfaceBoundsNode> SurfaceBoundsProps;
   /** A fixed model overhangs the declared surface by eight pixels on two sides. */
@@ -863,8 +880,55 @@ namespace
   {
   public:
     explicit PaintDamageConfig(PlatformContext *context)
-        : AppConfigurable(context), app_(0), node_(0), composited_(0), edit_(0), log_(0), phase_(SETTLE), result_(0),
-          initial_(), marker_(), scrollTextMarker_(), gate_(false), editGeometry_(), paintWindow_(0), compositedWindow_(0), editWindow_(0), plain_(0), plainWindow_(0), boundsWindow_(0), cellWindow_(0), popupWindow_(0), overflowWindow_(0), imageWindow_(0), imageVacatedWindow_(0), popupRow_(), editExact_(0), editExactWindow_(0), editZStack_(0), editZStackWindow_(0), popupExact_(0), popupExactWindow_(0), popupFaceRows_(), history_(0), historyWindow_(0), popupHistory_(0), popupHistoryWindow_(0), buttonEnabled_(0), buttonEnabledWindow_(0), buttonLabel_(0), buttonLabelWindow_(0), buttonTitlePixels_(), textWidth_(0), textWidthWindow_(0), textStyleChange_(0), textStyleChangeWindow_(0), textStyleBefore_(), offscreen_(0), offscreenWindow_(0)
+        : AppConfigurable(context),
+          app_(0),
+          node_(0),
+          composited_(0),
+          edit_(0),
+          log_(0),
+          phase_(SETTLE),
+          result_(0),
+          initial_(),
+          marker_(),
+          scrollTextMarker_(),
+          gate_(false),
+          editGeometry_(),
+          paintWindow_(0),
+          compositedWindow_(0),
+          editWindow_(0),
+          plain_(0),
+          plainWindow_(0),
+          boundsWindow_(0),
+          cellWindow_(0),
+          popupWindow_(0),
+          overflowWindow_(0),
+          imageWindow_(0),
+          imageVacatedWindow_(0),
+          popupRow_(),
+          editExact_(0),
+          editExactWindow_(0),
+          editZStack_(0),
+          editZStackWindow_(0),
+          popupExact_(0),
+          popupExactWindow_(0),
+          popupFaceRows_(),
+          history_(0),
+          historyWindow_(0),
+          popupHistory_(0),
+          popupHistoryWindow_(0),
+          buttonEnabled_(0),
+          buttonEnabledWindow_(0),
+          buttonLabel_(0),
+          buttonLabelWindow_(0),
+          buttonTitlePixels_(),
+          textWidth_(0),
+          textWidthWindow_(0),
+          textStyleChange_(0),
+          textStyleChangeWindow_(0),
+          textStyleBefore_(),
+          offscreen_(0),
+          offscreenWindow_(0),
+          ribbonWindow_(0)
     {
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
@@ -984,6 +1048,16 @@ namespace
                                    OffscreenDamageProps(), &this->offscreen_))
                                .visible(false).idlePolicy(IdlePolicy::everyTick())
                                .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->offscreenWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Ribbon frame")
+              .scene(loka::scenario_tests::ObservedMainDefinition<RibbonFrameProps, RibbonFrameNode>(RibbonFrameProps(),
+                                                                                                     0))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->ribbonWindow_);
     }
 
   private:
@@ -994,7 +1068,19 @@ namespace
                  BUTTON_LABEL_SHOW, BUTTON_LABEL_WRITE, BUTTON_LABEL_CHECK,
                  TEXT_WIDTH_SHOW, TEXT_WIDTH_WRITE, TEXT_WIDTH_CHECK, TEXT_WIDTH_RELAYOUT,
                  TEXT_STYLE_SHOW, TEXT_STYLE_WRITE, TEXT_STYLE_CHECK,
-                 OFFSCREEN_SHOW, OFFSCREEN_WRITE, OFFSCREEN_SIBLING_CHECK, OFFSCREEN_TEXT_CHECK, OFFSCREEN_HIDDEN_CHECK, OFFSCREEN_REVEAL_CHECK, OFFSCREEN_REVEALED_WRITE_CHECK, OFFSCREEN_DETACH_CHECK, COMPLETE };
+                 OFFSCREEN_SHOW,
+                 OFFSCREEN_WRITE,
+                 OFFSCREEN_SIBLING_CHECK,
+                 OFFSCREEN_TEXT_CHECK,
+                 OFFSCREEN_HIDDEN_CHECK,
+                 OFFSCREEN_REVEAL_CHECK,
+                 OFFSCREEN_REVEALED_WRITE_CHECK,
+                 OFFSCREEN_DETACH_CHECK,
+                 RIBBON_SHOW,
+                 RIBBON_CHECK,
+                 RIBBON_REPAINT,
+                 COMPLETE
+    };
     App *app_;
     ViewportDamageNode *node_;
     CompositedDamageNode *composited_;
@@ -1044,6 +1130,7 @@ namespace
     TextStyleChangeBefore textStyleBefore_;
     OffscreenDamageNode *offscreen_;
     Window *offscreenWindow_;
+    Window *ribbonWindow_;
 
     void recordArm(const char *name, bool pass, Phase next)
     {
@@ -1124,6 +1211,11 @@ namespace
       case OFFSCREEN_TEXT_CHECK: case OFFSCREEN_HIDDEN_CHECK: case OFFSCREEN_REVEAL_CHECK: case OFFSCREEN_REVEALED_WRITE_CHECK: case OFFSCREEN_DETACH_CHECK:
         target = self->offscreenWindow_;
         break;
+      case RIBBON_SHOW:
+      case RIBBON_CHECK:
+      case RIBBON_REPAINT:
+        target = self->ribbonWindow_;
+        break;
       case COMPLETE:
         return;
       }
@@ -1177,6 +1269,8 @@ namespace
         OnTextStyleIdle(target, self->textStyleChange_, self);
       else if (target == self->imageVacatedWindow_)
         OnImageVacatedIdle(target, self);
+      else if (target == self->ribbonWindow_)
+        OnRibbonIdle(target, self);
       else if (target == self->imageWindow_)
         OnImageIdle(target, self);
       else
@@ -2388,8 +2482,92 @@ namespace
                           && contexts[i]->deliveredFact() == NODE_FACT_DETACHED_RETAINED
                           && detached.kind == PAINT_ANSWER_REFUSED, COMPLETE);
         }
+        self->phase_ = RIBBON_SHOW;
+      }
+    }
+
+    static void OnRibbonIdle(Window *window, PaintDamageConfig *self)
+    {
+      ToolboxWindow *native = window->asToolboxWindow();
+      if (self->phase_ == RIBBON_SHOW)
+      {
+        ShowWindow(native->window());
+        SelectWindow(native->window());
+        native->requestInvalidate();
+        self->phase_ = RIBBON_CHECK;
+        return;
+      }
+      const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+      PaintAnswer edges[3];
+      Node *ribbon = 0;
+      loka::dsl::FlowError error;
+      loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Ribbon.Frame", ribbon, error);
+      RibbonGroupNode *group =
+          ribbon && ribbon->asNestable() ? ribbon->asNestable()->childrenHead()->asRibbonGroupNode() : 0;
+      if (!group)
+      {
+        self->recordArm("ribbon-frame-setup", false, COMPLETE);
+        self->finish(false);
+        return;
+      }
+      loka::dsl::CompositionCursor<Node> children(group->childrenHead(), group->childrenCount());
+      children.next(); // The content Column precedes the three closed leaves.
+      for (unsigned i = 0; i < 3; ++i)
+      {
+        Node *child = children.next();
+        RibbonGroupEdgeNode *edge = child ? child->asRibbonGroupEdgeNode() : 0;
+        if (!edge || !edge->getContext())
+        {
+          self->recordArm("ribbon-frame-setup", false, COMPLETE);
+          self->finish(false);
+          return;
+        }
+        edges[edge->props.edge] = static_cast<NativeNodeContext *>(edge->getContext())->queryPaintDamage(query);
+      }
+      const short left = edges[RIBBON_GROUP_EDGE_LEFT].damage.x;
+      const short top = edges[RIBBON_GROUP_EDGE_LEFT].damage.y;
+      const short right = edges[RIBBON_GROUP_EDGE_RIGHT].damage.x;
+      const short bottom = edges[RIBBON_GROUP_EDGE_BOTTOM].damage.y;
+      GrafPtr saved;
+      GetPort(&saved);
+      SetPort(native->window());
+      bool solid = right > left && bottom - top >= 32;
+      for (short x = left; x <= right; ++x)
+        solid = solid && GetPixel(x, bottom) != 0;
+      unsigned density = 0;
+      for (short y = top; y < top + 8; ++y)
+        density += GetPixel(left, y) != 0;
+      const bool dark = GetPixel(left, bottom - 1) != 0;
+      const bool inset = !GetPixel(left + 1, top + 1) && !GetPixel(right - 1, bottom - 1);
+      // The caption and button occupy the inset interior, which still contains ink.
+      bool buttonInk = false, captionInk = false;
+      for (short x = left + RibbonGroupNode::kFrameInset; x <= right - RibbonGroupNode::kFrameInset; ++x)
+      {
+        for (short y = top + RibbonGroupNode::kFrameInset; y < top + 24; ++y)
+          buttonInk = buttonInk || GetPixel(x, y) != 0;
+        for (short y = top + 26; y < bottom - 3; ++y)
+          captionInk = captionInk || GetPixel(x, y) != 0;
+      }
+      if (self->phase_ == RIBBON_CHECK)
+      {
+        self->recordArm("ribbon-bottom-solid", solid, RIBBON_CHECK);
+        self->recordArm("ribbon-left-bottom-black", dark, RIBBON_CHECK);
+        self->recordArm("ribbon-left-top-density-2", density == 2, RIBBON_CHECK);
+        self->recordArm("ribbon-inset-content-preserved", inset && buttonInk && captionInk, RIBBON_REPAINT);
+        Rect damage;
+        SetRect(&damage, left - 1, top, left + 3, bottom + 1);
+        EraseRect(&damage);
+        self->recordArm("ribbon-damage-erased-control", !GetPixel(left, bottom), RIBBON_REPAINT);
+        native->requestInvalidateRect(damage);
+      }
+      else
+      {
+        self->recordArm("ribbon-partial-restores-edge",
+                        solid && dark && density == 2 && inset && buttonInk && captionInk,
+                        COMPLETE);
         self->finish(true);
       }
+      SetPort(saved);
     }
 
     void checkFontCursor(ToolboxScenePlatformController &controller, GrafPtr port)

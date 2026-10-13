@@ -474,6 +474,13 @@ namespace toolbox_host
     std::string bytes;
     long ink;
   };
+  struct Fill
+  {
+    Rect rect;
+    Pattern pattern;
+    long ink;
+  };
+  extern std::vector<Fill> fills;
   extern std::vector<Draw> draws;
   extern std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   extern int erases, widths, measures, fonts, metrics;

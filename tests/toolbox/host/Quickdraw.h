@@ -2,6 +2,11 @@
 #define LOKA_TEST_QUICKDRAW_H
 #include <cstddef>
 typedef unsigned char Style;
+struct Pattern
+{
+  unsigned char pat[8];
+};
+void FillRect(const struct Rect *, const Pattern *);
 typedef unsigned char Str255[256];
 enum
 {

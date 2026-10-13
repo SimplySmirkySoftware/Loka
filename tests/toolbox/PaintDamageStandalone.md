@@ -89,3 +89,16 @@ leaves none; black and the window pair leave ink. This exercises real ForeColor.
 The additivity arms compare uniform `MMMM` against `M` and `MMM` runs split only by
 Red, logging both measured widths (Chicago 12 measured `uniform=36 split=36`),
 then compare line widths and ending offsets when wrapping at 18 pixels.
+
+## Ribbon group frame
+
+The final fixture mounts one `RibbonControl` group with a button and caption.
+Pixel reads check a solid full-width bottom row, black at the bottom of the
+left edge, and two black pixels in an eight-pixel vertical sample of its top
+band. Ground samples inside the frame and positive ink samples in the button
+and caption check that content survives. The fixture erases a rectangle crossing
+the left edge, proves the erase removed a black pixel, then invalidates that
+rectangle and checks restoration after the next delivery.
+
+The six `ribbon-*` audit lines are predicted additions pending the MAME run;
+they are not runtime-verification evidence yet.
