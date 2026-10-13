@@ -101,12 +101,28 @@ not a spin; admission commits the starting revision even without creates (#1245)
 A document whose window cannot be created or adopted at runtime is dropped from
 the roster, never retried; the application observes removal as a list fact
 (A′, ruling of 2026-10-10, Window rally page 2). At launch a refused adoption
-takes the bootstrap door (#1186). A native close of a keyed window removes its
+takes the bootstrap door (#1186). A terminal native removal of a keyed window removes its
 document. Runtime refusal uses the existing close batching: group removal and
 scene detach occur in the refusal tail, while the Window is reclaimed at the
-next tail. Closing is a decided fact here; a close that can be refused (a dirty
-document, a native close box that asks first) is Window rally page 3b and has no
-door yet.
+next tail. Closing remains a decided fact. Window rally 3b d0 (owner ruling, 2026-10-13)
+adds a separate native close request: App writes the roster's `closeAsked`
+box, and the document node either removes its own row or writes a decline to
+`closeAnswer`. Each request carries identity and sequence; repeated requests
+for the same document are distinct. Null routes native asks in d0; d1 routes the production rails
+(Win32 `WM_CLOSE`, macOS `windowShouldClose:`, Toolbox after `TrackGoAway`)
+through the same `App::closeAsked` door, and the three menu Quit commands call
+`App::requestQuit`; terminal removal and factory refusal never ask. SimpleText declines edited or
+for the same document are distinct. Only Null routes native asks in d0;
+terminal removal and factory refusal never ask. SimpleText declines edited or
+busy documents in d0; a clean document's menu Close uses the same node policy.
+
+`requestQuit` asks the first roster document, then advances at the admission
+tail when that row disappears. A matching decline cancels the attempt. Empty
+rosters quit even when static windows remain. Because the roster only appends
+and removes, the asked first row's disappearance is answered by count and first
+identity, without a row walk. The two boxes and their writer walls live in
+[DocumentRoster.hpp](../common/app/core/DocumentRoster.hpp); the serial attempt
+lives in [App.cpp](../common/app/core/App.cpp).
 
 **Window-less launch.** Every static `WindowDef` can be refused, a roster whose
 attach was refused can seed nothing, or every launch document create can be

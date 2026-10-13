@@ -577,3 +577,8 @@ loka_compile_pin(dialog_result_cross_payload
   REFUSES pins/refuses_dialog_result_cross_payload.cpp
   ACCEPTS pins/accepts_dialog_result_cross_payload.cpp
 )
+
+loka_compile_pin(document_roster_ask_close_private
+  REFUSES pins/refuses_document_roster_ask_close.cpp
+  ACCEPTS pins/accepts_document_roster_ask_close.cpp
+)

@@ -40,7 +40,9 @@ namespace loka
     /** Process-lifetime raw storage, for a static, zero-initialized instance.
      * Source supplies static acquire(size_t), release(void *), and kAlignment;
      * live acquisitions are disjoint and retain their address and size.
-     * Never copy an active pool. Automatic instances must be value-initialized.
+     * Never copy an active pool. An automatic instance must start from zeroed
+     * storage: C++98 zeroes this constructor-less class only in static storage,
+     * and GCC 4.0/4.2 leave `Pool p = Pool();` indeterminate (#1278).
      * No constructor/destructor: storage remains usable through static teardown.
      * Source alignment must accommodate a pointer. Slots promise only
      * min(Source::kAlignment, 8) alignment. No per-allocation header is stored.

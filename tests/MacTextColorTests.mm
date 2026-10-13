@@ -180,9 +180,12 @@ namespace
         NSColor *installed = [label textColor];
         LOKA_VERIFY(installed == expected(styles[i].color_) || [installed isEqual:expected(styles[i].color_)]);
 #if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
-        // DarkAqua arrived in 10.14; the name is spelled out so older hosts
-        // reach the skip instead of a missing symbol.
-        NSAppearance *darkAqua = [NSAppearance appearanceNamed:@"NSAppearanceNameDarkAqua"];
+        // DarkAqua arrived in 10.14 (AppKit 1671); the name is spelled out so
+        // older hosts reach the skip instead of a missing symbol. Presence is
+        // read from the host AppKit version: Mac OS X 10.9 answers
+        // appearanceNamed: with a generic appearance for any name, never nil.
+        NSAppearance *darkAqua =
+            NSAppKitVersionNumber >= 1671 ? [NSAppearance appearanceNamed:@"NSAppearanceNameDarkAqua"] : nil;
         if (!darkAqua)
         {
           std::printf("[skip] %s light/dark resolution: the host has no dark appearance (10.14+)\n", names[i]);

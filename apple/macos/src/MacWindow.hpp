@@ -53,6 +53,8 @@ public:
   virtual bool queryDisplayDepth(int &out) const;
   virtual bool queryDisplayAppearance(DisplayAppearance &out) const;
 
+  /** True leaves the native window open for the keyed document to answer. */
+  bool handleWindowShouldClose();
   void handleWindowWillClose();
   void handleWindowDidBecomeKey();
   bool handleKeyPress(char key);
