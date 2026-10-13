@@ -131,3 +131,7 @@ LOKA_TEST(testWin32LiveGroundLegibility)
 LOKA_TEST(testWin32StaticTextInks)
 LOKA_TEST(testWin32StaticTextColorChangeResidue)
 LOKA_TEST(testWin32AttributedTextInksAndAdditivity)
+
+LOKA_TEST(testWin32TextNaturalWidthAnswer)
+LOKA_TEST(testWin32SmallLabelNaturalWidth)
+LOKA_TEST(testWin32RibbonGroupNaturalWidthTraversal)

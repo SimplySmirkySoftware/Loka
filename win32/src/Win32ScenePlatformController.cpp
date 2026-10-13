@@ -41,6 +41,7 @@
 #include "app/scene/Node.hpp"
 #include "core/Profiler.hpp"
 #include "context/Win32ButtonContext.hpp"
+#include "context/Win32TextContext.hpp"
 #include "context/Win32EditTextContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32CellContext.hpp"
@@ -293,6 +294,8 @@ bool Win32ScenePlatformController::measurePushButtonNaturalWidth(
 
 bool Win32ScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
+  if (child && child->asTextNode())
+    return Win32TextContext::queryNaturalWidth(child->asTextNode(), this, width);
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   // Win32ButtonContext leaves its initial empty title alone without a text State.
   if (!button || !button->props.text_)

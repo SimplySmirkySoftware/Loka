@@ -4,6 +4,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "platform/Win32String.hpp"
+#include "platform/String.hpp"
 #include <cwchar>
 
 #include "support/TestVerify.hpp"
@@ -1216,6 +1217,15 @@ void testWin32AttributedTextPaintRouting()
 
 namespace
 {
+  class RefusingNaturalWidthString : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &) const
+    {
+      return false;
+    }
+  };
+
   int expectedPushButtonWidth(Win32ScenePlatformController &controller, const wchar_t *label)
   {
     HDC dc = GetDC(controller.rootHwnd());
@@ -1294,6 +1304,213 @@ void testWin32ButtonNaturalWidthAnswer()
     LOKA_VERIFY(!controller.queryNaturalWidth(&huge, refused));
     LOKA_VERIFY(refused == 13);
   }
+}
+
+void testWin32TextNaturalWidthAnswer()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+  {
+    HWND root = CreateWindowExW(
+        0, L"STATIC", L"natural-text", WS_POPUP, 0, 0, 640, 160, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    LOKA_VERIFY(root != NULL);
+    {
+      Win32ScenePlatformController controller(root, scales[scaleIndex]);
+      RegisterWin32BuiltInSupport(controller);
+      const TextStyle styles[] = {TextStyle(), SmallLabel, SmallLabel + Bold, FontSize<24>() + Italic};
+      for (int i = 0; i < 4; ++i)
+      {
+        TextProps props("Width & italic Wj");
+        props.textStyle_ = styles[i];
+        TextNode text(props);
+        HWND child = projectFontText(controller, root, text);
+        LOGFONTW descriptor;
+        const HFONT nativeFont = readFont(child, descriptor);
+        RECT measured = {0, 0, 0, 0};
+        // Invoke the context's own CALCRECT path with the font installed on its STATIC.
+        LOKA_VERIFY(Win32TextContext::measureTextRect(child, nativeFont, L"Width & italic Wj", measured));
+        short width = 0;
+        LOKA_VERIFY(controller.queryNaturalWidth(&text, width));
+        LOKA_VERIFY(width == scales[scaleIndex].measurementToLu(measured.right - measured.left));
+        // Independent GDI oracle keeps a shared-helper mutation discriminating.
+        HDC dc = GetDC(child);
+        LOKA_VERIFY(dc != NULL);
+        HGDIOBJ previous = SelectObject(dc, nativeFont);
+        LOKA_VERIFY(previous && previous != HGDI_ERROR);
+        RECT expected = {0, 0, 0, 0};
+        LOKA_VERIFY(DrawTextW(dc, L"Width & italic Wj", -1, &expected, DT_LEFT | DT_NOPREFIX | DT_CALCRECT));
+        LOKA_VERIFY(SelectObject(dc, previous) != NULL);
+        LOKA_VERIFY(ReleaseDC(child, dc));
+        LOKA_VERIFY(measured.right == expected.right && measured.bottom == expected.bottom);
+      }
+      PushStateTracker tracker;
+      MutableState<String> label(String::Literal("i"));
+      MutableState<TextStyle> style((FontSize<12>()));
+      tracker.addState(&label);
+      tracker.addState(&style);
+      TextProps liveProps;
+      liveProps.text(&label);
+      liveProps.textStyleState_ = &style;
+      TextNode live(liveProps);
+      short before = 0, after = 0;
+      LOKA_VERIFY(controller.queryNaturalWidth(&live, before));
+      {
+        StateTrackerGuard guard(&tracker);
+        label.set(String::Literal("A much longer current label"));
+        style.set(FontSize<24>() + Bold);
+      }
+      LOKA_VERIFY(controller.queryNaturalWidth(&live, after));
+      LOKA_VERIFY(after > before);
+      TextProps snapshotProps("A much longer current label");
+      snapshotProps.textStyle_ = FontSize<24>() + Bold;
+      TextNode snapshot(snapshotProps);
+      short snapshotWidth = 0;
+      LOKA_VERIFY(controller.queryNaturalWidth(&snapshot, snapshotWidth));
+      LOKA_VERIFY(after == snapshotWidth);
+      const wchar_t wideLabel[] = {0x65e5, 0x672c, 0x8a9e, 0};
+      TextNode unicode(TextProps(String(loka::win32::CreateWin32StringFromUtf16(wideLabel, 3))));
+      RECT unicodeRect = {0, 0, 0, 0};
+      LOKA_VERIFY(Win32TextContext::measureTextRect(root, controller.displayFont(), wideLabel, unicodeRect));
+      LOKA_VERIFY(controller.queryNaturalWidth(&unicode, after));
+      LOKA_VERIFY(after == scales[scaleIndex].measurementToLu(unicodeRect.right));
+      TextNode missing((TextProps()));
+      const String refusedString(Managed<loka::platform::String>::Wrap(new RefusingNaturalWidthString()));
+      TextNode conversionFailure((TextProps(refusedString)));
+      short refused = 13;
+      LOKA_VERIFY(!controller.queryNaturalWidth(&conversionFailure, refused));
+      LOKA_VERIFY(refused == 13);
+      LOKA_VERIFY(!controller.queryNaturalWidth(&missing, refused));
+      const char *declines[] = {"", "one\ntwo", "one\rtwo", "\n", "\r"};
+      for (int i = 0; i < 5; ++i)
+      {
+        TextNode text((TextProps(declines[i])));
+        LOKA_VERIFY(!controller.queryNaturalWidth(&text, refused));
+        LOKA_VERIFY(refused == 13);
+      }
+      TextNode huge(TextProps(String(std::string(32768, 'W'))));
+      LOKA_VERIFY(!controller.queryNaturalWidth(&huge, refused));
+      LOKA_VERIFY(refused == 13);
+      RECT noFont = {0, 0, 0, 0};
+      LOKA_VERIFY(!Win32TextContext::measureTextRect(root, NULL, L"text", noFont));
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+  HWND refusedRoot = CreateWindowExW(
+      0, L"STATIC", L"refused-text", WS_POPUP, 0, 0, 100, 100, NULL, NULL, GetModuleHandleW(NULL), NULL);
+  LOKA_VERIFY(refusedRoot != NULL);
+  Win32ScenePlatformController refusedController(refusedRoot);
+  LOKA_VERIFY(DestroyWindow(refusedRoot));
+  LOKA_VERIFY(GetDC(refusedRoot) == NULL);
+  TextNode text(TextProps("No DC"));
+  short refused = 13;
+  LOKA_VERIFY(!refusedController.queryNaturalWidth(&text, refused));
+  LOKA_VERIFY(refused == 13);
+}
+
+void testWin32SmallLabelNaturalWidth()
+{
+  using namespace loka::app;
+  Win32ScenePlatformController controller(NULL);
+  TextNode body(TextProps("Alignment sample WWW"));
+  TextProps captionProps("Alignment sample WWW");
+  captionProps.textStyle_ = SmallLabel;
+  TextNode caption(captionProps);
+  short bodyWidth = 0, captionWidth = 0;
+  LOKA_VERIFY(controller.queryNaturalWidth(&body, bodyWidth));
+  LOKA_VERIFY(controller.queryNaturalWidth(&caption, captionWidth));
+  // Acceptance pin requires the SmallLabel font-role row from #1285.
+  LOKA_VERIFY(captionWidth < bodyWidth);
+}
+
+void testWin32RibbonGroupNaturalWidthTraversal()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  const char *captions[] = {"Alignment", "Alignment and paragraph positioning controls"};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+    for (int captionIndex = 0; captionIndex < 2; ++captionIndex)
+    {
+      const loka::win32::Win32DisplayScale &scale = scales[scaleIndex];
+      HWND root = CreateWindowExW(0,
+                                  L"STATIC",
+                                  L"natural-group",
+                                  WS_POPUP,
+                                  0,
+                                  0,
+                                  scale.clientLengthToNative(960).px,
+                                  scale.clientLengthToNative(160).px,
+                                  NULL,
+                                  NULL,
+                                  GetModuleHandleW(NULL),
+                                  NULL);
+      LOKA_VERIFY(root != NULL);
+      {
+        Win32ScenePlatformController controller(root, scale);
+        NodeDefinitionBase *definition =
+            (RibbonControl().testId("groupRibbon")
+             << RibbonItem("Open")
+             << (RibbonGroup(captions[captionIndex]) << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
+             << RibbonItem("Close"))
+                .clone();
+        LOKA_VERIFY(definition != 0);
+        Scene scene(definition);
+        LOKA_VERIFY(scene.mount(&controller));
+        SceneTestAccess::updateAttached(scene, true);
+        controller.relayout(960, 160);
+        ButtonNode *buttons[5] = {0, 0, 0, 0, 0};
+        short widths[5] = {0, 0, 0, 0, 0};
+        FlowError error;
+        for (int i = 0; i < 5; ++i)
+        {
+          LOKA_VERIFY(
+              ResolveSelector(&scene, WithinAnchor("groupRibbon").descendant<ButtonNode>(i + 1), buttons[i], error)
+              == FLOW_STEP_SUCCEEDED);
+          LOKA_VERIFY(controller.queryNaturalWidth(buttons[i], widths[i]));
+        }
+        TextNode *caption = 0;
+        LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("groupRibbon").descendant<TextNode>(1), caption, error)
+                    == FLOW_STEP_SUCCEEDED);
+        short captionWidth = 0;
+        LOKA_VERIFY(controller.queryNaturalWidth(caption, captionWidth));
+        const int gap = layout::FallbackControlMetrics::rowLayout().gap;
+        const int itemsWidth = widths[1] + gap + widths[2] + gap + widths[3];
+        const int groupWidth = itemsWidth > captionWidth ? itemsWidth : captionWidth;
+        if (captionIndex == 1)
+          LOKA_VERIFY(captionWidth > itemsWidth);
+        const int groupX = 20 + widths[0] + gap;
+        verifyButtonSeat(buttons[0], root, scale, 20, widths[0]);
+        int x = groupX;
+        for (int i = 1; i < 4; ++i)
+        {
+          verifyButtonSeat(buttons[i], root, scale, x, widths[i]);
+          x += widths[i] + gap;
+        }
+        verifyButtonSeat(buttons[4], root, scale, groupX + groupWidth + gap, widths[4]);
+        // STATIC spans the entire group seat; inspect the real context's native projection.
+        HWND captionWindow = NULL;
+        for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
+        {
+          wchar_t className[32];
+          LOKA_VERIFY(GetClassNameW(child, className, 32));
+          if (std::wcscmp(className, L"Static") == 0 || std::wcscmp(className, L"STATIC") == 0)
+            captionWindow = child;
+        }
+        LOKA_VERIFY(captionWindow != NULL);
+        const RECT seat = childRectInParent(captionWindow, root);
+        LOKA_VERIFY(seat.left == scale.projectEdge(groupX));
+        LOKA_VERIFY(seat.right == scale.projectEdge(groupX + groupWidth));
+        SceneTestAccess::unmount(scene);
+        controller.drainNativeRetirements();
+      }
+      LOKA_VERIFY(DestroyWindow(root));
+    }
 }
 
 void testWin32RibbonNaturalWidthTraversal()
