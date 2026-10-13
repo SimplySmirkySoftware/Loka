@@ -10,10 +10,7 @@ LOKA_TEST(testQuitSecondDeclineInSameTurnStillCancelsAttempt)
 LOKA_TEST(testQuitOtherDocumentDeclineInSameTurnEndsAttempt)
 LOKA_TEST(testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt)
 LOKA_TEST(testQuitAllAcceptedExitsWithStaticWindow)
-<<<<<<< HEAD
 LOKA_TEST(testQuitAllAcceptedWithoutStaticWindowQuitsOnce)
-=======
->>>>>>> origin/main
 LOKA_TEST(testDocumentWindowFactoryReceivesTheDocumentId)
 LOKA_TEST(testBootstrapWithEveryStaticWindowRefusedReportsWindowless)
 LOKA_TEST(testBootstrapWithTheSeededDocumentRefusedReportsWindowless)
