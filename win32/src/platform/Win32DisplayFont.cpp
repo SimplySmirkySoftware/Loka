@@ -48,6 +48,26 @@ namespace
     out.lfWidth = scale.scaleLengthFrom(systemScale, out.lfWidth);
     return true;
   }
+
+  // This rail's answer for each size role, in logical units of the message
+  // face. SmallLabel is -10 px at 96 dpi: the smallest size whose kana and
+  // kanji stayed legible beside the -12 px body in a window probe of Yu Gothic
+  // UI, Segoe UI and Meiryo UI (2026-10-13). For the same role the Toolbox
+  // answers Geneva 9 (ToolboxTextFontDescriptor::resolve), macOS the small
+  // system font (MacScenePlatformController.mm) and headless 9
+  // (SyntheticTextSize).
+  int RoleLogicalUnits(loka::app::TextSizeRole role)
+  {
+    switch (role)
+    {
+    case loka::app::TEXT_SIZE_ROLE_SMALL_LABEL:
+      return 10;
+    case loka::app::TEXT_SIZE_ROLE_COUNT:
+      break;
+    }
+    assert(!"TEXT_SIZE_ROLE_COUNT names no row");
+    return 0;
+  }
 } // namespace
 
 namespace loka
@@ -88,7 +108,10 @@ namespace loka
             // The shared native message-font row also serves fixed controls.
             if (row != kDefaultSizeRow)
             {
-              const int height = scale.fontHeightToNative(loka::app::detail::StyleVocabularySizes[row]);
+              const int logicalUnits = row < kRoleRowBase
+                                           ? loka::app::detail::StyleVocabularySizes[row]
+                                           : RoleLogicalUnits(static_cast<loka::app::TextSizeRole>(row - kRoleRowBase));
+              const int height = scale.fontHeightToNative(logicalUnits);
               if (height < 0)
                 return false;
               descriptor.lfHeight = -height;
@@ -110,6 +133,9 @@ namespace loka
     {
       const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
       const int italic = style.hasItalic_ && style.italic_ ? 1 : 0;
+      loka::app::TextSizeRole role;
+      if (style.size_.queryRole(role))
+        return this->fonts_[kRoleRowBase + role][bold][italic];
       int logicalUnits = 0;
       if (!style.size_.queryPoints(logicalUnits))
         return this->fonts_[kDefaultSizeRow][bold][italic];

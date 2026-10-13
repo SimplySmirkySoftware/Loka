@@ -467,6 +467,11 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       EndPaint(hwnd, &ps);
       break;
     }
+    case WM_CLOSE:
+      // Same request/terminal split as NullWindow::simulateCloseAsked.
+      if (self->app_ && self->app_->closeAsked(static_cast<Window *>(self)))
+        return 0;
+      return DefWindowProcW(hwnd, msg, wParam, lParam);
     case WM_DESTROY:
       self->dialogResults().close();
       self->teardownScene();
