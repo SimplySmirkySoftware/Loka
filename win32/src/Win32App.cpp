@@ -1,4 +1,3 @@
-#include "app/MenuComposition.hpp"
 #include "Win32App.hpp"
 #include "Win32Window.hpp"
 #include <windows.h>
@@ -169,10 +168,5 @@ void Win32App::projectMenu(Window *activeWindow, const loka::app::MenuSources &s
   Win32Window *win = activeWindow ? activeWindow->asWin32Window() : 0;
   if (!win || !win->hwnd())
     return;
-  // Temporary bridge, mirrored by the other rails until identity projection lands.
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
-      loka::app::MergeMenuBars(sources.base, sources.overlay));
-  if (!sources.absent() && !merged.isSet())
-    return;
-  win->menuAttachment().project(merged.get(), sources.source);
+  win->menuAttachment().project(sources);
 }
