@@ -455,14 +455,13 @@ namespace loka
           // with its parent) still turns RETIRED before its context hears
           // the terminal. Already-retired nodes are a silent same-value set.
           //
-          // Because it is the one door, it is also where gate provenance is
-          // checked. DestroyHeapNode lowers the bit on its way in, so a bit
-          // that is still raised here means the storage came from LokaAllocRaw
-          // and something else is destroying it -- the storage is about to go
-          // back to the wrong allocator. The base subobject is still alive in
-          // this body, so unlike a check in operator delete the read is
+          // Every door destroying non-heap storage lowers provenance first.
+          // Provenance still raised here proves another door (plain delete or
+          // a raw destructor call) is ending a node whose storage it does not own.
+          // The base subobject is still alive in this body, so the read is
           // well-defined and cannot be optimised away.
-          assert(!this->isGateAllocated() && "gate-allocated Node storage requires DestroyHeapNode");
+          assert(this->storageOrigin_ == STORAGE_HEAP &&
+                 "gate storage requires DestroyHeapNode; arena and partition storage requires its landlord through DestroyNodeInPlace");
           this->applyLifecycleFact(NODE_FACT_RETIRED);
           this->releaseContext();
         }
@@ -545,19 +544,6 @@ namespace loka
           return composeAttachLifecycle_.resolveChildComposeEvent(parentEvent);
         }
 
-        /** Arena and partition storage returns through its landlord, so delete
-            must not free either backing address. Tagged heap nodes instead use
-            DestroyHeapNode; plain global-new nodes use global delete. */
-        static void operator delete(void *ptr)
-        {
-          Node *node = static_cast<Node *>(ptr);
-          if (node && (node->isArenaAllocated() || node->isPartitionAllocated()))
-          {
-            // The storage landlord owns the backing address.
-            return;
-          }
-          ::operator delete(ptr);
-        }
         virtual void compose() {}
         virtual NodeKind kind() const
         {
@@ -839,6 +825,7 @@ namespace loka
         enum StorageOrigin { STORAGE_HEAP, STORAGE_GATE, STORAGE_PARTITION, STORAGE_ARENA };
         unsigned char storageOrigin_;
 
+        friend void DestroyNodeInPlace(Node *node);
         friend class BoundaryNode;
         friend class Scene;
         friend void NotifySubtreeNodeDetached(Node *node);
@@ -878,22 +865,36 @@ namespace loka
         return site;
       }
 
-      /** Destroys one runtime node through the door its storage came from.
-          Gate-resident nodes (NodeDefinition::create) return to the backend
-          under NodeHeapAllocationSite(); every other node keeps `delete`,
-          which routes through Node::operator delete — arena nodes skip the
-          free (the slab owns their storage), plain-new nodes (RootBoundary
-          wrapper, test fixtures) hit ::operator delete. Null-safe.
+      /** Destroys one runtime node in storage owned by the caller.
+          The caller returns the storage itself after this door lowers its
+          provenance and invokes the virtual destructor. Null-safe.
 
-          The provenance bit is read before the destructor runs, and then
-          lowered: past that point this function is the only thing that can
-          free the storage, so the bit has said everything it has to say. That
-          is what lets ~Node treat a raised bit as proof that some other door
-          is destroying gate storage. On the gate path the virtual destructor
-          destroys the most-derived node and the storage returns via
-          LokaFreeRaw. The creation path asserts the Node base subobject sits
-          at the storage address, so freeing through the Node* is
-          address-correct. */
+          Classifying the storage is the caller's job, done before this call:
+          once the door has run, every destructor in the chain sees heap
+          provenance, so no destructor may decide anything from its own
+          isArenaAllocated() / partitionOwner(). */
+      inline void DestroyNodeInPlace(Node *node)
+      {
+        if (!node)
+        {
+          return;
+        }
+        node->storageOrigin_ = Node::STORAGE_HEAP;
+        node->~Node();
+      }
+
+      /** Destroys one heap runtime node through the door its storage came from.
+          Gate-resident nodes (NodeDefinition::create) return to the backend
+          under NodeHeapAllocationSite(); plain-new nodes use global delete.
+          Arena and partition nodes return through their landlords; one passed
+          here is refused (asserts in debug, a no-op otherwise). Null-safe.
+
+          Provenance is read before destruction, then lowered by
+          DestroyNodeInPlace on the gate path. A raised provenance in ~Node
+          proves some other door is destroying non-heap storage. The virtual
+          destructor destroys the most-derived node and LokaFreeRaw returns
+          gate storage. The creation path asserts the Node base subobject sits
+          at the storage address, so freeing through Node* is address-correct. */
       inline void DestroyHeapNode(Node *node)
       {
         if (!node)
@@ -902,9 +903,15 @@ namespace loka
         }
         if (node->isGateAllocated())
         {
-          node->setGateAllocated(false);
-          node->~Node();
+          DestroyNodeInPlace(node);
           loka::core::LokaFreeRaw(node, NodeHeapAllocationSite());
+          return;
+        }
+        if (node->isArenaAllocated() || node->isPartitionAllocated())
+        {
+          // Refused in every build: neither destroyed nor freed. The node
+          // stays in its landlord's ledger, which ends it through its own door.
+          assert(false && "arena and partition nodes return through their landlord");
           return;
         }
         delete node;
@@ -1699,7 +1706,7 @@ namespace loka
         }
         virtual ~NestableNode()
         {
-          clearChildrenInternal(false);
+          clearChildrenInternal();
         }
 
         virtual void addChild(Node *child)
@@ -1739,7 +1746,7 @@ namespace loka
         }
 
       protected:
-        void clearChildrenInternal(bool deleteArenaChildren)
+        void clearChildrenInternal()
         {
           if (children_.count() == 0)
           {
@@ -1754,13 +1761,12 @@ namespace loka
             {
               continue;
             }
-            if (child->isPartitionAllocated() || (!deleteArenaChildren && child->isArenaAllocated()))
+            if (child->isPartitionAllocated() || child->isArenaAllocated())
             {
               continue;
             }
-            // Children are arena- or gate-created (createNodeWithArena /
-            // createNodeRecursive); DestroyHeapNode frees gate storage through
-            // the gate and lets arena children skip via Node::operator delete.
+            // Arena and partition children belong to their landlords.
+            // Remaining children return through their heap allocation door.
             DestroyHeapNode(child);
           }
         }
