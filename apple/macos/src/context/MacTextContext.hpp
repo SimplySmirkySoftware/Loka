@@ -32,6 +32,10 @@ public:
                  int height,
                  loka::app::TextNode *node);
   virtual ~MacTextContext();
+  /** Current single-line intrinsic width, using the Text layout measurement home.
+      Refusal leaves width untouched; no cache or native context is required. */
+  static bool
+  queryNaturalWidth(const loka::app::TextNode *text, const MacScenePlatformController *controller, short &width);
   virtual void onPropsApplied();
   virtual loka::app::scene::ICapturableBitmap *asCapturableBitmap()
   {
