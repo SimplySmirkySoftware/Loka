@@ -23,30 +23,8 @@ inline void PutDialogItem(unsigned char *&out, const Rect &bounds, unsigned char
   if (length & 1) *out++ = 0;
 }
 /** Alert placement: centered horizontally, one third down the work area. */
-inline Rect CenterDialogBounds(short width, short height)
-{
-  const Rect &screen = qd.screenBits.bounds;
-  const short workTop = static_cast<short>(screen.top + GetMBarHeight());
-  const short left = static_cast<short>((screen.left + screen.right - width) / 2);
-  const short top = static_cast<short>(workTop + (screen.bottom - workTop - height) / 3);
-  const Rect bounds = {top, left, static_cast<short>(top + height), static_cast<short>(left + width)};
-  return bounds;
-}
+Rect CenterDialogBounds(short width, short height);
 /** Preserve the caller's port and pen while drawing the default button ring. */
-inline void DrawDialogDefaultOutline(DialogPtr dialog, const Rect &button)
-{
-  GrafPtr savedPort;
-  GetPort(&savedPort);
-  SetPort(reinterpret_cast<GrafPtr>(dialog));
-  PenState savedPen;
-  GetPenState(&savedPen);
-  PenNormal();
-  PenSize(3, 3);
-  Rect bounds = button;
-  InsetRect(&bounds, -4, -4);
-  FrameRoundRect(&bounds, 16, 16);
-  SetPenState(&savedPen);
-  SetPort(savedPort);
-}
+void DrawDialogDefaultOutline(DialogPtr dialog, const Rect &button);
 } }
 #endif

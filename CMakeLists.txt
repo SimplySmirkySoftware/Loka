@@ -439,6 +439,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_executable(LokaToolboxOutOfMemoryTests
     tests/toolbox/host/ToolboxOutOfMemoryHostTests.cpp
     apple/toolbox/src/ToolboxOutOfMemory.cpp
+    apple/toolbox/src/ToolboxDialogConstruction.cpp
     apple/toolbox/src/ToolboxReserveGrowZone.cpp)
   target_include_directories(LokaToolboxOutOfMemoryTests PRIVATE
     tests/toolbox/host/oom apple/toolbox/src tests)
@@ -482,7 +483,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/TestingHooks.cpp
     apple/toolbox/src/context/ToolboxOpenFileDialogContext.cpp
     apple/toolbox/src/context/ToolboxConfirmDialogContext.cpp
-    apple/toolbox/src/ToolboxPendingDialogs.cpp)
+    apple/toolbox/src/ToolboxPendingDialogs.cpp
+    apple/toolbox/src/ToolboxDialogConstruction.cpp)
 
   target_include_directories(LokaToolboxFileChoiceTests PRIVATE
     tests/toolbox/host/dialog tests/toolbox/host tests apple/toolbox/src common tools example/SimpleViewer/src)
