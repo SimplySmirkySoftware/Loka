@@ -181,7 +181,8 @@ namespace loka
         NODE_KIND_SCROLL_VIEW = 15,
         NODE_KIND_CANVAS = 16,
         NODE_KIND_ATTRIBUTED_TEXT = 17,
-        NODE_KIND_TEXT_EDITOR = 18
+        NODE_KIND_TEXT_EDITOR = 18,
+        NODE_KIND_CONFIRM_DIALOG = 19
       };
 
       typedef unsigned short NodeTag;
@@ -260,6 +261,7 @@ namespace loka
     class ScrollViewNode;
     class CanvasNode;
     class OpenFileDialogNode;
+    class ConfirmDialogNode;
     class ImageViewNode;
     class RectSurfaceNode;
   } // namespace app
@@ -632,6 +634,10 @@ namespace loka
           return 0;
         }
         virtual ::loka::app::ScrollViewNode *asScrollViewNode()
+        {
+          return 0;
+        }
+        virtual ::loka::app::ConfirmDialogNode *asConfirmDialogNode()
         {
           return 0;
         }
