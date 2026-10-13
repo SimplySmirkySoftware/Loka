@@ -30,8 +30,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedWin32ConfirmDialog(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>());
   // Win32 has no ScrollBar context yet: a known unsupported kind must take
   // the typed-refusal path, not trip the accidental-miss assert. ScrollView
   // is a controller-owned projection-parent arm and does not use this leaf
@@ -81,6 +79,5 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   RegisterWin32CellNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32OpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32ScrollBar);
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32ConfirmDialog);
   RegisterWin32ConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
 }
