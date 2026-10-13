@@ -1,3 +1,4 @@
+#include "support/MenuStructure.hpp"
 #include "MenuCompletionTests.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/MenuComposition.hpp"
@@ -170,12 +171,12 @@ void testMergeMenuBarsReplacesInPlaceAndAppendsInOrder()
   expected << (Menu("File") << MenuItem("Save")) << (Menu("Help") << MenuItem("Help"))
            << (Menu("View") << MenuItem("Zoom")) << (Menu("Tools") << MenuItem("Run"));
   OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
-  LOKA_VERIFY(merged.isSet() && merged->equalsStructure(expected));
-  LOKA_VERIFY(base.equalsStructure(defaultBar()));
+  LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(base, defaultBar()));
   OwnedDef<MenuBarDefinition> baseOnly(MergeMenuBars(&base, 0));
   OwnedDef<MenuBarDefinition> overlayOnly(MergeMenuBars(0, &overlay));
-  LOKA_VERIFY(baseOnly.isSet() && baseOnly->equalsStructure(base));
-  LOKA_VERIFY(overlayOnly.isSet() && overlayOnly->equalsStructure(overlay));
+  LOKA_VERIFY(baseOnly.isSet() && loka::app::testing::EqualsStructure(*baseOnly, base));
+  LOKA_VERIFY(overlayOnly.isSet() && loka::app::testing::EqualsStructure(*overlayOnly, overlay));
   OwnedDef<MenuBarDefinition> absent(MergeMenuBars(0, 0));
   LOKA_VERIFY(!absent.isSet());
   loka::app::testing::failMenuBarDefinitionClones(2);

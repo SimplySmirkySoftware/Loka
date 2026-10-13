@@ -3,13 +3,15 @@
 
 void testMacMenuProjectionDetachesMainMenuBeforeReleasingTarget();
 
-void testMacMenuAttachmentProjectsOnceForEqualBar();
+void testMacMenuAttachmentProjectsOnceForIdentity();
+void testMacMenuDoorSkipsMergeForUnchangedSources();
 void testMacMenuDoorSkipsProjectionDuringTracking();
 void testMacMenuAttachmentDisconnectStripsTargetAndAction();
 void testMacSceneDetachReleasesMenu();
+void testMacMenuReleaseThenAbsentRemovesMainMenu();
 void testMacNativeCloseReleasesMenuBeforeReclaim();
 void testMacAppShutdownReleasesMenuBeforeAttachmentDestruction();
-void testMacMenuAttachmentCloneRefusalClearsBaseline();
+void testMacMenuAttachmentMergeRefusalPreservesProjection();
 void testMacMenuAttachmentDispatchMayDisconnect();
 
 void testMacMenuTitleFollowsState();

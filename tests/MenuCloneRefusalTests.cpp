@@ -1,3 +1,4 @@
+#include "support/MenuStructure.hpp"
 #include "MenuCloneRefusalTests.hpp"
 #include "app/Menu.hpp"
 #include "support/TestVerify.hpp"
@@ -37,7 +38,7 @@ void testMenuAssignmentPreservesDestination()
   loka::app::testing::failMenuItemDefinitionClones(0);
   LOKA_VERIFY(destination.title.equals(String::Literal("Old")));
   LOKA_VERIFY(destination.itemsCount() == 1);
-  LOKA_VERIFY(destination.equalsStructure(before));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(destination, before));
 }
 
 void testMenuMergeRefusesNestedClone()
@@ -60,19 +61,19 @@ void testMenuClonePreservesStructure()
   fillBar(bar);
   OwnedDef<MenuBarDefinition> copy(bar.clone());
   LOKA_VERIFY(copy.isSet());
-  LOKA_VERIFY(copy->equalsStructure(bar));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*copy, bar));
   LOKA_VERIFY(copy->menuAt(0) != bar.menuAt(0));
   LOKA_VERIFY(copy->menuAt(0)->itemsHead()->childrenHead() !=
               bar.menuAt(0)->itemsHead()->childrenHead());
   MenuBarDefinition assigned;
   assigned = bar;
-  LOKA_VERIFY(assigned.equalsStructure(bar));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(assigned, bar));
   MenuDefinition menu;
   menu = *bar.menuAt(0);
-  LOKA_VERIFY(menu.equalsStructure(*bar.menuAt(0)));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(menu, *bar.menuAt(0)));
   MenuItemDefinition item;
   item = *menu.itemsHead();
-  LOKA_VERIFY(item.equalsStructure(*menu.itemsHead()));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(item, *menu.itemsHead()));
 }
 
 void testMenuCloneFailCounts()
@@ -114,7 +115,7 @@ void testMenuItemAssignmentPreservesDestination()
   loka::app::testing::failMenuItemDefinitionClones(0);
   LOKA_VERIFY(destination.title.equals(String::Literal("Old")));
   LOKA_VERIFY(destination.childrenCount() == 1);
-  LOKA_VERIFY(destination.equalsStructure(before));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(destination, before));
   LOKA_VERIFY(destination.nextInComposition == &link);
 }
 
@@ -127,7 +128,7 @@ void testMenuBarAssignmentPreservesDestination()
   loka::app::testing::failMenuDefinitionClones(1);
   destination = source;
   loka::app::testing::failMenuDefinitionClones(0);
-  LOKA_VERIFY(destination.equalsStructure(before));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(destination, before));
 }
 
 void testMenuCopyConstructorRefusalLeavesEmpty()
@@ -168,11 +169,11 @@ void testMenuListCopyCommitsOnlyCompletedChain()
   LOKA_VERIFY(destination.head()->title.equals(String::Literal("Old")));
   LOKA_VERIFY(destination.copyFrom(source));
   LOKA_VERIFY(destination.count() == 2);
-  LOKA_VERIFY(destination.head()->equalsStructure(first));
-  LOKA_VERIFY(destination.head()->nextInComposition->equalsStructure(second));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*destination.head(), first));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*destination.head()->nextInComposition, second));
   LOKA_VERIFY(destination.appendClone(old));
   LOKA_VERIFY(destination.count() == 3);
-  LOKA_VERIFY(destination.head()->nextInComposition->nextInComposition->equalsStructure(old));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*destination.head()->nextInComposition->nextInComposition, old));
   loka::app::testing::failMenuItemDefinitionClones(1);
   LOKA_VERIFY(destination.copyFrom(destination));
   loka::app::testing::failMenuItemDefinitionClones(0);
@@ -199,5 +200,5 @@ void testMenuSelfAssignmentDoesNotClone()
   loka::app::testing::failMenuItemDefinitionClones(0);
   loka::app::testing::failMenuDefinitionClones(0);
   LOKA_VERIFY(!refusedItem.isSet() && !refusedMenu.isSet());
-  LOKA_VERIFY(bar.equalsStructure(before));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(bar, before));
 }

@@ -1,4 +1,3 @@
-#include "app/MenuComposition.hpp"
 #include "MacApp.hpp"
 #include "core/Operation.hpp"
 #include "MacWindow.hpp"
@@ -217,10 +216,5 @@ void MacApp::projectMenu(Window *window, const loka::app::MenuSources &sources)
 {
   if (window != this->activeWindow() || IsEventTrackingRunLoopMode())
     return;
-  // Temporary bridge, mirrored by the other rails until identity projection lands.
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
-      loka::app::MergeMenuBars(sources.base, sources.overlay));
-  if (!sources.absent() && !merged.isSet())
-    return;
-  this->menuAttachment_.project(merged.get(), sources.source);
+  this->menuAttachment_.project(sources);
 }
