@@ -31,6 +31,7 @@
 #include "app/nodes/controls/EditText.hpp"
 #include "app/scene/Node.hpp"
 #include "context/MacEditTextContext.hpp"
+#include "context/MacTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacOpenFileDialogContext.hpp"
 #include "context/MacRectSurfaceContext.hpp"
@@ -124,6 +125,10 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
 
 bool MacScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
+  // A consulting NATURAL Row asks at most twice per allocation; each ask
+  // measures only this leaf's current string, with no foreign rows or cache.
+  if (child && child->asTextNode())
+    return MacTextContext::queryNaturalWidth(child->asTextNode(), this, width);
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   if (!button)
     return false;

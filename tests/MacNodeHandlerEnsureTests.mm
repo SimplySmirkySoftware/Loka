@@ -701,7 +701,11 @@ namespace
     {
       ++this->attempts_;
       if (!this->available_)
+      {
+        // Refusal may leave partial output; callers must honor the result.
+        out.append("partial");
         return false;
+      }
       out.append("retry the same wrapped text");
       return true;
     }
@@ -1107,4 +1111,310 @@ void testMacSmallLabelUsesTheSmallSystemFont()
   [root release];
   [pool drain];
   std::printf("==== [testMacSmallLabelUsesTheSmallSystemFont] PASSED ====\n");
+}
+
+#include "app/nodes/controls/Ribbon.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
+#include <climits>
+#include <limits>
+
+namespace
+{
+  short VerifyMacTextNaturalWidth(loka::app::TextNode &node, MacScenePlatformController &controller, NSView *root)
+  {
+    short width = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(&node, width));
+    loka::app::scene::LayoutState state;
+    state.width = width;
+    node.layoutProjected(&controller, state);
+    LOKA_VERIFY([[root subviews] count] == 1);
+    NSTextField *field = (NSTextField *)[[root subviews] objectAtIndex:0];
+    LOKA_VERIFY([field isKindOfClass:[NSTextField class]]);
+    // The presented context is the independent reference, including its font
+    // and cell insets. No controller answer or measurement hook is overridden.
+    const NSSize measured = [[field cell] cellSizeForBounds:NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX)];
+    LOKA_VERIFY(width == controller.projection().measurementToLu(measured.width));
+    return width;
+  }
+} // namespace
+
+void testMacTextNaturalWidthMatchesLayout()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int scale = 0; scale < 2; ++scale)
+  {
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 160)];
+    {
+      MacScenePlatformController controller(root, metrics[scale]);
+      short body = 0, small = 0;
+      {
+        TextNode node(Text("Alignment settings").props);
+        body = VerifyMacTextNaturalWidth(node, controller, root);
+      }
+      {
+        TextNode node((Text("Alignment settings") + SmallLabel).props);
+        small = VerifyMacTextNaturalWidth(node, controller, root);
+      }
+      {
+        TextNode node((Text("Alignment settings") + SmallLabel + Bold).props);
+        LOKA_VERIFY(VerifyMacTextNaturalWidth(node, controller, root) > small);
+      }
+      LOKA_VERIFY(small < body);
+      MutableState<String> text(String::Literal("Alignment settings"));
+      MutableState<TextStyle> style(SmallLabel);
+      PushStateTracker tracker;
+      tracker.addState(&text);
+      tracker.addState(&style);
+      TextNode live((Text(&text) + &style).props);
+      short before = 0, after = 0;
+      LOKA_VERIFY(controller.queryNaturalWidth(&live, before));
+      LOKA_VERIFY(before == small);
+      {
+        StateTrackerGuard guard(&tracker);
+        style.set(SmallLabel + Bold);
+      }
+      LOKA_VERIFY(controller.queryNaturalWidth(&live, after));
+      LOKA_VERIFY(after > before);
+      before = after;
+      {
+        StateTrackerGuard guard(&tracker);
+        text.set(String::Literal("Alignment settings and additional controls"));
+      }
+      LOKA_VERIFY(controller.queryNaturalWidth(&live, after));
+      LOKA_VERIFY(after > before);
+      LOKA_VERIFY(VerifyMacTextNaturalWidth(live, controller, root) == after);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+  }
+  [pool drain];
+}
+
+namespace
+{
+  NSSize MacZeroTextMeasurement(id, SEL, NSRect)
+  {
+    return NSMakeSize(0, 20);
+  }
+
+  NSSize MacNegativeTextMeasurement(id, SEL, NSRect)
+  {
+    return NSMakeSize(-1, 20);
+  }
+
+  NSSize MacInfiniteTextMeasurement(id, SEL, NSRect)
+  {
+    return NSMakeSize(HUGE_VAL, 20);
+  }
+
+  NSSize MacNanTextMeasurement(id, SEL, NSRect)
+  {
+    return NSMakeSize(std::numeric_limits<CGFloat>::quiet_NaN(), 20);
+  }
+
+  class MacInvalidUtf8String : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append(1, static_cast<char>(0xff));
+      return true;
+    }
+  };
+
+  NSFont *MacMissingTextFont(id, SEL)
+  {
+    return nil;
+  }
+
+  NSFont *MacMissingSystemFont(id, SEL, CGFloat)
+  {
+    return nil;
+  }
+
+  /** Test-only scoped native refusal, installed on the measured cell class. */
+  class MacTextNativeRefusal
+  {
+  public:
+    MacTextNativeRefusal(SEL selector, IMP replacement, Class cell = [NSTextFieldCell class])
+    {
+      Method inherited = class_getInstanceMethod(cell, selector);
+      LOKA_VERIFY(inherited != 0);
+      class_addMethod(cell, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited));
+      this->method_ = class_getInstanceMethod(cell, selector);
+      this->original_ = method_setImplementation(this->method_, replacement);
+    }
+    ~MacTextNativeRefusal()
+    {
+      method_setImplementation(this->method_, this->original_);
+    }
+
+  private:
+    Method method_;
+    IMP original_;
+    MacTextNativeRefusal(const MacTextNativeRefusal &);
+    MacTextNativeRefusal &operator=(const MacTextNativeRefusal &);
+  };
+} // namespace
+
+void testMacTextNaturalWidthDeclines()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 160)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    short width = 17;
+    TextNode absent((TextProps()));
+    LOKA_VERIFY(!controller.queryNaturalWidth(&absent, width));
+    LOKA_VERIFY(width == 17);
+    const char *values[] = {"", "first\nsecond", "first\rsecond"};
+    for (int i = 0; i < 3; ++i)
+    {
+      TextNode node(Text(values[i]).props);
+      LOKA_VERIFY(!controller.queryNaturalWidth(&node, width));
+      LOKA_VERIFY(width == 17);
+    }
+    const String invalidUtf8(Managed<loka::platform::String>::Wrap(new MacInvalidUtf8String()));
+    TextNode invalid(Text(invalidUtf8).props);
+    LOKA_VERIFY(!controller.queryNaturalWidth(&invalid, width));
+    LOKA_VERIFY(width == 17);
+    TextNode oversized(Text(String(std::string(SHRT_MAX + 1, 'W'))).props);
+    LOKA_VERIFY(!controller.queryNaturalWidth(&oversized, width));
+    LOKA_VERIFY(width == 17);
+    MacRetryString *source = new MacRetryString();
+    const String value(Managed<loka::platform::String>::Wrap(source));
+    TextNode retry(Text(value).props);
+    LOKA_VERIFY(controller.queryNaturalWidth(&retry, width));
+    const short good = width;
+    source->available(false);
+    width = 17;
+    LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
+    LOKA_VERIFY(width == 17);
+    source->available(true);
+    LOKA_VERIFY(controller.queryNaturalWidth(&retry, width));
+    LOKA_VERIFY(width == good);
+    const IMP measurements[] = {reinterpret_cast<IMP>(&MacZeroTextMeasurement),
+                                reinterpret_cast<IMP>(&MacNegativeTextMeasurement),
+                                reinterpret_cast<IMP>(&MacInfiniteTextMeasurement),
+                                reinterpret_cast<IMP>(&MacNanTextMeasurement)};
+    for (int i = 0; i < 4; ++i)
+    {
+      MacTextNativeRefusal refusal(@selector(cellSizeForBounds:), measurements[i]);
+      width = 17;
+      LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
+      LOKA_VERIFY(width == 17);
+    }
+    {
+      MacTextNativeRefusal refusal(@selector(font), reinterpret_cast<IMP>(&MacMissingTextFont));
+      width = 17;
+      LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
+      LOKA_VERIFY(width == 17);
+    }
+    LOKA_VERIFY(controller.queryNaturalWidth(&retry, width));
+    LOKA_VERIFY(width == good);
+  }
+  MacScenePlatformController *missingFont = 0;
+  {
+    MacTextNativeRefusal refusal(
+        @selector(systemFontOfSize:), reinterpret_cast<IMP>(&MacMissingSystemFont), object_getClass([NSFont class]));
+    missingFont = new MacScenePlatformController(root, RailMetrics());
+  }
+  // Native defaults work again, but this controller captured a refused styled
+  // font. The query must not substitute the fresh label's default for it.
+  TextNode styled((Text("Alignment") + SmallLabel).props);
+  TextNode unstyled(Text("Alignment").props);
+  short width = 17;
+  LOKA_VERIFY(missingFont->textFont(SmallLabel) == 0);
+  LOKA_VERIFY(!missingFont->queryNaturalWidth(&styled, width));
+  LOKA_VERIFY(width == 17);
+  LOKA_VERIFY(missingFont->queryNaturalWidth(&unstyled, width));
+  delete missingFont;
+  [root release];
+  [pool drain];
+}
+
+void testMacRibbonGroupNaturalWidthFrames()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  // The short caption is the band SimpleText will carry; whichever part is
+  // wider sets the seat. The long caption must win, so the caption counts.
+  const char *captions[] = {"Alignment", "Paragraph alignment and indentation controls"};
+  for (int run = 0; run < 4; ++run)
+  {
+    const int scale = run / 2;
+    const int sample = run % 2;
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 160)];
+    {
+      MacScenePlatformController controller(root, metrics[scale]);
+      NodeDefinitionBase *definition =
+          (RibbonControl().testId("NaturalGroup")
+           << RibbonItem("Open")
+           << (RibbonGroup(captions[sample]) << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
+           << RibbonItem("Close"))
+              .clone();
+      LOKA_VERIFY(definition != 0);
+      Scene scene(definition);
+      LOKA_VERIFY(scene.mount(&controller));
+      SceneTestAccess::updateAttached(scene, true);
+      controller.relayout(640, 160);
+      Node *anchor = 0;
+      FlowError error;
+      LOKA_VERIFY(LookupNodeById<Node>(&scene, "NaturalGroup", anchor, error) == FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(anchor && anchor->asStackNode());
+      StackNode *ribbon = anchor->asStackNode();
+      CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
+      Node *open = top.next();
+      StackNode *group = top.next()->asStackNode();
+      LOKA_VERIFY(group != 0);
+      CompositionCursor<Node> parts(group->childrenHead(), group->childrenCount());
+      StackNode *items = parts.next()->asStackNode();
+      Node *caption = parts.next();
+      LOKA_VERIFY(items && caption && caption->asTextNode());
+      const int gap = layout::FallbackControlMetrics::kHorizontalSpacing;
+      int itemsWidth = 2 * gap;
+      CompositionCursor<Node> buttons(items->childrenHead(), items->childrenCount());
+      for (Node *button = buttons.next(); button; button = buttons.next())
+      {
+        short width = 0;
+        LOKA_VERIFY(controller.queryNaturalWidth(button, width));
+        itemsWidth += width;
+      }
+      short captionWidth = 0, openWidth = 0;
+      LOKA_VERIFY(controller.queryNaturalWidth(caption, captionWidth));
+      LOKA_VERIFY(controller.queryNaturalWidth(open, openWidth));
+      const int seat = captionWidth > itemsWidth ? captionWidth : itemsWidth;
+      LOKA_VERIFY([[root subviews] count] == 6);
+      NSTextField *captionField = (NSTextField *)[[root subviews] objectAtIndex:4];
+      NSButton *closeButton = (NSButton *)[[root subviews] objectAtIndex:5];
+      LOKA_VERIFY([captionField isKindOfClass:[NSTextField class]]);
+      LOKA_VERIFY([[captionField stringValue] isEqualToString:[NSString stringWithUTF8String:captions[sample]]]);
+      LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
+      const int groupX = 20 + openWidth + gap;
+      const loka::macos::MacProjection &projection = controller.projection();
+      LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX).pt);
+      LOKA_VERIFY([captionField frame].size.width == projection.projectLength(groupX, groupX + seat).pt);
+      LOKA_VERIFY([closeButton frame].origin.x == projection.projectEdge(groupX + seat + gap).pt);
+      std::printf(
+          "macOS ribbon widths: caption=%d items=%d scale=%d sample=%d\n", captionWidth, itemsWidth, scale, sample);
+      if (sample == 1)
+        LOKA_VERIFY(captionWidth > itemsWidth);
+      SceneTestAccess::unmount(scene);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+  }
+  [pool drain];
 }

@@ -17,6 +17,8 @@ namespace loka
       public:
         explicit KeySnapshot(const loka::core::State<K> *key) : key_(key), value_(key->get()) {}
         KeySnapshot(const loka::core::State<K> *key, const K &value) : key_(key), value_(value) {}
+        /** The captured key, independent of subsequent live-key changes. */
+        const K &value() const { return this->value_; }
         bool matches() const { return this->value_ == this->key_->get(); }
 
       private:

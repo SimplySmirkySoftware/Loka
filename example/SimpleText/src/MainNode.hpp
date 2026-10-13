@@ -3,6 +3,7 @@
 
 #include "app/scene/BorrowedKeys.hpp"
 #include "app/scene/KeySnapshot.hpp"
+#include "app/scene/node/ComponentNode.hpp"
 #include "platform/file/FileHandle.hpp"
 #include "app/core/DocumentFacts.hpp"
 #include "app/core/DocumentRoster.hpp"
@@ -17,6 +18,7 @@
 #include "app/Menu.hpp"
 #include "app/CommandSet.hpp"
 #include "app/OpenFileDialog.hpp"
+#include "app/ConfirmDialog.hpp"
 #include "app/TextDocumentFile.hpp"
 #include "app/scene/state/FlowSlot.hpp"
 
@@ -62,7 +64,9 @@ namespace simpletext
   {
     NONE,
     OPEN,
-    SAVE
+    SAVE,
+    CONFIRM_CLOSE,
+    SAVE_FOR_CLOSE
   };
   class MainTypeTag
   {
@@ -126,6 +130,52 @@ namespace simpletext
     };
     loka::app::scene::BorrowedKeys<KEY_COUNT> keys_;
     loka::core::ItemId document_;
+  };
+
+  class ConfirmCloseTypeTag {};
+  class ConfirmCloseNode;
+
+  /** Borrows the document identity and forwards the owner's rail result channel. */
+  struct ConfirmCloseProps : loka::app::scene::NodePropsBase<ConfirmCloseProps>
+  {
+    typedef ConfirmCloseTypeTag TypeTag;
+    typedef ConfirmCloseNode NodeType;
+    MainProps document;
+    loka::app::scene::NodeState<loka::app::ConfirmResult> result;
+    ConfirmCloseProps(const MainProps &owner,
+                      const loka::app::scene::NodeState<loka::app::ConfirmResult> &channel)
+        : document(owner), result(channel) {}
+    bool operator<(const loka::app::scene::PropsBase &rhs) const
+    {
+      if (rhs.propsTypeId() != this->propsTypeId())
+        return false;
+      const ConfirmCloseProps &other = static_cast<const ConfirmCloseProps &>(rhs);
+      if (this->document < other.document)
+        return true;
+      if (other.document < this->document)
+        return false;
+      return this->result.state() < other.result.state();
+    }
+  };
+
+  /** Captures the current title when the confirmation arm mounts, not at app composition. */
+  class ConfirmCloseNode : public loka::app::scene::ComponentNodeWithProps<ConfirmCloseProps>
+  {
+  public:
+    explicit ConfirmCloseNode(const ConfirmCloseProps &props)
+        : loka::app::scene::ComponentNodeWithProps<ConfirmCloseProps>(props) {}
+
+  protected:
+    virtual void composeChildren(loka::app::scene::NodeComposition &c)
+    {
+      using namespace loka::app;
+      using namespace loka::core;
+      const Document *entry = this->props.document.documents()->find(this->props.document.document());
+      const String title = entry ? entry->title : String::Literal("Untitled");
+      c.declare(ConfirmDialog(ConfirmDialogOptions(String::Literal("Save changes to ") + title + "?"))
+                    .result(this->props.result)
+                    .testId("SimpleText.ConfirmClose"));
+    }
   };
 
   /** One document owner; chooser facts arrive through separate rail-written channels. */
@@ -194,6 +244,7 @@ namespace simpletext
       this->state(this->operation_, NONE);
       this->state(this->openResult_, Choice());
       this->state(this->saveResult_, Choice());
+      this->state(this->confirmResult_, loka::app::ConfirmResult::none());
       this->state(this->error_, loka::core::String());
       this->state(this->cursor_, loka::app::LineCursor::None());
       this->state(this->caret_, loka::app::LineCursor::None());
@@ -223,6 +274,7 @@ namespace simpletext
     {
       this->props.assertInitialized();
       t.actions(this->commands_, this, &MainNode::onCommand);
+      t.watch(*this->confirmResult_.state(), this, &MainNode::completeConfirm);
       // Immediate: a request published before this node mounted (a document
       // opened and asked to close in one turn, a Quit that reached a row whose
       // window was not admitted yet) is answered at attach, not lost.
@@ -251,6 +303,11 @@ namespace simpletext
                     << MenuSeparator()
                     << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP)));
       // One seat on the operation: at most one dialog exists, and none while idle.
+      const PolicyScopeDefinition saveDialog = PolicyScopeDefinition().destroyOnDetach()
+          << SaveFileDialog(String::Literal("untitled.txt"))
+                 .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
+                 .result(this->saveResult_)
+                 .testId("SimpleText.Save");
       MatchDefinition<Operation> dialog = Match(*this->operation_.state());
       dialog
           .arm(OPEN, PolicyScopeDefinition().destroyOnDetach()
@@ -258,11 +315,10 @@ namespace simpletext
                                 .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
                                 .result(this->openResult_)
                                 .testId("SimpleText.Open"))
-          .arm(SAVE, PolicyScopeDefinition().destroyOnDetach()
-                         << SaveFileDialog(String::Literal("untitled.txt"))
-                                .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
-                                .result(this->saveResult_)
-                                .testId("SimpleText.Save"))
+          .arm(SAVE, saveDialog)
+          .arm(CONFIRM_CLOSE, PolicyScopeDefinition().destroyOnDetach()
+                                  << scene::Component(ConfirmCloseProps(this->props, this->confirmResult_)))
+          .arm(SAVE_FOR_CLOSE, saveDialog)
           .otherwise(Fragment());
       // The band and File menu fire the same emitters.
       c.declare(
@@ -335,16 +391,62 @@ namespace simpletext
       const Document *entry = this->props.documents()->find(this->props.document());
       if (entry && entry->edited)
       {
-        // d3 replaces this edited-document decline with CONFIRM_CLOSE.
-        if (!ask.id.isNone())
-          this->props.documents()->declineClose(ask);
+        this->operation_.set(CONFIRM_CLOSE);
         return;
       }
+      this->closeDocument();
+    }
+    void closeDocument()
+    {
       loka::core::StateTrackerGuard guard(this->tracker());
       // A second Close before admission finds the document already gone.
       const loka::core::ListEditResult result = this->props.documents()->close(this->props.document());
       assert(result == loka::core::EDIT_OK || result == loka::core::EDIT_ID_NOT_FOUND);
       (void)result;
+    }
+    void declineConfirmedClose()
+    {
+      this->operation_.set(NONE);
+      const loka::app::CloseAsk &ask = this->answered_.value();
+      if (!ask.id.isNone())
+        this->props.documents()->declineClose(ask);
+    }
+    void completeConfirm()
+    {
+      using namespace loka::app;
+      const ConfirmResult result = this->confirmResult_.get();
+      if (this->operation_.get() != CONFIRM_CLOSE || result.kind == ConfirmResult::CONFIRM_NONE)
+        return;
+      switch (result.kind)
+      {
+      case ConfirmResult::CONFIRM_CANCEL:
+        this->declineConfirmedClose();
+        break;
+      case ConfirmResult::CONFIRM_DISCARD:
+        this->closeDocument();
+        break;
+      case ConfirmResult::CONFIRM_ERROR:
+        this->error_.set(loka::core::String::Literal("Confirmation dialog failed."));
+        this->declineConfirmedClose();
+        break;
+      case ConfirmResult::CONFIRM_SAVE:
+      {
+        this->operation_.set(SAVE_FOR_CLOSE);
+        const Choice destination = this->currentFile();
+        if (destination.kind == Choice::RESULT_FILE)
+          this->completeSaveForClose(this->commitDocument(SAVE_DOCUMENT, destination));
+        break;
+      }
+      case ConfirmResult::CONFIRM_NONE:
+        break;
+      }
+    }
+    void completeSaveForClose(bool committed)
+    {
+      if (committed)
+        this->closeDocument();
+      else
+        this->declineConfirmedClose();
     }
     void openDocument()
     {
@@ -373,18 +475,23 @@ namespace simpletext
     }
     static void saved(const Choice &result, void *owner)
     {
-      static_cast<MainNode *>(owner)->completeChooser(SAVE, result);
+      MainNode *node = static_cast<MainNode *>(owner);
+      node->completeChooser(node->operation_.get() == SAVE_FOR_CLOSE ? SAVE_FOR_CLOSE : SAVE, result);
     }
     void completeChooser(Operation expected, const Choice &result)
     {
-      if (this->operation_.get() != expected || result.kind == Choice::RESULT_NONE)
+      if (this->operation_.get() != expected
+          || (result.kind == Choice::RESULT_NONE && expected != SAVE_FOR_CLOSE))
         return;
       this->operation_.set(NONE);
       switch (result.kind)
       {
       case Choice::RESULT_FILE:
-        this->commitDocument(expected == OPEN ? OPEN_DOCUMENT : SAVE_DOCUMENT, result);
-        break;
+        if (expected == SAVE_FOR_CLOSE)
+          this->completeSaveForClose(this->commitDocument(SAVE_DOCUMENT, result));
+        else
+          this->commitDocument(expected == OPEN ? OPEN_DOCUMENT : SAVE_DOCUMENT, result);
+        return;
       case Choice::RESULT_FOLDER:
       case Choice::RESULT_ERROR:
         this->error_.set(loka::core::String::Literal("File dialog failed."));
@@ -393,6 +500,8 @@ namespace simpletext
       case Choice::RESULT_NONE:
         break;
       }
+      if (expected == SAVE_FOR_CLOSE)
+        this->declineConfirmedClose();
     }
 
     static loka::core::String failureText(DocumentAction action, loka::app::TextDocumentResult result)
@@ -418,7 +527,7 @@ namespace simpletext
     }
 
     /** The sole destination writer. Replacement success also supersedes stale caret IDs. */
-    void commitDocument(DocumentAction action, const Choice &destination)
+    bool commitDocument(DocumentAction action, const Choice &destination)
     {
       using namespace loka::app;
       loka::core::StateTrackerGuard guard(this->tracker());
@@ -445,13 +554,14 @@ namespace simpletext
       if (!committed)
       {
         this->error_.set(failureText(action, result));
-        return;
+        return false;
       }
       this->saved_ = loka::app::scene::KeySnapshot<loka::core::ListRevision>(&this->lines_.revision());
       this->publishFacts(destination);
       this->error_.set(loka::core::String());
       if (action != SAVE_DOCUMENT)
         this->caret_.set(LineCursor(this->lines_.at(0).id, 0));
+      return true;
     }
 
     Choice currentFile() const
@@ -495,6 +605,7 @@ namespace simpletext
     loka::app::scene::KeySnapshot<loka::app::CloseAsk> answered_;
     loka::app::scene::NodeState<Operation> operation_;
     loka::app::scene::NodeState<Choice> openResult_, saveResult_;
+    loka::app::scene::NodeState<loka::app::ConfirmResult> confirmResult_;
     loka::app::scene::NodeState<loka::core::String> error_;
     loka::app::scene::FlowSlot<ChoiceFlow> openFlow_, saveFlow_;
   };
