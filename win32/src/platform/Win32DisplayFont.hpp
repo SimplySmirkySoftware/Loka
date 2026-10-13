@@ -29,11 +29,14 @@ namespace loka
       HFONT replacementFor(HFONT font, const Win32DisplayFont &replacement) const;
 
     private:
+      // Rows: one per vocabulary size, one per size role, then the native
+      // message-font row that fixed controls share.
       enum
       {
         kSizeCount = loka::app::detail::kStyleVocabularySizeCount,
-        kDefaultSizeRow = kSizeCount,
-        kFontRowCount = kSizeCount + 1
+        kRoleRowBase = kSizeCount,
+        kDefaultSizeRow = kRoleRowBase + loka::app::TEXT_SIZE_ROLE_COUNT,
+        kFontRowCount = kDefaultSizeRow + 1
       };
       HFONT fonts_[kFontRowCount][2][2];
       Win32DisplayScale scale_;
