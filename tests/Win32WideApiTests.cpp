@@ -12,6 +12,8 @@
 #include "app/nodes/controls/Cell.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "context/Win32CellContext.hpp"
+#include "context/Win32RibbonGroupEdgeContext.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "context/Win32AttributedTextContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
 #include "context/Win32RectSurfaceContext.hpp"
@@ -74,6 +76,16 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     Win32CellContext cell(&controller, root, 0, 0, 80, 24, &cellNode);
     verifyWideChildWindow(root, L"LOKA_CELL");
 
+    loka::app::RibbonGroupEdgeNode edgeNode((loka::app::RibbonGroupEdgeProps()));
+    Win32RibbonGroupEdgeContext edge(&controller, root, 85, 0, 1, 24, &edgeNode);
+    verifyWideChildWindow(root, L"LOKA_RIBBON_GROUP_EDGE");
+    HWND edgeWindow = findChildWindowByClass(root, L"LOKA_RIBBON_GROUP_EDGE");
+    const wchar_t edgeTitle[] = {0xff21, 0xd83d, 0xde00, 0};
+    LOKA_VERIFY(SetWindowTextW(edgeWindow, edgeTitle));
+    wchar_t edgeRoundTrip[8];
+    LOKA_VERIFY(GetWindowTextW(edgeWindow, edgeRoundTrip, 8) == 3);
+    LOKA_VERIFY(std::wcscmp(edgeRoundTrip, edgeTitle) == 0);
+
     loka::app::ImageViewProps imageProps;
     loka::app::ImageViewNode imageNode(imageProps);
     Win32ImageViewContext image(&controller, root, 0, 30, 80, 60, &imageNode);
@@ -102,6 +114,7 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");
 
     attributed.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
+    edge.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     cell.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     image.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     surface.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);

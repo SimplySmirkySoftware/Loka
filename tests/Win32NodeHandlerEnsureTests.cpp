@@ -1,3 +1,5 @@
+#include "support/LifecycleFactTestAccess.hpp"
+#include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "support/TextEditorStateOwner.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "Win32NodeHandlerEnsureTests.hpp"
@@ -1671,4 +1673,115 @@ void testWin32AttributedTextInksAndAdditivity()
     ReleaseDC(root, source);
   }
   DestroyWindow(root);
+}
+
+void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  const int dpis[] = {96, 144};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+  {
+    const loka::win32::Win32DisplayScale scale(dpis[scaleIndex], RailMetrics());
+    HWND root = CreateWindowExW(
+        0, L"STATIC", L"ribbon-edge-host", WS_POPUP, 0, 0, 600, 300, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    LOKA_VERIFY(root != NULL);
+    {
+      Win32ScenePlatformController controller(root, scale);
+      RibbonGroupNode group((RibbonGroupProps()));
+      StackNode *content = new StackNode(StackProps(STACK_AXIS_COLUMN));
+      ButtonNode *button = new ButtonNode(ButtonProps().text("New"));
+      content->addChild(button);
+      content->addChild(new TextNode(TextProps("File")));
+      group.addChild(content);
+      const RibbonGroupEdge roles[] = {RIBBON_GROUP_EDGE_LEFT, RIBBON_GROUP_EDGE_RIGHT, RIBBON_GROUP_EDGE_BOTTOM};
+      RibbonGroupEdgeNode *edges[3];
+      Win32RibbonGroupEdgeContext *contexts[3] = {0, 0, 0};
+      HWND windows[3] = {0, 0, 0};
+      for (int i = 0; i < 3; ++i)
+      {
+        edges[i] = new RibbonGroupEdgeNode(RibbonGroupEdgeProps(roles[i]));
+        group.addChild(edges[i]);
+      }
+      NotifySubtreeNodeAttached(&group);
+      controller.onChange(&group, NODE_DIRTY_NONE, false);
+      RefusedNodeHandler foreign(NodeTypeToken<RibbonGroupEdgeNode>());
+      LOKA_VERIFY(!controller.registerNodeHandler(&foreign));
+      for (int pass = 0; pass < 2; ++pass)
+      {
+        controller.relayout(320 + pass * 40, 160);
+        int edgeCount = 0;
+        for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
+        {
+          wchar_t name[64];
+          LOKA_VERIFY(GetClassNameW(child, name, 64));
+          if (std::wcscmp(name, L"LOKA_RIBBON_GROUP_EDGE") != 0)
+            continue;
+          ++edgeCount;
+          for (int i = 0; i < 3; ++i)
+            if (reinterpret_cast<void *>(GetWindowLongPtr(child, GWLP_USERDATA)) == edges[i]->getContext())
+            {
+              if (pass == 0)
+                windows[i] = child;
+              else
+                LOKA_VERIFY(windows[i] == child);
+            }
+        }
+        LOKA_VERIFY(edgeCount == 3);
+        RECT frames[3];
+        for (int i = 0; i < 3; ++i)
+        {
+          LOKA_VERIFY(windows[i] && IsWindow(windows[i]));
+          LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) != 0);
+          if (pass == 0)
+            contexts[i] = static_cast<Win32RibbonGroupEdgeContext *>(edges[i]->getContext());
+          LOKA_VERIFY(contexts[i] && edges[i]->getContext() == contexts[i]);
+          frames[i] = childRectInParent(windows[i], root);
+          RECT client;
+          LOKA_VERIFY(GetClientRect(windows[i], &client));
+          LOKA_VERIFY(client.right == frames[i].right - frames[i].left);
+          LOKA_VERIFY(client.bottom == frames[i].bottom - frames[i].top);
+          const PaintQuery eligible = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+          const PaintQuery pending = {eligible.scope, PLACEMENT_PENDING};
+          LOKA_VERIFY(contexts[i]->queryPaintDamage(eligible).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+          LOKA_VERIFY(contexts[i]->queryPaintDamage(pending).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
+        }
+        LOKA_VERIFY(frames[0].left == scale.projectEdge(20));
+        LOKA_VERIFY(frames[0].top == scale.projectEdge(20));
+        LOKA_VERIFY(frames[0].right == scale.projectEdge(21));
+        LOKA_VERIFY(frames[1].right == scale.projectEdge(300 + pass * 40));
+        LOKA_VERIFY(frames[1].left == scale.projectEdge(299 + pass * 40));
+        LOKA_VERIFY(frames[1].top == frames[0].top);
+        LOKA_VERIFY(frames[0].bottom == frames[2].top && frames[1].bottom == frames[2].top);
+        LOKA_VERIFY(frames[2].left == frames[0].left && frames[2].right == frames[1].right);
+        LOKA_VERIFY(frames[2].bottom > frames[2].top);
+        if (scaleIndex == 0)
+          LOKA_VERIFY(frames[2].bottom - frames[2].top == 1);
+      }
+      NotifySubtreeNodeDetached(&group);
+      LifecycleFactTestAccess::DeliverFacts(&group);
+      for (int i = 0; i < 3; ++i)
+      {
+        LOKA_VERIFY(edges[i]->getContext() == contexts[i] && IsWindow(windows[i]));
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) == 0);
+      }
+      NotifySubtreeNodeAttached(&group);
+      LifecycleFactTestAccess::DeliverFacts(&group);
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) != 0);
+      LifecycleFactTestAccess::MarkSubtreeRetired(&group);
+      controller.releaseNodeContexts(&group);
+      for (int i = 0; i < 3; ++i)
+      {
+        LOKA_VERIFY(edges[i]->getContext() == 0 && IsWindow(windows[i]));
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) == 0);
+        LOKA_VERIFY(GetWindowLongPtr(windows[i], GWLP_USERDATA) == 0);
+      }
+      controller.drainNativeRetirements();
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY(!IsWindow(windows[i]));
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
 }

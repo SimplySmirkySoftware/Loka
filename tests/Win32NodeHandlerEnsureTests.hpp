@@ -22,4 +22,6 @@ void testWin32AttributedTextInksAndAdditivity();
 void testWin32TextNaturalWidthAnswer();
 void testWin32SmallLabelNaturalWidth();
 void testWin32RibbonGroupNaturalWidthTraversal();
+void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP
