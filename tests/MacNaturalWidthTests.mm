@@ -2,6 +2,7 @@
 #include "MacObjCCompat.hpp"
 #include "MacScenePlatformController.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
@@ -16,11 +17,10 @@ namespace
   using namespace loka::dsl;
   using namespace loka::dsl::testing;
 
-  // Every test lays out in one client box. MacScenePlatformController::relayout
-  // starts its root kRootInset in from each edge.
+  // Every test lays out in one client box. SceneRootLayout places the root
+  // kInset logical units in from each edge.
   const int kClientWidth = 640;
   const int kClientHeight = 160;
-  const int kRootInset = 20;
   // A seat declared with width(n) instead of a natural width.
   const int kFixedWidth = 120;
   // Written before a declined query, which must leave it untouched.
@@ -91,7 +91,7 @@ namespace
       controller.relayout(kClientWidth, kClientHeight);
       LOKA_VERIFY([[root subviews] count] == 3);
       const loka::macos::MacProjection &projection = controller.projection();
-      int x = kRootInset;
+      int x = layout::SceneRootLayout::kInset;
       for (NSUInteger i = 0; i < 3; ++i)
       {
         NSButton *button = buttonAt(root, i);
@@ -205,7 +205,7 @@ void testMacOrdinaryRowStillSharesWidth()
     const NSRect first = [buttonAt(root, 0) frame];
     const NSRect second = [buttonAt(root, 1) frame];
     const int gap = layout::FallbackControlMetrics::kHorizontalSpacing;
-    LOKA_VERIFY(first.size.width == (kClientWidth - 2 * kRootInset - gap) / 2);
+    LOKA_VERIFY(first.size.width == (kClientWidth - 2 * layout::SceneRootLayout::kInset - gap) / 2);
     LOKA_VERIFY(second.size.width == first.size.width);
     LOKA_VERIFY(second.origin.x == NSMaxX(first) + gap);
     SceneTestAccess::unmount(scene);

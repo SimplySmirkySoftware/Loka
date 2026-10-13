@@ -31,6 +31,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/BoxLayout.hpp"
@@ -1090,15 +1091,8 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
-  LayoutState state;
-  state.x = 20;
-  state.y = 20;
-  state.width = measureClientWidth(clientWidth) - 40;
-  if (state.width < 0)
-  {
-    state.width = 0;
-  }
-  state.height = clientHeight > 0 ? clientHeight - 40 : 0;
+  LayoutState state = loka::app::layout::SceneRootLayout::stateFor(
+      measureClientWidth(clientWidth), clientHeight);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);

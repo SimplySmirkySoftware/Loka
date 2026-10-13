@@ -17,6 +17,7 @@
 #include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/controls/ScrollBar.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -27,7 +28,7 @@ namespace
   {
     using namespace loka::app;
     const int count = 3;
-    const int height = 40 + count * layout::FallbackControlMetrics::kButtonHeight
+    const int height = 2 * layout::SceneRootLayout::kInset + count * layout::FallbackControlMetrics::kButtonHeight
                        + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
     const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
     for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
@@ -58,7 +59,7 @@ namespace
           if (NSMaxY(frame) > bottom)
             bottom = NSMaxY(frame);
         }
-        LOKA_VERIFY(bottom == controller.projection().projectEdge(height - 20).pt);
+        LOKA_VERIFY(bottom == controller.projection().projectEdge(height - layout::SceneRootLayout::kInset).pt);
         LOKA_VERIFY(bottom <= [root bounds].size.height);
         controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
       }
@@ -116,10 +117,10 @@ namespace
             const int minimum = fontHeight > 20 ? fontHeight : 20;
             const int measured = projection.measurementToLu(nativeHeight) + 2;
             const int textHeight = measured > minimum ? measured : minimum;
-            const int captionY = boxed ? 190 : 20 + textHeight + 12;
+            const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
             const int buttonY = captionY + 20 + 12;
             LOKA_VERIFY(NSEqualRects([page frame], projection.projectFrame(
-                loka::core::Frame(20, 20, 300, textHeight)).r));
+                loka::core::Frame(layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r));
             LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(captionY).pt);
             LOKA_VERIFY(NSMinY([button frame]) == projection.projectEdge(buttonY).pt);
             LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + 32).pt);
@@ -1402,7 +1403,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       LOKA_VERIFY([captionField isKindOfClass:[NSTextField class]]);
       LOKA_VERIFY([[captionField stringValue] isEqualToString:[NSString stringWithUTF8String:captions[sample]]]);
       LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
-      const int groupX = 20 + openWidth + gap;
+      const int groupX = layout::SceneRootLayout::kInset + openWidth + gap;
       const loka::macos::MacProjection &projection = controller.projection();
       LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX).pt);
       LOKA_VERIFY([captionField frame].size.width == projection.projectLength(groupX, groupX + seat).pt);

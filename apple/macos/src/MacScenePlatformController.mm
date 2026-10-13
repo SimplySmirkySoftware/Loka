@@ -21,6 +21,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "app/layout/BoxLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
@@ -520,15 +521,8 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   }
   firstEditField_ = 0;
   lastEditField_ = 0;
-  LayoutState state;
-  state.x = 20;
-  state.y = 20;
-  state.width = measureClientWidth(clientWidth) - 40;
-  if (state.width < 0)
-  {
-    state.width = 0;
-  }
-  state.height = clientHeight > 0 ? clientHeight - 40 : 0;
+  LayoutState state = loka::app::layout::SceneRootLayout::stateFor(
+      measureClientWidth(clientWidth), clientHeight);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);

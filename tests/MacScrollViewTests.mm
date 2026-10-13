@@ -1,5 +1,6 @@
 #include "MacScrollViewTests.hpp"
 
+#include "app/layout/SceneRootLayout.hpp"
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
@@ -151,7 +152,10 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
     assert([nativeScrollView superview] == root);
     assert([nativeScrollView hasVerticalScroller]);
     assert(![nativeScrollView autohidesScrollers]);
-    LOKA_VERIFY(frameEquals(nativeScrollView, 20, 20, 260, 100));
+    LOKA_VERIFY(frameEquals(nativeScrollView, loka::app::layout::SceneRootLayout::kInset,
+                            loka::app::layout::SceneRootLayout::kInset,
+                            300 - 2 * loka::app::layout::SceneRootLayout::kInset,
+                            140 - 2 * loka::app::layout::SceneRootLayout::kInset));
 
     NSView *documentView = [nativeScrollView documentView];
     LOKA_VERIFY(documentView != nil);
@@ -274,9 +278,9 @@ void testMacScrollViewResizeReclampsOffsetOnce()
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == 64);
+    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
     assert(offset.changeCount() == 1 && "a range-changing resize must publish one clamped fact");
-    assert(clipOffset(nativeScrollView) == 64);
+    assert(clipOffset(nativeScrollView) == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1);
 
@@ -289,7 +293,7 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     offset.state().set(40000);
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 204 && "an oversized offset must recover to the exact content maximum");
+    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) && "an oversized offset must recover to the exact content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);
