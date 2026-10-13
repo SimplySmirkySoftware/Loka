@@ -1500,7 +1500,9 @@ void testMacRibbonGroupEdgeEnsureAndRetirement()
       state.y = 9;
       state.width = 0;
       state.height = 0;
-      LOKA_VERIFY(controller.prepareProjectedLayout(&edge, state));
+      // The controller's ensure may offer a fallback height for creation; the
+      // edge's own layout then places it at exactly the offered strip.
+      LOKA_VERIFY(edge.layoutProjected(&controller, state) == 9);
       LOKA_VERIFY([[root subviews] count] == 1);
       view = [[root subviews] objectAtIndex:0];
       LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(7, 9, 0, 0)));

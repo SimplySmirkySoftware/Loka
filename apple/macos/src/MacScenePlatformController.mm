@@ -295,7 +295,7 @@ bool MacScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *
     return false;
   }
   loka::app::scene::LayoutState handlerState = state;
-  if (handlerState.height <= 0 && !node->asRibbonGroupEdgeNode())
+  if (handlerState.height <= 0)
   {
     handlerState.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kTextHeight);
   }
