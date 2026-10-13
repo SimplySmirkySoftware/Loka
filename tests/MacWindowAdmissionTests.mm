@@ -1,5 +1,6 @@
 #include "MacWindowAdmissionTests.hpp"
 #include "support/TestVerify.hpp"
+#include "support/NativeCloseTestConfig.hpp"
 
 #include <AppKit/AppKit.h>
 #include <cstdio>
@@ -275,6 +276,68 @@ void testMacWindowVisibilityAdmissionAndDelegateClose()
     AppAccess::flushWindowInvalidations(app);
     LOKA_VERIFY(app.closes == 1 && probe.unmounts == 2);
     [second release];
+  }
+  [pool drain];
+}
+
+namespace
+{
+  class CloseAskedMacApp : public MacApp
+  {
+  public:
+    explicit CloseAskedMacApp(AppConfigurable &config) : MacApp(&config) {}
+    virtual void quit() {}
+    MacWindow *firstWindow()
+    {
+      LOKA_VERIFY(this->group_ != 0);
+      LOKA_VERIFY(this->group_->getComponents().size() == 1);
+      return this->group_->getComponents()[0]->asWindow()->asMacWindow();
+    }
+  };
+}
+
+void testMacPerformCloseAsksKeyedWindowWithoutClosing()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  {
+    NativeCloseTestContext<MacWindow> context;
+    NativeCloseTestConfig config(context, true);
+    const loka::core::ItemId key = config.roster.open(loka::app::DocumentFacts());
+    LOKA_VERIFY(!key.isNone());
+    CloseAskedMacApp app(config);
+    app.App::run();
+    MacWindow *window = app.firstWindow();
+    LOKA_VERIFY(window != 0);
+    NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(*window);
+    LOKA_VERIFY(native != nil);
+    LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 0);
+    [native performClose:nil];
+    LOKA_VERIFY(NativeAccess::nativeWindow(*window) == native);
+    LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 0);
+    LOKA_VERIFY(config.roster.closeAsked().get().id == key);
+    LOKA_VERIFY([[native delegate] windowShouldClose:native] == NO);
+  }
+  [pool drain];
+}
+
+void testMacPerformCloseClosesUnkeyedWindowAsToday()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  {
+    NativeCloseTestContext<MacWindow> context;
+    NativeCloseTestConfig config(context, false);
+    CloseAskedMacApp app(config);
+    app.App::run();
+    MacWindow *window = app.firstWindow();
+    LOKA_VERIFY(window != 0);
+    NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(*window);
+    LOKA_VERIFY(native != nil);
+    LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 0);
+    [native performClose:nil];
+    LOKA_VERIFY(NativeAccess::nativeWindow(*window) == 0);
+    LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 1);
   }
   [pool drain];
 }

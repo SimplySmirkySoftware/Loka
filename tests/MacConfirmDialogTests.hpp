@@ -1,0 +1,12 @@
+#ifndef LOKA_MAC_CONFIRM_DIALOG_TESTS_HPP
+#define LOKA_MAC_CONFIRM_DIALOG_TESTS_HPP
+
+void testMacConfirmDialogRetiredBeforeCompletion();
+void testMacConfirmDialogRetainedDetachDropsResult();
+void testMacConfirmDialogCompletionDuringSceneWaitsForAdmission();
+void testMacConfirmDialogCloseDropsPendingAtDrain();
+void testMacConfirmDialogRetargetDropsResult();
+void testMacConfirmDialogMapsEachResponseToResult();
+void testMacConfirmDialogRetargetBeforePresentation();
+
+#endif

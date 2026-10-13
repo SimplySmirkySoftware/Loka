@@ -15,6 +15,7 @@
 #include "platform/file/FileLocatorAccess.hpp"
 
 #include "support/DialogResultTestAccess.hpp"
+#include "support/DialogContext.hpp"
 
 namespace
 {
@@ -31,68 +32,18 @@ namespace
   DialogContext *g_context = 0;
   std::vector<int> *g_events = 0;
 
-  /** Null native-equivalent producer: actual dialog node, shared transport. */
-  class DialogContext : public NodeContext
+  typedef dialog_testing::DialogContext<OpenFileDialogNode, Transport::Registration,
+                                        Transport::ReturnPort> FileContext;
+  class DialogContext : public FileContext
   {
   public:
-    explicit DialogContext(OpenFileDialogNode *node)
-        : node_(node),
-          registration_(0)
+    explicit DialogContext(OpenFileDialogNode *node) : FileContext(node, *g_window, *g_events)
     {
       g_context = this;
     }
-    virtual ~DialogContext()
-    {
-      this->cancel();
-      g_context = 0;
-      g_events->push_back(3);
-    }
-    void readLifecycleFactOnAttach()
-    {
-      if (this->node_->lifecycleFact() == NODE_FACT_ATTACHED)
-        this->presentation_.markDetached();
-    }
-    virtual void onFactChanged(NodeLifecycleFact, NodeLifecycleFact next)
-    {
-      g_events->push_back(4);
-      if (next == NODE_FACT_ATTACHED)
-        this->presentation_.markDetached();
-      else
-      {
-        this->presentation_.markDetached();
-        this->cancel();
-      }
-    }
-    virtual void onPropsApplied()
-    {
-      if (this->registration_ && !this->registration_->matches(this->node_->props))
-        this->cancel();
-    }
-    void attach()
-    {
-      // Deliberate Win32 producer twin: attach records intent; projection
-      // attempts enrollment once, with phase and binding guarding repeats.
-      if (this->registration_ || this->node_->lifecycleFact() != NODE_FACT_ATTACHED
-          || !this->presentation_.beginPresent())
-        return;
-      this->registration_ = g_window->dialogResults().reserve(this->node_->props);
-      if (!this->registration_)
-      {
-        this->presentation_.markDetached();
-        return;
-      }
-      this->presentation_.markPresented();
-      g_events->push_back(5);
-    }
-    void cancel()
-    {
-      Transport::Registration *registration = this->registration_;
-      this->registration_ = 0;
-      delete registration;
-    }
+    virtual ~DialogContext() { g_context = 0; }
     void produce()
     {
-      Transport::ReturnPort port(this->registration_);
       // The native producer owns no identity after return: transport must
       // carry this entire File, not reconstruct it from its display text.
       const unsigned char address[] = {0, 0xa7};
@@ -100,11 +51,8 @@ namespace
       LOKA_VERIFY(loka::platform::file::FileLocatorAccess::capture(
           loka::core::String::Literal("accepted-dialog-result.png"), loka::file::File::KIND_FILE,
           address, sizeof(address), chosen));
-      LOKA_VERIFY(port.seal(FileChooserResult::File(chosen)) == g_window);
+      LOKA_VERIFY(FileContext::produce(FileChooserResult::File(chosen)) == g_window);
     }
-    OpenFileDialogPresentationPhase presentation_;
-    OpenFileDialogNode *node_;
-    Transport::Registration *registration_;
   };
 
   class DialogHandler : public RetainedNodeHandler<DialogHandler, OpenFileDialogNode, DialogContext>

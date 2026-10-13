@@ -101,6 +101,7 @@ namespace
       switch (node->kind())
       {
       case NODE_KIND_OPEN_FILE_DIALOG:
+      case NODE_KIND_CONFIRM_DIALOG:
       case NODE_KIND_BOX:
       case NODE_KIND_ZSTACK:
       case NODE_KIND_GRID:

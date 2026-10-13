@@ -65,6 +65,8 @@ set(LOKA_MACOS_CORE_SOURCES
   src/context/MacEditTextContext.mm
   src/context/MacTextEditorContext.mm
   src/context/MacOpenFileDialogContext.mm
+  src/context/MacConfirmDialogContext.mm
+  src/context/MacDeferredDialogPresenter.mm
   src/context/MacTextContext.mm
   src/context/MacAttributedTextContext.mm
   src/context/MacPopupMenuContext.mm
@@ -134,6 +136,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacWindowFrameClampTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowResizeTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacOpenFileDialogTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacConfirmDialogTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacWindow.mm
     ${PROJECT_SOURCE_DIR}/apple/common/cocoa/src/AppleString.mm
     ${PROJECT_SOURCE_DIR}/tests/MacGroundTests.mm
@@ -151,6 +154,8 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacEditTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextEditorContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacOpenFileDialogContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacConfirmDialogContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacDeferredDialogPresenter.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacAttributedTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacPopupMenuContext.mm

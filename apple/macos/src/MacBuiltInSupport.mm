@@ -1,3 +1,4 @@
+#include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "MacBuiltInSupport.hpp"
 #include "app/nodes/AttributedText.hpp"
@@ -18,6 +19,7 @@
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacImageViewContext.hpp"
 #include "context/MacOpenFileDialogContext.hpp"
+#include "context/MacConfirmDialogContext.hpp"
 #include "context/MacPopupMenuContext.hpp"
 #include "context/MacTextContext.hpp"
 #include "context/MacAttributedTextContext.hpp"
@@ -56,6 +58,9 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   controller.hostActionHandlerRegistry_.registerHandler(
       loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>(),
       &MacScenePlatformController::DispatchProjectedLayout);
+  controller.hostActionHandlerRegistry_.registerHandler(
+      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>(),
+      &MacScenePlatformController::DispatchProjectedLayout);
   RegisterMacTextEditorNodeHandler(controller.nodeHandlerRegistry_);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>(),
                                                         &MacScenePlatformController::DispatchProjectedLayout);
@@ -68,4 +73,5 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   RegisterMacCellNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacScrollBar);
+  RegisterMacConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
 }
