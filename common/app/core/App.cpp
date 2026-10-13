@@ -520,8 +520,16 @@ void App::advanceQuitAttempt()
     this->quitAttempt_ = QuitAttempt::none();
     return;
   }
-  if (roster.count() == 0 || roster.idAt(0) != this->quitAttempt_.id)
-    this->requestQuit();
+  if (roster.count() != 0 && roster.idAt(0) == this->quitAttempt_.id)
+    return;
+  // The last accepted document may have emptied the group, in which case the
+  // close tail above already quit once; a second requestQuit would quit twice.
+  if (roster.count() == 0 && this->quitWhenLastWindowClosed_ && group_ && group_->getComponents().size() == 0)
+  {
+    this->quitAttempt_ = QuitAttempt::none();
+    return;
+  }
+  this->requestQuit();
 }
 
 void App::requestWindowClose(Window *window)
