@@ -21,7 +21,20 @@ void testSimpleTextRibbonFiresTheMenuEmitters();
 void testSimpleTextMenuDisconnectsOnUnmount();
 void testSimpleTextCloseAskedWhileBusyIsDeclined();
 void testSimpleTextQuitAskedBeforeMountIsAnsweredAtAttach();
-void testSimpleTextCloseAskedEditedDeclinesInD0();
+void testSimpleTextCloseAskedEditedEntersConfirmClose();
+void testSimpleTextConfirmCancelDeclinesAndStays();
+void testSimpleTextConfirmDiscardCloses();
+void testSimpleTextConfirmErrorDeclinesWithMessage();
+void testSimpleTextConfirmSaveWithDestinationCommitsThenCloses();
+void testSimpleTextConfirmSaveWithoutDestinationOpensChooser();
+void testSimpleTextConfirmSaveCommitFailureDeclines();
+void testSimpleTextMenuCloseEditedConfirmsWithoutAnswer();
+void testSimpleTextAskWhileConfirmingIsDeclinedAsBusy();
+void testSimpleTextConfirmSaveChooserSuccessCloses();
+void testSimpleTextConfirmSaveChooserNoneAndErrorDecline();
+void testSimpleTextConfirmDeclinesCapturedAsk();
+void testSimpleTextConfirmIgnoresResultsOutsideOperation();
+void testSimpleTextConfirmUsesTitleAtMount();
 
 #endif
 #endif

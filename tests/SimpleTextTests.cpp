@@ -5,6 +5,7 @@
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(LOKA_RETRO68)
 #include "../example/SimpleText/src/MyAppConfig.hpp"
 #include "app/MenuComposition.hpp"
+#include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/layout/RowLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
@@ -979,25 +980,297 @@ void testSimpleTextQuitAskedBeforeMountIsAnsweredAtAttach()
   LOKA_VERIFY(config.documents().count() == 0 && app.quitRequested());
 }
 
-void testSimpleTextCloseAskedEditedDeclinesInD0()
+namespace
 {
-  NullPlatformContext context;
-  SimpleTextAppConfig config(&context);
-  SimpleTextApp app(config);
-  app.run();
-  const ItemId id = config.documents().idAt(0);
-  ObservableList<String> &lines = SimpleTextTestAccess::lines(app.main(0));
-  LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
-  app.tail();
-  app.window(0).simulateCloseAsked();
-  const CloseAsk ask = config.documents().closeAsked().get();
-  app.tail();
-  LOKA_VERIFY(config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
-  LOKA_VERIFY(config.documents().find(id) && !app.quitRequested());
-  SimpleTextTestAccess::commands(app.main(0)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
-  app.tail();
-  LOKA_VERIFY(config.documents().find(id));
-  LOKA_VERIFY(config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+  /** Real app admission plus direct result publication, like Harness::choose. */
+  struct CloseHarness
+  {
+    NullPlatformContext context;
+    SimpleTextAppConfig config;
+    SimpleTextApp app;
+    ItemId id;
+    std::string directory;
+    CloseHarness() : config(&this->context), app(this->config)
+    {
+      char pattern[] = "/tmp/loka-simpletext-close-XXXXXX";
+      char *created = mkdtemp(pattern);
+      LOKA_VERIFY(created);
+      this->directory = created;
+      this->context.setApplicationDirectory(String(this->directory));
+      this->app.run();
+      this->id = this->config.documents().idAt(0);
+      this->edit();
+    }
+    ~CloseHarness()
+    {
+      std::remove((this->directory + "/first.txt").c_str());
+      LOKA_VERIFY(rmdir(this->directory.c_str()) == 0);
+    }
+    void edit()
+    {
+      ObservableList<String> &lines = SimpleTextTestAccess::lines(this->app.main(0));
+      LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
+      this->app.tail();
+    }
+    CloseAsk ask()
+    {
+      this->app.window(0).simulateCloseAsked();
+      this->app.tail();
+      return this->config.documents().closeAsked().get();
+    }
+    ConfirmDialogNode &dialog()
+    {
+      scene::Node *node = find(&this->app.main(0), "SimpleText.ConfirmClose");
+      LOKA_VERIFY(node && node->asConfirmDialogNode());
+      return *node->asConfirmDialogNode();
+    }
+    void confirm(const ConfirmResult &result)
+    {
+      // Null has no native confirm producer: mirror the file-result fixtures.
+      {
+        StateTrackerGuard guard(this->app.main(0).tracker());
+        this->dialog().props.result_.set(result, true);
+      }
+      this->app.tail();
+    }
+    void choose(const FileChooserResult &result)
+    {
+      {
+        StateTrackerGuard guard(this->app.main(0).tracker());
+        SimpleTextTestAccess::choose(this->app.main(0), true, result);
+      }
+      this->app.tail();
+    }
+    File file() { return File::Application() << File("first.txt"); }
+    void destination()
+    {
+      SimpleTextTestAccess::commands(this->app.main(0)).slot<simpletext::SAVE_AS_DOCUMENT>()->emit();
+      this->app.tail();
+      this->choose(FileChooserResult::File(this->file()));
+      ObservableList<String> &lines = SimpleTextTestAccess::lines(this->app.main(0));
+      LOKA_VERIFY(lines.update(lines.at(0).id, String("saved for close")) == EDIT_OK);
+      this->app.tail();
+    }
+    void stays(const CloseAsk &ask)
+    {
+      LOKA_VERIFY(this->config.documents().find(this->id));
+      LOKA_VERIFY(this->app.group().find(this->id));
+      LOKA_VERIFY(SimpleTextTestAccess::operation(this->app.main(0)) == simpletext::NONE);
+      LOKA_VERIFY(this->config.documents().closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+      LOKA_VERIFY(!find(&this->app.main(0), "SimpleText.ConfirmClose"));
+      LOKA_VERIFY(!find(&this->app.main(0), "SimpleText.Save"));
+    }
+    void closed()
+    {
+      LOKA_VERIFY(!this->config.documents().find(this->id));
+      LOKA_VERIFY(!this->app.group().find(this->id));
+      LOKA_VERIFY(this->app.quitRequested());
+    }
+  };
+}
+
+void testSimpleTextCloseAskedEditedEntersConfirmClose()
+{
+  CloseHarness h;
+  const CloseAnswer before = h.config.documents().closeAnswer().get();
+  h.ask();
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+  LOKA_VERIFY(h.config.documents().find(h.id));
+  LOKA_VERIFY(h.config.documents().closeAnswer().get() == before);
+  LOKA_VERIFY(utf8(h.dialog().props.options_.message()) == "Save changes to Untitled?");
+  h.confirm(ConfirmResult::none());
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+}
+
+void testSimpleTextConfirmCancelDeclinesAndStays()
+{
+  CloseHarness h;
+  const CloseAsk ask = h.ask();
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(ask);
+  // A later confirmation must accept the same result again.
+  const CloseAsk second = h.ask();
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(second);
+}
+
+void testSimpleTextConfirmDiscardCloses()
+{
+  CloseHarness h;
+  h.ask();
+  h.confirm(ConfirmResult::Discard());
+  h.closed();
+}
+
+void testSimpleTextConfirmErrorDeclinesWithMessage()
+{
+  CloseHarness h;
+  const CloseAsk ask = h.ask();
+  h.confirm(ConfirmResult::Error(431));
+  h.stays(ask);
+  LOKA_VERIFY(!SimpleTextTestAccess::error(h.app.main(0)).empty());
+}
+
+void testSimpleTextConfirmSaveWithDestinationCommitsThenCloses()
+{
+  CloseHarness h;
+  h.destination();
+  h.ask();
+  h.confirm(ConfirmResult::Save());
+  h.closed();
+  std::FILE *file = std::fopen((h.directory + "/first.txt").c_str(), "rb");
+  LOKA_VERIFY(file);
+  char bytes[32] = {0};
+  LOKA_VERIFY(std::fread(bytes, 1, sizeof(bytes), file) == 15);
+  LOKA_VERIFY(std::fclose(file) == 0);
+  LOKA_VERIFY(std::string(bytes) == "saved for close");
+}
+
+void testSimpleTextConfirmSaveWithoutDestinationOpensChooser()
+{
+  CloseHarness h;
+  const CloseAsk ask = h.ask();
+  h.confirm(ConfirmResult::Save());
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::SAVE_FOR_CLOSE);
+  LOKA_VERIFY(h.config.documents().find(h.id));
+  LOKA_VERIFY(h.config.documents().closeAnswer().get() == CloseAnswer::none());
+  scene::Node *node = find(&h.app.main(0), "SimpleText.Save");
+  LOKA_VERIFY(node && node->asOpenFileDialogNode());
+  LOKA_VERIFY(node->asOpenFileDialogNode()->props.options_.purpose() == FILE_DIALOG_SAVE);
+  LOKA_VERIFY(!find(&h.app.main(0), "SimpleText.ConfirmClose"));
+  h.choose(FileChooserResult::Canceled());
+  h.stays(ask);
+}
+
+void testSimpleTextConfirmSaveCommitFailureDeclines()
+{
+  // Same real write-refusal seam as ReadAndWriteFailuresPreserveDestination:
+  // a directory at the selected destination cannot be opened for writing.
+  for (int hasDestination = 0; hasDestination != 2; ++hasDestination)
+  {
+    CloseHarness h;
+    if (hasDestination)
+    {
+      h.destination();
+      LOKA_VERIFY(std::remove((h.directory + "/first.txt").c_str()) == 0);
+    }
+    LOKA_VERIFY(mkdir((h.directory + "/first.txt").c_str(), 0700) == 0);
+    const CloseAsk ask = h.ask();
+    h.confirm(ConfirmResult::Save());
+    if (!hasDestination)
+      h.choose(FileChooserResult::File(h.file()));
+    h.stays(ask);
+    LOKA_VERIFY(!SimpleTextTestAccess::error(h.app.main(0)).empty());
+    LOKA_VERIFY(h.config.documents().find(h.id)->edited);
+    LOKA_VERIFY(rmdir((h.directory + "/first.txt").c_str()) == 0);
+  }
+}
+
+void testSimpleTextMenuCloseEditedConfirmsWithoutAnswer()
+{
+  CloseHarness h;
+  SimpleTextTestAccess::commands(h.app.main(0)).slot<simpletext::CLOSE_DOCUMENT>()->emit();
+  h.app.tail();
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(CloseAsk::none());
+}
+
+void testSimpleTextAskWhileConfirmingIsDeclinedAsBusy()
+{
+  CloseHarness h;
+  const CloseAsk first = h.ask();
+  const CloseAsk second = h.ask();
+  LOKA_VERIFY(first.seq != second.seq);
+  LOKA_VERIFY(h.config.documents().closeAnswer().get() == CloseAnswer(second.id, second.seq));
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+  LOKA_VERIFY(h.config.documents().find(h.id));
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(second);
+}
+
+void testSimpleTextConfirmSaveChooserSuccessCloses()
+{
+  CloseHarness h;
+  h.ask();
+  h.confirm(ConfirmResult::Save());
+  h.choose(FileChooserResult::File(h.file()));
+  h.closed();
+  std::FILE *file = std::fopen((h.directory + "/first.txt").c_str(), "rb");
+  LOKA_VERIFY(file);
+  char bytes[16] = {0};
+  LOKA_VERIFY(std::fread(bytes, 1, sizeof(bytes), file) == 6);
+  LOKA_VERIFY(std::fclose(file) == 0);
+  LOKA_VERIFY(std::string(bytes) == "edited");
+}
+
+void testSimpleTextConfirmSaveChooserNoneAndErrorDecline()
+{
+  const FileChooserResult results[] = {FileChooserResult(), FileChooserResult::Error(19)};
+  for (unsigned i = 0; i != 2; ++i)
+  {
+    CloseHarness h;
+    const CloseAsk ask = h.ask();
+    h.confirm(ConfirmResult::Save());
+    h.choose(results[i]);
+    h.stays(ask);
+    if (i)
+      LOKA_VERIFY(!SimpleTextTestAccess::error(h.app.main(0)).empty());
+  }
+}
+
+void testSimpleTextConfirmDeclinesCapturedAsk()
+{
+  CloseHarness h;
+  const CloseAsk first = h.ask();
+  const ItemId second = h.config.documents().open(simpletext::Document());
+  LOKA_VERIFY(!second.isNone());
+  h.app.tail();
+  SimpleTextTestAccess::commands(h.app.main(1)).slot<simpletext::OPEN_DOCUMENT>()->emit();
+  h.app.window(1).simulateCloseAsked();
+  h.app.tail();
+  LOKA_VERIFY(h.config.documents().closeAsked().get().id == second);
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(first);
+}
+
+void testSimpleTextConfirmIgnoresResultsOutsideOperation()
+{
+  CloseHarness h;
+  const CloseAsk ask = h.ask();
+  scene::NodeState<ConfirmResult> channel = h.dialog().props.result_;
+  h.confirm(ConfirmResult::Cancel());
+  {
+    StateTrackerGuard guard(h.app.main(0).tracker());
+    channel.set(ConfirmResult::Discard(), true);
+  }
+  h.app.tail();
+  h.stays(ask);
+  SimpleTextTestAccess::commands(h.app.main(0)).slot<simpletext::OPEN_DOCUMENT>()->emit();
+  h.app.tail();
+  {
+    StateTrackerGuard guard(h.app.main(0).tracker());
+    channel.set(ConfirmResult::Save(), true);
+  }
+  h.app.tail();
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::OPEN);
+  LOKA_VERIFY(h.config.documents().find(h.id));
+}
+
+void testSimpleTextConfirmUsesTitleAtMount()
+{
+  CloseHarness h;
+  const CloseAsk first = h.ask();
+  LOKA_VERIFY(utf8(h.dialog().props.options_.message()) == "Save changes to Untitled?");
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(first);
+  // Save As changes the roster title after MainNode has already composed.
+  h.destination();
+  const CloseAsk second = h.ask();
+  LOKA_VERIFY(utf8(h.app.window(0).titleState().get()) == "first.txt");
+  LOKA_VERIFY(utf8(h.dialog().props.options_.message()) == "Save changes to first.txt?");
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(second);
 }
 
 #endif

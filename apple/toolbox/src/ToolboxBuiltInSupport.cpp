@@ -19,8 +19,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedToolboxConfirmDialog(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxTextEditor(
       loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxButton(
@@ -68,6 +66,5 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
   }
   ok = RegisterToolboxOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
   ok = RegisterToolboxConfirmDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
-  ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxConfirmDialog) && ok;
   return ok;
 }
