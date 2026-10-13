@@ -1091,8 +1091,16 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
-  LayoutState state = loka::app::layout::SceneRootLayout::stateFor(
-      measureClientWidth(clientWidth), clientHeight);
+  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
+  LayoutState state;
+  state.x = rootInset;
+  state.y = rootInset;
+  state.width = measureClientWidth(clientWidth) - 2 * rootInset;
+  if (state.width < 0)
+  {
+    state.width = 0;
+  }
+  state.height = clientHeight > 0 ? clientHeight - 2 * rootInset : 0;
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
