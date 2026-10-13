@@ -2,6 +2,7 @@
 #include "Win32TextColorProperty.hpp"
 #include "Win32AttributedTextTable.hpp"
 #include <cassert>
+#include <climits>
 #include "../Win32ScenePlatformController.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -137,18 +138,8 @@ namespace
   {
     if (wide.empty())
       return true;
-    HDC hdc = GetDC(hwnd);
-    if (!hdc)
-      return false;
     RECT rc = {0, 0, nativeWidth, 0};
-    HGDIOBJ previousFont = selectedFont ? SelectObject(hdc, selectedFont) : 0;
-    const bool selected = !selectedFont || (previousFont && previousFont != HGDI_ERROR);
-    const UINT flags = DT_LEFT | DT_NOPREFIX | DT_CALCRECT;
-    const bool measured = selected && DrawTextW(hdc, wide.c_str(), -1, &rc, flags) != 0;
-    if (previousFont && previousFont != HGDI_ERROR)
-      SelectObject(hdc, previousFont);
-    ReleaseDC(hwnd, hdc);
-    if (!measured)
+    if (!Win32TextContext::measureTextRect(hwnd, selectedFont, wide, rc))
       return false;
     const int measuredWithPadding = controller->displayScale().measurementToLu(rc.bottom - rc.top) + 8;
     if (measuredWithPadding > height)
@@ -157,6 +148,48 @@ namespace
   }
 
 } // namespace
+
+/** Shared native rectangle measurement for Text height and one-line width. */
+bool Win32TextContext::measureTextRect(HWND hwnd, HFONT font, const std::wstring &wide, RECT &rect)
+{
+  HDC hdc = GetDC(hwnd);
+  if (!hdc)
+    return false;
+  HGDIOBJ previousFont = font ? SelectObject(hdc, font) : 0;
+  const bool selected = !font || (previousFont && previousFont != HGDI_ERROR);
+  const UINT flags = DT_LEFT | DT_NOPREFIX | DT_CALCRECT;
+  const bool measured = selected && DrawTextW(hdc, wide.c_str(), -1, &rect, flags) != 0;
+  if (previousFont && previousFont != HGDI_ERROR)
+    SelectObject(hdc, previousFont);
+  ReleaseDC(hwnd, hdc);
+  return measured;
+}
+
+bool Win32TextContext::queryNaturalWidth(const loka::app::TextNode *node,
+                                         const Win32ScenePlatformController *controller,
+                                         short &width)
+{
+  if (!node || !controller || !node->props.text_)
+    return false;
+  std::wstring wide;
+  if (!loka::win32::MaterializeWideString(node->props.text_->get(), wide) || wide.empty()
+      || wide.find_first_of(L"\r\n") != std::wstring::npos)
+    return false;
+  HFONT font = ResolveTextFont(node, controller);
+  if (!font)
+    font = controller->displayFont();
+  // Unlike the height path, the answer needs the font the Text presents with.
+  if (!font)
+    return false;
+  RECT rect = {0, 0, 0, 0};
+  if (!measureTextRect(controller->rootHwnd(), font, wide, rect))
+    return false;
+  const int logicalWidth = controller->displayScale().measurementToLu(rect.right - rect.left);
+  if (logicalWidth <= 0 || logicalWidth > SHRT_MAX)
+    return false;
+  width = static_cast<short>(logicalWidth);
+  return true;
+}
 
 Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
                                    HWND parent,
