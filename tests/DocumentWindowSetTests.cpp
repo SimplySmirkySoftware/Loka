@@ -51,7 +51,9 @@ namespace
     typedef DocumentRoot NodeType;
     struct TypeTag {};
     RootFacts *facts;
-    explicit DocumentProps(RootFacts &f) : facts(&f) {}
+    DocumentRoster<Document, 4> *closeRoster;
+    ItemId id;
+    explicit DocumentProps(RootFacts &f) : facts(&f), closeRoster(0) {}
     bool operator<(const PropsBase &rhs) const
     {
       if (rhs.propsTypeId() != this->propsTypeId())
@@ -99,6 +101,25 @@ namespace
       this->props.facts->root = this;
       if (this->props.facts->roster)
         this->state(this->showOpener_, false);
+    }
+    virtual void declareBindings(BindingToken &t)
+    {
+      if (this->props.closeRoster)
+        t.watch(const_cast<State<CloseAsk> &>(this->props.closeRoster->closeAsked()),
+                this, &DocumentRoot::onCloseAsked);
+    }
+    void onCloseAsked()
+    {
+      const CloseAsk ask = this->props.closeRoster->closeAsked().get();
+      if (ask.id != this->props.id)
+        return;
+      const Document *entry = this->props.closeRoster->find(ask.id);
+      if (!entry)
+        return;
+      if (entry->edited)
+        this->props.closeRoster->declineClose(ask);
+      else
+        this->props.closeRoster->close(ask.id);
     }
     void openDuringSceneRun() { this->showOpener_.set(true); }
     virtual void composeNode(NodeComposition &composition)
@@ -205,7 +226,10 @@ namespace
         LOKA_VERIFY(config.roster.close(closing) == EDIT_OK);
       }
       WindowProps props;
-      props.scene(new Scene(BoundaryDefinition<DocumentProps, DocumentRoot>(DocumentProps(config.roots[value]))));
+      DocumentProps root(config.roots[value]);
+      root.closeRoster = &config.roster;
+      root.id = id;
+      props.scene(new Scene(BoundaryDefinition<DocumentProps, DocumentRoot>(root)));
       if (value == config.refuseValue)
         static_cast<TrackingContext *>(config.getPlatformContext())->refuseNextCreate = true;
       return props;
@@ -1238,4 +1262,177 @@ void testDocumentWindowMountRemovesOwnEntrySkipsFacts()
   }
   app.tail();
   LOKA_VERIFY(!app.window(config.closing) && app.window(survivor));
+}
+
+void testCloseAskedCleanDocumentCloses()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId id = config.roster.open(Document(0));
+  TestApp app(config);
+  app.run();
+  app.window(id)->simulateCloseAsked();
+  const CloseAsk ask = config.roster.closeAsked().get();
+  LOKA_VERIFY(ask.id == id && ask.seq == 1);
+  app.tail();
+  LOKA_VERIFY(!config.roster.find(id) && !app.window(id));
+  LOKA_VERIFY(config.roster.closeAsked().get() == ask);
+}
+
+void testCloseAskedEditedDocumentRemains()
+{
+  TrackingContext context;
+  Config config(context);
+  const ItemId id = config.roster.open(Document("Edited", true));
+  TestApp app(config);
+  app.run();
+  NullWindow *window = app.window(id);
+  Scene *scene = window->scene();
+  window->simulateCloseAsked();
+  const CloseAsk ask = config.roster.closeAsked().get();
+  app.tail();
+  LOKA_VERIFY(config.roster.find(id) && app.window(id) == window && window->scene() == scene);
+  LOKA_VERIFY(config.roster.closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+  window->simulateCloseAsked();
+  LOKA_VERIFY(config.roster.closeAsked().get().seq == ask.seq + 1);
+}
+
+void testCloseAskedUnkeyedWindowClosesAsToday()
+{
+  TrackingContext context;
+  StaticWindowConfig config(context);
+  TestApp app(config);
+  app.run();
+  NullWindow *window = static_cast<NullWindow *>(app.adoptedWindows()[0]);
+  LOKA_VERIFY(!app.closeAsked(window));
+  window->simulateCloseAsked();
+  app.tail();
+  LOKA_VERIFY(app.group().getComponents().size() == 0 && app.quitRequested());
+}
+
+void testQuitWithoutRosterQuitsNow()
+{
+  TrackingContext context;
+  StaticWindowConfig config(context);
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  LOKA_VERIFY(app.quitRequested() && app.group().getComponents().size() == 1);
+}
+
+void testQuitAsksSeriallyAndCancelEndsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  const ItemId second = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk ask = config.roster.closeAsked().get();
+  LOKA_VERIFY(ask.id == config.initial);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAnswer().get() == CloseAnswer(ask.id, ask.seq));
+  LOKA_VERIFY(!app.quitRequested() && config.roster.count() == 2);
+  config.roster.close(config.initial);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == ask);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
+void testQuitSecondDeclineInSameTurnStillCancelsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  const ItemId second = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk attempt = config.roster.closeAsked().get();
+  // A native close box on the same edited document before the tail: the node
+  // declines again, and the answer box now carries the later sequence.
+  app.window(config.initial)->simulateCloseAsked();
+  const CloseAsk later = config.roster.closeAsked().get();
+  LOKA_VERIFY(later.id == attempt.id && later.seq == attempt.seq + 1);
+  LOKA_VERIFY(config.roster.closeAnswer().get() == CloseAnswer(later.id, later.seq));
+  app.tail();
+  LOKA_VERIFY(!app.quitRequested() && config.roster.count() == 2);
+  config.roster.close(config.initial);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == later);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
+void testQuitOtherDocumentDeclineInSameTurnEndsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  Document editedSecond(1);
+  editedSecond.edited = true;
+  const ItemId second = config.roster.open(editedSecond);
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk attempt = config.roster.closeAsked().get();
+  LOKA_VERIFY(attempt.id == config.initial);
+  // The asked document declined synchronously; a native close box on the
+  // other edited document before the tail overwrites that answer.
+  app.window(second)->simulateCloseAsked();
+  const CloseAsk other = config.roster.closeAsked().get();
+  LOKA_VERIFY(other.id == second && config.roster.closeAnswer().get() == CloseAnswer(other.id, other.seq));
+  app.tail();
+  LOKA_VERIFY(!app.quitRequested() && config.roster.count() == 2);
+  // The attempt ended: closing the first document by hand asks nobody else.
+  config.roster.close(config.initial);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == other);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
+void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt()
+{
+  TrackingContext context;
+  Config config(context, true);
+  Document edited(0);
+  edited.edited = true;
+  config.roster.update(config.initial, edited);
+  const ItemId second = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk attempt = config.roster.closeAsked().get();
+  LOKA_VERIFY(config.roster.closeAnswer().get() == CloseAnswer(attempt.id, attempt.seq));
+  // The declined document is closed by hand before the tail: its row is gone
+  // and its decline is still published. The decline wins; nobody else is asked.
+  config.roster.close(config.initial);
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == attempt);
+  LOKA_VERIFY(config.roster.find(second) && !app.quitRequested());
+}
+
+void testQuitAllAcceptedExitsWithStaticWindow()
+{
+  TrackingContext context;
+  Config config(context, true);
+  const ItemId second = config.roster.open(Document(1));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  LOKA_VERIFY(config.roster.closeAsked().get().id == config.initial);
+  LOKA_VERIFY(!app.quitRequested());
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get().id == second);
+  LOKA_VERIFY(config.roster.closeAsked().get().seq == 2);
+  LOKA_VERIFY(config.roster.count() == 0 && app.quitRequested());
+  LOKA_VERIFY(app.group().getComponents().size() == 1);
 }
