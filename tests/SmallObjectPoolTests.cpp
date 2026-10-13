@@ -1,6 +1,7 @@
 #include "SmallObjectPoolTests.hpp"
 #include "UpstreamGaugeTests.hpp"
 #include "core/SmallObjectPool.hpp"
+#include "support/AutomaticPool.hpp"
 #include "support/TestVerify.hpp"
 #include <cstdlib>
 #include <cstring>
@@ -93,12 +94,12 @@ namespace
     }
   };
   FakeSource *FakeSource::active = 0;
-  typedef loka::core::SmallObjectPool<FakeSource> Pool;
+  typedef loka::testing::AutomaticPool<FakeSource> Pool;
   struct Fixture
   {
     FakeSource source;
     Pool pool;
-    explicit Fixture(FakeSource::Order order = FakeSource::Ascending) : source(order), pool() {}
+    explicit Fixture(FakeSource::Order order = FakeSource::Ascending) : source(order) {}
   };
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
   typedef loka::core::SmallObjectPoolReport Report;
@@ -428,8 +429,7 @@ namespace
 }
 void testUpstreamGaugeSaturation()
 {
-  typedef loka::core::SmallObjectPool<GaugeLimitSource> LimitPool;
-  LimitPool pool = LimitPool();
+  loka::testing::AutomaticPool<GaugeLimitSource> pool;
   LOKA_VERIFY(pool.allocate(ULONG_MAX - 1));
   const loka::core::UpstreamGauge before = pool.snapshot();
   LOKA_VERIFY(!before.saturated && before.bytesAcquired == ULONG_MAX - 1);
