@@ -15,4 +15,7 @@ void testWin32WindowFrameIsClampedToWorkArea();
 
 void testWin32WindowEditedMarkPrefixesTheNativeTitle();
 
+void testWin32WmCloseAsksKeyedWindowWithoutDestroying();
+void testWin32WmCloseDestroysUnkeyedWindowAsToday();
+
 #endif // LOKA_WIN32_WINDOW_CLIENT_SIZE_TESTS_HPP

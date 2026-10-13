@@ -74,6 +74,11 @@ void testNullTextLayoutTruncationModesProduceDifferentWidths()
   assert(measurementFor(noneText).width() == 40);
   assert(measurementFor(clipText).width() == 22);
   assert(measurementFor(ellipsisText).width() == 20);
+  // Characterize the existing ellipsis snap independently of role resolution.
+  const loka::app::TextLineRecord rawLine = {loka::app::TextLineMetrics(16), 100, 0, 0};
+  LOKA_VERIFY(loka::app::SyntheticTextLineWidth(
+                  rawLine, loka::app::BlockStyle().truncation(loka::app::TEXT_TRUNCATION_ELLIPSIS), 13)
+              == 10);
 }
 
 void testNullTextLayoutHonorsExplicitBreaksAndForceBreaksLongWords()
@@ -200,4 +205,26 @@ void testNullTextLayoutWordWrapMeasuresStandaloneSpaces()
   assert(resultY == 24);
   assert(measurementFor(text).width() == 8);
   assert(measurementFor(text).lineCount() == 2);
+}
+
+void testNullTextSmallLabelMetrics()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  TextNode small((Text("MMMM") + SmallLabel).props);
+  TextNode plain(Text("MMMM").props);
+  scene::LayoutState state;
+  state.lineHeight = 0;
+  const int smallY = platform.projectLayoutForTesting(&small, state);
+  const int plainY = platform.projectLayoutForTesting(&plain, state);
+  LOKA_VERIFY(smallY == 9 && plainY == 12);
+  const NullTextMeasurement &smallMeasurement = measurementFor(small);
+  const NullTextMeasurement &plainMeasurement = measurementFor(plain);
+  LOKA_VERIFY(smallMeasurement.height() == 9);
+  LOKA_VERIFY(smallMeasurement.width() < plainMeasurement.width());
+  LOKA_VERIFY(NullTextPaintStyle(small.props).fontSize == 9);
+  NullTextMeasurement refused;
+  testing::NullTextMeasurementAccess::failMeasure(1);
+  const bool measured = MeasureNullText(SmallLabel, BlockStyle(), 0, state, refused);
+  LOKA_VERIFY(!measured && refused.height() == 9);
 }

@@ -2610,6 +2610,14 @@ namespace
       unsnapped.size_ = loka::app::TextSizeValue::points(11);
       this->recordArm("font-size-tie-snaps-down", ToolboxTextFontDescriptor(unsnapped).size(12) == 10,
                       TEXT_WIDTH_WRITE);
+      {
+        ToolboxTextMeasureScope scope(controller, ToolboxTextFontDescriptor(SmallLabel));
+        this->recordArm(
+            "font-small-label-geneva-9", port->txFont == kFontIDGeneva && port->txSize == 9, TEXT_WIDTH_WRITE);
+      }
+      this->recordArm("font-small-label-restores-port",
+                      port->txFont == portFont && port->txSize == portSize && port->txFace == portFace,
+                      TEXT_WIDTH_WRITE);
       const ToolboxTextFontDescriptor inherited;
       this->recordArm("font-unset-inherits-port", inherited.font(portFont) == portFont
                       && inherited.size(17) == 17 && inherited.face(bold | italic) == (bold | italic),

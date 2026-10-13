@@ -3,6 +3,7 @@
 
 void testMacNodeHandlerEnsureContract();
 void testMacCaptureRefusalReleasesBitmapOnce();
+void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();
 void testMacAttributedTextRetainedLifecycle();

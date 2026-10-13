@@ -142,6 +142,9 @@ namespace loka
       virtual TextLineMetrics metrics(const TextStyle &style) const = 0;
     };
 
+    /** Headless font projection: raw points, SmallLabel at 9, absent size at 12. */
+    int SyntheticTextSize(const TextSizeValue &size);
+
     /** Synthetic joined UTF-32 table, owned by the measure. No state is retained. */
     class SyntheticTextWidthSource : public TextWidthSource
     {
