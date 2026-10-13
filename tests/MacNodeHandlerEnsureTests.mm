@@ -1349,14 +1349,20 @@ void testMacRibbonGroupNaturalWidthFrames()
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
   const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
-  for (int scale = 0; scale < 2; ++scale)
+  // The short caption is the band SimpleText will carry; whichever part is
+  // wider sets the seat. The long caption must win, so the caption counts.
+  const char *captions[] = {"Alignment", "Paragraph alignment and indentation controls"};
+  for (int run = 0; run < 4; ++run)
   {
+    const int scale = run / 2;
+    const int sample = run % 2;
     NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 160)];
     {
       MacScenePlatformController controller(root, metrics[scale]);
       NodeDefinitionBase *definition =
           (RibbonControl().testId("NaturalGroup")
-           << RibbonItem("Open") << (RibbonGroup("Alignment") << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
+           << RibbonItem("Open")
+           << (RibbonGroup(captions[sample]) << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
            << RibbonItem("Close"))
               .clone();
       LOKA_VERIFY(definition != 0);
@@ -1394,15 +1400,17 @@ void testMacRibbonGroupNaturalWidthFrames()
       NSTextField *captionField = (NSTextField *)[[root subviews] objectAtIndex:4];
       NSButton *closeButton = (NSButton *)[[root subviews] objectAtIndex:5];
       LOKA_VERIFY([captionField isKindOfClass:[NSTextField class]]);
-      LOKA_VERIFY([[captionField stringValue] isEqualToString:@"Alignment"]);
+      LOKA_VERIFY([[captionField stringValue] isEqualToString:[NSString stringWithUTF8String:captions[sample]]]);
       LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
       const int groupX = 20 + openWidth + gap;
       const loka::macos::MacProjection &projection = controller.projection();
       LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX).pt);
       LOKA_VERIFY([captionField frame].size.width == projection.projectLength(groupX, groupX + seat).pt);
       LOKA_VERIFY([closeButton frame].origin.x == projection.projectEdge(groupX + seat + gap).pt);
-      std::printf("macOS ribbon widths: caption=%d items=%d scale=%d\n", captionWidth, itemsWidth, scale);
-      LOKA_VERIFY(captionWidth > itemsWidth);
+      std::printf(
+          "macOS ribbon widths: caption=%d items=%d scale=%d sample=%d\n", captionWidth, itemsWidth, scale, sample);
+      if (sample == 1)
+        LOKA_VERIFY(captionWidth > itemsWidth);
       SceneTestAccess::unmount(scene);
     }
     LOKA_VERIFY([[root subviews] count] == 0);
