@@ -23,6 +23,7 @@
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
 #include "context/Win32OpenFileDialogContext.hpp"
+#include "context/Win32ConfirmDialogContext.hpp"
 #include "context/Win32PopupMenuContext.hpp"
 #include "context/Win32TextContext.hpp"
 #include "context/Win32AttributedTextContext.hpp"
@@ -81,4 +82,5 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   RegisterWin32OpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32ScrollBar);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32ConfirmDialog);
+  RegisterWin32ConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
 }

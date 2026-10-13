@@ -75,6 +75,7 @@
 #include "Win32EditTextBridgeTests.hpp"
 #include "Win32FilePathTests.hpp"
 #include "Win32OpenFileDialogTransportTests.hpp"
+#include "Win32ConfirmDialogTransportTests.hpp"
 #include "Win32AppLocationTests.hpp"
 #include "Win32RectSurfacePaintTests.hpp"
 #include "Win32RectSurfaceRedrawTests.hpp"
