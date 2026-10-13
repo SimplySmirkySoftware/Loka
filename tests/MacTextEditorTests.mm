@@ -1336,18 +1336,31 @@ void testMacTextEditorUndoLocation()
   for (unsigned short i = 0; i < multi.lines.size(); ++i)
     LOKA_VERIFY(bytes(multi.lines.at(i).value) == "abcd");
   LOKA_VERIFY([[multi.view string] isEqualToString:@"abcd\nabcd\nabcd"]);
-  // Undo reaches the rail through the storage delegate only, and AppKit leaves
-  // a selection outside the restored span where it was (offset 0 here), so no
-  // selection notification follows. The storage path derives the caret from
-  // the change span: the end of the restored text, "abcd\nabcd\nabc|d".
-  LOKA_VERIFY(NSEqualRanges([multi.view selectedRange], NSMakeRange(0, 0)));
-  LOKA_VERIFY(multi.cursor.state()->get() == LineCursor(multi.lines.at(2).id, 3));
+  const NSRange afterUndo = [multi.view selectedRange];
+  if (NSEqualRanges(afterUndo, NSMakeRange(0, 0)))
+  {
+    // Undo reaches the rail through the storage delegate only, and AppKit leaves
+    // a selection outside the restored span where it was (offset 0 here), so no
+    // selection notification follows. The storage path derives the caret from
+    // the change span: the end of the restored text, "abcd\nabcd\nabc|d".
+    LOKA_VERIFY(multi.cursor.state()->get() == LineCursor(multi.lines.at(2).id, 3));
+  }
+  else
+  {
+    // Mac OS X 10.9's AppKit selects the restored span on undo (measured on
+    // 10.9.5), and the rail reports that native caret: the span's start.
+    std::printf("[skip] undo keeps an outside selection: this AppKit selects the restored span (10.9); "
+                "its caret is pinned instead\n");
+    LOKA_VERIFY(NSEqualRanges(afterUndo, NSMakeRange(1, 12)));
+    LOKA_VERIFY(multi.cursor.state()->get() == LineCursor(retained, 1));
+  }
   LOKA_VERIFY(multiObserver.calls == 2 && Access::restores(*multi.context) == 0 && [multi.view isEditable]);
   // The next selection notification reports the native caret over the committed text.
   [[multi.view delegate]
       textViewDidChangeSelection:[NSNotification notificationWithName:NSTextViewDidChangeSelectionNotification
                                                                object:multi.view]];
-  LOKA_VERIFY(multi.cursor.state()->get() == LineCursor(retained, 0) && multiObserver.calls == 2);
+  LOKA_VERIFY(multi.cursor.state()->get() == LineCursor(retained, static_cast<int>(afterUndo.location))
+              && multiObserver.calls == 2);
 }
 
 void testMacTextEditorStorageChanges()
