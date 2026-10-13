@@ -1393,8 +1393,10 @@ void testWin32TextNaturalWidthAnswer()
       TextNode huge(TextProps(String(std::string(32768, 'W'))));
       LOKA_VERIFY(!controller.queryNaturalWidth(&huge, refused));
       LOKA_VERIFY(refused == 13);
+      // A null font keeps the height path's historical meaning: the DC's own font.
       RECT noFont = {0, 0, 0, 0};
-      LOKA_VERIFY(!Win32TextContext::measureTextRect(root, NULL, L"text", noFont));
+      LOKA_VERIFY(Win32TextContext::measureTextRect(root, NULL, L"text", noFont));
+      LOKA_VERIFY(noFont.right > 0);
     }
     LOKA_VERIFY(DestroyWindow(root));
   }

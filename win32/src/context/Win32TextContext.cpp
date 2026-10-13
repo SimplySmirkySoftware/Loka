@@ -152,16 +152,14 @@ namespace
 /** Shared native rectangle measurement for Text height and one-line width. */
 bool Win32TextContext::measureTextRect(HWND hwnd, HFONT font, const std::wstring &wide, RECT &rect)
 {
-  if (!font)
-    return false;
   HDC hdc = GetDC(hwnd);
   if (!hdc)
     return false;
-  HGDIOBJ previousFont = SelectObject(hdc, font);
-  const bool selected = previousFont && previousFont != HGDI_ERROR;
+  HGDIOBJ previousFont = font ? SelectObject(hdc, font) : 0;
+  const bool selected = !font || (previousFont && previousFont != HGDI_ERROR);
   const UINT flags = DT_LEFT | DT_NOPREFIX | DT_CALCRECT;
   const bool measured = selected && DrawTextW(hdc, wide.c_str(), -1, &rect, flags) != 0;
-  if (selected)
+  if (previousFont && previousFont != HGDI_ERROR)
     SelectObject(hdc, previousFont);
   ReleaseDC(hwnd, hdc);
   return measured;
@@ -180,6 +178,9 @@ bool Win32TextContext::queryNaturalWidth(const loka::app::TextNode *node,
   HFONT font = ResolveTextFont(node, controller);
   if (!font)
     font = controller->displayFont();
+  // Unlike the height path, the answer needs the font the Text presents with.
+  if (!font)
+    return false;
   RECT rect = {0, 0, 0, 0};
   if (!measureTextRect(controller->rootHwnd(), font, wide, rect))
     return false;
