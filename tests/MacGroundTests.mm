@@ -167,14 +167,16 @@ namespace
         RibbonGroupEdgeNode node((RibbonGroupEdgeProps(kinds[i])));
         NSView *view = project(controller, parent, node);
         LOKA_VERIFY([view isFlipped]);
-        [view setFrame:i == 2 ? NSMakeRect(0, 0, 9, 1) : NSMakeRect(0, 0, 1, 9)];
+        // A three-row bottom tells the solid bottom fill from a one-row blend.
+        [view setFrame:i == 2 ? NSMakeRect(0, 0, 9, 3) : NSMakeRect(0, 0, 1, 9)];
         // render() calls drawRect directly into an unflipped bitmap context:
         // bitmap y=0 is the last drawn geometric row (the view's bottom).
         NSBitmapImageRep *bitmap = render(view);
         if (i == 2)
         {
-          for (int x = 0; x < 9; ++x)
-            LOKA_VERIFY(sameColor([bitmap colorAtX:x y:0], [NSColor controlShadowColor]));
+          for (int y = 0; y < 3; ++y)
+            for (int x = 0; x < 9; ++x)
+              LOKA_VERIFY(sameColor([bitmap colorAtX:x y:y], [NSColor controlShadowColor]));
         }
         else
         {
