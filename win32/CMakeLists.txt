@@ -29,6 +29,7 @@ set(SOURCES
   src/context/Win32EditTextContext.cpp
   src/context/Win32TextEditorContext.cpp
   src/context/Win32OpenFileDialogContext.cpp
+  src/context/Win32ConfirmDialogContext.cpp
   src/context/Win32PopupMenuContext.cpp
   src/context/Win32ImageViewContext.cpp
   src/context/Win32RectSurfaceContext.cpp
