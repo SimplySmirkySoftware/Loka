@@ -58,5 +58,6 @@ void testQuitSecondDeclineInSameTurnStillCancelsAttempt();
 void testQuitOtherDocumentDeclineInSameTurnEndsAttempt();
 void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt();
 void testQuitAllAcceptedExitsWithStaticWindow();
+void testQuitAllAcceptedWithoutStaticWindowQuitsOnce();
 
 #endif

@@ -75,6 +75,7 @@
 #include "Win32EditTextBridgeTests.hpp"
 #include "Win32FilePathTests.hpp"
 #include "Win32OpenFileDialogTransportTests.hpp"
+#include "Win32ConfirmDialogTransportTests.hpp"
 #include "Win32AppLocationTests.hpp"
 #include "Win32RectSurfacePaintTests.hpp"
 #include "Win32RectSurfaceRedrawTests.hpp"
@@ -94,6 +95,7 @@
 #include "MacWindowFrameClampTests.hpp"
 #include "MacWindowResizeTests.hpp"
 #include "MacOpenFileDialogTests.hpp"
+#include "MacConfirmDialogTests.hpp"
 #endif
 #include "DerivedStateTests.hpp"
 #include "DerivedNodeStateTests.hpp"
@@ -157,6 +159,7 @@
 #include "RectSurfaceSeatExtentTests.hpp"
 #include "NullPlatformContractTests.hpp"
 #include "OpenFileDialogTransportTests.hpp"
+#include "ConfirmDialogTransportTests.hpp"
 #include "LifecycleFactTests.hpp"
 #include "LokaAllocTests.hpp"
 #include "ForTests.hpp"

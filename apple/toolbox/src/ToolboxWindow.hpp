@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_WINDOW_HPP
 
 #include "app/core/Window.hpp"
+#include "app/core/DialogResultTransport.hpp"
 #include "ToolboxActivationPhase.hpp"
 #include <Windows.h>
 #include <vector>
@@ -35,6 +36,7 @@ public:
     return this;
   }
 
+  loka::app::DialogResultTransport &dialogResults() { return this->dialogResults_; }
   void setApp(App *app);
   void ensureSceneMounted();
   void open();
@@ -91,6 +93,9 @@ public:
   }
 
 private:
+  virtual void closeDialogResults() { this->dialogResults_.close(); }
+  virtual loka::app::DialogResultDelivery *dialogResultDelivery() { return &this->dialogResults_; }
+  loka::app::DialogResultTransport dialogResults_;
   static void TitleChangedThunk(void *userData);
   static void FrameChangedThunk(void *userData);
   App *app_;

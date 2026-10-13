@@ -1,3 +1,4 @@
+#include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "Win32BuiltInSupport.hpp"
 #include "app/nodes/AttributedText.hpp"
@@ -22,6 +23,7 @@
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
 #include "context/Win32OpenFileDialogContext.hpp"
+#include "context/Win32ConfirmDialogContext.hpp"
 #include "context/Win32PopupMenuContext.hpp"
 #include "context/Win32TextContext.hpp"
 #include "context/Win32AttributedTextContext.hpp"
@@ -60,6 +62,9 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   controller.hostActionHandlerRegistry_.registerHandler(
       loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>(),
       &Win32ScenePlatformController::DispatchProjectedLayout);
+  controller.hostActionHandlerRegistry_.registerHandler(
+      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>(),
+      &Win32ScenePlatformController::DispatchProjectedLayout);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::AttributedTextNode>(),
                                                         &Win32ScenePlatformController::DispatchProjectedLayout);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>(),
@@ -74,4 +79,5 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   RegisterWin32CellNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32OpenFileDialogNodeHandler(controller.nodeHandlerRegistry_);
   controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32ScrollBar);
+  RegisterWin32ConfirmDialogNodeHandler(controller.nodeHandlerRegistry_);
 }

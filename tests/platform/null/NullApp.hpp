@@ -10,6 +10,7 @@ public:
   explicit NullApp(AppConfigurable *config)
       : App(config),
         quitRequested_(false),
+        quitCalls_(0),
         bootstrapWindowlessReported_(false)
   {
   }
@@ -25,6 +26,13 @@ public:
   virtual void quit()
   {
     this->quitRequested_ = true;
+    ++this->quitCalls_;
+  }
+
+  /** How many times the rail's terminal quit ran; one menu Quit must cost one. */
+  int quitCalls() const
+  {
+    return this->quitCalls_;
   }
 
   bool quitRequested() const
@@ -51,6 +59,7 @@ protected:
 
 private:
   bool quitRequested_;
+  int quitCalls_;
   bool bootstrapWindowlessReported_;
   std::vector<Window *> adopted_;
   std::vector<Window *> bootstrapRefused_;

@@ -17,7 +17,7 @@ namespace loka
               &transport.reserved_, &transport.pending_, &transport.active_, &transport.retired_};
           size_t count = 0;
           for (size_t i = 0; i != 4; ++i)
-            for (DialogResultTransport::Entry *entry = chains[i]->head; entry; entry = entry->next)
+            for (DialogResultTransport::DialogRequest *entry = chains[i]->head; entry; entry = entry->next)
               ++count;
           return count;
         }

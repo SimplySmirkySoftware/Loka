@@ -3,14 +3,14 @@
 
 #include "app/OpenFileDialog.hpp"
 
-class ToolboxOpenFileDialogContext;
+class ToolboxDialogPresenter;
 namespace loka { namespace testing { struct ToolboxDialogTestAccess; } }
 
 /** Context-owned enrollment. Links alone encode pending membership. */
 class ToolboxDialogEnrollment
 {
 public:
-  explicit ToolboxDialogEnrollment(ToolboxOpenFileDialogContext *owner);
+  explicit ToolboxDialogEnrollment(ToolboxDialogPresenter *owner);
   ~ToolboxDialogEnrollment();
   void unlink();
 
@@ -21,7 +21,7 @@ private:
   ToolboxDialogEnrollment &operator=(const ToolboxDialogEnrollment &);
   ToolboxDialogEnrollment *prev_;
   ToolboxDialogEnrollment *next_;
-  ToolboxOpenFileDialogContext *const owner_;
+  ToolboxDialogPresenter *const owner_;
 };
 
 /** Window-owned FIFO, consumed only by the foreground App present pass. */
@@ -31,7 +31,7 @@ public:
   ToolboxPendingDialogs();
   ~ToolboxPendingDialogs();
   void enroll(ToolboxDialogEnrollment &row);
-  bool take(loka::app::OpenFileDialogProps &out);
+  ToolboxDialogPresenter *take();
   bool empty() const { return this->sentinel_.next_ == &this->sentinel_; }
 
 private:
@@ -43,8 +43,4 @@ private:
 
 /** Native modal body; holds no context or controller reference. */
 loka::app::FileChooserResult RunToolboxFileDialog(const loka::app::FileDialogOptions &options);
-/** Publishes copied result channels, preserving the emitter lifetime token. */
-void DeliverOpenFileDialogResult(loka::app::scene::NodeState<loka::app::FileChooserResult> resultState,
-                                 loka::core::EmitterState *onResult,
-                                 const loka::app::FileChooserResult &result);
 #endif

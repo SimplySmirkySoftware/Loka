@@ -64,6 +64,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/StyleTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextAlignmentTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/OpenFileDialogTransportTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/ConfirmDialogTransportTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/NullPlatformContractTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LifecycleFactTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/StateNotifyTests.cpp

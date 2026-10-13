@@ -1,0 +1,11 @@
+#ifndef LOKA_CONFIRM_DIALOG_TRANSPORT_TESTS_HPP
+#define LOKA_CONFIRM_DIALOG_TRANSPORT_TESTS_HPP
+void testConfirmDialogTransportDeliversEachResultOnce();
+void testConfirmDialogTransportReservedReturnIsRevoked();
+void testConfirmDialogTransportCallbackClosesWindow();
+void testDialogTransportMixedPayloadBatchKeepsOrder();
+void testConfirmDialogTransportEnrollmentRefusalRetriesOnAdmission();
+void testDialogTransportReclaimsRetiredEntriesOfBothPayloads();
+void testConfirmDialogOptionsIdentityAndNullRefusal();
+void testConfirmDialogTransportEmitterTokenChecksDeliveryLifetime();
+#endif

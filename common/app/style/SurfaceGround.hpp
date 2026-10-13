@@ -34,6 +34,7 @@ namespace loka
       case scene::NODE_KIND_EDIT_TEXT:
       case scene::NODE_KIND_POPUP_MENU:
       case scene::NODE_KIND_OPEN_FILE_DIALOG:
+      case scene::NODE_KIND_CONFIRM_DIALOG:
       case scene::NODE_KIND_SCROLL_BAR:
       case scene::NODE_KIND_TEXT_EDITOR:
         return SURFACE_GROUND_NATIVE;

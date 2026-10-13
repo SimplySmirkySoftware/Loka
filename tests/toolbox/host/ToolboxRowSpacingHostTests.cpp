@@ -5,6 +5,8 @@
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
+#include "core/util/StateTrackerGuard.hpp"
+#include "platform/String.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -22,17 +24,22 @@ namespace
     explicit SpacingNode(const SpacingProps &props) : StdCompositionBoundaryNodeBase<SpacingProps>(props) {}
     virtual void composeNode(NodeComposition &c)
     {
-      c.declare(Column() << (Column().TEST_ID("unaligned")
-                            << (Row() << Button("A").TEST_ID("row-a") << Button("B").TEST_ID("row-b"))
-                            << Text("below").TEST_ID("row-below"))
-                         << (Column().TEST_ID("aligned")
-                             << (Row().alignVertical(VERTICAL_ALIGNMENT_CENTER)
-                                 << Button("A").TEST_ID("aligned-a") << Button("B").TEST_ID("aligned-b"))
-                             << Text("below").TEST_ID("aligned-below"))
-                         << (Column().TEST_ID("plain") << Button("A").TEST_ID("plain-a")
-                                                     << Button("B").TEST_ID("plain-b"))
-                         << (RibbonControl().testId("ribbon")
-                             << RibbonItem("New") << RibbonItem("Save As...").width(120)));
+      c.declare(
+          Column()
+          << (Column().TEST_ID("unaligned") << (Row() << Button("A").TEST_ID("row-a") << Button("B").TEST_ID("row-b"))
+                                            << Text("below").TEST_ID("row-below"))
+          << (Column().TEST_ID("aligned") << (Row().alignVertical(VERTICAL_ALIGNMENT_CENTER)
+                                              << Button("A").TEST_ID("aligned-a") << Button("B").TEST_ID("aligned-b"))
+                                          << Text("below").TEST_ID("aligned-below"))
+          << (Column().TEST_ID("plain") << Button("A").TEST_ID("plain-a") << Button("B").TEST_ID("plain-b"))
+          << (RibbonControl().testId("ribbon") << RibbonItem("New") << RibbonItem("Save As...").width(120))
+          << (RibbonControl().testId("group") << RibbonItem(
+                  "Open") << (RibbonGroup("Alignment") << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
+                                              << RibbonItem("Close"))
+          << (RibbonControl().testId("caption-wins") << RibbonItem("Open")
+                                                     << (RibbonGroup("Alignment options for selected objects")
+                                                         << RibbonItem("L") << RibbonItem("C") << RibbonItem("R"))
+                                                     << RibbonItem("Close")));
     }
   };
 
@@ -50,7 +57,9 @@ namespace
   {
   public:
     explicit SpacingTraversal(ToolboxScenePlatformController &controller)
-        : controller_(controller), resultY_(0), paintedCount_(0)
+        : controller_(controller),
+          resultY_(0),
+          rectCount_(0)
     {
       RegisterToolboxPlatformLayoutHandlers(this->registry_);
     }
@@ -73,38 +82,211 @@ namespace
         }
         width = node->context->layout(&this->controller_, state);
         node->context->render(&this->controller_);
-        LOKA_VERIFY(this->paintedCount_ < 3);
+        LOKA_VERIFY(this->rectCount_ < 6);
         if (node->asButtonNode())
-          this->painted_[this->paintedCount_] = toolbox_host::controlRect;
+          this->rects_[this->rectCount_] = toolbox_host::controlRect;
         else
         {
-          const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
-          const PaintAnswer answer = static_cast<ToolboxTextContext *>(node->context)->queryPaintDamage(query);
-          LOKA_VERIFY(answer.kind == PAINT_ANSWER_EXACT);
-          SetRect(&this->painted_[this->paintedCount_], answer.damage.x, answer.damage.y,
-                  answer.damage.x + answer.damage.width, answer.damage.y + answer.damage.height);
+          SetRect(&this->rects_[this->rectCount_], offer.x, offer.y, offer.x + width, state.y - state.spacing);
         }
-        ++this->paintedCount_;
+        ++this->rectCount_;
       }
       this->resultY_ = state.y;
       return width;
     }
     virtual void setLayoutResultY(short y) { this->resultY_ = y; }
     virtual short layoutResultY() const { return this->resultY_; }
-    const Rect &painted(unsigned i) const
+    const Rect &rect(unsigned i) const
     {
-      LOKA_VERIFY(i < this->paintedCount_);
-      return this->painted_[i];
+      LOKA_VERIFY(i < this->rectCount_);
+      return this->rects_[i];
     }
 
   private:
     ToolboxScenePlatformController &controller_;
     PlatformLayoutHandlerRegistry registry_;
     short resultY_;
-    Rect painted_[3];
-    unsigned paintedCount_;
+    Rect rects_[6];
+    unsigned rectCount_;
   };
 }
+
+namespace
+{
+  class RefusingNaturalString : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out += "partial";
+      return false;
+    }
+  };
+
+  class RefusingFirstNaturalCollection : public loka::platform::String
+  {
+  public:
+    RefusingFirstNaturalCollection()
+        : refused_(false)
+    {
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out += "partial";
+      if (this->refused_)
+        return true;
+      this->refused_ = true;
+      return false;
+    }
+
+  private:
+    mutable bool refused_;
+  };
+
+  void TextNaturalPins(ToolboxScenePlatformController &controller)
+  {
+    using namespace loka::core;
+    PushStateTracker tracker;
+    MutableState<String> value(String::Literal("Alignment"));
+    MutableState<TextStyle> style((TextStyle()));
+    TextProps props(&value);
+    props.textStyleState_ = &style;
+    TextNode node(props);
+    ToolboxTextContext context(&node, &controller);
+    const TextStyle styles[] = {TextStyle(), SmallLabel, SmallLabel + Bold};
+    short widths[3] = {0, 0, 0};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      {
+        StateTrackerGuard guard(&tracker);
+        style.set(styles[i]);
+      }
+      const int measurements = toolbox_host::widths;
+      LOKA_VERIFY(controller.queryNaturalWidth(&node, widths[i]));
+      LOKA_VERIFY(toolbox_host::widths == measurements + 1);
+      LayoutState offer;
+      offer.width = 0;
+      offer.lineHeight = 16;
+      offer.inputs = NODE_DIRTY_LAYOUT;
+      LOKA_VERIFY(widths[i] == context.layout(&controller, offer));
+    }
+    LOKA_VERIFY(widths[1] < widths[0]);
+    LOKA_VERIFY(widths[2] > widths[1]);
+    short width = 123;
+    ToolboxScenePlatformController portless(0);
+    const int metrics = toolbox_host::metrics;
+    LOKA_VERIFY(!portless.queryNaturalWidth(&node, width));
+    LOKA_VERIFY(toolbox_host::metrics == metrics);
+    LOKA_VERIFY(width == 123);
+    {
+      StateTrackerGuard guard(&tracker);
+      style.set(TextStyle());
+    }
+    // Exercise nonpositive native measurements.
+    ToolboxWindow *window = controller.window_;
+    const short oldSize = window->port.txSize;
+    {
+      StateTrackerGuard guard(&tracker);
+      value.set(String(std::string(255, 'a')));
+    }
+    window->port.txSize = 1;
+    LOKA_VERIFY(!controller.queryNaturalWidth(&node, width));
+    window->port.txSize = -3;
+    LOKA_VERIFY(!controller.queryNaturalWidth(&node, width));
+    window->port.txSize = oldSize;
+    const String refused(Managed<loka::platform::String>::Wrap(new RefusingNaturalString()));
+    const String refusesOnce(Managed<loka::platform::String>::Wrap(new RefusingFirstNaturalCollection()));
+    const String declines[] = {String::Literal(""),
+                               String::Literal("a\nb"),
+                               String::Literal("a\rb"),
+                               refused,
+                               refusesOnce,
+                               String(std::string(255, 'a') + "\n")};
+    for (unsigned i = 0; i < sizeof(declines) / sizeof(declines[0]); ++i)
+    {
+      {
+        StateTrackerGuard guard(&tracker);
+        value.set(declines[i]);
+      }
+      LOKA_VERIFY(!controller.queryNaturalWidth(&node, width));
+      LOKA_VERIFY(width == 123);
+    }
+    {
+      StateTrackerGuard guard(&tracker);
+      value.set(String::Literal("Changed"));
+    }
+    LOKA_VERIFY(controller.queryNaturalWidth(&node, width));
+    LayoutState offer;
+    offer.width = 0;
+    offer.lineHeight = 16;
+    offer.inputs = NODE_DIRTY_LAYOUT;
+    LOKA_VERIFY(width == context.layout(&controller, offer));
+    LOKA_VERIFY(width != widths[0]);
+    std::string accented;
+    for (unsigned i = 0; i < 255; ++i)
+      accented += "\xC3\xA9";
+    {
+      StateTrackerGuard guard(&tracker);
+      value.set(String(accented));
+    }
+    node.props.textStyleState_ = 0;
+    node.props.textStyle_ = SmallLabel + Bold;
+    LOKA_VERIFY(controller.queryNaturalWidth(&node, width));
+    offer.inputs = NODE_DIRTY_LAYOUT;
+    LOKA_VERIFY(width == context.layout(&controller, offer));
+    node.props.text_ = 0;
+    LOKA_VERIFY(!controller.queryNaturalWidth(&node, width));
+    LOKA_VERIFY(!controller.queryNaturalWidth(0, width));
+  }
+
+  void GroupNaturalPins(Scene &scene,
+                        ToolboxScenePlatformController &controller,
+                        SpacingTraversal &traversal,
+                        const LayoutState &state,
+                        bool captionWins)
+  {
+    const char *id = captionWins ? "caption-wins" : "group";
+    traversal.layoutChild(SpacingLookup(scene, id), state);
+    short buttons[5] = {0, 0, 0, 0, 0};
+    loka::dsl::FlowError error;
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      ButtonNode *button = 0;
+      LOKA_VERIFY(loka::dsl::testing::ResolveSelector(
+                      &scene, loka::dsl::testing::WithinAnchor(id).descendant<ButtonNode>(i + 1), button, error)
+                  == loka::dsl::FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(controller.queryNaturalWidth(button, buttons[i]));
+    }
+    TextNode *caption = 0;
+    LOKA_VERIFY(loka::dsl::testing::ResolveSelector(
+                    &scene, loka::dsl::testing::WithinAnchor(id).descendant<TextNode>(1), caption, error)
+                == loka::dsl::FLOW_STEP_SUCCEEDED);
+    short captionWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(caption, captionWidth));
+    const int items = buttons[1] + state.spacing + buttons[2] + state.spacing + buttons[3];
+    LOKA_VERIFY(captionWins ? captionWidth > items : captionWidth < items);
+    const int groupWidth = items > captionWidth ? items : captionWidth;
+    const Rect open = traversal.rect(0), left = traversal.rect(1);
+    const Rect center = traversal.rect(2), right = traversal.rect(3);
+    const Rect label = traversal.rect(4), close = traversal.rect(5);
+    LOKA_VERIFY(open.right - open.left == buttons[0]);
+    LOKA_VERIFY(left.left == open.right + state.spacing);
+    LOKA_VERIFY(left.right - left.left == buttons[1]);
+    LOKA_VERIFY(center.left == left.right + state.spacing);
+    LOKA_VERIFY(center.right - center.left == buttons[2]);
+    LOKA_VERIFY(right.left == center.right + state.spacing);
+    LOKA_VERIFY(right.right - right.left == buttons[3]);
+    LOKA_VERIFY(label.left == left.left && label.right - label.left == groupWidth);
+    LOKA_VERIFY(close.left == label.right + state.spacing);
+    LOKA_VERIFY(close.right - close.left == buttons[4]);
+    std::printf("%s: items=%d caption=%d group=%d gap=%d\n",
+                id,
+                items,
+                captionWidth,
+                label.right - label.left,
+                close.left - label.right);
+  }
+} // namespace
 
 void testToolboxRowSpacing(const char *mode)
 {
@@ -113,6 +295,11 @@ void testToolboxRowSpacing(const char *mode)
   const bool aligned = std::strcmp(mode, "spacing-aligned") == 0;
   ToolboxWindow window;
   ToolboxScenePlatformController controller(&window);
+  if (std::strcmp(mode, "spacing-text-natural") == 0)
+  {
+    TextNaturalPins(controller);
+    return;
+  }
   Scene scene((Boundary<SpacingNode>(SpacingProps())));
   scene.mount(&controller);
   typedef loka::dsl::testing::SceneTestAccess Access;
@@ -125,8 +312,14 @@ void testToolboxRowSpacing(const char *mode)
   state.height = 100;
   state.lineHeight = 16;
   state.spacing = 6;
+  if (std::strcmp(mode, "spacing-group") == 0 || std::strcmp(mode, "spacing-caption-wins") == 0)
+  {
+    GroupNaturalPins(scene, controller, traversal, state, std::strcmp(mode, "spacing-caption-wins") == 0);
+    Access::unmount(scene);
+    return;
+  }
   traversal.layoutChild(SpacingLookup(scene, ribbon ? "ribbon" : plain ? "plain" : aligned ? "aligned" : "unaligned"), state);
-  const Rect a = traversal.painted(0), b = traversal.painted(1);
+  const Rect a = traversal.rect(0), b = traversal.rect(1);
   if (ribbon)
   {
     std::printf("Ribbon Toolbox widths: %d, %d; gap: %d\n", a.right - a.left, b.right - b.left, b.left - a.right);
@@ -157,7 +350,7 @@ void testToolboxRowSpacing(const char *mode)
     Access::unmount(scene);
     return;
   }
-  const Rect next = traversal.painted(plain ? 1 : 2);
+  const Rect next = traversal.rect(plain ? 1 : 2);
   const short bottom = plain ? a.bottom : (a.bottom > b.bottom ? a.bottom : b.bottom);
   const short gap = static_cast<short>(next.top - bottom);
   std::printf("%s: A=(%d,%d,%d,%d) B=(%d,%d,%d,%d) next-top=%d gap=%d\n", mode,

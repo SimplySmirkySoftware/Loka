@@ -81,6 +81,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32EditTextContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32TextEditorContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32OpenFileDialogContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ConfirmDialogContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32PopupMenuContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ImageViewContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32RectSurfaceContext.cpp
@@ -98,6 +99,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32MenuAttachmentTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32TextEditorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32OpenFileDialogTransportTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ConfirmDialogTransportTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32FilePathTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32AppLocationTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ImageBlobTests.cpp
