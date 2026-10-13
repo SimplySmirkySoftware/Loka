@@ -2,7 +2,9 @@
 
 // Library/core Objective-C: internal state goes through private accessors
 // (AGENTS.md, macOS Objective-C policy); the ivars are touched only by the
-// synthesized properties.
+// accessors. owner is synthesized. timer's accessors are written by hand: a
+// synthesized retain setter calls objc_setProperty, which the Objective-C 1
+// runtime on Tiger does not have (#1302).
 @interface LokaMacDeferredDialogPresenter ()
 @property(nonatomic, assign) MacDeferredDialogOwner *owner;
 @property(nonatomic, retain) NSTimer *timer;
@@ -10,7 +12,20 @@
 
 @implementation LokaMacDeferredDialogPresenter
 @synthesize owner = owner_;
-@synthesize timer = timer_;
+- (NSTimer *)timer
+{
+  return timer_;
+}
+
+- (void)setTimer:(NSTimer *)value
+{
+  if (timer_ != value)
+  {
+    [timer_ release];
+    timer_ = [value retain];
+  }
+}
+
 #ifdef TEST_BUILD
 - (NSTimer *)scheduledTimerForTesting
 {
