@@ -28,6 +28,8 @@ set(LOKA_TOOLBOX_SOURCES
   src/context/ToolboxCellContext.cpp
   src/context/ToolboxTextEditorContext.cpp
   src/context/ToolboxEditTextContext.cpp
+  src/ToolboxPendingDialogs.cpp
+  src/context/ToolboxConfirmDialogContext.cpp
   src/context/ToolboxOpenFileDialogContext.cpp
   src/context/ToolboxPopupMenuContext.cpp
   src/context/ToolboxScrollBarContext.cpp

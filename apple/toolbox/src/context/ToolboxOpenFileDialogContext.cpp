@@ -2,28 +2,10 @@
 #include "ToolboxFileChoice.hpp"
 #include "platform/ToolboxPascalText.hpp"
 #include "ToolboxScenePlatformController.hpp"
+#include "ToolboxApp.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <StandardFile.h>
 #include <cassert>
-
-void DeliverOpenFileDialogResult(loka::app::scene::NodeState<loka::app::FileChooserResult> resultState,
-                                 loka::core::EmitterState *onResult,
-                                 const loka::app::FileChooserResult &result)
-{
-  void *onResultToken = onResult ? onResult->retainExternalLifetimeToken() : 0;
-  if (resultState.isValid())
-  {
-    resultState.set(result, true);
-  }
-  if (onResult && loka::core::StateBase::isExternalLifetimeTokenAlive(onResultToken))
-  {
-    onResult->emit();
-  }
-  if (onResultToken)
-  {
-    loka::core::StateBase::releaseExternalLifetimeToken(onResultToken);
-  }
-}
 
 namespace
 {
@@ -45,55 +27,14 @@ namespace
       ToolboxScenePlatformController *toolbox = static_cast<ToolboxScenePlatformController *>(controller);
       (void)state;
       // Keep the installation ordering at the shared ritual; see RetainedNodeHandler.
-      return new ToolboxOpenFileDialogContext(node, toolbox ? &toolbox->pendingDialogs() : 0);
+      return new ToolboxOpenFileDialogContext(node, &toolbox->pendingDialogs(), toolbox->dialogResults());
     }
+    static void refresh(ToolboxOpenFileDialogContext *context, const loka::app::scene::LayoutState &)
+    { context->refresh(); }
   };
 
   ToolboxOpenFileDialogNodeHandler gToolboxOpenFileDialogNodeHandler;
 } // namespace
-
-ToolboxOpenFileDialogContext::ToolboxOpenFileDialogContext(loka::app::OpenFileDialogNode *node,
-                                                           ToolboxPendingDialogs *pending)
-    : pending_(pending), enrollment_(this), node_(node), props_(), presentation_()
-{
-  this->captureProps();
-}
-
-void ToolboxOpenFileDialogContext::readLifecycleFactOnAttach()
-{
-  if (this->node_ && this->node_->lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED)
-  {
-    this->applyAttachedPresentation();
-  }
-}
-
-void ToolboxOpenFileDialogContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                                 loka::app::scene::NodeLifecycleFact next)
-{
-  (void)previous;
-  if (next == loka::app::scene::NODE_FACT_ATTACHED)
-  {
-    this->applyAttachedPresentation();
-  }
-  else
-  {
-    // Both retained detach and terminal retirement cancel pending presentation.
-    this->applyDetachedPresentation();
-  }
-}
-
-void ToolboxOpenFileDialogContext::applyAttachedPresentation()
-{
-  if (this->pending_
-      && this->presentation_.value == loka::app::OPEN_FILE_DIALOG_PRESENTATION_PENDING_ATTACH)
-    this->pending_->enroll(this->enrollment_);
-}
-
-void ToolboxOpenFileDialogContext::applyDetachedPresentation()
-{
-  this->enrollment_.unlink();
-  this->presentation_.markDetached();
-}
 
 loka::app::FileChooserResult RunToolboxFileDialog(const loka::app::FileDialogOptions &options)
 {
@@ -148,76 +89,13 @@ bool RegisterToolboxOpenFileDialogNodeHandler(loka::app::scene::PlatformNodeHand
   return registry.registerHandler(&gToolboxOpenFileDialogNodeHandler);
 }
 
-void ToolboxOpenFileDialogContext::captureProps()
+void ToolboxOpenFileDialogContext::present(ToolboxApp &app)
 {
-  this->props_ = this->node_ ? this->node_->props : loka::app::OpenFileDialogProps();
-}
-
-void ToolboxOpenFileDialogContext::onPropsApplied()
-{
-  this->captureProps();
-}
-
-bool ToolboxOpenFileDialogContext::take(loka::app::OpenFileDialogProps &out)
-{
-  if (!this->node_ || this->node_->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
-    return false;
-  this->enrollment_.unlink();
-  out = this->props_;
-  this->presentation_.markPresented();
-  return true;
-}
-
-ToolboxDialogEnrollment::ToolboxDialogEnrollment(ToolboxOpenFileDialogContext *owner)
-    : prev_(0), next_(0), owner_(owner)
-{
-}
-
-ToolboxDialogEnrollment::~ToolboxDialogEnrollment()
-{
-  this->unlink();
-}
-
-void ToolboxDialogEnrollment::unlink()
-{
-  if (!this->next_)
-    return;
-  this->prev_->next_ = this->next_;
-  this->next_->prev_ = this->prev_;
-  this->prev_ = this->next_ = 0;
-}
-
-ToolboxPendingDialogs::ToolboxPendingDialogs() : sentinel_(0)
-{
-  this->sentinel_.prev_ = this->sentinel_.next_ = &this->sentinel_;
-}
-
-ToolboxPendingDialogs::~ToolboxPendingDialogs()
-{
-#ifdef LOKA_LIFECYCLE_AUDIT
-  const bool wasEmpty = this->sentinel_.next_ == &this->sentinel_;
-#endif
-  while (this->sentinel_.next_ != &this->sentinel_)
-    this->sentinel_.next_->unlink();
-#ifdef LOKA_LIFECYCLE_AUDIT
-  assert(wasEmpty && "pending dialogs must detach before controller teardown");
-  (void)wasEmpty;
-#endif
-}
-
-void ToolboxPendingDialogs::enroll(ToolboxDialogEnrollment &row)
-{
-  if (row.next_)
-    return;
-  row.prev_ = this->sentinel_.prev_;
-  row.next_ = &this->sentinel_;
-  row.prev_->next_ = &row;
-  this->sentinel_.prev_ = &row;
-}
-
-bool ToolboxPendingDialogs::take(loka::app::OpenFileDialogProps &out)
-{
-  if (this->sentinel_.next_ == &this->sentinel_)
-    return false;
-  return this->sentinel_.next_->owner_->take(out);
+  ReturnPort port(this->registration());
+  const loka::app::FileDialogOptions options(this->props().options_);
+  this->markPresented();
+  const loka::app::FileChooserResult result = RunToolboxFileDialog(options);
+  // Deliberate confirm twin: no context access after the modal can destroy it.
+  app.cursorOwner().reconcile();
+  port.seal(result);
 }

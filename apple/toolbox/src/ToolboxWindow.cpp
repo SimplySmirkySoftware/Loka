@@ -115,6 +115,7 @@ ToolboxWindow::ToolboxWindow(PlatformContext *context, const WindowProps &props)
 
 ToolboxWindow::~ToolboxWindow()
 {
+  this->closeDialogResults();
   this->detachNativeStateObservers();
   needsInvalidate_ = false;
   pendingDebugDump_ = false;
@@ -190,6 +191,7 @@ void ToolboxWindow::open()
   {
     return;
   }
+  this->dialogResults_.open(*this);
   GrafPtr previousPort;
   GetPort(&previousPort);
   SetPort(this->window_);

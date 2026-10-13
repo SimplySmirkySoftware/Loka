@@ -19,6 +19,7 @@
 #endif
 #define LOKA_TOOLBOX_IMAGE_VIEW_CONTEXT_HPP
 #define LOKA_TOOLBOX_OPEN_FILE_DIALOG_CONTEXT_HPP
+#define LOKA_TOOLBOX_CONFIRM_DIALOG_CONTEXT_HPP
 #ifndef LOKA_HOST_CONTROL_WIDTH
 #define LOKA_TOOLBOX_POPUP_MENU_CONTEXT_HPP
 #endif
@@ -99,10 +100,11 @@ namespace toolbox_host { extern GrafPtr frontWindow; extern int textHits; }
 inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
 #define LOKA_TOOLBOX_PENDING_DIALOGS_HPP
 #include "app/OpenFileDialog.hpp"
+#include "ToolboxDialogPresenter.hpp"
 class ToolboxPendingDialogs
 {
 public:
-  bool take(loka::app::OpenFileDialogProps &) { return false; }
+  ToolboxDialogPresenter *take() { return 0; }
   bool empty() const { return true; }
 };
 class ToolboxScenePlatformController;
@@ -455,6 +457,7 @@ LOKA_HOST_OTHER_HANDLER(EditText)
 #endif
 LOKA_HOST_OTHER_HANDLER(ImageView)
 LOKA_HOST_OTHER_HANDLER(OpenFileDialog)
+LOKA_HOST_OTHER_HANDLER(ConfirmDialog)
 #ifndef LOKA_HOST_CONTROL_WIDTH
 LOKA_HOST_OTHER_HANDLER(PopupMenu)
 #endif

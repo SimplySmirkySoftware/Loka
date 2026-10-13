@@ -1,4 +1,4 @@
-#include "app/ConfirmDialog.hpp"
+#include "context/ToolboxConfirmDialogContext.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "ToolboxBuiltInSupport.hpp"
@@ -18,8 +18,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedToolboxConfirmDialog(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxTextEditor(
       loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxButton(
@@ -66,6 +64,6 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
     ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxScrollBar) && ok;
   }
   ok = RegisterToolboxOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
-  ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxConfirmDialog) && ok;
+  ok = RegisterToolboxConfirmDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
   return ok;
 }

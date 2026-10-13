@@ -91,7 +91,6 @@ private:
   /** Applies recorded scene changes and, while foreground, paints each window
       once at the run-loop tick's presentation boundary. */
   void present(ActivationPhase phase, loka::core::Operation &turn);
-  bool hasPendingDialogs() const;
   /** The run loop owns this; every step branches on it rather than taking
       per-step booleans (see ToolboxActivationPhase.hpp). */
   ActivationPhase activationPhase_;

@@ -480,16 +480,18 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/platform/ToolboxMacRoman.cpp
     ${LOKA_TOOLBOX_FILE_COMMON_SOURCES}
     tests/TestingHooks.cpp
-    apple/toolbox/src/context/ToolboxOpenFileDialogContext.cpp)
+    apple/toolbox/src/context/ToolboxOpenFileDialogContext.cpp
+    apple/toolbox/src/context/ToolboxConfirmDialogContext.cpp
+    apple/toolbox/src/ToolboxPendingDialogs.cpp)
 
   target_include_directories(LokaToolboxFileChoiceTests PRIVATE
-    tests/toolbox/host tests apple/toolbox/src common tools example/SimpleViewer/src)
+    tests/toolbox/host/dialog tests/toolbox/host tests apple/toolbox/src common tools example/SimpleViewer/src)
   target_compile_definitions(LokaToolboxFileChoiceTests PRIVATE LOKA_RETRO68=1)
   target_compile_options(LokaToolboxFileChoiceTests PRIVATE -fno-exceptions -fno-rtti
     -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxFileChoiceHost.hpp)
   loka_enable_warnings(LokaToolboxFileChoiceTests)
   set_target_properties(LokaToolboxFileChoiceTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_file_case tuple single application viewer smirky refused collision-ab collision-ba decoy canonical validation allocation display copies dialog validity busy prepare prepare-refuses-write save save-retarget present-render present-update present-detach present-destroy present-close present-background present-quit present-fifo present-two-windows present-modal-destroy present-save present-reattach present-props present-lifecycle present-borrow present-controller present-no-group present-retire present-phase present-snapshot present-non-toolbox present-show present-scene-replace present-quit-delivery)
+  foreach(_file_case tuple single application viewer smirky refused collision-ab collision-ba decoy canonical validation allocation display copies dialog validity busy prepare prepare-refuses-write save save-retarget present-render present-update present-detach present-destroy present-close present-background present-quit present-fifo present-two-windows present-modal-destroy-suppresses present-save present-reattach present-props present-lifecycle present-borrow present-controller present-no-group present-retire present-phase present-snapshot present-non-toolbox present-show present-scene-replace present-quit-delivery confirm-present-maps-items mixed-fifo-order confirm-newdialog-failure-seals-error close-during-pending-revokes-both-payloads confirm-lifecycle confirm-retarget confirm-modal-destroy-suppresses confirm-items-failure-seals-error confirm-retarget-channels confirm-seals-before-admission confirm-filter-failure-seals-error)
     add_test(NAME testToolboxFileChoice_${_file_case} COMMAND LokaToolboxFileChoiceTests ${_file_case})
   endforeach()
 
@@ -497,7 +499,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   get_target_property(_dialog_sources LokaToolboxFileChoiceTests SOURCES)
   add_executable(LokaToolboxFileChoiceReleaseTests ${_dialog_sources})
   target_include_directories(LokaToolboxFileChoiceReleaseTests PRIVATE
-    tests/toolbox/host tests apple/toolbox/src common tools example/SimpleViewer/src)
+    tests/toolbox/host/dialog tests/toolbox/host tests apple/toolbox/src common tools example/SimpleViewer/src)
   target_compile_definitions(LokaToolboxFileChoiceReleaseTests PRIVATE LOKA_RETRO68=1)
   target_compile_options(LokaToolboxFileChoiceReleaseTests PRIVATE -fno-exceptions -fno-rtti
     -ULOKA_LIFECYCLE_AUDIT

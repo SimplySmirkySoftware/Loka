@@ -529,19 +529,36 @@ autonomous wake-up, and a post during the take waits for a later completion.
 (`OpenFileDialogProps` / `FileChooserResult`) or confirm (`ConfirmDialogProps` /
 `ConfirmResult`) payloads; registration and return ports remain typed per
 payload. Both share one finite delivery batch and the same synchronous
-revocation and silent reclamation paths. Confirm has no native presenter in
-this leg; Toolbox retains the copied file-channel delivery described below.
+revocation and silent reclamation paths. Toolbox uses the same ledger for file and confirm results; its native modal
+presentation is scheduled separately as described below.
 
 ### Toolbox file dialog presentation
 
-`ToolboxApp::present` consumes pending file dialogs in its foreground arm,
-after all window invalidation flushes and before focus reconciliation. The App
-must be running, the window must have a Toolbox controller and no pending close,
-and that controller's borrow phase must be closed. Each window presents at most
-one dialog per present, in FIFO order. A head whose node is no longer attached
-waits for its pending lifecycle apply to unlink it; detach and context destruction
-unlink rows. Background and no-group presents leave rows pending. The pass
-snapshots the windows before delivery can change the group. Taking a row copies
-its latest props and marks it presented before entering native code; no context
-is accessed after the modal. The App reconciles the cursor and delivers through
-the copied result channels. Reattach permits one new presentation.
+`ToolboxApp::present` consumes pending file and confirm dialogs in its foreground
+arm, after all window invalidation flushes and before focus reconciliation. The
+App must be running, the window must have a Toolbox controller and no pending
+close, and that controller's borrow phase must be closed. The foreground pass
+walks the Window group in order and presents at most **one dialog for the whole
+App**, taking the first eligible Window FIFO head (owner ruling, 2026-10-13,
+Window rally 3b d2-3). The next pass selects again from the surviving enrollments.
+Background and no-group presents leave rows pending. A head whose node is no
+longer attached waits for lifecycle apply to unlink it.
+
+Contexts own their FIFO enrollments and typed ledger registrations. Attach and
+refresh reserve a registration before enrollment; props changes revoke the old
+registration. A pending retarget enrolls the latest props; a consumed presentation
+waits for reattach. Detach and destruction synchronously unlink and revoke.
+Taking a row returns its presenter owner, which captures options and a typed
+return port before running native code. No context is accessed after the modal:
+the App cursor is reconciled and the stack port is sealed. The ordinary completion
+admission at the tail of the same tick delivers through the common Window ledger.
+There is no direct result delivery and no admission inside the FIFO walk. Close
+and quit callbacks run before the next pass can present another dialog.
+
+FIFO take, ledger reserve and seal are O(1); native presentation is at most once
+per App present pass. The presentation selector walks its own Window group once
+per foreground tick, with no extra snapshot allocation. Ordinary App admission
+still discovers Window work and delivers O(k) entries for each admitted Window;
+the tail adds no per-dialog group walk. Confirm uses hand-built Dialog Manager
+items (Save, Cancel, Don't Save), bounded native-script message text, and seals
+allocation refusal as `Error(memFullErr)` without retry.
