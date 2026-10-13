@@ -156,6 +156,15 @@ namespace
       NSView *view = project(controller, parent, node);
       NSBitmapImageRep *bitmap = render(view);
       LOKA_VERIFY(sameColor([bitmap colorAtX:4 y:4], [NSColor controlBackgroundColor]));
+      // The one-pixel border on each edge must differ from the ground it
+      // frames. NSFrameRect draws with the fill color, so a border color set
+      // only as the stroke came out in the ground color (#1208).
+      const NSInteger edges[][2] = {{0, 30}, {119, 30}, {60, 0}, {60, 59}};
+      for (int i = 0; i < 4; ++i)
+        LOKA_VERIFY(!sameColor([bitmap colorAtX:edges[i][0] y:edges[i][1]],
+                               [NSColor controlBackgroundColor]));
+      std::printf("[pixels] Cell %s border=%.6f ground=%.6f\n", dark ? "dark" : "light",
+                  luminance([bitmap colorAtX:0 y:30]), luminance([NSColor controlBackgroundColor]));
       // In dark appearance, glyph interiors must follow the bright text role;
       // the former fixed black cannot produce any such pixel.
       int textPixels = 0;
