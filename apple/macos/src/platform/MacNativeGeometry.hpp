@@ -19,6 +19,12 @@ namespace loka
       return NSMakeRect(0, 0, width.pt, CGFLOAT_MAX);
     }
 
+    /** One-line natural measurement: neither axis is bounded, so nothing is projected. */
+    inline NSRect MacUnboundedMeasurementBounds()
+    {
+      return NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX);
+    }
+
     /** Document width belongs to AppKit; only content height comes from layout. */
     inline void SetMacDocumentHeight(NSScrollView *scrollView, const MacLength &height)
     {

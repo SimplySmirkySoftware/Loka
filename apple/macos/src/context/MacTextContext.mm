@@ -160,7 +160,7 @@ bool MacTextContext::queryNaturalWidth(const loka::app::TextNode *text,
     return false;
   NSSize size;
   if (!MeasureTextCell(
-          string, geometry.font, loka::app::TEXT_WRAP_NONE, NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX), size))
+          string, geometry.font, loka::app::TEXT_WRAP_NONE, loka::macos::MacUnboundedMeasurementBounds(), size))
     return false;
   // Match the button answer: bound points before narrowing, including NaN refusal.
   const loka::app::Ratio &scale = controller->projection().railMetrics().spaceScale;
