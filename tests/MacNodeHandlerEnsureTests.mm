@@ -1398,9 +1398,9 @@ void testMacRibbonGroupNaturalWidthFrames()
       LOKA_VERIFY(controller.queryNaturalWidth(caption, captionWidth));
       LOKA_VERIFY(controller.queryNaturalWidth(open, openWidth));
       const int seat = captionWidth > itemsWidth ? captionWidth : itemsWidth;
-      LOKA_VERIFY([[root subviews] count] == 6);
+      LOKA_VERIFY([[root subviews] count] == 9);
       NSTextField *captionField = (NSTextField *)[[root subviews] objectAtIndex:4];
-      NSButton *closeButton = (NSButton *)[[root subviews] objectAtIndex:5];
+      NSButton *closeButton = (NSButton *)[[root subviews] objectAtIndex:8];
       LOKA_VERIFY([captionField isKindOfClass:[NSTextField class]]);
       LOKA_VERIFY([[captionField stringValue] isEqualToString:[NSString stringWithUTF8String:captions[sample]]]);
       LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
@@ -1418,10 +1418,122 @@ void testMacRibbonGroupNaturalWidthFrames()
           "macOS ribbon widths: caption=%d items=%d scale=%d sample=%d\n", captionWidth, itemsWidth, scale, sample);
       if (sample == 1)
         LOKA_VERIFY(captionWidth > itemsWidth);
+      // Content precedes the three closed edge leaves in the projection.
+      NSArray *edgeViews = [[NSArray alloc] initWithObjects:[[root subviews] objectAtIndex:5],
+                                                            [[root subviews] objectAtIndex:6],
+                                                            [[root subviews] objectAtIndex:7],
+                                                            nil];
+      CompositionCursor<Node> edges(frame->childrenHead(), frame->childrenCount());
+      edges.next();
+      NodeContext *contexts[3];
+      Node *edgeNodes[3];
+      for (int i = 0; i < 3; ++i)
+      {
+        edgeNodes[i] = edges.next();
+        LOKA_VERIFY(edgeNodes[i] && edgeNodes[i]->asRibbonGroupEdgeNode());
+        contexts[i] = edgeNodes[i]->getContext();
+        LOKA_VERIFY(contexts[i] != 0);
+        LOKA_VERIFY([[edgeViews objectAtIndex:i] isFlipped]);
+        LOKA_VERIFY(![[edgeViews objectAtIndex:i] isHidden]);
+      }
+      const NSRect left = [[edgeViews objectAtIndex:0] frame];
+      const NSRect right = [[edgeViews objectAtIndex:1] frame];
+      const NSRect bottom = [[edgeViews objectAtIndex:2] frame];
+      const int groupWidth = seat + 2 * RibbonGroupNode::kFrameInset;
+      LOKA_VERIFY(NSMinX(left) == projection.projectEdge(groupX).pt);
+      LOKA_VERIFY(NSMinY(left) == projection.projectEdge(20).pt);
+      LOKA_VERIFY(NSMaxX(left) == projection.projectEdge(groupX + 1).pt);
+      LOKA_VERIFY(NSMinX(right) == projection.projectEdge(groupX + groupWidth - 1).pt);
+      LOKA_VERIFY(NSMaxX(right) == projection.projectEdge(groupX + groupWidth).pt);
+      LOKA_VERIFY(NSMinY(right) == NSMinY(left));
+      LOKA_VERIFY(NSMaxY(left) == NSMinY(bottom));
+      LOKA_VERIFY(NSMaxY(right) == NSMinY(bottom));
+      LOKA_VERIFY(NSMinX(bottom) == NSMinX(left));
+      LOKA_VERIFY(NSMaxX(bottom) == NSMaxX(right));
+      LOKA_VERIFY(NSMinY(bottom) > NSMaxY([captionField frame]));
+      // At unit scale the bottom is exactly one point; projection may round
+      // the non-unit metric's one-lu strip to one or two points.
+      if (scale == 0)
+        LOKA_VERIFY(bottom.size.height == 1);
+      controller.relayout(640, 160);
+      LOKA_VERIFY([[root subviews] count] == 9);
+      for (int i = 0; i < 3; ++i)
+      {
+        LOKA_VERIFY(edgeNodes[i]->getContext() == contexts[i]);
+        LOKA_VERIFY([[root subviews] objectAtIndex:5 + i] == [edgeViews objectAtIndex:i]);
+      }
+      NotifySubtreeNodeDetached(frame);
+      LifecycleFactTestAccess::DeliverFacts(frame);
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY([[edgeViews objectAtIndex:i] isHidden]);
+      NotifySubtreeNodeAttached(frame);
+      LifecycleFactTestAccess::DeliverFacts(frame);
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY(![[edgeViews objectAtIndex:i] isHidden]);
       SceneTestAccess::unmount(scene);
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY([[edgeViews objectAtIndex:i] superview] == nil);
+      [edgeViews release];
     }
     LOKA_VERIFY([[root subviews] count] == 0);
     [root release];
   }
+  [pool drain];
+}
+
+void testMacRibbonGroupEdgeEnsureAndRetirement()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    int released = 0;
+    NSView *view = nil;
+    NSAutoreleasePool *nativePool = [[NSAutoreleasePool alloc] init];
+    {
+      RibbonGroupEdgeNode edge((RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT)));
+      LayoutState state;
+      state.x = 7;
+      state.y = 9;
+      state.width = 0;
+      state.height = 0;
+      LOKA_VERIFY(controller.prepareProjectedLayout(&edge, state));
+      LOKA_VERIFY([[root subviews] count] == 1);
+      view = [[root subviews] objectAtIndex:0];
+      LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(7, 9, 0, 0)));
+      NodeContext *context = edge.getContext();
+      state.width = 1;
+      state.height = 19;
+      LOKA_VERIFY(controller.prepareProjectedLayout(&edge, state));
+      LOKA_VERIFY(edge.getContext() == context);
+      LOKA_VERIFY([[root subviews] count] == 1);
+      LOKA_VERIFY([[root subviews] objectAtIndex:0] == view);
+      LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(7, 9, 1, 19)));
+      state.x = 11;
+      state.y = 13;
+      state.height = 0;
+      LOKA_VERIFY(edge.layoutProjected(&controller, state) == 13);
+      LOKA_VERIFY(state.height == 0);
+      LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(11, 13, 1, 0)));
+      state.x = 17;
+      state.y = 23;
+      state.height = 11;
+      LOKA_VERIFY(context->layout(&controller, state) == 34);
+      LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(17, 23, 1, 11)));
+      observeMacNativeDeallocation(view, released);
+    }
+    [nativePool drain];
+    LOKA_VERIFY(released == 0);
+    LOKA_VERIFY([view superview] == nil);
+    LOKA_VERIFY([view isHidden]);
+    controller.drainNativeRetirements();
+    LOKA_VERIFY(released == 1);
+    controller.drainNativeRetirements();
+    LOKA_VERIFY(released == 1);
+  }
+  [root release];
   [pool drain];
 }

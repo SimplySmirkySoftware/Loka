@@ -122,3 +122,6 @@ LOKA_TEST(testMacConfirmDialogMapsEachResponseToResult)
 LOKA_TEST(testMacConfirmDialogRetargetBeforePresentation)
 LOKA_TEST(testMacPerformCloseAsksKeyedWindowWithoutClosing)
 LOKA_TEST(testMacPerformCloseClosesUnkeyedWindowAsToday)
+
+LOKA_TEST(testMacRibbonGroupEdgePixels)
+LOKA_TEST(testMacRibbonGroupEdgeEnsureAndRetirement)
