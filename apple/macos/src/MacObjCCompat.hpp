@@ -146,4 +146,14 @@ typedef float CGFloat;
 - (id)effectiveAppearance;
 @end
 
+// NSView's inputContext and NSTextInputContext's discardMarkedText arrived in
+// 10.6. As above, these declarations only give Objective-C++ the types;
+// respondsToSelector: remains the runtime wall.
+@interface NSView (LokaInputContextCompat)
+- (id)inputContext;
+@end
+@interface NSObject (LokaDiscardMarkedTextCompat)
+- (void)discardMarkedText;
+@end
+
 #endif // LOKA_MAC_OBJC_COMPAT_HPP

@@ -1557,6 +1557,43 @@ void testMacTextEditorRefusals()
   }
 }
 
+void testMacTextEditorCompositionRefusal()
+{
+  // #1264: an input method composes through setMarkedText: and commits
+  // through insertText:. Stage 1 refuses the composition before it marks
+  // anything, so the view never holds marked text while it is read-only.
+  Fixture f;
+  Observer observer(f);
+  const Snapshot snapshot(f);
+  const NSRange selection = [f.view selectedRange];
+  const NSRange none = NSMakeRange(NSNotFound, 0);
+  // A converted preedit is non-ASCII; a romaji preedit is ASCII. Both are refused.
+  NSString *preedits[] = {@"\u304b", @"k"};
+  for (int i = 0; i < 2; ++i)
+  {
+    [f.view setMarkedText:preedits[i] selectedRange:NSMakeRange(1, 0) replacementRange:none];
+    // The run loop turns between keystrokes. On the unfixed rail the refusal's
+    // restore replaced the storage here, and AppKit's commit of the stale
+    // marked text recursed until the stack overflowed.
+    for (int turn = 0; turn < 5; ++turn)
+      f.turn();
+    LOKA_VERIFY(![f.view hasMarkedText]);
+    LOKA_VERIFY([f.view isEditable]);
+    LOKA_VERIFY(Access::restores(*f.context) == 0);
+    snapshot.unchanged(f);
+    LOKA_VERIFY(observer.calls == 0);
+    LOKA_VERIFY(NSEqualRanges([f.view selectedRange], selection));
+  }
+  // The commit arrives as text and is refused like a keystroke.
+  [f.view insertText:@"\u304b" replacementRange:none];
+  LOKA_VERIFY(![f.view isEditable]);
+  f.restored(1);
+  snapshot.unchanged(f);
+  LOKA_VERIFY(observer.calls == 0);
+  LOKA_VERIFY(NSEqualRanges([f.view selectedRange], selection));
+  nextKey(f);
+}
+
 void testMacTextEditorNestedInput()
 {
   // PR C2 (#1057): only the immediate variant remains. The deferred variant
