@@ -1269,3 +1269,10 @@ LOKA_TEST(testWin32TextInks)
 LOKA_TEST(testWin32GroundLegibility)
 
 LOKA_TEST(testNullTextSmallLabelMetrics)
+
+LOKA_TEST(testStackNaturalWidthComposesGroup)
+LOKA_TEST(testStackNaturalWidthSharedAndDeclaredSeats)
+LOKA_TEST(testStackNaturalWidthDeclinesIncompleteAndOverflow)
+LOKA_TEST(testStackNaturalWidthColumnDeclaredWidths)
+LOKA_TEST(testStackNaturalWidthReadsLiveAxis)
+LOKA_TEST(testRibbonGroupExpansionAndGeometry)

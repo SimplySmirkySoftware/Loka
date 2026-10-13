@@ -2,6 +2,8 @@
 #define LOKA_APP_NODES_CONTROLS_RIBBON_HPP
 
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/Text.hpp"
+#include "app/style/StyleVocab.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include <cassert>
@@ -11,6 +13,7 @@ namespace loka
   namespace app
   {
     struct RibbonControlDefinition;
+    struct RibbonGroupDefinition;
 
     /** One native push button in a left-to-right RibbonControl, using its rail's
         natural width unless width(n) declares a fixed seat. The emitter is borrowed;
@@ -67,7 +70,7 @@ namespace loka
 
     /** A left-to-right row of native push buttons using rail-measured natural
         widths or the item's explicit width(n). A declining rail shares the remaining
-        width among undeclared seats. Only RibbonItems may
+        width among undeclared seats. Only RibbonItems and RibbonGroups may
         be appended, preserving a closed declaration for future native projections.
         Enabled, icons and identifier commands are later work. */
     struct RibbonControlDefinition
@@ -86,7 +89,7 @@ namespace loka
       }
 
       // Declaring this operator hides the generic node operator<< of the base,
-      // so a RibbonControl accepts RibbonItems only.
+      // so a RibbonControl accepts only the closed ribbon vocabulary.
       RibbonControlDefinition &operator<<(const RibbonItemDefinition &item)
       {
         short fixedWidth = 0;
@@ -97,8 +100,40 @@ namespace loka
           BaseType::operator<<(Button(ButtonProps().text(item.title_).onClick(item.onClick_)));
         return *this;
       }
+      RibbonControlDefinition &operator<<(const RibbonGroupDefinition &group);
     };
     typedef RibbonControlDefinition RibbonControl;
+
+    /** A captioned group of RibbonItems. The items sit above a centered small
+        secondary label; the wider part determines the group's natural width.
+        A rail that declines either part gives the group a shared seat. */
+    struct RibbonGroupDefinition
+    {
+      explicit RibbonGroupDefinition(const char *caption)
+          : caption_(loka::core::String::Literal(caption)),
+            items_()
+      {
+      }
+
+      RibbonGroupDefinition &operator<<(const RibbonItemDefinition &item)
+      {
+        this->items_ << item;
+        return *this;
+      }
+
+    private:
+      friend struct RibbonControlDefinition;
+      loka::core::String caption_;
+      RibbonControlDefinition items_;
+    };
+    typedef RibbonGroupDefinition RibbonGroup;
+
+    inline RibbonControlDefinition &RibbonControlDefinition::operator<<(const RibbonGroupDefinition &group)
+    {
+      BaseType::operator<<(VStack() << group.items_
+                                    << (Text(group.caption_) + SmallLabel + Secondary + block::Centered));
+      return *this;
+    }
   } // namespace app
 } // namespace loka
 
