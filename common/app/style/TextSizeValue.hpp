@@ -2,12 +2,13 @@
 #define LOKA_APP_STYLE_TEXT_SIZE_VALUE_HPP
 
 #include <cassert>
+#include "app/style/StyleVocab.hpp"
 
 namespace loka
 {
   namespace app
   {
-    /** Optional text size. Absence is transparent during style merge.
+    /** Optional points or semantic font role. Absence is transparent during style merge.
         Points are stored unchanged; each rail keeps its existing snapping policy.
         Four bytes, the size of the int and flag it replaced: TextStyle sits in
         every Text definition, and the definitions are pinned to their pool class. */
@@ -15,7 +16,7 @@ namespace loka
     {
     public:
       TextSizeValue()
-          : points_(0),
+          : payload_(0),
             kind_(static_cast<unsigned char>(NONE))
       {
       }
@@ -24,7 +25,7 @@ namespace loka
       static TextSizeValue points(int value)
       {
         assert(value >= -32768 && value <= 32767 && "text size points must fit in a short");
-        return TextSizeValue(static_cast<short>(value));
+        return TextSizeValue(static_cast<short>(value), POINTS);
       }
 
       /** Returns false without changing out when no points were declared. */
@@ -32,13 +33,30 @@ namespace loka
       {
         switch (static_cast<Kind>(this->kind_))
         {
+        case ROLE:
         case NONE:
           return false;
         case POINTS:
-          out = this->points_;
+          out = this->payload_;
           return true;
         }
         return false;
+      }
+
+      /** A semantic size, resolved by the receiving rail. */
+      static TextSizeValue role(TextSizeRole value)
+      {
+        assert(value >= 0 && value < TEXT_SIZE_ROLE_COUNT);
+        return TextSizeValue(static_cast<short>(value), ROLE);
+      }
+
+      /** Returns false without changing out when no role was declared. */
+      bool queryRole(TextSizeRole &out) const
+      {
+        if (this->kind_ != ROLE)
+          return false;
+        out = static_cast<TextSizeRole>(this->payload_);
+        return true;
       }
 
       bool isSet() const
@@ -48,30 +66,31 @@ namespace loka
 
       bool operator==(const TextSizeValue &other) const
       {
-        return this->kind_ == other.kind_ && this->points_ == other.points_;
+        return this->kind_ == other.kind_ && this->payload_ == other.payload_;
       }
 
       bool operator<(const TextSizeValue &other) const
       {
         if (this->kind_ != other.kind_)
           return this->kind_ < other.kind_;
-        return this->points_ < other.points_;
+        return this->payload_ < other.payload_;
       }
 
     private:
       enum Kind
       {
         NONE,
-        POINTS
+        POINTS,
+        ROLE
       };
 
-      explicit TextSizeValue(short value)
-          : points_(value),
-            kind_(static_cast<unsigned char>(POINTS))
+      TextSizeValue(short value, Kind kind)
+          : payload_(value),
+            kind_(static_cast<unsigned char>(kind))
       {
       }
 
-      short points_;
+      short payload_;
       unsigned char kind_;
     };
   } // namespace app

@@ -118,6 +118,33 @@ add_test(NAME standalonePerformanceConfigAccepts-3
     -DLOKA_TEST_PERFORMANCE_RUNS=3
     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/scripts/StandalonePerformanceConfigProbe.cmake)
 
+# The SmirkyCard disk-script ASCII wall, one case per refusal shape: an
+# embedded NUL followed by an em-dash (a text read stops at the NUL), a bare
+# em-dash, a control byte, DEL, and a "00" that straddles two allowed bytes.
+foreach(_loka_ascii_case IN ITEMS
+    "clean|6f6b09746162200d0a|-1"
+    "nulThenEmDash|61626300646566e2809478|3"
+    "emDash|616263e2809478|3"
+    "control|610162|1"
+    "del|617f|1"
+    "straddledZeroes|200a300a|-1")
+  string(REPLACE "|" ";" _loka_ascii_fields "${_loka_ascii_case}")
+  list(GET _loka_ascii_fields 0 _loka_ascii_name)
+  list(GET _loka_ascii_fields 1 _loka_ascii_hex)
+  list(GET _loka_ascii_fields 2 _loka_ascii_offset)
+  add_test(NAME "smirkyCardDiskScriptAscii-${_loka_ascii_name}"
+    COMMAND ${CMAKE_COMMAND}
+      -DLOKA_REPOSITORY_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+      -DHEX=${_loka_ascii_hex}
+      -DEXPECT_OFFSET=${_loka_ascii_offset}
+      -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/scripts/SmirkyCardDiskScriptAsciiProbe.cmake)
+endforeach()
+unset(_loka_ascii_case)
+unset(_loka_ascii_fields)
+unset(_loka_ascii_name)
+unset(_loka_ascii_hex)
+unset(_loka_ascii_offset)
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/LokaTestSources.cmake)
 
 # Compile-only regression pins are built by the headless test profile and by
