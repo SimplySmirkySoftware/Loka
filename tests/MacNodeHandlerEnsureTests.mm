@@ -1077,3 +1077,34 @@ void testMacCaptureRefusalReleasesBitmapOnce()
   [outer drain];
   std::printf("==== [testMacCaptureRefusalReleasesBitmapOnce] PASSED ====\n");
 }
+
+void testMacSmallLabelUsesTheSmallSystemFont()
+{
+  std::printf("\n==== [testMacSmallLabelUsesTheSmallSystemFont] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    // The rail's default metrics have a non-unit fontScale (13/12); the role,
+    // like the unset size, is a system size that fontScale does not touch.
+    MacScenePlatformController controller((void *)root, loka::macos::DefaultRailMetrics());
+    NSFont *body = (NSFont *)controller.textFont(TextStyle());
+    NSFont *small = (NSFont *)controller.textFont(SmallLabel);
+    LOKA_VERIFY(small != nil && small != body);
+    LOKA_VERIFY([small pointSize] == [NSFont smallSystemFontSize]);
+    LOKA_VERIFY([[small familyName] isEqualToString:[body familyName]]);
+    // Weight and the fixed-pitch column compose with the role on its own row.
+    NSFont *smallBold = (NSFont *)controller.textFont(SmallLabel + Bold);
+    LOKA_VERIFY(smallBold != nil && smallBold != small);
+    LOKA_VERIFY([smallBold pointSize] == [NSFont smallSystemFontSize]);
+    LOKA_VERIFY(([[NSFontManager sharedFontManager] traitsOfFont:smallBold] & NSBoldFontMask) != 0);
+    NSFont *smallFixed = (NSFont *)controller.textFont(SmallLabel, true);
+    LOKA_VERIFY(smallFixed != nil && [smallFixed isFixedPitch]);
+    LOKA_VERIFY([smallFixed pointSize] == [NSFont smallSystemFontSize]);
+  }
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacSmallLabelUsesTheSmallSystemFont] PASSED ====\n");
+}

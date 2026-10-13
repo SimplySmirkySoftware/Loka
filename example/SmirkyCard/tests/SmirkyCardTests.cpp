@@ -1172,6 +1172,7 @@ namespace
         "Text('a',{size:13}).TEST_ID('Snap13'),Text('a',{size:16}).TEST_ID('Snap16'),"
         "Text('a',{size:21}).TEST_ID('Snap21'),Text('a',{size:18}).TEST_ID('Exact18'),"
         "Text('a',{size:24}).TEST_ID('Chained'),"
+        "Text('a',{size:'smallLabel'}).TEST_ID('SmallLabel'),"
         "Text('a',{weight:'normal',italic:false}).TEST_ID('Normal'),"
         "Text('a').TEST_ID('Plain'),Text(this.text,{size:18}).TEST_ID('Live'),"
         "Text(this.c.error,{italic:true}).TEST_ID('Error'))}});",
@@ -1185,7 +1186,7 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
     loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
     const char *ids[] = {
-        "Chained", "Styled", "Snap13", "Snap16", "Snap21", "Exact18", "Normal", "Plain", "Live", "Error"};
+        "Chained", "Styled", "Snap13", "Snap16", "Snap21", "Exact18", "Normal", "Plain", "Live", "Error", "SmallLabel"};
     const TextStyle styles[] = {FontSize<24>(),
                                 FontSize<24>() + Bold + Italic,
                                 FontSize<12>(),
@@ -1195,7 +1196,8 @@ namespace
                                 TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false),
                                 TextStyle(),
                                 FontSize<18>(),
-                                Italic};
+                                Italic,
+                                SmallLabel};
     for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
     {
       loka::app::scene::Node *node = find(root, ids[i]);
@@ -1405,6 +1407,8 @@ namespace
   {
     const char *styles[] = {"{colour:1}",
                             "{size:'big'}",
+                            "{size:'SmallLabel'}",
+                            "{size:'smallLabel\\u0000'}",
                             "{color:1}",
                             "{color:'purple'}",
                             "{color:'Red'}",

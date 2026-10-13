@@ -422,6 +422,7 @@ void App::admitAndApplyWindows()
     if (scene && !scene->isBusy())
       window->retireSceneForClose();
   }
+  this->advanceQuitAttempt();
   this->projectMenuSources();
   this->flushingWindowWork_ = false;
 }
@@ -472,6 +473,55 @@ void App::windowClosed(Window *window)
   assert(activeWindow_ != window && "A retired Window cannot remain active at reclaim");
   window->closeDialogResults();
   delete window;
+}
+
+bool App::closeAsked(Window *window)
+{
+  if (!this->group_ || !this->windowSeat_)
+    return false;
+  const loka::core::ItemId key = this->group_->keyOf(window);
+  if (key.isNone())
+    return false;
+  this->windowSeat_->roster().askClose(key);
+  return true;
+}
+
+void App::requestQuit()
+{
+  if (!this->windowSeat_ || this->windowSeat_->roster().count() == 0)
+  {
+    this->quitAttempt_ = QuitAttempt::none();
+    this->quit();
+    return;
+  }
+  loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
+  roster.askClose(roster.idAt(0));
+  this->quitAttempt_ = QuitAttempt(roster.closeAsked().get());
+}
+
+/** Once per admission tail: constant State/count/first-id reads, no row walk.
+    The roster only appends and removes: its asked first row cannot move. */
+void App::advanceQuitAttempt()
+{
+  if (this->quitAttempt_.id.isNone())
+    return;
+  loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
+  // Any decline published at or after this attempt's ask ends it, whichever
+  // document declined: the answer box is latest-wins, so a second ask in the
+  // same turn (a native close box on another document, or the same one; Win32
+  // drains queued accelerators before its tail) overwrites the asked
+  // document's own decline. Ending the attempt on any later decline costs the
+  // user one more Quit; keeping it would quit later without being asked. The
+  // decline is read before the row, so a document that declined and was then
+  // closed by hand in the same turn does not read as an acceptance.
+  const loka::app::CloseAnswer answer = roster.closeAnswer().get();
+  if (!answer.id.isNone() && answer.seq >= this->quitAttempt_.seq)
+  {
+    this->quitAttempt_ = QuitAttempt::none();
+    return;
+  }
+  if (roster.count() == 0 || roster.idAt(0) != this->quitAttempt_.id)
+    this->requestQuit();
 }
 
 void App::requestWindowClose(Window *window)
