@@ -27,10 +27,13 @@ namespace loka
         assert((offer.overlay == 0) == (offer.source == 0));
         this->applied_ = offer;
       }
-      void release(const scene::Scene *scene)
+      /** Revoke a matching source; the rail uses the result to drop bindings. */
+      bool release(const scene::Scene *scene)
       {
-        if (scene && this->applied_.source == scene)
-          this->clear();
+        if (!scene || this->applied_.source != scene)
+          return false;
+        this->clear();
+        return true;
       }
       void clear()
       {
