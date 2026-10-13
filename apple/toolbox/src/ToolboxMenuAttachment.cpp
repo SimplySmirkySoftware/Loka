@@ -1,3 +1,4 @@
+#include "app/MenuComposition.hpp"
 #include "ToolboxMenuAttachment.hpp"
 #include "ToolboxApp.hpp"
 #include "ToolboxWindow.hpp"
@@ -650,12 +651,16 @@ ToolboxApp::~ToolboxApp()
   this->retireComponents();
 }
 
-void ToolboxApp::projectMenu(Window *activeWindow, const loka::app::MenuBarDefinition *bar,
-                             const loka::app::scene::Scene *source)
+void ToolboxApp::projectMenu(Window *activeWindow, const loka::app::MenuSources &sources)
 {
   if (activeWindow != this->activeWindow())
     return;
-  if (this->menuAttachment_.project(bar, source) && activeWindow && activeWindow->asToolboxWindow())
+  // Temporary bridge, mirrored by the other rails until identity projection lands.
+  loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
+      loka::app::MergeMenuBars(sources.base, sources.overlay));
+  if (!sources.absent() && !merged.isSet())
+    return;
+  if (this->menuAttachment_.project(merged.get(), sources.source) && activeWindow && activeWindow->asToolboxWindow())
     activeWindow->asToolboxWindow()->preserveNativeContentPositionAfterMenuBarChange();
 }
 

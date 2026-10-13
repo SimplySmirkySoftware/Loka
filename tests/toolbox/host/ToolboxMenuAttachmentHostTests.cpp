@@ -138,16 +138,14 @@ void testToolboxMenuAttachmentSeesItemChange()
 {
   ToolboxApp app;
   const MenuBarDefinition first = checkedBar(false), second = checkedBar(true);
-  app.setDefaultMenuBar(&first);
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  LOKA_VERIFY(app.menuAttachment().project(&first, 0));
   LOKA_VERIFY(toolbox_host::menuSets.back() == "Actual");
-  app.setDefaultMenuBar(&second);
   clearCalls();
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  app.menuAttachment().project(&second, 0);
   LOKA_VERIFY(toolbox_host::menuSets.size() == 1 && toolbox_host::menuSets[0] == "Actual");
   LOKA_VERIFY(toolbox_host::menuTitles.empty());
   clearCalls();
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  app.menuAttachment().project(&second, 0);
   noCalls();
 }
 void testToolboxMenuAttachmentPartialRebuildFromBaseline()
@@ -235,21 +233,19 @@ void testToolboxMenuAttachmentCloneRefusalClearsAppliedBaseline()
 {
   ToolboxApp app;
   const MenuBarDefinition first = checkedBar(false), second = checkedBar(true);
-  app.setDefaultMenuBar(&first);
-  app.projectMenu(0, app.defaultMenuBar(), 0);
-  app.setDefaultMenuBar(&second);
+  LOKA_VERIFY(app.menuAttachment().project(&first, 0));
   loka::app::testing::failMenuBarDefinitionClones(1);
   clearCalls();
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  app.menuAttachment().project(&second, 0);
   LOKA_VERIFY(toolbox_host::menuSets.size() == 1 && toolbox_host::menuSets[0] == "Actual");
-  LOKA_VERIFY(app.defaultMenuBar()->menuAt(0)->itemsHead()->isCheckedInitial());
+  LOKA_VERIFY(second.menuAt(0)->itemsHead()->isCheckedInitial());
   loka::app::testing::allowMenuBarDefinitionClones();
   clearCalls();
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  app.menuAttachment().project(&second, 0);
   // Failed capture left no baseline, so even an equal offer must rebuild fully.
   LOKA_VERIFY(toolbox_host::menuTitles.size() == 1 && toolbox_host::menuDisposes == 1);
   clearCalls();
-  app.projectMenu(0, app.defaultMenuBar(), 0);
+  app.menuAttachment().project(&second, 0);
   noCalls();
 }
 
@@ -418,17 +414,61 @@ void testToolboxMenuDoorFiltersRowsAndForwardsScene()
   MenuBarDefinition other = bar("Other");
   f.app.setActiveWindow(&f.window);
   clearCalls();
-  f.app.projectMenu(&inactive, &other, 0);
-  f.app.projectMenu(0, &other, 0);
+  const MenuSources otherSources = {&other, 0, 0};
+  f.app.projectMenu(&inactive, otherSources);
+  f.app.projectMenu(0, otherSources);
   noCalls();
   // Equal Scene offer proves the door retained the source identity as well as
   // the contents; dropping the source would force a native rebuild here.
-  f.app.projectMenu(&f.window, f.window.scene()->menuBar(), f.window.scene());
+  const MenuSources sceneSources = {0, f.window.scene()->menuBar(), f.window.scene()};
+  f.app.projectMenu(&f.window, sceneSources);
   noCalls();
+  const MenuSources combined = {&other, f.window.scene()->menuBar(), f.window.scene()};
+  f.app.projectMenu(&f.window, combined);
+  LOKA_VERIFY(toolbox_host::installedMenus.size() == 2);
+  LOKA_VERIFY(toolbox_host::installedMenus[0]->items[0] == "Run");
+  LOKA_VERIFY(toolbox_host::installedMenus[1]->items[0] == "Copy");
+  clearCalls();
   f.app.setActiveWindow(0);
-  f.app.projectMenu(0, &other, 0);
+  f.app.projectMenu(0, otherSources);
   LOKA_VERIFY(toolbox_host::menuDraws == 1);
   f.app.menuAttachment().disconnect();
+}
+void testToolboxMenuBridgeRefusalPreservesNativeAndRetries()
+{
+  ToolboxApp app;
+  MenuBarDefinition first = bar("Initial"), second = bar("Replacement");
+  const MenuSources initial = {&first, 0, 0}, replacement = {&second, 0, 0};
+  app.projectMenu(0, initial);
+  MenuHandle installed = toolbox_host::installedMenus[0];
+  clearCalls();
+  loka::app::testing::failMenuBarDefinitionClones(1);
+  app.projectMenu(0, replacement);
+  loka::app::testing::allowMenuBarDefinitionClones();
+  noCalls();
+  LOKA_VERIFY(toolbox_host::installedMenus[0] == installed);
+  LOKA_VERIFY(installed->items[0] == "Initial");
+  app.projectMenu(0, replacement);
+  LOKA_VERIFY(toolbox_host::menuSets.size() == 1);
+  LOKA_VERIFY(toolbox_host::menuSets[0] == "Replacement");
+  clearCalls();
+  app.projectMenu(0, replacement);
+  noCalls();
+}
+void testToolboxMenuBridgeReleaseThenAbsentClearsNative()
+{
+  Mounted f;
+  f.app.menuAttachment().releaseFrom(f.window.scene());
+  LOKA_VERIFY(!toolbox_host::installedMenus.empty());
+  f.app.setActiveWindow(0);
+  clearCalls();
+  const MenuSources absent = {0, 0, 0};
+  f.app.projectMenu(0, absent);
+  LOKA_VERIFY(toolbox_host::installedMenus.empty());
+  LOKA_VERIFY(toolbox_host::menuClears == 1 && toolbox_host::menuDraws == 1);
+  clearCalls();
+  f.app.projectMenu(0, absent);
+  noCalls();
 }
 void testToolboxMenuProjectionDefersBackgroundDraws()
 {
@@ -668,6 +708,8 @@ int main(int argc, char **argv)
   struct Test { const char *name; void (*run)(); };
 #define PIN(name) {#name, &name}
   const Test tests[] = {
+    PIN(testToolboxMenuBridgeRefusalPreservesNativeAndRetries),
+    PIN(testToolboxMenuBridgeReleaseThenAbsentClearsNative),
     PIN(testToolboxMenuTitleFollowsState),
     PIN(testToolboxSubmenuTitleFollowsState),
     PIN(testToolboxMenuTitleStateUnbindsOnRelease),

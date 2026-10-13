@@ -440,8 +440,7 @@ namespace
     }
 
   protected:
-    virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *,
-                             const loka::app::scene::Scene *)
+    virtual void projectMenu(Window *window, const loka::app::MenuSources &)
     {
       ++applyMenuCalls;
       appliedWindow = window;

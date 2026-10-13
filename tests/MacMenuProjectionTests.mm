@@ -216,7 +216,8 @@ void testMacMenuDoorSkipsProjectionDuringTracking()
   CocoaHost host;
   TestApp app;
   MenuBarDefinition first = bar(), changed = bar(true);
-  app.projectMenu(0, &first, 0);
+  const loka::app::MenuSources firstSources = {&first, 0, 0};
+  app.projectMenu(0, firstSources);
   NSMenu *installed = [[NSApp mainMenu] retain];
   // Run the loop in the tracking mode AppKit uses while a menu is open; the
   // door must leave the tracked graph alone and the next completion re-offers.
@@ -225,12 +226,14 @@ void testMacMenuDoorSkipsProjectionDuringTracking()
   MenuBarDefinition *offer = &changed;
   CFRunLoopPerformBlock(CFRunLoopGetCurrent(), (CFStringRef)NSEventTrackingRunLoopMode, ^{
     ran = true;
-    door->projectMenu(0, offer, 0);
+    const loka::app::MenuSources sources = {offer, 0, 0};
+    door->projectMenu(0, sources);
   });
   [[NSRunLoop currentRunLoop] runMode:NSEventTrackingRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
   LOKA_VERIFY(ran);
   LOKA_VERIFY([NSApp mainMenu] == installed);
-  app.projectMenu(0, &changed, 0);
+  const loka::app::MenuSources changedSources = {&changed, 0, 0};
+  app.projectMenu(0, changedSources);
   LOKA_VERIFY([NSApp mainMenu] != installed);
   [installed release];
 }
