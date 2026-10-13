@@ -293,7 +293,8 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     offset.state().set(40000);
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) && "an oversized offset must recover to the exact content maximum");
+    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
+           "an oversized offset must recover to the exact content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);

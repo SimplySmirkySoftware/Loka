@@ -119,8 +119,8 @@ namespace
             const int textHeight = measured > minimum ? measured : minimum;
             const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
             const int buttonY = captionY + 20 + 12;
-            LOKA_VERIFY(NSEqualRects([page frame], projection.projectFrame(
-                loka::core::Frame(layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r));
+            LOKA_VERIFY(NSEqualRects([page frame], projection.projectFrame(loka::core::Frame(
+                layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r));
             LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(captionY).pt);
             LOKA_VERIFY(NSMinY([button frame]) == projection.projectEdge(buttonY).pt);
             LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + 32).pt);
