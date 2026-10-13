@@ -1,3 +1,4 @@
+#include "context/ToolboxConfirmDialogContext.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
@@ -66,6 +67,7 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
     ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxScrollBar) && ok;
   }
   ok = RegisterToolboxOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
+  ok = RegisterToolboxConfirmDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
   ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxConfirmDialog) && ok;
   return ok;
 }

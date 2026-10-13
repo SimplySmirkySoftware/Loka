@@ -58,6 +58,8 @@ public:
       standalone layout's inset-only width for that case. */
   bool measurePushButtonNaturalWidth(const loka::core::String &label, short &width) const;
   short measurePushButtonNaturalWidth(const loka::core::String &label) const;
+  loka::app::DialogResultTransport *dialogResults()
+  { return this->window_ ? &this->window_->dialogResults() : 0; }
   ToolboxPendingDialogs &pendingDialogs() { return this->pendingDialogs_; }
   void registerCompositionReplay(ToolboxCompositionReplay::Registration &registration)
   {
