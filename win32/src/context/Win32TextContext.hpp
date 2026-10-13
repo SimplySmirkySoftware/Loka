@@ -47,6 +47,15 @@ public:
                    int height,
                    loka::app::TextNode *node);
   virtual ~Win32TextContext();
+  /** Native CALCRECT operation shared by constrained height and natural width.
+      The caller supplies the selected Text font and the initial rectangle; a
+      null font measures with the DC's current font, the historical unstyled
+      height. */
+  static bool measureTextRect(HWND hwnd, HFONT font, const std::wstring &wide, RECT &rect);
+  /** One-line width using the same font and rectangle measurement as Text layout.
+      Refusal leaves width untouched; no context or measurement cache is created. */
+  static bool
+  queryNaturalWidth(const loka::app::TextNode *node, const Win32ScenePlatformController *controller, short &width);
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
   virtual loka::app::scene::ICapturableBitmap *asCapturableBitmap()
   {

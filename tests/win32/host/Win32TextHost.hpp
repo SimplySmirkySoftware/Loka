@@ -54,6 +54,10 @@ public:
   {
     return this->rootHwnd_;
   }
+  HWND rootHwnd() const
+  {
+    return this->rootHwnd_;
+  }
 
   void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   void synchronize() {}
