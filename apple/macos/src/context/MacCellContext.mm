@@ -99,7 +99,8 @@ namespace
   [super drawRect:dirtyRect];
   loka::macos::MacPaintGround(
       loka::app::GroundForKind(loka::app::scene::NODE_KIND_CELL), self.bounds);
-  [MacCellBorderColor() setStroke];
+  // NSFrameRect draws with the fill color, not the stroke color.
+  [MacCellBorderColor() setFill];
   NSFrameRect(self.bounds);
 
   if ([self text])
