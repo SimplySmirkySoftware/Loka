@@ -8,6 +8,7 @@ void testMacTextEditorStorageChanges();
 void testMacTextEditorStorageAttributes();
 void testMacTextEditorMultilinePasteRefusal();
 void testMacTextEditorRefusals();
+void testMacTextEditorCompositionRefusal();
 void testMacTextEditorNestedInput();
 void testMacTextEditorReplacementFailure();
 void testMacTextEditorHighlightAndLifecycle();
