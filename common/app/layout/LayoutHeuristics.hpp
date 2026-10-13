@@ -35,34 +35,41 @@ namespace loka
         return value;
       }
 
-      inline int preferredChildWidthForColumn(loka::app::scene::Node *child, int availableWidth)
+      /** Unclamped Column width claim, or a negative value when undeclared. */
+      inline int declaredChildWidthForColumn(loka::app::scene::Node *child)
       {
         if (!child)
         {
-          return clampToAvailable(availableWidth, availableWidth);
+          return -1;
         }
         if (loka::app::ImageViewNode *image = child->asImageViewNode())
         {
           if (image->props.width_ > 0)
           {
-            return clampToAvailable(image->props.width_, availableWidth);
+            return image->props.width_;
           }
         }
         if (loka::app::RectSurfaceNode *surface = child->asRectSurfaceNode())
         {
           if (surface->props.width_ > 0)
           {
-            return clampToAvailable(surface->props.width_, availableWidth);
+            return surface->props.width_;
           }
         }
         if (loka::app::BoxNode *box = child->asBoxNode())
         {
           if (box->props.hasFixedSize())
           {
-            return clampToAvailable(box->props.effectiveWidth(), availableWidth);
+            return box->props.effectiveWidth();
           }
         }
-        return clampToAvailable(availableWidth, availableWidth);
+        return -1;
+      }
+
+      inline int preferredChildWidthForColumn(loka::app::scene::Node *child, int availableWidth)
+      {
+        const int declared = declaredChildWidthForColumn(child);
+        return clampToAvailable(declared < 0 ? availableWidth : declared, availableWidth);
       }
 
       /** Returns a Row child's fixed-width claim, a negative value for a flex
@@ -98,7 +105,10 @@ namespace loka
       /** Owns one Row pass's flex remainder and live-seat progression.
           NATURAL rows query each eligible child at most twice: once while
           totalling, once in next(). SHARED rows never query the source.
-          Source answers and child claims must stay stable for the whole pass. */
+          Stacks compose the smallest width that seats each child at its own width
+          under their layout rules; only leaves reach the source. Each stack ask
+          walks its own subtree without caching. Source answers and child claims
+          must stay stable for the whole pass. */
       class RowWidthConsultation
       {
       public:
@@ -110,6 +120,7 @@ namespace loka
       private:
         int preferredWidth(loka::app::scene::Node *child) const;
         const INaturalWidthSource *source_;
+        int gap_;
         int baseFlexWidth_;
         int flexRemainder_;
         int liveSeatsSeen_;

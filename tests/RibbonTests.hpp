@@ -3,4 +3,6 @@
 
 void testRibbonFixedSeatsAndClicks();
 
+void testRibbonGroupExpansionAndGeometry();
+
 #endif

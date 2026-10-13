@@ -20,4 +20,10 @@ void testRowSharedWidthNeverQueriesSource();
 
 void testNullNaturalWidthDeclinesUnrepresentableWidth();
 
+void testStackNaturalWidthComposesGroup();
+void testStackNaturalWidthSharedAndDeclaredSeats();
+void testStackNaturalWidthDeclinesIncompleteAndOverflow();
+void testStackNaturalWidthColumnDeclaredWidths();
+void testStackNaturalWidthReadsLiveAxis();
+
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP

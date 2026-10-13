@@ -1,4 +1,5 @@
 #include "ToolboxOutOfMemory.hpp"
+#include "ToolboxDialogConstruction.hpp"
 #include "ToolboxReserveGrowZone.hpp"
 #include <Dialogs.h>
 #include <Events.h>
@@ -69,41 +70,6 @@ pascal long ReleaseReserveForSystem(Size cbNeeded)
 }
 const Rect kQuitBounds = {100, 264, 120, 332};
 
-void PutWord(unsigned char *&out, unsigned short value)
-{
-  *out++ = static_cast<unsigned char>(value >> 8);
-  *out++ = static_cast<unsigned char>(value);
-}
-
-// DITL records have a four-byte placeholder, Rect, type, byte length, and
-// even-padded data. Encode explicitly: host pointer size/alignment is irrelevant.
-void PutItem(unsigned char *&out, const Rect &bounds, unsigned char type,
-             const unsigned char *data, unsigned char length)
-{
-  PutWord(out, 0); PutWord(out, 0);
-  PutWord(out, bounds.top); PutWord(out, bounds.left);
-  PutWord(out, bounds.bottom); PutWord(out, bounds.right);
-  *out++ = type; *out++ = length;
-  std::memcpy(out, data, length); out += length;
-  if (length & 1) *out++ = 0;
-}
-
-void DrawQuitOutline(DialogPtr dialog)
-{
-  GrafPtr savedPort;
-  GetPort(&savedPort);
-  SetPort(reinterpret_cast<GrafPtr>(dialog));
-  PenState savedPen;
-  GetPenState(&savedPen);
-  PenNormal();
-  PenSize(3, 3);
-  Rect bounds = kQuitBounds;
-  InsetRect(&bounds, -4, -4);
-  FrameRoundRect(&bounds, 16, 16);
-  SetPenState(&savedPen);
-  SetPort(savedPort);
-}
-
 pascal Boolean QuitFilter(DialogPtr dialog, EventRecord *event, short *item)
 {
   if (event->what == updateEvt &&
@@ -112,7 +78,7 @@ pascal Boolean QuitFilter(DialogPtr dialog, EventRecord *event, short *item)
     // Draw the standard default outline inside the update clip, after items.
     BeginUpdate(reinterpret_cast<WindowPtr>(dialog));
     DrawDialog(dialog);
-    DrawQuitOutline(dialog);
+    loka::toolbox::DrawDialogDefaultOutline(dialog, kQuitBounds);
     EndUpdate(reinterpret_cast<WindowPtr>(dialog));
     return false;
   }
@@ -147,25 +113,20 @@ void ShowOutOfMemoryDialog()
 
   unsigned char bytes[2 + 18 + 14 + 256 + 16];
   unsigned char *out = bytes;
-  PutWord(out, 2); // count minus one
-  PutItem(out, kQuitBounds, ctrlItem + btnCtrl,
+  loka::toolbox::PutDialogWord(out, 2); // count minus one
+  loka::toolbox::PutDialogItem(out, kQuitBounds, ctrlItem + btnCtrl,
           reinterpret_cast<const unsigned char *>("Quit"), 4);
   const Rect textBounds = {20, 64, 88, 332};
-  PutItem(out, textBounds, statText + itemDisable, text, textLength);
+  loka::toolbox::PutDialogItem(out, textBounds, statText + itemDisable, text, textLength);
   const Rect iconBounds = {20, 20, 52, 52};
   const unsigned char stopIcon[] = {0, 0}; // System ICON resource 0
-  PutItem(out, iconBounds, iconItem + itemDisable, stopIcon, 2);
+  loka::toolbox::PutDialogItem(out, iconBounds, iconItem + itemDisable, stopIcon, 2);
   Handle items = NewHandle(out - bytes);
   if (!items) return;
   std::memcpy(*items, bytes, out - bytes);
   // Centre horizontally and place a third of the way down the work area, as
   // the Dialog Manager places alerts; items are in dialog-local coordinates.
-  const short width = 352, height = 140;
-  const Rect &screen = qd.screenBits.bounds;
-  const short workTop = static_cast<short>(screen.top + GetMBarHeight());
-  const short left = static_cast<short>((screen.left + screen.right - width) / 2);
-  const short top = static_cast<short>(workTop + (screen.bottom - workTop - height) / 3);
-  const Rect bounds = {top, left, static_cast<short>(top + height), static_cast<short>(left + width)};
+  const Rect bounds = loka::toolbox::CenterDialogBounds(352, 140);
   const unsigned char title[] = {0};
   DialogPtr dialog = NewDialog(0, &bounds, title, true, dBoxProc,
                               reinterpret_cast<WindowPtr>(-1), false, 0, items);
@@ -176,7 +137,7 @@ void ShowOutOfMemoryDialog()
   }
   // NewDialog transfers the item list to the dialog; DisposeDialog owns it.
   ModalFilterUPP filter = NewModalFilterUPP(QuitFilter);
-  DrawQuitOutline(dialog);
+  loka::toolbox::DrawDialogDefaultOutline(dialog, kQuitBounds);
   SysBeep(1);
   short item = 0;
   do { ModalDialog(filter, &item); } while (item != 1);
