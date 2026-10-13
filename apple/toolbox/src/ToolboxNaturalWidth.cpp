@@ -1,6 +1,8 @@
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/Text.hpp"
+#include "platform/StringUTF8.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 #include <climits>
 
@@ -30,10 +32,27 @@ short ToolboxScenePlatformController::measurePushButtonNaturalWidth(const loka::
 bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
-  if (!button)
+  if (button)
+  {
+    const loka::core::String label =
+        button->props.text_ ? button->props.text_->get() : loka::core::String::Literal("Button");
+    // A refused measurement declines, so the Row keeps a shared seat.
+    return this->measurePushButtonNaturalWidth(label, width);
+  }
+  loka::app::TextNode *text = child ? child->asTextNode() : 0;
+  if (!text || !text->props.text_)
     return false;
-  const loka::core::String label =
-      button->props.text_ ? button->props.text_->get() : loka::core::String::Literal("Button");
-  // A refused measurement declines, so the Row keeps a shared seat.
-  return this->measurePushButtonNaturalWidth(label, width);
+  const loka::core::String value = text->props.text_->get();
+  // One line only: a line break declines, so multi-line Text keeps a shared seat.
+  std::string utf8;
+  if (!loka::platform::CollectUtf8(value, utf8) || utf8.find_first_of("\r\n") != std::string::npos)
+    return false;
+  // The Text context measures through this same scope and descriptor, so the
+  // answer is the width it lays the string out at.
+  ToolboxTextMeasureScope scope(*this, ToolboxTextFontDescriptor(text->props.resolvedTextStyle()));
+  short measured = 0;
+  if (!scope.measure(value, measured) || measured <= 0)
+    return false;
+  width = measured;
+  return true;
 }

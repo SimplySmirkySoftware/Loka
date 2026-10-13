@@ -2,6 +2,7 @@
 #define LOKA_MAC_OPEN_FILE_DIALOG_CONTEXT_HPP
 
 #include "MacRetirableContext.hpp"
+#include "MacDeferredDialogPresenter.hpp"
 #include "app/core/DialogResultTransport.hpp"
 #include "core/String.hpp"
 
@@ -19,7 +20,7 @@ namespace loka
 class MacScenePlatformController;
 class MacDialogResultTestAccess;
 
-class MacOpenFileDialogContext : public MacRetirableContext
+class MacOpenFileDialogContext : public MacRetirableContext, public MacDeferredDialogOwner
 {
 public:
   MacOpenFileDialogContext(MacScenePlatformController *controller,
@@ -32,7 +33,7 @@ public:
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
                              loka::app::scene::NodeLifecycleFact next);
   void presentIfNeeded();
-  void presentDeferred();
+  virtual void presentDeferred();
   virtual void onPropsApplied();
 
 private:

@@ -62,6 +62,22 @@ typedef char ClassicSpecSize[sizeof(FSSpec) == 70 ? 1 : -1];
 typedef char ClassicParentOffset[offsetof(FSSpec, parID) == 2 ? 1 : -1];
 typedef char ClassicNameOffset[offsetof(FSSpec, name) == 6 ? 1 : -1];
 
+/** Native capture tests seal through the same Window ledger as presentation. */
+static void RunFileToLedger(const loka::app::OpenFileDialogProps &props)
+{
+  ToolboxWindow window;
+  ToolboxApp app(window);
+  loka::app::DialogResultTransport::Registration *registration = window.results.reserve(props);
+  LOKA_VERIFY(registration != 0);
+  {
+    loka::app::DialogResultTransport::ReturnPort port(registration);
+    LOKA_VERIFY(port.seal(RunToolboxFileDialog(props.options_)) == &window);
+  }
+  app.flush();
+  delete registration;
+  app.flush();
+}
+
 // The production dialog consumes a fake Standard File reply and publishes
 // through its real NodeState door; retained choices outlive every temporary.
 static File Choose(const FSSpec &spec)
@@ -74,7 +90,7 @@ static File Choose(const FSSpec &spec)
   loka::app::OpenFileDialogNode node(loka::app::OpenFileDialogProps().result(state));
   reply.sfGood = true;
   reply.sfFile = spec;
-  DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+  RunFileToLedger(node.props);
   LOKA_VERIFY(storage.get().kind == Result::RESULT_FILE);
   const File chosen = storage.get().item;
   tracker.removeState(&storage);
@@ -446,14 +462,14 @@ static void Dialog()
   reply.sfFile = Spec(-1, 10, "dialog");
   Put(reply.sfFile, "dialog contents");
   {
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
   }
   LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_FILE);
   LOKA_VERIFY(Read(platform, storage.get().item) == "dialog contents");
   state.set(FileChooserResult());
   {
     failLokaAllocRaw("FileLocator", "Payload", 1);
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_ERROR);
     LOKA_VERIFY(storage.get().item.locator().empty());
     allowLokaAllocRaw();
@@ -477,7 +493,7 @@ static void SaveDialog()
   File first;
   for (unsigned i = 0; i != 2; ++i)
   {
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_FILE);
     if (!i) first = storage.get().item;
     else LOKA_VERIFY(!(first != storage.get().item));
@@ -497,19 +513,19 @@ static void SaveDialog()
   for (unsigned i = 0; i != 3; ++i)
   {
     reply.sfFile = Spec(-7, 123, std::string(invalidLengths[i], 'n'));
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_ERROR && storage.get().errorCode == paramErr);
   }
   reply.sfGood = false;
   {
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_CANCELED);
   }
   reply.sfGood = true;
   reply.sfFile = Spec(-7, 123, "n");
   {
     failLokaAllocRaw("FileLocator", "Payload", 1);
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(storage.get().kind == FileChooserResult::RESULT_ERROR && storage.get().errorCode == memFullErr);
     allowLokaAllocRaw();
   }
@@ -519,7 +535,7 @@ static void SaveDialog()
   {
     node.props.options_ = FileDialogOptions(FILE_DIALOG_SAVE, names[i]);
     const unsigned before = putCalls;
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     if (i == 1 || i == 2)
     {
       LOKA_VERIFY(putCalls == before);
@@ -537,7 +553,7 @@ static void SaveDialog()
   node.props.options_ = FileDialogOptions(FILE_DIALOG_SAVE, String::Literal("Caf\xc3\xa9"));
   {
     const unsigned before = putCalls;
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(putCalls == before && storage.get().kind == FileChooserResult::RESULT_ERROR);
   }
   toolbox_host::systemScript = smRoman;
@@ -545,7 +561,7 @@ static void SaveDialog()
   reply.sfFile = Spec(-7, 123, std::string(32, 'n'));
   node.props.options_ = FileDialogOptions();
   {
-    DeliverOpenFileDialogResult(node.props.result_, node.props.onResult_, RunToolboxFileDialog(node.props.options_));
+    RunFileToLedger(node.props);
     LOKA_VERIFY(getCalls == 1 && storage.get().kind == FileChooserResult::RESULT_FILE);
   }
   storage.unbind(&CountDelivery, &notifications);
@@ -691,7 +707,9 @@ static void Busy()
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (!std::strncmp(argv[1], "present-", 8)) PresentPin(argv[1] + 8);
+  if (!std::strncmp(argv[1], "confirm-", 8) || !std::strcmp(argv[1], "mixed-fifo-order")
+      || !std::strcmp(argv[1], "close-during-pending-revokes-both-payloads")) ConfirmPinTest(argv[1]);
+  else if (!std::strncmp(argv[1], "present-", 8)) PresentPin(argv[1] + 8);
   else if (!std::strcmp(argv[1], "tuple")) Tuple();
   else if (!std::strcmp(argv[1], "single")) Single();
   else if (!std::strcmp(argv[1], "application")) Application(false, false);

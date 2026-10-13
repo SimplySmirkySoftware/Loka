@@ -95,6 +95,7 @@
 #include "MacWindowFrameClampTests.hpp"
 #include "MacWindowResizeTests.hpp"
 #include "MacOpenFileDialogTests.hpp"
+#include "MacConfirmDialogTests.hpp"
 #endif
 #include "DerivedStateTests.hpp"
 #include "DerivedNodeStateTests.hpp"

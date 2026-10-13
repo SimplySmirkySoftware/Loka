@@ -1,4 +1,5 @@
 #include "ToolboxPendingDialogs.hpp"
+#include "ToolboxDialogPresenter.hpp"
 
 /** Outer admission/render completion, shared with the host fixture. */
 void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
@@ -28,19 +29,13 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
     this->reclaimWindows();
     return;
   }
-  if (this->hasPendingDialogs())
+  // One group walk and at most one modal for the entire App. No group borrow
+  // is read after native code: the modal may have changed the Window group.
+  if (this->running_)
   {
-    // Delivery may remove windows from the group; App reclamation follows this pass.
-    const AppComponentGroup::Components components = this->group_->getComponents();
-    std::vector<AppComponent *> dialogs;
-    dialogs.reserve(components.size());
-    for (std::size_t i = 0; i < components.size(); ++i)
-      dialogs.push_back(components[i]);
+    const AppComponentGroup::Components dialogs = this->group_->getComponents();
     for (std::size_t i = 0; i < dialogs.size(); ++i)
     {
-      // A delivery may quit the app; later windows then present nothing.
-      if (!this->running_)
-        break;
       Window *window = dialogs[i] ? dialogs[i]->asWindow() : 0;
       if (!window || this->isWindowClosePending(window))
         continue;
@@ -48,33 +43,19 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
       ToolboxScenePlatformController *controller = toolboxWindow ? toolboxWindow->scenePlatformController() : 0;
       if (!controller || controller->borrowPhase().open())
         continue;
-      loka::app::OpenFileDialogProps props;
-      if (controller->pendingDialogs().take(props))
+      ToolboxDialogPresenter *dialog = controller->pendingDialogs().take();
+      if (dialog)
       {
-        const loka::app::FileChooserResult result = RunToolboxFileDialog(props.options_);
-        this->cursorOwner_.reconcile();
-        DeliverOpenFileDialogResult(props.result_, props.onResult_, result);
+        dialog->present(*this);
+        // One more admission only on the tick that ran a modal: it delivers the
+        // sealed value so close/quit callbacks act before the next pass. Never
+        // admit inside the dialog walk.
+        this->admitAndApplyWindows();
+        break;
       }
     }
   }
   this->reconcileFocus();
   turn.close();
   this->reclaimWindows();
-}
-
-/** Allocation-free check before the dialog pass snapshots the group. */
-bool ToolboxApp::hasPendingDialogs() const
-{
-  if (!this->running_ || !this->group_)
-    return false;
-  const AppComponentGroup::Components comps = this->group_->getComponents();
-  for (std::size_t i = 0; i < comps.size(); ++i)
-  {
-    Window *window = comps[i] ? comps[i]->asWindow() : 0;
-    ToolboxWindow *toolboxWindow = window ? window->asToolboxWindow() : 0;
-    ToolboxScenePlatformController *controller = toolboxWindow ? toolboxWindow->scenePlatformController() : 0;
-    if (controller && !controller->pendingDialogs().empty())
-      return true;
-  }
-  return false;
 }
