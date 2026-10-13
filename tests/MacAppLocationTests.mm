@@ -7,10 +7,12 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 #include "core/io/File.hpp"
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileIO.hpp"
+#include "platform/StringUTF8.hpp"
 
 @interface NSFileManager (LokaSidecarTests)
 - (BOOL)loka_testRefuseWritableFileAtPath:(NSString *)path;
@@ -63,11 +65,14 @@ void testMacApplicationItemNamesResourceDirectory()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   NSString *executablePath = [[NSBundle mainBundle] executablePath];
-  NSString *executableDirectory = [executablePath stringByDeletingLastPathComponent];
+  // Mac OS X 10.9 joins the launch directory and argv[0] without normalizing
+  // ("/private/tmp/./sub/tool" for "./sub/tool") while resourcePath comes back
+  // normalized; later releases normalize both. Paths compare normalized.
+  NSString *executableDirectory = [[executablePath stringByDeletingLastPathComponent] stringByStandardizingPath];
   NSString *resourcePath = [[NSBundle mainBundle] resourcePath];
   assert(executablePath);
   assert(executableDirectory);
-  assert([resourcePath isEqualToString:executableDirectory]);
+  assert([[resourcePath stringByStandardizingPath] isEqualToString:executableDirectory]);
 
   NSString *name = @"loka-application-location.bin";
   NSString *fixturePath = [executableDirectory stringByAppendingPathComponent:name];
@@ -82,9 +87,11 @@ void testMacApplicationItemNamesResourceDirectory()
   loka::platform::file::FileHandle handle;
   LOKA_VERIFY(loka::platform::file::ResolveApplicationItem(item, handle));
 
-  const char *pathUtf8 = [fixturePath UTF8String];
-  assert(pathUtf8);
-  assert(handle.displayPath.equals(loka::core::String::Utf8(pathUtf8, std::strlen(pathUtf8))));
+  std::string displayUtf8;
+  LOKA_VERIFY(loka::platform::CollectUtf8(handle.displayPath, displayUtf8));
+  NSString *displayPath = [NSString stringWithUTF8String:displayUtf8.c_str()];
+  assert(displayPath);
+  assert([[displayPath stringByStandardizingPath] isEqualToString:[fixturePath stringByStandardizingPath]]);
 
   std::FILE *opened = loka::platform::file::OpenRead(handle.displayPath);
   assert(opened);
