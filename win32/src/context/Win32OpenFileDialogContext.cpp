@@ -5,12 +5,11 @@
 #include <commdlg.h>
 #include <string>
 #include "Win32ThreadModalDialogScope.hpp"
+#include "Win32DialogResultWake.hpp"
 #include "platform/Win32PathBridge.hpp"
 
 namespace
 {
-  const UINT kWin32OpenFileDialogDeferredResultMessage = WM_APP + 41;
-
   class Win32OpenFileDialogNodeHandler
       : public loka::app::scene::RetainedNodeHandler<Win32OpenFileDialogNodeHandler,
                                                      loka::app::OpenFileDialogNode,
@@ -51,12 +50,12 @@ namespace
 
 UINT Win32OpenFileDialogContext::deferredResultMessage()
 {
-  return kWin32OpenFileDialogDeferredResultMessage;
+  return loka::win32::DialogResultWakeMessage();
 }
 
 bool Win32OpenFileDialogContext::handlePostedResultMessage(UINT message, WPARAM, LPARAM)
 {
-  if (message != kWin32OpenFileDialogDeferredResultMessage)
+  if (message != loka::win32::DialogResultWakeMessage())
   {
     return false;
   }
@@ -71,6 +70,7 @@ Win32OpenFileDialogContext::Win32OpenFileDialogContext(HWND parent, loka::app::O
 {
 }
 
+// Lifecycle/props sequencing deliberately mirrors Win32ConfirmDialogContext.
 void Win32OpenFileDialogContext::onPropsApplied()
 {
   if (this->registration_ && this->node_ && !this->registration_->matches(this->node_->props))
@@ -242,11 +242,7 @@ void Win32OpenFileDialogContext::presentDialog()
 void Win32OpenFileDialogContext::queueDeferredResult(loka::app::DialogResultTransport::ReturnPort &port,
                                                      const loka::app::FileChooserResult &result)
 {
-  Window *window = port.seal(result);
-  Win32Window *win32 = window ? window->asWin32Window() : 0;
-  if (win32 && win32->hwnd())
-    PostMessage(win32->hwnd(), kWin32OpenFileDialogDeferredResultMessage, 0, 0);
-  // Failed posts and missing HWNDs leave the same pending work for App admission.
+  loka::win32::QueueDeferredDialogResult(port, result);
 }
 
 void Win32OpenFileDialogContext::detachOwnedDialog()

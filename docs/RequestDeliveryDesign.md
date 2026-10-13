@@ -531,6 +531,8 @@ autonomous wake-up, and a post during the take waits for a later completion.
 payload. Both share one finite delivery batch and the same synchronous
 revocation and silent reclamation paths. Toolbox uses the same ledger for file and confirm results; its native modal
 presentation is scheduled separately as described below.
+revocation and silent reclamation paths. Confirm has no native presenter in
+this leg; Toolbox retains the copied file-channel delivery described below.
 
 ### Toolbox file dialog presentation
 

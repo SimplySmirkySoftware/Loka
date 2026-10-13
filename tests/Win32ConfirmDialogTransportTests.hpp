@@ -1,0 +1,8 @@
+#ifndef LOKA_WIN32_CONFIRM_DIALOG_TRANSPORT_TESTS_HPP
+#define LOKA_WIN32_CONFIRM_DIALOG_TRANSPORT_TESTS_HPP
+void testWin32ConfirmDialogMapsEachButtonToResult();
+void testWin32ConfirmDialogRetiredBeforePostedWake();
+void testWin32ConfirmDialogOwnerReclaimedBeforePostedWake();
+void testWin32ConfirmDialogLiveAdmissionDelivers();
+void testWin32ConfirmDialogPropsChangeRevokesPostedResult();
+#endif
