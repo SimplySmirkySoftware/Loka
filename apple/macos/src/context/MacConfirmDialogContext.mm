@@ -141,11 +141,11 @@ void MacConfirmDialogContext::presentIfNeeded()
     this->presentation_.markDetached();
     return;
   }
-  if (this->deferredPresenter_)
-  {
-    [(LokaMacDeferredDialogPresenter *)this->deferredPresenter_ schedulePresent];
+  // A refused timer (#1295 bot P2) must not strand the reserved operation:
+  // present now, exactly as a context without a presenter does.
+  if (this->deferredPresenter_
+      && [(LokaMacDeferredDialogPresenter *)this->deferredPresenter_ schedulePresent])
     return;
-  }
   this->presentDialog();
 }
 

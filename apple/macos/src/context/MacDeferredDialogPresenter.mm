@@ -1,10 +1,20 @@
 #include "MacDeferredDialogPresenter.hpp"
 
+// Library/core Objective-C: internal state goes through private accessors
+// (AGENTS.md, macOS Objective-C policy); the ivars are touched only by the
+// synthesized properties.
+@interface LokaMacDeferredDialogPresenter ()
+@property(nonatomic, assign) MacDeferredDialogOwner *owner;
+@property(nonatomic, retain) NSTimer *timer;
+@end
+
 @implementation LokaMacDeferredDialogPresenter
+@synthesize owner = owner_;
+@synthesize timer = timer_;
 #ifdef TEST_BUILD
 - (NSTimer *)scheduledTimerForTesting
 {
-  return timer_;
+  return self.timer;
 }
 #endif
 - (id)initWithOwner:(MacDeferredDialogOwner *)owner
@@ -12,8 +22,8 @@
   self = [super init];
   if (self)
   {
-    owner_ = owner;
-    timer_ = nil;
+    self.owner = owner;
+    self.timer = nil;
   }
   return self;
 }
@@ -24,46 +34,47 @@
   [super dealloc];
 }
 
-- (void)schedulePresent
+- (BOOL)schedulePresent
 {
-  if (timer_)
+  if (self.timer)
   {
-    return;
+    return YES;
   }
-  timer_ = [[NSTimer scheduledTimerWithTimeInterval:0.0
-                                             target:self
-                                           selector:@selector(onTimer:)
-                                           userInfo:nil
-                                            repeats:NO] retain];
+  // The retain property keeps the scheduled timer; a refused allocation leaves
+  // nil and the caller presents synchronously instead of waiting forever.
+  self.timer = [NSTimer scheduledTimerWithTimeInterval:0.0
+                                                target:self
+                                              selector:@selector(onTimer:)
+                                              userInfo:nil
+                                               repeats:NO];
+  return self.timer != nil;
 }
 
 - (void)cancelPresent
 {
-  if (!timer_)
+  if (!self.timer)
   {
     return;
   }
-  [timer_ invalidate];
-  [timer_ release];
-  timer_ = nil;
+  [self.timer invalidate];
+  self.timer = nil;
 }
 
 - (void)detachOwner
 {
-  owner_ = 0;
+  self.owner = 0;
 }
 
 - (void)onTimer:(NSTimer *)timer
 {
-  if (timer != timer_)
+  if (timer != self.timer)
   {
     return;
   }
-  [timer_ release];
-  timer_ = nil;
-  if (owner_)
+  self.timer = nil;
+  if (self.owner)
   {
-    owner_->presentDeferred();
+    self.owner->presentDeferred();
   }
 }
 @end

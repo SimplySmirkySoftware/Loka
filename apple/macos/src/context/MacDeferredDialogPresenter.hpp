@@ -22,7 +22,8 @@ protected:
   NSTimer *timer_;
 }
 - (id)initWithOwner:(MacDeferredDialogOwner *)owner;
-- (void)schedulePresent;
+/** NO when the run loop refused the timer; the caller then presents now. */
+- (BOOL)schedulePresent;
 - (void)cancelPresent;
 - (void)detachOwner;
 - (void)onTimer:(NSTimer *)timer;
