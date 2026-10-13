@@ -17,8 +17,8 @@ namespace
   using namespace loka::dsl;
   using namespace loka::dsl::testing;
 
-  // Every test lays out in one client box. SceneRootLayout places the root
-  // kInset logical units in from each edge.
+  // Every test lays out in one client box. MacScenePlatformController::performLayout
+  // starts its root SceneRootLayout::kInset in from each edge.
   const int kClientWidth = 640;
   const int kClientHeight = 160;
   // A seat declared with width(n) instead of a natural width.
