@@ -53,8 +53,6 @@ namespace
       turn.close();
       this->reclaimWindows();
       this->group_->build();
-      // The borrowed Window leaves this App before its bootstrap bar can die.
-      window.asWin32Window()->setApp(0);
     }
   protected:
     // Empty bootstrap is intentional: complete() later borrows the test Window.
@@ -612,6 +610,9 @@ void testWin32AppDestructionLeavesWindowOwnedMenu()
       const BOOL menuCreated = IsMenu(menu);
       LOKA_VERIFY(menuCreated);
       frameNotifications = 0;
+      // The borrowed Window leaves this App before its bootstrap bar can die,
+      // so the next App's identity cannot alias a freed base.
+      window.setApp(0);
     }
 
     // The fixture owns the Window beyond the App: its native menu stays put.
