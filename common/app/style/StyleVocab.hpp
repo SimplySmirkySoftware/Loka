@@ -6,6 +6,12 @@ namespace loka
 {
   namespace app
   {
+    enum TextSizeRole
+    {
+      TEXT_SIZE_ROLE_SMALL_LABEL = 0,
+      TEXT_SIZE_ROLE_COUNT = 1
+    };
+
     enum TextWeight
     {
       TEXT_WEIGHT_NORMAL = 0,
@@ -71,8 +77,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 9;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(9);
       }
     };
 
@@ -80,8 +85,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 10;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(10);
       }
     };
 
@@ -89,8 +93,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 12;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(12);
       }
     };
 
@@ -98,8 +101,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 14;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(14);
       }
     };
 
@@ -107,8 +109,7 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 18;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(18);
       }
     };
 
@@ -116,11 +117,12 @@ namespace loka
     {
       FontSize() : TextStyle()
       {
-        this->fontSize_ = 24;
-        this->hasFontSize_ = true;
+        this->size_ = TextSizeValue::points(24);
       }
     };
 
+    /** Semantic font roles, initialized per TU like Bold. */
+    static const TextStyle SmallLabel = TextStyle(TextSizeValue::role(TEXT_SIZE_ROLE_SMALL_LABEL));
     /** Standard-palette roles and inks, initialized per TU like Bold. */
     static const TextStyle Primary = TextStyle().color(TEXT_COLOR_PRIMARY);
     static const TextStyle Secondary = TextStyle().color(TEXT_COLOR_SECONDARY);
@@ -165,6 +167,15 @@ namespace loka
   {
     namespace detail
     {
+      struct TextSizeRoleName
+      {
+        const char *name;
+        TextSizeRole value;
+      };
+      static const TextSizeRoleName StyleVocabularySizeRoles[] = {
+          {"smallLabel", TEXT_SIZE_ROLE_SMALL_LABEL},
+      };
+
       struct TextWeightName
       {
         const char *name;

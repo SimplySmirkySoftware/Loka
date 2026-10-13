@@ -10,7 +10,10 @@ LOKA_TEST(testQuitSecondDeclineInSameTurnStillCancelsAttempt)
 LOKA_TEST(testQuitOtherDocumentDeclineInSameTurnEndsAttempt)
 LOKA_TEST(testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt)
 LOKA_TEST(testQuitAllAcceptedExitsWithStaticWindow)
+<<<<<<< HEAD
 LOKA_TEST(testQuitAllAcceptedWithoutStaticWindowQuitsOnce)
+=======
+>>>>>>> origin/main
 LOKA_TEST(testDocumentWindowFactoryReceivesTheDocumentId)
 LOKA_TEST(testBootstrapWithEveryStaticWindowRefusedReportsWindowless)
 LOKA_TEST(testBootstrapWithTheSeededDocumentRefusedReportsWindowless)
@@ -459,6 +462,8 @@ LOKA_TEST(testStateArenaSlabsCrossAllocationGate)
 LOKA_TEST(testNodeArenaSlabCrossesAllocationGate)
 LOKA_TEST(testHeapNodeCrossesAllocationGate)
 LOKA_TEST(testGateAllocatedNodeRejectsUnauthorizedDestruction)
+LOKA_TEST(testLandlordNodesRejectUnauthorizedDestruction)
+LOKA_TEST(testHeapDoorRefusesLandlordNodesInRelease)
 LOKA_TEST(testHeapFallbackWhiteFlagFailsBoundaryCompose)
 LOKA_TEST(testSceneRootAllocationRefusalArmsWhiteFlagAndHealsOnRefresh)
 LOKA_TEST(testNestedConditionalSeatInContextlessMaterialization_Probe)
@@ -960,7 +965,7 @@ LOKA_TEST(testStrictNodeRouteLocalRefusal)
 
 LOKA_TEST(testStrictNodeRouteKeyedAttachRefusal)
 
-LOKA_TEST(testStrictNodeRoutePartitionDeleteGuard)
+LOKA_TEST(testStrictNodeRoutePartitionDestroysThroughItsOwnDoor)
 
 LOKA_TEST(testPaintAnswersHandOverWrittenResident)
 LOKA_TEST(testPaintAnswersRefusalDisablesGate)
@@ -1266,3 +1271,5 @@ LOKA_TEST(testToolboxGroundLegibility)
 LOKA_TEST(testWin32GroundRoles)
 LOKA_TEST(testWin32TextInks)
 LOKA_TEST(testWin32GroundLegibility)
+
+LOKA_TEST(testNullTextSmallLabelMetrics)

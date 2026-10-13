@@ -283,13 +283,15 @@ private:
     void *find(const loka::app::TextStyle &style, bool fixedPitch) const;
 
   private:
-    // Sized from the generated vocabulary so a size added through
-    // tools/style-vocab.json cannot fall outside the table.
+    // Sized from the generated vocabulary so a size or size role added through
+    // tools/style-vocab.json cannot fall outside the table. Rows: one per
+    // vocabulary size, one per size role, then the system default row.
     enum
     {
       kSizeCount = loka::app::detail::kStyleVocabularySizeCount,
-      kDefaultSizeRow = kSizeCount,
-      kFontRowCount = kSizeCount + 1
+      kRoleRowBase = kSizeCount,
+      kDefaultSizeRow = kRoleRowBase + loka::app::TEXT_SIZE_ROLE_COUNT,
+      kFontRowCount = kDefaultSizeRow + 1
     };
     void *fonts_[kFontRowCount][2][2][2];
     TextFontTable(const TextFontTable &);

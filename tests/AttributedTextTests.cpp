@@ -465,7 +465,8 @@ namespace
     }
     virtual TextLineMetrics metrics(const TextStyle &style) const
     {
-      return style.hasFontSize_ && style.fontSize_ == 24 ? TextLineMetrics(14, 7, 3) : TextLineMetrics(8, 2, 1);
+      int points = 0;
+      return style.size_.queryPoints(points) && points == 24 ? TextLineMetrics(14, 7, 3) : TextLineMetrics(8, 2, 1);
     }
   };
   /** A UTF-16-shaped source: the middle code point occupies two native units. */

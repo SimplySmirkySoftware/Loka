@@ -2362,20 +2362,25 @@ namespace
     explicit StrandCandidateNode(const TextProps &props) : TextNode(props) {}
     virtual ~StrandCandidateNode()
     {
-      if (strandObservation && !this->isArenaAllocated())
+      if (strandObservation)
         ++strandObservation->heapCandidatesDestroyed;
     }
   };
 
   /** Force a real REPLACE candidate during the parked branch's re-entry. */
-  struct StrandCandidateDefinition : NodeDefinition<TextProps, StrandCandidateNode>
+  struct StrandCandidateDefinition : NodeDefinition<TextProps, TextNode>
   {
     typedef StrandCandidateDefinition CloneType;
     virtual NodeDefinitionBase *clone() const { return new StrandCandidateDefinition(*this); }
     virtual bool isCompatibleWithNode(const Node *) const { return false; }
     virtual Node *create() const
     {
-      Node *node = NodeDefinition<TextProps, StrandCandidateNode>::create();
+      // Only heap candidates use the counting type: storage provenance has
+      // already been lowered by the destruction door when a destructor runs.
+      NodeDefinition<TextProps, StrandCandidateNode> heapDefinition(this->props);
+      heapDefinition.setNodeTag(this->nodeTag());
+      heapDefinition.setNativeLifetimeHint(this->nativeLifetimeHint());
+      Node *node = heapDefinition.create();
       if (node && strandObservation)
         ++strandObservation->heapCandidatesCreated;
       return node;

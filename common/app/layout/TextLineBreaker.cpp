@@ -147,9 +147,28 @@ namespace loka
       assert(this->valid_ && i < this->length_);
       return this->characters_[i];
     }
+    int SyntheticTextSize(const TextSizeValue &size)
+    {
+      int points = 12;
+      if (size.queryPoints(points))
+        return points;
+      TextSizeRole role;
+      if (size.queryRole(role))
+      {
+        switch (role)
+        {
+        case TEXT_SIZE_ROLE_SMALL_LABEL:
+          return 9;
+        case TEXT_SIZE_ROLE_COUNT:
+          break;
+        }
+      }
+      return points;
+    }
+
     TextLineMetrics SyntheticTextWidthSource::metrics(const TextStyle &style) const
     {
-      return TextLineMetrics(style.hasFontSize_ ? style.fontSize_ : 12);
+      return TextLineMetrics(SyntheticTextSize(style.size_));
     }
     bool SyntheticTextWidthSource::width(std::size_t start, std::size_t end, std::size_t span, int &out) const
     {
@@ -406,7 +425,7 @@ namespace loka
           break;
         case TEXT_TRUNCATION_ELLIPSIS:
         {
-          const int size = SizeOf(line.metrics.ascent + line.metrics.descent).fontSize_;
+          const int size = detail::SnapTextSizePoints(line.metrics.ascent + line.metrics.descent);
           const int advance = syntheticAdvance(size);
           const int capacity = availableWidth / advance;
           width = (capacity > 0 ? capacity : 1) * advance;

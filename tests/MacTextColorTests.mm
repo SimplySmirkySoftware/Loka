@@ -129,6 +129,9 @@ namespace
     double red, green, blue, alpha;
   };
 
+  // NSAppearance arrived in the 10.9 SDK; an older SDK builds the installed
+  // color checks and skips only the light/dark resolution.
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
   RGB resolve(NSColor *color, NSAppearance *appearance, bool legacy)
   {
     __block RGB result;
@@ -155,6 +158,7 @@ namespace
     }
     return result;
   }
+#endif
 
   void dynamicInstalledColors(bool legacy)
   {
@@ -175,6 +179,7 @@ namespace
         LOKA_VERIFY((Text("dynamic") + styles[i]).applyPropsToNode(&node));
         NSColor *installed = [label textColor];
         LOKA_VERIFY(installed == expected(styles[i].color_) || [installed isEqual:expected(styles[i].color_)]);
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
         // DarkAqua arrived in 10.14; the name is spelled out so older hosts
         // reach the skip instead of a missing symbol.
         NSAppearance *darkAqua = [NSAppearance appearanceNamed:@"NSAppearanceNameDarkAqua"];
@@ -200,6 +205,10 @@ namespace
                         + std::fabs(light.blue - dark.blue)
                     > 0.01);
         LOKA_VERIFY([label textColor] == installed);
+#else
+        (void)legacy;
+        std::printf("[skip] %s light/dark resolution: the SDK has no NSAppearance (10.9+)\n", names[i]);
+#endif
       }
       controller.onChange(0, NODE_DIRTY_NONE, false);
     }

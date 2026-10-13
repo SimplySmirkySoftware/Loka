@@ -603,7 +603,7 @@ namespace loka
               assert(occupied(c, s) && "reclaim requires this partition's occupied slot");
               if (!occupied(c, s))
                 return;
-              node->~Node();
+              DestroyNodeInPlace(node);
               r->node = 0;
               r->owner = 0;
               put(c, s);

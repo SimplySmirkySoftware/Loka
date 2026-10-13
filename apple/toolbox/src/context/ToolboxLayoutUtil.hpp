@@ -5,10 +5,11 @@
 #include "app/style/Style.hpp"
 #include "ToolboxApp.hpp"
 #include <Quickdraw.h>
+#include <Fonts.h>
 
 class ToolboxScenePlatformController;
 
-/** Resolved Text style projected onto the owning port's font family.
+/** Text style projected onto the owning port, or the role's family and size.
     Unset fields inherit the port; explicit face fields replace only their bit. */
 class ToolboxTextFontDescriptor
 {
@@ -18,14 +19,17 @@ public:
 
   short font(short portFont) const
   {
+    short size = 0;
+    this->resolve(portFont, size);
     return portFont;
   }
   short size(short portSize) const
   {
-    return this->style_.hasFontSize_
-               ? static_cast<short>(loka::app::SizeOf(this->style_.fontSize_).fontSize_)
-               : portSize;
+    short font = 0;
+    this->resolve(font, portSize);
+    return portSize;
   }
+
   Style face(Style portFace) const
   {
     if (this->style_.hasWeight_)
@@ -37,6 +41,29 @@ public:
   }
 
 private:
+  void resolve(short &font, short &size) const
+  {
+    int points = 0;
+    if (this->style_.size_.queryPoints(points))
+    {
+      size = static_cast<short>(loka::app::detail::SnapTextSizePoints(points));
+      return;
+    }
+    loka::app::TextSizeRole role;
+    if (this->style_.size_.queryRole(role))
+    {
+      switch (role)
+      {
+      case loka::app::TEXT_SIZE_ROLE_SMALL_LABEL:
+        font = kFontIDGeneva;
+        size = 9;
+        return;
+      case loka::app::TEXT_SIZE_ROLE_COUNT:
+        break;
+      }
+    }
+  }
+
   loka::app::TextStyle style_;
 };
 

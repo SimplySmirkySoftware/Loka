@@ -146,18 +146,41 @@ loka::app::RailMetrics loka::macos::DefaultRailMetrics()
   return app::RailMetrics(app::Ratio(13, 12), app::Ratio(5, 4));
 }
 
+namespace
+{
+  // This rail's answer for each size role, in points. Like the default row it
+  // is a system size and exempt from fontScale: SmallLabel is AppKit's small
+  // system font (11 pt). The Toolbox answers Geneva 9
+  // (ToolboxTextFontDescriptor::resolve), Win32 the message face at 10 lu
+  // (Win32DisplayFont.cpp), and headless 9 (SyntheticTextSize).
+  CGFloat RolePoints(loka::app::TextSizeRole role)
+  {
+    switch (role)
+    {
+    case loka::app::TEXT_SIZE_ROLE_SMALL_LABEL:
+      return [NSFont smallSystemFontSize];
+    case loka::app::TEXT_SIZE_ROLE_COUNT:
+      break;
+    }
+    assert(!"TEXT_SIZE_ROLE_COUNT names no row");
+    return [NSFont systemFontSize];
+  }
+} // namespace
+
 MacScenePlatformController::TextFontTable::TextFontTable(const loka::app::Ratio &fontScale)
 {
   NSFontManager *manager = [NSFontManager sharedFontManager];
   const CGFloat defaultSize = [NSFont systemFontSize];
   for (int size = 0; size < kFontRowCount; ++size)
   {
-    // Unset size means the rail's system default (13 pt), exempt from fontScale.
-    // Explicit lu sizes keep fractional points: 9 lu -> 9.75 pt, no pixel rounding.
-    const CGFloat points = size == kDefaultSizeRow
-                               ? defaultSize
-                               : static_cast<CGFloat>(loka::app::detail::StyleVocabularySizes[size])
-                                     * fontScale.num / fontScale.den;
+    // Unset size means the rail's system default (13 pt) and a size role its
+    // system size, both exempt from fontScale. Explicit lu sizes keep
+    // fractional points: 9 lu -> 9.75 pt, no pixel rounding.
+    CGFloat points = defaultSize;
+    if (size < kRoleRowBase)
+      points = static_cast<CGFloat>(loka::app::detail::StyleVocabularySizes[size]) * fontScale.num / fontScale.den;
+    else if (size < kDefaultSizeRow)
+      points = RolePoints(static_cast<loka::app::TextSizeRole>(size - kRoleRowBase));
     for (int fixed = 0; fixed < 2; ++fixed)
       for (int bold = 0; bold < 2; ++bold)
       {
@@ -190,9 +213,13 @@ void *MacScenePlatformController::TextFontTable::find(const loka::app::TextStyle
 {
   const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
   const int italic = style.hasItalic_ && style.italic_ ? 1 : 0;
-  if (!style.hasFontSize_)
+  loka::app::TextSizeRole role;
+  if (style.size_.queryRole(role))
+    return this->fonts_[kRoleRowBase + role][bold][italic][fixedPitch ? 1 : 0];
+  int points = 0;
+  if (!style.size_.queryPoints(points))
     return this->fonts_[kDefaultSizeRow][bold][italic][fixedPitch ? 1 : 0];
-  const int points = loka::app::SizeOf(style.fontSize_).fontSize_;
+  loka::app::SizeOf(points).size_.queryPoints(points);
   for (int size = 0; size < kSizeCount; ++size)
     if (loka::app::detail::StyleVocabularySizes[size] == points)
       return this->fonts_[size][bold][italic][fixedPitch ? 1 : 0];

@@ -1436,6 +1436,7 @@ void testQuitAllAcceptedExitsWithStaticWindow()
   LOKA_VERIFY(config.roster.count() == 0 && app.quitRequested());
   LOKA_VERIFY(app.group().getComponents().size() == 1);
 }
+<<<<<<< HEAD
 
 // #1286 bot P2: with no static window the last accepted document empties the
 // group, whose close tail already quits; the quit attempt must not quit again.
@@ -1454,3 +1455,5 @@ void testQuitAllAcceptedWithoutStaticWindowQuitsOnce()
   LOKA_VERIFY(app.group().getComponents().size() == 0);
   LOKA_VERIFY(app.quitCalls() == 1);
 }
+=======
+>>>>>>> origin/main

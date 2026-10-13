@@ -9,4 +9,6 @@ void testNullTextLayoutPreservesNegativeStartY();
 void testNullTextLayoutWrapsAtPositiveSubGlyphWidth();
 void testNullTextLayoutWordWrapMeasuresStandaloneSpaces();
 
+void testNullTextSmallLabelMetrics();
+
 #endif // LOKA_TESTS_NULL_TEXT_LAYOUT_TESTS_HPP

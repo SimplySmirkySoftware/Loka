@@ -3,6 +3,7 @@
 #include "support/NativeCloseTestConfig.hpp"
 
 #include <AppKit/AppKit.h>
+#include <cstdio>
 
 #include "MacWindow.hpp"
 #include "MacApp.hpp"
@@ -129,9 +130,17 @@ namespace
     app.install(window);
     // Observe the framework-owned delegate without extending its lifetime.
     // AppKit may retain the window and view beyond this autorelease pool.
+    // NSPointerFunctionsWeakMemory arrived in the 10.8 SDK; an older SDK
+    // cannot observe the delegate without retaining it, so only that
+    // observation is skipped.
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
     NSHashTable *delegates = [[NSHashTable alloc]
         initWithOptions:NSPointerFunctionsWeakMemory | NSPointerFunctionsObjectPointerPersonality
                capacity:1];
+#else
+    NSHashTable *delegates = nil;
+    std::printf("[skip] delegate release observation: the SDK has no NSPointerFunctionsWeakMemory (10.8+)\n");
+#endif
     const int cycles = 8;
     for (int cycle = 0; cycle < cycles; ++cycle)
     {
@@ -147,7 +156,8 @@ namespace
       LOKA_VERIFY(native != nil);
       LOKA_VERIFY(![native isReleasedWhenClosed]);
       [delegates addObject:[native delegate]];
-      LOKA_VERIFY([[delegates allObjects] count] == 1);
+      if (delegates)
+        LOKA_VERIFY([[delegates allObjects] count] == 1);
       // Make activation deterministic even when the test runner is not frontmost.
       window->handleWindowDidBecomeKey();
       LOKA_VERIFY(app.activeWindow() == window);
@@ -163,7 +173,8 @@ namespace
       LOKA_VERIFY(app.closes == 0);
       LOKA_VERIFY(probe.mounts == cycle + 1 && probe.unmounts == cycle + 1);
       [cyclePool drain];
-      LOKA_VERIFY([[delegates allObjects] count] == 0);
+      if (delegates)
+        LOKA_VERIFY([[delegates allObjects] count] == 0);
     }
     [delegates release];
   }

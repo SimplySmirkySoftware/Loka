@@ -1,5 +1,8 @@
 {
   "sizes": [9, 10, 12, 14, 18, 24],
+  "sizeRoles": {
+    "SMALL_LABEL": 0
+  },
   "weights": {
     "NORMAL": 0,
     "BOLD": 1

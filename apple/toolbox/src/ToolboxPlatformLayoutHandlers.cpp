@@ -11,6 +11,16 @@
 #include "app/layout/BoxLayout.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
+// Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
+// conditional with two lvalue operands binds the member by reference, and
+// C++98 then requires a definition; GCC 4.2 at -O0 links against it.
+const short ToolboxLayoutMetrics::kDefaultLineHeight;
+const short ToolboxLayoutMetrics::kImageFallbackHeight;
+const short ToolboxLayoutMetrics::kControlAscentInset;
+const short ToolboxLayoutMetrics::kControlDescent;
+const short ToolboxLayoutMetrics::kPushButtonTitleInset;
+const short ToolboxLayoutMetrics::kEditTextDescent;
+
 namespace
 {
   inline int

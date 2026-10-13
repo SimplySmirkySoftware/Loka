@@ -108,10 +108,15 @@ next tail. Closing remains a decided fact. Window rally 3b d0 (owner ruling, 202
 adds a separate native close request: App writes the roster's `closeAsked`
 box, and the document node either removes its own row or writes a decline to
 `closeAnswer`. Each request carries identity and sequence; repeated requests
+<<<<<<< HEAD
 for the same document are distinct. Null routes native asks in d0; d1 routes the production rails
 (Win32 `WM_CLOSE`, macOS `windowShouldClose:`, Toolbox after `TrackGoAway`)
 through the same `App::closeAsked` door, and the three menu Quit commands call
 `App::requestQuit`; terminal removal and factory refusal never ask. SimpleText declines edited or
+=======
+for the same document are distinct. Only Null routes native asks in d0;
+terminal removal and factory refusal never ask. SimpleText declines edited or
+>>>>>>> origin/main
 busy documents in d0; a clean document's menu Close uses the same node policy.
 
 `requestQuit` asks the first roster document, then advances at the admission
