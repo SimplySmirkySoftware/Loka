@@ -88,6 +88,9 @@ LOKA_TEST(testMacNativeRetirementFinalDrain)
 
 LOKA_TEST(testMacImageDecodeRetainsOutputOwnedBlob)
 
+LOKA_TEST(testMacTextNaturalWidthMatchesLayout)
+LOKA_TEST(testMacTextNaturalWidthDeclines)
+LOKA_TEST(testMacRibbonGroupNaturalWidthFrames)
 LOKA_TEST(testMacButtonNaturalWidthMatchesCell)
 LOKA_TEST(testMacRibbonNaturalWidthFrames)
 LOKA_TEST(testMacDirectRowNaturalWidthFrames)

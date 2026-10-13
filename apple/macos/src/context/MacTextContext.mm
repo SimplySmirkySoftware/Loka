@@ -1,6 +1,7 @@
 #include "MacTextContext.hpp"
 #include <cassert>
 #include <cmath>
+#include <climits>
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../MacGround.hpp"
@@ -25,16 +26,45 @@ namespace
     const int minimumHeight;
   };
 
-  TextGeometry ResolveTextGeometry(const loka::app::TextStyle &style,
-                                   MacScenePlatformController *controller)
+  bool HasTextFontStyle(const loka::app::TextStyle &style)
+  {
+    return style.size_.isSet() || style.hasWeight_ || style.hasItalic_;
+  }
+
+  TextGeometry ResolveTextGeometry(const loka::app::TextStyle &style, const MacScenePlatformController *controller)
   {
     const int fallback = loka::app::layout::FallbackControlMetrics::kTextHeight;
-    if (!controller || !(style.size_.isSet() || style.hasWeight_ || style.hasItalic_))
+    if (!controller || !HasTextFontStyle(style))
       return TextGeometry(nil, fallback);
     NSFont *font = (NSFont *)controller->textFont(style);
     const int lineHeight = controller->projection().measurementToLu(
         [font ascender] + std::fabs([font descender]) + [font leading]);
     return TextGeometry(font, lineHeight > fallback ? lineHeight : fallback);
+  }
+
+  /** One cell measurement home for constrained layout and unbounded width.
+      A fresh label supplies the same native default font as the live context. */
+  bool MeasureTextCell(NSString *string, NSFont *selectedFont, loka::app::TextWrap wrap, NSRect bounds, NSSize &size)
+  {
+    NSTextField *label = [[[NSTextField alloc] initWithFrame:NSZeroRect] autorelease];
+    [label setEditable:NO];
+    [label setSelectable:NO];
+    [label setBezeled:NO];
+    [label setDrawsBackground:NO];
+    NSTextFieldCell *cell = [label cell];
+    NSFont *font = selectedFont ? selectedFont : [cell font];
+    if (!cell || !font)
+      return false;
+    [cell setStringValue:string];
+    [cell setFont:font];
+    [cell setWraps:wrap != loka::app::TEXT_WRAP_NONE];
+    [cell setScrollable:wrap == loka::app::TEXT_WRAP_NONE];
+    // Twin: applyStyle configures the presented cell with these wrapping modes.
+    [cell setLineBreakMode:wrap == loka::app::TEXT_WRAP_NONE   ? NSLineBreakByClipping
+                           : wrap == loka::app::TEXT_WRAP_CHAR ? NSLineBreakByCharWrapping
+                                                               : NSLineBreakByWordWrapping];
+    size = [cell cellSizeForBounds:bounds];
+    return true;
   }
 
   // Miss only: materialize this leaf's text and measure one temporary cell if wrapped.
@@ -59,16 +89,11 @@ namespace
       return true;
 
     NSFont *font = selectedFont ? selectedFont : [NSFont systemFontOfSize:[NSFont systemFontSize]];
-    NSTextFieldCell *cell = [[[NSTextFieldCell alloc] initTextCell:string] autorelease];
-    if (!cell || !font)
+    NSSize size;
+    if (!font
+        || !MeasureTextCell(
+            string, font, text->props.blockStyle_.wrap_, loka::macos::MacMeasurementBounds(width), size))
       return false;
-    [cell setFont:font];
-    [cell setWraps:YES];
-    [cell setScrollable:NO];
-    // Twin: applyStyle selects the same wrapping mode for the presented cell.
-    [cell setLineBreakMode:text->props.blockStyle_.wrap_ == loka::app::TEXT_WRAP_CHAR
-        ? NSLineBreakByCharWrapping : NSLineBreakByWordWrapping];
-    const NSSize size = [cell cellSizeForBounds:loka::macos::MacMeasurementBounds(width)];
     const int measuredWithPadding = projection.measurementToLu(size.height) + 2;
     if (measuredWithPadding > height)
       height = measuredWithPadding;
@@ -116,6 +141,34 @@ namespace
 
   MacTextNodeHandler gMacTextNodeHandler;
 } // namespace
+
+bool MacTextContext::queryNaturalWidth(const loka::app::TextNode *text,
+                                       const MacScenePlatformController *controller,
+                                       short &width)
+{
+  if (!controller || !text || !text->props.text_)
+    return false;
+  std::string utf8;
+  if (!loka::platform::CollectUtf8(text->props.text_->get(), utf8) || utf8.empty()
+      || utf8.find_first_of("\n\r") != std::string::npos)
+    return false;
+  NSString *string = [NSString stringWithUTF8String:utf8.c_str()];
+  if (!string)
+    return false;
+  const TextGeometry geometry = ResolveTextGeometry(text->props.resolvedTextStyle(), controller);
+  if (HasTextFontStyle(text->props.resolvedTextStyle()) && !geometry.font)
+    return false;
+  NSSize size;
+  if (!MeasureTextCell(
+          string, geometry.font, loka::app::TEXT_WRAP_NONE, NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX), size))
+    return false;
+  // Match the button answer: bound points before narrowing, including NaN refusal.
+  const loka::app::Ratio &scale = controller->projection().railMetrics().spaceScale;
+  if (!(size.width > 0 && size.width <= static_cast<double>(SHRT_MAX) * scale.num / scale.den))
+    return false;
+  width = static_cast<short>(controller->projection().measurementToLu(size.width));
+  return true;
+}
 
 MacTextContext::MacTextContext(MacScenePlatformController *controller,
                                void *parentView,
