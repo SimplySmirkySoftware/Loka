@@ -41,6 +41,21 @@ namespace
     }
   };
 
+  class RibbonEdgeGeometryHandler : public IPlatformNodeHandler
+  {
+  public:
+    virtual const void *nodeTypeKey() const
+    {
+      return NodeTypeToken<RibbonGroupEdgeNode>();
+    }
+    virtual NodeContext *ensureContext(Node *node, IPlatformController *, const LayoutState &)
+    {
+      if (!node->getContext())
+        node->setContext(new RibbonGeometryContext());
+      return node->getContext();
+    }
+  };
+
   void countRibbonClick(void *data)
   {
     ++*static_cast<int *>(data);
@@ -150,6 +165,7 @@ namespace
     virtual bool queryNaturalWidth(Node *child, short &width) const
     {
       LOKA_VERIFY(child->asStackNode() == 0);
+      LOKA_VERIFY(child->asRibbonGroupEdgeNode() == 0);
       if (child->asTextNode())
       {
         width = 20;
@@ -164,6 +180,8 @@ void testRibbonGroupExpansionAndGeometry()
 {
   RibbonGeometryHandler buttons;
   RibbonGroupWidthPlatform platform;
+  RibbonEdgeGeometryHandler edges;
+  LOKA_VERIFY(platform.registerNodeHandler(&edges));
   LOKA_VERIFY(platform.registerNodeHandler(&buttons));
   NodeDefinitionBase *definition =
       (RibbonControl().testId("Groups") << RibbonItem("Before")
@@ -186,9 +204,20 @@ void testRibbonGroupExpansionAndGeometry()
   loka::dsl::CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
   LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 0));
   RibbonGroupNode *frame = top.next()->asRibbonGroupNode();
-  LOKA_VERIFY(frame != 0 && frame->childrenCount() == 1);
+  LOKA_VERIFY(frame != 0 && frame->childrenCount() == 4);
   LOKA_VERIFY(frame->kind() == NODE_KIND_RIBBON_GROUP);
-  StackNode *group = frame->childrenHead()->asStackNode();
+  loka::dsl::CompositionCursor<Node> frameChildren(frame->childrenHead(), frame->childrenCount());
+  StackNode *group = frameChildren.next()->asStackNode();
+  RibbonGroupEdgeNode *edgeNodes[3];
+  const RibbonGroupEdge roles[] = {RIBBON_GROUP_EDGE_LEFT, RIBBON_GROUP_EDGE_RIGHT, RIBBON_GROUP_EDGE_BOTTOM};
+  for (int i = 0; i < 3; ++i)
+  {
+    edgeNodes[i] = frameChildren.next()->asRibbonGroupEdgeNode();
+    LOKA_VERIFY(edgeNodes[i] && edgeNodes[i]->props.edge == roles[i]);
+    LOKA_VERIFY(edgeNodes[i]->asNestable() == 0);
+    LOKA_VERIFY(edgeNodes[i]->kind() == NODE_KIND_RIBBON_GROUP_EDGE);
+  }
+  LOKA_VERIFY(frameChildren.next() == 0);
   LOKA_VERIFY(group != 0 && group->props.effectiveAxis() == STACK_AXIS_COLUMN);
   LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 3));
   LOKA_VERIFY(group->childrenCount() == 2);
@@ -225,6 +254,28 @@ void testRibbonGroupExpansionAndGeometry()
   LOKA_VERIFY(measured.next(frame).width() == 40 + gap + 48 + 2 * p);
   const LayoutState after = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 3)->getContext())->rect;
   LOKA_VERIFY(after.x - first.x - gap == 40 + gap + 48 + RibbonGroupNode::kFrameInset);
+  LayoutState strip[3];
+  for (int i = 0; i < 3; ++i)
+  {
+    LOKA_VERIFY(edgeNodes[i]->getContext() != 0);
+    strip[i] = static_cast<RibbonGeometryContext *>(edgeNodes[i]->getContext())->rect;
+  }
+  LayoutState contentSeat = viewport;
+  contentSeat.x = first.x;
+  contentSeat.y = first.y;
+  contentSeat.width = static_cast<short>(40 + gap + 48);
+  contentSeat.height = static_cast<short>(viewport.height - 2 * p);
+  const int contentBottom = platform.projectLayoutForTesting(group, contentSeat);
+  const int gx = first.x - p;
+  const int gy = viewport.y;
+  const int gw = contentSeat.width + 2 * p;
+  const int gh = contentBottom + p - gy;
+  LOKA_VERIFY(strip[0].x == gx && strip[0].y == gy);
+  LOKA_VERIFY(strip[0].width == 1 && strip[0].height == gh - 1);
+  LOKA_VERIFY(strip[1].x == gx + gw - 1 && strip[1].y == gy);
+  LOKA_VERIFY(strip[1].width == 1 && strip[1].height == gh - 1);
+  LOKA_VERIFY(strip[2].x == gx && strip[2].y == gy + gh - 1);
+  LOKA_VERIFY(strip[2].width == gw && strip[2].height == 1);
   SceneTestAccess::unmount(scene);
 }
 
@@ -246,17 +297,25 @@ namespace
   public:
     Node *child;
     LayoutState seat;
-    RibbonChildSeatTraversal()
+    LayoutState edgeSeats[3];
+    const int contentAdvance;
+    explicit RibbonChildSeatTraversal(int advance = 37)
         : child(0),
-          seat()
+          seat(),
+          contentAdvance(advance)
     {
     }
     virtual int layoutChild(Node *value, const LayoutState &state)
     {
+      if (RibbonGroupEdgeNode *edge = value->asRibbonGroupEdgeNode())
+      {
+        this->edgeSeats[edge->props.edge] = state;
+        return state.y + 999; // Decorations cannot advance the group.
+      }
       LOKA_VERIFY(this->child == 0);
       this->child = value;
       this->seat = state;
-      return state.y + 37;
+      return state.y + this->contentAdvance;
     }
     virtual void setLayoutResultY(short)
     {
@@ -283,7 +342,7 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   LOKA_VERIFY(LookupNodeById<Node>(&scene, "InsetGroup", anchor, error) == FLOW_STEP_SUCCEEDED);
   LOKA_VERIFY(anchor && anchor->asStackNode());
   RibbonGroupNode *group = anchor->asStackNode()->childrenHead()->asRibbonGroupNode();
-  LOKA_VERIFY(group && group->childrenCount() == 1);
+  LOKA_VERIFY(group && group->childrenCount() == 4);
   layout::RowWidthConsultation declined(group, 1, 311, 7, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(declined.next(group).width() == 311);
 
@@ -309,5 +368,25 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   const int groupBottom = platform.projectLayoutForTesting(group, offer);
   const int childBottom = platform.projectLayoutForTesting(group->childrenHead(), traversal.seat);
   LOKA_VERIFY(groupBottom == childBottom + p);
+  loka::dsl::CompositionCursor<Node> noDraw(group->childrenHead(), group->childrenCount());
+  noDraw.next();
+  for (Node *edge = noDraw.next(); edge; edge = noDraw.next())
+    LOKA_VERIFY(edge->getContext() == 0);
+  // Strip width follows the offered seat, not the much smaller natural content width.
+  LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].width == offer.width);
+  for (int sample = 0; sample < 2; ++sample)
+  {
+    LayoutState small = offer;
+    if (sample == 0)
+      small.width = 1;
+    RibbonChildSeatTraversal tiny(sample == 0 ? 37 : 1 - 2 * p);
+    const int tinyBottom = handler->layoutNode(group, small, &tiny);
+    LOKA_VERIFY(tinyBottom == small.y + 2 * p + tiny.contentAdvance);
+    for (int i = 0; i < 3; ++i)
+    {
+      LOKA_VERIFY(tiny.edgeSeats[i].x == small.x && tiny.edgeSeats[i].y == small.y);
+      LOKA_VERIFY(tiny.edgeSeats[i].width == 0 && tiny.edgeSeats[i].height == 0);
+    }
+  }
   SceneTestAccess::unmount(scene);
 }

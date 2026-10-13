@@ -383,6 +383,7 @@ namespace
       return width;
     }
     case loka::app::scene::NODE_KIND_CANVAS:
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
     case loka::app::scene::NODE_KIND_UNKNOWN:
     case loka::app::scene::NODE_KIND_CELL:
     case loka::app::scene::NODE_KIND_TEXT:
@@ -443,6 +444,7 @@ namespace
             static_cast<loka::app::ScrollViewNode *>(node));
       }
       return;
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
     case loka::app::scene::NODE_KIND_UNKNOWN:
     case loka::app::scene::NODE_KIND_BOX:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:

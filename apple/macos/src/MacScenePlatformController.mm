@@ -22,6 +22,7 @@
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "app/layout/RibbonGroupLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"

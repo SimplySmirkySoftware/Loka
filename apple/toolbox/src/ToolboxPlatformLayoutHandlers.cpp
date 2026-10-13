@@ -9,6 +9,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "app/layout/RibbonGroupLayout.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 // Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
@@ -33,6 +34,17 @@ namespace
       return 0;
     }
     return traversal->layoutChild(child, state);
+  }
+
+  /** For containers whose width is their offered seat, forward only the child result Y. */
+  int DispatchTraversalLayoutChildResultY(void *context,
+                                          loka::app::scene::Node *child,
+                                          const loka::app::scene::LayoutState &state)
+  {
+    loka::app::scene::IPlatformLayoutTraversal *traversal =
+        static_cast<loka::app::scene::IPlatformLayoutTraversal *>(context);
+    traversal->layoutChild(child, state);
+    return traversal->layoutResultY();
   }
 
   /** Stack-local adapter for Toolbox's width return and separate result Y. */
@@ -403,16 +415,15 @@ int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
   {
     return 0;
   }
-  ToolboxBoxTraversal adapter(*traversal);
-  // Common BoxLayout owns padding, clamping and child advancement on every rail.
+  // Common ribbon layout owns content inset and strip placement on every rail.
   const int resultY =
-      loka::app::layout::computeRibbonGroupLayoutResultY(group, state, &adapter, &ToolboxBoxTraversal::layoutChild);
+      loka::app::layout::computeRibbonGroupLayoutResultY(group, state, traversal, &DispatchTraversalLayoutChildResultY);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;
   }
   traversal->setLayoutResultY(static_cast<short>(resultY));
-  return static_cast<short>(adapter.maxWidth + loka::app::RibbonGroupNode::kFrameInset * 2);
+  return state.width;
 }
 
 int ComputeToolboxRowLayout(loka::app::StackNode *row,

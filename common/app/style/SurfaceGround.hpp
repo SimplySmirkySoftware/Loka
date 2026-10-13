@@ -26,6 +26,8 @@ namespace loka
     {
       switch (kind)
       {
+      case scene::NODE_KIND_RIBBON_GROUP_EDGE:
+        return SURFACE_GROUND_WINDOW;
       case scene::NODE_KIND_CELL:
         return SURFACE_GROUND_CONTROL;
       case scene::NODE_KIND_RECT_SURFACE:

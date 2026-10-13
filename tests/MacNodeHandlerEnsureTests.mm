@@ -1378,7 +1378,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
       Node *open = top.next();
       RibbonGroupNode *frame = top.next()->asRibbonGroupNode();
-      LOKA_VERIFY(frame && frame->childrenCount() == 1);
+      LOKA_VERIFY(frame && frame->childrenCount() == 4);
       StackNode *group = frame->childrenHead()->asStackNode();
       LOKA_VERIFY(group != 0);
       CompositionCursor<Node> parts(group->childrenHead(), group->childrenCount());

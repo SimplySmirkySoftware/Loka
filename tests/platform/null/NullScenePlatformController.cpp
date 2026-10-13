@@ -88,7 +88,8 @@ private:
 };
 
 NullScenePlatformController::RefusedProjectedNodeHandlers::RefusedProjectedNodeHandlers()
-    : cell_(loka::app::scene::NodeTypeToken<loka::app::CellNode>()),
+    : ribbonGroupEdge_(loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>()),
+      cell_(loka::app::scene::NodeTypeToken<loka::app::CellNode>()),
       popupMenu_(loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>()),
       imageView_(loka::app::scene::NodeTypeToken<loka::app::ImageViewNode>()),
       openFileDialog_(loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>()),
@@ -99,6 +100,7 @@ NullScenePlatformController::RefusedProjectedNodeHandlers::RefusedProjectedNodeH
 void NullScenePlatformController::RefusedProjectedNodeHandlers::registerWith(
     NullScenePlatformController &controller)
 {
+  controller.registerNodeHandler(&this->ribbonGroupEdge_);
   controller.registerNodeHandler(&this->cell_);
   controller.registerNodeHandler(&this->popupMenu_);
   controller.registerNodeHandler(&this->imageView_);
@@ -263,6 +265,7 @@ namespace
     case NODE_KIND_CONFIRM_DIALOG:
     case NODE_KIND_SCROLL_VIEW:
     case NODE_KIND_BOX:
+    case NODE_KIND_RIBBON_GROUP_EDGE:
     case NODE_KIND_RIBBON_GROUP:
     case NODE_KIND_ZSTACK:
     case NODE_KIND_GRID:

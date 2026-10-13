@@ -69,6 +69,11 @@ namespace
     }
     virtual int layoutChild(Node *node, const LayoutState &offer)
     {
+      if (node->asRibbonGroupEdgeNode())
+      {
+        this->resultY_ = offer.y;
+        return 0;
+      }
       LayoutState state = offer;
       short width = 0;
       if (!ApplyToolboxPlatformLayoutHandler(this->registry_, *node, state, *this, width))
@@ -243,8 +248,10 @@ namespace
   {
   public:
     LayoutState seat;
-    virtual int layoutChild(Node *, const LayoutState &state)
+    virtual int layoutChild(Node *node, const LayoutState &state)
     {
+      if (node->asRibbonGroupEdgeNode())
+        return 999; // Child widths cannot change the group seat width.
       this->seat = state;
       return 73;
     }
@@ -293,7 +300,7 @@ namespace
     LOKA_VERIFY(group != 0);
     GroupChildWidthTraversal widthTraversal;
     const int inset = RibbonGroupNode::kFrameInset;
-    LOKA_VERIFY(ComputeToolboxRibbonGroupLayout(group, state, &widthTraversal) == 73 + 2 * inset);
+    LOKA_VERIFY(ComputeToolboxRibbonGroupLayout(group, state, &widthTraversal) == state.width);
     LOKA_VERIFY(widthTraversal.seat.x == state.x + inset);
     LOKA_VERIFY(widthTraversal.seat.width == state.width - 2 * inset);
     LOKA_VERIFY(widthTraversal.layoutResultY() == state.y + 2 * inset);
