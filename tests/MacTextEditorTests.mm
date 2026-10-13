@@ -246,7 +246,13 @@ namespace
     }
     void turn()
     {
-      [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+      // A turn is 10 ms of run loop, not one handled source: Mac OS X 10.9
+      // returns from runMode:beforeDate: after each source, about 1 ms apart,
+      // and fired a zero-delay perform 37 ms after arming it, so a bounded
+      // count of single calls ran out before the rail's deferred entry.
+      NSDate *until = [NSDate dateWithTimeIntervalSinceNow:0.01];
+      while ([until timeIntervalSinceNow] > 0)
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:until];
     }
     void restored(unsigned count)
     {
