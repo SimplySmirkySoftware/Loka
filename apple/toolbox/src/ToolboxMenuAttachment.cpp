@@ -633,7 +633,7 @@ bool ToolboxMenuAttachment::dispatch(short menuId, short item)
       SysBeep(1);
       return true;
     case loka::app::MENU_ACTION_QUIT_APP:
-      this->app_.quit();
+      this->app_.requestQuit();
       return true;
     case loka::app::MENU_ACTION_NONE:
       break;

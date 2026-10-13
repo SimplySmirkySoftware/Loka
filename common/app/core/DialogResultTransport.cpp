@@ -8,27 +8,21 @@ namespace loka
 {
   namespace app
   {
-    namespace
+    const core::LokaAllocationSite &DialogResultTransport::entrySite()
     {
-      const loka::core::LokaAllocationSite &entrySite()
-      {
-        static const loka::core::LokaAllocationSite site("DialogResultTransport", "Entry");
-        return site;
-      }
+      static const core::LokaAllocationSite site("DialogResultTransport", "Entry");
+      return site;
     }
 
-    DialogResultTransport::Entry::Entry(DialogResultTransport &owner)
+    DialogResultTransport::DialogRequest::DialogRequest(DialogResultTransport &owner)
         : transport(owner),
-          registration(0),
-          returnPort(0),
-          result(),
           chain(0),
           next(0),
           previous(0)
     {
     }
 
-    void DialogResultTransport::Entry::unlink()
+    void DialogResultTransport::DialogRequest::unlink()
     {
       if (!this->previous)
         return;
@@ -40,7 +34,7 @@ namespace loka
       this->previous = 0;
     }
 
-    void DialogResultTransport::Entry::moveTo(Chain &destination)
+    void DialogResultTransport::DialogRequest::moveTo(Chain &destination)
     {
       this->unlink();
       this->chain = &destination;
@@ -49,55 +43,6 @@ namespace loka
       if (this->next)
         this->next->previous = &this->next;
       destination.head = this;
-    }
-
-    DialogResultTransport::Registration::Registration(const OpenFileDialogProps &props)
-        : binding_(props),
-          entry_(0)
-    {
-    }
-
-    DialogResultTransport::Registration::~Registration()
-    {
-      if (this->entry_)
-        this->entry_->transport.cancel(*this->entry_);
-    }
-
-    bool DialogResultTransport::Registration::matches(const OpenFileDialogProps &props) const
-    {
-      return this->binding_.result_.state() == props.result_.state() && this->binding_.onResult_ == props.onResult_
-             && this->binding_.windowToAttach_ == props.windowToAttach_
-             && this->binding_.options_.compare(props.options_) == 0;
-    }
-
-    DialogResultTransport::ReturnPort::ReturnPort(Registration *registration)
-        : entry_(0)
-    {
-      if (registration && registration->entry_
-          && registration->entry_->chain == &registration->entry_->transport.reserved_
-          && !registration->entry_->returnPort)
-      {
-        this->entry_ = registration->entry_;
-        this->entry_->returnPort = this;
-      }
-    }
-
-    DialogResultTransport::ReturnPort::~ReturnPort()
-    {
-      if (this->entry_)
-        this->entry_->transport.cancel(*this->entry_);
-    }
-
-    Window *DialogResultTransport::ReturnPort::seal(const FileChooserResult &result)
-    {
-      Entry *entry = this->entry_;
-      if (!entry)
-        return 0;
-      this->entry_ = 0;
-      entry->returnPort = 0;
-      entry->result = result;
-      entry->moveTo(entry->transport.pending_);
-      return entry->transport.window_;
     }
 
     DialogResultTransport::DialogResultTransport()
@@ -119,29 +64,14 @@ namespace loka
 
     DialogResultTransport::Registration *DialogResultTransport::reserve(const OpenFileDialogProps &props)
     {
-      // Internal binding validation reads the handle's owner route, never the
-      // transaction-local StateBase::trackerOwner(). It does not create State.
-      if (!this->window_ || (props.result_.isValid() && !props.result_.dangerouslyTracker()))
+      return this->reserveTyped<OpenFileDialogProps, FileChooserResult>(props);
+    }
+
+    DialogResultTransport::ConfirmRegistration *DialogResultTransport::reserve(const ConfirmDialogProps &props)
+    {
+      if (!props.result_.isValid())
         return 0;
-      Registration *registration = new (std::nothrow) Registration(props);
-      if (!registration)
-      {
-        this->retryEnrollment();
-        return 0;
-      }
-      // Entry storage returns through the same site in reclaim().
-      void *storage = loka::core::LokaAllocRaw(sizeof(Entry), entrySite());
-      if (!storage)
-      {
-        delete registration;
-        this->retryEnrollment();
-        return 0;
-      }
-      Entry *entry = new (storage) Entry(*this);
-      registration->entry_ = entry;
-      entry->registration = registration;
-      entry->moveTo(this->reserved_);
-      return registration;
+      return this->reserveTyped<ConfirmDialogProps, ConfirmResult>(props);
     }
 
     void DialogResultTransport::retryEnrollment()
@@ -156,24 +86,9 @@ namespace loka
       }
     }
 
-    void DialogResultTransport::revoke(Entry &entry)
+    void DialogResultTransport::cancel(DialogRequest &entry)
     {
-      if (entry.registration)
-      {
-        entry.registration->entry_ = 0;
-        entry.registration->binding_ = OpenFileDialogProps();
-        entry.registration = 0;
-      }
-      if (entry.returnPort)
-      {
-        entry.returnPort->entry_ = 0;
-        entry.returnPort = 0;
-      }
-    }
-
-    void DialogResultTransport::cancel(Entry &entry)
-    {
-      revoke(entry);
+      entry.revoke();
       if (entry.chain != &this->active_)
         entry.moveTo(this->retired_);
     }
@@ -185,8 +100,8 @@ namespace loka
         this->cancel(*this->reserved_.head);
       while (this->pending_.head)
         this->cancel(*this->pending_.head);
-      for (Entry *entry = this->active_.head; entry; entry = entry->next)
-        revoke(*entry);
+      for (DialogRequest *entry = this->active_.head; entry; entry = entry->next)
+        entry->revoke();
     }
 
     bool DialogResultTransport::hasRunnableWork() const
@@ -207,34 +122,10 @@ namespace loka
       }
     }
 
-    DialogResultTransport::Invocation::Invocation(Entry &entry)
-        : entry_(entry),
-          emitterToken_(0)
-    {
-      if (entry.registration && entry.registration->binding_.onResult_)
-        this->emitterToken_ = entry.registration->binding_.onResult_->retainExternalLifetimeToken();
-    }
-
     DialogResultTransport::Invocation::~Invocation()
     {
-      if (this->emitterToken_)
-        loka::core::StateBase::releaseExternalLifetimeToken(this->emitterToken_);
-      revoke(this->entry_);
+      this->entry_.revoke();
       this->entry_.moveTo(this->entry_.transport.retired_);
-    }
-
-    void DialogResultTransport::Invocation::deliver()
-    {
-      if (!this->entry_.registration)
-        return;
-      scene::NodeState<FileChooserResult> result = this->entry_.registration->binding_.result_;
-      loka::core::EmitterState *emitter = this->entry_.registration->binding_.onResult_;
-      if (result.isValid())
-        result.set(this->entry_.result, true);
-      // set() may synchronously delete the registration or close this Window.
-      if (this->entry_.registration && emitter
-          && loka::core::StateBase::isExternalLifetimeTokenAlive(this->emitterToken_))
-        emitter->emit();
     }
 
     DialogResultDelivery::Retirement *DialogResultTransport::retirementSnapshot() const
@@ -244,12 +135,12 @@ namespace loka
 
     void DialogResultTransport::reclaim(Retirement *retired)
     {
-      Entry *snapshot = static_cast<Entry *>(retired);
+      DialogRequest *snapshot = static_cast<DialogRequest *>(retired);
       while (snapshot)
       {
-        Entry *next = snapshot->next;
+        DialogRequest *next = snapshot->next;
         snapshot->unlink();
-        snapshot->~Entry();
+        snapshot->~DialogRequest();
         loka::core::LokaFreeRaw(snapshot, entrySite());
         snapshot = next;
       }
