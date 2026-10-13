@@ -14,6 +14,7 @@
 #include "app/scene/Scene.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "core/StateTracker.hpp"
+#include "core/util/StateTrackerGuard.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -477,4 +478,161 @@ void testNullNaturalWidthDeclinesUnrepresentableWidth()
   LOKA_VERIFY(width == 13);
   LOKA_VERIFY(!platform.queryNaturalWidth(&button, width));
   LOKA_VERIFY(width == 13);
+}
+
+namespace
+{
+  class StackWidthProbe : public loka::app::layout::INaturalWidthSource
+  {
+  public:
+    StackWidthProbe(short a, short b, short caption)
+        : calls(0),
+          a_(a),
+          b_(b),
+          caption_(caption)
+    {
+    }
+    virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const
+    {
+      LOKA_VERIFY(child->asStackNode() == 0);
+      ++this->calls;
+      loka::app::TextNode *text = child->asTextNode();
+      if (!text)
+        return false;
+      const loka::core::String label = text->props.text_->get();
+      width = label.equals(loka::core::String::Literal("a"))   ? this->a_
+              : label.equals(loka::core::String::Literal("b")) ? this->b_
+                                                               : this->caption_;
+      return width > 0;
+    }
+    mutable int calls;
+
+  private:
+    short a_, b_, caption_;
+  };
+
+  loka::app::StackNode *widthRow(loka::app::RowUndeclaredWidth policy)
+  {
+    using namespace loka::app;
+    StackProps props(STACK_AXIS_ROW);
+    props.rowUndeclaredWidth_ = policy;
+    StackNode *row = new StackNode(props);
+    row->addChild(new TextNode(TextProps("a")));
+    row->addChild(new TextNode(TextProps("b")));
+    return row;
+  }
+
+  int consultedStackWidth(loka::app::StackNode &outer, const StackWidthProbe &probe)
+  {
+    using namespace loka::app;
+    layout::RowWidthConsultation widths(
+        outer.childrenHead(), outer.childrenCount(), 300, 4, ROW_UNDECLARED_WIDTH_NATURAL, &probe);
+    return widths.next(outer.childrenHead()).width();
+  }
+} // namespace
+
+void testStackNaturalWidthComposesGroup()
+{
+  using namespace loka::app;
+  StackNode outer((StackProps()));
+  StackNode *group = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  outer.addChild(group);
+  group->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  group->addChild(new TextNode(TextProps("caption")));
+  StackWidthProbe itemsWider(30, 40, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, itemsWider) == 74);
+  LOKA_VERIFY(itemsWider.calls == 6);
+  StackWidthProbe captionWider(10, 10, 50);
+  LOKA_VERIFY(consultedStackWidth(outer, captionWider) == 50);
+}
+
+void testStackNaturalWidthSharedAndDeclaredSeats()
+{
+  using namespace loka::app;
+  StackNode outer((StackProps()));
+  StackNode *row = widthRow(ROW_UNDECLARED_WIDTH_SHARED);
+  outer.addChild(row);
+  StackWidthProbe probe(30, 40, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 84);
+  BoxProps fixed;
+  fixed.setSize(25, 0);
+  row->addChild(new BoxNode(fixed));
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 113);
+  row->props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+  FragmentNode *empty = new FragmentNode((FragmentProps()));
+  empty->setPropsTypeId(FragmentProps::staticTypeId());
+  row->addChild(empty);
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 103);
+}
+
+void testStackNaturalWidthDeclinesIncompleteAndOverflow()
+{
+  using namespace loka::app;
+  StackNode outer((StackProps()));
+  StackNode *group = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  outer.addChild(group);
+  group->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  group->addChild(new TextNode(TextProps("caption")));
+  outer.addChild(new TextNode(TextProps("caption")));
+  StackWidthProbe refused(30, 40, 0);
+  LOKA_VERIFY(consultedStackWidth(outer, refused) == 148);
+  StackWidthProbe refusedItem(0, 40, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, refusedItem) == 276);
+  StackWidthProbe overflow(32767, 32767, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, overflow) == 276);
+
+  StackNode emptyOuter((StackProps()));
+  StackNode *empty = new StackNode(StackProps(STACK_AXIS_ROW));
+  emptyOuter.addChild(empty);
+  LOKA_VERIFY(consultedStackWidth(emptyOuter, refused) == 300);
+  FragmentNode *fragment = new FragmentNode((FragmentProps()));
+  fragment->setPropsTypeId(FragmentProps::staticTypeId());
+  empty->addChild(fragment);
+  LOKA_VERIFY(consultedStackWidth(emptyOuter, refused) == 300);
+  empty->props.axis_ = STACK_AXIS_COLUMN;
+  LOKA_VERIFY(consultedStackWidth(emptyOuter, refused) == 300);
+}
+
+void testStackNaturalWidthColumnDeclaredWidths()
+{
+  using namespace loka::app;
+  StackNode outer((StackProps()));
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  outer.addChild(column);
+  BoxProps box;
+  box.setSize(60, 10);
+  BoxNode *fixed = new BoxNode(box);
+  column->addChild(fixed);
+  column->addChild(new TextNode(TextProps("a")));
+  StackWidthProbe probe(30, 40, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 60);
+  ImageViewProps imageProps;
+  imageProps.size(75, 10);
+  column->addChild(new ImageViewNode(imageProps));
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 75);
+  RectSurfaceProps surfaceProps;
+  surfaceProps.size(90, 10);
+  column->addChild(new RectSurfaceNode(surfaceProps));
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 90);
+  fixed->props.setSize(60, 0); // Width-only Boxes do not declare a Column width.
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 300);
+}
+
+void testStackNaturalWidthReadsLiveAxis()
+{
+  using namespace loka::app;
+  loka::core::MutableState<StackAxis> axis(STACK_AXIS_ROW);
+  loka::core::PushStateTracker tracker;
+  tracker.addState(&axis);
+  StackNode outer((StackProps()));
+  StackNode *child = widthRow(ROW_UNDECLARED_WIDTH_NATURAL);
+  child->props.axisState_ = &axis;
+  outer.addChild(child);
+  StackWidthProbe probe(30, 40, 20);
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 74);
+  {
+    loka::core::StateTrackerGuard guard(&tracker);
+    axis.set(STACK_AXIS_COLUMN);
+  }
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 40);
 }

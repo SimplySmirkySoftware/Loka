@@ -1,5 +1,6 @@
 #include "RibbonTests.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
+#include "dsl/composition/CompositionList.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
@@ -137,4 +138,79 @@ void testRibbonFixedSeatsAndClicks()
   SceneTestAccess::unmount(scene);
   for (int i = 0; i < 4; ++i)
     events[i].unbind(&countRibbonClick, &clicks[i]);
+}
+
+namespace
+{
+  class RibbonGroupWidthPlatform : public NullScenePlatformController
+  {
+  public:
+    virtual bool queryNaturalWidth(Node *child, short &width) const
+    {
+      LOKA_VERIFY(child->asStackNode() == 0);
+      if (child->asTextNode())
+      {
+        width = 20;
+        return true;
+      }
+      return NullScenePlatformController::queryNaturalWidth(child, width);
+    }
+  };
+} // namespace
+
+void testRibbonGroupExpansionAndGeometry()
+{
+  RibbonGeometryHandler buttons;
+  RibbonGroupWidthPlatform platform;
+  LOKA_VERIFY(platform.registerNodeHandler(&buttons));
+  NodeDefinitionBase *definition =
+      (RibbonControl().testId("Groups") << RibbonItem("Before")
+                                        << (RibbonGroup("File") << RibbonItem("New") << RibbonItem("Save"))
+                                        << RibbonItem("After"))
+          .clone();
+  LOKA_VERIFY(definition != 0);
+  Scene scene(definition);
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  Node *anchor = 0;
+  FlowError error;
+  LOKA_VERIFY(LookupNodeById<Node>(&scene, "Groups", anchor, error) == FLOW_STEP_SUCCEEDED);
+  LOKA_VERIFY(anchor != 0);
+  StackNode *ribbon = anchor->asStackNode();
+  LOKA_VERIFY(ribbon != 0);
+  LOKA_VERIFY(ribbon->props.effectiveAxis() == STACK_AXIS_ROW);
+  LOKA_VERIFY(ribbon->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL);
+  LOKA_VERIFY(ribbon->childrenCount() == 3);
+  loka::dsl::CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
+  LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 0));
+  StackNode *group = top.next()->asStackNode();
+  LOKA_VERIFY(group != 0 && group->props.effectiveAxis() == STACK_AXIS_COLUMN);
+  LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 3));
+  LOKA_VERIFY(group->childrenCount() == 2);
+  loka::dsl::CompositionCursor<Node> parts(group->childrenHead(), group->childrenCount());
+  StackNode *items = parts.next()->asStackNode();
+  LOKA_VERIFY(items != 0 && items->props.effectiveAxis() == STACK_AXIS_ROW);
+  LOKA_VERIFY(items->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL);
+  LOKA_VERIFY(items->childrenCount() == 2);
+  TextNode *caption = parts.next()->asTextNode();
+  LOKA_VERIFY(caption != 0);
+  LOKA_VERIFY(caption->props.text_->get().equals(loka::core::String::Literal("File")));
+  LOKA_VERIFY(caption->props.textStyle_ == SmallLabel + Secondary);
+  LOKA_VERIFY(caption->props.blockStyle_ == block::Centered);
+  const char *titles[] = {"Before", "New", "Save", "After"};
+  for (int i = 0; i < 4; ++i)
+    LOKA_VERIFY(ribbonButton(scene, "Groups", i)->props.text_->get().equals(loka::core::String::Literal(titles[i])));
+  LayoutState viewport;
+  viewport.width = 640;
+  viewport.height = 160;
+  viewport.lineHeight = 20;
+  platform.projectLayoutForTesting(SceneTestAccess::rootNode(scene), viewport);
+  const LayoutState first = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 1)->getContext())->rect;
+  const LayoutState second = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 2)->getContext())->rect;
+  const int gap = second.x - first.x - first.width;
+  LOKA_VERIFY(gap > 0);
+  LOKA_VERIFY(first.width == 40 && second.width == 48);
+  const LayoutState after = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 3)->getContext())->rect;
+  LOKA_VERIFY(after.x - first.x - gap == 40 + gap + 48);
+  SceneTestAccess::unmount(scene);
 }
