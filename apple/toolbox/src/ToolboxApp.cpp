@@ -332,7 +332,8 @@ void ToolboxApp::run()
               }
             }
           }
-          if (closing)
+          // Same request/terminal split as NullWindow::simulateCloseAsked.
+          if (closing && !this->closeAsked(static_cast<Window *>(closing)))
           {
             requestWindowClose(closing);
           }
