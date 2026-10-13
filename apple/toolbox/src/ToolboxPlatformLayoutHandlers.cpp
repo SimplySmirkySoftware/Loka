@@ -75,6 +75,24 @@ namespace
     }
   };
 
+  class ToolboxRibbonGroupLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+  {
+  public:
+    virtual const void *nodeTypeKey() const
+    {
+      return loka::app::scene::NodeTypeToken<loka::app::RibbonGroupNode>();
+    }
+
+    virtual int layoutNode(loka::app::scene::Node *node,
+                           const loka::app::scene::LayoutState &state,
+                           loka::app::scene::IPlatformLayoutTraversal *traversal,
+                           const loka::app::layout::LazyWindow * = 0,
+                           loka::app::layout::StackSpans * = 0)
+    {
+      return ComputeToolboxRibbonGroupLayout(node ? node->asRibbonGroupNode() : 0, state, traversal);
+    }
+  };
+
   class ToolboxZStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
   {
   public:
@@ -377,6 +395,26 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
                                   : static_cast<short>(adapter.maxWidth + box->props.padding * 2);
 }
 
+int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
+                                    const loka::app::scene::LayoutState &state,
+                                    loka::app::scene::IPlatformLayoutTraversal *traversal)
+{
+  if (!group || !traversal)
+  {
+    return 0;
+  }
+  ToolboxBoxTraversal adapter(*traversal);
+  // Common BoxLayout owns padding, clamping and child advancement on every rail.
+  const int resultY =
+      loka::app::layout::computeRibbonGroupLayoutResultY(group, state, &adapter, &ToolboxBoxTraversal::layoutChild);
+  if (traversal->refuseLayoutResultY(resultY))
+  {
+    return 0;
+  }
+  traversal->setLayoutResultY(static_cast<short>(resultY));
+  return static_cast<short>(adapter.maxWidth + loka::app::RibbonGroupNode::kFrameInset * 2);
+}
+
 int ComputeToolboxRowLayout(loka::app::StackNode *row,
                             const loka::app::scene::LayoutState &state,
                             loka::app::scene::IPlatformLayoutTraversal *traversal)
@@ -502,6 +540,7 @@ bool ApplyToolboxPlatformLayoutHandler(
 bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
 {
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
+  ok = registry.registerHandler(new ToolboxRibbonGroupLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;

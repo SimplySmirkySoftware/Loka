@@ -1,4 +1,6 @@
 #include "RibbonTests.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "dsl/composition/CompositionList.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
@@ -183,7 +185,10 @@ void testRibbonGroupExpansionAndGeometry()
   LOKA_VERIFY(ribbon->childrenCount() == 3);
   loka::dsl::CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
   LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 0));
-  StackNode *group = top.next()->asStackNode();
+  RibbonGroupNode *frame = top.next()->asRibbonGroupNode();
+  LOKA_VERIFY(frame != 0 && frame->childrenCount() == 1);
+  LOKA_VERIFY(frame->kind() == NODE_KIND_RIBBON_GROUP);
+  StackNode *group = frame->childrenHead()->asStackNode();
   LOKA_VERIFY(group != 0 && group->props.effectiveAxis() == STACK_AXIS_COLUMN);
   LOKA_VERIFY(top.next()->asButtonNode() == ribbonButton(scene, "Groups", 3));
   LOKA_VERIFY(group->childrenCount() == 2);
@@ -210,7 +215,99 @@ void testRibbonGroupExpansionAndGeometry()
   const int gap = second.x - first.x - first.width;
   LOKA_VERIFY(gap > 0);
   LOKA_VERIFY(first.width == 40 && second.width == 48);
+  const int p = RibbonGroupNode::kFrameInset;
+  const LayoutState before = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 0)->getContext())->rect;
+  LOKA_VERIFY(first.x == before.x + before.width + gap + p);
+  LOKA_VERIFY(first.y == viewport.y + p);
+  LOKA_VERIFY(layout::preferredChildWidthForRow(frame) == -1);
+  LOKA_VERIFY(layout::declaredChildWidthForColumn(frame) == -1);
+  layout::RowWidthConsultation measured(frame, 1, 640, gap, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  LOKA_VERIFY(measured.next(frame).width() == 40 + gap + 48 + 2 * p);
   const LayoutState after = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 3)->getContext())->rect;
-  LOKA_VERIFY(after.x - first.x - gap == 40 + gap + 48);
+  LOKA_VERIFY(after.x - first.x - gap == 40 + gap + 48 + RibbonGroupNode::kFrameInset);
+  SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  class RibbonTextDecliningPlatform : public NullScenePlatformController
+  {
+  public:
+    virtual bool queryNaturalWidth(Node *child, short &width) const
+    {
+      if (child->asTextNode())
+        return false;
+      return NullScenePlatformController::queryNaturalWidth(child, width);
+    }
+  };
+
+  class RibbonChildSeatTraversal : public IPlatformLayoutTraversal
+  {
+  public:
+    Node *child;
+    LayoutState seat;
+    RibbonChildSeatTraversal()
+        : child(0),
+          seat()
+    {
+    }
+    virtual int layoutChild(Node *value, const LayoutState &state)
+    {
+      LOKA_VERIFY(this->child == 0);
+      this->child = value;
+      this->seat = state;
+      return state.y + 37;
+    }
+    virtual void setLayoutResultY(short)
+    {
+      LOKA_VERIFY(false);
+    }
+    virtual short layoutResultY() const
+    {
+      return 0;
+    }
+  };
+} // namespace
+
+void testRibbonGroupInsetAndDecliningNaturalWidth()
+{
+  RibbonTextDecliningPlatform platform;
+  NodeDefinitionBase *definition =
+      (RibbonControl().testId("InsetGroup") << (RibbonGroup("Caption") << RibbonItem("New"))).clone();
+  LOKA_VERIFY(definition != 0);
+  Scene scene(definition);
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  Node *anchor = 0;
+  FlowError error;
+  LOKA_VERIFY(LookupNodeById<Node>(&scene, "InsetGroup", anchor, error) == FLOW_STEP_SUCCEEDED);
+  LOKA_VERIFY(anchor && anchor->asStackNode());
+  RibbonGroupNode *group = anchor->asStackNode()->childrenHead()->asRibbonGroupNode();
+  LOKA_VERIFY(group && group->childrenCount() == 1);
+  layout::RowWidthConsultation declined(group, 1, 311, 7, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  LOKA_VERIFY(declined.next(group).width() == 311);
+
+  LayoutState offer;
+  offer.x = 19;
+  offer.y = 23;
+  offer.width = 211;
+  offer.height = 137;
+  offer.lineHeight = 20;
+  const int p = RibbonGroupNode::kFrameInset;
+  PlatformLayoutHandlerRegistry registry;
+  layout::RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0);
+  IPlatformLayoutHandler *handler = registry.find(group);
+  LOKA_VERIFY(handler != 0);
+  RibbonChildSeatTraversal traversal;
+  const int bottom = handler->layoutNode(group, offer, &traversal);
+  LOKA_VERIFY(traversal.child == group->childrenHead());
+  LOKA_VERIFY(traversal.seat.x == offer.x + p);
+  LOKA_VERIFY(traversal.seat.y == offer.y + p);
+  LOKA_VERIFY(traversal.seat.width == offer.width - 2 * p);
+  LOKA_VERIFY(traversal.seat.height == offer.height - 2 * p);
+  LOKA_VERIFY(bottom == traversal.seat.y + 37 + p);
+  const int groupBottom = platform.projectLayoutForTesting(group, offer);
+  const int childBottom = platform.projectLayoutForTesting(group->childrenHead(), traversal.seat);
+  LOKA_VERIFY(groupBottom == childBottom + p);
   SceneTestAccess::unmount(scene);
 }

@@ -875,6 +875,28 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     return LayoutNodeResult(state.width, resultY);
   }
 
+  if (loka::app::RibbonGroupNode *group = node->asRibbonGroupNode())
+  {
+    int resultY = state.y;
+    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
+    if (handler)
+    {
+      loka::app::scene::LayoutState handlerState;
+      if (!this->narrowLayoutState(state, handlerState, false))
+      {
+        return LayoutNodeResult(state.width, state.y);
+      }
+      loka::app::scene::MacPlatformLayoutTraversal traversal(this);
+      resultY = handler->layoutNode(group, handlerState, &traversal);
+    }
+    else
+    {
+      resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+          group, state, this, &MacScenePlatformController::layoutContainerChild);
+    }
+    return LayoutNodeResult(state.width, resultY);
+  }
+
   if (loka::app::ZStackNode *stack = node->asZStackNode())
   {
     int maxY = state.y;

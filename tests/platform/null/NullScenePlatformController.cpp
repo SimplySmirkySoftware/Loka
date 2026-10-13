@@ -263,6 +263,7 @@ namespace
     case NODE_KIND_CONFIRM_DIALOG:
     case NODE_KIND_SCROLL_VIEW:
     case NODE_KIND_BOX:
+    case NODE_KIND_RIBBON_GROUP:
     case NODE_KIND_ZSTACK:
     case NODE_KIND_GRID:
     case NODE_KIND_STACK:

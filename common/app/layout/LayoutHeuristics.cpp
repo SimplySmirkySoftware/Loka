@@ -1,6 +1,7 @@
 #include "app/layout/LayoutHeuristics.hpp"
 
 #include "app/nodes/nestable/Fragment.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "dsl/composition/CompositionList.hpp"
 #include <climits>
 
@@ -101,6 +102,17 @@ namespace loka
 
         bool queryNaturalWidth(scene::Node *child, int gap, const INaturalWidthSource *source, short &width)
         {
+          if (RibbonGroupNode *group = child->asRibbonGroupNode())
+          {
+            short contentWidth = 0;
+            if (!group->childrenHead() || !queryNaturalWidth(group->childrenHead(), gap, source, contentWidth))
+              return false;
+            const long answer = static_cast<long>(contentWidth) + 2 * RibbonGroupNode::kFrameInset;
+            if (answer > SHRT_MAX)
+              return false;
+            width = static_cast<short>(answer);
+            return true;
+          }
           StackNode *stack = child->asStackNode();
           if (!stack)
             return source && source->queryNaturalWidth(child, width) && width > 0;

@@ -15,6 +15,52 @@ namespace loka
     struct RibbonControlDefinition;
     struct RibbonGroupDefinition;
 
+    struct RibbonGroupTypeTag
+    {
+    };
+
+    struct RibbonGroupProps : public scene::NodePropsBase<RibbonGroupProps>
+    {
+      typedef RibbonGroupTypeTag TypeTag;
+      typedef RibbonGroupNode NodeType;
+      int hash() const
+      {
+        return 0;
+      }
+      bool operator<(const scene::PropsBase &) const
+      {
+        return false;
+      }
+    };
+
+    /** Closed ribbon container; its single child is the items-and-caption column. */
+    class RibbonGroupNode : public scene::NestableNode
+    {
+    public:
+      typedef RibbonGroupTypeTag TypeTag;
+      /** The inset is the band each rail draws the group frame into (left edge,
+          right edge, bottom line); the content never overlaps it. */
+      static const int kFrameInset = 4;
+      RibbonGroupProps props;
+      explicit RibbonGroupNode(const RibbonGroupProps &p)
+          : scene::NestableNode(),
+            props(p)
+      {
+      }
+      virtual scene::NodeKind kind() const
+      {
+        return scene::NODE_KIND_RIBBON_GROUP;
+      }
+      virtual const void *nodeTypeKey() const
+      {
+        return scene::NodeTypeToken<RibbonGroupNode>();
+      }
+      virtual RibbonGroupNode *asRibbonGroupNode()
+      {
+        return this;
+      }
+    };
+
     /** One native push button in a left-to-right RibbonControl, using its rail's
         natural width unless width(n) declares a fixed seat. The emitter is borrowed;
         null does nothing.
@@ -101,11 +147,18 @@ namespace loka
         return *this;
       }
       RibbonControlDefinition &operator<<(const RibbonGroupDefinition &group);
+
+    private:
+      /** Only RibbonControl expands a group into this runtime container. */
+      struct GroupFrameDefinition
+          : public scene::NestableNodeDefinition<RibbonGroupProps, RibbonGroupNode, GroupFrameDefinition>
+      {
+      };
     };
     typedef RibbonControlDefinition RibbonControl;
 
     /** A captioned group of RibbonItems. The items sit above a centered small
-        secondary label; the wider part determines the group's natural width.
+        secondary label; the wider part plus the frame band determines the group's natural width.
         A rail that declines either part gives the group a shared seat. */
     struct RibbonGroupDefinition
     {
@@ -130,8 +183,9 @@ namespace loka
 
     inline RibbonControlDefinition &RibbonControlDefinition::operator<<(const RibbonGroupDefinition &group)
     {
-      BaseType::operator<<(VStack() << group.items_
-                                    << (Text(group.caption_) + SmallLabel + Secondary + block::Centered));
+      BaseType::operator<<(GroupFrameDefinition()
+                           << (VStack() << group.items_
+                                        << (Text(group.caption_) + SmallLabel + Secondary + block::Centered)));
       return *this;
     }
   } // namespace app

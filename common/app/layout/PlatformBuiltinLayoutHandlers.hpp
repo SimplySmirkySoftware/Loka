@@ -51,6 +51,30 @@ namespace loka
         }
       };
 
+      class RibbonGroupPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+      {
+      public:
+        virtual const void *nodeTypeKey() const
+        {
+          return loka::app::scene::NodeTypeToken<loka::app::RibbonGroupNode>();
+        }
+
+        virtual int layoutNode(loka::app::scene::Node *node,
+                               const loka::app::scene::LayoutState &state,
+                               loka::app::scene::IPlatformLayoutTraversal *traversal,
+                               const loka::app::layout::LazyWindow * = 0,
+                               loka::app::layout::StackSpans * = 0)
+        {
+          loka::app::RibbonGroupNode *group = node ? node->asRibbonGroupNode() : 0;
+          if (!group || !traversal)
+          {
+            return state.y;
+          }
+          return loka::app::layout::computeRibbonGroupLayoutResultY(
+              group, state, traversal, &DispatchTraversalLayoutChild);
+        }
+      };
+
       class ZStackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
@@ -148,6 +172,7 @@ namespace loka
                                                         const GridLayoutMetrics *gridMetrics)
       {
         registry.registerHandler(new BoxPlatformLayoutHandler());
+        registry.registerHandler(new RibbonGroupPlatformLayoutHandler());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)

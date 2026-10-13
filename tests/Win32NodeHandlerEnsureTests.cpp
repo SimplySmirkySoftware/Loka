@@ -1489,14 +1489,15 @@ void testWin32RibbonGroupNaturalWidthTraversal()
           LOKA_VERIFY(captionWidth > itemsWidth);
         const int groupX = 20 + widths[0] + gap;
         verifyButtonSeat(buttons[0], root, scale, 20, widths[0]);
-        int x = groupX;
+        int x = groupX + RibbonGroupNode::kFrameInset;
         for (int i = 1; i < 4; ++i)
         {
           verifyButtonSeat(buttons[i], root, scale, x, widths[i]);
           x += widths[i] + gap;
         }
-        verifyButtonSeat(buttons[4], root, scale, groupX + groupWidth + gap, widths[4]);
-        // STATIC spans the entire group seat; inspect the real context's native projection.
+        verifyButtonSeat(
+            buttons[4], root, scale, groupX + groupWidth + 2 * RibbonGroupNode::kFrameInset + gap, widths[4]);
+        // STATIC spans the inset content seat; inspect the real context's native projection.
         HWND captionWindow = NULL;
         for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
         {
@@ -1507,8 +1508,8 @@ void testWin32RibbonGroupNaturalWidthTraversal()
         }
         LOKA_VERIFY(captionWindow != NULL);
         const RECT seat = childRectInParent(captionWindow, root);
-        LOKA_VERIFY(seat.left == scale.projectEdge(groupX));
-        LOKA_VERIFY(seat.right == scale.projectEdge(groupX + groupWidth));
+        LOKA_VERIFY(seat.left == scale.projectEdge(groupX + RibbonGroupNode::kFrameInset));
+        LOKA_VERIFY(seat.right == scale.projectEdge(groupX + RibbonGroupNode::kFrameInset + groupWidth));
         SceneTestAccess::unmount(scene);
         controller.drainNativeRetirements();
       }

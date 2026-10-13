@@ -1298,3 +1298,5 @@ LOKA_TEST(testStackNaturalWidthDeclinesIncompleteAndOverflow)
 LOKA_TEST(testStackNaturalWidthColumnDeclaredWidths)
 LOKA_TEST(testStackNaturalWidthReadsLiveAxis)
 LOKA_TEST(testRibbonGroupExpansionAndGeometry)
+
+LOKA_TEST(testRibbonGroupInsetAndDecliningNaturalWidth)

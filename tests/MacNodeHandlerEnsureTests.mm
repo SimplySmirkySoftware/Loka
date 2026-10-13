@@ -1377,7 +1377,9 @@ void testMacRibbonGroupNaturalWidthFrames()
       StackNode *ribbon = anchor->asStackNode();
       CompositionCursor<Node> top(ribbon->childrenHead(), ribbon->childrenCount());
       Node *open = top.next();
-      StackNode *group = top.next()->asStackNode();
+      RibbonGroupNode *frame = top.next()->asRibbonGroupNode();
+      LOKA_VERIFY(frame && frame->childrenCount() == 1);
+      StackNode *group = frame->childrenHead()->asStackNode();
       LOKA_VERIFY(group != 0);
       CompositionCursor<Node> parts(group->childrenHead(), group->childrenCount());
       StackNode *items = parts.next()->asStackNode();
@@ -1404,9 +1406,14 @@ void testMacRibbonGroupNaturalWidthFrames()
       LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
       const int groupX = 20 + openWidth + gap;
       const loka::macos::MacProjection &projection = controller.projection();
-      LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX).pt);
-      LOKA_VERIFY([captionField frame].size.width == projection.projectLength(groupX, groupX + seat).pt);
-      LOKA_VERIFY([closeButton frame].origin.x == projection.projectEdge(groupX + seat + gap).pt);
+      LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX + RibbonGroupNode::kFrameInset).pt);
+      LOKA_VERIFY(
+          [captionField frame].size.width
+          == projection
+                 .projectLength(groupX + RibbonGroupNode::kFrameInset, groupX + RibbonGroupNode::kFrameInset + seat)
+                 .pt);
+      LOKA_VERIFY([closeButton frame].origin.x
+                  == projection.projectEdge(groupX + seat + 2 * RibbonGroupNode::kFrameInset + gap).pt);
       std::printf(
           "macOS ribbon widths: caption=%d items=%d scale=%d sample=%d\n", captionWidth, itemsWidth, scale, sample);
       if (sample == 1)
