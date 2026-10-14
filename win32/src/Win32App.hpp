@@ -25,8 +25,7 @@ protected:
   /** Routes one non-quit message: menu shortcut, dialog navigation, dispatch. */
   static void TranslateOrDispatch(MSG &msg);
   virtual bool windowAdopted(Window *window);
-  virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source);
+  virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
 
 private:
   /** Flushes Scene work produced inside the focus completion's operation in

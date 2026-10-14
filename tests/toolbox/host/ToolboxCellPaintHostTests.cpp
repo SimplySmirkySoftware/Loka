@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Ribbon.hpp"
 #include "context/ToolboxCellContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "ToolboxGround.hpp"

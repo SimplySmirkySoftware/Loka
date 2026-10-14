@@ -62,6 +62,7 @@ set(LOKA_MACOS_CORE_SOURCES
   src/context/MacButtonContext.mm
   src/context/MacRetirableContext.mm
   src/context/MacCellContext.mm
+  src/context/MacRibbonGroupEdgeContext.mm
   src/context/MacEditTextContext.mm
   src/context/MacTextEditorContext.mm
   src/context/MacOpenFileDialogContext.mm
@@ -151,6 +152,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacButtonContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRetirableContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacCellContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRibbonGroupEdgeContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacEditTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextEditorContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacOpenFileDialogContext.mm

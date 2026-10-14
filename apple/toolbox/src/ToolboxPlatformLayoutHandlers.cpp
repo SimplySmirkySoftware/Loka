@@ -9,6 +9,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "app/layout/RibbonGroupLayout.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 // Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
@@ -33,6 +34,17 @@ namespace
       return 0;
     }
     return traversal->layoutChild(child, state);
+  }
+
+  /** For containers whose width is their offered seat, forward only the child result Y. */
+  int DispatchTraversalLayoutChildResultY(void *context,
+                                          loka::app::scene::Node *child,
+                                          const loka::app::scene::LayoutState &state)
+  {
+    loka::app::scene::IPlatformLayoutTraversal *traversal =
+        static_cast<loka::app::scene::IPlatformLayoutTraversal *>(context);
+    traversal->layoutChild(child, state);
+    return traversal->layoutResultY();
   }
 
   /** Stack-local adapter for Toolbox's width return and separate result Y. */
@@ -72,6 +84,24 @@ namespace
                                loka::app::layout::StackSpans * = 0)
     {
       return ComputeToolboxBoxLayout(node ? node->asBoxNode() : 0, state, traversal);
+    }
+  };
+
+  class ToolboxRibbonGroupLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+  {
+  public:
+    virtual const void *nodeTypeKey() const
+    {
+      return loka::app::scene::NodeTypeToken<loka::app::RibbonGroupNode>();
+    }
+
+    virtual int layoutNode(loka::app::scene::Node *node,
+                           const loka::app::scene::LayoutState &state,
+                           loka::app::scene::IPlatformLayoutTraversal *traversal,
+                           const loka::app::layout::LazyWindow * = 0,
+                           loka::app::layout::StackSpans * = 0)
+    {
+      return ComputeToolboxRibbonGroupLayout(node ? node->asRibbonGroupNode() : 0, state, traversal);
     }
   };
 
@@ -377,6 +407,25 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
                                   : static_cast<short>(adapter.maxWidth + box->props.padding * 2);
 }
 
+int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
+                                    const loka::app::scene::LayoutState &state,
+                                    loka::app::scene::IPlatformLayoutTraversal *traversal)
+{
+  if (!group || !traversal)
+  {
+    return 0;
+  }
+  // Common ribbon layout owns content inset and strip placement on every rail.
+  const int resultY =
+      loka::app::layout::computeRibbonGroupLayoutResultY(group, state, traversal, &DispatchTraversalLayoutChildResultY);
+  if (traversal->refuseLayoutResultY(resultY))
+  {
+    return 0;
+  }
+  traversal->setLayoutResultY(static_cast<short>(resultY));
+  return state.width;
+}
+
 int ComputeToolboxRowLayout(loka::app::StackNode *row,
                             const loka::app::scene::LayoutState &state,
                             loka::app::scene::IPlatformLayoutTraversal *traversal)
@@ -502,6 +551,7 @@ bool ApplyToolboxPlatformLayoutHandler(
 bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
 {
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
+  ok = registry.registerHandler(new ToolboxRibbonGroupLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;

@@ -41,6 +41,10 @@ jobs:
       # target sets so CI proves the application and the tests still build.
       - run: cmake --build --preset macos-debug
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+      # No hosted runner has the Tiger toolchain. This refuses the Objective-C
+      # 2.0 runtime names that the Tiger link would miss (#1302).
+      - run: python3 tools/ci/check_macos_objc1_runtime.py build/macos/Debug
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: cmake --build --preset macos-tests
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: ctest --preset macos-tests --output-on-failure

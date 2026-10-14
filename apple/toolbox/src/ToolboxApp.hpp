@@ -70,8 +70,7 @@ public:
   virtual void run();
   virtual void quit();
   void handleMenuSelection(short menuId, short item);
-  virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source);
+  virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
   ToolboxMenuAttachment &menuAttachment() { return this->menuAttachment_; }
 
   /** Called by projection or live bindings after updating app-owned menu

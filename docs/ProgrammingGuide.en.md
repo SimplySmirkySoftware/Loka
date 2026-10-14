@@ -1235,7 +1235,7 @@ RibbonControl()
 `RibbonGroup` accepts only `RibbonItem`s and places them above a centered
 caption styled `SmallLabel + Secondary`. Items and groups may be mixed in a
 `RibbonControl`. A group's natural width is the wider of its item row and its
-caption. If a rail cannot measure any part, the group takes a shared seat.
+caption, plus the frame band on both sides. If a rail cannot measure any part, the group takes a shared seat.
 
 ```cpp
 RibbonControl()

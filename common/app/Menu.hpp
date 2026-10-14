@@ -16,6 +16,10 @@ namespace loka
 #ifdef TEST_BUILD
     namespace testing
     {
+      void failMenuItemDefinitionClones(int count, int successfulClonesBeforeFailure = 0);
+      bool shouldCloneMenuItemDefinition();
+      void failMenuDefinitionClones(int count);
+      bool shouldCloneMenuDefinition();
       void failNextMenuBarDefinitionClone();
       void failMenuBarDefinitionClones(int count);
       void allowMenuBarDefinitionClones();
@@ -190,6 +194,8 @@ namespace loka
       {
       }
 
+      /** By-value copy cannot report refusal; children remain empty on failure.
+          Refusal-capable callers must use clone(). */
       MenuItemDefinition(const MenuItemDefinition &other)
           : title(other.title),
             titleState(other.titleState),
@@ -206,12 +212,7 @@ namespace loka
             hasAttr_(other.hasAttr_),
             nextInComposition(0)
       {
-        const MenuItemDefinition *cur = other.children_.head();
-        while (cur)
-        {
-          children_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
       }
 
       ~MenuItemDefinition()
@@ -219,36 +220,50 @@ namespace loka
         clearChildren();
       }
 
+      /** Preserve the entire destination when a child clone refuses. */
       MenuItemDefinition &operator=(const MenuItemDefinition &other)
       {
         if (this == &other)
           return *this;
-        title = other.title;
-        titleState = other.titleState;
-        enabledState = other.enabledState;
-        enabledValue_ = other.enabledValue_;
-        hasEnabledValue_ = other.hasEnabledValue_;
-        onClickState = other.onClickState;
-        action = other.action;
-        isSeparator = other.isSeparator;
-        hasShortcut = other.hasShortcut;
-        shortcutKey = other.shortcutKey;
-        attr_ = other.attr_;
-        hasAttr_ = other.hasAttr_;
-        nextInComposition = 0;
-        clearChildren();
-        const MenuItemDefinition *cur = other.children_.head();
-        while (cur)
-        {
-          children_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
         return *this;
       }
 
+    private:
+      bool copyFrom(const MenuItemDefinition &other)
+      {
+        loka::dsl::CompositionList<MenuItemDefinition> candidate;
+        if (!candidate.copyFrom(other.children_))
+          return false;
+        this->title = other.title;
+        this->titleState = other.titleState;
+        this->enabledState = other.enabledState;
+        this->enabledValue_ = other.enabledValue_;
+        this->hasEnabledValue_ = other.hasEnabledValue_;
+        this->onClickState = other.onClickState;
+        this->action = other.action;
+        this->isSeparator = other.isSeparator;
+        this->hasShortcut = other.hasShortcut;
+        this->shortcutKey = other.shortcutKey;
+        this->attr_ = other.attr_;
+        this->hasAttr_ = other.hasAttr_;
+        this->nextInComposition = 0;
+        candidate.detachTo(this->children_);
+        return true;
+      }
+
+    public:
+      /** Return a completed owned definition or 0 on clone refusal. */
       MenuItemDefinition *clone() const
       {
-        return new MenuItemDefinition(*this);
+#ifdef TEST_BUILD
+        if (!testing::shouldCloneMenuItemDefinition())
+          return 0;
+#endif
+        loka::core::OwnedDef<MenuItemDefinition> candidate(new MenuItemDefinition());
+        if (!candidate.isSet() || !candidate->copyFrom(*this))
+          return 0;
+        return candidate.take();
       }
 
       MenuItemDefinition &text(const loka::core::String &value)
@@ -402,46 +417,6 @@ namespace loka
         return *this;
       }
 
-      bool equalsStructure(const MenuItemDefinition &other) const
-      {
-        if (isSeparator != other.isSeparator)
-          return false;
-        if (!title.equals(other.title))
-          return false;
-        if (titleState != other.titleState)
-          return false;
-        if (enabledState != other.enabledState)
-          return false;
-        if (enabledValue_ != other.enabledValue_)
-          return false;
-        if (hasEnabledValue_ != other.hasEnabledValue_)
-          return false;
-        if (onClickState != other.onClickState)
-          return false;
-        if (action != other.action)
-          return false;
-        if (hasShortcut != other.hasShortcut)
-          return false;
-        if (shortcutKey != other.shortcutKey)
-          return false;
-        if (hasAttr_ != other.hasAttr_)
-          return false;
-        if (!(attr_ == other.attr_))
-          return false;
-        if (children_.count() != other.children_.count())
-          return false;
-        const MenuItemDefinition *left = children_.head();
-        const MenuItemDefinition *right = other.children_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
-      }
-
       bool hasChildren() const
       {
         return children_.count() > 0;
@@ -526,18 +501,15 @@ namespace loka
       {
       }
 
+      /** By-value copy cannot report refusal; children remain empty on failure.
+          Refusal-capable callers must use clone(). */
       MenuDefinition(const MenuDefinition &other)
           : title(other.title),
             isAppMenu(other.isAppMenu),
             items_(),
             nextInComposition(0)
       {
-        const MenuItemDefinition *cur = other.items_.head();
-        while (cur)
-        {
-          items_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
       }
 
       ~MenuDefinition()
@@ -545,26 +517,40 @@ namespace loka
         clearItems();
       }
 
+      /** Preserve the entire destination when a child clone refuses. */
       MenuDefinition &operator=(const MenuDefinition &other)
       {
         if (this == &other)
           return *this;
-        title = other.title;
-        isAppMenu = other.isAppMenu;
-        nextInComposition = 0;
-        clearItems();
-        const MenuItemDefinition *cur = other.items_.head();
-        while (cur)
-        {
-          items_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
         return *this;
       }
 
+    private:
+      bool copyFrom(const MenuDefinition &other)
+      {
+        loka::dsl::CompositionList<MenuItemDefinition> candidate;
+        if (!candidate.copyFrom(other.items_))
+          return false;
+        this->title = other.title;
+        this->isAppMenu = other.isAppMenu;
+        this->nextInComposition = 0;
+        candidate.detachTo(this->items_);
+        return true;
+      }
+
+    public:
+      /** Return a completed owned definition or 0 on clone refusal. */
       MenuDefinition *clone() const
       {
-        return new MenuDefinition(*this);
+#ifdef TEST_BUILD
+        if (!testing::shouldCloneMenuDefinition())
+          return 0;
+#endif
+        loka::core::OwnedDef<MenuDefinition> candidate(new MenuDefinition());
+        if (!candidate.isSet() || !candidate->copyFrom(*this))
+          return 0;
+        return candidate.take();
       }
 
       MenuDefinition &text(const loka::core::String &value)
@@ -589,26 +575,6 @@ namespace loka
       {
         items_.appendClone(item);
         return *this;
-      }
-
-      bool equalsStructure(const MenuDefinition &other) const
-      {
-        if (isAppMenu != other.isAppMenu)
-          return false;
-        if (!title.equals(other.title))
-          return false;
-        if (items_.count() != other.items_.count())
-          return false;
-        const MenuItemDefinition *left = items_.head();
-        const MenuItemDefinition *right = other.items_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
       }
 
       bool hasItems() const
@@ -642,16 +608,13 @@ namespace loka
       {
       }
 
+      /** By-value copy cannot report refusal; children remain empty on failure.
+          Refusal-capable callers must use clone(). */
       MenuBarDefinition(const MenuBarDefinition &other)
           : LOKA_AUDITED_COPY(MenuBarDefinition, other)
             menus_()
       {
-        const MenuDefinition *cur = other.menus_.head();
-        while (cur)
-        {
-          menus_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
       }
 
       ~MenuBarDefinition()
@@ -659,43 +622,33 @@ namespace loka
         clearMenus();
       }
 
+      /** Preserve the entire destination when a child clone refuses. */
       MenuBarDefinition &operator=(const MenuBarDefinition &other)
       {
         if (this == &other)
           return *this;
-        clearMenus();
-        const MenuDefinition *cur = other.menus_.head();
-        while (cur)
-        {
-          menus_.appendClone(*cur);
-          cur = cur->nextInComposition;
-        }
+        this->copyFrom(other);
         return *this;
       }
 
+    private:
+      bool copyFrom(const MenuBarDefinition &other)
+      {
+        return this->menus_.copyFrom(other.menus_);
+      }
+
+    public:
+      /** Return a completed owned definition or 0 on clone refusal. */
       MenuBarDefinition *clone() const
       {
 #ifdef TEST_BUILD
         if (!testing::shouldCloneMenuBarDefinition())
           return 0;
 #endif
-        return new MenuBarDefinition(*this);
-      }
-
-      bool equalsStructure(const MenuBarDefinition &other) const
-      {
-        if (menus_.count() != other.menus_.count())
-          return false;
-        const MenuDefinition *left = menus_.head();
-        const MenuDefinition *right = other.menus_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
+        loka::core::OwnedDef<MenuBarDefinition> candidate(new MenuBarDefinition());
+        if (!candidate.isSet() || !candidate->copyFrom(*this))
+          return 0;
+        return candidate.take();
       }
 
       MenuBarDefinition &operator<<(const MenuDefinition &menu)
@@ -740,7 +693,7 @@ namespace loka
       loka::dsl::CompositionList<MenuDefinition> menus_;
     };
 
-    // MenuComposition and MenuCompositionDiff are defined in MenuComposition.hpp.
+    // MenuComposition is defined in MenuComposition.hpp.
 
     inline MenuDefinition Menu(const char *title)
     {

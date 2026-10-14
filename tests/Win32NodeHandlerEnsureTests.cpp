@@ -1,3 +1,5 @@
+#include "support/LifecycleFactTestAccess.hpp"
+#include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "support/TextEditorStateOwner.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "Win32NodeHandlerEnsureTests.hpp"
@@ -18,6 +20,7 @@
 #include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "core/StateTracker.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -64,7 +67,7 @@ namespace
   {
     using namespace loka::app;
     const int count = 3;
-    const int height = 40 + count * layout::FallbackControlMetrics::kButtonHeight
+    const int height = 2 * layout::SceneRootLayout::kInset + count * layout::FallbackControlMetrics::kButtonHeight
                        + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
     const RailMetrics metrics[] = {RailMetrics(), loka::win32::DefaultRailMetrics()};
     for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
@@ -94,7 +97,7 @@ namespace
         Win32ButtonContext *context = static_cast<Win32ButtonContext *>(last->getContext());
         LOKA_VERIFY(context != 0);
         const RECT frame = childRectInParent(context->hwnd(), root);
-        LOKA_VERIFY(frame.bottom == scale.projectEdge(height - 20));
+        LOKA_VERIFY(frame.bottom == scale.projectEdge(height - layout::SceneRootLayout::kInset));
         LOKA_VERIFY(frame.bottom <= client.bottom);
         controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
       }
@@ -171,10 +174,11 @@ namespace
             const int minimum = fontHeight > 20 ? fontHeight : 20;
             const int padded = scale.measurementToLu(nativeHeight) + 8;
             const int textHeight = padded > minimum ? padded : minimum;
-            const int captionY = boxed ? 190 : 20 + textHeight + 12;
+            const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
             const int buttonY = captionY + 20 + 12;
             const RECT pageFrame = childRectInParent(page, root);
-            const RECT expectedPage = scale.projectFrame(loka::core::Frame(20, 20, 300, textHeight)).r;
+            const RECT expectedPage = scale.projectFrame(loka::core::Frame(
+                layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r;
             LOKA_VERIFY(EqualRect(&pageFrame, &expectedPage));
             LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY));
             const RECT buttonFrame = childRectInParent(button, root);
@@ -1487,16 +1491,17 @@ void testWin32RibbonGroupNaturalWidthTraversal()
         const int groupWidth = itemsWidth > captionWidth ? itemsWidth : captionWidth;
         if (captionIndex == 1)
           LOKA_VERIFY(captionWidth > itemsWidth);
-        const int groupX = 20 + widths[0] + gap;
-        verifyButtonSeat(buttons[0], root, scale, 20, widths[0]);
-        int x = groupX;
+        const int groupX = layout::SceneRootLayout::kInset + widths[0] + gap;
+        verifyButtonSeat(buttons[0], root, scale, layout::SceneRootLayout::kInset, widths[0]);
+        int x = groupX + RibbonGroupNode::kFrameInset;
         for (int i = 1; i < 4; ++i)
         {
           verifyButtonSeat(buttons[i], root, scale, x, widths[i]);
           x += widths[i] + gap;
         }
-        verifyButtonSeat(buttons[4], root, scale, groupX + groupWidth + gap, widths[4]);
-        // STATIC spans the entire group seat; inspect the real context's native projection.
+        verifyButtonSeat(
+            buttons[4], root, scale, groupX + groupWidth + 2 * RibbonGroupNode::kFrameInset + gap, widths[4]);
+        // STATIC spans the inset content seat; inspect the real context's native projection.
         HWND captionWindow = NULL;
         for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
         {
@@ -1507,8 +1512,8 @@ void testWin32RibbonGroupNaturalWidthTraversal()
         }
         LOKA_VERIFY(captionWindow != NULL);
         const RECT seat = childRectInParent(captionWindow, root);
-        LOKA_VERIFY(seat.left == scale.projectEdge(groupX));
-        LOKA_VERIFY(seat.right == scale.projectEdge(groupX + groupWidth));
+        LOKA_VERIFY(seat.left == scale.projectEdge(groupX + RibbonGroupNode::kFrameInset));
+        LOKA_VERIFY(seat.right == scale.projectEdge(groupX + RibbonGroupNode::kFrameInset + groupWidth));
         SceneTestAccess::unmount(scene);
         controller.drainNativeRetirements();
       }
@@ -1547,7 +1552,7 @@ void testWin32RibbonNaturalWidthTraversal()
       const int widths[] = {expectedPushButtonWidth(controller, L"New"),
                             expectedPushButtonWidth(controller, L"Save As..."), 120};
       const int gap = layout::FallbackControlMetrics::rowLayout().gap;
-      int x = 20;
+      int x = layout::SceneRootLayout::kInset;
       for (int i = 0; i < 3; ++i)
       {
         ButtonNode *button = 0;
@@ -1563,8 +1568,8 @@ void testWin32RibbonNaturalWidthTraversal()
         x += widths[i] + gap;
       }
       // Different titles remain equal seats in an ordinary Row.
-      const int sharedWidth = (640 - 40 - gap) / 2;
-      LOKA_VERIFY(2 * sharedWidth + gap == 600);
+      const int sharedWidth = (640 - 2 * layout::SceneRootLayout::kInset - gap) / 2;
+      LOKA_VERIFY(2 * sharedWidth + gap == 640 - 2 * layout::SceneRootLayout::kInset);
       for (int i = 0; i < 2; ++i)
       {
         ButtonNode *button = 0;
@@ -1572,7 +1577,7 @@ void testWin32RibbonNaturalWidthTraversal()
         LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("sharedRow").descendant<ButtonNode>(i + 1),
                                     button, error) == FLOW_STEP_SUCCEEDED);
         LOKA_VERIFY(button != 0);
-        verifyButtonSeat(button, root, scale, 20 + i * (sharedWidth + gap), sharedWidth);
+        verifyButtonSeat(button, root, scale, layout::SceneRootLayout::kInset + i * (sharedWidth + gap), sharedWidth);
       }
       SceneTestAccess::unmount(scene);
       controller.drainNativeRetirements();
@@ -1602,8 +1607,9 @@ void testWin32NaturalWidthDirectRow()
     controller.relayout(640, 160);
     const int firstWidth = expectedPushButtonWidth(controller, L"New");
     const int secondWidth = expectedPushButtonWidth(controller, L"Save As...");
-    verifyButtonSeat(first, root, scale, 20, firstWidth);
-    verifyButtonSeat(second, root, scale, 20 + firstWidth + layout::FallbackControlMetrics::rowLayout().gap,
+    verifyButtonSeat(first, root, scale, layout::SceneRootLayout::kInset, firstWidth);
+    verifyButtonSeat(second, root, scale,
+                     layout::SceneRootLayout::kInset + firstWidth + layout::FallbackControlMetrics::rowLayout().gap,
                      secondWidth);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
@@ -1667,4 +1673,117 @@ void testWin32AttributedTextInksAndAdditivity()
     ReleaseDC(root, source);
   }
   DestroyWindow(root);
+}
+
+void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  const int dpis[] = {96, 144};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+  {
+    const loka::win32::Win32DisplayScale scale(dpis[scaleIndex], RailMetrics());
+    HWND root = CreateWindowExW(
+        0, L"STATIC", L"ribbon-edge-host", WS_POPUP, 0, 0, 600, 300, NULL, NULL, GetModuleHandleW(NULL), NULL);
+    LOKA_VERIFY(root != NULL);
+    {
+      Win32ScenePlatformController controller(root, scale);
+      RibbonGroupNode group((RibbonGroupProps()));
+      StackNode *content = new StackNode(StackProps(STACK_AXIS_COLUMN));
+      ButtonNode *button = new ButtonNode(ButtonProps().text("New"));
+      content->addChild(button);
+      content->addChild(new TextNode(TextProps("File")));
+      group.addChild(content);
+      const RibbonGroupEdge roles[] = {RIBBON_GROUP_EDGE_LEFT, RIBBON_GROUP_EDGE_RIGHT, RIBBON_GROUP_EDGE_BOTTOM};
+      RibbonGroupEdgeNode *edges[3];
+      Win32RibbonGroupEdgeContext *contexts[3] = {0, 0, 0};
+      HWND windows[3] = {0, 0, 0};
+      for (int i = 0; i < 3; ++i)
+      {
+        edges[i] = new RibbonGroupEdgeNode(RibbonGroupEdgeProps(roles[i]));
+        group.addChild(edges[i]);
+      }
+      NotifySubtreeNodeAttached(&group);
+      controller.onChange(&group, NODE_DIRTY_NONE, false);
+      RefusedNodeHandler foreign(NodeTypeToken<RibbonGroupEdgeNode>());
+      LOKA_VERIFY(!controller.registerNodeHandler(&foreign));
+      for (int pass = 0; pass < 2; ++pass)
+      {
+        const int width = 320 + pass * 40;
+        controller.relayout(width, 160);
+        int edgeCount = 0;
+        for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
+        {
+          wchar_t name[64];
+          LOKA_VERIFY(GetClassNameW(child, name, 64));
+          if (std::wcscmp(name, L"LOKA_RIBBON_GROUP_EDGE") != 0)
+            continue;
+          ++edgeCount;
+          for (int i = 0; i < 3; ++i)
+            if (reinterpret_cast<void *>(GetWindowLongPtr(child, GWLP_USERDATA)) == edges[i]->getContext())
+            {
+              if (pass == 0)
+                windows[i] = child;
+              else
+                LOKA_VERIFY(windows[i] == child);
+            }
+        }
+        LOKA_VERIFY(edgeCount == 3);
+        RECT frames[3];
+        for (int i = 0; i < 3; ++i)
+        {
+          LOKA_VERIFY(windows[i] && IsWindow(windows[i]));
+          LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) != 0);
+          if (pass == 0)
+            contexts[i] = static_cast<Win32RibbonGroupEdgeContext *>(edges[i]->getContext());
+          LOKA_VERIFY(contexts[i] && edges[i]->getContext() == contexts[i]);
+          frames[i] = childRectInParent(windows[i], root);
+          RECT client;
+          LOKA_VERIFY(GetClientRect(windows[i], &client));
+          LOKA_VERIFY(client.right == frames[i].right - frames[i].left);
+          LOKA_VERIFY(client.bottom == frames[i].bottom - frames[i].top);
+          const PaintQuery eligible = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+          const PaintQuery pending = {eligible.scope, PLACEMENT_PENDING};
+          LOKA_VERIFY(contexts[i]->queryPaintDamage(eligible).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
+          LOKA_VERIFY(contexts[i]->queryPaintDamage(pending).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
+        }
+        const int inset = layout::SceneRootLayout::kInset;
+        LOKA_VERIFY(frames[0].left == scale.projectEdge(inset));
+        LOKA_VERIFY(frames[0].top == scale.projectEdge(inset));
+        LOKA_VERIFY(frames[0].right == scale.projectEdge(inset + 1));
+        LOKA_VERIFY(frames[1].right == scale.projectEdge(width - inset));
+        LOKA_VERIFY(frames[1].left == scale.projectEdge(width - inset - 1));
+        LOKA_VERIFY(frames[1].top == frames[0].top);
+        LOKA_VERIFY(frames[0].bottom == frames[2].top && frames[1].bottom == frames[2].top);
+        LOKA_VERIFY(frames[2].left == frames[0].left && frames[2].right == frames[1].right);
+        LOKA_VERIFY(frames[2].bottom > frames[2].top);
+        if (scaleIndex == 0)
+          LOKA_VERIFY(frames[2].bottom - frames[2].top == 1);
+      }
+      NotifySubtreeNodeDetached(&group);
+      LifecycleFactTestAccess::DeliverFacts(&group);
+      for (int i = 0; i < 3; ++i)
+      {
+        LOKA_VERIFY(edges[i]->getContext() == contexts[i] && IsWindow(windows[i]));
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) == 0);
+      }
+      NotifySubtreeNodeAttached(&group);
+      LifecycleFactTestAccess::DeliverFacts(&group);
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) != 0);
+      LifecycleFactTestAccess::MarkSubtreeRetired(&group);
+      controller.releaseNodeContexts(&group);
+      for (int i = 0; i < 3; ++i)
+      {
+        LOKA_VERIFY(edges[i]->getContext() == 0 && IsWindow(windows[i]));
+        LOKA_VERIFY((GetWindowLongPtr(windows[i], GWL_STYLE) & WS_VISIBLE) == 0);
+        LOKA_VERIFY(GetWindowLongPtr(windows[i], GWLP_USERDATA) == 0);
+      }
+      controller.drainNativeRetirements();
+      for (int i = 0; i < 3; ++i)
+        LOKA_VERIFY(!IsWindow(windows[i]));
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
 }

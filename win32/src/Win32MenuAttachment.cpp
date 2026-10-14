@@ -1,4 +1,6 @@
 #include "Win32MenuAttachment.hpp"
+#include "app/MenuComposition.hpp"
+#include "core/util/OwnedDef.hpp"
 #include "Win32Window.hpp"
 #include "Win32App.hpp"
 #include "platform/Win32String.hpp"
@@ -54,7 +56,7 @@ namespace
 } // namespace
 
 Win32MenuAttachment::Win32MenuAttachment(Win32Window &window)
-    : window_(window), menu_(NULL), accel_(NULL), nextCommandId_(1000), applied_(), source_(0)
+    : window_(window), menu_(NULL), accel_(NULL), nextCommandId_(1000), record_()
 {
 }
 
@@ -103,14 +105,13 @@ bool Win32MenuAttachment::resetForTeardown()
 void Win32MenuAttachment::disconnect()
 {
   this->clearMenuBindings();
-  this->applied_.reset();
-  this->source_ = 0;
+  this->record_.clear();
 }
 
 void Win32MenuAttachment::releaseFrom(const loka::app::scene::Scene *source)
 {
-  if (this->source_ == source)
-    this->disconnect();
+  if (this->record_.release(source))
+    this->clearMenuBindings();
 }
 
 bool Win32MenuAttachment::translateAccelerator(MSG &msg)
@@ -351,16 +352,13 @@ bool Win32MenuAttachment::buildMenuItems(HMENU menu, const loka::app::MenuItemDe
   return true;
 }
 
-Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app::MenuBarDefinition *bar,
-                                  const loka::app::scene::Scene *source)
+Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app::MenuSources &sources)
 {
   if (!this->window_.hwnd())
     return PROJECT_REFUSED;
-  if (bar && this->source_ == source && this->applied_.get() &&
-      this->applied_->equalsStructure(*bar))
-    return PROJECT_UNCHANGED;
-  if (!bar)
+  if (sources.absent())
   {
+    this->record_.clear();
     // An absent offer with no installed HMENU is unchanged.
     if (!this->menu_)
       return PROJECT_UNCHANGED;
@@ -369,6 +367,15 @@ Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app:
     this->disconnect();
     return PROJECT_APPLIED;
   }
+
+  if (this->record_.unchanged(sources))
+    return PROJECT_UNCHANGED;
+
+  loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
+      loka::app::MergeMenuBars(sources.base, sources.overlay));
+  if (!merged.isSet())
+    return PROJECT_REFUSED;
+  const loka::app::MenuBarDefinition *bar = merged.get();
 
   // The same owner shape holds the candidate until the native swap succeeds.
   // Its destructor disposes either a refused candidate or the replaced handle.
@@ -427,8 +434,6 @@ Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app:
   this->commands_.swap(next.commands_);
   this->bindings_.swap(next.bindings_);
   std::swap(this->nextCommandId_, next.nextCommandId_);
-  this->source_ = source;
-  // A failed capture leaves no stale reconciliation baseline (N2b ruling).
-  this->applied_.reset(bar->clone());
+  this->record_.commit(sources);
   return PROJECT_APPLIED;
 }

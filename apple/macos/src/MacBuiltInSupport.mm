@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Ribbon.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "MacBuiltInSupport.hpp"
@@ -15,6 +16,7 @@
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "context/MacButtonContext.hpp"
 #include "context/MacCellContext.hpp"
+#include "context/MacRibbonGroupEdgeContext.hpp"
 #include "context/MacEditTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacImageViewContext.hpp"
@@ -36,6 +38,10 @@ namespace
 
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
+  RegisterMacRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
+  controller.leafLayoutHandlerRegistry_.registerHandler(
+      loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>(),
+      &MacScenePlatformController::DispatchProjectedLayout);
   const loka::app::layout::RowLayoutMetrics rowMetrics =
       loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;

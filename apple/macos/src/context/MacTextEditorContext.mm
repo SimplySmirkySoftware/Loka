@@ -161,10 +161,35 @@ namespace
   MacTextEditorHandler handler;
 } // namespace
 
-/** Native participant mark; behavior remains NSTextView's. */
+/** Native participant mark; behavior remains NSTextView's, except that the
+    editor accepts no input-method composition (#862). A refused composition
+    would leave marked text in a view the refusal makes read-only, and AppKit
+    commits stale marked text through insertText:, which a read-only view
+    declines, so the commit retries until the stack overflows (#1264). The
+    composition is abandoned before it marks anything; text the input method
+    commits still arrives through insertText: and is refused like a keystroke. */
 @interface LokaTextEditorView : NSTextView
 @end
 @implementation LokaTextEditorView
+- (void)abandonComposition
+{
+  // NSTextInputContext arrived in 10.6. Earlier systems only see the marking refused.
+  if ([self respondsToSelector:@selector(inputContext)])
+    [[self inputContext] discardMarkedText];
+}
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selection replacementRange:(NSRange)replacement
+{
+  (void)string;
+  (void)selection;
+  (void)replacement;
+  [self abandonComposition];
+}
+- (void)setMarkedText:(id)string selectedRange:(NSRange)selection
+{
+  (void)string;
+  (void)selection;
+  [self abandonComposition];
+}
 @end
 
 /** Informal text view/storage delegate selectors also work on ObjC1 SDKs. */

@@ -163,11 +163,10 @@ bool Win32App::handleMenuCommand(int commandId, Window *window)
   return true;
 }
 
-void Win32App::projectMenu(Window *activeWindow, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source)
+void Win32App::projectMenu(Window *activeWindow, const loka::app::MenuSources &sources)
 {
   Win32Window *win = activeWindow ? activeWindow->asWin32Window() : 0;
   if (!win || !win->hwnd())
     return;
-  win->menuAttachment().project(bar, source);
+  win->menuAttachment().project(sources);
 }
