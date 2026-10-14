@@ -357,6 +357,24 @@ void testNestableDefinitionCloneReturnsNullOnOomChildClone()
   printf("==== [testNestableDefinitionCloneReturnsNullOnOomChildClone] end ====\n");
 }
 
+void testNodeCompositionLastDeclarationWins()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+
+  NodeComposition composition;
+  BoxDefinition first = Box().testId("A");
+  BoxDefinition second = Box().testId("B");
+  composition.declare(first);
+  LOKA_VERIFY(composition.root() != 0);
+  LOKA_VERIFY(composition.root() != &first);
+  LOKA_VERIFY(composition.root()->testIdValue() == "A");
+  composition.declare(second);
+  LOKA_VERIFY(composition.root() != 0);
+  LOKA_VERIFY(composition.root() != &second);
+  LOKA_VERIFY(composition.root()->testIdValue() == "B");
+}
+
 void testNodeCompositionSkipsOomClones()
 {
   printf("\n==== [testNodeCompositionSkipsOomClones] start ====\n");
@@ -373,22 +391,16 @@ void testNodeCompositionSkipsOomClones()
     assert(storedRoot != 0);
 
     loka::app::scene::NodeDefinitionBase *grouped = composition.group(failingDefinition);
-    OomCloneProbeDefinition::CloneType &typedResult = composition.declare(failingDefinition);
-    loka::app::scene::NodeDefinitionBase &baseResult = composition.declare(failingBase);
-    loka::app::scene::NodeDefinitionBase &taggedResult = composition.declareTagged(42, failingBase);
-    OomCloneProbeDefinition::CloneType &typedTaggedResult = composition.declareTagged(42, failingDefinition);
-
     (void)grouped;
     assert(grouped == 0);
-    (void)typedResult;
-    assert(&typedResult == &failingDefinition);
-    (void)baseResult;
-    assert(&baseResult == &failingBase);
-    (void)taggedResult;
-    assert(&taggedResult == &failingBase);
-    (void)typedTaggedResult;
-    assert(&typedTaggedResult == &failingDefinition);
-    assert(composition.root() == storedRoot);
+    composition.declare(failingDefinition);
+    LOKA_VERIFY(composition.root() == storedRoot);
+    composition.declare(failingBase);
+    LOKA_VERIFY(composition.root() == storedRoot);
+    composition.declareTagged(42, failingBase);
+    LOKA_VERIFY(composition.root() == storedRoot);
+    composition.declareTagged(42, failingDefinition);
+    LOKA_VERIFY(composition.root() == storedRoot);
   }
   assert(g_probePropsAlive == 0);
   assert(g_probeNodesAlive == 0);

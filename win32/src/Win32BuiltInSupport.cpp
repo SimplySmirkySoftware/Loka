@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Ribbon.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "Win32BuiltInSupport.hpp"
@@ -19,6 +20,7 @@
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "context/Win32ButtonContext.hpp"
 #include "context/Win32CellContext.hpp"
+#include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "context/Win32EditTextContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
@@ -40,6 +42,7 @@ namespace
 
 void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
 {
+  RegisterWin32RibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
   const loka::app::layout::RowLayoutMetrics rowMetrics =
       loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;

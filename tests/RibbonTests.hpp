@@ -5,4 +5,6 @@ void testRibbonFixedSeatsAndClicks();
 
 void testRibbonGroupExpansionAndGeometry();
 
+void testRibbonGroupInsetAndDecliningNaturalWidth();
+
 #endif

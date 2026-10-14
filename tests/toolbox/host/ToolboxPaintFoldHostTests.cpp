@@ -1,3 +1,8 @@
+#include "ToolboxBuiltInSupport.hpp"
+#include "ToolboxPaintGradient.hpp"
+#include "ToolboxDirtyReplay.hpp"
+#include "context/ToolboxRibbonGroupEdgeContext.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "context/ToolboxCellContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "app/nodes/AttributedText.hpp"
@@ -45,9 +50,15 @@ namespace
       for (int i = 0; i < kBoardCells; ++i)
         board << Cell(this->cells[i].state()).TEST_ID(kIds[i]);
       if (gStatusLast)
-        c.declare(Column() << (board << Cell("unchanged").TEST_ID("neighbour")).TEST_ID("board") << Cell(this->status.state()).TEST_ID("status"));
+        c.declare(Column() << NodeDefinition<RibbonGroupEdgeProps, RibbonGroupEdgeNode>(
+                      RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT))
+                           << (board << Cell("unchanged").TEST_ID("neighbour")).TEST_ID("board")
+                           << Cell(this->status.state()).TEST_ID("status"));
       else
-        c.declare(Column() << Cell(this->status.state()).TEST_ID("status") << (board << Cell("unchanged").TEST_ID("neighbour")).TEST_ID("board"));
+        c.declare(Column() << NodeDefinition<RibbonGroupEdgeProps, RibbonGroupEdgeNode>(
+                      RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT))
+                           << Cell(this->status.state()).TEST_ID("status")
+                           << (board << Cell("unchanged").TEST_ID("neighbour")).TEST_ID("board"));
     }
     NodeState<String> status;
     NodeState<String> cells[kBoardCells];
@@ -82,6 +93,63 @@ void Run(bool statusLast, bool partialNeighbour = false)
   scene.mount(&controller);
   SceneTestAccess::updateAttached(scene, true);
   FoldNode *root = static_cast<FoldNode *>(SceneTestAccess::rootBoundary(scene));
+  RibbonGroupEdgeNode *edge = root->asNestable()->childrenHead()->asNestable()->childrenHead()->asRibbonGroupEdgeNode();
+  LOKA_VERIFY(edge != 0);
+  LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+  LayoutState edgeSeat = Seat(20, 65, 1);
+  IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(edge);
+  LOKA_VERIFY(handler != 0);
+  ToolboxRibbonGroupEdgeContext *edgeContext =
+      static_cast<ToolboxRibbonGroupEdgeContext *>(handler->ensureContext(edge, &controller, edgeSeat));
+  LOKA_VERIFY(edgeContext != 0);
+  LOKA_VERIFY(edgeContext->layout(&controller, edgeSeat) == 1);
+  LOKA_VERIFY(edgeSeat.y == 85);
+  LOKA_VERIFY(controller.compositionReplay.required());
+  LOKA_VERIFY(handler->ensureContext(edge, &controller, edgeSeat) == edgeContext);
+  const PaintQuery edgeQuery = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+  LOKA_VERIFY(edgeContext->queryPaintDamage(edgeQuery).kind == PAINT_ANSWER_EXACT);
+  LOKA_VERIFY(edgeContext->queryPaintDamage(edgeQuery).damage.width == 0);
+  const PaintQuery unsettled = {ToolboxPaintScope(), PLACEMENT_PENDING};
+  LOKA_VERIFY(edgeContext->queryPaintDamage(unsettled).kind == PAINT_ANSWER_REFUSED);
+  // Projection clipping bounds every band, including an entirely hidden strip.
+  for (unsigned hidden = 0; hidden < 2; ++hidden)
+  {
+    SetRect(&controller.projectionClip, 20, 70, hidden ? 20 : 21, 75);
+    edgeSeat = Seat(20, 65, 1);
+    edgeContext->layout(&controller, edgeSeat);
+    toolbox_host::fills.clear();
+    edgeContext->render(&controller);
+    LOKA_VERIFY(hidden ? toolbox_host::fills.empty() : !toolbox_host::fills.empty());
+    for (unsigned i = 0; i < toolbox_host::fills.size(); ++i)
+      LOKA_VERIFY(toolbox_host::fills[i].rect.top >= 70 && toolbox_host::fills[i].rect.bottom <= 75);
+  }
+  SetRect(&controller.projectionClip, -30000, -30000, 30000, 30000);
+  // Render both side kinds and the bottom through the actual leaf, then restore the fold seat.
+  for (unsigned kind = 0; kind < 3; ++kind)
+  {
+    edge->props.edge = static_cast<RibbonGroupEdge>(kind);
+    LayoutState paintSeat = Seat(20, 65, kind == RIBBON_GROUP_EDGE_BOTTOM ? 41 : 1);
+    paintSeat.height = kind == RIBBON_GROUP_EDGE_BOTTOM ? 1 : 41;
+    edgeContext->layout(&controller, paintSeat);
+    toolbox_host::fills.clear();
+    toolbox_host::backgroundColors.clear();
+    window.port.fgColor = greenColor;
+    edgeContext->render(&controller);
+    LOKA_VERIFY(window.port.fgColor == greenColor);
+    LOKA_VERIFY(!toolbox_host::backgroundColors.empty() && toolbox_host::backgroundColors.back() == whiteColor);
+    const unsigned count = kind == RIBBON_GROUP_EDGE_BOTTOM ? 1 : 4;
+    LOKA_VERIFY(toolbox_host::fills.size() == count);
+    for (unsigned band = 0; band < count; ++band)
+    {
+      LOKA_VERIFY(toolbox_host::fills[band].ink == blackColor);
+      for (unsigned y = 0; y < 8; ++y)
+        LOKA_VERIFY(toolbox_host::fills[band].pattern.pat[y]
+                    == loka::toolbox::kToolboxGradientPatterns[8 - 2 * band].pat[y]);
+    }
+  }
+  edge->props.edge = RIBBON_GROUP_EDGE_LEFT;
+  edgeSeat = Seat(20, 65, 1);
+  edgeContext->layout(&controller, edgeSeat);
   ToolboxCellContext *residents[kBoardCells + 2];
   Rect rects[kBoardCells + 2];
   residents[0] = Attach(scene, controller, "status", Seat(10, 0, 120));
@@ -118,6 +186,7 @@ void Run(bool statusLast, bool partialNeighbour = false)
   std::fflush(stdout);
   // Ten changed Cells in one apply: the rail must not widen to the window.
   LOKA_VERIFY(verdict.canSkipBroadPaint(info));
+  LOKA_VERIFY(verdict.exactCount() == kBoardCells + 3);
   LOKA_VERIFY(answers.count() <= kApplyPaintPlanCapacity);
   bool covered[kBoardCells + 1] = {false};
   for (unsigned r = 0; r < answers.count(); ++r)
@@ -136,11 +205,26 @@ void Run(bool statusLast, bool partialNeighbour = false)
   LOKA_VERIFY(neighbourBefore.kind == PAINT_ANSWER_EXACT);
   LOKA_VERIFY(neighbourBefore.damage.width == 0 || neighbourBefore.damage.height == 0);
   unsigned partialDraws = 0;
+  unsigned edgeDraws = 0;
   for (unsigned r = 0; r < answers.count(); ++r)
   {
     const PaintDamage &d = answers.entry(r).damage;
     Rect delivery;
     SetRect(&delivery, d.x, d.y, d.x + d.width, d.y + d.height);
+    toolbox_host::fills.clear();
+    controller.rootNode_ = root;
+    controller.renderContext = edgeContext;
+    if (controller.compositionReplay.required())
+      ToolboxRenderDirtyInCompositionOrder(controller, delivery);
+    if (!toolbox_host::fills.empty())
+    {
+      ++edgeDraws;
+      LOKA_VERIFY(partialNeighbour);
+      // Neither changed Cell touches this strip; only their folded union does.
+      LOKA_VERIFY(delivery.top <= 65 && delivery.bottom > 65);
+      LOKA_VERIFY(toolbox_host::fills.front().rect.left == 20);
+      LOKA_VERIFY(toolbox_host::fills.back().rect.top == 65);
+    }
     ToolboxPaintClip clip(delivery);
     for (int i = 0; i < kBoardCells + 2; ++i)
     {
@@ -163,7 +247,10 @@ void Run(bool statusLast, bool partialNeighbour = false)
     }
   }
   if (partialNeighbour)
+  {
     LOKA_VERIFY(partialDraws != 0);
+    LOKA_VERIFY(edgeDraws != 0);
+  }
   {
     StateTrackerGuard guard(root->tracker());
     root->cells[0].set(String::Literal("2"));
@@ -175,10 +262,69 @@ void Run(bool statusLast, bool partialNeighbour = false)
   std::fflush(stdout);
   LOKA_VERIFY(next.canSkipBroadPaint(info));
   LOKA_VERIFY(next.refusedCount() == 0);
+  edgeContext->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+  LOKA_VERIFY(!controller.compositionReplay.required());
+  toolbox_host::fills.clear();
+  edgeContext->render(&controller);
+  LOKA_VERIFY(toolbox_host::fills.empty());
+  edgeContext->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+  LOKA_VERIFY(controller.compositionReplay.required());
+  controller.renderContext = 0;
   SceneTestAccess::unmount(scene);
+  LOKA_VERIFY(!controller.compositionReplay.required());
+}
+void GradientPins()
+{
+  using namespace loka::toolbox;
+  for (unsigned k = 0; k <= 8; ++k)
+    for (unsigned a = 0; a < 8; ++a)
+    {
+      unsigned row = 0, column = 0;
+      for (unsigned b = 0; b < 8; ++b)
+      {
+        row += (kToolboxGradientPatterns[k].pat[a] >> b) & 1;
+        column += (kToolboxGradientPatterns[k].pat[b] >> a) & 1;
+      }
+      LOKA_VERIFY(row == k && column == k);
+      LOKA_VERIFY(kToolboxGradientPatterns[0].pat[a] == 0);
+      LOKA_VERIFY(kToolboxGradientPatterns[8].pat[a] == 255);
+    }
+  const unsigned char levels[] = {8, 6, 4, 2};
+  const int heights[] = {1, 3, 4, 41, 43};
+  for (unsigned h = 0; h < sizeof(heights) / sizeof(heights[0]); ++h)
+  {
+    const Rect rect = {7, 13, static_cast<short>(7 + heights[h]), 14};
+    toolbox_host::fills.clear();
+    ToolboxPaintGradient(rect, BOTTOM_TO_TOP, levels, 4);
+    unsigned painted = 0;
+    short previousTop = rect.bottom;
+    for (unsigned i = 0; i < toolbox_host::fills.size(); ++i)
+    {
+      const toolbox_host::Fill &fill = toolbox_host::fills[i];
+      LOKA_VERIFY(fill.rect.bottom == previousTop);
+      LOKA_VERIFY(fill.rect.top >= rect.top && fill.rect.bottom <= rect.bottom);
+      LOKA_VERIFY(fill.rect.left == rect.left && fill.rect.right == rect.right);
+      painted += fill.rect.bottom - fill.rect.top;
+      previousTop = fill.rect.top;
+    }
+    LOKA_VERIFY(painted == static_cast<unsigned>(heights[h]) && previousTop == rect.top);
+    if (heights[h] == 41)
+    {
+      const short boundaries[] = {48, 38, 28, 18, 7};
+      LOKA_VERIFY(toolbox_host::fills.size() == 4);
+      for (unsigned i = 0; i < 4; ++i)
+      {
+        LOKA_VERIFY(toolbox_host::fills[i].rect.bottom == boundaries[i]);
+        LOKA_VERIFY(toolbox_host::fills[i].rect.top == boundaries[i + 1]);
+        for (unsigned y = 0; y < 8; ++y)
+          LOKA_VERIFY(toolbox_host::fills[i].pattern.pat[y] == kToolboxGradientPatterns[levels[i]].pat[y]);
+      }
+    }
+  }
 }
 int main()
 {
+  GradientPins();
   Run(false);
   Run(true);
   Run(false, true);

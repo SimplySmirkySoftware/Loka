@@ -8,6 +8,7 @@
            || key == loka::app::scene::NodeTypeToken<loka::app::RectSurfaceNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::ButtonNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::CellNode>()
+           || key == loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::TextNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::EditTextNode>()
@@ -39,6 +40,7 @@
       case NODE_KIND_CONFIRM_DIALOG:
       case NODE_KIND_SCROLL_VIEW:
       case NODE_KIND_BOX:
+      case NODE_KIND_RIBBON_GROUP:
       case NODE_KIND_ZSTACK:
       case NODE_KIND_GRID:
       case NODE_KIND_STACK:
@@ -58,6 +60,7 @@
       case NODE_KIND_SCROLL_BAR:
       case NODE_KIND_EDIT_TEXT:
       case NODE_KIND_CELL:
+      case NODE_KIND_RIBBON_GROUP_EDGE:
       case NODE_KIND_IMAGE_VIEW:
         break;
       }

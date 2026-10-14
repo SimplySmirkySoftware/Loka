@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Ribbon.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
 #include <climits>
@@ -228,6 +229,29 @@ namespace
       }
       return width;
     }
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP:
+    {
+      loka::app::RibbonGroupNode *group = static_cast<loka::app::RibbonGroupNode *>(node);
+      short width = 0;
+      bool usedHandler = false;
+      if (controller && controller->layoutHandlerRegistry())
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        usedHandler =
+            ApplyToolboxPlatformLayoutHandler(*controller->layoutHandlerRegistry(), *group, state, traversal, width);
+      }
+      if (!usedHandler)
+      {
+        ToolboxLayoutTraversal traversal(controller, activeBoundary);
+        width = static_cast<short>(ComputeToolboxRibbonGroupLayout(group, state, &traversal));
+        state.y = traversal.layoutResultY();
+      }
+      if (boundary)
+      {
+        boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
+      }
+      return width;
+    }
     case loka::app::scene::NODE_KIND_ZSTACK:
     {
       loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
@@ -358,7 +382,26 @@ namespace
       }
       return width;
     }
-    default:
+    // App-defined nodes report NODE_KIND_UNKNOWN (Node::kind()), so this case
+    // is the open door: boundaries, components, and app-defined containers lay
+    // out their children here; app-defined leaves were answered above.
+    case loka::app::scene::NODE_KIND_UNKNOWN:
+      break;
+    // Built-in kinds answered above by asProjectedLayoutNode() or asCanvasNode().
+    case loka::app::scene::NODE_KIND_CELL:
+    case loka::app::scene::NODE_KIND_TEXT:
+    case loka::app::scene::NODE_KIND_BUTTON:
+    case loka::app::scene::NODE_KIND_EDIT_TEXT:
+    case loka::app::scene::NODE_KIND_POPUP_MENU:
+    case loka::app::scene::NODE_KIND_OPEN_FILE_DIALOG:
+    case loka::app::scene::NODE_KIND_IMAGE_VIEW:
+    case loka::app::scene::NODE_KIND_SCROLL_BAR:
+    case loka::app::scene::NODE_KIND_CANVAS:
+    case loka::app::scene::NODE_KIND_ATTRIBUTED_TEXT:
+    case loka::app::scene::NODE_KIND_TEXT_EDITOR:
+    case loka::app::scene::NODE_KIND_CONFIRM_DIALOG:
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
+      assert(false && "asProjectedLayoutNode() or asCanvasNode() answered above");
       break;
     }
     short width = LayoutChildren(node->asNestable(), state, controller, activeBoundary);
@@ -407,7 +450,29 @@ namespace
             static_cast<loka::app::ScrollViewNode *>(node));
       }
       return;
-    default:
+    // Nodes without a built-in kind (boundaries, components, app-defined
+    // containers) and these built-in containers render their children.
+    case loka::app::scene::NODE_KIND_UNKNOWN:
+    case loka::app::scene::NODE_KIND_BOX:
+    case loka::app::scene::NODE_KIND_ZSTACK:
+    case loka::app::scene::NODE_KIND_GRID:
+    case loka::app::scene::NODE_KIND_CANVAS:
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP:
+      break;
+    // Built-in kinds answered above by asProjectedLayoutNode().
+    case loka::app::scene::NODE_KIND_CELL:
+    case loka::app::scene::NODE_KIND_TEXT:
+    case loka::app::scene::NODE_KIND_BUTTON:
+    case loka::app::scene::NODE_KIND_EDIT_TEXT:
+    case loka::app::scene::NODE_KIND_POPUP_MENU:
+    case loka::app::scene::NODE_KIND_OPEN_FILE_DIALOG:
+    case loka::app::scene::NODE_KIND_IMAGE_VIEW:
+    case loka::app::scene::NODE_KIND_SCROLL_BAR:
+    case loka::app::scene::NODE_KIND_ATTRIBUTED_TEXT:
+    case loka::app::scene::NODE_KIND_TEXT_EDITOR:
+    case loka::app::scene::NODE_KIND_CONFIRM_DIALOG:
+    case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
+      assert(false && "asProjectedLayoutNode() answered above");
       break;
     }
     RenderChildren(node->asNestable(), controller);

@@ -182,7 +182,9 @@ namespace loka
         NODE_KIND_CANVAS = 16,
         NODE_KIND_ATTRIBUTED_TEXT = 17,
         NODE_KIND_TEXT_EDITOR = 18,
-        NODE_KIND_CONFIRM_DIALOG = 19
+        NODE_KIND_CONFIRM_DIALOG = 19,
+        NODE_KIND_RIBBON_GROUP = 20,
+        NODE_KIND_RIBBON_GROUP_EDGE = 21
       };
 
       typedef unsigned short NodeTag;
@@ -248,6 +250,8 @@ namespace loka
   {
     class BoundarySectionNode;
     class BoxNode;
+    class RibbonGroupNode;
+    class RibbonGroupEdgeNode;
     class ZStackNode;
     class GridNode;
     class CellNode;
@@ -586,6 +590,14 @@ namespace loka
         }
         // App node type casts (avoid dynamic_cast for 68k performance)
         virtual ::loka::app::StackNode *asStackNode()
+        {
+          return 0;
+        }
+        virtual ::loka::app::RibbonGroupEdgeNode *asRibbonGroupEdgeNode()
+        {
+          return 0;
+        }
+        virtual ::loka::app::RibbonGroupNode *asRibbonGroupNode()
         {
           return 0;
         }
