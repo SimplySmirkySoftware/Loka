@@ -210,6 +210,17 @@ function(loka_add_te_style_probe name core_target)
 endfunction()
 loka_add_te_style_probe(LokaTEStyleProbe LokaAppleToolboxCore)
 
+# Finite event-queue typing comparison; reuse the small probe SIZE partition.
+configure_file(${CMAKE_SOURCE_DIR}/example/HelloWorld/Size.r
+  ${CMAKE_CURRENT_BINARY_DIR}/RibbonTypingSize.r COPYONLY)
+set(LOKA_RIBBON_TYPING_TARGET "LokaRibbonTyping${LOKA_CLASSIC_TARGET_SUFFIX}")
+loka_add_toolbox_test_application(${LOKA_RIBBON_TYPING_TARGET} LokaAppleToolboxCore
+  src/RibbonTypingStandaloneMain.cpp ${CMAKE_CURRENT_BINARY_DIR}/RibbonTypingSize.r)
+target_include_directories(${LOKA_RIBBON_TYPING_TARGET} PRIVATE ${CMAKE_SOURCE_DIR}/tests/standalone)
+target_compile_definitions(${LOKA_RIBBON_TYPING_TARGET} PRIVATE TEST_BUILD=1)
+set_property(TARGET ${LOKA_RIBBON_TYPING_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
+set_property(TARGET ${LOKA_RIBBON_TYPING_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+
 # Interactive editor; production core, no scenario driver or idle callback.
 # LokaTextEditor68K_APPL.bin is 26 characters (HFS limit: 31).
 set(LOKA_TEXT_EDITOR_TARGET "LokaTextEditor${LOKA_CLASSIC_TARGET_SUFFIX}")
