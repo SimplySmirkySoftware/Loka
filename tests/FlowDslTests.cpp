@@ -3306,9 +3306,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> visible(true);
     loka::core::MutableState<bool> replacementVisible(false);
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box());
+    BoxDefinition root = Box();
     root << (Show(visible) << Button("Capture").testId("Target"));
     root << (Show(replacementVisible) << Text("Replacement").testId("Target"));
+    composition.declare(root);
     NodeDefinitionBase *definition = composition.root()->clone();
     LOKA_VERIFY(definition != 0);
     Scene scene(definition);
@@ -3383,9 +3384,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Hello Flow").testId("MainText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3485,16 +3487,17 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> showState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     TextDefinition trueText = Text("On").testId("ShowOnText");
     ShowDefinition showDef = Show(showState);
     showDef << trueText;
-  LOKA_VERIFY(showDef.childrenCount() == 1);
+    LOKA_VERIFY(showDef.childrenCount() == 1);
     root << showDef;
-  LOKA_VERIFY(root.childrenCount() == 1);
-  LOKA_VERIFY(root.childrenHead() != 0);
-  LOKA_VERIFY(root.childrenHead()->asNestableDefinition() == 0);
+    LOKA_VERIFY(root.childrenCount() == 1);
+    LOKA_VERIFY(root.childrenHead() != 0);
+    LOKA_VERIFY(root.childrenHead()->asNestableDefinition() == 0);
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3526,9 +3529,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> showState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("ConditionalProjectedRoot"));
+    BoxDefinition root = Box().testId("ConditionalProjectedRoot");
     root << (Show(showState) << ConditionalProjectedProbeDefinition());
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3561,9 +3565,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> showState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Show(showState) << Text("First").testId("ShowFirstText") << Text("Second").testId("ShowSecondText"));
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3591,9 +3596,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Hello SnapText").testId("MainText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3639,9 +3645,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::dsl::testing;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("SelectorRegion"));
+    BoxDefinition root = Box().testId("SelectorRegion");
     root << Text("First") << (Box() << Text("Nested second"));
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3711,9 +3718,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::dsl::testing;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box());
+    BoxDefinition root = Box();
     root << Text("Only").testId("EmptyAnchorLeaf");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3740,10 +3748,11 @@ void testLokaFlowDslV1Core()
     using namespace loka::dsl::testing;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("DuplicateRoot"));
+    BoxDefinition root = Box().testId("DuplicateRoot");
     root << (Box().testId("DuplicatedRegion") << Text("A"));
     root << (Box().testId("DuplicatedRegion") << Text("B"));
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3769,10 +3778,11 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> visible(false);
     loka::core::MutableState<bool> replacementVisible(false);
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("ConditionalRegion"));
+    BoxDefinition root = Box().testId("ConditionalRegion");
     root << (Show(visible) << Text("First materialized"));
     root << (Show(replacementVisible) << Text("Replacement materialized"));
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3829,9 +3839,10 @@ void testLokaFlowDslV1Core()
     cellClick.bind(&incrementNotificationCount, &cellClicks, false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("ActionRegion"));
+    BoxDefinition root = Box().testId("ActionRegion");
     root << EditText(loka::app::scene::WriteSeat<loka::core::String>(&input)) << Button("Press").onClick(&buttonClick) << Cell("Open").onClick(&cellClick);
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3864,9 +3875,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Press").testId("ActionButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3903,9 +3915,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Press").testId("ActionButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3941,9 +3954,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Press").testId("ActionButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -3974,9 +3988,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Press").testId("ActionButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4007,9 +4022,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Ready").testId("StatusText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4041,9 +4057,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<loka::core::String> textState(loka::core::String::Literal("Before"));
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text(&textState).testId("MainText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4073,9 +4090,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<loka::core::String> textState(loka::core::String::Literal("Before"));
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Text(&textState) + BlockStyle().wrap(TEXT_WRAP_WORD)).testId("WrapText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4106,10 +4124,11 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> enabledState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Text(&textState) + BlockStyle().wrap(TEXT_WRAP_WORD)).testId("WrapText");
     root << Button("Run").enabled(&enabledState).testId("MainButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4138,12 +4157,13 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> enabledState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     TextDefinition falseText = Text("Off").testId("OffText");
     TextDefinition trueText = Text("On").testId("OnText");
     root << composition.conditional(showState, trueText, falseText);
     root << Button("Run").enabled(&enabledState).testId("MainButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4461,9 +4481,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> enabledState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Run").enabled(&enabledState).testId("MainButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -4490,9 +4511,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> enabledState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Run").enabled(&enabledState).testId("MainButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5048,11 +5070,12 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> showState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     TextDefinition falseText = Text("Off").testId("OffText");
     TextDefinition trueText = Text("On").testId("OnText");
     root << composition.conditional(showState, trueText, falseText);
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5080,11 +5103,12 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<bool> showState(false);
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     TextDefinition falseText = Text("Off").testId("OffText");
     TextDefinition trueText = Text("On").testId("OnText");
     root << composition.conditional(showState, trueText, falseText);
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5132,9 +5156,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<TextStyle> fontSizeState((FontSize<12>()));
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Text("Sized") + &fontSizeState).testId("SizedText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5180,9 +5205,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<TextStyle> fontSizeState((FontSize<12>()));
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Text("Sized") + &fontSizeState).testId("SizedText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5212,9 +5238,10 @@ void testLokaFlowDslV1Core()
     loka::core::MutableState<TextStyle> fontSizeState((FontSize<12>()));
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << (Text(&textState) + &fontSizeState).testId("MixedText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5395,9 +5422,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Hello Flow").testId("MainText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5439,9 +5467,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Ready").testId("StatusText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5481,9 +5510,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("Ready").testId("StatusText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5520,9 +5550,10 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Button("Press").testId("ActionButton");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5552,10 +5583,11 @@ void testLokaFlowDslV1Core()
     using namespace loka::app::scene;
 
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Text("A").testId("DupText");
     root << Text("B").testId("DupText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5588,9 +5620,10 @@ void testLokaFlowDslV1Core()
     int textNotificationCount = 0;
     text.bind(&incrementNotificationCount, &textNotificationCount, false);
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << EditText(loka::app::scene::WriteSeat<loka::core::String>(&text)).testId("ScenarioEditText");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -5634,9 +5667,10 @@ void testLokaFlowDslV1Core()
     int clickCount = 0;
     click.bind(&incrementNotificationCount, &clickCount, false);
     NodeComposition composition;
-    BoxDefinition &root = composition.declare(Box().testId("RootBox"));
+    BoxDefinition root = Box().testId("RootBox");
     root << Cell("Covered").onClick(&click).testId("ScenarioCell");
 
+    composition.declare(root);
     NodeDefinitionBase *rootDefinition = composition.root()->clone();
     LOKA_VERIFY(rootDefinition != 0);
     Scene scene(rootDefinition);
@@ -8745,9 +8779,10 @@ void testSceneDefaultClickRejectsDisabledButtonAndExplicitNoopSucceeds()
   int calls = 0;
   click.bind(&incrementNotificationCount, &calls, false);
   NodeComposition composition;
-  BoxDefinition &root = composition.declare(Box().testId("ClickRegion"));
+  BoxDefinition root = Box().testId("ClickRegion");
   root << Button("Run").enabled(&enabled).onClick(&click).testId("StrictButton");
   root << Cell("Cell").onClick(&click).testId("StrictCell");
+  composition.declare(root);
   NodeDefinitionBase *definition = composition.root()->clone();
   LOKA_VERIFY(definition != 0);
   Scene scene(definition);

@@ -504,11 +504,6 @@ loka_compile_pin(boundary-declaration-is-kernel-owned
   ACCEPTS pins/accepts_boundary_declaration.cpp
 )
 
-loka_compile_pin(declare-returns-clone-type
-  REFUSES pins/refuses_declare_clone_type.cpp
-  ACCEPTS pins/accepts_declare_clone_type.cpp
-)
-
 loka_compile_pin(paint-source-requires-merge-declaration
   REFUSES pins/refuses_paint_source_declaration.cpp
   ACCEPTS pins/accepts_paint_source_declaration.cpp

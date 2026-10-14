@@ -293,10 +293,6 @@ namespace helloworld
                   << (MenuItem("Item") << MenuItem("Sub Item"))
                   << MenuItem("Item 2"))
               << randomMenu);
-    ZStack rootDefinition;
-    rootDefinition.TEST_ID("HelloWorld.Root");
-    ZStack &root = c.declare(rootDefinition);
-    loka::app::scene::NodeComposition::ParentScope scope(c, root);
     ScrollView mainPanels = ScrollView(this->scrollOffset_)
                                 .TEST_ID("HelloWorld.MainPanelsScroll")
                             << (Box().padding(kContentInset).TEST_ID("HelloWorld.MainPanelsInset")
@@ -310,10 +306,9 @@ namespace helloworld
                                                       this->weightInput_,
                                                       this->bmiResult_.state())));
     mainPanels.tag(kMainPanelsScrollTag);
-    c.declare(mainPanels);
     TextDefinition decoration = Text("*").TEST_ID("HelloWorld.Decoration");
     decoration.tag(kDecorationTag);
-    c.declare(decoration);
+    c.declare(ZStack().TEST_ID("HelloWorld.Root") << mainPanels << decoration);
   }
 
 

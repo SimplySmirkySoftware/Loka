@@ -145,46 +145,6 @@ namespace loka
           NodeComposition *prev_;
         };
 
-        struct ParentScope
-        {
-          explicit ParentScope(NodeComposition &composition, INestableDefinition &parent)
-              : composition_(composition),
-                prev_(composition.activeParent_)
-          {
-            composition_.activeParent_ = &parent;
-          }
-          ~ParentScope()
-          {
-            composition_.activeParent_ = prev_;
-          }
-
-        private:
-          NodeComposition &composition_;
-          INestableDefinition *prev_;
-        };
-
-        struct ChildComposition
-        {
-          explicit ChildComposition(NodeComposition &composition, INestableDefinition &parent)
-              : composition_(composition),
-                scope_(composition, parent)
-          {
-          }
-
-          operator NodeComposition &()
-          {
-            return composition_;
-          }
-          NodeComposition &composition()
-          {
-            return composition_;
-          }
-
-        private:
-          NodeComposition &composition_;
-          ParentScope scope_;
-        };
-
         // StateBatch is a declaration transaction: it collects State declarations
         // and commits them as one owner-side batch when the batch leaves scope --
         // the end of the declaring statement for the usual temporary chain, the
@@ -400,7 +360,6 @@ namespace loka
         loka::core::OwnedDef<MenuBarDefinition> menuBar_;
         bool isSceneRootDeclaration() const;
         friend class Scene;
-        INestableDefinition *activeParent_;
         ComponentContext *context_;
         BoundaryBranchSeatRuntimeRegistrationPlan *branchSeatRegistrations_;
         NodeDefinitionBase *storeBase(const NodeDefinitionBase &def)
@@ -464,7 +423,6 @@ namespace loka
       public:
         NodeComposition()
             : root_(0),
-              activeParent_(0),
               context_(0),
               branchSeatRegistrations_(0)
         {
@@ -507,82 +465,60 @@ namespace loka
           return true;
         }
 
-        // Declare root node
-        template <typename T> typename T::CloneType &declare(const T &def)
+        /** Clone a completed tree as the root declaration. Compose normally calls
+            this once; if called again, the last successful declaration wins.
+            Clone failure preserves the previous root. Appending to the declared
+            tree afterwards is undefined; build all children before declaring. */
+        template <typename T> void declare(const T &def)
         {
-          if (activeParent_)
-          {
-            (*activeParent_) << const_cast<T &>(def);
-            return const_cast<T &>(def);
-          }
           typename T::CloneType *newRoot = this->store(def);
           if (!newRoot)
           {
-            return const_cast<T &>(def);
+            return;
           }
           this->root_ = newRoot;
-          return *newRoot;
         }
 
-        template <typename T> typename T::CloneType &declareTagged(NodeTag tag, const T &def)
+        template <typename T> void declareTagged(NodeTag tag, const T &def)
         {
           T tagged(def);
           tagged.tag(tag);
-          typename T::CloneType &declared = this->declare(tagged);
-          if (&declared == &tagged)
-          {
-            // declare() handed back our stack-local copy (parent path or clone
-            // failure); returning it would dangle past this frame.
-            return const_cast<T &>(def);
-          }
-          return declared;
+          this->declare(tagged);
         }
-        NodeDefinitionBase &declare(const NodeDefinitionBase &def)
+        void declare(const NodeDefinitionBase &def)
         {
-          if (activeParent_)
-          {
-            (*activeParent_) << const_cast<NodeDefinitionBase &>(def);
-            return const_cast<NodeDefinitionBase &>(def);
-          }
           NodeDefinitionBase *newRoot = this->store(def);
           if (!newRoot)
           {
-            return const_cast<NodeDefinitionBase &>(def);
+            return;
           }
           this->root_ = newRoot;
-          return *newRoot;
         }
-        NodeDefinitionBase &declareTagged(NodeTag tag, const NodeDefinitionBase &def)
+        void declareTagged(NodeTag tag, const NodeDefinitionBase &def)
         {
           loka::core::OwnedDef<NodeDefinitionBase> tagged(def.clone());
           if (!tagged.isSet())
           {
             this->noteCaptureRefusal();
-            return const_cast<NodeDefinitionBase &>(def);
+            return;
           }
           tagged->setNodeTag(tag);
           NodeDefinitionBase *stored = tagged.get();
-          if (activeParent_)
-          {
-            activeParent_->addOwnedChild(tagged.take());
-            return *stored;
-          }
           tagged->setCleanupHook(&NodeComposition::cleanupStoredNode, this);
           arena_.push_back(tagged.take());
           this->root_ = stored;
-          return *stored;
         }
-        NodeDefinitionBase &declare(const INestableDefinition &def)
+        void declare(const INestableDefinition &def)
         {
           const NodeDefinitionBase *base = def.asNodeDefinitionBase();
           assert(base && "Nestable definitions must derive from NodeDefinitionBase");
-          return this->declare(*base);
+          this->declare(*base);
         }
-        NodeDefinitionBase &declareTagged(NodeTag tag, const INestableDefinition &def)
+        void declareTagged(NodeTag tag, const INestableDefinition &def)
         {
           const NodeDefinitionBase *base = def.asNodeDefinitionBase();
           assert(base && "Nestable definitions must derive from NodeDefinitionBase");
-          return this->declareTagged(tag, *base);
+          this->declareTagged(tag, *base);
         }
 
         void setContext(ComponentContext *context)
@@ -622,7 +558,6 @@ namespace loka
         {
           this->destroyArena();
           this->menuBar_.reset();
-          activeParent_ = 0;
           context_ = 0;
           branchSeatRegistrations_ = 0;
         }
