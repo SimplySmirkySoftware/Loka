@@ -4,7 +4,9 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/layout/SceneRootLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
+#include "app/nodes/controls/EditText.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
+#include "support/MacNativeRefusal.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
 #include <cmath>
@@ -212,5 +214,119 @@ void testMacOrdinaryRowStillSharesWidth()
   }
   LOKA_VERIFY([[root subviews] count] == 0);
   [root release];
+  [pool drain];
+}
+
+void testMacButtonNativeHeightColumn()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = newRootView();
+  {
+    MacScenePlatformController controller(root, loka::macos::DefaultRailMetrics());
+    NodeDefinitionBase *definition = (Column() << Button("First") << Button("Second")).clone();
+    LOKA_VERIFY(definition != 0);
+    Scene scene(definition);
+    LOKA_VERIFY(scene.mount(&controller));
+    SceneTestAccess::updateAttached(scene, true);
+    controller.relayout(kClientWidth, kClientHeight);
+    LOKA_VERIFY([[root subviews] count] == 2);
+    NSButton *first = buttonAt(root, 0);
+    const NSRect frame = [first frame];
+    const CGFloat nativeHeight = [[first cell] cellSize].height;
+    const loka::macos::MacProjection &projection = controller.projection();
+    const Ratio &scale = projection.railMetrics().spaceScale;
+    const double pointsPerLu = static_cast<double>(scale.num) / scale.den;
+    LOKA_VERIFY(frame.size.height >= nativeHeight);
+    LOKA_VERIFY(frame.size.height < nativeHeight + pointsPerLu);
+    const int height = projection.measurementToLu(nativeHeight);
+    LOKA_VERIFY(controller.rowLayoutMetrics().buttonHeight == height);
+    const int firstY = layout::SceneRootLayout::kInset;
+    LOKA_VERIFY(frame.origin.y == projection.projectEdge(firstY).pt);
+    LOKA_VERIFY([buttonAt(root, 1) frame].origin.y
+                == projection.projectEdge(firstY + height + layout::FallbackControlMetrics::kVerticalSpacing).pt);
+    SceneTestAccess::unmount(scene);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacButtonNativeHeightCenteredRow()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  for (int direct = 0; direct < 2; ++direct)
+  {
+    NSView *root = newRootView();
+    {
+      MacScenePlatformController controller(root, loka::macos::DefaultRailMetrics());
+      // Exercise both the registered Stack handler and the controller fallback.
+      StackNode *row = direct ? new DirectRow() : new StackNode(StackProps(STACK_AXIS_ROW));
+      row->props.alignVertical(VERTICAL_ALIGNMENT_CENTER);
+      row->addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("Button"))));
+      row->addChild(new EditTextNode(EditTextProps()));
+      controller.onChange(row, NODE_DIRTY_NONE, false);
+      controller.relayout(kClientWidth, kClientHeight);
+      LOKA_VERIFY([[root subviews] count] == 2);
+      const NSRect button = [buttonAt(root, 0) frame];
+      NSView *field = [[root subviews] objectAtIndex:1];
+      LOKA_VERIFY([field isKindOfClass:[NSTextField class]]);
+      const Ratio &scale = controller.projection().railMetrics().spaceScale;
+      const double pointsPerLu = static_cast<double>(scale.num) / scale.den;
+      LOKA_VERIFY(std::fabs(NSMidY(button) - NSMidY([field frame])) <= pointsPerLu);
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+      delete row;
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+  }
+  [pool drain];
+}
+
+namespace
+{
+  NSSize MacDeclinedCellSize(id, SEL)
+  {
+    return NSZeroSize;
+  }
+} // namespace
+
+void testMacButtonDeclinedHeightKeepsRowAligned()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  for (int direct = 0; direct < 2; ++direct)
+  {
+    NSView *root = newRootView();
+    MacScenePlatformController *controller = 0;
+    {
+      // Only the construction-time measurement declines. Every later push cell
+      // answers natively, so a reader that measured again would disagree.
+      MacNativeRefusal refusal(@selector(cellSize), reinterpret_cast<IMP>(&MacDeclinedCellSize), [NSButtonCell class]);
+      controller = new MacScenePlatformController(root, loka::macos::DefaultRailMetrics());
+    }
+    LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
+    StackNode *row = direct ? new DirectRow() : new StackNode(StackProps(STACK_AXIS_ROW));
+    row->props.alignVertical(VERTICAL_ALIGNMENT_CENTER);
+    row->addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("Button"))));
+    row->addChild(new EditTextNode(EditTextProps()));
+    controller->onChange(row, NODE_DIRTY_NONE, false);
+    controller->relayout(kClientWidth, kClientHeight);
+    LOKA_VERIFY([[root subviews] count] == 2);
+    const loka::macos::MacProjection &projection = controller->projection();
+    const int top = layout::SceneRootLayout::kInset;
+    const NSRect button = [buttonAt(root, 0) frame];
+    LOKA_VERIFY(NSMinY(button) == projection.projectEdge(top).pt);
+    LOKA_VERIFY(NSMaxY(button) == projection.projectEdge(top + layout::FallbackControlMetrics::kButtonHeight).pt);
+    const Ratio &scale = projection.railMetrics().spaceScale;
+    const double pointsPerLu = static_cast<double>(scale.num) / scale.den;
+    LOKA_VERIFY(std::fabs(NSMidY(button) - NSMidY([[[root subviews] objectAtIndex:1] frame])) <= pointsPerLu);
+    controller->onChange(0, NODE_DIRTY_NONE, false);
+    delete row;
+    delete controller;
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+  }
   [pool drain];
 }

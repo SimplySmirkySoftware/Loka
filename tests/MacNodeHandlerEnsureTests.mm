@@ -8,6 +8,7 @@
 #include "support/MacRetirementProbe.hpp"
 #include "support/TestVerify.hpp"
 #include "support/RailTextLayoutFixture.hpp"
+#include "support/MacNativeRefusal.hpp"
 #include <cmath>
 
 #include <AppKit/AppKit.h>
@@ -28,16 +29,18 @@ namespace
   {
     using namespace loka::app;
     const int count = 3;
-    const int height = 2 * layout::SceneRootLayout::kInset + count * layout::FallbackControlMetrics::kButtonHeight
-                       + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
     const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
     for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
     {
       const loka::macos::MacProjection allocation(0, metrics[scaleIndex]);
-      NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(257, height).r];
+      NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(257, 160).r];
       LOKA_VERIFY(root != nil);
       {
         MacScenePlatformController controller((void *)root, metrics[scaleIndex]);
+        const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
+        const int height = 2 * layout::SceneRootLayout::kInset + count * buttonHeight
+                           + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
+        [root setFrameSize:allocation.projectClientSize(257, height).r.size];
         LOKA_VERIFY(controller.projection().clientCapacityToLu([root bounds].size.width) == 257);
         LOKA_VERIFY(controller.projection().clientCapacityToLu([root bounds].size.height) == height);
         if (scaleIndex == 1)
@@ -119,21 +122,30 @@ namespace
             const int textHeight = measured > minimum ? measured : minimum;
             const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
             const int buttonY = captionY + 20 + 12;
+            const int buttonHeight = projection.measurementToLu([[button cell] cellSize].height);
             LOKA_VERIFY(NSEqualRects([page frame], projection.projectFrame(loka::core::Frame(
                 layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r));
             LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(captionY).pt);
             LOKA_VERIFY(NSMinY([button frame]) == projection.projectEdge(buttonY).pt);
-            LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + 32).pt);
+            LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + buttonHeight).pt);
             // The actual Scrapbook fixed Box prevents measured text changes
             // reaching the caption/buttons, for either one or two native lines.
             if (boxed)
-              LOKA_VERIFY(buttonY + 32 == 254);
+              LOKA_VERIFY(buttonY == 222);
             std::printf("  Mac text extent: font=%d/%d space=%d/%d boxed=%d lines=%d "
                         "nativeText=%.2f textLu=%d buttonLu=%d..%d framePt=%.2f..%.2f clientPt=%.2f\n",
-                        metrics[scaleIndex].fontScale.num, metrics[scaleIndex].fontScale.den,
-                        metrics[scaleIndex].spaceScale.num, metrics[scaleIndex].spaceScale.den,
-                        boxed, lines, static_cast<double>(nativeHeight), textHeight, buttonY, buttonY + 32,
-                        static_cast<double>(NSMinY([button frame])), static_cast<double>(NSMaxY([button frame])),
+                        metrics[scaleIndex].fontScale.num,
+                        metrics[scaleIndex].fontScale.den,
+                        metrics[scaleIndex].spaceScale.num,
+                        metrics[scaleIndex].spaceScale.den,
+                        boxed,
+                        lines,
+                        static_cast<double>(nativeHeight),
+                        textHeight,
+                        buttonY,
+                        buttonY + buttonHeight,
+                        static_cast<double>(NSMinY([button frame])),
+                        static_cast<double>(NSMaxY([button frame])),
                         static_cast<double>([root bounds].size.height));
             controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
           }
@@ -1236,30 +1248,6 @@ namespace
   {
     return nil;
   }
-
-  /** Test-only scoped native refusal, installed on the measured cell class. */
-  class MacTextNativeRefusal
-  {
-  public:
-    MacTextNativeRefusal(SEL selector, IMP replacement, Class cell = [NSTextFieldCell class])
-    {
-      Method inherited = class_getInstanceMethod(cell, selector);
-      LOKA_VERIFY(inherited != 0);
-      class_addMethod(cell, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited));
-      this->method_ = class_getInstanceMethod(cell, selector);
-      this->original_ = method_setImplementation(this->method_, replacement);
-    }
-    ~MacTextNativeRefusal()
-    {
-      method_setImplementation(this->method_, this->original_);
-    }
-
-  private:
-    Method method_;
-    IMP original_;
-    MacTextNativeRefusal(const MacTextNativeRefusal &);
-    MacTextNativeRefusal &operator=(const MacTextNativeRefusal &);
-  };
 } // namespace
 
 void testMacTextNaturalWidthDeclines()
@@ -1307,13 +1295,13 @@ void testMacTextNaturalWidthDeclines()
                                 reinterpret_cast<IMP>(&MacNanTextMeasurement)};
     for (int i = 0; i < 4; ++i)
     {
-      MacTextNativeRefusal refusal(@selector(cellSizeForBounds:), measurements[i]);
+      MacNativeRefusal refusal(@selector(cellSizeForBounds:), measurements[i]);
       width = 17;
       LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
       LOKA_VERIFY(width == 17);
     }
     {
-      MacTextNativeRefusal refusal(@selector(font), reinterpret_cast<IMP>(&MacMissingTextFont));
+      MacNativeRefusal refusal(@selector(font), reinterpret_cast<IMP>(&MacMissingTextFont));
       width = 17;
       LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
       LOKA_VERIFY(width == 17);
@@ -1323,7 +1311,7 @@ void testMacTextNaturalWidthDeclines()
   }
   MacScenePlatformController *missingFont = 0;
   {
-    MacTextNativeRefusal refusal(
+    MacNativeRefusal refusal(
         @selector(systemFontOfSize:), reinterpret_cast<IMP>(&MacMissingSystemFont), object_getClass([NSFont class]));
     missingFont = new MacScenePlatformController(root, RailMetrics());
   }
