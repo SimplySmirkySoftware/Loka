@@ -7,6 +7,9 @@ B2 (#1199) adds four arms: 139 PASS / 0 FAIL on the same rig, with a
 byte-identical `LOG.TXT` from the Universal Interfaces and Multiversal builds.
 A2 (#1196) adds six arms: 145 PASS / 0 FAIL on the same rig, with a
 byte-identical `LOG.TXT` from both builds (#1240).
+#1283 adds two SmallLabel arms (147 PASS). The ribbon group frame (#1310) adds
+six arms: 153 PASS / 0 FAIL on the same rig, with a `LOG.TXT` byte-identical to
+the tracked log from the Multiversal build.
 Owns: Toolbox native paint-damage pins that need real QuickDraw and the
 Control Manager: exact versus whole-window delivery, presentation history,
 control and popup geometry, and busy-cursor borrows.
@@ -100,5 +103,4 @@ and caption check that content survives. The fixture erases a rectangle crossing
 the left edge, proves the erase removed a black pixel, then invalidates that
 rectangle and checks restoration after the next delivery.
 
-The six `ribbon-*` audit lines are predicted additions pending the MAME run;
-they are not runtime-verification evidence yet.
+The six `ribbon-*` arms are runtime-verified on the `toolbox-maciix` rig (#1310).
