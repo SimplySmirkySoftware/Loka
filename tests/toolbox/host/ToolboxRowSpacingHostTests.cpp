@@ -69,6 +69,11 @@ namespace
     }
     virtual int layoutChild(Node *node, const LayoutState &offer)
     {
+      if (node->asRibbonGroupEdgeNode())
+      {
+        this->resultY_ = offer.y;
+        return 0;
+      }
       LayoutState state = offer;
       short width = 0;
       if (!ApplyToolboxPlatformLayoutHandler(this->registry_, *node, state, *this, width))
@@ -239,6 +244,27 @@ namespace
     LOKA_VERIFY(!controller.queryNaturalWidth(0, width));
   }
 
+  class GroupChildWidthTraversal : public IPlatformLayoutTraversal
+  {
+  public:
+    LayoutState seat;
+    virtual int layoutChild(Node *node, const LayoutState &state)
+    {
+      if (node->asRibbonGroupEdgeNode())
+        return 999; // Child widths cannot change the group seat width.
+      this->seat = state;
+      return 73;
+    }
+    virtual void setLayoutResultY(short y)
+    {
+      this->seat.y = y;
+    }
+    virtual short layoutResultY() const
+    {
+      return this->seat.y;
+    }
+  };
+
   void GroupNaturalPins(Scene &scene,
                         ToolboxScenePlatformController &controller,
                         SpacingTraversal &traversal,
@@ -266,18 +292,30 @@ namespace
     const int items = buttons[1] + state.spacing + buttons[2] + state.spacing + buttons[3];
     LOKA_VERIFY(captionWins ? captionWidth > items : captionWidth < items);
     const int groupWidth = items > captionWidth ? items : captionWidth;
+    Node *ribbon = SpacingLookup(scene, id);
+    loka::dsl::CompositionCursor<Node> groups(ribbon->asNestable()->childrenHead(),
+                                              ribbon->asNestable()->childrenCount());
+    groups.next();
+    RibbonGroupNode *group = groups.next()->asRibbonGroupNode();
+    LOKA_VERIFY(group != 0);
+    GroupChildWidthTraversal widthTraversal;
+    const int inset = RibbonGroupNode::kFrameInset;
+    LOKA_VERIFY(ComputeToolboxRibbonGroupLayout(group, state, &widthTraversal) == state.width);
+    LOKA_VERIFY(widthTraversal.seat.x == state.x + inset);
+    LOKA_VERIFY(widthTraversal.seat.width == state.width - 2 * inset);
+    LOKA_VERIFY(widthTraversal.layoutResultY() == state.y + 2 * inset);
     const Rect open = traversal.rect(0), left = traversal.rect(1);
     const Rect center = traversal.rect(2), right = traversal.rect(3);
     const Rect label = traversal.rect(4), close = traversal.rect(5);
     LOKA_VERIFY(open.right - open.left == buttons[0]);
-    LOKA_VERIFY(left.left == open.right + state.spacing);
+    LOKA_VERIFY(left.left == open.right + state.spacing + RibbonGroupNode::kFrameInset);
     LOKA_VERIFY(left.right - left.left == buttons[1]);
     LOKA_VERIFY(center.left == left.right + state.spacing);
     LOKA_VERIFY(center.right - center.left == buttons[2]);
     LOKA_VERIFY(right.left == center.right + state.spacing);
     LOKA_VERIFY(right.right - right.left == buttons[3]);
     LOKA_VERIFY(label.left == left.left && label.right - label.left == groupWidth);
-    LOKA_VERIFY(close.left == label.right + state.spacing);
+    LOKA_VERIFY(close.left == label.right + state.spacing + RibbonGroupNode::kFrameInset);
     LOKA_VERIFY(close.right - close.left == buttons[4]);
     std::printf("%s: items=%d caption=%d group=%d gap=%d\n",
                 id,

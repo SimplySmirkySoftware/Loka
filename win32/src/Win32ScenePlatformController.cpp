@@ -35,6 +35,7 @@
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "app/layout/RibbonGroupLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"
@@ -105,6 +106,8 @@ namespace
       case NODE_KIND_OPEN_FILE_DIALOG:
       case NODE_KIND_CONFIRM_DIALOG:
       case NODE_KIND_BOX:
+      case NODE_KIND_RIBBON_GROUP_EDGE:
+      case NODE_KIND_RIBBON_GROUP:
       case NODE_KIND_ZSTACK:
       case NODE_KIND_GRID:
       case NODE_KIND_STACK:
@@ -1461,6 +1464,28 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
           box, state, this, &Win32ScenePlatformController::layoutContainerChild);
+    }
+    return LayoutNodeResult(state.width, resultY);
+  }
+
+  if (loka::app::RibbonGroupNode *group = node->asRibbonGroupNode())
+  {
+    int resultY = state.y;
+    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
+    if (handler)
+    {
+      loka::app::scene::LayoutState handlerState;
+      if (!this->narrowLayoutState(state, handlerState, false))
+      {
+        return LayoutNodeResult(state.width, state.y);
+      }
+      loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
+      resultY = handler->layoutNode(group, handlerState, &traversal);
+    }
+    else
+    {
+      resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+          group, state, this, &Win32ScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, resultY);
   }

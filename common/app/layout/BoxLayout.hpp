@@ -12,50 +12,57 @@ namespace loka
     namespace layout
     {
       template <typename LayoutStateT>
+      int computeInsetLayoutResultY(loka::app::scene::Node *childrenHead,
+                                    size_t childCount,
+                                    int padding,
+                                    bool hasFixedSize,
+                                    int fixedWidth,
+                                    int fixedHeight,
+                                    const LayoutStateT &state,
+                                    void *context,
+                                    int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+      {
+        LayoutStateT childState = state;
+        childState.x = layoutCoordinate<LayoutStateT>(state.x + padding);
+        childState.y = layoutCoordinate<LayoutStateT>(state.y + padding);
+        childState.width = layoutCoordinate<LayoutStateT>((hasFixedSize ? fixedWidth : state.width) - padding * 2);
+        if (childState.width < 0)
+        {
+          childState.width = 0;
+        }
+        childState.height = layoutCoordinate<LayoutStateT>((hasFixedSize ? fixedHeight : state.height) - padding * 2);
+        if (childState.height < 0)
+        {
+          childState.height = 0;
+        }
+
+        loka::dsl::CompositionCursor<loka::app::scene::Node> it(childrenHead, childCount);
+        for (loka::app::scene::Node *child = it.next(); child; child = it.next())
+        {
+          childState.y = layoutCoordinate<LayoutStateT>(layoutChild(context, child, childState));
+        }
+        const int resultY = childState.y + padding;
+        return hasFixedSize ? state.y + fixedHeight : resultY;
+      }
+      template <typename LayoutStateT>
       int computeBoxLayoutResultY(loka::app::BoxNode *box,
                                   const LayoutStateT &state,
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
       {
         if (!box)
-        {
           return state.y;
-        }
-
-        const int padding = box->props.padding;
-        const bool hasFixedSize = box->props.hasFixedSize();
-        LayoutStateT childState = state;
-        childState.x = layoutCoordinate<LayoutStateT>(state.x + padding);
-        childState.y = layoutCoordinate<LayoutStateT>(state.y + padding);
-        childState.width = layoutCoordinate<LayoutStateT>(
-            (hasFixedSize ? box->props.effectiveWidth() : state.width) - padding * 2);
-        if (childState.width < 0)
-        {
-          childState.width = 0;
-        }
-        childState.height = layoutCoordinate<LayoutStateT>(
-            (hasFixedSize ? box->props.height : state.height) - padding * 2);
-        if (childState.height < 0)
-        {
-          childState.height = 0;
-        }
-
-        int resultY = childState.y;
-        if (loka::app::scene::INestable *nestable = box->asNestable())
-        {
-          loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-          for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-          {
-            childState.y = layoutCoordinate<LayoutStateT>(layoutChild(context, child, childState));
-          }
-          resultY = childState.y + padding;
-        }
-        else
-        {
-          resultY = state.y + padding * 2;
-        }
-        return hasFixedSize ? state.y + box->props.height : resultY;
+        return computeInsetLayoutResultY(box->childrenHead(),
+                                         box->childrenCount(),
+                                         box->props.padding,
+                                         box->props.hasFixedSize(),
+                                         box->props.effectiveWidth(),
+                                         box->props.height,
+                                         state,
+                                         context,
+                                         layoutChild);
       }
+
     } // namespace layout
   } // namespace app
 } // namespace loka
