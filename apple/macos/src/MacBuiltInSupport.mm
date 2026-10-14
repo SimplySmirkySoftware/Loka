@@ -36,12 +36,11 @@ namespace
 
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
-  const loka::app::layout::RowLayoutMetrics rowMetrics = controller.rowLayoutMetrics();
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &rowMetrics, &gridMetrics);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ButtonNode>(),
                                                         &MacScenePlatformController::DispatchProjectedLayout);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::EditTextNode>(),

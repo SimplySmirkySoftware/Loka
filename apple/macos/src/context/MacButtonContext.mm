@@ -168,8 +168,8 @@ bool MacButtonContext::captureBitmap(loka::core::resource::Image &out) const
 
 short MacButtonContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
 {
-  short height = loka::app::layout::FallbackControlMetrics::kButtonHeight;
-  this->controller()->measurePushButtonHeight(height);
+  // The height a Row aligns this button by, so the frame cannot disagree with it.
+  const short height = static_cast<short>(this->controller()->rowLayoutMetrics().buttonHeight);
   this->relayout(state.x, state.y, state.width, height);
   state.height = height;
   return static_cast<short>(state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);

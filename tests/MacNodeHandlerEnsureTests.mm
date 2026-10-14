@@ -36,8 +36,7 @@ namespace
       LOKA_VERIFY(root != nil);
       {
         MacScenePlatformController controller((void *)root, metrics[scaleIndex]);
-        short buttonHeight = 0;
-        LOKA_VERIFY(controller.measurePushButtonHeight(buttonHeight));
+        const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
         const int height = 2 * layout::SceneRootLayout::kInset + count * buttonHeight
                            + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
         [root setFrameSize:allocation.projectClientSize(257, height).r.size];

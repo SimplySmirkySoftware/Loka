@@ -167,8 +167,7 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
     {
       assert([[buttons objectAtIndex:i] superview] == documentView);
     }
-    short buttonHeight = 0;
-    LOKA_VERIFY(controller.measurePushButtonHeight(buttonHeight));
+    const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
     const int advance = buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
     LOKA_VERIFY(frameEquals([buttons objectAtIndex:0], 0, 0, [nativeScrollView contentSize].width, buttonHeight));
     assert([(NSView *)[buttons objectAtIndex:1] frame].origin.y == advance);
@@ -272,8 +271,7 @@ void testMacScrollViewResizeReclampsOffsetOnce()
   LOKA_VERIFY(root != nil);
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
-    short buttonHeight = 0;
-    LOKA_VERIFY(controller.measurePushButtonHeight(buttonHeight));
+    const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
     const int contentHeight = 6 * (buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     const int initialMax = contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset);
     const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);

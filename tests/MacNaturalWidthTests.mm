@@ -239,6 +239,7 @@ void testMacButtonNativeHeightColumn()
     LOKA_VERIFY(frame.size.height >= nativeHeight);
     LOKA_VERIFY(frame.size.height < nativeHeight + pointsPerLu);
     const int height = projection.measurementToLu(nativeHeight);
+    LOKA_VERIFY(controller.rowLayoutMetrics().buttonHeight == height);
     const int firstY = layout::SceneRootLayout::kInset;
     LOKA_VERIFY(frame.origin.y == projection.projectEdge(firstY).pt);
     LOKA_VERIFY([buttonAt(root, 1) frame].origin.y
