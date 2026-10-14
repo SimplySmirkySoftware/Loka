@@ -16,6 +16,7 @@
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "context/MacButtonContext.hpp"
 #include "context/MacCellContext.hpp"
+#include "context/MacRibbonGroupEdgeContext.hpp"
 #include "context/MacEditTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacImageViewContext.hpp"
@@ -27,8 +28,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler
-      gRefusedMacRibbonGroupEdge(loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>());
   // Mac has no ScrollBar context yet: a known unsupported kind must take the
   // typed-refusal path, not trip the accidental-miss assert. ScrollView is a
   // controller-owned projection-parent arm and does not use this leaf ensure
@@ -39,7 +38,10 @@ namespace
 
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacRibbonGroupEdge);
+  RegisterMacRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
+  controller.leafLayoutHandlerRegistry_.registerHandler(
+      loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>(),
+      &MacScenePlatformController::DispatchProjectedLayout);
   const loka::app::layout::RowLayoutMetrics rowMetrics =
       loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;
