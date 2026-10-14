@@ -215,8 +215,8 @@ namespace
     Count commits, direct;
     PushStateTracker tracker;
     NodeState<int> seat;
-    SeatLedger(LedgerPolicy policy = LEDGER_JOINS)
-        : source(1), derived(&source, new SeatDouble(source)), tracker(policy), seat(&source, &tracker)
+    SeatLedger()
+        : source(1), derived(&source, new SeatDouble(source)), tracker(), seat(&source, &tracker)
     {
       this->tracker.addState(&this->source);
       this->tracker.addState(&this->derived);
@@ -643,50 +643,20 @@ void testGuardCallbackFiresOnlyOutsideTurn()
   }
 }
 
-void testStandaloneLedgerRefusesTheClock()
+void testBootstrapGuardSettlesIdleJoiningLedger()
 {
-  SeatLedger f(LEDGER_STANDALONE);
-  Operation turn;
-  LOKA_VERIFY(turn.open(&f.tracker) == OPEN_REFUSED_STANDALONE);
-  LOKA_VERIFY(Operation::openActive(&f.tracker) == OPEN_REFUSED_STANDALONE);
-  f.seat.writeSeat().set(4);
-  LOKA_VERIFY(f.derived.get() == 8 && f.commits.calls == 1);
-  LOKA_VERIFY(f.tracker.phase() == TRACKER_IDLE && SeatAccess::depth(f.tracker) == 0);
+  SeatLedger f;
   Count callback;
+  LOKA_VERIFY(!Operation::hasActive() && f.tracker.phase() == TRACKER_IDLE);
   {
-    StateTrackerGuard guard(&f.tracker, &Count::hit, &callback);
-    LOKA_VERIFY(SeatAccess::depth(f.tracker) == 1);
-    LOKA_VERIFY(turn.open(&f.tracker) == OPEN_REFUSED_STANDALONE);
-    LOKA_VERIFY(Operation::openActive(&f.tracker) == OPEN_REFUSED_STANDALONE);
-    f.source.set(5);
+    StandaloneTransactionGuard guard(&f.tracker, &Count::hit, &callback);
+    LOKA_VERIFY(f.tracker.phase() == TRACKER_PRECOMMIT && SeatAccess::depth(f.tracker) == 1);
+    f.source.set(4);
   }
-  LOKA_VERIFY(f.derived.get() == 10 && f.commits.calls == 2 && callback.calls == 1);
+  LOKA_VERIFY(f.tracker.peekDirty() && f.derived.get() == 8 && callback.calls == 1);
+  LOKA_VERIFY(f.tracker.consumeDirty());
+  LOKA_VERIFY(!f.tracker.peekDirty());
   LOKA_VERIFY(f.tracker.phase() == TRACKER_IDLE && SeatAccess::depth(f.tracker) == 0);
-  std::vector<StateBase *> states;
-  MutableState<int> source(0);
-  states.push_back(&source);
-  PushStateTracker fromStates(states, LEDGER_STANDALONE);
-  LOKA_VERIFY(turn.open(&fromStates) == OPEN_REFUSED_STANDALONE);
-  LOKA_VERIFY(SeatClockAccess::empty(turn));
-  LOKA_VERIFY(turn.close().rounds == 0);
-}
-
-void testStandaloneGuardCommitsBeforeReadInsideTurn()
-{
-  for (unsigned clocked = 0; clocked != 2; ++clocked)
-  {
-    SeatLedger f;
-    Count callback;
-    ScopedPtr<Operation> turn(clocked ? new Operation : 0);
-    {
-      StandaloneTransactionGuard guard(&f.tracker, &Count::hit, &callback);
-      f.source.set(4);
-    }
-    LOKA_VERIFY(f.tracker.peekDirty() && f.derived.get() == 8 && callback.calls == 1);
-    LOKA_VERIFY(f.tracker.consumeDirty());
-    LOKA_VERIFY(!f.tracker.peekDirty());
-    if (turn.get()) LOKA_VERIFY(SeatClockAccess::empty(*turn));
-  }
 }
 
 namespace
@@ -835,14 +805,14 @@ namespace
     }
   };
 
-  void verifyFlowRunBracket(bool clocked, LedgerPolicy policy)
+  void verifyFlowRunBracket(bool clocked)
   {
     using namespace loka::dsl;
     const StepRunStatus statuses[] = { FLOW_STEP_PENDING, FLOW_STEP_SUCCEEDED, FLOW_STEP_FAILED };
     const FlowRunResult results[] = { FLOW_RUN_PENDING, FLOW_RUN_SUCCEEDED, FLOW_RUN_FAILED };
     for (unsigned path = 0; path != 3; ++path)
     {
-      SeatLedger owner(policy);
+      SeatLedger owner;
       GuardFlowRead read(owner);
       StepRunStatus status = statuses[path];
       int input = 5, calls = 0;
@@ -850,7 +820,7 @@ namespace
       FlowChain<int, int> flow = Flow() | Step(1, BracketFlowStep(owner, status, calls)).input(&input);
       flow.withTracker(&owner.tracker).trackLoading(&loading).onFinally(&GuardFlowRead::finally, &read);
       ScopedPtr<Operation> turn(clocked ? new Operation : 0);
-      const bool joined = clocked && policy == LEDGER_JOINS;
+      const bool joined = clocked;
       for (int run = 1; run <= 2; ++run)
       {
         LOKA_VERIFY(flow.runResult() == results[path]);
@@ -880,18 +850,12 @@ namespace
 
 void testFlowRunBracketJoinsTurn()
 {
-  verifyFlowRunBracket(true, LEDGER_JOINS);
+  verifyFlowRunBracket(true);
 }
 
 void testFlowRunBracketOutsideClockKeepsLegacy()
 {
-  verifyFlowRunBracket(false, LEDGER_JOINS);
-}
-
-void testFlowRunBracketOnStandaloneLedgerStaysSynchronous()
-{
-  verifyFlowRunBracket(false, LEDGER_STANDALONE);
-  verifyFlowRunBracket(true, LEDGER_STANDALONE);
+  verifyFlowRunBracket(false);
 }
 
 void testFlowPendingAndResumeInsideTurn()

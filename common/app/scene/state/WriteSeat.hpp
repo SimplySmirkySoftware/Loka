@@ -55,7 +55,6 @@ namespace loka
           case loka::core::OPEN_REFUSED_CLOSING:
             this->state_->set(value, forceUpdate);
             return;
-          case loka::core::OPEN_REFUSED_STANDALONE:
           case loka::core::OPEN_NO_CLOCK:
           case loka::core::OPEN_CLOCK_REFUSED:
           case loka::core::OPEN_REFUSED_NOT_PUSH:

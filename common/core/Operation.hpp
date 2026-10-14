@@ -42,7 +42,6 @@ namespace loka
       OPEN_OK,
       OPEN_ALREADY_OPEN,
       OPEN_REFUSED_BUSY,
-      OPEN_REFUSED_STANDALONE,
       OPEN_REFUSED_NOT_PUSH,
       OPEN_NO_CLOCK,
       OPEN_REFUSED_CLOSING,
@@ -61,7 +60,7 @@ namespace loka
         then reclaim; collection turns only collect, settle and close. Fair rounds
         visit the ledgers present at each round's start. WriteSeat enrolls its
         owner ledger through openActive, as does StateTrackerGuard.
-        StandaloneTransactionGuard keeps its own bracket. */
+        StandaloneTransactionGuard brackets an idle, unenrolled ledger and never joins. */
     class Operation
     {
     public:
@@ -80,12 +79,11 @@ namespace loka
 
       explicit Operation(const OperationBudget &budget = OperationBudget());
       ~Operation();
-      /** Refuses standalone ledgers before checking transaction phase.
-          Opens an idle joining ledger, or recognizes one already in this clock.
+      /** Opens an idle joining ledger, or recognizes one already in this clock.
           May be called during work rounds, never during cleanup or after close. */
       OpenResult open(StateTracker *tracker);
       /** The single active-clock door for write seats and guards. After honoring
-          an active clock's cleanup/refusal, null/non-Push and standalone trackers
+          an active clock's cleanup/refusal, null/non-Push trackers
           are refused before answering OPEN_NO_CLOCK.
           An eligible tracker without a clock returns OPEN_NO_CLOCK for legacy
           begin/end, and asserts in debug if a rail Regime requires a turn.
