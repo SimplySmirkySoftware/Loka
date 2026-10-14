@@ -43,9 +43,6 @@ namespace
 void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
 {
   RegisterWin32RibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
-  controller.leafLayoutHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>(),
-      &Win32ScenePlatformController::DispatchProjectedLayout);
   const loka::app::layout::RowLayoutMetrics rowMetrics =
       loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;
