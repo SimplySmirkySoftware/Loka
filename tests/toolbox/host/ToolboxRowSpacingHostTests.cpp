@@ -1,4 +1,5 @@
 #include "ToolboxLayoutMetrics.hpp"
+#include "context/ToolboxRibbonGroupEdgeContext.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "context/ToolboxTextContext.hpp"
@@ -71,8 +72,19 @@ namespace
     {
       if (node->asRibbonGroupEdgeNode())
       {
-        this->resultY_ = offer.y;
-        return 0;
+        const loka::app::RibbonGroupEdge edge = node->asRibbonGroupEdgeNode()->props.edge;
+        node->setContext(new ToolboxRibbonGroupEdgeContext(node->asRibbonGroupEdgeNode(), &this->controller_));
+        LayoutState state = offer;
+        const int width = node->context->layout(&this->controller_, state);
+        toolbox_host::fills.clear();
+        node->context->render(&this->controller_);
+        LOKA_VERIFY(!toolbox_host::fills.empty());
+        Rect painted = toolbox_host::fills.front().rect;
+        for (unsigned i = 1; i < toolbox_host::fills.size(); ++i)
+          painted.top = toolbox_host::fills[i].rect.top;
+        this->edges_[edge] = painted;
+        this->resultY_ = state.y;
+        return width;
       }
       LayoutState state = offer;
       short width = 0;
@@ -101,6 +113,10 @@ namespace
     }
     virtual void setLayoutResultY(short y) { this->resultY_ = y; }
     virtual short layoutResultY() const { return this->resultY_; }
+    const Rect &edge(RibbonGroupEdge kind) const
+    {
+      return this->edges_[kind];
+    }
     const Rect &rect(unsigned i) const
     {
       LOKA_VERIFY(i < this->rectCount_);
@@ -112,6 +128,7 @@ namespace
     PlatformLayoutHandlerRegistry registry_;
     short resultY_;
     Rect rects_[6];
+    Rect edges_[3];
     unsigned rectCount_;
   };
 }
@@ -317,6 +334,36 @@ namespace
     LOKA_VERIFY(label.left == left.left && label.right - label.left == groupWidth);
     LOKA_VERIFY(close.left == label.right + state.spacing + RibbonGroupNode::kFrameInset);
     LOKA_VERIFY(close.right - close.left == buttons[4]);
+    const int x = left.left - inset;
+    const int y = left.top - inset;
+    const int w = groupWidth + 2 * inset;
+    // The content Column reports its final spacing as part of the group extent.
+    const int h = label.bottom + state.spacing + inset - y;
+    const Rect expected[] = {
+        {static_cast<short>(y), static_cast<short>(x), static_cast<short>(y + h - 1), static_cast<short>(x + 1)},
+        {static_cast<short>(y),
+         static_cast<short>(x + w - 1),
+         static_cast<short>(y + h - 1),
+         static_cast<short>(x + w)},
+        {static_cast<short>(y + h - 1), static_cast<short>(x), static_cast<short>(y + h), static_cast<short>(x + w)}};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      const Rect &actual = traversal.edge(static_cast<RibbonGroupEdge>(i));
+      std::printf("edge %u actual=(%d,%d,%d,%d) expected=(%d,%d,%d,%d)\n",
+                  i,
+                  actual.left,
+                  actual.top,
+                  actual.right,
+                  actual.bottom,
+                  expected[i].left,
+                  expected[i].top,
+                  expected[i].right,
+                  expected[i].bottom);
+    }
+    std::fflush(stdout);
+    LOKA_VERIFY(EqualRect(&traversal.edge(RIBBON_GROUP_EDGE_LEFT), &expected[0]));
+    LOKA_VERIFY(EqualRect(&traversal.edge(RIBBON_GROUP_EDGE_RIGHT), &expected[1]));
+    LOKA_VERIFY(EqualRect(&traversal.edge(RIBBON_GROUP_EDGE_BOTTOM), &expected[2]));
     std::printf("%s: items=%d caption=%d group=%d gap=%d\n",
                 id,
                 items,
