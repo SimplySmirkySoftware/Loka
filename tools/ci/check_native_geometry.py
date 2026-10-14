@@ -30,6 +30,8 @@ MAC_ALLOWLIST = {
     "apple/macos/src/context/MacCellContext.mm": {"NSMakeRect"},
     # drawRect IMAGE_FIT_COVER source crop: decoded pixels, never layout units.
     "apple/macos/src/context/MacImageViewContext.mm": {"NSMakeRect"},
+    # drawRect edge blend: one-point rows of the view's native bounds.
+    "apple/macos/src/context/MacRibbonGroupEdgeContext.mm": {"NSMakeRect"},
     # Constructor: initial document width is AppKit contentSize, height zero.
     # relayout: refresh document width from AppKit, preserving native height.
     "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect", "setFrame"},
