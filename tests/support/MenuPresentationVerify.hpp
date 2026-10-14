@@ -1,7 +1,7 @@
 #ifndef LOKA_TESTS_SUPPORT_MENU_PRESENTATION_VERIFY_HPP
 #define LOKA_TESTS_SUPPORT_MENU_PRESENTATION_VERIFY_HPP
 
-#include "app/Menu.hpp"
+#include "MenuStructure.hpp"
 #include "app/core/AppConfigurable.hpp"
 
 namespace loka
@@ -43,7 +43,7 @@ namespace loka
       {
         ClearMenuItemDriving(menu->itemsHead());
       }
-      return leftPresentation.equalsStructure(rightPresentation);
+      return loka::app::testing::EqualsStructure(leftPresentation, rightPresentation);
     }
   } // namespace testing
 } // namespace loka

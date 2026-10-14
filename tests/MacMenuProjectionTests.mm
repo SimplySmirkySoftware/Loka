@@ -2,6 +2,7 @@
 #include "support/TestVerify.hpp"
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
+#include "MacScenePlatformController.hpp"
 #include "testing/MacWindowTestAccess.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "platform/null/NullPlatformContext.hpp"
@@ -9,6 +10,7 @@
 #include "core/util/StateTrackerGuard.hpp"
 #include <AppKit/AppKit.h>
 #include <objc/runtime.h>
+#include <new>
 
 // Test-only association observes the real target's destruction without adding
 // an injected target or lifetime getter to the production attachment.
@@ -64,6 +66,12 @@ namespace
     MenuBarDefinition result;
     MenuDefinition menu = Menu("File") << MenuItem("Run").attr(MenuItemAttr().checked(checked));
     result << menu;
+    return result;
+  }
+
+  MenuSources sources(const MenuBarDefinition *bar, const Scene *scene = 0)
+  {
+    const MenuSources result = {scene ? 0 : bar, scene ? bar : 0, scene};
     return result;
   }
 
@@ -172,7 +180,7 @@ namespace
       this->window = new MacWindow(&this->platform, sceneProps());
       this->app.own(this->window);
       LOKA_VERIFY(this->window->scene()->menuBar());
-      LOKA_VERIFY(this->app.menuAttachment().project(this->window->scene()->menuBar(), this->window->scene()));
+      LOKA_VERIFY(this->app.menuAttachment().project(sources(this->window->scene()->menuBar(), this->window->scene())));
       this->observation.item = [commandItem() retain];
       this->observation.tag = static_cast<int>([this->observation.item tag]);
       LOKA_VERIFY(this->observation.tag != 0);
@@ -190,25 +198,41 @@ namespace
   };
 }
 
-void testMacMenuAttachmentProjectsOnceForEqualBar()
+void testMacMenuAttachmentProjectsOnceForIdentity()
 {
   CocoaHost host;
+  MenuBarDefinition first = bar(), equal = bar();
   TestApp app;
-  MenuBarDefinition first = bar(), equal = bar(), changed = bar(true);
-  LOKA_VERIFY(app.menuAttachment().project(&first, 0));
+  const MenuSources firstSources = {&first, 0, 0};
+  LOKA_VERIFY(app.menuAttachment().project(firstSources));
   NSMenu *installed = [[NSApp mainMenu] retain];
-  LOKA_VERIFY(!app.menuAttachment().project(&equal, 0));
+  loka::app::testing::failMenuBarDefinitionClones(1);
+  LOKA_VERIFY(!app.menuAttachment().project(firstSources));
   LOKA_VERIFY([NSApp mainMenu] == installed);
-  // An item-level change must replace the installed projection.
-  LOKA_VERIFY(app.menuAttachment().project(&changed, 0));
+  OwnedDef<MenuBarDefinition> refused(first.clone());
+  LOKA_VERIFY(!refused.isSet()); // Suppression did not consume the clone failure.
+  loka::app::testing::allowMenuBarDefinitionClones();
+  const MenuSources equalSources = {&equal, 0, 0};
+  LOKA_VERIFY(app.menuAttachment().project(equalSources));
   LOKA_VERIFY([NSApp mainMenu] != installed);
   [installed release];
-  installed = [[NSApp mainMenu] retain];
-  Scene other((Boundary<Root>()));
-  LOKA_VERIFY(app.menuAttachment().project(&changed, &other));
-  LOKA_VERIFY([NSApp mainMenu] != installed);
+}
+
+void testMacMenuDoorSkipsMergeForUnchangedSources()
+{
+  CocoaHost host;
+  MenuBarDefinition offered = bar();
+  TestApp app;
+  const MenuSources offer = {&offered, 0, 0};
+  app.projectMenu(0, offer);
+  NSMenu *installed = [[NSApp mainMenu] retain];
+  loka::app::testing::failMenuBarDefinitionClones(1);
+  app.projectMenu(0, offer);
+  LOKA_VERIFY([NSApp mainMenu] == installed);
+  OwnedDef<MenuBarDefinition> refused(offered.clone());
+  LOKA_VERIFY(!refused.isSet());
+  loka::app::testing::allowMenuBarDefinitionClones();
   [installed release];
-  app.menuAttachment().releaseFrom(&other);
 }
 
 void testMacMenuDoorSkipsProjectionDuringTracking()
@@ -216,7 +240,8 @@ void testMacMenuDoorSkipsProjectionDuringTracking()
   CocoaHost host;
   TestApp app;
   MenuBarDefinition first = bar(), changed = bar(true);
-  app.projectMenu(0, &first, 0);
+  const loka::app::MenuSources firstSources = {&first, 0, 0};
+  app.projectMenu(0, firstSources);
   NSMenu *installed = [[NSApp mainMenu] retain];
   // Run the loop in the tracking mode AppKit uses while a menu is open; the
   // door must leave the tracked graph alone and the next completion re-offers.
@@ -225,13 +250,20 @@ void testMacMenuDoorSkipsProjectionDuringTracking()
   MenuBarDefinition *offer = &changed;
   CFRunLoopPerformBlock(CFRunLoopGetCurrent(), (CFStringRef)NSEventTrackingRunLoopMode, ^{
     ran = true;
-    door->projectMenu(0, offer, 0);
+    const loka::app::MenuSources sources = {offer, 0, 0};
+    door->projectMenu(0, sources);
   });
   [[NSRunLoop currentRunLoop] runMode:NSEventTrackingRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.2]];
   LOKA_VERIFY(ran);
   LOKA_VERIFY([NSApp mainMenu] == installed);
-  app.projectMenu(0, &changed, 0);
+  const loka::app::MenuSources changedSources = {&changed, 0, 0};
+  // The identical offer skipped above was not committed: this completion applies it.
+  app.projectMenu(0, changedSources);
   LOKA_VERIFY([NSApp mainMenu] != installed);
+  [installed release];
+  installed = [[NSApp mainMenu] retain];
+  app.projectMenu(0, changedSources);
+  LOKA_VERIFY([NSApp mainMenu] == installed);
   [installed release];
 }
 void testMacMenuAttachmentDisconnectStripsTargetAndAction()
@@ -266,7 +298,7 @@ void testMacMenuAttachmentDisconnectStripsTargetAndAction()
   LOKA_VERIFY([o.item isEnabled] && [o.item state] == 0);
   // Reinstall uses the same numeric IDs, but the tracking-retained old item
   // must stay inert even after replacement commands become dispatchable.
-  LOKA_VERIFY(o.attachment->project(fixture.window->scene()->menuBar(), fixture.window->scene()));
+  LOKA_VERIFY(o.attachment->project(sources(fixture.window->scene()->menuBar(), fixture.window->scene())));
   LOKA_VERIFY([o.item target] == nil && [o.item action] == NULL && [o.item tag] == 0);
   LOKA_VERIFY(o.attachment->dispatch(static_cast<int>([commandItem() tag])));
   LOKA_VERIFY(o.calls == 3);
@@ -276,12 +308,55 @@ void testMacSceneDetachReleasesMenu()
 {
   CocoaHost host;
   Mounted fixture;
-  LOKA_VERIFY(fixture.observation.attachment->dispatch(fixture.observation.tag));
-  LOKA_VERIFY(fixture.observation.calls == 1);
+  Observer &o = fixture.observation;
+  // Mirror the Win32 pin: reuse the overlay address across fresh compositions.
+  MenuBarDefinition reused(*fixture.window->scene()->menuBar());
+  const MenuSources offer = {0, &reused, fixture.window->scene()};
+  LOKA_VERIFY(o.attachment->project(offer));
+  [o.item release];
+  o.item = [commandItem() retain];
+  o.tag = static_cast<int>([o.item tag]);
+  NSMenu *installed = [[NSApp mainMenu] retain];
+  LOKA_VERIFY(o.attachment->dispatch(o.tag));
+  LOKA_VERIFY(o.calls == 1);
   SceneAccess::unmount(*fixture.window->scene());
-  LOKA_VERIFY(fixture.observation.detaches == 1);
-  LOKA_VERIFY(!fixture.observation.attachment->dispatch(fixture.observation.tag));
-  LOKA_VERIFY(fixture.observation.calls == 1);
+  LOKA_VERIFY(o.detaches == 1);
+  LOKA_VERIFY(!o.attachment->dispatch(o.tag));
+  LOKA_VERIFY([NSApp mainMenu] == installed);
+  reused.~MenuBarDefinition();
+  MacScenePlatformController *controller = MacScenePlatformController::findForRootView(
+      loka::dsl::testing::MacWindowTestAccess::contentView(*fixture.window));
+  LOKA_VERIFY(controller != 0);
+  LOKA_VERIFY(fixture.window->scene()->mount(controller));
+  LOKA_VERIFY(fixture.window->scene()->menuBar());
+  new (&reused) MenuBarDefinition(*fixture.window->scene()->menuBar());
+  LOKA_VERIFY(o.attachment->project(offer));
+  LOKA_VERIFY([NSApp mainMenu] != installed);
+  [installed release];
+  [o.item release];
+  o.item = [commandItem() retain];
+  o.tag = static_cast<int>([o.item tag]);
+  LOKA_VERIFY(o.attachment->dispatch(o.tag));
+  LOKA_VERIFY(o.calls == 2);
+  SceneAccess::unmount(*fixture.window->scene());
+  LOKA_VERIFY(o.detaches == 2);
+  LOKA_VERIFY(!o.attachment->dispatch(o.tag));
+}
+
+void testMacMenuReleaseThenAbsentRemovesMainMenu()
+{
+  CocoaHost host;
+  Mounted fixture;
+  MacMenuAttachment &attachment = *fixture.observation.attachment;
+  NSMenu *installed = [[NSApp mainMenu] retain];
+  attachment.releaseFrom(fixture.window->scene());
+  LOKA_VERIFY([NSApp mainMenu] == installed);
+  const MenuSources absent = {0, 0, 0};
+  LOKA_VERIFY(attachment.project(absent));
+  // AppKit can substitute its application menu; our installed graph must be gone.
+  LOKA_VERIFY([NSApp mainMenu] != installed);
+  LOKA_VERIFY(!attachment.project(absent));
+  [installed release];
 }
 
 void testMacNativeCloseReleasesMenuBeforeReclaim()
@@ -329,7 +404,7 @@ void testMacAppShutdownReleasesMenuBeforeAttachmentDestruction()
     observation.attachment = &app.menuAttachment();
     ShutdownWindow *window = new ShutdownWindow(&platform);
     app.own(window);
-    LOKA_VERIFY(app.menuAttachment().project(window->scene()->menuBar(), window->scene()));
+    LOKA_VERIFY(app.menuAttachment().project(sources(window->scene()->menuBar(), window->scene())));
     observation.item = [commandItem() retain];
     observation.tag = static_cast<int>([observation.item tag]);
     LOKA_VERIFY(app.menuAttachment().dispatch(observation.tag));
@@ -354,7 +429,7 @@ void testMacMenuProjectionDetachesMainMenuBeforeReleasingTarget()
   {
     TestApp app;
     MenuBarDefinition offered = bar();
-    LOKA_VERIFY(app.menuAttachment().project(&offered, 0));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered, 0)));
     {
       // Reading a weak `target` without ARC retains and autoreleases it; drain
       // that +1 before the attachment dies so the witness sees the real release.
@@ -376,26 +451,30 @@ void testMacMenuProjectionDetachesMainMenuBeforeReleasingTarget()
   LOKA_VERIFY(detachedBeforeTargetRelease);
 }
 
-void testMacMenuAttachmentCloneRefusalClearsBaseline()
+void testMacMenuAttachmentMergeRefusalPreservesProjection()
 {
   CocoaHost host;
-  TestApp app;
   MenuBarDefinition first = bar(), changed = bar(true);
-  LOKA_VERIFY(app.menuAttachment().project(&first, 0));
-  loka::app::testing::failMenuBarDefinitionClones(1);
-  LOKA_VERIFY(app.menuAttachment().project(&changed, 0));
-  loka::app::testing::allowMenuBarDefinitionClones();
+  TestApp app;
+  const MenuSources firstSources = {&first, 0, 0};
+  const MenuSources changedSources = {&changed, 0, 0};
+  LOKA_VERIFY(app.menuAttachment().project(firstSources));
   NSMenu *installed = [[NSApp mainMenu] retain];
-  LOKA_VERIFY(app.menuAttachment().project(&changed, 0));
+  loka::app::testing::failMenuBarDefinitionClones(1);
+  LOKA_VERIFY(!app.menuAttachment().project(changedSources));
+  loka::app::testing::allowMenuBarDefinitionClones();
+  LOKA_VERIFY([NSApp mainMenu] == installed);
+  LOKA_VERIFY(!app.menuAttachment().project(firstSources)); // Old record survives.
+  LOKA_VERIFY(app.menuAttachment().project(changedSources)); // Identical retry applies.
   LOKA_VERIFY([NSApp mainMenu] != installed);
   [installed release];
-  LOKA_VERIFY(!app.menuAttachment().project(&changed, 0));
+  LOKA_VERIFY(!app.menuAttachment().project(changedSources));
   NSMenu *before = [[NSApp mainMenu] retain];
-  LOKA_VERIFY(app.menuAttachment().project(0, 0));
+  const MenuSources absent = {0, 0, 0};
+  LOKA_VERIFY(app.menuAttachment().project(absent));
   LOKA_VERIFY([NSApp mainMenu] != before);
   [before release];
-  // Completion re-offers every tick: absent over absent is unchanged.
-  LOKA_VERIFY(!app.menuAttachment().project(0, 0));
+  LOKA_VERIFY(!app.menuAttachment().project(absent));
 }
 
 void testMacMenuAttachmentDispatchMayDisconnect()
@@ -406,6 +485,10 @@ void testMacMenuAttachmentDispatchMayDisconnect()
   LOKA_VERIFY(fixture.observation.attachment->dispatch(fixture.observation.tag));
   LOKA_VERIFY(fixture.observation.calls == 1);
   LOKA_VERIFY(!fixture.observation.attachment->dispatch(fixture.observation.tag));
+  const MenuSources offer = {0, fixture.window->scene()->menuBar(), fixture.window->scene()};
+  LOKA_VERIFY(fixture.observation.attachment->project(offer));
+  LOKA_VERIFY(fixture.observation.attachment->dispatch(static_cast<int>([commandItem() tag])));
+  LOKA_VERIFY(fixture.observation.calls == 2);
 }
 
 void testMacMenuTitleFollowsState()
@@ -426,7 +509,7 @@ void testMacMenuTitleFollowsState()
     menu << command;
     MenuBarDefinition offered;
     offered << menu;
-    LOKA_VERIFY(app.menuAttachment().project(&offered, 0));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered, 0)));
     NSMenuItem *item = commandItem();
     LOKA_VERIFY([[item title] isEqualToString:@"Alpha"]);
     NSString *shortcut = i == 0 ? @"a" : (i == 2 ? @"q" : @"");
@@ -450,7 +533,7 @@ void testMacMenuSubmenuTitleFollowsState()
   TestApp app;
   MenuBarDefinition offered;
   offered << (Menu("File") << (MenuItem("Fallback").text(&state) << MenuItem("Child")));
-  LOKA_VERIFY(app.menuAttachment().project(&offered, 0));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, 0)));
   NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
   LOKA_VERIFY(menu && [menu numberOfItems] == 1);
   NSMenuItem *item = [menu itemAtIndex:0];
@@ -476,7 +559,7 @@ void testMacMenuTitleStateUnbindsOnRelease()
   TestApp app;
   MenuBarDefinition offered;
   offered << (Menu("File") << MenuItem("Fallback").text(&state));
-  LOKA_VERIFY(app.menuAttachment().project(&offered, &source));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, &source)));
   NSMenuItem *item = [commandItem() retain];
   {
     StateTrackerGuard guard(&tracker);
