@@ -1,4 +1,5 @@
 #include "MacScenePlatformController.hpp"
+#include "platform/MacPushButton.hpp"
 #include "MacBitmapCapture.hpp"
 #include "MacInputDoor.hpp"
 #include "MacApp.hpp"
@@ -113,8 +114,7 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
   NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
   if (!button)
     return 0;
-  [button setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-  [button setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
+  loka::macos::ConfigureMacPushButton(button);
   [button setTitle:loka::macos::CreateNSStringFromUtf8(utf8)];
   const CGFloat points = [[button cell] cellSize].width;
   [button release];
@@ -124,6 +124,26 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
     return 0;
   return static_cast<short>(this->projection_.measurementToLu(points));
 }
+
+namespace
+{
+  // Twin of measurePushButtonNaturalWidth's cell and bound. A NaN or
+  // non-positive cell declines and keeps kButtonHeight.
+  loka::app::layout::RowLayoutMetrics MeasureRowLayoutMetrics(const loka::macos::MacProjection &projection)
+  {
+    loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
+    NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
+    if (!button)
+      return metrics;
+    loka::macos::ConfigureMacPushButton(button);
+    const CGFloat points = [[button cell] cellSize].height;
+    [button release];
+    const loka::app::Ratio &scale = projection.railMetrics().spaceScale;
+    if (points > 0 && points <= static_cast<double>(SHRT_MAX) * scale.num / scale.den)
+      metrics.buttonHeight = projection.measurementToLu(points);
+    return metrics;
+  }
+} // namespace
 
 bool MacScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
@@ -238,9 +258,11 @@ void *MacScenePlatformController::textFont(const loka::app::TextStyle &style, bo
   return this->textFonts_.find(style, fixedPitch);
 }
 
-MacScenePlatformController::MacScenePlatformController(void *rootView, const loka::app::RailMetrics &metrics,
-                                                         PlatformContext *platformContext)
+MacScenePlatformController::MacScenePlatformController(void *rootView,
+                                                       const loka::app::RailMetrics &metrics,
+                                                       PlatformContext *platformContext)
     : projection_(rootView, metrics),
+      rowLayoutMetrics_(MeasureRowLayoutMetrics(this->projection_)),
       textShaping_(loka::app::WHOLE_LINE),
       textFonts_(this->projection_.railMetrics().fontScale),
       platformContext_(platformContext),
@@ -822,11 +844,8 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     }
     else
     {
-      const loka::app::layout::RowLayoutMetrics metrics =
-          loka::app::layout::FallbackControlMetrics::rowLayout();
       resultY = loka::app::layout::computeRowLayoutResultY(
-          stack, state, metrics, this,
-          this, &MacScenePlatformController::layoutContainerChild);
+          stack, state, this->rowLayoutMetrics_, this, this, &MacScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, resultY);
   }

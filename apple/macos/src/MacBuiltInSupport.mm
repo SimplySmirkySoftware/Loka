@@ -42,13 +42,11 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   controller.leafLayoutHandlerRegistry_.registerHandler(
       loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>(),
       &MacScenePlatformController::DispatchProjectedLayout);
-  const loka::app::layout::RowLayoutMetrics rowMetrics =
-      loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &rowMetrics, &gridMetrics);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ButtonNode>(),
                                                         &MacScenePlatformController::DispatchProjectedLayout);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::EditTextNode>(),
