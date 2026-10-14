@@ -101,7 +101,6 @@ namespace loka
             return JOINED;
           case OPEN_REFUSED_BUSY:
           case OPEN_REFUSED_CLOSING:
-          case OPEN_REFUSED_STANDALONE:
           case OPEN_NO_CLOCK:
           case OPEN_CLOCK_REFUSED:
           case OPEN_REFUSED_NOT_PUSH:

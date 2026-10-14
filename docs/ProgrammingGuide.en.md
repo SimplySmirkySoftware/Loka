@@ -649,19 +649,16 @@ Outside a turn, an idle owner's Seat still begins, writes, and ends a transactio
 before returning. `StateTrackerGuard` joins the active clock too, regardless of
 whether a Seat or guard writes first. It retains begin/end when enrollment is
 refused or no clock is active. Its optional callback is not invoked when joined;
-observe the State or use `StandaloneTransactionGuard` for post-commit work.
+observe the State for post-commit work.
 
-`StandaloneTransactionGuard` keeps an explicit begin/end bracket for bounded
-commit-before-read preparation: Scene installation/rearm and
-bootstrap. SceneManager declares a standalone ledger at
-construction, so earlier handler writes cannot enroll it in the turn clock.
-Its seat writes and ordinary tracker guards keep synchronous transactions.
-Window retains a joining ledger; bootstrap uses the standalone bracket before
-any turn. Flow's run bracket and its `onSuccess` state assignment join the active
+`StandaloneTransactionGuard` is the bootstrap bracket for launch-time document
+facts and initial visibility before the first turn. Window retains a joining ledger;
+bootstrap uses the bracket before any Operation exists.
+Flow's run bracket and its `onSuccess` state assignment join the active
 clock too. Step writes keep source values and direct observers synchronous, but
 a following step or `finally` can still read the previous derived value until
-the tail. Outside a turn, or when enrollment is refused (including standalone
-ledgers), the run bracket ends at PENDING or terminal cleanup before `finally`.
+the tail. Outside a turn, or when enrollment is refused, the run bracket ends at
+PENDING or terminal cleanup before `finally`.
 Public resume starts a fresh bracket; an internal flow-success continuation
 shares the original bracket without opening another level. Dialog transport
 remains unchanged; the App default menu bar is composed once at bootstrap and

@@ -23,7 +23,7 @@ namespace
     MutableState<int> source;
     PushStateTracker tracker;
     int invalidations;
-    Ledger(LedgerPolicy policy = LEDGER_JOINS) : source(0), tracker(policy), invalidations(0)
+    Ledger() : source(0), tracker(), invalidations(0)
     {
       this->tracker.addState(&this->source);
       this->tracker.setInvalidateCallback(&Ledger::invalidate, this);
@@ -197,12 +197,21 @@ namespace
     operation.open(&ledger.tracker);
     _exit(0); // Do not let the destructor's separate wall mask this probe.
   }
-  void closeWithNestedGuard()
+  void bootstrapOnEnrolledLedger()
   {
     Ledger ledger;
     Operation operation;
     LOKA_VERIFY(operation.open(&ledger.tracker) == OPEN_OK);
     StandaloneTransactionGuard guard(&ledger.tracker);
+    _exit(0); // Isolate construction: no destructor/close wall may mask this pin.
+  }
+
+  void closeWithNestedGuard()
+  {
+    Ledger ledger;
+    Operation operation;
+    LOKA_VERIFY(operation.open(&ledger.tracker) == OPEN_OK);
+    ledger.tracker.begin(); // Exercise the close wall independently of the bootstrap guard.
     operation.close();
   }
 
@@ -670,6 +679,7 @@ void testOperationClockContracts()
   expectAssert(&closeTwice);
   expectAssert(&openAfterClose);
   expectAssert(&closeWithNestedGuard);
+  expectAssert(&bootstrapOnEnrolledLedger);
 #else
   std::printf("[skip] Operation clock death pins require Linux debug without ASan.\n");
 #endif
@@ -1027,30 +1037,16 @@ void testRegimeInsideTurnSeatJoins()
   verifyClosed(ledger);
 }
 
-void testRegimeStandaloneLedgerWithoutClockStaysSynchronous()
-{
-  Ledger ledger(LEDGER_STANDALONE);
-  loka::app::scene::NodeState<int> seat(&ledger.source, &ledger.tracker);
-  Operation::Regime regime;
-  seat.writeSeat().set(1);
-  LOKA_VERIFY(ledger.source.get() == 1 && ledger.invalidations == 1);
-  const std::vector<StateBase *> &committed = ledger.tracker.committedSet().identities();
-  LOKA_VERIFY(committed.size() == 1 && committed[0] == &ledger.source);
-  LOKA_VERIFY(Operation::openActive(&ledger.tracker) == OPEN_REFUSED_STANDALONE);
-  verifyClosed(ledger);
-}
-
 void testOpenActiveOrderWithClock()
 {
-  Ledger standalone(LEDGER_STANDALONE), joining;
+  Ledger unenrolled, joining;
   NonPushTracker nonPush;
   Operation turn(OperationBudget(0));
-  LOKA_VERIFY(Operation::openActive(&standalone.tracker) == OPEN_REFUSED_STANDALONE);
   LOKA_VERIFY(Operation::openActive(&nonPush) == OPEN_REFUSED_NOT_PUSH);
   LOKA_VERIFY(Operation::openActive(&joining.tracker) == OPEN_OK);
   joining.source.set(1);
   const OperationOutcome outcome = turn.settle();
   LOKA_VERIFY(outcome.status == OPERATION_REFUSED_CHAIN_LIMIT);
-  LOKA_VERIFY(Operation::openActive(&standalone.tracker) == OPEN_CLOCK_REFUSED);
+  LOKA_VERIFY(Operation::openActive(&unenrolled.tracker) == OPEN_CLOCK_REFUSED);
   LOKA_VERIFY(Operation::openActive(&nonPush) == OPEN_CLOCK_REFUSED);
 }

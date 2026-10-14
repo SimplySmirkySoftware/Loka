@@ -10,7 +10,7 @@ namespace loka
   {
     /** A transaction that joins the active clock when its ledger can enroll.
         When joined to a turn the callback is not invoked; owners that need a post-commit
-        callback use StandaloneTransactionGuard or observe the State.
+        callback observe the State.
         Refused enrollment retains the legacy begin/end bracket. */
     struct StateTrackerGuard
     {
@@ -34,7 +34,6 @@ namespace loka
           return;
         case OPEN_REFUSED_BUSY:
         case OPEN_REFUSED_CLOSING:
-        case OPEN_REFUSED_STANDALONE:
         case OPEN_NO_CLOCK:
         case OPEN_CLOCK_REFUSED:
         case OPEN_REFUSED_NOT_PUSH:
@@ -63,12 +62,9 @@ namespace loka
       StateTrackerGuard &operator=(const StateTrackerGuard &);
     };
 
-    /** A bounded preparation transaction that must commit before its owner
-        reads the result (commit-before-read). It does not join the clock.
-        For menu composition and Scene installation, its owner's ledger is
-        LEDGER_STANDALONE, so no earlier write in the turn can have enrolled it.
-        Bootstrap uses this bracket before any turn on a joining Window ledger.
-        Its begin/end and callback mechanism mirrors the OWNED policy above. */
+    /** The bootstrap bracket, used before any Operation exists on a joining
+        ledger. Its begin/end settles preparation before its owner reads the
+        result; its callback mechanism mirrors the OWNED bracket above. */
     struct StandaloneTransactionGuard
     {
       typedef void (*InvalidateFn)(void *userData);
@@ -81,7 +77,10 @@ namespace loka
             invalidateUserData(userData)
       {
         if (tracker)
+        {
+          assert(tracker->phase() == TRACKER_IDLE && "bootstrap bracket opens on an idle ledger");
           tracker->begin();
+        }
       }
       ~StandaloneTransactionGuard()
       {
