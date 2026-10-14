@@ -1,3 +1,4 @@
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32ScrollViewTests.hpp"
 
 #include "app/layout/SceneRootLayout.hpp"
@@ -243,6 +244,8 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
+    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
+                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     // Nodes are declared after the controller so they leave scope first:
     // ~Node is the last retire door, and the controller must still be alive
     // to receive the queued HWNDs (the ensure-contract convention; a node
@@ -311,12 +314,13 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
       }
     }
     assert(first.left == 0 && first.top == -10);
-    assert(second.top == 34 &&
+    assert(second.top == controller.rowLayoutMetrics().buttonHeight
+                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing - 10 &&
            "content y must project as viewport-client y minus offset");
 
     const SCROLLINFO info = scrollInfo(viewport);
     assert(info.nPage == 140 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    assert(maximumOffset(info) == 264 - (140 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(maximumOffset(info) == contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset));
     assert(info.nPos == 10);
 
     // Release the root pointer before the nodes leave scope so the
@@ -576,6 +580,8 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
+    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
+                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     // Nodes after the controller: see the parents-and-clips pin.
     OffsetFact offset(100);
     loka::app::ScrollViewNode scrollView(
@@ -584,14 +590,16 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     establishLayout(controller, &scrollView, 300, 100);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
-    assert(offset.state().get() == 100);
+    const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    assert(offset.state().get() == (initialMax < 100 ? initialMax : 100));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.changeCount() == 1 &&
            "a range-changing resize must publish one clamped fact");
-    assert(scrollInfo(viewport).nPos == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(scrollInfo(viewport).nPos == (resizedMax > 0 ? resizedMax : 0));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1 &&
            "the settled clamp must not be published again");
@@ -609,7 +617,7 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     offset.state().set(40000);
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
+    assert(offset.state().get() == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
            "an oversized offset must recover to the content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);

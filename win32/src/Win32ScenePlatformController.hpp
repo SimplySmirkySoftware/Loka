@@ -6,6 +6,7 @@
 #include "app/layout/TextShaping.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
 #include <vector>
+#include "app/layout/RowLayout.hpp"
 #include "app/RectSurface.hpp"
 #include "app/scene/projection/ProjectionParentScope.hpp"
 #include "app/scene/projection/PlatformController.hpp"
@@ -170,6 +171,13 @@ public:
   /** Schedule through the existing WM_SIZE layout path, never reenter layout. */
   void requestRelayout();
   loka::app::TextShaping textShaping() const { return this->textShaping_; }
+  /** One construction-time height for Row alignment and Button layout;
+      a declined native measurement keeps the fallback. */
+  const loka::app::layout::RowLayoutMetrics &rowLayoutMetrics() const
+  {
+    return this->rowLayoutMetrics_;
+  }
+
   HFONT displayFont() const
   {
     return this->displayFont_.get();
@@ -441,6 +449,9 @@ private:
   const loka::app::TextShaping textShaping_;
   loka::win32::Win32DisplayScale displayScale_;
   loka::win32::Win32DisplayFont displayFont_;
+  // Keep the construction measurement across DPI changes: Stack owns a copy.
+  // Font and inset scale together; remeasurement could split Row/Button heights.
+  const loka::app::layout::RowLayoutMetrics rowLayoutMetrics_;
   std::vector<PendingInvalidate> pendingInvalidations_;
   std::vector<HWND> retiredWindows_;
   RedrawStats redrawStats_;
