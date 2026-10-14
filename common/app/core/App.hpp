@@ -6,6 +6,7 @@
 #include "app/core/AppComponent.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/Menu.hpp"
+#include "app/MenuSources.hpp"
 #include "core/util/OwnedDef.hpp"
 #include "app/core/DialogResultDelivery.hpp"
 #include <cassert>
@@ -57,8 +58,8 @@ public:
   bool consumeIdle(double elapsedSeconds, double &dispatchElapsedSeconds);
   void handleIdle(double elapsedSeconds);
   bool handleKeyPress(char key);
-  /** Clone and replace the default; clone refusal preserves the installed value. */
-  void setDefaultMenuBar(const loka::app::MenuBarDefinition *menuBar);
+  /** Bootstrap-only default from composeDefaultMenu; absent without a config
+      or when its clone is refused. Its identity stays fixed for the App lifetime. */
   const loka::app::MenuBarDefinition *defaultMenuBar() const
   {
     return this->defaultMenuBar_.get();
@@ -82,7 +83,9 @@ protected:
   AppComponentGroup *group_;
   bool quitWhenLastWindowClosed_;
   AppConfigurable *config_;
+private:
   loka::core::OwnedDef<loka::app::MenuBarDefinition> defaultMenuBar_;
+protected:
   Window *activeWindow_;
   double idleAccumulatedSeconds_;
 
@@ -90,8 +93,7 @@ protected:
       means no active window: project the default. Global rails accept only
       window == activeWindow() (including both null); per-window rails accept
       every non-null row and ignore null. Attachments revoke source on detach. */
-  virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source);
+  virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
 
   /** Rail setup for a Window just placed in the App's group. Bootstrap and
       runtime adoption (from w1) call this inline, one window at a time.

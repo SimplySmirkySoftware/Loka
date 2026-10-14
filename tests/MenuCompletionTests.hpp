@@ -2,13 +2,13 @@
 #define LOKA_MENU_COMPLETION_TESTS_HPP
 void testMenuProjectedAtCompletionNotOnActivation();
 void testLastWindowCloseProjectsDefaultInSameTurn();
-void testMenuSourceMergesDefaultAndActiveScene();
+void testMenuSourceOffersDefaultAndSceneIdentity();
 void testMergeMenuBarsReplacesInPlaceAndAppendsInOrder();
-void testMenuMergeCloneRefusalSkipsRowKeepsNextCompletion();
+void testMenuOffersDoNotConsumeCloneRefusal();
 void testInactiveWindowCloseKeepsActiveBar();
 void testTwoAdmissionsReofferSameSource();
 void testBootstrapProjectsOnce();
 void testDefaultBarComposedOnceAtBootstrap();
 void testDefaultBarBootstrapCloneRefusalLeavesNoDefault();
-void testDefaultBarReplacementCloneRefusalPreservesInstalledValue();
+void testMenuProjectionRecordIdentityAndRelease();
 #endif

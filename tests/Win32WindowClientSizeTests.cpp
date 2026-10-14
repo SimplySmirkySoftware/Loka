@@ -13,6 +13,7 @@
 #include "testing/app/WindowTestAccess.hpp"
 #include "Win32ScenePlatformController.hpp"
 #include "app/Menu.hpp"
+#include "app/MenuComposition.hpp"
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/null/NullPlatformContext.hpp"
@@ -20,15 +21,26 @@
 
 namespace
 {
+  class DefaultMenuConfig : public AppConfigurable
+  {
+  public:
+    DefaultMenuConfig(PlatformContext *platform, const loka::app::MenuBarDefinition &bar)
+        : AppConfigurable(platform), bar_(bar) {}
+    virtual void compose(AppComposition &) {}
+    virtual void composeDefaultMenu(loka::app::MenuComposition &c) { c << this->bar_; }
+  private:
+    const loka::app::MenuBarDefinition &bar_;
+  };
   class MenuApplyingWin32App : public Win32App
   {
   public:
-    MenuApplyingWin32App()
-        : Win32App(0, GetModuleHandle(NULL), SW_SHOW)
+    explicit MenuApplyingWin32App(AppConfigurable *config = 0)
+        : Win32App(config, GetModuleHandle(NULL), SW_SHOW)
     {
     }
 
     virtual ~MenuApplyingWin32App() {}
+    void bootstrap() { App::run(); }
     /** Borrow the fixture Window only for a production completion. */
     void complete(Window &window)
     {
@@ -42,6 +54,9 @@ namespace
       this->reclaimWindows();
       this->group_->build();
     }
+  protected:
+    // Empty bootstrap is intentional: complete() later borrows the test Window.
+    virtual void bootstrapWindowless() {}
   };
 
   void setWindowVisibility(Win32Window &window, bool visible)
@@ -335,16 +350,14 @@ void testWin32DeclaredWindowSizeMeansClientArea()
 
   MenuApplyingWin32App app;
   app.setActiveWindow(&window);
-  app.setDefaultMenuBar(&menuBar);
-  app.complete(window);
+  // Native transition is attachment-owned; the App default is bootstrap-only.
+  window.menuAttachment().project(&menuBar, 0);
   assert(GetMenu(hwnd) && "the production menu path must attach the declared menu");
   assertLogicalClientSize(hwnd, declaredWidth, declaredHeight);
   LOKA_VERIFY(window.frameState().get().width == declaredWidth);
   LOKA_VERIFY(window.frameState().get().height == declaredHeight);
 
-  app.setDefaultMenuBar(0);
-
-  app.complete(window);
+  window.menuAttachment().project(0, 0);
   assert(!GetMenu(hwnd) && "the production menu path must detach a cleared menu");
   assertLogicalClientSize(hwnd, declaredWidth, declaredHeight);
   LOKA_VERIFY(window.frameState().get().width == declaredWidth);
@@ -451,9 +464,10 @@ void testWin32AppOnlyMenuWindowSettles()
   LOKA_VERIFY(hwnd && IsWindow(hwnd));
   const RECT initialOuterRect = readWindowRect(hwnd);
 
-  MenuApplyingWin32App app;
+  DefaultMenuConfig config(&context, appOnlyMenuBar);
+  MenuApplyingWin32App app(&config);
+  app.bootstrap();
   app.setActiveWindow(&window);
-  app.setDefaultMenuBar(&appOnlyMenuBar);
   app.complete(window);
   pumpWindowMessages(16);
 
@@ -501,8 +515,8 @@ void testWin32MenuRebuildPreservesMovedWindowFrame()
 
   MenuApplyingWin32App app;
   app.setActiveWindow(&window);
-  app.setDefaultMenuBar(&initialMenuBar);
-  app.complete(window);
+  // Native transition is attachment-owned; the App default is bootstrap-only.
+  window.menuAttachment().project(&initialMenuBar, 0);
   assert(GetMenu(hwnd) && "the production menu path must attach the initial menu");
   LOKA_VERIFY(SetWindowPos(hwnd,
                            NULL,
@@ -515,9 +529,7 @@ void testWin32MenuRebuildPreservesMovedWindowFrame()
   RECT movedClientRect;
   LOKA_VERIFY(GetClientRect(hwnd, &movedClientRect));
 
-  app.setDefaultMenuBar(&rebuiltMenuBar);
-
-  app.complete(window);
+  window.menuAttachment().project(&rebuiltMenuBar, 0);
 
   const RECT rebuiltOuterRect = readWindowRect(hwnd);
   RECT rebuiltClientRect;
@@ -584,9 +596,10 @@ void testWin32AppDestructionLeavesWindowOwnedMenu()
   {
     HMENU menu = NULL;
     {
-      MenuApplyingWin32App app;
+      DefaultMenuConfig config(&context, menuBar);
+      MenuApplyingWin32App app(&config);
+      app.bootstrap();
       app.setActiveWindow(&window);
-      app.setDefaultMenuBar(&menuBar);
       app.complete(window);
       menu = GetMenu(hwnd);
       LOKA_VERIFY(menu != NULL);
@@ -616,14 +629,15 @@ void testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification()
   printf("\n==== [testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification] start ====\n");
   loka::app::MenuBarDefinition menuBar;
   menuBar << (loka::app::Menu("File") << loka::app::MenuItem("Quit"));
-  MenuApplyingWin32App app;
+  NullPlatformContext context;
+  DefaultMenuConfig config(&context, menuBar);
+  MenuApplyingWin32App app(&config);
   WindowProps props;
   props.frame(40, 40, 257, 163).visible(false);
-  NullPlatformContext context;
   Win32Window window(&context, props);
   window.setApp(&app);
   setWindowVisibility(window, true);
-  app.setDefaultMenuBar(&menuBar);
+  app.bootstrap();
   app.complete(window);
   HMENU menu = GetMenu(window.hwnd());
   LOKA_VERIFY(menu != NULL);

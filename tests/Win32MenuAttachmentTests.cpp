@@ -303,11 +303,13 @@ void testWin32TwoWindowsOwnTheirMenus()
   show(b, true);
   // Exercise the production rail door: B's projection used to detach A.
   app.setActiveWindow(&a);
-  app.projectMenu(&a, a.scene()->menuBar(), a.scene());
+  const loka::app::MenuSources aSources = {0, a.scene()->menuBar(), a.scene()};
+  app.projectMenu(&a, aSources);
   HMENU menuA = GetMenu(a.hwnd());
   LOKA_VERIFY(menuA);
   app.setActiveWindow(&b);
-  app.projectMenu(&b, b.scene()->menuBar(), b.scene());
+  const loka::app::MenuSources bSources = {0, b.scene()->menuBar(), b.scene()};
+  app.projectMenu(&b, bSources);
   HMENU menuB = GetMenu(b.hwnd());
   LOKA_VERIFY(menuB && menuB != menuA);
   LOKA_VERIFY(GetMenu(a.hwnd()) == menuA && IsMenu(menuA));
