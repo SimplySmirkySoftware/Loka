@@ -102,13 +102,16 @@ namespace loka
         bool gapBefore_;
       };
 
-      /** Owns one Row pass's flex remainder and live-seat progression.
-          NATURAL rows query each eligible child at most twice: once while
-          totalling, once in next(). SHARED rows never query the source.
-          Stacks compose the smallest width that seats each child at its own width
-          under their layout rules; only leaves reach the source. Each stack ask
-          walks its own subtree without caching. Source answers and child claims
-          must stay stable for the whole pass. */
+      /** Answers the maximum offer-independent width within the parent's composed child count,
+          treating children as vertically stacked ScrollView content and recursing into Columns;
+          gap is used only for natural Row measurement, and a null parent or offer-bound children answer zero.
+          Unavailable measurements or results above SHRT_MAX refuse without changing width. */
+      bool queryContentOverflowWidth(scene::Node *parent, int gap, const INaturalWidthSource *source, short &width);
+
+      /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
+          leaf answers (including intrinsic images) at most twice, SHARED rows never consult them.
+          Private recursive natural measurement walks each Stack's subtree without caching to find
+          the smallest seating width, independently of ScrollView's offer-bound overflow rule. */
       class RowWidthConsultation
       {
       public:

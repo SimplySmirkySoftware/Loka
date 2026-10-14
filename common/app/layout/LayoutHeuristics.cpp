@@ -164,6 +164,44 @@ namespace loka
         }
       } // namespace
 
+      bool queryContentOverflowWidth(scene::Node *parent, int gap, const INaturalWidthSource *source, short &width)
+      {
+        int maximum = 0;
+        scene::INestable *content = parent ? parent->asNestable() : 0;
+        loka::dsl::CompositionCursor<scene::Node> children(content ? content->childrenHead() : 0,
+                                                           content ? content->childrenCount() : 0);
+        for (scene::Node *child = children.next(); child; child = children.next())
+        {
+          int resolved = declaredChildWidthForColumn(child);
+          if (resolved < 0)
+          {
+            short measured = 0;
+            StackNode *stack = child->asStackNode();
+            ImageViewNode *image = child->asImageViewNode();
+            if (stack && stack->props.effectiveAxis() == STACK_AXIS_COLUMN)
+            {
+              if (!queryContentOverflowWidth(stack, gap, source, measured))
+                return false;
+            }
+            else if ((stack && stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL)
+                     || child->asRibbonGroupNode()
+                     || (image && image->props.hasAttr_ && image->props.attr_.hasSizePolicyValue_
+                         && image->props.attr_.sizePolicyValue_ == IMAGE_VIEW_SIZE_INTRINSIC))
+            {
+              if (!queryNaturalWidth(child, gap, source, measured))
+                return false;
+            }
+            resolved = measured;
+          }
+          if (resolved > SHRT_MAX)
+            return false;
+          if (resolved > maximum)
+            maximum = resolved;
+        }
+        width = static_cast<short>(maximum);
+        return true;
+      }
+
       RowWidthConsultation::RowWidthConsultation(loka::app::scene::Node *childrenHead,
                                                  size_t childCount,
                                                  int availableWidth,

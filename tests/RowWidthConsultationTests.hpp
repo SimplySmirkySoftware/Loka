@@ -26,4 +26,11 @@ void testStackNaturalWidthDeclinesIncompleteAndOverflow();
 void testStackNaturalWidthColumnDeclaredWidths();
 void testStackNaturalWidthReadsLiveAxis();
 
+void testContentOverflowIgnoresOfferBoundText();
+void testContentOverflowOfferBoundAnswersZero();
+void testContentOverflowNaturalDeclinePreservesOutput();
+void testContentOverflowNestedMaximumAndOverflow();
+void testContentOverflowBoxPaddingIsOfferBound();
+void testContentOverflowRibbonUsesNaturalMeasurement();
+
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP
