@@ -72,6 +72,9 @@ namespace loka
         return clampToAvailable(declared < 0 ? availableWidth : declared, availableWidth);
       }
 
+      /** Nestable without its own container or projected layout. */
+      bool isLayoutPassThrough(loka::app::scene::Node *node);
+
       /** Whether a child occupies a container seat, independently of its size. */
       bool childTakesLayoutSeat(loka::app::scene::Node *child);
 

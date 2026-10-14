@@ -3,6 +3,7 @@
 #include <cassert>
 #include <climits>
 #include "app/layout/CanvasLayout.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "app/RectSurface.hpp"
@@ -24,9 +25,20 @@
       return 0;
     }
     short maxWidth = 0;
+    bool seatSeen = false;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      // Keep the pass-through gap in step with the Toolbox Column.
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      if (takesSeat && seatSeen)
+      {
+        const int gapY = state.y + state.spacing;
+        if (controller->refuseNarrowingInScrollScope(gapY))
+          break;
+        state.y = static_cast<short>(gapY);
+      }
+      seatSeen = seatSeen || takesSeat;
       short width = LayoutNode(child, state, controller, currentBoundary);
       if (controller && controller->refuseNarrowingInScrollScope(state.y))
       {

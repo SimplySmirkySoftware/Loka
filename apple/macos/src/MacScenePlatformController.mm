@@ -950,9 +950,20 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
+    bool seatSeen = false;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      // Keep the pass-through gap in step with this rail's Column.
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      if (takesSeat && seatSeen)
+      {
+        const int gapY = childState.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+        if (this->refuseNarrowingInScrollScope(gapY))
+          break;
+        childState.y = gapY;
+      }
+      seatSeen = seatSeen || takesSeat;
       const int nextY = this->layoutNode(child, childState);
       if (this->refuseNarrowingInScrollScope(nextY))
       {

@@ -11,17 +11,29 @@ namespace loka
   {
     namespace layout
     {
+      bool isLayoutPassThrough(loka::app::scene::Node *node)
+      {
+        return node && node->asNestable() && !node->asProjectedLayoutNode()
+            && !node->asStackNode() && !node->asBoxNode() && !node->asGridNode()
+            && !node->asZStackNode() && !node->asScrollViewNode()
+            && !node->asRibbonGroupNode() && !node->asCanvasNode()
+            && !node->asRectSurfaceNode();
+      }
+
       bool childTakesLayoutSeat(loka::app::scene::Node *child)
       {
-        if (!child || child->asOpenFileDialogNode())
+        if (!child || child->asOpenFileDialogNode() || child->asConfirmDialogNode())
           return false;
-        if (child->propsTypeId() == loka::app::FragmentProps::staticTypeId())
+        if (isLayoutPassThrough(child))
         {
-          loka::app::scene::INestable *fragment = child->asNestable();
-          if (!fragment || fragment->childrenCount() == 0)
-            return false;
-          if (fragment->childrenCount() == 1)
-            return childTakesLayoutSeat(fragment->childrenHead());
+          loka::app::scene::INestable *nestable = child->asNestable();
+          loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
+          for (loka::app::scene::Node *seat = it.next(); seat; seat = it.next())
+          {
+            if (childTakesLayoutSeat(seat))
+              return true;
+          }
+          return false;
         }
         return true;
       }

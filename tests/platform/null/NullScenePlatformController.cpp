@@ -845,8 +845,19 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
     return state.y;
   }
   loka::app::scene::LayoutState childState = state;
+  bool seatSeen = false;
   for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
   {
+    // Keep the pass-through gap in step with this rail's Column.
+    const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+    if (takesSeat && seatSeen)
+    {
+      const int gapY = childState.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+      if (this->refuseNarrowingInScrollScope(gapY))
+        break;
+      childState.y = static_cast<short>(gapY);
+    }
+    seatSeen = seatSeen || takesSeat;
     const int nextY = this->layoutNode(child, childState);
     if (this->refuseNarrowingInScrollScope(nextY))
     {

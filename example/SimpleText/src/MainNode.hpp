@@ -13,6 +13,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/Match.hpp"
+#include "app/nodes/nestable/Show.hpp"
 #include "app/nodes/nestable/PolicyScope.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/Menu.hpp"
@@ -246,6 +247,7 @@ namespace simpletext
       this->state(this->saveResult_, Choice());
       this->state(this->confirmResult_, loka::app::ConfirmResult::none());
       this->state(this->error_, loka::core::String());
+      this->state(this->errorVisible_, false);
       this->state(this->cursor_, loka::app::LineCursor::None());
       this->state(this->caret_, loka::app::LineCursor::None());
     }
@@ -257,7 +259,7 @@ namespace simpletext
       {
         if (this->lines_.attach(this->tracker()->asPushTracker(), loka::app::TextEditorProps::kMaxLines)
             != loka::core::ATTACH_OK)
-          this->error_.set(loka::core::String::Literal("Cannot allocate document."));
+          this->setError(loka::core::String::Literal("Cannot allocate document."));
         else
           this->commitDocument(NEW_DOCUMENT, Choice());
       }
@@ -329,7 +331,8 @@ namespace simpletext
                             << RibbonItem("Open...").onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                             << RibbonItem("Save").onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
                             << RibbonItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())))
-                    << Text(this->error_.state()).TEST_ID("SimpleText.Error")
+                    << (Show(*this->errorVisible_.state())
+                        << Text(this->error_.state()).TEST_ID("SimpleText.Error"))
                     << TextEditor(this->lines_, this->cursor_) //
                            .moveCaretTo(this->caret_)
                            .TEST_ID("SimpleText.Editor"))
@@ -340,6 +343,12 @@ namespace simpletext
 #ifdef TEST_BUILD
     friend class ::SimpleTextTestAccess;
 #endif
+    void setError(const loka::core::String &error)
+    {
+      this->error_.set(error);
+      this->errorVisible_.set(!error.empty());
+    }
+
     void onCommand(FileCommand command)
     {
       switch (command)
@@ -370,7 +379,7 @@ namespace simpletext
       {
         loka::core::StateTrackerGuard guard(this->tracker());
         if (this->props.documents()->open(Document()).isNone())
-          this->error_.set(loka::core::String::Literal("Cannot open another document window."));
+          this->setError(loka::core::String::Literal("Cannot open another document window."));
       }
     }
     void onCloseAsked()
@@ -427,7 +436,7 @@ namespace simpletext
         this->closeDocument();
         break;
       case ConfirmResult::CONFIRM_ERROR:
-        this->error_.set(loka::core::String::Literal("Confirmation dialog failed."));
+        this->setError(loka::core::String::Literal("Confirmation dialog failed."));
         this->declineConfirmedClose();
         break;
       case ConfirmResult::CONFIRM_SAVE:
@@ -495,7 +504,7 @@ namespace simpletext
         return;
       case Choice::RESULT_FOLDER:
       case Choice::RESULT_ERROR:
-        this->error_.set(loka::core::String::Literal("File dialog failed."));
+        this->setError(loka::core::String::Literal("File dialog failed."));
         break;
       case Choice::RESULT_CANCELED:
       case Choice::RESULT_NONE:
@@ -554,12 +563,12 @@ namespace simpletext
       }
       if (!committed)
       {
-        this->error_.set(failureText(action, result));
+        this->setError(failureText(action, result));
         return false;
       }
       this->saved_ = loka::app::scene::KeySnapshot<loka::core::ListRevision>(&this->lines_.revision());
       this->publishFacts(destination);
-      this->error_.set(loka::core::String());
+      this->setError(loka::core::String());
       if (action != SAVE_DOCUMENT)
         this->caret_.set(LineCursor(this->lines_.at(0).id, 0));
       return true;
@@ -608,6 +617,7 @@ namespace simpletext
     loka::app::scene::NodeState<Choice> openResult_, saveResult_;
     loka::app::scene::NodeState<loka::app::ConfirmResult> confirmResult_;
     loka::app::scene::NodeState<loka::core::String> error_;
+    loka::app::scene::NodeState<bool> errorVisible_;
     loka::app::scene::FlowSlot<ChoiceFlow> openFlow_, saveFlow_;
   };
 } // namespace simpletext
