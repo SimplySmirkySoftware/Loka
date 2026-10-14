@@ -8,6 +8,7 @@
 #include "support/MacRetirementProbe.hpp"
 #include "support/TestVerify.hpp"
 #include "support/RailTextLayoutFixture.hpp"
+#include "support/MacNativeRefusal.hpp"
 #include <cmath>
 
 #include <AppKit/AppKit.h>
@@ -1247,30 +1248,6 @@ namespace
   {
     return nil;
   }
-
-  /** Test-only scoped native refusal, installed on the measured cell class. */
-  class MacTextNativeRefusal
-  {
-  public:
-    MacTextNativeRefusal(SEL selector, IMP replacement, Class cell = [NSTextFieldCell class])
-    {
-      Method inherited = class_getInstanceMethod(cell, selector);
-      LOKA_VERIFY(inherited != 0);
-      class_addMethod(cell, selector, method_getImplementation(inherited), method_getTypeEncoding(inherited));
-      this->method_ = class_getInstanceMethod(cell, selector);
-      this->original_ = method_setImplementation(this->method_, replacement);
-    }
-    ~MacTextNativeRefusal()
-    {
-      method_setImplementation(this->method_, this->original_);
-    }
-
-  private:
-    Method method_;
-    IMP original_;
-    MacTextNativeRefusal(const MacTextNativeRefusal &);
-    MacTextNativeRefusal &operator=(const MacTextNativeRefusal &);
-  };
 } // namespace
 
 void testMacTextNaturalWidthDeclines()
@@ -1318,13 +1295,13 @@ void testMacTextNaturalWidthDeclines()
                                 reinterpret_cast<IMP>(&MacNanTextMeasurement)};
     for (int i = 0; i < 4; ++i)
     {
-      MacTextNativeRefusal refusal(@selector(cellSizeForBounds:), measurements[i]);
+      MacNativeRefusal refusal(@selector(cellSizeForBounds:), measurements[i]);
       width = 17;
       LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
       LOKA_VERIFY(width == 17);
     }
     {
-      MacTextNativeRefusal refusal(@selector(font), reinterpret_cast<IMP>(&MacMissingTextFont));
+      MacNativeRefusal refusal(@selector(font), reinterpret_cast<IMP>(&MacMissingTextFont));
       width = 17;
       LOKA_VERIFY(!controller.queryNaturalWidth(&retry, width));
       LOKA_VERIFY(width == 17);
@@ -1334,7 +1311,7 @@ void testMacTextNaturalWidthDeclines()
   }
   MacScenePlatformController *missingFont = 0;
   {
-    MacTextNativeRefusal refusal(
+    MacNativeRefusal refusal(
         @selector(systemFontOfSize:), reinterpret_cast<IMP>(&MacMissingSystemFont), object_getClass([NSFont class]));
     missingFont = new MacScenePlatformController(root, RailMetrics());
   }
