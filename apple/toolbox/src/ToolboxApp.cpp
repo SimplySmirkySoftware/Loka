@@ -341,27 +341,35 @@ void ToolboxApp::run()
       }
       else if (part == inContent && target)
       {
-        ToolboxWindow *clicked = 0;
-        if (group_)
+        if (target != FrontWindow())
         {
-          const AppComponentGroup::Components comps = group_->getComponents();
-          for (std::size_t i = 0; i < comps.size(); ++i)
+          // The first content click selects a back window without reaching its content.
+          SelectWindow(target);
+        }
+        else
+        {
+          ToolboxWindow *clicked = 0;
+          if (group_)
           {
-            Window *w = comps[i]->asWindow();
-            ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-            if (toolboxWindow && toolboxWindow->window() == target)
+            const AppComponentGroup::Components comps = group_->getComponents();
+            for (std::size_t i = 0; i < comps.size(); ++i)
             {
-              clicked = toolboxWindow;
-              break;
+              Window *w = comps[i]->asWindow();
+              ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+              if (toolboxWindow && toolboxWindow->window() == target)
+              {
+                clicked = toolboxWindow;
+                break;
+              }
             }
           }
-        }
-        if (clicked)
-        {
-          if (!clicked->hasPendingInvalidate())
+          if (clicked)
           {
-            clicked->handleMouseDown(event.where);
-            this->cursorOwner_.reconcile();
+            if (!clicked->hasPendingInvalidate())
+            {
+              clicked->handleMouseDown(event.where);
+              this->cursorOwner_.reconcile();
+            }
           }
         }
       }
