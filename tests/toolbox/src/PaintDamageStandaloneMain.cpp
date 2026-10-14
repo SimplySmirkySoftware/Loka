@@ -2535,16 +2535,16 @@ namespace
       for (short x = left; x <= right; ++x)
         solid = solid && GetPixel(x, bottom) != 0;
       unsigned density = 0;
-      for (short y = top; y < top + 8; ++y)
-        density += GetPixel(left, y) != 0;
+      for (int y = top; y < top + 8; ++y)
+        density += GetPixel(left, static_cast<short>(y)) != 0;
       const bool dark = GetPixel(left, bottom - 1) != 0;
       const bool inset = !GetPixel(left + 1, top + 1) && !GetPixel(right - 1, bottom - 1);
       // The caption and button occupy the inset interior, which still contains ink.
       bool buttonInk = false, captionInk = false;
       for (short x = left + RibbonGroupNode::kFrameInset; x <= right - RibbonGroupNode::kFrameInset; ++x)
       {
-        for (short y = top + RibbonGroupNode::kFrameInset; y < top + 24; ++y)
-          buttonInk = buttonInk || GetPixel(x, y) != 0;
+        for (int y = top + RibbonGroupNode::kFrameInset; y < top + 24; ++y)
+          buttonInk = buttonInk || GetPixel(x, static_cast<short>(y)) != 0;
         for (short y = top + 26; y < bottom - 3; ++y)
           captionInk = captionInk || GetPixel(x, y) != 0;
       }
