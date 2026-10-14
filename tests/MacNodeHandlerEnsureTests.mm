@@ -1442,7 +1442,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       const NSRect bottom = [[edgeViews objectAtIndex:2] frame];
       const int groupWidth = seat + 2 * RibbonGroupNode::kFrameInset;
       LOKA_VERIFY(NSMinX(left) == projection.projectEdge(groupX).pt);
-      LOKA_VERIFY(NSMinY(left) == projection.projectEdge(20).pt);
+      LOKA_VERIFY(NSMinY(left) == projection.projectEdge(layout::SceneRootLayout::kInset).pt);
       LOKA_VERIFY(NSMaxX(left) == projection.projectEdge(groupX + 1).pt);
       LOKA_VERIFY(NSMinX(right) == projection.projectEdge(groupX + groupWidth - 1).pt);
       LOKA_VERIFY(NSMaxX(right) == projection.projectEdge(groupX + groupWidth).pt);
