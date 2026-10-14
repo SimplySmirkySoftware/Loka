@@ -16,6 +16,54 @@
 #include <Windows.h>
 #include <Devices.h>
 #include "platform/StringUTF8.hpp"
+#include <cstdio>
+#include "core/io/File.hpp"
+#include "platform/file/AppLocation.hpp"
+#include "platform/file/FileIO.hpp"
+
+// PROBE ONLY (probe/activate-flag): never merged.
+namespace activate_probe
+{
+  std::FILE *log = 0;
+  loka::platform::file::FileHandle file;
+  unsigned long pass = 0;
+  void Open()
+  {
+    if (loka::platform::file::ResolveApplicationSidecar(
+            loka::file::File::Application() << loka::file::File("LOG.TXT"), file))
+    {
+      log = loka::platform::file::OpenWriteTruncate(file);
+      if (log)
+        std::setvbuf(log, 0, _IONBF, 0);
+    }
+  }
+  char Label(AppComponentGroup *group, Window *window)
+  {
+    if (!window)
+      return '-';
+    if (!group)
+      return '?';
+    const AppComponentGroup::Components comps = group->getComponents();
+    for (std::size_t i = 0; i < comps.size(); ++i)
+      if (comps[i]->asWindow() == window)
+        return static_cast<char>('A' + i);
+    return '?';
+  }
+  char LabelNative(AppComponentGroup *group, WindowPtr native)
+  {
+    if (!group)
+      return '?';
+    const AppComponentGroup::Components comps = group->getComponents();
+    for (std::size_t i = 0; i < comps.size(); ++i)
+    {
+      Window *w = comps[i]->asWindow();
+      ToolboxWindow *tw = w ? w->asToolboxWindow() : 0;
+      if (tw && tw->window() == native)
+        return static_cast<char>('A' + i);
+    }
+    return 'x';
+  }
+}
 
 namespace
 {
@@ -240,6 +288,43 @@ void ToolboxApp::run()
   {
     EventRecord event;
     WaitNextEvent(everyEvent, &event, 1, 0);
+    ++activate_probe::pass;
+    {
+      static unsigned long probeStart = 0;
+      static unsigned long triggerTick = 0;
+      if (!probeStart)
+      {
+        probeStart = TickCount();
+        activate_probe::Open();
+        if (activate_probe::log)
+          std::fprintf(activate_probe::log, "probe start active=%c\r", activate_probe::Label(group_, activeWindow()));
+      }
+      if (!triggerTick && TickCount() - probeStart >= 180)
+      {
+        triggerTick = TickCount();
+        if (activate_probe::log)
+          std::fprintf(activate_probe::log, "pass=%lu trigger File>New active=%c\r", activate_probe::pass, activate_probe::Label(group_, activeWindow()));
+        this->handleMenuSelection(129, 1);
+        if (activate_probe::log)
+          std::fprintf(activate_probe::log, "pass=%lu after File>New active=%c\r", activate_probe::pass, activate_probe::Label(group_, activeWindow()));
+      }
+      else if (triggerTick && TickCount() - triggerTick >= 300)
+      {
+        if (activate_probe::log)
+        {
+          std::fprintf(activate_probe::log, "pass=%lu done active=%c front=%c\r", activate_probe::pass, activate_probe::Label(group_, activeWindow()), activate_probe::LabelNative(group_, FrontWindow()));
+          loka::platform::file::FlushWrite(activate_probe::log, activate_probe::file);
+          std::fclose(activate_probe::log);
+        }
+        ExitToShell();
+      }
+    }
+    if (event.what == activateEvt && activate_probe::log)
+      std::fprintf(activate_probe::log, "pass=%lu activateEvt target=%c activeFlag=%d active-before=%c\r",
+                   activate_probe::pass,
+                   activate_probe::LabelNative(group_, reinterpret_cast<WindowPtr>(event.message)),
+                   (event.modifiers & activeFlag) ? 1 : 0,
+                   activate_probe::Label(group_, activeWindow()));
     loka::core::Operation turn;
     // Consume the OS foreground fact before idle work or hover can write the
     // shared cursor on the iteration that delivers a suspend event.
@@ -405,7 +490,10 @@ void ToolboxApp::run()
           ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
           if (toolboxWindow && toolboxWindow->window() == target)
           {
-            setActiveWindow(toolboxWindow);
+            if ((event.modifiers & activeFlag) != 0)
+              setActiveWindow(toolboxWindow);
+            if (activate_probe::log)
+              std::fprintf(activate_probe::log, "pass=%lu   -> active-after=%c\r", activate_probe::pass, activate_probe::Label(group_, activeWindow()));
             // The grow icon follows the window hilite state; redraw only
             // its corner through the ordinary update event.
             toolboxWindow->invalidateGrowIcon();
@@ -513,4 +601,12 @@ void ToolboxApp::requestMenuBarDraw()
     return;
   }
   menuBarDrawDeferred_ = true;
+}
+
+// PROBE ONLY
+void ActivateProbeNoteProjection(AppComponentGroup *group, Window *window, bool rebuilt)
+{
+  if (activate_probe::log)
+    std::fprintf(activate_probe::log, "pass=%lu projectMenu window=%c rebuilt=%d\r",
+                 activate_probe::pass, activate_probe::Label(group, window), rebuilt ? 1 : 0);
 }

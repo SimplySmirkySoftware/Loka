@@ -441,6 +441,8 @@ bool ToolboxMenuAttachment::dispatch(short menuId, short item)
   return false;
 }
 
+void ActivateProbeNoteProjection(AppComponentGroup *group, Window *window, bool rebuilt);
+
 ToolboxApp::~ToolboxApp()
 {
   this->retireComponents();
@@ -450,7 +452,9 @@ void ToolboxApp::projectMenu(Window *activeWindow, const loka::app::MenuSources 
 {
   if (activeWindow != this->activeWindow())
     return;
-  if (this->menuAttachment_.project(sources) && activeWindow && activeWindow->asToolboxWindow())
+  const bool rebuilt = this->menuAttachment_.project(sources);
+  ActivateProbeNoteProjection(this->group_, activeWindow, rebuilt);
+  if (rebuilt && activeWindow && activeWindow->asToolboxWindow())
     activeWindow->asToolboxWindow()->preserveNativeContentPositionAfterMenuBarChange();
 }
 
