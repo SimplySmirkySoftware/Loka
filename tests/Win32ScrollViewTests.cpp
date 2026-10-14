@@ -1,5 +1,6 @@
 #include "Win32ScrollViewTests.hpp"
 
+#include "app/layout/SceneRootLayout.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -314,8 +315,8 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
            "content y must project as viewport-client y minus offset");
 
     const SCROLLINFO info = scrollInfo(viewport);
-    assert(info.nPage == 100);
-    assert(maximumOffset(info) == 164);
+    assert(info.nPage == 140 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    assert(maximumOffset(info) == 264 - (140 - 2 * loka::app::layout::SceneRootLayout::kInset));
     assert(info.nPos == 10);
 
     // Release the root pointer before the nodes leave scope so the
@@ -587,10 +588,10 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == 64);
+    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
     assert(offset.changeCount() == 1 &&
            "a range-changing resize must publish one clamped fact");
-    assert(scrollInfo(viewport).nPos == 64);
+    assert(scrollInfo(viewport).nPos == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1 &&
            "the settled clamp must not be published again");
@@ -608,7 +609,7 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     offset.state().set(40000);
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 204 &&
+    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
            "an oversized offset must recover to the content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);

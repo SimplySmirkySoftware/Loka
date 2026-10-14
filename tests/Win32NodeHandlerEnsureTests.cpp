@@ -18,6 +18,7 @@
 #include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "core/StateTracker.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -64,7 +65,7 @@ namespace
   {
     using namespace loka::app;
     const int count = 3;
-    const int height = 40 + count * layout::FallbackControlMetrics::kButtonHeight
+    const int height = 2 * layout::SceneRootLayout::kInset + count * layout::FallbackControlMetrics::kButtonHeight
                        + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
     const RailMetrics metrics[] = {RailMetrics(), loka::win32::DefaultRailMetrics()};
     for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
@@ -94,7 +95,7 @@ namespace
         Win32ButtonContext *context = static_cast<Win32ButtonContext *>(last->getContext());
         LOKA_VERIFY(context != 0);
         const RECT frame = childRectInParent(context->hwnd(), root);
-        LOKA_VERIFY(frame.bottom == scale.projectEdge(height - 20));
+        LOKA_VERIFY(frame.bottom == scale.projectEdge(height - layout::SceneRootLayout::kInset));
         LOKA_VERIFY(frame.bottom <= client.bottom);
         controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
       }
@@ -171,10 +172,11 @@ namespace
             const int minimum = fontHeight > 20 ? fontHeight : 20;
             const int padded = scale.measurementToLu(nativeHeight) + 8;
             const int textHeight = padded > minimum ? padded : minimum;
-            const int captionY = boxed ? 190 : 20 + textHeight + 12;
+            const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
             const int buttonY = captionY + 20 + 12;
             const RECT pageFrame = childRectInParent(page, root);
-            const RECT expectedPage = scale.projectFrame(loka::core::Frame(20, 20, 300, textHeight)).r;
+            const RECT expectedPage = scale.projectFrame(loka::core::Frame(
+                layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r;
             LOKA_VERIFY(EqualRect(&pageFrame, &expectedPage));
             LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY));
             const RECT buttonFrame = childRectInParent(button, root);
@@ -1487,8 +1489,8 @@ void testWin32RibbonGroupNaturalWidthTraversal()
         const int groupWidth = itemsWidth > captionWidth ? itemsWidth : captionWidth;
         if (captionIndex == 1)
           LOKA_VERIFY(captionWidth > itemsWidth);
-        const int groupX = 20 + widths[0] + gap;
-        verifyButtonSeat(buttons[0], root, scale, 20, widths[0]);
+        const int groupX = layout::SceneRootLayout::kInset + widths[0] + gap;
+        verifyButtonSeat(buttons[0], root, scale, layout::SceneRootLayout::kInset, widths[0]);
         int x = groupX + RibbonGroupNode::kFrameInset;
         for (int i = 1; i < 4; ++i)
         {
@@ -1548,7 +1550,7 @@ void testWin32RibbonNaturalWidthTraversal()
       const int widths[] = {expectedPushButtonWidth(controller, L"New"),
                             expectedPushButtonWidth(controller, L"Save As..."), 120};
       const int gap = layout::FallbackControlMetrics::rowLayout().gap;
-      int x = 20;
+      int x = layout::SceneRootLayout::kInset;
       for (int i = 0; i < 3; ++i)
       {
         ButtonNode *button = 0;
@@ -1564,8 +1566,8 @@ void testWin32RibbonNaturalWidthTraversal()
         x += widths[i] + gap;
       }
       // Different titles remain equal seats in an ordinary Row.
-      const int sharedWidth = (640 - 40 - gap) / 2;
-      LOKA_VERIFY(2 * sharedWidth + gap == 600);
+      const int sharedWidth = (640 - 2 * layout::SceneRootLayout::kInset - gap) / 2;
+      LOKA_VERIFY(2 * sharedWidth + gap == 640 - 2 * layout::SceneRootLayout::kInset);
       for (int i = 0; i < 2; ++i)
       {
         ButtonNode *button = 0;
@@ -1573,7 +1575,7 @@ void testWin32RibbonNaturalWidthTraversal()
         LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("sharedRow").descendant<ButtonNode>(i + 1),
                                     button, error) == FLOW_STEP_SUCCEEDED);
         LOKA_VERIFY(button != 0);
-        verifyButtonSeat(button, root, scale, 20 + i * (sharedWidth + gap), sharedWidth);
+        verifyButtonSeat(button, root, scale, layout::SceneRootLayout::kInset + i * (sharedWidth + gap), sharedWidth);
       }
       SceneTestAccess::unmount(scene);
       controller.drainNativeRetirements();
@@ -1603,8 +1605,9 @@ void testWin32NaturalWidthDirectRow()
     controller.relayout(640, 160);
     const int firstWidth = expectedPushButtonWidth(controller, L"New");
     const int secondWidth = expectedPushButtonWidth(controller, L"Save As...");
-    verifyButtonSeat(first, root, scale, 20, firstWidth);
-    verifyButtonSeat(second, root, scale, 20 + firstWidth + layout::FallbackControlMetrics::rowLayout().gap,
+    verifyButtonSeat(first, root, scale, layout::SceneRootLayout::kInset, firstWidth);
+    verifyButtonSeat(second, root, scale,
+                     layout::SceneRootLayout::kInset + firstWidth + layout::FallbackControlMetrics::rowLayout().gap,
                      secondWidth);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }

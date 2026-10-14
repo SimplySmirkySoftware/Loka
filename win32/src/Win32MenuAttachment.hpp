@@ -2,7 +2,7 @@
 #define LOKA_WIN32_MENU_ATTACHMENT_HPP
 
 #include "app/Menu.hpp"
-#include "core/util/OwnedDef.hpp"
+#include "app/MenuProjectionRecord.hpp"
 #include <windows.h>
 #include <vector>
 #include <string>
@@ -17,18 +17,15 @@ class Win32MenuAttachment
 public:
   explicit Win32MenuAttachment(Win32Window &window);
   ~Win32MenuAttachment();
-  /** Equal offers return false. Snapshot refusal clears the baseline while
-      keeping the installed projection; native build refusal preserves it. */
-  /** project() answers three ways so the caller can tell a refused native swap
-      (nothing changed, keep the pending diff) from an equal offer or a swap. */
+  /** Refusal preserves the installed projection for retry. Unchanged identity
+      skips merge and native work; success commits the offered identity. */
   enum ProjectResult
   {
     PROJECT_APPLIED,
     PROJECT_UNCHANGED,
     PROJECT_REFUSED
   };
-  ProjectResult project(const loka::app::MenuBarDefinition *bar,
-               const loka::app::scene::Scene *source);
+  ProjectResult project(const loka::app::MenuSources &sources);
   void disconnect();
   void releaseFrom(const loka::app::scene::Scene *source);
   bool dispatch(int commandId);
@@ -90,7 +87,6 @@ private:
   int nextCommandId_;
   std::vector<MenuCommand> commands_;
   std::vector<MenuBinding *> bindings_;
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> applied_;
-  const loka::app::scene::Scene *source_;
+  loka::app::MenuProjectionRecord record_;
 };
 #endif

@@ -17,8 +17,7 @@ class ToolboxApp : public App
 public:
   explicit ToolboxApp(AppConfigurable *config = 0) : App(config), menuAttachment_(*this), phase_(ACTIVATION_FOREGROUND), deferred_(false), redraws(0), quits(0) {}
   virtual ~ToolboxApp();
-  virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source);
+  virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
   void handleMenuSelection(short menuId, short item);
   ToolboxMenuAttachment &menuAttachment() { return this->menuAttachment_; }
   void requestMenuBarDraw()

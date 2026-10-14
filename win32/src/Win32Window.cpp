@@ -290,6 +290,8 @@ bool Win32Window::detachMenuForTeardown(HMENU expectedMenu)
 
 void Win32Window::setApp(Win32App *app)
 {
+  if (this->app_ != app)
+    this->menuAttachment_.disconnect();
   app_ = app;
   if (app_ && hwnd_)
   {

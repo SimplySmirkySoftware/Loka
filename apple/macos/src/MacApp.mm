@@ -212,10 +212,9 @@ void MacApp::dispatchNativeMenuCommand(int commandId)
   this->menuAttachment_.dispatch(commandId);
 }
 
-void MacApp::projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                         const loka::app::scene::Scene *source)
+void MacApp::projectMenu(Window *window, const loka::app::MenuSources &sources)
 {
   if (window != this->activeWindow() || IsEventTrackingRunLoopMode())
     return;
-  this->menuAttachment_.project(bar, source);
+  this->menuAttachment_.project(sources);
 }
