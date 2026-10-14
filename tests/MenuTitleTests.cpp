@@ -1,3 +1,4 @@
+#include "support/MenuStructure.hpp"
 #include "MenuTitleTests.hpp"
 #include "app/Menu.hpp"
 #include "platform/null/NullMenuAttachment.hpp"
@@ -26,9 +27,9 @@ void testMenuTitleDefinitionCopiesAndSelectsState()
   loka::core::OwnedDef<MenuItemDefinition> cloned(original.clone());
   LOKA_VERIFY(copy.titleState == &first && assigned.titleState == &first);
   LOKA_VERIFY(cloned.isSet() && cloned->titleState == &first);
-  LOKA_VERIFY(original.equalsStructure(copy) && original.equalsStructure(assigned));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(original, copy) && loka::app::testing::EqualsStructure(original, assigned));
   copy.text(&second);
-  LOKA_VERIFY(!original.equalsStructure(copy));
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(original, copy));
   copy.text(static_cast<State<String> *>(0));
   LOKA_VERIFY(!copy.titleState && copy.title.equals(String::Literal("Fallback")));
   copy.text(&first).text("Constant");
@@ -36,7 +37,7 @@ void testMenuTitleDefinitionCopiesAndSelectsState()
   copy.text(&first).text(String::Literal("Value"));
   LOKA_VERIFY(!copy.titleState && copy.title.equals(String::Literal("Value")));
   MenuItemDefinition differentFallback = MenuItem("Other").text(&first);
-  LOKA_VERIFY(!original.equalsStructure(differentFallback));
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(original, differentFallback));
 }
 
 void testNullMenuTitleFollowsStateAndDisconnects()
@@ -70,9 +71,19 @@ void testMenuStructureComparisonSeesItemsOfEveryMenu()
   MenuBarDefinition before;
   before << (Menu("File") << MenuItem("Open"))
          << (Menu("Edit") << MenuItem("Option"));
-  LOKA_VERIFY(before.equalsStructure(before));
-  const MenuCompositionDiff equal = MenuCompositionDiff::DiffProjection(&before, before);
-  LOKA_VERIFY(equal.valid && !equal.fullRebuild && equal.changedCount() == 0);
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(before, before));
+  MenuBarDefinition extraMenu(before);
+  extraMenu << Menu("Help");
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(before, extraMenu));
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(extraMenu, before));
+  MenuBarDefinition extraItem(before);
+  *extraItem.menuAt(1) << MenuItem("Extra");
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(before, extraItem));
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(extraItem, before));
+  MenuBarDefinition extraChild(before);
+  *extraChild.menuAt(1)->itemsHead() << MenuItem("Child");
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(before, extraChild));
+  LOKA_VERIFY(!loka::app::testing::EqualsStructure(extraChild, before));
   for (unsigned change = 0; change != 3; ++change)
   {
     MenuBarDefinition after;
@@ -84,11 +95,7 @@ void testMenuStructureComparisonSeesItemsOfEveryMenu()
     else
       second << MenuItem("Renamed");
     after << (Menu("File") << MenuItem("Open")) << second;
-    LOKA_VERIFY(!before.equalsStructure(after));
-    LOKA_VERIFY(!after.equalsStructure(before));
-    const MenuCompositionDiff diff = MenuCompositionDiff::DiffProjection(&before, after);
-    LOKA_VERIFY(diff.valid && !diff.fullRebuild && diff.changedCount() == 1);
-    LOKA_VERIFY(diff.changedHead()->value == 1);
-    LOKA_VERIFY(diff.changedHead()->nextInComposition == 0);
+    LOKA_VERIFY(!loka::app::testing::EqualsStructure(before, after));
+    LOKA_VERIFY(!loka::app::testing::EqualsStructure(after, before));
   }
 }

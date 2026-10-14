@@ -23,8 +23,7 @@ public:
 
 protected:
   virtual bool windowAdopted(Window *window);
-  virtual void projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                           const loka::app::scene::Scene *source);
+  virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
 
 private:
   void startInvalidationFlushTimer();

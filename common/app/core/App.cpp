@@ -62,7 +62,7 @@ void App::run()
     loka::app::MenuComposition menuComposition(&bar);
     config_->composeDefaultMenu(menuComposition);
     menuComposition.finish();
-    this->setDefaultMenuBar(bar.empty() ? 0 : &bar);
+    this->defaultMenuBar_.reset(bar.empty() ? 0 : bar.clone());
     group_ = new AppComponentGroup(composition.build());
     this->windowSeat_ = composition.takeWindowSeat();
     const AppComponentGroup::Components components = this->group_->getComponents();
@@ -623,19 +623,6 @@ bool App::handleMenuCommand(int commandId, Window *window)
   return false;
 }
 
-void App::setDefaultMenuBar(const loka::app::MenuBarDefinition *menuBar)
-{
-  if (menuBar)
-  {
-    loka::core::OwnedDef<loka::app::MenuBarDefinition> next(menuBar->clone());
-    if (!next.isSet())
-      return;
-    this->defaultMenuBar_.reset(next.take());
-  }
-  else
-    this->defaultMenuBar_.reset();
-}
-
 void App::setActiveWindow(Window *window)
 {
   if (activeWindow_ == window)
@@ -645,18 +632,16 @@ void App::setActiveWindow(Window *window)
   activeWindow_ = window;
 }
 
-void App::projectMenu(Window *window, const loka::app::MenuBarDefinition *bar,
-                      const loka::app::scene::Scene *source)
+void App::projectMenu(Window *window, const loka::app::MenuSources &sources)
 {
   (void)window;
-  (void)bar;
-  (void)source;
+  (void)sources;
 }
 
 void App::projectMenuSources()
 {
   // One pass per admission (twice in a Win32 tail), plus bootstrap. Walk only
-  // App-owned rows; each offer owns one temporary merge, never a cached source.
+  // App-owned rows; offers borrow input identity with no allocation or merge.
   if (this->group_)
   {
     const AppComponentGroup::Components rows = this->group_->getComponents();
@@ -669,15 +654,15 @@ void App::projectMenuSources()
           this->defaultMenuBar();
       const loka::app::scene::Scene *scene = window->scene();
       const loka::app::MenuBarDefinition *overlay = scene ? scene->menuBar() : 0;
-      loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
-          loka::app::MergeMenuBars(base, overlay));
-      if ((base || overlay) && !merged.isSet())
-        continue;
-      this->projectMenu(window, merged.get(), overlay ? scene : 0);
+      const loka::app::MenuSources sources = {base, overlay, overlay ? scene : 0};
+      this->projectMenu(window, sources);
     }
   }
   if (!this->activeWindow_)
-    this->projectMenu(0, this->defaultMenuBar(), 0);
+  {
+    const loka::app::MenuSources sources = {this->defaultMenuBar(), 0, 0};
+    this->projectMenu(0, sources);
+  }
 }
 
 void App::reconcileFocus()

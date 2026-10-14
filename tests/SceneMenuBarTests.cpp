@@ -1,3 +1,4 @@
+#include "support/MenuStructure.hpp"
 #include "SceneMenuBarTests.hpp"
 
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -221,7 +222,7 @@ void testSceneMenuBarPublishedWithRoot()
   const MenuBarDefinition *snapshot = scene.menuBar();
   LOKA_VERIFY(snapshot);
   const MenuBarDefinition expected = bar(snapshot->menusHead()->itemsHead()->onClickState);
-  LOKA_VERIFY(snapshot->equalsStructure(expected));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*snapshot, expected));
   window.teardownScene();
   LOKA_VERIFY(!scene.menuBar());
 }
@@ -331,7 +332,7 @@ void testMenuAttachmentDisconnectsOnDetachBeforeRootTeardown()
   NullMenuAttachment &attachment = window.scenePlatformController()->menuAttachment();
   f.attachment = &attachment;
   LOKA_VERIFY(attachment.open(*window.scene()->menuBar()));
-  LOKA_VERIFY(attachment.applied()->equalsStructure(*window.scene()->menuBar()));
+  LOKA_VERIFY(loka::app::testing::EqualsStructure(*attachment.applied(), *window.scene()->menuBar()));
   attachment.dispatch(1);
   LOKA_VERIFY(f.calls == 1 && attachment.subscriptionCount() == 1);
   LOKA_VERIFY(attachment.values(1) == std::make_pair(true, false));

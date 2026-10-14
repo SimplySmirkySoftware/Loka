@@ -1,3 +1,4 @@
+#include "support/MenuStructure.hpp"
 #include "AttrDslTests.hpp"
 #include "support/TestVerify.hpp"
 
@@ -652,15 +653,15 @@ void testLokaAttrDslV1Core()
 
     loka::app::MenuItemDefinitionWithAttr right =
         loka::app::MenuItem("Open").attr(loka::app::MenuItemAttr().disabled(&disabledState));
-    assert(left.equalsStructure(right));
+    assert(loka::app::testing::EqualsStructure(left, right));
 
     loka::app::MenuItemDefinitionWithAttr changed =
         loka::app::MenuItem("Open").attr(loka::app::MenuItemAttr().disabled(false));
-    assert(!left.equalsStructure(changed));
+    assert(!loka::app::testing::EqualsStructure(left, changed));
 
     loka::app::MenuItemDefinitionWithAttr checkedChanged =
         loka::app::MenuItem("Open").attr(loka::app::MenuItemAttr().disabled(&disabledState).checked(true));
-    assert(!left.equalsStructure(checkedChanged));
+    assert(!loka::app::testing::EqualsStructure(left, checkedChanged));
   }
 
   // --- MenuItem.attr is chain-style: returned definition carries attr ---

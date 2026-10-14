@@ -1,4 +1,5 @@
 #include "Win32LiveResizeTests.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 
 #include "support/TestVerify.hpp"
 
@@ -251,7 +252,7 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
 
     controller.relayout(300, 240);
 
-    assert(offset.state().get() == 64);
+    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
     assert(offset.reentryCount() == 1 && "one range clamp must cause one synchronous layout reentry");
     if (hostPaints)
     {
