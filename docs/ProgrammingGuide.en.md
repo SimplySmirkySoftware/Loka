@@ -652,8 +652,9 @@ refused or no clock is active. Its optional callback is not invoked when joined;
 observe the State for post-commit work.
 
 `StandaloneTransactionGuard` is the bootstrap bracket for launch-time document
-facts and initial visibility before the first turn. Window retains a joining ledger;
-bootstrap uses the bracket before any Operation exists.
+facts and initial visibility. It opens only on an idle ledger that no turn has
+enrolled, commits before its owner reads, and never joins a turn that happens to
+be active. Window retains a joining ledger; bootstrap uses the bracket on it.
 Flow's run bracket and its `onSuccess` state assignment join the active
 clock too. Step writes keep source values and direct observers synchronous, but
 a following step or `finally` can still read the previous derived value until

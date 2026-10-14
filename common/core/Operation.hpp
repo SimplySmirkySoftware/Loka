@@ -60,7 +60,7 @@ namespace loka
         then reclaim; collection turns only collect, settle and close. Fair rounds
         visit the ledgers present at each round's start. WriteSeat enrolls its
         owner ledger through openActive, as does StateTrackerGuard.
-        StandaloneTransactionGuard opens its bootstrap bracket before any clock exists. */
+        StandaloneTransactionGuard brackets an idle, unenrolled ledger and never joins. */
     class Operation
     {
     public:

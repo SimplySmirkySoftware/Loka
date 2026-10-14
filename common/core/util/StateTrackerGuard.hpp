@@ -62,9 +62,11 @@ namespace loka
       StateTrackerGuard &operator=(const StateTrackerGuard &);
     };
 
-    /** The bootstrap bracket, used before any Operation exists on a joining
-        ledger. Its begin/end settles preparation before its owner reads the
-        result; its callback mechanism mirrors the OWNED bracket above. */
+    /** The bootstrap bracket. Its precondition is an idle ledger that no
+        Operation has enrolled; an unrelated turn may be active, and the bracket
+        never joins it (bootstrap visibility is pinned inside a turn). Its
+        begin/end settles preparation before its owner reads the result; its
+        callback mechanism mirrors the OWNED bracket above. */
     struct StandaloneTransactionGuard
     {
       typedef void (*InvalidateFn)(void *userData);
