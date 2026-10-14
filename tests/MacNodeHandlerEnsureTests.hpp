@@ -19,6 +19,8 @@ void testMacTextNaturalWidthDeclines();
 void testMacRibbonGroupNaturalWidthFrames();
 void testMacButtonNaturalWidthMatchesCell();
 void testMacRibbonNaturalWidthFrames();
+void testMacButtonNativeHeightColumn();
+void testMacButtonNativeHeightCenteredRow();
 void testMacDirectRowNaturalWidthFrames();
 void testMacOrdinaryRowStillSharesWidth();
 

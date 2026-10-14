@@ -2,6 +2,7 @@
 #define LOKA_MAC_SCENE_PLATFORM_CONTROLLER_HPP
 
 #include <vector>
+#include "app/layout/RowLayout.hpp"
 #include "core/resource/Image.hpp"
 #include "app/layout/TextShaping.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
@@ -65,6 +66,10 @@ public:
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Push-button cell measurement in Row allocation units; zero declines. */
   short measurePushButtonNaturalWidth(const loka::core::String &label) const;
+  /** Push-button cell height in lu; false leaves height untouched when measurement declines. */
+  bool measurePushButtonHeight(short &height) const;
+  /** Row metrics with the native push-button height when available. */
+  loka::app::layout::RowLayoutMetrics rowLayoutMetrics() const;
   /** Retire door for a RectSurface context: takes back that surface's pending
       seat rows so a surface reclaimed during delivery publishes nothing. */
   void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *surface)

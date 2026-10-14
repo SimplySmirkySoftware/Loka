@@ -4,6 +4,7 @@
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../platform/MacNativeGeometry.hpp"
+#include "../platform/MacPushButton.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "Utf8String.hpp"
@@ -83,9 +84,7 @@ MacButtonContext::MacButtonContext(MacScenePlatformController *controller,
   const loka::macos::MacRect frame =
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height));
   NSButton *button = [[NSButton alloc] initWithFrame:frame.r];
-  // Keep measurement configuration in measurePushButtonNaturalWidth in sync.
-  [button setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-  [button setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
+  loka::macos::ConfigureMacPushButton(button);
 
   LokaButtonTarget *target = [[LokaButtonTarget alloc] init];
   target.owner = this;
@@ -169,10 +168,11 @@ bool MacButtonContext::captureBitmap(loka::core::resource::Image &out) const
 
 short MacButtonContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
 {
-  this->relayout(state.x, state.y, state.width, loka::app::layout::FallbackControlMetrics::kButtonHeight);
-  state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kButtonHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kButtonHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  short height = loka::app::layout::FallbackControlMetrics::kButtonHeight;
+  this->controller()->measurePushButtonHeight(height);
+  this->relayout(state.x, state.y, state.width, height);
+  state.height = height;
+  return static_cast<short>(state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
 }
 
 void MacButtonContext::handlePress()

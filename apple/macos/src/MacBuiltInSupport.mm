@@ -36,8 +36,7 @@ namespace
 
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
-  const loka::app::layout::RowLayoutMetrics rowMetrics =
-      loka::app::layout::FallbackControlMetrics::rowLayout();
+  const loka::app::layout::RowLayoutMetrics rowMetrics = controller.rowLayoutMetrics();
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;

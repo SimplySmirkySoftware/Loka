@@ -1,4 +1,5 @@
 #include "MacScrollViewTests.hpp"
+#include "app/layout/FallbackControlMetrics.hpp"
 
 #include "app/layout/SceneRootLayout.hpp"
 #include "support/TestVerify.hpp"
@@ -166,9 +167,12 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
     {
       assert([[buttons objectAtIndex:i] superview] == documentView);
     }
-    LOKA_VERIFY(frameEquals([buttons objectAtIndex:0], 0, 0, [nativeScrollView contentSize].width, 32));
-    assert([(NSView *)[buttons objectAtIndex:1] frame].origin.y == 44);
-    assert([documentView frame].size.height == 264);
+    short buttonHeight = 0;
+    LOKA_VERIFY(controller.measurePushButtonHeight(buttonHeight));
+    const int advance = buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+    LOKA_VERIFY(frameEquals([buttons objectAtIndex:0], 0, 0, [nativeScrollView contentSize].width, buttonHeight));
+    assert([(NSView *)[buttons objectAtIndex:1] frame].origin.y == advance);
+    assert([documentView frame].size.height == 6 * advance);
     assert(clipOffset(nativeScrollView) == 10);
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
@@ -268,19 +272,24 @@ void testMacScrollViewResizeReclampsOffsetOnce()
   LOKA_VERIFY(root != nil);
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
+    short buttonHeight = 0;
+    LOKA_VERIFY(controller.measurePushButtonHeight(buttonHeight));
+    const int contentHeight = 6 * (buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    const int initialMax = contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
     OffsetFact offset(100);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 140);
     NSScrollView *nativeScrollView = scrollViewUnderRoot(root);
     LOKA_VERIFY(nativeScrollView != nil);
-    assert(offset.state().get() == 100);
+    assert(offset.state().get() == (initialMax <= 0 ? 0 : initialMax < 100 ? initialMax : 100));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.changeCount() == 1 && "a range-changing resize must publish one clamped fact");
-    assert(clipOffset(nativeScrollView) == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(clipOffset(nativeScrollView) == (resizedMax > 0 ? resizedMax : 0));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1);
 
@@ -293,8 +302,8 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     offset.state().set(40000);
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 264 - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
-           "an oversized offset must recover to the exact content maximum");
+    assert(offset.state().get() == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset)
+           && "an oversized offset must recover to the exact content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);

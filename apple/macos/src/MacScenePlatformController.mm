@@ -1,4 +1,5 @@
 #include "MacScenePlatformController.hpp"
+#include "platform/MacPushButton.hpp"
 #include "MacBitmapCapture.hpp"
 #include "MacInputDoor.hpp"
 #include "MacApp.hpp"
@@ -112,8 +113,7 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
   NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
   if (!button)
     return 0;
-  [button setBezelStyle:LOKA_MAC_BUTTON_BEZEL_STYLE];
-  [button setButtonType:LOKA_MAC_BUTTON_TYPE_MOMENTARY_PUSH_IN];
+  loka::macos::ConfigureMacPushButton(button);
   [button setTitle:loka::macos::CreateNSStringFromUtf8(utf8)];
   const CGFloat points = [[button cell] cellSize].width;
   [button release];
@@ -122,6 +122,31 @@ short MacScenePlatformController::measurePushButtonNaturalWidth(const loka::core
   if (!(points > 0 && points <= static_cast<double>(SHRT_MAX) * scale.num / scale.den))
     return 0;
   return static_cast<short>(this->projection_.measurementToLu(points));
+}
+
+bool MacScenePlatformController::measurePushButtonHeight(short &height) const
+{
+  NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
+  if (!button)
+    return false;
+  loka::macos::ConfigureMacPushButton(button);
+  const CGFloat points = [[button cell] cellSize].height;
+  [button release];
+  // Bound before the floating-to-integer conversion; NaN also declines.
+  const loka::app::Ratio &scale = this->projection_.railMetrics().spaceScale;
+  if (!(points > 0 && points <= static_cast<double>(SHRT_MAX) * scale.num / scale.den))
+    return false;
+  height = static_cast<short>(this->projection_.measurementToLu(points));
+  return true;
+}
+
+loka::app::layout::RowLayoutMetrics MacScenePlatformController::rowLayoutMetrics() const
+{
+  loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
+  short height = 0;
+  if (this->measurePushButtonHeight(height))
+    metrics.buttonHeight = height;
+  return metrics;
 }
 
 bool MacScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
@@ -821,8 +846,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     }
     else
     {
-      const loka::app::layout::RowLayoutMetrics metrics =
-          loka::app::layout::FallbackControlMetrics::rowLayout();
+      const loka::app::layout::RowLayoutMetrics metrics = this->rowLayoutMetrics();
       resultY = loka::app::layout::computeRowLayoutResultY(
           stack, state, metrics, this,
           this, &MacScenePlatformController::layoutContainerChild);

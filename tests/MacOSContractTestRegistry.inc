@@ -96,6 +96,8 @@ LOKA_TEST(testMacTextNaturalWidthDeclines)
 LOKA_TEST(testMacRibbonGroupNaturalWidthFrames)
 LOKA_TEST(testMacButtonNaturalWidthMatchesCell)
 LOKA_TEST(testMacRibbonNaturalWidthFrames)
+LOKA_TEST(testMacButtonNativeHeightColumn)
+LOKA_TEST(testMacButtonNativeHeightCenteredRow)
 LOKA_TEST(testMacDirectRowNaturalWidthFrames)
 LOKA_TEST(testMacOrdinaryRowStillSharesWidth)
 
