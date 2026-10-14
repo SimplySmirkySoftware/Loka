@@ -1709,7 +1709,8 @@ void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle()
       LOKA_VERIFY(!controller.registerNodeHandler(&foreign));
       for (int pass = 0; pass < 2; ++pass)
       {
-        controller.relayout(320 + pass * 40, 160);
+        const int width = 320 + pass * 40;
+        controller.relayout(width, 160);
         int edgeCount = 0;
         for (HWND child = GetWindow(root, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
         {
@@ -1746,11 +1747,12 @@ void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle()
           LOKA_VERIFY(contexts[i]->queryPaintDamage(eligible).kind == PAINT_ANSWER_NATIVE_SCHEDULED);
           LOKA_VERIFY(contexts[i]->queryPaintDamage(pending).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
         }
-        LOKA_VERIFY(frames[0].left == scale.projectEdge(20));
-        LOKA_VERIFY(frames[0].top == scale.projectEdge(20));
-        LOKA_VERIFY(frames[0].right == scale.projectEdge(21));
-        LOKA_VERIFY(frames[1].right == scale.projectEdge(300 + pass * 40));
-        LOKA_VERIFY(frames[1].left == scale.projectEdge(299 + pass * 40));
+        const int inset = layout::SceneRootLayout::kInset;
+        LOKA_VERIFY(frames[0].left == scale.projectEdge(inset));
+        LOKA_VERIFY(frames[0].top == scale.projectEdge(inset));
+        LOKA_VERIFY(frames[0].right == scale.projectEdge(inset + 1));
+        LOKA_VERIFY(frames[1].right == scale.projectEdge(width - inset));
+        LOKA_VERIFY(frames[1].left == scale.projectEdge(width - inset - 1));
         LOKA_VERIFY(frames[1].top == frames[0].top);
         LOKA_VERIFY(frames[0].bottom == frames[2].top && frames[1].bottom == frames[2].top);
         LOKA_VERIFY(frames[2].left == frames[0].left && frames[2].right == frames[1].right);
