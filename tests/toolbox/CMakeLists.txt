@@ -132,6 +132,22 @@ target_compile_definitions(${LOKA_WINDOW_CLAMP_TARGET} PRIVATE TEST_BUILD LOKA_D
 set_property(TARGET ${LOKA_WINDOW_CLAMP_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
 set_property(TARGET ${LOKA_WINDOW_CLAMP_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
 
+# One finite native activation pin; same shape and SIZE as the clamp pin.
+set(LOKA_WINDOW_ACTIVATION_TARGET "LokaWindowActivation${LOKA_CLASSIC_TARGET_SUFFIX}")
+loka_add_toolbox_test_application(
+  ${LOKA_WINDOW_ACTIVATION_TARGET}
+  LokaAppleToolboxTestCore
+  src/WindowActivationStandaloneMain.cpp
+  ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/WindowClampSize.r
+)
+target_include_directories(${LOKA_WINDOW_ACTIVATION_TARGET} PRIVATE
+  ${CMAKE_SOURCE_DIR}/tests/standalone
+)
+target_compile_definitions(${LOKA_WINDOW_ACTIVATION_TARGET} PRIVATE TEST_BUILD LOKA_DIAG=1)
+set_property(TARGET ${LOKA_WINDOW_ACTIVATION_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
+set_property(TARGET ${LOKA_WINDOW_ACTIVATION_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+
 # Production runner cost, with no TEST_BUILD trace or native editing in the interval.
 set(LOKA_SETTLE_PROBE_TARGET "LokaSettleProbe${LOKA_CLASSIC_TARGET_SUFFIX}")
 loka_add_toolbox_test_application(
