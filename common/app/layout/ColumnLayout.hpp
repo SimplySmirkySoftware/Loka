@@ -4,6 +4,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/StackSpans.hpp"
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 namespace loka
@@ -18,7 +19,8 @@ namespace loka
                                      void *context,
                                      int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
                                      const LazyWindow *range = 0,
-                                     StackSpans *spans = 0)
+                                     StackSpans *spans = 0,
+                                     int gap = FallbackControlMetrics::kVerticalSpacing)
       {
         if (!column)
         {
@@ -43,13 +45,21 @@ namespace loka
           int currentY = state.y + (band && first < count ? spans->start(first) : 0);
           unsigned index = 0;
           bool mismatch = false;
+          bool seatSeen = false;
           loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
           for (loka::app::scene::Node *child = it.next(); child; child = it.next())
           {
             if (index >= last)
               break;
+            const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+            const bool gapBefore = takesSeat && seatSeen;
+            seatSeen = seatSeen || takesSeat;
             if (index++ < first)
               continue;
+            if (gapBefore && !(band && index == first + 1))
+            {
+              currentY += gap;
+            }
             const int startY = currentY;
             LayoutStateT childState = state;
             childState.y = layoutCoordinate<LayoutStateT>(currentY);

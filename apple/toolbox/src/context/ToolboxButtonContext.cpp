@@ -241,7 +241,7 @@ short ToolboxButtonContext::layout(loka::app::scene::IPlatformController *contro
                                    + ToolboxLayoutMetrics::kControlDescent);
   updateRect(rect);
   // Advance by the painted box, as the other rails do: y is the top edge.
-  state.y = static_cast<short>(rect.bottom + state.spacing);
+  state.y = static_cast<short>(rect.bottom);
   return width;
 }
 

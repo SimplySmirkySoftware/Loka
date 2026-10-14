@@ -334,7 +334,7 @@ namespace
       // outside a ScrollView the same unrepresentable seat still refuses.
       const int right = static_cast<int>(projectedState.x) + resolvedWidth;
       const int bottom = static_cast<int>(projectedState.y) + resolvedHeight;
-      const int nextY = bottom + projectedState.spacing;
+      const int nextY = bottom;
       if (right < SHRT_MIN || right > SHRT_MAX
           || bottom < SHRT_MIN || bottom > SHRT_MAX
           || nextY < SHRT_MIN || nextY > SHRT_MAX)

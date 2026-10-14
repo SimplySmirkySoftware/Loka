@@ -917,8 +917,14 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
                             && column->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN;
   if (spans && !directColumn)
     spans->invalidate();
+  bool seatSeen = false;
   for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child; child = child->nextInComposition)
   {
+    const int advanceStartY = currentY;
+    const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+    if (takesSeat && seatSeen)
+      currentY += loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+    seatSeen = seatSeen || takesSeat;
     if (currentY < SHRT_MIN || currentY > SHRT_MAX)
     {
       this->refuseScrollViewShortRange();
@@ -935,7 +941,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
       refused = true;
       break;
     }
-    if (!this->projectionParentScopes_.current().tryAccumulateContentHeight(currentY, nextY))
+    if (!this->projectionParentScopes_.current().tryAccumulateContentHeight(advanceStartY, nextY))
     {
       this->refuseScrollViewShortRange();
       refused = true;

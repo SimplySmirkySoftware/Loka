@@ -208,13 +208,24 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     short currentY = static_cast<short>(state.y + (band && first < count ? spans->start(first) : 0));
     unsigned index = 0;
     bool mismatch = false;
+    bool seatSeen = false;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       if (index >= last)
         break;
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      const bool gapBefore = takesSeat && seatSeen;
+      seatSeen = seatSeen || takesSeat;
       if (index++ < first)
         continue;
+      if (gapBefore && !(band && index == first + 1))
+      {
+        const int nextY = currentY + state.spacing;
+        if (traversal->refuseLayoutResultY(nextY))
+          return 0;
+        currentY = static_cast<short>(nextY);
+      }
       const short startY = currentY;
       loka::app::scene::LayoutState childState = state;
       childState.y = currentY;
@@ -397,7 +408,7 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
   ToolboxBoxTraversal adapter(*traversal);
   // Common BoxLayout owns padding, clamping and child advancement on every rail.
   const int resultY = loka::app::layout::computeBoxLayoutResultY(
-      box, state, &adapter, &ToolboxBoxTraversal::layoutChild);
+      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, state.spacing);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;
@@ -516,9 +527,8 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
   }
   if (row->props.hasVerticalAlignment_)
   {
-    // An aligned row's extent is the painted box it measured; child advances
-    // include spacing and need not equal their painted heights.
-    maxHeight = rowHeight + state.spacing;
+    // An aligned row's extent is the painted box it measured.
+    maxHeight = rowHeight;
   }
   const int resultY = state.y + maxHeight;
   if (traversal->refuseLayoutResultY(resultY))

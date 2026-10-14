@@ -85,11 +85,10 @@ short NullButtonContext::layout(loka::app::scene::IPlatformController *,
                                 loka::app::scene::LayoutState &state)
 {
   // Mirrors the native Button contexts: the control height is the seat, and
-  // the column advances past it by the vertical spacing. Consuming the whole
+  // the column owns the spacing between seats. Consuming the whole
   // available height here left a following fill-seat child with nothing.
   state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kButtonHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kButtonHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kButtonHeight);
 }
 
 void RegisterNullButtonNodeHandler(NullScenePlatformController &controller)

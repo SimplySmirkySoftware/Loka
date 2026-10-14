@@ -1,3 +1,5 @@
+#include "app/layout/LayoutHeuristics.hpp"
+
 // Included by the controller and the Toolbox host fixture.
 namespace
 {
@@ -159,9 +161,19 @@ short ToolboxScenePlatformController::layoutScrollView(
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         scrollView->childrenHead(), scrollView->childrenCount());
+    bool seatSeen = false;
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       const int childStartY = childState.y;
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      const int placedY = childStartY + (takesSeat && seatSeen ? state.spacing : 0);
+      seatSeen = seatSeen || takesSeat;
+      if (placedY < SHRT_MIN || placedY > SHRT_MAX)
+      {
+        this->refuseScrollViewShortRange();
+        break;
+      }
+      childState.y = static_cast<short>(placedY);
       LayoutNode(child, childState, this, currentBoundary,
                  child == column ? range : 0,
                  child == column && spans.isValid() ? spans.get() : 0);

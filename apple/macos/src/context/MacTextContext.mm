@@ -375,7 +375,7 @@ short MacTextContext::layout(loka::app::scene::IPlatformController *, loka::app:
       this->controller()->refuseTextMeasurement(this->node_, state);
       this->clearMeasurement();
       state.height = 0;
-      return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+      return static_cast<short>(state.y);
     }
     // Also restores presentation after refusal without needing a new State publication.
     [(NSTextField *)this->label_ setStringValue:string];
@@ -384,7 +384,7 @@ short MacTextContext::layout(loka::app::scene::IPlatformController *, loka::app:
   const int textHeight = this->measurement_.extent();
   this->relayout(state.x, state.y, state.width, textHeight);
   state.height = static_cast<short>(textHeight);
-  return static_cast<short>(state.y + textHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + textHeight);
 }
 
 void MacTextContext::relayout(int x, int y, int width, int height)

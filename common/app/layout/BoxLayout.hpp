@@ -3,6 +3,7 @@
 
 #include "app/nodes/nestable/Box.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 namespace loka
@@ -20,7 +21,8 @@ namespace loka
                                     int fixedHeight,
                                     const LayoutStateT &state,
                                     void *context,
-                                    int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                    int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                    int gap = FallbackControlMetrics::kVerticalSpacing)
       {
         LayoutStateT childState = state;
         childState.x = layoutCoordinate<LayoutStateT>(state.x + padding);
@@ -36,9 +38,14 @@ namespace loka
           childState.height = 0;
         }
 
+        bool seatSeen = false;
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(childrenHead, childCount);
         for (loka::app::scene::Node *child = it.next(); child; child = it.next())
         {
+          const bool takesSeat = childTakesLayoutSeat(child);
+          if (takesSeat && seatSeen)
+            childState.y = layoutCoordinate<LayoutStateT>(childState.y + gap);
+          seatSeen = seatSeen || takesSeat;
           childState.y = layoutCoordinate<LayoutStateT>(layoutChild(context, child, childState));
         }
         const int resultY = childState.y + padding;
@@ -48,7 +55,8 @@ namespace loka
       int computeBoxLayoutResultY(loka::app::BoxNode *box,
                                   const LayoutStateT &state,
                                   void *context,
-                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                  int gap = FallbackControlMetrics::kVerticalSpacing)
       {
         if (!box)
           return state.y;
@@ -60,7 +68,8 @@ namespace loka
                                          box->props.height,
                                          state,
                                          context,
-                                         layoutChild);
+                                         layoutChild,
+                                         gap);
       }
 
     } // namespace layout

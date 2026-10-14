@@ -72,6 +72,9 @@ namespace loka
         return clampToAvailable(declared < 0 ? availableWidth : declared, availableWidth);
       }
 
+      /** Whether a child occupies a container seat, independently of its size. */
+      bool childTakesLayoutSeat(loka::app::scene::Node *child);
+
       /** Returns a Row child's fixed-width claim, a negative value for a flex
           seat, or zero for an empty Fragment that consumes no seat. A
           single-child Fragment forwards the child's answer so branch seats

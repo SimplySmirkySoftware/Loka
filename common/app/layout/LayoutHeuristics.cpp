@@ -11,33 +11,31 @@ namespace loka
   {
     namespace layout
     {
-      int preferredChildWidthForRow(loka::app::scene::Node *child)
+      bool childTakesLayoutSeat(loka::app::scene::Node *child)
       {
-        if (!child)
-        {
-          return -1;
-        }
+        if (!child || child->asOpenFileDialogNode())
+          return false;
         if (child->propsTypeId() == loka::app::FragmentProps::staticTypeId())
         {
           loka::app::scene::INestable *fragment = child->asNestable();
           if (!fragment || fragment->childrenCount() == 0)
-          {
-            return 0;
-          }
+            return false;
           if (fragment->childrenCount() == 1)
-          {
-            return preferredChildWidthForRow(fragment->childrenHead());
-          }
-          return -1;
+            return childTakesLayoutSeat(fragment->childrenHead());
         }
-        if (child->asOpenFileDialogNode())
-        {
-          // A dialog never paints in the Row: it is a materialized resource
-          // (the Show that opens it is a node while the dialog is up), not a
-          // seat. Like an empty Fragment it takes neither width nor a gap,
-          // so opening it leaves the visual siblings' allocation unchanged
-          // (#588).
+        return true;
+      }
+
+      int preferredChildWidthForRow(loka::app::scene::Node *child)
+      {
+        if (!childTakesLayoutSeat(child))
           return 0;
+        if (child->propsTypeId() == loka::app::FragmentProps::staticTypeId())
+        {
+          loka::app::scene::INestable *fragment = child->asNestable();
+          if (fragment->childrenCount() == 1)
+            return preferredChildWidthForRow(fragment->childrenHead());
+          return -1;
         }
         if (loka::app::ImageViewNode *image = child->asImageViewNode())
         {

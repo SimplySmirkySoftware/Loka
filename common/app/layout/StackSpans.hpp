@@ -29,27 +29,30 @@ namespace loka
         bool begin(unsigned count)
         {
           this->invalidate();
-          if (count == UINT_MAX || !this->ends_.allocate(static_cast<std::size_t>(count) + 1))
+          if (count == UINT_MAX || !this->spans_.allocate(static_cast<std::size_t>(count) + 1))
             return false;
-          this->ends_[0] = 0;
+          this->spans_[0].start = 0;
+          this->spans_[0].end = 0;
           return true;
         }
 
         bool append(int start, int end)
         {
-          if (!this->ends_.valid() || this->completed_ || this->filled_ + 1 >= this->ends_.size()
-              || start != this->ends_[this->filled_] || end < start || end > SHRT_MAX)
+          if (!this->spans_.valid() || this->completed_ || this->filled_ + 1 >= this->spans_.size()
+              || start < this->spans_[this->filled_].end || end < start || end > SHRT_MAX)
           {
             this->invalidate();
             return false;
           }
-          this->ends_[++this->filled_] = static_cast<short>(end);
+          ++this->filled_;
+          this->spans_[this->filled_].start = static_cast<short>(start);
+          this->spans_[this->filled_].end = static_cast<short>(end);
           return true;
         }
 
         bool finish()
         {
-          this->completed_ = this->ends_.valid() && this->filled_ + 1 == this->ends_.size();
+          this->completed_ = this->spans_.valid() && this->filled_ + 1 == this->spans_.size();
           return this->completed_;
         }
 
@@ -59,7 +62,7 @@ namespace loka
         }
         void invalidate()
         {
-          this->ends_.clear();
+          this->spans_.clear();
           this->filled_ = 0;
           this->completed_ = false;
           this->placedViewport_ = core::Frame(0, 0, 0, 0);
@@ -71,16 +74,16 @@ namespace loka
         short start(unsigned index) const
         {
           assert(this->valid() && index < this->filled_);
-          return this->ends_[index];
+          return this->spans_[index + 1].start;
         }
         short end(unsigned index) const
         {
           assert(this->valid() && index < this->filled_);
-          return this->ends_[index + 1];
+          return this->spans_[index + 1].end;
         }
         short total() const
         {
-          return this->valid() ? this->ends_[this->filled_] : 0;
+          return this->valid() ? this->spans_[this->filled_].end : 0;
         }
         const core::Frame &placedViewport() const
         {
@@ -101,7 +104,7 @@ namespace loka
           while (lo < hi)
           {
             const unsigned mid = lo + (hi - lo) / 2;
-            if (this->ends_[mid + 1] <= top)
+            if (this->spans_[mid + 1].end <= top)
               lo = mid + 1;
             else
               hi = mid;
@@ -111,7 +114,7 @@ namespace loka
           while (lo < hi)
           {
             const unsigned mid = lo + (hi - lo) / 2;
-            if (this->ends_[mid] < bottom)
+            if (this->spans_[mid + 1].start < bottom)
               lo = mid + 1;
             else
               hi = mid;
@@ -132,7 +135,12 @@ namespace loka
         }
 
       private:
-        detail::TextMeasureTable<short> ends_;
+        struct Span
+        {
+          short start;
+          short end;
+        };
+        detail::TextMeasureTable<Span> spans_;
         unsigned filled_;
         bool completed_;
         core::Frame placedViewport_;

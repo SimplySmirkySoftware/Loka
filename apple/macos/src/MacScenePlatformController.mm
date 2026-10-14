@@ -636,7 +636,7 @@ MacScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *su
   this->rectSurfaceExtentLedger_.record(
       surface, loka::core::Frame(state.x, state.y, width, height));
   return LayoutNodeResult(
-      state.width, state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+      state.width, state.y + height);
 }
 
 MacScenePlatformController::LayoutNodeResult
@@ -733,8 +733,14 @@ MacScenePlatformController::layoutScrollViewNode(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
+    bool seatSeen = false;
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      const int advanceStartY = currentY;
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      if (takesSeat && seatSeen)
+        currentY += loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+      seatSeen = seatSeen || takesSeat;
       if (currentY < SHRT_MIN || currentY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();
@@ -748,7 +754,7 @@ MacScenePlatformController::layoutScrollViewNode(
         break;
       }
       if (!this->projectionParentScopes_.current().tryAccumulateContentHeight(
-              currentY, nextY))
+              advanceStartY, nextY))
       {
         this->refuseScrollViewShortRange();
         break;

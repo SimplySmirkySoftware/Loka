@@ -1232,7 +1232,7 @@ Win32ScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *
   this->rectSurfaceExtentLedger_.record(
       surface, loka::core::Frame(state.x, state.y, width, height));
   return LayoutNodeResult(
-      state.width, state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+      state.width, state.y + height);
 }
 
 Win32ScenePlatformController::LayoutNodeResult
@@ -1346,8 +1346,14 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
+    bool seatSeen = false;
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      const int advanceStartY = currentY;
+      const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
+      if (takesSeat && seatSeen)
+        currentY += loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+      seatSeen = seatSeen || takesSeat;
       if (currentY < SHRT_MIN || currentY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();
@@ -1361,7 +1367,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
         break;
       }
       if (!this->projectionParentScopes_.current().tryAccumulateContentHeight(
-              currentY, nextY))
+              advanceStartY, nextY))
       {
         this->refuseScrollViewShortRange();
         break;
