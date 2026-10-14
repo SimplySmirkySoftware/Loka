@@ -215,8 +215,11 @@ configure_file(${CMAKE_SOURCE_DIR}/example/HelloWorld/Size.r
   ${CMAKE_CURRENT_BINARY_DIR}/RibbonTypingSize.r COPYONLY)
 function(loka_add_ribbon_typing_probe name grouped)
   set(target "${name}${LOKA_CLASSIC_TARGET_SUFFIX}")
-  loka_add_toolbox_test_application(${target} LokaAppleToolboxCore
-    src/RibbonTypingStandaloneMain.cpp ${CMAKE_CURRENT_BINARY_DIR}/RibbonTypingSize.r)
+  # TEST_BUILD must match the core it links (the PaintDamage shape); a
+  # TEST_BUILD probe on LokaAppleToolboxCore reads shifted class layouts.
+  loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
+    src/RibbonTypingStandaloneMain.cpp ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/RibbonTypingSize.r)
   target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/tests/standalone)
   target_compile_definitions(${target} PRIVATE TEST_BUILD=1 "LOKA_RIBBON_TYPING_GROUP=${grouped}")
   set_property(TARGET ${target} PROPERTY EXCLUDE_FROM_ALL TRUE)

@@ -407,13 +407,15 @@ namespace
     }
     void inject()
     {
-      // PostEvent enters exactly the ordinary ToolboxApp keyDown dispatch.
-      // The keyboard must have no held modifiers during the unattended run.
+      // ToolboxApp's keyDown branch decodes a plain key and calls exactly
+      // this window door (ToolboxApp.cpp keyDown/autoKey branch). A posted
+      // event never reaches it on the KanjiTalk rig: the input method takes
+      // the key first. The turn's present() still runs after this idle.
       this->keyStartTicks_ = TickCount();
       this->keyStartUs_ = this->timer_.elapsed();
-      if (PostEvent(keyDown, (7L << 8) | 'x') != noErr)
+      if (!this->window_->handleKeyDown('x'))
       {
-        this->finish("PostEvent refused");
+        this->finish("key not handled");
         return;
       }
       this->phase_ = KEY_DELIVERY;
