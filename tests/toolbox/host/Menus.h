@@ -4,6 +4,7 @@
 namespace toolbox_host
 {
   extern unsigned menuDraws, menuClears, menuDisposes, menuValueWrites;
+  extern unsigned menuInitializations;
   extern std::vector<MenuHandle> installedMenus;
   /** Immutable call facts captured at the fake Toolbox boundary. */
   struct ItemCmdCall
@@ -21,7 +22,7 @@ inline void EnableItem(MenuHandle, short) { ++toolbox_host::menuValueWrites; }
 inline void DisableItem(MenuHandle, short) { ++toolbox_host::menuValueWrites; }
 inline void CheckItem(MenuHandle, short, bool) { ++toolbox_host::menuValueWrites; }
 inline void ClearMenuBar() { ++toolbox_host::menuClears; toolbox_host::installedMenus.clear(); }
-inline void InitMenus() {}
+void InitMenus();
 inline void DrawMenuBar() { ++toolbox_host::menuDraws; }
 inline void AppendResMenu(MenuHandle, unsigned long) {}
 inline void SetItemCmd(MenuHandle menu, short item, short cmd)

@@ -13,6 +13,11 @@
 
 #ifdef TEST_BUILD
 
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+namespace toolbox_host { unsigned menuInitializations = 0; }
+void InitMenus() { ++toolbox_host::menuInitializations; }
+#endif
+
 #ifdef _WIN32
 #include "../win32/src/context/Win32EditTextBridge.hpp"
 namespace loka

@@ -769,7 +769,7 @@ namespace loka
       loka::dsl::CompositionList<MenuDefinition> menus_;
     };
 
-    // MenuComposition and MenuCompositionDiff are defined in MenuComposition.hpp.
+    // MenuComposition is defined in MenuComposition.hpp.
 
     inline MenuDefinition Menu(const char *title)
     {
