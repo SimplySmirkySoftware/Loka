@@ -59,7 +59,6 @@ void testSceneReplacementTearsDownEnrolledRootWithoutAssert();
 
 void testSceneInstallProjectsAttachedObserverInsideTurn();
 void testSceneRearmCommitsBeforeReadInsideTurn();
-void testSceneManagerLedgerNeverEnrolls();
 void testWindowCloseDetachHookRunsInsideTurn();
 void testWindowCloseRequestCommitsAtTurnTail();
 void testWindowCloseFocusClearsInsideTurn();

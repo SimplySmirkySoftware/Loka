@@ -1,15 +1,13 @@
 #include "app/core/SceneManager.hpp"
 #include "app/core/Window.hpp"
 #include <cassert>
-#include "core/util/StateTrackerGuard.hpp"
 
 SceneManager::SceneManager()
-    : request_(REQUEST_NONE), currentScene_(0), desired_(0), applying_(0), tracker_(loka::core::LEDGER_STANDALONE), retiredScenes_(), window_(0)
+    : request_(REQUEST_NONE), currentScene_(0), desired_(0), applying_(0), retiredScenes_(), window_(0)
 {
 #ifdef TEST_BUILD
   this->lastPrepareRefusal_ = 0;
 #endif
-  this->tracker_.addState(&this->currentScene_);
 }
 
 SceneManager::~SceneManager()
@@ -76,20 +74,17 @@ bool SceneManager::applyPendingWork()
   // Protect the installed identity against adoption by synchronous observers.
   // Only this Scene's owned composition is walked, once per admitted request.
   this->applying_ = current;
+  current->updateAttached(false);
+  current->updateLifecycle(ON_DETACH);
+  switch (request)
   {
-    loka::core::StandaloneTransactionGuard guard(&this->tracker_);
-    current->updateAttached(false);
-    current->updateLifecycle(ON_DETACH);
-    switch (request)
-    {
-    case REQUEST_NONE:
-    case REQUEST_DETACH:
-      break;
-    case REQUEST_REARM:
-      current->updateAttached(true);
-      current->updateLifecycle(ON_ATTACH);
-      break;
-    }
+  case REQUEST_NONE:
+  case REQUEST_DETACH:
+    break;
+  case REQUEST_REARM:
+    current->updateAttached(true);
+    current->updateLifecycle(ON_ATTACH);
+    break;
   }
   // A refused fresh composition still owes this seat a renewal. Preserve any
   // newer observer intent; retry only at the following App admission.
@@ -149,7 +144,6 @@ bool SceneManager::applyReplacement()
 
 void SceneManager::retireScene(loka::app::scene::Scene *scene)
 {
-  loka::core::StandaloneTransactionGuard guard(&this->tracker_);
   scene->setWindow(0);
   scene->updateAttached(false);
   scene->updateLifecycle(ON_DETACH);
@@ -166,27 +160,24 @@ void SceneManager::retireCurrentScene()
 void SceneManager::installScene(loka::app::scene::Scene *next)
 {
   loka::app::scene::Scene *old = this->currentScene_.get();
+  if (old)
   {
-    loka::core::StandaloneTransactionGuard guard(&this->tracker_);
-    if (old)
+    this->retireScene(old);
+    // #920: outgoing detach observers can destroy the prepared Scene's rail.
+    if (next->platformController_ && !this->window_->hasLiveScenePlatform())
     {
-      this->retireScene(old);
-      // #920: outgoing detach observers can destroy the prepared Scene's rail.
-      if (next->platformController_ && !this->window_->hasLiveScenePlatform())
-      {
-        assert(false && "window rail lost while installing a replacement Scene (#920)");
-        next->platformController_ = 0;
-      }
+      assert(false && "window rail lost while installing a replacement Scene (#920)");
+      next->platformController_ = 0;
     }
-    this->currentScene_.set(next);
-    next->setWindow(this->window_);
-    // Outgoing detach resets the shared controller. Attach the prepared scene,
-    // project its root, then publish ON_ATTACH; applying protects reentrant adoption.
-    next->updateAttached(true);
-    if (next->composed_ && next->platformController_)
-      next->platformController_->onChange(next->rootNode_, loka::app::scene::NODE_DIRTY_INITIAL, true);
-    next->updateLifecycle(ON_ATTACH);
   }
+  this->currentScene_.set(next);
+  next->setWindow(this->window_);
+  // Outgoing detach resets the shared controller. Attach the prepared scene,
+  // project its root, then publish ON_ATTACH; applying protects reentrant adoption.
+  next->updateAttached(true);
+  if (next->composed_ && next->platformController_)
+    next->platformController_->onChange(next->rootNode_, loka::app::scene::NODE_DIRTY_INITIAL, true);
+  next->updateLifecycle(ON_ATTACH);
   if (old != this->desired_)
     this->retiredScenes_.retire(old);
 }
