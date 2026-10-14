@@ -96,6 +96,16 @@ loka_compile_pin(tracker-assign
   ACCEPTS pins/accepts_tracker_construction.cpp
 )
 
+loka_compile_pin(nestable-definition-copy
+  REFUSES pins/refuses_nestable_definition_copy.cpp
+  ACCEPTS pins/accepts_nestable_definition_construction.cpp
+)
+
+loka_compile_pin(nestable-definition-assign
+  REFUSES pins/refuses_nestable_definition_assign.cpp
+  ACCEPTS pins/accepts_nestable_definition_construction.cpp
+)
+
 loka_compile_pin(small-object-pool-source-alignment
   REFUSES pins/refuses_small_object_pool_unaligned_source.cpp
   ACCEPTS pins/accepts_small_object_pool_aligned_source.cpp

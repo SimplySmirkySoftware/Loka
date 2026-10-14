@@ -1,0 +1,9 @@
+#ifndef LOKA_TESTS_NODE_DEFINITION_CLONE_REFUSAL_TESTS_HPP
+#define LOKA_TESTS_NODE_DEFINITION_CLONE_REFUSAL_TESTS_HPP
+
+void testNodeDefinitionCloneRefusesGrandchild();
+void testNodeDefinitionAssignmentPreservesDestination();
+void testNodeDefinitionCopiesFullStructure();
+void testNodeDefinitionByValueRefusalLeavesEmpty();
+
+#endif

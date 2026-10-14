@@ -145,6 +145,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/MenuCheckedTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/MenuTitleTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/MenuCloneRefusalTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/NodeDefinitionCloneRefusalTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/PartialTreePublicationTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/BoundaryArenaTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ComponentNodeTests.cpp
