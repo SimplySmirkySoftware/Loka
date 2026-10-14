@@ -1,4 +1,6 @@
 #include "MacMenuAttachment.hpp"
+#include "app/MenuComposition.hpp"
+#include "core/util/OwnedDef.hpp"
 #include "MacApp.hpp"
 #include "MacObjCCompat.hpp"
 #include "core/Operation.hpp"
@@ -60,7 +62,7 @@ namespace
 }
 
 MacMenuAttachment::MacMenuAttachment(MacApp &app)
-    : app_(app), nextCommandId_(1), target_(0), menu_(0), applied_(), source_(0)
+    : app_(app), nextCommandId_(1), target_(0), menu_(0), record_()
 {
   LokaMenuTarget *target = [[LokaMenuTarget alloc] init];
   [target setOwner:&app];
@@ -78,15 +80,17 @@ MacMenuAttachment::~MacMenuAttachment()
 void MacMenuAttachment::disconnect()
 {
   this->clearMenuBindings();
-  this->applied_.reset();
-  this->source_ = 0;
+  this->record_.clear();
   StripMenuActions((NSMenu *)this->menu_);
 }
 
 void MacMenuAttachment::releaseFrom(const loka::app::scene::Scene *scene)
 {
-  if (this->source_ == scene)
-    this->disconnect();
+  if (this->record_.release(scene))
+  {
+    this->clearMenuBindings();
+    StripMenuActions((NSMenu *)this->menu_);
+  }
 }
 
 void MacMenuAttachment::reset()
@@ -279,23 +283,24 @@ std::size_t MacMenuAttachment::BuildMenuItems(void *nativeMenu,
   return added;
 }
 
-bool MacMenuAttachment::project(const loka::app::MenuBarDefinition *menuBar,
-                                const loka::app::scene::Scene *source)
+bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
 {
-  if (!menuBar)
+  if (sources.absent())
   {
+    this->record_.clear();
     // An absent offer with no installed graph is unchanged.
     if (!this->menu_)
       return false;
     this->reset();
     return true;
   }
-  if (this->source_ == source && this->applied_.isSet()
-      && this->applied_->equalsStructure(*menuBar))
+  if (this->record_.unchanged(sources))
     return false;
-  // As on Toolbox, failed capture clears the cache, not an acknowledged
-  // legacy projection. The next offer must rebuild instead of trusting stale truth.
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> candidate(menuBar->clone());
+  loka::core::OwnedDef<loka::app::MenuBarDefinition> merged(
+      loka::app::MergeMenuBars(sources.base, sources.overlay));
+  if (!merged.isSet())
+    return false;
+  const loka::app::MenuBarDefinition *menuBar = merged.get();
   this->reset();
   bool hasAppMenu = false;
   loka::dsl::CompositionCursor<loka::app::MenuDefinition> appMenuScan(menuBar->menusHead(), menuBar->menusCount());
@@ -338,8 +343,7 @@ bool MacMenuAttachment::project(const loka::app::MenuBarDefinition *menuBar,
   }
   this->menu_ = (void *)mainMenu;
   [NSApp setMainMenu:mainMenu];
-  this->applied_.reset(candidate.take());
-  this->source_ = source;
+  this->record_.commit(sources);
   return true;
 }
 

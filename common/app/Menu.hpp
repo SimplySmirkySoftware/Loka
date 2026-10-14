@@ -417,46 +417,6 @@ namespace loka
         return *this;
       }
 
-      bool equalsStructure(const MenuItemDefinition &other) const
-      {
-        if (isSeparator != other.isSeparator)
-          return false;
-        if (!title.equals(other.title))
-          return false;
-        if (titleState != other.titleState)
-          return false;
-        if (enabledState != other.enabledState)
-          return false;
-        if (enabledValue_ != other.enabledValue_)
-          return false;
-        if (hasEnabledValue_ != other.hasEnabledValue_)
-          return false;
-        if (onClickState != other.onClickState)
-          return false;
-        if (action != other.action)
-          return false;
-        if (hasShortcut != other.hasShortcut)
-          return false;
-        if (shortcutKey != other.shortcutKey)
-          return false;
-        if (hasAttr_ != other.hasAttr_)
-          return false;
-        if (!(attr_ == other.attr_))
-          return false;
-        if (children_.count() != other.children_.count())
-          return false;
-        const MenuItemDefinition *left = children_.head();
-        const MenuItemDefinition *right = other.children_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
-      }
-
       bool hasChildren() const
       {
         return children_.count() > 0;
@@ -617,26 +577,6 @@ namespace loka
         return *this;
       }
 
-      bool equalsStructure(const MenuDefinition &other) const
-      {
-        if (isAppMenu != other.isAppMenu)
-          return false;
-        if (!title.equals(other.title))
-          return false;
-        if (items_.count() != other.items_.count())
-          return false;
-        const MenuItemDefinition *left = items_.head();
-        const MenuItemDefinition *right = other.items_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
-      }
-
       bool hasItems() const
       {
         return items_.count() > 0;
@@ -709,22 +649,6 @@ namespace loka
         if (!candidate.isSet() || !candidate->copyFrom(*this))
           return 0;
         return candidate.take();
-      }
-
-      bool equalsStructure(const MenuBarDefinition &other) const
-      {
-        if (menus_.count() != other.menus_.count())
-          return false;
-        const MenuDefinition *left = menus_.head();
-        const MenuDefinition *right = other.menus_.head();
-        while (left && right)
-        {
-          if (!left->equalsStructure(*right))
-            return false;
-          left = left->nextInComposition;
-          right = right->nextInComposition;
-        }
-        return true;
       }
 
       MenuBarDefinition &operator<<(const MenuDefinition &menu)

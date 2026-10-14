@@ -2,7 +2,7 @@
 #define LOKA_MAC_MENU_ATTACHMENT_HPP
 
 #include "app/Menu.hpp"
-#include "core/util/OwnedDef.hpp"
+#include "app/MenuProjectionRecord.hpp"
 #include <vector>
 
 class MacApp;
@@ -15,10 +15,11 @@ class MacMenuAttachment
 public:
   explicit MacMenuAttachment(MacApp &app);
   ~MacMenuAttachment();
-  /** Returns true when projected; equal source/projection offers do nothing.
-      Snapshot refusal clears the baseline without dropping the projection. */
-  bool project(const loka::app::MenuBarDefinition *bar,
-               const loka::app::scene::Scene *source);
+  /** Called per admission offer, active window only. Unchanged input costs
+      three pointer comparisons, no allocations or row walks. Changed input
+      merges once and fully rebuilds the merged bar's rows. Returns true when
+      native menus were projected; merge refusal preserves native and record. */
+  bool project(const loka::app::MenuSources &sources);
   void disconnect();
   void releaseFrom(const loka::app::scene::Scene *scene);
   bool dispatch(int commandId);
@@ -54,7 +55,6 @@ private:
   std::vector<MenuBinding *> bindings_;
   void *target_;
   void *menu_;
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> applied_;
-  const loka::app::scene::Scene *source_;
+  loka::app::MenuProjectionRecord record_;
 };
 #endif
