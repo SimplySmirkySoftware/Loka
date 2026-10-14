@@ -20,6 +20,7 @@
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "context/Win32ButtonContext.hpp"
 #include "context/Win32CellContext.hpp"
+#include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "context/Win32EditTextContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
@@ -31,8 +32,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler
-      gRefusedWin32RibbonGroupEdge(loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>());
   // Win32 has no ScrollBar context yet: a known unsupported kind must take
   // the typed-refusal path, not trip the accidental-miss assert. ScrollView
   // is a controller-owned projection-parent arm and does not use this leaf
@@ -43,7 +42,7 @@ namespace
 
 void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
 {
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32RibbonGroupEdge);
+  RegisterWin32RibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
   const loka::app::layout::RowLayoutMetrics rowMetrics =
       loka::app::layout::FallbackControlMetrics::rowLayout();
   loka::app::layout::GridLayoutMetrics gridMetrics;
