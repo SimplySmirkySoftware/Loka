@@ -1299,6 +1299,7 @@ LOKA_TEST(testStackNaturalWidthColumnDeclaredWidths)
 LOKA_TEST(testStackNaturalWidthReadsLiveAxis)
 LOKA_TEST(testRibbonGroupExpansionAndGeometry)
 
+LOKA_TEST(testRibbonGroupInsetAndDecliningNaturalWidth)
 LOKA_TEST(testMenuCloneRefusesGrandchild)
 LOKA_TEST(testMenuAssignmentPreservesDestination)
 LOKA_TEST(testMenuMergeRefusesNestedClone)

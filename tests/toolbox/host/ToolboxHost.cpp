@@ -12,6 +12,7 @@ namespace toolbox_host
   unsigned scriptReads = 0;
   ControlCalls controlCalls;
   std::vector<std::string> controlTitles, menuTitles, menuAppends, menuInserts, menuSets, disposedMenuItems;
+  std::vector<Fill> fills;
   std::vector<Draw> draws;
   std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   std::vector<long> backgroundColors, foregroundColors;
@@ -23,6 +24,7 @@ namespace toolbox_host
   int textHits = 0;
   void reset()
   {
+    fills.clear();
     draws.clear();
     foregroundColors.clear();
     pascalDraws.clear();
@@ -472,4 +474,14 @@ void ForeColor(long ink)
 {
   port->fgColor = ink;
   toolbox_host::foregroundColors.push_back(ink);
+}
+
+void FillRect(const Rect *rect, const Pattern *pattern)
+{
+  toolbox_host::Fill fill;
+  fill.rect = Intersection(*rect, clip);
+  fill.pattern = *pattern;
+  fill.ink = port->fgColor;
+  if (!EmptyRect(&fill.rect))
+    toolbox_host::fills.push_back(fill);
 }

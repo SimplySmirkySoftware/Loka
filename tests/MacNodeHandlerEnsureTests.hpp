@@ -17,6 +17,7 @@ void testMacTextMeasurementInputPublications();
 void testMacTextNaturalWidthMatchesLayout();
 void testMacTextNaturalWidthDeclines();
 void testMacRibbonGroupNaturalWidthFrames();
+void testMacRibbonGroupEdgeEnsureAndRetirement();
 void testMacButtonNaturalWidthMatchesCell();
 void testMacRibbonNaturalWidthFrames();
 void testMacDirectRowNaturalWidthFrames();

@@ -1,3 +1,5 @@
+#include "context/Win32RibbonGroupEdgeContext.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "Win32PaintGround.hpp"
 #include "app/nodes/controls/Cell.hpp"
 #include "context/Win32CellContext.hpp"
@@ -1294,5 +1296,59 @@ void testWin32StaticTextColorChangeResidue()
     }
     text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
     controller.drainNativeRetirements();
+  }
+}
+
+void testWin32RibbonGroupEdgePixels()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  const RibbonGroupEdge roles[] = {RIBBON_GROUP_EDGE_LEFT, RIBBON_GROUP_EDGE_RIGHT, RIBBON_GROUP_EDGE_BOTTOM};
+  int groundIndex;
+  LOKA_VERIFY(loka::win32::QueryWin32GroundColor(SURFACE_GROUND_WINDOW, groundIndex));
+  const COLORREF ground = GetSysColor(groundIndex);
+  const COLORREF shadow = GetSysColor(COLOR_3DSHADOW);
+  if (ground == shadow)
+    std::printf("[skip] ground equals shadow; gradient direction is not discriminated on this theme\n");
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  for (int i = 0; i < 3; ++i)
+  {
+    RibbonGroupEdgeNode node((RibbonGroupEdgeProps(roles[i])));
+    Win32RibbonGroupEdgeContext edge(&controller, root, 10, 10, 3, 17, &node);
+    HWND child = FindWindowExW(root, NULL, L"LOKA_RIBBON_GROUP_EDGE", NULL);
+    LOKA_VERIFY(child != NULL);
+    flushTransparentPaint(controller, root);
+    // Exercise WM_PAINT and its real client coordinates, including every row.
+    LOKA_VERIFY(RedrawWindow(child, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW));
+    for (int y = 0; y < 17; ++y)
+    {
+      const COLORREF expected = i == 2 ? shadow
+                                       : RGB((GetRValue(ground) * (16 - y) + GetRValue(shadow) * y) / 16,
+                                             (GetGValue(ground) * (16 - y) + GetGValue(shadow) * y) / 16,
+                                             (GetBValue(ground) * (16 - y) + GetBValue(shadow) * y) / 16);
+      for (int x = 0; x < 3; ++x)
+        LOKA_VERIFY(windowPixel(child, x, y) == expected);
+    }
+    edge.relayout(10, 10, 3, 1);
+    flushTransparentPaint(controller, root);
+    LOKA_VERIFY(RedrawWindow(child, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW));
+    LOKA_VERIFY(windowPixel(child, 0, 0) == shadow);
+    LayoutState empty;
+    empty.x = 10;
+    empty.y = 10;
+    empty.width = 0;
+    empty.height = 0;
+    LOKA_VERIFY(edge.layout(&controller, empty) == 10);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(child, &client));
+    LOKA_VERIFY(client.right == 0 && client.bottom == 0 && empty.height == 0);
+    edge.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    const PaintQuery query = {Win32RetirableContext::paintScope(), PLACEMENT_ELIGIBLE};
+    LOKA_VERIFY(edge.queryPaintDamage(query).reason == PAINT_REFUSED_NO_CONTEXT);
+    controller.drainNativeRetirements();
+    LOKA_VERIFY(!IsWindow(child));
   }
 }

@@ -16,6 +16,7 @@
 #include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/controls/PopupMenu.hpp"
 #include "app/nodes/ImageView.hpp"
 #include <cassert>
@@ -31,9 +32,11 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/SceneRootLayout.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "app/layout/RibbonGroupLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"
@@ -71,6 +74,8 @@ namespace
       {loka::app::scene::NODE_KIND_EDIT_TEXT, loka::app::scene::NodeTypeToken<loka::app::EditTextNode>()},
       {loka::app::scene::NODE_KIND_TEXT_EDITOR, loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>()},
       {loka::app::scene::NODE_KIND_POPUP_MENU, loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>()},
+      {loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE,
+       loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>()},
       {loka::app::scene::NODE_KIND_CELL, loka::app::scene::NodeTypeToken<loka::app::CellNode>()},
       {loka::app::scene::NODE_KIND_IMAGE_VIEW, loka::app::scene::NodeTypeToken<loka::app::ImageViewNode>()},
       {loka::app::scene::NODE_KIND_SCROLL_VIEW, loka::app::scene::NodeTypeToken<loka::app::ScrollViewNode>()}};
@@ -104,6 +109,7 @@ namespace
       case NODE_KIND_OPEN_FILE_DIALOG:
       case NODE_KIND_CONFIRM_DIALOG:
       case NODE_KIND_BOX:
+      case NODE_KIND_RIBBON_GROUP:
       case NODE_KIND_ZSTACK:
       case NODE_KIND_GRID:
       case NODE_KIND_STACK:
@@ -122,6 +128,7 @@ namespace
       case NODE_KIND_EDIT_TEXT:
       case NODE_KIND_TEXT_EDITOR:
       case NODE_KIND_POPUP_MENU:
+      case NODE_KIND_RIBBON_GROUP_EDGE:
       case NODE_KIND_CELL:
       case NODE_KIND_IMAGE_VIEW:
       case NODE_KIND_SCROLL_VIEW:
@@ -1090,15 +1097,16 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
+  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
   LayoutState state;
-  state.x = 20;
-  state.y = 20;
-  state.width = measureClientWidth(clientWidth) - 40;
+  state.x = rootInset;
+  state.y = rootInset;
+  state.width = measureClientWidth(clientWidth) - 2 * rootInset;
   if (state.width < 0)
   {
     state.width = 0;
   }
-  state.height = clientHeight > 0 ? clientHeight - 40 : 0;
+  state.height = clientHeight > 0 ? clientHeight - 2 * rootInset : 0;
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -1459,6 +1467,28 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
           box, state, this, &Win32ScenePlatformController::layoutContainerChild);
+    }
+    return LayoutNodeResult(state.width, resultY);
+  }
+
+  if (loka::app::RibbonGroupNode *group = node->asRibbonGroupNode())
+  {
+    int resultY = state.y;
+    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
+    if (handler)
+    {
+      loka::app::scene::LayoutState handlerState;
+      if (!this->narrowLayoutState(state, handlerState, false))
+      {
+        return LayoutNodeResult(state.width, state.y);
+      }
+      loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
+      resultY = handler->layoutNode(group, handlerState, &traversal);
+    }
+    else
+    {
+      resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+          group, state, this, &Win32ScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, resultY);
   }

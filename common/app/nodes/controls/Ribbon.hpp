@@ -15,6 +15,123 @@ namespace loka
     struct RibbonControlDefinition;
     struct RibbonGroupDefinition;
 
+    /** The three closed frame strips owned by a ribbon group. */
+    enum RibbonGroupEdge
+    {
+      RIBBON_GROUP_EDGE_LEFT,
+      RIBBON_GROUP_EDGE_RIGHT,
+      RIBBON_GROUP_EDGE_BOTTOM
+    };
+
+    struct RibbonGroupEdgeTypeTag
+    {
+    };
+
+    /** An edge's sole payload is its role in the group frame. */
+    struct RibbonGroupEdgeProps : public scene::NodePropsBase<RibbonGroupEdgeProps>
+    {
+      typedef RibbonGroupEdgeTypeTag TypeTag;
+      typedef RibbonGroupEdgeNode NodeType;
+      RibbonGroupEdge edge;
+      explicit RibbonGroupEdgeProps(RibbonGroupEdge value = RIBBON_GROUP_EDGE_LEFT)
+          : edge(value)
+      {
+      }
+      int hash() const
+      {
+        return this->edge;
+      }
+      bool operator<(const scene::PropsBase &rhs) const
+      {
+        if (rhs.propsTypeId() != this->propsTypeId())
+          return false;
+        return this->edge < static_cast<const RibbonGroupEdgeProps &>(rhs).edge;
+      }
+    };
+
+    /** A closed leaf whose future rail context fills exactly its offered strip. */
+    class RibbonGroupEdgeNode : public scene::Node, public scene::IProjectedLayoutNode
+    {
+    public:
+      typedef RibbonGroupEdgeTypeTag TypeTag;
+      RibbonGroupEdgeProps props;
+      explicit RibbonGroupEdgeNode(const RibbonGroupEdgeProps &p)
+          : props(p)
+      {
+      }
+      virtual scene::NodeKind kind() const
+      {
+        return scene::NODE_KIND_RIBBON_GROUP_EDGE;
+      }
+      virtual const void *nodeTypeKey() const
+      {
+        return scene::NodeTypeToken<RibbonGroupEdgeNode>();
+      }
+      virtual RibbonGroupEdgeNode *asRibbonGroupEdgeNode()
+      {
+        return this;
+      }
+      virtual scene::IProjectedLayoutNode *asProjectedLayoutNode()
+      {
+        return this;
+      }
+      virtual short layoutProjected(scene::IPlatformController *controller, scene::LayoutState &state)
+      {
+        if (!controller || !scene::PrepareProjectedLayout(controller, this, state))
+          return state.y;
+        return scene::Node::layout(controller, state);
+      }
+    };
+
+    struct RibbonGroupTypeTag
+    {
+    };
+
+    struct RibbonGroupProps : public scene::NodePropsBase<RibbonGroupProps>
+    {
+      typedef RibbonGroupTypeTag TypeTag;
+      typedef RibbonGroupNode NodeType;
+      int hash() const
+      {
+        return 0;
+      }
+      bool operator<(const scene::PropsBase &) const
+      {
+        return false;
+      }
+    };
+
+    /** Closed ribbon container: content column, left edge, right edge, bottom edge. */
+    class RibbonGroupNode : public scene::NestableNode
+    {
+    public:
+      typedef RibbonGroupTypeTag TypeTag;
+      /** The inset is the band each rail draws the group frame into (left edge,
+          right edge, bottom line). For outer (x,y,W,H), the strips are
+          LEFT (x,y,1,H-1), RIGHT (x+W-1,y,1,H-1), BOTTOM (x,y+H-1,W,1).
+          Content never overlaps the strips because the inset is >= 1 on every side.
+          When W < 2 or H < 2, all strips are empty at (x,y). */
+      static const int kFrameInset = 4;
+      RibbonGroupProps props;
+      explicit RibbonGroupNode(const RibbonGroupProps &p)
+          : scene::NestableNode(),
+            props(p)
+      {
+      }
+      virtual scene::NodeKind kind() const
+      {
+        return scene::NODE_KIND_RIBBON_GROUP;
+      }
+      virtual const void *nodeTypeKey() const
+      {
+        return scene::NodeTypeToken<RibbonGroupNode>();
+      }
+      virtual RibbonGroupNode *asRibbonGroupNode()
+      {
+        return this;
+      }
+    };
+
     /** One native push button in a left-to-right RibbonControl, using its rail's
         natural width unless width(n) declares a fixed seat. The emitter is borrowed;
         null does nothing.
@@ -101,11 +218,27 @@ namespace loka
         return *this;
       }
       RibbonControlDefinition &operator<<(const RibbonGroupDefinition &group);
+
+    private:
+      /** Only group expansion can declare a frame leaf. */
+      struct GroupEdgeDefinition : public scene::NodeDefinition<RibbonGroupEdgeProps, RibbonGroupEdgeNode>
+      {
+        explicit GroupEdgeDefinition(RibbonGroupEdge edge)
+            : scene::NodeDefinition<RibbonGroupEdgeProps, RibbonGroupEdgeNode>(RibbonGroupEdgeProps(edge))
+        {
+        }
+      };
+
+      /** Only RibbonControl expands a group into this runtime container. */
+      struct GroupFrameDefinition
+          : public scene::NestableNodeDefinition<RibbonGroupProps, RibbonGroupNode, GroupFrameDefinition>
+      {
+      };
     };
     typedef RibbonControlDefinition RibbonControl;
 
     /** A captioned group of RibbonItems. The items sit above a centered small
-        secondary label; the wider part determines the group's natural width.
+        secondary label; the wider part plus the frame band determines the group's natural width.
         A rail that declines either part gives the group a shared seat. */
     struct RibbonGroupDefinition
     {
@@ -130,8 +263,12 @@ namespace loka
 
     inline RibbonControlDefinition &RibbonControlDefinition::operator<<(const RibbonGroupDefinition &group)
     {
-      BaseType::operator<<(VStack() << group.items_
-                                    << (Text(group.caption_) + SmallLabel + Secondary + block::Centered));
+      BaseType::operator<<(GroupFrameDefinition()
+                           << (VStack() << group.items_
+                                        << (Text(group.caption_) + SmallLabel + Secondary + block::Centered))
+                           << GroupEdgeDefinition(RIBBON_GROUP_EDGE_LEFT)
+                           << GroupEdgeDefinition(RIBBON_GROUP_EDGE_RIGHT)
+                           << GroupEdgeDefinition(RIBBON_GROUP_EDGE_BOTTOM));
       return *this;
     }
   } // namespace app
