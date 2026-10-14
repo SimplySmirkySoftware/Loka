@@ -19,6 +19,10 @@
 #include "platform/file/FileIO.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 
+#if !defined(LOKA_RIBBON_TYPING_GROUP) || (LOKA_RIBBON_TYPING_GROUP != 0 && LOKA_RIBBON_TYPING_GROUP != 1)
+#error Define LOKA_RIBBON_TYPING_GROUP as 0 or 1
+#endif
+
 namespace
 {
   using namespace loka::app;
@@ -26,6 +30,8 @@ namespace
   using namespace loka::core;
   using loka_toolbox_probe::Timer;
   const int kKeys = 32;
+  const bool kGrouped = LOKA_RIBBON_TYPING_GROUP != 0;
+  const char *const kArmName = kGrouped ? "group" : "plain";
 
   /** Config-owned durable log; each record commits stdio and the HFS volume. */
   class ProbeLog
@@ -151,19 +157,38 @@ namespace
     }
     bool reset()
     {
-      if (!this->ready())
+      this->props.log->record("checkpoint reset.ready begin");
+      const bool available = this->ready();
+      this->props.log->record("checkpoint reset.ready end ready=%d", available);
+      if (!available)
         return false;
-      StateTrackerGuard transaction(this->tracker());
-      if (this->lines_.update(this->lines_.at(0).id, String()) != EDIT_OK)
-        return false;
-      this->caret_.set(LineCursor(this->lines_.at(0).id, 0));
-      this->focus_.post(1);
-      return true;
-    }
-    void requestFocus()
-    {
-      StateTrackerGuard transaction(this->tracker());
-      this->focus_.post(1);
+      this->props.log->record("checkpoint reset.tracker begin");
+      StateTracker *owner = this->tracker();
+      this->props.log->record("checkpoint reset.tracker end");
+      ListEditResult result;
+      this->props.log->record("checkpoint reset.transaction begin");
+      {
+        StateTrackerGuard transaction(owner);
+        this->props.log->record("checkpoint reset.transaction entered");
+        this->props.log->record("checkpoint reset.line_id begin");
+        const ItemId line = this->lines_.at(0).id;
+        this->props.log->record("checkpoint reset.line_id end");
+        this->props.log->record("checkpoint reset.document_update begin");
+        result = this->lines_.update(line, String());
+        this->props.log->record("checkpoint reset.document_update end result=%d", static_cast<int>(result));
+        if (result == EDIT_OK)
+        {
+          this->props.log->record("checkpoint reset.caret_request begin");
+          this->caret_.set(LineCursor(line, 0));
+          this->props.log->record("checkpoint reset.caret_request end");
+          this->props.log->record("checkpoint reset.focus_request begin");
+          this->focus_.post(1);
+          this->props.log->record("checkpoint reset.focus_request end");
+        }
+        this->props.log->record("checkpoint reset.transaction leave begin");
+      }
+      this->props.log->record("checkpoint reset.transaction leave end");
+      return result == EDIT_OK;
     }
     bool focused() const
     {
@@ -224,7 +249,7 @@ namespace
           log_(),
           result_(0),
           phase_(SETUP),
-          arm_(0),
+          round_(1),
           keys_(0),
           totalUs_(0),
           totalTicks_(0),
@@ -235,8 +260,8 @@ namespace
           timer_(),
           before_()
     {
-      this->windows_[0] = this->windows_[1] = 0;
-      this->nodes_[0] = this->nodes_[1] = 0;
+      this->window_ = 0;
+      this->node_ = 0;
       if (!this->log_.good())
         this->result_ = 1;
     }
@@ -246,7 +271,9 @@ namespace
     }
     virtual void onIdle(double)
     {
+      this->checkpoint("idle entry");
       this->step();
+      this->checkpoint("idle return");
     }
     void setApp(App *app)
     {
@@ -260,16 +287,15 @@ namespace
     virtual void compose(AppComposition &composition)
     {
       this->log_.record("app compose begin");
-      for (int i = 0; i < 2; ++i)
-        composition << ObservedWindowDefinition(
-            WindowProps()
-                .title(i ? "Typing group" : "Typing plain")
-                .frame(20, 40, 500, 300)
-                .visible(true)
-                .scene(BoundaryDefinition<TypingProps, TypingNode>(TypingProps(i != 0, &this->log_)))
-                .idlePolicy(IdlePolicy::everyTick()),
-            &this->windows_[i],
-            &this->log_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .title("Ribbon typing probe")
+              .frame(20, 40, 500, 300)
+              .visible(true)
+              .scene(BoundaryDefinition<TypingProps, TypingNode>(TypingProps(kGrouped, &this->log_)))
+              .idlePolicy(IdlePolicy::everyTick()),
+          &this->window_,
+          &this->log_);
       this->log_.record("app compose end");
     }
 
@@ -286,12 +312,12 @@ namespace
     ProbeLog log_;
     int result_;
     Phase phase_;
-    int arm_, keys_;
+    int round_, keys_;
     unsigned long totalUs_, totalTicks_, keyStartUs_, keyStartTicks_, runStart_, lastDiagnostic_;
     Timer timer_;
     ToolboxSceneDebugStats before_;
-    ToolboxWindow *windows_[2];
-    TypingNode *nodes_[2];
+    ToolboxWindow *window_;
+    TypingNode *node_;
 
     void finish(const char *error)
     {
@@ -299,17 +325,12 @@ namespace
       if (error)
       {
         this->result_ = 1;
-        this->log_.record("ERROR arm=%d keys=%d %s", this->arm_, this->keys_, error);
+        this->log_.record("ERROR round=%d keys=%d %s", this->round_, this->keys_, error);
       }
       this->log_.record("done result=%d", this->result_);
       if (!this->log_.good())
         this->result_ = 1;
       this->app_->quit();
-    }
-    bool activationQueued() const
-    {
-      EventRecord event;
-      return EventAvail(activMask, &event);
     }
     bool quiet(ToolboxWindow *window) const
     {
@@ -333,6 +354,22 @@ namespace
       }
       return "invalid";
     }
+    void checkpoint(const char *call)
+    {
+      const unsigned long ticks = TickCount();
+      const unsigned long us = this->timer_.elapsed();
+      this->log_.record("checkpoint %s phase=%s round=%d keys=%d ticks=%lu",
+                        call,
+                        this->phaseName(),
+                        this->round_,
+                        this->keys_,
+                        ticks - this->runStart_);
+      if (this->phase_ == KEY_DELIVERY || this->phase_ == KEY_PRESENTATION)
+      {
+        this->keyStartUs_ += this->timer_.elapsed() - us;
+        this->keyStartTicks_ += TickCount() - ticks;
+      }
+    }
     void diagnoseWait()
     {
       const unsigned long now = TickCount();
@@ -340,15 +377,15 @@ namespace
         return;
       this->lastDiagnostic_ = now;
       const unsigned long startUs = this->timer_.elapsed();
-      ToolboxWindow *window = this->windows_[this->arm_ % 2];
-      TypingNode *node = this->nodes_[this->arm_ % 2];
+      ToolboxWindow *window = this->window_;
+      TypingNode *node = this->node_;
       std::size_t characters = 0;
       const bool counted = node && node->characterCount(characters);
       const bool native = window && window->window();
-      this->log_.record("wait phase=%s arm=%d keys=%d ticks=%lu window=%d node=%d sync=%d invalidate=%d update=%d "
-                        "quiet=%d front=%d active=%d activation_queued=%d focused=%d characters=%ld",
+      this->log_.record("wait phase=%s round=%d keys=%d ticks=%lu window=%d node=%d sync=%d invalidate=%d update=%d "
+                        "quiet=%d front=%d active=%d focused=%d characters=%ld",
                         this->phaseName(),
-                        this->arm_,
+                        this->round_,
                         this->keys_,
                         now - this->runStart_,
                         native,
@@ -359,7 +396,6 @@ namespace
                         native ? this->quiet(window) : -1,
                         native ? FrontWindow() == window->window() : -1,
                         window ? this->app_->activeWindow() == window : -1,
-                        this->activationQueued(),
                         node ? node->focused() : -1,
                         counted ? static_cast<long>(characters) : -1L);
       // Durable diagnostics are outside the measured key latency.
@@ -391,32 +427,53 @@ namespace
         this->finish("log write/flush failed");
         return;
       }
+      if (this->phase_ == SETUP)
+        this->checkpoint("wait diagnostic begin");
       this->diagnoseWait();
+      if (this->phase_ == SETUP)
+        this->checkpoint("wait diagnostic end");
       if (TickCount() - this->runStart_ > 110UL * 60)
       {
         this->finish("110 second watchdog expired");
         return;
       }
-      if (!this->windows_[0] || !this->windows_[1])
+      if (!this->window_)
         return;
-      const int index = this->arm_ % 2;
-      ToolboxWindow *window = this->windows_[index];
-      if (!this->nodes_[index])
+      ToolboxWindow *window = this->window_;
+      if (!this->node_)
       {
+        this->checkpoint("setup.lookup_context begin");
         Node *found = 0;
         loka::dsl::FlowError error;
-        loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Typing.Owner", found, error);
+        this->checkpoint("setup.lookup_context end");
+        this->checkpoint("setup.scene begin");
+        Scene *scene = window->scene();
+        this->checkpoint("setup.scene end");
+        this->checkpoint("setup.node_lookup begin");
+        const loka::dsl::StepRunStatus lookup =
+            loka::dsl::testing::LookupNodeById<Node>(scene, "Typing.Owner", found, error);
+        this->log_.record("checkpoint setup.node_lookup end status=%d found=%d", static_cast<int>(lookup), found != 0);
         // The unique ID belongs only to TypingNode in this self-contained fixture.
-        this->nodes_[index] = found ? static_cast<TypingNode *>(found) : 0;
+        this->node_ = found ? static_cast<TypingNode *>(found) : 0;
       }
-      TypingNode *node = this->nodes_[index];
-      if (!node || !window->scenePlatformController() || !window->window() || !node->ready())
+      TypingNode *node = this->node_;
+      if (this->phase_ == SETUP)
+        this->checkpoint("setup.validate begin");
+      const bool ready = node && window->scenePlatformController() && window->window() && node->ready();
+      if (this->phase_ == SETUP)
+        this->checkpoint("setup.validate end");
+      if (!ready)
       {
         this->finish("window/editor allocation refused");
         return;
       }
       std::size_t characters = 0;
-      if (!node->characterCount(characters))
+      if (this->phase_ == SETUP)
+        this->checkpoint("setup.character_count begin");
+      const bool counted = node->characterCount(characters);
+      if (this->phase_ == SETUP)
+        this->checkpoint("setup.character_count end");
+      if (!counted)
       {
         this->finish("character count unavailable");
         return;
@@ -424,28 +481,24 @@ namespace
       switch (this->phase_)
       {
       case SETUP:
-        SelectWindow(window->window());
-        this->app_->setActiveWindow(window);
-        if (!node->reset())
+        // The sole window is already adopted/selected by the App. No switch.
+        this->checkpoint("setup.reset begin");
         {
-          this->finish("document reset refused");
-          return;
+          const bool reset = node->reset();
+          this->checkpoint("setup.reset end");
+          if (!reset)
+          {
+            this->finish("document reset refused");
+            return;
+          }
         }
         this->keys_ = 0;
         this->totalUs_ = this->totalTicks_ = 0;
         this->phase_ = SETTLING;
+        this->checkpoint("setup complete");
         return;
       case SETTLING:
-        // Queued activateEvt includes deactivation; the rail currently assigns
-        // activeWindow for either. Restore our selected arm before focus settles.
-        if (FrontWindow() != window->window() || this->app_->activeWindow() != window)
-        {
-          SelectWindow(window->window());
-          this->app_->setActiveWindow(window);
-          node->requestFocus();
-          return;
-        }
-        if (this->activationQueued() || !this->quiet(window) || !node->focused())
+        if (!this->quiet(window) || !node->focused())
           return;
         if (characters != 0)
         {
@@ -482,10 +535,13 @@ namespace
           return;
         }
         this->report(characters);
-        if (++this->arm_ == 4)
+        if (this->round_ == 2)
           this->finish(0);
         else
+        {
+          ++this->round_;
           this->phase_ = SETUP;
+        }
         return;
       case DONE:
         return;
@@ -493,20 +549,19 @@ namespace
     }
     void report(std::size_t characters)
     {
-      const ToolboxSceneDebugStats &after =
-          this->windows_[this->arm_ % 2]->scenePlatformController()->debugStatsForTesting();
-      const char *name = this->arm_ % 2 ? "group" : "plain";
+      const ToolboxSceneDebugStats &after = this->window_->scenePlatformController()->debugStatsForTesting();
+      const char *name = kArmName;
       this->log_.record(
           "arm=%s round=%d keys=%d total_us=%lu us_per_key=%lu ticks=%lu timing=queue_to_present_observed",
           name,
-          this->arm_ / 2 + 1,
+          this->round_,
           this->keys_,
           this->totalUs_,
           this->totalUs_ / this->keys_,
           this->totalTicks_);
       this->log_.record("sanity arm=%s round=%d characters=%lu expected=%d",
                         name,
-                        this->arm_ / 2 + 1,
+                        this->round_,
                         static_cast<unsigned long>(characters),
                         kKeys);
       this->log_.record("counts changes=%lu draw=%d draw_dirty=%d render=%d render_dirty=%d collector_visits=%d "
