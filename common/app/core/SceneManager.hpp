@@ -175,8 +175,9 @@ private:
       receives the captured request. Observer requests wait for next admission. */
   bool applyPendingWork();
   bool applyReplacement();
+  /** Publishes currentScene_ synchronously inside seat apply, with applying_ set. */
   void installScene(loka::app::scene::Scene *scene);
-  /** Publishes retirement and unmounts the Scene under the seat transaction. */
+  /** Publishes retirement synchronously and unmounts the Scene. */
   void retireScene(loka::app::scene::Scene *scene);
   /** Close admission retires the current Scene before Window reclamation. */
   void retireCurrentScene();
@@ -189,7 +190,6 @@ private:
   loka::core::MutableState<loka::app::scene::Scene *> currentScene_;
   loka::app::scene::Scene *desired_;
   loka::app::scene::Scene *applying_;
-  loka::core::PushStateTracker tracker_;
   loka::app::detail::SceneRetirePool retiredScenes_;
   Window *window_;
 #ifdef TEST_BUILD

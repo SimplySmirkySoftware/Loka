@@ -2,7 +2,6 @@
 #define LOKA_APP_TESTING_SCENE_MANAGER_TEST_ACCESS_HPP
 
 #include "app/core/SceneManager.hpp"
-#include "app/scene/state/NodeState.hpp"
 
 namespace loka
 {
@@ -10,7 +9,7 @@ namespace loka
   {
     namespace testing
     {
-      /** Testing-only readers for SceneManager transaction state. */
+      /** Testing-only readers for SceneManager seat state. */
       class SceneManagerTestAccess
       {
       public:
@@ -19,17 +18,9 @@ namespace loka
           return manager.request_ != SceneManager::REQUEST_NONE;
         }
 
-        static const ::loka::core::PushStateTracker &tracker(const SceneManager &manager)
+        static const loka::app::scene::Scene *applying(const SceneManager &m)
         {
-          return manager.tracker_;
-        }
-
-        /** Exercises a seat write on the manager's actual registered Scene fact. */
-        static void writeCurrentScene(SceneManager &manager)
-        {
-          loka::app::scene::NodeState<loka::app::scene::Scene *> current(
-              &manager.currentScene_, &manager.tracker_);
-          current.set(manager.currentScene_.get(), true);
+          return m.applying_;
         }
 
         /** Number of scenes waiting in the Window retirement pool. */
@@ -50,11 +41,6 @@ namespace loka
           return manager.lastPrepareRefusal_;
         }
 #endif
-
-        static ::loka::core::TrackerPhase trackerPhase(const SceneManager &manager)
-        {
-          return manager.tracker_.phase();
-        }
       };
     } // namespace testing
   } // namespace app
