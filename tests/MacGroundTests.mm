@@ -4,6 +4,7 @@
 #include "MacScenePlatformController.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "support/ContrastRatio.hpp"
@@ -147,6 +148,60 @@ namespace
     }
   }
 
+  // controlShadowColor and colorUsingColorSpaceName: are the Tiger-era spellings
+  // the edge view draws with; newer SDKs deprecate them.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  void checkRibbonGroupEdge(bool dark)
+  {
+    (void)dark;
+    using namespace loka::app;
+    NSColor *ground = nil;
+    LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_WINDOW, ground));
+    const RibbonGroupEdge kinds[] = {RIBBON_GROUP_EDGE_LEFT, RIBBON_GROUP_EDGE_RIGHT, RIBBON_GROUP_EDGE_BOTTOM};
+    NSView *parent = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 160, 100)];
+    {
+      MacScenePlatformController controller(parent, RailMetrics());
+      for (int i = 0; i < 3; ++i)
+      {
+        RibbonGroupEdgeNode node((RibbonGroupEdgeProps(kinds[i])));
+        NSView *view = project(controller, parent, node);
+        LOKA_VERIFY([view isFlipped]);
+        // A three-row bottom tells the solid bottom fill from a one-row blend.
+        [view setFrame:i == 2 ? NSMakeRect(0, 0, 9, 3) : NSMakeRect(0, 0, 1, 9)];
+        // render() calls drawRect directly into an unflipped bitmap context:
+        // bitmap y=0 is the last drawn geometric row (the view's bottom).
+        NSBitmapImageRep *bitmap = render(view);
+        if (i == 2)
+        {
+          for (int y = 0; y < 3; ++y)
+            for (int x = 0; x < 9; ++x)
+              LOKA_VERIFY(sameColor([bitmap colorAtX:x y:y], [NSColor controlShadowColor]));
+        }
+        else
+        {
+          LOKA_VERIFY(sameColor([bitmap colorAtX:0 y:0], [NSColor controlShadowColor]));
+          LOKA_VERIFY(sameColor([bitmap colorAtX:0 y:8], ground));
+          NSColor *a = [[NSColor controlShadowColor] colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+          NSColor *b = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+          LOKA_VERIFY(a != nil && b != nil);
+          NSColor *middle = [NSColor colorWithCalibratedRed:([a redComponent] + [b redComponent]) / 2
+                                                      green:([a greenComponent] + [b greenComponent]) / 2
+                                                       blue:([a blueComponent] + [b blueComponent]) / 2
+                                                      alpha:([a alphaComponent] + [b alphaComponent]) / 2];
+          LOKA_VERIFY(sameColor([bitmap colorAtX:0 y:4], middle));
+          [view setFrame:NSMakeRect(0, 0, 1, 1)];
+          LOKA_VERIFY(sameColor([render(view) colorAtX:0 y:0], [NSColor controlShadowColor]));
+        }
+        controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      }
+    }
+    LOKA_VERIFY([[parent subviews] count] == 0);
+    [parent release];
+  }
+
+#pragma clang diagnostic pop
+
   void checkCell(bool dark)
   {
     NSView *parent = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 160, 100)];
@@ -274,4 +329,9 @@ void testMacScrollViewTransparentBackground()
   }
   [parent release];
   [pool drain];
+}
+
+void testMacRibbonGroupEdgePixels()
+{
+  inAppearances(checkRibbonGroupEdge);
 }

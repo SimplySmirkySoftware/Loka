@@ -5,6 +5,7 @@ void testMacGroundRoles();
 void testMacGroundLegibility();
 void testMacGroundLegacyDrawingAppearance();
 void testMacCellGroundAndTextPixels();
+void testMacRibbonGroupEdgePixels();
 void testMacRectSurfaceGroundAndSpritePixels();
 void testMacImageViewTransparentPixels();
 void testMacScrollViewTransparentBackground();
