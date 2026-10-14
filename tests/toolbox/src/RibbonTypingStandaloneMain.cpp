@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdarg>
 #include <Processes.h>
 
 #include "StandaloneFlowRunner.hpp"
@@ -26,6 +27,54 @@ namespace
   using loka_toolbox_probe::Timer;
   const int kKeys = 32;
 
+  /** Config-owned durable log; each record commits stdio and the HFS volume. */
+  class ProbeLog
+  {
+  public:
+    ProbeLog()
+        : stream_(0),
+          good_(false)
+    {
+      if (loka::platform::file::ResolveApplicationSidecar(
+              loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
+        this->stream_ = loka::platform::file::OpenWriteTruncate(this->file_);
+      if (this->stream_)
+      {
+        std::setvbuf(this->stream_, 0, _IONBF, 0);
+        this->good_ = true;
+        this->record("start ticks=%lu", TickCount());
+      }
+    }
+    ~ProbeLog()
+    {
+      if (this->stream_)
+        std::fclose(this->stream_);
+    }
+    bool good() const
+    {
+      return this->good_;
+    }
+    void record(const char *format, ...) __attribute__((format(printf, 2, 3)))
+    {
+      if (!this->good_)
+        return;
+      va_list args;
+      va_start(args, format);
+      std::vfprintf(this->stream_, format, args);
+      va_end(args);
+      std::fprintf(this->stream_, "\r");
+      const bool flushed = loka::platform::file::FlushWrite(this->stream_, this->file_);
+      this->good_ = flushed && !std::ferror(this->stream_);
+    }
+
+  private:
+    ProbeLog(const ProbeLog &);
+    ProbeLog &operator=(const ProbeLog &);
+    loka::platform::file::FileHandle file_;
+    std::FILE *stream_;
+    bool good_;
+  };
+
   class TypingNode;
   struct TypingProps : NodePropsBase<TypingProps>
   {
@@ -34,13 +83,18 @@ namespace
     {
     };
     bool grouped;
-    explicit TypingProps(bool value = false)
-        : grouped(value)
+    ProbeLog *log;
+    explicit TypingProps(bool value = false, ProbeLog *sink = 0)
+        : grouped(value),
+          log(sink)
     {
     }
     bool operator<(const PropsBase &rhs) const
     {
-      return rhs.propsTypeId() == this->propsTypeId() && this->grouped < static_cast<const TypingProps &>(rhs).grouped;
+      return rhs.propsTypeId() == this->propsTypeId()
+             && (this->grouped != static_cast<const TypingProps &>(rhs).grouped
+                     ? this->grouped < static_cast<const TypingProps &>(rhs).grouped
+                     : std::less<ProbeLog *>()(this->log, static_cast<const TypingProps &>(rhs).log));
     }
   };
 
@@ -52,24 +106,31 @@ namespace
     explicit TypingNode(const TypingProps &props)
         : StdCompositionBoundaryNodeBase<TypingProps>(props)
     {
+      this->props.log->record("node construct begin group=%d", this->props.grouped);
       this->setTestId("Typing.Owner");
       this->state(this->cursor_, LineCursor::None());
       this->state(this->caret_, LineCursor::None());
       this->state(this->error_, String());
       this->state(this->focus_);
+      this->props.log->record("node construct end group=%d", this->props.grouped);
     }
     virtual void attachNode(NodeComposition &)
     {
+      this->props.log->record("attach begin group=%d", this->props.grouped);
       StateTracker *owner = 0;
       if (this->lines_.queryMutationTracker(owner) == EDIT_OK)
         return;
-      StateTrackerGuard transaction(this->tracker());
-      if (this->lines_.attach(this->tracker()->asPushTracker(), TextEditorProps::kMaxLines) != ATTACH_OK
-          || this->lines_.insert(0, String()) != EDIT_OK)
-        this->lines_.detach();
+      {
+        StateTrackerGuard transaction(this->tracker());
+        if (this->lines_.attach(this->tracker()->asPushTracker(), TextEditorProps::kMaxLines) != ATTACH_OK
+            || this->lines_.insert(0, String()) != EDIT_OK)
+          this->lines_.detach();
+      }
+      this->props.log->record("attach end group=%d ready=%d", this->props.grouped, this->ready());
     }
     virtual void composeNode(NodeComposition &composition)
     {
+      this->props.log->record("compose begin group=%d ready=%d", this->props.grouped, this->ready());
       if (!this->ready())
         return;
       RibbonControl band;
@@ -81,6 +142,7 @@ namespace
       composition.declare(
           VStack() << band << Text(this->error_.state())
                    << TextEditor(this->lines_, this->cursor_).moveCaretTo(this->caret_).focusedAs(this->focus_, 1));
+      this->props.log->record("compose end group=%d", this->props.grouped);
     }
     bool ready() const
     {
@@ -97,6 +159,11 @@ namespace
       this->caret_.set(LineCursor(this->lines_.at(0).id, 0));
       this->focus_.post(1);
       return true;
+    }
+    void requestFocus()
+    {
+      StateTrackerGuard transaction(this->tracker());
+      this->focus_.post(1);
     }
     bool focused() const
     {
@@ -120,9 +187,10 @@ namespace
   class ObservedWindowDefinition : public WindowDefinition<WindowProps>
   {
   public:
-    ObservedWindowDefinition(const WindowProps &props, ToolboxWindow **out)
+    ObservedWindowDefinition(const WindowProps &props, ToolboxWindow **out, ProbeLog *log)
         : WindowDefinition<WindowProps>(props),
-          out_(out)
+          out_(out),
+          log_(log)
     {
     }
     virtual WindowDefinitionBase *clone() const
@@ -131,13 +199,19 @@ namespace
     }
     virtual Window *create(PlatformContext *context) const
     {
+      this->log_->record("window create begin");
       Window *window = WindowDefinition<WindowProps>::create(context);
       *this->out_ = window ? window->asToolboxWindow() : 0;
+      this->log_->record("window create end window=%d scene=%d idle=%d",
+                         window != 0,
+                         window && window->scene(),
+                         static_cast<int>(this->props.idlePolicyValue.mode));
       return window;
     }
 
   private:
     ToolboxWindow **out_;
+    ProbeLog *log_;
   };
 
   /** Finite event-loop driver. All borrows end before the App destroys its windows. */
@@ -147,7 +221,7 @@ namespace
     explicit ProbeConfig(PlatformContext *context)
         : AppConfigurable(context),
           app_(0),
-          log_(0),
+          log_(),
           result_(0),
           phase_(SETUP),
           arm_(0),
@@ -157,27 +231,27 @@ namespace
           keyStartUs_(0),
           keyStartTicks_(0),
           runStart_(TickCount()),
+          lastDiagnostic_(runStart_ - 60),
           timer_(),
           before_()
     {
       this->windows_[0] = this->windows_[1] = 0;
       this->nodes_[0] = this->nodes_[1] = 0;
-      if (loka::platform::file::ResolveApplicationSidecar(
-              loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
-        this->log_ = loka::platform::file::OpenWriteTruncate(this->file_);
-      if (this->log_)
-        std::setvbuf(this->log_, 0, _IONBF, 0);
-      else
+      if (!this->log_.good())
         this->result_ = 1;
     }
-    virtual ~ProbeConfig()
+    virtual IdlePolicy idlePolicy() const
     {
-      if (this->log_)
-        std::fclose(this->log_);
+      return IdlePolicy::everyTick();
+    }
+    virtual void onIdle(double)
+    {
+      this->step();
     }
     void setApp(App *app)
     {
       this->app_ = app;
+      this->log_.record("app created; entering run next");
     }
     int exitCode() const
     {
@@ -185,16 +259,18 @@ namespace
     }
     virtual void compose(AppComposition &composition)
     {
+      this->log_.record("app compose begin");
       for (int i = 0; i < 2; ++i)
         composition << ObservedWindowDefinition(
             WindowProps()
                 .title(i ? "Typing group" : "Typing plain")
                 .frame(20, 40, 500, 300)
                 .visible(true)
-                .scene(BoundaryDefinition<TypingProps, TypingNode>(TypingProps(i != 0)))
-                .idlePolicy(IdlePolicy::everyTick())
-                .onIdle(&ProbeConfig::OnIdle, this),
-            &this->windows_[i]);
+                .scene(BoundaryDefinition<TypingProps, TypingNode>(TypingProps(i != 0, &this->log_)))
+                .idlePolicy(IdlePolicy::everyTick()),
+            &this->windows_[i],
+            &this->log_);
+      this->log_.record("app compose end");
     }
 
   private:
@@ -207,12 +283,11 @@ namespace
       DONE
     };
     App *app_;
-    loka::platform::file::FileHandle file_;
-    std::FILE *log_;
+    ProbeLog log_;
     int result_;
     Phase phase_;
     int arm_, keys_;
-    unsigned long totalUs_, totalTicks_, keyStartUs_, keyStartTicks_, runStart_;
+    unsigned long totalUs_, totalTicks_, keyStartUs_, keyStartTicks_, runStart_, lastDiagnostic_;
     Timer timer_;
     ToolboxSceneDebugStats before_;
     ToolboxWindow *windows_[2];
@@ -224,17 +299,75 @@ namespace
       if (error)
       {
         this->result_ = 1;
-        std::fprintf(this->log_, "ERROR arm=%d keys=%d %s\r", this->arm_, this->keys_, error);
+        this->log_.record("ERROR arm=%d keys=%d %s", this->arm_, this->keys_, error);
       }
-      std::fprintf(this->log_, "done result=%d\r", this->result_);
-      if (std::ferror(this->log_) || !loka::platform::file::FlushWrite(this->log_, this->file_))
+      this->log_.record("done result=%d", this->result_);
+      if (!this->log_.good())
         this->result_ = 1;
       this->app_->quit();
+    }
+    bool activationQueued() const
+    {
+      EventRecord event;
+      return EventAvail(activMask, &event);
     }
     bool quiet(ToolboxWindow *window) const
     {
       return !window->hasPendingScenePlatformSync() && !window->hasPendingInvalidate()
              && EmptyRgn(reinterpret_cast<WindowPeek>(window->window())->updateRgn);
+    }
+    const char *phaseName() const
+    {
+      switch (this->phase_)
+      {
+      case SETUP:
+        return "SETUP";
+      case SETTLING:
+        return "SETTLING";
+      case KEY_DELIVERY:
+        return "KEY_DELIVERY";
+      case KEY_PRESENTATION:
+        return "KEY_PRESENTATION";
+      case DONE:
+        return "DONE";
+      }
+      return "invalid";
+    }
+    void diagnoseWait()
+    {
+      const unsigned long now = TickCount();
+      if (now - this->lastDiagnostic_ < 60)
+        return;
+      this->lastDiagnostic_ = now;
+      const unsigned long startUs = this->timer_.elapsed();
+      ToolboxWindow *window = this->windows_[this->arm_ % 2];
+      TypingNode *node = this->nodes_[this->arm_ % 2];
+      std::size_t characters = 0;
+      const bool counted = node && node->characterCount(characters);
+      const bool native = window && window->window();
+      this->log_.record("wait phase=%s arm=%d keys=%d ticks=%lu window=%d node=%d sync=%d invalidate=%d update=%d "
+                        "quiet=%d front=%d active=%d activation_queued=%d focused=%d characters=%ld",
+                        this->phaseName(),
+                        this->arm_,
+                        this->keys_,
+                        now - this->runStart_,
+                        native,
+                        node != 0,
+                        window ? window->hasPendingScenePlatformSync() : -1,
+                        window ? window->hasPendingInvalidate() : -1,
+                        native ? !EmptyRgn(reinterpret_cast<WindowPeek>(window->window())->updateRgn) : -1,
+                        native ? this->quiet(window) : -1,
+                        native ? FrontWindow() == window->window() : -1,
+                        window ? this->app_->activeWindow() == window : -1,
+                        this->activationQueued(),
+                        node ? node->focused() : -1,
+                        counted ? static_cast<long>(characters) : -1L);
+      // Durable diagnostics are outside the measured key latency.
+      if (this->phase_ == KEY_DELIVERY || this->phase_ == KEY_PRESENTATION)
+      {
+        this->keyStartUs_ += this->timer_.elapsed() - startUs;
+        this->keyStartTicks_ += TickCount() - now;
+      }
     }
     void inject()
     {
@@ -253,6 +386,12 @@ namespace
     {
       if (this->phase_ == DONE)
         return;
+      if (!this->log_.good())
+      {
+        this->finish("log write/flush failed");
+        return;
+      }
+      this->diagnoseWait();
       if (TickCount() - this->runStart_ > 110UL * 60)
       {
         this->finish("110 second watchdog expired");
@@ -297,7 +436,16 @@ namespace
         this->phase_ = SETTLING;
         return;
       case SETTLING:
-        if (!this->quiet(window) || !node->focused())
+        // Queued activateEvt includes deactivation; the rail currently assigns
+        // activeWindow for either. Restore our selected arm before focus settles.
+        if (FrontWindow() != window->window() || this->app_->activeWindow() != window)
+        {
+          SelectWindow(window->window());
+          this->app_->setActiveWindow(window);
+          node->requestFocus();
+          return;
+        }
+        if (this->activationQueued() || !this->quiet(window) || !node->focused())
           return;
         if (characters != 0)
         {
@@ -348,34 +496,28 @@ namespace
       const ToolboxSceneDebugStats &after =
           this->windows_[this->arm_ % 2]->scenePlatformController()->debugStatsForTesting();
       const char *name = this->arm_ % 2 ? "group" : "plain";
-      std::fprintf(this->log_,
-                   "arm=%s round=%d keys=%d total_us=%lu us_per_key=%lu ticks=%lu timing=queue_to_present_observed\r",
-                   name,
-                   this->arm_ / 2 + 1,
-                   this->keys_,
-                   this->totalUs_,
-                   this->totalUs_ / this->keys_,
-                   this->totalTicks_);
-      std::fprintf(this->log_,
-                   "sanity arm=%s round=%d characters=%lu expected=%d\r",
-                   name,
-                   this->arm_ / 2 + 1,
-                   static_cast<unsigned long>(characters),
-                   kKeys);
-      std::fprintf(this->log_,
-                   "counts changes=%lu draw=%d draw_dirty=%d render=%d render_dirty=%d collector_visits=%d "
-                   "boundary_apply=%d replay=unavailable fast_path=unavailable\r",
-                   after.totalChanges - this->before_.totalChanges,
-                   after.totalDrawCalls - this->before_.totalDrawCalls,
-                   after.totalDrawDirtyCalls - this->before_.totalDrawDirtyCalls,
-                   after.totalRenderCalls - this->before_.totalRenderCalls,
-                   after.totalRenderDirtyCalls - this->before_.totalRenderDirtyCalls,
-                   after.totalCollectorVisitCount - this->before_.totalCollectorVisitCount,
-                   after.totalBoundaryApplyCount - this->before_.totalBoundaryApplyCount);
-    }
-    static void OnIdle(Window *, double, void *data)
-    {
-      static_cast<ProbeConfig *>(data)->step();
+      this->log_.record(
+          "arm=%s round=%d keys=%d total_us=%lu us_per_key=%lu ticks=%lu timing=queue_to_present_observed",
+          name,
+          this->arm_ / 2 + 1,
+          this->keys_,
+          this->totalUs_,
+          this->totalUs_ / this->keys_,
+          this->totalTicks_);
+      this->log_.record("sanity arm=%s round=%d characters=%lu expected=%d",
+                        name,
+                        this->arm_ / 2 + 1,
+                        static_cast<unsigned long>(characters),
+                        kKeys);
+      this->log_.record("counts changes=%lu draw=%d draw_dirty=%d render=%d render_dirty=%d collector_visits=%d "
+                        "boundary_apply=%d replay=unavailable fast_path=unavailable",
+                        after.totalChanges - this->before_.totalChanges,
+                        after.totalDrawCalls - this->before_.totalDrawCalls,
+                        after.totalDrawDirtyCalls - this->before_.totalDrawDirtyCalls,
+                        after.totalRenderCalls - this->before_.totalRenderCalls,
+                        after.totalRenderDirtyCalls - this->before_.totalRenderDirtyCalls,
+                        after.totalCollectorVisitCount - this->before_.totalCollectorVisitCount,
+                        after.totalBoundaryApplyCount - this->before_.totalBoundaryApplyCount);
     }
   };
 } // namespace
