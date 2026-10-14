@@ -109,6 +109,7 @@
 #include "MenuCheckedTests.hpp"
 #include "MenuTitleTests.hpp"
 #include "MenuCloneRefusalTests.hpp"
+#include "NodeDefinitionCloneRefusalTests.hpp"
 #include "SnapFormatTests.hpp"
 #include "ScenarioProfileTests.hpp"
 #include "LrpkFormatTests.hpp"

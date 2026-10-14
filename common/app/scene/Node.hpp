@@ -1542,20 +1542,6 @@ namespace loka
             : children_()
         {
         }
-        NestableDefinitionBase(const NestableDefinitionBase &other)
-            : INestableDefinition(other),
-              children_()
-        {
-          this->replaceChildrenFrom(other);
-        }
-        NestableDefinitionBase &operator=(const NestableDefinitionBase &other)
-        {
-          if (this != &other)
-          {
-            this->replaceChildrenFrom(other);
-          }
-          return *this;
-        }
         virtual ~NestableDefinitionBase()
         {
           this->clearChildren();
@@ -1627,6 +1613,9 @@ namespace loka
         }
 
       private:
+        NestableDefinitionBase(const NestableDefinitionBase &);
+        NestableDefinitionBase &operator=(const NestableDefinitionBase &);
+
         loka::dsl::CompositionList<NodeDefinitionBase> children_;
       };
 
@@ -1650,6 +1639,8 @@ namespace loka
         {
         }
 
+        /** By-value copy cannot report refusal; children remain empty on failure.
+            Refusal-capable callers must use clone(). */
         NestableNodeDefinition(const NestableNodeDefinition &other)
             : BaseType(),
               NestableDefinitionBase()
