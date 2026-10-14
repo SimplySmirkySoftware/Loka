@@ -351,13 +351,15 @@ void testWin32DeclaredWindowSizeMeansClientArea()
   MenuApplyingWin32App app;
   app.setActiveWindow(&window);
   // Native transition is attachment-owned; the App default is bootstrap-only.
-  window.menuAttachment().project(&menuBar, 0);
+  const loka::app::MenuSources menuBarSources = {&menuBar, 0, 0};
+  window.menuAttachment().project(menuBarSources);
   assert(GetMenu(hwnd) && "the production menu path must attach the declared menu");
   assertLogicalClientSize(hwnd, declaredWidth, declaredHeight);
   LOKA_VERIFY(window.frameState().get().width == declaredWidth);
   LOKA_VERIFY(window.frameState().get().height == declaredHeight);
 
-  window.menuAttachment().project(0, 0);
+  const loka::app::MenuSources absent = {0, 0, 0};
+  window.menuAttachment().project(absent);
   assert(!GetMenu(hwnd) && "the production menu path must detach a cleared menu");
   assertLogicalClientSize(hwnd, declaredWidth, declaredHeight);
   LOKA_VERIFY(window.frameState().get().width == declaredWidth);
@@ -516,7 +518,8 @@ void testWin32MenuRebuildPreservesMovedWindowFrame()
   MenuApplyingWin32App app;
   app.setActiveWindow(&window);
   // Native transition is attachment-owned; the App default is bootstrap-only.
-  window.menuAttachment().project(&initialMenuBar, 0);
+  const loka::app::MenuSources initialMenuBarSources = {&initialMenuBar, 0, 0};
+  window.menuAttachment().project(initialMenuBarSources);
   assert(GetMenu(hwnd) && "the production menu path must attach the initial menu");
   LOKA_VERIFY(SetWindowPos(hwnd,
                            NULL,
@@ -529,7 +532,8 @@ void testWin32MenuRebuildPreservesMovedWindowFrame()
   RECT movedClientRect;
   LOKA_VERIFY(GetClientRect(hwnd, &movedClientRect));
 
-  window.menuAttachment().project(&rebuiltMenuBar, 0);
+  const loka::app::MenuSources rebuiltMenuBarSources = {&rebuiltMenuBar, 0, 0};
+  window.menuAttachment().project(rebuiltMenuBarSources);
 
   const RECT rebuiltOuterRect = readWindowRect(hwnd);
   RECT rebuiltClientRect;
@@ -606,6 +610,9 @@ void testWin32AppDestructionLeavesWindowOwnedMenu()
       const BOOL menuCreated = IsMenu(menu);
       LOKA_VERIFY(menuCreated);
       frameNotifications = 0;
+      // The borrowed Window leaves this App before its bootstrap bar can die,
+      // so the next App's identity cannot alias a freed base.
+      window.setApp(0);
     }
 
     // The fixture owns the Window beyond the App: its native menu stays put.
