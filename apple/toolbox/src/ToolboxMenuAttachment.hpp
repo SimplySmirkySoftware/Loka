@@ -2,7 +2,7 @@
 #define LOKA_TOOLBOX_MENU_ATTACHMENT_HPP
 
 #include "app/Menu.hpp"
-#include "core/util/OwnedDef.hpp"
+#include "app/MenuProjectionRecord.hpp"
 #include <Menus.h>
 #include <vector>
 
@@ -16,10 +16,11 @@ class ToolboxMenuAttachment
 public:
   explicit ToolboxMenuAttachment(ToolboxApp &app);
   ~ToolboxMenuAttachment();
-  /** Returns true when native menus were projected; equal offers return false.
-      Snapshot refusal clears the baseline without dropping the projection. */
-  bool project(const loka::app::MenuBarDefinition *bar,
-               const loka::app::scene::Scene *source);
+  /** Called per admission offer, active window only. Unchanged input costs
+      three pointer comparisons, no allocations or row walks. Changed input
+      merges once and fully rebuilds the merged bar's rows. Returns true when
+      native menus were projected; merge refusal preserves native and record. */
+  bool project(const loka::app::MenuSources &sources);
   void disconnect();
   void releaseFrom(const loka::app::scene::Scene *scene);
   bool dispatch(short menuId, short item);
@@ -44,13 +45,6 @@ private:
     bool invertEnabled;
     loka::core::State<bool> *checkedState;
   };
-  struct MenuEntry
-  {
-    MenuHandle menu;
-    short menuId;
-    bool isAppMenu;
-    loka::core::String title;
-  };
   static void MenuTitleChangedThunk(void *userData);
   static void MenuEnabledChangedThunk(void *userData);
   static void MenuCheckedChangedThunk(void *userData);
@@ -62,9 +56,7 @@ private:
                             short &nextMenuId, std::vector<MenuCommand> &commands,
                             std::vector<MenuBinding *> &bindings,
                             std::vector<MenuHandle> &hierarchicalMenus);
-  static bool HasHierarchicalItems(const loka::app::MenuItemDefinition *items);
   void clearMenuBindings();
-  void clearMenuBindingsFor(MenuHandle menu, short menuId);
   void resetMenuState();
   void disposeMenuEntries();
   void disposeHierarchicalMenus();
@@ -73,9 +65,8 @@ private:
   short nextMenuId_;
   std::vector<MenuCommand> commands_;
   std::vector<MenuBinding *> bindings_;
-  std::vector<MenuEntry> menuEntries_;
+  std::vector<MenuHandle> menuEntries_;
   std::vector<MenuHandle> hierarchicalMenus_;
-  loka::core::OwnedDef<loka::app::MenuBarDefinition> applied_;
-  const loka::app::scene::Scene *source_;
+  loka::app::MenuProjectionRecord record_;
 };
 #endif

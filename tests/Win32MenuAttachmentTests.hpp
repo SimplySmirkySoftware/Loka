@@ -1,7 +1,13 @@
 #ifndef LOKA_WIN32_MENU_ATTACHMENT_TESTS_HPP
 #define LOKA_WIN32_MENU_ATTACHMENT_TESTS_HPP
 
-void testWin32MenuAttachmentProjectsOnceForEqualBar();
+void testWin32MenuAttachmentProjectsOncePerIdentity();
+void testWin32MenuAttachmentRetriesRefusedOffer();
+void testWin32MenuAttachmentReleaseThenAbsentRemovesMenu();
+void testWin32MenuAttachmentAbsentClearsEmptyProjection();
+void testWin32MenuAttachmentDisconnectClearsIdentity();
+void testWin32MenuAttachmentAppDetachClearsIdentity();
+void testWin32AppMenuReofferSkipsMerge();
 void testWin32MenuAttachmentReleaseFromSourceDisconnects();
 void testWin32SceneDetachReleasesMenu();
 void testWin32TwoWindowsOwnTheirMenus();
