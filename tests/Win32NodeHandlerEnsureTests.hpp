@@ -24,4 +24,8 @@ void testWin32SmallLabelNaturalWidth();
 void testWin32RibbonGroupNaturalWidthTraversal();
 void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle();
 
+void testWin32ButtonNativeHeightColumn();
+void testWin32ButtonNativeHeightCenteredRow();
+void testWin32ButtonDeclinedHeightKeepsRowAligned();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP

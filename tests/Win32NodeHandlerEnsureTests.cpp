@@ -1,3 +1,7 @@
+#include "support/Win32ImportRefusal.hpp"
+#include "app/nodes/controls/EditText.hpp"
+#include "context/Win32EditTextContext.hpp"
+#include <cstdlib>
 #include "support/LifecycleFactTestAccess.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "support/TextEditorStateOwner.hpp"
@@ -67,19 +71,21 @@ namespace
   {
     using namespace loka::app;
     const int count = 3;
-    const int height = 2 * layout::SceneRootLayout::kInset + count * layout::FallbackControlMetrics::kButtonHeight
-                       + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
     const RailMetrics metrics[] = {RailMetrics(), loka::win32::DefaultRailMetrics()};
     for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
     {
       const loka::win32::Win32DisplayScale scale(96, metrics[scaleIndex]);
       HWND root = CreateWindowExW(0, L"STATIC", L"column-fit", WS_POPUP, 0, 0,
                                   scale.clientLengthToNative(257).px,
-                                  scale.clientLengthToNative(height).px,
+                                  scale.clientLengthToNative(200).px,
                                   NULL, NULL, GetModuleHandle(NULL), NULL);
       LOKA_VERIFY(root != NULL);
       {
         Win32ScenePlatformController controller(root, scale);
+        const int height = 2 * layout::SceneRootLayout::kInset + count * controller.rowLayoutMetrics().buttonHeight
+                           + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
+        LOKA_VERIFY(SetWindowPos(root, NULL, 0, 0, scale.clientLengthToNative(257).px,
+                                scale.clientLengthToNative(height).px, SWP_NOMOVE | SWP_NOZORDER));
         RECT client;
         LOKA_VERIFY(GetClientRect(root, &client));
         LOKA_VERIFY(scale.clientCapacityToLu(client.right) == 257);
@@ -183,13 +189,14 @@ namespace
             LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY));
             const RECT buttonFrame = childRectInParent(button, root);
             LOKA_VERIFY(buttonFrame.top == scale.projectEdge(buttonY));
-            LOKA_VERIFY(buttonFrame.bottom == scale.projectEdge(buttonY + 32));
+            const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
+            LOKA_VERIFY(buttonFrame.bottom == scale.projectEdge(buttonY + buttonHeight));
             if (boxed)
-              LOKA_VERIFY(buttonY + 32 == 254);
+              LOKA_VERIFY(buttonY == 222);
             std::printf("  Win32 text extent: space=%d/%d boxed=%d lines=%d nativeText=%d "
                         "textLu=%d buttonLu=%d..%d framePx=%ld..%ld clientPx=%ld\n",
                         metrics[scaleIndex].spaceScale.num, metrics[scaleIndex].spaceScale.den,
-                        boxed, sample + 1, nativeHeight, textHeight, buttonY, buttonY + 32,
+                        boxed, sample + 1, nativeHeight, textHeight, buttonY, buttonY + buttonHeight,
                         buttonFrame.top, buttonFrame.bottom, client.bottom);
             controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
           }
@@ -1784,6 +1791,151 @@ void testWin32RibbonGroupEdgesEnsureGeometryAndLifecycle()
         LOKA_VERIFY(!IsWindow(windows[i]));
       controller.onChange(0, NODE_DIRTY_NONE, false);
     }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+namespace
+{
+  int expectedPushButtonHeightPixels(const Win32ScenePlatformController &controller)
+  {
+    HDC dc = GetDC(NULL);
+    LOKA_VERIFY(dc != NULL);
+    LOKA_VERIFY(controller.displayFont() != NULL);
+    HGDIOBJ previous = SelectObject(dc, controller.displayFont());
+    LOKA_VERIFY(previous && previous != HGDI_ERROR);
+    TEXTMETRICW text;
+    LOKA_VERIFY(GetTextMetricsW(dc, &text));
+    LOKA_VERIFY(SelectObject(dc, previous) != NULL);
+    LOKA_VERIFY(ReleaseDC(NULL, dc));
+    return static_cast<int>(text.tmHeight) + 2 * controller.displayScale().nativeLength(0, 4).px;
+  }
+
+  BOOL WINAPI declineButtonTextMetrics(HDC, LPTEXTMETRICW)
+  {
+    return FALSE;
+  }
+
+  HWND buttonHeightHost(const loka::win32::Win32DisplayScale &scale)
+  {
+    HWND root = CreateWindowExW(0, L"STATIC", L"button-height", WS_POPUP, 0, 0,
+                               scale.clientLengthToNative(640).px, scale.clientLengthToNative(160).px,
+                               NULL, NULL, GetModuleHandleW(NULL), NULL);
+    LOKA_VERIFY(root != NULL);
+    return root;
+  }
+
+  void verifyButtonCenteredRow(Win32ScenePlatformController &controller, HWND root, bool direct, bool declined)
+  {
+    using namespace loka::app;
+    StackProps props(STACK_AXIS_ROW);
+    props.alignVertical(VERTICAL_ALIGNMENT_CENTER);
+    StackNode *row = direct ? new DirectNaturalWidthRow(props) : new StackNode(props);
+    ButtonNode *button = new ButtonNode(ButtonProps().text("Button"));
+    EditTextNode *field = new EditTextNode((EditTextProps()));
+    row->addChild(button);
+    row->addChild(field);
+    controller.onChange(row, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 160);
+    Win32ButtonContext *buttonContext = static_cast<Win32ButtonContext *>(button->getContext());
+    Win32EditTextContext *fieldContext = static_cast<Win32EditTextContext *>(field->getContext());
+    LOKA_VERIFY(buttonContext && fieldContext);
+    const RECT buttonFrame = childRectInParent(buttonContext->hwnd(), root);
+    const RECT fieldFrame = childRectInParent(fieldContext->hwnd(), root);
+    const loka::win32::Win32DisplayScale &scale = controller.displayScale();
+    LOKA_VERIFY(std::abs((buttonFrame.top + buttonFrame.bottom) - (fieldFrame.top + fieldFrame.bottom))
+                <= 2 * scale.nativeLength(0, 1).px);
+    if (declined)
+    {
+      const int top = layout::SceneRootLayout::kInset;
+      LOKA_VERIFY(buttonFrame.top == scale.projectEdge(top));
+      LOKA_VERIFY(buttonFrame.bottom == scale.projectEdge(top + layout::FallbackControlMetrics::kButtonHeight));
+    }
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    delete row;
+  }
+}
+
+void testWin32ButtonNativeHeightColumn()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int i = 0; i < 2; ++i)
+  {
+    const loka::win32::Win32DisplayScale &scale = scales[i];
+    HWND root = buttonHeightHost(scale);
+    {
+      Win32ScenePlatformController controller(root, scale);
+      StackNode column((StackProps(STACK_AXIS_COLUMN)));
+      ButtonNode *first = new ButtonNode(ButtonProps().text("First"));
+      ButtonNode *second = new ButtonNode(ButtonProps().text("Second"));
+      column.addChild(first);
+      column.addChild(second);
+      controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 160);
+      const int nativeHeight = expectedPushButtonHeightPixels(controller);
+      const int height = scale.measurementToLu(nativeHeight);
+      LOKA_VERIFY(controller.rowLayoutMetrics().buttonHeight == height);
+      const RECT frame = childRectInParent(static_cast<Win32ButtonContext *>(first->getContext())->hwnd(), root);
+      const RECT next = childRectInParent(static_cast<Win32ButtonContext *>(second->getContext())->hwnd(), root);
+      const int top = layout::SceneRootLayout::kInset;
+      LOKA_VERIFY(frame.top == scale.projectEdge(top));
+      LOKA_VERIFY(frame.bottom == scale.projectEdge(top + height));
+      LOKA_VERIFY(std::abs(frame.bottom - frame.top - nativeHeight) <= scale.nativeLength(0, 1).px);
+      LOKA_VERIFY(next.top == scale.projectEdge(top + height + layout::FallbackControlMetrics::kVerticalSpacing));
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+void testWin32ButtonNativeHeightCenteredRow()
+{
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int i = 0; i < 2; ++i)
+    for (int direct = 0; direct < 2; ++direct)
+    {
+      HWND root = buttonHeightHost(scales[i]);
+      {
+        Win32ScenePlatformController controller(root, scales[i]);
+        verifyButtonCenteredRow(controller, root, direct != 0, false);
+      }
+      LOKA_VERIFY(DestroyWindow(root));
+    }
+}
+
+void testWin32ButtonDeclinedHeightKeepsRowAligned()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scale(96);
+  for (int direct = 0; direct < 2; ++direct)
+  {
+    HWND root = buttonHeightHost(scale);
+    Win32ScenePlatformController *controller = NULL;
+    HDC probe = GetDC(root);
+    LOKA_VERIFY(probe != NULL);
+    TEXTMETRICW text;
+    LOKA_VERIFY(GetTextMetricsW(probe, &text));
+    {
+      // Refuse only construction: subsequent GDI queries must answer natively.
+      Win32ImportRefusal refusal("gdi32.dll", "GetTextMetricsW",
+                                 reinterpret_cast<ULONG_PTR>(&declineButtonTextMetrics));
+      LOKA_VERIFY(!GetTextMetricsW(probe, &text));
+      controller = new Win32ScenePlatformController(root, scale);
+    }
+    LOKA_VERIFY(GetTextMetricsW(probe, &text));
+    LOKA_VERIFY(ReleaseDC(root, probe));
+    const int nativeHeight = expectedPushButtonHeightPixels(*controller);
+    LOKA_VERIFY(scale.measurementToLu(nativeHeight) != layout::FallbackControlMetrics::kButtonHeight);
+    LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
+    verifyButtonCenteredRow(*controller, root, direct != 0, true);
+    // A DPI change must not split the cached Stack copy from the Button reader.
+    controller->updateDisplayScale(loka::win32::Win32DisplayScale(144));
+    LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
+    verifyButtonCenteredRow(*controller, root, direct != 0, true);
+    delete controller;
     LOKA_VERIFY(DestroyWindow(root));
   }
 }
