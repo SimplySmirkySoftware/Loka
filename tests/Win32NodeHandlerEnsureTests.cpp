@@ -1808,7 +1808,8 @@ namespace
     LOKA_VERIFY(GetTextMetricsW(dc, &text));
     LOKA_VERIFY(SelectObject(dc, previous) != NULL);
     LOKA_VERIFY(ReleaseDC(NULL, dc));
-    return static_cast<int>(text.tmHeight) + 2 * controller.displayScale().nativeLength(0, 4).px;
+    // 4 DIPs per side at dpi only, written out independently of the rail's projection.
+    return static_cast<int>(text.tmHeight) + 2 * MulDiv(4, static_cast<int>(controller.displayScale().dpi()), 96);
   }
 
   BOOL WINAPI declineButtonTextMetrics(HDC, LPTEXTMETRICW)
@@ -1859,9 +1860,12 @@ namespace
 void testWin32ButtonNativeHeightColumn()
 {
   using namespace loka::app;
+  // 96 dpi with the default rail metrics is the production configuration; there
+  // spaceScale 5/4 would widen a 4-DIP inset to 5 px if it leaked into the margin.
   const loka::win32::Win32DisplayScale scales[] = {
-      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
-  for (int i = 0; i < 2; ++i)
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(96, loka::win32::DefaultRailMetrics()),
+      loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int i = 0; i < 3; ++i)
   {
     const loka::win32::Win32DisplayScale &scale = scales[i];
     HWND root = buttonHeightHost(scale);
@@ -1893,8 +1897,9 @@ void testWin32ButtonNativeHeightColumn()
 void testWin32ButtonNativeHeightCenteredRow()
 {
   const loka::win32::Win32DisplayScale scales[] = {
-      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
-  for (int i = 0; i < 2; ++i)
+      loka::win32::Win32DisplayScale(96), loka::win32::Win32DisplayScale(96, loka::win32::DefaultRailMetrics()),
+      loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int i = 0; i < 3; ++i)
     for (int direct = 0; direct < 2; ++direct)
     {
       HWND root = buttonHeightHost(scales[i]);

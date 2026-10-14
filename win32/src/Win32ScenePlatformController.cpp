@@ -101,7 +101,8 @@ namespace
     TEXTMETRICW text;
     if (!dc.get() || !GetTextMetricsW(dc.get(), &text) || text.tmHeight <= 0)
       return metrics;
-    const int inset = scale.nativeLength(0, kPushButtonVerticalTitleInsetDips).px;
+    // DIPs follow dpi only: spaceScale is the rail's layout ratio, not the control's margin.
+    const int inset = loka::win32::Win32DisplayScale(scale.dpi()).nativeLength(0, kPushButtonVerticalTitleInsetDips).px;
     if (inset < 0 || inset > (INT_MAX - text.tmHeight) / 2)
       return metrics;
     const int height = scale.measurementToLu(static_cast<int>(text.tmHeight) + 2 * inset);
