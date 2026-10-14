@@ -21,15 +21,13 @@ void testGuardInsideTurnJoinsAndSettlesAtTail();
 void testGuardOutsideClockKeepsLegacyBracket();
 void testGuardOnBusyLedgerNestsLegacyLevel();
 void testGuardCallbackFiresOnlyOutsideTurn();
-void testStandaloneGuardCommitsBeforeReadInsideTurn();
+void testBootstrapGuardSettlesIdleJoiningLedger();
 void testGuardedBlocksProjectOnceAtTail();
 void testBootstrapVisibilityCommitsBeforeReadInsideTurn();
 void testFlowOnSuccessJoinsTurn();
-void testStandaloneLedgerRefusesTheClock();
 void testFlowRunBracketJoinsTurn();
 void testFlowRunBracketOutsideClockKeepsLegacy();
 void testFlowPendingAndResumeInsideTurn();
-void testFlowRunBracketOnStandaloneLedgerStaysSynchronous();
 void testFlowFinallyReadsOldDerivedInsideTurn();
 void testFlowRunBracketAbstractTrackerEndsOnce();
 #endif

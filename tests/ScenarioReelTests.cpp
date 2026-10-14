@@ -221,14 +221,16 @@ namespace
   {
     AttachmentTransactionObservation()
         : manager(0),
+          window(0),
           calls(0),
-          allCallsWereTransactional(true)
+          allCallsInsideSeatApply(true)
     {
     }
 
     SceneManager *manager;
+    Window *window;
     int calls;
-    bool allCallsWereTransactional;
+    bool allCallsInsideSeatApply;
   };
 
   void ObserveAttachmentTransaction(void *userData)
@@ -236,10 +238,10 @@ namespace
     AttachmentTransactionObservation *observation =
         static_cast<AttachmentTransactionObservation *>(userData);
     ++observation->calls;
-    observation->allCallsWereTransactional =
-        observation->allCallsWereTransactional &&
-        loka::app::testing::SceneManagerTestAccess::trackerPhase(*observation->manager) !=
-            loka::core::TRACKER_IDLE;
+    observation->allCallsInsideSeatApply =
+        observation->allCallsInsideSeatApply &&
+        loka::app::testing::SceneManagerTestAccess::applying(*observation->manager) ==
+            observation->window->scene();
   }
 
   loka::scenario_tests::ScenarioCellTable ProbeCells()
@@ -527,13 +529,14 @@ void testScenarioSceneRearmRebuildsExampleStateFromDefinition()
 
   AttachmentTransactionObservation attachmentObservation;
   attachmentObservation.manager = window.sceneManager();
+  attachmentObservation.window = &window;
   window.scene()->getAttachedState()->bind(
       &ObserveAttachmentTransaction, &attachmentObservation, false);
   LOKA_VERIFY(loka::scenario_tests::RearmScenarioScene(&window, &admission));
   window.scene()->getAttachedState()->unbind(
       &ObserveAttachmentTransaction, &attachmentObservation);
   LOKA_VERIFY(attachmentObservation.calls == 2);
-  LOKA_VERIFY(attachmentObservation.allCallsWereTransactional);
+  LOKA_VERIFY(attachmentObservation.allCallsInsideSeatApply);
   LOKA_VERIFY(window.scene() != 0);
   LOKA_VERIFY(window.scene() == installedScene);
   LOKA_VERIFY(window.scene()->liveNodeCount() == mountedNodeCount);
@@ -1059,6 +1062,7 @@ void testStandaloneScenarioRailReplacementIsFailureAtomic()
   loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
   AttachmentTransactionObservation attachmentObservation;
   attachmentObservation.manager = window.sceneManager();
+  attachmentObservation.window = &window;
   window.scene()->getAttachedState()->bind(
       &ObserveAttachmentTransaction, &attachmentObservation, false);
 
@@ -1080,7 +1084,7 @@ void testStandaloneScenarioRailReplacementIsFailureAtomic()
     LOKA_VERIFY(second.stops == 0);
     LOKA_VERIFY(second.destructions == 0);
     LOKA_VERIFY(attachmentObservation.calls == 2);
-    LOKA_VERIFY(attachmentObservation.allCallsWereTransactional);
+    LOKA_VERIFY(attachmentObservation.allCallsInsideSeatApply);
   }
   window.scene()->getAttachedState()->unbind(
       &ObserveAttachmentTransaction, &attachmentObservation);
@@ -1130,6 +1134,7 @@ void testStandaloneSceneRearmAllocationRefusalDoesNotCommitNextPass()
         new StandaloneScenarioRailProbe(&first));
     AttachmentTransactionObservation attachmentObservation;
     attachmentObservation.manager = window.sceneManager();
+    attachmentObservation.window = &window;
     window.scene()->getAttachedState()->bind(
         &ObserveAttachmentTransaction, &attachmentObservation, false);
 
@@ -1149,7 +1154,7 @@ void testStandaloneSceneRearmAllocationRefusalDoesNotCommitNextPass()
     LOKA_VERIFY(second.stops == 0);
     LOKA_VERIFY(second.destructions == 0);
     LOKA_VERIFY(attachmentObservation.calls == 2);
-    LOKA_VERIFY(attachmentObservation.allCallsWereTransactional);
+    LOKA_VERIFY(attachmentObservation.allCallsInsideSeatApply);
 
     runControl.completeSceneRearm(rearmed, &window);
     LOKA_VERIFY(runControl.failed());

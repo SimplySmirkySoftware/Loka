@@ -1172,15 +1172,12 @@ void testSceneReplacementRoundTripReturnsCensusToBaseline()
   LOKA_VERIFY(window->scenePlatformController()->createdCount() > 0);
   RunSceneCensusRoundTrip(window, admission);
   const SceneRoundTripCensus baseline(*window);
-  printf("P1 baseline: scenes=%d handles=%lu callbacks=%lu retired=%lu window current=%lu next=%lu deferred=%lu manager current=%lu next=%lu deferred=%lu\n",
+  printf("P1 baseline: scenes=%d handles=%lu callbacks=%lu retired=%lu window current=%lu next=%lu deferred=%lu\n",
          baseline.scenes, baseline.handles, static_cast<unsigned long>(baseline.callbacks),
          static_cast<unsigned long>(loka::app::testing::SceneManagerTestAccess::retiredSceneCount(*window->sceneManager())),
          static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::currentDirtyCount(*window->getTracker()->asPushTracker())),
          static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::nextDirtyCount(*window->getTracker()->asPushTracker())),
-         static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::nextDeferredCount(*window->getTracker()->asPushTracker())),
-         static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::currentDirtyCount(loka::app::testing::SceneManagerTestAccess::tracker(*window->sceneManager()))),
-         static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::nextDirtyCount(loka::app::testing::SceneManagerTestAccess::tracker(*window->sceneManager()))),
-         static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::nextDeferredCount(loka::app::testing::SceneManagerTestAccess::tracker(*window->sceneManager()))));
+         static_cast<unsigned long>(loka::core::testing::PushStateTrackerTestAccess::nextDeferredCount(*window->getTracker()->asPushTracker())));
   for (int round = 1; round < 8; ++round)
   {
     RunSceneCensusRoundTrip(window, admission);
@@ -1190,7 +1187,6 @@ void testSceneReplacementRoundTripReturnsCensusToBaseline()
     LOKA_VERIFY(actual.callbacks == baseline.callbacks);
     LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::retiredSceneCount(*window->sceneManager()) == 0);
     VerifySceneCensusIntake(*window->getTracker()->asPushTracker());
-    VerifySceneCensusIntake(loka::app::testing::SceneManagerTestAccess::tracker(*window->sceneManager()));
   }
   delete window;
   LOKA_VERIFY(g_sceneOwnershipScenesAlive == 0);
@@ -1992,7 +1988,6 @@ namespace
     loka::core::ScopedPtr<loka::core::Operation> turn(clocked ? new loka::core::Operation : 0);
     app.flush();
     LOKA_VERIFY(window.scene() == b);
-    LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::trackerPhase(*window.sceneManager()) == loka::core::TRACKER_IDLE);
     Node *edit = FindPreparedEdit(SceneTestAccess::rootNode(*b));
     LOKA_VERIFY(edit && edit->getContext());
     if (ordinary) LOKA_VERIFY(window.scenePlatformController()->onChangeCallCount() == before + 1);
@@ -2435,30 +2430,11 @@ void testSceneRearmCommitsBeforeReadInsideTurn()
     loka::core::ScopedPtr<loka::core::Operation> turn(clocked ? new loka::core::Operation : 0);
     window.sceneManager()->requestRearm();
     app.flush();
-    LOKA_VERIFY(loka::app::testing::SceneManagerTestAccess::trackerPhase(*window.sceneManager()) == loka::core::TRACKER_IDLE);
+    if (clocked)
+      LOKA_VERIFY(loka::core::testing::OperationTestAccess::empty(*turn));
     Node *edit = FindPreparedEdit(SceneTestAccess::rootNode(*window.scene()));
     LOKA_VERIFY(edit && edit->getContext());
   }
-}
-
-void testSceneManagerLedgerNeverEnrolls()
-{
-  using namespace loka::core;
-  typedef loka::app::testing::SceneManagerTestAccess ManagerAccess;
-  WindowCreatingPlatformContext context;
-  NullWindow window(&context, WindowProps().scene(new Scene(new loka::app::EditTextDefinition())));
-  WindowAdmissionTestApp app(window);
-  app.flush();
-  SceneManager &manager = *window.sceneManager();
-  const PushStateTracker &tracker = ManagerAccess::tracker(manager);
-  Scene *installed = window.scene();
-  Operation turn;
-  ManagerAccess::writeCurrentScene(manager);
-  LOKA_VERIFY(tracker.phase() == TRACKER_IDLE);
-  LOKA_VERIFY(loka::core::testing::PushStateTrackerTestAccess::depth(tracker) == 0);
-  LOKA_VERIFY(loka::core::testing::OperationTestAccess::empty(turn));
-  LOKA_VERIFY(window.scene() == installed);
-  LOKA_VERIFY(turn.close().rounds == 0);
 }
 
 #include "app/nodes/controls/TextEditor.hpp"
