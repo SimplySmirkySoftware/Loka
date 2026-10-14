@@ -41,6 +41,21 @@ namespace loka
         return true;
       }
 
+      /** Replace with a completed copy, preserving this list on clone refusal. */
+      bool copyFrom(const CompositionList<DefT> &other)
+      {
+        if (this == &other)
+          return true;
+        CompositionList<DefT> candidate;
+        for (const DefT *cur = other.head(); cur; cur = cur->nextInComposition)
+        {
+          if (!candidate.appendClone(*cur))
+            return false;
+        }
+        candidate.detachTo(*this);
+        return true;
+      }
+
       void appendOwned(DefT *node)
       {
         if (!node)

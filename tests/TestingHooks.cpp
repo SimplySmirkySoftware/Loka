@@ -126,6 +126,45 @@ namespace loka
       namespace
       {
         int g_menuBarDefinitionCloneFailures = 0;
+        int g_menuItemDefinitionCloneFailures = 0;
+        int g_menuItemDefinitionCloneSkips = 0;
+        int g_menuDefinitionCloneFailures = 0;
+      }
+
+      void failMenuItemDefinitionClones(int count, int successfulClonesBeforeFailure)
+      {
+        g_menuItemDefinitionCloneFailures = count;
+        g_menuItemDefinitionCloneSkips = successfulClonesBeforeFailure;
+      }
+
+      bool shouldCloneMenuItemDefinition()
+      {
+        if (g_menuItemDefinitionCloneSkips > 0)
+        {
+          --g_menuItemDefinitionCloneSkips;
+          return true;
+        }
+        if (g_menuItemDefinitionCloneFailures > 0)
+        {
+          --g_menuItemDefinitionCloneFailures;
+          return false;
+        }
+        return true;
+      }
+
+      void failMenuDefinitionClones(int count)
+      {
+        g_menuDefinitionCloneFailures = count;
+      }
+
+      bool shouldCloneMenuDefinition()
+      {
+        if (g_menuDefinitionCloneFailures > 0)
+        {
+          --g_menuDefinitionCloneFailures;
+          return false;
+        }
+        return true;
       }
 
       void failNextMenuBarDefinitionClone()
