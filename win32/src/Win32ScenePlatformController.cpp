@@ -32,7 +32,8 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
-#include "app/layout/SceneRootLayout.hpp"
+#include "Win32SceneLayout.hpp"
+#include "app/layout/StackGaps.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/BoxLayout.hpp"
@@ -97,6 +98,7 @@ namespace
       HWND root, const loka::win32::Win32DisplayScale &scale, HFONT font)
   {
     loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
+    metrics.gap = Win32SceneLayout::kGap;
     PushButtonMeasurementDC dc(root, font);
     TEXTMETRICW text;
     if (!dc.get() || !GetTextMetricsW(dc.get(), &text) || text.tmHeight <= 0)
@@ -1158,7 +1160,7 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
-  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
+  const int rootInset = Win32SceneLayout::kRootInset;
   LayoutState state;
   state.x = rootInset;
   state.y = rootInset;
@@ -1246,8 +1248,7 @@ Win32ScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *
   // projection or a failed native context records nothing.
   this->rectSurfaceExtentLedger_.record(
       surface, loka::core::Frame(state.x, state.y, width, height));
-  return LayoutNodeResult(
-      state.width, state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return LayoutNodeResult(state.width, state.y + height);
 }
 
 Win32ScenePlatformController::LayoutNodeResult
@@ -1344,18 +1345,20 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
     loka::app::scene::INestable *nestable = scrollView->asNestable();
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
+    loka::app::layout::StackGaps gaps(Win32SceneLayout::kGap);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
-      if (currentY < SHRT_MIN || currentY > SHRT_MAX)
+      const int childY = currentY + gaps.before(child);
+      if (childY < SHRT_MIN || childY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();
         break;
       }
       LayoutState childState = childBase;
-      childState.y = currentY;
+      childState.y = childY;
       const int nextY = this->layoutNode(child, childState);
       if (this->projectionParentScopes_.current().hasShortRangeRefusal())
       {
@@ -1452,7 +1455,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &Win32ScenePlatformController::layoutContainerChild, 0, 0);
+          stack, state, this, &Win32ScenePlatformController::layoutContainerChild, Win32SceneLayout::kGap, 0);
     }
     else
     {
@@ -1505,7 +1508,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &Win32ScenePlatformController::layoutContainerChild, 0, 0);
+          box, state, this, &Win32ScenePlatformController::layoutContainerChild, Win32SceneLayout::kGap, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -1558,9 +1561,14 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
+    loka::app::layout::StackGaps gaps(Win32SceneLayout::kGap);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      const int childY = childState.y + gaps.before(child);
+      if (this->refuseNarrowingInScrollScope(childY))
+        break;
+      childState.y = childY;
       const int nextY = this->layoutNode(child, childState);
       if (this->refuseNarrowingInScrollScope(nextY))
       {

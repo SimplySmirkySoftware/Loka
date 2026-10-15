@@ -142,7 +142,7 @@ short Win32AttributedTextContext::layout(loka::app::scene::IPlatformController *
   state.height = Coordinate(height);
   this->relayout(state.x, state.y, Coordinate(width), state.height);
   Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
-  return Coordinate(state.y + state.height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return Coordinate(state.y + state.height);
 }
 void Win32AttributedTextContext::relayout(int x, int y, int width, int height)
 {

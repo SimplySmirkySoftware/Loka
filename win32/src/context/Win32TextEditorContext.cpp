@@ -822,7 +822,7 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
 short Win32TextEditorContext::layout(scene::IPlatformController *, scene::LayoutState &state)
 {
   this->relayout(state);
-  return static_cast<short>(state.y + state.height + state.spacing);
+  return static_cast<short>(state.y + state.height);
 }
 void Win32TextEditorContext::relayout(const scene::LayoutState &state)
 {

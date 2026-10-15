@@ -138,12 +138,7 @@ short Win32CellContext::layout(loka::app::scene::IPlatformController *, loka::ap
                                              : loka::app::layout::FallbackControlMetrics::kCellHeight;
   this->relayout(state.x, state.y, state.width, cellHeight);
   state.height = static_cast<short>(cellHeight);
-  short result = static_cast<short>(state.y + cellHeight);
-  if (requestedHeight <= 0)
-  {
-    result = static_cast<short>(result + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
-  }
-  return result;
+  return static_cast<short>(state.y + cellHeight);
 }
 
 void Win32CellContext::relayout(int x, int y, int width, int height)
