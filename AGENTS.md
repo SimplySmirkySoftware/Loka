@@ -188,7 +188,7 @@ For declaration ownership and replacement sequencing, see
 - When a directly runnable test environment is available (e.g. Linux/WSL headless), always build and run the relevant tests before committing code or test changes. Do not skip this step even for "obviously correct" changes.
 - Test-only introspection/access APIs should not expand normal prod-facing surfaces; prefer isolating them under a dedicated `testing` namespace/access layer (or equivalent backdoor) rather than adding general-purpose getters for tests.
 - Failure-injection convention: simulate OOM/clone failure through `TEST_BUILD`-only hooks in a `testing` namespace (fail-count style, e.g. `failMenuBarDefinitionClones(n)`), or through probe definitions with failing `clone()` overrides. Prefer fail-count hooks over one-shot hooks when the code under test retries within one flush, so the red stays deterministic.
-- Failure-injection placement: implement `TEST_BUILD`-only hooks in a test translation unit (`tests/TestingHooks.cpp`, wired through `LOKA_SHARED_TEST_SOURCES`), never inside production translation units, for the same reason test-only access stays out of prod-facing surfaces (two bullets above). The test executables that use `LOKA_SHARED_TEST_SOURCES` compile that translation unit together with the common sources under `TEST_BUILD` (their CMake targets record how), so the production cores (`LokaWin32Core`, `LokaMacOSCore`) never carry a hook.
+- Failure-injection placement: implement `TEST_BUILD`-only hooks in a test translation unit (`tests/TestingHooks.cpp`, wired through `LOKA_SHARED_TEST_SOURCES`), never inside production translation units, for the same reason test-only access stays out of prod-facing surfaces (two bullets above). The test executables that use `LOKA_SHARED_TEST_SOURCES` compile that translation unit together with the common sources under `TEST_BUILD` (their CMake targets record how), so the production cores (`LokaWin32Core`, `LokaMacOSCore`) never carry a hook. [History](docs/REVIEW_HISTORY.md#117-and-118--common-sources-under-test_build)
 - When adding a new example target, add its run config to `.vscode/launch.json` and the matching build task to `.vscode/tasks.json` for its `preLaunchTask`.
 
 ### Compile-time contract pins
@@ -201,4 +201,5 @@ because compiler wording differs; keep twins aligned by hand (a typo confined to
 the refusing TU is not detected). Which configurations build `tests/compile` and
 which register the refusal tests (`LOKA_COMPILE_PINS`) is recorded in the
 top-level `CMakeLists.txt` and `CMakePresets.json`; check there before claiming
-that a pin holds on a toolchain.
+that a pin holds on a toolchain
+([history](docs/REVIEW_HISTORY.md#172--compile-pins-outside-linux)).
