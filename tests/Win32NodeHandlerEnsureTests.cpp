@@ -138,9 +138,9 @@ namespace
             LOKA_VERIFY(GetClientRect(root, &client));
             LOKA_VERIFY(scale.clientCapacityToLu(client.bottom) == 250);
             LOKA_VERIFY(countChildWindows(root) == (boxed ? 5 : 3));
-            // Text contexts publish no HWND accessor; walk the root's children in
-            // creation order like the Mac twin walks subviews: page, caption,
-            // [badge], button. The Button context does expose its HWND.
+            // Walk the root's children in creation order like the Mac twin
+            // walks subviews: page, caption, [badge], button. The Button's
+            // HWND anchors that order.
             // GetWindow(GW_CHILD) may list either creation order or z-order
             // (newest first); the Button's published HWND anchors which one.
             const int count = boxed ? 5 : 3;
@@ -568,6 +568,10 @@ namespace loka
       {
         return context.table_;
       }
+      static bool hasNode(const Win32AttributedTextContext &context)
+      {
+        return context.node_ != 0;
+      }
       static bool known(const Win32AttributedTextContext &context)
       {
         return context.presented_.isKnown();
@@ -772,6 +776,9 @@ void testWin32AttributedTextPerRunProjection()
     LOKA_VERIFY(GetWindowLongPtrW(child, GWL_STYLE) & WS_VISIBLE);
     context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
     LOKA_VERIFY(!table.valid() && !context->paintHwnd());
+    LOKA_VERIFY(!AttributedAccess::hasNode(*context));
+    LOKA_VERIFY(!static_cast<Win32RetirableContext *>(context)->hwnd());
+    LOKA_VERIFY(GetWindowLongPtrW(child, GWLP_USERDATA) == 0);
     LOKA_VERIFY(IsWindow(child));
     controller.drainNativeRetirements();
     LOKA_VERIFY(!IsWindow(child));

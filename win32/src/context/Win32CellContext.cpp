@@ -51,12 +51,11 @@ Win32CellContext::Win32CellContext(Win32ScenePlatformController *controller,
                                    loka::app::CellNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(0),
       textState_(0),
       text_()
 {
   EnsureClassRegistered();
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       kCellClassName,
       L"",
@@ -71,14 +70,14 @@ Win32CellContext::Win32CellContext(Win32ScenePlatformController *controller,
 
 Win32CellContext::~Win32CellContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** The text observer has redrawn this HWND subtree with erase=true. */
 loka::app::scene::PaintAnswer Win32CellContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -95,8 +94,8 @@ void Win32CellContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32CellContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                     loka::app::scene::NodeLifecycleFact next)
+void Win32CellContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                    loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -111,7 +110,6 @@ void Win32CellContext::onFactChanged(loka::app::scene::NodeLifecycleFact previou
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       this->unbindText();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -119,17 +117,17 @@ void Win32CellContext::onFactChanged(loka::app::scene::NodeLifecycleFact previou
 
 void Win32CellContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32CellContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
@@ -150,13 +148,13 @@ short Win32CellContext::layout(loka::app::scene::IPlatformController *, loka::ap
 
 void Win32CellContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
-  Win32ScenePlatformController::redrawDirtySubtreeNow(hwnd_, NULL, TRUE);
+  Win32ScenePlatformController::redrawDirtySubtreeNow(this->hwnd(), NULL, TRUE);
 }
 
 void Win32CellContext::EnsureClassRegistered()
@@ -249,9 +247,9 @@ void Win32CellContext::applyText()
   {
     text_.clear();
   }
-  if (hwnd_)
+  if (this->hwnd())
   {
-    Win32ScenePlatformController::redrawDirtySubtreeNow(hwnd_, NULL, TRUE);
+    Win32ScenePlatformController::redrawDirtySubtreeNow(this->hwnd(), NULL, TRUE);
   }
 }
 

@@ -84,7 +84,6 @@ Win32TextEditorContext::Win32TextEditorContext(Win32ScenePlatformController *con
     : Win32RetirableContext(controller),
       key_(key),
       node_(node),
-      hwnd_(0),
       previousProc_(0),
       phase_(IDLE),
       status_(EDITOR_UNAVAILABLE),
@@ -93,7 +92,7 @@ Win32TextEditorContext::Win32TextEditorContext(Win32ScenePlatformController *con
       restores_(0),
       delivery_(scene::PaintAnswer::refused(scene::PAINT_REFUSED_HISTORY_UNKNOWN))
 {
-  this->hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       loka::win32::EditTextControlExStyle(),
       L"EDIT",
       L"",
@@ -103,30 +102,30 @@ Win32TextEditorContext::Win32TextEditorContext(Win32ScenePlatformController *con
       NULL,
       GetModuleHandleW(NULL),
       NULL);
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    if (!SetPropW(this->hwnd_, kEditorContext, this))
+    if (!SetPropW(this->hwnd(), kEditorContext, this))
     {
-      this->retireWindow(this->hwnd_);
+      this->retireWindow();
       return;
     }
     this->previousProc_ = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtrW(this->hwnd_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WindowProc)));
+        SetWindowLongPtrW(this->hwnd(), GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WindowProc)));
     if (!this->previousProc_)
     {
-      RemovePropW(this->hwnd_, kEditorContext);
-      this->retireWindow(this->hwnd_);
+      RemovePropW(this->hwnd(), kEditorContext);
+      this->retireWindow();
       return;
     }
     // The owner enforces the logical cap. Leave room for an over-cap native
     // action so it is refused atomically instead of accepting a truncated paste.
     // Zero has special multiline semantics; specify the native limit explicitly.
-    SendMessageW(this->hwnd_, EM_SETLIMITTEXT, 0x7ffffffe, 0);
+    SendMessageW(this->hwnd(), EM_SETLIMITTEXT, 0x7ffffffe, 0);
   }
 }
 Win32TextEditorContext::~Win32TextEditorContext()
 {
-  assert(!this->hwnd_ && "terminal lifecycle must strip the native input route before reclaim");
+  assert(!this->hwnd() && "terminal lifecycle must strip the native input route before reclaim");
 }
 Win32TextEditorContext *Win32TextEditorContext::fromWindow(HWND window)
 {
@@ -206,7 +205,7 @@ public:
       return EDITOR_OWNER_MISMATCH;
     if (c.phase_ != COMMIT)
       return EDITOR_REENTRANT;
-    if (!c.hwnd_)
+    if (!c.hwnd())
       return EDITOR_UNAVAILABLE;
     if (c.status_ != EDITOR_OK)
       return c.status_;
@@ -237,10 +236,10 @@ public:
     if (c.phase_ != COMMIT || c.status_ != EDITOR_OK)
       return scene::RequestApplication<LineCursor>(pending, c.status_, follow);
     const int row = c.node_->props.lines_->find(pending.line);
-    const int offset = static_cast<int>(SendMessageW(c.hwnd_, EM_LINEINDEX, row, 0));
-    const int length = static_cast<int>(SendMessageW(c.hwnd_, EM_LINELENGTH, offset, 0));
+    const int offset = static_cast<int>(SendMessageW(c.hwnd(), EM_LINEINDEX, row, 0));
+    const int length = static_cast<int>(SendMessageW(c.hwnd(), EM_LINELENGTH, offset, 0));
     const int column = pending.column < 0 ? 0 : (pending.column > length ? length : pending.column);
-    SendMessageW(c.hwnd_, EM_SETSEL, offset + column, offset + column);
+    SendMessageW(c.hwnd(), EM_SETSEL, offset + column, offset + column);
     return scene::RequestApplication<LineCursor>(LineCursor(pending.line, column), EDITOR_OK, scene::REPAINT);
   }
   virtual EditorResult report(scene::Node &base, const LineCursor &applied)
@@ -253,7 +252,7 @@ public:
   {
     Win32TextEditorContext &c = context(base);
     scene::FollowUp follow = scene::FOLLOW_NONE;
-    if (c.node_ && c.hwnd_ && c.status_ == EDITOR_OK && c.node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
+    if (c.node_ && c.hwnd() && c.status_ == EDITOR_OK && c.node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
     {
       if (c.phase_ == REJECTED || !c.projection_.current(*c.node_))
       {
@@ -277,7 +276,7 @@ public:
   {
     Win32TextEditorContext &c = context(base);
     // A reply subscriber can detach a retained context without retiring its identity.
-    if (!c.hwnd_ || base.lifecycleFact() != scene::NODE_FACT_ATTACHED)
+    if (!c.hwnd() || base.lifecycleFact() != scene::NODE_FACT_ATTACHED)
       return scene::FOLLOW_UP_NONE;
     if (this->follow_.contains(scene::RESTORE_QUEUED) && c.phase_ == IDLE)
       c.phase_ = RETRY;
@@ -287,7 +286,7 @@ public:
         && (follow.contains(scene::SCHEDULE_RESTORE) || this->follow_.contains(scene::SCHEDULE_RESTORE)))
     {
       // A failed arm refuses the deferred request in this same settlement.
-      if (!SetTimer(c.hwnd_, kRestoreTimer, 1, NULL))
+      if (!SetTimer(c.hwnd(), kRestoreTimer, 1, NULL))
       {
         c.status_ = EDITOR_UNAVAILABLE;
         // Keep clear/reply subscribers inside the same native exclusion as a take.
@@ -329,20 +328,20 @@ private:
 };
 bool Win32TextEditorContext::queryVisibleLines(unsigned &lines) const
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return false;
   RECT rect = {0};
-  SendMessageW(this->hwnd_, EM_GETRECT, 0, reinterpret_cast<LPARAM>(&rect));
-  HDC dc = GetDC(this->hwnd_);
+  SendMessageW(this->hwnd(), EM_GETRECT, 0, reinterpret_cast<LPARAM>(&rect));
+  HDC dc = GetDC(this->hwnd());
   if (!dc)
     return false;
-  const HFONT font = reinterpret_cast<HFONT>(SendMessageW(this->hwnd_, WM_GETFONT, 0, 0));
+  const HFONT font = reinterpret_cast<HFONT>(SendMessageW(this->hwnd(), WM_GETFONT, 0, 0));
   const HGDIOBJ previous = font ? SelectObject(dc, font) : NULL;
   TEXTMETRICW metrics = {0};
   const BOOL measured = GetTextMetricsW(dc, &metrics);
   if (previous)
     SelectObject(dc, previous);
-  ReleaseDC(this->hwnd_, dc);
+  ReleaseDC(this->hwnd(), dc);
   const LONG lineHeight = metrics.tmHeight + metrics.tmExternalLeading;
   if (!measured || lineHeight <= 0 || rect.bottom <= rect.top)
     return false;
@@ -402,12 +401,12 @@ public:
       // Scroll by an explicit line delta: EM_SCROLLCARET does nothing for a
       // window that is not visible (hosted CI), while EM_LINESCROLL moves the
       // formatting frame regardless of visibility.
-      const LRESULT row = SendMessageW(c.hwnd_, EM_LINEFROMCHAR, static_cast<WPARAM>(-1), 0);
-      const LRESULT first = SendMessageW(c.hwnd_, EM_GETFIRSTVISIBLELINE, 0, 0);
+      const LRESULT row = SendMessageW(c.hwnd(), EM_LINEFROMCHAR, static_cast<WPARAM>(-1), 0);
+      const LRESULT first = SendMessageW(c.hwnd(), EM_GETFIRSTVISIBLELINE, 0, 0);
       const LRESULT last = first + static_cast<LRESULT>(visibleLines) - 1;
       const LRESULT delta = row < first ? row - first : row > last ? row - last : 0;
       if (delta)
-        SendMessageW(c.hwnd_, EM_LINESCROLL, 0, static_cast<LPARAM>(delta));
+        SendMessageW(c.hwnd(), EM_LINESCROLL, 0, static_cast<LPARAM>(delta));
     }
     return applied;
   }
@@ -424,7 +423,7 @@ public:
     // viewport before the shared finishTake calls restoreSelection (#902), but
     // only for an accepted command: a refused report restores the pre-command
     // live view, so the snapshot must still describe it.
-    if (reply.kind() == scene::Reply<EditorCommand>::GRANTED && applied.result() == EDITOR_OK && c.hwnd_)
+    if (reply.kind() == scene::Reply<EditorCommand>::GRANTED && applied.result() == EDITOR_OK && c.hwnd())
       c.captureSelection();
     const scene::Reply<LineCursor> caretReply = reply.kind() == scene::Reply<EditorCommand>::REFUSED
                                                     ? scene::Reply<LineCursor>::Refused(applied.value(), reply.reason())
@@ -459,8 +458,8 @@ void Win32TextEditorContext::settle(scene::Settlement stimulus, RailOperation &o
 void Win32TextEditorContext::readLifecycleFactOnAttach()
 {
   RailOperation op(*this);
-  if (this->hwnd_ && this->node_ && this->node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
-    Win32FocusParticipant::attach(this->hwnd_, this);
+  if (this->hwnd() && this->node_ && this->node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
+    Win32FocusParticipant::attach(this->hwnd(), this);
   this->syncFromNode(scene::SETTLE_ATTACH);
 }
 void Win32TextEditorContext::onPropsApplied()
@@ -468,54 +467,53 @@ void Win32TextEditorContext::onPropsApplied()
   if (this->phase_ == IDLE || this->phase_ == RETRY)
     this->syncFromNode();
 }
-void Win32TextEditorContext::onFactChanged(scene::NodeLifecycleFact, scene::NodeLifecycleFact next)
+void Win32TextEditorContext::onNativeFact(scene::NodeLifecycleFact, scene::NodeLifecycleFact next)
 {
   RailOperation op(*this);
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return;
   if (next == scene::NODE_FACT_ATTACHED)
   {
-    Win32FocusParticipant::attach(this->hwnd_, this);
+    Win32FocusParticipant::attach(this->hwnd(), this);
     this->syncFromNode(scene::SETTLE_ATTACH);
     if (op.hasSameContext() && this->node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
-      ShowWindow(this->hwnd_, SW_SHOW);
+      ShowWindow(this->hwnd(), SW_SHOW);
     return;
   }
-  Win32FocusParticipant::detach(this->hwnd_);
-  KillTimer(this->hwnd_, kRestoreTimer);
-  ShowWindow(this->hwnd_, SW_HIDE);
-  SendMessageW(this->hwnd_, EM_SETREADONLY, TRUE, 0);
+  Win32FocusParticipant::detach(this->hwnd());
+  KillTimer(this->hwnd(), kRestoreTimer);
+  ShowWindow(this->hwnd(), SW_HIDE);
+  SendMessageW(this->hwnd(), EM_SETREADONLY, TRUE, 0);
   this->status_ = EDITOR_UNAVAILABLE;
   this->phase_ = this->phase_ == INPUT || this->phase_ == PASTING || this->phase_ == COMMIT ? REJECTED : IDLE;
   this->delivery_ = scene::PaintAnswer::refused(scene::PAINT_REFUSED_HISTORY_UNKNOWN);
   if (next == scene::NODE_FACT_RETIRED)
   {
-    RemovePropW(this->hwnd_, kEditorContext);
-    SetWindowLongPtrW(this->hwnd_, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(this->previousProc_));
-    this->retireWindow(this->hwnd_);
+    RemovePropW(this->hwnd(), kEditorContext);
+    SetWindowLongPtrW(this->hwnd(), GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(this->previousProc_));
     this->node_ = 0;
   }
 }
 void Win32TextEditorContext::captureSelection()
 {
-  SendMessageW(this->hwnd_,
+  SendMessageW(this->hwnd(),
                EM_GETSEL,
                reinterpret_cast<WPARAM>(&this->selection_.start),
                reinterpret_cast<LPARAM>(&this->selection_.end));
-  this->selection_.firstVisible = static_cast<int>(SendMessageW(this->hwnd_, EM_GETFIRSTVISIBLELINE, 0, 0));
-  this->selection_.horizontal = GetScrollPos(this->hwnd_, SB_HORZ);
+  this->selection_.firstVisible = static_cast<int>(SendMessageW(this->hwnd(), EM_GETFIRSTVISIBLELINE, 0, 0));
+  this->selection_.horizontal = GetScrollPos(this->hwnd(), SB_HORZ);
 }
 scene::FollowUp Win32TextEditorContext::deferRestore()
 {
-  if (!this->hwnd_ || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
+  if (!this->hwnd() || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
     return scene::FOLLOW_NONE;
   this->phase_ = RETRY;
-  SendMessageW(this->hwnd_, EM_SETREADONLY, TRUE, 0);
+  SendMessageW(this->hwnd(), EM_SETREADONLY, TRUE, 0);
   return scene::SCHEDULE_RESTORE;
 }
 scene::FollowUp Win32TextEditorContext::replaceProjection()
 {
-  if (!this->hwnd_ || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
+  if (!this->hwnd() || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
     return scene::FOLLOW_NONE;
   // A repair from the request consumer must keep its exclusion at completion.
   const Phase completion = this->phase_ == COMMIT ? COMMIT : IDLE;
@@ -523,8 +521,8 @@ scene::FollowUp Win32TextEditorContext::replaceProjection()
   const EditorResult projected = this->projection_.capture(*this->node_, this->key_);
   const bool available = projected == EDITOR_OK;
   // Deliberately bypass State equality and the ordinary projection cache.
-  const bool complete = loka::win32::WriteTextEditorWide(this->hwnd_, this->projection_.wide);
-  SendMessageW(this->hwnd_, EM_EMPTYUNDOBUFFER, 0, 0);
+  const bool complete = loka::win32::WriteTextEditorWide(this->hwnd(), this->projection_.wide);
+  SendMessageW(this->hwnd(), EM_EMPTYUNDOBUFFER, 0, 0);
   if (!complete)
   {
     this->status_ = EDITOR_UNAVAILABLE;
@@ -535,7 +533,7 @@ scene::FollowUp Win32TextEditorContext::replaceProjection()
   this->restoreSelection();
   this->status_ = projected;
   this->phase_ = completion;
-  SendMessageW(this->hwnd_, EM_SETREADONLY, available ? FALSE : TRUE, 0);
+  SendMessageW(this->hwnd(), EM_SETREADONLY, available ? FALSE : TRUE, 0);
   this->delivery_ = scene::PaintAnswer::nativeScheduled();
   if (projected == EDITOR_ALLOCATION)
     return this->deferRestore();
@@ -550,16 +548,16 @@ void Win32TextEditorContext::restoreSelection()
     const int index = this->node_->props.lines_->find(cursor.line);
     if (index >= 0)
     {
-      const int offset = static_cast<int>(SendMessageW(this->hwnd_, EM_LINEINDEX, index, 0));
-      const int length = static_cast<int>(SendMessageW(this->hwnd_, EM_LINELENGTH, offset, 0));
+      const int offset = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEINDEX, index, 0));
+      const int length = static_cast<int>(SendMessageW(this->hwnd(), EM_LINELENGTH, offset, 0));
       const int column = cursor.column < 0 ? 0 : (cursor.column > length ? length : cursor.column);
       start = end = static_cast<DWORD>(offset + column);
     }
   }
-  SendMessageW(this->hwnd_, EM_SETSEL, start, end);
-  const int visible = static_cast<int>(SendMessageW(this->hwnd_, EM_GETFIRSTVISIBLELINE, 0, 0));
-  SendMessageW(this->hwnd_, EM_LINESCROLL, 0, this->selection_.firstVisible - visible);
-  SendMessageW(this->hwnd_, WM_HSCROLL, MAKEWPARAM(SB_THUMBPOSITION, this->selection_.horizontal), 0);
+  SendMessageW(this->hwnd(), EM_SETSEL, start, end);
+  const int visible = static_cast<int>(SendMessageW(this->hwnd(), EM_GETFIRSTVISIBLELINE, 0, 0));
+  SendMessageW(this->hwnd(), EM_LINESCROLL, 0, this->selection_.firstVisible - visible);
+  SendMessageW(this->hwnd(), WM_HSCROLL, MAKEWPARAM(SB_THUMBPOSITION, this->selection_.horizontal), 0);
 }
 scene::FollowUp Win32TextEditorContext::restoreCommittedProjection()
 {
@@ -572,14 +570,14 @@ void Win32TextEditorContext::syncFromNode(scene::Settlement stimulus)
   if (this->phase_ != IDLE && this->phase_ != RETRY)
     return;
   RailOperation op(*this);
-  if (!this->hwnd_ || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
+  if (!this->hwnd() || !this->node_ || this->node_->lifecycleFact() != scene::NODE_FACT_ATTACHED)
   {
     this->settle(stimulus, op);
     return;
   }
   if (this->phase_ == RETRY)
   {
-    KillTimer(this->hwnd_, kRestoreTimer);
+    KillTimer(this->hwnd(), kRestoreTimer);
     op.restore(*this->node_);
   }
   else
@@ -599,9 +597,9 @@ void Win32TextEditorContext::syncFromNode(scene::Settlement stimulus)
 RowCursor Win32TextEditorContext::nativeRowCaret() const
 {
   DWORD start = 0, end = 0;
-  SendMessageW(this->hwnd_, EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
-  const int index = static_cast<int>(SendMessageW(this->hwnd_, EM_LINEFROMCHAR, end, 0));
-  const int offset = static_cast<int>(SendMessageW(this->hwnd_, EM_LINEINDEX, index, 0));
+  SendMessageW(this->hwnd(), EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
+  const int index = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEFROMCHAR, end, 0));
+  const int offset = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEINDEX, index, 0));
   return RowCursor(static_cast<unsigned short>(index), static_cast<int>(end) - offset);
 }
 LineCursor Win32TextEditorContext::nativeCaret() const
@@ -648,11 +646,11 @@ EditorResult Win32TextEditorContext::commitNativeChange()
     return EDITOR_UNAVAILABLE;
   if (!this->projection_.current(*this->node_))
     return EDITOR_STALE_ID;
-  const int length = GetWindowTextLengthW(this->hwnd_);
+  const int length = GetWindowTextLengthW(this->hwnd());
   if (length > TextEditorProps::kMaxBytes + TextEditorProps::kMaxLines - 1)
     return EDITOR_CAPACITY;
   std::wstring wide;
-  loka::win32::ReadEditTextWide(this->hwnd_, wide);
+  loka::win32::ReadEditTextWide(this->hwnd(), wide);
   if (wide.size() != static_cast<std::size_t>(length))
     return EDITOR_UNAVAILABLE;
   std::string logical;
@@ -767,7 +765,7 @@ void Win32TextEditorContext::handleRestoreTimer()
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(this->controller()->borrowPhase().open());
 #endif
-  const HWND window = this->hwnd_;
+  const HWND window = this->hwnd();
   RailOperation op(*this);
   KillTimer(window, kRestoreTimer);
   if (this->phase_ == RETRY)
@@ -782,7 +780,7 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(this->controller()->borrowPhase().open());
 #endif
-  const HWND window = this->hwnd_;
+  const HWND window = this->hwnd();
   if (this->phase_ == INPUT || this->phase_ == PASTING)
   {
     // EDIT can forward input messages while executing one native action. Its
@@ -809,7 +807,7 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
   const LRESULT result = CallWindowProcW(this->previousProc_, window, message, wParam, lParam);
   if (!op.hasSameContext())
     return result;
-  if (!this->hwnd_ || !this->node_)
+  if (!this->hwnd() || !this->node_)
     return result;
   this->syncCaret();
   if (!op.hasSameContext())
@@ -828,14 +826,14 @@ short Win32TextEditorContext::layout(scene::IPlatformController *, scene::Layout
 }
 void Win32TextEditorContext::relayout(const scene::LayoutState &state)
 {
-  if (this->hwnd_)
-    this->positionNativeWindow(this->hwnd_,
+  if (this->hwnd())
+    this->positionNativeWindow(this->hwnd(),
                                this->controller()->displayScale().projectFrame(
                                    loka::core::Frame(state.x, state.y, state.width, state.height)));
 }
 scene::PaintAnswer Win32TextEditorContext::queryPaintDamage(const scene::PaintQuery &query) const
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return scene::PaintAnswer::refused(scene::PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != scene::PLACEMENT_ELIGIBLE)
     return scene::PaintAnswer::refused(scene::PAINT_REFUSED_PLACEMENT_UNSETTLED);

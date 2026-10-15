@@ -24,11 +24,10 @@ public:
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
 
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                            loka::app::scene::NodeLifecycleFact next);
 
   bool isValid() const;
-  HWND hwnd() const;
   void relayout(int x, int y, int width, int height);
 
   /** Publishes native range/page/position state and returns the clamped
@@ -55,7 +54,6 @@ private:
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
   loka::app::ScrollViewNode *node_;
-  HWND hwnd_;
 };
 
 #endif // LOKA_WIN32_SCROLL_VIEW_CONTEXT_HPP

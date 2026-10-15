@@ -18,11 +18,10 @@ Win32RectSurfaceContext::Win32RectSurfaceContext(Win32ScenePlatformController *c
                                                  loka::app::RectSurfaceNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(0),
       modelState_(0)
 {
   EnsureClassRegistered();
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       kRectSurfaceClassName,
       L"",
@@ -34,7 +33,7 @@ Win32RectSurfaceContext::Win32RectSurfaceContext(Win32ScenePlatformController *c
       this);
   // A context without a native window is discarded by the controller; it
   // must not have bound anything.
-  if (hwnd_)
+  if (this->hwnd())
   {
     bindModel();
   }
@@ -42,7 +41,7 @@ Win32RectSurfaceContext::Win32RectSurfaceContext(Win32ScenePlatformController *c
 
 Win32RectSurfaceContext::~Win32RectSurfaceContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** A clearing surface owes its own HWND client rect, without erase or children.
@@ -52,9 +51,9 @@ loka::app::scene::PaintAnswer Win32RectSurfaceContext::queryPaintDamage(const lo
 {
   using namespace loka::app::scene;
   RECT rect;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-  if (query.placement != PLACEMENT_ELIGIBLE || query.scope != paintScope() || !GetClientRect(this->hwnd_, &rect))
+  if (query.placement != PLACEMENT_ELIGIBLE || query.scope != paintScope() || !GetClientRect(this->hwnd(), &rect))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
   if (!this->node_ || !this->modelState_ || this->node_->props.model_ != this->modelState_)
     return PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
@@ -77,8 +76,8 @@ void Win32RectSurfaceContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32RectSurfaceContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                            loka::app::scene::NodeLifecycleFact next)
+void Win32RectSurfaceContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                           loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -100,7 +99,6 @@ void Win32RectSurfaceContext::onFactChanged(loka::app::scene::NodeLifecycleFact 
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       this->unbindModel();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -118,28 +116,28 @@ void Win32RectSurfaceContext::onPropsApplied()
 
 void Win32RectSurfaceContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32RectSurfaceContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
 void Win32RectSurfaceContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
   this->presented_.invalidate();
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
   HWND parent = 0;
   RECT rect;
@@ -235,9 +233,9 @@ void Win32RectSurfaceContext::unbindModel()
 
 void Win32RectSurfaceContext::applyModel()
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    Win32ScenePlatformController::requestDirtyRect(this->hwnd_, NULL, FALSE);
+    Win32ScenePlatformController::requestDirtyRect(this->hwnd(), NULL, FALSE);
     return;
   }
   HWND parent = 0;
@@ -250,8 +248,8 @@ void Win32RectSurfaceContext::applyModel()
 
 bool Win32RectSurfaceContext::queryBoundsInParent(HWND &parent, RECT &rect) const
 {
-  parent = this->hwnd_ ? GetParent(this->hwnd_) : 0;
-  if (!parent || !GetWindowRect(this->hwnd_, &rect))
+  parent = this->hwnd() ? GetParent(this->hwnd()) : 0;
+  if (!parent || !GetWindowRect(this->hwnd(), &rect))
   {
     return false;
   }

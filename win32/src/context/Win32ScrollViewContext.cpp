@@ -26,8 +26,7 @@ Win32ScrollViewContext::Win32ScrollViewContext(Win32ScenePlatformController *con
                                                int height,
                                                loka::app::ScrollViewNode *node)
     : Win32RetirableContext(controller),
-      node_(node),
-      hwnd_(0)
+      node_(node)
 {
   EnsureClassRegistered();
   // WS_EX_CONTROLPARENT: Win32App routes Tab through IsDialogMessage on the
@@ -37,7 +36,7 @@ Win32ScrollViewContext::Win32ScrollViewContext(Win32ScenePlatformController *con
   // navigation.
   // #1199: like the root, paint ground beneath transparent children. Native
   // parentage still clips those children to this viewport's client area (#544).
-  this->hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       WS_EX_CONTROLPARENT,
       kScrollViewClassName,
       L"",
@@ -51,7 +50,7 @@ Win32ScrollViewContext::Win32ScrollViewContext(Win32ScenePlatformController *con
 
 Win32ScrollViewContext::~Win32ScrollViewContext()
 {
-  assert(!this->hwnd_ && "terminal fact delivery must queue the ScrollView HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the ScrollView HWND before context reclaim");
 }
 
 /** The viewport has no paint-only State input: offset is LAYOUT, delivered
@@ -60,7 +59,7 @@ Win32ScrollViewContext::~Win32ScrollViewContext()
 loka::app::scene::PaintAnswer Win32ScrollViewContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -76,8 +75,8 @@ void Win32ScrollViewContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32ScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                           loka::app::scene::NodeLifecycleFact next)
+void Win32ScrollViewContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                          loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -89,7 +88,6 @@ void Win32ScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact p
     this->applyDetachedPresentation();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -97,35 +95,30 @@ void Win32ScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact p
 
 bool Win32ScrollViewContext::isValid() const
 {
-  return this->hwnd_ != 0;
-}
-
-HWND Win32ScrollViewContext::hwnd() const
-{
-  return this->hwnd_;
+  return this->hwnd() != 0;
 }
 
 void Win32ScrollViewContext::applyAttachedPresentation()
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(this->hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32ScrollViewContext::applyDetachedPresentation()
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(this->hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
 void Win32ScrollViewContext::relayout(int x, int y, int width, int height)
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    this->positionNativeWindow(this->hwnd_,
+    this->positionNativeWindow(this->hwnd(),
                                this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
   }
 }
@@ -148,7 +141,7 @@ int Win32ScrollViewContext::setScrollMetrics(int contentHeight,
     maximum = 0;
   }
   const int clamped = this->clampOffset(offset, maximum);
-  if (!this->hwnd_)
+  if (!this->hwnd())
   {
     return clamped;
   }
@@ -164,7 +157,7 @@ int Win32ScrollViewContext::setScrollMetrics(int contentHeight,
   info.nMax = contentHeight > 0 ? contentHeight - 1 : 0;
   info.nPage = viewportHeight > 0 ? static_cast<UINT>(viewportHeight) : 0;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(clamped);
-  SetScrollInfo(this->hwnd_, SB_VERT, &info, TRUE);
+  SetScrollInfo(this->hwnd(), SB_VERT, &info, TRUE);
   return clamped;
 }
 
@@ -224,14 +217,14 @@ bool Win32ScrollViewContext::handleVerticalScroll(int command,
 
 bool Win32ScrollViewContext::readScrollInfo(SCROLLINFO &info) const
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
   {
     return false;
   }
   ZeroMemory(&info, sizeof(info));
   info.cbSize = sizeof(info);
   info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-  return GetScrollInfo(this->hwnd_, SB_VERT, &info) != FALSE;
+  return GetScrollInfo(this->hwnd(), SB_VERT, &info) != FALSE;
 }
 
 int Win32ScrollViewContext::maximumOffset(const SCROLLINFO &info) const
@@ -263,7 +256,7 @@ int Win32ScrollViewContext::clampOffset(int value, int maximum) const
 
 void Win32ScrollViewContext::setVisualPosition(int value)
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
@@ -272,7 +265,7 @@ void Win32ScrollViewContext::setVisualPosition(int value)
   info.cbSize = sizeof(info);
   info.fMask = SIF_POS;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(value);
-  SetScrollInfo(this->hwnd_, SB_VERT, &info, TRUE);
+  SetScrollInfo(this->hwnd(), SB_VERT, &info, TRUE);
 }
 
 void Win32ScrollViewContext::publishOffset(int value)

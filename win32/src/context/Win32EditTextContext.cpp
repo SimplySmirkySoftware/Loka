@@ -50,13 +50,12 @@ Win32EditTextContext::Win32EditTextContext(Win32ScenePlatformController *control
                                            loka::app::EditTextNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(NULL),
       textState_(0),
       applyingFromState_(false),
       updatingFromControl_(false),
       textDelivery_(loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN))
 {
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       loka::win32::EditTextControlExStyle(),
       L"EDIT",
       L"",
@@ -66,16 +65,16 @@ Win32EditTextContext::Win32EditTextContext(Win32ScenePlatformController *control
       NULL,
       GetModuleHandleW(NULL),
       NULL);
-  if (hwnd_)
+  if (this->hwnd())
   {
-    SetWindowLongPtr(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    SetWindowLongPtr(this->hwnd(), GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
   }
   bindText();
 }
 
 Win32EditTextContext::~Win32EditTextContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** EDIT owns the repaint caused by its submitted WM_SETTEXT. Native echoes
@@ -83,7 +82,7 @@ Win32EditTextContext::~Win32EditTextContext()
 loka::app::scene::PaintAnswer Win32EditTextContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -103,8 +102,8 @@ void Win32EditTextContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32EditTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                         loka::app::scene::NodeLifecycleFact next)
+void Win32EditTextContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                        loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -120,7 +119,6 @@ void Win32EditTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact pre
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       this->unbindText();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -128,20 +126,20 @@ void Win32EditTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact pre
 
 void Win32EditTextContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
     // A refused property leaves the native control unmarked; reads report none.
-    Win32FocusParticipant::attach(this->hwnd_, this);
-    ShowWindow(hwnd_, SW_SHOW);
+    Win32FocusParticipant::attach(this->hwnd(), this);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32EditTextContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    Win32FocusParticipant::detach(this->hwnd_);
-    ShowWindow(hwnd_, SW_HIDE);
+    Win32FocusParticipant::detach(this->hwnd());
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
@@ -172,11 +170,11 @@ short Win32EditTextContext::layout(loka::app::scene::IPlatformController *, loka
 
 void Win32EditTextContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
 }
 
@@ -209,7 +207,7 @@ void Win32EditTextContext::applyText()
   using namespace loka::app::scene;
   this->textDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   const PaintDamage empty = {paintScope(), 0, 0, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
-  if (!hwnd_ || !textState_)
+  if (!this->hwnd() || !textState_)
   {
     return;
   }
@@ -219,7 +217,7 @@ void Win32EditTextContext::applyText()
     return;
   }
   std::wstring currentText;
-  loka::win32::ReadEditTextWide(hwnd_, currentText);
+  loka::win32::ReadEditTextWide(this->hwnd(), currentText);
   std::wstring desired;
   if (!loka::win32::MaterializeWideString(textState_->get(), desired))
   {
@@ -232,10 +230,10 @@ void Win32EditTextContext::applyText()
   }
   DWORD selStart = 0;
   DWORD selEnd = 0;
-  SendMessageW(hwnd_, EM_GETSEL, reinterpret_cast<WPARAM>(&selStart), reinterpret_cast<LPARAM>(&selEnd));
+  SendMessageW(this->hwnd(), EM_GETSEL, reinterpret_cast<WPARAM>(&selStart), reinterpret_cast<LPARAM>(&selEnd));
   applyingFromState_ = true;
-  const bool submitted = SetWindowTextW(this->hwnd_, desired.c_str()) != FALSE;
-  SendMessageW(hwnd_, EM_SETSEL, selStart, selEnd);
+  const bool submitted = SetWindowTextW(this->hwnd(), desired.c_str()) != FALSE;
+  SendMessageW(this->hwnd(), EM_SETSEL, selStart, selEnd);
   applyingFromState_ = false;
   if (submitted)
     this->textDelivery_ = PaintAnswer::nativeScheduled();
@@ -243,12 +241,12 @@ void Win32EditTextContext::applyText()
 
 void Win32EditTextContext::syncStateFromControl()
 {
-  if (!textState_ || !hwnd_)
+  if (!textState_ || !this->hwnd())
   {
     return;
   }
   updatingFromControl_ = true;
-  textSeat_.set(loka::win32::ReadEditTextString(hwnd_), true);
+  textSeat_.set(loka::win32::ReadEditTextString(this->hwnd()), true);
   updatingFromControl_ = false;
 }
 

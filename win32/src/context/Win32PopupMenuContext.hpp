@@ -34,13 +34,9 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                            loka::app::scene::NodeLifecycleFact next);
 
-  HWND hwnd() const
-  {
-    return hwnd_;
-  }
   void relayout(int x, int y, int width, int height);
 
 private:
@@ -64,7 +60,6 @@ private:
   static void EnabledChangedThunk(void *userData);
 
   loka::app::PopupMenuNode *node_;
-  HWND hwnd_;
   loka::core::State<int> *selectionState_;
   loka::app::scene::WriteSeat<int> selectionSeat_;
   loka::core::State<bool> *enabledState_;

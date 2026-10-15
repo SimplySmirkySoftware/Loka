@@ -31,8 +31,8 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                            loka::app::scene::NodeLifecycleFact next);
 
   virtual void onPropsApplied();
   void relayout(int x, int y, int width, int height);
@@ -40,11 +40,11 @@ public:
       then holds no surface and must not be installed on the node. */
   virtual HWND paintHwnd() const
   {
-    return this->hwnd_;
+    return this->hwnd();
   }
   bool hasNativeSurface() const
   {
-    return this->hwnd_ != 0;
+    return this->hwnd() != 0;
   }
 
 private:
@@ -61,7 +61,6 @@ private:
 
   loka::app::scene::PaintFact<loka::app::RectSurfaceModel> presented_;
   loka::app::RectSurfaceNode *node_;
-  HWND hwnd_;
   loka::core::State<loka::app::RectSurfaceModel> *modelState_;
 };
 

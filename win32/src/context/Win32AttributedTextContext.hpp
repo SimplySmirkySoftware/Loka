@@ -17,14 +17,14 @@ public:
   static void *operator new(std::size_t) throw();
   static void operator delete(void *) throw();
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact);
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact);
   virtual void onPropsApplied();
   virtual void onTextEnvironmentChanged();
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &) const;
   virtual HWND paintHwnd() const
   {
-    return this->hwnd_;
+    return this->hwnd();
   }
 
 private:
@@ -36,7 +36,6 @@ private:
   void draw(HDC, const RECT &);
   void relayout(int, int, int, int);
   loka::app::AttributedTextNode *node_;
-  HWND hwnd_;
   Win32AttributedTextTable table_;
   loka::app::scene::PaintFact<loka::app::AttributedString> presented_;
 };
