@@ -262,12 +262,6 @@ int MacScrollViewContext::maximumOffset() const
 
 void MacScrollViewContext::publishOffset(int value)
 {
-  if (!this->node_ || !this->node_->props.offset_.isValid() || this->node_->props.offset_.state()->get() == value)
-  {
-    return;
-  }
-  // The complete NodeState door opens the owner tracker when idle. A
-  // layout-driven scrollPoint notification arrives here too; its same-value
-  // write is the echo-loop breaker, so no suppression flag is needed.
-  this->node_->props.offset_.set(value);
+  if (this->node_ && this->node_->props.viewport_.isValid())
+    this->node_->publishOrigin(this->node_->props.viewport_.state()->get().x, value);
 }

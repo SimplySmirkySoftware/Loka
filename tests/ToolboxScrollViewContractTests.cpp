@@ -1,6 +1,7 @@
 #include "ToolboxScrollViewContractTests.hpp"
 
 #include "support/TestVerify.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 
 #include "../apple/toolbox/src/ToolboxScrollViewDecisions.hpp"
 
@@ -32,26 +33,36 @@ void testToolboxScrollViewHitIntersectionGatesViewport()
       ToolboxScrollViewRect(20, 120, 40, 140), viewport, result));
 }
 
+namespace
+{
+  void countClampWrites(void *context)
+  {
+    ++*static_cast<int *>(context);
+  }
+} // namespace
+
 void testToolboxScrollViewOffsetClampRepublishesOnlyChangedFacts()
 {
-  ToolboxScrollViewMetrics metrics =
-      ToolboxScrollViewResolveMetrics(300, 100, -7);
-  LOKA_VERIFY(metrics.maximum == 200);
-  LOKA_VERIFY(metrics.clampedOffset == 0);
-  LOKA_VERIFY(ToolboxScrollViewShouldRepublish(-7, metrics.clampedOffset));
-
-  metrics = ToolboxScrollViewResolveMetrics(300, 100, 75);
-  LOKA_VERIFY(metrics.clampedOffset == 75);
-  LOKA_VERIFY(!ToolboxScrollViewShouldRepublish(75, metrics.clampedOffset));
-
-  metrics = ToolboxScrollViewResolveMetrics(300, 100, 50000);
-  LOKA_VERIFY(metrics.clampedOffset == 200);
-  LOKA_VERIFY(ToolboxScrollViewShouldRepublish(50000, metrics.clampedOffset));
-
-  metrics = ToolboxScrollViewResolveMetrics(120, 200, 40);
-  LOKA_VERIFY(metrics.maximum == 0);
-  LOKA_VERIFY(metrics.clampedOffset == 0);
-  LOKA_VERIFY(ToolboxScrollViewShouldRepublish(40, metrics.clampedOffset));
+  using loka::core::Frame;
+  loka::core::MutableState<Frame> storage;
+  loka::app::scene::NodeState<Frame> fact(&storage, 0);
+  loka::app::ScrollViewNode node((loka::app::ScrollViewProps(fact)));
+  const int requested[] = {-7, 75, 50000, 40};
+  const int expected[] = {0, 75, 200, 0};
+  for (unsigned i = 0; i < 4; ++i)
+  {
+    fact.set(Frame(0, requested[i], 0, 0));
+    int writes = 0;
+    storage.bind(&countClampWrites, &writes, false);
+    const ToolboxScrollViewMetrics metrics =
+        ToolboxScrollViewResolveMetrics(i == 3 ? 120 : 300, i == 3 ? 200 : 100, requested[i]);
+    LOKA_VERIFY(metrics.maximum == (i == 3 ? 0 : 200));
+    LOKA_VERIFY(metrics.clampedOffset == expected[i]);
+    node.publishOrigin(0, metrics.clampedOffset);
+    LOKA_VERIFY(writes == (i == 1 ? 0 : 1));
+    LOKA_VERIFY(fact.get().y == expected[i]);
+    storage.unbind(&countClampWrites, &writes);
+  }
 }
 
 void testToolboxScrollViewRangeMapsContentMinusViewport()

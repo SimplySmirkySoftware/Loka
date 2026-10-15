@@ -700,20 +700,7 @@ MacScenePlatformController::layoutScrollViewNode(
     ctx->readLifecycleFactOnAttach();
   }
 
-  int requestedOffset = scrollView->props.offset_.isValid()
-                            ? scrollView->props.offset_.state()->get()
-                            : 0;
-  if (requestedOffset < 0)
-  {
-    requestedOffset = 0;
-  }
-  else if (requestedOffset > SHRT_MAX)
-  {
-    // A far-out fact must not poison every child coordinate before the exact
-    // measured maximum can be republished after the scope has popped.
-    requestedOffset = SHRT_MAX;
-  }
-
+  const int requestedOffset = scrollView->requestedOrigin().y;
   const loka::core::Frame viewportClip(0, 0, state.width, state.height);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
@@ -784,13 +771,8 @@ MacScenePlatformController::layoutScrollViewNode(
   {
     const int clampedOffset =
         ctx->setScrollMetrics(contentHeight, state.height, requestedOffset);
-    if (scrollView->props.offset_.isValid() &&
-        scrollView->props.offset_.state()->get() != clampedOffset)
-    {
-      // A fact write may schedule another layout. Publish only after the
-      // document scope has popped so every projection pass starts at root.
-      scrollView->props.offset_.set(clampedOffset);
-    }
+    // Publish only after successful layout and after the scope has popped.
+    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
   }
 
   if (state.height > 0)

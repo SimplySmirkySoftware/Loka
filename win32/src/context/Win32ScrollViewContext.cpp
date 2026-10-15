@@ -174,8 +174,8 @@ bool Win32ScrollViewContext::handleVerticalScroll(int command,
   }
 
   const int maximum = this->maximumOffset(info);
-  int next = this->node_ && this->node_->props.offset_.isValid()
-                 ? this->node_->props.offset_.state()->get()
+  int next = this->node_ && this->node_->props.viewport_.isValid()
+                 ? this->node_->requestedOrigin().y
                  : this->controller()->displayScale().scrollPositionToLu(info.nPos);
   next = this->clampOffset(next, maximum);
   int page = info.nPage > static_cast<UINT>(maximum)
@@ -270,12 +270,8 @@ void Win32ScrollViewContext::setVisualPosition(int value)
 
 void Win32ScrollViewContext::publishOffset(int value)
 {
-  if (!this->node_ || !this->node_->props.offset_.isValid() ||
-      this->node_->props.offset_.state()->get() == value)
-  {
-    return;
-  }
-  this->node_->props.offset_.set(value);
+  if (this->node_ && this->node_->props.viewport_.isValid())
+    this->node_->publishOrigin(this->node_->props.viewport_.state()->get().x, value);
 }
 
 bool Win32ScrollViewContext::forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam)

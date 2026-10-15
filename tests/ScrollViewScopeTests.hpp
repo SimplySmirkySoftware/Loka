@@ -6,4 +6,9 @@ void testScrollViewOffsetIsReappliedOnEveryRelayout();
 void testScrollViewContentHeightRefusesBeforeShortWrap();
 void testNestedScrollViewRefusalPreservesOuterScope();
 
+void testScrollViewXScopePushPopRestoresRootProjectionParent();
+void testScrollViewXOriginIsReappliedOnEveryRelayout();
+void testScrollViewRequestedOriginNormalizesBothAxes();
+void testScrollViewPublishesOnlyChangedOriginAndPreservesSize();
+
 #endif // LOKA_TESTS_SCROLL_VIEW_SCOPE_TESTS_HPP

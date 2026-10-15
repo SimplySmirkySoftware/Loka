@@ -5,6 +5,8 @@
 #include "app/scene/state/NodeState.hpp"
 #include "app/scene/state/WriteSeat.hpp"
 #include "core/State.hpp"
+#include "core/Frame.hpp"
+#include <climits>
 
 namespace loka
 {
@@ -16,7 +18,7 @@ namespace loka
 
     class ScrollViewNode;
 
-    /** Stable inputs for a scrollable projection-parent scope. offset_ is the
+    /** Stable inputs for a scrollable projection-parent scope. viewport_ is the
         rail-published fact; scrollTo_ is application intent, stored by the
         contract but deliberately not yet consumed by any rail — wiring it
         (clamping, zoom focal behavior) is its own mechanism in a later PR,
@@ -26,29 +28,31 @@ namespace loka
       typedef ScrollViewTypeTag TypeTag;
       typedef ScrollViewNode NodeType;
 
-      /** The full tracked door, kept whole: the rail publishes the fact
-          through offset_.set(), which opens the owner's tracker when idle
-          (#533). Storing only the raw MutableState pointer would discard the
-          tracker and owner and let a rail write bypass the transaction. */
-      scene::WriteSeat<int> offset_;
+      /** Visible content rect in CONTENT coordinates, not the seat rect.
+          x/y are the scroll origin. Rails publish only origin in this phase:
+          width/height are carried through unchanged; !hasSize() means not
+          reported yet. Initialise apps with Frame(0, 0, 0, 0); a nonzero
+          origin publishes a clamp on first layout, as the int door did.
+          The whole WriteSeat retains the owner's tracked transaction door. */
+      scene::WriteSeat<loka::core::Frame> viewport_;
       scene::WriteSeat<int> scrollTo_;
 
       ScrollViewProps()
-          : offset_(),
+          : viewport_(),
             scrollTo_(0)
       {
       }
 
-      explicit ScrollViewProps(const scene::NodeState<int> &offset)
-          : offset_(offset.writeSeat()),
+      explicit ScrollViewProps(const scene::NodeState<loka::core::Frame> &viewport)
+          : viewport_(viewport.writeSeat()),
             scrollTo_(0)
       {
       }
 
-      /** Binds the rail-published scroll offset fact. */
-      ScrollViewProps &offset(const scene::NodeState<int> &value)
+      /** Binds the rail-published visible content rect. */
+      ScrollViewProps &viewport(const scene::NodeState<loka::core::Frame> &value)
       {
-        this->offset_ = value.writeSeat();
+        this->viewport_ = value.writeSeat();
         return *this;
       }
 
@@ -75,8 +79,8 @@ namespace loka
           return false;
         }
         const ScrollViewProps &other = static_cast<const ScrollViewProps &>(rhs);
-        loka::core::State<int> *mine = this->offset_.state();
-        loka::core::State<int> *theirs = other.offset_.state();
+        loka::core::State<loka::core::Frame> *mine = this->viewport_.state();
+        loka::core::State<loka::core::Frame> *theirs = other.viewport_.state();
         if (mine != theirs)
         {
           return mine < theirs;
@@ -111,11 +115,34 @@ namespace loka
         return this;
       }
 
+      /** Requested origin, safely representable by every rail. An unbound
+          seat or Frame()'s negative origin requests zero. */
+      loka::core::Frame requestedOrigin() const
+      {
+        const loka::core::Frame current =
+            this->props.viewport_.isValid() ? this->props.viewport_.state()->get() : loka::core::Frame(0, 0, 0, 0);
+        return loka::core::Frame(current.x < 0 ? 0 : (current.x > SHRT_MAX ? SHRT_MAX : current.x),
+                                 current.y < 0 ? 0 : (current.y > SHRT_MAX ? SHRT_MAX : current.y),
+                                 current.width,
+                                 current.height);
+      }
+
+      /** Publishes one changed origin through the owner's tracker, preserving
+          the current size. An unbound seat has no fact to publish. */
+      void publishOrigin(int x, int y)
+      {
+        if (!this->props.viewport_.isValid())
+          return;
+        const loka::core::Frame current = this->props.viewport_.state()->get();
+        if (current.x != x || current.y != y)
+          this->props.viewport_.set(loka::core::Frame(x, y, current.width, current.height));
+      }
+
       virtual void declareDirtySources(scene::DirtySourceRegistrar &registrar)
       {
-        if (this->props.offset_.isValid())
+        if (this->props.viewport_.isValid())
         {
-          registrar.markDirtyOnChange(this->props.offset_.state(), scene::NODE_DIRTY_LAYOUT);
+          registrar.markDirtyOnChange(this->props.viewport_.state(), scene::NODE_DIRTY_LAYOUT);
         }
       }
 
@@ -139,8 +166,8 @@ namespace loka
       {
       }
 
-      explicit ScrollViewDefinition(const scene::NodeState<int> &offset)
-          : BaseType(ScrollViewProps(offset))
+      explicit ScrollViewDefinition(const scene::NodeState<loka::core::Frame> &viewport)
+          : BaseType(ScrollViewProps(viewport))
       {
       }
 
@@ -149,9 +176,9 @@ namespace loka
       {
       }
 
-      ScrollViewDefinition &offset(const scene::NodeState<int> &value)
+      ScrollViewDefinition &viewport(const scene::NodeState<loka::core::Frame> &value)
       {
-        this->props.offset(value);
+        this->props.viewport(value);
         return *this;
       }
 

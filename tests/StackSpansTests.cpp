@@ -191,16 +191,16 @@ void testStackSpansEligibility()
 void testScrollViewOwnLayoutInputs()
 {
   NullScenePlatformController platform;
-  MutableState<int> storage(0);
+  MutableState<loka::core::Frame> storage(loka::core::Frame(0, 0, 0, 0));
   PushStateTracker tracker;
   tracker.addState(&storage);
-  NodeState<int> offset(&storage, &tracker);
+  NodeState<loka::core::Frame> offset(&storage, &tracker);
   StdCompositionNode owner((StdCompositionProps()));
   ScrollViewNode scroll((ScrollViewProps(offset)));
   scroll.setPropsTypeId(ScrollViewProps::staticTypeId());
   BoundaryNode::declareBoundaryDirtySources(&scroll, &owner);
   scroll.takeLayoutInputs();
-  scroll.props.offset_.set(10);
+  scroll.publishOrigin(0, 10);
   LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
   LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_NONE);
   ScrollViewDefinition next((ScrollViewProps(offset)));

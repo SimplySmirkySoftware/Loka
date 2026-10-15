@@ -50,7 +50,7 @@ namespace
   {
   public:
     explicit ReentrantLayoutOffset(int initial)
-        : storage_(initial),
+        : storage_(loka::core::Frame(0, initial, 0, 0)),
           tracker_(),
           state_(&this->storage_, &this->tracker_),
           controller_(0),
@@ -66,7 +66,7 @@ namespace
       this->tracker_.setInvalidateCallback(0, 0);
     }
 
-    loka::app::scene::NodeState<int> &state()
+    loka::app::scene::NodeState<loka::core::Frame> &state()
     {
       return this->state_;
     }
@@ -94,9 +94,9 @@ namespace
       self->controller_->relayout(self->width_, self->height_);
     }
 
-    loka::core::MutableState<int> storage_;
+    loka::core::MutableState<loka::core::Frame> storage_;
     loka::core::PushStateTracker tracker_;
-    loka::app::scene::NodeState<int> state_;
+    loka::app::scene::NodeState<loka::core::Frame> state_;
     Win32ScenePlatformController *controller_;
     int width_;
     int height_;
@@ -251,13 +251,13 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
     controller.relayout(300, 100);
     const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
     const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    assert(offset.state().get() == (initialMax < 100 ? initialMax : 100));
+    assert(offset.state().get().y == (initialMax < 100 ? initialMax : 100));
     offset.reenterLayout(&controller, 300, 240);
     gLiveResizeHostPaintCount = 0;
 
     controller.relayout(300, 240);
 
-    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
+    assert(offset.state().get().y == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.reentryCount() == 1 && "one range clamp must cause one synchronous layout reentry");
     if (hostPaints)
     {

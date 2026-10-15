@@ -1,6 +1,7 @@
 #ifndef LOKA_HELLOWORLD_MAIN_NODE_HPP
 #define LOKA_HELLOWORLD_MAIN_NODE_HPP
 
+#include "core/Frame.hpp"
 #include "MainRightPanel.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -94,7 +95,7 @@ namespace helloworld
     loka::app::scene::NodeState<int> fruitIndex_;
     loka::app::scene::DerivedNodeState<loka::core::String> fruitMessage_;
     loka::app::scene::NodeState<loka::app::StackAxis> axis_;
-    loka::app::scene::NodeState<int> scrollOffset_;
+    loka::app::scene::NodeState<loka::core::Frame> viewport_;
     loka::Vector<loka::core::String> fruits_;
     loka::app::scene::NodeState<loka::core::String> randomTitles_[6];
     loka::core::EmitterState shuffleEvent_;
