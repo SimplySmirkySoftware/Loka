@@ -1,5 +1,6 @@
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/ConfirmDialog.hpp"
@@ -35,6 +36,24 @@ namespace
       return 23;
     }
   };
+
+  void framedRoutingPin(ToolboxScenePlatformController &controller, bool handler)
+  {
+    RibbonGroupNode frame((RibbonGroupProps()));
+    Probe *content = new Probe(7);
+    frame.addChild(content);
+    LOKA_VERIFY((controller.registry.find(&frame) != 0) == handler);
+    LayoutState state;
+    state.x = 10;
+    state.y = 20;
+    state.width = 100;
+    state.height = 80;
+    LOKA_VERIFY(LayoutNode(&frame, state, &controller, 0) == 100);
+    LOKA_VERIFY(state.y == 35);
+    LOKA_VERIFY(content->calls == 1);
+    LOKA_VERIFY(content->offer.x == 14 && content->offer.y == 24);
+    LOKA_VERIFY(content->offer.width == 92 && content->offer.height == 72);
+  }
 
   class DirectStack : public StackNode
   {
@@ -417,6 +436,8 @@ int main(int argc, char **argv)
   passThroughGapPin();
   containerGapPin(controller);
   const char *mode = argv[2];
+  if (std::strcmp(mode, "normal") == 0)
+    framedRoutingPin(controller, handler);
   if (std::strcmp(mode, "derived-column") == 0 || std::strcmp(mode, "derived-row") == 0)
   {
     derivedStackPin(controller, std::strcmp(mode, "derived-row") == 0);

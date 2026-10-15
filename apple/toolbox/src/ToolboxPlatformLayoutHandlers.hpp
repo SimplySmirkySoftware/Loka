@@ -9,7 +9,6 @@ namespace loka
   {
     class StackNode;
     class BoxNode;
-    class RibbonGroupNode;
     class GridNode;
     class ZStackNode;
   }
@@ -21,9 +20,9 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
                             loka::app::scene::IPlatformLayoutTraversal *traversal);
 
 /** Applies the shared inset core with Toolbox's width/result-Y channels. */
-int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
-                                    const loka::app::scene::LayoutState &state,
-                                    loka::app::scene::IPlatformLayoutTraversal *traversal);
+int ComputeToolboxFramedLayout(loka::app::scene::Node *group,
+                               const loka::app::scene::LayoutState &state,
+                               loka::app::scene::IPlatformLayoutTraversal *traversal);
 
 /** Applies Toolbox Row layout through the supplied traversal. */
 int ComputeToolboxRowLayout(loka::app::StackNode *row,

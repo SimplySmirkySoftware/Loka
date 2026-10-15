@@ -328,6 +328,34 @@ namespace
   };
 } // namespace
 
+namespace
+{
+  int recordRibbonChild(void *context, Node *node, const LayoutState &state)
+  {
+    return static_cast<RibbonChildSeatTraversal *>(context)->layoutChild(node, state);
+  }
+  class RibbonConstantWidth : public layout::INaturalWidthSource
+  {
+  public:
+    explicit RibbonConstantWidth(short width)
+        : width_(width)
+    {
+    }
+    virtual bool queryNaturalWidth(Node *, short &width) const
+    {
+      width = this->width_;
+      return true;
+    }
+
+  private:
+    const short width_;
+  };
+  bool rejectRibbonY(void *, int)
+  {
+    return false;
+  }
+} // namespace
+
 void testRibbonGroupInsetAndDecliningNaturalWidth()
 {
   RibbonTextDecliningPlatform platform;
@@ -345,6 +373,19 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   LOKA_VERIFY(group && group->childrenCount() == 4);
   layout::RowWidthConsultation declined(group, 1, 311, 7, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(declined.next(group).width() == 311);
+
+  RibbonConstantWidth natural(100);
+  layout::RowWidthConsultation measured(group, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
+  LOKA_VERIFY(measured.next(group).width() == 108);
+  short overflow = -1;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(anchor, 0, &natural, overflow));
+  LOKA_VERIFY(overflow == 108);
+  RibbonConstantWidth excessive(32767);
+  layout::RowWidthConsultation tooWide(group, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &excessive);
+  LOKA_VERIFY(tooWide.next(group).width() == 311);
+  overflow = -1;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(anchor, 0, &excessive, overflow));
+  LOKA_VERIFY(overflow == -1);
 
   LayoutState offer;
   offer.x = 19;
@@ -365,6 +406,17 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   LOKA_VERIFY(traversal.seat.width == offer.width - 2 * p);
   LOKA_VERIFY(traversal.seat.height == offer.height - 2 * p);
   LOKA_VERIFY(bottom == traversal.seat.y + 37 + p);
+  PlatformLayoutHandlerRegistry noHandlers;
+  LOKA_VERIFY(noHandlers.find(group) == 0);
+  RibbonChildSeatTraversal fallback;
+  LOKA_VERIFY(layout::computeFramedLayoutResultY(group, offer, &fallback, &recordRibbonChild, 0) == bottom);
+  for (int edge = 0; edge < 3; ++edge)
+  {
+    LOKA_VERIFY(fallback.edgeSeats[edge].x == traversal.edgeSeats[edge].x);
+    LOKA_VERIFY(fallback.edgeSeats[edge].y == traversal.edgeSeats[edge].y);
+    LOKA_VERIFY(fallback.edgeSeats[edge].width == traversal.edgeSeats[edge].width);
+    LOKA_VERIFY(fallback.edgeSeats[edge].height == traversal.edgeSeats[edge].height);
+  }
   const int groupBottom = platform.projectLayoutForTesting(group, offer);
   const int childBottom = platform.projectLayoutForTesting(group->childrenHead(), traversal.seat);
   LOKA_VERIFY(groupBottom == childBottom + p);
@@ -374,12 +426,12 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
     LOKA_VERIFY(edge->getContext() == 0);
   // Strip width follows the offered seat, not the much smaller natural content width.
   LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].width == offer.width);
-  for (int sample = 0; sample < 2; ++sample)
+  for (int sample = 0; sample < 3; ++sample)
   {
     LayoutState small = offer;
     if (sample == 0)
       small.width = 1;
-    RibbonChildSeatTraversal tiny(sample == 0 ? 37 : 1 - 2 * p);
+    RibbonChildSeatTraversal tiny(sample == 0 ? 37 : sample == 1 ? 1 - 2 * p : -20);
     const int tinyBottom = handler->layoutNode(group, small, &tiny);
     LOKA_VERIFY(tinyBottom == small.y + 2 * p + tiny.contentAdvance);
     for (int i = 0; i < 3; ++i)
@@ -388,5 +440,78 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
       LOKA_VERIFY(tiny.edgeSeats[i].width == 0 && tiny.edgeSeats[i].height == 0);
     }
   }
+  RibbonChildSeatTraversal rejected;
+  const int rejectedY = layout::computeFramedLayoutResultY(group, offer, &rejected, &recordRibbonChild, &rejectRibbonY);
+  LOKA_VERIFY(rejectedY == offer.y + p);
+  LOKA_VERIFY(rejected.child == 0);
+  LOKA_VERIFY(rejected.edgeSeats[0].x == offer.x);
+  LOKA_VERIFY(rejected.edgeSeats[0].height == p - 1);
+  LOKA_VERIFY(rejected.edgeSeats[1].x == offer.x + offer.width - 1);
+  LOKA_VERIFY(rejected.edgeSeats[2].y == rejectedY - 1);
+  LOKA_VERIFY(rejected.edgeSeats[2].width == offer.width);
+  RibbonGroupProps emptyProps;
+  RibbonGroupNode empty(emptyProps);
+  RibbonChildSeatTraversal emptyTraversal;
+  LOKA_VERIFY(layout::computeFramedLayoutResultY(&empty, offer, &emptyTraversal, &recordRibbonChild, 0)
+              == offer.y + 2 * p);
+  LOKA_VERIFY(emptyTraversal.child == 0);
   SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  /** Exercises the capability independently of the legacy RibbonGroup query. */
+  class CapabilityFrame : public RibbonGroupNode
+  {
+  public:
+    CapabilityFrame()
+        : RibbonGroupNode(RibbonGroupProps())
+    {
+    }
+    virtual RibbonGroupNode *asRibbonGroupNode()
+    {
+      return 0;
+    }
+    virtual const void *nodeTypeKey() const
+    {
+      return NodeTypeToken<CapabilityFrame>();
+    }
+    virtual layout::FrameGeometry frameGeometry() const
+    {
+      return layout::FrameGeometry(layout::FRAME_PLACEMENT_RIBBON_GROUP_EDGES, 6);
+    }
+  };
+} // namespace
+
+void testFramedCapabilityLayoutAndMeasurement()
+{
+  CapabilityFrame frame;
+  frame.addChild(new ButtonNode(ButtonProps().text("content")));
+  frame.addChild(new RibbonGroupEdgeNode(RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_BOTTOM)));
+  LayoutState offer;
+  offer.x = 10;
+  offer.y = 20;
+  offer.width = 100;
+  offer.height = 80;
+  PlatformLayoutHandlerRegistry registry;
+  LOKA_VERIFY(registry.registerHandler(new layout::FramedPlatformLayoutHandler<CapabilityFrame>()));
+  IPlatformLayoutHandler *handler = registry.find(&frame);
+  LOKA_VERIFY(handler != 0);
+  RibbonChildSeatTraversal traversal;
+  LOKA_VERIFY(handler->layoutNode(&frame, offer, &traversal) == 69);
+  LOKA_VERIFY(traversal.seat.x == 16 && traversal.seat.y == 26);
+  LOKA_VERIFY(traversal.seat.width == 88 && traversal.seat.height == 68);
+  LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].y == 68);
+  LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].width == 100);
+  RibbonConstantWidth natural(100);
+  layout::RowWidthConsultation measured(&frame, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
+  LOKA_VERIFY(measured.next(&frame).width() == 112);
+  // Stack owns the frame below, so use a distinct heap resident for overflow.
+  StackNode parent((StackProps(STACK_AXIS_COLUMN)));
+  CapabilityFrame *overflowFrame = new CapabilityFrame();
+  overflowFrame->addChild(new ButtonNode(ButtonProps().text("content")));
+  parent.addChild(overflowFrame);
+  short overflow = 0;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&parent, 0, &natural, overflow));
+  LOKA_VERIFY(overflow == 112);
 }

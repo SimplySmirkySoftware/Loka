@@ -9,7 +9,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/BoxLayout.hpp"
-#include "app/layout/RibbonGroupLayout.hpp"
+#include "app/layout/FramedLayout.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 // Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
@@ -97,12 +97,12 @@ namespace
     }
   };
 
-  class ToolboxRibbonGroupLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+  template <typename NodeT> class ToolboxFramedLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
   {
   public:
     virtual const void *nodeTypeKey() const
     {
-      return loka::app::scene::NodeTypeToken<loka::app::RibbonGroupNode>();
+      return loka::app::scene::NodeTypeToken<NodeT>();
     }
 
     virtual int layoutNode(loka::app::scene::Node *node,
@@ -111,7 +111,7 @@ namespace
                            const loka::app::layout::LazyWindow * = 0,
                            loka::app::layout::StackSpans * = 0)
     {
-      return ComputeToolboxRibbonGroupLayout(node ? node->asRibbonGroupNode() : 0, state, traversal);
+      return ComputeToolboxFramedLayout(node, state, traversal);
     }
   };
 
@@ -426,16 +426,16 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
                                   : static_cast<short>(adapter.maxWidth + box->props.padding * 2);
 }
 
-int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
-                                    const loka::app::scene::LayoutState &state,
-                                    loka::app::scene::IPlatformLayoutTraversal *traversal)
+int ComputeToolboxFramedLayout(loka::app::scene::Node *group,
+                               const loka::app::scene::LayoutState &state,
+                               loka::app::scene::IPlatformLayoutTraversal *traversal)
 {
-  if (!group || !traversal)
+  if (!group || !group->asFramedNode() || !traversal)
   {
     return 0;
   }
-  // Common ribbon layout owns content inset and strip placement on every rail.
-  const int resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+  // Common framed layout owns content inset and strip placement on every rail.
+  const int resultY = loka::app::layout::computeFramedLayoutResultY(
       group, state, traversal, &DispatchTraversalLayoutChildResultY, &AcceptTraversalY);
   if (traversal->refuseLayoutResultY(resultY))
   {
@@ -569,7 +569,7 @@ bool ApplyToolboxPlatformLayoutHandler(
 bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
 {
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
-  ok = registry.registerHandler(new ToolboxRibbonGroupLayoutHandler()) && ok;
+  ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::RibbonGroupNode>()) && ok;
   ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;

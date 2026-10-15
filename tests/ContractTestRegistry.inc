@@ -1338,3 +1338,5 @@ LOKA_TEST(testContainerGapNaturalColumn)
 LOKA_TEST(testNullLayoutGridReturnedHeight)
 
 LOKA_TEST(testContainerGapKindCharacterization)
+
+LOKA_TEST(testFramedCapabilityLayoutAndMeasurement)
