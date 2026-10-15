@@ -29,4 +29,12 @@ void testWin32ButtonNativeHeightColumn();
 void testWin32ButtonNativeHeightCenteredRow();
 void testWin32ButtonDeclinedHeightKeepsRowAligned();
 
+void testWin32ContainerGapLeafExits();
+void testWin32ContainerGapColumnAndPassThrough();
+void testWin32ContainerGapNoSeats();
+
+void testWin32ContainerGapBox();
+
+void testWin32ContainerGapRow();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP

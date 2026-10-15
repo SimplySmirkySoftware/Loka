@@ -1,6 +1,6 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32LiveResizeTests.hpp"
-#include "app/layout/SceneRootLayout.hpp"
+#include "Win32SceneLayout.hpp"
 
 #include "support/TestVerify.hpp"
 
@@ -235,8 +235,7 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
-                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    const int contentHeight = 6 * controller.rowLayoutMetrics().buttonHeight + 5 * Win32SceneLayout::kGap;
     ReentrantLayoutOffset offset(100);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     loka::app::StackNode *column =
@@ -249,8 +248,8 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
 
     controller.onChange(&scrollView, loka::app::scene::NODE_DIRTY_NONE, false);
     controller.relayout(300, 100);
-    const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int initialMax = contentHeight - (100 - 2 * Win32SceneLayout::kRootInset);
+    const int resizedMax = contentHeight - (240 - 2 * Win32SceneLayout::kRootInset);
     assert(offset.state().get().y == (initialMax < 100 ? initialMax : 100));
     offset.reenterLayout(&controller, 300, 240);
     gLiveResizeHostPaintCount = 0;
