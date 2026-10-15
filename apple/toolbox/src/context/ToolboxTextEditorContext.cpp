@@ -724,7 +724,7 @@ short ToolboxTextEditorContext::layout(scene::IPlatformController *, scene::Layo
   // would refuse a request render can still apply (#1141).
   if (this->te_)
     this->onPropsApplied();
-  state.y = rect.bottom + state.spacing;
+  state.y = rect.bottom;
   return state.width;
 }
 void ToolboxTextEditorContext::repaint(TEHandle te)

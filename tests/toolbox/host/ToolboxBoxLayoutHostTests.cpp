@@ -1,6 +1,9 @@
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/ConfirmDialog.hpp"
+#include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
@@ -39,6 +42,125 @@ namespace
     explicit DirectStack(const StackProps &props) : StackNode(props) {}
     virtual const void *nodeTypeKey() const { return NodeTypeToken<DirectStack>(); }
   };
+
+  class TextProbe : public TextNode
+  {
+  public:
+    LayoutState offer;
+    const short advance;
+    explicit TextProbe(short height)
+        : TextNode(TextProps("text")),
+          advance(height)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &state)
+    {
+      this->offer = state;
+      state.y = static_cast<short>(state.y + this->advance);
+      return 23;
+    }
+  };
+
+  class VisitedDialog : public ConfirmDialogNode
+  {
+  public:
+    unsigned calls;
+    explicit VisitedDialog(const NodeState<ConfirmResult> &result)
+        : ConfirmDialogNode(ConfirmDialogProps().result(result)),
+          calls(0)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &)
+    {
+      ++this->calls;
+      return 0;
+    }
+  };
+
+  class VisitedFragment : public FragmentNode
+  {
+  public:
+    unsigned dispatchCalls;
+    VisitedFragment()
+        : FragmentNode(FragmentProps()),
+          dispatchCalls(0)
+    {
+    }
+    // LayoutNode's first question; the seat verdict reads kind() and never asks it.
+    virtual BoundaryNode *asBoundary()
+    {
+      ++this->dispatchCalls;
+      return FragmentNode::asBoundary();
+    }
+  };
+
+  void passThroughGapPin()
+  {
+    ToolboxScenePlatformController controller;
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.registry));
+    loka::core::MutableState<ConfirmResult> storage;
+    NodeState<ConfirmResult> result(&storage, 0);
+    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    FragmentNode *fragment = new FragmentNode(FragmentProps());
+    TextProbe *first = new TextProbe(5), *last = new TextProbe(7);
+    VisitedDialog *dialog = new VisitedDialog(result);
+    fragment->addChild(first);
+    VisitedFragment *empty = new VisitedFragment();
+    fragment->addChild(empty);
+    fragment->addChild(dialog);
+    fragment->addChild(last);
+    column.addChild(fragment);
+    LayoutState state;
+    state.y = 20;
+    state.width = 100;
+    state.spacing = 9;
+    LOKA_VERIFY(LayoutNode(&column, state, &controller, 0) == 23);
+    LOKA_VERIFY(first->offer.y == 20 && last->offer.y == 34 && state.y == 41);
+    LOKA_VERIFY(dialog->calls == 1 && empty->dispatchCalls == 1);
+  }
+
+  void containerGapPin(ToolboxScenePlatformController &controller)
+  {
+    for (unsigned kind = 0; kind != 3; ++kind)
+    {
+      NestableNode *container = kind == 0   ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN)))
+                                : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps()))
+                                            : static_cast<NestableNode *>(new FragmentNode(FragmentProps()));
+      Probe *first = new Probe(5), *last = new Probe(7);
+      container->addChild(first);
+      container->addChild(new FragmentNode(FragmentProps()));
+      container->addChild(last);
+      LayoutState state;
+      state.y = 20;
+      state.width = 100;
+      state.spacing = 9;
+      LOKA_VERIFY(LayoutNode(container, state, &controller, 0) == 23);
+      LOKA_VERIFY(first->calls == 1 && last->calls == 1);
+      LOKA_VERIFY(first->offer.y == 20 && last->offer.y == 34 && state.y == 41);
+      delete container;
+
+      container = kind == 0   ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN)))
+                  : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps()))
+                              : static_cast<NestableNode *>(new FragmentNode(FragmentProps()));
+      BoxProps large;
+      large.setSize(10, 32760);
+      container->addChild(new BoxNode(large));
+      last = new Probe(1);
+      container->addChild(last);
+      ProjectionParentScope scope;
+      LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
+          0, 0, 0, loka::core::Frame(0, 0, 100, 100), scope));
+      {
+        ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+        state.y = 0;
+        state.spacing = 12;
+        LayoutNode(container, state, &controller, 0);
+        LOKA_VERIFY(controller.projectionParentScopes_.current().hasShortRangeRefusal());
+        LOKA_VERIFY(last->calls == 0);
+      }
+      delete container;
+    }
+  }
 
   void derivedStackPin(ToolboxScenePlatformController &controller, bool row)
   {
@@ -160,8 +282,9 @@ namespace
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
-    state.width = 80; state.spacing = -1;
-    state.y = static_cast<short>(SHRT_MAX - 19 + (refuses ? 1 : 0));
+    state.width = 80;
+    state.spacing = 0;
+    state.y = static_cast<short>(SHRT_MAX - (refuses ? 18 : 20));
     LayoutNode(&column, state, &controller, 0);
     std::printf("row offset: child calls=%u child Y=%d sibling calls=%u\n",
                 child->calls, child->offer.y, sibling->calls);
@@ -196,7 +319,7 @@ namespace
     LayoutState state;
     state.width = 80; state.height = 20; state.lineHeight = 20; state.spacing = 5;
     if (largeAdvance) { state.lineHeight = 30000; state.spacing = 10000; }
-    const int advance = largeAdvance ? 40000 : row ? 25 : 20;
+    const int advance = largeAdvance ? 40000 : (!row && refuses ? 20 : 25);
     state.y = static_cast<short>(SHRT_MAX - advance + (refuses ? 1 : 0));
     LayoutNode(&column, state, &controller, 0);
     const bool refused = controller.projectionParentScopes_.current().hasShortRangeRefusal();
@@ -206,7 +329,8 @@ namespace
     LOKA_VERIFY(refused == refuses);
     LOKA_VERIFY(sibling->calls == (refuses ? 0u : 1u));
     if (!largeAdvance) LOKA_VERIFY(state.y >= 0);
-    if (!row) LOKA_VERIFY(child->calls == (refuses ? 0u : 1u));
+    if (!row)
+      LOKA_VERIFY(child->calls == (refuses ? 0u : 1u));
     if (!refuses) LOKA_VERIFY(sibling->offer.y == SHRT_MAX);
   }
 
@@ -290,6 +414,8 @@ int main(int argc, char **argv)
     const bool registered = RegisterToolboxPlatformLayoutHandlers(controller.registry);
     LOKA_VERIFY(registered);
   }
+  passThroughGapPin();
+  containerGapPin(controller);
   const char *mode = argv[2];
   if (std::strcmp(mode, "derived-column") == 0 || std::strcmp(mode, "derived-row") == 0)
   {

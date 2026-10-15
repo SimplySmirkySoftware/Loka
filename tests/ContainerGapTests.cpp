@@ -276,6 +276,10 @@ void testContainerGapSeatsAndTraversal()
     const int bottom =
         computeColumnLayoutResultY(&column, seat(), &c, &Recorder::child, 12, &loka::testing::acceptShortLayoutY);
     LOKA_VERIFY(c.calls == 3 && c.states[0].y == 20 && c.states[2].y == 37 && bottom == 42);
+    Recorder toolboxColumn;
+    LOKA_VERIFY(ComputeToolboxColumnLayout(&column, seat(), &toolboxColumn) == 100);
+    LOKA_VERIFY(toolboxColumn.calls == 3 && toolboxColumn.states[0].y == 20);
+    LOKA_VERIFY(toolboxColumn.states[2].y == 29 && toolboxColumn.bottom == 34);
     BoxNode box((BoxProps()));
     box.addChild(new TextNode(TextProps("a")));
     box.addChild(noSeat(kind, result));
@@ -350,6 +354,10 @@ void testContainerGapNullGeometry()
   for (int i = 0; i != 3; ++i)
     column.addChild(new TextNode(TextProps("x")));
   LayoutState s = seat();
+  Recorder toolbox;
+  LOKA_VERIFY(ComputeToolboxColumnLayout(&column, s, &toolbox) == 100);
+  LOKA_VERIFY(toolbox.calls == 3 && toolbox.states[0].y == 20);
+  LOKA_VERIFY(toolbox.states[1].y == 29 && toolbox.states[2].y == 38 && toolbox.bottom == 43);
   LOKA_VERIFY(platform.projectLayoutForTesting(&column, s) == 20 + 3 * 12 + 2 * 12);
   unsigned index = 0;
   for (Node *child = column.childrenHead(); child; child = child->nextInComposition, ++index)
@@ -490,6 +498,9 @@ void testContainerGapShapeVerdicts()
     computeColumnLayoutResultY(
         column->asStackNode(), seat(), &recorder, &Recorder::child, 12, &loka::testing::acceptShortLayoutY);
     LOKA_VERIFY(recorder.calls == 1);
+    Recorder toolbox;
+    ComputeToolboxColumnLayout(column->asStackNode(), seat(), &toolbox);
+    LOKA_VERIFY(toolbox.calls == 1 && toolbox.bottom == seat().y);
     loka::dsl::testing::SceneTestAccess::unmount(scene);
   }
 

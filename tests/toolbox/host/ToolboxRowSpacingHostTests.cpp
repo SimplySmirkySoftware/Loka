@@ -104,7 +104,7 @@ namespace
           this->rects_[this->rectCount_] = toolbox_host::controlRect;
         else
         {
-          SetRect(&this->rects_[this->rectCount_], offer.x, offer.y, offer.x + width, state.y - state.spacing);
+          SetRect(&this->rects_[this->rectCount_], offer.x, offer.y, offer.x + width, state.y);
         }
         ++this->rectCount_;
       }
@@ -337,8 +337,8 @@ namespace
     const int x = left.left - inset;
     const int y = left.top - inset;
     const int w = groupWidth + 2 * inset;
-    // The content Column reports its final spacing as part of the group extent.
-    const int h = label.bottom + state.spacing + inset - y;
+    // The content Column ends at its final child bottom.
+    const int h = label.bottom + inset - y;
     const Rect expected[] = {
         {static_cast<short>(y), static_cast<short>(x), static_cast<short>(y + h - 1), static_cast<short>(x + 1)},
         {static_cast<short>(y),

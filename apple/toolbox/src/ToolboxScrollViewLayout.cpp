@@ -1,3 +1,4 @@
+#include "app/layout/StackGaps.hpp"
 // Included by the controller and the Toolbox host fixture.
 namespace
 {
@@ -157,11 +158,16 @@ short ToolboxScenePlatformController::layoutScrollView(
     childState.width = static_cast<short>(
         ToolboxScrollViewChildWidth(state.width));
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
+    loka::app::layout::StackGaps gaps(state.spacing);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         scrollView->childrenHead(), scrollView->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       const int childStartY = childState.y;
+      const int childY = childStartY + gaps.before(child);
+      if (this->refuseNarrowingInScrollScope(childY))
+        break;
+      childState.y = static_cast<short>(childY);
       LayoutNode(child, childState, this, currentBoundary,
                  child == column ? range : 0,
                  child == column && spans.isValid() ? spans.get() : 0);

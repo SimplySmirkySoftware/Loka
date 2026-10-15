@@ -1,6 +1,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
+#include "app/layout/StackGaps.hpp"
 #include <climits>
 #include "app/layout/CanvasLayout.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
@@ -24,9 +25,14 @@
       return 0;
     }
     short maxWidth = 0;
+    loka::app::layout::StackGaps gaps(state.spacing);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      const int childY = static_cast<int>(state.y) + gaps.before(child);
+      if (controller && controller->refuseNarrowingInScrollScope(childY))
+        break;
+      state.y = static_cast<short>(childY);
       short width = LayoutNode(child, state, controller, currentBoundary);
       if (controller && controller->refuseNarrowingInScrollScope(state.y))
       {
@@ -334,15 +340,12 @@ namespace
       // outside a ScrollView the same unrepresentable seat still refuses.
       const int right = static_cast<int>(projectedState.x) + resolvedWidth;
       const int bottom = static_cast<int>(projectedState.y) + resolvedHeight;
-      const int nextY = bottom + projectedState.spacing;
       if (right < SHRT_MIN || right > SHRT_MAX
-          || bottom < SHRT_MIN || bottom > SHRT_MAX
-          || nextY < SHRT_MIN || nextY > SHRT_MAX)
+          || bottom < SHRT_MIN || bottom > SHRT_MAX)
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
         traversal.refuseLayoutResultY(right);
         traversal.refuseLayoutResultY(bottom);
-        traversal.refuseLayoutResultY(nextY);
         return 0;
       }
       const loka::app::scene::Node::LayoutInputsCheckpoint inputs(*node);

@@ -493,7 +493,7 @@ short ToolboxTextContext::layout(loka::app::scene::IPlatformController *controll
   rect.bottom = static_cast<short>(state.y + geometry.height);
   updateRect(rect, state.x, static_cast<short>(state.y + geometry.baselineOffset));
   // Advance by the painted box, as the other rails do: y is the top edge.
-  state.y = static_cast<short>(rect.bottom + state.spacing);
+  state.y = static_cast<short>(rect.bottom);
   return width;
 }
 

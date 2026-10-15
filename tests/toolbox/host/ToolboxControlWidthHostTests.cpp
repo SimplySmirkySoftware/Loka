@@ -331,6 +331,16 @@ int main(int argc, char **argv)
   edit->setContext(new ToolboxEditTextContext(edit->asEditTextNode(), &controller));
   popup->setContext(new ToolboxPopupMenuContext(popup->asPopupMenuNode(), &controller));
   rowButton->setContext(new ToolboxButtonContext(rowButton->asButtonNode(), &controller));
+  // A leaf's exit is independent of the enclosing container's gap.
+  Node *leaves[] = {button, edit, popup};
+  for (unsigned i = 0; i != 3; ++i)
+  {
+    LayoutState plain = seat(80), spaced = plain;
+    spaced.spacing = 9;
+    const short width = leaves[i]->context->layout(&controller, plain);
+    LOKA_VERIFY(leaves[i]->context->layout(&controller, spaced) == width);
+    LOKA_VERIFY(spaced.y == plain.y && spaced.y > 20);
+  }
   const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
   if (std::strcmp(mode, "encoding-button") == 0)
   {

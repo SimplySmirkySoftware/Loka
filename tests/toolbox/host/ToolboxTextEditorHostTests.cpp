@@ -66,7 +66,9 @@ namespace
       LOKA_VERIFY(handler);
       context = static_cast<ToolboxTextEditorContext *>(handler->ensureContext(&node, &controller, state));
       LOKA_VERIFY(context);
-      context->layout(&controller, state);
+      state.spacing = 9;
+      LOKA_VERIFY(context->layout(&controller, state) == 200);
+      LOKA_VERIFY(state.y == 100);
       LOKA_VERIFY(!ToolboxTextEditorAccess::te(*context));
       context->render(&controller);
       // Seed native editing through its input seam; request tests post explicitly.
