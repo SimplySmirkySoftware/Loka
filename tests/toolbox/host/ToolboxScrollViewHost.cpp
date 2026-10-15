@@ -54,21 +54,33 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
     state.y += 20;
     return state.width;
   }
+  if (loka::app::ImageViewNode *image = node->asImageViewNode())
+  {
+    // Image painting is outside this fixture; R0 reads the real props above.
+    if (!controller->projectLayoutState(state))
+      return 0;
+    state.y += image->props.height_;
+    if (!controller->restoreProjectedLayoutState(state))
+      return 0;
+    return state.width;
+  }
   const loka::app::scene::ProjectionParentScope &scope = controller->projectionParentScopes_.current();
-  loka::app::scene::LayoutState projected;
-  if (!scope.project(state, projected)) { controller->refuseScrollViewShortRange(); return 0; }
+  if (!controller->projectLayoutState(state))
+    return 0;
   const loka::core::Frame &clip = scope.clipRect;
   SetRect(&controller->projectionClip, clip.x, clip.y, clip.x + clip.width, clip.y + clip.height);
   loka::app::scene::IPlatformNodeHandler *handler = controller->nodeHandlerRegistry_.find(node);
   assert(handler);
   loka::app::scene::NodeContext *previous = node->getContext();
-  if (!handler->ensureContext(node, controller, projected)) { controller->refuseScrollViewShortRange(); return 0; }
-  if (node->getContext() != previous) controller->requestStructurePresent();
-  const short width = node->layout(controller, projected);
-  int contentY = 0;
-  if (!scope.restoreContentY(projected.y, contentY) || controller->refuseNarrowingInScrollScope(contentY))
+  if (!handler->ensureContext(node, controller, state))
+  {
+    controller->refuseScrollViewShortRange();
     return 0;
-  state.y = static_cast<short>(contentY);
+  }
+  if (node->getContext() != previous) controller->requestStructurePresent();
+  const short width = node->layout(controller, state);
+  if (!controller->restoreProjectedLayoutState(state))
+    return 0;
   return width;
 }
 #include "ToolboxScrollViewLayout.cpp"

@@ -351,6 +351,11 @@ int main(int argc, char **argv)
   if (argc > 1 && std::string(argv[1]) == "paint-recovery") { PaintRecoveryPins(); return 0; }
   if (argc == 1) { EncodingPins(); PaintRecoveryPins(); MemoryPin(); }
   if (argc > 1 && std::string(argv[1]) == "memory") { MemoryPin(); return 0; }
+  if (argc > 1 && std::string(argv[1]) == "scroll-x")
+  {
+    ScrollViewXPins();
+    return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "scroll-band") { ScrollViewPins(); return 0; }
   ScrollViewPins();
   if (argc > 1 && std::string(argv[1]) == "measurement-plain") { MeasurementPins(true, false); return 0; }

@@ -6,4 +6,6 @@ void testToolboxScrollViewHitIntersectionGatesViewport();
 void testToolboxScrollViewOffsetClampRepublishesOnlyChangedFacts();
 void testToolboxScrollViewRangeMapsContentMinusViewport();
 
+void testToolboxScrollViewContentRectExcludesScrollbar();
+
 #endif // LOKA_TESTS_TOOLBOX_SCROLL_VIEW_CONTRACT_TESTS_HPP
