@@ -16,6 +16,13 @@ namespace
   // a Win32 rail default, like AppKit's lineScroll, not a logical Props door;
   // a later per-window platform parameter (#720) may override it.
   const int kLineStepPixels = 16;
+  // Vista identifiers are not exposed by every XP-target SDK.
+  static const UINT kMouseHorizontalWheelMessage = 0x020E;
+#ifdef SPI_GETWHEELSCROLLCHARS
+  static const UINT kSpiGetWheelScrollChars = SPI_GETWHEELSCROLLCHARS;
+#else
+  static const UINT kSpiGetWheelScrollChars = 0x006C;
+#endif
 }
 
 Win32ScrollViewContext::Win32ScrollViewContext(Win32ScenePlatformController *controller,
@@ -123,19 +130,17 @@ void Win32ScrollViewContext::relayout(int x, int y, int width, int height)
   }
 }
 
-int Win32ScrollViewContext::setScrollMetrics(int contentHeight,
-                                             int viewportHeight,
-                                             int offset)
+int Win32ScrollViewContext::setScrollMetrics(int bar, int content, int viewport, int offset)
 {
-  if (contentHeight < 0)
+  if (content < 0)
   {
-    contentHeight = 0;
+    content = 0;
   }
-  if (viewportHeight < 0)
+  if (viewport < 0)
   {
-    viewportHeight = 0;
+    viewport = 0;
   }
-  int maximum = contentHeight - viewportHeight;
+  int maximum = content - viewport;
   if (maximum < 0)
   {
     maximum = 0;
@@ -149,33 +154,36 @@ int Win32ScrollViewContext::setScrollMetrics(int contentHeight,
   SCROLLINFO info;
   ZeroMemory(&info, sizeof(info));
   info.cbSize = sizeof(info);
-  // SIF_DISABLENOSCROLL keeps the scrollbar present (disabled) when content
-  // fits, so the viewport client width never changes between layout passes
-  // and the width read before measurement stays true after it.
-  info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS | SIF_DISABLENOSCROLL;
+  // SIF_DISABLENOSCROLL keeps the vertical scrollbar present (disabled) when
+  // content fits, so the viewport client width never changes between layout
+  // passes and the width read before measurement stays true after it. The
+  // horizontal bar omits it: SetScrollInfo then shows the bar only while the
+  // range exists, so every viewport whose content fits keeps today's pixels.
+  info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+  if (bar == SB_VERT)
+    info.fMask |= SIF_DISABLENOSCROLL;
   info.nMin = 0;
-  info.nMax = contentHeight > 0 ? contentHeight - 1 : 0;
-  info.nPage = viewportHeight > 0 ? static_cast<UINT>(viewportHeight) : 0;
+  info.nMax = content > 0 ? content - 1 : 0;
+  info.nPage = viewport > 0 ? static_cast<UINT>(viewport) : 0;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(clamped);
-  SetScrollInfo(this->hwnd(), SB_VERT, &info, TRUE);
+  SetScrollInfo(this->hwnd(), bar, &info, TRUE);
   return clamped;
 }
 
-bool Win32ScrollViewContext::handleVerticalScroll(int command,
-                                                  int thumbPosition)
+bool Win32ScrollViewContext::handleScroll(int bar, int command, int thumbPosition)
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(this->controller()->borrowPhase().open());
 #endif
   SCROLLINFO info;
-  if (!this->readScrollInfo(info))
+  if (!this->readScrollInfo(bar, info))
   {
     return false;
   }
 
   const int maximum = this->maximumOffset(info);
   int next = this->node_ && this->node_->props.viewport_.isValid()
-                 ? this->node_->requestedOrigin().y
+                 ? (bar == SB_HORZ ? this->node_->requestedOrigin().x : this->node_->requestedOrigin().y)
                  : this->controller()->displayScale().scrollPositionToLu(info.nPos);
   next = this->clampOffset(next, maximum);
   int page = info.nPage > static_cast<UINT>(maximum)
@@ -197,25 +205,26 @@ bool Win32ScrollViewContext::handleVerticalScroll(int command,
     break;
   case SB_THUMBTRACK:
     this->setVisualPosition(
-        this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum));
+        bar, this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum));
     return true;
   case SB_THUMBPOSITION:
     next = this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum);
     break;
   case SB_ENDSCROLL:
-    this->publishOffset(this->clampOffset(this->controller()->displayScale().scrollPositionToLu(info.nPos), maximum));
+    this->publishOffset(bar,
+                        this->clampOffset(this->controller()->displayScale().scrollPositionToLu(info.nPos), maximum));
     return true;
   default:
     return false;
   }
   // Every settled step moves the native position with the fact: a click's
   // SB_ENDSCROLL arrives before layout and republishes that position.
-  this->setVisualPosition(next);
-  this->publishOffset(next);
+  this->setVisualPosition(bar, next);
+  this->publishOffset(bar, next);
   return true;
 }
 
-bool Win32ScrollViewContext::readScrollInfo(SCROLLINFO &info) const
+bool Win32ScrollViewContext::readScrollInfo(int bar, SCROLLINFO &info) const
 {
   if (!this->hwnd())
   {
@@ -224,7 +233,7 @@ bool Win32ScrollViewContext::readScrollInfo(SCROLLINFO &info) const
   ZeroMemory(&info, sizeof(info));
   info.cbSize = sizeof(info);
   info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-  return GetScrollInfo(this->hwnd(), SB_VERT, &info) != FALSE;
+  return GetScrollInfo(this->hwnd(), bar, &info) != FALSE;
 }
 
 int Win32ScrollViewContext::maximumOffset(const SCROLLINFO &info) const
@@ -254,7 +263,7 @@ int Win32ScrollViewContext::clampOffset(int value, int maximum) const
   return value;
 }
 
-void Win32ScrollViewContext::setVisualPosition(int value)
+void Win32ScrollViewContext::setVisualPosition(int bar, int value)
 {
   if (!this->hwnd())
   {
@@ -265,16 +274,25 @@ void Win32ScrollViewContext::setVisualPosition(int value)
   info.cbSize = sizeof(info);
   info.fMask = SIF_POS;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(value);
-  SetScrollInfo(this->hwnd(), SB_VERT, &info, TRUE);
+  SetScrollInfo(this->hwnd(), bar, &info, TRUE);
 }
 
-void Win32ScrollViewContext::publishOffset(int value)
+void Win32ScrollViewContext::publishOffset(int bar, int value)
 {
-  if (this->node_)
+  if (!this->node_)
+    return;
+  switch (bar)
+  {
+  case SB_HORZ:
+    this->node_->publishOrigin(value, this->node_->requestedOrigin().y);
+    break;
+  case SB_VERT:
     this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
+    break;
+  }
 }
 
-bool Win32ScrollViewContext::forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam)
+bool Win32ScrollViewContext::forwardMouseWheel(HWND root, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   const POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
   HWND target = WindowFromPoint(point);
@@ -293,7 +311,7 @@ bool Win32ScrollViewContext::forwardMouseWheel(HWND root, WPARAM wParam, LPARAM 
       // root-directed wheels (including default propagation from controls
       // outside a viewport). Children inside a viewport propagate directly
       // to its WndProc; no per-control wheel handlers are needed.
-      SendMessageW(target, WM_MOUSEWHEEL, wParam, lParam);
+      SendMessageW(target, msg, wParam, lParam);
       return true;
     }
   }
@@ -350,14 +368,14 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
     return 0;
   }
 
-  if (msg == WM_VSCROLL && self &&
-      Win32InputDoor::verticalScroll(*self, LOWORD(wParam), HIWORD(wParam)))
+  if ((msg == WM_VSCROLL || msg == WM_HSCROLL) && self
+      && Win32InputDoor::scroll(*self, msg == WM_HSCROLL ? SB_HORZ : SB_VERT, LOWORD(wParam), HIWORD(wParam)))
   {
     return 0;
   }
-  if (msg == WM_MOUSEWHEEL && self)
+  if ((msg == WM_MOUSEWHEEL || msg == kMouseHorizontalWheelMessage) && self)
   {
-    Win32InputDoor::mouseWheel(*self, wParam);
+    Win32InputDoor::mouseWheel(*self, msg == kMouseHorizontalWheelMessage ? SB_HORZ : SB_VERT, wParam);
     return 0;
   }
   if (msg == WM_COMMAND && self && self->controller() &&
@@ -371,13 +389,13 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
   return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-void Win32ScrollViewContext::handleMouseWheel(WPARAM wParam)
+void Win32ScrollViewContext::handleMouseWheel(int bar, WPARAM wParam)
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(this->controller()->borrowPhase().open());
 #endif
   UINT lines = 3;
-  if (!SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0))
+  if (!SystemParametersInfoW(bar == SB_HORZ ? kSpiGetWheelScrollChars : SPI_GETWHEELSCROLLLINES, 0, &lines, 0))
   {
     lines = 3;
   }
@@ -385,15 +403,17 @@ void Win32ScrollViewContext::handleMouseWheel(WPARAM wParam)
   // own a sub-detent remainder. Keep all offset writes in the line/page path.
   const int detents = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
   const bool page = lines == WHEEL_PAGESCROLL;
-  const int command = page ? (detents > 0 ? SB_PAGEUP : SB_PAGEDOWN)
-                           : (detents > 0 ? SB_LINEUP : SB_LINEDOWN);
+  // Positive horizontal delta scrolls RIGHT; positive vertical delta scrolls UP.
+  // The horizontal command aliases have the same values as the vertical ones.
+  const bool backwards = bar == SB_HORZ ? detents < 0 : detents > 0;
+  const int command = page ? (backwards ? SB_PAGEUP : SB_PAGEDOWN) : (backwards ? SB_LINEUP : SB_LINEDOWN);
   const UINT steps = page ? 1 : lines;
   const int count = detents < 0 ? -detents : detents;
   for (int detent = 0; detent < count; ++detent)
   {
     for (UINT step = 0; step < steps; ++step)
     {
-      this->handleVerticalScroll(command, 0);
+      this->handleScroll(bar, command, 0);
     }
   }
 }
