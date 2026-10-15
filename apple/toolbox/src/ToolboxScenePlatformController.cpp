@@ -549,7 +549,7 @@ void ToolboxScenePlatformController::renderScrollView(
   {
     return;
   }
-  const Rect viewportRect = ToolboxScrollViewContentRect(binding->rect);
+  const Rect viewportRect = binding->contentRect;
   const loka::core::Frame viewportClip(
       viewportRect.left,
       viewportRect.top,
@@ -1652,6 +1652,12 @@ void ToolboxScenePlatformController::clearControls()
     }
   }
   scrollBarLedger_.scrollBarControls_.clear();
+  // Bulk teardown also returns ids whose axis never materialized a control.
+  for (size_t i = 0; i < scrollBarLedger_.viewportScrollBars_.size(); ++i)
+  {
+    this->controlIds_.release(scrollBarLedger_.viewportScrollBars_[i].barId[loka::app::SCROLL_BAR_VERTICAL]);
+    this->controlIds_.release(scrollBarLedger_.viewportScrollBars_[i].barId[loka::app::SCROLL_BAR_HORIZONTAL]);
+  }
   scrollBarLedger_.viewportScrollBars_.clear();
   for (size_t i = 0; i < editControls_.size(); ++i)
   {

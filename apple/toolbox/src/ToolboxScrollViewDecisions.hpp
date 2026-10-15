@@ -41,12 +41,30 @@ inline int ToolboxScrollViewChildWidth(int viewportWidth)
   return width > 0 ? width : 0;
 }
 
-/** Excludes the scrollbar column without moving the seat's other edges. */
-template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT &seat)
+/** Bars exclude the bottom-right corner, which remains window ground. */
+template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT &seat, bool horizontalBar)
 {
   RectT content = seat;
   content.right = content.left + ToolboxScrollViewChildWidth(seat.right - seat.left);
+  if (horizontalBar)
+    content.bottom = content.top + ToolboxScrollViewChildWidth(seat.bottom - seat.top);
   return content;
+}
+
+template <typename RectT> inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat, bool horizontalBar)
+{
+  RectT bar = ToolboxScrollViewContentRect(seat, horizontalBar);
+  bar.left = bar.right;
+  bar.right = seat.right;
+  return bar;
+}
+
+template <typename RectT> inline RectT ToolboxScrollViewHorizontalBarRect(const RectT &seat)
+{
+  RectT bar = ToolboxScrollViewContentRect(seat, true);
+  bar.top = bar.bottom;
+  bar.bottom = seat.bottom;
+  return bar;
 }
 
 inline int ToolboxScrollViewMaximum(int contentHeight, int viewportHeight)

@@ -8,4 +8,6 @@ void testToolboxScrollViewRangeMapsContentMinusViewport();
 
 void testToolboxScrollViewContentRectExcludesScrollbar();
 
+void testToolboxScrollViewTwoBarGeometry();
+
 #endif // LOKA_TESTS_TOOLBOX_SCROLL_VIEW_CONTRACT_TESTS_HPP
