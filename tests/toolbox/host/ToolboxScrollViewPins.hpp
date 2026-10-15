@@ -5,6 +5,7 @@
 #include "app/ConfirmDialog.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
+#include <vector>
 
 namespace
 {
@@ -39,7 +40,11 @@ namespace
       LifecycleFactTestAccess::DeliverFacts(&scroll);
       controller.releaseNodeContexts(&scroll);
       LOKA_VERIFY(!controller.scrollSpans());
-      delete scroll.detachChildren();
+      // Gap pins seat several direct children; detachChildren() hands back only the chain head.
+      std::vector<Node *> children;
+      scroll.detachChildrenTo(children);
+      for (std::size_t i = 0; i != children.size(); ++i)
+        delete children[i];
       controller.retired.clear();
     }
     unsigned step(int value, short width = 100, short height = 34, short y = 0, short gap = 0)
