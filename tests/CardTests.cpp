@@ -450,3 +450,20 @@ void testCardInsertionFormsReachContent()
   // The card itself still holds exactly its column and four bands.
   LOKA_VERIFY(card.childrenCount() == 1 + CARD_BAND_COUNT);
 }
+
+void testCardBodyReconstruction()
+{
+  using namespace loka::app;
+  using loka::core::Frame;
+  // Asymmetric v1 allowances: zero top/left, three right/bottom.
+  const Frame bands[] = {Frame(10, 20, 34, 3), Frame(10, 23, 3, 37), Frame(44, 20, 6, 34), Frame(13, 54, 37, 6)};
+  const Frame bodies[] = {Frame(10, 20, 37, 12), Frame(10, 20, 12, 37), Frame(35, 20, 12, 37), Frame(10, 45, 37, 12)};
+  for (int role = 0; role < CARD_BAND_COUNT; ++role)
+  {
+    const CardBandProps props(static_cast<CardBandRole>(role));
+    LOKA_VERIFY(CardBodyInBand(bands[role], props) == bodies[role]);
+    const Frame shifted(bands[role].x + 71, bands[role].y + 93, bands[role].width, bands[role].height);
+    const Frame expected(bodies[role].x + 71, bodies[role].y + 93, bodies[role].width, bodies[role].height);
+    LOKA_VERIFY(CardBodyInBand(shifted, props) == expected);
+  }
+}

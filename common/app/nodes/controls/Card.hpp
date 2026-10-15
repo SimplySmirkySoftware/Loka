@@ -4,6 +4,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/style/CardStyle.hpp"
 #include <vector>
+#include "core/Frame.hpp"
 
 namespace loka
 {
@@ -50,6 +51,52 @@ namespace loka
         return this->role < other.role || (this->role == other.role && this->style < other.style);
       }
     };
+
+    /** Recover three real body edges and one virtual opposite edge in layout
+        units. The minimum body is 2r: its opposite arc cannot reach this
+        band's inset-wide sample. Call only for nonempty admitted bands.
+        Cost: O(1) per band paint; no tree or ledger walk. */
+    inline core::Frame CardBodyInBand(const core::Frame &band, const CardBandProps &props)
+    {
+      const CardStyle &style = props.style;
+      const int b = style.kBorderBand;
+      const int diameter = 2 * style.kCornerRadius;
+      int left = band.x;
+      int top = band.y;
+      int right = band.x + band.width;
+      int bottom = band.y + band.height;
+      switch (props.role)
+      {
+      case CARD_BAND_TOP:
+        left += style.kShadowLeft;
+        top += style.kShadowTop;
+        right += b;
+        bottom = top + diameter;
+        break;
+      case CARD_BAND_RIGHT:
+        top += style.kShadowTop;
+        right -= style.kShadowRight;
+        bottom += b;
+        left = right - diameter;
+        break;
+      case CARD_BAND_BOTTOM:
+        left -= b;
+        right -= style.kShadowRight;
+        bottom -= style.kShadowBottom;
+        top = bottom - diameter;
+        break;
+      case CARD_BAND_LEFT:
+        left += style.kShadowLeft;
+        top -= b;
+        bottom -= style.kShadowBottom;
+        right = left + diameter;
+        break;
+      case CARD_BAND_COUNT:
+        assert(false && "CardBand requires a role");
+        return core::Frame(0, 0, 0, 0);
+      }
+      return core::Frame(left, top, right - left, bottom - top);
+    }
 
     /** A projected strip; native rails explicitly refuse it until their painters land. */
     class CardBandNode : public scene::Node, public scene::IProjectedLayoutNode

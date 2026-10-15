@@ -13,6 +13,8 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "context/Win32CellContext.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
+#include "context/Win32CardBandContext.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "context/Win32AttributedTextContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
@@ -86,6 +88,13 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     LOKA_VERIFY(GetWindowTextW(edgeWindow, edgeRoundTrip, 8) == 3);
     LOKA_VERIFY(std::wcscmp(edgeRoundTrip, edgeTitle) == 0);
 
+    loka::app::CardBandNode bandNode((loka::app::CardBandProps()));
+    Win32CardBandContext band(&controller, root, 100, 0, 40, 3, &bandNode);
+    verifyWideChildWindow(root, L"LOKA_CARD_BAND");
+    LOKA_VERIFY(SetWindowTextW(band.hwnd(), edgeTitle));
+    LOKA_VERIFY(GetWindowTextW(band.hwnd(), edgeRoundTrip, 8) == 3);
+    LOKA_VERIFY(std::wcscmp(edgeRoundTrip, edgeTitle) == 0);
+
     loka::app::ImageViewProps imageProps;
     loka::app::ImageViewNode imageNode(imageProps);
     Win32ImageViewContext image(&controller, root, 0, 30, 80, 60, &imageNode);
@@ -114,6 +123,7 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");
 
     attributed.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
+    band.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     edge.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     cell.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     image.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);

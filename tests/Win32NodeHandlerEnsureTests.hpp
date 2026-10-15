@@ -47,4 +47,7 @@ void testWin32TextEditorCreationRefusalAndRetry();
 void testWin32RibbonGroupEdgeCreationRefusalAndRetry();
 void testWin32AttributedTextCreationRefusalAndRetry();
 
+void testWin32CardBandCreationRefusalAndRetry();
+void testWin32CardBandsLifecycleAndRepaint();
+void testWin32CardBandPaintOnlyClassification();
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP
