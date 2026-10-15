@@ -27,3 +27,4 @@ smirkbench text-editor-plain
 simpletext startup
 simpletext open-readme
 simpletext save-roundtrip
+simpleviewer open-wide-scroll

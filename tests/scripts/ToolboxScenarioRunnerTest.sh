@@ -364,7 +364,7 @@ run_case smirkbench startup 4 unset
 run_case smirkbench surface-ticks 4 unset
 run_case smirkbench add-face 4 unset
 # SimpleViewer launch-only pins: template data forks, no invented audits.
-printf '%s\n' 'simpleviewer startup' 'simpleviewer open-sun' 'simpleviewer open-bulb' 'simpleviewer churn-replace' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
+printf '%s\n' 'simpleviewer startup' 'simpleviewer open-sun' 'simpleviewer open-bulb' 'simpleviewer churn-replace' 'simpleviewer open-wide-scroll' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
 touch "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/LokaSimpleViewerTestsToolbox68K.bin"
 mkdir -p "$SANDBOX/repo/tests/scenarios/expected/simpleviewer"
 cp "$REPO_DIR/tests/scenarios/expected/simpleviewer/startup.audit" \
@@ -391,6 +391,17 @@ for picture in Sun Bulb; do
   grep -Fxq -- "template data fork: :Desktop Folder:Images:$picture.pict" "$staged" \
     || fail "$picture data fork was not preserved"
 done
+# The original wide picture bypasses the template and keeps three Finder items.
+mkdir -p "$SANDBOX/repo/example/SimpleViewer/assets"
+cp "$REPO_DIR/example/SimpleViewer/assets/Wide.pict" \
+  "$SANDBOX/repo/example/SimpleViewer/assets/Wide.pict"
+: >"$SANDBOX/hfs-mount-log"
+: >"$SANDBOX/picture-copy-arguments"
+RETRO68_TOOLCHAIN_BIN="$SANDBOX/retro-tools" run_case simpleviewer open-wide-scroll 3 unset
+[ ! -s "$SANDBOX/hfs-mount-log" ] || fail "wide picture mounted the template"
+[ ! -s "$SANDBOX/picture-copy-arguments" ] || fail "wide picture extracted template data"
+grep -Fxq -- "$SANDBOX/repo/example/SimpleViewer/assets/Wide.pict" \
+  "$SANDBOX/dev-disk-arguments" || fail "repository wide picture was not staged"
 # Four staged items: both data forks must survive the same template mount.
 : >"$SANDBOX/hfs-mount-log"
 : >"$SANDBOX/picture-copy-arguments"

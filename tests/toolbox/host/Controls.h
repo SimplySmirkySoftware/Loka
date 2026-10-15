@@ -17,10 +17,22 @@ namespace toolbox_host
   Rect currentClip();
   struct ControlCalls
   {
-    unsigned values, hilites, shows, draws;
+    unsigned values, hilites, shows, draws, hides;
     Rect valueClip, hiliteClip, showClip, drawClip;
-    ControlCalls() : values(0), hilites(0), shows(0), draws(0),
-        valueClip(), hiliteClip(), showClip(), drawClip() {}
+    ControlRef lastHidden;
+    ControlCalls()
+        : values(0),
+          hilites(0),
+          shows(0),
+          draws(0),
+          hides(0),
+          valueClip(),
+          hiliteClip(),
+          showClip(),
+          drawClip(),
+          lastHidden(0)
+    {
+    }
   };
   extern ControlCalls controlCalls;
 }
@@ -46,7 +58,11 @@ inline void Draw1Control(ControlRef)
   ++toolbox_host::controlCalls.draws;
   toolbox_host::controlCalls.drawClip = toolbox_host::currentClip();
 }
-inline void HideControl(ControlRef) {}
+inline void HideControl(ControlRef c)
+{
+  ++toolbox_host::controlCalls.hides;
+  toolbox_host::controlCalls.lastHidden = c;
+}
 inline short FindControl(Point, GrafPtr, ControlRef *out)
 { *out = toolbox_host::hitControl; return *out ? kControlIndicatorPart : 0; }
 inline short TrackControl(ControlRef c, Point, ControlActionUPP)

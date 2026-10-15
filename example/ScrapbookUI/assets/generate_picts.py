@@ -48,6 +48,7 @@ PAGE_GLYPHS = {
     "P": ((0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000), 6),
     "R": ((0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001), 6),
     "S": ((0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110), 6),
+    "W": ((0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010), 6),
     "T": ((0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100), 6),
 }
 
@@ -253,7 +254,7 @@ def line_width(text, scale):
     return width
 
 
-def draw_glyph_line(bitmap, text, scale, field):
+def draw_glyph_line(bitmap, text, scale, field, row_bytes=PICT_ROW_BYTES):
     top, left, bottom, right = field
     horizontal = left + (right - left - line_width(text, scale)) // 2
     glyph_top = top + (bottom - top - 7 * scale) // 2
@@ -267,7 +268,7 @@ def draw_glyph_line(bitmap, text, scale, field):
                     for dx in range(scale):
                         x = horizontal + column * scale + dx
                         y = glyph_top + row * scale + dy
-                        bitmap[y * PICT_ROW_BYTES + x // 8] |= 1 << (7 - x % 8)
+                        bitmap[y * row_bytes + x // 8] |= 1 << (7 - x % 8)
         horizontal += advance * scale
 
 
@@ -278,19 +279,20 @@ def build_glyph_plane(number, label):
     return bytes(bitmap)
 
 
-def pack_bits_rect(bitmap):
+def pack_bits_rect(bitmap, frame=FRAME):
+    row_bytes = (((frame[3] - frame[1] + 7) // 8) + 1) & ~1
     packed_rows = bytearray()
-    for row_start in range(0, len(bitmap), PICT_ROW_BYTES):
-        packed = pack_bits(bitmap[row_start : row_start + PICT_ROW_BYTES])
+    for row_start in range(0, len(bitmap), row_bytes):
+        packed = pack_bits(bitmap[row_start : row_start + row_bytes])
         if len(packed) > 250:
             raise AssertionError("packed scanline exceeds a 1-byte length")
         packed_rows.append(len(packed))
         packed_rows += packed
     return (
-        word(PICT_ROW_BYTES)
-        + rect(FRAME)
-        + rect(FRAME)
-        + rect(FRAME)
+        word(row_bytes)
+        + rect(frame)
+        + rect(frame)
+        + rect(frame)
         + word(1)  # srcOr
         + packed_rows
     )
