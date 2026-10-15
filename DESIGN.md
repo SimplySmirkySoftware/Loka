@@ -74,7 +74,7 @@ facts into native behavior.
 | What applies to Classic Mac and Retro68? | [docs/retro68.md](docs/retro68.md) | [`apple/toolbox/`](apple/toolbox/), Retro68 presets, and Toolbox CI |
 | What applies to macOS native code? | [AGENTS.md](AGENTS.md) and [docs/environments.md](docs/environments.md) | [`apple/macos/`](apple/macos/) and macOS CI |
 | What applies to Win32 text, paths, and native windows? | The Win32 rules in [AGENTS.md](AGENTS.md) | [`win32/`](win32/) and the Win32 bridge/path tests |
-| What must a PR claim and verify? | [CONTRIBUTING.md](CONTRIBUTING.md) and the review gates in [AGENTS.md](AGENTS.md) | Presets, CI workflows, and the PR's exact diff |
+| What must a PR claim and verify? | [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ReviewPolicy.md](docs/ReviewPolicy.md) | Presets, CI workflows, and the PR's exact diff |
 
 The [Programming Guide](docs/ProgrammingGuide.en.md) is the broad tutorial
 reference. It does not replace the headers for exact API facts.
