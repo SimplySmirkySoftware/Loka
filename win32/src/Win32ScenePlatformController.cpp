@@ -1341,8 +1341,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   int viewportHeight = state.height;
   if (horizontalBar)
   {
-    const int barHeight = this->displayScale_.clientCapacityToLu(this->displayScale_.systemMetric(SM_CYHSCROLL));
-    viewportHeight = state.height > barHeight ? state.height - barHeight : 0;
+    viewportHeight = this->displayScale_.clientHeightBelowHorizontalBar(
+        loka::core::Frame(state.x, state.y, state.width, state.height));
   }
   childBase.height = static_cast<short>(viewportHeight);
   const loka::core::Frame childClip(0, 0, state.width, viewportHeight);

@@ -156,6 +156,12 @@ namespace loka
           scroll bar thickness, then matches what Windows adds to a
           per-monitor-DPI window on that monitor. */
       int systemMetric(int index) const;
+      /** The client height, in lu, that a viewport seated at this frame keeps
+          below a horizontal scroll bar: the bar is subtracted from the seat's
+          projected native height and the result converted once, the way the
+          HWND's own client comes out, so no second rounding step disagrees
+          with it at fractional scales. */
+      int clientHeightBelowHorizontalBar(const loka::core::Frame &seatLu) const;
 
       bool operator==(const Win32DisplayScale &rhs) const
       {
