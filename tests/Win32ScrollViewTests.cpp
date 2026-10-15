@@ -1008,3 +1008,43 @@ void testWin32ScrollViewHorizontalBarShortensChildHeight()
   }
   LOKA_VERIFY(DestroyWindow(root));
 }
+
+void testWin32ScrollViewRefusedLayoutKeepsHorizontalMetrics()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root != NULL);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    offset.state().set(loka::core::Frame(50, 0, 0, 0));
+    ScrollViewNode scroll((ScrollViewProps(offset.state())));
+    ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(400, 100));
+    int visits = 0;
+    TextNode *following = new GapDispatchText(visits);
+    scroll.addChild(leading);
+    scroll.addChild(following);
+    establishLayout(controller, &scroll, 300, 100);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport != NULL);
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) != 0);
+    const SCROLLINFO before = scrollInfo(viewport, SB_HORZ);
+    const int establishedX = offset.state().get().x;
+    LOKA_VERIFY(maximumOffset(before) > 0 && establishedX == 50);
+    visits = 0;
+    // Wider content whose gap crosses the short limit: the traversal refuses,
+    // and the horizontal bar must keep the range and position of the last
+    // successful layout instead of showing the refused pass's numbers.
+    leading->props.size(1000, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset - Win32SceneLayout::kGap + 1));
+    controller.relayout(300, 100);
+    const SCROLLINFO after = scrollInfo(viewport, SB_HORZ);
+    LOKA_VERIFY(visits == 0);
+    LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
+    LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
+    const int retainedX = offset.state().get().x;
+    LOKA_VERIFY(retainedX == 50);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}

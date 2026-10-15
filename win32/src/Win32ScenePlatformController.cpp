@@ -1332,18 +1332,17 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   // An unknown range must not scroll: otherwise content cannot be brought back
   const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
   const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
-  // The horizontal bar is decided before the children are laid out: its
-  // presence shortens the client, and the children, the clip and the vertical
-  // page must all see that shorter height (the Toolbox rule from #1367).
-  ctx->setScrollMetrics(SB_HORZ, known ? contentWidthLu : 0, childBase.width, clampedX);
+  // The horizontal bar is decided before the children are laid out, because
+  // its presence shortens the client the children, the clip and the vertical
+  // page must share (the Toolbox rule from #1367). The decision is computed
+  // from the system bar height; nothing native changes until the whole layout
+  // has succeeded, so a refused traversal leaves the previous bars in place.
+  const bool horizontalBar = maximumX > 0 && state.height > 0;
   int viewportHeight = state.height;
-  if (state.height > 0)
+  if (horizontalBar)
   {
-    RECT viewportClient;
-    if (GetClientRect(ctx->hwnd(), &viewportClient))
-    {
-      viewportHeight = this->displayScale_.clientCapacityToLu(viewportClient.bottom - viewportClient.top);
-    }
+    const int barHeight = this->displayScale_.clientCapacityToLu(GetSystemMetrics(SM_CYHSCROLL));
+    viewportHeight = state.height > barHeight ? state.height - barHeight : 0;
   }
   childBase.height = static_cast<short>(viewportHeight);
   const loka::core::Frame childClip(0, 0, state.width, viewportHeight);
@@ -1405,6 +1404,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
   if (!shortRangeRefused)
   {
+    // Both bars commit together with the successful layout.
+    ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
     const int clampedOffset = ctx->setScrollMetrics(SB_VERT, contentHeight, viewportHeight, requestedOffset);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishOrigin(clampedX, clampedOffset);
