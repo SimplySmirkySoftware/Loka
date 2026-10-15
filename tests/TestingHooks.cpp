@@ -20,6 +20,7 @@ void InitMenus() { ++toolbox_host::menuInitializations; }
 
 #ifdef _WIN32
 #include "../win32/src/context/Win32EditTextBridge.hpp"
+#include "../win32/src/Win32ScenePlatformController.hpp"
 namespace loka
 {
   namespace win32
@@ -30,6 +31,20 @@ namespace loka
       {
         TextEditorSetFailure g_textEditorSetFailure = TEXT_EDITOR_SET_REFUSED;
         unsigned g_textEditorSetFailures = 0;
+        unsigned g_nativeChildWindowFailures = 0;
+      } // namespace
+
+      void failNativeChildWindowCreations(unsigned count)
+      {
+        g_nativeChildWindowFailures = count;
+      }
+
+      bool refuseNativeChildWindowCreation()
+      {
+        if (!g_nativeChildWindowFailures)
+          return false;
+        --g_nativeChildWindowFailures;
+        return true;
       }
 
       void failTextEditorSets(TextEditorSetFailure failure, unsigned count)

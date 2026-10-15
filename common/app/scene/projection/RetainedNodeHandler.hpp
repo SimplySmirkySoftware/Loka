@@ -10,7 +10,7 @@ namespace loka
   {
     namespace scene
     {
-      /** Shared retained-context installation wall. setContext must precede
+      /** Shared retained-context installation wall. Successful adoption must precede
           readLifecycleFactOnAttach, and afterAttach must remain last. In
           particular, Boundary compose may already have consumed pendingAttach
           before an OpenFileDialog context is created, so its afterAttach hook
@@ -54,7 +54,10 @@ namespace loka
           {
             return 0;
           }
-          typed->setContext(ctx);
+          if (!typed->adoptContext(ctx))
+          {
+            return 0;
+          }
           ctx->readLifecycleFactOnAttach();
           Derived::afterAttach(ctx);
           // The attach read / after-attach hook can run arbitrary reentrant
