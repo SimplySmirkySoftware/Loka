@@ -71,3 +71,16 @@ On #398, five debug runs "proved" a crash bypassed abort, exit, and every except
 ### SIZE partition
 
 Suspect allocation failure first, and use the SIZE partition as the discriminator before blaming a machine class: shrinking it reproduces the failure deterministically on any 68k machine, growing it makes the failure vanish (#398: 512K red on the Quadra, 768K green; 448K red even on the IIx, one swap earlier). Small allocations are served from a process-lifetime pool under the same global `operator new`; pooling preserves that refusal/abort policy rather than adding one, so still suspect allocation first — the pool's refill-failure path is chunk, then single request, then a nothrow null or plain-new abort.
+
+## Test builds — relocated dates
+
+Relocated from AGENTS.md at `f287b75b` by the AGENTS.md refresh, which keeps
+dates and issue numbers out of rule text.
+
+### 117 and 118 — common sources under TEST_BUILD
+
+Since #117 (macOS, `c29ba017`) and #118 (Win32, `bd247f1c`), both 2026-07-18, `LokaTestsMacOS` and `LokaTestsWin32` compile the common sources under `TEST_BUILD` into the test executable instead of linking the production cores, so `TEST_BUILD`-only hooks in `tests/TestingHooks.cpp` link on every platform while `LokaWin32Core` and `LokaMacOSCore` carry none. Linux reaches the same arrangement through the configure-time `TEST_BUILD` configuration.
+
+### 172 — compile pins outside Linux
+
+`tests/compile` is configured only by a configure-time `TEST_BUILD`. On 2026-10-15 that meant the Linux `testing*` presets: the macOS and Win32 CI presets define `TEST_BUILD` per target, not at configure, so they do not build the pins. Building the accepting twins on the macOS/Win32 toolchains was not wired when #172 closed on 2026-10-11.
