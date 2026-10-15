@@ -146,6 +146,19 @@ namespace loka
       }
     };
 
+    /** Answers the undeclared INTRINSIC source width in pixels; refusal leaves width untouched. */
+    inline bool queryIntrinsicImageWidth(const ImageViewProps &props, int &width)
+    {
+      if (props.width_ > 0 || !props.hasAttr_ || !props.attr_.hasSizePolicyValue_
+          || props.attr_.sizePolicyValue_ != IMAGE_VIEW_SIZE_INTRINSIC || !props.image_)
+        return false;
+      const loka::core::resource::Image image = props.image_->get();
+      if (!image.isValid() || image.width() <= 0)
+        return false;
+      width = image.width();
+      return true;
+    }
+
     class ImageViewNode : public scene::Node, public scene::IProjectedLayoutNode
     {
     public:

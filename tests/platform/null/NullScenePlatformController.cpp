@@ -26,10 +26,18 @@
 #include "app/scene/boundary/Boundary.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 
-/** Null push-button metric: eight units per UTF-32 scalar plus sixteen units
-    of total title inset. Constant labels yield the same answer throughout layout. */
+/** Null measures intrinsic images 1:1 in pixels and push buttons at eight units per
+    UTF-32 scalar plus sixteen units of title inset; answers remain stable during layout. */
 bool NullScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
+  if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
+  {
+    int pixels = 0;
+    if (!loka::app::queryIntrinsicImageWidth(image->props, pixels) || pixels > SHRT_MAX)
+      return false;
+    width = static_cast<short>(pixels);
+    return true;
+  }
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   if (!button)
     return false;

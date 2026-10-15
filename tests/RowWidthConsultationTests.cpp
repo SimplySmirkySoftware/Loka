@@ -1,3 +1,6 @@
+#include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
+#include <climits>
 #include "RowWidthConsultationTests.hpp"
 
 #include "app/OpenFileDialog.hpp"
@@ -635,4 +638,136 @@ void testStackNaturalWidthReadsLiveAxis()
     axis.set(STACK_AXIS_COLUMN);
   }
   LOKA_VERIFY(consultedStackWidth(outer, probe) == 40);
+}
+
+void testContentOverflowIgnoresOfferBoundText()
+{
+  using namespace loka::app;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  column.addChild(new TextNode(TextProps("a")));
+  BoxProps fixed;
+  fixed.setSize(300, 10);
+  column.addChild(new BoxNode(fixed));
+  StackWidthProbe probe(500, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 300);
+  LOKA_VERIFY(probe.calls == 0);
+}
+
+void testContentOverflowOfferBoundAnswersZero()
+{
+  using namespace loka::app;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  column.addChild(new TextNode(TextProps("a")));
+  StackWidthProbe probe(500, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 0);
+  column.addChild(widthRow(ROW_UNDECLARED_WIDTH_SHARED));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 0);
+  LOKA_VERIFY(probe.calls == 0);
+  LOKA_VERIFY(layout::queryContentOverflowWidth(0, 4, 0, width));
+  LOKA_VERIFY(width == 0);
+}
+
+void testContentOverflowNaturalDeclinePreservesOutput()
+{
+  using namespace loka::app;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  column.addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  StackWidthProbe probe(30, 0, 20);
+  short width = 19;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 19);
+}
+
+void testContentOverflowNestedMaximumAndOverflow()
+{
+  using namespace loka::app;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  StackNode *nested = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  column.addChild(nested);
+  nested->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  BoxProps fixed;
+  fixed.setSize(60, 10);
+  column.addChild(new BoxNode(fixed));
+  StackWidthProbe probe(30, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 74);
+  StackWidthProbe overflow(32767, 40, 20);
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &overflow, width));
+  LOKA_VERIFY(width == 74);
+  ImageViewProps imageProps;
+  imageProps.size(SHRT_MAX, 10);
+  StackNode images((StackProps(STACK_AXIS_COLUMN)));
+  ImageViewNode *image = new ImageViewNode(imageProps);
+  images.addChild(image);
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&images, 4, 0, width));
+  LOKA_VERIFY(width == SHRT_MAX);
+  image->props.width_ = static_cast<int>(SHRT_MAX) + 1;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&images, 4, 0, width));
+  LOKA_VERIFY(width == SHRT_MAX);
+}
+
+void testContentOverflowBoxPaddingIsOfferBound()
+{
+  using namespace loka::app;
+  ScrollViewNode scroll((ScrollViewProps()));
+  BoxProps props;
+  props.padding = 8;
+  BoxNode *box = new BoxNode(props);
+  scroll.addChild(box);
+  box->addChild(new TextNode(TextProps("a")));
+  StackWidthProbe probe(500, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(width == 0);
+  LOKA_VERIFY(probe.calls == 0);
+}
+
+void testContentOverflowPassThroughIsTransparent()
+{
+  using namespace loka::app;
+  // A Fragment (the shape a Show arm materializes as) lays its children out
+  // in place under the same offer, so its declared-width child overflows.
+  ScrollViewNode scroll((ScrollViewProps()));
+  FragmentNode *fragment = new FragmentNode(FragmentProps());
+  scroll.addChild(fragment);
+  fragment->addChild(new TextNode(TextProps("offer-bound")));
+  BoxProps fixed;
+  fixed.setSize(300, 10);
+  fragment->addChild(new BoxNode(fixed));
+  StackWidthProbe probe(500, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(width == 300);
+  LOKA_VERIFY(probe.calls == 0);
+  // Nested pass-through wrappers stay transparent; a decline inside propagates.
+  FragmentNode *inner = new FragmentNode(FragmentProps());
+  fragment->addChild(inner);
+  inner->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  StackWidthProbe refused(30, 0, 20);
+  width = 19;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, 4, &refused, width));
+  LOKA_VERIFY(width == 19);
+}
+
+void testContentOverflowRibbonUsesNaturalMeasurement()
+{
+  using namespace loka::app;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  RibbonGroupNode *group = new RibbonGroupNode(RibbonGroupProps());
+  column.addChild(group);
+  group->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  StackWidthProbe probe(30, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(width == 74 + 2 * RibbonGroupNode::kFrameInset);
+  StackWidthProbe refused(30, 0, 20);
+  width = 19;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &refused, width));
+  LOKA_VERIFY(width == 19);
 }

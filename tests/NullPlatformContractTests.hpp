@@ -67,6 +67,8 @@ void testNullPlatformContract_S8_directProjectionRefreshesRangeEdges();
 void testNullPlatformContract_S9_absentBindingsKeepGesturesLocal();
 void testNullPlatformContract_S10_stepDefaultsAreOneWithoutBeingRestated();
 
+void testNullIntrinsicImageOverflowWidth();
+
 #endif // LOKA_TESTS_NULL_PLATFORM_CONTRACT_TESTS_HPP
 void testStep4ShapeSettlesAfterShowFlip();
 void testConditionalSeatInitiallyNullCanMaterialize();
