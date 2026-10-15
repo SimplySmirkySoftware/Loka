@@ -13,18 +13,44 @@ namespace loka
     {
       bool isLayoutPassThrough(scene::Node *node)
       {
-        return node && node->asNestable() && !node->asProjectedLayoutNode() && !node->asStackNode()
-               && !node->asBoxNode() && !node->asGridNode() && !node->asZStackNode() && !node->asScrollViewNode()
-               && !node->asRibbonGroupNode() && !node->asCanvasNode() && !node->asRectSurfaceNode();
+        // Built-in containers have known kinds; pass-through wrappers do not.
+        return node && node->kind() == scene::NODE_KIND_UNKNOWN && node->asNestable() && !node->asProjectedLayoutNode();
       }
 
       bool childTakesLayoutSeat(scene::Node *child)
       {
-        if (!child || child->asOpenFileDialogNode() || child->asConfirmDialogNode())
+        if (!child)
           return false;
-        if (!isLayoutPassThrough(child))
+        switch (child->kind())
+        {
+        case scene::NODE_KIND_OPEN_FILE_DIALOG:
+        case scene::NODE_KIND_CONFIRM_DIALOG:
+          return false;
+        case scene::NODE_KIND_UNKNOWN:
+          break;
+        case scene::NODE_KIND_BOX:
+        case scene::NODE_KIND_ZSTACK:
+        case scene::NODE_KIND_GRID:
+        case scene::NODE_KIND_CELL:
+        case scene::NODE_KIND_STACK:
+        case scene::NODE_KIND_TEXT:
+        case scene::NODE_KIND_BUTTON:
+        case scene::NODE_KIND_EDIT_TEXT:
+        case scene::NODE_KIND_POPUP_MENU:
+        case scene::NODE_KIND_IMAGE_VIEW:
+        case scene::NODE_KIND_RECT_SURFACE:
+        case scene::NODE_KIND_SCROLL_BAR:
+        case scene::NODE_KIND_SCROLL_VIEW:
+        case scene::NODE_KIND_CANVAS:
+        case scene::NODE_KIND_ATTRIBUTED_TEXT:
+        case scene::NODE_KIND_TEXT_EDITOR:
+        case scene::NODE_KIND_RIBBON_GROUP:
+        case scene::NODE_KIND_RIBBON_GROUP_EDGE:
           return true;
+        }
         scene::INestable *content = child->asNestable();
+        if (!content || child->asProjectedLayoutNode())
+          return true;
         loka::dsl::CompositionCursor<scene::Node> children(content->childrenHead(), content->childrenCount());
         for (scene::Node *descendant = children.next(); descendant; descendant = children.next())
           if (childTakesLayoutSeat(descendant))
