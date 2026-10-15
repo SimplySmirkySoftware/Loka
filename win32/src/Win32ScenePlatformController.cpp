@@ -59,6 +59,58 @@ namespace
   // Deliberate Toolbox twin: eight logical display units per title side.
   const int kPushButtonTitleInsetDips = 8;
 
+  // #1325 owner ruling, Win32 VM probe (96 dpi, Yu Gothic UI, comctl32 v6):
+  // tmHeight 15; BCM_GETIDEALSIZE 23 = 15 + 2 * (text margin 1 + theme margin 3).
+  // One-line titles use tmHeight alone, without tmExternalLeading.
+  const int kPushButtonVerticalTitleInsetDips = 4;
+
+  /** Borrows a window DC with the display font selected for one measurement. */
+  class PushButtonMeasurementDC
+  {
+  public:
+    PushButtonMeasurementDC(HWND root, HFONT font)
+        : root_(root), dc_(font ? GetDC(root) : NULL),
+          previous_(this->dc_ ? SelectObject(this->dc_, font) : NULL)
+    {
+    }
+    ~PushButtonMeasurementDC()
+    {
+      if (this->get())
+        SelectObject(this->dc_, this->previous_);
+      if (this->dc_)
+        ReleaseDC(this->root_, this->dc_);
+    }
+    HDC get() const
+    {
+      return this->previous_ && this->previous_ != HGDI_ERROR ? this->dc_ : NULL;
+    }
+  private:
+    HWND root_;
+    HDC dc_;
+    HGDIOBJ previous_;
+    PushButtonMeasurementDC(const PushButtonMeasurementDC &);
+    PushButtonMeasurementDC &operator=(const PushButtonMeasurementDC &);
+  };
+
+  // Twin of measurePushButtonNaturalWidth: same font, DC, bound and decline rules.
+  loka::app::layout::RowLayoutMetrics MeasureRowLayoutMetrics(
+      HWND root, const loka::win32::Win32DisplayScale &scale, HFONT font)
+  {
+    loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
+    PushButtonMeasurementDC dc(root, font);
+    TEXTMETRICW text;
+    if (!dc.get() || !GetTextMetricsW(dc.get(), &text) || text.tmHeight <= 0)
+      return metrics;
+    // DIPs follow dpi only: spaceScale is the rail's layout ratio, not the control's margin.
+    const int inset = loka::win32::Win32DisplayScale(scale.dpi()).nativeLength(0, kPushButtonVerticalTitleInsetDips).px;
+    if (inset < 0 || inset > (INT_MAX - text.tmHeight) / 2)
+      return metrics;
+    const int height = scale.measurementToLu(static_cast<int>(text.tmHeight) + 2 * inset);
+    if (height > 0 && height <= SHRT_MAX)
+      metrics.buttonHeight = height;
+    return metrics;
+  }
+
   /** One installation contract for registration protection and paint lookup.
       Unknown handler contexts are never cast by the paint walk. */
   struct PaintContextKind
@@ -276,17 +328,11 @@ bool Win32ScenePlatformController::measurePushButtonNaturalWidth(
   if (!loka::win32::MaterializeWideString(label, wide)
       || wide.size() > static_cast<std::size_t>(INT_MAX))
     return false;
-  HDC dc = GetDC(this->rootHwnd_);
-  if (!dc)
+  PushButtonMeasurementDC dc(this->rootHwnd_, font);
+  if (!dc.get())
     return false;
-  HGDIOBJ previousFont = SelectObject(dc, font);
   SIZE extent = {0, 0};
-  const bool selected = previousFont && previousFont != HGDI_ERROR;
-  const BOOL measured = selected
-      ? GetTextExtentPoint32W(dc, wide.c_str(), static_cast<int>(wide.size()), &extent) : FALSE;
-  if (selected)
-    SelectObject(dc, previousFont);
-  ReleaseDC(this->rootHwnd_, dc);
+  const BOOL measured = GetTextExtentPoint32W(dc.get(), wide.c_str(), static_cast<int>(wide.size()), &extent);
   if (!measured || extent.cx < 0)
     return false;
   const int inset = this->displayScale_.nativeLength(0, kPushButtonTitleInsetDips).px;
@@ -335,10 +381,10 @@ Win32ScenePlatformController::Win32ScenePlatformController(
       railMetrics_(displayScale.railMetrics()),
       textShaping_(loka::app::PER_RUN),
       displayScale_(displayScale.dpi(), this->railMetrics_),
-      displayFont_()
+      displayFont_(this->displayScale_),
+      rowLayoutMetrics_(MeasureRowLayoutMetrics(rootHwnd, this->displayScale_, this->displayFont_.get()))
 {
   RegisterWin32BuiltInSupport(*this);
-  this->displayFont_.create(this->displayScale_);
   if (rootHwnd_)
   {
     gControllersByRootHwnd[rootHwnd_] = this;
@@ -1415,10 +1461,8 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     }
     else
     {
-      const loka::app::layout::RowLayoutMetrics metrics =
-          loka::app::layout::FallbackControlMetrics::rowLayout();
       resultY = loka::app::layout::computeRowLayoutResultY(
-          stack, state, metrics, this,
+          stack, state, this->rowLayoutMetrics_, this,
           this, &Win32ScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, resultY);

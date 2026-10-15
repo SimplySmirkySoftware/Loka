@@ -147,10 +147,11 @@ bool Win32ButtonContext::captureBitmap(loka::core::resource::Image &out) const
 
 short Win32ButtonContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
 {
-  this->relayout(state.x, state.y, state.width, loka::app::layout::FallbackControlMetrics::kButtonHeight);
-  state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kButtonHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kButtonHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  // The height a Row aligns this button by, so the frame cannot disagree with it.
+  const short height = static_cast<short>(this->controller()->rowLayoutMetrics().buttonHeight);
+  this->relayout(state.x, state.y, state.width, height);
+  state.height = height;
+  return static_cast<short>(state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
 }
 
 bool Win32ButtonContext::handleCommand(WPARAM, LPARAM)

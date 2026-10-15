@@ -14,6 +14,7 @@ namespace loka
     {
     public:
       Win32DisplayFont();
+      explicit Win32DisplayFont(const Win32DisplayScale &scale);
       ~Win32DisplayFont();
 
       bool create(const Win32DisplayScale &scale);

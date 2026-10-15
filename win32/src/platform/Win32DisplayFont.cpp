@@ -80,6 +80,13 @@ namespace loka
       ZeroMemory(this->fonts_, sizeof(this->fonts_));
     }
 
+    Win32DisplayFont::Win32DisplayFont(const Win32DisplayScale &scale)
+        : scale_()
+    {
+      ZeroMemory(this->fonts_, sizeof(this->fonts_));
+      this->create(scale);
+    }
+
     Win32DisplayFont::~Win32DisplayFont()
     {
       // Also releases every successful allocation in a refused partial build.

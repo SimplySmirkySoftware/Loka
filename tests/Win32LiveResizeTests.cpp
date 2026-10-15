@@ -1,3 +1,4 @@
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32LiveResizeTests.hpp"
 #include "app/layout/SceneRootLayout.hpp"
 
@@ -234,6 +235,8 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
+    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
+                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     ReentrantLayoutOffset offset(100);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     loka::app::StackNode *column =
@@ -246,13 +249,15 @@ void testWin32ReentrantLayoutSharesOutermostPresentation()
 
     controller.onChange(&scrollView, loka::app::scene::NODE_DIRTY_NONE, false);
     controller.relayout(300, 100);
-    assert(offset.state().get() == 100);
+    const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    assert(offset.state().get() == (initialMax < 100 ? initialMax : 100));
     offset.reenterLayout(&controller, 300, 240);
     gLiveResizeHostPaintCount = 0;
 
     controller.relayout(300, 240);
 
-    assert(offset.state().get() == 264 - (240 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.reentryCount() == 1 && "one range clamp must cause one synchronous layout reentry");
     if (hostPaints)
     {

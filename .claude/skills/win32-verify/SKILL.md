@@ -130,7 +130,7 @@ unless a follow-up on the same issue still needs it.
 ## Build
 
 `build.bat` (the two builds are both required — neither implies the other,
-see `.github/workflows/ci.yml`). The first two lines resolve the toolchain, so
+see `.github/workflows/windows.yml`). The first two lines resolve the toolchain, so
 the same file works on any rig:
 
 ```bat
