@@ -411,7 +411,7 @@ namespace
       virtual NodeKind kind() const { return NODE_KIND_TEXT; }
     };
     column.addChild(new TextProbe());
-    LOKA_VERIFY(spans.begin(1));
+    LOKA_VERIFY(spans.begin(1, LayoutState().spacing));
     LOKA_VERIFY(spans.append(0, 20));
     LOKA_VERIFY(spans.finish());
     const loka::app::layout::LazyWindow range = {0, 0};

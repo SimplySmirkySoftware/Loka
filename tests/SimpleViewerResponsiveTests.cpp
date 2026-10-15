@@ -328,9 +328,14 @@ namespace
     state.spacing = kRowGap;
     loka::app::layout::RowLayoutMetrics metrics;
     metrics.gap = kRowGap;
-    loka::app::layout::computeRowLayoutResultY(
-        rootRow, state, metrics, 0, // Synthetic allocation probe has no rail source.
-        &record, &recordRowSeat);
+    loka::app::layout::computeRowLayoutResultY(rootRow,
+                                               state,
+                                               metrics,
+                                               0, // Synthetic allocation probe has no rail source.
+                                               &record,
+                                               &recordRowSeat,
+                                               metrics.gap,
+                                               0);
   }
 
   struct SimpleViewerHarness
