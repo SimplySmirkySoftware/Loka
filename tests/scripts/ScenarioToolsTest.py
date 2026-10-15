@@ -243,10 +243,9 @@ class ExpectedAuditPinsTest(unittest.TestCase):
             self.assertEqual(len(entry), 2)
             example, scenario = entry
             audit_path = os.path.join(SCENARIO_DIR, "expected", example, scenario + ".audit")
-            # Build-only cells await the delegator's measured rig audit.
-            # Baked audits use all checks below.
-            if entry in (["simpleviewer", "churn-replace"],
-                         ["simpleviewer", "open-wide-scroll"]) and not os.path.exists(audit_path):
+            # #642 PR 0 is build-only until the delegator measures both partitions.
+            # Only this named cell may lack an audit; baked audits use all checks below.
+            if entry == ["simpleviewer", "churn-replace"] and not os.path.exists(audit_path):
                 self.assertTrue(os.path.isfile(audit_path + ".pending.md"))
                 continue
             registered_audits.add(os.path.relpath(audit_path, SCENARIO_DIR))

@@ -21,7 +21,8 @@ The wide cell stages `example/SimpleViewer/assets/Wide.pict`, reproduced by
 `generate_wide_pict.py`, directly from the repository. After recording the decided
 load outcome, it selects the production Actual Size (Scroll) action and waits
 through the same settled-presentation wall before recording `post-scroll` with
-`display.mode actual-scroll`. Its measured audit remains pending on the rig.
+`display.mode actual-scroll`. Its tracked audit was measured on the maciix/System 7
+rig on 2026-10-15 (`image.load ok`, 600×120, post-scroll at tick 4).
 The nominal 480×280 window minus the 200-pixel navigation column leaves 280
 pixels for content and 264 for the scroll child, giving maximumX 336 for the
 600-pixel image before rail margins and gaps. Toolbox currently applies

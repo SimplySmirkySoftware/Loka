@@ -1,0 +1,45 @@
+loka_scenario_audit version=1 scenario=open-wide-scroll
+step id=2 due_tick=2 tick=2 status=succeeded error_kind=0 error_code=0 name=post-settle
+step id=2 due_tick=2 tick=2 status=succeeded error_kind=0 error_code=0 name=open-image
+step id=3 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=post-open
+checkpoint	post-open
+crop_bottom	280
+crop_left	0
+crop_right	480
+crop_top	0
+format_version	1
+heap.probe_covers_image	yes
+image.bytes	7108
+image.height	120
+image.load	ok
+image.width	600
+node	SimpleViewer.Image
+rail	toolbox
+scenario_version	1
+schema_version	1
+status	ok
+step	open-wide-scroll
+test	SimpleViewer
+tick	3
+step id=4 due_tick=4 tick=4 status=succeeded error_kind=0 error_code=0 name=post-scroll
+checkpoint	post-scroll
+crop_bottom	280
+crop_left	0
+crop_right	480
+crop_top	0
+display.mode	actual-scroll
+format_version	1
+heap.probe_covers_image	yes
+image.bytes	7108
+image.height	120
+image.load	ok
+image.width	600
+node	SimpleViewer.Image
+rail	toolbox
+scenario_version	1
+schema_version	1
+status	ok
+step	open-wide-scroll
+test	SimpleViewer
+tick	4
+terminal status=succeeded
