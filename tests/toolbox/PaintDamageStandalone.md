@@ -9,7 +9,8 @@ A2 (#1196) adds six arms: 145 PASS / 0 FAIL on the same rig, with a
 byte-identical `LOG.TXT` from both builds (#1240).
 #1283 adds two SmallLabel arms (147 PASS). The ribbon group frame (#1310) adds
 six arms: 153 PASS / 0 FAIL on the same rig, with a `LOG.TXT` byte-identical to
-the tracked log from the Multiversal build.
+the tracked log from the Multiversal build. The Card bands (#1364) add eighteen
+arms: 171 PASS / 0 FAIL on the same rig, byte-identical to the tracked log.
 Owns: Toolbox native paint-damage pins that need real QuickDraw and the
 Control Manager: exact versus whole-window delivery, presentation history,
 control and popup geometry, and busy-cursor borrows.
@@ -105,7 +106,7 @@ rectangle and checks restoration after the next delivery.
 
 The six `ribbon-*` arms are runtime-verified on the `toolbox-maciix` rig (#1310).
 
-## Card bands (PR 2b, runtime acceptance pending)
+## Card bands
 
 Twelve painter arms use real QuickDraw in the final fixture's window. `CardPixels`
 feeds the production framed layout into production `ToolboxCardBandContext`s;
@@ -128,10 +129,10 @@ failure ends the list. The next ordinary Scene/window flush must then erase the
 old ring and restore it pixel for pixel, without a manual erase or explicit
 invalidation in the probe.
 
-Build with `scripts/retro68-cmake.sh --build --preset retro68-68k-release --target
-LokaPaintDamage68K_APPL`. Run the command above on the delegator's maciix rig,
-inspect all eighteen `card-*` outcomes, then update
-`tests/toolbox/expected/paintdamage-maciix.audit` from the captured Classic-CR
-log. The previous 153 PASS arms must retain their exact lines; the new expected
-total is 171 PASS, pending that run. Do not replace the tracked log with an
-unrun expectation. The separate 29-cell MAME baseline must remain byte-identical.
+The eighteen `card-*` arms are runtime-verified on the `toolbox-maciix` rig
+(#1364). The tracked `tests/toolbox/expected/paintdamage-maciix.audit` was
+updated from that run's captured Classic-CR log: 171 PASS, the earlier 153 lines
+unchanged and the Card lines added after `ribbon-partial-restores-edge`. The
+standalone is not part of the preset's default build, so rebuild it with
+`scripts/retro68-cmake.sh --build --preset retro68-68k-release --target
+LokaPaintDamage68K_APPL` before running the command above.
