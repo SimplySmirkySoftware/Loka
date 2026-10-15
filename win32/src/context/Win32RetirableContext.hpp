@@ -20,6 +20,10 @@ public:
   {
     return this->hwnd_;
   }
+  virtual bool acceptsInstallation() const
+  {
+    return this->hwnd() != 0;
+  }
   /** Subclasses override onNativeFact, never this terminal sequencing door.
       The hook runs before HWND retirement; retirement follows its local scopes. */
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,

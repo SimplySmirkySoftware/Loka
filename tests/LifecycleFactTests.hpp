@@ -8,4 +8,8 @@ void testPlatformControllerReleaseDropsRetiredNodeHitEntriesAndBindings();
 void testLifecycleFactWalkIsSilentAndDeliveryIsDiffBased();
 void testLifecycleFactChildAdoptedUnderHiddenAncestorInheritsDetached();
 
+void testRetainedContextRefusalRetriesWithoutAttach();
+
+void testNodeAdoptContextAcceptsAndRefuses();
+
 #endif // LOKA_TESTS_LIFECYCLE_FACT_TESTS_HPP
