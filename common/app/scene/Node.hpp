@@ -349,6 +349,13 @@ namespace loka
         }
         virtual ~NodeContext() {}
 
+        /** Whether this fresh context accepts installation in its creating Node.
+            Default acceptance preserves contexts without a native resident. */
+        virtual bool acceptsInstallation() const
+        {
+          return true;
+        }
+
         void setOwner(Node *owner)
         {
           owner_ = owner;
@@ -375,7 +382,9 @@ namespace loka
         /** The context-side observation point — the one channel. Living
             transitions (A <-> D) arrive from the apply-phase diff walk;
             the terminal RETIRED arrives from the retire door, after
-            severing and right before this context is destroyed. */
+            severing and right before this context is destroyed. A fresh context
+            refused by adoptContext also receives explicit RETIRED: this context's
+            life ends even though its creating Node may still be ATTACHED. */
         virtual void onFactChanged(NodeLifecycleFact previous, NodeLifecycleFact next)
         {
           (void)previous;
@@ -737,6 +746,26 @@ namespace loka
             return result;
           }
           return 0;
+        }
+
+        /** Consume a fresh, never-installed context into an empty slot, or end
+            its life with explicit RETIRED and delete it. The creating Node and
+            controller must be live. Refusal leaves the Node fact unchanged and
+            schedules nothing; the next ensure visit may try again. */
+        bool adoptContext(NodeContext *ctx)
+        {
+          assert(!this->context && ctx);
+          assert(this->lifecycleFact() != NODE_FACT_RETIRED);
+          assert(!ctx->owner() || ctx->owner() == this);
+          assert(ctx->deliveredFact() == NODE_FACT_ATTACHED);
+          if (!ctx->acceptsInstallation())
+          {
+            ctx->deliverFact(this, NODE_FACT_RETIRED);
+            delete ctx;
+            return false;
+          }
+          this->setContext(ctx);
+          return true;
         }
 
         void setContext(NodeContext *ctx)

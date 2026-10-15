@@ -958,7 +958,7 @@ short MacTextEditorContext::layout(loka::app::scene::IPlatformController *, loka
   const int documentHeight = projection.measurementToLu(std::max(size.height, [view frame].size.height));
   loka::macos::SetMacDocumentHeight(scroll, projection.projectLength(0, documentHeight));
   this->onPropsApplied();
-  return static_cast<short>(state.y + state.height + state.spacing);
+  return static_cast<short>(state.y + state.height);
 }
 
 loka::app::scene::FollowUp MacTextEditorContext::prepareRestore()

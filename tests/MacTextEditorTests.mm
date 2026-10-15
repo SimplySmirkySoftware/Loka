@@ -195,7 +195,7 @@ namespace
       this->view = (NSTextView *)[this->scroll documentView];
       LOKA_VERIFY(![this->view isRichText]);
       this->verifyPlainAttributes();
-      LOKA_VERIFY(this->context->layout(&this->controller, state) == 105);
+      LOKA_VERIFY(this->context->layout(&this->controller, state) == 101);
       LOKA_VERIFY(state.height == 96);
       LOKA_VERIFY(
           NSEqualRects([this->scroll frame], this->controller.projection().projectFrame(Frame(3, 5, 240, 96)).r));

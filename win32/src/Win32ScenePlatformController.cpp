@@ -1127,6 +1127,10 @@ HWND Win32ScenePlatformController::createNativeChildWindow(DWORD exStyle,
                                                            HINSTANCE instance,
                                                            void *createParameter)
 {
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseNativeChildWindowCreation())
+    return 0;
+#endif
   const RECT &nativeRect = geometry.r;
   HWND hwnd = CreateWindowExW(exStyle,
                               className,

@@ -2295,3 +2295,174 @@ void testWin32ContainerGapRow()
       LOKA_VERIFY(DestroyWindow(root));
     }
 }
+
+namespace
+{
+  // Same protected-list inspection as MenuTitleTests; no production getter.
+  template <typename T> class AdmissionState : public loka::core::MutableState<T>
+  {
+  public:
+    explicit AdmissionState(const T &value)
+        : loka::core::MutableState<T>(value)
+    {
+    }
+    size_t subscriptions() const
+    {
+      return this->handlers.size() + this->deferredHandlers.size();
+    }
+  };
+} // namespace
+
+namespace
+{
+  void verifyResidentCreationRefusalAndRetry(int leaf)
+  {
+    using namespace loka::app;
+    using namespace loka::app::scene;
+    using namespace loka::core;
+    HWND root = CreateWindowExW(
+        0, L"STATIC", L"refusal-host", WS_OVERLAPPED, 0, 0, 320, 240, NULL, NULL, GetModuleHandle(NULL), NULL);
+    LOKA_VERIFY(root != NULL);
+    {
+      Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96));
+      RegisterWin32BuiltInSupport(controller);
+      AdmissionState<String> text(String::Literal("Before"));
+      AdmissionState<bool> enabled(true);
+      AdmissionState<int> selection(0);
+      AdmissionState<resource::Image> image((resource::Image()));
+      loka::app::testing::TextEditorStateOwner editorState;
+      ObservableList<String> lines;
+      LOKA_VERIFY(lines.attach(&editorState.tracker, 256) == ATTACH_OK);
+      LOKA_VERIFY(lines.insert(0, String::Literal("line")) == EDIT_OK);
+      Node *node = 0;
+      switch (leaf)
+      {
+      case 0:
+        node = new TextNode(TextProps(&text));
+        break;
+      case 1:
+        node = new ButtonNode(ButtonProps().text(&text).enabled(&enabled));
+        break;
+      case 2:
+        node = new CellNode(CellProps().text(&text));
+        break;
+      case 3:
+        node = new EditTextNode(EditTextProps(WriteSeat<String>(&text)));
+        break;
+      case 4:
+        node = new ImageViewNode(ImageViewProps().image(&image));
+        break;
+      case 5:
+        node = new PopupMenuNode(PopupMenuProps().selectedIndex(WriteSeat<int>(&selection)).enabled(&enabled));
+        break;
+      case 6:
+        node = new TextEditorNode(TextEditorProps(lines, editorState.cursor));
+        break;
+      case 7:
+        node = new RibbonGroupEdgeNode(RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT));
+        break;
+      case 8:
+        node = new AttributedTextNode(AttributedTextProps(Styled("Styled", Bold)));
+        break;
+      }
+      LOKA_VERIFY(node != 0);
+      const size_t textBefore = text.subscriptions();
+      const size_t enabledBefore = enabled.subscriptions();
+      const size_t selectionBefore = selection.subscriptions();
+      const size_t imageBefore = image.subscriptions();
+      LayoutState state;
+      state.x = 10;
+      state.y = 10;
+      state.width = 200;
+      state.height = 40;
+      loka::win32::testing::failNativeChildWindowCreations(2);
+      for (int attempt = 0; attempt < 2; ++attempt)
+      {
+        LOKA_VERIFY(!controller.prepareProjectedLayout(node, state));
+        LOKA_VERIFY(node->getContext() == 0);
+        LOKA_VERIFY(node->lifecycleFact() == NODE_FACT_ATTACHED);
+        LOKA_VERIFY(countChildWindows(root) == 0);
+        LOKA_VERIFY(text.subscriptions() == textBefore);
+        LOKA_VERIFY(enabled.subscriptions() == enabledBefore);
+        LOKA_VERIFY(selection.subscriptions() == selectionBefore);
+        LOKA_VERIFY(image.subscriptions() == imageBefore);
+        // Force notifications, including ImageView's deferred subscription.
+        text.set(String::Literal("After"), true);
+        enabled.set(false, true);
+        selection.set(1, true);
+        image.set(resource::Image(), true);
+      }
+      LOKA_VERIFY(controller.prepareProjectedLayout(node, state));
+      NodeContext *accepted = node->getContext();
+      LOKA_VERIFY(accepted != 0);
+      const HWND child = static_cast<Win32RetirableContext *>(accepted)->hwnd();
+      LOKA_VERIFY(child != NULL && IsWindow(child));
+      LOKA_VERIFY(countChildWindows(root) == 1);
+      // Positive controls: prove the six fixtures really exercised bindings.
+      if (leaf == 0 || leaf == 1 || leaf == 2 || leaf == 3)
+        LOKA_VERIFY(text.subscriptions() > textBefore);
+      if (leaf == 1 || leaf == 5)
+        LOKA_VERIFY(enabled.subscriptions() > enabledBefore);
+      if (leaf == 4)
+        LOKA_VERIFY(image.subscriptions() > imageBefore);
+      if (leaf == 5)
+        LOKA_VERIFY(selection.subscriptions() > selectionBefore);
+      LOKA_VERIFY(controller.prepareProjectedLayout(node, state));
+      LOKA_VERIFY(node->getContext() == accepted && countChildWindows(root) == 1);
+      LifecycleFactTestAccess::MarkSubtreeRetired(node);
+      node->setContext(0);
+      delete node;
+      controller.drainNativeRetirements();
+      LOKA_VERIFY(countChildWindows(root) == 0);
+      LOKA_VERIFY(text.subscriptions() == textBefore && enabled.subscriptions() == enabledBefore);
+      LOKA_VERIFY(selection.subscriptions() == selectionBefore && image.subscriptions() == imageBefore);
+      loka::win32::testing::failNativeChildWindowCreations(0);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+} // namespace
+
+void testWin32TextCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(0);
+}
+
+void testWin32ButtonCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(1);
+}
+
+void testWin32CellCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(2);
+}
+
+void testWin32EditTextCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(3);
+}
+
+void testWin32ImageViewCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(4);
+}
+
+void testWin32PopupMenuCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(5);
+}
+
+void testWin32TextEditorCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(6);
+}
+
+void testWin32RibbonGroupEdgeCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(7);
+}
+
+void testWin32AttributedTextCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(8);
+}

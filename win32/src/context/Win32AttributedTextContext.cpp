@@ -28,11 +28,6 @@ namespace
       Win32ScenePlatformController *win32 = static_cast<Win32ScenePlatformController *>(controller);
       Win32AttributedTextContext *context = new Win32AttributedTextContext(
           win32, win32->projectionParentHwnd(), state.x, state.y, state.width, state.height, node);
-      if (context && !context->paintHwnd())
-      {
-        delete context;
-        return 0;
-      }
       return context;
     }
   };

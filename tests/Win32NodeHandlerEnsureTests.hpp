@@ -37,4 +37,14 @@ void testWin32ContainerGapBox();
 
 void testWin32ContainerGapRow();
 
+void testWin32TextCreationRefusalAndRetry();
+void testWin32ButtonCreationRefusalAndRetry();
+void testWin32CellCreationRefusalAndRetry();
+void testWin32EditTextCreationRefusalAndRetry();
+void testWin32ImageViewCreationRefusalAndRetry();
+void testWin32PopupMenuCreationRefusalAndRetry();
+void testWin32TextEditorCreationRefusalAndRetry();
+void testWin32RibbonGroupEdgeCreationRefusalAndRetry();
+void testWin32AttributedTextCreationRefusalAndRetry();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP

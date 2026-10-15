@@ -1,5 +1,7 @@
+#include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "LifecycleFactTests.hpp"
+#include "app/scene/projection/RetainedNodeHandler.hpp"
 
 #include <cassert>
 #include <vector>
@@ -735,4 +737,130 @@ void testLifecycleFactChildAdoptedUnderHiddenAncestorInheritsDetached()
   g_hiddenRecord = 0;
   g_hiddenAncestorVisible = 0;
   g_hiddenInnerCondition = 0;
+}
+
+namespace
+{
+  struct ContextAdmissionRecord
+  {
+    ContextAdmissionRecord()
+        : created(0),
+          destroyed(0),
+          facts(0),
+          reads(0),
+          attaches(0)
+    {
+    }
+    unsigned created, destroyed, facts, reads, attaches;
+  };
+
+  class RefusingContext : public loka::app::scene::NodeContext
+  {
+  public:
+    explicit RefusingContext(ContextAdmissionRecord &record)
+        : record_(record)
+    {
+      ++this->record_.created;
+    }
+    virtual ~RefusingContext()
+    {
+      ++this->record_.destroyed;
+    }
+    virtual bool acceptsInstallation() const
+    {
+      return false;
+    }
+    virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next)
+    {
+      LOKA_VERIFY(previous == loka::app::scene::NODE_FACT_ATTACHED);
+      LOKA_VERIFY(next == loka::app::scene::NODE_FACT_RETIRED);
+      LOKA_VERIFY(this->deliveredFact() == next);
+      ++this->record_.facts;
+    }
+    void readLifecycleFactOnAttach()
+    {
+      ++this->record_.reads;
+    }
+    void afterAttach()
+    {
+      ++this->record_.attaches;
+    }
+
+  private:
+    ContextAdmissionRecord &record_;
+  };
+
+  class AdmissionNode : public loka::app::scene::Node
+  {
+  public:
+    explicit AdmissionNode(ContextAdmissionRecord &record)
+        : record(record)
+    {
+    }
+    ContextAdmissionRecord &record;
+  };
+
+  class AdmissionHandler
+      : public loka::app::scene::RetainedNodeHandler<AdmissionHandler, AdmissionNode, RefusingContext>
+  {
+  public:
+    static AdmissionNode *cast(loka::app::scene::Node *node)
+    {
+      return static_cast<AdmissionNode *>(node);
+    }
+    static RefusingContext *
+    create(AdmissionNode *node, loka::app::scene::IPlatformController *, const loka::app::scene::LayoutState &)
+    {
+      return new RefusingContext(node->record);
+    }
+    static void afterAttach(RefusingContext *ctx)
+    {
+      ctx->afterAttach();
+    }
+  };
+} // namespace
+
+void testRetainedContextRefusalRetriesWithoutAttach()
+{
+  ContextAdmissionRecord record;
+  AdmissionNode node(record);
+  AdmissionHandler handler;
+  NoopPlatformController controller;
+  loka::app::scene::LayoutState state;
+  for (unsigned visit = 1; visit <= 2; ++visit)
+  {
+    LOKA_VERIFY(handler.ensureContext(&node, &controller, state) == 0);
+    LOKA_VERIFY(node.getContext() == 0);
+    LOKA_VERIFY(node.lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED);
+    LOKA_VERIFY(record.created == visit && record.destroyed == visit && record.facts == visit);
+    LOKA_VERIFY(record.reads == 0 && record.attaches == 0);
+  }
+}
+
+void testNodeAdoptContextAcceptsAndRefuses()
+{
+  using namespace loka::app::scene;
+  FactRecord acceptedFacts;
+  Node legacy;
+  Node accepted;
+  NotifySubtreeNodeDetached(&legacy);
+  NotifySubtreeNodeDetached(&accepted);
+  legacy.setNativeLifetimeHint(NATIVE_HINT_DESIRE_STAY);
+  accepted.setNativeLifetimeHint(NATIVE_HINT_DESIRE_STAY);
+  NodeContext *expected = new NodeContext();
+  NodeContext *candidate = new FactProbeContext(&acceptedFacts);
+  legacy.setContext(expected);
+  LOKA_VERIFY(accepted.adoptContext(candidate));
+  LOKA_VERIFY(accepted.getContext() == candidate && candidate->owner() == &accepted);
+  LOKA_VERIFY(candidate->deliveredFact() == NODE_FACT_DETACHED_RETAINED);
+  LOKA_VERIFY(candidate->deliveredFact() == expected->deliveredFact());
+  LOKA_VERIFY(candidate->lifetimeHint() == expected->lifetimeHint());
+  LOKA_VERIFY(acceptedFacts.attachFacts.empty() && acceptedFacts.detachFacts.empty());
+
+  ContextAdmissionRecord record;
+  Node refused;
+  LOKA_VERIFY(!refused.adoptContext(new RefusingContext(record)));
+  LOKA_VERIFY(refused.getContext() == 0 && refused.lifecycleFact() == NODE_FACT_ATTACHED);
+  LOKA_VERIFY(record.created == 1 && record.destroyed == 1 && record.facts == 1);
+  LOKA_VERIFY(record.reads == 0 && record.attaches == 0);
 }

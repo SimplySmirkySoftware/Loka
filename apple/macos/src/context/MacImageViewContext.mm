@@ -328,7 +328,7 @@ short MacImageViewContext::layout(loka::app::scene::IPlatformController *, loka:
   this->relayout(state.x, state.y, imageWidth, imageHeight);
   state.width = static_cast<short>(imageWidth);
   state.height = static_cast<short>(imageHeight);
-  return static_cast<short>(state.y + imageHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + imageHeight);
 }
 
 void MacImageViewContext::relayout(int x, int y, int width, int height)

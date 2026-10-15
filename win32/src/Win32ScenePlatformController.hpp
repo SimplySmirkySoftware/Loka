@@ -66,6 +66,20 @@ namespace loka
   } // namespace app
 } // namespace loka
 
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace win32
+  {
+    namespace testing
+    {
+      void failNativeChildWindowCreations(unsigned count);
+      bool refuseNativeChildWindowCreation();
+    } // namespace testing
+  } // namespace win32
+} // namespace loka
+#endif
+
 class Win32ScenePlatformController : public loka::app::scene::IPlatformController,
     public loka::app::layout::INaturalWidthSource
 {
