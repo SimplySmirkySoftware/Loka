@@ -1,7 +1,7 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32ScrollViewTests.hpp"
 
-#include "app/layout/SceneRootLayout.hpp"
+#include "Win32SceneLayout.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -23,6 +23,14 @@
 #include "app/scene/state/NodeState.hpp"
 #include "core/State.hpp"
 #include "core/StateTracker.hpp"
+#include <climits>
+#include "app/nodes/Text.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/ConfirmDialog.hpp"
+#include "context/Win32TextContext.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
+#include "app/nodes/nestable/Show.hpp"
 
 namespace
 {
@@ -244,8 +252,7 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
-                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    const int contentHeight = 6 * controller.rowLayoutMetrics().buttonHeight + 5 * Win32SceneLayout::kGap;
     // Nodes are declared after the controller so they leave scope first:
     // ~Node is the last retire door, and the controller must still be alive
     // to receive the queued HWNDs (the ensure-contract convention; a node
@@ -314,13 +321,12 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
       }
     }
     assert(first.left == 0 && first.top == -10);
-    assert(second.top == controller.rowLayoutMetrics().buttonHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing - 10 &&
-           "content y must project as viewport-client y minus offset");
+    assert(second.top == controller.rowLayoutMetrics().buttonHeight + Win32SceneLayout::kGap - 10
+           && "content y must project as viewport-client y minus offset");
 
     const SCROLLINFO info = scrollInfo(viewport);
-    assert(info.nPage == 140 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    assert(maximumOffset(info) == contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    assert(info.nPage == 140 - 2 * Win32SceneLayout::kRootInset);
+    assert(maximumOffset(info) == contentHeight - (140 - 2 * Win32SceneLayout::kRootInset));
     assert(info.nPos == 10);
 
     // Release the root pointer before the nodes leave scope so the
@@ -484,7 +490,8 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
-    addButtonColumn(scrollView, 6);
+    // Eight buttons keep the range past three wheel lines with the 6 lu gap.
+    addButtonColumn(scrollView, 8);
     establishLayout(controller, &scrollView, 300, 140);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
@@ -580,8 +587,7 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
   {
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
-    const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
-                                  + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    const int contentHeight = 6 * controller.rowLayoutMetrics().buttonHeight + 5 * Win32SceneLayout::kGap;
     // Nodes after the controller: see the parents-and-clips pin.
     ViewportFact offset(100);
     loka::app::ScrollViewNode scrollView(
@@ -590,8 +596,8 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     establishLayout(controller, &scrollView, 300, 100);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
-    const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int initialMax = contentHeight - (100 - 2 * Win32SceneLayout::kRootInset);
+    const int resizedMax = contentHeight - (240 - 2 * Win32SceneLayout::kRootInset);
     assert(offset.state().get().y == (initialMax < 100 ? initialMax : 100));
 
     offset.resetChangeCount();
@@ -617,8 +623,8 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
-           "an oversized offset must recover to the content maximum");
+    assert(offset.state().get().y == contentHeight - (100 - 2 * Win32SceneLayout::kRootInset)
+           && "an oversized offset must recover to the content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);
@@ -686,4 +692,125 @@ void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope()
   }
   LOKA_VERIFY(DestroyWindow(root));
   std::printf("==== [testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope] PASSED ====\n");
+}
+
+void testWin32ScrollViewContainerGapsAndNoSeats()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root != NULL);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    ViewportFact offset(0);
+    loka::core::MutableState<bool> hidden(false);
+    // A ConfirmDialog needs a result channel; the STATIC host gives it no transport, so nothing opens.
+    loka::core::MutableState<ConfirmResult> resultStorage;
+    NodeState<ConfirmResult> result(&resultStorage, 0);
+    NodeDefinitionBase *definition = (ScrollView(ScrollViewProps(offset.state())).testId("gapScroll")
+                                      << Text("First") << Fragment() << (Show(hidden) << Text("Hidden"))
+                                      << ConfirmDialog().result(result) << Text("Second") << Text("Third"))
+                                         .clone();
+    LOKA_VERIFY(definition != 0);
+    Scene scene(definition);
+    LOKA_VERIFY(scene.mount(&controller));
+    SceneTestAccess::updateAttached(scene, true);
+    const int visible = 30;
+    controller.relayout(300, visible + 2 * Win32SceneLayout::kRootInset);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport != NULL);
+    int bottom = 0;
+    int totalHeight = 0;
+    for (int i = 0; i < 3; ++i)
+    {
+      TextNode *text = 0;
+      FlowError error;
+      LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("gapScroll").descendant<TextNode>(i + 1), text, error)
+                  == FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(text && text->getContext());
+      const RECT frame = childRectInParent(static_cast<Win32TextContext *>(text->getContext())->hwnd(), viewport);
+      LOKA_VERIFY(frame.top == bottom + (i > 0 ? Win32SceneLayout::kGap : 0));
+      totalHeight += static_cast<int>(frame.bottom - frame.top);
+      bottom = static_cast<int>(frame.bottom);
+    }
+    const SCROLLINFO info = scrollInfo(viewport);
+    LOKA_VERIFY(info.nPage == static_cast<UINT>(visible));
+    const int maximum = maximumOffset(info);
+    LOKA_VERIFY(maximum == totalHeight + 2 * Win32SceneLayout::kGap - visible);
+    SceneTestAccess::unmount(scene);
+    controller.drainNativeRetirements();
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  // The seat verdict reads kind(), while dispatch asks asBoundary(). Counting
+  // only the latter distinguishes refusal before layout from later narrowing.
+  class GapDispatchText : public loka::app::TextNode
+  {
+  public:
+    explicit GapDispatchText(int &visits)
+        : TextNode(loka::app::TextProps("Following")),
+          visits_(visits)
+    {
+    }
+    virtual loka::app::scene::BoundaryNode *asBoundary()
+    {
+      ++this->visits_;
+      return 0;
+    }
+
+  private:
+    int &visits_;
+  };
+} // namespace
+
+void testWin32ScrollViewGappedOriginRefuses()
+{
+  using namespace loka::app;
+  for (int generic = 0; generic < 2; ++generic)
+  {
+    HWND root = createHostWindow();
+    LOKA_VERIFY(root != NULL);
+    {
+      Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+      ViewportFact offset(0);
+      int visits = 0;
+      ScrollViewNode scroll((ScrollViewProps(offset.state())));
+      scene::NestableNode *content = &scroll;
+      if (generic)
+      {
+        FragmentNode *fragment = new FragmentNode((FragmentProps()));
+        scroll.addChild(fragment);
+        content = fragment;
+      }
+      BoxNode *leading = new BoxNode(BoxProps().setSize(100, 100));
+      TextNode *following = new GapDispatchText(visits);
+      content->addChild(leading);
+      content->addChild(following);
+      establishLayout(controller, &scroll, 300, 100);
+      HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+      LOKA_VERIFY(viewport != NULL);
+      const SCROLLINFO before = scrollInfo(viewport);
+      LOKA_VERIFY(visits > 0);
+      visits = 0;
+      const int maximum = maximumOffset(before);
+      LOKA_VERIFY(maximum > 0);
+      // The old end fits short; only the intervening gap crosses the limit.
+      leading->props.setSize(100,
+                             static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset - Win32SceneLayout::kGap + 1));
+      controller.relayout(300, 100);
+      const SCROLLINFO after = scrollInfo(viewport);
+      LOKA_VERIFY(visits == 0);
+      LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
+      LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
+      const int offsetValue = offset.state().get().y;
+      LOKA_VERIFY(offsetValue == 0);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
 }

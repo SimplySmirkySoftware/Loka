@@ -1,3 +1,4 @@
+#include "Win32SceneLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
@@ -47,7 +48,7 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, 0);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, Win32SceneLayout::kGap);
   RegisterWin32TextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32ButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32TextNodeHandler(controller.nodeHandlerRegistry_);
