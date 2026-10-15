@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Card.hpp"
 #include "context/ToolboxRibbonGroupEdgeContext.hpp"
 #include "context/ToolboxConfirmDialogContext.hpp"
 #include "app/ConfirmDialog.hpp"
@@ -20,6 +21,8 @@
 
 namespace
 {
+  loka::app::scene::RefusedNodeHandler
+      gRefusedToolboxCardBand(loka::app::scene::NodeTypeToken<loka::app::CardBandNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxTextEditor(
       loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>());
   loka::app::scene::RefusedNodeHandler gRefusedToolboxButton(
@@ -36,6 +39,7 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
   const int capabilities = controller.window_->context()->capabilities();
   bool ok = RegisterToolboxAttributedTextNodeHandler(controller.nodeHandlerRegistry_);
   ok = RegisterToolboxRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_) && ok;
+  ok = controller.nodeHandlerRegistry_.registerHandler(&gRefusedToolboxCardBand) && ok;
   if ((capabilities & ToolboxWindowContext::CAP_CONTROL_MANAGER) != 0)
   {
     ok = RegisterToolboxButtonNodeHandler(controller.nodeHandlerRegistry_) && ok;

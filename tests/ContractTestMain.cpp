@@ -8,6 +8,7 @@
 #endif
 #include "NativeResourceRetirementTests.hpp"
 #include "RibbonTests.hpp"
+#include "CardTests.hpp"
 #include "CommandSetTests.hpp"
 #include "SimpleTextTests.hpp"
 #include "MenuCompletionTests.hpp"

@@ -163,6 +163,7 @@ namespace
       case NODE_KIND_OPEN_FILE_DIALOG:
       case NODE_KIND_CONFIRM_DIALOG:
       case NODE_KIND_BOX:
+      case NODE_KIND_CARD:
       case NODE_KIND_RIBBON_GROUP:
       case NODE_KIND_ZSTACK:
       case NODE_KIND_GRID:
@@ -182,6 +183,7 @@ namespace
       case NODE_KIND_EDIT_TEXT:
       case NODE_KIND_TEXT_EDITOR:
       case NODE_KIND_POPUP_MENU:
+      case NODE_KIND_CARD_BAND:
       case NODE_KIND_RIBBON_GROUP_EDGE:
       case NODE_KIND_CELL:
       case NODE_KIND_IMAGE_VIEW:
