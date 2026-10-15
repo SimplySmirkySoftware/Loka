@@ -8,4 +8,7 @@ void testMacScrollViewResizeReclampsOffsetOnce();
 void testMacNestedScrollViewRefusesWithoutDisturbingOuterScope();
 void testMacScrollViewButtonClickReachesLokaHandler();
 
+void testMacScrollViewContainerGapsAndNoSeats();
+void testMacScrollViewGappedOriginRefuses();
+
 #endif // LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP
