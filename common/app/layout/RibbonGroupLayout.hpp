@@ -14,7 +14,8 @@ namespace loka
       int computeRibbonGroupLayoutResultY(loka::app::RibbonGroupNode *group,
                                           const LayoutStateT &state,
                                           void *context,
-                                          int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                          int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                          bool (*acceptY)(void *, int))
       {
         if (!group)
           return state.y;
@@ -26,7 +27,9 @@ namespace loka
                                                       0,
                                                       state,
                                                       context,
-                                                      layoutChild);
+                                                      layoutChild,
+                                                      0,
+                                                      acceptY);
         const int width = state.width;
         const int height = resultY - state.y;
         loka::dsl::CompositionCursor<loka::app::scene::Node> children(group->childrenHead(), group->childrenCount());

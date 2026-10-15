@@ -1,3 +1,5 @@
+#include "app/layout/ColumnLayout.hpp"
+#include "support/LayoutY.hpp"
 #include "StackSpansTests.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LokaAllocFailure.hpp"
@@ -15,6 +17,39 @@ namespace
   using namespace loka::app::scene;
   using namespace loka::app::layout;
   using namespace loka::core;
+
+  struct SpanTraversal
+  {
+    NullScenePlatformController &platform;
+    int *origins;
+    unsigned calls;
+    SpanTraversal(NullScenePlatformController &p, int *o)
+        : platform(p),
+          origins(o),
+          calls(0)
+    {
+    }
+    static int child(void *context, Node *node, const LayoutState &state)
+    {
+      SpanTraversal &self = *static_cast<SpanTraversal *>(context);
+      if (self.origins)
+        self.origins[self.calls] = state.y;
+      ++self.calls;
+      return self.platform.projectLayoutForTesting(node, state);
+    }
+  };
+
+  int layoutSpanColumn(NullScenePlatformController &platform,
+                       StackNode *column,
+                       const LayoutState &state,
+                       const LazyWindow *range,
+                       StackSpans &spans,
+                       int *origins = 0)
+  {
+    SpanTraversal traversal(platform, origins);
+    return computeColumnLayoutResultY(
+        column, state, &traversal, &SpanTraversal::child, 3, &loka::testing::acceptShortLayoutY, range, &spans);
+  }
 
   void window(const StackSpans &spans, int top, int bottom, unsigned first, unsigned count)
   {
@@ -82,46 +117,46 @@ void testStackSpansColumnCollection()
   StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
   scroll.addChild(column);
   for (int i = 0; i < 4; ++i)
-    column->addChild(new TextNode(TextProps("text")));
+    column->addChild(Text("text").create());
   LayoutState state;
   state.x = 3;
   state.y = 7;
   state.width = 100;
   state.height = 80;
-  state.spacing = 3;
+  // Fixture gap 3 is supplied to the Column, not to leaf advances.
   StackSpans spans;
-  LOKA_VERIFY(platform.projectLayoutForTesting(&scroll, state, 0, &spans) == 87);
+  int origins[4];
+  LOKA_VERIFY(layoutSpanColumn(platform, column, state, 0, spans, origins) == 64);
   LOKA_VERIFY(spans.valid());
   LOKA_VERIFY(spans.size() == 4);
   unsigned index = 0;
   for (Node *child = column->childrenHead(); child; child = child->nextInComposition, ++index)
   {
-    TextNode *text = static_cast<TextNode *>(child);
     NullTextContext *context = static_cast<NullTextContext *>(child->getContext());
     LOKA_VERIFY(context != 0);
-    LOKA_VERIFY(context->commitPresented(text->props.text_->get(), platform.paintScope()));
-    const PaintQuery query = {platform.paintScope(), PLACEMENT_ELIGIBLE};
-    const PaintAnswer placed = context->queryPaintDamage(query);
-    LOKA_VERIFY(placed.kind == PAINT_ANSWER_EXACT);
-    LOKA_VERIFY(spans.start(index) == placed.damage.y - state.y);
-    LOKA_VERIFY(spans.end(index) == placed.damage.y - state.y + context->measurement().height() + state.spacing);
+    // Each span starts at the previous bottom; its gap precedes this child.
+    LOKA_VERIFY(spans.start(index) == origins[index] - state.y - (index ? 3 : 0));
+    LOKA_VERIFY(spans.end(index) == origins[index] - state.y + context->measurement().height());
   }
-  LOKA_VERIFY(spans.total() == 60);
+  LOKA_VERIFY(spans.total() == 57);
   const unsigned long before = platform.leafLayoutVisitsForTesting();
   const LazyWindow range = {1, 2};
-  platform.projectLayoutForTesting(&scroll, state, &range, &spans);
+  int restarted[2];
+  layoutSpanColumn(platform, column, state, &range, spans, restarted);
   LOKA_VERIFY(platform.leafLayoutVisitsForTesting() - before == 2);
+  LOKA_VERIFY(restarted[0] == origins[1] && restarted[1] == origins[2]);
   // A changed visited advance repairs all four leaves in this same call.
-  state.spacing = 4;
+  TextDefinition taller(TextProps("text\ntext"));
+  LOKA_VERIFY(taller.applyPropsToNode(column->childrenHead()->nextInComposition));
   const unsigned long beforeRepair = platform.leafLayoutVisitsForTesting();
-  platform.projectLayoutForTesting(&scroll, state, &range, &spans);
+  layoutSpanColumn(platform, column, state, &range, spans);
   LOKA_VERIFY(platform.leafLayoutVisitsForTesting() - beforeRepair == 5);
-  LOKA_VERIFY(spans.valid() && spans.total() == 64);
+  LOKA_VERIFY(spans.valid() && spans.total() == 69);
   column->addChild(new TextNode(TextProps("new child")));
   const unsigned long beforeStructure = platform.leafLayoutVisitsForTesting();
-  platform.projectLayoutForTesting(&scroll, state, &range, &spans);
+  layoutSpanColumn(platform, column, state, &range, spans);
   LOKA_VERIFY(platform.leafLayoutVisitsForTesting() - beforeStructure == 5);
-  LOKA_VERIFY(spans.valid() && spans.size() == 5 && spans.total() == 80);
+  LOKA_VERIFY(spans.valid() && spans.size() == 5 && spans.total() == 84);
   // A refused viewport must not leave a table from a prior successful pass.
   LayoutState refused = state;
   refused.y = SHRT_MAX;

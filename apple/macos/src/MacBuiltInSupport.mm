@@ -46,7 +46,7 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, 0);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ButtonNode>(),
                                                         &MacScenePlatformController::DispatchProjectedLayout);
   controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::EditTextNode>(),

@@ -118,7 +118,7 @@ short NullAttributedTextContext::layout(loka::app::scene::IPlatformController *c
     this->placement_.complete(loka::core::Frame(state.x, state.y, state.width, state.height), scope);
     this->placedBlock_ = this->node_->props.blockStyle_;
   }
-  const int bottom = state.y + state.height + state.spacing;
+  const int bottom = state.y + state.height;
   return static_cast<short>(bottom < SHRT_MIN ? SHRT_MIN : extent(bottom));
 }
 

@@ -116,12 +116,12 @@ void testFallbackControlMetricsContract()
 
 void testNullLayoutRowProducesFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::StackNode row((loka::app::StackProps(loka::app::STACK_AXIS_ROW)));
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
   row.addChild(first);
   row.addChild(second);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&row, makeState(10, 20, 101, 30));
 
@@ -133,40 +133,41 @@ void testNullLayoutRowProducesFixedChildGeometry()
 
 void testNullLayoutColumnProducesFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::StackNode column((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
   column.addChild(first);
   column.addChild(second);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&column, makeState(10, 20, 80, 40));
 
   assertGeometry(first, 10, 20, 80, 40);
-  assertGeometry(second, 10, 27, 80, 33);
+  assertGeometry(second, 10, 39, 80, 21);
   (void)resultY;
-  assert(resultY == 38);
+  assert(resultY == 50);
 }
 
 void testNullLayoutFragmentAdvancesAcrossChildren()
 {
+  NullScenePlatformController platform;
   loka::app::FragmentNode fragment((loka::app::FragmentProps()));
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
   fragment.addChild(first);
   fragment.addChild(second);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&fragment, makeState(10, 20, 80, 40));
 
   assertGeometry(first, 10, 20, 80, 40);
-  assertGeometry(second, 10, 27, 80, 40);
+  assertGeometry(second, 10, 39, 80, 40);
   (void)resultY;
-  assert(resultY == 38);
+  assert(resultY == 50);
 }
 
 void testNullLayoutBoxProducesFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::BoxProps props;
   props.setPadding(5);
   loka::app::BoxNode box(props);
@@ -174,24 +175,23 @@ void testNullLayoutBoxProducesFixedChildGeometry()
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
   box.addChild(first);
   box.addChild(second);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&box, makeState(10, 20, 80, 40));
 
   assertGeometry(first, 15, 25, 70, 30);
-  assertGeometry(second, 15, 32, 70, 30);
+  assertGeometry(second, 15, 44, 70, 30);
   (void)resultY;
-  assert(resultY == 48);
+  assert(resultY == 60);
 }
 
 void testNullLayoutFixedBoxOwnsDeclaredExtent()
 {
+  NullScenePlatformController platform;
   loka::app::BoxProps props;
   props.setPadding(5).setSize(300, 170);
   loka::app::BoxNode box(props);
   FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
   box.addChild(child);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&box, makeState(10, 20, 80, 40));
 
@@ -202,6 +202,7 @@ void testNullLayoutFixedBoxOwnsDeclaredExtent()
 
 void testNullLayoutGridProducesFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::GridNode grid((loka::app::GridProps(2, 2)));
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
@@ -211,26 +212,34 @@ void testNullLayoutGridProducesFixedChildGeometry()
   grid.addChild(second);
   grid.addChild(third);
   grid.addChild(fourth);
-  NullScenePlatformController platform;
 
-  const int resultY = platform.projectLayoutForTesting(&grid, makeState(10, 20, 83, 44));
+  platform.projectLayoutForTesting(&grid, makeState(10, 20, 83, 44));
 
   assertGeometry(first, 10, 20, 40, 20);
   assertGeometry(second, 52, 20, 40, 20);
   assertGeometry(third, 10, 44, 40, 20);
   assertGeometry(fourth, 52, 44, 40, 20);
-  (void)resultY;
-  assert(resultY == 61);
+}
+
+void testNullLayoutGridReturnedHeight()
+{
+  NullScenePlatformController platform;
+  loka::app::GridNode grid((loka::app::GridProps(2, 2)));
+  grid.addChild(new FixedLayoutProbeNode(7));
+  grid.addChild(new FixedLayoutProbeNode(11));
+  grid.addChild(new FixedLayoutProbeNode(13));
+  grid.addChild(new FixedLayoutProbeNode(17));
+  LOKA_VERIFY(platform.projectLayoutForTesting(&grid, makeState(10, 20, 83, 44)) == 61);
 }
 
 void testNullLayoutZStackProducesFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::ZStackNode stack((loka::app::ZStackProps()));
   FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);
   stack.addChild(back);
   stack.addChild(front);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&stack, makeState(10, 20, 80, 40));
 
@@ -242,6 +251,7 @@ void testNullLayoutZStackProducesFixedChildGeometry()
 
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry()
 {
+  NullScenePlatformController platform;
   loka::app::BoxProps boxProps;
   boxProps.setPadding(2);
   loka::app::BoxNode box(boxProps);
@@ -252,7 +262,6 @@ void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry()
   row->addChild(first);
   row->addChild(second);
   box.addChild(row);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(&box, makeState(10, 20, 100, 40));
 
@@ -264,12 +273,12 @@ void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry()
 
 void testNullLayoutOnChangeUsesRegisteredTraversal()
 {
+  NullScenePlatformController platform;
   loka::app::StackNode row((loka::app::StackProps(loka::app::STACK_AXIS_ROW)));
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
   FixedLayoutProbeNode *second = new FixedLayoutProbeNode(11);
   row.addChild(first);
   row.addChild(second);
-  NullScenePlatformController platform;
 
   platform.onChange(&row, loka::app::scene::NODE_DIRTY_LAYOUT, false);
 

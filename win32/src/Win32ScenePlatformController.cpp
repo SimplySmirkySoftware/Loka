@@ -1457,7 +1457,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &Win32ScenePlatformController::layoutContainerChild);
+          stack, state, this, &Win32ScenePlatformController::layoutContainerChild, 0, 0);
     }
     else
     {
@@ -1510,7 +1510,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &Win32ScenePlatformController::layoutContainerChild);
+          box, state, this, &Win32ScenePlatformController::layoutContainerChild, 0, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -1532,7 +1532,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else
     {
       resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
-          group, state, this, &Win32ScenePlatformController::layoutContainerChild);
+          group, state, this, &Win32ScenePlatformController::layoutContainerChild, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }

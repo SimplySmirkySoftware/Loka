@@ -291,7 +291,7 @@ void testRectSurfaceStateChangeExcludesSiblingTextFromPaintDamage()
   change(scene, model.surfaceModel_, 12);
   exactOne(platform);
   const PaintDamage &d = only(platform).entry(0);
-  LOKA_VERIFY(d.x == 10 && d.y == 22 && d.width == 10 && d.height == 8);
+  LOKA_VERIFY(d.x == 10 && d.y == 34 && d.width == 10 && d.height == 8);
   LOKA_VERIFY(d.width < loka_floppy_bird::kWindowWidth && d.height < loka_floppy_bird::kWindowHeight);
   LOKA_VERIFY(d.y >= 20 && d.y + d.height <= 20 + loka_floppy_bird::kWindowHeight);
   LOKA_VERIFY(platform.queries == 2 && platform.commits == 2);
