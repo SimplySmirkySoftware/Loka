@@ -317,7 +317,7 @@ namespace
     LOKA_VERIFY(group != 0);
     GroupChildWidthTraversal widthTraversal;
     const int inset = RibbonGroupNode::kFrameInset;
-    LOKA_VERIFY(ComputeToolboxRibbonGroupLayout(group, state, &widthTraversal) == state.width);
+    LOKA_VERIFY(ComputeToolboxFramedLayout(group, state, &widthTraversal) == state.width);
     LOKA_VERIFY(widthTraversal.seat.x == state.x + inset);
     LOKA_VERIFY(widthTraversal.seat.width == state.width - 2 * inset);
     LOKA_VERIFY(widthTraversal.layoutResultY() == state.y + 2 * inset);

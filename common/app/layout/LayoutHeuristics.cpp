@@ -149,12 +149,14 @@ namespace loka
 
         bool queryNaturalWidth(scene::Node *child, int gap, const INaturalWidthSource *source, short &width)
         {
-          if (RibbonGroupNode *group = child->asRibbonGroupNode())
+          if (scene::IFramedNode *frame = child->asFramedNode())
           {
+            scene::INestable *group = child->asNestable();
             short contentWidth = 0;
-            if (!group->childrenHead() || !queryNaturalWidth(group->childrenHead(), gap, source, contentWidth))
+            if (!group || !group->childrenHead()
+                || !queryNaturalWidth(group->childrenHead(), gap, source, contentWidth))
               return false;
-            const long answer = static_cast<long>(contentWidth) + 2 * RibbonGroupNode::kFrameInset;
+            const long answer = static_cast<long>(contentWidth) + 2 * frame->frameGeometry().inset;
             if (answer > SHRT_MAX)
               return false;
             width = static_cast<short>(answer);
@@ -240,7 +242,7 @@ namespace loka
                 return false;
             }
             else if ((stack && stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL)
-                     || child->asRibbonGroupNode()
+                     || child->asFramedNode()
                      || (image && image->props.hasAttr_ && image->props.attr_.hasSizePolicyValue_
                          && image->props.attr_.sizePolicyValue_ == IMAGE_VIEW_SIZE_INTRINSIC))
             {

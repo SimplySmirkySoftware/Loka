@@ -2,7 +2,7 @@
 #define LOKA_APP_LAYOUT_PLATFORM_BUILTIN_LAYOUT_HANDLERS_HPP
 
 #include "app/layout/BoxLayout.hpp"
-#include "app/layout/RibbonGroupLayout.hpp"
+#include "app/layout/FramedLayout.hpp"
 #include "app/layout/CanvasLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
@@ -66,12 +66,12 @@ namespace loka
         const int gap_;
       };
 
-      class RibbonGroupPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+      template <typename NodeT> class FramedPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
         virtual const void *nodeTypeKey() const
         {
-          return loka::app::scene::NodeTypeToken<loka::app::RibbonGroupNode>();
+          return loka::app::scene::NodeTypeToken<NodeT>();
         }
 
         virtual int layoutNode(loka::app::scene::Node *node,
@@ -80,12 +80,12 @@ namespace loka
                                const loka::app::layout::LazyWindow * = 0,
                                loka::app::layout::StackSpans * = 0)
         {
-          loka::app::RibbonGroupNode *group = node ? node->asRibbonGroupNode() : 0;
+          loka::app::scene::Node *group = node && node->asFramedNode() ? node : 0;
           if (!group || !traversal)
           {
             return state.y;
           }
-          return loka::app::layout::computeRibbonGroupLayoutResultY(
+          return loka::app::layout::computeFramedLayoutResultY(
               group, state, traversal, &DispatchTraversalLayoutChild, &AcceptTraversalLayoutY);
         }
       };
@@ -196,7 +196,7 @@ namespace loka
                                                         int verticalGap)
       {
         registry.registerHandler(new BoxPlatformLayoutHandler(verticalGap));
-        registry.registerHandler(new RibbonGroupPlatformLayoutHandler());
+        registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)

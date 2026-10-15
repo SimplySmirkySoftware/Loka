@@ -102,7 +102,7 @@ namespace loka
     };
 
     /** Closed ribbon container: content column, left edge, right edge, bottom edge. */
-    class RibbonGroupNode : public scene::NestableNode
+    class RibbonGroupNode : public scene::NestableNode, public scene::IFramedNode
     {
     public:
       typedef RibbonGroupTypeTag TypeTag;
@@ -125,6 +125,14 @@ namespace loka
       virtual const void *nodeTypeKey() const
       {
         return scene::NodeTypeToken<RibbonGroupNode>();
+      }
+      virtual scene::IFramedNode *asFramedNode()
+      {
+        return this;
+      }
+      virtual layout::FrameGeometry frameGeometry() const
+      {
+        return layout::FrameGeometry(layout::FRAME_PLACEMENT_RIBBON_GROUP_EDGES, kFrameInset);
       }
       virtual RibbonGroupNode *asRibbonGroupNode()
       {
