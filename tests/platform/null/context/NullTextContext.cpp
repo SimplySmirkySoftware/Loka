@@ -123,7 +123,7 @@ short NullTextContext::layout(loka::app::scene::IPlatformController *controller,
     this->placement_.complete(loka::core::Frame(state.x, state.y, state.width, state.height), scope);
     this->placedStyle_ = NullTextPaintStyle(this->node_->props);
   }
-  return ClampCoordinateToShort(state.y + state.height + state.spacing);
+  return ClampCoordinateToShort(state.y + state.height);
 }
 
 const NullTextMeasurement &NullTextContext::measurement() const

@@ -8,6 +8,7 @@ void testNullLayoutFragmentAdvancesAcrossChildren();
 void testNullLayoutBoxProducesFixedChildGeometry();
 void testNullLayoutFixedBoxOwnsDeclaredExtent();
 void testNullLayoutGridProducesFixedChildGeometry();
+void testNullLayoutGridReturnedHeight();
 void testNullLayoutZStackProducesFixedChildGeometry();
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry();
 void testNullLayoutOnChangeUsesRegisteredTraversal();

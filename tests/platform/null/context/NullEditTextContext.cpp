@@ -84,13 +84,9 @@ void NullEditTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact prev
 short NullEditTextContext::layout(loka::app::scene::IPlatformController *,
                                   loka::app::scene::LayoutState &state)
 {
-  // Mirrors the Win32 and macOS EditText contexts: the control height is the
-  // seat, and the column advances past it by the vertical spacing. Consuming
-  // the whole available height here left a following fill-seat child with
-  // nothing (the Null Button had the same shape, #591).
+  // The control consumes its own height; the enclosing container owns gaps.
   state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kEditTextHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kEditTextHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kEditTextHeight);
 }
 
 void RegisterNullEditTextNodeHandler(NullScenePlatformController &controller)

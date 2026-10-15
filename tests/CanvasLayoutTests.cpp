@@ -206,8 +206,8 @@ void testCanvasReportsFullExtentToColumn()
   LayoutState state = input();
   state.x = 7;
   state.y = 11;
-  LOKA_VERIFY(platform.projectLayoutForTesting(&column, state) == 2011);
-  LOKA_VERIFY(tail->geometry.y == 2011);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&column, state) == 2023);
+  LOKA_VERIFY(tail->geometry.y == 2023);
   LOKA_VERIFY(probes[50]->geometry.x == 7 && probes[50]->geometry.y == 11);
 }
 

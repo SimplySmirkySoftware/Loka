@@ -1,3 +1,4 @@
+#include "support/LayoutY.hpp"
 #include "support/MenuStructure.hpp"
 #include "AttrDslTests.hpp"
 #include "support/TestVerify.hpp"
@@ -1053,7 +1054,8 @@ void testContainerLayoutHelpersAdvanceResultY()
     loka::app::BoxNode box(props);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeBoxLayoutResultY(&box, state, &recorder, &recordLayoutChild);
+    const int resultY = loka::app::layout::computeBoxLayoutResultY(
+        &box, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 0);
     (void)resultY;
     assert(resultY == 32);
@@ -1069,7 +1071,8 @@ void testContainerLayoutHelpersAdvanceResultY()
     box.addChild(second);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeBoxLayoutResultY(&box, state, &recorder, &recordLayoutChild);
+    const int resultY = loka::app::layout::computeBoxLayoutResultY(
+        &box, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 2);
     assert(recorder.calls[0].state.x == 14);
     assert(recorder.calls[0].state.y == 24);
@@ -1090,7 +1093,8 @@ void testContainerLayoutHelpersAdvanceResultY()
     column.addChild(second);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeColumnLayoutResultY(&column, state, &recorder, &recordLayoutChild);
+    const int resultY = loka::app::layout::computeColumnLayoutResultY(
+        &column, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 2);
     assert(recorder.calls[0].state.y == 20);
     (void)resultY;
@@ -1108,7 +1112,8 @@ void testContainerLayoutHelpersAdvanceResultY()
     column.addChild(image);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeColumnLayoutResultY(&column, state, &recorder, &recordLayoutChild);
+    const int resultY = loka::app::layout::computeColumnLayoutResultY(
+        &column, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 1);
     assert(recorder.calls[0].state.x == 45);
     assert(recorder.calls[0].state.width == 30);
@@ -1126,7 +1131,8 @@ void testContainerLayoutHelpersAdvanceResultY()
     column.addChild(image);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeColumnLayoutResultY(&column, state, &recorder, &recordLayoutChild);
+    const int resultY = loka::app::layout::computeColumnLayoutResultY(
+        &column, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 1);
     assert(recorder.calls[0].state.x == 80);
     assert(recorder.calls[0].state.width == 30);

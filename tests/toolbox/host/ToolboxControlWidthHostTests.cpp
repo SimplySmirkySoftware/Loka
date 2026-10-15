@@ -1,3 +1,4 @@
+#include "support/LayoutY.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "context/ToolboxTextContext.hpp"
 #include "Script.h"
@@ -358,7 +359,12 @@ int main(int argc, char **argv)
     Node *target = std::strcmp(mode, "column-button") == 0 ? button :
         std::strcmp(mode, "column-edit") == 0 ? edit : popup;
     LayoutProbe p(controller, target);
-    layout::computeColumnLayoutResultY(lookup(scene, "column")->asStackNode(), seat(240), &p, LayoutProbe::child);
+    layout::computeColumnLayoutResultY(lookup(scene, "column")->asStackNode(),
+                                       seat(240),
+                                       &p,
+                                       LayoutProbe::child,
+                                       0,
+                                       &loka::testing::acceptShortLayoutY);
     std::printf("%s: used=%d outer=%d expected=240\n", mode, p.used,
         toolbox_host::controlRect.right - toolbox_host::controlRect.left); std::fflush(stdout);
     LOKA_VERIFY(p.used == 240);
