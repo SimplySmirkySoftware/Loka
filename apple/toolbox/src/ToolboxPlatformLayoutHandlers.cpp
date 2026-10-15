@@ -570,6 +570,7 @@ bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandl
 {
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::RibbonGroupNode>()) && ok;
+  ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::CardNode>()) && ok;
   ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;

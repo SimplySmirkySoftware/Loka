@@ -294,6 +294,7 @@ private:
     unsigned cellCount() const;
 
   private:
+    loka::app::scene::RefusedNodeHandler cardBand_;
     loka::app::scene::RefusedNodeHandler ribbonGroupEdge_;
     loka::app::scene::RefusedNodeHandler cell_;
     loka::app::scene::RefusedNodeHandler popupMenu_;

@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
@@ -53,6 +54,49 @@ namespace
     LOKA_VERIFY(content->calls == 1);
     LOKA_VERIFY(content->offer.x == 14 && content->offer.y == 24);
     LOKA_VERIFY(content->offer.width == 92 && content->offer.height == 72);
+  }
+
+  void cardRoutingPin(ToolboxScenePlatformController &controller, bool handler)
+  {
+    CardNode card((CardProps()));
+    Probe *content = new Probe(1);
+    card.addChild(content);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      card.addChild(new CardBandNode(CardBandProps(static_cast<CardBandRole>(role))));
+    LOKA_VERIFY((controller.registry.find(&card) != 0) == handler);
+    LayoutState state;
+    state.x = 10;
+    state.y = 20;
+    state.width = 100;
+    state.height = 80;
+    LOKA_VERIFY(LayoutNode(&card, state, &controller, 0) == 100);
+    LOKA_VERIFY(state.y == 35 && content->calls == 1);
+    LOKA_VERIFY(content->offer.x == 13 && content->offer.y == 23);
+    LOKA_VERIFY(content->offer.width == 91 && content->offer.height == 71);
+  }
+
+  void cardScrollRangePin(ToolboxScenePlatformController &controller)
+  {
+    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    CardNode *card = new CardNode(CardProps());
+    Probe *content = new Probe(0);
+    Probe *sibling = new Probe(0);
+    card->addChild(content);
+    column.addChild(card);
+    column.addChild(sibling);
+    ProjectionParentScope scope;
+    LOKA_VERIFY(
+        controller.projectionParentScopes_.current().deriveScrolled(0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
+    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+    LOKA_VERIFY(guard.isActive());
+    LayoutState state;
+    state.width = 80;
+    state.height = 80;
+    state.y = SHRT_MAX - 12;
+    LayoutNode(&column, state, &controller, 0);
+    LOKA_VERIFY(content->calls == 1 && content->offer.y == SHRT_MAX - 9);
+    LOKA_VERIFY(controller.projectionParentScopes_.current().hasShortRangeRefusal());
+    LOKA_VERIFY(sibling->calls == 0 && state.y >= 0);
   }
 
   class DirectStack : public StackNode
@@ -437,7 +481,11 @@ int main(int argc, char **argv)
   containerGapPin(controller);
   const char *mode = argv[2];
   if (std::strcmp(mode, "normal") == 0)
+  {
     framedRoutingPin(controller, handler);
+    cardRoutingPin(controller, handler);
+    cardScrollRangePin(controller);
+  }
   if (std::strcmp(mode, "derived-column") == 0 || std::strcmp(mode, "derived-row") == 0)
   {
     derivedStackPin(controller, std::strcmp(mode, "derived-row") == 0);

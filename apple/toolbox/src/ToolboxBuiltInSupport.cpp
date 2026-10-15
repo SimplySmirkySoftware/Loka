@@ -1,3 +1,4 @@
+#include "context/ToolboxCardBandContext.hpp"
 #include "context/ToolboxRibbonGroupEdgeContext.hpp"
 #include "context/ToolboxConfirmDialogContext.hpp"
 #include "app/ConfirmDialog.hpp"
@@ -36,6 +37,7 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
   const int capabilities = controller.window_->context()->capabilities();
   bool ok = RegisterToolboxAttributedTextNodeHandler(controller.nodeHandlerRegistry_);
   ok = RegisterToolboxRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_) && ok;
+  ok = RegisterToolboxCardBandNodeHandler(controller.nodeHandlerRegistry_) && ok;
   if ((capabilities & ToolboxWindowContext::CAP_CONTROL_MANAGER) != 0)
   {
     ok = RegisterToolboxButtonNodeHandler(controller.nodeHandlerRegistry_) && ok;

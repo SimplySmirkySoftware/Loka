@@ -235,6 +235,7 @@ namespace
       }
       return width;
     }
+    case loka::app::scene::NODE_KIND_CARD:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
     {
       loka::app::scene::Node *group = node;
@@ -403,6 +404,7 @@ namespace
     case loka::app::scene::NODE_KIND_ATTRIBUTED_TEXT:
     case loka::app::scene::NODE_KIND_TEXT_EDITOR:
     case loka::app::scene::NODE_KIND_CONFIRM_DIALOG:
+    case loka::app::scene::NODE_KIND_CARD_BAND:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
       assert(false && "asProjectedLayoutNode() or asCanvasNode() answered above");
       break;
@@ -460,6 +462,7 @@ namespace
     case loka::app::scene::NODE_KIND_ZSTACK:
     case loka::app::scene::NODE_KIND_GRID:
     case loka::app::scene::NODE_KIND_CANVAS:
+    case loka::app::scene::NODE_KIND_CARD:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
       break;
     // Built-in kinds answered above by asProjectedLayoutNode().
@@ -474,6 +477,7 @@ namespace
     case loka::app::scene::NODE_KIND_ATTRIBUTED_TEXT:
     case loka::app::scene::NODE_KIND_TEXT_EDITOR:
     case loka::app::scene::NODE_KIND_CONFIRM_DIALOG:
+    case loka::app::scene::NODE_KIND_CARD_BAND:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE:
       assert(false && "asProjectedLayoutNode() answered above");
       break;

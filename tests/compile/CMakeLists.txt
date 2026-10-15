@@ -553,6 +553,11 @@ loka_compile_pin(ribbon-control-accepts-only-items
   ACCEPTS pins/accepts_ribbon-control-accepts-only-items.cpp
 )
 
+loka_compile_pin(ribbon-control-refuses-card
+  REFUSES pins/refuses_ribbon-control-card.cpp
+  ACCEPTS pins/accepts_ribbon-control-card.cpp
+)
+
 loka_compile_pin(ribbon-item-is-not-a-node
   REFUSES pins/refuses_ribbon-item-is-not-a-node.cpp
   ACCEPTS pins/accepts_ribbon-item-is-not-a-node.cpp
