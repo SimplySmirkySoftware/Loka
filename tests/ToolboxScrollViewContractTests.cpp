@@ -71,3 +71,13 @@ void testToolboxScrollViewRangeMapsContentMinusViewport()
   LOKA_VERIFY(ToolboxScrollViewMaximum(100, 100) == 0);
   LOKA_VERIFY(ToolboxScrollViewMaximum(80, 100) == 0);
 }
+
+void testToolboxScrollViewContentRectExcludesScrollbar()
+{
+  const ToolboxScrollViewRect content = ToolboxScrollViewContentRect(ToolboxScrollViewRect(10, 20, 110, 120));
+  LOKA_VERIFY(content.left == 10 && content.top == 20 && content.right == 94 && content.bottom == 120);
+  const ToolboxScrollViewRect narrow = ToolboxScrollViewContentRect(ToolboxScrollViewRect(10, 20, 18, 120));
+  LOKA_VERIFY(narrow.left == 10 && narrow.right == 10);
+  const ToolboxScrollViewRect empty = ToolboxScrollViewContentRect(ToolboxScrollViewRect(10, 20, 10, 20));
+  LOKA_VERIFY(empty.left == 10 && empty.right == 10 && empty.top == 20 && empty.bottom == 20);
+}

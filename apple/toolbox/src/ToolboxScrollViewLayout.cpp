@@ -85,14 +85,23 @@ short ToolboxScenePlatformController::layoutScrollView(
   const int requestedFact = scrollView->requestedOrigin().y;
   const int projectedOffset = requestedFact;
 
+  short contentWidth = 0;
+  const bool widthKnown = loka::app::layout::queryContentOverflowWidth(scrollView, state.spacing, this, contentWidth);
+  // An unknown range must not scroll: otherwise content cannot be brought back.
+  const ToolboxScrollViewMetrics horizontal = ToolboxScrollViewResolveMetrics(
+      widthKnown ? contentWidth : 0, ToolboxScrollViewChildWidth(state.width), scrollView->requestedOrigin().x);
+  // An X step revisits every row; the next pass recaptures the band.
+  if (spans.isValid() && spans->valid() && spans->placedViewport().x != horizontal.clampedOffset)
+    spans->invalidate();
+
+  const Rect contentRect = ToolboxScrollViewContentRect(viewportRect);
   const loka::core::Frame viewportClip(
-      state.x, state.y, state.width, state.height);
+      contentRect.left, contentRect.top, contentRect.right - contentRect.left, contentRect.bottom - contentRect.top);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
   if (!parentScope.deriveScrolled(
-          parentScope.nativeParent, 0, projectedOffset,
-          viewportClip, childScope))
+          parentScope.nativeParent, horizontal.clampedOffset, projectedOffset, viewportClip, childScope))
   {
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
@@ -111,7 +120,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   else if (!spans.isValid())
     spans = BuildScrollViewSpans();
 
-  const loka::core::Frame newViewport(0, projectedOffset, state.width, state.height);
+  const loka::core::Frame newViewport(horizontal.clampedOffset, projectedOffset, state.width, state.height);
   loka::app::layout::LazyWindow band = {0, 0};
   const loka::app::layout::LazyWindow *range = 0;
   if (column && spans.isValid() && spans->valid() && inputs == loka::app::scene::NODE_DIRTY_LAYOUT)
@@ -205,7 +214,7 @@ short ToolboxScenePlatformController::layoutScrollView(
         break;
       }
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
+    scrollView->publishOrigin(horizontal.clampedOffset, clampedOffset);
   }
 
   if (state.height > 0)

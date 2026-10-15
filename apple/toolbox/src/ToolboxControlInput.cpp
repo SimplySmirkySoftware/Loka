@@ -61,6 +61,7 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(
   addPendingDirty(rect);
   // Unlike the DSL ScrollBar commit above, this fact belongs to the
   // ScrollView owner. The complete NodeState door selects that tracker.
+  // This input moves only Y; the preceding layout has already clamped X.
   scrollView->publishOrigin(scrollView->requestedOrigin().x, settled);
   endBatchUpdate();
 }

@@ -1,6 +1,7 @@
 #ifndef LOKA_TOOLBOX_SCROLL_VIEW_PINS_HPP
 #define LOKA_TOOLBOX_SCROLL_VIEW_PINS_HPP
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "core/StateTracker.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -47,9 +48,9 @@ namespace
         delete children[i];
       controller.retired.clear();
     }
-    unsigned step(int value, short width = 100, short height = 34, short y = 0, short gap = 0)
+    unsigned step(int value, short width = 100, short height = 34, short y = 0, short gap = 0, int x = 0)
     {
-      fact.set(loka::core::Frame(0, value, 0, 0));
+      fact.set(loka::core::Frame(x, value, 0, 0));
       scroll.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
       LayoutState seat = Seat(width);
       seat.x = 0;
@@ -58,6 +59,7 @@ namespace
       seat.spacing = gap;
       const unsigned before = controller.leafLayouts;
       controller.layoutScrollView(&scroll, seat, 0);
+      LOKA_VERIFY(seat.x == 0);
       return controller.leafLayouts - before;
     }
     AttributedTextNode *leaf(unsigned index)
@@ -77,6 +79,104 @@ namespace
           *static_cast<ToolboxAttributedTextContext *>(leaf(index)->getContext()));
     }
   };
+
+  class ScrollBarColumnHitProbe : public AttributedTextNode
+  {
+  public:
+    ScrollBarColumnHitProbe()
+        : AttributedTextNode(AttributedText(Styled("hit", FontSize<12>())).props)
+    {
+    }
+    virtual short layout(IPlatformController *controller, LayoutState &state)
+    {
+      Rect hit = {0, 90, 10, 99};
+      Rect out;
+      LOKA_VERIFY(!static_cast<ToolboxScenePlatformController *>(controller)->intersectWithProjectionClip(hit, out));
+      return AttributedTextNode::layout(controller, state);
+    }
+  };
+
+  void ScrollViewXPins()
+  {
+    Pin("ToolboxScrollViewContentClipDropsScrollbarHit");
+    {
+      ScrollFixture f(0);
+      f.column->addChild(new ScrollBarColumnHitProbe());
+      LOKA_VERIFY(f.step(0) == 1);
+    }
+    Pin("ToolboxScrollViewXTranslationClampAndSeat");
+    {
+      ScrollFixture f(3);
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      const int requests[] = {50, 1000, -7};
+      const int expected[] = {50, 316, 0};
+      for (unsigned step = 0; step < 3; ++step)
+      {
+        LOKA_VERIFY(f.step(0, 100, 34, 0, 0, requests[step]) == 4);
+        LOKA_VERIFY(f.fact.get().x == expected[step]);
+        LOKA_VERIFY(f.fact.get().y == 0);
+        for (unsigned i = 0; i < 3; ++i)
+        {
+          LOKA_VERIFY(f.rect(i).left == -expected[step]);
+          LOKA_VERIFY(f.rect(i).top == static_cast<short>(i * 17));
+        }
+      }
+    }
+    Pin("ToolboxScrollViewXRestoreBetweenDirectSiblings");
+    {
+      ScrollFixture f(0);
+      f.scroll.addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      for (unsigned i = 0; i < 3; ++i)
+        f.scroll.addChild(new AttributedTextNode(AttributedText(Styled("abcd", FontSize<12>())).props));
+      LOKA_VERIFY(f.step(0, 100, 34, 0, 0, 50) == 4);
+      Node *node = f.column->nextInComposition->nextInComposition;
+      for (; node; node = node->nextInComposition)
+      {
+        const Rect rect =
+            ToolboxAttributedTextContextAccess::rect(*static_cast<ToolboxAttributedTextContext *>(node->getContext()));
+        LOKA_VERIFY(rect.left == -50);
+      }
+    }
+    Pin("ToolboxScrollViewUnknownWidthClampsX");
+    {
+      ScrollFixture f(3);
+      f.column->addChild(
+          new ImageViewNode(ImageViewProps().attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC))));
+      LOKA_VERIFY(f.step(0, 100, 34, 0, 0, 50) == 4);
+      LOKA_VERIFY(f.fact.get().x == 0);
+      for (unsigned i = 0; i < 3; ++i)
+        LOKA_VERIFY(f.rect(i).left == 0);
+    }
+    Pin("ToolboxScrollViewXStepRevisitsAndRecapturesBand");
+    {
+      ScrollFixture f;
+      LOKA_VERIFY(f.step(0, 100, 34, 0, 6) == 20);
+      LOKA_VERIFY(f.step(23, 100, 34, 0, 6) == 3);
+      // Text-only eligibility has no overflow claim. Seed a prior X placement
+      // through the real table door to discriminate the X mismatch policy.
+      f.controller.scrollSpans()->placed(loka::core::Frame(50, 23, 100, 34));
+      LOKA_VERIFY(f.step(23, 100, 34, 0, 6) == 20);
+      LOKA_VERIFY(f.controller.scrollSpans()->valid());
+      LOKA_VERIFY(f.controller.scrollSpans()->placedViewport().x == 0);
+      LOKA_VERIFY(f.step(46, 100, 34, 0, 6) == 3);
+    }
+    Pin("ToolboxScrollViewXShortRangeRefusal");
+    {
+      ScrollFixture f(0);
+      ProjectionParentScope scope(0, SHRT_MIN, 0, loka::core::Frame(0, 0, 100, 34));
+      ProjectionParentScopeGuard guard(f.controller.projectionParentScopes_, scope);
+      LOKA_VERIFY(guard.isActive());
+      LayoutState state = Seat(100);
+      state.x = 0;
+      LOKA_VERIFY(f.controller.projectLayoutState(state));
+      LOKA_VERIFY(state.x == SHRT_MIN);
+      LOKA_VERIFY(f.controller.restoreProjectedLayoutState(state));
+      LOKA_VERIFY(state.x == 0);
+      state.x = -1;
+      LOKA_VERIFY(!f.controller.projectLayoutState(state));
+      LOKA_VERIFY(f.controller.projectionParentScopes_.current().hasShortRangeRefusal());
+    }
+  }
 
   void ScrollViewPins()
   {

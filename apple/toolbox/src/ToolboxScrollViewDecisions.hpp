@@ -41,6 +41,14 @@ inline int ToolboxScrollViewChildWidth(int viewportWidth)
   return width > 0 ? width : 0;
 }
 
+/** Excludes the scrollbar column without moving the seat's other edges. */
+template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT &seat)
+{
+  RectT content = seat;
+  content.right = content.left + ToolboxScrollViewChildWidth(seat.right - seat.left);
+  return content;
+}
+
 inline int ToolboxScrollViewMaximum(int contentHeight, int viewportHeight)
 {
   if (contentHeight <= viewportHeight)

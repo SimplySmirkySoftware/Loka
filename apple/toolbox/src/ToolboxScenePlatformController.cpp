@@ -549,7 +549,7 @@ void ToolboxScenePlatformController::renderScrollView(
   {
     return;
   }
-  const Rect viewportRect = binding->rect;
+  const Rect viewportRect = ToolboxScrollViewContentRect(binding->rect);
   const loka::core::Frame viewportClip(
       viewportRect.left,
       viewportRect.top,

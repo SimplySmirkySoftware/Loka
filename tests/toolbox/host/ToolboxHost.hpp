@@ -234,6 +234,7 @@ public:
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
 #include "ToolboxInputBodies.hpp"
 public:
+#include "ToolboxScrollViewProjection.hpp"
   unsigned leafLayouts;
   int scrollMaximum;
   RgnHandle scrollViewClipRgn_;
