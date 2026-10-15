@@ -23,7 +23,8 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
-#include "app/layout/SceneRootLayout.hpp"
+#include "MacSceneLayout.hpp"
+#include "app/layout/StackGaps.hpp"
 #include "app/layout/BoxLayout.hpp"
 #include "app/layout/FramedLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
@@ -133,6 +134,7 @@ namespace
   loka::app::layout::RowLayoutMetrics MeasureRowLayoutMetrics(const loka::macos::MacProjection &projection)
   {
     loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
+    metrics.gap = MacSceneLayout::kGap;
     NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
     if (!button)
       return metrics;
@@ -559,7 +561,7 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   }
   firstEditField_ = 0;
   lastEditField_ = 0;
-  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
+  const int rootInset = MacSceneLayout::kRootInset;
   LayoutState state;
   state.x = rootInset;
   state.y = rootInset;
@@ -650,8 +652,7 @@ MacScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *su
   // projection or a failed native context records nothing.
   this->rectSurfaceExtentLedger_.record(
       surface, loka::core::Frame(state.x, state.y, width, height));
-  return LayoutNodeResult(
-      state.width, state.y + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return LayoutNodeResult(state.width, state.y + height);
 }
 
 MacScenePlatformController::LayoutNodeResult
@@ -735,15 +736,17 @@ MacScenePlatformController::layoutScrollViewNode(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
+    loka::app::layout::StackGaps gaps(MacSceneLayout::kGap);
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
-      if (currentY < SHRT_MIN || currentY > SHRT_MAX)
+      const int childY = currentY + gaps.before(child);
+      if (childY < SHRT_MIN || childY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();
         break;
       }
       LayoutState childState = childBase;
-      childState.y = currentY;
+      childState.y = childY;
       const int nextY = this->layoutNode(child, childState);
       if (this->projectionParentScopes_.current().hasShortRangeRefusal())
       {
@@ -837,7 +840,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &MacScenePlatformController::layoutContainerChild, 0, 0);
+          stack, state, this, &MacScenePlatformController::layoutContainerChild, MacSceneLayout::kGap, 0);
     }
     else
     {
@@ -889,7 +892,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &MacScenePlatformController::layoutContainerChild, 0, 0);
+          box, state, this, &MacScenePlatformController::layoutContainerChild, MacSceneLayout::kGap, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -942,9 +945,14 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
+    loka::app::layout::StackGaps gaps(MacSceneLayout::kGap);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
+      const int childY = childState.y + gaps.before(child);
+      if (this->refuseNarrowingInScrollScope(childY))
+        break;
+      childState.y = childY;
       const int nextY = this->layoutNode(child, childState);
       if (this->refuseNarrowingInScrollScope(nextY))
       {

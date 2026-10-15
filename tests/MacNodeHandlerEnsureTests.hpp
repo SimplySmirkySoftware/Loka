@@ -27,4 +27,10 @@ void testMacButtonDeclinedHeightKeepsRowAligned();
 void testMacDirectRowNaturalWidthFrames();
 void testMacOrdinaryRowStillSharesWidth();
 
+void testMacContainerGapLeafExits();
+void testMacContainerGapColumnAndPassThrough();
+void testMacContainerGapNoSeats();
+void testMacContainerGapBox();
+void testMacContainerGapRow();
+
 #endif // LOKA_TESTS_MAC_NODE_HANDLER_ENSURE_TESTS_HPP

@@ -19,7 +19,7 @@
 #include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
-#include "app/layout/SceneRootLayout.hpp"
+#include "MacSceneLayout.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/controls/ScrollBar.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -39,8 +39,7 @@ namespace
       {
         MacScenePlatformController controller((void *)root, metrics[scaleIndex]);
         const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
-        const int height = 2 * layout::SceneRootLayout::kInset + count * buttonHeight
-                           + (count - 1) * layout::FallbackControlMetrics::kVerticalSpacing;
+        const int height = 2 * MacSceneLayout::kRootInset + count * buttonHeight + (count - 1) * MacSceneLayout::kGap;
         [root setFrameSize:allocation.projectClientSize(257, height).r.size];
         LOKA_VERIFY(controller.projection().clientCapacityToLu([root bounds].size.width) == 257);
         LOKA_VERIFY(controller.projection().clientCapacityToLu([root bounds].size.height) == height);
@@ -63,7 +62,7 @@ namespace
           if (NSMaxY(frame) > bottom)
             bottom = NSMaxY(frame);
         }
-        LOKA_VERIFY(bottom == controller.projection().projectEdge(height - layout::SceneRootLayout::kInset).pt);
+        LOKA_VERIFY(bottom == controller.projection().projectEdge(height - MacSceneLayout::kRootInset).pt);
         LOKA_VERIFY(bottom <= [root bounds].size.height);
         controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
       }
@@ -107,7 +106,8 @@ namespace
             [cell setWraps:YES];
             [cell setScrollable:NO];
             [cell setLineBreakMode:NSLineBreakByWordWrapping];
-            const NSRect bounds = NSMakeRect(0, 0, projection.projectLength(0, 300).pt, 10000);
+            const int pageWidth = boxed ? 300 : 340 - 2 * MacSceneLayout::kRootInset;
+            const NSRect bounds = NSMakeRect(0, 0, projection.projectLength(0, pageWidth).pt, 10000);
             const CGFloat oneLine = [cell cellSizeForBounds:bounds].height;
             [cell setStringValue:[NSString stringWithUTF8String:strings[sample]]];
             const CGFloat nativeHeight = [cell cellSizeForBounds:bounds].height;
@@ -121,18 +121,22 @@ namespace
             const int minimum = fontHeight > 20 ? fontHeight : 20;
             const int measured = projection.measurementToLu(nativeHeight) + 2;
             const int textHeight = measured > minimum ? measured : minimum;
-            const int captionY = boxed ? 190 : layout::SceneRootLayout::kInset + textHeight + 12;
-            const int buttonY = captionY + 20 + 12;
+            const int captionY = MacSceneLayout::kRootInset + (boxed ? 170 : textHeight) + MacSceneLayout::kGap;
+            const int buttonY = captionY + 20 + MacSceneLayout::kGap;
             const int buttonHeight = projection.measurementToLu([[button cell] cellSize].height);
-            LOKA_VERIFY(NSEqualRects([page frame], projection.projectFrame(loka::core::Frame(
-                layout::SceneRootLayout::kInset, layout::SceneRootLayout::kInset, 300, textHeight)).r));
+            LOKA_VERIFY(
+                NSEqualRects([page frame],
+                             projection
+                                 .projectFrame(loka::core::Frame(
+                                     MacSceneLayout::kRootInset, MacSceneLayout::kRootInset, pageWidth, textHeight))
+                                 .r));
             LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(captionY).pt);
             LOKA_VERIFY(NSMinY([button frame]) == projection.projectEdge(buttonY).pt);
             LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + buttonHeight).pt);
             // The actual Scrapbook fixed Box prevents measured text changes
             // reaching the caption/buttons, for either one or two native lines.
             if (boxed)
-              LOKA_VERIFY(buttonY == 222);
+              LOKA_VERIFY(buttonY == MacSceneLayout::kRootInset + 170 + 20 + 2 * MacSceneLayout::kGap);
             std::printf("  Mac text extent: font=%d/%d space=%d/%d boxed=%d lines=%d "
                         "nativeText=%.2f textLu=%d buttonLu=%d..%d framePt=%.2f..%.2f clientPt=%.2f\n",
                         metrics[scaleIndex].fontScale.num,
@@ -642,7 +646,7 @@ namespace
       const short advance = node.layout(&controller, state);
       LOKA_VERIFY(counter.calls() == 1);
       LOKA_VERIFY(state.height == height);
-      LOKA_VERIFY(advance == state.y + height + layout::FallbackControlMetrics::kVerticalSpacing);
+      LOKA_VERIFY(advance == state.y + height);
       LOKA_VERIFY(NSEqualRects([field frame], controller.projection().projectFrame(
           loka::core::Frame(4, 23, 101, height)).r));
       if (attributed)
@@ -754,7 +758,8 @@ namespace
       LOKA_VERIFY(counter.calls() == 1 && state.height > 0);
       source.available(false);
       state.width = 90; // Force a miss without mutating the logical input.
-      node.layout(&controller, state);
+      const short refusedAdvance = node.layout(&controller, state);
+      LOKA_VERIFY(refusedAdvance == state.y);
       LOKA_VERIFY(state.height == 0 && [[field stringValue] length] == 0);
       LOKA_VERIFY(NSIsEmptyRect([field frame]));
       const unsigned refusedAttempts = source.attempts();
@@ -1385,7 +1390,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       StackNode *items = parts.next()->asStackNode();
       Node *caption = parts.next();
       LOKA_VERIFY(items && caption && caption->asTextNode());
-      const int gap = layout::FallbackControlMetrics::kHorizontalSpacing;
+      const int gap = MacSceneLayout::kGap;
       int itemsWidth = 2 * gap;
       CompositionCursor<Node> buttons(items->childrenHead(), items->childrenCount());
       for (Node *button = buttons.next(); button; button = buttons.next())
@@ -1404,7 +1409,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       LOKA_VERIFY([captionField isKindOfClass:[NSTextField class]]);
       LOKA_VERIFY([[captionField stringValue] isEqualToString:[NSString stringWithUTF8String:captions[sample]]]);
       LOKA_VERIFY([[closeButton title] isEqualToString:@"Close"]);
-      const int groupX = layout::SceneRootLayout::kInset + openWidth + gap;
+      const int groupX = MacSceneLayout::kRootInset + openWidth + gap;
       const loka::macos::MacProjection &projection = controller.projection();
       LOKA_VERIFY([captionField frame].origin.x == projection.projectEdge(groupX + RibbonGroupNode::kFrameInset).pt);
       LOKA_VERIFY(
@@ -1441,7 +1446,7 @@ void testMacRibbonGroupNaturalWidthFrames()
       const NSRect bottom = [[edgeViews objectAtIndex:2] frame];
       const int groupWidth = seat + 2 * RibbonGroupNode::kFrameInset;
       LOKA_VERIFY(NSMinX(left) == projection.projectEdge(groupX).pt);
-      LOKA_VERIFY(NSMinY(left) == projection.projectEdge(layout::SceneRootLayout::kInset).pt);
+      LOKA_VERIFY(NSMinY(left) == projection.projectEdge(MacSceneLayout::kRootInset).pt);
       LOKA_VERIFY(NSMaxX(left) == projection.projectEdge(groupX + 1).pt);
       LOKA_VERIFY(NSMinX(right) == projection.projectEdge(groupX + groupWidth - 1).pt);
       LOKA_VERIFY(NSMaxX(right) == projection.projectEdge(groupX + groupWidth).pt);
@@ -1537,5 +1542,305 @@ void testMacRibbonGroupEdgeEnsureAndRetirement()
     LOKA_VERIFY(released == 1);
   }
   [root release];
+  [pool drain];
+}
+
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/PopupMenu.hpp"
+#include "app/nodes/controls/EditText.hpp"
+#include "app/nodes/ImageView.hpp"
+#include "app/RectSurface.hpp"
+#include "app/ConfirmDialog.hpp"
+// Keep Show after RequestSettlement and all other includes (#1359).
+#include "app/nodes/nestable/Show.hpp"
+
+namespace
+{
+  class DirectGapStack : public loka::app::StackNode
+  {
+  public:
+    explicit DirectGapStack(const loka::app::StackProps &props)
+        : StackNode(props)
+    {
+    }
+    virtual const void *nodeTypeKey() const
+    {
+      return loka::app::scene::NodeTypeToken<DirectGapStack>();
+    }
+  };
+} // namespace
+
+void testMacContainerGapLeafExits()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+    for (int leaf = 0; leaf < 8; ++leaf)
+    {
+      const loka::macos::MacProjection allocation(0, metrics[scaleIndex]);
+      NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(640, 400).r];
+      {
+        MacScenePlatformController controller(root, allocation.railMetrics());
+        const loka::macos::MacProjection &scale = controller.projection();
+        // Fragment gives Cell an unspecified height, exercising its natural exit.
+        FragmentNode content((FragmentProps()));
+        scene::Node *first = 0;
+        switch (leaf)
+        {
+        case 0:
+          first = new TextNode(TextProps("Text"));
+          break;
+        case 1:
+          first = new ButtonNode(ButtonProps().text("Button"));
+          break;
+        case 2:
+          first = new EditTextNode((EditTextProps()));
+          break;
+        case 3:
+          first = new PopupMenuNode((PopupMenuProps()));
+          break;
+        case 4:
+          first = new ImageViewNode((ImageViewProps()));
+          break;
+        case 5:
+          first = new CellNode(CellProps().text("Cell"));
+          break;
+        case 6:
+          first = new AttributedTextNode(AttributedTextProps(Styled("Styled", Bold)));
+          break;
+        case 7:
+          first = new RectSurfaceNode(RectSurfaceProps().size(80, 30));
+          break;
+        }
+        LOKA_VERIFY(first != 0);
+        TextNode *next = new TextNode(TextProps("Following"));
+        content.addChild(first);
+        content.addChild(next);
+        controller.onChange(&content, scene::NODE_DIRTY_NONE, false);
+        // Root padding consumes the height, leaving an unspecified seat.
+        controller.relayout(640, 2 * MacSceneLayout::kRootInset);
+        LOKA_VERIFY(first->getContext() && next->getContext());
+        const NSRect frame = [[[root subviews] objectAtIndex:0] frame];
+        const NSRect following = [[[root subviews] objectAtIndex:1] frame];
+        LOKA_VERIFY(NSMinX(frame) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+        LOKA_VERIFY(NSMinY(frame) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+        // At these scales projection is injective; recover the actual painted
+        // bottom independently of the leaf's returned layout advance.
+        int bottom = MacSceneLayout::kRootInset;
+        while (scale.projectEdge(bottom).pt < NSMaxY(frame))
+          ++bottom;
+        LOKA_VERIFY(NSMaxY(frame) == scale.projectEdge(bottom).pt);
+        LOKA_VERIFY(NSMinY(following) == scale.projectEdge(bottom + MacSceneLayout::kGap).pt);
+        controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      }
+      [root release];
+    }
+  [pool drain];
+}
+
+void testMacContainerGapColumnAndPassThrough()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+    for (int direct = 0; direct < 2; ++direct)
+    {
+      const loka::macos::MacProjection allocation(0, metrics[scaleIndex]);
+      NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(640, 400).r];
+      {
+        MacScenePlatformController controller(root, allocation.railMetrics());
+        const loka::macos::MacProjection &scale = controller.projection();
+        const StackProps props(STACK_AXIS_COLUMN);
+        StackNode *column = direct ? new DirectGapStack(props) : new StackNode(props);
+        TextNode *text = new TextNode(TextProps("First"));
+        ButtonNode *button = new ButtonNode(ButtonProps().text("Second"));
+        EditTextNode *edit = new EditTextNode((EditTextProps()));
+        FragmentNode *fragment = new FragmentNode((FragmentProps()));
+        TextNode *last = new TextNode(TextProps("Last"));
+        TextNode *tail = new TextNode(TextProps("Tail"));
+        column->addChild(text);
+        column->addChild(button);
+        column->addChild(edit);
+        fragment->addChild(last);
+        fragment->addChild(tail);
+        column->addChild(fragment);
+        controller.onChange(column, scene::NODE_DIRTY_NONE, false);
+        controller.relayout(640, 400);
+        scene::Node *nodes[] = {text, button, edit, last, tail};
+        int top = MacSceneLayout::kRootInset;
+        for (int i = 0; i < 5; ++i)
+        {
+          LOKA_VERIFY(nodes[i]->getContext() != 0);
+          const NSRect frame = [[[root subviews] objectAtIndex:i] frame];
+          LOKA_VERIFY(NSMinX(frame) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+          LOKA_VERIFY(NSMinY(frame) == scale.projectEdge(top).pt);
+          while (scale.projectEdge(top).pt < NSMaxY(frame))
+            ++top;
+          LOKA_VERIFY(NSMaxY(frame) == scale.projectEdge(top).pt);
+          top += MacSceneLayout::kGap;
+        }
+        controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+        delete column;
+      }
+      [root release];
+    }
+  [pool drain];
+}
+
+void testMacContainerGapNoSeats()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  using namespace loka::app::scene;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+  {
+    const loka::macos::MacProjection allocation(0, metrics[scaleIndex]);
+    NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(640, 400).r];
+    {
+      MacScenePlatformController controller(root, allocation.railMetrics());
+      const loka::macos::MacProjection &scale = controller.projection();
+      loka::core::MutableState<bool> hidden(false);
+      // A plain NSView has no MacWindow/dialog transport, so this cannot present an alert.
+      loka::core::MutableState<ConfirmResult> resultStorage;
+      NodeState<ConfirmResult> result(&resultStorage, 0);
+      NodeDefinitionBase *definition =
+          (Fragment().testId("gapRoot") << Text("First") << Fragment() << (Show(hidden) << Text("Hidden"))
+                                        << ConfirmDialog().result(result) << Text("Second"))
+              .clone();
+      LOKA_VERIFY(definition != 0);
+      Scene scene(definition);
+      LOKA_VERIFY(scene.mount(&controller));
+      SceneTestAccess::updateAttached(scene, true);
+      controller.relayout(640, 160);
+      TextNode *first = 0;
+      TextNode *second = 0;
+      loka::dsl::FlowError error;
+      LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("gapRoot").descendant<TextNode>(1), first, error)
+                  == loka::dsl::FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(ResolveSelector(&scene, WithinAnchor("gapRoot").descendant<TextNode>(2), second, error)
+                  == loka::dsl::FLOW_STEP_SUCCEEDED);
+      LOKA_VERIFY(first && second);
+      const NSRect a = [[[root subviews] objectAtIndex:0] frame];
+      const NSRect b = [[[root subviews] objectAtIndex:1] frame];
+      int bottom = MacSceneLayout::kRootInset;
+      while (scale.projectEdge(bottom).pt < NSMaxY(a))
+        ++bottom;
+      LOKA_VERIFY(NSMinY(b) == scale.projectEdge(bottom + MacSceneLayout::kGap).pt);
+      LOKA_VERIFY([[root subviews] count] == 2);
+      SceneTestAccess::unmount(scene);
+      controller.drainNativeRetirements();
+    }
+    [root release];
+  }
+  [pool drain];
+}
+
+namespace
+{
+  class DirectGapBox : public loka::app::BoxNode
+  {
+  public:
+    explicit DirectGapBox(const loka::app::BoxProps &props)
+        : BoxNode(props)
+    {
+    }
+    virtual const void *nodeTypeKey() const
+    {
+      return loka::app::scene::NodeTypeToken<DirectGapBox>();
+    }
+  };
+} // namespace
+
+void testMacContainerGapBox()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  for (int direct = 0; direct < 2; ++direct)
+  {
+    const loka::app::RailMetrics metrics;
+    const loka::macos::MacProjection allocation(0, metrics);
+    NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(640, 400).r];
+    {
+      MacScenePlatformController controller(root, allocation.railMetrics());
+      const loka::macos::MacProjection &scale = controller.projection();
+      FragmentNode content((FragmentProps()));
+      BoxNode *box =
+          direct ? new DirectGapBox(BoxProps().setSize(200, 100)) : new BoxNode(BoxProps().setSize(200, 100));
+      TextNode *first = new TextNode(TextProps("First"));
+      TextNode *second = new TextNode(TextProps("Second"));
+      TextNode *following = new TextNode(TextProps("Following"));
+      box->addChild(first);
+      box->addChild(second);
+      content.addChild(box);
+      content.addChild(following);
+      controller.onChange(&content, loka::app::scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 160);
+      LOKA_VERIFY(first->getContext() && second->getContext() && following->getContext());
+      const NSRect a = [[[root subviews] objectAtIndex:0] frame];
+      const NSRect b = [[[root subviews] objectAtIndex:1] frame];
+      const NSRect c = [[[root subviews] objectAtIndex:2] frame];
+      LOKA_VERIFY(NSMinY(a) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+      LOKA_VERIFY(NSMinY(b) == NSMaxY(a) + MacSceneLayout::kGap);
+      LOKA_VERIFY(NSMinY(c) == scale.projectEdge(MacSceneLayout::kRootInset + 100 + MacSceneLayout::kGap).pt);
+      controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+    }
+    [root release];
+  }
+  [pool drain];
+}
+
+void testMacContainerGapRow()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int scaleIndex = 0; scaleIndex < 2; ++scaleIndex)
+    for (int aligned = 0; aligned < 2; ++aligned)
+    {
+      const loka::macos::MacProjection allocation(0, metrics[scaleIndex]);
+      NSView *root = [[NSView alloc] initWithFrame:allocation.projectClientSize(640, 400).r];
+      {
+        MacScenePlatformController controller(root, allocation.railMetrics());
+        const loka::macos::MacProjection &scale = controller.projection();
+        StackNode column((StackProps(STACK_AXIS_COLUMN)));
+        StackProps rowProps(STACK_AXIS_ROW);
+        if (aligned)
+          rowProps.alignVertical(VERTICAL_ALIGNMENT_CENTER);
+        StackNode *row = new StackNode(rowProps);
+        ButtonNode *first = new ButtonNode(ButtonProps().text("First"));
+        ButtonNode *second = new ButtonNode(ButtonProps().text("Second"));
+        TextNode *following = new TextNode(TextProps("Following"));
+        row->addChild(first);
+        row->addChild(second);
+        column.addChild(row);
+        column.addChild(following);
+        controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+        controller.relayout(640, 160);
+        const NSRect a = [[[root subviews] objectAtIndex:0] frame];
+        const NSRect b = [[[root subviews] objectAtIndex:1] frame];
+        const NSRect c = [[[root subviews] objectAtIndex:2] frame];
+        const int width = (640 - 2 * MacSceneLayout::kRootInset - MacSceneLayout::kGap) / 2;
+        LOKA_VERIFY(NSMaxX(a) == scale.projectEdge(MacSceneLayout::kRootInset + width).pt);
+        LOKA_VERIFY(NSMinX(b) == scale.projectEdge(MacSceneLayout::kRootInset + width + MacSceneLayout::kGap).pt);
+        LOKA_VERIFY(NSMinY(c)
+                    == scale
+                           .projectEdge(MacSceneLayout::kRootInset + controller.rowLayoutMetrics().buttonHeight
+                                        + MacSceneLayout::kGap)
+                           .pt);
+        controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      }
+      [root release];
+    }
   [pool drain];
 }

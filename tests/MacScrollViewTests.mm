@@ -1,7 +1,7 @@
 #include "MacScrollViewTests.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 
-#include "app/layout/SceneRootLayout.hpp"
+#include "MacSceneLayout.hpp"
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
@@ -153,10 +153,11 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
     assert([nativeScrollView superview] == root);
     assert([nativeScrollView hasVerticalScroller]);
     assert(![nativeScrollView autohidesScrollers]);
-    LOKA_VERIFY(frameEquals(nativeScrollView, loka::app::layout::SceneRootLayout::kInset,
-                            loka::app::layout::SceneRootLayout::kInset,
-                            300 - 2 * loka::app::layout::SceneRootLayout::kInset,
-                            140 - 2 * loka::app::layout::SceneRootLayout::kInset));
+    LOKA_VERIFY(frameEquals(nativeScrollView,
+                            MacSceneLayout::kRootInset,
+                            MacSceneLayout::kRootInset,
+                            300 - 2 * MacSceneLayout::kRootInset,
+                            140 - 2 * MacSceneLayout::kRootInset));
 
     NSView *documentView = [nativeScrollView documentView];
     LOKA_VERIFY(documentView != nil);
@@ -168,10 +169,10 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
       assert([[buttons objectAtIndex:i] superview] == documentView);
     }
     const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
-    const int advance = buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+    const int advance = buttonHeight + MacSceneLayout::kGap;
     LOKA_VERIFY(frameEquals([buttons objectAtIndex:0], 0, 0, [nativeScrollView contentSize].width, buttonHeight));
     assert([(NSView *)[buttons objectAtIndex:1] frame].origin.y == advance);
-    assert([documentView frame].size.height == 6 * advance);
+    assert([documentView frame].size.height == 6 * advance - MacSceneLayout::kGap);
     assert(clipOffset(nativeScrollView) == 10);
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
@@ -272,9 +273,9 @@ void testMacScrollViewResizeReclampsOffsetOnce()
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
     const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
-    const int contentHeight = 6 * (buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
-    const int initialMax = contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
+    const int contentHeight = 6 * buttonHeight + 5 * MacSceneLayout::kGap;
+    const int initialMax = contentHeight - (140 - 2 * MacSceneLayout::kRootInset);
+    const int resizedMax = contentHeight - (240 - 2 * MacSceneLayout::kRootInset);
     ViewportFact offset(100);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
@@ -300,7 +301,7 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset)
+    assert(offset.state().get().y == contentHeight - (100 - 2 * MacSceneLayout::kRootInset)
            && "an oversized offset must recover to the exact content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
@@ -392,4 +393,133 @@ void testMacScrollViewButtonClickReachesLokaHandler()
   [root release];
   [pool drain];
   std::printf("==== [testMacScrollViewButtonClickReachesLokaHandler] PASSED ====\n");
+}
+
+#include "app/nodes/Text.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/ConfirmDialog.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
+#include <climits>
+// Keep Show after RequestSettlement and all other includes (#1359).
+#include "app/nodes/nestable/Show.hpp"
+
+void testMacScrollViewContainerGapsAndNoSeats()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl;
+  using namespace loka::dsl::testing;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 160)];
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact offset(0);
+    loka::core::MutableState<bool> hidden(false);
+    // No MacWindow owns this plain NSView: the dialog has no transport.
+    loka::core::MutableState<ConfirmResult> resultStorage;
+    NodeState<ConfirmResult> result(&resultStorage, 0);
+    NodeDefinitionBase *definition = (ScrollView(offset.state()).testId("gapScroll")
+                                      << Text("First") << Fragment() << (Show(hidden) << Text("Hidden"))
+                                      << ConfirmDialog().result(result) << Text("Second") << Text("Third"))
+                                         .clone();
+    LOKA_VERIFY(definition != 0);
+    Scene scene(definition);
+    LOKA_VERIFY(scene.mount(&controller));
+    SceneTestAccess::updateAttached(scene, true);
+    const int visible = 30;
+    controller.relayout(300, visible + 2 * MacSceneLayout::kRootInset);
+    NSScrollView *viewport = scrollViewUnderRoot(root);
+    LOKA_VERIFY(viewport != nil);
+    NSArray *children = [[viewport documentView] subviews];
+    LOKA_VERIFY([children count] == 3);
+    int bottom = 0;
+    int totalHeight = 0;
+    for (NSUInteger i = 0; i < 3; ++i)
+    {
+      const NSRect frame = [[children objectAtIndex:i] frame];
+      LOKA_VERIFY(NSMinY(frame) == bottom + (i > 0 ? MacSceneLayout::kGap : 0));
+      totalHeight += static_cast<int>(frame.size.height);
+      bottom = static_cast<int>(NSMaxY(frame));
+    }
+    LOKA_VERIFY([viewport contentSize].height == visible);
+    const int maximum = totalHeight + 2 * MacSceneLayout::kGap - visible;
+    LOKA_VERIFY(maximum > 0);
+    LOKA_VERIFY([[viewport documentView] frame].size.height == maximum + visible);
+    SceneTestAccess::unmount(scene);
+    controller.drainNativeRetirements();
+  }
+  [root release];
+  [pool drain];
+}
+
+namespace
+{
+  // kind() supplies the seat verdict; asBoundary() counts actual dispatch.
+  class GapDispatchText : public loka::app::TextNode
+  {
+  public:
+    explicit GapDispatchText(int &visits)
+        : TextNode(loka::app::TextProps("Following")),
+          visits_(visits)
+    {
+    }
+    virtual loka::app::scene::BoundaryNode *asBoundary()
+    {
+      ++this->visits_;
+      return 0;
+    }
+
+  private:
+    int &visits_;
+  };
+} // namespace
+
+void testMacScrollViewGappedOriginRefuses()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  for (int generic = 0; generic < 2; ++generic)
+  {
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 100)];
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      ViewportFact offset(0);
+      int visits = 0;
+      ScrollViewNode scroll((ScrollViewProps(offset.state())));
+      loka::app::scene::NestableNode *content = &scroll;
+      if (generic)
+      {
+        FragmentNode *fragment = new FragmentNode((FragmentProps()));
+        scroll.addChild(fragment);
+        content = fragment;
+      }
+      BoxNode *leading = new BoxNode(BoxProps().setSize(100, 100));
+      TextNode *following = new GapDispatchText(visits);
+      content->addChild(leading);
+      content->addChild(following);
+      establishLayout(controller, &scroll, 300, 100);
+      NSScrollView *viewport = scrollViewUnderRoot(root);
+      LOKA_VERIFY(viewport != nil);
+      const NSRect before = [[viewport documentView] frame];
+      LOKA_VERIFY(visits > 0);
+      LOKA_VERIFY(before.size.height > [viewport contentSize].height);
+      visits = 0;
+      // The old end fits short; only the intervening gap crosses the limit.
+      leading->props.setSize(100, static_cast<short>(SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1));
+      controller.relayout(300, 100);
+      LOKA_VERIFY(visits == 0);
+      const bool unchanged = NSEqualRects([[viewport documentView] frame], before);
+      LOKA_VERIFY(unchanged);
+      const int offsetValue = offset.state().get().y;
+      LOKA_VERIFY(offsetValue == 0);
+      const int settledClip = clipOffset(viewport);
+      LOKA_VERIFY(settledClip == 0);
+      controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+    }
+    [root release];
+  }
+  [pool drain];
 }

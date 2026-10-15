@@ -1,3 +1,4 @@
+#include "MacSceneLayout.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/ConfirmDialog.hpp"
@@ -46,7 +47,7 @@ void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, 0);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, MacSceneLayout::kGap);
   RegisterMacTextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacTextNodeHandler(controller.nodeHandlerRegistry_);
