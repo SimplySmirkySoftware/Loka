@@ -80,16 +80,17 @@ namespace
   class VisitedFragment : public FragmentNode
   {
   public:
-    mutable unsigned dispatchCalls;
+    unsigned dispatchCalls;
     VisitedFragment()
         : FragmentNode(FragmentProps()),
           dispatchCalls(0)
     {
     }
-    virtual NodeKind kind() const
+    // LayoutNode's first question; the seat verdict reads kind() and never asks it.
+    virtual BoundaryNode *asBoundary()
     {
       ++this->dispatchCalls;
-      return FragmentNode::kind();
+      return FragmentNode::asBoundary();
     }
   };
 
