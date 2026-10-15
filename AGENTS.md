@@ -169,9 +169,9 @@ stated here is quoted from there, so an edit changes both.
 
 ## Build, Test, And Commit
 - Retro68 workflow policy: if `.dsk` is mounted (emulator/host), unmount it before rebuild. Building while mounted can leave stale artifacts or produce corruption-like runtime issues; when users report corrupted/unchanged Classic output, first retry with `.dsk` unmounted, then rebuild.
-- Parallel work policy: agents work in git worktrees owned by an **agent-side clone**, never by the human's clone. A branch checked out in a worktree cannot be checked out again in the repository that owns it, so a worktree created from the human's clone silently takes that branch away from them. Create it as `git -C <agent-clone> worktree add <path> -b <branch> origin/main`, on the WSL filesystem. Win32 golden and pre/post verification builds in the VM rig guest's own clone (win32-verify skill); the bare-metal flow that the same skill keeps for release evidence and explained version-to-version comparison still uses a worktree on an NTFS path under `/mnt/c`, because Windows tools cannot read the ext4 clone. Because the two clones are separate repositories, several agents can work in parallel and the human can still check out any branch, including the same one.
-- Runtime-verification handoff: when a change reaches the point where only real hardware can discriminate it, stop at built-and-ready and hand over rather than asking the human to assemble the setup. Push the branch and state, in one place, the exact command to run and what a pass looks like. The human switches their own clone to that branch, builds and runs, and the agent keeps working on the next thing meanwhile.
-- Handoff assets must travel with the branch: commit the fixture the repro needs, or commit the script that generates it, and name its path. A file left beside the binary in the agent's worktree does not reach the human — `build/` is ignored and the two clones are different directories, so pushing transfers only committed objects. Getting this wrong quietly restores the setup work the handoff exists to remove.
+- Parallel work policy: agents work in git worktrees owned by an **agent-side clone**, never by the human's clone, because a branch checked out in a worktree cannot be checked out again in the repository that owns it, so a worktree created from the human's clone silently takes that branch away from them. Create it as `git -C <agent-clone> worktree add <path> -b <branch> origin/main`, on the WSL filesystem. Win32 golden and pre/post verification builds in the VM rig guest's own clone, and the bare-metal flow kept for release evidence and explained version-to-version comparison uses a worktree on an NTFS path under `/mnt/c`; the win32-verify skill says why and how.
+- Runtime-verification handoff: when a change reaches the point where only real hardware can discriminate it, stop at built-and-ready and hand over rather than asking the human to assemble the setup. Push the branch and state, in one place, the exact command to run and what a pass looks like, then keep working on the next thing while the human switches their own clone to that branch, builds, and runs it.
+- Handoff assets must travel with the branch: commit the fixture the repro needs, or commit the script that generates it, and name its path, because pushing transfers only committed objects (`build/` is ignored and the two clones are different directories).
 - Runtime evidence on the owning rig (Win32 VM, MAME, the macOS rigs) is part of a class S candidate and is produced by the agent; ask the human for a runtime check only when no rig covers the change, and then hand over built-and-ready as described above.
 - Commit policy: Do not amend commits. Only small fixes found immediately after a commit may be amended.
 - Build output policy: keep all generated build trees under `build/` using purpose/platform-specific subfolders (for example `build/Testing`, `build/macos/Debug`, `build/retro68/68k/Release`); do not introduce ad hoc top-level build directories such as `build-foo`.
@@ -179,19 +179,18 @@ stated here is quoted from there, so an edit changes both.
 - When a directly runnable test environment is available (e.g. Linux/WSL headless), always build and run the relevant tests before committing code or test changes. Do not skip this step even for "obviously correct" changes.
 - Test-only introspection/access APIs should not expand normal prod-facing surfaces; prefer isolating them under a dedicated `testing` namespace/access layer (or equivalent backdoor) rather than adding general-purpose getters for tests.
 - Failure-injection convention: simulate OOM/clone failure through `TEST_BUILD`-only hooks in a `testing` namespace (fail-count style, e.g. `failMenuBarDefinitionClones(n)`), or through probe definitions with failing `clone()` overrides. Prefer fail-count hooks over one-shot hooks when the code under test retries within one flush, so the red stays deterministic.
-- Failure-injection placement: implement `TEST_BUILD`-only hooks in a test translation unit (`tests/TestingHooks.cpp`, wired through `LOKA_SHARED_TEST_SOURCES`), never inside production translation units, for the same reason test-only access stays out of prod-facing surfaces (two bullets above). The unit-test executables that use `LOKA_SHARED_TEST_SOURCES` build that translation unit together with the common sources compiled under `TEST_BUILD` (on Linux through the `TEST_BUILD` configuration; `LokaTestsMacOS` and `LokaTestsWin32` compile the common sources into the executable since #117 and #118, 2026-07-18), so the production cores (`LokaWin32Core`, `LokaMacOSCore`) never carry a hook.
+- Failure-injection placement: implement `TEST_BUILD`-only hooks in a test translation unit (`tests/TestingHooks.cpp`, wired through `LOKA_SHARED_TEST_SOURCES`), never inside production translation units, for the same reason test-only access stays out of prod-facing surfaces (two bullets above). The test executables that use `LOKA_SHARED_TEST_SOURCES` compile that translation unit together with the common sources under `TEST_BUILD` (their CMake targets record how), so the production cores (`LokaWin32Core`, `LokaMacOSCore`) never carry a hook. [History](docs/REVIEW_HISTORY.md#117-and-118--common-sources-under-test_build)
 - When adding a new example target, add its run config to `.vscode/launch.json` and the matching build task to `.vscode/tasks.json` for its `preLaunchTask`.
 
 ### Compile-time contract pins
-`tests/compile` is configured only when `TEST_BUILD` is set at configure time,
-which today means the Linux `testing*` presets (the macOS and Win32 CI presets
-define `TEST_BUILD` per target, not at configure, so they do not build the
-pins). Register each pair with `loka_compile_pin(<name> REFUSES <tu> ACCEPTS <tu>)`.
-The refusing TU must fail to compile; its accepting twin shares the same
-includes and pins that the failure is the one expression, not a broken
-environment, and it is part of ALL in every configuration that builds `tests/compile`.
-Diagnostics are not matched because compiler wording differs; keep twins aligned
-by hand (a typo confined to the refusing TU is not detected). `LOKA_COMPILE_PINS`
-registers the refusal tests (ON in the `testing` and `testing-asan` presets);
-the CTest build probes share one `RESOURCE_LOCK`. Building the accepting twins
-on the macOS/Win32 toolchains is not wired; #172 closed on 2026-10-11 without it.
+Register each pair in `tests/compile/CMakeLists.txt` with
+`loka_compile_pin(<name> REFUSES <tu> ACCEPTS <tu>)`. The refusing TU must fail
+to compile; its accepting twin shares the same includes and pins that the
+failure is the one expression, not a broken environment, and it is part of ALL
+in every configuration that builds `tests/compile`. Diagnostics are not matched
+because compiler wording differs; keep twins aligned by hand (a typo confined to
+the refusing TU is not detected). Which configurations build `tests/compile` and
+which register the refusal tests (`LOKA_COMPILE_PINS`) is recorded in the
+top-level `CMakeLists.txt` and `CMakePresets.json`; check there before claiming
+that a pin holds on a toolchain
+([history](docs/REVIEW_HISTORY.md#172--compile-pins-outside-linux)).
