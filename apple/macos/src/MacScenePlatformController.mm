@@ -544,7 +544,7 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   }
   firstEditField_ = 0;
   lastEditField_ = 0;
-  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
+  const int rootInset = 16; // probe(#950 values A): native outer margin, 20 pt
   LayoutState state;
   state.x = rootInset;
   state.y = rootInset;

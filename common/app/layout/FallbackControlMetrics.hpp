@@ -19,8 +19,8 @@ namespace loka
           kPopupMenuHeight = 26,
           kTextHeight = 20,
           kCellHeight = 20,
-          kVerticalSpacing = 12,
-          kHorizontalSpacing = 12,
+          kVerticalSpacing = 6,
+          kHorizontalSpacing = 6,
           kImageFallbackHeight = 160
         };
 

@@ -1143,7 +1143,7 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
-  const int rootInset = loka::app::layout::SceneRootLayout::kInset;
+  const int rootInset = 10; // probe(#950 values A): native outer margin, about 12-13 px
   LayoutState state;
   state.x = rootInset;
   state.y = rootInset;
