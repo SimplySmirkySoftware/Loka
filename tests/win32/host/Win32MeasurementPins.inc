@@ -63,8 +63,7 @@ namespace
     state.height = 1;
     const int advance = node.layout(&controller, state);
     LOKA_VERIFY(measurementCalls() == calls && win32_host::selections == selections);
-    LOKA_VERIFY(state.height == height
-                && advance == 23 + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    LOKA_VERIFY(state.height == height && advance == 23 + height);
     LOKA_VERIFY(window->rect.left == 8 && window->rect.top == 23);
     std::printf("  repeat: measurement=0 SelectObject=0; placement=(8,23)\n");
     state.width = 103;

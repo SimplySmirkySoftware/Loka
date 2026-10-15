@@ -7,11 +7,10 @@ namespace loka
   {
     namespace layout
     {
-      /** Where the macOS and Win32 scene controllers place a scene's root layout:
+      /** Where the macOS scene controller places a scene's root layout:
           kInset logical units in from each edge of the window's client area.
-          Each controller builds its own root LayoutState from it in
-          performLayout. The Toolbox rail places its root differently
-          (ToolboxRender.cpp). */
+          Win32 uses win32/src/Win32SceneLayout.hpp; Toolbox places its root
+          in ToolboxRender.cpp. */
       struct SceneRootLayout
       {
         enum

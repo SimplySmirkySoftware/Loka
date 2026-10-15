@@ -8,4 +8,7 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath();
 void testWin32ScrollViewResizeReclampsOffsetOnce();
 void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope();
 
+void testWin32ScrollViewContainerGapsAndNoSeats();
+void testWin32ScrollViewGappedOriginRefuses();
+
 #endif // LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP
