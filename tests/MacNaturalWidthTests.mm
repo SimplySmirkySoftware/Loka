@@ -3,7 +3,7 @@
 #include "MacScenePlatformController.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
-#include "app/layout/SceneRootLayout.hpp"
+#include "MacSceneLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -21,7 +21,7 @@ namespace
   using namespace loka::dsl::testing;
 
   // Every test lays out in one client box. MacScenePlatformController::performLayout
-  // starts its root SceneRootLayout::kInset in from each edge.
+  // starts its root MacSceneLayout::kRootInset in from each edge.
   const int kClientWidth = 640;
   const int kClientHeight = 160;
   // A seat declared with width(n) instead of a natural width.
@@ -94,7 +94,7 @@ namespace
       controller.relayout(kClientWidth, kClientHeight);
       LOKA_VERIFY([[root subviews] count] == 3);
       const loka::macos::MacProjection &projection = controller.projection();
-      int x = layout::SceneRootLayout::kInset;
+      int x = MacSceneLayout::kRootInset;
       for (NSUInteger i = 0; i < 3; ++i)
       {
         NSButton *button = buttonAt(root, i);
@@ -111,7 +111,7 @@ namespace
           LOKA_VERIFY(frame.size.width == (i == 2 ? kFixedWidth : std::ceil(points)));
         if (i)
           LOKA_VERIFY(frame.origin.x > NSMaxX([buttonAt(root, i - 1) frame]));
-        x += width + layout::FallbackControlMetrics::kHorizontalSpacing;
+        x += width + MacSceneLayout::kGap;
       }
       SceneTestAccess::unmount(scene);
     }
@@ -243,8 +243,7 @@ void testMacDirectRowNaturalWidthFrames()
     NSButton *second = buttonAt(root, 1);
     LOKA_VERIFY([first frame].size.width == std::ceil([[first cell] cellSize].width));
     LOKA_VERIFY([second frame].size.width == std::ceil([[second cell] cellSize].width));
-    LOKA_VERIFY([second frame].origin.x == NSMaxX([first frame])
-                + layout::FallbackControlMetrics::kHorizontalSpacing);
+    LOKA_VERIFY([second frame].origin.x == NSMaxX([first frame]) + MacSceneLayout::kGap);
     controller.onChange(0, NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY([[root subviews] count] == 0);
@@ -268,8 +267,8 @@ void testMacOrdinaryRowStillSharesWidth()
     LOKA_VERIFY([[root subviews] count] == 2);
     const NSRect first = [buttonAt(root, 0) frame];
     const NSRect second = [buttonAt(root, 1) frame];
-    const int gap = layout::FallbackControlMetrics::kHorizontalSpacing;
-    LOKA_VERIFY(first.size.width == (kClientWidth - 2 * layout::SceneRootLayout::kInset - gap) / 2);
+    const int gap = MacSceneLayout::kGap;
+    LOKA_VERIFY(first.size.width == (kClientWidth - 2 * MacSceneLayout::kRootInset - gap) / 2);
     LOKA_VERIFY(second.size.width == first.size.width);
     LOKA_VERIFY(second.origin.x == NSMaxX(first) + gap);
     SceneTestAccess::unmount(scene);
@@ -303,10 +302,10 @@ void testMacButtonNativeHeightColumn()
     LOKA_VERIFY(frame.size.height < nativeHeight + pointsPerLu);
     const int height = projection.measurementToLu(nativeHeight);
     LOKA_VERIFY(controller.rowLayoutMetrics().buttonHeight == height);
-    const int firstY = layout::SceneRootLayout::kInset;
+    const int firstY = MacSceneLayout::kRootInset;
     LOKA_VERIFY(frame.origin.y == projection.projectEdge(firstY).pt);
     LOKA_VERIFY([buttonAt(root, 1) frame].origin.y
-                == projection.projectEdge(firstY + height + layout::FallbackControlMetrics::kVerticalSpacing).pt);
+                == projection.projectEdge(firstY + height + MacSceneLayout::kGap).pt);
     SceneTestAccess::unmount(scene);
   }
   LOKA_VERIFY([[root subviews] count] == 0);
@@ -369,6 +368,7 @@ void testMacButtonDeclinedHeightKeepsRowAligned()
       controller = new MacScenePlatformController(root, loka::macos::DefaultRailMetrics());
     }
     LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
+    LOKA_VERIFY(controller->rowLayoutMetrics().gap == MacSceneLayout::kGap);
     StackNode *row = direct ? new DirectRow() : new StackNode(StackProps(STACK_AXIS_ROW));
     row->props.alignVertical(VERTICAL_ALIGNMENT_CENTER);
     row->addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("Button"))));
@@ -377,7 +377,7 @@ void testMacButtonDeclinedHeightKeepsRowAligned()
     controller->relayout(kClientWidth, kClientHeight);
     LOKA_VERIFY([[root subviews] count] == 2);
     const loka::macos::MacProjection &projection = controller->projection();
-    const int top = layout::SceneRootLayout::kInset;
+    const int top = MacSceneLayout::kRootInset;
     const NSRect button = [buttonAt(root, 0) frame];
     LOKA_VERIFY(NSMinY(button) == projection.projectEdge(top).pt);
     LOKA_VERIFY(NSMaxY(button) == projection.projectEdge(top + layout::FallbackControlMetrics::kButtonHeight).pt);

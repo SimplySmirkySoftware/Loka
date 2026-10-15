@@ -164,8 +164,7 @@ short MacPopupMenuContext::layout(loka::app::scene::IPlatformController *, loka:
 {
   this->relayout(state.x, state.y, state.width, loka::app::layout::FallbackControlMetrics::kPopupMenuHeight);
   state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kPopupMenuHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kPopupMenuHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kPopupMenuHeight);
 }
 
 void MacPopupMenuContext::handleSelectionChange()

@@ -254,7 +254,7 @@ short MacAttributedTextContext::layout(loka::app::scene::IPlatformController *, 
       label,
       this->controller()->projection().projectFrame(loka::core::Frame(state.x, state.y, state.width, state.height)));
   [label setNeedsDisplay:YES];
-  return Coordinate(state.y + state.height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return Coordinate(state.y + state.height);
 }
 
 void RegisterMacAttributedTextNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
