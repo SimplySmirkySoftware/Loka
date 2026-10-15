@@ -122,8 +122,7 @@ The frozen [#977 ruling](https://github.com/SimplySmirkySoftware/Loka/issues/977
 coverage as of 2026-09-28 includes Null, Win32, macOS and Toolbox**: Null ScrollBar complete
 gestures and split input entries, plus the TextEditor input adapter, use
 `NullInputDoor`. Win32 command inputs (Button, EditText, PopupMenu, TextEditor),
-Cell clicks, ScrollView `WM_VSCROLL` / `WM_HSCROLL` and vertical / horizontal
-wheel messages (including the whole wheel loop), TextEditor
+Cell clicks, ScrollView vertical scrolling (including the whole wheel loop), TextEditor
 subclass input/retry, and root size/DPI layout use `Win32InputDoor`. These doors
 use the internal `scene::detail::InputInvocation` mechanism. The Win32 pins
 (`tests/Win32InputDoorTests.cpp`) are runtime-verified on the Win32 VM rig as
@@ -138,6 +137,12 @@ pins (`tests/toolbox/host/ToolboxInputDoorHostTests.cpp`) exercise production
 operation bodies with substituted OS calls and geometry traversal; they do
 not establish native Classic timing or layout accuracy. Toolbox evidence and
 native verification limits are recorded in the #977 Toolbox PR.
+
+#580 PR 2 extends the Win32 ScrollView input door to `WM_HSCROLL` and horizontal
+wheel messages (`0x020E`, including the whole wheel loop). Its added horizontal
+pins in `tests/Win32InputDoorTests.cpp` and `tests/Win32ScrollViewTests.cpp` await
+Win32 VM runtime verification; the historical #977 evidence above does not
+cover these additions.
 
 Each rail has one synchronous scope-owning invocation implementation, exposed
 through named typed entries. It opens `BorrowScope` (formerly `OperationScope`) on the
