@@ -25,6 +25,7 @@
 #include "core/StateTracker.hpp"
 #include <climits>
 #include "app/nodes/Text.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/ConfirmDialog.hpp"
@@ -172,13 +173,13 @@ namespace
     return result;
   }
 
-  SCROLLINFO scrollInfo(HWND viewport)
+  SCROLLINFO scrollInfo(HWND viewport, int bar = SB_VERT)
   {
     SCROLLINFO info;
     ZeroMemory(&info, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    LOKA_VERIFY(GetScrollInfo(viewport, SB_VERT, &info));
+    LOKA_VERIFY(GetScrollInfo(viewport, bar, &info));
     return info;
   }
 
@@ -812,5 +813,168 @@ void testWin32ScrollViewGappedOriginRefuses()
       controller.onChange(0, scene::NODE_DIRTY_NONE, false);
     }
     LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+void testWin32ScrollViewHorizontalRangeAndBar()
+{
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    offset.state().set(loka::core::Frame(1000, 0, 0, 0));
+    loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
+    // Tall content keeps nPage observable: Win32 caps it at the content range.
+    loka::app::StackNode *column = addButtonColumn(scrollView, 8);
+    loka::app::ImageViewNode *image = new loka::app::ImageViewNode(loka::app::ImageViewProps().size(400, 10));
+    column->addChild(image);
+    establishLayout(controller, &scrollView, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    HWND imageWindow = findChildWindowByClass(viewport, L"LOKA_IMAGE_VIEW");
+    LOKA_VERIFY(viewport && imageWindow);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(viewport, &client));
+    const int maximum = 400 - controller.displayScale().clientCapacityToLu(client.right - client.left);
+    const SCROLLINFO observedInfo1 = scrollInfo(viewport, SB_HORZ);
+    const int observedMaximum2 = maximumOffset(observedInfo1);
+    LOKA_VERIFY(observedMaximum2 == maximum);
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) != 0);
+    LOKA_VERIFY(offsetState.get().x == maximum);
+    LOKA_VERIFY(childRectInParent(imageWindow, viewport).left == -controller.displayScale().projectEdge(maximum));
+    const int seatHeight = 140 - 2 * Win32SceneLayout::kRootInset;
+    const SCROLLINFO observedInfo3 = scrollInfo(viewport);
+    LOKA_VERIFY(observedInfo3.nPage == static_cast<UINT>(controller.displayScale().clientCapacityToLu(client.bottom)));
+    const SCROLLINFO observedInfo4 = scrollInfo(viewport);
+    LOKA_VERIFY(static_cast<int>(observedInfo4.nPage) < seatHeight);
+
+    offset.state().set(loka::core::Frame(-7, 0, 0, 0));
+    controller.relayout(300, 140);
+    LOKA_VERIFY(offsetState.get().x == 0);
+    LOKA_VERIFY(childRectInParent(imageWindow, viewport).left == 0);
+    image->props.size(50, 10);
+    offset.state().set(loka::core::Frame(1000, 0, 0, 0));
+    controller.relayout(300, 140);
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) == 0);
+    LOKA_VERIFY(offsetState.get().x == 0);
+    const SCROLLINFO observedInfo5 = scrollInfo(viewport);
+    LOKA_VERIFY(observedInfo5.nPage == static_cast<UINT>(seatHeight));
+    LOKA_VERIFY(childRectInParent(imageWindow, viewport).left == 0);
+
+    // A refused width cannot leave the requested origin stranded off screen.
+    image->props.size(0, 10).attr(loka::app::ImageViewAttr().sizePolicy(loka::app::IMAGE_VIEW_SIZE_INTRINSIC));
+    offset.state().set(loka::core::Frame(37, 0, 0, 0));
+    controller.relayout(300, 140);
+    LOKA_VERIFY(offsetState.get().x == 0);
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) == 0);
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewHorizontalMessagePublishesOffsetFact()
+{
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(5);
+    loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
+    addButtonColumn(scrollView, 8)->addChild(new loka::app::ImageViewNode(loka::app::ImageViewProps().size(1000, 10)));
+    establishLayout(controller, &scrollView, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    const SCROLLINFO info = scrollInfo(viewport, SB_HORZ);
+    const int maximum = maximumOffset(info);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(viewport, &client));
+    const int page = controller.displayScale().clientCapacityToLu(client.right);
+    LOKA_VERIFY(info.nPage == static_cast<UINT>(page));
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == 16 && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == 16 && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_PAGERIGHT, 0), 0);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == 16 + page && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_THUMBTRACK, 10), 0);
+    LOKA_VERIFY(offsetState.get().x == 16 + page && offsetState.get().y == 5);
+    const SCROLLINFO observedInfo6 = scrollInfo(viewport, SB_HORZ);
+    LOKA_VERIFY(observedInfo6.nPos == 10);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_THUMBPOSITION, 10), 0);
+    LOKA_VERIFY(offsetState.get().x == 10 && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_THUMBTRACK, 11), 0);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == 11 && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_LINELEFT, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == 0 && offsetState.get().y == 5);
+    offset.state().set(loka::core::Frame(maximum - 3, 5, 0, 0));
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == maximum && offsetState.get().y == 5);
+    SendMessageW(viewport, WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
+    LOKA_VERIFY(offsetState.get().x == maximum && offsetState.get().y == 5);
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewHorizontalWheelStepsOffset()
+{
+  UINT chars = 3;
+  if (!SystemParametersInfoW(0x006C, 0, &chars, 0))
+    chars = 3;
+  if (chars == 0)
+  {
+    std::printf(
+        "[skip] testWin32ScrollViewHorizontalWheelStepsOffset: system horizontal wheel scrolling is disabled\n");
+    return;
+  }
+  NullPlatformContext platform;
+  WindowProps props;
+  props.frame(40, 40, 360, 280).visible(false);
+  Win32Window window(&platform, props);
+  {
+    loka::core::StateTrackerGuard guard(window.getTracker());
+    window.visibilityState().set(true, true);
+  }
+  WindowAdmissionTestApp admission(window);
+  admission.flush();
+  HWND root = window.hwnd();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(5);
+    loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
+    addButtonColumn(scrollView, 8)->addChild(new loka::app::ImageViewNode(loka::app::ImageViewProps().size(1000, 10)));
+    establishLayout(controller, &scrollView, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    const SCROLLINFO info = scrollInfo(viewport, SB_HORZ);
+    const int maximum = maximumOffset(info);
+    const UINT distance = chars == WHEEL_PAGESCROLL                 ? info.nPage
+                          : chars > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
+                                                                    : chars * 16;
+    const int expected = distance > static_cast<UINT>(maximum) ? maximum : static_cast<int>(distance);
+    // WM_MOUSEHWHEEL: positive delta moves right, unlike WM_MOUSEWHEEL.
+    SendMessageW(viewport, 0x020E, MAKEWPARAM(0, WHEEL_DELTA), 0);
+    LOKA_VERIFY(offsetState.get().x == expected && offsetState.get().y == 5);
+    SendMessageW(viewport, 0x020E, MAKEWPARAM(0, -WHEEL_DELTA), 0);
+    LOKA_VERIFY(offsetState.get().x == 0 && offsetState.get().y == 5);
+    SendMessageW(viewport, 0x020E, MAKEWPARAM(0, WHEEL_DELTA / 2), 0);
+    LOKA_VERIFY(offsetState.get().x == 0 && offsetState.get().y == 5);
+    // Exercise the actual root forwarding path with the original message ID.
+    POINT point = {5, 5};
+    LOKA_VERIFY(ClientToScreen(viewport, &point));
+    LOKA_VERIFY(SetWindowPos(root, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE));
+    LOKA_VERIFY(GetAncestor(WindowFromPoint(point), GA_ROOT) == root);
+    SendMessageW(root, 0x020E, MAKEWPARAM(0, WHEEL_DELTA), MAKELPARAM(point.x, point.y));
+    LOKA_VERIFY(offsetState.get().x == expected && offsetState.get().y == 5);
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
 }

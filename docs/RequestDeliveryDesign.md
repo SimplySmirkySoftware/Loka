@@ -122,7 +122,8 @@ The frozen [#977 ruling](https://github.com/SimplySmirkySoftware/Loka/issues/977
 coverage as of 2026-09-28 includes Null, Win32, macOS and Toolbox**: Null ScrollBar complete
 gestures and split input entries, plus the TextEditor input adapter, use
 `NullInputDoor`. Win32 command inputs (Button, EditText, PopupMenu, TextEditor),
-Cell clicks, ScrollView scrolling (including the whole wheel loop), TextEditor
+Cell clicks, ScrollView `WM_VSCROLL` / `WM_HSCROLL` and vertical / horizontal
+wheel messages (including the whole wheel loop), TextEditor
 subclass input/retry, and root size/DPI layout use `Win32InputDoor`. These doors
 use the internal `scene::detail::InputInvocation` mechanism. The Win32 pins
 (`tests/Win32InputDoorTests.cpp`) are runtime-verified on the Win32 VM rig as

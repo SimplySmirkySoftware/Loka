@@ -11,4 +11,10 @@ void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope();
 void testWin32ScrollViewContainerGapsAndNoSeats();
 void testWin32ScrollViewGappedOriginRefuses();
 
+void testWin32ScrollViewHorizontalRangeAndBar();
+
+void testWin32ScrollViewHorizontalMessagePublishesOffsetFact();
+
+void testWin32ScrollViewHorizontalWheelStepsOffset();
+
 #endif // LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP

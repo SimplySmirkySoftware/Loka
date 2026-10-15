@@ -1314,16 +1314,6 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     return LayoutNodeResult(state.width, state.y);
   }
-  loka::app::scene::ProjectionParentScope childScope;
-  if (!viewportScope.deriveScrolled(viewportScope.nativeParent,
-                                    0,
-                                    requestedOffset,
-                                    viewportClip,
-                                    childScope))
-  {
-    return LayoutNodeResult(state.width, state.y);
-  }
-
   LayoutState childBase = state;
   {
     RECT viewportClient;
@@ -1334,6 +1324,18 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
       // against the client, or they extend underneath the scrollbar.
       childBase.width = this->displayScale_.clientCapacityToLu(viewportClient.right - viewportClient.left);
     }
+  }
+
+  short contentWidthLu = 0;
+  const bool known =
+      loka::app::layout::queryContentOverflowWidth(scrollView, Win32SceneLayout::kGap, this, contentWidthLu);
+  // An unknown range must not scroll: otherwise content cannot be brought back
+  const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
+  const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
+  loka::app::scene::ProjectionParentScope childScope;
+  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, requestedOffset, viewportClip, childScope))
+  {
+    return LayoutNodeResult(state.width, state.y);
   }
 
   int currentY = state.y;
@@ -1388,10 +1390,14 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
   if (!shortRangeRefused)
   {
-    const int clampedOffset =
-        ctx->setScrollMetrics(contentHeight, state.height, requestedOffset);
+    ctx->setScrollMetrics(SB_HORZ, known ? contentWidthLu : 0, childBase.width, clampedX);
+    RECT viewportClient;
+    const int viewportHeight = GetClientRect(ctx->hwnd(), &viewportClient)
+                                   ? this->displayScale_.clientCapacityToLu(viewportClient.bottom - viewportClient.top)
+                                   : state.height;
+    const int clampedOffset = ctx->setScrollMetrics(SB_VERT, contentHeight, viewportHeight, requestedOffset);
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
+    scrollView->publishOrigin(clampedX, clampedOffset);
   }
 
   if (state.height > 0)
