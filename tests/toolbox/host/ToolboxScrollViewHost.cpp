@@ -3,6 +3,8 @@
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 #include <algorithm>
+#include "app/layout/LayoutHeuristics.hpp"
+#include "app/nodes/nestable/Box.hpp"
 
 // The host substitutes dispatch/OS neighbors, but executes the production
 // ScrollView body, Column handler, attributed context and viewport ledger.
@@ -21,6 +23,10 @@ namespace
       this->y_ = child.y;
       return width;
     }
+    virtual bool refuseLayoutResultY(int y)
+    {
+      return this->controller_.refuseNarrowingInScrollScope(y);
+    }
     virtual void setLayoutResultY(short y) { this->y_ = y; }
     virtual short layoutResultY() const { return this->y_; }
   };
@@ -29,8 +35,10 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
                  ToolboxScenePlatformController *controller, loka::app::scene::BoundaryNode *,
                  const loka::app::layout::LazyWindow *range, loka::app::layout::StackSpans *spans)
 {
-  if (node->asStackNode())
+  if (node->asStackNode() || node->asBoxNode())
   {
+    if (node->asBoxNode())
+      ++controller->leafLayouts;
     loka::app::scene::PlatformLayoutHandlerRegistry registry;
     RegisterToolboxPlatformLayoutHandlers(registry);
     Traversal traversal(*controller);
@@ -39,6 +47,8 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
     return width;
   }
   ++controller->leafLayouts;
+  if (!loka::app::layout::childTakesLayoutSeat(node))
+    return 0;
   if (node->kind() == loka::app::scene::NODE_KIND_BUTTON)
   {
     state.y += 20;

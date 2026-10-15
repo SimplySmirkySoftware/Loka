@@ -39,7 +39,7 @@ scenario_version	1
 schema_version	1
 status	ok
 step	add-face
-surface.rects	71,72,24,24;201,205,24,24
+surface.rects	71,72,24,24;281,139,24,24
 test	SmirkBench
 text.value	Faces: 2
 tick	4
@@ -67,7 +67,7 @@ scenario_version	1
 schema_version	1
 status	ok
 step	add-face
-surface.rects	61,82,24,24;216,200,24,24
+surface.rects	61,82,24,24;296,134,24,24
 test	SmirkBench
 text.value	Faces: 2
 tick	10

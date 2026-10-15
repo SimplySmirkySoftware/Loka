@@ -2,6 +2,10 @@
 #define LOKA_TOOLBOX_SCROLL_VIEW_PINS_HPP
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "core/StateTracker.hpp"
+#include "app/ConfirmDialog.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include <vector>
 
 namespace
 {
@@ -36,15 +40,22 @@ namespace
       LifecycleFactTestAccess::DeliverFacts(&scroll);
       controller.releaseNodeContexts(&scroll);
       LOKA_VERIFY(!controller.scrollSpans());
-      delete scroll.detachChildren();
+      // Gap pins seat several direct children; detachChildren() hands back only the chain head.
+      std::vector<Node *> children;
+      scroll.detachChildrenTo(children);
+      for (std::size_t i = 0; i != children.size(); ++i)
+        delete children[i];
       controller.retired.clear();
     }
-    unsigned step(int value, short width = 100, short height = 34, short y = 0)
+    unsigned step(int value, short width = 100, short height = 34, short y = 0, short gap = 0)
     {
       fact.set(value);
       scroll.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
       LayoutState seat = Seat(width);
-      seat.x = 0; seat.y = y; seat.height = height;
+      seat.x = 0;
+      seat.y = y;
+      seat.height = height;
+      seat.spacing = gap;
       const unsigned before = controller.leafLayouts;
       controller.layoutScrollView(&scroll, seat, 0);
       return controller.leafLayouts - before;
@@ -69,6 +80,57 @@ namespace
 
   void ScrollViewPins()
   {
+    Pin("ToolboxScrollViewColumnBoxesGapRefusal");
+    {
+      ScrollFixture f(0);
+      f.column->addChild(new BoxNode(BoxProps().setSize(10, 32760)));
+      f.column->addChild(new BoxNode(BoxProps().setSize(10, 1)));
+      LOKA_VERIFY(f.step(0, 100, 10, 0, 12) == 1);
+      LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!f.controller.scrollSpans());
+    }
+    Pin("ToolboxScrollViewGapRefusalAndContentTotal");
+    for (unsigned accumulated = 0; accumulated != 2; ++accumulated)
+    {
+      ScrollFixture f(0);
+      delete f.scroll.detachChildren();
+      f.column = 0;
+      f.scroll.addChild(new BoxNode(BoxProps().setSize(10, accumulated ? 20000 : 32760)));
+      f.scroll.addChild(new BoxNode(BoxProps().setSize(10, accumulated ? 12760 : 1)));
+      LOKA_VERIFY(f.step(0, 100, 10, accumulated ? -10000 : 0, 12) == (accumulated ? 2u : 1u));
+      LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!f.controller.scrollSpans());
+      LOKA_VERIFY(f.controller.scrollMaximum == 0);
+    }
+    Pin("ToolboxScrollViewDirectContentGapsAndNoSeats");
+    {
+      loka::core::MutableState<ConfirmResult> storage;
+      NodeState<ConfirmResult> result(&storage, 0);
+      ScrollFixture f(0);
+      delete f.scroll.detachChildren();
+      f.column = 0;
+      f.scroll.addChild(new ButtonNode(ButtonProps()));
+      f.scroll.addChild(new FragmentNode(FragmentProps()));
+      f.scroll.addChild(new ConfirmDialogNode(ConfirmDialogProps().result(result)));
+      // Hidden Show arms materialize as empty Fragments, as the common pin verifies.
+      f.scroll.addChild(new FragmentNode(FragmentProps()));
+      f.scroll.addChild(new ButtonNode(ButtonProps()));
+      LOKA_VERIFY(f.step(0, 100, 10, 0, 9) == 5);
+      LOKA_VERIFY(f.controller.scrollMaximum == 39);
+    }
+    Pin("ToolboxScrollViewBandWithGap");
+    {
+      ScrollFixture f;
+      LOKA_VERIFY(f.step(0, 100, 34, 0, 6) == 20);
+      LOKA_VERIFY(f.controller.scrollSpans()->total() == 20 * 17 + 19 * 6);
+      const short middle = f.rect(2).top;
+      LOKA_VERIFY(middle == 46);
+      LOKA_VERIFY(f.step(23, 100, 34, 0, 6) == 3);
+      LOKA_VERIFY(f.rect(2).top == middle - 23);
+      LOKA_VERIFY(f.step(46, 100, 34, 0, 6) == 3);
+      LOKA_VERIFY(f.rect(2).top == middle - 46);
+      LOKA_VERIFY(f.controller.scrollMaximum == 420);
+    }
     Pin("ToolboxScrollBarSetterPaintSuppressed");
     {
       ScrollFixture f;

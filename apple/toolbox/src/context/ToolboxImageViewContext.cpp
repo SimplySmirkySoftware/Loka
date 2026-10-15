@@ -298,7 +298,7 @@ short ToolboxImageViewContext::layout(loka::app::scene::IPlatformController *, l
     }
   }
   updateRect(state.x, state.y, static_cast<short>(width), static_cast<short>(height));
-  state.y = static_cast<short>(state.y + static_cast<short>(height) + state.spacing);
+  state.y = static_cast<short>(state.y + static_cast<short>(height));
   return static_cast<short>(width);
 }
 

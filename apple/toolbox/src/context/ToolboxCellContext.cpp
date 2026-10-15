@@ -162,10 +162,6 @@ short ToolboxCellContext::layout(loka::app::scene::IPlatformController *controll
   this->captureProps();
   updateRect(rect);
   state.y = static_cast<short>(state.y + height);
-  if (state.height <= 0)
-  {
-    state.y = static_cast<short>(state.y + state.spacing);
-  }
   return width;
 }
 

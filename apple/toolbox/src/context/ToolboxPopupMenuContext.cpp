@@ -227,7 +227,7 @@ short ToolboxPopupMenuContext::layout(loka::app::scene::IPlatformController *con
     toolbox->recordPopupHit(this->rect_, this->enabled_, this);
   }
   // Advance by the painted box, as the other rails do: y is the top edge.
-  state.y = static_cast<short>(rect.bottom + state.spacing);
+  state.y = static_cast<short>(rect.bottom);
   return width;
 }
 

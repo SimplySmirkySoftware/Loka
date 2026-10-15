@@ -106,7 +106,7 @@ short ToolboxRectSurfaceContext::layout(loka::app::scene::IPlatformController *,
     SetRect(&this->paintRect_, 0, 0, 0, 0);
   if (!EqualRect(&previousRect, &this->rect_) || !EqualRect(&previousPaintRect, &this->paintRect_))
     this->presented_.invalidate();
-  state.y = static_cast<short>(rect_.bottom + state.spacing);
+  state.y = static_cast<short>(rect_.bottom);
   return state.width;
 }
 

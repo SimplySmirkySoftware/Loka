@@ -13,6 +13,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/Match.hpp"
+#include "app/nodes/nestable/Show.hpp"
 #include "app/nodes/nestable/PolicyScope.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/Menu.hpp"
@@ -221,6 +222,22 @@ namespace simpletext
       unsigned short position_;
     };
 
+    class ErrorVisibleEvalFn : public loka::core::DerivedState<bool>::EvalFn
+    {
+    public:
+      explicit ErrorVisibleEvalFn(const loka::app::scene::NodeState<loka::core::String> &error)
+          : error_(error)
+      {
+      }
+      virtual bool operator()()
+      {
+        return !this->error_.get().empty();
+      }
+
+    private:
+      const loka::app::scene::NodeState<loka::core::String> &error_;
+    };
+
     struct ChooserCompletion
     {
       typedef Choice In;
@@ -246,6 +263,7 @@ namespace simpletext
       this->state(this->saveResult_, Choice());
       this->state(this->confirmResult_, loka::app::ConfirmResult::none());
       this->state(this->error_, loka::core::String());
+      this->derived(this->errorVisible_, this->error_, new (std::nothrow) ErrorVisibleEvalFn(this->error_));
       this->state(this->cursor_, loka::app::LineCursor::None());
       this->state(this->caret_, loka::app::LineCursor::None());
     }
@@ -289,6 +307,7 @@ namespace simpletext
     {
       using namespace loka::app;
       using namespace loka::core;
+      const State<bool> &errorVisible = *this->errorVisible_.state();
       c.menuBar(MenuBarDefinition()
                 << (AppMenu()
                     << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
@@ -329,7 +348,7 @@ namespace simpletext
                             << RibbonItem("Open...").onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                             << RibbonItem("Save").onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
                             << RibbonItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())))
-                    << Text(this->error_.state()).TEST_ID("SimpleText.Error")
+                    << (Show(errorVisible) << Text(this->error_.state()).TEST_ID("SimpleText.Error"))
                     << TextEditor(this->lines_, this->cursor_) //
                            .moveCaretTo(this->caret_)
                            .TEST_ID("SimpleText.Editor"))
@@ -608,6 +627,7 @@ namespace simpletext
     loka::app::scene::NodeState<Choice> openResult_, saveResult_;
     loka::app::scene::NodeState<loka::app::ConfirmResult> confirmResult_;
     loka::app::scene::NodeState<loka::core::String> error_;
+    loka::app::scene::DerivedNodeState<bool> errorVisible_;
     loka::app::scene::FlowSlot<ChoiceFlow> openFlow_, saveFlow_;
   };
 } // namespace simpletext

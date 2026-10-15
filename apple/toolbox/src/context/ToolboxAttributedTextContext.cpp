@@ -138,7 +138,7 @@ short ToolboxAttributedTextContext::layout(loka::app::scene::IPlatformController
     this->presented_.invalidate();
   this->rect_ = rect;
   this->paintRect_ = paintRect;
-  state.y = Coordinate(this->rect_.bottom + state.spacing);
+  state.y = Coordinate(this->rect_.bottom);
   return width;
 }
 

@@ -760,7 +760,7 @@ void testSimpleTextMenuAndDialogProps()
   LOKA_VERIFY(save && save->props.options_.purpose() == FILE_DIALOG_SAVE);
   LOKA_VERIFY(save->props.options_.defaultName().equals(String("untitled.txt")));
   LOKA_VERIFY(save->props.options_.filterPolicy() == FILE_DIALOG_FILTER_ALL_FILES_TEXT);
-  LOKA_VERIFY(find(&h.main(), "SimpleText.Editor") && find(&h.main(), "SimpleText.Error"));
+  LOKA_VERIFY(find(&h.main(), "SimpleText.Editor") && !find(&h.main(), "SimpleText.Error"));
   h.choose(true, FileChooserResult::File(h.file("first.txt")));
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("saved through menu")) == EDIT_OK);
   attachment.dispatch(kAppMenuItems + 4);
@@ -917,6 +917,10 @@ void testSimpleTextEditorReceivesRemainingWindow()
     }
     if (phase == 2)
       h.choose(false, FileChooserResult::Error(5));
+    scene::Node *error = find(&h.main(), "SimpleText.Error");
+    LOKA_VERIFY((error != 0) == (phase == 2));
+    if (error)
+      LOKA_VERIFY(layout::childTakesLayoutSeat(error));
     LayoutProbe probe(h);
     StackNode *root = h.main().childrenHead()->asStackNode();
     LOKA_VERIFY(root && root->props.effectiveAxis() == STACK_AXIS_ROW);

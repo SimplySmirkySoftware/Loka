@@ -43,9 +43,9 @@ void ToolboxScenePlatformController::render()
   }
   loka::app::scene::LayoutState state;
   state.x = 12;
-  state.y = 24;
+  state.y = 12;
   state.lineHeight = 14;
-  state.spacing = 6;
+  state.spacing = 8;
   {
     Rect port = window_->window()->portRect;
     short width = static_cast<short>(port.right - port.left - state.x * 2);
