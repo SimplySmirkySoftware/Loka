@@ -298,102 +298,10 @@ private:
     bool includeChildren;
   };
 
-  typedef LayoutNodeResult (*LeafLayoutHandlerFn)(Win32ScenePlatformController *,
-                                                  loka::app::scene::Node *,
-                                                  const LayoutState &);
   static LayoutNodeResult DispatchProjectedLayout(
       Win32ScenePlatformController *controller,
       loka::app::scene::Node *node,
       const LayoutState &state);
-
-  struct LeafLayoutHandlerEntry
-  {
-    LeafLayoutHandlerEntry(const void *nodeTypeKey, LeafLayoutHandlerFn handler)
-        : nodeTypeKey_(nodeTypeKey),
-          handler_(handler),
-          next_(0)
-    {
-    }
-
-    const void *nodeTypeKey_;
-    LeafLayoutHandlerFn handler_;
-    LeafLayoutHandlerEntry *next_;
-  };
-
-  class LeafLayoutHandlerRegistry
-  {
-  public:
-    LeafLayoutHandlerRegistry()
-        : head_(0)
-    {
-    }
-    ~LeafLayoutHandlerRegistry()
-    {
-      LeafLayoutHandlerEntry *entry = this->head_;
-      while (entry)
-      {
-        LeafLayoutHandlerEntry *next = entry->next_;
-        delete entry;
-        entry = next;
-      }
-      this->head_ = 0;
-    }
-
-    bool registerHandler(const void *nodeTypeKey, LeafLayoutHandlerFn handler)
-    {
-      if (!nodeTypeKey || !handler)
-      {
-        return false;
-      }
-      LeafLayoutHandlerEntry *existing = this->head_;
-      while (existing)
-      {
-        if (existing->nodeTypeKey_ == nodeTypeKey)
-        {
-          existing->handler_ = handler;
-          return true;
-        }
-        existing = existing->next_;
-      }
-      LeafLayoutHandlerEntry *entry = new LeafLayoutHandlerEntry(nodeTypeKey, handler);
-      if (!entry)
-      {
-        return false;
-      }
-      entry->next_ = this->head_;
-      this->head_ = entry;
-      return true;
-    }
-
-    LeafLayoutHandlerFn find(const loka::app::scene::Node *node) const
-    {
-      if (!node)
-      {
-        return 0;
-      }
-      const void *nodeTypeKey = node->nodeTypeKey();
-      if (!nodeTypeKey)
-      {
-        return 0;
-      }
-      LeafLayoutHandlerEntry *entry = this->head_;
-      while (entry)
-      {
-        if (entry->nodeTypeKey_ == nodeTypeKey)
-        {
-          return entry->handler_;
-        }
-        entry = entry->next_;
-      }
-      return 0;
-    }
-
-  private:
-    LeafLayoutHandlerEntry *head_;
-
-    LeafLayoutHandlerRegistry(const LeafLayoutHandlerRegistry &);
-    LeafLayoutHandlerRegistry &operator=(const LeafLayoutHandlerRegistry &);
-  };
 
   static int layoutContainerChild(void *context, loka::app::scene::Node *child, const LayoutState &state);
   int layoutNodeFromSceneState(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
@@ -440,8 +348,6 @@ private:
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::PlatformLayoutHandlerRegistry layoutHandlerRegistry_;
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
-  LeafLayoutHandlerRegistry leafLayoutHandlerRegistry_;
-  LeafLayoutHandlerRegistry hostActionHandlerRegistry_;
   loka::app::scene::Node *rootNode_;
   int clientWidth_;
   int clientHeight_;

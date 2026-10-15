@@ -747,7 +747,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlWidthTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlWidthTests)
   set_target_properties(LokaToolboxControlWidthTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_control_width_case spacing-text-natural spacing-group spacing-caption-wins spacing-ribbon spacing-unaligned spacing-aligned spacing-column encoding-button encoding-popup encoding-text encoding-plain encoding-wrap encoding-ellipsis column-button column-edit column-popup natural row-title natural-title equal-title clipped-title)
+  foreach(_control_width_case natural-image spacing-text-natural spacing-group spacing-caption-wins spacing-ribbon spacing-unaligned spacing-aligned spacing-column encoding-button encoding-popup encoding-text encoding-plain encoding-wrap encoding-ellipsis column-button column-edit column-popup natural row-title natural-title equal-title clipped-title)
     add_test(NAME testToolboxControlWidth_${_control_width_case} COMMAND LokaToolboxControlWidthTests ${_control_width_case})
   endforeach()
 

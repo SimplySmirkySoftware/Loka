@@ -9,6 +9,8 @@
 #include "support/LokaAllocFailure.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include <cstdio>
+#include <climits>
+#include "app/nodes/ImageView.hpp"
 #include <cstring>
 #include "support/LifecycleFactTestAccess.hpp"
 #include "platform/String.hpp"
@@ -81,6 +83,53 @@ namespace loka { namespace testing {
 
 namespace
 {
+  void naturalImagePins()
+  {
+    ToolboxWindow window;
+    ToolboxScenePlatformController controller(&window);
+    ToolboxScenePlatformController portless(0);
+    int native = 0;
+    MutableState<resource::Image> imageState(resource::Image::FromNative(&native, 640, 10, 0, 0));
+    ImageViewProps props;
+    props.image(&imageState).attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC));
+    ImageViewNode image(props);
+    const int widths = toolbox_host::widths;
+    const int metrics = toolbox_host::metrics;
+    ToolboxScenePlatformController *controllers[] = {&controller, &portless};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      image.props = props;
+      imageState.set(resource::Image::FromNative(&native, 640, 10, 0, 0));
+      short width = 123;
+      LOKA_VERIFY(controllers[i]->queryNaturalWidth(&image, width));
+      LOKA_VERIFY(width == 640);
+      imageState.set(resource::Image::FromNative(&native, SHRT_MAX, 10, 0, 0));
+      LOKA_VERIFY(controllers[i]->queryNaturalWidth(&image, width));
+      LOKA_VERIFY(width == SHRT_MAX);
+      for (unsigned refusal = 0; refusal < 7; ++refusal)
+      {
+        image.props = props;
+        imageState.set(resource::Image::FromNative(&native, 640, 10, 0, 0));
+        switch (refusal)
+        {
+        case 0: image.props.width_ = 100; break;
+        case 1: image.props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_AUTO; break;
+        case 2: image.props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_FILL_PARENT; break;
+        case 3: imageState.set(resource::Image::Empty()); break;
+        case 4: imageState.set(resource::Image::FromNative(&native, 0, 10, 0, 0)); break;
+        case 5: imageState.set(resource::Image::FromNative(&native, static_cast<int>(SHRT_MAX) + 1, 10, 0, 0)); break;
+        case 6: image.props.image_ = 0; break;
+        }
+        width = 123;
+        LOKA_VERIFY(!controllers[i]->queryNaturalWidth(&image, width));
+        LOKA_VERIFY(width == 123);
+      }
+    }
+    LOKA_VERIFY(toolbox_host::widths == widths);
+    LOKA_VERIFY(toolbox_host::metrics == metrics);
+    std::puts("Natural image width pins passed");
+  }
+
   class RefusingPlainString : public loka::platform::String
   {
   public:
@@ -254,6 +303,11 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *mode = argv[1];
+  if (std::strcmp(mode, "natural-image") == 0)
+  {
+    naturalImagePins();
+    return 0;
+  }
   if (std::strncmp(mode, "spacing-", 8) == 0)
   {
     testToolboxRowSpacing(mode);
