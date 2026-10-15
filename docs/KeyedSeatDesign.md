@@ -138,7 +138,8 @@ by `requestWindowClose`, where the last-window quit check remains (A′).
 
 ## Review risk profile
 
-Four flags require explicit review under AGENTS.md: new definition ownership
+Four flags require explicit review under the
+[complexity gate](ReviewPolicy.md#complexity-gate): new definition ownership
 and cleanup; multiple new borrowed context fields; State/Boundary interaction;
 and dirty/attach/detach behavior. This note records the combined design rather
 than treating those changes as independent conveniences. Review lenses are

@@ -7,4 +7,5 @@ void testContainerGapShortRefusal();
 void testContainerGapShapeVerdicts();
 void testContainerGapRefusedTextRecovery();
 void testContainerGapNaturalColumn();
+void testContainerGapKindCharacterization();
 #endif

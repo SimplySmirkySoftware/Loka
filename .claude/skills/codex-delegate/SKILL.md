@@ -140,8 +140,9 @@ the follow-up asks for. Session ids are in the transcripts under
 ## Always ask for the smell list (required deliverable)
 
 Every implementation brief must require, **as a section of the PR body**, a
-ranked list naming the places the delivered shape reads as bolted-on. AGENTS.md
-"Shape Review Gates" gate 2 item 5 puts the findings in the PR body; a scratch
+ranked list naming the places the delivered shape reads as bolted-on.
+docs/ReviewPolicy.md "Shape Review Gates" gate 2 item 5 puts the findings in
+the PR body; a scratch
 file while working is fine but **must not be committed** — say so in the brief.
 Asking for a `.<slice>-smells.md` deliverable without that caveat put four
 stray markdown files on the ScrapbookUI stack and cost a rebuild to remove
@@ -164,14 +165,15 @@ them. Word the requirement so the walk cannot be skipped by default (there is no
 > another owner holds is a return-for-reshaping finding, not a medium smell.
 > "No applicable structural change" is an accepted answer only with the lens
 > walk written out; "looks good" without it is not. For a class E or C change
-> (AGENTS.md "Review Paths") the lens walk is replaced by that class's required
-> statement.
+> (docs/ReviewPolicy.md "Review Paths") the lens walk is replaced by that
+> class's required statement.
 
 Reason for the forced output: a passive escape hatch does not fire. The S3
 brief said "stop and write a questions file if the rulings underdetermine
 something"; the file came back absent while the review found three real holes,
-one of them exactly an underdetermined ruling. This mirrors AGENTS.md
-"Shape Review Gates" gate 2, which the delegator runs on the same diff.
+one of them exactly an underdetermined ruling. This mirrors
+docs/ReviewPolicy.md "Shape Review Gates" gate 2, which the delegator runs on
+the same diff.
 
 ## Pre-PR review fixed point
 
@@ -186,8 +188,8 @@ as a substitute for finishing its design.
    Put the anticipated flags and their required review lenses and evidence in
    the brief. Reconcile them against the candidate revision and publish the
    result in the PR body as `Review risk profile`; explicitly record a zero-flag
-   result. Use the catalog and thresholds in AGENTS.md instead of restating
-   them here.
+   result. Use the catalog and thresholds in docs/ReviewPolicy.md instead of
+   restating them here.
 2. **Produce one candidate revision.** First run the affected checks that can
    inspect the working tree. Then commit, confirm clean status, and record the
    candidate SHA, merge base, and changed-file list. Run exact-ref platform

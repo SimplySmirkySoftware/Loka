@@ -49,14 +49,13 @@ Win32ButtonContext::Win32ButtonContext(Win32ScenePlatformController *controller,
                                        loka::app::ButtonNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(NULL),
       textState_(0),
       enabledState_(0)
 {
   DWORD style = WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON;
   // Unicode window: keeps the label UTF-16 end to end (an ANSI window would
   // thunk SetWindowTextW through the system ACP and lose out-of-ACP chars).
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       L"BUTTON",
       L"",
@@ -66,9 +65,9 @@ Win32ButtonContext::Win32ButtonContext(Win32ScenePlatformController *controller,
       reinterpret_cast<HMENU>(static_cast<INT_PTR>(1000)),
       GetModuleHandleW(NULL),
       NULL);
-  if (hwnd_)
+  if (this->hwnd())
   {
-    SetWindowLongPtr(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    SetWindowLongPtr(this->hwnd(), GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
   }
   bindText();
   bindEnabled();
@@ -76,14 +75,14 @@ Win32ButtonContext::Win32ButtonContext(Win32ScenePlatformController *controller,
 
 Win32ButtonContext::~Win32ButtonContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** Text and enabled observers have requested this HWND, erase=true, children=false. */
 loka::app::scene::PaintAnswer Win32ButtonContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -101,8 +100,8 @@ void Win32ButtonContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32ButtonContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                       loka::app::scene::NodeLifecycleFact next)
+void Win32ButtonContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                      loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -118,7 +117,6 @@ void Win32ButtonContext::onFactChanged(loka::app::scene::NodeLifecycleFact previ
     {
       this->unbindText();
       this->unbindEnabled();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -126,23 +124,23 @@ void Win32ButtonContext::onFactChanged(loka::app::scene::NodeLifecycleFact previ
 
 void Win32ButtonContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32ButtonContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
 bool Win32ButtonContext::captureBitmap(loka::core::resource::Image &out) const
 {
-  return this->controller()->captureWindowClientBitmap(this->hwnd_, out);
+  return this->controller()->captureWindowClientBitmap(this->hwnd(), out);
 }
 
 short Win32ButtonContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
@@ -169,11 +167,11 @@ bool Win32ButtonContext::handleCommand(WPARAM, LPARAM)
 
 void Win32ButtonContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
 }
 
@@ -219,26 +217,26 @@ void Win32ButtonContext::unbindEnabled()
 
 void Win32ButtonContext::applyText()
 {
-  if (!hwnd_ || !textState_)
+  if (!this->hwnd() || !textState_)
   {
     return;
   }
   std::wstring wide;
   if (loka::win32::MaterializeWideString(textState_->get(), wide))
   {
-    SetWindowTextW(hwnd_, wide.c_str());
+    SetWindowTextW(this->hwnd(), wide.c_str());
   }
-  Win32ScenePlatformController::requestDirtyRect(hwnd_, NULL, TRUE);
+  Win32ScenePlatformController::requestDirtyRect(this->hwnd(), NULL, TRUE);
 }
 
 void Win32ButtonContext::applyEnabled()
 {
-  if (!hwnd_ || !enabledState_)
+  if (!this->hwnd() || !enabledState_)
   {
     return;
   }
-  EnableWindow(hwnd_, enabledState_->get() ? TRUE : FALSE);
-  Win32ScenePlatformController::requestDirtyRect(hwnd_, NULL, TRUE);
+  EnableWindow(this->hwnd(), enabledState_->get() ? TRUE : FALSE);
+  Win32ScenePlatformController::requestDirtyRect(this->hwnd(), NULL, TRUE);
 }
 
 void Win32ButtonContext::TextChangedThunk(void *userData)

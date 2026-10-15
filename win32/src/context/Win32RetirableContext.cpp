@@ -5,7 +5,8 @@
 
 Win32RetirableContext::Win32RetirableContext(Win32ScenePlatformController *controller)
     : loka::app::scene::NativeNodeContext(),
-      controller_(controller)
+      controller_(controller),
+      hwnd_(0)
 {
 }
 
@@ -38,15 +39,16 @@ HWND Win32RetirableContext::createNativeChildWindow(DWORD exStyle,
                                                     void *createParameter)
 {
   assert(this->controller_ && "a native child must have a projection owner");
-  return this->controller_
-             ? this->controller_->createNativeChildWindow(
-                   exStyle, className, windowName, style, geometry, parent, menu, instance, createParameter)
-             : 0;
+  this->hwnd_ = this->controller_
+                    ? this->controller_->createNativeChildWindow(
+                          exStyle, className, windowName, style, geometry, parent, menu, instance, createParameter)
+                    : 0;
+  return this->hwnd_;
 }
 
-void Win32RetirableContext::retireWindow(HWND &hwnd)
+void Win32RetirableContext::retireWindow()
 {
-  if (!hwnd)
+  if (!this->hwnd_)
   {
     return;
   }
@@ -55,7 +57,20 @@ void Win32RetirableContext::retireWindow(HWND &hwnd)
   {
     return;
   }
-  SetWindowLongPtr(hwnd, GWLP_USERDATA, 0);
-  this->controller_->queueNativeRetirement(hwnd);
-  hwnd = NULL;
+  SetWindowLongPtr(this->hwnd_, GWLP_USERDATA, 0);
+  this->controller_->queueNativeRetirement(this->hwnd_);
+  this->hwnd_ = NULL;
+}
+
+void Win32RetirableContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
+                                          loka::app::scene::NodeLifecycleFact next)
+{
+  this->onNativeFact(previous, next);
+  if (next == loka::app::scene::NODE_FACT_RETIRED)
+    this->retireWindow();
+}
+
+void Win32RetirableContext::onNativeFact(loka::app::scene::NodeLifecycleFact,
+                                        loka::app::scene::NodeLifecycleFact)
+{
 }

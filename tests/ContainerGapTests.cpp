@@ -1,4 +1,15 @@
 #include "ContainerGapTests.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/Canvas.hpp"
+#include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/EditText.hpp"
+#include "app/nodes/controls/PopupMenu.hpp"
+#include "app/nodes/controls/ScrollBar.hpp"
+#include "app/nodes/controls/TextEditor.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
+#include "app/nodes/AttributedText.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LayoutY.hpp"
 #include "app/layout/ColumnLayout.hpp"
@@ -25,6 +36,53 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
   using namespace loka::app::layout;
+
+  // Verbatim shape-based reference from origin/main (PR #1342).
+  namespace reference
+  {
+    // clang-format off
+      bool isLayoutPassThrough(scene::Node *node)
+      {
+        return node && node->asNestable() && !node->asProjectedLayoutNode() && !node->asStackNode()
+               && !node->asBoxNode() && !node->asGridNode() && !node->asZStackNode() && !node->asScrollViewNode()
+               && !node->asRibbonGroupNode() && !node->asCanvasNode() && !node->asRectSurfaceNode();
+      }
+
+      bool childTakesLayoutSeat(scene::Node *child)
+      {
+        if (!child || child->asOpenFileDialogNode() || child->asConfirmDialogNode())
+          return false;
+        if (!isLayoutPassThrough(child))
+          return true;
+        scene::INestable *content = child->asNestable();
+        loka::dsl::CompositionCursor<scene::Node> children(content->childrenHead(), content->childrenCount());
+        for (scene::Node *descendant = children.next(); descendant; descendant = children.next())
+          if (childTakesLayoutSeat(descendant))
+            return true;
+        return false;
+      }
+
+    // clang-format on
+  } // namespace reference
+
+  void verifySeatVerdicts(Node *node)
+  {
+    LOKA_VERIFY(isLayoutPassThrough(node) == reference::isLayoutPassThrough(node));
+    LOKA_VERIFY(childTakesLayoutSeat(node) == reference::childTakesLayoutSeat(node));
+  }
+
+  class ProjectedLeaf : public Node, public IProjectedLayoutNode
+  {
+  public:
+    virtual IProjectedLayoutNode *asProjectedLayoutNode()
+    {
+      return this;
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &s)
+    {
+      return s.y;
+    }
+  };
 
   class EmptyComponent : public ComponentNode
   {
@@ -435,6 +493,7 @@ void testContainerGapShapeVerdicts()
     LOKA_VERIFY(column && column->asStackNode());
     Node *arm = column->asNestable()->childrenHead();
     LOKA_VERIFY(arm && isLayoutPassThrough(arm) && !childTakesLayoutSeat(arm));
+    verifySeatVerdicts(arm);
     Recorder recorder;
     computeColumnLayoutResultY(
         column->asStackNode(), seat(), &recorder, &Recorder::child, 12, &loka::testing::acceptShortLayoutY);
@@ -486,4 +545,96 @@ void testContainerGapNaturalColumn()
   RowWidthConsultation widths(row.childrenHead(), row.childrenCount(), 100, 4, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(widths.next(column).width() == 24);
   LOKA_VERIFY(widths.next(column->nextInComposition).width() == 32);
+}
+
+void testContainerGapKindCharacterization()
+{
+  loka::core::MutableState<FileChooserResult> fileResultStorage;
+  NodeState<FileChooserResult> fileResult(&fileResultStorage, 0);
+  loka::core::MutableState<ConfirmResult> confirmResultStorage;
+  NodeState<ConfirmResult> confirmResult(&confirmResultStorage, 0);
+  verifySeatVerdicts(0);
+  BoxNode box((BoxProps()));
+  LOKA_VERIFY(box.kind() == NODE_KIND_BOX);
+  verifySeatVerdicts(&box);
+  ZStackNode zstack((ZStackProps()));
+  LOKA_VERIFY(zstack.kind() == NODE_KIND_ZSTACK);
+  verifySeatVerdicts(&zstack);
+  GridNode grid((GridProps()));
+  LOKA_VERIFY(grid.kind() == NODE_KIND_GRID);
+  verifySeatVerdicts(&grid);
+  CellNode cell((CellProps()));
+  LOKA_VERIFY(cell.kind() == NODE_KIND_CELL);
+  verifySeatVerdicts(&cell);
+  StackNode row((StackProps(STACK_AXIS_ROW)));
+  LOKA_VERIFY(row.kind() == NODE_KIND_STACK);
+  verifySeatVerdicts(&row);
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  LOKA_VERIFY(column.kind() == NODE_KIND_STACK);
+  verifySeatVerdicts(&column);
+  TextNode textLeaf((TextProps()));
+  LOKA_VERIFY(textLeaf.kind() == NODE_KIND_TEXT);
+  verifySeatVerdicts(&textLeaf);
+  ButtonNode button((ButtonProps()));
+  LOKA_VERIFY(button.kind() == NODE_KIND_BUTTON);
+  verifySeatVerdicts(&button);
+  EditTextNode editText((EditTextProps()));
+  LOKA_VERIFY(editText.kind() == NODE_KIND_EDIT_TEXT);
+  verifySeatVerdicts(&editText);
+  PopupMenuNode popupMenu((PopupMenuProps()));
+  LOKA_VERIFY(popupMenu.kind() == NODE_KIND_POPUP_MENU);
+  verifySeatVerdicts(&popupMenu);
+  OpenFileDialogNode openDialog(OpenFileDialogProps().result(fileResult));
+  LOKA_VERIFY(openDialog.kind() == NODE_KIND_OPEN_FILE_DIALOG);
+  verifySeatVerdicts(&openDialog);
+  ImageViewNode image((ImageViewProps()));
+  LOKA_VERIFY(image.kind() == NODE_KIND_IMAGE_VIEW);
+  verifySeatVerdicts(&image);
+  RectSurfaceNode surface((RectSurfaceProps()));
+  LOKA_VERIFY(surface.kind() == NODE_KIND_RECT_SURFACE);
+  verifySeatVerdicts(&surface);
+  ScrollBarNode scrollBar((ScrollBarProps()));
+  LOKA_VERIFY(scrollBar.kind() == NODE_KIND_SCROLL_BAR);
+  verifySeatVerdicts(&scrollBar);
+  ScrollViewNode scrollView((ScrollViewProps()));
+  LOKA_VERIFY(scrollView.kind() == NODE_KIND_SCROLL_VIEW);
+  verifySeatVerdicts(&scrollView);
+  CanvasNode canvas((CanvasProps()));
+  LOKA_VERIFY(canvas.kind() == NODE_KIND_CANVAS);
+  verifySeatVerdicts(&canvas);
+  AttributedTextNode attributedText((AttributedTextProps()));
+  LOKA_VERIFY(attributedText.kind() == NODE_KIND_ATTRIBUTED_TEXT);
+  verifySeatVerdicts(&attributedText);
+  TextEditorNode editor((TextEditorProps()));
+  LOKA_VERIFY(editor.kind() == NODE_KIND_TEXT_EDITOR);
+  verifySeatVerdicts(&editor);
+  ConfirmDialogNode confirmDialog(ConfirmDialogProps().result(confirmResult));
+  LOKA_VERIFY(confirmDialog.kind() == NODE_KIND_CONFIRM_DIALOG);
+  verifySeatVerdicts(&confirmDialog);
+  RibbonGroupNode ribbon((RibbonGroupProps()));
+  LOKA_VERIFY(ribbon.kind() == NODE_KIND_RIBBON_GROUP);
+  verifySeatVerdicts(&ribbon);
+  RibbonGroupEdgeNode ribbonEdge((RibbonGroupEdgeProps()));
+  LOKA_VERIFY(ribbonEdge.kind() == NODE_KIND_RIBBON_GROUP_EDGE);
+  verifySeatVerdicts(&ribbonEdge);
+  OpenFileDialogNode saveDialog(SaveFileDialog(loka::core::String()).result(fileResult).props);
+  LOKA_VERIFY(saveDialog.kind() == NODE_KIND_OPEN_FILE_DIALOG);
+  verifySeatVerdicts(&saveDialog);
+  FragmentNode empty((FragmentProps()));
+  verifySeatVerdicts(&empty);
+  FragmentNode text((FragmentProps()));
+  text.addChild(new TextNode(TextProps("seat")));
+  verifySeatVerdicts(&text);
+  FragmentNode dialog((FragmentProps()));
+  dialog.addChild(new ConfirmDialogNode(ConfirmDialogProps().result(confirmResult)));
+  verifySeatVerdicts(&dialog);
+  EmptyComponent component;
+  verifySeatVerdicts(&component);
+  CustomNestable custom;
+  verifySeatVerdicts(&custom);
+  ProjectedLeaf projected;
+  LOKA_VERIFY(projected.kind() == NODE_KIND_UNKNOWN && !projected.asNestable());
+  verifySeatVerdicts(&projected);
+  ProjectedNestable projectedNestable;
+  verifySeatVerdicts(&projectedNestable);
 }

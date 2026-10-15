@@ -22,6 +22,14 @@ namespace loka
     class Win32TextEditorAccess
     {
     public:
+      static app::TextEditorNode *node(const Win32TextEditorContext &context)
+      {
+        return context.node_;
+      }
+      static const app::scene::SeamKey<app::TextEditorNode> &key(const Win32TextEditorContext &context)
+      {
+        return context.key_;
+      }
       static unsigned restores(const Win32TextEditorContext &context)
       {
         return context.restores_;
@@ -315,6 +323,62 @@ namespace
       LOKA_VERIFY(GetWindowTextLengthW(context->hwnd()) == static_cast<int>(desired.size()));
     }
   };
+  /** Observe the real derived cleanup at the hook/base boundary, before queueing. */
+  class RetirementOrderEditor : public Win32TextEditorContext
+  {
+  public:
+    RetirementOrderEditor(Fixture &fixture, const LayoutState &bounds)
+        : Win32TextEditorContext(&fixture.controller, fixture.host, bounds,
+                                 fixture.node, EditorAccess::key(*fixture.context))
+    {
+    }
+
+  protected:
+    virtual void onNativeFact(NodeLifecycleFact previous, NodeLifecycleFact next)
+    {
+      const bool borrowed = this->controller()->borrowPhase().open();
+      Win32TextEditorContext::onNativeFact(previous, next);
+      if (next == NODE_FACT_RETIRED)
+      {
+        // Both moved steps have completed, but the base has not stripped or
+        // queued the HWND yet. Moving retireWindow back into the hook fails.
+        LOKA_VERIFY(EditorAccess::node(*this) == 0);
+        LOKA_VERIFY(this->controller()->borrowPhase().open() == borrowed);
+        LOKA_VERIFY(this->hwnd() && IsWindow(this->hwnd()));
+        LOKA_VERIFY(GetWindowLongPtrW(this->hwnd(), GWLP_USERDATA) == reinterpret_cast<LONG_PTR>(this));
+        LOKA_VERIFY(!Win32TextEditorContext::fromWindow(this->hwnd()));
+        LOKA_VERIFY(reinterpret_cast<WNDPROC>(GetWindowLongPtrW(this->hwnd(), GWLP_WNDPROC))
+                    == EditorAccess::nativeProcedure(*this));
+        LOKA_VERIFY(!(GetWindowLongPtrW(this->hwnd(), GWL_STYLE) & WS_VISIBLE));
+        LOKA_VERIFY(GetWindowLongPtrW(this->hwnd(), GWL_STYLE) & ES_READONLY);
+      }
+    }
+  };
+
+  void verifyBaseOwnedRetirement()
+  {
+    Fixture fixture;
+    LayoutState bounds;
+    bounds.x = 0;
+    bounds.y = 0;
+    bounds.width = 180;
+    bounds.height = 80;
+    RetirementOrderEditor context(fixture, bounds);
+    Win32RetirableContext &base = context;
+    const HWND child = base.hwnd();
+    LOKA_VERIFY(child && IsWindow(child));
+    LOKA_VERIFY(Win32TextEditorContext::fromWindow(child) == &context);
+    // TextEditor routes via a property; seed USERDATA to discriminate the
+    // base's unconditional stripping as well as its deferred destruction.
+    SetWindowLongPtrW(child, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&context));
+    base.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    LOKA_VERIFY(!base.hwnd() && !EditorAccess::node(context));
+    LOKA_VERIFY(!fixture.controller.borrowPhase().open());
+    LOKA_VERIFY(IsWindow(child) && GetWindowLongPtrW(child, GWLP_USERDATA) == 0);
+    fixture.controller.drainNativeRetirements();
+    LOKA_VERIFY(!IsWindow(child));
+  }
+
   void expectSelection(const Fixture &fixture, DWORD expected)
   {
     DWORD start = 0, end = 0;
@@ -1570,6 +1634,7 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
 }
 void testWin32TextEditorNestedInput()
 {
+  verifyBaseOwnedRetirement();
   for (int deferred = 0; deferred < 2; ++deferred)
   {
     Fixture fixture;

@@ -16,14 +16,14 @@ Every PR must include:
 - Supported OS range for the change (for example: `10.4-10.6`, `10.7+`, `11+`).
 - Verification type for each claimed platform: `build-verified` (compile/link passed) or `runtime-verified` (app launched and behavior checked).
 - A `Review risk profile` produced from the complexity gate in
-  [AGENTS.md](AGENTS.md#debugging-and-review), including an explicit zero when
-  no flag is triggered.
+  [docs/ReviewPolicy.md](docs/ReviewPolicy.md#complexity-gate), including an
+  explicit zero when no flag is triggered.
 
 ## Testing Requirements
 
 Every change follows the
-[verification policy](AGENTS.md#verification-policy-for-bug-fixes-and-refactoring)
-in `AGENTS.md` and records its evidence in the PR. That section is the one
+[verification policy](docs/ReviewPolicy.md#verification-policy-for-bug-fixes-and-refactoring)
+in `docs/ReviewPolicy.md` and records its evidence in the PR. That section is the one
 statement of what the tests must show; no workflow measures or gates a coverage
 percentage.
 

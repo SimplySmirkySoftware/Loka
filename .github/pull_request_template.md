@@ -20,7 +20,7 @@
 
 ## Review risk profile
 
-<!-- Use the complexity gate in AGENTS.md. Flags route review; they are not a quality score. -->
+<!-- Use the complexity gate in docs/ReviewPolicy.md. Flags route review; they are not a quality score. -->
 
 Total triggered flags: <!-- 0 or count -->
 
