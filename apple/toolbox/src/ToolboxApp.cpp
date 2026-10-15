@@ -405,7 +405,11 @@ void ToolboxApp::run()
           ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
           if (toolboxWindow && toolboxWindow->window() == target)
           {
-            setActiveWindow(toolboxWindow);
+            // A front-window change arrives as two records: the old window
+            // without activeFlag, then the new one with it. Only the second
+            // names the active window.
+            if ((event.modifiers & activeFlag) != 0)
+              setActiveWindow(toolboxWindow);
             // The grow icon follows the window hilite state; redraw only
             // its corner through the ordinary update event.
             toolboxWindow->invalidateGrowIcon();
