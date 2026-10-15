@@ -11,6 +11,27 @@ namespace loka
   {
     namespace layout
     {
+      bool isLayoutPassThrough(scene::Node *node)
+      {
+        return node && node->asNestable() && !node->asProjectedLayoutNode() && !node->asStackNode()
+               && !node->asBoxNode() && !node->asGridNode() && !node->asZStackNode() && !node->asScrollViewNode()
+               && !node->asRibbonGroupNode() && !node->asCanvasNode() && !node->asRectSurfaceNode();
+      }
+
+      bool childTakesLayoutSeat(scene::Node *child)
+      {
+        if (!child || child->asOpenFileDialogNode() || child->asConfirmDialogNode())
+          return false;
+        if (!isLayoutPassThrough(child))
+          return true;
+        scene::INestable *content = child->asNestable();
+        loka::dsl::CompositionCursor<scene::Node> children(content->childrenHead(), content->childrenCount());
+        for (scene::Node *descendant = children.next(); descendant; descendant = children.next())
+          if (childTakesLayoutSeat(descendant))
+            return true;
+        return false;
+      }
+
       int preferredChildWidthForRow(loka::app::scene::Node *child)
       {
         if (!child)
@@ -75,9 +96,9 @@ namespace loka
                 flex_(0)
           {
           }
-          void add(int width)
+          void add(int width, bool takesSeat)
           {
-            if (width == 0)
+            if (!takesSeat)
               return;
             ++this->live_;
             if (width < 0)
@@ -126,6 +147,9 @@ namespace loka
           case STACK_AXIS_ROW:
             for (scene::Node *seat = children.next(); seat; seat = children.next())
             {
+              const bool takesSeat = childTakesLayoutSeat(seat);
+              if (!takesSeat)
+                continue;
               const int declared = preferredChildWidthForRow(seat);
               int resolved = declared;
               if (declared < 0)
@@ -137,13 +161,16 @@ namespace loka
                 if (natural > maximum)
                   maximum = natural;
               }
-              tally.add(stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL ? resolved : declared);
+              tally.add(stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL ? resolved : declared,
+                        takesSeat);
             }
             answer = tally.occupied(gap) + tally.flexSeats() * maximum;
             break;
           case STACK_AXIS_COLUMN:
             for (scene::Node *seat = children.next(); seat; seat = children.next())
             {
+              if (!childTakesLayoutSeat(seat))
+                continue;
               int resolved = declaredChildWidthForColumn(seat);
               if (resolved < 0)
               {
@@ -187,7 +214,10 @@ namespace loka
         RowWidthTally tally;
         loka::dsl::CompositionCursor<loka::app::scene::Node> consult(childrenHead, childCount);
         for (loka::app::scene::Node *child = consult.next(); child; child = consult.next())
-          tally.add(this->preferredWidth(child));
+        {
+          const bool takesSeat = childTakesLayoutSeat(child);
+          tally.add(takesSeat ? this->preferredWidth(child) : 0, takesSeat);
+        }
         const long flexSeats = tally.flexSeats();
         long remainingWidth = availableWidth - tally.occupied(gap);
         if (remainingWidth < 0)
@@ -213,11 +243,11 @@ namespace loka
 
       RowChildWidth RowWidthConsultation::next(loka::app::scene::Node *child)
       {
-        const int preferredWidth = this->preferredWidth(child);
-        if (preferredWidth == 0)
+        if (!childTakesLayoutSeat(child))
         {
           return RowChildWidth(0, false, false);
         }
+        const int preferredWidth = this->preferredWidth(child);
         int width = preferredWidth;
         if (preferredWidth < 0)
         {

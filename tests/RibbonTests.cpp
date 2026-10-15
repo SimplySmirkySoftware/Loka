@@ -354,7 +354,7 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   offer.lineHeight = 20;
   const int p = RibbonGroupNode::kFrameInset;
   PlatformLayoutHandlerRegistry registry;
-  layout::RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0);
+  layout::RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0, 0);
   IPlatformLayoutHandler *handler = registry.find(group);
   LOKA_VERIFY(handler != 0);
   RibbonChildSeatTraversal traversal;
