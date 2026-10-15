@@ -35,12 +35,6 @@ struct ToolboxScrollViewMetrics
   int clampedOffset;
 };
 
-inline bool ToolboxScrollViewShouldRepublish(int requestedOffset,
-                                             int clampedOffset)
-{
-  return requestedOffset != clampedOffset;
-}
-
 inline int ToolboxScrollViewChildWidth(int viewportWidth)
 {
   const int width = viewportWidth - loka::app::SCROLL_BAR_THICKNESS;

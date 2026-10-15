@@ -105,24 +105,24 @@ namespace
     explicit Document(const DocumentProps &props)
         : StdCompositionBoundaryNodeBase<DocumentProps>(props)
     {
-      this->state(this->offset_, 0);
+      this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
       this->state(this->viewport_, Frame(0, 0, 300, 192));
     }
     int offset() const
     {
-      return this->offset_.get();
+      return this->offset_.get().y;
     }
     void scrollOneLine()
     {
-      this->offset_.set(this->offset_.get() + 16);
+      this->offset_.set(loka::core::Frame(0, this->offset_.get().y + 16, 0, 0));
     }
     virtual void declareBindings(BindingToken &token)
     {
-      token.watch(this->offset_, this, &Document::updateViewport, true);
+      token.watch(*this->offset_.state(), this, &Document::updateViewport, true);
     }
     void updateViewport()
     {
-      this->viewport_.set(Frame(0, this->offset_.get(), 300, 192));
+      this->viewport_.set(Frame(0, this->offset_.get().y, 300, 192));
     }
     virtual void composeNode(NodeComposition &composition)
     {
@@ -144,7 +144,7 @@ namespace
     }
 
   private:
-    NodeState<int> offset_;
+    NodeState<loka::core::Frame> offset_;
     NodeState<Frame> viewport_;
   };
   typedef BoundaryDefinition<DocumentProps, Document> DocumentDefinition;

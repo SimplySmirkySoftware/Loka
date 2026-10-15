@@ -176,7 +176,7 @@ namespace
           offset(),
           shown()
     {
-      this->declareStates(2).state(this->offset, 0).state(this->shown, true);
+      this->declareStates(2).state(this->offset, loka::core::Frame(0, 0, 0, 0)).state(this->shown, true);
     }
     virtual void declareBindings(BindingToken &token)
     {
@@ -185,9 +185,9 @@ namespace
     }
     void copyOffset()
     {
-      this->offset.set(record->viewport->get().y);
+      this->offset.set(loka::core::Frame(0, record->viewport->get().y, 0, 0));
     }
-    NodeState<int> offset;
+    NodeState<loka::core::Frame> offset;
     NodeState<bool> shown;
     virtual void composeNode(NodeComposition &c)
     {

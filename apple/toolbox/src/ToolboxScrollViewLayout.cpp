@@ -82,20 +82,8 @@ short ToolboxScenePlatformController::layoutScrollView(
   viewportRect.right = static_cast<short>(viewportRight);
   viewportRect.bottom = static_cast<short>(viewportBottom);
 
-  const int requestedFact = scrollView->props.offset_.isValid()
-                                ? scrollView->props.offset_.state()->get()
-                                : 0;
-  int projectedOffset = requestedFact;
-  if (projectedOffset < 0)
-  {
-    projectedOffset = 0;
-  }
-  else if (projectedOffset > SHRT_MAX)
-  {
-    // Pre-clamp only for safe projection. The exact measured maximum is
-    // published after the scope has popped below.
-    projectedOffset = SHRT_MAX;
-  }
+  const int requestedFact = scrollView->requestedOrigin().y;
+  const int projectedOffset = requestedFact;
 
   const loka::core::Frame viewportClip(
       state.x, state.y, state.width, state.height);
@@ -216,14 +204,8 @@ short ToolboxScenePlatformController::layoutScrollView(
         this->scrollBarLedger_.viewportScrollBars_[i].spans = spans;
         break;
       }
-    if (scrollView->props.offset_.isValid() &&
-        ToolboxScrollViewShouldRepublish(
-            scrollView->props.offset_.state()->get(), clampedOffset))
-    {
-      // The NodeState door opens the ScrollView owner's tracker when idle.
-      // Publish only after the projection-parent scope has popped.
-      scrollView->props.offset_.set(clampedOffset);
-    }
+    // Publish only after successful layout and after the scope has popped.
+    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
   }
 
   if (state.height > 0)

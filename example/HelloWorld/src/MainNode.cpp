@@ -132,7 +132,7 @@ namespace helloworld
         fruitIndex_(),
         fruitMessage_(),
         axis_(),
-        scrollOffset_(),
+        viewport_(),
         fruits_(),
         random_(p.menuSeed())
   {
@@ -145,7 +145,7 @@ namespace helloworld
     this->state(this->weightInput_, String::Literal("60.0"));
     this->state(this->fruitIndex_, 0);
     this->state(this->axis_, loka::app::STACK_AXIS_ROW);
-    this->state(this->scrollOffset_, 0);
+    this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
     const String fruitItems[] = {
         String::Literal("Apple"),
         String::Literal("Banana"),
@@ -293,7 +293,7 @@ namespace helloworld
                   << (MenuItem("Item") << MenuItem("Sub Item"))
                   << MenuItem("Item 2"))
               << randomMenu);
-    ScrollView mainPanels = ScrollView(this->scrollOffset_)
+    ScrollView mainPanels = ScrollView(this->viewport_)
                                 .TEST_ID("HelloWorld.MainPanelsScroll")
                             << (Box().padding(kContentInset).TEST_ID("HelloWorld.MainPanelsInset")
                                 << (Stack(this->axis_.state())

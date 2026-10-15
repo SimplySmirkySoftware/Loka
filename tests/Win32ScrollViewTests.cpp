@@ -26,25 +26,25 @@
 
 namespace
 {
-  class OffsetFact
+  class ViewportFact
   {
   public:
-    explicit OffsetFact(int initial)
-        : storage_(initial),
+    explicit ViewportFact(int initial)
+        : storage_(loka::core::Frame(0, initial, 0, 0)),
           tracker_(),
           state_(&this->storage_, &this->tracker_),
           changeCount_(0)
     {
       this->tracker_.addState(&this->storage_);
-      this->storage_.bind(&OffsetFact::ChangedThunk, this, false);
+      this->storage_.bind(&ViewportFact::ChangedThunk, this, false);
     }
 
-    ~OffsetFact()
+    ~ViewportFact()
     {
-      this->storage_.unbind(&OffsetFact::ChangedThunk, this);
+      this->storage_.unbind(&ViewportFact::ChangedThunk, this);
     }
 
-    loka::app::scene::NodeState<int> &state()
+    loka::app::scene::NodeState<loka::core::Frame> &state()
     {
       return this->state_;
     }
@@ -62,20 +62,20 @@ namespace
   private:
     static void ChangedThunk(void *userData)
     {
-      OffsetFact *self = static_cast<OffsetFact *>(userData);
+      ViewportFact *self = static_cast<ViewportFact *>(userData);
       if (self)
       {
         ++self->changeCount_;
       }
     }
 
-    loka::core::MutableState<int> storage_;
+    loka::core::MutableState<loka::core::Frame> storage_;
     loka::core::PushStateTracker tracker_;
-    loka::app::scene::NodeState<int> state_;
+    loka::app::scene::NodeState<loka::core::Frame> state_;
     int changeCount_;
 
-    OffsetFact(const OffsetFact &);
-    OffsetFact &operator=(const OffsetFact &);
+    ViewportFact(const ViewportFact &);
+    ViewportFact &operator=(const ViewportFact &);
   };
 
   struct ClassWindowQuery
@@ -251,7 +251,7 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
     // to receive the queued HWNDs (the ensure-contract convention; a node
     // that instead dies after the controller is torn down by
     // clearNodeContexts' releaseContext, which does not retire).
-    OffsetFact offset(10);
+    ViewportFact offset(10);
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
@@ -340,7 +340,7 @@ void testWin32ScrollViewOffsetIsRelayoutInput()
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
     // Nodes after the controller: see the parents-and-clips pin.
-    OffsetFact offset(0);
+    ViewportFact offset(0);
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
@@ -351,7 +351,7 @@ void testWin32ScrollViewOffsetIsRelayoutInput()
     assert(!buttons.empty());
     const RECT atZero = childRectInParent(buttons[0], viewport);
 
-    offset.state().set(7);
+    offset.state().set(loka::core::Frame(0, 7, 0, 0));
     controller.relayout(300, 140);
     const RECT afterChange = childRectInParent(buttons[0], viewport);
     const SCROLLINFO afterChangeInfo = scrollInfo(viewport);
@@ -381,7 +381,7 @@ void testWin32ScrollViewMessagePublishesOffsetFact()
     RegisterWin32BuiltInSupport(controller);
     // Nodes after the controller: see the parents-and-clips pin.
     loka::core::EmitterState firstClick;
-    OffsetFact offset(0);
+    ViewportFact offset(0);
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6, &firstClick);
@@ -403,57 +403,57 @@ void testWin32ScrollViewMessagePublishesOffsetFact()
                 "a click inside the viewport must reach the Loka handler");
 
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get() == 16 &&
+    assert(offset.state().get().y == 16 &&
            "WM_VSCROLL must publish through the ScrollView NodeState door");
     controller.relayout(300, 140);
     const RECT after = childRectInParent(buttons[0], viewport);
     assert(after.top == before.top - 16);
 
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, 10), 0);
-    assert(offset.state().get() == 16 &&
+    assert(offset.state().get().y == 16 &&
            "thumb tracking is visual-only until the value settles");
     assert(scrollInfo(viewport).nPos == 10);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBPOSITION, 10), 0);
-    assert(offset.state().get() == 10 &&
+    assert(offset.state().get().y == 10 &&
            "thumb position must publish the settled fact");
     controller.relayout(300, 140);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, 11), 0);
-    assert(offset.state().get() == 10);
+    assert(offset.state().get().y == 10);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get() == 11 &&
+    assert(offset.state().get().y == 11 &&
            "end scroll must publish the last visual thumb position");
     controller.relayout(300, 140);
 
     // A click on an arrow or on the track sends its step and then, on release,
     // SB_ENDSCROLL, with no layout pass in between: the step must survive it.
-    offset.state().set(0);
+    offset.state().set(loka::core::Frame(0, 0, 0, 0));
     controller.relayout(300, 140);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get() == 16 && "an arrow click's end scroll must keep its line step");
+    assert(offset.state().get().y == 16 && "an arrow click's end scroll must keep its line step");
     const SCROLLINFO clickInfo = scrollInfo(viewport);
     const int clickMaximum = maximumOffset(clickInfo);
     const int clickPage =
         clickInfo.nPage > static_cast<UINT>(clickMaximum) ? clickMaximum : static_cast<int>(clickInfo.nPage);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_PAGEDOWN, 0), 0);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get() == (16 > clickMaximum - clickPage ? clickMaximum : 16 + clickPage)
+    assert(offset.state().get().y == (16 > clickMaximum - clickPage ? clickMaximum : 16 + clickPage)
            && "a track click's end scroll must keep its page step");
-    assert(offset.state().get() > 16 && "the page step must move in this fixture");
+    assert(offset.state().get().y > 16 && "the page step must move in this fixture");
     controller.relayout(300, 140);
 
     const int rangeEnd = maximumOffset(scrollInfo(viewport));
-    offset.state().set(rangeEnd);
+    offset.state().set(loka::core::Frame(0, rangeEnd, 0, 0));
     controller.relayout(300, 140);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get() == rangeEnd &&
+    assert(offset.state().get().y == rangeEnd &&
            "line scrolling at the range end must clamp without another write");
-    offset.state().set(rangeEnd - 3);
+    offset.state().set(loka::core::Frame(0, rangeEnd - 3, 0, 0));
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get() == rangeEnd && "a partial final line must clamp to the maximum");
-    offset.state().set(3);
+    assert(offset.state().get().y == rangeEnd && "a partial final line must clamp to the maximum");
+    offset.state().set(loka::core::Frame(0, 3, 0, 0));
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEUP, 0), 0);
-    assert(offset.state().get() == 0 && "a partial first line must clamp to zero");
+    assert(offset.state().get().y == 0 && "a partial first line must clamp to zero");
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
@@ -480,8 +480,8 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
     // Nodes after the controller: see the parents-and-clips pin.
-    OffsetFact offset(0);
-    loka::app::scene::NodeState<int> &offsetState = offset.state();
+    ViewportFact offset(0);
+    loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
@@ -508,23 +508,23 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     const WPARAM down = MAKEWPARAM(0, -WHEEL_DELTA);
     const WPARAM up = MAKEWPARAM(0, WHEEL_DELTA);
     LOKA_VERIFY(SendMessageW(viewport, WM_MOUSEWHEEL, down, position) == 0);
-    LOKA_VERIFY(offsetState.get() == expected);
+    LOKA_VERIFY(offsetState.get().y == expected);
     controller.relayout(300, 140);
     const SCROLLINFO afterWheel = scrollInfo(viewport);
     LOKA_VERIFY(afterWheel.nPos == expected);
     SendMessageW(viewport, WM_MOUSEWHEEL, up, position);
-    LOKA_VERIFY(offsetState.get() == 0);
+    LOKA_VERIFY(offsetState.get().y == 0);
     SendMessageW(viewport, WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA / 2), position);
-    LOKA_VERIFY(offsetState.get() == 0 && "sub-detent remainders are dropped");
+    LOKA_VERIFY(offsetState.get().y == 0 && "sub-detent remainders are dropped");
 
-    offsetState.set(maximum);
+    offsetState.set(loka::core::Frame(0, maximum, 0, 0));
     controller.relayout(300, 140);
     offset.resetChangeCount();
     SendMessageW(viewport, WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get() == maximum);
+    LOKA_VERIFY(offsetState.get().y == maximum);
     const int clampedChanges = offset.changeCount();
     LOKA_VERIFY(clampedChanges == 0);
-    offsetState.set(0);
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
     controller.relayout(300, 140);
 
     std::vector<HWND> buttons = directChildWindowsByClass(viewport, L"Button");
@@ -532,8 +532,8 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     SetFocus(buttons[0]);
     LOKA_VERIFY(GetFocus() == buttons[0]);
     SendMessageW(GetFocus(), WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get() == expected && "focused Button must propagate to the viewport");
-    offsetState.set(0);
+    LOKA_VERIFY(offsetState.get().y == expected && "focused Button must propagate to the viewport");
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
 
     // Use the shipping single-line EditText style to exercise native default
     // propagation, without introducing a per-control subclass for the test.
@@ -542,9 +542,9 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     SetFocus(edit);
     LOKA_VERIFY(GetFocus() == edit);
     SendMessageW(GetFocus(), WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get() == expected && "focused EditText must propagate to the viewport");
+    LOKA_VERIFY(offsetState.get().y == expected && "focused EditText must propagate to the viewport");
     LOKA_VERIFY(DestroyWindow(edit));
-    offsetState.set(0);
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
 
     // The real Win32Window WndProc must route by the message's screen point.
     LOKA_VERIFY(SetWindowPos(root, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE));
@@ -552,21 +552,21 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     SetFocus(root);
     LOKA_VERIFY(GetFocus() == root);
     SendMessageW(GetFocus(), WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get() == expected && "root-directed wheel must find the viewport");
-    offsetState.set(0);
+    LOKA_VERIFY(offsetState.get().y == expected && "root-directed wheel must find the viewport");
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
     HWND outside = CreateWindowExW(0, L"BUTTON", L"", WS_CHILD | WS_VISIBLE,
                                    310, 10, 30, 24, root, NULL, GetModuleHandleW(NULL), NULL);
     LOKA_VERIFY(outside);
     SetFocus(outside);
     LOKA_VERIFY(GetFocus() == outside);
     SendMessageW(GetFocus(), WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get() == expected && "child outside viewport must propagate through root routing");
+    LOKA_VERIFY(offsetState.get().y == expected && "child outside viewport must propagate through root routing");
     LOKA_VERIFY(DestroyWindow(outside));
-    offsetState.set(0);
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
     POINT outsidePoint = {320, 200};
     LOKA_VERIFY(ClientToScreen(root, &outsidePoint));
     SendMessageW(root, WM_MOUSEWHEEL, down, MAKELPARAM(outsidePoint.x, outsidePoint.y));
-    LOKA_VERIFY(offsetState.get() == 0 && "root routing must refuse a point outside the viewport");
+    LOKA_VERIFY(offsetState.get().y == 0 && "root routing must refuse a point outside the viewport");
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
   std::printf("==== [testWin32ScrollViewWheelStepsOffsetThroughLinePath] PASSED ====\n");
@@ -583,7 +583,7 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     const int contentHeight = 6 * (controller.rowLayoutMetrics().buttonHeight
                                   + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     // Nodes after the controller: see the parents-and-clips pin.
-    OffsetFact offset(100);
+    ViewportFact offset(100);
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
@@ -592,11 +592,11 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     LOKA_VERIFY(viewport);
     const int initialMax = contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset);
     const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    assert(offset.state().get() == (initialMax < 100 ? initialMax : 100));
+    assert(offset.state().get().y == (initialMax < 100 ? initialMax : 100));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
+    assert(offset.state().get().y == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.changeCount() == 1 &&
            "a range-changing resize must publish one clamped fact");
     assert(scrollInfo(viewport).nPos == (resizedMax > 0 ? resizedMax : 0));
@@ -604,20 +604,20 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     assert(offset.changeCount() == 1 &&
            "the settled clamp must not be published again");
 
-    offset.state().set(20);
+    offset.state().set(loka::core::Frame(0, 20, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 20);
+    assert(offset.state().get().y == 20);
     assert(offset.changeCount() == 0 &&
            "a still-valid offset must survive resize without a fact write");
 
     // An offset far beyond the short range must not wedge the viewport in a
     // refusal loop: the arm pre-clamps before deriving the child scope, lays
     // out, and setScrollMetrics republishes the exact maximum.
-    offset.state().set(40000);
+    offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
+    assert(offset.state().get().y == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset) &&
            "an oversized offset must recover to the content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
@@ -650,8 +650,8 @@ void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope()
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     RegisterWin32BuiltInSupport(controller);
     // Nodes after the controller: see the parents-and-clips pin.
-    OffsetFact outerOffset(5);
-    OffsetFact innerOffset(3);
+    ViewportFact outerOffset(5);
+    ViewportFact innerOffset(3);
     loka::app::ScrollViewNode outer(
         (loka::app::ScrollViewProps(outerOffset.state())));
     loka::app::ScrollViewNode *inner = new loka::app::ScrollViewNode(
@@ -675,8 +675,8 @@ void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope()
     assert(outerButtons.size() == 6);
     const RECT before = childRectInParent(outerButtons[0], viewport);
     SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(outerOffset.state().get() == 21);
-    assert(innerOffset.state().get() == 3);
+    assert(outerOffset.state().get().y == 21);
+    assert(innerOffset.state().get().y == 3);
     controller.relayout(300, 140);
     const RECT after = childRectInParent(outerButtons[0], viewport);
     assert(after.top == before.top - 16 &&

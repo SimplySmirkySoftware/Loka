@@ -1,6 +1,7 @@
 #include "ScrollViewScopeTests.hpp"
 
 #include <cassert>
+#include "support/TestVerify.hpp"
 #include <climits>
 
 #include "app/nodes/nestable/Box.hpp"
@@ -13,29 +14,29 @@
 
 namespace
 {
-  class OffsetFact
+  class ViewportFact
   {
   public:
-    explicit OffsetFact(int initial)
-        : storage_(initial),
+    explicit ViewportFact(int initial, int x = 0)
+        : storage_(loka::core::Frame(x, initial, 0, 0)),
           tracker_(),
           state_(&this->storage_, &this->tracker_)
     {
       this->tracker_.addState(&this->storage_);
     }
 
-    loka::app::scene::NodeState<int> &state()
+    loka::app::scene::NodeState<loka::core::Frame> &state()
     {
       return this->state_;
     }
 
   private:
-    loka::core::MutableState<int> storage_;
+    loka::core::MutableState<loka::core::Frame> storage_;
     loka::core::PushStateTracker tracker_;
-    loka::app::scene::NodeState<int> state_;
+    loka::app::scene::NodeState<loka::core::Frame> state_;
 
-    OffsetFact(const OffsetFact &);
-    OffsetFact &operator=(const OffsetFact &);
+    ViewportFact(const ViewportFact &);
+    ViewportFact &operator=(const ViewportFact &);
   };
 
   class FixedLayoutProbeNode : public loka::app::scene::Node,
@@ -104,10 +105,10 @@ namespace
     return state;
   }
 
-  loka::app::ScrollViewNode *makeScrollView(OffsetFact &offset)
+  loka::app::ScrollViewNode *makeScrollView(ViewportFact &offset)
   {
     loka::app::ScrollViewProps props;
-    props.offset(offset.state());
+    props.viewport(offset.state());
     return new loka::app::ScrollViewNode(props);
   }
 
@@ -124,7 +125,7 @@ namespace
 void testScrollViewScopePushPopRestoresRootProjectionParent()
 {
   NullScenePlatformController platform;
-  OffsetFact offset(4);
+  ViewportFact offset(4);
   loka::app::StackNode column((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
   loka::app::ScrollViewNode *scrollView = makeScrollView(offset);
   FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
@@ -155,7 +156,7 @@ void testScrollViewScopePushPopRestoresRootProjectionParent()
 void testScrollViewOffsetIsReappliedOnEveryRelayout()
 {
   NullScenePlatformController platform;
-  OffsetFact offset(0);
+  ViewportFact offset(0);
   loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
   FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
   scrollView.addChild(child);
@@ -163,7 +164,7 @@ void testScrollViewOffsetIsReappliedOnEveryRelayout()
 
   const int firstResult = platform.projectLayoutForTesting(&scrollView, input);
   const short atZero = child->geometry().y;
-  offset.state().set(6);
+  offset.state().set(loka::core::Frame(0, 6, 0, 0));
   const int secondResult = platform.projectLayoutForTesting(&scrollView, input);
   const short afterChange = child->geometry().y;
   const int thirdResult = platform.projectLayoutForTesting(&scrollView, input);
@@ -187,7 +188,7 @@ void testScrollViewOffsetIsReappliedOnEveryRelayout()
 void testScrollViewContentHeightRefusesBeforeShortWrap()
 {
   NullScenePlatformController platform;
-  OffsetFact offset(0);
+  ViewportFact offset(0);
 
   loka::app::ScrollViewNode nearLimit((loka::app::ScrollViewProps(offset.state())));
   FixedLayoutProbeNode *nearProbe = new FixedLayoutProbeNode(1);
@@ -265,8 +266,8 @@ void testScrollViewContentHeightRefusesBeforeShortWrap()
 void testNestedScrollViewRefusalPreservesOuterScope()
 {
   NullScenePlatformController platform;
-  OffsetFact outerOffset(3);
-  OffsetFact innerOffset(5);
+  ViewportFact outerOffset(3);
+  ViewportFact innerOffset(5);
   loka::app::ScrollViewNode outer((loka::app::ScrollViewProps(outerOffset.state())));
   loka::app::ScrollViewNode *inner = makeScrollView(innerOffset);
   FixedLayoutProbeNode *innerChild = new FixedLayoutProbeNode(9);
@@ -287,4 +288,118 @@ void testNestedScrollViewRefusalPreservesOuterScope()
   assert(platform.scrollViewShortRangeRefusalCount() == 0);
   assert(platform.projectionParentScopeDepthForTesting() == 0);
   assert(resultY == 60);
+}
+
+void testScrollViewXScopePushPopRestoresRootProjectionParent()
+{
+  NullScenePlatformController platform;
+  ViewportFact offset(0, 4);
+  loka::app::StackNode column((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
+  loka::app::ScrollViewNode *scrollView = makeScrollView(offset);
+  FixedLayoutProbeNode *first = new FixedLayoutProbeNode(7);
+  FixedLayoutProbeNode *second = new FixedLayoutProbeNode(5);
+  FixedLayoutProbeNode *rootSibling = new FixedLayoutProbeNode(5);
+  scrollView->addChild(first);
+  scrollView->addChild(second);
+  column.addChild(scrollView);
+  column.addChild(rootSibling);
+
+  const int resultY = platform.projectLayoutForTesting(&column, makeState(10, 20, 80, 40));
+  (void)resultY;
+
+  assert(first->wasLaidOut());
+  assert(second->wasLaidOut());
+  assert(first->scopeDepth() == 1);
+  assert(second->scopeDepth() == 1);
+  assert(first->geometry().x == 6);
+  assert(second->geometry().x == 6);
+  assert(rootSibling->wasLaidOut());
+  assert(rootSibling->scopeDepth() == 0);
+  assert(rootSibling->geometry().x == 10);
+  assert(platform.projectionParentScopeDepthForTesting() == 0);
+  assert(resultY == 77);
+}
+
+void testScrollViewXOriginIsReappliedOnEveryRelayout()
+{
+  NullScenePlatformController platform;
+  ViewportFact offset(0);
+  loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
+  FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
+  scrollView.addChild(child);
+  const loka::app::scene::LayoutState input = makeState(10, 20, 80, 30);
+
+  const int firstResult = platform.projectLayoutForTesting(&scrollView, input);
+  const short atZero = child->geometry().x;
+  offset.state().set(loka::core::Frame(6, 0, 0, 0));
+  const int secondResult = platform.projectLayoutForTesting(&scrollView, input);
+  const short afterChange = child->geometry().x;
+  const int thirdResult = platform.projectLayoutForTesting(&scrollView, input);
+  const short afterUnchangedRelayout = child->geometry().x;
+  (void)firstResult;
+  (void)atZero;
+  (void)secondResult;
+  (void)afterChange;
+  (void)thirdResult;
+  (void)afterUnchangedRelayout;
+
+  assert(atZero == 10);
+  assert(afterChange == 4);
+  assert(afterUnchangedRelayout == afterChange);
+  assert(firstResult == 50);
+  assert(secondResult == firstResult);
+  assert(thirdResult == secondResult);
+  assert(platform.projectionParentScopeDepthForTesting() == 0);
+}
+
+namespace
+{
+  void countOriginWrites(void *context)
+  {
+    ++*static_cast<int *>(context);
+  }
+} // namespace
+
+void testScrollViewRequestedOriginNormalizesBothAxes()
+{
+  using loka::core::Frame;
+  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
+  LOKA_VERIFY(unbound.requestedOrigin().x == 0);
+  LOKA_VERIFY(unbound.requestedOrigin().y == 0);
+  ViewportFact fact(0);
+  loka::app::ScrollViewNode node((loka::app::ScrollViewProps(fact.state())));
+  fact.state().set(Frame(-7, -9, 0, 0));
+  LOKA_VERIFY(node.requestedOrigin().x == 0);
+  LOKA_VERIFY(node.requestedOrigin().y == 0);
+  fact.state().set(Frame(SHRT_MAX + 1, SHRT_MAX + 1, 0, 0));
+  LOKA_VERIFY(node.requestedOrigin().x == SHRT_MAX);
+  LOKA_VERIFY(node.requestedOrigin().y == SHRT_MAX);
+  fact.state().set(Frame());
+  LOKA_VERIFY(node.requestedOrigin().x == 0);
+  LOKA_VERIFY(node.requestedOrigin().y == 0);
+}
+
+void testScrollViewPublishesOnlyChangedOriginAndPreservesSize()
+{
+  using loka::core::Frame;
+  ViewportFact fact(0);
+  fact.state().set(Frame(3, 4, 123, 456));
+  int writes = 0;
+  fact.state().state()->bind(&countOriginWrites, &writes, false);
+  loka::app::ScrollViewNode node((loka::app::ScrollViewProps(fact.state())));
+  node.publishOrigin(3, 4);
+  LOKA_VERIFY(writes == 0);
+  node.publishOrigin(7, 8);
+  LOKA_VERIFY(writes == 1);
+  LOKA_VERIFY(fact.state().get() == Frame(7, 8, 123, 456));
+  node.publishOrigin(9, 8);
+  LOKA_VERIFY(writes == 2);
+  LOKA_VERIFY(fact.state().get() == Frame(9, 8, 123, 456));
+  node.publishOrigin(9, 10);
+  LOKA_VERIFY(writes == 3);
+  LOKA_VERIFY(fact.state().get() == Frame(9, 10, 123, 456));
+  fact.state().state()->unbind(&countOriginWrites, &writes);
+  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
+  unbound.publishOrigin(1, 2);
+  LOKA_VERIFY(!unbound.props.viewport_.isValid());
 }

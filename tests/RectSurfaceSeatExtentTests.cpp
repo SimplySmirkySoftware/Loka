@@ -407,12 +407,12 @@ void testRectSurfaceScrollViewExtentUsesContentCoordinates()
   // Declared first so it outlives the nodes: their contexts deliver the
   // terminal fact to this controller when the nodes are destroyed.
   NullScenePlatformController platform;
-  loka::core::MutableState<int> offset(7);
+  loka::core::MutableState<loka::core::Frame> offset(loka::core::Frame(0, 7, 0, 0));
   loka::core::MutableState<loka::core::Frame> extent;
   loka::core::PushStateTracker tracker;
   tracker.addState(&offset);
   tracker.addState(&extent);
-  loka::app::scene::NodeState<int> offsetState(&offset, &tracker);
+  loka::app::scene::NodeState<loka::core::Frame> offsetState(&offset, &tracker);
   loka::app::scene::NodeState<loka::core::Frame> extentState(&extent, &tracker);
   loka::app::RectSurfaceProps props;
   props.laidOutExtent(extentState);
@@ -490,26 +490,26 @@ void testRectSurfaceExtentLedgerNestedFlushKeepsNewerEntry()
   LOKA_VERIFY(laterExtent.get() == loka::core::Frame(0, 0, 20, 20));
 }
 
-// A refused layout (ScrollView offset beyond the short range) places nothing,
+// A refused layout (seat minus clamped origin beyond short range) places nothing,
 // so no seat fact is published for the surface.
 void testRectSurfaceRefusedProjectionPublishesNoExtent()
 {
   // Declared first so it outlives the nodes: their contexts deliver the
   // terminal fact to this controller when the nodes are destroyed.
   NullScenePlatformController platform;
-  loka::core::MutableState<int> offset(40000);
+  loka::core::MutableState<loka::core::Frame> offset(loka::core::Frame(0, 40000, 0, 0));
   loka::core::MutableState<loka::core::Frame> extent(loka::core::Frame(1, 2, 3, 4));
   loka::core::PushStateTracker tracker;
   tracker.addState(&offset);
   tracker.addState(&extent);
-  loka::app::scene::NodeState<int> offsetState(&offset, &tracker);
+  loka::app::scene::NodeState<loka::core::Frame> offsetState(&offset, &tracker);
   loka::app::scene::NodeState<loka::core::Frame> extentState(&extent, &tracker);
   loka::app::RectSurfaceProps props;
   props.laidOutExtent(extentState);
   loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offsetState)));
   scrollView.addChild(new loka::app::RectSurfaceNode(props));
 
-  platform.projectLayoutForTesting(&scrollView, layoutState(10, 20, 100, 40));
+  platform.projectLayoutForTesting(&scrollView, layoutState(10, -10, 100, 40));
 
   verifyFrame(extent.get(), 1, 2, 3, 4);
 }
@@ -521,12 +521,12 @@ void testRectSurfaceRefusedScrollViewContentPublishesNoExtent()
   // Declared first so it outlives the nodes: their contexts deliver the
   // terminal fact to this controller when the nodes are destroyed.
   NullScenePlatformController platform;
-  loka::core::MutableState<int> offset(0);
+  loka::core::MutableState<loka::core::Frame> offset(loka::core::Frame(0, 0, 0, 0));
   loka::core::MutableState<loka::core::Frame> extent(loka::core::Frame(1, 2, 3, 4));
   loka::core::PushStateTracker tracker;
   tracker.addState(&offset);
   tracker.addState(&extent);
-  loka::app::scene::NodeState<int> offsetState(&offset, &tracker);
+  loka::app::scene::NodeState<loka::core::Frame> offsetState(&offset, &tracker);
   loka::app::scene::NodeState<loka::core::Frame> extentState(&extent, &tracker);
   loka::app::RectSurfaceProps props;
   props.size(100, 40).laidOutExtent(extentState);
@@ -777,4 +777,26 @@ void testSeatRailFactSettlesAtCloseAndProjectsNextAdmission()
   root.extent.unbind(&RecordExtentPublication, &sequence);
   root.extent.unbind(&ChangeCount::Increment, &publications);
   platform.layoutRoot = 0;
+}
+
+void testRectSurfaceScrollViewXExtentUsesContentCoordinates()
+{
+  // Declared first so it outlives the nodes: their contexts deliver the
+  // terminal fact to this controller when the nodes are destroyed.
+  NullScenePlatformController platform;
+  loka::core::MutableState<loka::core::Frame> offset(loka::core::Frame(7, 0, 0, 0));
+  loka::core::MutableState<loka::core::Frame> extent;
+  loka::core::PushStateTracker tracker;
+  tracker.addState(&offset);
+  tracker.addState(&extent);
+  loka::app::scene::NodeState<loka::core::Frame> offsetState(&offset, &tracker);
+  loka::app::scene::NodeState<loka::core::Frame> extentState(&extent, &tracker);
+  loka::app::RectSurfaceProps props;
+  props.laidOutExtent(extentState);
+  loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offsetState)));
+  scrollView.addChild(new loka::app::RectSurfaceNode(props));
+
+  platform.projectLayoutForTesting(&scrollView, layoutState(10, 20, 100, 40));
+
+  verifyFrame(extent.get(), 10, 20, 100, 40);
 }
