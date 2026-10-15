@@ -728,6 +728,33 @@ void testContentOverflowBoxPaddingIsOfferBound()
   LOKA_VERIFY(probe.calls == 0);
 }
 
+void testContentOverflowPassThroughIsTransparent()
+{
+  using namespace loka::app;
+  // A Fragment (the shape a Show arm materializes as) lays its children out
+  // in place under the same offer, so its declared-width child overflows.
+  ScrollViewNode scroll((ScrollViewProps()));
+  FragmentNode *fragment = new FragmentNode(FragmentProps());
+  scroll.addChild(fragment);
+  fragment->addChild(new TextNode(TextProps("offer-bound")));
+  BoxProps fixed;
+  fixed.setSize(300, 10);
+  fragment->addChild(new BoxNode(fixed));
+  StackWidthProbe probe(500, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(width == 300);
+  LOKA_VERIFY(probe.calls == 0);
+  // Nested pass-through wrappers stay transparent; a decline inside propagates.
+  FragmentNode *inner = new FragmentNode(FragmentProps());
+  fragment->addChild(inner);
+  inner->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
+  StackWidthProbe refused(30, 0, 20);
+  width = 19;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, 4, &refused, width));
+  LOKA_VERIFY(width == 19);
+}
+
 void testContentOverflowRibbonUsesNaturalMeasurement()
 {
   using namespace loka::app;

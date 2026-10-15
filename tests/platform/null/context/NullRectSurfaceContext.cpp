@@ -79,7 +79,7 @@ short NullRectSurfaceContext::layout(loka::app::scene::IPlatformController *, lo
   this->presented_.invalidate();
   if (this->controller_ && this->controller_->queryPaintProjectionScope(scope))
     this->placement_.complete(loka::core::Frame(state.x, state.y, width, height), scope);
-  return static_cast<short>(state.y + height + state.spacing);
+  return static_cast<short>(state.y + height);
 }
 
 void RegisterNullRectSurfaceNodeHandler(NullScenePlatformController &controller)

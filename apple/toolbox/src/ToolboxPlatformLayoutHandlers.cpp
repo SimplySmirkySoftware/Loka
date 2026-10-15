@@ -36,6 +36,11 @@ namespace
     return traversal->layoutChild(child, state);
   }
 
+  bool AcceptTraversalY(void *context, int y)
+  {
+    return !static_cast<loka::app::scene::IPlatformLayoutTraversal *>(context)->refuseLayoutResultY(y);
+  }
+
   /** For containers whose width is their offered seat, forward only the child result Y. */
   int DispatchTraversalLayoutChildResultY(void *context,
                                           loka::app::scene::Node *child,
@@ -55,6 +60,11 @@ namespace
 
     explicit ToolboxBoxTraversal(loka::app::scene::IPlatformLayoutTraversal &value)
         : traversal(value), maxWidth(0) {}
+
+    static bool acceptY(void *context, int y)
+    {
+      return !static_cast<ToolboxBoxTraversal *>(context)->traversal.refuseLayoutResultY(y);
+    }
 
     static int layoutChild(void *context, loka::app::scene::Node *child,
                            const loka::app::scene::LayoutState &state)
@@ -397,7 +407,7 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
   ToolboxBoxTraversal adapter(*traversal);
   // Common BoxLayout owns padding, clamping and child advancement on every rail.
   const int resultY = loka::app::layout::computeBoxLayoutResultY(
-      box, state, &adapter, &ToolboxBoxTraversal::layoutChild);
+      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, 0, &ToolboxBoxTraversal::acceptY);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;
@@ -416,8 +426,8 @@ int ComputeToolboxRibbonGroupLayout(loka::app::RibbonGroupNode *group,
     return 0;
   }
   // Common ribbon layout owns content inset and strip placement on every rail.
-  const int resultY =
-      loka::app::layout::computeRibbonGroupLayoutResultY(group, state, traversal, &DispatchTraversalLayoutChildResultY);
+  const int resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+      group, state, traversal, &DispatchTraversalLayoutChildResultY, &AcceptTraversalY);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;

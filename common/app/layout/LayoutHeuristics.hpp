@@ -14,6 +14,11 @@ namespace loka
   {
     namespace layout
     {
+      /** Shape-only classification; independent of rail handler registration. */
+      bool isLayoutPassThrough(scene::Node *node);
+      /** Dialogs and pass-through subtrees without a seat consume no layout gap. */
+      bool childTakesLayoutSeat(scene::Node *child);
+
       /** Converts an intermediate layout calculation to the target's
           declared coordinate width at the assignment boundary. */
       template <typename LayoutStateT>
@@ -156,7 +161,7 @@ namespace loka
         {
           return fallbackHeight;
         }
-        if (child->asOpenFileDialogNode())
+        if (!childTakesLayoutSeat(child))
         {
           // Seats nothing (see preferredChildWidthForRow): it must not raise
           // an aligned Row's height either.

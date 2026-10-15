@@ -300,7 +300,7 @@ void testTextEditorActions()
   layout.y = 10;
   layout.height = 300;
   layout.spacing = 4;
-  LOKA_VERIFY(f.context->layout(&f.platform, layout) == 94 && layout.height == 80);
+  LOKA_VERIFY(f.context->layout(&f.platform, layout) == 90 && layout.height == 80);
   const Snapshot beforeDetach(f);
   NotifySubtreeNodeDetached(&f.node);
   LOKA_VERIFY(Input::type(*f.context, 'x') == EDITOR_UNAVAILABLE);

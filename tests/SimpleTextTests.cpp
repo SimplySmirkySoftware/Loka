@@ -1,3 +1,4 @@
+#include "support/LayoutY.hpp"
 #include "SimpleTextTests.hpp"
 
 // Null/generic-file integration only: desktop runners link their native core
@@ -890,7 +891,8 @@ namespace
     static int rowChild(void *context, scene::Node *node, const scene::LayoutState &state)
     {
       if (node->asStackNode())
-        return layout::computeColumnLayoutResultY(node->asStackNode(), state, context, &LayoutProbe::columnChild);
+        return layout::computeColumnLayoutResultY(
+            node->asStackNode(), state, context, &LayoutProbe::columnChild, 0, &loka::testing::acceptShortLayoutY);
       return state.y;
     }
   };

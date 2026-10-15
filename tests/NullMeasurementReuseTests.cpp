@@ -35,7 +35,7 @@ namespace
     state.spacing = 3;
     state.height = 999;
     state.lineHeight = 87; // Null uses font metrics, never this Toolbox fallback input.
-    LOKA_VERIFY(node.layout(&platform, state) == 56);
+    LOKA_VERIFY(node.layout(&platform, state) == 53);
     LOKA_VERIFY(state.height == 12);
     LOKA_VERIFY(NullTextMeasurementAccess::builds(context) == 1);
     const PaintQuery query = {platform.paintScope(), PLACEMENT_ELIGIBLE};
