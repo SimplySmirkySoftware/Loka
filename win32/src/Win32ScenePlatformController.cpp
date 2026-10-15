@@ -1580,18 +1580,6 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     return DispatchProjectedLayout(this, node, state);
   }
 
-  LeafLayoutHandlerFn leafLayoutHandler = this->leafLayoutHandlerRegistry_.find(node);
-  if (leafLayoutHandler)
-  {
-    return leafLayoutHandler(this, node, state);
-  }
-
-  LeafLayoutHandlerFn hostActionHandler = this->hostActionHandlerRegistry_.find(node);
-  if (hostActionHandler)
-  {
-    return hostActionHandler(this, node, state);
-  }
-
   if (loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode())
   {
     return this->layoutRectSurfaceNode(surface, state);

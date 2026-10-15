@@ -39,35 +39,12 @@ namespace
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
   RegisterMacRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
-  controller.leafLayoutHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>(),
-      &MacScenePlatformController::DispatchProjectedLayout);
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
       controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, 0);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ButtonNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::EditTextNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::CellNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ImageViewNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
-  controller.hostActionHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>(),
-      &MacScenePlatformController::DispatchProjectedLayout);
-  controller.hostActionHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>(),
-      &MacScenePlatformController::DispatchProjectedLayout);
   RegisterMacTextEditorNodeHandler(controller.nodeHandlerRegistry_);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>(),
-                                                        &MacScenePlatformController::DispatchProjectedLayout);
   RegisterMacButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacTextNodeHandler(controller.nodeHandlerRegistry_);
   RegisterMacAttributedTextNodeHandler(controller.nodeHandlerRegistry_);
