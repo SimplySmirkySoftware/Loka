@@ -393,7 +393,7 @@ namespace loka
     int Win32DisplayScale::clientHeightBelowHorizontalBar(const loka::core::Frame &seatLu) const
     {
       const NativeRect native = this->projectFrame(seatLu);
-      const int nativeHeight = native.bottom - native.top;
+      const int nativeHeight = native.r.bottom - native.r.top;
       const int bar = this->systemMetric(SM_CYHSCROLL);
       return nativeHeight > bar ? this->clientCapacityToLu(nativeHeight - bar) : 0;
     }

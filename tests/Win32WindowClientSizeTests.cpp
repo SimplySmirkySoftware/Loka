@@ -783,7 +783,7 @@ void testWin32DisplayScaleSystemMetricFollowsDpi()
     const Win32DisplayScale fractional(120, loka::app::RailMetrics());
     const loka::core::Frame seat(0, 0, 300, 140);
     const loka::win32::NativeRect native = fractional.projectFrame(seat);
-    const int oneStep = fractional.clientCapacityToLu(native.bottom - native.top - forDpi(SM_CYHSCROLL, 120));
+    const int oneStep = fractional.clientCapacityToLu(native.r.bottom - native.r.top - forDpi(SM_CYHSCROLL, 120));
     const int twoStep = 140 - fractional.clientCapacityToLu(forDpi(SM_CYHSCROLL, 120));
     LOKA_VERIFY(fractional.clientHeightBelowHorizontalBar(seat) == oneStep);
     if (oneStep == twoStep)
