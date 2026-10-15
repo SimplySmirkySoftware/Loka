@@ -13,69 +13,33 @@
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileIO.hpp"
 
-// Page 3 of the card probe (page 1 is a6997e5d, page 2 is d2dc2f17): build a
-// card's whole decoration once into a cached offscreen (shape mask, offset,
-// two box-blur passes per axis, then a Bayer stencil on 1-bit or grays on
-// 8-bit), and repaint it with one CopyBits per strip. Not for merge.
+// Page 4 of the card probe (pages 1-3: a6997e5d, d2dc2f17, dcf1b0f8): can
+// Classic QuickDraw blend a per-pixel alpha shadow over arbitrary pixels?
+// The page 3 intensity (blurred offset round rect) becomes an 8-bit gray
+// mask; a solid black source is composited through it with CopyDeepMask, and
+// with CopyMask given the same deep mask, onto 8-, 16- and 32-bit canvases
+// holding colored stripes and a gray ramp. A `blend` CopyBits with a 50%
+// OpColor is the constant-alpha control. Not for merge.
 namespace
 {
-  enum { kWidth = 512, kHeight = 342, kColorHeight = 220, kReps = 40, kBand = 4, kPeak = 140 };
+  enum { kCanvasW = 560, kCanvasH = 270, kBodyW = 240, kBodyH = 160, kBand = 4, kPeak = 140 };
+  enum { kRampW = 160, kRampH = 48, kRowTop = 212, kSampleY = 252 };
 
-  const unsigned char kBayer8[8][8] = {{0, 32, 8, 40, 2, 34, 10, 42},  {48, 16, 56, 24, 50, 18, 58, 26},
-                                       {12, 44, 4, 36, 14, 46, 6, 38}, {60, 28, 52, 20, 62, 30, 54, 22},
-                                       {3, 35, 11, 43, 1, 33, 9, 41},  {51, 19, 59, 27, 49, 17, 57, 25},
-                                       {15, 47, 7, 39, 13, 45, 5, 37}, {63, 31, 55, 23, 61, 29, 53, 21}};
-
-  enum ShapeKind { SHAPE_SQUARE, SHAPE_ROUND, SHAPE_OVAL, SHAPE_BUBBLE };
-
-  /** The body as a region whose box starts at (0, 0); the bubble's tail hangs below h. */
-  RgnHandle MakeShape(ShapeKind kind, short w, short h)
+  /** The rounded body (oval 12 = radius 6) as a region whose box starts at (0, 0). */
+  RgnHandle MakeBody(short w, short h)
   {
     RgnHandle rgn = NewRgn();
     if (!rgn)
       return 0;
     Rect r;
     SetRect(&r, 0, 0, w, h);
-    switch (kind)
-    {
-    case SHAPE_SQUARE:
-      RectRgn(rgn, &r);
-      break;
-    case SHAPE_ROUND:
-      OpenRgn();
-      FrameRoundRect(&r, 12, 12);
-      CloseRgn(rgn);
-      break;
-    case SHAPE_OVAL:
-      OpenRgn();
-      FrameOval(&r);
-      CloseRgn(rgn);
-      break;
-    case SHAPE_BUBBLE:
-    {
-      OpenRgn();
-      FrameRoundRect(&r, 12, 12);
-      CloseRgn(rgn);
-      RgnHandle tail = NewRgn();
-      if (tail)
-      {
-        const short root = w / 6;
-        OpenRgn();
-        MoveTo(root, h - 2);
-        LineTo(root - 8, h + h / 4);
-        LineTo(root + 18, h - 2);
-        LineTo(root, h - 2);
-        CloseRgn(tail);
-        UnionRgn(rgn, tail, rgn);
-        DisposeRgn(tail);
-      }
-      break;
-    }
-    }
+    OpenRgn();
+    FrameRoundRect(&r, 12, 12);
+    CloseRgn(rgn);
     return rgn;
   }
 
-  /** Shadow geometry: blur radius per pass, total reach, and offset. */
+  /** Shadow geometry, as on page 3. */
   struct Spread
   {
     short radius;
@@ -88,27 +52,6 @@ namespace
     }
   };
 
-  /** A built card: the offscreen holding the whole outer frame, and the
-      local rects the strips are cut from. */
-  struct CardCache
-  {
-    GWorldPtr world;
-    Rect outer;   // (0, 0, W, H)
-    Rect body;    // body box (w x h) inside outer
-    Rect content; // what the strips leave to the content leaf
-    long bytes;
-  };
-
-  // Build-stage marks for the breakdown line: 0 start, 1 mask rasterized,
-  // 2 expanded to bytes, 3 blurred, 4 cache GWorld ready, 5 stencil written, 6 body drawn.
-  UnsignedWide gMarks[7];
-  bool gFastBlur = false;
-
-  void Mark(short stage)
-  {
-    Microseconds(&gMarks[stage]);
-  }
-
   bool PixelsOf(GWorldPtr world, char *&base, long &rowBytes)
   {
     PixMapHandle pixels = GetGWorldPixMap(world);
@@ -119,51 +62,18 @@ namespace
     return true;
   }
 
-  void BlurRows(unsigned char *values, short w, short h, short radius, unsigned char *line)
+  const BitMap *BitsOf(GWorldPtr world)
   {
-    const long scale = 65536L / (2 * radius + 1);
-    for (short y = 0; y < h; ++y)
-    {
-      unsigned char *row = values + static_cast<long>(y) * w;
-      for (short x = 0; x < w; ++x)
-        line[x] = row[x];
-      long sum = 0;
-      for (short k = 0; k <= radius && k < w; ++k)
-        sum += line[k];
-      for (short x = 0; x < w; ++x)
-      {
-        row[x] = static_cast<unsigned char>((sum * scale) >> 16);
-        if (x + radius + 1 < w)
-          sum += line[x + radius + 1];
-        if (x - radius >= 0)
-          sum -= line[x - radius];
-      }
-    }
+    return reinterpret_cast<const BitMap *>(*GetGWorldPixMap(world));
   }
 
-  void BlurColumns(unsigned char *values, short w, short h, short radius, unsigned char *line)
+  const BitMap *PortBits()
   {
-    const long scale = 65536L / (2 * radius + 1);
-    for (short x = 0; x < w; ++x)
-    {
-      for (short y = 0; y < h; ++y)
-        line[y] = values[static_cast<long>(y) * w + x];
-      long sum = 0;
-      for (short k = 0; k <= radius && k < h; ++k)
-        sum += line[k];
-      for (short y = 0; y < h; ++y)
-      {
-        values[static_cast<long>(y) * w + x] = static_cast<unsigned char>((sum * scale) >> 16);
-        if (y + radius + 1 < h)
-          sum += line[y + radius + 1];
-        if (y - radius >= 0)
-          sum -= line[y - radius];
-      }
-    }
+    GrafPtr port;
+    GetPort(&port);
+    return &port->portBits;
   }
 
-  /** Same passes with a quotient table and pointer stepping instead of a
-      multiply per pixel and an index multiply per column step. */
   unsigned char gQuotient[255 * 33 + 1];
   short gQuotientRadius = -1;
 
@@ -209,9 +119,9 @@ namespace
         BlurLineFast(values + x, w, h, radius, line);
   }
 
-  /** Shadow intensity (0..255 before kPeak) over the outer frame: the body
-      offset down-right, rasterized through a 1-bit GWorld, blurred twice per axis. */
-  unsigned char *BuildIntensity(RgnHandle body, const Rect &outer, const Spread &spread)
+  /** Shadow alpha (0..kPeak) over the outer frame: the body offset
+      down-right, rasterized through a 1-bit GWorld, blurred twice per axis. */
+  unsigned char *BuildAlpha(RgnHandle body, const Rect &outer, const Spread &spread)
   {
     const short w = outer.right, h = outer.bottom;
     GWorldPtr mask = 0;
@@ -232,7 +142,6 @@ namespace
       PaintRgn(body);
       OffsetRgn(body, static_cast<short>(-spread.offset), static_cast<short>(-spread.offset));
       SetGWorld(savedPort, savedDevice);
-      Mark(1);
       values = reinterpret_cast<unsigned char *>(NewPtr(static_cast<long>(w) * h));
       line = reinterpret_cast<unsigned char *>(NewPtr(w > h ? w : h));
       if (values && line)
@@ -244,17 +153,10 @@ namespace
           for (short x = 0; x < w; ++x)
             dst[x] = ((src[x >> 3] >> (7 - (x & 7))) & 1) ? 255 : 0;
         }
-        Mark(2);
-        if (gFastBlur)
-          BlurFast(values, w, h, spread.radius, line);
-        else
-        {
-          BlurRows(values, w, h, spread.radius, line);
-          BlurRows(values, w, h, spread.radius, line);
-          BlurColumns(values, w, h, spread.radius, line);
-          BlurColumns(values, w, h, spread.radius, line);
-        }
-        Mark(3);
+        BlurFast(values, w, h, spread.radius, line);
+        const long n = static_cast<long>(w) * h;
+        for (long i = 0; i < n; ++i)
+          values[i] = static_cast<unsigned char>((values[i] * kPeak) >> 8);
       }
       else if (values)
       {
@@ -268,135 +170,355 @@ namespace
     return values;
   }
 
-  unsigned char gGrayIndex[256];
+  /** Which mask gray means "take the source": decided once by pixels. */
+  bool gBlackIsSource = true;
+  CTabHandle gGrays = 0;
 
-  /** Build the whole decoration once. depth 1 = Bayer stencil, depth 8 = grays onto white. */
-  bool BuildCard(ShapeKind kind, short w, short h, short spreadPx, short depth, CardCache &card)
+  /** An 8-bit gray GWorld; level(x, y) is the source weight 0..255. */
+  GWorldPtr NewGrayMask(const Rect &bounds)
   {
-    card.world = 0;
-    card.bytes = 0;
-    const Spread spread(spreadPx);
-    RgnHandle body = MakeShape(kind, w, h);
-    if (!body)
-      return false;
-    const Rect box = (**body).rgnBBox;
-    const short left = static_cast<short>(spread.reach > spread.offset ? spread.reach - spread.offset : 0);
-    const short right = static_cast<short>(spread.reach + spread.offset);
-    SetRect(&card.outer, 0, 0, static_cast<short>(left + box.right + right),
-            static_cast<short>(left + box.bottom + right));
-    OffsetRgn(body, left, left);
-    SetRect(&card.body, left, left, left + w, left + h);
-    const short inset = kind == SHAPE_OVAL ? static_cast<short>(w * 3 / 20 + 2) : static_cast<short>(kBand);
-    const short insetY = kind == SHAPE_OVAL ? static_cast<short>(h * 3 / 20 + 2) : static_cast<short>(kBand);
-    SetRect(&card.content, card.body.left + inset, card.body.top + insetY, card.body.right - inset,
-            card.body.bottom - insetY);
+    GWorldPtr world = 0;
+    if (NewGWorld(&world, 8, &bounds, gGrays, 0, 0) != noErr)
+      return 0;
+    return world;
+  }
 
-    Mark(0);
-    unsigned char *values = BuildIntensity(body, card.outer, spread);
-    bool ok = values != 0;
-    if (ok)
-      ok = NewGWorld(&card.world, depth, &card.outer, 0, 0, 0) == noErr && card.world;
+  /** Index for a source weight under the mask world's own device. */
+  void MaskIndices(GWorldPtr mask, unsigned char *index)
+  {
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(mask, 0);
+    for (short a = 0; a < 256; ++a)
+    {
+      const unsigned short level = static_cast<unsigned short>((gBlackIsSource ? 255 - a : a) * 0x0101);
+      RGBColor gray;
+      gray.red = gray.green = gray.blue = level;
+      index[a] = static_cast<unsigned char>(Color2Index(&gray));
+    }
+    SetGWorld(savedPort, savedDevice);
+  }
+
+  struct ShadowMask
+  {
+    GWorldPtr mask;
+    RgnHandle body;       // outer-local
+    RgnHandle shadowRgn;  // offset body minus body, outer-local
+    unsigned char *alpha; // outer-local source weight, for expected values
+    Rect outer;
+    Rect bodyBox;
+    Rect content;
+    Spread spread;
+    explicit ShadowMask(short s)
+        : mask(0), body(0), shadowRgn(0), alpha(0), spread(s)
+    {
+    }
+  };
+
+  void FreeMask(ShadowMask &m)
+  {
+    if (m.mask)
+      DisposeGWorld(m.mask);
+    if (m.body)
+      DisposeRgn(m.body);
+    if (m.shadowRgn)
+      DisposeRgn(m.shadowRgn);
+    if (m.alpha)
+      DisposePtr(reinterpret_cast<Ptr>(m.alpha));
+    m.mask = 0;
+    m.body = m.shadowRgn = 0;
+    m.alpha = 0;
+  }
+
+  bool BuildMask(ShadowMask &m)
+  {
+    m.body = MakeBody(kBodyW, kBodyH);
+    if (!m.body)
+      return false;
+    const short left = static_cast<short>(m.spread.reach - m.spread.offset);
+    const short right = static_cast<short>(m.spread.reach + m.spread.offset);
+    SetRect(&m.outer, 0, 0, static_cast<short>(left + kBodyW + right), static_cast<short>(left + kBodyH + right));
+    OffsetRgn(m.body, left, left);
+    SetRect(&m.bodyBox, left, left, left + kBodyW, left + kBodyH);
+    SetRect(&m.content, left + kBand, left + kBand, left + kBodyW - kBand, left + kBodyH - kBand);
+    m.shadowRgn = NewRgn();
+    if (!m.shadowRgn)
+      return false;
+    CopyRgn(m.body, m.shadowRgn);
+    OffsetRgn(m.shadowRgn, m.spread.offset, m.spread.offset);
+    DiffRgn(m.shadowRgn, m.body, m.shadowRgn);
+    m.alpha = BuildAlpha(m.body, m.outer, m.spread);
+    if (!m.alpha)
+      return false;
+    m.mask = NewGrayMask(m.outer);
     char *base = 0;
     long rowBytes = 0;
-    if (ok)
-      ok = PixelsOf(card.world, base, rowBytes);
-    Mark(4);
-    if (ok)
+    if (!m.mask || !PixelsOf(m.mask, base, rowBytes))
+      return false;
+    unsigned char index[256];
+    MaskIndices(m.mask, index);
+    const short w = m.outer.right, h = m.outer.bottom;
+    for (short y = 0; y < h; ++y)
     {
-      const short ow = card.outer.right, oh = card.outer.bottom;
-      card.bytes = rowBytes * oh;
-      for (short y = 0; y < oh; ++y)
-      {
-        unsigned char *row = reinterpret_cast<unsigned char *>(base) + y * rowBytes;
-        const unsigned char *src = values + static_cast<long>(y) * ow;
-        if (depth == 1)
-        {
-          for (short x = 0; x < (ow + 7) / 8; ++x)
-            row[x] = 0;
-          for (short x = 0; x < ow; ++x)
-            if (((src[x] * kPeak) >> 8) > kBayer8[y & 7][x & 7] * 4 + 2)
-              row[x >> 3] |= static_cast<unsigned char>(0x80 >> (x & 7));
-        }
-        else
-        {
-          for (short x = 0; x < ow; ++x)
-            row[x] = gGrayIndex[255 - ((src[x] * kPeak) >> 8)];
-        }
-      }
-      Mark(5);
-      CGrafPtr savedPort;
-      GDHandle savedDevice;
-      GetGWorld(&savedPort, &savedDevice);
-      SetGWorld(card.world, 0);
-      PenNormal();
-      ForeColor(blackColor);
-      BackColor(whiteColor);
-      EraseRgn(body);
-      FrameRgn(body);
-      SetGWorld(savedPort, savedDevice);
-      Mark(6);
+      unsigned char *row = reinterpret_cast<unsigned char *>(base) + y * rowBytes;
+      const unsigned char *src = m.alpha + static_cast<long>(y) * w;
+      for (short x = 0; x < w; ++x)
+        row[x] = index[src[x]];
     }
-    if (values)
-      DisposePtr(reinterpret_cast<Ptr>(values));
-    DisposeRgn(body);
-    if (!ok && card.world)
-    {
-      DisposeGWorld(card.world);
-      card.world = 0;
-    }
-    return ok;
+    // The opaque body is drawn afterwards; keep the mask from darkening it.
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(m.mask, 0);
+    RGBColor none;
+    none.red = none.green = none.blue = static_cast<unsigned short>(gBlackIsSource ? 0xFFFF : 0);
+    RGBForeColor(&none);
+    PaintRgn(m.body);
+    ForeColor(blackColor);
+    SetGWorld(savedPort, savedDevice);
+    return true;
   }
 
-  void FreeCard(CardCache &card)
+  /** A solid black source at the canvas depth, large enough for every frame. */
+  GWorldPtr NewBlackSource(short depth, const Rect &bounds)
   {
-    if (card.world)
-      DisposeGWorld(card.world);
-    card.world = 0;
+    GWorldPtr world = 0;
+    if (NewGWorld(&world, depth, &bounds, 0, 0, 0) != noErr || !world)
+      return 0;
+    char *base = 0;
+    long rowBytes = 0;
+    if (!PixelsOf(world, base, rowBytes))
+    {
+      DisposeGWorld(world);
+      return 0;
+    }
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(world, 0);
+    ForeColor(blackColor);
+    PaintRect(&bounds);
+    SetGWorld(savedPort, savedDevice);
+    return world;
   }
 
-  /** Four strips tiling outer minus content (top, right, bottom, left), local coordinates. */
-  void Strips(const CardCache &card, Rect *strips)
+  enum Method { PLAIN_COPY, DEEP_WHOLE, DEEP_STRIPS, MASK_WHOLE, BLEND_WHOLE };
+
+  void Strips(const ShadowMask &m, Rect *strips)
   {
-    const Rect &o = card.outer;
-    const Rect &c = card.content;
+    const Rect &o = m.outer;
+    const Rect &c = m.content;
     SetRect(&strips[0], 0, 0, c.right, c.top);
     SetRect(&strips[1], c.right, 0, o.right, c.bottom);
     SetRect(&strips[2], c.left, c.bottom, o.right, o.bottom);
     SetRect(&strips[3], 0, c.top, c.left, o.bottom);
   }
 
-  const BitMap *CacheBits(const CardCache &card)
+  /** One composite of the shadow frame at (atX, atY) on the current port. */
+  void Composite(Method method, const ShadowMask &m, GWorldPtr source, short atX, short atY, const Rect &portRect)
   {
-    return reinterpret_cast<const BitMap *>(*GetGWorldPixMap(card.world));
-  }
-
-  /** The current port's own bits: a window's portBits or a GWorld's pixmap. */
-  const BitMap *PortBits()
-  {
-    GrafPtr port;
-    GetPort(&port);
-    return &port->portBits;
-  }
-
-  void RepaintStrips(const CardCache &card, short atX, short atY, const Rect &portRect)
-  {
-    Rect strips[4];
-    Strips(card, strips);
-    for (short s = 0; s < 4; ++s)
-    {
-      Rect dst = strips[s];
-      OffsetRect(&dst, atX, atY);
-      ClipRect(&dst);
-      CopyBits(CacheBits(card), PortBits(), &strips[s], &dst, srcCopy, 0);
-    }
-    ClipRect(&portRect);
-  }
-
-  void RepaintWhole(const CardCache &card, short atX, short atY)
-  {
-    Rect dst = card.outer;
+    Rect dst = m.outer;
     OffsetRect(&dst, atX, atY);
-    CopyBits(CacheBits(card), PortBits(), &card.outer, &dst, srcCopy, 0);
+    const BitMap *src = BitsOf(source);
+    const BitMap *mask = BitsOf(m.mask);
+    switch (method)
+    {
+    case PLAIN_COPY:
+      CopyBits(src, PortBits(), &m.outer, &dst, srcCopy, 0);
+      break;
+    case DEEP_WHOLE:
+      CopyDeepMask(src, mask, PortBits(), &m.outer, &m.outer, &dst, srcCopy, 0);
+      break;
+    case DEEP_STRIPS:
+    {
+      Rect strips[4];
+      Strips(m, strips);
+      for (short s = 0; s < 4; ++s)
+      {
+        Rect piece = strips[s];
+        OffsetRect(&piece, atX, atY);
+        ClipRect(&piece);
+        CopyDeepMask(src, mask, PortBits(), &strips[s], &strips[s], &piece, srcCopy, 0);
+      }
+      ClipRect(&portRect);
+      break;
+    }
+    case MASK_WHOLE:
+      CopyMask(src, mask, PortBits(), &m.outer, &m.outer, &dst);
+      break;
+    case BLEND_WHOLE:
+    {
+      RGBColor half;
+      half.red = half.green = half.blue = 0x8000;
+      OpColor(&half);
+      OffsetRgn(m.shadowRgn, atX, atY);
+      CopyBits(src, PortBits(), &m.outer, &dst, blend, m.shadowRgn);
+      OffsetRgn(m.shadowRgn, static_cast<short>(-atX), static_cast<short>(-atY));
+      break;
+    }
+    }
+  }
+
+  void DrawBody(const ShadowMask &m, short atX, short atY)
+  {
+    OffsetRgn(m.body, atX, atY);
+    BackColor(whiteColor);
+    EraseRgn(m.body);
+    ForeColor(blackColor);
+    FrameRgn(m.body);
+    OffsetRgn(m.body, static_cast<short>(-atX), static_cast<short>(-atY));
+  }
+
+  void PaintGround(const Rect &canvas)
+  {
+    static const RGBColor stripes[6] = {{0xFFFF, 0x6666, 0x6666}, {0x6666, 0xDDDD, 0x6666},
+                                        {0x6666, 0x8888, 0xFFFF}, {0xFFFF, 0xEEEE, 0x4444},
+                                        {0x4444, 0xDDDD, 0xDDDD}, {0xDDDD, 0x6666, 0xDDDD}};
+    for (short x = 0; x < canvas.right; x += 12)
+    {
+      Rect r;
+      SetRect(&r, x, 0, x + 12, canvas.bottom);
+      RGBForeColor(&stripes[(x / 12) % 6]);
+      PaintRect(&r);
+    }
+    for (short x = 0; x < canvas.right; x += 8)
+    {
+      Rect r;
+      SetRect(&r, x, 150, x + 8, 200);
+      RGBColor gray;
+      gray.red = gray.green = gray.blue = static_cast<unsigned short>(0x2000 + (0xD000L * x) / canvas.right);
+      RGBForeColor(&gray);
+      PaintRect(&r);
+    }
+    ForeColor(blackColor);
+  }
+
+  struct Sample
+  {
+    const char *where;
+    short x;
+    short y;
+    short alpha; // source weight 0..255, -1 when not known
+    RGBColor ground;
+  };
+
+  void WriteRGB(std::FILE *file, const char *label, const RGBColor &c)
+  {
+    std::fprintf(file, " %s=%04x,%04x,%04x", label, c.red, c.green, c.blue);
+  }
+
+  void ReportSample(std::FILE *file, short depth, const Sample &s)
+  {
+    RGBColor result;
+    GetCPixel(s.x, s.y, &result);
+    std::fprintf(file, "SAMPLE depth=%d where=%s x=%d y=%d alpha=%d", depth, s.where, s.x, s.y, s.alpha);
+    WriteRGB(file, "ground", s.ground);
+    WriteRGB(file, "result", result);
+    if (s.alpha >= 0)
+    {
+      RGBColor expected;
+      expected.red = static_cast<unsigned short>((static_cast<unsigned long>(s.ground.red) * (255 - s.alpha)) / 255);
+      expected.green = static_cast<unsigned short>((static_cast<unsigned long>(s.ground.green) * (255 - s.alpha)) / 255);
+      expected.blue = static_cast<unsigned short>((static_cast<unsigned long>(s.ground.blue) * (255 - s.alpha)) / 255);
+      WriteRGB(file, "expected", expected);
+    }
+    std::fprintf(file, "\n");
+  }
+
+  short AlphaAt(const ShadowMask &m, short lx, short ly)
+  {
+    if (lx < 0 || ly < 0 || lx >= m.outer.right || ly >= m.outer.bottom)
+      return -1;
+    return m.alpha[static_cast<long>(ly) * m.outer.right + lx];
+  }
+
+  /** Decide the deep-mask polarity on a 32-bit scratch: white ground, black
+      source, mask left half black and right half white. */
+  bool ProbePolarity(std::FILE *file)
+  {
+    Rect r;
+    SetRect(&r, 0, 0, 16, 4);
+    GWorldPtr dst = 0, src = 0, mask = 0;
+    bool ok = NewGWorld(&dst, 32, &r, 0, 0, 0) == noErr && dst;
+    ok = ok && NewGWorld(&src, 32, &r, 0, 0, 0) == noErr && src;
+    ok = ok && (mask = NewGrayMask(r)) != 0;
+    char *base = 0;
+    long rowBytes = 0;
+    ok = ok && PixelsOf(dst, base, rowBytes) && PixelsOf(src, base, rowBytes) && PixelsOf(mask, base, rowBytes);
+    if (ok)
+    {
+      CGrafPtr savedPort;
+      GDHandle savedDevice;
+      GetGWorld(&savedPort, &savedDevice);
+      SetGWorld(src, 0);
+      ForeColor(blackColor);
+      PaintRect(&r);
+      SetGWorld(mask, 0);
+      BackColor(whiteColor);
+      EraseRect(&r);
+      Rect half;
+      SetRect(&half, 0, 0, 8, 4);
+      ForeColor(blackColor);
+      PaintRect(&half);
+      SetGWorld(dst, 0);
+      BackColor(whiteColor);
+      EraseRect(&r);
+      CopyDeepMask(BitsOf(src), BitsOf(mask), PortBits(), &r, &r, &r, srcCopy, 0);
+      const short err = QDError();
+      RGBColor underBlack, underWhite;
+      GetCPixel(2, 2, &underBlack);
+      GetCPixel(12, 2, &underWhite);
+      SetGWorld(savedPort, savedDevice);
+      gBlackIsSource = underBlack.red < underWhite.red;
+      std::fprintf(file, "POLARITY qderr=%d under_black_mask=%04x,%04x,%04x under_white_mask=%04x,%04x,%04x black_is_source=%d\n",
+                   err, underBlack.red, underBlack.green, underBlack.blue, underWhite.red, underWhite.green,
+                   underWhite.blue, gBlackIsSource ? 1 : 0);
+    }
+    else
+      std::fprintf(file, "POLARITY refused\n");
+    if (dst)
+      DisposeGWorld(dst);
+    if (src)
+      DisposeGWorld(src);
+    if (mask)
+      DisposeGWorld(mask);
+    return ok;
+  }
+
+  /** A horizontal ramp mask: white (left) to black (right), independent of polarity. */
+  GWorldPtr BuildRampMask()
+  {
+    Rect r;
+    SetRect(&r, 0, 0, kRampW, kRampH);
+    GWorldPtr mask = NewGrayMask(r);
+    char *base = 0;
+    long rowBytes = 0;
+    if (!mask || !PixelsOf(mask, base, rowBytes))
+    {
+      if (mask)
+        DisposeGWorld(mask);
+      return 0;
+    }
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(mask, 0);
+    unsigned char index[kRampW];
+    for (short x = 0; x < kRampW; ++x)
+    {
+      RGBColor gray;
+      gray.red = gray.green = gray.blue = static_cast<unsigned short>((255 - (x * 255L) / (kRampW - 1)) * 0x0101);
+      index[x] = static_cast<unsigned char>(Color2Index(&gray));
+    }
+    SetGWorld(savedPort, savedDevice);
+    for (short y = 0; y < kRampH; ++y)
+    {
+      unsigned char *row = reinterpret_cast<unsigned char *>(base) + y * rowBytes;
+      for (short x = 0; x < kRampW; ++x)
+        row[x] = index[x];
+    }
+    return mask;
   }
 
   unsigned long Elapsed(const UnsignedWide &before, const UnsignedWide &after)
@@ -404,161 +526,203 @@ namespace
     return after.lo - before.lo;
   }
 
-  void Snapshot(Ptr bytes)
-  {
-    BitMap shot;
-    shot.baseAddr = bytes;
-    shot.rowBytes = kWidth / 8;
-    SetRect(&shot.bounds, 0, 0, kWidth, kHeight);
-    Rect content;
-    SetRect(&content, 0, 0, kWidth, kHeight);
-    CopyBits(&qd.thePort->portBits, &shot, &content, &shot.bounds, srcCopy, 0);
-  }
-
-  struct TimedCase
-  {
-    const char *name;
-    ShapeKind kind;
-    short spread;
-  };
-
-  void TimeCase(std::FILE *file, const char *depthName, short depth, const TimedCase &c, const Rect &portRect)
+  void TimeComposite(std::FILE *file, short depth, const char *name, Method method, const ShadowMask &m,
+                     GWorldPtr source, const Rect &canvas)
   {
     UnsignedWide before, after;
-    CardCache card;
     Microseconds(&before);
-    const bool built = BuildCard(c.kind, 240, 160, c.spread, depth, card);
+    Composite(method, m, source, 8, 4, canvas);
     Microseconds(&after);
-    if (!built)
+    unsigned long total = Elapsed(before, after);
+    short reps = 1;
+    if (total < 250000UL)
     {
-      std::fprintf(file, "TIME depth=%s case=%s refused=build\n", depthName, c.name);
-      return;
+      Microseconds(&before);
+      for (short i = 0; i < 4; ++i)
+        Composite(method, m, source, 8, 4, canvas);
+      Microseconds(&after);
+      total += Elapsed(before, after);
+      reps = 5;
     }
-    const unsigned long build = Elapsed(before, after);
-    std::fprintf(file, "STAGES depth=%s case=%s fast_blur=%d mask_us=%lu expand_us=%lu blur_us=%lu gworld_us=%lu stencil_us=%lu body_us=%lu\n",
-                 depthName, c.name, gFastBlur ? 1 : 0, Elapsed(gMarks[0], gMarks[1]), Elapsed(gMarks[1], gMarks[2]),
-                 Elapsed(gMarks[2], gMarks[3]), Elapsed(gMarks[3], gMarks[4]), Elapsed(gMarks[4], gMarks[5]),
-                 Elapsed(gMarks[5], gMarks[6]));
-    const short atX = static_cast<short>(24 - card.body.left), atY = static_cast<short>(24 - card.body.top);
-    EraseRect(&portRect);
-    Microseconds(&before);
-    for (short i = 0; i < kReps; ++i)
-      RepaintStrips(card, atX, atY, portRect);
-    Microseconds(&after);
-    const unsigned long strips = Elapsed(before, after) / kReps;
-    Microseconds(&before);
-    for (short i = 0; i < kReps; ++i)
-      RepaintWhole(card, atX, atY);
-    Microseconds(&after);
-    const unsigned long whole = Elapsed(before, after) / kReps;
-    if (depth == 1)
-    {
-      // Strip tiling must reproduce the whole-card copy exactly.
-      const long size = static_cast<long>(kWidth / 8) * kHeight;
-      Ptr viaStrips = NewPtrClear(size);
-      Ptr viaWhole = NewPtrClear(size);
-      if (viaStrips && viaWhole)
-      {
-        EraseRect(&portRect);
-        RepaintStrips(card, atX, atY, portRect);
-        Snapshot(viaStrips);
-        EraseRect(&portRect);
-        RepaintWhole(card, atX, atY);
-        Snapshot(viaWhole);
-        long diff = 0;
-        for (long b = 0; b < size; ++b)
-          if (viaStrips[b] != viaWhole[b])
-            ++diff;
-        std::fprintf(file, "MATCH case=%s strips_vs_whole_diffbytes=%ld\n", c.name, diff);
-      }
-      if (viaStrips)
-        DisposePtr(viaStrips);
-      if (viaWhole)
-        DisposePtr(viaWhole);
-    }
-    std::fprintf(file, "TIME depth=%s case=%s outer=%dx%d build_us=%lu strips_us=%lu whole_us=%lu cache_bytes=%ld\n",
-                 depthName, c.name, card.outer.right, card.outer.bottom, build, strips, whole, card.bytes);
-    FreeCard(card);
+    std::fprintf(file, "TIME depth=%d case=%s reps=%d us=%lu outer=%dx%d qderr=%d\n", depth, name, reps, total / reps,
+                 m.outer.right, m.outer.bottom, QDError());
   }
 
-  void PlaceCard(ShapeKind kind, short spread, short depth, short bodyX, short bodyY, ConstStr255Param label,
-                 ConstStr255Param caption)
+  bool DumpCanvas(std::FILE *file, short depth, GWorldPtr canvas)
   {
-    CardCache card;
-    if (!BuildCard(kind, 120, 72, spread, depth, card))
-    {
-      MoveTo(bodyX, bodyY + 40);
-      DrawString("\pREFUSED");
-      return;
-    }
-    RepaintWhole(card, static_cast<short>(bodyX - card.body.left), static_cast<short>(bodyY - card.body.top));
-    MoveTo(bodyX + 12, bodyY + 40);
-    DrawString(label);
-    MoveTo(bodyX, static_cast<short>(bodyY + card.outer.bottom - card.body.top + 12));
-    DrawString(caption);
-    FreeCard(card);
-  }
-
-  void SetUpPort(const Rect &portRect)
-  {
-    PenNormal();
-    TextFont(0); // Chicago on the intended System 7 rig.
-    TextSize(12);
-    TextMode(srcOr);
-    ForeColor(blackColor);
-    BackColor(whiteColor);
-    ClipRect(&portRect);
-    EraseRect(&portRect);
-  }
-
-  bool WriteMono(std::FILE *file)
-  {
-    const short rowBytes = kWidth / 8;
-    BitMap shot;
-    shot.baseAddr = NewPtrClear(static_cast<long>(rowBytes) * kHeight);
-    if (!shot.baseAddr)
-      return false;
-    shot.rowBytes = rowBytes;
-    SetRect(&shot.bounds, 0, 0, kWidth, kHeight);
-    Rect content;
-    SetRect(&content, 0, 0, kWidth, kHeight);
-    // The Mac II frame buffer is NuBus memory; read it through QuickDraw.
-    CopyBits(&qd.thePort->portBits, &shot, &content, &shot.bounds, srcCopy, 0);
-    std::fprintf(file, "IMG1 %d %d\n", kWidth, kHeight);
-    const size_t bytes = static_cast<size_t>(rowBytes) * kHeight;
-    const bool ok = std::fwrite(shot.baseAddr, 1, bytes, file) == bytes;
-    DisposePtr(shot.baseAddr);
-    return ok;
-  }
-
-  bool WriteColor(std::FILE *file, GWorldPtr world)
-  {
-    PixMapHandle pixels = GetGWorldPixMap(world);
-    CTabHandle table = (**pixels).pmTable;
-    const short entries = static_cast<short>((**table).ctSize + 1);
-    std::fprintf(file, "IMG8 %d %d %d\n", kWidth, kColorHeight, entries);
-    bool ok = true;
-    for (short i = 0; i < entries && ok; ++i)
-    {
-      const RGBColor &rgb = (**table).ctTable[i].rgb;
-      unsigned char entry[6] = {static_cast<unsigned char>(rgb.red >> 8), static_cast<unsigned char>(rgb.red),
-                                static_cast<unsigned char>(rgb.green >> 8), static_cast<unsigned char>(rgb.green),
-                                static_cast<unsigned char>(rgb.blue >> 8), static_cast<unsigned char>(rgb.blue)};
-      ok = std::fwrite(entry, 1, 6, file) == 6;
-    }
+    PixMapHandle pixels = GetGWorldPixMap(canvas);
     const long rowBytes = (**pixels).rowBytes & 0x3FFF;
     const char *base = GetPixBaseAddr(pixels);
-    for (short row = 0; row < kColorHeight && ok; ++row)
-      ok = std::fwrite(base + row * rowBytes, 1, kWidth, file) == static_cast<size_t>(kWidth);
+    const long bytesPerRow = static_cast<long>(kCanvasW) * (depth / 8);
+    bool ok = true;
+    if (depth == 8)
+    {
+      CTabHandle table = (**pixels).pmTable;
+      const short entries = static_cast<short>((**table).ctSize + 1);
+      std::fprintf(file, "IMGD %d %d %d %d\n", depth, kCanvasW, kCanvasH, entries);
+      for (short i = 0; i < entries && ok; ++i)
+      {
+        const RGBColor &rgb = (**table).ctTable[i].rgb;
+        unsigned char entry[6] = {static_cast<unsigned char>(rgb.red >> 8), static_cast<unsigned char>(rgb.red),
+                                  static_cast<unsigned char>(rgb.green >> 8), static_cast<unsigned char>(rgb.green),
+                                  static_cast<unsigned char>(rgb.blue >> 8), static_cast<unsigned char>(rgb.blue)};
+        ok = std::fwrite(entry, 1, 6, file) == 6;
+      }
+    }
+    else
+      std::fprintf(file, "IMGD %d %d %d 0\n", depth, kCanvasW, kCanvasH);
+    for (short row = 0; row < kCanvasH && ok; ++row)
+      ok = std::fwrite(base + row * rowBytes, 1, static_cast<size_t>(bytesPerRow), file)
+           == static_cast<size_t>(bytesPerRow);
     return ok;
   }
 
-  const TimedCase kMonoCases[] = {{"round-s3", SHAPE_ROUND, 3},   {"round-s8", SHAPE_ROUND, 8},
-                                  {"round-s16", SHAPE_ROUND, 16}, {"square-s8", SHAPE_SQUARE, 8},
-                                  {"oval-s8", SHAPE_OVAL, 8},     {"bubble-s8", SHAPE_BUBBLE, 8}};
-  const TimedCase kColorCases[] = {{"round-s8-gray", SHAPE_ROUND, 8},
-                                   {"round-s16-gray", SHAPE_ROUND, 16},
-                                   {"bubble-s8-gray", SHAPE_BUBBLE, 8}};
+  /** One canvas depth: picture, samples, dump, then timings. */
+  bool RunDepth(std::FILE *file, short depth, ShadowMask &m8, ShadowMask &m16, GWorldPtr ramp)
+  {
+    Rect canvasRect;
+    SetRect(&canvasRect, 0, 0, kCanvasW, kCanvasH);
+    GWorldPtr canvas = 0;
+    if (NewGWorld(&canvas, depth, &canvasRect, 0, 0, 0) != noErr || !canvas)
+    {
+      std::fprintf(file, "CANVAS depth=%d refused\n", depth);
+      return false;
+    }
+    char *base = 0;
+    long rowBytes = 0;
+    GWorldPtr source = PixelsOf(canvas, base, rowBytes) ? NewBlackSource(depth, m16.outer) : 0;
+    if (!source)
+    {
+      std::fprintf(file, "CANVAS depth=%d unreadable-or-no-source\n", depth);
+      DisposeGWorld(canvas);
+      return false;
+    }
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(canvas, 0);
+    PenNormal();
+    TextFont(0);
+    TextSize(12);
+    TextMode(srcOr);
+    ClipRect(&canvasRect);
+    PaintGround(canvasRect);
+
+    const short at8X = 8, at16X = static_cast<short>(8 + m8.outer.right + 16), atY = 4;
+    Sample samples[16];
+    short count = 0;
+    struct CardAt
+    {
+      const ShadowMask *m;
+      short atX;
+      const char *right1;
+      const char *right2;
+      const char *bottom1;
+      const char *bottom2;
+    };
+    const CardAt cards[2] = {{&m8, at8X, "s8-right-near", "s8-right-out", "s8-bottom-dark", "s8-bottom-light"},
+                             {&m16, at16X, "s16-right-near", "s16-right-out", "s16-bottom-dark", "s16-bottom-light"}};
+    for (short c = 0; c < 2; ++c)
+    {
+      const ShadowMask &m = *cards[c].m;
+      const short lx[4] = {static_cast<short>(m.bodyBox.right + 1),
+                           static_cast<short>(m.bodyBox.right + m.spread.offset + 2),
+                           static_cast<short>(m.bodyBox.left + 60), static_cast<short>(m.bodyBox.left + 180)};
+      const short ly[4] = {static_cast<short>(m.bodyBox.top + 60), static_cast<short>(m.bodyBox.top + 60),
+                           static_cast<short>(m.bodyBox.bottom + 1), static_cast<short>(m.bodyBox.bottom + 1)};
+      const char *names[4] = {cards[c].right1, cards[c].right2, cards[c].bottom1, cards[c].bottom2};
+      for (short k = 0; k < 4; ++k)
+      {
+        Sample &s = samples[count++];
+        s.where = names[k];
+        s.x = static_cast<short>(cards[c].atX + lx[k]);
+        s.y = static_cast<short>(atY + ly[k]);
+        s.alpha = AlphaAt(m, lx[k], ly[k]);
+      }
+    }
+    // Row 2 controls: A blend 50%, B CopyDeepMask ramp, C CopyMask ramp.
+    const short aX = 10, bX = 190, cX = 370;
+    const short rampX[3] = {2, 80, 157};
+    const char *bNames[3] = {"B-deep-ramp-left", "B-deep-ramp-mid", "B-deep-ramp-right"};
+    const char *cNames[3] = {"C-mask-ramp-left", "C-mask-ramp-mid", "C-mask-ramp-right"};
+    for (short k = 0; k < 3; ++k)
+    {
+      Sample &a = samples[count++];
+      a.where = k == 0 ? "A-blend50-1" : (k == 1 ? "A-blend50-2" : "A-blend50-3");
+      a.x = static_cast<short>(aX + 20 + 60 * k);
+      a.y = kSampleY;
+      a.alpha = 128;
+    }
+    for (short k = 0; k < 3; ++k)
+    {
+      Sample &b = samples[count++];
+      b.where = bNames[k];
+      b.x = static_cast<short>(bX + rampX[k]);
+      b.y = kSampleY;
+      b.alpha = static_cast<short>((rampX[k] * 255L) / (kRampW - 1));
+    }
+    for (short k = 0; k < 2; ++k)
+    {
+      Sample &cs = samples[count++];
+      cs.where = cNames[k == 0 ? 1 : 2];
+      cs.x = static_cast<short>(cX + rampX[k == 0 ? 1 : 2]);
+      cs.y = kSampleY;
+      cs.alpha = static_cast<short>((rampX[k == 0 ? 1 : 2] * 255L) / (kRampW - 1));
+    }
+    for (short i = 0; i < count; ++i)
+      GetCPixel(samples[i].x, samples[i].y, &samples[i].ground);
+
+    Composite(DEEP_WHOLE, m8, source, at8X, atY, canvasRect);
+    std::fprintf(file, "QDERR depth=%d after=deep-s8 err=%d\n", depth, QDError());
+    Composite(DEEP_WHOLE, m16, source, at16X, atY, canvasRect);
+    DrawBody(m8, at8X, atY);
+    DrawBody(m16, at16X, atY);
+    {
+      Rect sr, dr;
+      SetRect(&sr, 0, 0, kRampW, kRampH);
+      RGBColor half;
+      half.red = half.green = half.blue = 0x8000;
+      OpColor(&half);
+      SetRect(&dr, aX, kRowTop, aX + kRampW, kRowTop + kRampH);
+      CopyBits(BitsOf(source), PortBits(), &sr, &dr, blend, 0);
+      std::fprintf(file, "QDERR depth=%d after=blend err=%d\n", depth, QDError());
+      SetRect(&dr, bX, kRowTop, bX + kRampW, kRowTop + kRampH);
+      CopyDeepMask(BitsOf(source), BitsOf(ramp), PortBits(), &sr, &sr, &dr, srcCopy, 0);
+      std::fprintf(file, "QDERR depth=%d after=deep-ramp err=%d\n", depth, QDError());
+      SetRect(&dr, cX, kRowTop, cX + kRampW, kRowTop + kRampH);
+      CopyMask(BitsOf(source), BitsOf(ramp), PortBits(), &sr, &sr, &dr);
+      std::fprintf(file, "QDERR depth=%d after=mask-ramp err=%d\n", depth, QDError());
+    }
+    for (short i = 0; i < count; ++i)
+      ReportSample(file, depth, samples[i]);
+    ForeColor(blackColor);
+    MoveTo(m8.bodyBox.left + at8X + 12, atY + m8.bodyBox.top + 40);
+    DrawString("\ps8 CopyDeepMask");
+    MoveTo(m16.bodyBox.left + at16X + 12, atY + m16.bodyBox.top + 40);
+    DrawString("\ps16 CopyDeepMask");
+    MoveTo(aX + 4, kRowTop + 14);
+    DrawString("\pA blend 50%");
+    MoveTo(bX + 4, kRowTop + 14);
+    DrawString("\pB CopyDeepMask ramp");
+    MoveTo(cX + 4, kRowTop + 14);
+    DrawString("\pC CopyMask ramp");
+    SetGWorld(savedPort, savedDevice);
+    bool ok = DumpCanvas(file, depth, canvas);
+
+    SetGWorld(canvas, 0);
+    TimeComposite(file, depth, "plain-copy-s8", PLAIN_COPY, m8, source, canvasRect);
+    TimeComposite(file, depth, "deep-whole-s8", DEEP_WHOLE, m8, source, canvasRect);
+    TimeComposite(file, depth, "deep-strips-s8", DEEP_STRIPS, m8, source, canvasRect);
+    TimeComposite(file, depth, "plain-copy-s16", PLAIN_COPY, m16, source, canvasRect);
+    TimeComposite(file, depth, "deep-whole-s16", DEEP_WHOLE, m16, source, canvasRect);
+    TimeComposite(file, depth, "deep-strips-s16", DEEP_STRIPS, m16, source, canvasRect);
+    TimeComposite(file, depth, "copymask-whole-s16", MASK_WHOLE, m16, source, canvasRect);
+    TimeComposite(file, depth, "blend50-whole-s16", BLEND_WHOLE, m16, source, canvasRect);
+    SetGWorld(savedPort, savedDevice);
+    DisposeGWorld(source);
+    DisposeGWorld(canvas);
+    return ok;
+  }
 } // namespace
 
 int main()
@@ -572,8 +736,8 @@ int main()
   InitCursor();
 
   Rect bounds;
-  SetRect(&bounds, 0, 40, kWidth, 40 + kHeight);
-  WindowPtr window = NewWindow(0, &bounds, "\pCard shadow probe 3", true, plainDBox,
+  SetRect(&bounds, 0, 40, 200, 140);
+  WindowPtr window = NewWindow(0, &bounds, "\pCard shadow probe 4", true, plainDBox,
                                reinterpret_cast<WindowPtr>(-1L), false, 0);
   if (!window)
   {
@@ -582,10 +746,6 @@ int main()
   }
   SetPort(window);
   HideCursor();
-  BackPat(&qd.white);
-  Rect windowRect;
-  SetRect(&windowRect, 0, 0, kWidth, kHeight);
-  SetUpPort(windowRect);
 
   loka::platform::file::FileHandle destination;
   bool ok = loka::platform::file::ResolveApplicationSidecar(
@@ -598,70 +758,52 @@ int main()
     ExitToShell();
     return 1;
   }
-  std::fprintf(file, "CARDPROBE3\n");
-
-  // 1-bit: stencil timings on the window, then the picture page.
-  for (unsigned i = 0; i < sizeof(kMonoCases) / sizeof(kMonoCases[0]); ++i)
-    TimeCase(file, "1-window", 1, kMonoCases[i], windowRect);
-  gFastBlur = true;
+  std::fprintf(file, "CARDPROBE4\n");
+  gGrays = GetCTable(40);
+  if (gGrays)
   {
-    const TimedCase fastCases[] = {{"round-s8-fastblur", SHAPE_ROUND, 8}, {"round-s16-fastblur", SHAPE_ROUND, 16},
-                                   {"bubble-s8-fastblur", SHAPE_BUBBLE, 8}};
-    for (unsigned i = 0; i < sizeof(fastCases) / sizeof(fastCases[0]); ++i)
-      TimeCase(file, "1-window", 1, fastCases[i], windowRect);
-  }
-  gFastBlur = false;
-  SetUpPort(windowRect);
-  PlaceCard(SHAPE_ROUND, 3, 1, 20, 24, "\pRound", "\pA round s3");
-  PlaceCard(SHAPE_ROUND, 8, 1, 185, 24, "\pRound", "\pB round s8");
-  PlaceCard(SHAPE_ROUND, 16, 1, 350, 24, "\pRound", "\pC round s16");
-  PlaceCard(SHAPE_SQUARE, 8, 1, 20, 184, "\pSquare", "\pD square s8");
-  PlaceCard(SHAPE_OVAL, 8, 1, 185, 184, "\pOval", "\pE oval s8");
-  PlaceCard(SHAPE_BUBBLE, 8, 1, 350, 184, "\pBubble", "\pF bubble s8");
-  ok = WriteMono(file);
-
-  // 8-bit offscreen: grays onto white, no dither.
-  GWorldPtr world = 0;
-  Rect worldBounds;
-  SetRect(&worldBounds, 0, 0, kWidth, kColorHeight);
-  const QDErr err = NewGWorld(&world, 8, &worldBounds, 0, 0, 0);
-  if (err != noErr || !world)
-  {
-    std::fprintf(file, "GWORLD-REFUSED err=%d\n", static_cast<int>(err));
+    const ColorSpec &mid = (**gGrays).ctTable[128];
+    std::fprintf(file, "GRAYS ctSize=%d entry0=%04x entry128=%04x,%04x,%04x entryLast=%04x\n", (**gGrays).ctSize,
+                 (**gGrays).ctTable[0].rgb.red, mid.rgb.red, mid.rgb.green, mid.rgb.blue,
+                 (**gGrays).ctTable[(**gGrays).ctSize].rgb.red);
   }
   else
+    std::fprintf(file, "GRAYS refused\n");
+
+  ok = gGrays && ProbePolarity(file);
+  ShadowMask m8(8), m16(16);
+  GWorldPtr ramp = 0;
+  if (ok)
   {
-    char *base = 0;
-    long rowBytes = 0;
-    if (!PixelsOf(world, base, rowBytes))
-    {
-      std::fprintf(file, "GWORLD-UNREADABLE\n");
-    }
-    else
-    {
-      CGrafPtr savedPort;
-      GDHandle savedDevice;
-      GetGWorld(&savedPort, &savedDevice);
-      SetGWorld(world, 0);
-      for (short g = 0; g < 256; ++g)
-      {
-        RGBColor gray;
-        gray.red = gray.green = gray.blue = static_cast<unsigned short>(g * 0x0101);
-        gGrayIndex[g] = static_cast<unsigned char>(Color2Index(&gray));
-      }
-      SetUpPort(worldBounds);
-      for (unsigned i = 0; i < sizeof(kColorCases) / sizeof(kColorCases[0]); ++i)
-        TimeCase(file, "8-gworld", 8, kColorCases[i], worldBounds);
-      SetUpPort(worldBounds);
-      PlaceCard(SHAPE_ROUND, 8, 8, 20, 24, "\pRound", "\pG round s8 gray");
-      PlaceCard(SHAPE_ROUND, 16, 8, 185, 24, "\pRound", "\pH round s16 gray");
-      PlaceCard(SHAPE_BUBBLE, 8, 8, 350, 24, "\pBubble", "\pI bubble s8 gray");
-      SetGWorld(savedPort, savedDevice);
-      if (!WriteColor(file, world))
-        ok = false;
-    }
-    DisposeGWorld(world);
+    UnsignedWide before, after;
+    Microseconds(&before);
+    ok = BuildMask(m8);
+    Microseconds(&after);
+    std::fprintf(file, "BUILD case=mask-s8 ok=%d us=%lu outer=%dx%d\n", ok ? 1 : 0, Elapsed(before, after),
+                 m8.outer.right, m8.outer.bottom);
+    Microseconds(&before);
+    ok = ok && BuildMask(m16);
+    Microseconds(&after);
+    std::fprintf(file, "BUILD case=mask-s16 ok=%d us=%lu outer=%dx%d\n", ok ? 1 : 0, Elapsed(before, after),
+                 m16.outer.right, m16.outer.bottom);
+    ramp = ok ? BuildRampMask() : 0;
+    ok = ramp != 0;
   }
+  if (ok)
+  {
+    const short depths[3] = {32, 16, 8};
+    for (short i = 0; i < 3; ++i)
+      if (!RunDepth(file, depths[i], m8, m16, ramp))
+        ok = false;
+  }
+  else
+    std::fprintf(file, "SETUP refused\n");
+  if (ramp)
+    DisposeGWorld(ramp);
+  FreeMask(m8);
+  FreeMask(m16);
+  if (gGrays)
+    DisposeCTable(gGrays);
   std::fprintf(file, "END\n");
   if (!loka::platform::file::FlushWrite(file, destination))
     ok = false;
