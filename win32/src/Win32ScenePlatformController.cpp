@@ -1421,6 +1421,7 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
     // that poisoned value.
     return state.y;
   }
+  // Deliberate macOS twin: resolve into a local copy before dispatching any layout branch.
   LayoutState local = state;
   local.spacing = loka::app::layout::resolveLayoutGap(
       node, state.spacing, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap);
