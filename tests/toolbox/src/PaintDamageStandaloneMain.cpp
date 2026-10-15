@@ -62,6 +62,15 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
 
+  // Mirrors the root in apple/toolbox/src/ToolboxRender.cpp; change these
+  // together with that root. Fixture sizes and local ink offsets are separate.
+  enum { kRootX = 12, kRootY = 12, kRootGap = 8,
+         kScrollSurfaceY = kRootY + 48 + kRootGap - 32,
+         kScrollTextY = kScrollSurfaceY + 50 + kRootGap + 50 + kRootGap,
+         kBoundsViewportY = kRootY + 40 + kRootGap,
+         kCellThirdY = kRootY + 2 * (24 + kRootGap),
+         kOverflowCellX = kRootX + 42 + kRootGap };
+
   /** A StateTrackerGuard write inside the idle turn commits at the turn's
       settle (#1080). An arm that reads the result in the same turn settles
       first, as the turn's tail would. */
@@ -321,11 +330,11 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      // Top-origin layout puts the EditText at y=72 with height 20; the
-      // viewport [24,86) leaves 14 px of chrome visible and clips 6 px.
+      // The spacer plus inter-seat gap is 48: the 62px viewport leaves
+      // 14 px of the 20px EditText chrome visible and clips 6 px.
       composition.declare(Box().size(180, 62)
                           << (ScrollView()
-                              << (Column() << Box().size(150, 48)
+                              << (Column() << Box().size(150, 48 - kRootGap)
                                   << EditText(this->text_).TEST_ID("PaintDamage.Edit"))));
     }
   private:
@@ -749,12 +758,13 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
+      // Keep six pixels of Text inside the viewport after adding its gap.
       composition.declare(Column()
                           << (Box().size(180, 40)
                               << RectSurface(this->model_.state()).size(60, 40))
                           << (Box().size(180, 54)
                               << (ScrollView()
-                                  << (Column() << Box().size(150, 48)
+                                  << (Column() << Box().size(150, 48 - kRootGap)
                                       << Text("HHHH").TEST_ID("PaintDamage.ClippedText")))));
     }
   private:
@@ -772,8 +782,9 @@ namespace
     explicit DrawerDamageNode(const Props &props) : StdCompositionBoundaryNodeBase<Props>(props) {}
     virtual void composeNode(NodeComposition &composition)
     {
+      // Preserve 14 visible pixels of the third Cell across two seat gaps.
       if (Kind == CELL_VIEWPORT)
-        composition.declare(Row() << (Box().size(180, 62)
+        composition.declare(Row() << (Box().size(180, 62 + 2 * kRootGap)
                             << (ScrollView().TEST_ID("Drawer.Viewport")
                                 << (Column() << (Box().size(100, 24) << loka::app::Cell("One"))
                                     << (Box().size(100, 24) << loka::app::Cell("Two"))
@@ -794,13 +805,13 @@ namespace
     PopupRow() : pixels_() {}
     void capture()
     {
-      for (short x = 12; x < 156; ++x)
-        this->pixels_[x - 12] = GetPixel(x, 31) != 0;
+      for (short x = kRootX; x < kRootX + 144; ++x)
+        this->pixels_[x - kRootX] = GetPixel(x, kRootY + 7) != 0;
     }
     bool matches() const
     {
-      for (short x = 12; x < 156; ++x)
-        if (this->pixels_[x - 12] != (GetPixel(x, 31) != 0))
+      for (short x = kRootX; x < kRootX + 144; ++x)
+        if (this->pixels_[x - kRootX] != (GetPixel(x, kRootY + 7) != 0))
           return false;
       return true;
     }
@@ -1448,20 +1459,20 @@ namespace
         }
         if (HasViewport)
         {
-          // Root y=24, leading space=48, initial offset=32: surface y=40.
-          // Text follows both 50px surfaces at y=140. Find real sibling ink.
+          // Include the gap after the spacer and between/after the surfaces.
+          // The viewport translates all content by the initial offset of 32.
           bool foundText = false;
-          for (short y = 140; y < 156 && !foundText; ++y)
-            for (short x = 12; x < 180 && !foundText; ++x)
+          for (short y = kScrollTextY; y < kScrollTextY + 16 && !foundText; ++y)
+            for (short x = kRootX; x < kRootX + 168 && !foundText; ++x)
               if (GetPixel(x, y))
               {
                 self->scrollTextMarker_.h = x;
                 self->scrollTextMarker_.v = y;
                 foundText = true;
               }
-          const bool scrolled = source.firstDamage.y == 40;
-          const bool oldBlack = GetPixel(20, 48) != 0;
-          const bool newWhite = GetPixel(32, 48) == 0;
+          const bool scrolled = source.firstDamage.y == kScrollSurfaceY;
+          const bool oldBlack = GetPixel(kRootX + 8, kScrollSurfaceY + 8) != 0;
+          const bool newWhite = GetPixel(kRootX + 20, kScrollSurfaceY + 8) == 0;
           self->recordArm("viewport-scroll-replay-setup",
                           scrolled && foundText && oldBlack && newWhite, WRITE);
         }
@@ -1481,8 +1492,8 @@ namespace
         if (HasViewport)
         {
           const bool textPreserved = GetPixel(self->scrollTextMarker_.h, self->scrollTextMarker_.v) != 0;
-          const bool oldErased = GetPixel(20, 48) == 0;
-          const bool newPainted = GetPixel(32, 48) != 0;
+          const bool oldErased = GetPixel(kRootX + 8, kScrollSurfaceY + 8) == 0;
+          const bool newPainted = GetPixel(kRootX + 20, kScrollSurfaceY + 8) != 0;
           std::fprintf(self->log_, "scrolled_text_preserved=%d old_erased=%d new_painted=%d\r",
                        textPreserved ? 1 : 0, oldErased ? 1 : 0, newPainted ? 1 : 0);
           self->recordArm("viewport-scroll-replay",
@@ -1527,7 +1538,7 @@ namespace
       }
       if (self->phase_ == COMPOSITED_WRITE)
       {
-        // This fixture's viewport starts at the root seat y = 24. Require a
+        // This fixture's viewport starts at the root seat kRootY. Require a
         // complete recorded Text placement and visible ink inside that seat.
         TextNode *text = 0;
         loka::dsl::FlowError error;
@@ -1537,17 +1548,17 @@ namespace
         const PaintAnswer answer = text && text->getContext()
             ? static_cast<NativeNodeContext *>(text->getContext())->queryPaintDamage(query)
             : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-        const bool placedInside = answer.kind == PAINT_ANSWER_EXACT && answer.damage.y >= 24;
+        const bool placedInside = answer.kind == PAINT_ANSWER_EXACT && answer.damage.y >= kRootY;
         GrafPtr previousPort;
         GetPort(&previousPort);
         SetPort(native->window());
         bool above = false;
         bool inside = false;
-        for (short y = 12; y < 38; ++y)
-          for (short x = 12; x < 70; ++x)
+        for (short y = kRootY - 12; y < kRootY + 14; ++y)
+          for (short x = kRootX; x < kRootX + 58; ++x)
             if (GetPixel(x, y))
             {
-              if (y < 24)
+              if (y < kRootY)
                 above = true;
               else
                 inside = true;
@@ -1574,13 +1585,14 @@ namespace
       // The ZStack is not classified composited by the Boundary, so the write
       // is delivered exactly; renderDirty's ZStack branch re-renders the dirty
       // rect under a clip so the overlapping Text keeps its ink. Sample the
-      // Text ink right of the moved sprite (sprite now spans x 28-40 at y 52-64).
+      // Text ink right of the moved sprite; the ZStack follows a 16px
+      // Text seat and one gap.
       GrafPtr zPort;
       GetPort(&zPort);
       SetPort(native->window());
       bool textInk = false;
-      for (short y = 50; y < 62; ++y)
-        for (short x = 44; x < 58; ++x)
+      for (short y = kRootY + 16 + kRootGap + 2; y < kRootY + 16 + kRootGap + 14; ++y)
+        for (short x = kRootX + 32; x < kRootX + 46; ++x)
           textInk = textInk || GetPixel(x, y) != 0;
       SetPort(zPort);
       std::fprintf(self->log_, "zstack_gate=%d broad_requests=%d rect_requests=%d text_ink=%d\r", gate ? 1 : 0, broad, rects, textInk ? 1 : 0);
@@ -1602,18 +1614,18 @@ namespace
       GrafPtr previousPort;
       GetPort(&previousPort);
       SetPort(native->window());
-      // The root layout starts at (12, 24). Both samples lie in the sprite's
+      // Both root-relative samples lie in the sprite's
       // row; only the first lies inside the 60 x 40 surface.
-      const bool insideBlack = GetPixel(12 + 56, 24 + 36) != 0;
-      const bool outsideWhite = GetPixel(12 + 64, 24 + 36) == 0;
-      // The second seat starts at y=64: its viewport ends at 118, while
-      // Text starts at 112 with baseline 124. H has ink on both sampled rows.
+      const bool insideBlack = GetPixel(kRootX + 56, kRootY + 36) != 0;
+      const bool outsideWhite = GetPixel(kRootX + 64, kRootY + 36) == 0;
+      // The second seat follows the 40px Box and one gap. Text starts
+      // 48px into its 54px viewport; H has ink across the clip edge.
       bool textInsideBlack = false;
       bool textOutsideWhite = true;
-      for (short x = 12; x < 60; ++x)
+      for (short x = kRootX; x < kRootX + 48; ++x)
       {
-        textInsideBlack = GetPixel(x, 117) != 0 || textInsideBlack;
-        textOutsideWhite = GetPixel(x, 119) == 0 && textOutsideWhite;
+        textInsideBlack = GetPixel(x, kBoundsViewportY + 53) != 0 || textInsideBlack;
+        textOutsideWhite = GetPixel(x, kBoundsViewportY + 55) == 0 && textOutsideWhite;
       }
       SetPort(previousPort);
       TextNode *text = 0;
@@ -1624,7 +1636,7 @@ namespace
       const PaintAnswer answer = text && text->getContext()
           ? static_cast<NativeNodeContext *>(text->getContext())->queryPaintDamage(query)
           : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-      const bool clippedHistory = answer.kind == PAINT_ANSWER_EXACT && answer.damage.y == 112;
+      const bool clippedHistory = answer.kind == PAINT_ANSWER_EXACT && answer.damage.y == kBoundsViewportY + 48;
       std::fprintf(self->log_, "text_inside_black=%d outside_white=%d clipped_history=%d\r",
                    textInsideBlack ? 1 : 0, textOutsideWhite ? 1 : 0, clippedHistory ? 1 : 0);
       self->recordArm("text-clipped-to-viewport",
@@ -1674,16 +1686,17 @@ namespace
         // drawer's captured projection and clipped hit rows remain intact.
         controller->destroyViewportScrollBarControl(viewport, viewport->nativeLifetimeHint());
         Rect damage;
-        SetRect(&damage, 12, cell ? 72 : 24, cell ? 112 : 156, cell ? 96 : 44);
+        SetRect(&damage, kRootX, cell ? kCellThirdY : kRootY,
+                kRootX + (cell ? 100 : 144), cell ? kCellThirdY + 24 : kRootY + 20);
         if (!cell)
           self->popupRow_.capture();
-        bool ink = cell ? GetPixel(12, 80) != 0 && GetPixel(12, 90) == 0
-                        : GetPixel(12, 31) != 0;
+        bool ink = cell ? GetPixel(kRootX, kCellThirdY + 8) != 0 && GetPixel(kRootX, kCellThirdY + 18) == 0
+                        : GetPixel(kRootX, kRootY + 7) != 0;
         if (!cell)
         {
           bool labelInk = false;
-          for (short x = 16; x < 55; ++x)
-            labelInk = labelInk || GetPixel(x, 31) != 0;
+          for (short x = kRootX + 4; x < kRootX + 43; ++x)
+            labelInk = labelInk || GetPixel(x, kRootY + 7) != 0;
           ink = ink && labelInk;
         }
         self->initial_ = controller->debugStatsForTesting();
@@ -1700,14 +1713,14 @@ namespace
         const bool replayed = stats.totalRenderCalls == self->initial_.totalRenderCalls
                               && stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
                               && stats.windowFlushDirtyCount > self->initial_.windowFlushDirtyCount;
-        bool pass = cell ? GetPixel(12, 80) != 0 && GetPixel(12, 90) == 0
+        bool pass = cell ? GetPixel(kRootX, kCellThirdY + 8) != 0 && GetPixel(kRootX, kCellThirdY + 18) == 0
                          : self->popupRow_.matches();
-        // The projection clip ends at x=108; the 16px scrollbar only
+        // The projection clip ends at root x + 96; the 16px scrollbar only
         // reduces the child layout width, not the viewport clip.
         // The retired scrollbar no longer contributes native ink here.
         if (!cell)
-          for (short y = 24; y < 42; ++y)
-            for (short x = 108; x < 156; ++x)
+          for (short y = kRootY; y < kRootY + 18; ++y)
+            for (short x = kRootX + 96; x < kRootX + 144; ++x)
               pass = pass && GetPixel(x, y) == 0;
         SetPort(previousPort);
         std::fprintf(self->log_, "drawer_dirty_replayed=%d pixels_match=%d\r", replayed ? 1 : 0, pass ? 1 : 0);
@@ -1719,7 +1732,7 @@ namespace
       {
         // A Cell-only registry must reach the Cell replay loop.
         Rect damage;
-        SetRect(&damage, 60, 24, 68, 48);
+        SetRect(&damage, kOverflowCellX, kRootY, kOverflowCellX + 8, kRootY + 24);
         self->initial_ = controller->debugStatsForTesting();
         native->requestInvalidateRect(damage);
         self->phase_ = OVERFLOW_CHECK;
@@ -1730,15 +1743,15 @@ namespace
       self->recordArm("cell-only-dirty-replay",
                       stats.totalRenderCalls == self->initial_.totalRenderCalls
                       && stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls, OVERFLOW_CHECK);
-      // The narrow Cell is [60,68) x [24,48). Its centered seven-W label
+      // The narrow Cell follows the 42px Box and one gap. Its seven-W label
       // is wider than the box in the same font used by the production drawer.
       const unsigned char label[] = {7, 'W', 'W', 'W', 'W', 'W', 'W', 'W'};
       bool outsideWhite = true;
-      for (short y = 25; y < 47; ++y)
-        for (short x = 12; x < 120; ++x)
-          if (x < 60 || x >= 68)
+      for (short y = kRootY + 1; y < kRootY + 23; ++y)
+        for (short x = kRootX; x < kRootX + 108; ++x)
+          if (x < kOverflowCellX || x >= kOverflowCellX + 8)
             outsideWhite = outsideWhite && GetPixel(x, y) == 0;
-      const bool setup = StringWidth(label) > 8 && GetPixel(60, 24) != 0;
+      const bool setup = StringWidth(label) > 8 && GetPixel(kOverflowCellX, kRootY) != 0;
       SetPort(previousPort);
       self->recordArm("cell-ink-clipped-to-rect", setup && outsideWhite, IMAGE_SHOW);
     }
@@ -2435,8 +2448,8 @@ namespace
         // current value and exact answer are the pin.
         self->recordArm("column-scroll-reveals-current-text",
                         changed.kind == PAINT_ANSWER_EXACT && changed.damage.width > 0
-                        && changed.damage.height > 0 && changed.damage.y >= 24
-                        && changed.damage.y + changed.damage.height <= 134, OFFSCREEN_REVEALED_WRITE_CHECK);
+                        && changed.damage.height > 0 && changed.damage.y >= kRootY
+                        && changed.damage.y + changed.damage.height <= kRootY + 110, OFFSCREEN_REVEALED_WRITE_CHECK);
       }
       else if (self->phase_ == OFFSCREEN_REVEALED_WRITE_CHECK)
       {
