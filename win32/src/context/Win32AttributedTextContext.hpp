@@ -17,7 +17,6 @@ public:
   static void *operator new(std::size_t) throw();
   static void operator delete(void *) throw();
   void readLifecycleFactOnAttach();
-  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact);
   virtual void onPropsApplied();
   virtual void onTextEnvironmentChanged();
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);
@@ -26,6 +25,9 @@ public:
   {
     return this->hwnd();
   }
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact);
 
 private:
   Win32TextEnvironment::Subscription textEnvironmentSubscription_;

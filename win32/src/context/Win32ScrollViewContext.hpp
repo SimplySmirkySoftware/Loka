@@ -24,8 +24,6 @@ public:
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
 
   void readLifecycleFactOnAttach();
-  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous,
-                            loka::app::scene::NodeLifecycleFact next);
 
   bool isValid() const;
   void relayout(int x, int y, int width, int height);
@@ -37,6 +35,9 @@ public:
   /** Routes a root-window wheel message to its nearest viewport at the
       message's screen position; refuses targets outside that root. */
   static bool forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class Win32InputDoor;

@@ -332,6 +332,8 @@ namespace
                                  fixture.node, EditorAccess::key(*fixture.context))
     {
     }
+
+  protected:
     virtual void onNativeFact(NodeLifecycleFact previous, NodeLifecycleFact next)
     {
       const bool borrowed = this->controller()->borrowPhase().open();

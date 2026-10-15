@@ -31,8 +31,6 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous,
-                            loka::app::scene::NodeLifecycleFact next);
 
   virtual void onPropsApplied();
   void relayout(int x, int y, int width, int height);
@@ -46,6 +44,9 @@ public:
   {
     return this->hwnd() != 0;
   }
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   void applyAttachedPresentation();
