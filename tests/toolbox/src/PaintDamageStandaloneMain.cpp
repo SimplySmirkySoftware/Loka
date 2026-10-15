@@ -2860,6 +2860,7 @@ namespace
         const bool madeReference = CardPixels::reference(frame);
         CardPixels::capture(frame, reference);
         const int width = frame.right - frame.left, height = frame.bottom - frame.top;
+        const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
         bool seatClear = madeReference;
         for (int y = 3; y < height - 6; ++y)
           for (int x = 3; x < width - 6; ++x)
@@ -2871,14 +2872,14 @@ namespace
         card.draw();
         CardPixels::capture(frame, actual);
         this->recordArm(size ? "card-large-bands-equal-whole" : "card-minimum-bands-equal-whole",
-                        std::memcmp(reference, actual, width * height) == 0,
+                        std::memcmp(reference, actual, pixelCount) == 0,
                         COMPLETE);
         FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
         CardPixels::capture(frame, ground);
         card.draw();
         CardPixels::capture(frame, actual);
         bool transparent = true;
-        for (int i = 0; i < width * height; ++i)
+        for (std::size_t i = 0; i < pixelCount; ++i)
           transparent = transparent && actual[i] == (ground[i] || reference[i]);
         this->recordArm(
             size ? "card-large-transparent-ground" : "card-minimum-transparent-ground", transparent, COMPLETE);
@@ -2894,7 +2895,7 @@ namespace
         }
         CardPixels::capture(frame, ground);
         this->recordArm(size ? "card-large-partial-no-seam" : "card-minimum-partial-no-seam",
-                        std::memcmp(actual, ground, width * height) == 0,
+                        std::memcmp(actual, ground, pixelCount) == 0,
                         COMPLETE);
         // Broad layout-bearing replay reconstructs the ground before rendering the new placement.
         Rect narrow = frame;
@@ -2905,13 +2906,13 @@ namespace
         card.draw();
         CardPixels::capture(frame, actual);
         this->recordArm(size ? "card-large-disabled-no-stale-ink" : "card-minimum-disabled-no-stale-ink",
-                        std::memcmp(actual, ground, width * height) == 0,
+                        std::memcmp(actual, ground, pixelCount) == 0,
                         COMPLETE);
         card.layout(frame);
         card.draw();
         CardPixels::capture(frame, actual);
         bool restored = true;
-        for (int i = 0; i < width * height; ++i)
+        for (std::size_t i = 0; i < pixelCount; ++i)
           restored = restored && actual[i] == (ground[i] || reference[i]);
         this->recordArm(size ? "card-large-reenabled" : "card-minimum-reenabled", restored, COMPLETE);
       }
