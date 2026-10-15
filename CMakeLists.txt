@@ -606,6 +606,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   # Production QuickDraw projection against a deterministic host OS fixture.
   add_executable(LokaToolboxAttributedTextTests
     apple/toolbox/src/context/ToolboxRibbonGroupEdgeContext.cpp
+    apple/toolbox/src/context/ToolboxCardBandContext.cpp
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
     tests/toolbox/host/ToolboxHost.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp

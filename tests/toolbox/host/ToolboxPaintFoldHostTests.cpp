@@ -1,4 +1,6 @@
 #include "app/nodes/controls/Card.hpp"
+#include "context/ToolboxCardBandContext.hpp"
+#include "support/LifecycleFactTestAccess.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "ToolboxPaintGradient.hpp"
 #include "ToolboxDirtyReplay.hpp"
@@ -97,11 +99,6 @@ void Run(bool statusLast, bool partialNeighbour = false)
   RibbonGroupEdgeNode *edge = root->asNestable()->childrenHead()->asNestable()->childrenHead()->asRibbonGroupEdgeNode();
   LOKA_VERIFY(edge != 0);
   LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
-  CardBandNode refusedBand((CardBandProps()));
-  IPlatformNodeHandler *refusal = controller.nodeHandlerRegistry_.find(&refusedBand);
-  LOKA_VERIFY(refusal != 0);
-  LOKA_VERIFY(refusal->ensureContext(&refusedBand, &controller, Seat(10, 20, 30)) == 0);
-  LOKA_VERIFY(refusedBand.getContext() == 0);
   LayoutState edgeSeat = Seat(20, 65, 1);
   IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(edge);
   LOKA_VERIFY(handler != 0);
@@ -328,6 +325,125 @@ void GradientPins()
     }
   }
 }
+void CardPins()
+{
+  ToolboxWindow window;
+  ToolboxScenePlatformController controller(&window);
+  LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+  CardBandNode node((CardBandProps()));
+  IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(&node);
+  LOKA_VERIFY(handler != 0);
+  LayoutState seat = Seat(10, 20, 34);
+  seat.height = 3;
+  ToolboxCardBandContext *context =
+      static_cast<ToolboxCardBandContext *>(handler->ensureContext(&node, &controller, seat));
+  LOKA_VERIFY(context != 0 && node.getContext() == context);
+  LOKA_VERIFY(controller.compositionReplay.required());
+  LOKA_VERIFY(handler->ensureContext(&node, &controller, seat) == context);
+  context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+  LOKA_VERIFY(context->layout(&controller, seat) == 34 && seat.y == 23);
+  const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+  PaintAnswer answer = context->queryPaintDamage(query);
+  LOKA_VERIFY(answer.kind == PAINT_ANSWER_EXACT && answer.damage.x == 10 && answer.damage.y == 20
+              && answer.damage.width == 34 && answer.damage.height == 3);
+  const PaintQuery pending = {ToolboxPaintScope(), PLACEMENT_PENDING};
+  const PaintQuery foreign = {PaintScope(), PLACEMENT_ELIGIBLE};
+  LOKA_VERIFY(context->queryPaintDamage(pending).kind == PAINT_ANSWER_REFUSED);
+  LOKA_VERIFY(context->queryPaintDamage(foreign).kind == PAINT_ANSWER_REFUSED);
+  ToolboxSceneDebugStats cardStats;
+  ToolboxPaintAnswerSource cardSource(cardStats);
+  PaintAnswer collected;
+  LOKA_VERIFY(cardSource.queryPaintAnswer(&node, context, query, collected));
+  LOKA_VERIFY(collected.kind == PAINT_ANSWER_EXACT && collected.damage.width == 34);
+
+  // Real frame (10,20)-(50,60), in enum order TOP, LEFT, RIGHT, BOTTOM.
+  const Rect bands[] = {{20, 10, 23, 44}, {23, 10, 60, 13}, {20, 44, 54, 50}, {54, 13, 60, 50}};
+  const Rect bodies[] = {{20, 10, 32, 47}, {20, 10, 57, 22}, {20, 35, 57, 47}, {45, 10, 57, 47}};
+  for (int role = 0; role < CARD_BAND_COUNT; ++role)
+  {
+    node.props.role = static_cast<CardBandRole>(role);
+    seat = Seat(bands[role].left, bands[role].top, bands[role].right - bands[role].left);
+    seat.height = bands[role].bottom - bands[role].top;
+    context->layout(&controller, seat);
+    toolbox_host::roundFrames.clear();
+    const int paints = toolbox_host::shadowPaints;
+    const int differences = toolbox_host::regionDifferences;
+    const int erases = toolbox_host::erases;
+    const int regions = toolbox_host::regions;
+    toolbox_host::backgroundColors.clear();
+    window.port.fgColor = greenColor;
+    PenMode(42);
+    toolbox_host::pen.width = 2;
+    toolbox_host::pen.height = 3;
+    PenPat(&loka::toolbox::kToolboxGradientPatterns[2]);
+    const Rect savedClip = toolbox_host::currentClip();
+    PenState saved;
+    GetPenState(&saved);
+    context->render(&controller);
+    LOKA_VERIFY(toolbox_host::regions - regions == 4);
+    LOKA_VERIFY(toolbox_host::shadowPaints == paints + 1 && toolbox_host::regionDifferences == differences + 1);
+    LOKA_VERIFY(toolbox_host::shadowMode == patOr);
+    for (int row = 0; row < 8; ++row)
+      LOKA_VERIFY(toolbox_host::shadowPattern.pat[row] == loka::toolbox::kToolboxGradientPatterns[4].pat[row]);
+    LOKA_VERIFY(toolbox_host::roundFrames.size() == 1 && EqualRect(&toolbox_host::roundFrames[0], &bodies[role]));
+    LOKA_VERIFY(toolbox_host::erases == erases && toolbox_host::backgroundColors.empty());
+    LOKA_VERIFY(window.port.fgColor == greenColor && toolbox_host::pen.mode == saved.mode);
+    LOKA_VERIFY(toolbox_host::pen.width == saved.width && toolbox_host::pen.height == saved.height);
+    for (int row = 0; row < 8; ++row)
+      LOKA_VERIFY(toolbox_host::pen.pattern.pat[row] == saved.pattern.pat[row]);
+    const Rect restoredClip = toolbox_host::currentClip();
+    LOKA_VERIFY(EqualRect(&savedClip, &restoredClip));
+    // Clip allocation refusal must not fall back to drawing under an unknown clip.
+    toolbox_host::roundFrames.clear();
+    toolbox_host::failRegions = 2;
+    context->render(&controller);
+    LOKA_VERIFY(toolbox_host::roundFrames.empty() && toolbox_host::shadowPaints == paints + 1);
+    toolbox_host::failRegions = 0;
+    for (int allocation = 1; allocation <= 4; ++allocation)
+    {
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + allocation;
+      context->render(&controller);
+      LOKA_VERIFY(toolbox_host::roundFrames.empty() && toolbox_host::shadowPaints == paints + 1);
+      toolbox_host::refuseRegionAttempt = 0;
+    }
+  }
+  // A projected viewport narrows the conservative paint answer.
+  SetRect(&controller.projectionClip, 15, 55, 30, 58);
+  seat = Seat(13, 54, 37);
+  seat.height = 6;
+  context->layout(&controller, seat);
+  answer = context->queryPaintDamage(query);
+  LOKA_VERIFY(answer.damage.x == 15 && answer.damage.y == 55 && answer.damage.width == 15 && answer.damage.height == 3);
+  SetRect(&controller.projectionClip, -30000, -30000, 30000, 30000);
+  seat = Seat(10, 20, 0);
+  seat.height = 0;
+  context->layout(&controller, seat);
+  const int allocations = toolbox_host::regions;
+  context->render(&controller);
+  LOKA_VERIFY(toolbox_host::regions == allocations);
+  for (int terminal = 0; terminal < 2; ++terminal)
+  {
+    seat = Seat(13, 54, 37);
+    seat.height = 6;
+    context->layout(&controller, seat);
+    if (terminal)
+      LifecycleFactTestAccess::MarkSubtreeRetired(&node);
+    else
+      NotifySubtreeNodeDetached(&node);
+    LifecycleFactTestAccess::DeliverFacts(&node);
+    LOKA_VERIFY(!controller.compositionReplay.required());
+    LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+    toolbox_host::roundFrames.clear();
+    context->render(&controller);
+    LOKA_VERIFY(toolbox_host::roundFrames.empty());
+    if (!terminal)
+    {
+      NotifySubtreeNodeAttached(&node);
+      LifecycleFactTestAccess::DeliverFacts(&node);
+      LOKA_VERIFY(controller.compositionReplay.required());
+    }
+  }
+}
 int main()
 {
   ToolboxSceneDebugStats stats;
@@ -339,6 +455,7 @@ int main()
   LOKA_VERIFY(!source.queryPaintAnswer(&card, 0, query, answer));
   LOKA_VERIFY(source.queryPaintAnswer(&band, 0, query, answer));
   LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED);
+  CardPins();
   GradientPins();
   Run(false);
   Run(true);

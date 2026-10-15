@@ -482,6 +482,11 @@ namespace toolbox_host
     long ink;
   };
   extern std::vector<Fill> fills;
+  extern std::vector<Rect> roundFrames;
+  extern int shadowPaints, regionDifferences;
+  extern short shadowMode;
+  extern Pattern shadowPattern;
+  extern PenState pen;
   extern std::vector<Draw> draws;
   extern std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
   extern int erases, widths, measures, fonts, metrics;
@@ -490,6 +495,7 @@ namespace toolbox_host
   extern int failRegions;
   /** NewRgn attempts, including refused ones. */
   extern int regions;
+  extern int refuseRegionAttempt;
   void reset();
 } // namespace toolbox_host
 #endif
