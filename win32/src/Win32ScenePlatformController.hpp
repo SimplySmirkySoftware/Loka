@@ -107,6 +107,7 @@ public:
     int y;
     int width;
     int height;
+    int spacing;
   };
 
   struct LayoutNodeResult
