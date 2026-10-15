@@ -592,3 +592,43 @@ loka_compile_pin(document_roster_ask_close_private
   REFUSES pins/refuses_document_roster_ask_close.cpp
   ACCEPTS pins/accepts_document_roster_ask_close.cpp
 )
+
+loka_compile_pin(show-pointer
+  REFUSES pins/refuses_show_pointer.cpp
+  ACCEPTS pins/accepts_show_pointer.cpp
+)
+
+loka_compile_pin(show-bool
+  REFUSES pins/refuses_show_bool.cpp
+  ACCEPTS pins/accepts_show_bool.cpp
+)
+
+loka_compile_pin(show-temporary
+  REFUSES pins/refuses_show_temporary.cpp
+  ACCEPTS pins/accepts_show_temporary.cpp
+)
+
+loka_compile_pin(show-shift
+  REFUSES pins/refuses_show_shift.cpp
+  ACCEPTS pins/accepts_show_shift.cpp
+)
+
+loka_compile_pin(show-shift-temporary
+  REFUSES pins/refuses_show_shift_temporary.cpp
+  ACCEPTS pins/accepts_show_shift_temporary.cpp
+)
+
+loka_compile_pin(show-conversion
+  REFUSES pins/refuses_show_conversion.cpp
+  ACCEPTS pins/accepts_show_conversion.cpp
+)
+
+loka_compile_pin(show-include-order
+  REFUSES pins/refuses_show_include_order.cpp
+  ACCEPTS pins/accepts_show_include_order.cpp
+)
+
+loka_compile_pin(show-derived
+  REFUSES pins/refuses_show_derived.cpp
+  ACCEPTS pins/accepts_show_derived.cpp
+)
