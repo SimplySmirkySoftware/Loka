@@ -1,3 +1,6 @@
+#include "app/nodes/ImageView.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include <climits>
 #include "platform/null/NullInputDoor.hpp"
 #include "NullPlatformContractTests.hpp"
 #include "support/TestVerify.hpp"
@@ -4660,4 +4663,54 @@ void testNullPlatformContract_S10_stepDefaultsAreOneWithoutBeingRestated()
   assert(value.get() == 2 && "the default page step is one");
 
   resetScrollBarFixture();
+}
+
+void testNullIntrinsicImageOverflowWidth()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NullScenePlatformController platform;
+  int native = 0;
+  MutableState<resource::Image> imageState(resource::Image::FromNative(&native, 640, 10, 0, 0));
+  ImageViewProps props;
+  props.image(&imageState).attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC));
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  ImageViewNode *image = new ImageViewNode(props);
+  column.addChild(image);
+  short width = 19;
+  LOKA_VERIFY(platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 640);
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &platform, width));
+  LOKA_VERIFY(width == 640);
+  image->props.width_ = 100;
+  width = 19;
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 19);
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &platform, width));
+  LOKA_VERIFY(width == 100);
+  image->props.width_ = 0;
+  image->props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_AUTO;
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 100);
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &platform, width));
+  LOKA_VERIFY(width == 0);
+  image->props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_FILL_PARENT;
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &platform, width));
+  LOKA_VERIFY(width == 0);
+  image->props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_INTRINSIC;
+  image->props.image_ = 0;
+  width = 19;
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 19);
+  image->props.image_ = &imageState;
+  imageState.set(resource::Image::Empty());
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 19);
+  imageState.set(resource::Image::FromNative(&native, 0, 10, 0, 0));
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 19);
+  imageState.set(resource::Image::FromNative(&native, static_cast<int>(SHRT_MAX) + 1, 10, 0, 0));
+  LOKA_VERIFY(!platform.queryNaturalWidth(image, width));
+  LOKA_VERIFY(width == 19);
 }
