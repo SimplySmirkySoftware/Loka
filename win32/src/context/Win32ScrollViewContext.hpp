@@ -30,26 +30,27 @@ public:
 
   /** Publishes native range/page/position state and returns the clamped
       logical offset represented by that state. */
-  int setScrollMetrics(int contentHeight, int viewportHeight, int offset);
+  int setScrollMetrics(int bar, int content, int viewport, int offset);
+  /** Shared range clamp for layout projection and native input. */
+  int clampOffset(int value, int maximum) const;
 
   /** Routes a root-window wheel message to its nearest viewport at the
       message's screen position; refuses targets outside that root. */
-  static bool forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam);
+  static bool forwardMouseWheel(HWND root, UINT msg, WPARAM wParam, LPARAM lParam);
 
 protected:
   virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class Win32InputDoor;
-  void handleMouseWheel(WPARAM wParam);
+  void handleMouseWheel(int bar, WPARAM wParam);
   void applyAttachedPresentation();
   void applyDetachedPresentation();
-  bool handleVerticalScroll(int command, int thumbPosition);
-  bool readScrollInfo(SCROLLINFO &info) const;
+  bool handleScroll(int bar, int command, int thumbPosition);
+  bool readScrollInfo(int bar, SCROLLINFO &info) const;
   int maximumOffset(const SCROLLINFO &info) const;
-  int clampOffset(int value, int maximum) const;
-  void setVisualPosition(int value);
-  void publishOffset(int value);
+  void setVisualPosition(int bar, int value);
+  void publishOffset(int bar, int value);
 
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

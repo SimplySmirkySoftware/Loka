@@ -150,6 +150,19 @@ namespace loka
                             BOOL hasMenu,
                             DWORD exStyle) const;
 
+      /** A system metric (SM_*) at this scale's DPI: GetSystemMetricsForDpi
+          where the OS has it (Windows 10 1607+), the system-DPI metric
+          otherwise. A non-client measure predicted from it, such as the
+          scroll bar thickness, then matches what Windows adds to a
+          per-monitor-DPI window on that monitor. */
+      int systemMetric(int index) const;
+      /** The client height, in lu, that a viewport seated at this frame keeps
+          below a horizontal scroll bar: the bar is subtracted from the seat's
+          projected native height and the result converted once, the way the
+          HWND's own client comes out, so no second rounding step disagrees
+          with it at fractional scales. */
+      int clientHeightBelowHorizontalBar(const loka::core::Frame &seatLu) const;
+
       bool operator==(const Win32DisplayScale &rhs) const
       {
         return this->dpi_ == rhs.dpi_ && this->metrics_ == rhs.metrics_;
