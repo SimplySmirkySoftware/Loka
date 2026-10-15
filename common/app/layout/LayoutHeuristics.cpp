@@ -4,6 +4,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "dsl/composition/CompositionList.hpp"
 #include <climits>
+#include "app/layout/LayoutWidthSum.hpp"
 
 namespace loka
 {
@@ -15,6 +16,19 @@ namespace loka
       {
         // Built-in containers have known kinds; pass-through wrappers do not.
         return node && node->kind() == scene::NODE_KIND_UNKNOWN && node->asNestable() && !node->asProjectedLayoutNode();
+      }
+
+      int resolveLayoutGap(scene::Node *node, int received, int verticalDefault, int horizontalDefault)
+      {
+        if (node)
+        {
+          if (StackNode *stack = node->asStackNode())
+            return stack->props.gap_.resolve(stack->props.effectiveAxis() == STACK_AXIS_ROW ? horizontalDefault
+                                                                                            : verticalDefault);
+          if (BoxNode *box = node->asBoxNode())
+            return box->props.gap.resolve(verticalDefault);
+        }
+        return isLayoutPassThrough(node) ? received : verticalDefault;
       }
 
       bool childTakesLayoutSeat(scene::Node *child)
@@ -119,8 +133,7 @@ namespace loka
         {
         public:
           RowWidthTally()
-              : fixed_(0),
-                live_(0),
+              : live_(0),
                 flex_(0)
           {
           }
@@ -128,15 +141,21 @@ namespace loka
           {
             if (!takesSeat)
               return;
-            ++this->live_;
+            if (this->live_ <= SHRT_MAX + 1L)
+              ++this->live_;
             if (width < 0)
-              ++this->flex_;
+            {
+              if (this->flex_ <= SHRT_MAX)
+                ++this->flex_;
+            }
             else
-              this->fixed_ += width;
+              this->fixed_.add(width);
           }
-          long occupied(int gap) const
+          LayoutWidthSum occupied(int gap) const
           {
-            return this->fixed_ + gap * (this->live_ > 0 ? this->live_ - 1 : 0);
+            LayoutWidthSum result = this->fixed_;
+            result.addProduct(this->live_ > 0 ? this->live_ - 1 : 0, gap);
+            return result;
           }
           long flexSeats() const
           {
@@ -144,7 +163,7 @@ namespace loka
           }
 
         private:
-          long fixed_;
+          LayoutWidthSum fixed_;
           long live_;
           long flex_;
         };
@@ -197,7 +216,11 @@ namespace loka
               tally.add(stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL ? resolved : declared,
                         takesSeat);
             }
-            answer = tally.occupied(gap) + tally.flexSeats() * maximum;
+            {
+              LayoutWidthSum sum = tally.occupied(resolveLayoutGap(stack, gap, gap, gap));
+              sum.addProduct(tally.flexSeats(), maximum);
+              answer = sum.value();
+            }
             break;
           case STACK_AXIS_COLUMN:
             for (scene::Node *seat = children.next(); seat; seat = children.next())
@@ -269,10 +292,11 @@ namespace loka
                                                  size_t childCount,
                                                  int availableWidth,
                                                  int gap,
+                                                 int horizontalDefault,
                                                  RowUndeclaredWidth policy,
                                                  const INaturalWidthSource *source)
           : source_(0),
-            gap_(gap),
+            horizontalDefault_(horizontalDefault),
             baseFlexWidth_(0),
             flexRemainder_(0),
             liveSeatsSeen_(0)
@@ -293,7 +317,8 @@ namespace loka
           tally.add(takesSeat ? this->preferredWidth(child) : 0, takesSeat);
         }
         const long flexSeats = tally.flexSeats();
-        long remainingWidth = availableWidth - tally.occupied(gap);
+        const long occupied = tally.occupied(gap).value();
+        long remainingWidth = occupied > SHRT_MAX ? 0 : availableWidth - occupied;
         if (remainingWidth < 0)
         {
           remainingWidth = 0;
@@ -309,8 +334,8 @@ namespace loka
       {
         const int declaredWidth = preferredChildWidthForRow(child);
         short naturalWidth = 0;
-        if (declaredWidth < 0 && this->source_ && queryNaturalWidth(child, this->gap_, this->source_, naturalWidth)
-            && naturalWidth > 0)
+        if (declaredWidth < 0 && this->source_
+            && queryNaturalWidth(child, this->horizontalDefault_, this->source_, naturalWidth) && naturalWidth > 0)
           return naturalWidth;
         return declaredWidth;
       }

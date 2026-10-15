@@ -1459,13 +1459,26 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &Win32ScenePlatformController::layoutContainerChild, Win32SceneLayout::kGap, 0);
+          stack,
+          state,
+          this,
+          &Win32ScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              stack, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     else
     {
       resultY = loka::app::layout::computeRowLayoutResultY(
-          stack, state, this->rowLayoutMetrics_, this,
-          this, &Win32ScenePlatformController::layoutContainerChild);
+          stack,
+          state,
+          this->rowLayoutMetrics_,
+          this,
+          this,
+          &Win32ScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              stack, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -1512,7 +1525,13 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &Win32ScenePlatformController::layoutContainerChild, Win32SceneLayout::kGap, 0);
+          box,
+          state,
+          this,
+          &Win32ScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              box, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
