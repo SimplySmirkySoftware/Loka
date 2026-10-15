@@ -3,6 +3,7 @@
 
 #include "app/scene/projection/NativeHandlePool.hpp"
 #include "app/scene/projection/PlatformController.hpp"
+#include "app/nodes/controls/ScrollBar.hpp"
 #include "core/State.hpp"
 #include "core/Managed.hpp"
 #include "app/layout/StackSpans.hpp"
@@ -50,15 +51,17 @@ public:
     loka::app::scene::NativeLifetimeHint lifetimeHint;
   };
 
-  /** One viewport scrollbar. Its ScrollView pointer is the fact-write door;
+  /** One viewport binding with two bar ids, indexed by ScrollBarOrientation.
+      Its ScrollView pointer is the fact-write door;
       lifecycle teardown removes the binding before the node can be reclaimed. */
   struct ViewportScrollBarBinding
   {
-    short resourceId;
+    short barId[2];
     loka::app::ScrollViewNode *scrollView;
     loka::core::Managed<loka::app::layout::StackSpans> spans;
     bool usedThisFrame;
     Rect rect;
+    Rect contentRect;
   };
 
   explicit ToolboxScrollBarLedger(std::size_t bucketDepth)
