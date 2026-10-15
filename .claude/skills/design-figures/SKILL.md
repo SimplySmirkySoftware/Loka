@@ -13,8 +13,8 @@ the shape. First instance: #518 rally 1 v2 (2026-09-06).
 ## When
 
 - **Design complete, before asking for a ruling** — the same moment as shape
-  review gate 1 (AGENTS.md "Shape Review Gates"). The figure supplements the
-  gate's written checklist; it never replaces it. The wall-tier,
+  review gate 1 (docs/ReviewPolicy.md "Shape Review Gates"). The figure
+  supplements the gate's written checklist; it never replaces it. The wall-tier,
   test-observability, and primitive-member items of that list are still
   written out. What the figure adds is the shape test: a dotted arrow in the
   picture is a weak joint the written list must then name.
