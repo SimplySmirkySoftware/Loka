@@ -48,28 +48,6 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
       controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, 0);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ButtonNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::EditTextNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::CellNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::ImageViewNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.hostActionHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::OpenFileDialogNode>(),
-      &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.hostActionHandlerRegistry_.registerHandler(
-      loka::app::scene::NodeTypeToken<loka::app::ConfirmDialogNode>(),
-      &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::AttributedTextNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
-  controller.leafLayoutHandlerRegistry_.registerHandler(loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>(),
-                                                        &Win32ScenePlatformController::DispatchProjectedLayout);
   RegisterWin32TextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32ButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32TextNodeHandler(controller.nodeHandlerRegistry_);
