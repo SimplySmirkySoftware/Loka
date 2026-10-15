@@ -376,7 +376,12 @@ if [ "$EXAMPLE" = simpleviewer ] && [ "$SCENARIO" = startup ]; then
   # examples do; the picture cells add a third item and need three.
   FINDER_TAB_COUNT=2
 fi
-if [ "$EXAMPLE" = simpleviewer ] && [ "$SCENARIO" != startup ]; then
+if [ "$EXAMPLE" = simpleviewer ] && [ "$SCENARIO" = open-wide-scroll ]; then
+  DEV_DISK_ARGUMENTS+=("$PROJECT_DIR/example/SimpleViewer/assets/Wide.pict")
+  FINDER_TAB_COUNT=3
+fi
+if [ "$EXAMPLE" = simpleviewer ] && [ "$SCENARIO" != startup ] \
+    && [ "$SCENARIO" != open-wide-scroll ]; then
   case "$SCENARIO" in
     open-sun) PICT_NAMES=(Sun.pict) ;;
     open-bulb) PICT_NAMES=(Bulb.pict) ;;

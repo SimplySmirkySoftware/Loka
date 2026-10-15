@@ -43,9 +43,9 @@ void ToolboxScenePlatformController::commitScrollBarValueAt(std::size_t index)
   endBatchUpdate();
 }
 
-void ToolboxScenePlatformController::commitViewportScrollBarValue(
-    ViewportScrollBarBinding &binding,
-    ScrollBarControlBinding &native)
+void ToolboxScenePlatformController::commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
+                                                                  ScrollBarControlBinding &native,
+                                                                  loka::app::ScrollBarOrientation axis)
 {
   const int settled = static_cast<int>(GetControlValue(native.control));
   if (settled == native.appliedValue)
@@ -61,8 +61,16 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(
   addPendingDirty(rect);
   // Unlike the DSL ScrollBar commit above, this fact belongs to the
   // ScrollView owner. The complete NodeState door selects that tracker.
-  // This input moves only Y; the preceding layout has already clamped X.
-  scrollView->publishOrigin(scrollView->requestedOrigin().x, settled);
+  // This input moves one axis; the preceding layout has already clamped the other.
+  switch (axis)
+  {
+  case loka::app::SCROLL_BAR_VERTICAL:
+    scrollView->publishOrigin(scrollView->requestedOrigin().x, settled);
+    break;
+  case loka::app::SCROLL_BAR_HORIZONTAL:
+    scrollView->publishOrigin(settled, scrollView->requestedOrigin().y);
+    break;
+  }
   endBatchUpdate();
 }
 
@@ -104,12 +112,20 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
       continue;
     }
     std::size_t viewportIndex = scrollBarLedger_.viewportScrollBars_.size();
+    loka::app::ScrollBarOrientation axis = loka::app::SCROLL_BAR_VERTICAL;
     for (size_t j = 0; j < scrollBarLedger_.viewportScrollBars_.size(); ++j)
     {
-      if (scrollBarLedger_.viewportScrollBars_[j].resourceId ==
-          scrollBarLedger_.scrollBarControls_[i].resourceId)
+      if (scrollBarLedger_.viewportScrollBars_[j].barId[loka::app::SCROLL_BAR_VERTICAL]
+          == scrollBarLedger_.scrollBarControls_[i].resourceId)
       {
         viewportIndex = j;
+        break;
+      }
+      if (scrollBarLedger_.viewportScrollBars_[j].barId[loka::app::SCROLL_BAR_HORIZONTAL]
+          == scrollBarLedger_.scrollBarControls_[i].resourceId)
+      {
+        viewportIndex = j;
+        axis = loka::app::SCROLL_BAR_HORIZONTAL;
         break;
       }
     }
@@ -133,7 +149,7 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
     if (viewportIndex != scrollBarLedger_.viewportScrollBars_.size())
     {
       commitViewportScrollBarValue(
-          scrollBarLedger_.viewportScrollBars_[viewportIndex], scrollBarLedger_.scrollBarControls_[i]);
+          scrollBarLedger_.viewportScrollBars_[viewportIndex], scrollBarLedger_.scrollBarControls_[i], axis);
     }
     else
     {
