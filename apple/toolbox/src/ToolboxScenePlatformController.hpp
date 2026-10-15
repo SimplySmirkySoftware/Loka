@@ -201,45 +201,7 @@ public:
     this->rectSurfaceExtentLedger_.cancel(surface);
   }
   void renderScrollView(loka::app::ScrollViewNode *scrollView);
-  bool projectLayoutState(loka::app::scene::LayoutState &state)
-  {
-    if (this->projectionParentScopes_.activeDepth() == 0)
-    {
-      return true;
-    }
-    const loka::app::scene::ProjectionParentScope &scope =
-        this->projectionParentScopes_.current();
-    // This rail has no inner native origin and ScrollView translates only Y.
-    // Both operands are short-bounded, so their sum is safe in int.
-    const int projectedY = static_cast<int>(state.y) + scope.translationY;
-    if (scope.translationX != 0 ||
-        projectedY < SHRT_MIN || projectedY > SHRT_MAX)
-    {
-      this->refuseScrollViewShortRange();
-      return false;
-    }
-    state.y = static_cast<short>(projectedY);
-    return true;
-  }
-  bool restoreProjectedLayoutState(loka::app::scene::LayoutState &state)
-  {
-    if (this->projectionParentScopes_.activeDepth() == 0)
-    {
-      return true;
-    }
-    // Toolbox ScrollView only translates upward by a pre-clamped short
-    // offset, so this subtraction cannot overflow int. Keep the refusal at
-    // the narrowing edge without paying for the generic int-overflow path.
-    const int contentY = static_cast<int>(state.y) -
-                         this->projectionParentScopes_.current().translationY;
-    if (contentY < SHRT_MIN || contentY > SHRT_MAX)
-    {
-      this->refuseScrollViewShortRange();
-      return false;
-    }
-    state.y = static_cast<short>(contentY);
-    return true;
-  }
+#include "ToolboxScrollViewProjection.hpp"
   bool refuseNarrowingInScrollScope(int resultY);
   void refuseScrollViewShortRange();
 
