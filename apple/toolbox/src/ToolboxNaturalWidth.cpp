@@ -2,6 +2,7 @@
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/Text.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "platform/StringUTF8.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 #include <climits>
@@ -31,6 +32,16 @@ short ToolboxScenePlatformController::measurePushButtonNaturalWidth(const loka::
 
 bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
+  if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
+  {
+    // No GrafPort or measurement scope is needed; portless controllers answer too.
+    // Keep 1:1 source width aligned with ToolboxImageViewContext::layout's INTRINSIC branch.
+    int pixels = 0;
+    if (!loka::app::queryIntrinsicImageWidth(image->props, pixels) || pixels > SHRT_MAX)
+      return false;
+    width = static_cast<short>(pixels);
+    return true;
+  }
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   if (button)
   {

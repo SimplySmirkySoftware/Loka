@@ -273,6 +273,7 @@ short ToolboxImageViewContext::layout(loka::app::scene::IPlatformController *, l
 
     if (sizePolicy == loka::app::IMAGE_VIEW_SIZE_INTRINSIC && !hasExplicitWidth && srcWidth > 0)
     {
+      // Keep 1:1 source width aligned with ToolboxScenePlatformController::queryNaturalWidth.
       width = srcWidth;
     }
     else if (sizePolicy == loka::app::IMAGE_VIEW_SIZE_FILL_PARENT && !hasExplicitWidth)
