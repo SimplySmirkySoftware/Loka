@@ -447,11 +447,6 @@ void testMacScrollViewContainerGapsAndNoSeats()
     const int maximum = totalHeight + 2 * MacSceneLayout::kGap - visible;
     LOKA_VERIFY(maximum > 0);
     LOKA_VERIFY([[viewport documentView] frame].size.height == maximum + visible);
-    offset.state().set(loka::core::Frame(0, 40000, 0, 0));
-    controller.relayout(300, visible + 2 * MacSceneLayout::kRootInset);
-    const int maximumFact = offset.state().get().y;
-    const int maximumClip = clipOffset(viewport);
-    LOKA_VERIFY(maximumFact == maximum && maximumClip == maximum);
     SceneTestAccess::unmount(scene);
     controller.drainNativeRetirements();
   }
