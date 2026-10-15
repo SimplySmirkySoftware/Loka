@@ -154,14 +154,14 @@ int Win32ScrollViewContext::setScrollMetrics(int bar, int content, int viewport,
   SCROLLINFO info;
   ZeroMemory(&info, sizeof(info));
   info.cbSize = sizeof(info);
-  // SIF_DISABLENOSCROLL keeps the scrollbar present (disabled) when content
-  // fits, so the viewport client width never changes between layout passes
-  // and the width read before measurement stays true after it.
+  // SIF_DISABLENOSCROLL keeps the vertical scrollbar present (disabled) when
+  // content fits, so the viewport client width never changes between layout
+  // passes and the width read before measurement stays true after it. The
+  // horizontal bar omits it: SetScrollInfo then shows the bar only while the
+  // range exists, so every viewport whose content fits keeps today's pixels.
   info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
   if (bar == SB_VERT)
     info.fMask |= SIF_DISABLENOSCROLL;
-  else
-    ShowScrollBar(this->hwnd(), SB_HORZ, maximum > 0);
   info.nMin = 0;
   info.nMax = content > 0 ? content - 1 : 0;
   info.nPage = viewport > 0 ? static_cast<UINT>(viewport) : 0;
