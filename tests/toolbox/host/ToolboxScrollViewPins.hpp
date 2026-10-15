@@ -166,10 +166,14 @@ namespace
       f.controller.scrollControl(0).usedThisFrame = false;
       f.controller.scrollControl(1).usedThisFrame = false;
       f.controller.scrollCalls.clear();
+      toolbox_host::controlCalls = toolbox_host::ControlCalls();
       f.step(0, 500);
       LOKA_VERIFY(f.controller.scrollCalls.size() == 1);
       LOKA_VERIFY(f.controller.scrollControl(0).usedThisFrame);
       LOKA_VERIFY(!f.controller.scrollControl(1).usedThisFrame);
+      // The departing bar is hidden by the layout pass itself, before render.
+      LOKA_VERIFY(toolbox_host::controlCalls.hides == 1
+                  && toolbox_host::controlCalls.lastHidden == &controls[SCROLL_BAR_HORIZONTAL]);
       const Rect seat = {0, 0, 34, 500};
       LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, ToolboxScrollViewContentRect(seat, false)));
     }

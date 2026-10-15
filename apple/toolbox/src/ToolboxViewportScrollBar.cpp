@@ -83,6 +83,23 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
                                      native))
       ApplyViewportScrollBarValue(native, horizontal, this->paintSuppressClipRgn_);
   }
+  else
+  {
+    // A departing bar is hidden here, before the children paint into its
+    // row. The post-render sweep would HideControl after them, and the
+    // Control Manager fills a hidden control's rect with the window
+    // background, erasing that strip until the next update event.
+    // HideControl on an already hidden control does nothing.
+    for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+    {
+      ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+      if (row.resourceId == binding->barId[loka::app::SCROLL_BAR_HORIZONTAL] && row.control)
+      {
+        HideControl(row.control);
+        break;
+      }
+    }
+  }
   return metrics.clampedOffset;
 }
 
