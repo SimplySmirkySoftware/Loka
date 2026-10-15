@@ -72,6 +72,19 @@ namespace
     return user32 ? GetProcAddress(user32, name) : 0;
   }
 
+  typedef int(WINAPI *GetSystemMetricsForDpiFn)(int, UINT);
+
+  int ReadSystemMetricForDpi(int index, UINT dpi)
+  {
+    static GetSystemMetricsForDpiFn getSystemMetricsForDpi =
+        reinterpret_cast<GetSystemMetricsForDpiFn>(ResolveUser32Procedure("GetSystemMetricsForDpi"));
+    if (getSystemMetricsForDpi)
+    {
+      return getSystemMetricsForDpi(index, dpi);
+    }
+    return GetSystemMetrics(index);
+  }
+
   UINT ReadSystemDpiFromDeviceContext()
   {
     HDC dc = GetDC(NULL);
@@ -372,5 +385,10 @@ namespace loka
           static_cast<int>(systemAdjusted.bottom - nativeClientRect.bottom));
       return true;
     }
+    int Win32DisplayScale::systemMetric(int index) const
+    {
+      return ReadSystemMetricForDpi(index, this->dpi_);
+    }
+
   } // namespace win32
 } // namespace loka

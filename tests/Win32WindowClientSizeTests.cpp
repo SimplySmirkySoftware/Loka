@@ -753,3 +753,28 @@ void testWin32WmCloseDestroysUnkeyedWindowAsToday()
   LOKA_VERIFY(!IsWindow(hwnd));
   LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 1);
 }
+
+void testWin32DisplayScaleSystemMetricFollowsDpi()
+{
+  printf("\n==== [testWin32DisplayScaleSystemMetricFollowsDpi] start ====\n");
+  using loka::win32::Win32DisplayScale;
+  const Win32DisplayScale system(96, loka::app::RailMetrics());
+  LOKA_VERIFY(system.systemMetric(SM_CYHSCROLL) == GetSystemMetrics(SM_CYHSCROLL));
+  typedef int(WINAPI * GetSystemMetricsForDpiFn)(int, UINT);
+  HMODULE user32 = GetModuleHandleW(L"user32.dll");
+  GetSystemMetricsForDpiFn forDpi =
+      user32 ? reinterpret_cast<GetSystemMetricsForDpiFn>(GetProcAddress(user32, "GetSystemMetricsForDpi")) : 0;
+  if (!forDpi)
+  {
+    printf("[skip] GetSystemMetricsForDpi is unavailable on this Windows; the system metric is the only answer\n");
+  }
+  else
+  {
+    // A per-monitor-DPI window on a 192 dpi monitor gets the thicker bar
+    // Windows adds there, not the system-DPI one.
+    const Win32DisplayScale doubled(192, loka::app::RailMetrics());
+    LOKA_VERIFY(doubled.systemMetric(SM_CYHSCROLL) == forDpi(SM_CYHSCROLL, 192));
+    LOKA_VERIFY(doubled.systemMetric(SM_CYHSCROLL) > system.systemMetric(SM_CYHSCROLL));
+  }
+  printf("==== [testWin32DisplayScaleSystemMetricFollowsDpi] PASSED ====\n");
+}
