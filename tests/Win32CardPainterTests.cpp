@@ -75,13 +75,18 @@ void testWin32CardPainterPixels()
                                Frame(14, 17 + height - 3, width, 6)};
         CardDib reference(320, 320);
         CardDib split(320, 320);
-        // The whole-card reference has the same outer-frame clip as the union
-        // of child windows. A rounded shadow offset can exceed the separately
-        // projected allowance by one pixel, which Q1 clips at the card frame.
+        // The whole-card reference has the same clip as the union of child
+        // windows: the outer frame minus the content seat. A rounded shadow
+        // offset can exceed the separately projected allowance by one pixel,
+        // which Q1 clips at the card frame; GDI's elliptic regions can put one
+        // inner-arc pixel at a seat corner, which no band owns (Q1: the seat
+        // belongs to the content).
         const RECT outer = scale.projectFrame(Frame(11, 17, width + 3, height + 3)).r;
+        const RECT seat = scale.projectFrame(Frame(14, 20, width - 6, height - 6)).r;
         const int savedReference = SaveDC(reference.dc);
         LOKA_VERIFY(savedReference != 0);
         LOKA_VERIFY(IntersectClipRect(reference.dc, outer.left, outer.top, outer.right, outer.bottom) != ERROR);
+        LOKA_VERIFY(ExcludeClipRect(reference.dc, seat.left, seat.top, seat.right, seat.bottom) != ERROR);
         PaintCardInk(reference.dc, wholeBody, CardStyle(), scale, 0, 0, 0, 0);
         LOKA_VERIFY(RestoreDC(reference.dc, savedReference));
         for (int role = 0; role < CARD_BAND_COUNT; ++role)
@@ -115,7 +120,6 @@ void testWin32CardPainterPixels()
               ++ink;
           }
         LOKA_VERIFY(ink > 10);
-        const RECT seat = scale.projectFrame(Frame(14, 20, width - 6, height - 6)).r;
         for (int y = static_cast<int>(seat.top); y < seat.bottom; ++y)
           for (int x = static_cast<int>(seat.left); x < seat.right; ++x)
             LOKA_VERIFY(GetPixel(split.dc, x, y) == ground(x, y));
