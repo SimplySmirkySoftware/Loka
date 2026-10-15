@@ -216,6 +216,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     }
     short width = 0;
     short currentY = static_cast<short>(state.y + (band && first < count ? spans->start(first) : 0));
+    loka::app::layout::StackGaps gaps(state.spacing, first > 0);
     unsigned index = 0;
     bool mismatch = false;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
@@ -226,6 +227,14 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
       if (index++ < first)
         continue;
       const short startY = currentY;
+      const int childY = static_cast<int>(currentY) + gaps.before(child);
+      if (traversal->refuseLayoutResultY(childY))
+      {
+        if (spans)
+          spans->invalidate();
+        return 0;
+      }
+      currentY = static_cast<short>(childY);
       loka::app::scene::LayoutState childState = state;
       childState.y = currentY;
       if (state.height > 0)
@@ -407,7 +416,7 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
   ToolboxBoxTraversal adapter(*traversal);
   // Common BoxLayout owns padding, clamping and child advancement on every rail.
   const int resultY = loka::app::layout::computeBoxLayoutResultY(
-      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, 0, &ToolboxBoxTraversal::acceptY);
+      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, state.spacing, &ToolboxBoxTraversal::acceptY);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;
@@ -526,9 +535,8 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
   }
   if (row->props.hasVerticalAlignment_)
   {
-    // An aligned row's extent is the painted box it measured; child advances
-    // include spacing and need not equal their painted heights.
-    maxHeight = rowHeight + state.spacing;
+    // An aligned row's extent is the painted box it measured.
+    maxHeight = rowHeight;
   }
   const int resultY = state.y + maxHeight;
   if (traversal->refuseLayoutResultY(resultY))

@@ -90,7 +90,7 @@ namespace
     const Rect moved = MeasurementRect(context);
     LOKA_VERIFY(moved.top == 70 && moved.left == 17);
     LOKA_VERIFY(moved.bottom - moved.top == original.bottom - original.top);
-    LOKA_VERIFY(seat.y == moved.bottom + 7);
+    LOKA_VERIFY(seat.y == moved.bottom);
     const Rect clipped = MeasurementClip(context);
     LOKA_VERIFY(clipped.left == 19 && clipped.top == 72 && clipped.right == 35 && clipped.bottom == 78);
     Pin("PlainClippedOutRenderSkipsScopeClipAndHit");

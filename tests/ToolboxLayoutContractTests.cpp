@@ -199,13 +199,12 @@ namespace
       this->seats_[this->callCount_] = state;
       const int width = ToolboxLayoutContractTraversal::layoutChild(child, state);
       // Mirror the real child handlers: a text control advances from the
-      // box top it was handed by lineHeight + spacing (ToolboxButtonContext,
+      // box top it was handed by lineHeight (ToolboxButtonContext,
       // ToolboxTextContext); other kinds consume their seat.
       const bool baselineControl = child->asButtonNode() || child->asTextNode() || child->asEditTextNode()
                                    || child->asPopupMenuNode();
-      const short result = baselineControl
-                               ? static_cast<short>(state.y + state.lineHeight + state.spacing)
-                               : static_cast<short>(state.y + state.height);
+      const short result =
+          baselineControl ? static_cast<short>(state.y + state.lineHeight) : static_cast<short>(state.y + state.height);
       this->setLayoutResultY(result);
       return width;
     }
@@ -253,7 +252,7 @@ namespace
     // Top-origin controls center at 50 with top 43 and bottom 57, without an ascent lead.
     const short centeredOffsets[] = {0, 23, 23, 18, 0, 15, 0};
     const short centeredHeights[] = {60, 14, 14, 24, 60, 30, 60};
-    LOKA_VERIFY(state.y - startY == (centered ? 64 : 40));
+    LOKA_VERIFY(state.y - startY == (centered ? 60 : 40));
     for (int i = 0; i < 7; ++i)
     {
       LOKA_VERIFY(traversal.seats_[i].y - startY == (centered ? centeredOffsets[i] : 0));
@@ -291,5 +290,5 @@ void testToolboxCenteredControlOnlyRowPaintedBounds()
   // A top-origin control starts at the row top; its painted height stays 14.
   LOKA_VERIFY(traversal.seats_[0].y == 20);
   LOKA_VERIFY(traversal.seats_[0].height == 14);
-  LOKA_VERIFY(state.y == 38);
+  LOKA_VERIFY(state.y == 34);
 }

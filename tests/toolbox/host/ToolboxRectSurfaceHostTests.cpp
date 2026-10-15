@@ -87,9 +87,9 @@ namespace
     const short width = LayoutNode(&node, state, &controller, 0);
     std::printf("layout: width=%d y=%d extent records=%u\n", width, state.y, controller.extentRecords);
     std::fflush(stdout);
-    if (normal || limit)
+    if (normal || limit || std::strcmp(mode, "spacing") == 0)
     {
-      LOKA_VERIFY(width == 100 && state.y == (normal ? 73 : SHRT_MAX));
+      LOKA_VERIFY(width == 100 && state.y == (normal ? 70 : SHRT_MAX));
       LOKA_VERIFY(controller.extentRecords == 1);
       Rect bounds;
       LOKA_VERIFY(static_cast<ToolboxRectSurfaceContext *>(node.getContext())->dirtyRect(bounds));

@@ -87,7 +87,7 @@ short ToolboxScrollBarContext::layout(loka::app::scene::IPlatformController *con
     rect.bottom = static_cast<short>(rect.top + length);
   }
   updateRect(rect);
-  state.y = static_cast<short>(rect.bottom + state.spacing);
+  state.y = static_cast<short>(rect.bottom);
   return usedWidth;
 }
 

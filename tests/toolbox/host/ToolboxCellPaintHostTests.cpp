@@ -60,6 +60,14 @@ int main()
   ToolboxCellContext &sibling = *new ToolboxCellContext(second->asCellNode(), &controller);
   node.setContext(&cell);
   second->setContext(&sibling);
+  {
+    LayoutState plain = Seat(40), spaced = plain;
+    plain.height = spaced.height = 0;
+    spaced.spacing = 9;
+    const short width = cell.layout(&controller, plain);
+    LOKA_VERIFY(cell.layout(&controller, spaced) == width);
+    LOKA_VERIFY(spaced.y == plain.y && spaced.y > 20);
+  }
   toolbox_host::reset();
   LayoutState seat = Seat(40), other = Seat(40, 70);
   cell.layout(&controller, seat); sibling.layout(&controller, other);
