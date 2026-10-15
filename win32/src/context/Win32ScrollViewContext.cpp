@@ -270,8 +270,8 @@ void Win32ScrollViewContext::setVisualPosition(int value)
 
 void Win32ScrollViewContext::publishOffset(int value)
 {
-  if (this->node_ && this->node_->props.viewport_.isValid())
-    this->node_->publishOrigin(this->node_->props.viewport_.state()->get().x, value);
+  if (this->node_)
+    this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
 }
 
 bool Win32ScrollViewContext::forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam)

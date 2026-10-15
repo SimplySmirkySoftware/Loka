@@ -262,6 +262,8 @@ int MacScrollViewContext::maximumOffset() const
 
 void MacScrollViewContext::publishOffset(int value)
 {
-  if (this->node_ && this->node_->props.viewport_.isValid())
-    this->node_->publishOrigin(this->node_->props.viewport_.state()->get().x, value);
+  // A layout-driven scrollPoint notification arrives here too; its same-value
+  // write is a no-op inside publishOrigin, which is the echo-loop breaker.
+  if (this->node_)
+    this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
 }
