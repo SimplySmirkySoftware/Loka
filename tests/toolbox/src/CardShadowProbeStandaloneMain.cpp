@@ -9,381 +9,401 @@
 #include <Processes.h>
 #include <cstdio>
 
-#include "ToolboxPaintGradient.hpp"
 #include "core/io/File.hpp"
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileIO.hpp"
 
-// Page 2 of the card probe (page 1 is a6997e5d): single-pattern shadows on
-// 1-bit, solid-gray shadows in an 8-bit GWorld, and the cost of painting the
-// decoration through four band strips on both depths. Not for merge.
+// Page 3 of the card probe (page 1 is a6997e5d, page 2 is d2dc2f17): build a
+// card's whole decoration once into a cached offscreen (shape mask, offset,
+// two box-blur passes per axis, then a Bayer stencil on 1-bit or grays on
+// 8-bit), and repaint it with one CopyBits per strip. Not for merge.
 namespace
 {
-  enum { kWidth = 432, kHeight = 280, kReps = 40 };
+  enum { kWidth = 512, kHeight = 342, kColorHeight = 220, kReps = 40, kBand = 4, kPeak = 140 };
 
-  /** One silhouette: the card body offset by `offset`, inked with a pattern
-      level (1-bit) or a 16-bit gray (color). Steps are drawn outer first. */
-  struct Step
+  const unsigned char kBayer8[8][8] = {{0, 32, 8, 40, 2, 34, 10, 42},  {48, 16, 56, 24, 50, 18, 58, 26},
+                                       {12, 44, 4, 36, 14, 46, 6, 38}, {60, 28, 52, 20, 62, 30, 54, 22},
+                                       {3, 35, 11, 43, 1, 33, 9, 41},  {51, 19, 59, 27, 49, 17, 57, 25},
+                                       {15, 47, 7, 39, 13, 45, 5, 37}, {63, 31, 55, 23, 61, 29, 53, 21}};
+
+  enum ShapeKind { SHAPE_SQUARE, SHAPE_ROUND, SHAPE_OVAL, SHAPE_BUBBLE };
+
+  /** The body as a region whose box starts at (0, 0); the bubble's tail hangs below h. */
+  RgnHandle MakeShape(ShapeKind kind, short w, short h)
   {
+    RgnHandle rgn = NewRgn();
+    if (!rgn)
+      return 0;
+    Rect r;
+    SetRect(&r, 0, 0, w, h);
+    switch (kind)
+    {
+    case SHAPE_SQUARE:
+      RectRgn(rgn, &r);
+      break;
+    case SHAPE_ROUND:
+      OpenRgn();
+      FrameRoundRect(&r, 12, 12);
+      CloseRgn(rgn);
+      break;
+    case SHAPE_OVAL:
+      OpenRgn();
+      FrameOval(&r);
+      CloseRgn(rgn);
+      break;
+    case SHAPE_BUBBLE:
+    {
+      OpenRgn();
+      FrameRoundRect(&r, 12, 12);
+      CloseRgn(rgn);
+      RgnHandle tail = NewRgn();
+      if (tail)
+      {
+        const short root = w / 6;
+        OpenRgn();
+        MoveTo(root, h - 2);
+        LineTo(root - 8, h + h / 4);
+        LineTo(root + 18, h - 2);
+        LineTo(root, h - 2);
+        CloseRgn(tail);
+        UnionRgn(rgn, tail, rgn);
+        DisposeRgn(tail);
+      }
+      break;
+    }
+    }
+    return rgn;
+  }
+
+  /** Shadow geometry: blur radius per pass, total reach, and offset. */
+  struct Spread
+  {
+    short radius;
+    short reach;
     short offset;
-    unsigned short ink;
-  };
-
-  struct Look
-  {
-    const Step *steps;
-    short count;
-    short oval;
-    bool color;
-  };
-
-  void InkShape(const Rect &rect, short oval, const Step &step, bool color)
-  {
-    if (color)
+    explicit Spread(short spread)
+        : radius(static_cast<short>((spread + 1) / 2)), reach(static_cast<short>(2 * ((spread + 1) / 2))),
+          offset(static_cast<short>((spread + 2) / 3))
     {
-      RGBColor gray;
-      gray.red = gray.green = gray.blue = step.ink;
-      RGBForeColor(&gray);
-      if (oval)
-        PaintRoundRect(&rect, oval, oval);
-      else
-        PaintRect(&rect);
+    }
+  };
+
+  /** A built card: the offscreen holding the whole outer frame, and the
+      local rects the strips are cut from. */
+  struct CardCache
+  {
+    GWorldPtr world;
+    Rect outer;   // (0, 0, W, H)
+    Rect body;    // body box (w x h) inside outer
+    Rect content; // what the strips leave to the content leaf
+    long bytes;
+  };
+
+  // Build-stage marks for the breakdown line: 0 start, 1 mask rasterized,
+  // 2 expanded to bytes, 3 blurred, 4 cache GWorld ready, 5 stencil written, 6 body drawn.
+  UnsignedWide gMarks[7];
+  bool gFastBlur = false;
+
+  void Mark(short stage)
+  {
+    Microseconds(&gMarks[stage]);
+  }
+
+  bool PixelsOf(GWorldPtr world, char *&base, long &rowBytes)
+  {
+    PixMapHandle pixels = GetGWorldPixMap(world);
+    if (!LockPixels(pixels) || PixMap32Bit(pixels))
+      return false;
+    base = GetPixBaseAddr(pixels);
+    rowBytes = (**pixels).rowBytes & 0x3FFF;
+    return true;
+  }
+
+  void BlurRows(unsigned char *values, short w, short h, short radius, unsigned char *line)
+  {
+    const long scale = 65536L / (2 * radius + 1);
+    for (short y = 0; y < h; ++y)
+    {
+      unsigned char *row = values + static_cast<long>(y) * w;
+      for (short x = 0; x < w; ++x)
+        line[x] = row[x];
+      long sum = 0;
+      for (short k = 0; k <= radius && k < w; ++k)
+        sum += line[k];
+      for (short x = 0; x < w; ++x)
+      {
+        row[x] = static_cast<unsigned char>((sum * scale) >> 16);
+        if (x + radius + 1 < w)
+          sum += line[x + radius + 1];
+        if (x - radius >= 0)
+          sum -= line[x - radius];
+      }
+    }
+  }
+
+  void BlurColumns(unsigned char *values, short w, short h, short radius, unsigned char *line)
+  {
+    const long scale = 65536L / (2 * radius + 1);
+    for (short x = 0; x < w; ++x)
+    {
+      for (short y = 0; y < h; ++y)
+        line[y] = values[static_cast<long>(y) * w + x];
+      long sum = 0;
+      for (short k = 0; k <= radius && k < h; ++k)
+        sum += line[k];
+      for (short y = 0; y < h; ++y)
+      {
+        values[static_cast<long>(y) * w + x] = static_cast<unsigned char>((sum * scale) >> 16);
+        if (y + radius + 1 < h)
+          sum += line[y + radius + 1];
+        if (y - radius >= 0)
+          sum -= line[y - radius];
+      }
+    }
+  }
+
+  /** Same passes with a quotient table and pointer stepping instead of a
+      multiply per pixel and an index multiply per column step. */
+  unsigned char gQuotient[255 * 33 + 1];
+  short gQuotientRadius = -1;
+
+  void PrepareQuotients(short radius)
+  {
+    if (gQuotientRadius == radius)
       return;
-    }
-    const Pattern &pattern = loka::toolbox::kToolboxGradientPatterns[step.ink];
-    if (oval)
-      FillRoundRect(&rect, oval, oval, &pattern);
-    else
-      FillRect(&rect, &pattern);
+    const long width = 2 * radius + 1;
+    for (long sum = 0; sum <= 255 * width; ++sum)
+      gQuotient[sum] = static_cast<unsigned char>(sum / width);
+    gQuotientRadius = radius;
   }
 
-  void DrawShadow(const Rect &body, const Look &look)
+  void BlurLineFast(unsigned char *start, long stride, short n, short radius, unsigned char *line)
   {
-    for (short i = 0; i < look.count; ++i)
+    unsigned char *p = start;
+    for (short i = 0; i < n; ++i, p += stride)
+      line[i] = *p;
+    unsigned short sum = 0;
+    for (short k = 0; k <= radius && k < n; ++k)
+      sum += line[k];
+    p = start;
+    const unsigned char *add = line + radius + 1;
+    const unsigned char *sub = line - radius;
+    for (short i = 0; i < n; ++i, p += stride, ++add, ++sub)
     {
-      Rect silhouette = body;
-      OffsetRect(&silhouette, look.steps[i].offset, look.steps[i].offset);
-      InkShape(silhouette, look.oval, look.steps[i], look.color);
+      *p = gQuotient[sum];
+      if (i + radius + 1 < n)
+        sum += *add;
+      if (i - radius >= 0)
+        sum -= *sub;
     }
-    if (look.color)
+  }
+
+  void BlurFast(unsigned char *values, short w, short h, short radius, unsigned char *line)
+  {
+    PrepareQuotients(radius);
+    for (short pass = 0; pass < 2; ++pass)
+      for (short y = 0; y < h; ++y)
+        BlurLineFast(values + static_cast<long>(y) * w, 1, w, radius, line);
+    for (short pass = 0; pass < 2; ++pass)
+      for (short x = 0; x < w; ++x)
+        BlurLineFast(values + x, w, h, radius, line);
+  }
+
+  /** Shadow intensity (0..255 before kPeak) over the outer frame: the body
+      offset down-right, rasterized through a 1-bit GWorld, blurred twice per axis. */
+  unsigned char *BuildIntensity(RgnHandle body, const Rect &outer, const Spread &spread)
+  {
+    const short w = outer.right, h = outer.bottom;
+    GWorldPtr mask = 0;
+    if (NewGWorld(&mask, 1, &outer, 0, 0, 0) != noErr || !mask)
+      return 0;
+    char *bits = 0;
+    long rowBytes = 0;
+    unsigned char *values = 0;
+    unsigned char *line = 0;
+    if (PixelsOf(mask, bits, rowBytes))
     {
-      RGBColor black;
-      black.red = black.green = black.blue = 0;
-      RGBForeColor(&black);
+      CGrafPtr savedPort;
+      GDHandle savedDevice;
+      GetGWorld(&savedPort, &savedDevice);
+      SetGWorld(mask, 0);
+      EraseRect(&outer);
+      OffsetRgn(body, spread.offset, spread.offset);
+      PaintRgn(body);
+      OffsetRgn(body, static_cast<short>(-spread.offset), static_cast<short>(-spread.offset));
+      SetGWorld(savedPort, savedDevice);
+      Mark(1);
+      values = reinterpret_cast<unsigned char *>(NewPtr(static_cast<long>(w) * h));
+      line = reinterpret_cast<unsigned char *>(NewPtr(w > h ? w : h));
+      if (values && line)
+      {
+        for (short y = 0; y < h; ++y)
+        {
+          const unsigned char *src = reinterpret_cast<const unsigned char *>(bits) + y * rowBytes;
+          unsigned char *dst = values + static_cast<long>(y) * w;
+          for (short x = 0; x < w; ++x)
+            dst[x] = ((src[x >> 3] >> (7 - (x & 7))) & 1) ? 255 : 0;
+        }
+        Mark(2);
+        if (gFastBlur)
+          BlurFast(values, w, h, spread.radius, line);
+        else
+        {
+          BlurRows(values, w, h, spread.radius, line);
+          BlurRows(values, w, h, spread.radius, line);
+          BlurColumns(values, w, h, spread.radius, line);
+          BlurColumns(values, w, h, spread.radius, line);
+        }
+        Mark(3);
+      }
+      else if (values)
+      {
+        DisposePtr(reinterpret_cast<Ptr>(values));
+        values = 0;
+      }
     }
+    if (line)
+      DisposePtr(reinterpret_cast<Ptr>(line));
+    DisposeGWorld(mask);
+    return values;
   }
 
-  void DrawBody(const Rect &body, short oval)
+  unsigned char gGrayIndex[256];
+
+  /** Build the whole decoration once. depth 1 = Bayer stencil, depth 8 = grays onto white. */
+  bool BuildCard(ShapeKind kind, short w, short h, short spreadPx, short depth, CardCache &card)
   {
-    if (oval)
+    card.world = 0;
+    card.bytes = 0;
+    const Spread spread(spreadPx);
+    RgnHandle body = MakeShape(kind, w, h);
+    if (!body)
+      return false;
+    const Rect box = (**body).rgnBBox;
+    const short left = static_cast<short>(spread.reach > spread.offset ? spread.reach - spread.offset : 0);
+    const short right = static_cast<short>(spread.reach + spread.offset);
+    SetRect(&card.outer, 0, 0, static_cast<short>(left + box.right + right),
+            static_cast<short>(left + box.bottom + right));
+    OffsetRgn(body, left, left);
+    SetRect(&card.body, left, left, left + w, left + h);
+    const short inset = kind == SHAPE_OVAL ? static_cast<short>(w * 3 / 20 + 2) : static_cast<short>(kBand);
+    const short insetY = kind == SHAPE_OVAL ? static_cast<short>(h * 3 / 20 + 2) : static_cast<short>(kBand);
+    SetRect(&card.content, card.body.left + inset, card.body.top + insetY, card.body.right - inset,
+            card.body.bottom - insetY);
+
+    Mark(0);
+    unsigned char *values = BuildIntensity(body, card.outer, spread);
+    bool ok = values != 0;
+    if (ok)
+      ok = NewGWorld(&card.world, depth, &card.outer, 0, 0, 0) == noErr && card.world;
+    char *base = 0;
+    long rowBytes = 0;
+    if (ok)
+      ok = PixelsOf(card.world, base, rowBytes);
+    Mark(4);
+    if (ok)
     {
-      EraseRoundRect(&body, oval, oval);
-      FrameRoundRect(&body, oval, oval);
+      const short ow = card.outer.right, oh = card.outer.bottom;
+      card.bytes = rowBytes * oh;
+      for (short y = 0; y < oh; ++y)
+      {
+        unsigned char *row = reinterpret_cast<unsigned char *>(base) + y * rowBytes;
+        const unsigned char *src = values + static_cast<long>(y) * ow;
+        if (depth == 1)
+        {
+          for (short x = 0; x < (ow + 7) / 8; ++x)
+            row[x] = 0;
+          for (short x = 0; x < ow; ++x)
+            if (((src[x] * kPeak) >> 8) > kBayer8[y & 7][x & 7] * 4 + 2)
+              row[x >> 3] |= static_cast<unsigned char>(0x80 >> (x & 7));
+        }
+        else
+        {
+          for (short x = 0; x < ow; ++x)
+            row[x] = gGrayIndex[255 - ((src[x] * kPeak) >> 8)];
+        }
+      }
+      Mark(5);
+      CGrafPtr savedPort;
+      GDHandle savedDevice;
+      GetGWorld(&savedPort, &savedDevice);
+      SetGWorld(card.world, 0);
+      PenNormal();
+      ForeColor(blackColor);
+      BackColor(whiteColor);
+      EraseRgn(body);
+      FrameRgn(body);
+      SetGWorld(savedPort, savedDevice);
+      Mark(6);
     }
-    else
+    if (values)
+      DisposePtr(reinterpret_cast<Ptr>(values));
+    DisposeRgn(body);
+    if (!ok && card.world)
     {
-      EraseRect(&body);
-      FrameRect(&body);
+      DisposeGWorld(card.world);
+      card.world = 0;
     }
+    return ok;
   }
 
-  void DrawCard(short left, short top, const Look &look, ConstStr255Param label, ConstStr255Param caption)
+  void FreeCard(CardCache &card)
   {
-    Rect body;
-    SetRect(&body, left, top, left + 120, top + 72);
-    DrawShadow(body, look);
-    DrawBody(body, look.oval);
-    MoveTo(left + 12, top + 39);
-    DrawString(label);
-    MoveTo(left, top + 94);
-    DrawString(caption);
+    if (card.world)
+      DisposeGWorld(card.world);
+    card.world = 0;
   }
 
-  // Shadow inks. 1-bit levels index kToolboxGradientPatterns (k/8 black).
-  const Step kOne2[] = {{3, 2}};
-  const Step kOne3[] = {{3, 3}};
-  const Step kOne4[] = {{3, 4}};
-  const Step kThree[] = {{3, 2}, {2, 4}, {1, 6}};
-  // Grays with the same darkness as the 2/8, 4/8, 6/8 patterns.
-  const Step kGrayOne[] = {{3, 0x9999}};
-  const Step kGrayThree[] = {{3, 0xBBBB}, {2, 0x8888}, {1, 0x4444}};
-  const Step kGraySoft[] = {{6, 0xEEEE}, {5, 0xDDDD}, {4, 0xCCCC}, {3, 0xBBBB}, {2, 0xAAAA}, {1, 0x9999}};
-
-  void DrawPageMono()
+  /** Four strips tiling outer minus content (top, right, bottom, left), local coordinates. */
+  void Strips(const CardCache &card, Rect *strips)
   {
-    const Look g = {kOne2, 1, 0, false};
-    const Look h = {kOne3, 1, 0, false};
-    const Look i = {kOne4, 1, 0, false};
-    const Look j = {kOne3, 1, 12, false};
-    const Look k = {kOne4, 1, 12, false};
-    const Look l = {kThree, 3, 12, false};
-    DrawCard(16, 18, g, "\pSquare", "\pg one 2/8");
-    DrawCard(156, 18, h, "\pSquare", "\ph one 3/8");
-    DrawCard(296, 18, i, "\pSquare", "\pi one 4/8");
-    DrawCard(16, 150, j, "\pRound 12", "\pj R12 one 3/8");
-    DrawCard(156, 150, k, "\pRound 12", "\pk R12 one 4/8");
-    DrawCard(296, 150, l, "\pRound 12", "\pl R12 3-step");
+    const Rect &o = card.outer;
+    const Rect &c = card.content;
+    SetRect(&strips[0], 0, 0, c.right, c.top);
+    SetRect(&strips[1], c.right, 0, o.right, c.bottom);
+    SetRect(&strips[2], c.left, c.bottom, o.right, o.bottom);
+    SetRect(&strips[3], 0, c.top, c.left, o.bottom);
   }
 
-  void DrawPageColor()
+  const BitMap *CacheBits(const CardCache &card)
   {
-    const Look m = {kGrayOne, 1, 0, true};
-    const Look n = {kGrayThree, 3, 0, true};
-    const Look o = {kGraySoft, 6, 0, true};
-    const Look p = {kGrayOne, 1, 12, true};
-    const Look q = {kGrayThree, 3, 12, true};
-    const Look r = {kGraySoft, 6, 12, true};
-    DrawCard(16, 18, m, "\pSquare", "\pm one gray");
-    DrawCard(156, 18, n, "\pSquare", "\pn 3 grays");
-    DrawCard(296, 18, o, "\pSquare", "\po 6 grays");
-    DrawCard(16, 150, p, "\pRound 12", "\pp R12 one gray");
-    DrawCard(156, 150, q, "\pRound 12", "\pq R12 3 grays");
-    DrawCard(296, 150, r, "\pRound 12", "\pr R12 6 grays");
+    return reinterpret_cast<const BitMap *>(*GetGWorldPixMap(card.world));
   }
 
-  /** Paint a 240x160 card's band the way four strip leaves would: each strip
-      clips to itself, erases to the parent ground, then draws every
-      silhouette and the body. Strips tile the frame band without overlap. */
-  void PaintBandStrips(const Look &look)
+  /** The current port's own bits: a window's portBits or a GWorld's pixmap. */
+  const BitMap *PortBits()
   {
-    const short x = 20, y = 20, bw = 240, bh = 160, t = 4;
-    short d = 0;
-    for (short s = 0; s < look.count; ++s)
-      if (look.steps[s].offset > d)
-        d = look.steps[s].offset;
-    Rect body;
-    SetRect(&body, x, y, x + bw, y + bh);
+    GrafPtr port;
+    GetPort(&port);
+    return &port->portBits;
+  }
+
+  void RepaintStrips(const CardCache &card, short atX, short atY, const Rect &portRect)
+  {
     Rect strips[4];
-    SetRect(&strips[0], x, y, x + bw - t, y + t);                 // top
-    SetRect(&strips[1], x + bw - t, y, x + bw + d, y + bh - t);   // right + shadow
-    SetRect(&strips[2], x + t, y + bh - t, x + bw + d, y + bh + d); // bottom + shadow
-    SetRect(&strips[3], x, y + t, x + t, y + bh + d);             // left
+    Strips(card, strips);
     for (short s = 0; s < 4; ++s)
     {
-      ClipRect(&strips[s]);
-      EraseRect(&strips[s]);
-      DrawShadow(body, look);
-      DrawBody(body, look.oval);
+      Rect dst = strips[s];
+      OffsetRect(&dst, atX, atY);
+      ClipRect(&dst);
+      CopyBits(CacheBits(card), PortBits(), &strips[s], &dst, srcCopy, 0);
     }
-    Rect all;
-    SetRect(&all, 0, 0, kWidth, kHeight);
-    ClipRect(&all);
+    ClipRect(&portRect);
   }
 
-  void SetUpPort()
+  void RepaintWhole(const CardCache &card, short atX, short atY)
   {
-    PenNormal();
-    TextFont(0); // Chicago on the intended System 7 rig.
-    TextSize(12);
-    TextMode(srcOr);
-    ForeColor(blackColor);
-    BackColor(whiteColor);
-    Rect content;
-    SetRect(&content, 0, 0, kWidth, kHeight);
-    ClipRect(&content);
-    EraseRect(&content);
-  }
-  bool Touches(const Rect &piece, const Rect &strip)
-  {
-    Rect overlap;
-    return SectRect(&piece, &strip, &overlap);
+    Rect dst = card.outer;
+    OffsetRect(&dst, atX, atY);
+    CopyBits(CacheBits(card), PortBits(), &card.outer, &dst, srcCopy, 0);
   }
 
-  /** Ink (step != 0) or erase (step == 0) one piece; corner pieces are circles. */
-  void ApplyPiece(const Rect &piece, short oval, const Step *step, bool color)
+  unsigned long Elapsed(const UnsignedWide &before, const UnsignedWide &after)
   {
-    if (step)
-    {
-      InkShape(piece, oval, *step, color);
-      return;
-    }
-    if (oval)
-      EraseRoundRect(&piece, oval, oval);
-    else
-      EraseRect(&piece);
+    return after.lo - before.lo;
   }
 
-  /** A round rect as a cross of two rects plus four corner circles. Only
-      pieces whose own quadrant touches the strip are drawn; a circle's other
-      quadrants overlap the cross with the same ink. */
-  void FillRoundFast(const Rect &r, short oval, const Step *step, bool color, const Rect &strip)
-  {
-    if (!oval)
-    {
-      if (Touches(r, strip))
-        ApplyPiece(r, 0, step, color);
-      return;
-    }
-    const short radius = oval / 2;
-    Rect cross[2];
-    SetRect(&cross[0], r.left + radius, r.top, r.right - radius, r.bottom);
-    SetRect(&cross[1], r.left, r.top + radius, r.right, r.bottom - radius);
-    for (short i = 0; i < 2; ++i)
-      if (Touches(cross[i], strip))
-        ApplyPiece(cross[i], 0, step, color);
-    for (short corner = 0; corner < 4; ++corner)
-    {
-      const short left = (corner & 1) ? r.right - oval : r.left;
-      const short top = (corner & 2) ? r.bottom - oval : r.top;
-      Rect circle, quadrant;
-      SetRect(&circle, left, top, left + oval, top + oval);
-      SetRect(&quadrant, (corner & 1) ? r.right - radius : r.left, (corner & 2) ? r.bottom - radius : r.top,
-              (corner & 1) ? r.right : r.left + radius, (corner & 2) ? r.bottom : r.top + radius);
-      if (Touches(quadrant, strip))
-        ApplyPiece(circle, oval, step, color);
-    }
-  }
-
-  void FrameRoundFast(const Rect &r, short oval, const Rect &strip)
-  {
-    if (!oval)
-    {
-      FrameRect(&r);
-      return;
-    }
-    const short radius = oval / 2;
-    Rect edges[4];
-    SetRect(&edges[0], r.left + radius, r.top, r.right - radius, r.top + 1);
-    SetRect(&edges[1], r.left + radius, r.bottom - 1, r.right - radius, r.bottom);
-    SetRect(&edges[2], r.left, r.top + radius, r.left + 1, r.bottom - radius);
-    SetRect(&edges[3], r.right - 1, r.top + radius, r.right, r.bottom - radius);
-    for (short i = 0; i < 4; ++i)
-      if (Touches(edges[i], strip))
-        PaintRect(&edges[i]);
-    bool clipped = false;
-    for (short corner = 0; corner < 4; ++corner)
-    {
-      Rect quadrant, clip;
-      SetRect(&quadrant, (corner & 1) ? r.right - radius : r.left, (corner & 2) ? r.bottom - radius : r.top,
-              (corner & 1) ? r.right : r.left + radius, (corner & 2) ? r.bottom : r.top + radius);
-      if (!SectRect(&quadrant, &strip, &clip))
-        continue;
-      const short left = (corner & 1) ? r.right - oval : r.left;
-      const short top = (corner & 2) ? r.bottom - oval : r.top;
-      Rect circle;
-      SetRect(&circle, left, top, left + oval, top + oval);
-      ClipRect(&clip);
-      FrameOval(&circle);
-      clipped = true;
-    }
-    if (clipped)
-      ClipRect(&strip);
-  }
-
-  void PaintCardFast(const Rect &body, const Look &look, const Rect &strip)
-  {
-    for (short i = 0; i < look.count; ++i)
-    {
-      Rect silhouette = body;
-      OffsetRect(&silhouette, look.steps[i].offset, look.steps[i].offset);
-      FillRoundFast(silhouette, look.oval, &look.steps[i], look.color, strip);
-    }
-    if (look.color)
-    {
-      RGBColor black;
-      black.red = black.green = black.blue = 0;
-      RGBForeColor(&black);
-    }
-    FillRoundFast(body, look.oval, 0, false, strip);
-    FrameRoundFast(body, look.oval, strip);
-  }
-
-  void BandStrips(short d, Rect *strips)
-  {
-    const short x = 20, y = 20, bw = 240, bh = 160, t = 4;
-    SetRect(&strips[0], x, y, x + bw - t, y + t);
-    SetRect(&strips[1], x + bw - t, y, x + bw + d, y + bh - t);
-    SetRect(&strips[2], x + t, y + bh - t, x + bw + d, y + bh + d);
-    SetRect(&strips[3], x, y + t, x + t, y + bh + d);
-  }
-
-  short Depth(const Look &look)
-  {
-    short d = 0;
-    for (short s = 0; s < look.count; ++s)
-      if (look.steps[s].offset > d)
-        d = look.steps[s].offset;
-    return d;
-  }
-
-  /** Same band as PaintBandStrips, but each strip draws only pieces that touch it. */
-  void PaintBandStripsFast(const Look &look)
-  {
-    Rect body;
-    SetRect(&body, 20, 20, 260, 180);
-    Rect strips[4];
-    BandStrips(Depth(look), strips);
-    for (short s = 0; s < 4; ++s)
-    {
-      ClipRect(&strips[s]);
-      EraseRect(&strips[s]);
-      PaintCardFast(body, look, strips[s]);
-    }
-    Rect all;
-    SetRect(&all, 0, 0, kWidth, kHeight);
-    ClipRect(&all);
-  }
-
-  /** Reference cost: erasing the 240x160 body, the cheapest paint its inside gets. */
-  void PaintBodyErase(const Look &)
-  {
-    Rect body;
-    SetRect(&body, 20, 20, 260, 180);
-    EraseRect(&body);
-  }
-
-  typedef void (*PaintFn)(const Look &);
-
-  unsigned long TimeReps(PaintFn paint, const Look &look)
-  {
-    UnsignedWide before, after;
-    Microseconds(&before);
-    for (short i = 0; i < kReps; ++i)
-      paint(look);
-    Microseconds(&after);
-    return (after.lo - before.lo) / kReps;
-  }
-
-  struct Timing
-  {
-    const char *name;
-    PaintFn paint;
-    Look look;
-    bool colorOnly;
-  };
-
-  const Step kNone[] = {{0, 0}};
-
-  void RunTimings(std::FILE *file, const char *depth, bool colorPort)
-  {
-    const Timing timings[] = {
-        {"body-erase", PaintBodyErase, {kNone, 0, 0, false}, false},
-        {"square-border-only", PaintBandStrips, {kNone, 0, 0, false}, false},
-        {"square-one-pattern", PaintBandStrips, {kOne3, 1, 0, false}, false},
-        {"square-3-step", PaintBandStrips, {kThree, 3, 0, false}, false},
-        {"r12-border-only", PaintBandStrips, {kNone, 0, 12, false}, false},
-        {"r12-one-pattern", PaintBandStrips, {kOne3, 1, 12, false}, false},
-        {"r12-3-step", PaintBandStrips, {kThree, 3, 12, false}, false},
-        {"r12-3-grays", PaintBandStrips, {kGrayThree, 3, 12, true}, true},
-        {"r12-6-grays", PaintBandStrips, {kGraySoft, 6, 12, true}, true},
-        {"fast-square-border-only", PaintBandStripsFast, {kNone, 0, 0, false}, false},
-        {"fast-square-one-pattern", PaintBandStripsFast, {kOne3, 1, 0, false}, false},
-        {"fast-square-3-step", PaintBandStripsFast, {kThree, 3, 0, false}, false},
-        {"fast-r12-border-only", PaintBandStripsFast, {kNone, 0, 12, false}, false},
-        {"fast-r12-one-pattern", PaintBandStripsFast, {kOne3, 1, 12, false}, false},
-        {"fast-r12-3-step", PaintBandStripsFast, {kThree, 3, 12, false}, false},
-        {"fast-r12-3-grays", PaintBandStripsFast, {kGrayThree, 3, 12, true}, true},
-    };
-    for (unsigned i = 0; i < sizeof(timings) / sizeof(timings[0]); ++i)
-    {
-      if (timings[i].colorOnly && !colorPort)
-        continue;
-      const unsigned long us = TimeReps(timings[i].paint, timings[i].look);
-      std::fprintf(file, "TIME depth=%s case=%s reps=%d us_per_card=%lu\n", depth, timings[i].name, kReps, us);
-    }
-  }
-
-  /** Snapshot the window content into `bytes` (1-bit, kWidth/8 per row). */
   void Snapshot(Ptr bytes)
   {
     BitMap shot;
@@ -395,46 +415,100 @@ namespace
     CopyBits(&qd.thePort->portBits, &shot, &content, &shot.bounds, srcCopy, 0);
   }
 
-  /** The fast pieces must give the same pixels as the whole-shape strips. */
-  void CompareFastToNaive(std::FILE *file)
+  struct TimedCase
   {
-    const long size = static_cast<long>(kWidth / 8) * kHeight;
-    Ptr naive = NewPtrClear(size);
-    Ptr fast = NewPtrClear(size);
-    if (!naive || !fast)
+    const char *name;
+    ShapeKind kind;
+    short spread;
+  };
+
+  void TimeCase(std::FILE *file, const char *depthName, short depth, const TimedCase &c, const Rect &portRect)
+  {
+    UnsignedWide before, after;
+    CardCache card;
+    Microseconds(&before);
+    const bool built = BuildCard(c.kind, 240, 160, c.spread, depth, card);
+    Microseconds(&after);
+    if (!built)
     {
-      std::fprintf(file, "MATCH refused=memory\n");
-      if (naive)
-        DisposePtr(naive);
-      if (fast)
-        DisposePtr(fast);
+      std::fprintf(file, "TIME depth=%s case=%s refused=build\n", depthName, c.name);
       return;
     }
-    struct Case
+    const unsigned long build = Elapsed(before, after);
+    std::fprintf(file, "STAGES depth=%s case=%s fast_blur=%d mask_us=%lu expand_us=%lu blur_us=%lu gworld_us=%lu stencil_us=%lu body_us=%lu\n",
+                 depthName, c.name, gFastBlur ? 1 : 0, Elapsed(gMarks[0], gMarks[1]), Elapsed(gMarks[1], gMarks[2]),
+                 Elapsed(gMarks[2], gMarks[3]), Elapsed(gMarks[3], gMarks[4]), Elapsed(gMarks[4], gMarks[5]),
+                 Elapsed(gMarks[5], gMarks[6]));
+    const short atX = static_cast<short>(24 - card.body.left), atY = static_cast<short>(24 - card.body.top);
+    EraseRect(&portRect);
+    Microseconds(&before);
+    for (short i = 0; i < kReps; ++i)
+      RepaintStrips(card, atX, atY, portRect);
+    Microseconds(&after);
+    const unsigned long strips = Elapsed(before, after) / kReps;
+    Microseconds(&before);
+    for (short i = 0; i < kReps; ++i)
+      RepaintWhole(card, atX, atY);
+    Microseconds(&after);
+    const unsigned long whole = Elapsed(before, after) / kReps;
+    if (depth == 1)
     {
-      const char *name;
-      Look look;
-    };
-    const Case cases[] = {{"square-3-step", {kThree, 3, 0, false}},
-                          {"r12-one-pattern", {kOne3, 1, 12, false}},
-                          {"r12-3-step", {kThree, 3, 12, false}},
-                          {"r16-3-step", {kThree, 3, 16, false}}};
-    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
-    {
-      SetUpPort();
-      PaintBandStrips(cases[i].look);
-      Snapshot(naive);
-      SetUpPort();
-      PaintBandStripsFast(cases[i].look);
-      Snapshot(fast);
-      long diff = 0;
-      for (long b = 0; b < size; ++b)
-        if (naive[b] != fast[b])
-          ++diff;
-      std::fprintf(file, "MATCH case=%s diffbytes=%ld\n", cases[i].name, diff);
+      // Strip tiling must reproduce the whole-card copy exactly.
+      const long size = static_cast<long>(kWidth / 8) * kHeight;
+      Ptr viaStrips = NewPtrClear(size);
+      Ptr viaWhole = NewPtrClear(size);
+      if (viaStrips && viaWhole)
+      {
+        EraseRect(&portRect);
+        RepaintStrips(card, atX, atY, portRect);
+        Snapshot(viaStrips);
+        EraseRect(&portRect);
+        RepaintWhole(card, atX, atY);
+        Snapshot(viaWhole);
+        long diff = 0;
+        for (long b = 0; b < size; ++b)
+          if (viaStrips[b] != viaWhole[b])
+            ++diff;
+        std::fprintf(file, "MATCH case=%s strips_vs_whole_diffbytes=%ld\n", c.name, diff);
+      }
+      if (viaStrips)
+        DisposePtr(viaStrips);
+      if (viaWhole)
+        DisposePtr(viaWhole);
     }
-    DisposePtr(naive);
-    DisposePtr(fast);
+    std::fprintf(file, "TIME depth=%s case=%s outer=%dx%d build_us=%lu strips_us=%lu whole_us=%lu cache_bytes=%ld\n",
+                 depthName, c.name, card.outer.right, card.outer.bottom, build, strips, whole, card.bytes);
+    FreeCard(card);
+  }
+
+  void PlaceCard(ShapeKind kind, short spread, short depth, short bodyX, short bodyY, ConstStr255Param label,
+                 ConstStr255Param caption)
+  {
+    CardCache card;
+    if (!BuildCard(kind, 120, 72, spread, depth, card))
+    {
+      MoveTo(bodyX, bodyY + 40);
+      DrawString("\pREFUSED");
+      return;
+    }
+    RepaintWhole(card, static_cast<short>(bodyX - card.body.left), static_cast<short>(bodyY - card.body.top));
+    MoveTo(bodyX + 12, bodyY + 40);
+    DrawString(label);
+    MoveTo(bodyX, static_cast<short>(bodyY + card.outer.bottom - card.body.top + 12));
+    DrawString(caption);
+    FreeCard(card);
+  }
+
+  void SetUpPort(const Rect &portRect)
+  {
+    PenNormal();
+    TextFont(0); // Chicago on the intended System 7 rig.
+    TextSize(12);
+    TextMode(srcOr);
+    ForeColor(blackColor);
+    BackColor(whiteColor);
+    ClipRect(&portRect);
+    EraseRect(&portRect);
   }
 
   bool WriteMono(std::FILE *file)
@@ -457,11 +531,12 @@ namespace
     return ok;
   }
 
-  bool WriteColor(std::FILE *file, PixMapHandle pixels)
+  bool WriteColor(std::FILE *file, GWorldPtr world)
   {
+    PixMapHandle pixels = GetGWorldPixMap(world);
     CTabHandle table = (**pixels).pmTable;
     const short entries = static_cast<short>((**table).ctSize + 1);
-    std::fprintf(file, "IMG8 %d %d %d\n", kWidth, kHeight, entries);
+    std::fprintf(file, "IMG8 %d %d %d\n", kWidth, kColorHeight, entries);
     bool ok = true;
     for (short i = 0; i < entries && ok; ++i)
     {
@@ -473,11 +548,17 @@ namespace
     }
     const long rowBytes = (**pixels).rowBytes & 0x3FFF;
     const char *base = GetPixBaseAddr(pixels);
-    for (short row = 0; row < kHeight && ok; ++row)
+    for (short row = 0; row < kColorHeight && ok; ++row)
       ok = std::fwrite(base + row * rowBytes, 1, kWidth, file) == static_cast<size_t>(kWidth);
     return ok;
   }
 
+  const TimedCase kMonoCases[] = {{"round-s3", SHAPE_ROUND, 3},   {"round-s8", SHAPE_ROUND, 8},
+                                  {"round-s16", SHAPE_ROUND, 16}, {"square-s8", SHAPE_SQUARE, 8},
+                                  {"oval-s8", SHAPE_OVAL, 8},     {"bubble-s8", SHAPE_BUBBLE, 8}};
+  const TimedCase kColorCases[] = {{"round-s8-gray", SHAPE_ROUND, 8},
+                                   {"round-s16-gray", SHAPE_ROUND, 16},
+                                   {"bubble-s8-gray", SHAPE_BUBBLE, 8}};
 } // namespace
 
 int main()
@@ -491,8 +572,8 @@ int main()
   InitCursor();
 
   Rect bounds;
-  SetRect(&bounds, 32, 60, 32 + kWidth, 60 + kHeight);
-  WindowPtr window = NewWindow(0, &bounds, "\pCard shadow probe 2", true, documentProc,
+  SetRect(&bounds, 0, 40, kWidth, 40 + kHeight);
+  WindowPtr window = NewWindow(0, &bounds, "\pCard shadow probe 3", true, plainDBox,
                                reinterpret_cast<WindowPtr>(-1L), false, 0);
   if (!window)
   {
@@ -502,7 +583,9 @@ int main()
   SetPort(window);
   HideCursor();
   BackPat(&qd.white);
-  SetUpPort();
+  Rect windowRect;
+  SetRect(&windowRect, 0, 0, kWidth, kHeight);
+  SetUpPort(windowRect);
 
   loka::platform::file::FileHandle destination;
   bool ok = loka::platform::file::ResolveApplicationSidecar(
@@ -515,19 +598,32 @@ int main()
     ExitToShell();
     return 1;
   }
-  std::fprintf(file, "CARDPROBE2\n");
+  std::fprintf(file, "CARDPROBE3\n");
 
-  // 1-bit: timings on the window, then the picture page.
-  RunTimings(file, "1-window", false);
-  CompareFastToNaive(file);
-  SetUpPort();
-  DrawPageMono();
+  // 1-bit: stencil timings on the window, then the picture page.
+  for (unsigned i = 0; i < sizeof(kMonoCases) / sizeof(kMonoCases[0]); ++i)
+    TimeCase(file, "1-window", 1, kMonoCases[i], windowRect);
+  gFastBlur = true;
+  {
+    const TimedCase fastCases[] = {{"round-s8-fastblur", SHAPE_ROUND, 8}, {"round-s16-fastblur", SHAPE_ROUND, 16},
+                                   {"bubble-s8-fastblur", SHAPE_BUBBLE, 8}};
+    for (unsigned i = 0; i < sizeof(fastCases) / sizeof(fastCases[0]); ++i)
+      TimeCase(file, "1-window", 1, fastCases[i], windowRect);
+  }
+  gFastBlur = false;
+  SetUpPort(windowRect);
+  PlaceCard(SHAPE_ROUND, 3, 1, 20, 24, "\pRound", "\pA round s3");
+  PlaceCard(SHAPE_ROUND, 8, 1, 185, 24, "\pRound", "\pB round s8");
+  PlaceCard(SHAPE_ROUND, 16, 1, 350, 24, "\pRound", "\pC round s16");
+  PlaceCard(SHAPE_SQUARE, 8, 1, 20, 184, "\pSquare", "\pD square s8");
+  PlaceCard(SHAPE_OVAL, 8, 1, 185, 184, "\pOval", "\pE oval s8");
+  PlaceCard(SHAPE_BUBBLE, 8, 1, 350, 184, "\pBubble", "\pF bubble s8");
   ok = WriteMono(file);
 
-  // 8-bit offscreen: the closest proxy here for the 180c's 8-bit screen.
+  // 8-bit offscreen: grays onto white, no dither.
   GWorldPtr world = 0;
   Rect worldBounds;
-  SetRect(&worldBounds, 0, 0, kWidth, kHeight);
+  SetRect(&worldBounds, 0, 0, kWidth, kColorHeight);
   const QDErr err = NewGWorld(&world, 8, &worldBounds, 0, 0, 0);
   if (err != noErr || !world)
   {
@@ -535,8 +631,9 @@ int main()
   }
   else
   {
-    PixMapHandle pixels = GetGWorldPixMap(world);
-    if (!LockPixels(pixels) || PixMap32Bit(pixels))
+    char *base = 0;
+    long rowBytes = 0;
+    if (!PixelsOf(world, base, rowBytes))
     {
       std::fprintf(file, "GWORLD-UNREADABLE\n");
     }
@@ -546,12 +643,21 @@ int main()
       GDHandle savedDevice;
       GetGWorld(&savedPort, &savedDevice);
       SetGWorld(world, 0);
-      SetUpPort();
-      RunTimings(file, "8-gworld", true);
-      SetUpPort();
-      DrawPageColor();
+      for (short g = 0; g < 256; ++g)
+      {
+        RGBColor gray;
+        gray.red = gray.green = gray.blue = static_cast<unsigned short>(g * 0x0101);
+        gGrayIndex[g] = static_cast<unsigned char>(Color2Index(&gray));
+      }
+      SetUpPort(worldBounds);
+      for (unsigned i = 0; i < sizeof(kColorCases) / sizeof(kColorCases[0]); ++i)
+        TimeCase(file, "8-gworld", 8, kColorCases[i], worldBounds);
+      SetUpPort(worldBounds);
+      PlaceCard(SHAPE_ROUND, 8, 8, 20, 24, "\pRound", "\pG round s8 gray");
+      PlaceCard(SHAPE_ROUND, 16, 8, 185, 24, "\pRound", "\pH round s16 gray");
+      PlaceCard(SHAPE_BUBBLE, 8, 8, 350, 24, "\pBubble", "\pI bubble s8 gray");
       SetGWorld(savedPort, savedDevice);
-      if (!WriteColor(file, pixels))
+      if (!WriteColor(file, world))
         ok = false;
     }
     DisposeGWorld(world);
