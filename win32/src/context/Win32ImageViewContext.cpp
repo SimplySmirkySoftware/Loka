@@ -208,12 +208,11 @@ Win32ImageViewContext::Win32ImageViewContext(Win32ScenePlatformController *contr
                                              loka::app::ImageViewNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(0),
       imageState_(0),
       image_()
 {
   EnsureClassRegistered();
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       kImageViewClassName,
       L"",
@@ -228,7 +227,7 @@ Win32ImageViewContext::Win32ImageViewContext(Win32ScenePlatformController *contr
 
 Win32ImageViewContext::~Win32ImageViewContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** The image observer requests the parent rectangle and its children, without erase.
@@ -237,7 +236,7 @@ Win32ImageViewContext::~Win32ImageViewContext()
 loka::app::scene::PaintAnswer Win32ImageViewContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -254,8 +253,8 @@ void Win32ImageViewContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32ImageViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                          loka::app::scene::NodeLifecycleFact next)
+void Win32ImageViewContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                         loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -270,7 +269,6 @@ void Win32ImageViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact pr
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       this->unbindImage();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -278,17 +276,17 @@ void Win32ImageViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact pr
 
 void Win32ImageViewContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32ImageViewContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
@@ -305,13 +303,13 @@ short Win32ImageViewContext::layout(loka::app::scene::IPlatformController *, lok
 
 void Win32ImageViewContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
-  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_);
+  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
 }
 
 void Win32ImageViewContext::EnsureClassRegistered()
@@ -398,9 +396,9 @@ void Win32ImageViewContext::applyImage()
     return;
   }
   image_ = imageState_->get();
-  if (hwnd_)
+  if (this->hwnd())
   {
-    Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_);
+    Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
   }
 }
 

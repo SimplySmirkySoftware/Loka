@@ -45,11 +45,10 @@ Win32RibbonGroupEdgeContext::Win32RibbonGroupEdgeContext(Win32ScenePlatformContr
                                                          int height,
                                                          loka::app::RibbonGroupEdgeNode *node)
     : Win32RetirableContext(controller),
-      node_(node),
-      hwnd_(0)
+      node_(node)
 {
   EnsureClassRegistered();
-  this->hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       kEdgeClassName,
       L"",
@@ -63,7 +62,7 @@ Win32RibbonGroupEdgeContext::Win32RibbonGroupEdgeContext(Win32ScenePlatformContr
 
 Win32RibbonGroupEdgeContext::~Win32RibbonGroupEdgeContext()
 {
-  assert(!this->hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** Layout queues this fully painted child HWND through the native redraw path. */
@@ -71,7 +70,7 @@ loka::app::scene::PaintAnswer
 Win32RibbonGroupEdgeContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -86,8 +85,8 @@ void Win32RibbonGroupEdgeContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32RibbonGroupEdgeContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                                loka::app::scene::NodeLifecycleFact next)
+void Win32RibbonGroupEdgeContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                               loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -101,7 +100,6 @@ void Win32RibbonGroupEdgeContext::onFactChanged(loka::app::scene::NodeLifecycleF
     this->applyDetachedPresentation();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -109,17 +107,17 @@ void Win32RibbonGroupEdgeContext::onFactChanged(loka::app::scene::NodeLifecycleF
 
 void Win32RibbonGroupEdgeContext::applyAttachedPresentation()
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(this->hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32RibbonGroupEdgeContext::applyDetachedPresentation()
 {
-  if (this->hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(this->hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
@@ -131,13 +129,13 @@ short Win32RibbonGroupEdgeContext::layout(loka::app::scene::IPlatformController 
 
 void Win32RibbonGroupEdgeContext::relayout(int x, int y, int width, int height)
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
-  Win32ScenePlatformController::redrawDirtySubtreeNow(this->hwnd_, NULL, TRUE);
+  Win32ScenePlatformController::redrawDirtySubtreeNow(this->hwnd(), NULL, TRUE);
 }
 
 void Win32RibbonGroupEdgeContext::EnsureClassRegistered()

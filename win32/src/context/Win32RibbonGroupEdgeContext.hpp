@@ -33,8 +33,10 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
   void relayout(int x, int y, int width, int height);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   void applyAttachedPresentation();
@@ -44,7 +46,6 @@ private:
   void drawEdge(HDC hdc, const RECT &rect);
 
   loka::app::RibbonGroupEdgeNode *node_;
-  HWND hwnd_;
 };
 
 void RegisterWin32RibbonGroupEdgeNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry);

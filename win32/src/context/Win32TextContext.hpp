@@ -70,11 +70,12 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
   virtual void onPropsApplied();
   virtual void onTextEnvironmentChanged();
   void relayout(int x, int y, int width, int height);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class loka::testing::Win32TextColorAccess;
@@ -105,7 +106,6 @@ private:
   static void TextChangedThunk(void *userData);
 
   loka::app::TextNode *node_;
-  HWND hwnd_;
   loka::core::State<loka::core::String> *textState_;
   bool didInitialApply_;
   /** Completed outcome of applyText's native submission, never a future promise. */

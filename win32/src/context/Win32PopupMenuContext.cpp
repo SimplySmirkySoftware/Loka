@@ -48,7 +48,6 @@ Win32PopupMenuContext::Win32PopupMenuContext(Win32ScenePlatformController *contr
                                              loka::app::PopupMenuNode *node)
     : Win32RetirableContext(controller),
       node_(node),
-      hwnd_(0),
       selectionState_(0),
       enabledState_(0),
       appliedItems_(),
@@ -61,7 +60,7 @@ Win32PopupMenuContext::Win32PopupMenuContext(Win32ScenePlatformController *contr
   // Unicode window: CB_ADDSTRING sent via SendMessageW would otherwise be
   // thunked through the system ACP by an ANSI combo box, losing out-of-ACP
   // characters.
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       L"COMBOBOX",
       L"",
@@ -71,9 +70,9 @@ Win32PopupMenuContext::Win32PopupMenuContext(Win32ScenePlatformController *contr
       0,
       GetModuleHandleW(NULL),
       NULL);
-  if (hwnd_)
+  if (this->hwnd())
   {
-    SetWindowLongPtr(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    SetWindowLongPtr(this->hwnd(), GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
   }
 
   applyItems();
@@ -83,7 +82,7 @@ Win32PopupMenuContext::Win32PopupMenuContext(Win32ScenePlatformController *contr
 
 Win32PopupMenuContext::~Win32PopupMenuContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** COMBOBOX owns repaint after CB_SETCURSEL, EnableWindow, and item submission.
@@ -91,7 +90,7 @@ Win32PopupMenuContext::~Win32PopupMenuContext()
 loka::app::scene::PaintAnswer Win32PopupMenuContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   if (query.placement != PLACEMENT_ELIGIBLE)
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
@@ -112,8 +111,8 @@ void Win32PopupMenuContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32PopupMenuContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                          loka::app::scene::NodeLifecycleFact next)
+void Win32PopupMenuContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                         loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -130,7 +129,6 @@ void Win32PopupMenuContext::onFactChanged(loka::app::scene::NodeLifecycleFact pr
     {
       this->unbindSelection();
       this->unbindEnabled();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -138,17 +136,17 @@ void Win32PopupMenuContext::onFactChanged(loka::app::scene::NodeLifecycleFact pr
 
 void Win32PopupMenuContext::applyAttachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32PopupMenuContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    ShowWindow(hwnd_, SW_HIDE);
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
@@ -174,7 +172,7 @@ short Win32PopupMenuContext::layout(loka::app::scene::IPlatformController *, lok
 
 void Win32PopupMenuContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
@@ -186,7 +184,7 @@ void Win32PopupMenuContext::relayout(int x, int y, int width, int height)
     this->applySelection();
   }
   this->positionNativeWindow(
-      this->hwnd_, this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, this->dropHeight())));
+      this->hwnd(), this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, this->dropHeight())));
 }
 
 void Win32PopupMenuContext::bindSelection()
@@ -251,13 +249,13 @@ void Win32PopupMenuContext::applyItems()
 {
   using namespace loka::app::scene;
   this->controlDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
-  if (!hwnd_ || !node_)
+  if (!this->hwnd() || !node_)
   {
     return;
   }
-  const LRESULT previousCount = SendMessageW(this->hwnd_, CB_GETCOUNT, 0, 0);
+  const LRESULT previousCount = SendMessageW(this->hwnd(), CB_GETCOUNT, 0, 0);
   const PaintDamage empty = {paintScope(), 0, 0, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
-  SendMessageW(hwnd_, CB_RESETCONTENT, 0, 0);
+  SendMessageW(this->hwnd(), CB_RESETCONTENT, 0, 0);
   const loka::Vector<loka::core::String> *items = node_->props.items_;
   if (!items)
   {
@@ -275,7 +273,7 @@ void Win32PopupMenuContext::applyItems()
       appliedAllItems = false;
       break;
     }
-    const LRESULT added = SendMessageW(hwnd_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide.c_str()));
+    const LRESULT added = SendMessageW(this->hwnd(), CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide.c_str()));
     if (added == CB_ERR || added == CB_ERRSPACE)
     {
       appliedAllItems = false;
@@ -299,7 +297,7 @@ void Win32PopupMenuContext::applyItems()
 
 int Win32PopupMenuContext::dropHeight() const
 {
-  int itemHeight = static_cast<int>(SendMessage(hwnd_, CB_GETITEMHEIGHT, 0, 0));
+  int itemHeight = static_cast<int>(SendMessage(this->hwnd(), CB_GETITEMHEIGHT, 0, 0));
   if (itemHeight <= 0)
   {
     itemHeight = baseHeight_ > 0 ? baseHeight_ : 18;
@@ -324,19 +322,19 @@ int Win32PopupMenuContext::dropHeight() const
 
 void Win32PopupMenuContext::applyDropGeometry()
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
   const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
-  this->resizeNativeWindow(hwnd_, scale.projectFrame(loka::core::Frame(0, 0, baseWidth_, this->dropHeight())));
+  this->resizeNativeWindow(this->hwnd(), scale.projectFrame(loka::core::Frame(0, 0, baseWidth_, this->dropHeight())));
 }
 
 void Win32PopupMenuContext::applySelection()
 {
   using namespace loka::app::scene;
   this->controlDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
-  if (!hwnd_ || !selectionState_)
+  if (!this->hwnd() || !selectionState_)
   {
     return;
   }
@@ -346,13 +344,13 @@ void Win32PopupMenuContext::applySelection()
     index = -1;
   }
   const PaintDamage empty = {paintScope(), 0, 0, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
-  if (SendMessageW(this->hwnd_, CB_GETCURSEL, 0, 0) == index)
+  if (SendMessageW(this->hwnd(), CB_GETCURSEL, 0, 0) == index)
   {
     this->controlDelivery_ = PaintAnswer::exact(empty);
     return;
   }
   applyingFromState_ = true;
-  const LRESULT selected = SendMessageW(this->hwnd_, CB_SETCURSEL, static_cast<WPARAM>(index), 0);
+  const LRESULT selected = SendMessageW(this->hwnd(), CB_SETCURSEL, static_cast<WPARAM>(index), 0);
   applyingFromState_ = false;
   // CB_ERR is the successful deselection result for index -1 as well.
   if (selected != CB_ERR || index == -1)
@@ -363,29 +361,29 @@ void Win32PopupMenuContext::applyEnabled()
 {
   using namespace loka::app::scene;
   this->controlDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
-  if (!hwnd_ || !enabledState_)
+  if (!this->hwnd() || !enabledState_)
   {
     return;
   }
   const bool enabled = this->enabledState_->get();
-  if ((IsWindowEnabled(this->hwnd_) != FALSE) == enabled)
+  if ((IsWindowEnabled(this->hwnd()) != FALSE) == enabled)
   {
     const PaintDamage empty = {paintScope(), 0, 0, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
     this->controlDelivery_ = PaintAnswer::exact(empty);
     return;
   }
-  EnableWindow(this->hwnd_, enabled ? TRUE : FALSE);
+  EnableWindow(this->hwnd(), enabled ? TRUE : FALSE);
   this->controlDelivery_ = PaintAnswer::nativeScheduled();
 }
 
 void Win32PopupMenuContext::syncStateFromControl()
 {
-  if (!hwnd_ || !selectionState_)
+  if (!this->hwnd() || !selectionState_)
   {
     return;
   }
   updatingFromControl_ = true;
-  LRESULT index = SendMessage(hwnd_, CB_GETCURSEL, 0, 0);
+  LRESULT index = SendMessage(this->hwnd(), CB_GETCURSEL, 0, 0);
   selectionSeat_.set(static_cast<int>(index), true);
   updatingFromControl_ = false;
   if (node_ && node_->props.onChange_)
