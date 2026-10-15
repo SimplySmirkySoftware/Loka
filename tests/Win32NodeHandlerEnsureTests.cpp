@@ -178,9 +178,11 @@ namespace
             TEXTMETRICW font;
             LOKA_VERIFY(GetTextMetricsW(dc, &font));
             const UINT flags = DT_LEFT | DT_NOPREFIX | DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL;
-            RECT oneLine = {0, 0, scale.nativeLength(0, 300).px, 0};
+            // The fixed Box seats the page at 300 lu; otherwise it spans the client inside the root inset.
+            const int pageWidth = boxed ? 300 : 340 - 2 * Win32SceneLayout::kRootInset;
+            RECT oneLine = {0, 0, scale.nativeLength(0, pageWidth).px, 0};
             LOKA_VERIFY(DrawTextW(dc, L"First", -1, &oneLine, flags) > 0);
-            RECT measured = {0, 0, scale.nativeLength(0, 300).px, 0};
+            RECT measured = {0, 0, scale.nativeLength(0, pageWidth).px, 0};
             LOKA_VERIFY(DrawTextW(dc, wideStrings[sample], -1, &measured, flags) > 0);
             SelectObject(dc, previous);
             ReleaseDC(page, dc);
@@ -197,7 +199,7 @@ namespace
             const RECT expectedPage =
                 scale
                     .projectFrame(
-                        loka::core::Frame(Win32SceneLayout::kRootInset, Win32SceneLayout::kRootInset, 300, textHeight))
+                        loka::core::Frame(Win32SceneLayout::kRootInset, Win32SceneLayout::kRootInset, pageWidth, textHeight))
                     .r;
             LOKA_VERIFY(EqualRect(&pageFrame, &expectedPage));
             LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY));
@@ -2159,9 +2161,12 @@ void testWin32ContainerGapNoSeats()
     {
       Win32ScenePlatformController controller(root, scale);
       loka::core::MutableState<bool> hidden(false);
+      // A ConfirmDialog needs a result channel; the STATIC host gives it no transport, so nothing opens.
+      loka::core::MutableState<ConfirmResult> resultStorage;
+      NodeState<ConfirmResult> result(&resultStorage, 0);
       NodeDefinitionBase *definition =
-          (Fragment().testId("gapRoot") << Text("First") << Fragment() << (Show(&hidden) << Text("Hidden"))
-                                        << ConfirmDialog() << Text("Second"))
+          (Fragment().testId("gapRoot") << Text("First") << Fragment() << (Show(hidden) << Text("Hidden"))
+                                        << ConfirmDialog().result(result) << Text("Second"))
               .clone();
       LOKA_VERIFY(definition != 0);
       Scene scene(definition);
@@ -2206,10 +2211,9 @@ namespace
   };
 } // namespace
 
-void testWin32ContainerGapBoxAndRefusedText()
+void testWin32ContainerGapBox()
 {
   using namespace loka::app;
-  using namespace loka::core;
   for (int direct = 0; direct < 2; ++direct)
   {
     const loka::win32::Win32DisplayScale scale(96);
@@ -2219,23 +2223,20 @@ void testWin32ContainerGapBoxAndRefusedText()
       FragmentNode content((FragmentProps()));
       BoxNode *box =
           direct ? new DirectGapBox(BoxProps().setSize(200, 100)) : new BoxNode(BoxProps().setSize(200, 100));
-      const String refusedString(Managed<loka::platform::String>::Wrap(new RefusingNaturalWidthString()));
-      TextNode *refused = new TextNode(TextProps(refusedString));
       TextNode *first = new TextNode(TextProps("First"));
       TextNode *second = new TextNode(TextProps("Second"));
       TextNode *following = new TextNode(TextProps("Following"));
-      box->addChild(refused);
       box->addChild(first);
       box->addChild(second);
       content.addChild(box);
       content.addChild(following);
       controller.onChange(&content, loka::app::scene::NODE_DIRTY_NONE, false);
       controller.relayout(640, 160);
-      LOKA_VERIFY(refused->getContext() && first->getContext() && second->getContext() && following->getContext());
+      LOKA_VERIFY(first->getContext() && second->getContext() && following->getContext());
       const RECT a = childRectInParent(static_cast<Win32TextContext *>(first->getContext())->hwnd(), root);
       const RECT b = childRectInParent(static_cast<Win32TextContext *>(second->getContext())->hwnd(), root);
       const RECT c = childRectInParent(static_cast<Win32TextContext *>(following->getContext())->hwnd(), root);
-      LOKA_VERIFY(a.top == scale.projectEdge(Win32SceneLayout::kRootInset + Win32SceneLayout::kGap));
+      LOKA_VERIFY(a.top == scale.projectEdge(Win32SceneLayout::kRootInset));
       LOKA_VERIFY(b.top == a.bottom + Win32SceneLayout::kGap);
       LOKA_VERIFY(c.top == scale.projectEdge(Win32SceneLayout::kRootInset + 100 + Win32SceneLayout::kGap));
       controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);

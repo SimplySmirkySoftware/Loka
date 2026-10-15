@@ -490,7 +490,8 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     loka::app::scene::NodeState<int> &offsetState = offset.state();
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
-    addButtonColumn(scrollView, 6);
+    // Eight buttons keep the range past three wheel lines with the 6 lu gap.
+    addButtonColumn(scrollView, 8);
     establishLayout(controller, &scrollView, 300, 140);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
@@ -705,9 +706,12 @@ void testWin32ScrollViewContainerGapsAndNoSeats()
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
     OffsetFact offset(0);
     loka::core::MutableState<bool> hidden(false);
+    // A ConfirmDialog needs a result channel; the STATIC host gives it no transport, so nothing opens.
+    loka::core::MutableState<ConfirmResult> resultStorage;
+    NodeState<ConfirmResult> result(&resultStorage, 0);
     NodeDefinitionBase *definition = (ScrollView(ScrollViewProps(offset.state())).testId("gapScroll")
-                                      << Text("First") << Fragment() << (Show(&hidden) << Text("Hidden"))
-                                      << ConfirmDialog() << Text("Second") << Text("Third"))
+                                      << Text("First") << Fragment() << (Show(hidden) << Text("Hidden"))
+                                      << ConfirmDialog().result(result) << Text("Second") << Text("Third"))
                                          .clone();
     LOKA_VERIFY(definition != 0);
     Scene scene(definition);

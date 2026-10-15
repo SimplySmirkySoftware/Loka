@@ -33,7 +33,7 @@ void testWin32ContainerGapLeafExits();
 void testWin32ContainerGapColumnAndPassThrough();
 void testWin32ContainerGapNoSeats();
 
-void testWin32ContainerGapBoxAndRefusedText();
+void testWin32ContainerGapBox();
 
 void testWin32ContainerGapRow();
 
