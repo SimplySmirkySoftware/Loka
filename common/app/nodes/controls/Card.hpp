@@ -3,6 +3,7 @@
 
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/style/CardStyle.hpp"
+#include <vector>
 
 namespace loka
 {
@@ -175,15 +176,50 @@ namespace loka
         }
         return copy;
       }
+      // Every insertion form a nestable definition accepts goes to the content
+      // column; declaring these here hides the inherited forms, which would append
+      // to the card itself.
+      CardDefinition &operator<<(scene::NodeDefinitionBase &content)
+      {
+        if (scene::INestableDefinition *column = this->contentColumn())
+          *column << content;
+        return *this;
+      }
       CardDefinition &operator<<(const scene::NodeDefinitionBase &content)
       {
-        scene::NodeDefinitionBase *column = this->childrenHead();
-        if (column && column->asNestableDefinition())
-          *column->asNestableDefinition() << content;
+        if (scene::INestableDefinition *column = this->contentColumn())
+          *column << content;
+        return *this;
+      }
+      /** Takes ownership like every nestable definition; a refused card shell deletes it. */
+      CardDefinition &operator<<(scene::NodeDefinitionBase *ownedContent)
+      {
+        if (scene::INestableDefinition *column = this->contentColumn())
+          *column << ownedContent;
+        else
+          delete ownedContent;
+        return *this;
+      }
+      CardDefinition &operator<<(const std::vector<scene::NodeDefinitionBase *> &contents)
+      {
+        if (scene::INestableDefinition *column = this->contentColumn())
+          *column << contents;
+        return *this;
+      }
+      template <class ItemT, class FactoryT, class KeyExprT>
+      CardDefinition &operator<<(const ::loka::app::ForBuilder<ItemT, FactoryT, KeyExprT> &builder)
+      {
+        if (scene::INestableDefinition *column = this->contentColumn())
+          builder.appendTo(*column);
         return *this;
       }
 
     private:
+      scene::INestableDefinition *contentColumn()
+      {
+        scene::NodeDefinitionBase *column = this->childrenHead();
+        return column ? column->asNestableDefinition() : 0;
+      }
       /** Cloning fills the shell from completed source children, without re-expansion. */
       enum EmptyShell
       {
