@@ -14,6 +14,7 @@ void testWin32AttributedTextLiveDpiChange();
 void testWin32AttributedTextPaintRouting();
 
 void testWin32ButtonNaturalWidthAnswer();
+void testWin32IntrinsicImageNaturalWidthAnswer();
 void testWin32RibbonNaturalWidthTraversal();
 void testWin32NaturalWidthDirectRow();
 

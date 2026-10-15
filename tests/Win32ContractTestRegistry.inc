@@ -127,6 +127,7 @@ LOKA_TEST(testWin32SaveFileDialogInvalidBasenames)
 LOKA_TEST(testWin32ImageDecodeRetainsOutputOwnedBlob)
 
 LOKA_TEST(testWin32ButtonNaturalWidthAnswer)
+LOKA_TEST(testWin32IntrinsicImageNaturalWidthAnswer)
 LOKA_TEST(testWin32RibbonNaturalWidthTraversal)
 LOKA_TEST(testWin32NaturalWidthDirectRow)
 
