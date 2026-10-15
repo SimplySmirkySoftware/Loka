@@ -208,20 +208,22 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     short currentY = static_cast<short>(state.y + (band && first < count ? spans->start(first) : 0));
     unsigned index = 0;
     bool mismatch = false;
-    bool seatSeen = false;
+    const int kProbeGroupSpacing = 12;
+    loka::app::scene::Node *previousSeat = 0;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       if (index >= last)
         break;
       const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-      const bool gapBefore = takesSeat && seatSeen;
-      seatSeen = seatSeen || takesSeat;
+      const int gapBefore = loka::app::layout::tieredGap(previousSeat, child, state.spacing, kProbeGroupSpacing);
+      if (takesSeat)
+        previousSeat = child;
       if (index++ < first)
         continue;
       if (gapBefore && !(band && index == first + 1))
       {
-        const int nextY = currentY + state.spacing;
+        const int nextY = currentY + gapBefore;
         if (traversal->refuseLayoutResultY(nextY))
           return 0;
         currentY = static_cast<short>(nextY);
@@ -405,10 +407,11 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
   {
     return 0;
   }
+  const int kProbeGroupSpacing = 12;
   ToolboxBoxTraversal adapter(*traversal);
   // Common BoxLayout owns padding, clamping and child advancement on every rail.
   const int resultY = loka::app::layout::computeBoxLayoutResultY(
-      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, state.spacing);
+      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, state.spacing, kProbeGroupSpacing);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;

@@ -20,7 +20,8 @@ namespace loka
                                      int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
                                      const LazyWindow *range = 0,
                                      StackSpans *spans = 0,
-                                     int gap = FallbackControlMetrics::kVerticalSpacing)
+                                     int gap = FallbackControlMetrics::kVerticalSpacing,
+                                     int groupGap = FallbackControlMetrics::kGroupSpacing)
       {
         if (!column)
         {
@@ -45,20 +46,21 @@ namespace loka
           int currentY = state.y + (band && first < count ? spans->start(first) : 0);
           unsigned index = 0;
           bool mismatch = false;
-          bool seatSeen = false;
+          loka::app::scene::Node *previousSeat = 0;
           loka::dsl::CompositionCursor<loka::app::scene::Node> it(column->childrenHead(), column->childrenCount());
           for (loka::app::scene::Node *child = it.next(); child; child = it.next())
           {
             if (index >= last)
               break;
             const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-            const bool gapBefore = takesSeat && seatSeen;
-            seatSeen = seatSeen || takesSeat;
+            const int gapBefore = loka::app::layout::tieredGap(previousSeat, child, gap, groupGap);
+            if (takesSeat)
+              previousSeat = child;
             if (index++ < first)
               continue;
             if (gapBefore && !(band && index == first + 1))
             {
-              currentY += gap;
+              currentY += gapBefore;
             }
             const int startY = currentY;
             LayoutStateT childState = state;

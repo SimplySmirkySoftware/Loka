@@ -1346,14 +1346,18 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
-    bool seatSeen = false;
+    loka::app::scene::Node *previousSeat = 0;
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       const int advanceStartY = currentY;
       const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-      if (takesSeat && seatSeen)
-        currentY += loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
-      seatSeen = seatSeen || takesSeat;
+      const int gapBefore = loka::app::layout::tieredGap(
+          previousSeat, child, loka::app::layout::FallbackControlMetrics::kVerticalSpacing,
+          loka::app::layout::FallbackControlMetrics::kGroupSpacing);
+      if (gapBefore)
+        currentY += gapBefore;
+      if (takesSeat)
+        previousSeat = child;
       if (currentY < SHRT_MIN || currentY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();
@@ -1568,20 +1572,24 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
-    bool seatSeen = false;
+    loka::app::scene::Node *previousSeat = 0;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       // Keep the pass-through gap in step with this rail's Column.
       const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-      if (takesSeat && seatSeen)
+      const int gapBefore = loka::app::layout::tieredGap(
+          previousSeat, child, loka::app::layout::FallbackControlMetrics::kVerticalSpacing,
+          loka::app::layout::FallbackControlMetrics::kGroupSpacing);
+      if (gapBefore)
       {
-        const int gapY = childState.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+        const int gapY = childState.y + gapBefore;
         if (this->refuseNarrowingInScrollScope(gapY))
           break;
         childState.y = gapY;
       }
-      seatSeen = seatSeen || takesSeat;
+      if (takesSeat)
+        previousSeat = child;
       const int nextY = this->layoutNode(child, childState);
       if (this->refuseNarrowingInScrollScope(nextY))
       {

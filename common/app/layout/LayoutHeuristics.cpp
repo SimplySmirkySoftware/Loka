@@ -38,6 +38,31 @@ namespace loka
         return true;
       }
 
+      bool isContainerSeat(loka::app::scene::Node *child)
+      {
+        if (!childTakesLayoutSeat(child))
+          return false;
+        if (isLayoutPassThrough(child))
+        {
+          scene::INestable *nestable = child->asNestable();
+          loka::dsl::CompositionCursor<scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
+          for (scene::Node *seat = it.next(); seat; seat = it.next())
+          {
+            if (isContainerSeat(seat))
+              return true;
+          }
+          return false;
+        }
+        return child->asNestable() && !child->asRectSurfaceNode();
+      }
+
+      int tieredGap(scene::Node *previousSeat, scene::Node *child, int related, int group)
+      {
+        if (!previousSeat || !childTakesLayoutSeat(child))
+          return 0;
+        return isContainerSeat(previousSeat) || isContainerSeat(child) ? group : related;
+      }
+
       int preferredChildWidthForRow(loka::app::scene::Node *child)
       {
         if (!childTakesLayoutSeat(child))

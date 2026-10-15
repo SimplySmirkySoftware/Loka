@@ -161,13 +161,16 @@ short ToolboxScenePlatformController::layoutScrollView(
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         scrollView->childrenHead(), scrollView->childrenCount());
-    bool seatSeen = false;
+    const int kProbeGroupSpacing = 12;
+    loka::app::scene::Node *previousSeat = 0;
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       const int childStartY = childState.y;
       const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-      const int placedY = childStartY + (takesSeat && seatSeen ? state.spacing : 0);
-      seatSeen = seatSeen || takesSeat;
+      const int gapBefore = loka::app::layout::tieredGap(previousSeat, child, state.spacing, kProbeGroupSpacing);
+      const int placedY = childStartY + gapBefore;
+      if (takesSeat)
+        previousSeat = child;
       if (placedY < SHRT_MIN || placedY > SHRT_MAX)
       {
         this->refuseScrollViewShortRange();

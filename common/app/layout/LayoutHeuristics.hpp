@@ -78,6 +78,14 @@ namespace loka
       /** Whether a child occupies a container seat, independently of its size. */
       bool childTakesLayoutSeat(loka::app::scene::Node *child);
 
+      /** Whether a seat is a container, recursively through pass-through nodes. */
+      bool isContainerSeat(loka::app::scene::Node *child);
+
+      /** Gap before child: none without two seats, group beside a container,
+          related between leaves. Walks only pass-through descendants of the
+          two borrowed neighbours during the caller's layout pass. */
+      int tieredGap(scene::Node *previousSeat, scene::Node *child, int related, int group);
+
       /** Returns a Row child's fixed-width claim, a negative value for a flex
           seat, or zero for an empty Fragment that consumes no seat. A
           single-child Fragment forwards the child's answer so branch seats

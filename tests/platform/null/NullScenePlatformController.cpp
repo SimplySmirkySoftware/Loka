@@ -845,19 +845,23 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
     return state.y;
   }
   loka::app::scene::LayoutState childState = state;
-  bool seatSeen = false;
+  loka::app::scene::Node *previousSeat = 0;
   for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
   {
     // Keep the pass-through gap in step with this rail's Column.
     const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-    if (takesSeat && seatSeen)
+    const int gapBefore = loka::app::layout::tieredGap(
+        previousSeat, child, loka::app::layout::FallbackControlMetrics::kVerticalSpacing,
+        loka::app::layout::FallbackControlMetrics::kGroupSpacing);
+    if (gapBefore)
     {
-      const int gapY = childState.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+      const int gapY = childState.y + gapBefore;
       if (this->refuseNarrowingInScrollScope(gapY))
         break;
       childState.y = static_cast<short>(gapY);
     }
-    seatSeen = seatSeen || takesSeat;
+    if (takesSeat)
+      previousSeat = child;
     const int nextY = this->layoutNode(child, childState);
     if (this->refuseNarrowingInScrollScope(nextY))
     {
@@ -928,14 +932,18 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
                             && column->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN;
   if (spans && !directColumn)
     spans->invalidate();
-  bool seatSeen = false;
+  loka::app::scene::Node *previousSeat = 0;
   for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child; child = child->nextInComposition)
   {
     const int advanceStartY = currentY;
     const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-    if (takesSeat && seatSeen)
-      currentY += loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
-    seatSeen = seatSeen || takesSeat;
+    const int gapBefore = loka::app::layout::tieredGap(
+        previousSeat, child, loka::app::layout::FallbackControlMetrics::kVerticalSpacing,
+        loka::app::layout::FallbackControlMetrics::kGroupSpacing);
+    if (gapBefore)
+      currentY += gapBefore;
+    if (takesSeat)
+      previousSeat = child;
     if (currentY < SHRT_MIN || currentY > SHRT_MAX)
     {
       this->refuseScrollViewShortRange();

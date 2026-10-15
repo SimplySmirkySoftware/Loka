@@ -20,6 +20,7 @@ namespace loka
           kTextHeight = 20,
           kCellHeight = 20,
           kVerticalSpacing = 6,
+          kGroupSpacing = 10,
           kHorizontalSpacing = 6,
           kImageFallbackHeight = 160
         };

@@ -25,20 +25,23 @@
       return 0;
     }
     short maxWidth = 0;
-    bool seatSeen = false;
+    const int kProbeGroupSpacing = 12;
+    loka::app::scene::Node *previousSeat = 0;
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       // Keep the pass-through gap in step with the Toolbox Column.
       const bool takesSeat = loka::app::layout::childTakesLayoutSeat(child);
-      if (takesSeat && seatSeen)
+      const int gapBefore = loka::app::layout::tieredGap(previousSeat, child, state.spacing, kProbeGroupSpacing);
+      if (gapBefore)
       {
-        const int gapY = state.y + state.spacing;
+        const int gapY = state.y + gapBefore;
         if (controller->refuseNarrowingInScrollScope(gapY))
           break;
         state.y = static_cast<short>(gapY);
       }
-      seatSeen = seatSeen || takesSeat;
+      if (takesSeat)
+        previousSeat = child;
       short width = LayoutNode(child, state, controller, currentBoundary);
       if (controller && controller->refuseNarrowingInScrollScope(state.y))
       {

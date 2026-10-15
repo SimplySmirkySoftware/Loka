@@ -22,7 +22,8 @@ namespace loka
                                     const LayoutStateT &state,
                                     void *context,
                                     int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
-                                    int gap = FallbackControlMetrics::kVerticalSpacing)
+                                    int gap = FallbackControlMetrics::kVerticalSpacing,
+                                    int groupGap = FallbackControlMetrics::kGroupSpacing)
       {
         LayoutStateT childState = state;
         childState.x = layoutCoordinate<LayoutStateT>(state.x + padding);
@@ -38,14 +39,16 @@ namespace loka
           childState.height = 0;
         }
 
-        bool seatSeen = false;
+        loka::app::scene::Node *previousSeat = 0;
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(childrenHead, childCount);
         for (loka::app::scene::Node *child = it.next(); child; child = it.next())
         {
           const bool takesSeat = childTakesLayoutSeat(child);
-          if (takesSeat && seatSeen)
-            childState.y = layoutCoordinate<LayoutStateT>(childState.y + gap);
-          seatSeen = seatSeen || takesSeat;
+          const int gapBefore = loka::app::layout::tieredGap(previousSeat, child, gap, groupGap);
+          if (gapBefore)
+            childState.y = layoutCoordinate<LayoutStateT>(childState.y + gapBefore);
+          if (takesSeat)
+            previousSeat = child;
           childState.y = layoutCoordinate<LayoutStateT>(layoutChild(context, child, childState));
         }
         const int resultY = childState.y + padding;
@@ -56,7 +59,8 @@ namespace loka
                                   const LayoutStateT &state,
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
-                                  int gap = FallbackControlMetrics::kVerticalSpacing)
+                                  int gap = FallbackControlMetrics::kVerticalSpacing,
+                                  int groupGap = FallbackControlMetrics::kGroupSpacing)
       {
         if (!box)
           return state.y;
@@ -69,7 +73,8 @@ namespace loka
                                          state,
                                          context,
                                          layoutChild,
-                                         gap);
+                                         gap,
+                                         groupGap);
       }
 
     } // namespace layout
