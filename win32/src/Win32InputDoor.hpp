@@ -34,13 +34,13 @@ public:
   {
     return Invocation(*c.controller())(c, &Win32TextEditorContext::handleCommand, wp, lp);
   }
-  static bool verticalScroll(Win32ScrollViewContext &c, int command, int position)
+  static bool scroll(Win32ScrollViewContext &c, int bar, int command, int position)
   {
-    return Invocation(*c.controller())(c, &Win32ScrollViewContext::handleVerticalScroll, command, position);
+    return Invocation(*c.controller())(c, &Win32ScrollViewContext::handleScroll, bar, command, position);
   }
-  static void mouseWheel(Win32ScrollViewContext &c, WPARAM wp)
+  static void mouseWheel(Win32ScrollViewContext &c, int bar, WPARAM wp)
   {
-    Invocation(*c.controller())(c, &Win32ScrollViewContext::handleMouseWheel, wp);
+    Invocation (*c.controller())(c, &Win32ScrollViewContext::handleMouseWheel, bar, wp);
   }
   static void cellClick(Win32CellContext &c)
   {

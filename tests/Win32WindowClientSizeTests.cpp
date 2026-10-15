@@ -753,3 +753,41 @@ void testWin32WmCloseDestroysUnkeyedWindowAsToday()
   LOKA_VERIFY(!IsWindow(hwnd));
   LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 1);
 }
+
+void testWin32DisplayScaleSystemMetricFollowsDpi()
+{
+  printf("\n==== [testWin32DisplayScaleSystemMetricFollowsDpi] start ====\n");
+  using loka::win32::Win32DisplayScale;
+  typedef int(WINAPI * GetSystemMetricsForDpiFn)(int, UINT);
+  HMODULE user32 = GetModuleHandleW(L"user32.dll");
+  GetSystemMetricsForDpiFn forDpi =
+      user32 ? reinterpret_cast<GetSystemMetricsForDpiFn>(GetProcAddress(user32, "GetSystemMetricsForDpi")) : 0;
+  // The desktop's own scaling must not decide this pin: compare against the
+  // same API the scale resolves, at the scale's DPI.
+  const Win32DisplayScale base(96, loka::app::RailMetrics());
+  const int expected96 = forDpi ? forDpi(SM_CYHSCROLL, 96) : GetSystemMetrics(SM_CYHSCROLL);
+  LOKA_VERIFY(base.systemMetric(SM_CYHSCROLL) == expected96);
+  if (!forDpi)
+  {
+    printf("[skip] GetSystemMetricsForDpi is unavailable on this Windows; the system metric is the only answer\n");
+  }
+  else
+  {
+    // A per-monitor-DPI window on a 192 dpi monitor gets the thicker bar
+    // Windows adds there, not the system-DPI one.
+    const Win32DisplayScale doubled(192, loka::app::RailMetrics());
+    LOKA_VERIFY(doubled.systemMetric(SM_CYHSCROLL) == forDpi(SM_CYHSCROLL, 192));
+    LOKA_VERIFY(doubled.systemMetric(SM_CYHSCROLL) > base.systemMetric(SM_CYHSCROLL));
+    // One rounding step at a fractional scale: the bar leaves the projected
+    // native height and the remainder converts once, as the HWND client does.
+    const Win32DisplayScale fractional(120, loka::app::RailMetrics());
+    const loka::core::Frame seat(0, 0, 300, 140);
+    const loka::win32::NativeRect native = fractional.projectFrame(seat);
+    const int oneStep = fractional.clientCapacityToLu(native.r.bottom - native.r.top - forDpi(SM_CYHSCROLL, 120));
+    const int twoStep = 140 - fractional.clientCapacityToLu(forDpi(SM_CYHSCROLL, 120));
+    LOKA_VERIFY(fractional.clientHeightBelowHorizontalBar(seat) == oneStep);
+    if (oneStep == twoStep)
+      printf("[skip] the two rounding orders agree at 120 dpi on this Windows; the pin cannot discriminate them\n");
+  }
+  printf("==== [testWin32DisplayScaleSystemMetricFollowsDpi] PASSED ====\n");
+}

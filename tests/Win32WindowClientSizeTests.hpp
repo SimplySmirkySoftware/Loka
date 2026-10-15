@@ -10,6 +10,7 @@ void testWin32WindowDestructionDestroysNativeWindow();
 void testWin32AppDestructionLeavesWindowOwnedMenu();
 void testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification();
 void testWin32DisplayScaleProjectsLogicalEdges();
+void testWin32DisplayScaleSystemMetricFollowsDpi();
 void testWin32DpiChangeAcceptsSuggestedWindowRect();
 void testWin32WindowFrameIsClampedToWorkArea();
 
