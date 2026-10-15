@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+struct ToolboxScrollViewMetrics;
 #include "app/layout/NaturalWidthSource.hpp"
 #include "ToolboxEditInstalled.hpp"
 // Replace OS/controller neighbors; compile the actual context, table, measure
@@ -236,7 +237,29 @@ public:
 public:
 #include "ToolboxScrollViewProjection.hpp"
   unsigned leafLayouts;
-  int scrollMaximum;
+  struct ScrollCall
+  {
+    short id;
+    Rect rect;
+    int maximum;
+    int pageStep;
+  };
+  std::vector<ScrollCall> scrollCalls;
+  int scrollMaximum(short id = 100) const
+  {
+    for (std::size_t i = this->scrollCalls.size(); i > 0; --i)
+      if (this->scrollCalls[i - 1].id == id)
+        return this->scrollCalls[i - 1].maximum;
+    return 0;
+  }
+  ToolboxScrollBarLedger::ViewportScrollBarBinding &viewportScroll()
+  {
+    return this->scrollBarLedger_.viewportScrollBars_[0];
+  }
+  ToolboxScrollBarLedger::ScrollBarControlBinding &scrollControl(unsigned index)
+  {
+    return this->scrollBarLedger_.scrollBarControls_[index];
+  }
   RgnHandle scrollViewClipRgn_;
   RgnHandle paintSuppressClipRgn_;
   short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
@@ -255,7 +278,8 @@ public:
     if (y < SHRT_MIN || y > SHRT_MAX) this->refuseScrollViewShortRange();
     return this->projectionParentScopes_.current().hasShortRangeRefusal();
   }
-  int ensureViewportScrollBarControl(const Rect &, loka::app::ScrollViewNode *, int, int, int);
+  int ensureViewportScrollBarControl(
+      const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
   short allocateControlId() { return this->controlIds_.allocate(); }
   void destroyScrollBarControl(short id, loka::app::scene::NativeLifetimeHint) { this->controlIds_.release(id); }
@@ -265,15 +289,23 @@ public:
       loka::core::State<int> *, const loka::app::scene::WriteSeat<int> &, loka::core::EmitterState *, int);
   typedef ToolboxScrollBarLedger::ScrollBarControlBinding ScrollBarControlBinding;
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
-  bool ensureScrollBarBinding(short id, const Rect &rect, int, int maximum, int, int,
-      loka::app::scene::NativeLifetimeHint, ScrollBarControlBinding *&out)
+  bool ensureScrollBarBinding(short id,
+                              const Rect &rect,
+                              int,
+                              int maximum,
+                              int,
+                              int pageStep,
+                              loka::app::scene::NativeLifetimeHint,
+                              ScrollBarControlBinding *&out)
   {
-    this->scrollMaximum = maximum;
+    const ScrollCall call = {id, rect, maximum, pageStep};
+    this->scrollCalls.push_back(call);
     out = 0;
     for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
       if (this->scrollBarLedger_.scrollBarControls_[i].resourceId == id)
       {
         out = &this->scrollBarLedger_.scrollBarControls_[i];
+        out->maximum = maximum;
         out->rect = rect;
         out->usedThisFrame = true;
         break;
@@ -295,7 +327,8 @@ public:
   };
   std::vector<ButtonControlBinding> buttonControls_;
   void commitScrollBarValueAt(std::size_t);
-  void commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &);
+  void
+  commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &, loka::app::ScrollBarOrientation);
   void addPendingDirty(const Rect &rect) { this->pendingDirtyRects_.push_back(rect); }
   void installScroll(const ScrollBarControlBinding &row) { this->scrollBarLedger_.scrollBarControls_.push_back(row); }
 
@@ -384,7 +417,7 @@ public:
   loka::app::scene::NodeContext *renderContext;
   explicit ToolboxScenePlatformController(ToolboxWindow *window)
       : leafLayouts(0),
-        scrollMaximum(0),
+        scrollCalls(),
         scrollViewClipRgn_(NewRgn()),
         paintSuppressClipRgn_(NewRgn()),
         scrollBarLedger_(0),

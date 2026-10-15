@@ -36,6 +36,17 @@ public:
     node.chooserResult_.set(result, true);
   }
 
+  static void showActualScrolling(simpleviewer::MainNode &node)
+  {
+    loka::core::StateTrackerGuard guard(node.tracker());
+    node.showActualScrolling();
+  }
+
+  static bool isActualScrolling(const simpleviewer::MainNode &node)
+  {
+    return node.displayMode_.get() == simpleviewer::DISPLAY_ACTUAL_SCROLL;
+  }
+
   /** Failure diagnostics only: what the session left behind. */
   static void diagnose(const simpleviewer::MainNode &node, loka::dsl::SnapRecord &record)
   {
@@ -123,6 +134,7 @@ namespace loka
         const char *name;
         const char *firstPicture;
         unsigned churnReplacements;
+        bool scrollAfterLoad;
 
         unsigned loadCount() const { return this->churnReplacements ? this->churnReplacements + 2 : 1; }
         const char *picture(unsigned number) const
@@ -133,11 +145,10 @@ namespace loka
 
       const ImageCell *FindImageCell(const std::string &name)
       {
-        static const ImageCell cells[] = {
-          {"open-sun", "Sun.pict", 0},
-          {"open-bulb", "Bulb.pict", 0},
-          {"churn-replace", "Sun.pict", 8}
-        };
+        static const ImageCell cells[] = {{"open-sun", "Sun.pict", 0, false},
+                                          {"open-bulb", "Bulb.pict", 0, false},
+                                          {"churn-replace", "Sun.pict", 8, false},
+                                          {"open-wide-scroll", "Wide.pict", 0, true}};
         for (unsigned i = 0; i < sizeof(cells) / sizeof(cells[0]); ++i)
           if (name == cells[i].name) return &cells[i];
         return 0;
@@ -309,7 +320,13 @@ namespace loka
             record.set(keys[i], value.c_str());
           }
           record.set("rail", "toolbox");
-          record.set("checkpoint", "post-open");
+          // The production mode is the phase: no duplicate pending-scroll flag.
+          const bool postScroll =
+              cell->scrollAfterLoad && SimpleViewerTestAccess::isActualScrolling(*this->borrowedMain_);
+          const char *checkpoint = postScroll ? "post-scroll" : "post-open";
+          record.set("checkpoint", checkpoint);
+          if (postScroll)
+            record.set("display.mode", "actual-scroll");
           scenario_tests::SetContentBounds(record, ContentLocalBounds(QueryCaptureContentBounds(window)));
           // The production session advances its Flow over later settled turns;
           // wait for this request to finish, with a fresh bound for each load.
@@ -321,10 +338,23 @@ namespace loka
             this->fail(window);
             return;
           }
-          if (!this->recordStep("post-open") || !this->audit_.recordVerdict(record))
+          if (!this->recordStep(checkpoint) || !this->audit_.recordVerdict(record))
           {
             this->fail(window);
             return;
+          }
+          if (cell->scrollAfterLoad)
+          {
+            if (outcome != SimpleViewerTestAccess::LOAD_SUCCEEDED)
+            {
+              this->fail(window);
+              return;
+            }
+            if (!postScroll)
+            {
+              SimpleViewerTestAccess::showActualScrolling(*this->borrowedMain_);
+              return;
+            }
           }
           if (cell->churnReplacements)
           {

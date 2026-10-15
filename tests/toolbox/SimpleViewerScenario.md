@@ -1,6 +1,6 @@
 # SimpleViewer open-image characterization
 
-Status: Open-image and churn-replace cells all have successful tracked System 7
+Status: The template open-image and churn-replace cells have successful tracked System 7
 audits. churn-replace was runtime-verified on the maciix/System 7/8 MB rig at
 both the 512 KiB and 1 MiB application partitions (ten `image.load ok` results
 each, identical to the tracked `churn-replace.audit`).
@@ -15,6 +15,21 @@ Retro68 build. Expected audits must come from the rig.
 | `simpleviewer open-sun` | `Sun.pict`, 11,826 bytes | Settle, open, settle, capture |
 | `simpleviewer open-bulb` | `Bulb.pict`, 13,810 bytes | Settle, open, settle, capture |
 | `simpleviewer churn-replace` | Both pictures above | Sun, eight alternating replacements (Bulb, Sun × 4), final Bulb |
+| `simpleviewer open-wide-scroll` | Repository `Wide.pict`, 600×120, one-bit | Settle, open, post-open, Actual Size (Scroll), settle, post-scroll |
+
+The wide cell stages `example/SimpleViewer/assets/Wide.pict`, reproduced by
+`generate_wide_pict.py`, directly from the repository. After recording the decided
+load outcome, it selects the production Actual Size (Scroll) action and waits
+through the same settled-presentation wall before recording `post-scroll` with
+`display.mode actual-scroll`. Its measured audit remains pending on the rig.
+The nominal 480×280 window minus the 200-pixel navigation column leaves 280
+pixels for content and 264 for the scroll child, giving maximumX 336 for the
+600-pixel image before rail margins and gaps. Toolbox currently applies
+12-pixel side margins and an 8-pixel row gap (`ToolboxRender.cpp`,
+`ToolboxPlatformLayoutHandlers.cpp`, and `RowWidthConsultation`), so its source
+calculation is content width 248, child width 232, and maximumX 368. The owning
+rig must confirm the presented geometry. Image height 120 fits the viewport:
+the vertical bar is inactive and the horizontal bar is active.
 
 The production MainNode and menu run in a 480×280 content window at (16, 41),
 keeping its structure rectangle inside the rig's 640×480 screen. As in

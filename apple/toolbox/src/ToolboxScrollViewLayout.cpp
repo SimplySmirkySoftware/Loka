@@ -90,11 +90,13 @@ short ToolboxScenePlatformController::layoutScrollView(
   // An unknown range must not scroll: otherwise content cannot be brought back.
   const ToolboxScrollViewMetrics horizontal = ToolboxScrollViewResolveMetrics(
       widthKnown ? contentWidth : 0, ToolboxScrollViewChildWidth(state.width), scrollView->requestedOrigin().x);
+  const bool horizontalBar = horizontal.maximum > 0 && state.height > 0;
+  // The vertical bar always reserves width: horizontal range has no feedback from horizontalBar.
   // An X step revisits every row; the next pass recaptures the band.
   if (spans.isValid() && spans->valid() && spans->placedViewport().x != horizontal.clampedOffset)
     spans->invalidate();
 
-  const Rect contentRect = ToolboxScrollViewContentRect(viewportRect);
+  const Rect contentRect = ToolboxScrollViewContentRect(viewportRect, horizontalBar);
   const loka::core::Frame viewportClip(
       contentRect.left, contentRect.top, contentRect.right - contentRect.left, contentRect.bottom - contentRect.top);
   loka::app::scene::ProjectionParentScope childScope;
@@ -152,6 +154,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     }
 
     loka::app::scene::LayoutState childState = state;
+    childState.height = static_cast<short>(contentRect.bottom - contentRect.top);
     childState.width = static_cast<short>(
         ToolboxScrollViewChildWidth(state.width));
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
@@ -204,13 +207,18 @@ short ToolboxScenePlatformController::layoutScrollView(
       contentHeight = spans->total();
       spans->placed(newViewport);
     }
-    const int clampedOffset = this->ensureViewportScrollBarControl(
-        viewportRect, scrollView, contentHeight,
-        state.height, requestedFact);
+    const int clampedOffset = this->ensureViewportScrollBarControl(viewportRect,
+                                                                   scrollView,
+                                                                   contentHeight,
+                                                                   contentRect.bottom - contentRect.top,
+                                                                   requestedFact,
+                                                                   horizontal,
+                                                                   horizontalBar);
     for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
       if (this->scrollBarLedger_.viewportScrollBars_[i].scrollView == scrollView)
       {
         this->scrollBarLedger_.viewportScrollBars_[i].spans = spans;
+        this->scrollBarLedger_.viewportScrollBars_[i].contentRect = contentRect;
         break;
       }
     // Publish only after successful layout and after the scope has popped.

@@ -7,6 +7,7 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include <vector>
+#include "ToolboxScrollViewDecisions.hpp"
 
 namespace
 {
@@ -96,8 +97,98 @@ namespace
     }
   };
 
+  bool SameScrollRect(const Rect &a, const Rect &b)
+  {
+    return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+  }
+
+  void ScrollViewHorizontalPins()
+  {
+    Pin("ToolboxScrollViewHorizontalGeometryAndRange");
+    {
+      ScrollFixture f;
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      f.step(0);
+      const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
+      LOKA_VERIFY(binding.barId[SCROLL_BAR_VERTICAL] != binding.barId[SCROLL_BAR_HORIZONTAL]);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == 2);
+      const ToolboxScenePlatformController::ScrollCall &horizontal = f.controller.scrollCalls[1];
+      LOKA_VERIFY(horizontal.id == binding.barId[SCROLL_BAR_HORIZONTAL]);
+      LOKA_VERIFY(horizontal.maximum == 316 && horizontal.pageStep == 83);
+      const Rect expectedHorizontal = {18, 0, 34, 84};
+      LOKA_VERIFY(SameScrollRect(horizontal.rect, expectedHorizontal));
+      LOKA_VERIFY(f.controller.scrollMaximum(binding.barId[SCROLL_BAR_VERTICAL]) == 350 - 18);
+      const Rect expectedVertical = {0, 84, 18, 100};
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollCalls[0].rect, expectedVertical));
+      const Rect seat = {0, 0, 34, 100};
+      LOKA_VERIFY(SameScrollRect(binding.contentRect, ToolboxScrollViewContentRect(seat, true)));
+    }
+    Pin("ToolboxScrollViewHorizontalAbsentCases");
+    for (unsigned mode = 0; mode < 3; ++mode)
+    {
+      ScrollFixture f;
+      const ImageViewProps props = mode == 1
+                                       ? ImageViewProps().attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC))
+                                       : ImageViewProps().size(mode == 0 ? 50 : 400, 10);
+      f.column->addChild(new ImageViewNode(props));
+      f.step(0, 100, mode == 2 ? 0 : 34);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == 1);
+      LOKA_VERIFY(f.controller.scrollCalls[0].id == f.controller.viewportScroll().barId[SCROLL_BAR_VERTICAL]);
+      const int contentHeight = 340 + props.height_;
+      LOKA_VERIFY(f.controller.scrollMaximum() == contentHeight - (mode == 2 ? 0 : 34));
+      const Rect seat = {0, 0, static_cast<short>(mode == 2 ? 0 : 34), 100};
+      LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, ToolboxScrollViewContentRect(seat, false)));
+    }
+    Pin("ToolboxScrollViewHorizontalDisappearsAndAxisCommit");
+    {
+      ScrollFixture f;
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      f.step(17, 100, 34, 0, 0, 50);
+      HostControl controls[2] = {{0}, {0}};
+      for (unsigned axis = 0; axis < 2; ++axis)
+      {
+        ToolboxScenePlatformController::ScrollBarControlBinding row =
+            ToolboxScenePlatformController::ScrollBarControlBinding();
+        row.resourceId = f.controller.viewportScroll().barId[axis];
+        row.control = &controls[axis];
+        f.controller.installScroll(row);
+      }
+      f.step(17, 100, 34, 0, 0, 50);
+      LOKA_VERIFY(f.controller.scrollControl(0).usedThisFrame && f.controller.scrollControl(1).usedThisFrame);
+      controls[SCROLL_BAR_HORIZONTAL].value = 120;
+      f.controller.commitViewportScrollBarValue(
+          f.controller.viewportScroll(), f.controller.scrollControl(SCROLL_BAR_HORIZONTAL), SCROLL_BAR_HORIZONTAL);
+      LOKA_VERIFY(f.fact.get().x == 120 && f.fact.get().y == 17);
+      controls[SCROLL_BAR_VERTICAL].value = 40;
+      f.controller.commitViewportScrollBarValue(
+          f.controller.viewportScroll(), f.controller.scrollControl(SCROLL_BAR_VERTICAL), SCROLL_BAR_VERTICAL);
+      LOKA_VERIFY(f.fact.get().x == 120 && f.fact.get().y == 40);
+      f.controller.scrollControl(0).usedThisFrame = false;
+      f.controller.scrollControl(1).usedThisFrame = false;
+      f.controller.scrollCalls.clear();
+      f.step(0, 500);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == 1);
+      LOKA_VERIFY(f.controller.scrollControl(0).usedThisFrame);
+      LOKA_VERIFY(!f.controller.scrollControl(1).usedThisFrame);
+      const Rect seat = {0, 0, 34, 500};
+      LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, ToolboxScrollViewContentRect(seat, false)));
+    }
+    Pin("ToolboxScrollViewReleasesBothIdsWithoutNativeRows");
+    {
+      ScrollFixture f;
+      f.step(0);
+      const short vertical = f.controller.viewportScroll().barId[SCROLL_BAR_VERTICAL];
+      const short horizontal = f.controller.viewportScroll().barId[SCROLL_BAR_HORIZONTAL];
+      f.controller.destroyViewportScrollBarControl(&f.scroll, f.scroll.nativeLifetimeHint());
+      const short first = f.controller.allocateControlId();
+      const short second = f.controller.allocateControlId();
+      LOKA_VERIFY(first == horizontal && second == vertical);
+    }
+  }
+
   void ScrollViewXPins()
   {
+    ScrollViewHorizontalPins();
     Pin("ToolboxScrollViewContentClipDropsScrollbarHit");
     {
       ScrollFixture f(0);
@@ -200,7 +291,7 @@ namespace
       LOKA_VERIFY(f.step(0, 100, 10, accumulated ? -10000 : 0, 12) == (accumulated ? 2u : 1u));
       LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
       LOKA_VERIFY(!f.controller.scrollSpans());
-      LOKA_VERIFY(f.controller.scrollMaximum == 0);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 0);
     }
     Pin("ToolboxScrollViewDirectContentGapsAndNoSeats");
     {
@@ -216,7 +307,7 @@ namespace
       f.scroll.addChild(new FragmentNode(FragmentProps()));
       f.scroll.addChild(new ButtonNode(ButtonProps()));
       LOKA_VERIFY(f.step(0, 100, 10, 0, 9) == 5);
-      LOKA_VERIFY(f.controller.scrollMaximum == 39);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 39);
     }
     Pin("ToolboxScrollViewBandWithGap");
     {
@@ -229,7 +320,7 @@ namespace
       LOKA_VERIFY(f.rect(2).top == middle - 23);
       LOKA_VERIFY(f.step(46, 100, 34, 0, 6) == 3);
       LOKA_VERIFY(f.rect(2).top == middle - 46);
-      LOKA_VERIFY(f.controller.scrollMaximum == 420);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 420);
     }
     Pin("ToolboxScrollBarSetterPaintSuppressed");
     {
@@ -292,7 +383,9 @@ namespace
       const Rect viewport = {0, 0, 34, 100};
       ClipRect(&previous);
       toolbox_host::controlCalls = toolbox_host::ControlCalls();
-      LOKA_VERIFY(controller.ensureViewportScrollBarControl(viewport, &scroll, 200, 34, 17) == 17);
+      LOKA_VERIFY(controller.ensureViewportScrollBarControl(
+                      viewport, &scroll, 200, 34, 17, ToolboxScrollViewMetrics(0, 0), false)
+                  == 17);
       const toolbox_host::ControlCalls &calls = toolbox_host::controlCalls;
       LOKA_VERIFY(calls.values == 1 && !EmptyRect(&calls.valueClip) && control.value == 17);
       LOKA_VERIFY(calls.hilites == 1 && !EmptyRect(&calls.hiliteClip));
@@ -309,7 +402,7 @@ namespace
       ScrollFixture f;
       LOKA_VERIFY(f.step(0) == 20);
       LOKA_VERIFY(f.controller.scrollSpans() && f.controller.scrollSpans()->valid());
-      LOKA_VERIFY(f.controller.scrollMaximum == 306);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 306);
       LOKA_VERIFY(f.step(17) == 3);
       const Rect exited = f.paint(0);
       LOKA_VERIFY(EmptyRect(&exited));
@@ -343,9 +436,9 @@ namespace
       LOKA_VERIFY(AttributedText(Styled("abcd", FontSize<24>())).applyPropsToNode(f.leaf(4)));
       LOKA_VERIFY(f.step(17) == 3);
       LOKA_VERIFY(f.controller.scrollSpans()->valid());
-      LOKA_VERIFY(f.controller.scrollMaximum == 306);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 306);
       LOKA_VERIFY(f.step(51) == 24); // Four detection visits, then all twenty.
-      LOKA_VERIFY(f.controller.scrollMaximum == 318);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 318);
       LOKA_VERIFY(f.rect(5).top == 46);
       LOKA_VERIFY(f.controller.scrollSpans()->total() == 352);
     }
@@ -357,7 +450,7 @@ namespace
         LOKA_VERIFY(AttributedText(Styled("abcd", FontSize<24>())).applyPropsToNode(f.leaf(i)));
       LOKA_VERIFY(f.step(17) == 21);
       LOKA_VERIFY(f.controller.scrollSpans()->total() == 580);
-      LOKA_VERIFY(f.controller.scrollMaximum == 546);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 546);
     }
     Pin("ToolboxScrollViewInvalidationAndReattach");
     {
@@ -449,7 +542,7 @@ namespace
         LOKA_VERIFY(f.step(17) == 100);
         loka::core::testing::failLokaAllocRaw(owners[failure], purposes[failure], 0);
         LOKA_VERIFY(!f.controller.scrollSpans() || !f.controller.scrollSpans()->valid());
-        LOKA_VERIFY(f.controller.scrollMaximum == 1666);
+        LOKA_VERIFY(f.controller.scrollMaximum() == 1666);
         LOKA_VERIFY(f.rect(2).top == 17);
         const Rect exited = f.paint(0);
         LOKA_VERIFY(EmptyRect(&exited));

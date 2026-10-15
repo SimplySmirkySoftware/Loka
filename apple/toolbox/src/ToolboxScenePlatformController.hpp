@@ -29,6 +29,7 @@
 #include <Controls.h>
 #include <TextEdit.h>
 
+struct ToolboxScrollViewMetrics;
 class ToolboxWindow;
 class ToolboxButtonContext;
 class ToolboxPopupMenuContext;
@@ -145,12 +146,13 @@ public:
   void destroyScrollBarControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Projects the ScrollView viewport's own scrollBarProc without borrowing
       the DSL ScrollBar binding or its window-tracker commit clock. */
-  int ensureViewportScrollBarControl(
-      const Rect &viewportRect,
-      loka::app::ScrollViewNode *scrollView,
-      int contentHeight,
-      int viewportHeight,
-      int requestedOffset);
+  int ensureViewportScrollBarControl(const Rect &viewportRect,
+                                     loka::app::ScrollViewNode *scrollView,
+                                     int contentHeight,
+                                     int viewportHeight,
+                                     int requestedOffset,
+                                     const ToolboxScrollViewMetrics &horizontal,
+                                     bool horizontalBar);
   void destroyViewportScrollBarControl(
       loka::app::ScrollViewNode *scrollView,
       loka::app::scene::NativeLifetimeHint lifetimeHint);
@@ -361,9 +363,9 @@ public:
   /** Publishes the value a finished tracking loop settled on, in the order
       the ruling fixes: binding first, then onChange. */
   void commitScrollBarValueAt(std::size_t index);
-  void commitViewportScrollBarValue(
-      ViewportScrollBarBinding &binding,
-      ScrollBarControlBinding &native);
+  void commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
+                                    ScrollBarControlBinding &native,
+                                    loka::app::ScrollBarOrientation axis);
   bool ensureScrollBarBinding(
       short resourceId,
       const Rect &rect,
