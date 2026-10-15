@@ -32,17 +32,15 @@ public:
   virtual ~Win32TextEditorContext();
   void readLifecycleFactOnAttach();
   virtual void onPropsApplied();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state);
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
-  HWND hwnd() const
-  {
-    return this->hwnd_;
-  }
   void relayout(const loka::app::scene::LayoutState &state);
   /** Named property separates multiline EDIT notifications from EditText's
       GWLP_USERDATA without scanning controller-owned rows. */
   static Win32TextEditorContext *fromWindow(HWND window);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class Win32InputDoor;
@@ -105,7 +103,6 @@ private:
 
   const loka::app::scene::SeamKey<loka::app::TextEditorNode> key_;
   loka::app::TextEditorNode *node_;
-  HWND hwnd_;
   WNDPROC previousProc_;
   Phase phase_;
   loka::app::EditorResult status_;

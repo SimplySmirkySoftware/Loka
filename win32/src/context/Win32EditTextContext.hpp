@@ -45,14 +45,11 @@ public:
   /** Attach-time read (late-subscriber rule): presentation from the current
       fact, called by the installing handler right after setContext. */
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
 
-  HWND hwnd() const
-  {
-    return hwnd_;
-  }
   void relayout(int x, int y, int width, int height);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class Win32InputDoor;
@@ -66,7 +63,6 @@ private:
   static void TextChangedThunk(void *userData);
 
   loka::app::EditTextNode *node_;
-  HWND hwnd_;
   loka::core::State<loka::core::String> *textState_;
   loka::app::scene::WriteSeat<loka::core::String> textSeat_;
   bool applyingFromState_;

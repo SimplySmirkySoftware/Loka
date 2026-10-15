@@ -47,24 +47,22 @@ Win32AttributedTextContext::Win32AttributedTextContext(Win32ScenePlatformControl
                                                        loka::app::AttributedTextNode *node)
     : Win32RetirableContext(controller),
       textEnvironmentSubscription_(controller->textEnvironment_, *this),
-      node_(node),
-      hwnd_(0)
+      node_(node)
 {
   EnsureClassRegistered();
-  this->hwnd_ =
-      this->createNativeChildWindow(0,
-                                    kAttributedTextClassName,
-                                    L"",
-                                    WS_CHILD | WS_VISIBLE,
-                                    controller->displayScale().projectFrame(loka::core::Frame(x, y, width, height)),
-                                    parent,
-                                    0,
-                                    GetModuleHandleW(NULL),
-                                    this);
+  this->createNativeChildWindow(0,
+                                kAttributedTextClassName,
+                                L"",
+                                WS_CHILD | WS_VISIBLE,
+                                controller->displayScale().projectFrame(loka::core::Frame(x, y, width, height)),
+                                parent,
+                                0,
+                                GetModuleHandleW(NULL),
+                                this);
 }
 Win32AttributedTextContext::~Win32AttributedTextContext()
 {
-  assert(!this->hwnd_ && !this->table_.valid() && "terminal delivery precedes context reclaim");
+  assert(!this->hwnd() && !this->table_.valid() && "terminal delivery precedes context reclaim");
 }
 void *Win32AttributedTextContext::operator new(std::size_t size) throw()
 {
@@ -77,43 +75,42 @@ void Win32AttributedTextContext::operator delete(void *storage) throw()
 void Win32AttributedTextContext::readLifecycleFactOnAttach()
 {
   if (this->node_ && this->node_->lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED)
-    ShowWindow(this->hwnd_, SW_SHOW);
+    ShowWindow(this->hwnd(), SW_SHOW);
 }
-void Win32AttributedTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact,
-                                               loka::app::scene::NodeLifecycleFact next)
+void Win32AttributedTextContext::onNativeFact(loka::app::scene::NodeLifecycleFact,
+                                              loka::app::scene::NodeLifecycleFact next)
 {
   using namespace loka::app::scene;
   if (next == NODE_FACT_ATTACHED)
   {
-    if (this->hwnd_)
-      ShowWindow(this->hwnd_, SW_SHOW);
+    if (this->hwnd())
+      ShowWindow(this->hwnd(), SW_SHOW);
     return;
   }
   this->presented_.invalidate();
-  if (this->hwnd_)
-    ShowWindow(this->hwnd_, SW_HIDE);
+  if (this->hwnd())
+    ShowWindow(this->hwnd(), SW_HIDE);
   if (next == NODE_FACT_RETIRED)
   {
     this->clearMeasurement();
     this->textEnvironmentSubscription_.disconnectTextEnvironment();
-    this->retireWindow(this->hwnd_);
     this->node_ = 0;
   }
 }
 void Win32AttributedTextContext::onPropsApplied()
 {
   // Restore the old rectangle before clearMeasurement collapses the child.
-  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_);
+  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
   // The #965 input mark also forces rebuild on retained props application.
   this->clearMeasurement();
-  if (this->hwnd_)
+  if (this->hwnd())
     this->controller()->requestRelayout();
 }
 void Win32AttributedTextContext::clearMeasurement()
 {
   this->table_.clear();
   this->presented_.invalidate();
-  if (this->hwnd_)
+  if (this->hwnd())
     this->relayout(0, 0, 0, 0);
 }
 void Win32AttributedTextContext::onTextEnvironmentChanged()
@@ -128,12 +125,12 @@ short Win32AttributedTextContext::layout(loka::app::scene::IPlatformController *
   const int constraint = scale.nativeLength(state.x, state.x + state.width).px;
   if (state.inputs != loka::app::scene::NODE_DIRTY_NONE || !this->table_.reusable(constraint))
   {
-    HDC dc = this->hwnd_ ? GetDC(this->hwnd_) : 0;
+    HDC dc = this->hwnd() ? GetDC(this->hwnd()) : 0;
     const bool built = dc && this->node_ && this->node_->props.text_
                        && this->table_.build(this->node_->props.text_->get(),
                                              this->node_->props.blockStyle_, constraint, dc, *this->controller());
     if (dc)
-      ReleaseDC(this->hwnd_, dc);
+      ReleaseDC(this->hwnd(), dc);
     if (!built)
     {
       this->controller()->refuseTextMeasurement(this->node_, state);
@@ -144,17 +141,17 @@ short Win32AttributedTextContext::layout(loka::app::scene::IPlatformController *
   const int width = state.width > 0 ? state.width : this->table_.width();
   state.height = Coordinate(height);
   this->relayout(state.x, state.y, Coordinate(width), state.height);
-  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_);
+  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
   return Coordinate(state.y + state.height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
 }
 void Win32AttributedTextContext::relayout(int x, int y, int width, int height)
 {
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return;
   // Layout has completed the table for these absolute edges. Moving the
   // child revokes the old presentation before any synchronous native paint.
   this->presented_.invalidate();
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
 }
 loka::app::scene::PaintAnswer
@@ -162,9 +159,9 @@ Win32AttributedTextContext::queryPaintDamage(const loka::app::scene::PaintQuery 
 {
   using namespace loka::app::scene;
   RECT rect;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-  if (query.placement != PLACEMENT_ELIGIBLE || query.scope != paintScope() || !GetClientRect(this->hwnd_, &rect)
+  if (query.placement != PLACEMENT_ELIGIBLE || query.scope != paintScope() || !GetClientRect(this->hwnd(), &rect)
       || IsRectEmpty(&rect))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
   if (!this->table_.valid() || !this->node_ || !this->node_->props.text_

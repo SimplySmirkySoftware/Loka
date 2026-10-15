@@ -24,11 +24,8 @@ public:
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
 
   void readLifecycleFactOnAttach();
-  virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                             loka::app::scene::NodeLifecycleFact next);
 
   bool isValid() const;
-  HWND hwnd() const;
   void relayout(int x, int y, int width, int height);
 
   /** Publishes native range/page/position state and returns the clamped
@@ -38,6 +35,9 @@ public:
   /** Routes a root-window wheel message to its nearest viewport at the
       message's screen position; refuses targets outside that root. */
   static bool forwardMouseWheel(HWND root, WPARAM wParam, LPARAM lParam);
+
+protected:
+  virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
   friend class Win32InputDoor;
@@ -55,7 +55,6 @@ private:
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
   loka::app::ScrollViewNode *node_;
-  HWND hwnd_;
 };
 
 #endif // LOKA_WIN32_SCROLL_VIEW_CONTEXT_HPP

@@ -201,7 +201,6 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
     : Win32RetirableContext(controller),
       textEnvironmentSubscription_(controller->textEnvironment_, *this),
       node_(node),
-      hwnd_(NULL),
       textState_(0),
       didInitialApply_(false),
       textDelivery_(loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN))
@@ -219,7 +218,7 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
   }
   // Unicode window: keeps WM_SETTEXT/paint in UTF-16 so the displayed text
   // matches what MeasureTextHeightForWidth measures with DrawTextW.
-  hwnd_ = this->createNativeChildWindow(
+  this->createNativeChildWindow(
       0,
       L"STATIC",
       L"",
@@ -229,13 +228,13 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
       NULL,
       GetModuleHandleW(NULL),
       NULL);
-  if (hwnd_)
+  if (this->hwnd())
   {
-    HDC hdc = GetDC(hwnd_);
+    HDC hdc = GetDC(this->hwnd());
     if (hdc)
     {
       SetBkMode(hdc, TRANSPARENT);
-      ReleaseDC(hwnd_, hdc);
+      ReleaseDC(this->hwnd(), hdc);
     }
   }
   this->applyStyle();
@@ -244,7 +243,7 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
 
 Win32TextContext::~Win32TextContext()
 {
-  assert(!hwnd_ && "terminal fact delivery must queue the HWND before context reclaim");
+  assert(!this->hwnd() && "terminal fact delivery must queue the HWND before context reclaim");
 }
 
 /** A changed STATIC text has already requested its parent rectangle with
@@ -252,10 +251,10 @@ Win32TextContext::~Win32TextContext()
 loka::app::scene::PaintAnswer Win32TextContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
 {
   using namespace loka::app::scene;
-  if (!this->hwnd_)
+  if (!this->hwnd())
     return PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
   RECT placement;
-  if (query.placement != PLACEMENT_ELIGIBLE || !GetClientRect(this->hwnd_, &placement) || IsRectEmpty(&placement))
+  if (query.placement != PLACEMENT_ELIGIBLE || !GetClientRect(this->hwnd(), &placement) || IsRectEmpty(&placement))
     return PaintAnswer::refused(PAINT_REFUSED_PLACEMENT_UNSETTLED);
   if (!this->node_ || (!this->node_->props.ownsText() && this->node_->props.text_ != this->textState_))
     return PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
@@ -273,8 +272,8 @@ void Win32TextContext::readLifecycleFactOnAttach()
   }
 }
 
-void Win32TextContext::onFactChanged(loka::app::scene::NodeLifecycleFact previous,
-                                     loka::app::scene::NodeLifecycleFact next)
+void Win32TextContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous,
+                                    loka::app::scene::NodeLifecycleFact next)
 {
   (void)previous;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
@@ -292,7 +291,6 @@ void Win32TextContext::onFactChanged(loka::app::scene::NodeLifecycleFact previou
       this->clearMeasurement();
       this->unbindText();
       this->textEnvironmentSubscription_.disconnectTextEnvironment();
-      this->retireWindow(this->hwnd_);
       this->node_ = 0;
     }
   }
@@ -300,12 +298,12 @@ void Win32TextContext::onFactChanged(loka::app::scene::NodeLifecycleFact previou
 
 bool Win32TextContext::applyStyle()
 {
-  if (!this->hwnd_ || !this->node_ || !this->controller())
+  if (!this->hwnd() || !this->node_ || !this->controller())
     return false;
-  if (Win32TextColorProperty::apply(this->hwnd_, this->node_->props.resolvedTextStyle().color_))
+  if (Win32TextColorProperty::apply(this->hwnd(), this->node_->props.resolvedTextStyle().color_))
   {
     this->textDelivery_ =
-        Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_)
+        Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd())
             ? loka::app::scene::PaintAnswer::nativeScheduled()
             : loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_PROPS_UNRECONCILED);
   }
@@ -316,7 +314,7 @@ bool Win32TextContext::applyStyle()
     // old SS_CENTER/SS_RIGHT type. Keep the HWND and unrelated flags.
     // CENTER/RIGHT use native STATIC wrapping; the NONE + CLIP overflow limit
     // is documented in the guide.
-    const LONG_PTR style = GetWindowLongPtrW(this->hwnd_, GWL_STYLE);
+    const LONG_PTR style = GetWindowLongPtrW(this->hwnd(), GWL_STYLE);
     const LONG_PTR alignedStyle = (style & ~static_cast<LONG_PTR>(SS_TYPEMASK | SS_ENDELLIPSIS))
                                   | TextControlTypeFor(this->node_->props)
                                   | (this->node_->props.blockStyle_.hasTruncation_
@@ -324,7 +322,7 @@ bool Win32TextContext::applyStyle()
                                          ? SS_ENDELLIPSIS : 0);
     if (style != alignedStyle)
     {
-      SetWindowLongPtrW(this->hwnd_, GWL_STYLE, alignedStyle);
+      SetWindowLongPtrW(this->hwnd(), GWL_STYLE, alignedStyle);
       changed = true;
     }
   }
@@ -332,13 +330,13 @@ bool Win32TextContext::applyStyle()
   if (!font)
     font = this->controller()->displayFont();
   // WM_GETFONT is the native truth; no cached handle can outlive a DPI table.
-  if (font && reinterpret_cast<HFONT>(SendMessageW(this->hwnd_, WM_GETFONT, 0, 0)) != font)
+  if (font && reinterpret_cast<HFONT>(SendMessageW(this->hwnd(), WM_GETFONT, 0, 0)) != font)
   {
-    SendMessageW(this->hwnd_, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
+    SendMessageW(this->hwnd(), WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
     changed = true;
   }
   if (changed)
-    InvalidateRect(this->hwnd_, NULL, TRUE);
+    InvalidateRect(this->hwnd(), NULL, TRUE);
   return changed;
 }
 
@@ -373,34 +371,34 @@ void Win32TextContext::onPropsApplied()
 void Win32TextContext::applyAttachedPresentation()
 {
   this->measurement_.invalidate();
-  if (hwnd_)
+  if (this->hwnd())
   {
     // Detached presentation removed the color property; restore it only.
     Win32TextColorProperty::apply(
-        hwnd_, this->node_ ? this->node_->props.resolvedTextStyle().color_ : loka::app::TEXT_COLOR_UNSET);
-    ShowWindow(hwnd_, SW_SHOW);
+        this->hwnd(), this->node_ ? this->node_->props.resolvedTextStyle().color_ : loka::app::TEXT_COLOR_UNSET);
+    ShowWindow(this->hwnd(), SW_SHOW);
   }
 }
 
 void Win32TextContext::applyDetachedPresentation()
 {
-  if (hwnd_)
+  if (this->hwnd())
   {
-    Win32TextColorProperty::detach(this->hwnd_);
-    ShowWindow(hwnd_, SW_HIDE);
+    Win32TextColorProperty::detach(this->hwnd());
+    ShowWindow(this->hwnd(), SW_HIDE);
   }
 }
 
 bool Win32TextContext::captureBitmap(loka::core::resource::Image &out) const
 {
-  return this->controller()->captureWindowClientBitmap(this->hwnd_, out);
+  return this->controller()->captureWindowClientBitmap(this->hwnd(), out);
 }
 
 void Win32TextContext::clearMeasurement()
 {
   this->measurement_.invalidate();
   this->textDelivery_ = loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN);
-  if (this->hwnd_)
+  if (this->hwnd())
     this->relayout(0, 0, 0, 0);
 }
 
@@ -428,21 +426,21 @@ short Win32TextContext::layout(loka::app::scene::IPlatformController *, loka::ap
     // A synchronous WM_SETTEXT reentry must not reuse the previous snapshot.
     this->measurement_.invalidate();
     int height = 0;
-    bool measured = MinimumTextHeight(this->hwnd_, font, this->controller(), height);
+    bool measured = MinimumTextHeight(this->hwnd(), font, this->controller(), height);
     if (measured && this->node_ && GeneratesLines(this->node_->props))
     {
       const loka::app::scene::PaintAnswer styleDelivery = this->textDelivery_;
       this->textDelivery_ = loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN);
       Win32AttributedTextTable table;
       std::wstring wide;
-      HDC dc = GetDC(this->hwnd_);
+      HDC dc = GetDC(this->hwnd());
       measured = dc && this->node_->props.text_
                  && table.build(loka::app::Styled(this->node_->props.text_->get(), this->node_->props.resolvedTextStyle()),
                                 this->node_->props.blockStyle_, constraint.width, dc, *this->controller())
                  && table.joinLines(wide);
       if (dc)
-        ReleaseDC(this->hwnd_, dc);
-      measured = measured && MeasureTextHeightForWidth(this->hwnd_, this->controller(), wide,
+        ReleaseDC(this->hwnd(), dc);
+      measured = measured && MeasureTextHeightForWidth(this->hwnd(), this->controller(), wide,
                                                        constraint.width, constraint.font, height)
                  && this->writeText(wide);
       // Generated lines can be unchanged while style has queued native paint.
@@ -466,11 +464,11 @@ short Win32TextContext::layout(loka::app::scene::IPlatformController *, loka::ap
 
 void Win32TextContext::relayout(int x, int y, int width, int height)
 {
-  if (!hwnd_)
+  if (!this->hwnd())
   {
     return;
   }
-  this->positionNativeWindow(this->hwnd_,
+  this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
 }
 
@@ -505,7 +503,7 @@ void Win32TextContext::applyText()
   this->textDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   // Always read the node's current props: for a borrowed State this is the
   // subscribed one, for owned text it is the latest applied literal.
-  if (!hwnd_ || !node_ || !node_->props.text_)
+  if (!this->hwnd() || !node_ || !node_->props.text_)
   {
     return;
   }
@@ -528,12 +526,12 @@ bool Win32TextContext::writeText(const std::wstring &wide)
   this->textDelivery_ = PaintAnswer::refused(PAINT_REFUSED_PROPS_UNRECONCILED);
   // Only short strings are checked for "unchanged": the apply path never
   // allocates a previous-text buffer, so a long string counts as changed.
-  const bool unchanged = this->didInitialApply_ && wide.size() < 256 && NativeTextIs(this->hwnd_, wide);
+  const bool unchanged = this->didInitialApply_ && wide.size() < 256 && NativeTextIs(this->hwnd(), wide);
   // SetWindowTextW reports success whatever the window procedure answered to
   // WM_SETTEXT, so the write is verified by reading the text back: a refused
   // write leaves the previous text, which differs by content.
-  const bool applied = SetWindowTextW(this->hwnd_, wide.c_str()) != FALSE && NativeTextIs(this->hwnd_, wide);
-  if (Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd_) && applied)
+  const bool applied = SetWindowTextW(this->hwnd(), wide.c_str()) != FALSE && NativeTextIs(this->hwnd(), wide);
+  if (Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd()) && applied)
   {
     const PaintDamage empty = {paintScope(), 0, 0, 0, 0, PAINT_COVERAGE_PAINT_ONLY};
     this->textDelivery_ = unchanged ? PaintAnswer::exact(empty) : PaintAnswer::nativeScheduled();

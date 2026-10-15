@@ -43,7 +43,8 @@ MAC_ALLOWLIST = {
 MAC_CALL = re.compile(r"\b(NSMakeRect)\s*\(|\b(setFrame|setFrameSize|setFrameOrigin|scrollPoint|scrollToPoint)\s*:")
 CALL = re.compile(r"\b(MoveWindow|SetWindowPos|CreateWindowExW|InvalidateRect|MulDiv)\s*\(")
 NONCODE = re.compile(r'/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', re.DOTALL)
-NULL_DAMAGE = re.compile(r"\s*[^,()]+,\s*(?:NULL|0|nullptr)\s*,")
+# The window may be named through a no-argument accessor such as this->hwnd().
+NULL_DAMAGE = re.compile(r"\s*[^,()]+(?:\(\s*\))?\s*,\s*(?:NULL|0|nullptr)\s*,")
 SUFFIXES = {".cpp", ".hpp", ".h", ".c", ".inc", ".inl", ".cc", ".cxx", ".mm", ".m"}
 
 
