@@ -53,11 +53,8 @@ inline short TrackControl(ControlRef c, Point, ControlActionUPP)
 { ++toolbox_host::tracks; c->value = toolbox_host::trackedValue; return kControlIndicatorPart; }
 #ifdef LOKA_HOST_CONTROL_WIDTH
 namespace toolbox_host { extern Rect controlRect; extern std::vector<std::string> controlTitles; }
-struct PenState {};
 struct HostQD { int gray; };
 extern HostQD qd;
-inline void GetPenState(PenState *) {}
-inline void SetPenState(const PenState *) {}
 inline void PenPat(const int *) {}
 inline void SetControlTitle(ControlRef, const unsigned char *text)
 { toolbox_host::controlTitles.push_back(std::string(reinterpret_cast<const char *>(text + 1), text[0])); }

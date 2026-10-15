@@ -1,3 +1,7 @@
+#include "context/ToolboxCardBandContext.hpp"
+#include "ToolboxPaintGradient.hpp"
+#include "ToolboxPaintGround.hpp"
+#include "app/layout/FramedLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "context/ToolboxAttributedTextTable.hpp"
 #include <cstdio>
@@ -567,6 +571,94 @@ namespace
     unsigned long siblingInk_;
   };
 
+  /** Pixel fixture using production framed placement and production band contexts.
+        The enclosing standalone window supplies the real QuickDraw port. */
+  class CardPixels
+  {
+  public:
+    CardPixels()
+        : card_(CardProps())
+    {
+      this->card_.addChild(new Node());
+      for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      {
+        CardBandNode *band = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role)));
+        band->setContext(new ToolboxCardBandContext(band, 0));
+        this->card_.addChild(band);
+      }
+    }
+    void layout(const Rect &frame)
+    {
+      LayoutState state;
+      state.x = frame.left;
+      state.y = frame.top;
+      state.width = frame.right - frame.left;
+      state.height = frame.bottom - frame.top;
+      loka::app::layout::computeFramedLayoutResultY(&this->card_, state, 0, Place, 0);
+    }
+    void draw(int role = -1)
+    {
+      loka::dsl::CompositionCursor<Node> children(this->card_.childrenHead(), this->card_.childrenCount());
+      for (Node *child = children.next(); child; child = children.next())
+        if (child->asCardBandNode() && (role < 0 || child->asCardBandNode()->props.role == role))
+          child->getContext()->render(0);
+    }
+    static void capture(const Rect &frame, unsigned char *pixels)
+    {
+      for (short y = frame.top; y < frame.bottom; ++y)
+        for (short x = frame.left; x < frame.right; ++x)
+          *pixels++ = GetPixel(x, y) != 0;
+    }
+    /** Independent oracle: actual whole body, no local reconstruction or band clips. */
+    static bool reference(const Rect &frame)
+    {
+      RgnHandle bodyRegion = NewRgn(), shadowRegion = NewRgn();
+      if (!bodyRegion || !shadowRegion)
+      {
+        if (bodyRegion)
+          DisposeRgn(bodyRegion);
+        if (shadowRegion)
+          DisposeRgn(shadowRegion);
+        return false;
+      }
+      Rect body = frame;
+      body.right -= 3;
+      body.bottom -= 3;
+      PenState pen;
+      GetPenState(&pen);
+      PenNormal();
+      OpenRgn();
+      FrameRoundRect(&body, 12, 12);
+      CloseRgn(bodyRegion);
+      Rect shadow = body;
+      OffsetRect(&shadow, 3, 3);
+      OpenRgn();
+      FrameRoundRect(&shadow, 12, 12);
+      CloseRgn(shadowRegion);
+      DiffRgn(shadowRegion, bodyRegion, shadowRegion);
+      PenPat(&loka::toolbox::kToolboxGradientPatterns[4]);
+      PenMode(patOr);
+      PaintRgn(shadowRegion);
+      PenNormal();
+      FrameRoundRect(&body, 12, 12);
+      SetPenState(&pen);
+      DisposeRgn(shadowRegion);
+      DisposeRgn(bodyRegion);
+      return true;
+    }
+
+  private:
+    CardNode card_;
+    static int Place(void *, Node *node, const LayoutState &offer)
+    {
+      if (!node->asCardBandNode())
+        return offer.y + offer.height;
+      LayoutState state = offer;
+      node->getContext()->layout(0, state);
+      return state.y;
+    }
+  };
+
   /** Samples only the title interior, excluding the standard CDEF border. */
   class ButtonTitlePixels
   {
@@ -723,6 +815,80 @@ namespace
   private:
     bool frame_[128];
     bool label_[128];
+  };
+
+  class CardReplayNode;
+  typedef BoundaryPropsFor<CardReplayNode> CardReplayProps;
+  class CardReplayNode : public StdCompositionBoundaryNodeBase<CardReplayProps>
+  {
+  public:
+    typedef CardReplayProps::TypeTag TypeTag;
+    explicit CardReplayNode(const CardReplayProps &props)
+        : StdCompositionBoundaryNodeBase<CardReplayProps>(props)
+    {
+      this->state(this->width_, 96);
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(Box().width(this->width_.state()) << (Card().TEST_ID("Card.Replay") << Box().size(1, 63)));
+    }
+    void narrow(bool narrow)
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->width_.set(narrow ? 14 : 96);
+    }
+
+  private:
+    NodeState<int> width_;
+  };
+
+  /** Snapshot owned by the finite attached-Card replay fixture. */
+  class CardReplayPixels
+  {
+  public:
+    CardReplayPixels()
+        : frame_(),
+          pixels_()
+    {
+    }
+    bool capture(Node *card)
+    {
+      const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+      PaintDamage top = {}, bottom = {};
+      for (Node *child = card->asNestable()->childrenHead(); child; child = child->nextInComposition)
+      {
+        if (!child->asCardBandNode() || !child->getContext())
+          continue;
+        const PaintAnswer answer = static_cast<NativeNodeContext *>(child->getContext())->queryPaintDamage(query);
+        if (answer.kind != PAINT_ANSWER_EXACT)
+          return false;
+        if (child->asCardBandNode()->props.role == CARD_BAND_TOP)
+          top = answer.damage;
+        if (child->asCardBandNode()->props.role == CARD_BAND_BOTTOM)
+          bottom = answer.damage;
+      }
+      SetRect(&this->frame_, top.x, top.y, bottom.x + bottom.width, bottom.y + bottom.height);
+      if (this->frame_.right - this->frame_.left != 96 || this->frame_.bottom - this->frame_.top != 72)
+        return false;
+      CardPixels::capture(this->frame_, this->pixels_);
+      for (unsigned i = 0; i < sizeof(this->pixels_); ++i)
+        if (this->pixels_[i])
+          return true;
+      return false;
+    }
+    bool matches(bool disabled) const
+    {
+      for (short y = 0; y < 72; ++y)
+        for (short x = 0; x < 96; ++x)
+          if ((GetPixel(this->frame_.left + x, this->frame_.top + y) != 0)
+              != (disabled ? false : this->pixels_[y * 96 + x] != 0))
+            return false;
+      return true;
+    }
+
+  private:
+    Rect frame_;
+    unsigned char pixels_[96 * 72];
   };
 
   class RibbonFrameNode;
@@ -939,7 +1105,10 @@ namespace
           textStyleBefore_(),
           offscreen_(0),
           offscreenWindow_(0),
-          ribbonWindow_(0)
+          ribbonWindow_(0),
+          cardWindow_(0),
+          card_(0),
+          cardReplay_()
     {
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
@@ -1069,6 +1238,16 @@ namespace
               .idlePolicy(IdlePolicy::everyTick())
               .onIdle(&PaintDamageConfig::DispatchIdle, this),
           &this->ribbonWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Card replay")
+              .scene(loka::scenario_tests::ObservedMainDefinition<CardReplayProps, CardReplayNode>(CardReplayProps(),
+                                                                                                   &this->card_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->cardWindow_);
     }
 
   private:
@@ -1090,6 +1269,10 @@ namespace
                  RIBBON_SHOW,
                  RIBBON_CHECK,
                  RIBBON_REPAINT,
+                 CARD_SHOW,
+                 CARD_CAPTURE,
+                 CARD_DISABLED,
+                 CARD_RESTORED,
                  COMPLETE
     };
     App *app_;
@@ -1142,6 +1325,9 @@ namespace
     OffscreenDamageNode *offscreen_;
     Window *offscreenWindow_;
     Window *ribbonWindow_;
+    Window *cardWindow_;
+    CardReplayNode *card_;
+    CardReplayPixels cardReplay_;
 
     void recordArm(const char *name, bool pass, Phase next)
     {
@@ -1227,6 +1413,12 @@ namespace
       case RIBBON_REPAINT:
         target = self->ribbonWindow_;
         break;
+      case CARD_SHOW:
+      case CARD_CAPTURE:
+      case CARD_DISABLED:
+      case CARD_RESTORED:
+        target = self->cardWindow_;
+        break;
       case COMPLETE:
         return;
       }
@@ -1280,6 +1472,8 @@ namespace
         OnTextStyleIdle(target, self->textStyleChange_, self);
       else if (target == self->imageVacatedWindow_)
         OnImageVacatedIdle(target, self);
+      else if (target == self->cardWindow_)
+        OnCardIdle(target, self);
       else if (target == self->ribbonWindow_)
         OnRibbonIdle(target, self);
       else if (target == self->imageWindow_)
@@ -2578,9 +2772,126 @@ namespace
         self->recordArm("ribbon-partial-restores-edge",
                         solid && dark && density == 2 && inset && buttonInk && captionInk,
                         COMPLETE);
+        self->checkCardPixels();
+        self->phase_ = CARD_SHOW;
+      }
+      SetPort(saved);
+    }
+
+    static void OnCardIdle(Window *window, PaintDamageConfig *self)
+    {
+      ToolboxWindow *native = window->asToolboxWindow();
+      if (self->phase_ == CARD_SHOW)
+      {
+        ShowWindow(native->window());
+        SelectWindow(native->window());
+        native->requestInvalidate();
+        self->phase_ = CARD_CAPTURE;
+        return;
+      }
+      GrafPtr saved;
+      GetPort(&saved);
+      SetPort(native->window());
+      if (self->phase_ == CARD_CAPTURE)
+      {
+        Node *card = 0;
+        loka::dsl::FlowError error;
+        const bool found = loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Card.Replay", card, error);
+        const bool captured = found && card && self->card_ && self->cardReplay_.capture(card);
+        self->recordArm("card-attached-replay-setup", captured, CARD_DISABLED);
+        if (captured)
+          self->card_->narrow(true);
+        else
+          self->finish(false);
+      }
+      else if (self->phase_ == CARD_DISABLED)
+      {
+        // No manual erase or invalidate: the live Box width drives the rail's broad delivery.
+        self->recordArm("card-attached-disabled-erases-old-ink", self->cardReplay_.matches(true), CARD_RESTORED);
+        self->card_->narrow(false);
+      }
+      else
+      {
+        self->recordArm("card-attached-reenabled-restores-ink", self->cardReplay_.matches(false), COMPLETE);
         self->finish(true);
       }
       SetPort(saved);
+    }
+
+    void checkCardPixels()
+    {
+      // Append after the ribbon arms: all pre-existing arm lines and phase numbers stay fixed.
+      static unsigned char reference[96 * 72], actual[96 * 72], ground[96 * 72];
+      CardPixels card;
+      PenState savedPen;
+      GetPenState(&savedPen);
+      PenNormal();
+      loka::toolbox::ToolboxTextInkScope ink(blackColor);
+      for (int size = 0; size < 2; ++size)
+      {
+        Rect frame;
+        SetRect(&frame, 17, 19, 17 + (size ? 96 : 15), 19 + (size ? 72 : 15));
+        ToolboxPaintClip clip(frame);
+        EraseRect(&frame);
+        const bool madeReference = CardPixels::reference(frame);
+        CardPixels::capture(frame, reference);
+        const int width = frame.right - frame.left, height = frame.bottom - frame.top;
+        bool seatClear = madeReference;
+        for (int y = 3; y < height - 6; ++y)
+          for (int x = 3; x < width - 6; ++x)
+            seatClear = seatClear && !reference[y * width + x];
+        this->recordArm(
+            size ? "card-large-whole-ink-outside-seat" : "card-minimum-whole-ink-outside-seat", seatClear, COMPLETE);
+        EraseRect(&frame);
+        card.layout(frame);
+        card.draw();
+        CardPixels::capture(frame, actual);
+        this->recordArm(size ? "card-large-bands-equal-whole" : "card-minimum-bands-equal-whole",
+                        std::memcmp(reference, actual, width * height) == 0,
+                        COMPLETE);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        CardPixels::capture(frame, ground);
+        card.draw();
+        CardPixels::capture(frame, actual);
+        bool transparent = true;
+        for (int i = 0; i < width * height; ++i)
+          transparent = transparent && actual[i] == (ground[i] || reference[i]);
+        this->recordArm(
+            size ? "card-large-transparent-ground" : "card-minimum-transparent-ground", transparent, COMPLETE);
+        // Damage wholly inside RIGHT, crossing its corner-to-straight transition.
+        Rect damage = frame;
+        damage.left = frame.right - 5;
+        damage.top += 2;
+        damage.bottom -= 7;
+        {
+          ToolboxPaintClip partial(damage);
+          FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2]);
+          card.draw(CARD_BAND_RIGHT);
+        }
+        CardPixels::capture(frame, ground);
+        this->recordArm(size ? "card-large-partial-no-seam" : "card-minimum-partial-no-seam",
+                        std::memcmp(actual, ground, width * height) == 0,
+                        COMPLETE);
+        // Broad layout-bearing replay reconstructs the ground before rendering the new placement.
+        Rect narrow = frame;
+        narrow.right = narrow.left + 14;
+        card.layout(narrow);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        CardPixels::capture(frame, ground);
+        card.draw();
+        CardPixels::capture(frame, actual);
+        this->recordArm(size ? "card-large-disabled-no-stale-ink" : "card-minimum-disabled-no-stale-ink",
+                        std::memcmp(actual, ground, width * height) == 0,
+                        COMPLETE);
+        card.layout(frame);
+        card.draw();
+        CardPixels::capture(frame, actual);
+        bool restored = true;
+        for (int i = 0; i < width * height; ++i)
+          restored = restored && actual[i] == (ground[i] || reference[i]);
+        this->recordArm(size ? "card-large-reenabled" : "card-minimum-reenabled", restored, COMPLETE);
+      }
+      SetPenState(&savedPen);
     }
 
     void checkFontCursor(ToolboxScenePlatformController &controller, GrafPtr port)

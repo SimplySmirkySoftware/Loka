@@ -10,7 +10,6 @@ struct BitMap { Rect bounds; };
 struct QDGlobals { BitMap screenBits; };
 extern QDGlobals qd;
 short GetMBarHeight();
-struct PenState { short ignored; };
 struct EventRecord { short what; unsigned long message; unsigned short modifiers; };
 typedef Boolean (*ModalFilterUPP)(DialogPtr, EventRecord *, short *);
 #define pascal

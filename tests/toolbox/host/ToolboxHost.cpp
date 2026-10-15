@@ -21,6 +21,7 @@ namespace toolbox_host
   GrafPtr activationPort = 0, deactivationPort = 0;
   int failRegions = 0;
   int regions = 0;
+  int refuseRegionAttempt = 0;
   int textHits = 0;
   void reset()
   {
@@ -153,6 +154,8 @@ bool EmptyRect(const Rect *r)
 RgnHandle NewRgn()
 {
   ++toolbox_host::regions;
+  if (toolbox_host::regions == toolbox_host::refuseRegionAttempt)
+    return 0;
   if (toolbox_host::failRegions > 0)
   {
     --toolbox_host::failRegions;
@@ -484,4 +487,68 @@ void FillRect(const Rect *rect, const Pattern *pattern)
   fill.ink = port->fgColor;
   if (!EmptyRect(&fill.rect))
     toolbox_host::fills.push_back(fill);
+}
+
+// Call tracing only: the host shim deliberately does not rasterize arcs.
+namespace toolbox_host
+{
+  std::vector<Rect> roundFrames;
+  int shadowPaints = 0, regionDifferences = 0;
+  short shadowMode = 0;
+  Pattern shadowPattern = {{0}};
+  PenState pen = {patCopy, 1, 1, {{255, 255, 255, 255, 255, 255, 255, 255}}};
+} // namespace toolbox_host
+namespace
+{
+  bool recordingCardRegion = false;
+  Rect recordedCardRect = {0, 0, 0, 0};
+} // namespace
+void GetPenState(PenState *out)
+{
+  *out = toolbox_host::pen;
+}
+void SetPenState(const PenState *value)
+{
+  toolbox_host::pen = *value;
+}
+void PenNormal()
+{
+  toolbox_host::pen.mode = patCopy;
+  toolbox_host::pen.width = toolbox_host::pen.height = 1;
+  std::memset(&toolbox_host::pen.pattern, 255, sizeof(Pattern));
+}
+void PenPat(const Pattern *pattern)
+{
+  toolbox_host::pen.pattern = *pattern;
+}
+void PenMode(short mode)
+{
+  toolbox_host::pen.mode = mode;
+}
+void OpenRgn()
+{
+  recordingCardRegion = true;
+}
+void CloseRgn(RgnHandle region)
+{
+  (**region).rgnBBox = recordedCardRect;
+  recordingCardRegion = false;
+}
+void FrameRoundRect(const Rect *rect, short, short)
+{
+  if (recordingCardRegion)
+    recordedCardRect = *rect;
+  else
+    toolbox_host::roundFrames.push_back(*rect);
+}
+void DiffRgn(RgnHandle a, RgnHandle, RgnHandle out)
+{
+  ++toolbox_host::regionDifferences;
+  (**out).rgnBBox = (**a).rgnBBox;
+}
+void PaintRgn(RgnHandle)
+{
+  ++toolbox_host::shadowPaints;
+  toolbox_host::shadowMode = toolbox_host::pen.mode;
+  toolbox_host::shadowPattern = toolbox_host::pen.pattern;
 }

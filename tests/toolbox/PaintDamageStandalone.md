@@ -104,3 +104,29 @@ the left edge, proves the erase removed a black pixel, then invalidates that
 rectangle and checks restoration after the next delivery.
 
 The six `ribbon-*` arms are runtime-verified on the `toolbox-maciix` rig (#1310).
+
+## Card bands (PR 2b, runtime acceptance pending)
+
+Twelve painter arms use real QuickDraw in the final fixture's window. `CardPixels`
+feeds the production framed layout into production `ToolboxCardBandContext`s;
+its independent reference draws the actual whole body without band clipping or
+local reconstruction. Both the minimum 15×15 frame and a translated 96×72 frame
+check whole ink against the content seat, four-band equality, patterned-ground
+transparency, a RIGHT-band damaged subrectangle, and enabled → narrow/disabled →
+enabled placement. The relayout probe explicitly reconstructs the ground as a
+layout-bearing broad replay does; it is a painter/placement probe, not a new
+Scene invalidation-routing claim. Existing ribbon arms and earlier log lines
+are unchanged.
+
+Three further arms use an attached Card in its own window. A live Box width
+changes from 96 to 14 and back to 96; the next ordinary Scene/window flush
+must erase the old ring and restore it pixel for pixel, without a manual erase
+or explicit invalidation in the probe.
+
+Build with `scripts/retro68-cmake.sh --build --preset retro68-68k-release --target
+LokaPaintDamage68K_APPL`. Run the command above on the delegator's maciix rig,
+inspect all fifteen `card-*` outcomes, then update
+`tests/toolbox/expected/paintdamage-maciix.audit` from the captured Classic-CR
+log. The previous 153 PASS arms must retain their exact lines; the new expected
+total is 168 PASS, pending that run. Do not replace the tracked log with an
+unrun expectation. The separate 29-cell MAME baseline must remain byte-identical.

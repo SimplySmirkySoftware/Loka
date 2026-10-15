@@ -9,6 +9,7 @@
            || key == loka::app::scene::NodeTypeToken<loka::app::ButtonNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::CellNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>()
+           || key == loka::app::scene::NodeTypeToken<loka::app::CardBandNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::TextNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>()
            || key == loka::app::scene::NodeTypeToken<loka::app::EditTextNode>()

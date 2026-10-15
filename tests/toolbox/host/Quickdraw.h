@@ -14,7 +14,9 @@ enum
   blackColor = 33,
   redColor = 205, greenColor = 341, blueColor = 409, cyanColor = 273, magentaColor = 137, yellowColor = 69,
   bold = 1,
-  italic = 2
+  italic = 2,
+  patCopy = 8,
+  patOr = 9
 };
 struct Rect
 {
@@ -26,6 +28,22 @@ struct Region
   Rect rgnBBox;
 };
 typedef Region **RgnHandle;
+struct PenState
+{
+  short mode, width, height;
+  Pattern pattern;
+};
+void GetPenState(PenState *);
+void SetPenState(const PenState *);
+void PenNormal();
+void PenPat(const Pattern *);
+void PenMode(short);
+void OpenRgn();
+void CloseRgn(RgnHandle);
+void FrameRoundRect(const Rect *, short, short);
+void OffsetRect(Rect *, short, short);
+void DiffRgn(RgnHandle, RgnHandle, RgnHandle);
+void PaintRgn(RgnHandle);
 struct GrafPort
 {
   short txFont, txSize;
