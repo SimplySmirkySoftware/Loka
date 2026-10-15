@@ -32,8 +32,12 @@ const char *s = "CreateWindowExW(x)";
 InvalidateRect(hwnd, NULL, TRUE);
 InvalidateRect(hwnd, 0, TRUE);
 InvalidateRect(hwnd, &r, TRUE);
+InvalidateRect(this->hwnd(), NULL, TRUE);
+InvalidateRect(this->hwnd(), &r, TRUE);
+InvalidateRect(windowFor(r), NULL, TRUE);
 '''
-        self.assertEqual(list(checker.violations("win32/src/context/New.cpp", source)), [(6, "InvalidateRect")])
+        self.assertEqual(list(checker.violations("win32/src/context/New.cpp", source)),
+                         [(6, "InvalidateRect"), (8, "InvalidateRect"), (9, "InvalidateRect")])
 
     def test_header_multiline_and_spliced_calls(self):
         self.assertEqual(list(checker.violations("win32/src/New.hpp", "Move\\\nWindow\n(hwnd);")), [(1, "MoveWindow")])
