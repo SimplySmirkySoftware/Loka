@@ -315,7 +315,7 @@ void testMacNodeHandlerEnsureContract()
     LOKA_VERIFY(controller.prepareProjectedLayout(&editor, state));
     LOKA_VERIFY(editor.getContext());
     // Card bands are an explicit refusal in both debug and release builds.
-    const int beforeBands = countChildViews(root);
+    const NSUInteger beforeBands = countChildViews(root);
     for (int role = 0; role < loka::app::CARD_BAND_COUNT; ++role)
     {
       loka::app::CardBandNode band(loka::app::CardBandProps(static_cast<loka::app::CardBandRole>(role)));
