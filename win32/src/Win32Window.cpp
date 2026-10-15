@@ -28,6 +28,7 @@ namespace
   // sets _WIN32_WINNT=0x0501, although newer Windows can still send it to the
   // same binary. Keep the wire value local to the capability-aware rail.
   static const UINT kWindowDpiChangedMessage = 0x02E0;
+  static const UINT kMouseHorizontalWheelMessage = 0x020E;
 
   /** One policy for window geometry and scene admission, including bootstrap
       before an HWND exists. Native chrome and font queries stay DPI-only. */
@@ -384,7 +385,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     switch (msg)
     {
     case WM_MOUSEWHEEL:
-      if (Win32ScrollViewContext::forwardMouseWheel(hwnd, wParam, lParam))
+    case kMouseHorizontalWheelMessage:
+      if (Win32ScrollViewContext::forwardMouseWheel(hwnd, msg, wParam, lParam))
       {
         return 0;
       }

@@ -375,7 +375,7 @@ void testWin32InputDoorWheelLifetime()
     InputFixture fixture(WHEEL_INPUT, child != 0);
     HWND field = fixture.observe<Win32ScrollViewContext>(findField(fixture.root(), WHEEL_INPUT)->asScrollViewNode());
     static_cast<Win32ScrollViewContext *>(findField(fixture.root(), WHEEL_INPUT)->getContext())
-        ->setScrollMetrics(2000, 80, 0);
+        ->setScrollMetrics(SB_VERT, 2000, 80, 0);
     fixture.facts.bind();
     SendMessageW(field, WM_MOUSEWHEEL, MAKEWPARAM(0, -3 * WHEEL_DELTA), 0);
     LOKA_VERIFY(fixture.facts.writes >= 3);
@@ -442,4 +442,20 @@ void testWin32InputDoorCloseDuringLayout()
   facts.unbind();
   app.flush();
   LOKA_VERIFY(facts.destroyed > facts.returned);
+}
+
+void testWin32InputDoorHorizontalScrollLifetime()
+{
+  for (int child = 0; child != 2; ++child)
+  {
+    InputFixture fixture(WHEEL_INPUT, child != 0);
+    HWND field = fixture.observe<Win32ScrollViewContext>(findField(fixture.root(), WHEEL_INPUT)->asScrollViewNode());
+    static_cast<Win32ScrollViewContext *>(findField(fixture.root(), WHEEL_INPUT)->getContext())
+        ->setScrollMetrics(SB_HORZ, 2000, 240, 0);
+    fixture.facts.bind();
+    SendMessageW(field, WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
+    LOKA_VERIFY(fixture.facts.offset.get().x == 16 && fixture.facts.offset.get().y == 0);
+    LOKA_VERIFY(fixture.facts.writes == 1);
+    fixture.returned();
+  }
 }
