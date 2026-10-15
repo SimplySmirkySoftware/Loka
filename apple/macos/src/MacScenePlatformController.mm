@@ -9,6 +9,7 @@
 #include "Utf8String.hpp"
 #include "platform/StringUTF8.hpp"
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "app/style/Style.hpp"
 #include "app/scene/boundary/Boundary.hpp"
 #include <cassert>
@@ -148,9 +149,23 @@ namespace
 bool MacScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
   // A consulting NATURAL Row asks at most twice per allocation; each ask
-  // measures only this leaf's current string, with no foreign rows or cache.
+  // measures only this leaf's current string or converts its image width in O(1),
+  // with no foreign rows or cache.
   if (child && child->asTextNode())
     return MacTextContext::queryNaturalWidth(child->asTextNode(), this, width);
+  if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
+  {
+    // No NSView, cell, or font is needed.
+    int pixels = 0;
+    if (!loka::app::queryIntrinsicImageWidth(image->props, pixels))
+      return false;
+    // Keep conversion aligned with ResolveImageLayoutWidth in MacImageViewContext.mm.
+    const int lu = this->projection().intrinsicPixelsToLu(pixels);
+    if (lu <= 0 || lu > SHRT_MAX)
+      return false;
+    width = static_cast<short>(lu);
+    return true;
+  }
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   if (!button)
     return false;

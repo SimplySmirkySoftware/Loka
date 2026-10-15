@@ -43,6 +43,7 @@ namespace
     }
     if (sizePolicy == loka::app::IMAGE_VIEW_SIZE_INTRINSIC && srcWidth > 0)
     {
+      // Keep conversion aligned with MacScenePlatformController::queryNaturalWidth.
       return projection.intrinsicPixelsToLu(srcWidth);
     }
     if (sizePolicy == loka::app::IMAGE_VIEW_SIZE_FILL_PARENT)
