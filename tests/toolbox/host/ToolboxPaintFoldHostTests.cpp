@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Card.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "ToolboxPaintGradient.hpp"
 #include "ToolboxDirtyReplay.hpp"
@@ -96,6 +97,11 @@ void Run(bool statusLast, bool partialNeighbour = false)
   RibbonGroupEdgeNode *edge = root->asNestable()->childrenHead()->asNestable()->childrenHead()->asRibbonGroupEdgeNode();
   LOKA_VERIFY(edge != 0);
   LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+  CardBandNode refusedBand((CardBandProps()));
+  IPlatformNodeHandler *refusal = controller.nodeHandlerRegistry_.find(&refusedBand);
+  LOKA_VERIFY(refusal != 0);
+  LOKA_VERIFY(refusal->ensureContext(&refusedBand, &controller, Seat(10, 20, 30)) == 0);
+  LOKA_VERIFY(refusedBand.getContext() == 0);
   LayoutState edgeSeat = Seat(20, 65, 1);
   IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(edge);
   LOKA_VERIFY(handler != 0);
@@ -324,6 +330,15 @@ void GradientPins()
 }
 int main()
 {
+  ToolboxSceneDebugStats stats;
+  ToolboxPaintAnswerSource source(stats);
+  CardNode card((CardProps()));
+  CardBandNode band((CardBandProps()));
+  PaintAnswer answer;
+  const PaintQuery query = {PaintScope(), PLACEMENT_ELIGIBLE};
+  LOKA_VERIFY(!source.queryPaintAnswer(&card, 0, query, answer));
+  LOKA_VERIFY(source.queryPaintAnswer(&band, 0, query, answer));
+  LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED);
   GradientPins();
   Run(false);
   Run(true);

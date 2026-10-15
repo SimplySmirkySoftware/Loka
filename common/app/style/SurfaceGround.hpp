@@ -42,6 +42,8 @@ namespace loka
         return SURFACE_GROUND_NATIVE;
       case scene::NODE_KIND_UNKNOWN:
       case scene::NODE_KIND_BOX:
+      case scene::NODE_KIND_CARD_BAND:
+      case scene::NODE_KIND_CARD:
       case scene::NODE_KIND_RIBBON_GROUP:
       case scene::NODE_KIND_ZSTACK:
       case scene::NODE_KIND_GRID:

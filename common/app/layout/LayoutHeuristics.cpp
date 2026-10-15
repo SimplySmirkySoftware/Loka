@@ -44,6 +44,8 @@ namespace loka
         case scene::NODE_KIND_CANVAS:
         case scene::NODE_KIND_ATTRIBUTED_TEXT:
         case scene::NODE_KIND_TEXT_EDITOR:
+        case scene::NODE_KIND_CARD:
+        case scene::NODE_KIND_CARD_BAND:
         case scene::NODE_KIND_RIBBON_GROUP:
         case scene::NODE_KIND_RIBBON_GROUP_EDGE:
           return true;
@@ -156,7 +158,10 @@ namespace loka
             if (!group || !group->childrenHead()
                 || !queryNaturalWidth(group->childrenHead(), gap, source, contentWidth))
               return false;
-            const long answer = static_cast<long>(contentWidth) + 2 * frame->frameGeometry().inset;
+            const FrameGeometry geometry = frame->frameGeometry();
+            long answer = static_cast<long>(contentWidth) + geometry.insets.left + geometry.insets.right;
+            if (answer < geometry.minimumWidth)
+              answer = geometry.minimumWidth;
             if (answer > SHRT_MAX)
               return false;
             width = static_cast<short>(answer);

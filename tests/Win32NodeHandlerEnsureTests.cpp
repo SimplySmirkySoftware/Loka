@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Card.hpp"
 #include "support/Win32ImportRefusal.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "context/Win32EditTextContext.hpp"
@@ -315,6 +316,16 @@ void testWin32NodeHandlerEnsureContract()
     LOKA_VERIFY(editorContext && IsWindowUnicode(editorContext->hwnd()));
     LOKA_VERIFY(controller.prepareProjectedLayout(&editor, state));
     LOKA_VERIFY(editor.getContext() == editorContext);
+    // Card bands are an explicit refusal in both debug and release builds.
+    const int beforeBands = countChildWindows(root);
+    for (int role = 0; role < loka::app::CARD_BAND_COUNT; ++role)
+    {
+      loka::app::CardBandNode band(loka::app::CardBandProps(static_cast<loka::app::CardBandRole>(role)));
+      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
+      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
+      LOKA_VERIFY(band.getContext() == 0);
+    }
+    LOKA_VERIFY(countChildWindows(root) == beforeBands);
     // -- ScrollBar: Win32 has no native context for it; the registered
     // refusal stub must answer (false, no context) without tripping the
     // registry-miss education assert -- a known unsupported kind is a typed

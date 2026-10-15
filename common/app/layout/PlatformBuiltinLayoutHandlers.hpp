@@ -197,6 +197,7 @@ namespace loka
       {
         registry.registerHandler(new BoxPlatformLayoutHandler(verticalGap));
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
+        registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::CardNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)
