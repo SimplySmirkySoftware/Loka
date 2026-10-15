@@ -76,10 +76,12 @@ namespace
     PushStateTracker tracker;
     NodeState<bool> *shown;
     MutableState<String> text;
-    MutableState<int> selection, offset;
+    MutableState<int> selection;
+    MutableState<Frame> offset;
     MutableState<Frame> firstExtent, secondExtent;
     NodeState<String> textFact;
-    NodeState<int> selectionFact, offsetFact;
+    NodeState<int> selectionFact;
+    NodeState<Frame> offsetFact;
     NodeState<Frame> firstFact, secondFact;
     EmitterState change;
     const InputKind kind;
@@ -93,7 +95,7 @@ namespace
         : shown(0),
           text(String("before")),
           selection(0),
-          offset(0),
+          offset(Frame(0, 0, 0, 0)),
           firstExtent(Frame()),
           secondExtent(Frame()),
           textFact(&text, &tracker),
@@ -428,7 +430,7 @@ void testMacInputDoorScrollLifetime()
         ->setScrollMetrics(2000, 80, 0);
     fixture.facts.bind();
     [[field contentView] setBoundsOrigin:NSMakePoint(0, 100)];
-    LOKA_VERIFY(fixture.facts.offset.get() > 0);
+    LOKA_VERIFY(fixture.facts.offset.get().y > 0);
     fixture.returned();
   }
 }

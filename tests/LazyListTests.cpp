@@ -136,7 +136,7 @@ namespace
       const int maximum = extent > 0 ? extent : 0;
       ScrollViewNode *scroll = scrollView(this->root());
       LOKA_VERIFY(scroll != 0);
-      scroll->props.offset_.set(y < 0 ? 0 : (y > maximum ? maximum : y));
+      scroll->publishOrigin(0, y < 0 ? 0 : (y > maximum ? maximum : y));
       this->drain();
     }
     void nextPage()
