@@ -1552,6 +1552,12 @@ void testMacRibbonGroupEdgeEnsureAndRetirement()
 #include "app/nodes/ImageView.hpp"
 #include "app/RectSurface.hpp"
 #include "app/ConfirmDialog.hpp"
+#include <climits>
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
+#include "context/MacScrollViewContext.hpp"
 // Keep Show after RequestSettlement and all other includes (#1359).
 #include "app/nodes/nestable/Show.hpp"
 
@@ -1842,5 +1848,262 @@ void testMacContainerGapRow()
       }
       [root release];
     }
+  [pool drain];
+}
+
+namespace
+{
+  // Deliberate Win32 twin: invert only exact projected edges from native frames.
+  int gapDoorEdgeLu(const loka::macos::MacProjection &scale, CGFloat edge)
+  {
+    int lu = 0;
+    while (lu < SHRT_MAX && scale.projectEdge(lu).pt < edge)
+      ++lu;
+    LOKA_VERIFY(scale.projectEdge(lu).pt == edge);
+    return lu;
+  }
+
+  NSRect gapDoorFrame(NSView *parent, NSUInteger index)
+  {
+    LOKA_VERIFY([[parent subviews] count] > index);
+    return [[[parent subviews] objectAtIndex:index] frame];
+  }
+
+  void verifyGapDoorInterval(MacScenePlatformController &controller, NSView *parent,
+                             NSUInteger first, NSUInteger second, int gap)
+  {
+    // Match the existing Mac container pins: frames use the rail's top-down
+    // coordinates; ScrollView children are in the flipped document view.
+    const NSRect before = gapDoorFrame(parent, first);
+    const NSRect after = gapDoorFrame(parent, second);
+    const loka::macos::MacProjection &scale = controller.projection();
+    const int bottom = gapDoorEdgeLu(scale, NSMaxY(before));
+    LOKA_VERIFY(NSMinY(after) == scale.projectEdge(bottom + gap).pt);
+  }
+
+  void verifyGapDoorColumn(bool registered, bool fullSequence)
+  {
+    using namespace loka::app;
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    const loka::macos::MacProjection scale(0, loka::macos::DefaultRailMetrics());
+    NSView *root = [[NSView alloc] initWithFrame:scale.projectClientSize(640, 400).r];
+    LOKA_VERIFY(root != nil);
+    {
+      MacScenePlatformController controller(root, scale.railMetrics());
+      StackProps props(STACK_AXIS_COLUMN);
+      props.gap(fullSequence ? 16 : 20);
+      StackNode *column = registered ? new StackNode(props) : new DirectGapStack(props);
+      TextNode *head = fullSequence ? new TextNode(TextProps("Head")) : 0;
+      FragmentNode *fragment = new FragmentNode((FragmentProps()));
+      TextNode *first = new TextNode(TextProps("First"));
+      TextNode *second = new TextNode(TextProps("Second"));
+      ButtonNode *tail = fullSequence ? new ButtonNode(ButtonProps().text("Tail")) : 0;
+      if (fullSequence)
+        column->addChild(head);
+
+      fragment->addChild(first);
+      fragment->addChild(second);
+      column->addChild(fragment);
+      if (fullSequence)
+        column->addChild(tail);
+
+      controller.onChange(column, scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 400);
+      verifyGapDoorInterval(controller, root, fullSequence ? 1 : 0, fullSequence ? 2 : 1,
+                            fullSequence ? 16 : 20);
+      if (fullSequence)
+      {
+        LOKA_VERIFY(NSMinY(gapDoorFrame(root, 0)) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+        verifyGapDoorInterval(controller, root, 0, 1, 16);
+        verifyGapDoorInterval(controller, root, 2, 3, 16);
+      }
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      delete column;
+    }
+    [root release];
+    [pool drain];
+  }
+
+  enum GapDoorReset { GAP_DOOR_BOX, GAP_DOOR_ZSTACK, GAP_DOOR_GRID, GAP_DOOR_SCROLL, GAP_DOOR_COLUMN };
+
+  void verifyGapDoorReset(GapDoorReset reset)
+  {
+    using namespace loka::app;
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    const loka::macos::MacProjection scale(0, loka::macos::DefaultRailMetrics());
+    NSView *root = [[NSView alloc] initWithFrame:scale.projectClientSize(640, 400).r];
+    LOKA_VERIFY(root != nil);
+    {
+      MacScenePlatformController controller(root, scale.railMetrics());
+      StackProps props(STACK_AXIS_COLUMN);
+      props.gap(20);
+      DirectGapStack column(props);
+      scene::NestableNode *container = 0;
+      switch (reset)
+      {
+      case GAP_DOOR_BOX: container = new BoxNode((BoxProps())); break;
+      case GAP_DOOR_ZSTACK: container = new ZStackNode((ZStackProps())); break;
+      case GAP_DOOR_GRID: container = new GridNode(GridProps(1, 1)); break;
+      case GAP_DOOR_SCROLL: container = new ScrollViewNode((ScrollViewProps())); break;
+      case GAP_DOOR_COLUMN: container = new StackNode(StackProps(STACK_AXIS_COLUMN)); break;
+      }
+      LOKA_VERIFY(container != 0);
+      FragmentNode *inside = new FragmentNode((FragmentProps()));
+      TextNode *first = new TextNode(TextProps("Inside first"));
+      TextNode *second = new TextNode(TextProps("Inside second"));
+      inside->addChild(first);
+      inside->addChild(second);
+      container->addChild(inside);
+      column.addChild(container);
+      FragmentNode *sibling = new FragmentNode((FragmentProps()));
+      TextNode *third = new TextNode(TextProps("Sibling first"));
+      TextNode *fourth = new TextNode(TextProps("Sibling second"));
+      sibling->addChild(third);
+      sibling->addChild(fourth);
+      column.addChild(sibling);
+      controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 400);
+      // Scroll children use document-local coordinates; all other children use root coordinates.
+      if (reset == GAP_DOOR_SCROLL)
+        LOKA_VERIFY(container->getContext() != 0);
+      NSView *parent = reset == GAP_DOOR_SCROLL
+          ? (NSView *)static_cast<MacScrollViewContext *>(container->getContext())->documentView() : root;
+      verifyGapDoorInterval(controller, parent, 0, 1, 6);
+      verifyGapDoorInterval(controller, root, reset == GAP_DOOR_SCROLL ? 1 : 2,
+                            reset == GAP_DOOR_SCROLL ? 2 : 3, 20);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    [root release];
+    [pool drain];
+  }
+}
+
+void testMacGapDoorColumnFragment()
+{
+  verifyGapDoorColumn(false, true);
+}
+
+void testMacGapDoorBoxSiblingIsolation()
+{
+  verifyGapDoorReset(GAP_DOOR_BOX);
+}
+
+void testMacGapDoorZStackReset()
+{
+  verifyGapDoorReset(GAP_DOOR_ZSTACK);
+}
+
+void testMacGapDoorGridReset()
+{
+  verifyGapDoorReset(GAP_DOOR_GRID);
+}
+
+void testMacGapDoorScrollViewResetAndSiblingIsolation()
+{
+  verifyGapDoorReset(GAP_DOOR_SCROLL);
+}
+
+void testMacGapDoorUnspecifiedColumnReset()
+{
+  verifyGapDoorReset(GAP_DOOR_COLUMN);
+}
+
+void testMacGapDoorRegisteredColumnBridge()
+{
+  verifyGapDoorColumn(true, false);
+}
+
+void testMacGapDoorRowFragment()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const loka::macos::MacProjection scale(0, loka::macos::DefaultRailMetrics());
+  NSView *root = [[NSView alloc] initWithFrame:scale.projectClientSize(640, 400).r];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, scale.railMetrics());
+    StackProps props(STACK_AXIS_ROW);
+    props.gap(20);
+    DirectGapStack row(props);
+    FragmentNode *fragment = new FragmentNode((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("First"));
+    TextNode *second = new TextNode(TextProps("Second"));
+    fragment->addChild(first);
+    fragment->addChild(second);
+    row.addChild(fragment);
+    controller.onChange(&row, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    verifyGapDoorInterval(controller, root, 0, 1, 20);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  [root release];
+  [pool drain];
+}
+
+void testMacGapDoorRootFragment()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const loka::macos::MacProjection scale(0, loka::macos::DefaultRailMetrics());
+  NSView *root = [[NSView alloc] initWithFrame:scale.projectClientSize(640, 400).r];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, scale.railMetrics());
+    FragmentNode fragment((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("First"));
+    TextNode *second = new TextNode(TextProps("Second"));
+    fragment.addChild(first);
+    fragment.addChild(second);
+    controller.onChange(&fragment, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    LOKA_VERIFY(NSMinY(gapDoorFrame(root, 0)) == scale.projectEdge(MacSceneLayout::kRootInset).pt);
+    verifyGapDoorInterval(controller, root, 0, 1, 6);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  [root release];
+  [pool drain];
+}
+
+void testMacGapDoorScrollViewContent()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const loka::macos::MacProjection scale(0, loka::macos::DefaultRailMetrics());
+  NSView *root = [[NSView alloc] initWithFrame:scale.projectClientSize(640, 400).r];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, scale.railMetrics());
+    StackProps props(STACK_AXIS_COLUMN);
+    props.gap(20);
+    DirectGapStack column(props);
+    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    BoxNode *box = new BoxNode((BoxProps()));
+    FragmentNode *fragment = new FragmentNode((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("Box first"));
+    TextNode *second = new TextNode(TextProps("Box second"));
+    TextNode *third = new TextNode(TextProps("Fragment first"));
+    TextNode *fourth = new TextNode(TextProps("Fragment second"));
+    box->addChild(first);
+    box->addChild(second);
+    fragment->addChild(third);
+    fragment->addChild(fourth);
+    scroll->addChild(box);
+    scroll->addChild(fragment);
+    column.addChild(scroll);
+    controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    LOKA_VERIFY(scroll->getContext() != 0);
+    NSView *parent = (NSView *)static_cast<MacScrollViewContext *>(scroll->getContext())->documentView();
+    verifyGapDoorInterval(controller, parent, 0, 1, 6);
+    verifyGapDoorInterval(controller, parent, 1, 2, 6);
+    verifyGapDoorInterval(controller, parent, 2, 3, 6);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  [root release];
   [pool drain];
 }
