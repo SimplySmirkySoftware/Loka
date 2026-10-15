@@ -830,7 +830,9 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      composition.declare(Box().width(this->width_.state()) << (Card().TEST_ID("Card.Replay") << Box().size(1, 63)));
+      // A width-only Box is a Row seat claim (#576); as the root it would pass the full window width through.
+      composition.declare(
+          Row() << (Box().width(this->width_.state()) << (Card().TEST_ID("Card.Replay") << Box().size(1, 63))));
     }
     void narrow(bool narrow)
     {
@@ -851,30 +853,45 @@ namespace
           pixels_()
     {
     }
-    bool capture(Node *card)
+    /** Setup checks in log order; capture() returns the first one that fails, or READY. */
+    enum Check
+    {
+      CHECK_FOUND,
+      CHECK_BANDS_EXACT,
+      CHECK_FRAME_96X72,
+      CHECK_OLD_INK,
+      READY
+    };
+    Check capture(Node *card)
     {
       const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
       PaintDamage top = {}, bottom = {};
+      int exact = 0;
       for (Node *child = card->asNestable()->childrenHead(); child; child = child->nextInComposition)
       {
-        if (!child->asCardBandNode() || !child->getContext())
+        if (!child->asCardBandNode())
           continue;
+        if (!child->getContext())
+          return CHECK_BANDS_EXACT;
         const PaintAnswer answer = static_cast<NativeNodeContext *>(child->getContext())->queryPaintDamage(query);
         if (answer.kind != PAINT_ANSWER_EXACT)
-          return false;
+          return CHECK_BANDS_EXACT;
+        ++exact;
         if (child->asCardBandNode()->props.role == CARD_BAND_TOP)
           top = answer.damage;
         if (child->asCardBandNode()->props.role == CARD_BAND_BOTTOM)
           bottom = answer.damage;
       }
+      if (exact != CARD_BAND_COUNT)
+        return CHECK_BANDS_EXACT;
       SetRect(&this->frame_, top.x, top.y, bottom.x + bottom.width, bottom.y + bottom.height);
       if (this->frame_.right - this->frame_.left != 96 || this->frame_.bottom - this->frame_.top != 72)
-        return false;
+        return CHECK_FRAME_96X72;
       CardPixels::capture(this->frame_, this->pixels_);
       for (unsigned i = 0; i < sizeof(this->pixels_); ++i)
         if (this->pixels_[i])
-          return true;
-      return false;
+          return READY;
+      return CHECK_OLD_INK;
     }
     bool matches(bool disabled) const
     {
@@ -2797,9 +2814,16 @@ namespace
         Node *card = 0;
         loka::dsl::FlowError error;
         const bool found = loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Card.Replay", card, error);
-        const bool captured = found && card && self->card_ && self->cardReplay_.capture(card);
-        self->recordArm("card-attached-replay-setup", captured, CARD_DISABLED);
-        if (captured)
+        const CardReplayPixels::Check failed =
+            found && card && self->card_ ? self->cardReplay_.capture(card) : CardReplayPixels::CHECK_FOUND;
+        // Each check passed is one PASS line; the first failure ends the list.
+        static const char *const names[] = {"card-attached-replay-found",
+                                            "card-attached-replay-bands-exact",
+                                            "card-attached-replay-frame-96x72",
+                                            "card-attached-replay-old-ink"};
+        for (int check = CardReplayPixels::CHECK_FOUND; check < CardReplayPixels::READY && check <= failed; ++check)
+          self->recordArm(names[check], check != failed, CARD_DISABLED);
+        if (failed == CardReplayPixels::READY)
           self->card_->narrow(true);
         else
           self->finish(false);

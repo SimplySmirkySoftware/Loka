@@ -118,15 +118,20 @@ layout-bearing broad replay does; it is a painter/placement probe, not a new
 Scene invalidation-routing claim. Existing ribbon arms and earlier log lines
 are unchanged.
 
-Three further arms use an attached Card in its own window. A live Box width
-changes from 96 to 14 and back to 96; the next ordinary Scene/window flush
-must erase the old ring and restore it pixel for pixel, without a manual erase
-or explicit invalidation in the probe.
+Six further lines use an attached Card in its own window. The Card sits in a
+Row seat whose live Box width claim changes from 96 to 14 and back to 96 (a
+width-only Box constrains its content only as a Row seat; as the root it would
+pass the full window width through). Four setup lines report, in order, that
+the Card was found, that all four bands answer exact damage, that TOP and
+BOTTOM damage span 96×72, and that the captured frame holds ink; the first
+failure ends the list. The next ordinary Scene/window flush must then erase the
+old ring and restore it pixel for pixel, without a manual erase or explicit
+invalidation in the probe.
 
 Build with `scripts/retro68-cmake.sh --build --preset retro68-68k-release --target
 LokaPaintDamage68K_APPL`. Run the command above on the delegator's maciix rig,
-inspect all fifteen `card-*` outcomes, then update
+inspect all eighteen `card-*` outcomes, then update
 `tests/toolbox/expected/paintdamage-maciix.audit` from the captured Classic-CR
 log. The previous 153 PASS arms must retain their exact lines; the new expected
-total is 168 PASS, pending that run. Do not replace the tracked log with an
+total is 171 PASS, pending that run. Do not replace the tracked log with an
 unrun expectation. The separate 29-cell MAME baseline must remain byte-identical.
