@@ -11,11 +11,10 @@ namespace loka
     }
     namespace layout
     {
-      /** Borrowed rail measurement for an undeclared-width Row child.
-          Answers (including refusal) must remain stable throughout one synchronous
-          layout pass: no state writes, event pumping or consuming measurement tokens.
-          A successful answer is positive. The Row may ask twice, while totalling
-          and allocating; the source and its inputs must outlive that pass. */
+      /** Borrowed rail leaf measurement for natural Row allocation and offer-independent ScrollView
+          content (including intrinsic images), answering a positive width or refusing without changing it.
+          Answers and inputs must remain stable and outlive the synchronous pass, including repeated
+          Row queries: no state writes, event pumping, or consuming measurement tokens. */
       class INaturalWidthSource
       {
       public:
