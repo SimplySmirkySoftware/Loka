@@ -2854,7 +2854,7 @@ namespace
       for (int size = 0; size < 2; ++size)
       {
         Rect frame;
-        SetRect(&frame, 17, 19, 17 + (size ? 96 : 15), 19 + (size ? 72 : 15));
+        SetRect(&frame, 17, 19, 17 + (size ? 96 : 17), 19 + (size ? 72 : 17));
         ToolboxPaintClip clip(frame);
         EraseRect(&frame);
         const bool madeReference = CardPixels::reference(frame);

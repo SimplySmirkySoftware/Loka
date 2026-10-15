@@ -210,25 +210,27 @@ void testCardGeometryAndLimits()
   LOKA_VERIFY(handler != 0);
   const FrameGeometry g = card.frameGeometry();
   LOKA_VERIFY(g.insets.left == 3 && g.insets.top == 3 && g.insets.right == 6 && g.insets.bottom == 6);
-  LOKA_VERIFY(g.minimumWidth == 15 && g.minimumHeight == 15);
-  for (int width = 15; width <= 45; ++width)
+  LOKA_VERIFY(g.minimumWidth == 17 && g.minimumHeight == 17);
+  LOKA_VERIFY(CardStyle::minimumBodyExtent(5, 1) == 16);
+  LOKA_VERIFY(CardStyle::minimumBodyExtent(1, 5) == 16);
+  for (int width = 17; width <= 45; ++width)
     for (int height = 0; height <= 24; height += 3)
     {
       LayoutState s = offer(width);
       CardTraversal t(height);
       const int bottom = handler->layoutNode(&card, s, &t);
-      LOKA_VERIFY(bottom == s.y + (height + 9 < 15 ? 15 : height + 9));
+      LOKA_VERIFY(bottom == s.y + (height + 9 < 17 ? 17 : height + 9));
       LOKA_VERIFY(t.content.x == 13 && t.content.y == 23);
       LOKA_VERIFY(t.content.width == width - 9 && t.content.height == 71);
       verifyRing(t, s, bottom);
     }
-  const int widths[] = {15, 14, 15, 0};
+  const int widths[] = {17, 16, 17, 0};
   for (int i = 0; i < 4; ++i)
   {
     LayoutState s = offer(widths[i]);
     CardTraversal t;
     const int bottom = handler->layoutNode(&card, s, &t);
-    if (widths[i] < 15)
+    if (widths[i] < 17)
       emptyBands(t, s);
     else
       verifyRing(t, s, bottom);
@@ -245,7 +247,7 @@ void testCardGeometryAndLimits()
       s.x = 32767; // Content narrowing remains the existing convention.
     CardTraversal t(0);
     const int bottom = handler->layoutNode(&card, s, &t);
-    LOKA_VERIFY(bottom == s.y + 15);
+    LOKA_VERIFY(bottom == s.y + 17);
     emptyBands(t, s);
     LOKA_VERIFY(t.content.x == static_cast<short>(s.x + 3));
     LOKA_VERIFY(t.content.y == static_cast<short>(s.y + 3));
@@ -256,11 +258,11 @@ void testCardGeometryAndLimits()
   LOKA_VERIFY(handler->layoutNode(&card, tall, &tallTraversal) == 10009);
   emptyBands(tallTraversal, tall); // Endpoints fit; the bands' heights do not.
   CardTraversal refused;
-  LOKA_VERIFY(computeFramedLayoutResultY(&card, offer(), &refused, &recordCard, &refuseCardY) == 35);
+  LOKA_VERIFY(computeFramedLayoutResultY(&card, offer(), &refused, &recordCard, &refuseCardY) == 37);
   LOKA_VERIFY(refused.visits == 4);
   CardNode absent((CardProps()));
   CardTraversal none;
-  LOKA_VERIFY(handler->layoutNode(&absent, offer(), &none) == 35);
+  LOKA_VERIFY(handler->layoutNode(&absent, offer(), &none) == 37);
   LOKA_VERIFY(none.visits == 0);
 
   // Actual layout facts: Card does not contain content that ignores its offer.
@@ -273,8 +275,8 @@ void testCardGeometryAndLimits()
   Node *node = 0;
   FlowError error;
   LOKA_VERIFY(LookupNodeById<Node>(&scene, "card-limit", node, error) == FLOW_STEP_SUCCEEDED);
-  LayoutState small = offer(15);
-  LOKA_VERIFY(platform.projectLayoutForTesting(node, small) == 35);
+  LayoutState small = offer(17);
+  LOKA_VERIFY(platform.projectLayoutForTesting(node, small) == 37);
   Node *box = node->asNestable()->childrenHead()->asNestable()->childrenHead();
   OfferedContentContext *context =
       static_cast<OfferedContentContext *>(box->asNestable()->childrenHead()->getContext());
@@ -291,7 +293,7 @@ void testCardGeometryAndLimits()
   CardGridTraversal gridTraversal;
   const int gridBottom = gridHandler.layoutNode(&grid, offer(), &gridTraversal);
   LOKA_VERIFY(gridTraversal.cell.width == 20 && gridTraversal.cell.height == 3);
-  LOKA_VERIFY(gridBottom == 23 && gridTraversal.cardBottom == 35);
+  LOKA_VERIFY(gridBottom == 23 && gridTraversal.cardBottom == 37);
 }
 
 void testCardNaturalWidthAndSeats()
@@ -308,7 +310,7 @@ void testCardNaturalWidthAndSeats()
   CardNode card((CardProps()));
   populate(card);
   LOKA_VERIFY(measured(card, natural) == 29);
-  LOKA_VERIFY(measured(card, tiny) == 15);
+  LOKA_VERIFY(measured(card, tiny) == 17);
   LOKA_VERIFY(measured(card, excessive) == 301);
   LOKA_VERIFY(measured(card, declining) == 301);
   LOKA_VERIFY(measured(card, zero) == 301);

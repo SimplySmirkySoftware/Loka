@@ -111,7 +111,7 @@ The six `ribbon-*` arms are runtime-verified on the `toolbox-maciix` rig (#1310)
 Twelve painter arms use real QuickDraw in the final fixture's window. `CardPixels`
 feeds the production framed layout into production `ToolboxCardBandContext`s;
 its independent reference draws the actual whole body without band clipping or
-local reconstruction. Both the minimum 15×15 frame and a translated 96×72 frame
+local reconstruction. Both the minimum 17×17 frame and a translated 96×72 frame
 check whole ink against the content seat, four-band equality, patterned-ground
 transparency, a RIGHT-band damaged subrectangle, and enabled → narrow/disabled →
 enabled placement. The relayout probe explicitly reconstructs the ground as a

@@ -58,16 +58,16 @@ void testWin32CardPainterPixels()
   using namespace loka::app;
   using namespace loka::win32;
   using loka::core::Frame;
-  const UINT dpis[] = {96, 120, 144, 192};
+  const UINT dpis[] = {96, 120, 144, 168, 192};
   for (int metricsIndex = 0; metricsIndex < 2; ++metricsIndex)
-    for (int dpiIndex = 0; dpiIndex < 4; ++dpiIndex)
+    for (int dpiIndex = 0; dpiIndex < 5; ++dpiIndex)
       for (int sizeIndex = 0; sizeIndex < 4; ++sizeIndex)
       {
         const RailMetrics metrics(Ratio(), metricsIndex ? Ratio(3, 2) : Ratio());
         const Win32DisplayScale scale(dpis[dpiIndex], metrics);
         // Translated origin and asymmetric allowances exercise absolute-edge rounding.
-        const int width = (sizeIndex & 1) ? 12 : 77;
-        const int height = (sizeIndex & 2) ? 12 : 57;
+        const int width = (sizeIndex & 1) ? 14 : 77;
+        const int height = (sizeIndex & 2) ? 14 : 57;
         const Frame wholeBody(11, 17, width, height);
         const Frame bands[] = {Frame(11, 17, width - 3, 3),
                                Frame(11, 20, 3, height),
@@ -75,12 +75,8 @@ void testWin32CardPainterPixels()
                                Frame(14, 17 + height - 3, width, 6)};
         CardDib reference(320, 320);
         CardDib split(320, 320);
-        // The whole-card reference has the same clip as the union of child
-        // windows: the outer frame minus the content seat. A rounded shadow
-        // offset can exceed the separately projected allowance by one pixel,
-        // which Q1 clips at the card frame; GDI's elliptic regions can put one
-        // inner-arc pixel at a seat corner, which no band owns (Q1: the seat
-        // belongs to the content).
+        // Q1 limits the whole reference to the outer frame. Exclude the
+        // content seat below: no band owns those pixels, including arc corners.
         const RECT outer = scale.projectFrame(Frame(11, 17, width + 3, height + 3)).r;
         const RECT seat = scale.projectFrame(Frame(14, 20, width - 6, height - 6)).r;
         const int savedReference = SaveDC(reference.dc);
@@ -124,7 +120,7 @@ void testWin32CardPainterPixels()
           for (int x = static_cast<int>(seat.left); x < seat.right; ++x)
             LOKA_VERIFY(GetPixel(split.dc, x, y) == ground(x, y));
         // Straight-side checks need space between top and bottom corner quadrants.
-        if (height == 12)
+        if (height == 14)
           continue;
         const RECT body = scale.projectFrame(wholeBody).r;
         const int middle = static_cast<int>((body.top + body.bottom) / 2);

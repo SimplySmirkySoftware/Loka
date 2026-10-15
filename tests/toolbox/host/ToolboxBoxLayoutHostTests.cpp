@@ -70,7 +70,7 @@ namespace
     state.width = 100;
     state.height = 80;
     LOKA_VERIFY(LayoutNode(&card, state, &controller, 0) == 100);
-    LOKA_VERIFY(state.y == 35 && content->calls == 1);
+    LOKA_VERIFY(state.y == 37 && content->calls == 1);
     LOKA_VERIFY(content->offer.x == 13 && content->offer.y == 23);
     LOKA_VERIFY(content->offer.width == 91 && content->offer.height == 71);
   }

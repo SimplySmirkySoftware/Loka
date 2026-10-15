@@ -2,6 +2,18 @@
 
 namespace
 {
+  /** Offset in layout units before projection, so every real shadow edge has
+      the same absolute rounding in a band and in the whole-card reference. */
+  RECT ProjectCardShadow(const loka::core::Frame &body,
+                         const loka::app::CardStyle &style,
+                         const loka::win32::Win32DisplayScale &scale)
+  {
+    return scale
+        .projectFrame(
+            loka::core::Frame(body.x + style.kShadowRight, body.y + style.kShadowBottom, body.width, body.height))
+        .r;
+  }
+
   /** A temporary region with a single lexical owner. */
   class CardRegion
   {
@@ -96,15 +108,14 @@ namespace
       if (this->bitmap_)
         DeleteObject(this->bitmap_);
     }
-    bool prepare(const RECT &body, int diameter, int pen, int dx, int dy, unsigned corners)
+    bool prepare(const RECT &body, const RECT &shadow, int diameter, int pen, unsigned corners)
     {
       RECT inner = body;
       InflateRect(&inner, -pen, -pen);
       return this->body_.get() && this->shadow_.get() && this->inner_.get() && this->border_.get() && this->bitmap_
              && this->brush_ && BuildCardBody(this->body_.get(), body, diameter, corners)
              && BuildCardBody(this->inner_.get(), inner, diameter - 2 * pen, corners)
-             && CombineRgn(this->shadow_.get(), this->body_.get(), NULL, RGN_COPY) != ERROR
-             && OffsetRgn(this->shadow_.get(), dx, dy) != ERROR
+             && BuildCardBody(this->shadow_.get(), shadow, diameter, corners)
              && CombineRgn(this->shadow_.get(), this->shadow_.get(), this->body_.get(), RGN_DIFF) != ERROR
              && CombineRgn(this->border_.get(), this->body_.get(), this->inner_.get(), RGN_DIFF) != ERROR;
     }
@@ -155,11 +166,12 @@ namespace
   };
 } // namespace
 
-/** WM_PAINT: O(1) per nonempty band; 10 regions, one bitmap, one brush (8 objects peak),
-    at most 15 region combinations plus the DC clip intersection. Whole-body
-    rendering uses 14 regions and at most 23 combinations. No cached pixels or objects and no row walks. */
+/** WM_PAINT: O(1) per nonempty band; 13 regions, one bitmap, one brush (8 objects peak),
+    at most 20 region combinations plus the DC clip intersection. Whole-body
+    rendering uses 19 regions and at most 32 combinations. No cached pixels or objects and no row walks. */
 static void PaintNativeCardInk(HDC dc,
                                const RECT &native,
+                               const RECT &shadow,
                                const loka::app::CardStyle &style,
                                const loka::win32::Win32DisplayScale &scale,
                                int phaseX,
@@ -169,10 +181,8 @@ static void PaintNativeCardInk(HDC dc,
   const int diameter = scale.projectLength(2 * style.kCornerRadius);
   const int projectedPen = scale.projectLength(1);
   const int pen = projectedPen > 0 ? projectedPen : 1;
-  const int dx = scale.projectLength(style.kShadowRight);
-  const int dy = scale.projectLength(style.kShadowBottom);
   CardInkObjects objects;
-  if (!objects.prepare(native, diameter, pen, dx, dy, corners))
+  if (!objects.prepare(native, shadow, diameter, pen, corners))
     return;
   {
     CardDCScope saved(dc);
@@ -185,7 +195,7 @@ static void PaintNativeCardInk(HDC dc,
     SetBkColor(dc, RGB(255, 255, 255));
     SetBrushOrgEx(dc, -phaseX, -phaseY, NULL);
     // Destination AND brush: black dots darken; white leaves any ground intact.
-    PatBlt(dc, native.left + dx, native.top + dy, native.right - native.left, native.bottom - native.top, 0x00A000C9);
+    PatBlt(dc, shadow.left, shadow.top, shadow.right - shadow.left, shadow.bottom - shadow.top, 0x00A000C9);
   }
   // A region difference is an inside-only rounded pen, including widths > 1.
   FillRgn(dc, objects.border(), static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
@@ -203,8 +213,10 @@ void loka::win32::PaintCardInk(HDC dc,
   if (!dc || !body.hasSize())
     return;
   RECT native = scale.projectFrame(body).r;
+  RECT shadow = ProjectCardShadow(body, style, scale);
   OffsetRect(&native, -deviceOriginX, -deviceOriginY);
-  PaintNativeCardInk(dc, native, style, scale, phaseX, phaseY, 15u);
+  OffsetRect(&shadow, -deviceOriginX, -deviceOriginY);
+  PaintNativeCardInk(dc, native, shadow, style, scale, phaseX, phaseY, 15u);
 }
 
 void loka::win32::PaintCardBandInk(HDC dc,
@@ -216,11 +228,13 @@ void loka::win32::PaintCardBandInk(HDC dc,
 {
   if (!dc || !band.hasSize())
     return;
-  RECT body = scale.projectFrame(app::CardBodyInBand(band, props)).r;
+  const core::Frame logicalBody = app::CardBodyInBand(band, props);
+  RECT body = scale.projectFrame(logicalBody).r;
+  RECT shadow = ProjectCardShadow(logicalBody, props.style, scale);
   const int diameter = scale.projectLength(2 * props.style.kCornerRadius);
   const RECT origin = scale.projectFrame(band).r;
   // Only the border's body-side sample must lie below the corner midpoint;
-  // shadow allowance lies outside the body and is covered by its translated mask.
+  // shadow allowance lies outside the body and is covered by its displaced mask.
   int thickness = 0;
   unsigned corners = 0;
   switch (props.role)
@@ -229,21 +243,25 @@ void loka::win32::PaintCardBandInk(HDC dc,
     corners = 3u;
     thickness = static_cast<int>(origin.bottom - body.top);
     body.bottom = body.top + 2 * diameter;
+    shadow.bottom = shadow.top + 2 * diameter;
     break;
   case app::CARD_BAND_LEFT:
     corners = 5u;
     thickness = static_cast<int>(origin.right - body.left);
     body.right = body.left + 2 * diameter;
+    shadow.right = shadow.left + 2 * diameter;
     break;
   case app::CARD_BAND_RIGHT:
     corners = 10u;
     thickness = static_cast<int>(body.right - origin.left);
     body.left = body.right - 2 * diameter;
+    shadow.left = shadow.right - 2 * diameter;
     break;
   case app::CARD_BAND_BOTTOM:
     corners = 12u;
     thickness = static_cast<int>(body.bottom - origin.top);
     body.top = body.bottom - 2 * diameter;
+    shadow.top = shadow.bottom - 2 * diameter;
     break;
   case app::CARD_BAND_COUNT:
     return;
@@ -253,5 +271,6 @@ void loka::win32::PaintCardBandInk(HDC dc,
   if (!bounded)
     return;
   OffsetRect(&body, -origin.left, -origin.top);
-  PaintNativeCardInk(dc, body, props.style, scale, phaseX, phaseY, corners);
+  OffsetRect(&shadow, -origin.left, -origin.top);
+  PaintNativeCardInk(dc, body, shadow, props.style, scale, phaseX, phaseY, corners);
 }

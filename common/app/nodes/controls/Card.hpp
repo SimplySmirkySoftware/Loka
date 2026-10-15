@@ -53,7 +53,7 @@ namespace loka
     };
 
     /** Recover three real body edges and one virtual opposite edge in layout
-        units. The minimum body is 2r: its opposite arc cannot reach this
+        units. The virtual span is 2r: its opposite arc cannot reach this
         band's inset-wide sample. Call only for nonempty admitted bands.
         Cost: O(1) per band paint; no tree or ledger walk. */
     inline core::Frame CardBodyInBand(const core::Frame &band, const CardBandProps &props)
@@ -176,15 +176,16 @@ namespace loka
       }
       virtual layout::FrameGeometry frameGeometry() const
       {
-        const int bodyMinimum = CardStyle::kCornerRadius * 2 > CardStyle::kBorderBand * 2 ? CardStyle::kCornerRadius * 2
-                                                                                          : CardStyle::kBorderBand * 2;
-        return layout::FrameGeometry(layout::FRAME_PLACEMENT_CARD_BANDS,
-                                     layout::FrameInsets(CardStyle::kShadowLeft + CardStyle::kBorderBand,
-                                                         CardStyle::kShadowTop + CardStyle::kBorderBand,
-                                                         CardStyle::kShadowRight + CardStyle::kBorderBand,
-                                                         CardStyle::kShadowBottom + CardStyle::kBorderBand),
-                                     CardStyle::kShadowLeft + CardStyle::kShadowRight + bodyMinimum,
-                                     CardStyle::kShadowTop + CardStyle::kShadowBottom + bodyMinimum);
+        return layout::FrameGeometry(
+            layout::FRAME_PLACEMENT_CARD_BANDS,
+            layout::FrameInsets(CardStyle::kShadowLeft + CardStyle::kBorderBand,
+                                CardStyle::kShadowTop + CardStyle::kBorderBand,
+                                CardStyle::kShadowRight + CardStyle::kBorderBand,
+                                CardStyle::kShadowBottom + CardStyle::kBorderBand),
+            CardStyle::kShadowLeft + CardStyle::kShadowRight
+                + CardStyle::minimumBodyExtent(CardStyle::kShadowLeft, CardStyle::kShadowRight),
+            CardStyle::kShadowTop + CardStyle::kShadowBottom
+                + CardStyle::minimumBodyExtent(CardStyle::kShadowTop, CardStyle::kShadowBottom));
       }
     };
 
