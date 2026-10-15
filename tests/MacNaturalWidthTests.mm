@@ -1,6 +1,7 @@
 #include "MacNodeHandlerEnsureTests.hpp"
 #include "MacObjCCompat.hpp"
 #include "MacScenePlatformController.hpp"
+#include "app/nodes/ImageView.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/layout/SceneRootLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
@@ -152,6 +153,67 @@ void testMacButtonNaturalWidthMatchesCell()
     LOKA_VERIFY(repeated == std::ceil(projectedCellWidth(untitled.props, @"Button")));
   }
   [root release];
+  [pool drain];
+}
+
+void testMacIntrinsicImageNaturalWidthMatchesProjection()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  for (int i = 0; i < 2; ++i)
+  {
+    NSView *root = newRootView();
+    {
+      MacScenePlatformController controller(root, metrics[i]);
+      int native = 0;
+      MutableState<resource::Image> imageState(resource::Image::FromNative(&native, 640, 10, 0, 0));
+      ImageViewProps props;
+      props.image(&imageState).attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC));
+      ImageViewNode image(props);
+      short width = kUntouched;
+      LOKA_VERIFY(controller.queryNaturalWidth(&image, width));
+      // ResolveImageLayoutWidth is private to its translation unit; use its public conversion.
+      LOKA_VERIFY(width == controller.projection().intrinsicPixelsToLu(640));
+      const int overflowPixels = static_cast<int>(SHRT_MAX) * 4;
+      LOKA_VERIFY(controller.projection().intrinsicPixelsToLu(overflowPixels) > SHRT_MAX);
+      for (unsigned refusal = 0; refusal < 7; ++refusal)
+      {
+        image.props = props;
+        imageState.set(resource::Image::FromNative(&native, 640, 10, 0, 0));
+        switch (refusal)
+        {
+        case 0:
+          image.props.width_ = 100;
+          break;
+        case 1:
+          image.props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_AUTO;
+          break;
+        case 2:
+          image.props.attr_.sizePolicyValue_ = IMAGE_VIEW_SIZE_FILL_PARENT;
+          break;
+        case 3:
+          imageState.set(resource::Image::Empty());
+          break;
+        case 4:
+          imageState.set(resource::Image::FromNative(&native, 0, 10, 0, 0));
+          break;
+        case 5:
+          imageState.set(resource::Image::FromNative(&native, overflowPixels, 10, 0, 0));
+          break;
+        case 6:
+          image.props.image_ = 0;
+          break;
+        }
+        width = kUntouched;
+        LOKA_VERIFY(!controller.queryNaturalWidth(&image, width));
+        LOKA_VERIFY(width == kUntouched);
+      }
+    }
+    [root release];
+  }
   [pool drain];
 }
 
