@@ -350,6 +350,19 @@ bool Win32ScenePlatformController::queryNaturalWidth(loka::app::scene::Node *chi
 {
   if (child && child->asTextNode())
     return Win32TextContext::queryNaturalWidth(child->asTextNode(), this, width);
+  if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
+  {
+    // No HWND, HDC, or font is needed; a controller with a NULL root answers too.
+    int pixels = 0;
+    if (!loka::app::queryIntrinsicImageWidth(image->props, pixels))
+      return false;
+    // Keep conversion aligned with ResolveImageLayoutWidth in Win32ImageViewContext.cpp.
+    const int lu = this->displayScale().intrinsicPixelsToLu(pixels);
+    if (lu <= 0 || lu > SHRT_MAX)
+      return false;
+    width = static_cast<short>(lu);
+    return true;
+  }
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;
   // Win32ButtonContext leaves its initial empty title alone without a text State.
   if (!button || !button->props.text_)

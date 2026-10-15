@@ -143,6 +143,7 @@ namespace
     {
       // Source rectangles remain decoded pixels (DPI only, no space scale).
       // Only the intrinsic layout reservation converts to lu here.
+      // Keep conversion aligned with Win32ScenePlatformController::queryNaturalWidth.
       return scale.intrinsicPixelsToLu(srcWidth);
     }
     if (sizePolicy == loka::app::IMAGE_VIEW_SIZE_FILL_PARENT)
