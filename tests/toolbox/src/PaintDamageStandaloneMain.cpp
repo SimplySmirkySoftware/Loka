@@ -98,7 +98,7 @@ namespace
       this->state(this->first_, model);
       this->state(this->sibling_, model);
       this->state(this->text_, loka::core::String::Literal("Viewport paint damage"));
-      this->state(this->offset_, 32);
+      this->state(this->offset_, loka::core::Frame(0, 32, 0, 0));
     }
     virtual void composeNode(NodeComposition &composition)
     {
@@ -126,7 +126,7 @@ namespace
     NodeState<RectSurfaceModel> first_;
     NodeState<RectSurfaceModel> sibling_;
     NodeState<loka::core::String> text_;
-    NodeState<int> offset_;
+    NodeState<loka::core::Frame> offset_;
   };
 
   typedef PaintDamageNode<true> ViewportDamageNode;
@@ -146,7 +146,7 @@ namespace
       this->state(this->text_, loka::core::String::Literal("MMMM"));
       this->state(this->hidden_, loka::core::String::Literal("MMMM"));
       this->state(this->edit_, loka::core::String::Literal("Edit"));
-      this->state(this->offset_, 0);
+      this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
       this->state(this->button_, loka::core::String::Literal("Button"));
       this->state(this->drawersShown_, true);
       this->items_.push_back(loka::core::String::Literal("Fruit"));
@@ -190,16 +190,16 @@ namespace
     void scrollToTop()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(0);
+      this->offset_.set(loka::core::Frame(0, 0, 0, 0));
     }
     void reveal()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(160);
+      this->offset_.set(loka::core::Frame(0, 160, 0, 0));
     }
   private:
     NodeState<loka::core::String> sibling_, text_, hidden_, edit_, button_;
-    NodeState<int> offset_;
+    NodeState<loka::core::Frame> offset_;
     NodeState<bool> drawersShown_;
     loka::Vector<loka::core::String> items_;
   };

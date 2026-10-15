@@ -13,14 +13,14 @@ namespace
   {
     ToolboxWindow window;
     ToolboxScenePlatformController controller;
-    loka::core::MutableState<int> offset;
+    loka::core::MutableState<loka::core::Frame> offset;
     loka::core::PushStateTracker tracker;
-    NodeState<int> fact;
+    NodeState<loka::core::Frame> fact;
     ScrollViewNode scroll;
     StackNode *column;
     explicit ScrollFixture(unsigned count = 20, bool button = false)
-        : controller(&window), offset(0), fact(&offset, &tracker),
-          scroll(ScrollViewProps().offset(fact)), column(new StackNode(StackProps(STACK_AXIS_COLUMN)))
+        : controller(&window), offset(loka::core::Frame(0, 0, 0, 0)), fact(&offset, &tracker),
+          scroll(ScrollViewProps().viewport(fact)), column(new StackNode(StackProps(STACK_AXIS_COLUMN)))
     {
       tracker.addState(&offset);
       LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
@@ -49,7 +49,7 @@ namespace
     }
     unsigned step(int value, short width = 100, short height = 34, short y = 0, short gap = 0)
     {
-      fact.set(value);
+      fact.set(loka::core::Frame(0, value, 0, 0));
       scroll.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
       LayoutState seat = Seat(width);
       seat.x = 0;
@@ -265,7 +265,7 @@ namespace
       LOKA_VERIFY(f.step(0) == 20);
       LOKA_VERIFY(f.step(17, 101) == 20);
       LOKA_VERIFY(f.step(34, 101) == 3);
-      LOKA_VERIFY(ScrollView().offset(f.fact).applyPropsToNode(&f.scroll));
+      LOKA_VERIFY(ScrollView().viewport(f.fact).applyPropsToNode(&f.scroll));
       LOKA_VERIFY(f.step(51, 101) == 20);
       f.controller.requestStructurePresent();
       LOKA_VERIFY(!f.controller.scrollSpans()->valid());

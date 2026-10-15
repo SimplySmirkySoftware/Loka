@@ -18,25 +18,25 @@
 
 namespace
 {
-  class OffsetFact
+  class ViewportFact
   {
   public:
-    explicit OffsetFact(int initial)
-        : storage_(initial),
+    explicit ViewportFact(int initial)
+        : storage_(loka::core::Frame(0, initial, 0, 0)),
           tracker_(),
           state_(&this->storage_, &this->tracker_),
           changeCount_(0)
     {
       this->tracker_.addState(&this->storage_);
-      this->storage_.bind(&OffsetFact::ChangedThunk, this, false);
+      this->storage_.bind(&ViewportFact::ChangedThunk, this, false);
     }
 
-    ~OffsetFact()
+    ~ViewportFact()
     {
-      this->storage_.unbind(&OffsetFact::ChangedThunk, this);
+      this->storage_.unbind(&ViewportFact::ChangedThunk, this);
     }
 
-    loka::app::scene::NodeState<int> &state()
+    loka::app::scene::NodeState<loka::core::Frame> &state()
     {
       return this->state_;
     }
@@ -54,20 +54,20 @@ namespace
   private:
     static void ChangedThunk(void *userData)
     {
-      OffsetFact *self = static_cast<OffsetFact *>(userData);
+      ViewportFact *self = static_cast<ViewportFact *>(userData);
       if (self)
       {
         ++self->changeCount_;
       }
     }
 
-    loka::core::MutableState<int> storage_;
+    loka::core::MutableState<loka::core::Frame> storage_;
     loka::core::PushStateTracker tracker_;
-    loka::app::scene::NodeState<int> state_;
+    loka::app::scene::NodeState<loka::core::Frame> state_;
     int changeCount_;
 
-    OffsetFact(const OffsetFact &);
-    OffsetFact &operator=(const OffsetFact &);
+    ViewportFact(const ViewportFact &);
+    ViewportFact &operator=(const ViewportFact &);
   };
 
   void CountClickThunk(void *userData)
@@ -143,7 +143,7 @@ void testMacScrollViewParentsChildrenToFlippedDocumentView()
     // ~Node remains the terminal retire door while the native queue owner is
     // alive. Releasing rootNode_ below also prevents clearNodeContexts from
     // replacing a live context without terminal fact delivery.
-    OffsetFact offset(10);
+    ViewportFact offset(10);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 140);
@@ -191,7 +191,7 @@ void testMacScrollViewOffsetIsRelayoutInput()
   LOKA_VERIFY(root != nil);
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
-    OffsetFact offset(0);
+    ViewportFact offset(0);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 140);
@@ -202,7 +202,7 @@ void testMacScrollViewOffsetIsRelayoutInput()
     assert([buttons count] == 6);
     const NSRect buttonAtZero = [[buttons objectAtIndex:0] frame];
 
-    offset.state().set(7);
+    offset.state().set(loka::core::Frame(0, 7, 0, 0));
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 7);
     assert(NSEqualRects([[buttons objectAtIndex:0] frame], buttonAtZero)
@@ -234,7 +234,7 @@ void testMacScrollViewBoundsObservationPublishesOffsetFact()
   LOKA_VERIFY(root != nil);
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
-    OffsetFact offset(0);
+    ViewportFact offset(0);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 140);
@@ -245,10 +245,10 @@ void testMacScrollViewBoundsObservationPublishesOffsetFact()
     offset.resetChangeCount();
     [clipView setBoundsOrigin:NSMakePoint(0, 12)];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
-    assert(offset.state().get() == 12 && "clip-view bounds observation must publish through the NodeState door");
+    assert(offset.state().get().y == 12 && "clip-view bounds observation must publish through the NodeState door");
     assert(offset.changeCount() == 1 && "an explicit duplicate notification must remain a same-value no-op");
 
-    offset.state().set(13);
+    offset.state().set(loka::core::Frame(0, 13, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 13);
@@ -275,32 +275,32 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     const int contentHeight = 6 * (buttonHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
     const int initialMax = contentHeight - (140 - 2 * loka::app::layout::SceneRootLayout::kInset);
     const int resizedMax = contentHeight - (240 - 2 * loka::app::layout::SceneRootLayout::kInset);
-    OffsetFact offset(100);
+    ViewportFact offset(100);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 140);
     NSScrollView *nativeScrollView = scrollViewUnderRoot(root);
     LOKA_VERIFY(nativeScrollView != nil);
-    assert(offset.state().get() == (initialMax <= 0 ? 0 : initialMax < 100 ? initialMax : 100));
+    assert(offset.state().get().y == (initialMax <= 0 ? 0 : initialMax < 100 ? initialMax : 100));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get() == (resizedMax > 0 ? resizedMax : 0));
+    assert(offset.state().get().y == (resizedMax > 0 ? resizedMax : 0));
     assert(offset.changeCount() == 1 && "a range-changing resize must publish one clamped fact");
     assert(clipOffset(nativeScrollView) == (resizedMax > 0 ? resizedMax : 0));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1);
 
-    offset.state().set(20);
+    offset.state().set(loka::core::Frame(0, 20, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == 20);
+    assert(offset.state().get().y == 20);
     assert(offset.changeCount() == 0 && "a still-valid offset must survive resize without a fact write");
 
-    offset.state().set(40000);
+    offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get() == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset)
+    assert(offset.state().get().y == contentHeight - (100 - 2 * loka::app::layout::SceneRootLayout::kInset)
            && "an oversized offset must recover to the exact content maximum");
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
@@ -328,8 +328,8 @@ void testMacNestedScrollViewRefusesWithoutDisturbingOuterScope()
   LOKA_VERIFY(root != nil);
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
-    OffsetFact outerOffset(5);
-    OffsetFact innerOffset(3);
+    ViewportFact outerOffset(5);
+    ViewportFact innerOffset(3);
     loka::app::ScrollViewNode outer((loka::app::ScrollViewProps(outerOffset.state())));
     loka::app::ScrollViewNode *inner = new loka::app::ScrollViewNode((loka::app::ScrollViewProps(innerOffset.state())));
     loka::app::StackNode *innerColumn = addButtonColumn(*inner, 1);
@@ -348,8 +348,8 @@ void testMacNestedScrollViewRefusesWithoutDisturbingOuterScope()
     NSClipView *clipView = [nativeScrollView contentView];
     [clipView setBoundsOrigin:NSMakePoint(0, 6)];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
-    assert(outerOffset.state().get() == 6);
-    assert(innerOffset.state().get() == 3);
+    assert(outerOffset.state().get().y == 6);
+    assert(innerOffset.state().get().y == 3);
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 6 && "the outer scope must remain live after the inner refusal");
 
@@ -371,7 +371,7 @@ void testMacScrollViewButtonClickReachesLokaHandler()
   {
     MacScenePlatformController controller((void *)root, loka::app::RailMetrics());
     loka::core::EmitterState firstClick;
-    OffsetFact offset(0);
+    ViewportFact offset(0);
     loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 2, &firstClick);
     establishLayout(controller, &scrollView, 300, 140);

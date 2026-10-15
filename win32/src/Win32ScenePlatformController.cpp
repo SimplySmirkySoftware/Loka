@@ -1295,21 +1295,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     ctx->readLifecycleFactOnAttach();
   }
 
-  int requestedOffset = scrollView->props.offset_.isValid()
-                            ? scrollView->props.offset_.state()->get()
-                            : 0;
-  if (requestedOffset < 0)
-  {
-    requestedOffset = 0;
-  }
-  else if (requestedOffset > SHRT_MAX)
-  {
-    // A fact far beyond the projected range must not push every child out of
-    // range and wedge the layout in a refusal loop before setScrollMetrics
-    // (the only precise clamp) can run; the exact maximum is republished
-    // after measurement.
-    requestedOffset = SHRT_MAX;
-  }
+  const int requestedOffset = scrollView->requestedOrigin().y;
   const loka::core::Frame viewportClip(0, 0, state.width, state.height);
   loka::app::scene::ProjectionParentScope viewportScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
@@ -1397,14 +1383,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     const int clampedOffset =
         ctx->setScrollMetrics(contentHeight, state.height, requestedOffset);
-    if (scrollView->props.offset_.isValid() &&
-        scrollView->props.offset_.state()->get() != clampedOffset)
-    {
-      // Publish through the complete NodeState door after the scope has
-      // popped. A dirty notification may schedule/re-enter projection, and
-      // every projection pass must start from the root frame.
-      scrollView->props.offset_.set(clampedOffset);
-    }
+    // Publish only after successful layout and after the scope has popped.
+    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
   }
 
   if (state.height > 0)

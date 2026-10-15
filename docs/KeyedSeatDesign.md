@@ -348,7 +348,7 @@ Horizontal viewport movement selects the window but leaves residents in absolute
 content coordinates; horizontal scrolling is pending a ScrollView X offset.
 
 Candidate declaration refusal preserves the old LazyScope generation. At an
-already moved ScrollView offset, that old window may be stale or vacant; no
+already moved ScrollView viewport origin, that old window may be stale or vacant; no
 old-offset/pixel atomicity is promised. The full-list extent still follows current
 list size. A pending declaration requests layout through the existing Scene
 after-run door, so retry needs no fresh scroll and does not spin the current

@@ -312,10 +312,10 @@ void testMacScrollViewTransparentBackground()
   NSView *parent = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 160, 100)];
   {
     MacScenePlatformController controller(parent, loka::app::RailMetrics());
-    loka::core::MutableState<int> storage(0);
+    loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 0, 0, 0));
     loka::core::PushStateTracker tracker;
     tracker.addState(&storage);
-    loka::app::scene::NodeState<int> offset(&storage, &tracker);
+    loka::app::scene::NodeState<loka::core::Frame> offset(&storage, &tracker);
     loka::app::ScrollViewNode node((loka::app::ScrollViewProps(offset)));
     NSScrollView *view = (NSScrollView *)project(controller, parent, node);
     LOKA_VERIFY([view isKindOfClass:[NSScrollView class]]);
