@@ -12,6 +12,7 @@ void testWin32ScrollViewContainerGapsAndNoSeats();
 void testWin32ScrollViewGappedOriginRefuses();
 
 void testWin32ScrollViewHorizontalRangeAndBar();
+void testWin32ScrollViewHorizontalBarShortensChildHeight();
 
 void testWin32ScrollViewHorizontalMessagePublishesOffsetFact();
 

@@ -20,6 +20,7 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "app/RectSurface.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "core/State.hpp"
 #include "core/StateTracker.hpp"
@@ -327,7 +328,7 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
 
     const SCROLLINFO info = scrollInfo(viewport);
     assert(info.nPage == 140 - 2 * Win32SceneLayout::kRootInset);
-    assert(maximumOffset(info) == contentHeight - (140 - 2 * Win32SceneLayout::kRootInset));
+    LOKA_VERIFY(maximumOffset(info) == contentHeight - (140 - 2 * Win32SceneLayout::kRootInset));
     assert(info.nPos == 10);
 
     // Release the root pointer before the nodes leave scope so the
@@ -977,4 +978,33 @@ void testWin32ScrollViewHorizontalWheelStepsOffset()
     LOKA_VERIFY(offsetState.get().x == expected && offsetState.get().y == 5);
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
+}
+
+void testWin32ScrollViewHorizontalBarShortensChildHeight()
+{
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
+    // A width-only surface fills the height it is offered: with the horizontal
+    // bar present that offer is the shortened client, so the content ends at
+    // the client bottom and no vertical range appears.
+    loka::app::RectSurfaceNode *surface = new loka::app::RectSurfaceNode(loka::app::RectSurfaceProps().size(400, 0));
+    scrollView.addChild(surface);
+    establishLayout(controller, &scrollView, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) != 0);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(viewport, &client));
+    const SCROLLINFO vertical = scrollInfo(viewport);
+    LOKA_VERIFY(vertical.nPage == static_cast<UINT>(controller.displayScale().clientCapacityToLu(client.bottom)));
+    LOKA_VERIFY(maximumOffset(vertical) == 0
+                && "a height-filling child must not create a vertical range under the horizontal bar");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
 }

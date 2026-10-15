@@ -1332,8 +1332,23 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   // An unknown range must not scroll: otherwise content cannot be brought back
   const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
   const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
+  // The horizontal bar is decided before the children are laid out: its
+  // presence shortens the client, and the children, the clip and the vertical
+  // page must all see that shorter height (the Toolbox rule from #1367).
+  ctx->setScrollMetrics(SB_HORZ, known ? contentWidthLu : 0, childBase.width, clampedX);
+  int viewportHeight = state.height;
+  if (state.height > 0)
+  {
+    RECT viewportClient;
+    if (GetClientRect(ctx->hwnd(), &viewportClient))
+    {
+      viewportHeight = this->displayScale_.clientCapacityToLu(viewportClient.bottom - viewportClient.top);
+    }
+  }
+  childBase.height = static_cast<short>(viewportHeight);
+  const loka::core::Frame childClip(0, 0, state.width, viewportHeight);
   loka::app::scene::ProjectionParentScope childScope;
-  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, requestedOffset, viewportClip, childScope))
+  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, requestedOffset, childClip, childScope))
   {
     return LayoutNodeResult(state.width, state.y);
   }
@@ -1390,11 +1405,6 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
   if (!shortRangeRefused)
   {
-    ctx->setScrollMetrics(SB_HORZ, known ? contentWidthLu : 0, childBase.width, clampedX);
-    RECT viewportClient;
-    const int viewportHeight = GetClientRect(ctx->hwnd(), &viewportClient)
-                                   ? this->displayScale_.clientCapacityToLu(viewportClient.bottom - viewportClient.top)
-                                   : state.height;
     const int clampedOffset = ctx->setScrollMetrics(SB_VERT, contentHeight, viewportHeight, requestedOffset);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishOrigin(clampedX, clampedOffset);
