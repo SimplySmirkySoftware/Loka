@@ -62,11 +62,24 @@ normative in `AGENTS.md`.
 
 - For moving-rect redraw on Classic, `erase old minus new` is a safer first optimization than `paint new minus old`; only add more aggressive paint diffing after measurement proves it helps.
 
+## Framework gaps — worked example
+
+Relocated from AGENTS.md at `975c2eea` by the AGENTS.md refresh, which keeps
+issue numbers out of rule text.
+
+### 873 — delivery sites listed per rail
+
+The #873 delivery-site enumeration (three rails hand-listing their completion tails, then a rail-wide ruling from a bot review) is the worked example of a framework gap worked around per rail instead of named and designed once.
+
 ## Debugging — 398
 
 ### Silent instrument
 
 On #398, five debug runs "proved" a crash bypassed abort, exit, and every exception vector; the breakpoints were sitting at addresses the runtime segment was never loaded at, and one byte-compare exposed it. The next run captured the real backtrace.
+
+### 1107 — out-of-memory alert
+
+Relocated from AGENTS.md at `975c2eea` by the AGENTS.md refresh. Since #1107 (PR #1186, `3887805b`, 2026-10-10), the Classic plain-new/`std::vector` failure path (`QuitForOutOfMemory` in `apple/toolbox/src/ToolboxOutOfMemory.cpp`) shows the out-of-memory Stop alert before `ExitToShell()` whenever it can, so an allocation failure is no longer a silent return to the Finder.
 
 ### SIZE partition
 
