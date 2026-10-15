@@ -2,14 +2,6 @@
 #include "Win32ScrollViewTests.hpp"
 
 #include "Win32SceneLayout.hpp"
-#include <climits>
-#include "app/nodes/Text.hpp"
-#include "app/nodes/nestable/Box.hpp"
-#include "app/nodes/nestable/Fragment.hpp"
-#include "app/nodes/nestable/Show.hpp"
-#include "app/ConfirmDialog.hpp"
-#include "context/Win32TextContext.hpp"
-#include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -31,6 +23,14 @@
 #include "app/scene/state/NodeState.hpp"
 #include "core/State.hpp"
 #include "core/StateTracker.hpp"
+#include <climits>
+#include "app/nodes/Text.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/ConfirmDialog.hpp"
+#include "context/Win32TextContext.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
+#include "app/nodes/nestable/Show.hpp"
 
 namespace
 {

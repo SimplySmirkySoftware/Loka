@@ -27,13 +27,6 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32SceneLayout.hpp"
-#include "app/nodes/nestable/Fragment.hpp"
-#include "app/nodes/nestable/Show.hpp"
-#include "app/nodes/controls/Cell.hpp"
-#include "app/nodes/controls/PopupMenu.hpp"
-#include "app/RectSurface.hpp"
-#include "context/Win32RetirableContext.hpp"
-#include "app/ConfirmDialog.hpp"
 #include "core/StateTracker.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -41,6 +34,15 @@
 #include "context/Win32ButtonContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32TextContext.hpp"
+#include "app/nodes/nestable/Fragment.hpp"
+#include "app/nodes/controls/Cell.hpp"
+#include "app/nodes/controls/PopupMenu.hpp"
+#include "app/RectSurface.hpp"
+#include "context/Win32RetirableContext.hpp"
+#include "app/ConfirmDialog.hpp"
+// After Win32TextEditorContext.hpp: MSVC reads RequestSettlement's 1u << FollowUp as
+// ambiguous with Show's operator<<(const State<bool> &, ...) when Show.hpp comes first.
+#include "app/nodes/nestable/Show.hpp"
 
 namespace
 {
@@ -2227,7 +2229,7 @@ void testWin32ContainerGapBoxAndRefusedText()
       box->addChild(second);
       content.addChild(box);
       content.addChild(following);
-      controller.onChange(&content, scene::NODE_DIRTY_NONE, false);
+      controller.onChange(&content, loka::app::scene::NODE_DIRTY_NONE, false);
       controller.relayout(640, 160);
       LOKA_VERIFY(refused->getContext() && first->getContext() && second->getContext() && following->getContext());
       const RECT a = childRectInParent(static_cast<Win32TextContext *>(first->getContext())->hwnd(), root);
@@ -2236,7 +2238,7 @@ void testWin32ContainerGapBoxAndRefusedText()
       LOKA_VERIFY(a.top == scale.projectEdge(Win32SceneLayout::kRootInset + Win32SceneLayout::kGap));
       LOKA_VERIFY(b.top == a.bottom + Win32SceneLayout::kGap);
       LOKA_VERIFY(c.top == scale.projectEdge(Win32SceneLayout::kRootInset + 100 + Win32SceneLayout::kGap));
-      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
     }
     LOKA_VERIFY(DestroyWindow(root));
   }
