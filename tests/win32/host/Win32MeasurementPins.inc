@@ -63,8 +63,7 @@ namespace
     state.height = 1;
     const int advance = node.layout(&controller, state);
     LOKA_VERIFY(measurementCalls() == calls && win32_host::selections == selections);
-    LOKA_VERIFY(state.height == height
-                && advance == 23 + height + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+    LOKA_VERIFY(state.height == height && advance == 23 + height);
     LOKA_VERIFY(window->rect.left == 8 && window->rect.top == 23);
     std::printf("  repeat: measurement=0 SelectObject=0; placement=(8,23)\n");
     state.width = 103;
@@ -179,8 +178,9 @@ namespace
 
     state.width = 104;
     win32_host::failMeasure = true;
-    node.layout(&controller, state);
-    LOKA_VERIFY(state.height == 0 && IsRectEmpty(&window->rect));
+    const int refusedAdvance = node.layout(&controller, state);
+    // A refused leaf keeps its seat but advances by nothing: no trailing spacing (#950).
+    LOKA_VERIFY(refusedAdvance == state.y && state.height == 0 && IsRectEmpty(&window->rect));
     PaintQuery query;
     query.placement = PLACEMENT_ELIGIBLE;
     query.scope = Win32RetirableContext::paintScope();

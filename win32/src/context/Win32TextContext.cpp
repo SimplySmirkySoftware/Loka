@@ -452,14 +452,14 @@ short Win32TextContext::layout(loka::app::scene::IPlatformController *, loka::ap
       this->controller()->refuseTextMeasurement(this->node_, state);
       this->clearMeasurement();
       state.height = 0;
-      return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+      return static_cast<short>(state.y);
     }
     this->measurement_.commit(constraint, height);
   }
   const int textHeight = this->measurement_.extent();
   this->relayout(state.x, state.y, state.width, textHeight);
   state.height = static_cast<short>(textHeight);
-  return static_cast<short>(state.y + textHeight + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + textHeight);
 }
 
 void Win32TextContext::relayout(int x, int y, int width, int height)

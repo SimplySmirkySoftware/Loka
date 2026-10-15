@@ -164,8 +164,7 @@ short Win32EditTextContext::layout(loka::app::scene::IPlatformController *, loka
 {
   this->relayout(state.x, state.y, state.width, loka::app::layout::FallbackControlMetrics::kEditTextHeight);
   state.height = static_cast<short>(loka::app::layout::FallbackControlMetrics::kEditTextHeight);
-  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kEditTextHeight
-                            + loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  return static_cast<short>(state.y + loka::app::layout::FallbackControlMetrics::kEditTextHeight);
 }
 
 void Win32EditTextContext::relayout(int x, int y, int width, int height)

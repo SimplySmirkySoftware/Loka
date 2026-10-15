@@ -1713,7 +1713,8 @@ void testWin32TextEditorLayoutDpiAndRetirement()
   bounds.width = 300;
   bounds.height = 140;
   bounds.spacing = 4;
-  LOKA_VERIFY(fixture.context->layout(&fixture.controller, bounds) == 164 && bounds.height == 140);
+  // The leaf ends at its own bottom; spacing belongs to the container (#950).
+  LOKA_VERIFY(fixture.context->layout(&fixture.controller, bounds) == 160 && bounds.height == 140);
   RECT rect;
   LOKA_VERIFY(GetWindowRect(child, &rect) && rect.bottom - rect.top == 140);
   const HFONT font = reinterpret_cast<HFONT>(SendMessageW(child, WM_GETFONT, 0, 0));

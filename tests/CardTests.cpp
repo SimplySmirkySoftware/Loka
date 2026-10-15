@@ -1,5 +1,7 @@
 #include "CardTests.hpp"
 #include "app/nodes/controls/Card.hpp"
+#include "app/nodes/nestable/For.hpp"
+#include "core/Vector.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/style/SurfaceGround.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
@@ -402,4 +404,49 @@ void testCardDefinitionCloneRefusal()
   std::puts(
       "[skip] Card allocation refusal requires the Linux wrapped-new fixture; normal clone/apply runs on every rail.");
 #endif
+}
+
+namespace
+{
+  struct CardInsertItem
+  {
+  };
+  struct CardInsertFactory
+  {
+    TextDefinition operator()(const CardInsertItem &, std::size_t) const
+    {
+      return Text("item");
+    }
+  };
+  size_t cardContentCount(const CardDefinition &card)
+  {
+    NodeDefinitionBase *column = card.childrenHead();
+    INestableDefinition *nestable = column ? column->asNestableDefinition() : 0;
+    return nestable ? nestable->childrenCount() : 0;
+  }
+} // namespace
+
+/** Card hides the inherited insertion forms; each of its own forms reaches the content column. */
+void testCardInsertionFormsReachContent()
+{
+  Card card;
+  TextDefinition lvalue = Text("lvalue");
+  card << lvalue;
+  LOKA_VERIFY(cardContentCount(card) == 1);
+  card << Text("temporary");
+  LOKA_VERIFY(cardContentCount(card) == 2);
+  card << new TextDefinition(Text("owned"));
+  LOKA_VERIFY(cardContentCount(card) == 3);
+  TextDefinition listed = Text("listed");
+  std::vector<NodeDefinitionBase *> list;
+  list.push_back(&listed);
+  card << list;
+  LOKA_VERIFY(cardContentCount(card) == 4);
+  loka::Vector<CardInsertItem> items;
+  items.push_back(CardInsertItem());
+  items.push_back(CardInsertItem());
+  card << For(1, items, CardInsertFactory());
+  LOKA_VERIFY(cardContentCount(card) == 6);
+  // The card itself still holds exactly its column and four bands.
+  LOKA_VERIFY(card.childrenCount() == 1 + CARD_BAND_COUNT);
 }
