@@ -29,9 +29,19 @@ namespace loka
         return traversal->layoutChild(child, state);
       }
 
+      inline bool AcceptTraversalLayoutY(void *context, int y)
+      {
+        return !static_cast<scene::IPlatformLayoutTraversal *>(context)->refuseLayoutResultY(y);
+      }
+
       class BoxPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
+        explicit BoxPlatformLayoutHandler(int gap)
+            : gap_(gap)
+        {
+        }
+
         virtual const void *nodeTypeKey() const
         {
           return loka::app::scene::NodeTypeToken<loka::app::BoxNode>();
@@ -48,8 +58,12 @@ namespace loka
           {
             return state.y;
           }
-          return loka::app::layout::computeBoxLayoutResultY(box, state, traversal, &DispatchTraversalLayoutChild);
+          return loka::app::layout::computeBoxLayoutResultY(
+              box, state, traversal, &DispatchTraversalLayoutChild, this->gap_, &AcceptTraversalLayoutY);
         }
+
+      private:
+        const int gap_;
       };
 
       class RibbonGroupPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
@@ -72,7 +86,7 @@ namespace loka
             return state.y;
           }
           return loka::app::layout::computeRibbonGroupLayoutResultY(
-              group, state, traversal, &DispatchTraversalLayoutChild);
+              group, state, traversal, &DispatchTraversalLayoutChild, &AcceptTraversalLayoutY);
         }
       };
 
@@ -102,8 +116,9 @@ namespace loka
       class StackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
-        explicit StackPlatformLayoutHandler(const RowLayoutMetrics &metrics)
-            : metrics_(metrics)
+        explicit StackPlatformLayoutHandler(const RowLayoutMetrics &metrics, int gap)
+            : metrics_(metrics),
+              gap_(gap)
         {
         }
 
@@ -125,8 +140,14 @@ namespace loka
           }
           if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
           {
-            return loka::app::layout::computeColumnLayoutResultY(
-                stack, state, traversal, &DispatchTraversalLayoutChild, range, spans);
+            return loka::app::layout::computeColumnLayoutResultY(stack,
+                                                                 state,
+                                                                 traversal,
+                                                                 &DispatchTraversalLayoutChild,
+                                                                 this->gap_,
+                                                                 &AcceptTraversalLayoutY,
+                                                                 range,
+                                                                 spans);
           }
           return loka::app::layout::computeRowLayoutResultY(
               stack, state, this->metrics_, traversal, traversal, &DispatchTraversalLayoutChild);
@@ -134,6 +155,7 @@ namespace loka
 
       private:
         RowLayoutMetrics metrics_;
+        const int gap_;
       };
 
       class GridPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
@@ -170,15 +192,16 @@ namespace loka
 
       inline void RegisterBuiltinPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry,
                                                         const RowLayoutMetrics *rowMetrics,
-                                                        const GridLayoutMetrics *gridMetrics)
+                                                        const GridLayoutMetrics *gridMetrics,
+                                                        int verticalGap)
       {
-        registry.registerHandler(new BoxPlatformLayoutHandler());
+        registry.registerHandler(new BoxPlatformLayoutHandler(verticalGap));
         registry.registerHandler(new RibbonGroupPlatformLayoutHandler());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)
         {
-          registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics));
+          registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, verticalGap));
         }
         if (gridMetrics)
         {

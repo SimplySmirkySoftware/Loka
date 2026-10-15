@@ -1,3 +1,4 @@
+#include "app/layout/FallbackControlMetrics.hpp"
 #include "support/NullLayoutRefusal.hpp"
 #include "app/scene/Scene.hpp"
 #include "platform/null/context/NullTextEditorContext.hpp"
@@ -70,6 +71,11 @@ public:
     }
     this->resultY_ = static_cast<short>(result);
     return result;
+  }
+
+  virtual bool refuseLayoutResultY(int y)
+  {
+    return this->controller_->refuseNarrowingInScrollScope(y);
   }
 
   virtual void setLayoutResultY(short y)
@@ -161,7 +167,7 @@ NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepth
   gridMetrics.gapX = 2;
   gridMetrics.gapY = 4;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      this->layoutHandlers_, &rowMetrics, &gridMetrics);
+      this->layoutHandlers_, &rowMetrics, &gridMetrics, loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
   RegisterNullButtonNodeHandler(*this);
   RegisterNullEditTextNodeHandler(*this);
   RegisterNullTextEditorNodeHandler(*this);
@@ -845,8 +851,13 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
     return state.y;
   }
   loka::app::scene::LayoutState childState = state;
+  loka::app::layout::StackGaps gaps(loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
   for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
   {
+    const int childY = childState.y + gaps.before(child);
+    if (this->refuseNarrowingInScrollScope(childY))
+      break;
+    childState.y = static_cast<short>(childY);
     const int nextY = this->layoutNode(child, childState);
     if (this->refuseNarrowingInScrollScope(nextY))
     {
@@ -917,16 +928,18 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
                             && column->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN;
   if (spans && !directColumn)
     spans->invalidate();
+  loka::app::layout::StackGaps gaps(loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
   for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child; child = child->nextInComposition)
   {
-    if (currentY < SHRT_MIN || currentY > SHRT_MAX)
+    const int childY = currentY + gaps.before(child);
+    if (childY < SHRT_MIN || childY > SHRT_MAX)
     {
       this->refuseScrollViewShortRange();
       refused = true;
       break;
     }
     loka::app::scene::LayoutState childState = state;
-    childState.y = static_cast<short>(currentY);
+    childState.y = static_cast<short>(childY);
     const int nextY = this->layoutNode(child, childState, directColumn ? range : 0, directColumn ? spans : 0);
     if (this->projectionParentScopes_.current().hasShortRangeRefusal())
     {

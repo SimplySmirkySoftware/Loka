@@ -423,7 +423,7 @@ short NullTextEditorContext::layout(scene::IPlatformController *, scene::LayoutS
   this->syncFromNode();
   // Fixed 80-pixel multiline block, preserving room for a following sibling.
   state.height = 80;
-  return static_cast<short>(state.y + state.height + state.spacing);
+  return static_cast<short>(state.y + state.height);
 }
 void NullTextEditorContext::onFactChanged(scene::NodeLifecycleFact, scene::NodeLifecycleFact next)
 {

@@ -3,6 +3,7 @@
 
 #include "app/nodes/nestable/Box.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
+#include "app/layout/StackGaps.hpp"
 #include "dsl/composition/CompositionList.hpp"
 
 namespace loka
@@ -20,11 +21,13 @@ namespace loka
                                     int fixedHeight,
                                     const LayoutStateT &state,
                                     void *context,
-                                    int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                    int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                    int gap,
+                                    bool (*acceptY)(void *, int))
       {
         LayoutStateT childState = state;
         childState.x = layoutCoordinate<LayoutStateT>(state.x + padding);
-        childState.y = layoutCoordinate<LayoutStateT>(state.y + padding);
+        int currentY = state.y + padding;
         childState.width = layoutCoordinate<LayoutStateT>((hasFixedSize ? fixedWidth : state.width) - padding * 2);
         if (childState.width < 0)
         {
@@ -36,19 +39,26 @@ namespace loka
           childState.height = 0;
         }
 
+        StackGaps gaps(gap);
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(childrenHead, childCount);
         for (loka::app::scene::Node *child = it.next(); child; child = it.next())
         {
-          childState.y = layoutCoordinate<LayoutStateT>(layoutChild(context, child, childState));
+          const int childY = currentY + gaps.before(child);
+          if (acceptY && !acceptY(context, childY))
+            return currentY;
+          childState.y = layoutCoordinate<LayoutStateT>(childY);
+          currentY = layoutChild(context, child, childState);
         }
-        const int resultY = childState.y + padding;
+        const int resultY = currentY + padding;
         return hasFixedSize ? state.y + fixedHeight : resultY;
       }
       template <typename LayoutStateT>
       int computeBoxLayoutResultY(loka::app::BoxNode *box,
                                   const LayoutStateT &state,
                                   void *context,
-                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                  int gap,
+                                  bool (*acceptY)(void *, int))
       {
         if (!box)
           return state.y;
@@ -60,7 +70,9 @@ namespace loka
                                          box->props.height,
                                          state,
                                          context,
-                                         layoutChild);
+                                         layoutChild,
+                                         gap,
+                                         acceptY);
       }
 
     } // namespace layout

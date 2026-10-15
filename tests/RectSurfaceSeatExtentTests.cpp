@@ -207,7 +207,7 @@ void testRectSurfaceFillSeatReportsColumnRemainingHeight()
 
   platform.projectLayoutForTesting(&column, layoutState(5, 9, 300, 100));
 
-  verifyFrame(extent.get(), 5, 49, 300, 60);
+  verifyFrame(extent.get(), 5, 61, 300, 48);
 }
 
 void testRectSurfaceExtentChangesOnlyDuringRailLayout()

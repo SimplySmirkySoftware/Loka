@@ -123,6 +123,7 @@ namespace
 
 void testScrollViewScopePushPopRestoresRootProjectionParent()
 {
+  NullScenePlatformController platform;
   OffsetFact offset(4);
   loka::app::StackNode column((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
   loka::app::ScrollViewNode *scrollView = makeScrollView(offset);
@@ -133,7 +134,6 @@ void testScrollViewScopePushPopRestoresRootProjectionParent()
   scrollView->addChild(second);
   column.addChild(scrollView);
   column.addChild(rootSibling);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(
       &column, makeState(10, 20, 80, 40));
@@ -144,21 +144,21 @@ void testScrollViewScopePushPopRestoresRootProjectionParent()
   assert(first->scopeDepth() == 1);
   assert(second->scopeDepth() == 1);
   assert(first->geometry().y == 16);
-  assert(second->geometry().y == 23);
+  assert(second->geometry().y == 35);
   assert(rootSibling->wasLaidOut());
   assert(rootSibling->scopeDepth() == 0);
-  assert(rootSibling->geometry().y == 60);
+  assert(rootSibling->geometry().y == 72);
   assert(platform.projectionParentScopeDepthForTesting() == 0);
-  assert(resultY == 65);
+  assert(resultY == 77);
 }
 
 void testScrollViewOffsetIsReappliedOnEveryRelayout()
 {
+  NullScenePlatformController platform;
   OffsetFact offset(0);
   loka::app::ScrollViewNode scrollView((loka::app::ScrollViewProps(offset.state())));
   FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
   scrollView.addChild(child);
-  NullScenePlatformController platform;
   const loka::app::scene::LayoutState input = makeState(10, 20, 80, 30);
 
   const int firstResult = platform.projectLayoutForTesting(&scrollView, input);
@@ -186,8 +186,8 @@ void testScrollViewOffsetIsReappliedOnEveryRelayout()
 
 void testScrollViewContentHeightRefusesBeforeShortWrap()
 {
-  OffsetFact offset(0);
   NullScenePlatformController platform;
+  OffsetFact offset(0);
 
   loka::app::ScrollViewNode nearLimit((loka::app::ScrollViewProps(offset.state())));
   FixedLayoutProbeNode *nearProbe = new FixedLayoutProbeNode(1);
@@ -215,7 +215,7 @@ void testScrollViewContentHeightRefusesBeforeShortWrap()
   assert(first->wasLaidOut());
   assert(first->geometry().y == 0);
   assert(second->wasLaidOut());
-  assert(second->geometry().y == 20000);
+  assert(second->geometry().y == 20012);
   assert(second->geometry().y >= 0);
   assert(!afterOverflow->wasLaidOut());
   assert(platform.scrollViewShortRangeRefusalCount() == 1);
@@ -255,7 +255,7 @@ void testScrollViewContentHeightRefusesBeforeShortWrap()
   assert(firstGrandChild->wasLaidOut());
   assert(firstGrandChild->geometry().y == 0);
   assert(secondGrandChild->wasLaidOut());
-  assert(secondGrandChild->geometry().y == 20000);
+  assert(secondGrandChild->geometry().y == 20012);
   assert(!wrappedGrandChild->wasLaidOut());
   assert(platform.scrollViewShortRangeRefusalCount() == 3);
   assert(nestedResult == 100);
@@ -264,6 +264,7 @@ void testScrollViewContentHeightRefusesBeforeShortWrap()
 
 void testNestedScrollViewRefusalPreservesOuterScope()
 {
+  NullScenePlatformController platform;
   OffsetFact outerOffset(3);
   OffsetFact innerOffset(5);
   loka::app::ScrollViewNode outer((loka::app::ScrollViewProps(outerOffset.state())));
@@ -273,7 +274,6 @@ void testNestedScrollViewRefusalPreservesOuterScope()
   inner->addChild(innerChild);
   outer.addChild(inner);
   outer.addChild(outerSibling);
-  NullScenePlatformController platform;
 
   const int resultY = platform.projectLayoutForTesting(
       &outer, makeState(10, 20, 80, 40));
@@ -283,7 +283,7 @@ void testNestedScrollViewRefusalPreservesOuterScope()
   assert(!innerChild->wasLaidOut());
   assert(outerSibling->wasLaidOut());
   assert(outerSibling->scopeDepth() == 1);
-  assert(outerSibling->geometry().y == 17);
+  assert(outerSibling->geometry().y == 29);
   assert(platform.scrollViewShortRangeRefusalCount() == 0);
   assert(platform.projectionParentScopeDepthForTesting() == 0);
   assert(resultY == 60);

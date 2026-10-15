@@ -840,7 +840,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &MacScenePlatformController::layoutContainerChild);
+          stack, state, this, &MacScenePlatformController::layoutContainerChild, 0, 0);
     }
     else
     {
@@ -892,7 +892,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &MacScenePlatformController::layoutContainerChild);
+          box, state, this, &MacScenePlatformController::layoutContainerChild, 0, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -914,7 +914,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else
     {
       resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
-          group, state, this, &MacScenePlatformController::layoutContainerChild);
+          group, state, this, &MacScenePlatformController::layoutContainerChild, 0);
     }
     return LayoutNodeResult(state.width, resultY);
   }

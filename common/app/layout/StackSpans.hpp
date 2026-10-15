@@ -12,7 +12,10 @@ namespace loka
     namespace layout
     {
 
-      /** Measured, content-relative Column advances. Construction is pass-local;
+      /** Measured, content-relative Column advances: each span starts at the
+          previous child's bottom and includes the gap before its own child.
+          Valid while child order, heights, gap and width remain unchanged.
+          Construction is pass-local;
           only finish() publishes a reusable table. No resident pointers are retained.
           The owner invalidates on constraints, structure, props, reattach or lost
           eligibility, and records the viewport only after successful placement. */
