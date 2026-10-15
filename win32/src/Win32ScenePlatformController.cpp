@@ -36,7 +36,7 @@
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/layout/BoxLayout.hpp"
-#include "app/layout/RibbonGroupLayout.hpp"
+#include "app/layout/FramedLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"
@@ -1528,8 +1528,9 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     return LayoutNodeResult(state.width, resultY);
   }
 
-  if (loka::app::RibbonGroupNode *group = node->asRibbonGroupNode())
+  if (node->asFramedNode())
   {
+    loka::app::scene::Node *group = node;
     int resultY = state.y;
     loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
     if (handler)
@@ -1544,7 +1545,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     }
     else
     {
-      resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+      resultY = loka::app::layout::computeFramedLayoutResultY(
           group, state, this, &Win32ScenePlatformController::layoutContainerChild, 0);
     }
     return LayoutNodeResult(state.width, resultY);

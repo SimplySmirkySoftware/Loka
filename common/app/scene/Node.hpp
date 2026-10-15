@@ -1,6 +1,8 @@
 #ifndef LOKA_CORE2_SCENE_NODE_HPP
 #define LOKA_CORE2_SCENE_NODE_HPP
 
+#include "app/layout/FrameGeometry.hpp"
+
 #include "app/Focus.hpp"
 
 #include "core/diag/LifecycleAudit.hpp"
@@ -299,6 +301,13 @@ namespace loka
         }
       };
 
+      /** Framed layout capability. Implementing nodes also provide asNestable(). */
+      struct IFramedNode
+      {
+        virtual ~IFramedNode() {}
+        virtual layout::FrameGeometry frameGeometry() const = 0;
+      };
+
       struct IProjectedLayoutNode
       {
         virtual ~IProjectedLayoutNode() {}
@@ -594,6 +603,10 @@ namespace loka
           return 0;
         }
         virtual ::loka::app::RibbonGroupEdgeNode *asRibbonGroupEdgeNode()
+        {
+          return 0;
+        }
+        virtual IFramedNode *asFramedNode()
         {
           return 0;
         }

@@ -7,4 +7,6 @@ void testRibbonGroupExpansionAndGeometry();
 
 void testRibbonGroupInsetAndDecliningNaturalWidth();
 
+void testFramedCapabilityLayoutAndMeasurement();
+
 #endif

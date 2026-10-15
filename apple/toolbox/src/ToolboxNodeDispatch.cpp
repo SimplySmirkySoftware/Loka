@@ -237,7 +237,7 @@ namespace
     }
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
     {
-      loka::app::RibbonGroupNode *group = static_cast<loka::app::RibbonGroupNode *>(node);
+      loka::app::scene::Node *group = node;
       short width = 0;
       bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
@@ -249,7 +249,7 @@ namespace
       if (!usedHandler)
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxRibbonGroupLayout(group, state, &traversal));
+        width = static_cast<short>(ComputeToolboxFramedLayout(group, state, &traversal));
         state.y = traversal.layoutResultY();
       }
       if (boundary)

@@ -25,7 +25,7 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/layout/SceneRootLayout.hpp"
 #include "app/layout/BoxLayout.hpp"
-#include "app/layout/RibbonGroupLayout.hpp"
+#include "app/layout/FramedLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"
@@ -912,8 +912,9 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     return LayoutNodeResult(state.width, resultY);
   }
 
-  if (loka::app::RibbonGroupNode *group = node->asRibbonGroupNode())
+  if (node->asFramedNode())
   {
+    loka::app::scene::Node *group = node;
     int resultY = state.y;
     loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
     if (handler)
@@ -928,7 +929,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     }
     else
     {
-      resultY = loka::app::layout::computeRibbonGroupLayoutResultY(
+      resultY = loka::app::layout::computeFramedLayoutResultY(
           group, state, this, &MacScenePlatformController::layoutContainerChild, 0);
     }
     return LayoutNodeResult(state.width, resultY);
