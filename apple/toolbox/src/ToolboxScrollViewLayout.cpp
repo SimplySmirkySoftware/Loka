@@ -1,3 +1,4 @@
+#include "ToolboxLayoutMetrics.hpp"
 #include "app/layout/StackGaps.hpp"
 // Included by the controller and the Toolbox host fixture.
 namespace
@@ -86,7 +87,8 @@ short ToolboxScenePlatformController::layoutScrollView(
   const int projectedOffset = requestedFact;
 
   short contentWidth = 0;
-  const bool widthKnown = loka::app::layout::queryContentOverflowWidth(scrollView, state.spacing, this, contentWidth);
+  const bool widthKnown =
+      loka::app::layout::queryContentOverflowWidth(scrollView, ToolboxLayoutMetrics::kDefaultGap, this, contentWidth);
   // An unknown range must not scroll: otherwise content cannot be brought back.
   const ToolboxScrollViewMetrics horizontal = ToolboxScrollViewResolveMetrics(
       widthKnown ? contentWidth : 0, ToolboxScrollViewChildWidth(state.width), scrollView->requestedOrigin().x);
