@@ -621,6 +621,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxAttributedTextTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxAttributedTextTests)
   set_target_properties(LokaToolboxAttributedTextTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME testToolboxScrollViewX COMMAND LokaToolboxAttributedTextTests scroll-x)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
