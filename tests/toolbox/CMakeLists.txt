@@ -203,6 +203,16 @@ function(loka_add_paragraph_probe)
 endfunction()
 loka_add_paragraph_probe()
 
+# Raw QuickDraw visual probe; production layouts, no TEST_BUILD, opt-in only.
+function(loka_add_card_shadow_probe)
+  set(target "LokaCardShadowProbe${LOKA_CLASSIC_TARGET_SUFFIX}")
+  loka_add_toolbox_test_application(${target} LokaAppleToolboxCore
+    src/CardShadowProbeStandaloneMain.cpp ParagraphProbeSize.r)
+  set_property(TARGET ${target} PROPERTY EXCLUDE_FROM_ALL TRUE)
+  set_property(TARGET ${target}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+endfunction()
+loka_add_card_shadow_probe()
+
 # Deliberate timing-only twin of the attributed-string probe registration above.
 configure_file(
   ${CMAKE_SOURCE_DIR}/example/HelloWorld/Size.r
