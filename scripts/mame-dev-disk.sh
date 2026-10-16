@@ -72,6 +72,11 @@ elif [ "$1" = "--all" ]; then
     case "$script" in ''|\#*) continue ;; esac
     set -- "$@" "$PROJECT_DIR/example/SmirkyCard/$script"
   done < "$PROJECT_DIR/example/SmirkyCard/disk-scripts.txt"
+  # Same grammar as the adjacent script manifest; pictures are data forks.
+  while IFS=$' \t\r' read -r script || [ -n "$script" ]; do
+    case "$script" in ''|\#*) continue ;; esac
+    set -- "$@" "$PROJECT_DIR/example/SmirkyCard/assets/$script.PICT"
+  done < "$PROJECT_DIR/example/SmirkyCard/disk-pictures.txt"
 else
   MACBINARY_PATHS+=("$1")
   shift

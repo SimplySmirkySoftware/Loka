@@ -52,10 +52,11 @@ class ClassicReleaseDisksTest(unittest.TestCase):
             if files is None:
                 # The shell and CMake readers skip comments and blank lines and
                 # trim space, tab and CR; this reader must agree.
-                files = ("MAIN.JS", "MINES.JS", "VIEWER.JS")
+                files = ("MAIN.JS", "MINES.JS", "VIEWER.JS", "assets/PB100.PICT")
                 manifest = self.root / "example" / example / "disk-scripts.txt"
                 manifest.parent.mkdir(parents=True, exist_ok=True)
                 manifest.write_bytes(b"# Card scripts\r\n\r\n  MAIN.JS \r\n#NOTES.JS\nMINES.JS\t\n\n\tVIEWER.JS\r\n")
+                (manifest.parent / "disk-pictures.txt").write_bytes(b"# Pictures\r\n\n PB100 \t\r\n")
             self.files.append(files)
             for index, filename in enumerate(files):
                 data = self.root / "example" / example / filename
@@ -89,12 +90,12 @@ class ClassicReleaseDisksTest(unittest.TestCase):
                 self.assertIn(name, mounted)
                 try:
                     listing = subprocess.check_output([TOOLS["hls"], "-1a", ":"], env=env, text=True)
-                    self.assertEqual(sorted(listing.splitlines()), sorted((name, *files)))
+                    self.assertEqual(sorted(listing.splitlines()), sorted((name, *(Path(f).name for f in files))))
                     subprocess.run([TOOLS["hcopy"], "-m", ":" + name, str(Path(home) / "app.bin")], env=env, check=True)
                     self.assertEqual(disks.macbinary(Path(home) / "app.bin"), disks.macbinary(binary))
                     for filename in files:
-                        local = Path(home) / (filename + ".bin")
-                        subprocess.run([TOOLS["hcopy"], "-m", ":" + filename, str(local)], env=env, check=True)
+                        local = Path(home) / (Path(filename).name + ".bin")
+                        subprocess.run([TOOLS["hcopy"], "-m", ":" + Path(filename).name, str(local)], env=env, check=True)
                         data = disks.macbinary(local)
                         self.assertEqual(data[2], (self.root / "example" / example / filename).read_bytes())
                         self.assertEqual(data[3], b"")

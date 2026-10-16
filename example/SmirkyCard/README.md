@@ -27,7 +27,8 @@ scripts/mame-dev-disk-app.sh --build-and-prepare SmirkyCard
 ```
 
 It builds the app and puts it on the dev disk together with every card script
-listed in [disk-scripts.txt](disk-scripts.txt). `scripts/mame-boot-disk.sh --all`
+listed in [disk-scripts.txt](disk-scripts.txt), plus the pictures listed in
+[disk-pictures.txt](disk-pictures.txt). `scripts/mame-boot-disk.sh --all`
 reads the same list. To ship a new card file, add its name to that list.
 
 `open(name)` loads a sibling script into a fresh engine and shows its `first`
@@ -156,6 +157,17 @@ round trips (20 navigation calls), and Reload. This evidence does not cover
 physical hardware.
 
 ## JS seats and clickables
+
+`c.state.image(name)` declares an ordinary IMAGE seat with a shipped picture
+already decoded as its initial value; `c.state.image()` remains deliberately
+empty. The name is a stem of 1..26 ASCII letters, digits, underscores or hyphens,
+without dots, separators or NUL. The host appends `.PICT` on Classic and `.PNG`
+on Win32/macOS; JS never supplies the suffix. Invalid names, missing files,
+read/decode refusals and a missing platform throw a `TypeError` naming the stem
+and reason; an uncaught error fails the constructor, without declaring the seat.
+[disk-pictures.txt](disk-pictures.txt) lists the stems staged beside the app
+(in macOS bundle Resources); both binary twins live under `assets/`.
+
 
 Declare `state(initial)` only in a card constructor. Initial values may be
 Strings, integers, or Bools; the seat keeps its type. `Text(seat)` formats

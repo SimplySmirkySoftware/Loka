@@ -69,6 +69,10 @@ namespace smirkycard
         return static_cast<JsCardNode *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*scene));
       }
       static bool active() { return card()->flowAdmission_.hasExecution(); }
+      static int seatCount()
+      {
+        return card()->seats_.count();
+      }
       static loka::core::resource::Image image()
       {
         for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
@@ -3512,6 +3516,110 @@ namespace
     mutable int opens, decodes, capacityCalls, releases;
   };
 
+  // Null has no image decoder. This fixture pins file bytes and ownership using
+  // the same three-byte decoder-double shape as HandlePlatform and VIEWER.
+  class NamedPicturePlatform : public HandlePlatform
+  {
+  public:
+    NamedPicturePlatform()
+        : HandlePlatform(Success)
+    {
+    }
+    virtual bool openFile(const loka::file::File &file, loka::platform::file::FileHandle &out) const
+    {
+      ++this->opens;
+      LOKA_VERIFY(file.base() == loka::file::File::BASE_APPLICATION);
+      out.displayPath = loka::core::String::Literal("_named_pictures/") + file.relativePath();
+      return true;
+    }
+    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,
+                                     std::size_t offset,
+                                     std::size_t length,
+                                     loka::core::resource::Image &out)
+    {
+      if (length != 3 || std::memcmp(blob.data(), "img", 3))
+        return false;
+      return HandlePlatform::createImageFromBlob(blob, offset, length, out);
+    }
+  };
+
+  void checkNamedPictures()
+  {
+    LOKA_VERIFY(makeDirectory("_named_pictures"));
+    writeMain("_named_pictures/PB100.PNG", "img");
+    writeMain("_named_pictures/CLASSIC.PICT", "img");
+    writeMain("_named_pictures/BROKEN.PNG", "garbage");
+    NamedPicturePlatform context;
+    {
+      CardRunnerHarness h("let facts, budget=false; card('first',class {constructor(c){"
+                          "this.picture=c.state.image('PB100');this.empty=c.state.image();"
+                          "for(let i=0;i<126;i++)c.state.image();"
+                          "try{c.state.image('PB100')}catch(e){budget=e instanceof RangeError}"
+                          "facts=()=>[c.test.imageFacts(this.picture),c.test.imageFacts(this.empty),budget];}"
+                          "compose(){return ImageView(this.picture).TEST_ID('Named.Picture')}});",
+                          "scenario('first',c=>c.run(Flow().step(()=>{let f=facts();"
+                          "if(f[0].empty||f[0].width!==2||f[0].height!==3||!f[1].empty||"
+                          "f[1].width!==0||f[1].height!==0||!f[2])throw Error('facts')})))",
+                          7,
+                          true,
+                          &context);
+      h.mount();
+      loka::app::scene::Node *picture = windowNode(*h.window, "Named.Picture");
+      LOKA_VERIFY(picture && picture->asImageViewNode());
+      h.ticks(10);
+      LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+      LOKA_VERIFY(context.opens == 1 && context.decodes == 1);
+    }
+    LOKA_VERIFY(context.releases == 1);
+    const char *arguments[] = {"'NOPE'",
+                               "'a/b'",
+                               "'a:b'",
+                               "'..'",
+                               "'PB100.PNG'",
+                               "'abcdefghijklmnopqrstuvwxyzA'",
+                               "''",
+                               "5",
+                               "'BROKEN'",
+                               "'CLASSIC'",
+                               "'a\\\\b'",
+                               "'a\\0b'",
+                               "'PB100','extra'"};
+    const char *messages[] = {"NOPE",
+                              "a/b",
+                              "a:b",
+                              "..",
+                              "PB100.PNG",
+                              "abcdefghijklmnopqrstuvwxyzA",
+                              "invalid picture name",
+                              "optional picture name",
+                              "BROKEN: image decode failure",
+                              "CLASSIC",
+                              "invalid picture name",
+                              "invalid picture name",
+                              "optional picture name"};
+    for (std::size_t i = 0; i < sizeof(arguments) / sizeof(arguments[0]); ++i)
+    {
+      const std::string source = std::string("card('first',class {constructor(c){c.state.image(") + arguments[i]
+                                 + ");}compose(){return Text('unexpected').TEST_ID('Unexpected')}});";
+      CardRunnerHarness h(source.c_str(), "scenario('first',c=>{})", 7, true, &context);
+      h.mount();
+      loka::app::scene::Node *status = windowNode(*h.window, "SmirkyCard.Status");
+      LOKA_VERIFY(status && textValue(status->asTextNode()).find(messages[i]) != std::string::npos);
+      LOKA_VERIFY(textValue(status->asTextNode()).find("TypeError") != std::string::npos);
+      LOKA_VERIFY(!windowNode(*h.window, "Unexpected"));
+      smirkycard::testing::CardFlowAccess::scene = h.window->scene();
+      LOKA_VERIFY(!smirkycard::testing::CardFlowAccess::imageState());
+      LOKA_VERIFY(smirkycard::testing::CardFlowAccess::seatCount() == 0);
+    }
+    checkComposeRefusal("card('first',class {constructor(c){c.state.image('PB100')}"
+                        "compose(){return Text('bad')}});",
+                        "PB100: missing PlatformContext");
+    LOKA_VERIFY(std::remove("_named_pictures/PB100.PNG") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/CLASSIC.PICT") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/BROKEN.PNG") == 0);
+    removeDirectory("_named_pictures");
+  }
+
   class ViewerPlatform : public HandlePlatform
   {
   public:
@@ -4154,6 +4262,11 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--named-pictures"))
+  {
+    checkNamedPictures();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--viewer-scenario"))
   {
     checkChosenFileDelivery();
@@ -4313,6 +4426,7 @@ int main(int argc, char **argv)
   checkChosenFileLookupNavigation();
   checkImageFacts();
   checkImageFactsLookupNavigation();
+  checkNamedPictures();
   checkViewerScenario();
   checkMinesScenario();
   checkStandaloneScenario();

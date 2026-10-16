@@ -61,7 +61,7 @@ namespace smirkycard
     explicit JsCardNode(const JsCardProps &props);
     virtual ~JsCardNode();
     JSValue mintState(JSContext *context, JSValueConst initial);
-    JSValue mintTypedState(JSContext *, JsSeatRecord::Kind);
+    JSValue mintTypedState(JSContext *, JsSeatRecord::Kind, JSValueConst);
     bool flowLive() const;
     JSValue loadImage(JSContext *, JSValueConst);
     JSValue seatGet(JSContext *context, JSValueConst seat);

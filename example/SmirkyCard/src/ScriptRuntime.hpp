@@ -122,6 +122,11 @@ namespace smirkycard
       return this->currentEngine_;
     }
     PlatformContext *nativeContext() const { return this->mainContext_; }
+    /** A picture stem is 1..26 ASCII letters, digits, underscores or hyphens.
+        No suffix, separator, dot or embedded NUL is admitted (31-byte HFS limit). */
+    static bool IsPictureName(const std::string &stem);
+    /** Appends the native rail's picture suffix to a validated stem. */
+    static loka::core::String PictureFileName(const std::string &stem);
     JSContext *context() const;
     JSRuntime *jsRuntime() const;
     bool loadBuiltin(const char *source, loka::core::String &error);

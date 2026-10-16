@@ -254,8 +254,9 @@ function Get-StandaloneCatalog([string]$Path) {
 # scripts/mame-*-disk*, scripts/release/classic-disks.py and
 # scripts/macos/standalone-release-stage.sh: surrounding whitespace is
 # trimmed, blank lines and full-line # comments are skipped.
-function Get-SmirkyCardScripts {
-    $manifest = Join-Path $ProjectDirectory "example/SmirkyCard/disk-scripts.txt"
+function Get-SmirkyCardFiles {
+    param([string]$ManifestName, [string]$Suffix = "")
+    $manifest = Join-Path $ProjectDirectory "example/SmirkyCard/$ManifestName"
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
         throw "SmirkyCard script manifest not found: $manifest"
     }
@@ -272,7 +273,7 @@ function Get-SmirkyCardScripts {
         if (-not $names.Add($name)) {
             throw "Duplicate SmirkyCard script: $name"
         }
-        $scripts += $name
+        $scripts += ($name + $Suffix)
     }
     if ($scripts.Count -eq 0) {
         throw "SmirkyCard script manifest lists no scripts: $manifest"
@@ -346,7 +347,7 @@ if ($IsReleasePackage) {
     $simpleText = Join-Path $buildRoot "example/SimpleText/LokaSimpleTextWin32.exe"
     $smirkyCardRoot = Join-Path $buildRoot "example/SmirkyCard"
     $smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"
-    $smirkyCardScripts = Get-SmirkyCardScripts
+    $smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt") + (Get-SmirkyCardFiles "disk-pictures.txt" ".PNG")
     foreach ($entry in $catalog) {
         $loopTarget = $entry.Target.Replace("StandaloneFlow", "StandaloneLoop")
         $loopExecutable = Get-ApplicationExecutable $loopExecutableRoot $entry.Key $loopTarget
