@@ -32,6 +32,7 @@ void testContentOverflowNaturalDeclinePreservesOutput();
 void testContentOverflowNestedMaximumAndOverflow();
 void testContentOverflowBoxPaddingIsOfferBound();
 void testContentOverflowPassThroughIsTransparent();
+void testNaturalRowSeesThroughPassThroughWrapper();
 void testContentOverflowRibbonUsesNaturalMeasurement();
 
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP

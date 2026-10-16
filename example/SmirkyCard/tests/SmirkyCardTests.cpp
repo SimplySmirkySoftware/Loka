@@ -12,6 +12,8 @@
 #include "app/nodes/controls/Cell.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include "app/style/CardStyle.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -3942,8 +3944,92 @@ namespace
     LOKA_VERIFY(browse->requestedOrigin().y == 40 && detail->requestedOrigin().y == 80);
   }
 
+  /** Answers what the three rails answer (ToolboxNaturalWidth.cpp, Win32 and
+      macOS controllers): Text and Button labels and INTRINSIC images; a Cell
+      has no natural width on any rail, so a card that puts its click target
+      in a Cell gives a horizontal ScrollView no range. */
+  class LaptopNaturalWidthSource : public loka::app::layout::INaturalWidthSource
+  {
+  public:
+    virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const
+    {
+      if (!child || !(child->asTextNode() || child->asButtonNode()))
+        return false;
+      width = 10;
+      return true;
+    }
+  };
+
+  void checkNaturalRowLowering()
+  {
+    std::fputs("[pin] natural-width Row modifier and carousel overflow\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>{const pic=c.state.image();"
+                                    "function cards(cell){return Row(...[0,1,2,3,4].map(i=>"
+                                    "Card(VStack(ImageView(pic,{width:110,height:70}),"
+                                    "cell?Cell('x',()=>{}):Button('x',()=>{})))))}"
+                                    "return {compose(){return VStack("
+                                    "Row(Text('a')).naturalWidth().TEST_ID('Natural'),"
+                                    "Row(Text('a')).TEST_ID('Shared'),"
+                                    "ScrollView(cards(false).naturalWidth()).TEST_ID('WideScroll'),"
+                                    "ScrollView(cards(false)).TEST_ID('SharedScroll'),"
+                                    "ScrollView(cards(true).naturalWidth()).TEST_ID('CellScroll'))}}});",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *natural = windowNode(window, "Natural");
+    loka::app::scene::Node *shared = windowNode(window, "Shared");
+    LOKA_VERIFY(natural && natural->asStackNode());
+    LOKA_VERIFY(shared && shared->asStackNode());
+    LOKA_VERIFY(natural->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_NATURAL);
+    LOKA_VERIFY(shared->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_SHARED);
+    expectJs(runtime,
+             "(()=>{const original=Row(Text('a'));const tree=original.naturalWidth();"
+             "return Object.isFrozen(original)&&Object.isFrozen(tree)&&tree!==original&&"
+             "original.rowWidth===undefined&&tree.rowWidth===1&&tree.naturalWidth()===tree&&"
+             "tree.TEST_ID('x').rowWidth===1&&Row(Text('a')).TEST_ID('y').naturalWidth().testId==='y'})()",
+             "true");
+    const char *wrongKinds[] = {"VStack(Text('a'))", "Card(Text('a'))"};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      const std::string expression = std::string("(()=>{try{") + wrongKinds[i]
+                                     + ".naturalWidth();return false}catch(e){return e instanceof TypeError&&"
+                                       "e.message==='naturalWidth() applies to Row'}})()";
+      expectJs(runtime, expression.c_str(), "true");
+    }
+    expectJs(runtime,
+             "(()=>{try{Row(Text('a')).naturalWidth(1);return false}catch(e){return e instanceof TypeError}})()",
+             "true");
+    LaptopNaturalWidthSource source;
+    const int gap = 4;
+    short width = 0;
+    loka::app::scene::Node *scroll = windowNode(window, "WideScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    LOKA_VERIFY(loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width));
+    const int insets =
+        2 * loka::app::CardStyle::kBorderBand + loka::app::CardStyle::kShadowLeft + loka::app::CardStyle::kShadowRight;
+    LOKA_VERIFY(width == 5 * (110 + insets) + 4 * gap);
+    scroll = windowNode(window, "SharedScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    width = 0;
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width) || width == 0);
+    // A Cell inside the card declines on every rail, so the natural Row has no range
+    // (the Classic run of the first candidate showed five cards squeezed into the viewport).
+    scroll = windowNode(window, "CellScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    width = 0;
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width));
+  }
+
   void checkLaptopLowerings()
   {
+    checkNaturalRowLowering();
     std::fputs("[pin] LaptopTracker ScrollView, Card, ImageView options and depth\n", stderr);
     NullPlatformContext context;
     NullScenePlatformController platform;

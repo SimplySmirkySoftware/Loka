@@ -33,10 +33,6 @@ const MACHINES = [
    blurb: 'The first PowerPC PowerBook: a trackpad instead of a trackball, and a hot-swappable expansion bay.'},
 ];
 const COUNT = MACHINES.length;
-// The carousel shows three neighbours in order. Seven fixed slots over the
-// ring (last, 0..4, first) give every selection a left-to-right window
-// without moving pictures between seats.
-const RING = [COUNT - 1].concat(MACHINES.map((_, i) => i)).concat([0]);
 const SPECS = [['CPU', 'cpu'], ['RAM', 'ram'], ['Display', 'display'], ['Storage', 'storage'], ['Weight', 'weight']];
 function counterText(index) { return (index + 1) + ' of ' + COUNT + '  -  ' + MACHINES[index].year; }
 function specText(m, spec) { return spec[0] + ': ' + m[spec[1]]; }
@@ -65,7 +61,6 @@ card('first', class {
     const first = MACHINES[0];
     this.counter = c.state(counterText(0));
     this.heading = c.state(first.name);
-    this.slotShown = RING.map((_, k) => c.state(k >= 0 && k <= 2));
     this.detailShown = MACHINES.map((_, i) => c.state(i === 0));
     this.dName = c.state(first.name);
     this.dYear = c.state(first.year);
@@ -78,8 +73,6 @@ card('first', class {
     const m = MACHINES[this.index];
     this.counter.set(counterText(this.index));
     this.heading.set(m.name);
-    // Slot k shows ring entry k; the window is index .. index + 2.
-    this.slotShown.forEach((s, k) => s.set(k >= this.index && k <= this.index + 2));
     this.detailShown.forEach((s, i) => s.set(i === this.index));
     this.dName.set(m.name);
     this.dYear.set(m.year);
@@ -114,12 +107,15 @@ card('first', class {
     this.showBrowse();
   }
 
-  // Test ids must be unique in the whole tree; the carousel ring repeats two
-  // machines, so each card names its seat (slot k or list entry).
-  machineCard(i, width, height, label, testId) {
+  // List and carousel cells have distinct ids throughout the tree. The
+  // carousel's cards use a Button: a horizontal ScrollView measures its Row
+  // through Text, Button and ImageView widths, and a Cell has no natural width
+  // on any rail yet, so a Cell there would collapse the Row to the viewport.
+  machineCard(i, width, height, label, testId, asButton) {
+    const open = () => this.open(i);
     return Card(VStack(
       ImageView(this.pics[i], {width: width, height: height, fit: 'contain'}),
-      Cell(label, () => this.open(i)).TEST_ID(testId)));
+      (asButton ? Button(label, open) : Cell(label, open)).TEST_ID(testId)));
   }
 
   toolbar() {
@@ -133,12 +129,12 @@ card('first', class {
     return VStack(
       Text(this.heading, TITLE, {align: 'center'}).TEST_ID('Laptop.Heading'),
       Text(this.counter, LABEL, {align: 'center'}).TEST_ID('Laptop.Counter'),
-      // Arrows above the ring: the cards take the remaining height, so a row
-      // below them would sit under the fold of the 420x340 window.
+      // Arrows move the selection; the viewer scrolls the cards independently.
       Row(
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
         Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
-      Row(...RING.map((i, k) => Show(this.slotShown[k], this.machineCard(i, 110, 70, MACHINES[i].short, 'Laptop.Slot.' + k)))));
+      ScrollView(Row(...MACHINES.map((m, i) =>
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id, true))).naturalWidth()));
   }
 
   list() {
