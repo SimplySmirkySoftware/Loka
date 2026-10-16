@@ -153,6 +153,7 @@ namespace smirkycard
     bool
     evalMain(JsEngine &engine, const char *source, std::size_t length, const char *name, loka::core::String &error);
     /* Helper callback is public only so the local tree factory can install it. */
+    static JSValue naturalWidth(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     static JSValue testId(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     static JSValue enabled(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
 

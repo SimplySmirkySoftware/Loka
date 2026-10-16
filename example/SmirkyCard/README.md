@@ -194,6 +194,12 @@ one tree in the native Card body using the default CardStyle; it has no style
 argument yet. Both refuse missing, extra, array, or non-tree children with
 TypeError and each counts one level toward the depth-eight tree limit.
 
+Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
+The modifier seats undeclared-width children at their natural width; a shared-width
+Row (the default) splits the viewport instead. Like `TEST_ID`, it returns a frozen
+modified copy, preserving the original tree; repeating it on that copy returns
+the same tree. It takes no arguments and refuses non-Row trees with TypeError.
+
 `ImageView(imageSeat)` retains the default image props. The optional second
 argument is a plain options object: `ImageView(imageSeat, {width: 120, height: 80,
 fit: 'contain'})`. Width and height must be supplied together as integers in
@@ -425,18 +431,17 @@ refuses a longer one at configure time.
 
 [LAPTOP.JS](LAPTOP.JS) is an illustrated guide to five Apple portable Macs
 (Macintosh Portable, PowerBook 100, 180c, 550c and 5300c): a toolbar, a tall
-card list, a wide three-slot carousel, and a detail page, all in one card whose
+card list, a wide horizontal ScrollView carousel, and a detail page, all in one card whose
 seats hold the selection, the page and the presentation. Its five pictures are
 `c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
-when the card is constructed; the carousel shows three of seven fixed ring slots
-(last, 0..4, first) so a wrap never moves a picture between seats; the
-presentation is a toolbar toggle because no viewport fact reaches JavaScript
-yet. Open it from the first card's `./LAPTOP.JS` button.
+when the card is constructed. The carousel holds one Row of five Cards; the
+arrows move the selection (heading and counter), while scrolling is the viewer's.
+Presentation is a toolbar toggle because no viewport fact reaches JavaScript yet. Open it from the first card's `./LAPTOP.JS` button.
 
 [LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
 facts, open details from the list, Back with the selection kept, the carousel
 (selection kept, arrows wrap in both directions), open details from a carousel
-slot, and the way back to the list. Host coverage runs as part of the default
+cell, and the way back to the list. Host coverage runs as part of the default
 `LokaSmirkyCardTests` run (or `--laptop-scenario` alone) with a 2 by 3 decoder
 double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. For Classic,
 build `LokaLaptopStandaloneFlow68K_APPL` and stage the five `.PICT` files beside it:
