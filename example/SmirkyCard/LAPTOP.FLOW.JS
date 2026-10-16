@@ -67,8 +67,7 @@ scenario('first', function (c) {
       expect('Laptop.Counter', '5 of 5  -  1995');
     }).named('carousel-keeps-selection-and-wraps')
     .step(function () {
-      // Ring slot 5 shows machine 4 while the selection is 4 (window 4..6).
-      c.test.click('Laptop.Slot.5');
+      c.test.click('Laptop.Wide.pb5300c');
     }).named('open-from-carousel')
     .step(function () {
       expect('Laptop.Detail.cpu', 'CPU: PowerPC 603e, 100 MHz');

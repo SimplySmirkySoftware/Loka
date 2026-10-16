@@ -221,6 +221,13 @@ namespace loka
           : BaseType(other)
       {
       }
+      /** Seats undeclared-width children at their natural width; the Row then reports
+       * a natural width to an enclosing horizontal ScrollView. */
+      RowDefinition &naturalWidth()
+      {
+        this->props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+        return *this;
+      }
       RowDefinition &gap(int value)
       {
         this->props.gap(value);
