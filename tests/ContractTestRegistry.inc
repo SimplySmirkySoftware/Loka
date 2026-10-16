@@ -1369,3 +1369,12 @@ LOKA_TEST(testWindowMarginSpacingLayout)
 LOKA_TEST(testWindowMarginBoxRefusal)
 
 LOKA_TEST(testWindowContentMarginRetention)
+
+LOKA_TEST(testCardShadowHarnessRetainedValues)
+LOKA_TEST(testCardShadowValueIdentity)
+LOKA_TEST(testCardShadowIndependentOracle)
+LOKA_TEST(testCardShadowBandLocality)
+LOKA_TEST(testCardShadowStencilLattice)
+LOKA_TEST(testCardShadowSixGeometries)
+LOKA_TEST(testCardShadowSeatLookAndReentry)
+LOKA_TEST(testCardShadowStateWidthRetainsBands)
