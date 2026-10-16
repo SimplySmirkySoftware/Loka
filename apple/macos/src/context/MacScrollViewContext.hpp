@@ -33,6 +33,10 @@ public:
   int commitScrollMetrics(
       int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar);
   int clampOffset(int value, int maximum) const;
+  /** The horizontal range a content width would give this viewport: the
+      projected content width minus the native clip width, converted once,
+      so admission and the bounds notification clamp with the same number. */
+  int horizontalRange(int contentWidthLu) const;
 
 private:
   friend class MacInputDoor;

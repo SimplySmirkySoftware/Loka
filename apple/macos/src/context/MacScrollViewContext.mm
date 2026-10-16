@@ -271,6 +271,18 @@ void MacScrollViewContext::publishClipViewBoundsOrigin()
     this->node_->publishOrigin(x, y);
 }
 
+int MacScrollViewContext::horizontalRange(int contentWidthLu) const
+{
+  NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
+  if (!scrollView || contentWidthLu <= 0)
+  {
+    return 0;
+  }
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const CGFloat extent = projection.projectLength(0, contentWidthLu).pt - [scrollView contentSize].width;
+  return extent > 0 ? projection.scrollPositionToLu(extent) : 0;
+}
+
 int MacScrollViewContext::clampOffset(int value, int maximum) const
 {
   if (value < 0)

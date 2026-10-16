@@ -838,3 +838,55 @@ void testMacScrollViewScrollerStyleChangeRequestsRelayout()
   [pool drain];
   std::printf("==== [testMacScrollViewScrollerStyleChangeRequestsRelayout] PASSED ====\n");
 }
+
+void testMacScrollViewCongruentWidthsLeaveNoHorizontalRange()
+{
+  std::printf("\n==== [testMacScrollViewCongruentWidthsLeaveNoHorizontalRange] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    // 5/4 space scale: a content width one logical unit wider than the clip
+    // can project to the same native width; then there is nothing to scroll.
+    MacScenePlatformController controller((void *)root, RailMetrics(Ratio(), Ratio(5, 4)));
+    ViewportFact offset(0);
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    StackNode *column = addButtonColumn(scrollView, 2);
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(10, 10));
+    column->addChild(image);
+    establishLayout(controller, &scrollView, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const CGFloat clipWidth = [native contentSize].width;
+    const int visible = controller.projection().clientCapacityToLu(clipWidth);
+    int congruent = 0;
+    for (int candidate = visible + 1; candidate <= visible + 4; ++candidate)
+    {
+      if (controller.projection().projectLength(0, candidate).pt <= clipWidth)
+      {
+        congruent = candidate;
+        break;
+      }
+    }
+    if (!congruent)
+    {
+      std::printf("[skip] no logical width wider than %d projects into a %g pt clip at 5/4\n", visible, clipWidth);
+    }
+    else
+    {
+      image->props.size(congruent, 10);
+      offset.state().set(loka::core::Frame(50, 0, 0, 0));
+      controller.relayout(300, 140);
+      const bool scroller = [native hasHorizontalScroller] == YES;
+      const int x = offset.state().get().x;
+      LOKA_VERIFY(!scroller && x == 0 && "widths that project to the same native width leave no range");
+    }
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewCongruentWidthsLeaveNoHorizontalRange] PASSED ====\n");
+}

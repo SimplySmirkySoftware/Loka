@@ -708,7 +708,9 @@ MacScenePlatformController::layoutScrollViewNode(
   const bool known =
       loka::app::layout::queryContentOverflowWidth(scrollView, MacSceneLayout::kGap, this, contentWidthLu);
   // An unknown range must not scroll: otherwise content cannot be brought back
-  const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
+  // The range is measured in projected points, as the clip is: two logical
+  // widths that project to the same native width leave no range.
+  const int maximumX = known ? ctx->horizontalRange(contentWidthLu) : 0;
   const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
   // Like Win32, decide chrome before traversal without changing native metrics.
   const bool horizontalBar = maximumX > 0 && state.height > 0;
