@@ -195,7 +195,7 @@ namespace
   };
   int measured(CardNode &card, const INaturalWidthSource &source)
   {
-    RowWidthConsultation width(&card, 1, 301, 0, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+    RowWidthConsultation width(&card, 1, 301, 0, 0, ROW_UNDECLARED_WIDTH_NATURAL, &source);
     return width.next(&card).width();
   }
 } // namespace

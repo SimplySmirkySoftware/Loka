@@ -840,12 +840,26 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
     {
       resultY = loka::app::layout::computeColumnLayoutResultY(
-          stack, state, this, &MacScenePlatformController::layoutContainerChild, MacSceneLayout::kGap, 0);
+          stack,
+          state,
+          this,
+          &MacScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              stack, MacSceneLayout::kGap, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     else
     {
       resultY = loka::app::layout::computeRowLayoutResultY(
-          stack, state, this->rowLayoutMetrics_, this, this, &MacScenePlatformController::layoutContainerChild);
+          stack,
+          state,
+          this->rowLayoutMetrics_,
+          this,
+          this,
+          &MacScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              stack, MacSceneLayout::kGap, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     return LayoutNodeResult(state.width, resultY);
   }
@@ -892,7 +906,13 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     else
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
-          box, state, this, &MacScenePlatformController::layoutContainerChild, MacSceneLayout::kGap, 0);
+          box,
+          state,
+          this,
+          &MacScenePlatformController::layoutContainerChild,
+          loka::app::layout::resolveLayoutGap(
+              box, MacSceneLayout::kGap, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          0);
     }
     return LayoutNodeResult(state.width, resultY);
   }

@@ -59,7 +59,12 @@ namespace loka
             return state.y;
           }
           return loka::app::layout::computeBoxLayoutResultY(
-              box, state, traversal, &DispatchTraversalLayoutChild, this->gap_, &AcceptTraversalLayoutY);
+              box,
+              state,
+              traversal,
+              &DispatchTraversalLayoutChild,
+              resolveLayoutGap(box, state.spacing, this->gap_, this->gap_),
+              &AcceptTraversalLayoutY);
         }
 
       private:
@@ -140,17 +145,25 @@ namespace loka
           }
           if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
           {
-            return loka::app::layout::computeColumnLayoutResultY(stack,
-                                                                 state,
-                                                                 traversal,
-                                                                 &DispatchTraversalLayoutChild,
-                                                                 this->gap_,
-                                                                 &AcceptTraversalLayoutY,
-                                                                 range,
-                                                                 spans);
+            return loka::app::layout::computeColumnLayoutResultY(
+                stack,
+                state,
+                traversal,
+                &DispatchTraversalLayoutChild,
+                resolveLayoutGap(stack, state.spacing, this->gap_, this->metrics_.gap),
+                &AcceptTraversalLayoutY,
+                range,
+                spans);
           }
           return loka::app::layout::computeRowLayoutResultY(
-              stack, state, this->metrics_, traversal, traversal, &DispatchTraversalLayoutChild);
+              stack,
+              state,
+              this->metrics_,
+              traversal,
+              traversal,
+              &DispatchTraversalLayoutChild,
+              resolveLayoutGap(stack, state.spacing, this->gap_, this->metrics_.gap),
+              &AcceptTraversalLayoutY);
         }
 
       private:

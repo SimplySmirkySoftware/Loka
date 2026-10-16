@@ -34,7 +34,7 @@ namespace loka
           spans = 0;
         }
         const unsigned count = static_cast<unsigned>(column->childrenCount());
-        bool band = range && spans && spans->valid() && spans->size() == count && range->first <= count
+        bool band = range && spans && spans->validForGap(gap) && spans->size() == count && range->first <= count
                     && range->count <= count - range->first;
         // A mismatch repairs from the top in this call, before presentation.
         for (;;)
@@ -42,7 +42,7 @@ namespace loka
           const unsigned first = band ? range->first : 0;
           const unsigned last = band ? first + range->count : count;
           if (!band && spans)
-            spans->begin(count);
+            spans->begin(count, gap);
           int currentY = state.y + (band && first < count ? spans->start(first) : 0);
           StackGaps gaps(gap, first > 0);
           unsigned index = 0;
