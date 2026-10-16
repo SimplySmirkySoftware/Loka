@@ -34,7 +34,7 @@ namespace
   public:
     explicit Oracle(const Frame &body)
         : body_(body),
-          horizontal_((body.width + 24) * body.height, 0)
+          horizontal_(static_cast<std::vector<int>::size_type>(body.width + 24) * body.height, 0)
     {
       for (int i = 0; i < 25; ++i)
         this->weights_[i] = 0;
@@ -62,7 +62,8 @@ namespace
       {
         const int row = y - this->body_.y - 4 - tap;
         if (row >= 0 && row < this->body_.height)
-          sum += this->weights_[tap + 12] * this->horizontal_[row * (this->body_.width + 24) + localX + 12];
+          sum += static_cast<long>(this->weights_[tap + 12])
+                 * this->horizontal_[row * (this->body_.width + 24) + localX + 12];
       }
       return static_cast<int>((255L * sum + 531441L / 2) / 531441L);
     }
