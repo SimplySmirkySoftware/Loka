@@ -222,11 +222,18 @@ namespace loka
             {
               if (!childTakesLayoutSeat(seat))
                 continue;
-              short measured = 0;
-              if (!queryNaturalWidth(seat, gap, source, measured))
-                return false;
-              if (measured > widest)
-                widest = measured;
+              // A declared width (a sized ImageView or RectSurface) wins before
+              // the rail is asked, as in the column and row paths below.
+              int resolved = declaredChildWidthForColumn(seat);
+              if (resolved < 0)
+              {
+                short measured = 0;
+                if (!queryNaturalWidth(seat, gap, source, measured))
+                  return false;
+                resolved = measured;
+              }
+              if (resolved > widest)
+                widest = resolved;
             }
             if (widest <= 0)
               return false;
