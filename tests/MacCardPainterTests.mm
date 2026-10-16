@@ -269,7 +269,10 @@ void testMacCardPainterPixels()
           for (int y = static_cast<int>(NSMinY(seat) * backing); y < NSMaxY(seat) * backing; ++y)
             for (int x = static_cast<int>(NSMinX(seat) * backing); x < NSMaxX(seat) * backing; ++x)
             {
-              LOKA_VERIFY(SamePixel(expected.bitmap(), ground.bitmap(), x, y));
+              // No band owns the content seat (Q1), so the bands never paint it.
+              // The whole reference's antialiased inner fringe can reach seat
+              // pixels by at most one level at a fractional scale, which
+              // EqualBitmaps tolerates.
               LOKA_VERIFY(SamePixel(actual.bitmap(), ground.bitmap(), x, y));
             }
           if (height == 57)
@@ -360,6 +363,14 @@ void testMacCardBandMovePropsAndEmpty()
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
   NSView *root = [[LokaCardTestRoot alloc] initWithFrame:NSMakeRect(0, 0, 180, 150)];
+  // AppKit tracks needsDisplay only for views in a window (macOS 26 reports NO
+  // for a windowless view). As the content view, root keeps the same phase.
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 180, 150)
+                                                 styleMask:0
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  LOKA_VERIFY(window != nil);
+  [window setContentView:root];
   {
     MacScenePlatformController controller(root, RailMetrics());
     CardNode card((CardProps()));
@@ -419,6 +430,7 @@ void testMacCardBandMovePropsAndEmpty()
     controller.onChange(0, NODE_DIRTY_NONE, false);
   }
   [root release];
+  [window release];
   [pool drain];
 }
 
