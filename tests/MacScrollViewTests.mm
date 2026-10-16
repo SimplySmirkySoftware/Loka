@@ -859,26 +859,37 @@ void testMacScrollViewCongruentWidthsLeaveNoHorizontalRange()
     establishLayout(controller, &scrollView, 300, 140);
     NSScrollView *native = scrollViewUnderRoot(root);
     LOKA_VERIFY(native != nil);
-    const CGFloat clipWidth = [native contentSize].width;
-    const int visible = controller.projection().clientCapacityToLu(clipWidth);
+    // Search a few seat widths for a clip whose projected width a wider
+    // logical width still fits into (341 pt holds both 272 and 273 lu).
     int congruent = 0;
-    for (int candidate = visible + 1; candidate <= visible + 4; ++candidate)
+    int width = 300;
+    CGFloat clipWidth = 0;
+    int visible = 0;
+    for (width = 289; width <= 300 && !congruent; ++width)
     {
-      if (controller.projection().projectLength(0, candidate).pt <= clipWidth)
+      controller.relayout(width, 140);
+      clipWidth = [native contentSize].width;
+      visible = controller.projection().clientCapacityToLu(clipWidth);
+      for (int candidate = visible + 1; candidate <= visible + 4; ++candidate)
       {
-        congruent = candidate;
-        break;
+        if (controller.projection().projectLength(0, candidate).pt <= clipWidth)
+        {
+          congruent = candidate;
+          break;
+        }
       }
+      if (congruent)
+        break;
     }
     if (!congruent)
     {
-      std::printf("[skip] no logical width wider than %d projects into a %g pt clip at 5/4\n", visible, clipWidth);
+      std::printf("[skip] no logical width wider than the clip projects into it at 5/4 for seat widths 289..300\n");
     }
     else
     {
       image->props.size(congruent, 10);
       offset.state().set(loka::core::Frame(50, 0, 0, 0));
-      controller.relayout(300, 140);
+      controller.relayout(width, 140);
       const bool scroller = [native hasHorizontalScroller] == YES;
       const int x = offset.state().get().x;
       LOKA_VERIFY(!scroller && x == 0 && "widths that project to the same native width leave no range");
