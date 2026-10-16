@@ -10,6 +10,7 @@
 #include "NativeResourceRetirementTests.hpp"
 #include "RibbonTests.hpp"
 #include "CardTests.hpp"
+#include "CardShadowTableTests.hpp"
 #include "CommandSetTests.hpp"
 #include "SimpleTextTests.hpp"
 #include "MenuCompletionTests.hpp"
