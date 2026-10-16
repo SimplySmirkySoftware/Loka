@@ -3,9 +3,11 @@
 
 #include "app/layout/RailSpacing.hpp"
 
-/** macOS scene spacing ruled by #950, page 2: kRootInset is the outer
-    margin on every side; kGap is the distance between layout seats on either
-    axis. Both are logical units projected through spaceScale. */
+/** macOS scene spacing ruled by #950, page 2: kRootInset is the rail's
+    standard outer margin, on every side of a window whose contentMargin is
+    unspecified or StandardWindowMargin() (page 4); kGap is the distance
+    between layout seats on either axis. Both are logical units projected
+    through spaceScale. */
 struct MacSceneLayout
 {
   enum
