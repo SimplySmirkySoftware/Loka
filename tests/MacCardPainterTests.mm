@@ -7,6 +7,7 @@
 #include "support/MacNativeRefusal.hpp"
 #include "support/MacRetirementProbe.hpp"
 #include "support/TestVerify.hpp"
+#include <cmath>
 #include <cstdio>
 
 @interface LokaCardTestRoot : NSView
@@ -211,6 +212,79 @@ namespace
     result.end();
   }
 
+  // Signed distance to the outline: straight sides and four corner circles.
+  // The inner rectangle locates the nearest circle center in a corner quadrant.
+  // This is independent of the production arc paths and their rasterizer.
+  double RoundedCardDistance(NSRect rect, double radius, double x, double y)
+  {
+    const double dx = std::fabs(x - NSMidX(rect)) - (rect.size.width / 2 - radius);
+    const double dy = std::fabs(y - NSMidY(rect)) - (rect.size.height / 2 - radius);
+    const double outsideX = dx > 0 ? dx : 0;
+    const double outsideY = dy > 0 ? dy : 0;
+    const double inside = dx > dy ? dx : dy;
+    return std::sqrt(outsideX * outsideX + outsideY * outsideY) + (inside < 0 ? inside : 0) - radius;
+  }
+
+  void VerifyShadowOracle(const CardBitmap &actual,
+                          const Frame &body,
+                          const Frame *bands,
+                          const MacProjection &projection,
+                          NSPoint phase,
+                          int backing)
+  {
+    // Absolute layout edges are the oracle's only shadow geometry source.
+    const double left = projection.projectEdge(body.x + 3).pt;
+    const double top = projection.projectEdge(body.y + 3).pt;
+    const double right = projection.projectEdge(body.x + body.width + 3).pt;
+    const double bottom = projection.projectEdge(body.y + body.height + 3).pt;
+    const NSRect shadow = NSMakeRect(left, top, right - left, bottom - top);
+    const NSRect nativeBody = projection.projectFrame(body).r;
+    const double radius = projection.projectLength(0, 12).pt / 2;
+    const CardBandRole roles[] = {CARD_BAND_RIGHT, CARD_BAND_BOTTOM};
+    for (int side = 0; side < 2; ++side)
+    {
+      const NSRect band = projection.projectFrame(bands[roles[side]]).r;
+      unsigned compared = 0;
+      for (int y = static_cast<int>(NSMinY(band) * backing); y < NSMaxY(band) * backing; ++y)
+        for (int x = static_cast<int>(NSMinX(band) * backing); x < NSMaxX(band) * backing; ++x)
+        {
+          const double centerX = (x + 0.5) / backing;
+          const double centerY = (y + 0.5) / backing;
+          // Sample only the exposed top-right / bottom-left corner quadrants.
+          // Include both sides of the shadow arc and the outermost frame pixels.
+          if (side == 0 ? (centerX < right - radius || centerY > top + radius)
+                        : (centerX > left + radius || centerY < bottom - radius))
+            continue;
+          // Exterior samples farther than one backing pixel from the body
+          // cannot include its antialiased border. No outer clip exclusion.
+          if (RoundedCardDistance(nativeBody, radius, centerX, centerY) <= 1.0 / backing)
+            continue;
+          NSUInteger pixel[4], wanted[4];
+          [actual.bitmap() getPixel:pixel atX:x y:y];
+          GroundPixel(x, y, wanted);
+          const bool member = RoundedCardDistance(shadow, radius, centerX, centerY) <= 0;
+          if (member && ((x + y + static_cast<int>((phase.x + phase.y) * backing)) & 1))
+            wanted[0] = wanted[1] = wanted[2] = 0;
+          for (int channel = 0; channel < 4; ++channel)
+          {
+            if (pixel[channel] != wanted[channel])
+              std::printf("shadow oracle side=%d backing=%d pixel=(%d,%d) channel=%d actual=%lu expected=%lu\n",
+                          side,
+                          backing,
+                          x,
+                          y,
+                          channel,
+                          static_cast<unsigned long>(pixel[channel]),
+                          static_cast<unsigned long>(wanted[channel]));
+            LOKA_VERIFY(pixel[channel] == wanted[channel]);
+          }
+          ++compared;
+        }
+      std::printf("shadow oracle side=%d backing=%d compared=%u\n", side, backing, compared);
+      LOKA_VERIFY(compared != 0);
+    }
+  }
+
   id RefuseCardView(id object, SEL, NSRect)
   {
     [object release];
@@ -271,6 +345,7 @@ void testMacCardPainterPixels()
           RenderViews(root, actual, backing);
           std::printf("card pixels space=%d backing=%d body=%dx%d\n", metric, backing, width, height);
           EqualBitmaps(actual, expected, true);
+          VerifyShadowOracle(actual, body, bands, controller.projection(), phase, backing);
           const NSRect seat = controller.projection().projectFrame(Frame(originX + 3, 20, width - 6, height - 6)).r;
           for (int y = static_cast<int>(NSMinY(seat) * backing); y < NSMaxY(seat) * backing; ++y)
             for (int x = static_cast<int>(NSMinX(seat) * backing); x < NSMaxX(seat) * backing; ++x)
