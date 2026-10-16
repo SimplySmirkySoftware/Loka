@@ -198,9 +198,15 @@ namespace
   {
     CGContextRef graphics = result.begin();
     const NSRect outer = projection.projectFrame(Frame(body.x, body.y, body.width + 3, body.height + 3)).r;
-    // Do not mask the content seat: containment must hold for the whole ink,
-    // independently of clipping imposed by the four native band views.
-    CGContextClipToRect(graphics, CGRectMake(outer.origin.x, outer.origin.y, outer.size.width, outer.size.height));
+    const NSRect seat = projection.projectFrame(Frame(body.x + 3, body.y + 3, body.width - 6, body.height - 6)).r;
+    // The same clip as the union of the four band views: the outer frame minus
+    // the content seat, which no band owns (Q1). The whole ink's antialiased
+    // inner fringe can reach a seat corner at a fractional scale (3/2: one
+    // pixel, five levels); the bands' own seat pixels are checked separately.
+    CGContextBeginPath(graphics);
+    CGContextAddRect(graphics, CGRectMake(outer.origin.x, outer.origin.y, outer.size.width, outer.size.height));
+    CGContextAddRect(graphics, CGRectMake(seat.origin.x, seat.origin.y, seat.size.width, seat.size.height));
+    CGContextEOClip(graphics);
     PaintCardInk(graphics, body, CardStyle(), projection, NSZeroPoint, phase);
     result.end();
   }
@@ -270,9 +276,6 @@ void testMacCardPainterPixels()
             for (int x = static_cast<int>(NSMinX(seat) * backing); x < NSMaxX(seat) * backing; ++x)
             {
               // No band owns the content seat (Q1), so the bands never paint it.
-              // The whole reference's antialiased inner fringe can reach seat
-              // pixels by at most one level at a fractional scale, which
-              // EqualBitmaps tolerates.
               LOKA_VERIFY(SamePixel(actual.bitmap(), ground.bitmap(), x, y));
             }
           if (height == 57)
