@@ -181,6 +181,7 @@ struct PAINTSTRUCT { int unused; };
 #define MONITOR_DEFAULTTONEAREST 2
 #define FAILED(x) ((x)<0)
 #define LOGPIXELSX 88
+#define SM_CYHSCROLL 3
 #define FW_BOLD 700
 #define SPI_GETNONCLIENTMETRICS 41
 struct LOGFONTW { int lfHeight, lfWidth, lfWeight; unsigned char lfItalic; };
@@ -222,6 +223,7 @@ BOOL FreeLibrary(HMODULE);
 FARPROC GetProcAddress(HMODULE,const char *);
 HMONITOR MonitorFromWindow(HWND,DWORD);
 int GetDeviceCaps(HDC,int);
+int GetSystemMetrics(int);
 int MulDiv(int,int,int);
 BOOL AdjustWindowRectEx(RECT *,DWORD,BOOL,DWORD);
 BOOL SystemParametersInfoW(UINT,UINT,PVOID,UINT);
