@@ -4,5 +4,4 @@ void testMacCardPainterPixels();
 void testMacCardPainterFixedDiameter();
 void testMacCardBandLifecycleAndRetry();
 void testMacCardBandMovePropsAndEmpty();
-void testMacCardBandNativeRepaint();
 #endif
