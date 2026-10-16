@@ -164,13 +164,21 @@ namespace smirkycard
     JsFlowDescription *description = JsFlowDescription::get(value);
     if (!description || !description->steps() || description->hasWatch())
       return JS_ThrowTypeError(ctx, "c.run requires an unconsumed Flow with at least one step");
+    // One JS step per scenario tick. A step's seat writes complete with the
+    // rail's entry operation, not with the step: Toolbox routes them when the
+    // idle operation that ran the tick completes, so a Show branch revealed by
+    // step k exists only on tick k + 1. Null routes synchronously and passed
+    // every step on tick 1, which hid the dependency; the due tick makes the
+    // audit the same on every rail.
     const JsFlowDescription::StepRecord *s = description->steps();
-    ScenarioFlowChain<ScenePtr, ScenePtr> flow = ScenarioFlow(this->clock_, &this->input_).auditTo(&this->sink_)
-                                                 | Then(RunOnce(JsStepAdapter(*this, s->fn))).named(s->name.c_str());
+    long due = 1;
+    ScenarioFlowChain<ScenePtr, ScenePtr> flow =
+        ScenarioFlow(this->clock_, &this->input_).auditTo(&this->sink_)
+        | AtTick(due, RunOnce(JsStepAdapter(*this, s->fn))).named(s->name.c_str());
     flow = flow | Then(GatedSettle(*this));
     for (s = s->next; s; s = s->next)
     {
-      flow = flow | Then(RunOnce(JsStepAdapter(*this, s->fn))).named(s->name.c_str());
+      flow = flow | AtTick(++due, RunOnce(JsStepAdapter(*this, s->fn))).named(s->name.c_str());
       flow = flow | Then(GatedSettle(*this));
     }
     this->chain_ = new (std::nothrow) Chain(flow.flow());

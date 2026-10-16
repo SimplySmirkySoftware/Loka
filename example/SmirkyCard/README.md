@@ -301,6 +301,14 @@ and reclamation happen outside the tick; synchronous detach cancels work already
 on the stack, whose step outcome and canceled terminal are recorded on unwind.
 No JavaScript terminal callback runs after Detaching.
 
+Each JavaScript step is due on its own scenario tick (`due_tick` = step
+ordinal, starting at 1): a step's seat writes complete with the rail's entry
+operation, not with the step, so a Show branch that step k reveals exists only
+on tick k + 1. Toolbox routes those writes when the idle operation that ran the
+tick completes; Null routes them synchronously and used to pass every step on
+tick 1, which hid the dependency. Put a reveal (`click` on a Button that flips a
+Show seat) in one step and the lookups of the revealed nodes in the next.
+
 The immediate test operations are:
 
 - `c.test.click(id)`: Button or Cell, with a flush; a disabled Button fails.
@@ -407,8 +415,34 @@ terminal status=succeeded
 ```
 
 The whole LOG.TXT for this configuration is the [expected audit](tests/VIEWER.audit)
-(runtime-verified on the maciix rig, 68K runner, 2026-10-01; two runs byte-identical).
+(runtime-verified on the maciix rig, 68K runner, 2026-10-01; re-baked 2026-10-16 when each step moved to its own tick).
 The host decoder double supplies a 256 by 256 image and checks the same records
 through the same runner and audit writer. Runner names must keep the Classic
 target name within HFS's 31-character limit; `smirkycard_add_scenario_runner`
 refuses a longer one at configure time.
+
+## LaptopTracker.JS card
+
+[LAPTOP.JS](LAPTOP.JS) is an illustrated guide to five Apple portable Macs
+(Macintosh Portable, PowerBook 100, 180c, 550c and 5300c): a toolbar, a tall
+card list, a wide three-slot carousel, and a detail page, all in one card whose
+seats hold the selection, the page and the presentation. Its five pictures are
+`c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
+when the card is constructed; the carousel shows three of seven fixed ring slots
+(last, 0..4, first) so a wrap never moves a picture between seats; the
+presentation is a toolbar toggle because no viewport fact reaches JavaScript
+yet. Open it from the first card's `./LAPTOP.JS` button.
+
+[LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
+facts, open details from the list, Back with the selection kept, the carousel
+(selection kept, arrows wrap in both directions), open details from a carousel
+slot, and the way back to the list. Host coverage runs as part of the default
+`LokaSmirkyCardTests` run (or `--laptop-scenario` alone) with a 2 by 3 decoder
+double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. For Classic,
+build `LokaLaptopStandaloneFlow68K_APPL` and stage the five `.PICT` files beside it:
+
+```sh
+LOKA_TAB_COUNT=6 tests/toolbox/run-standalone.sh build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin example/SmirkyCard/assets/MACPORT.PICT example/SmirkyCard/assets/PB100.PICT example/SmirkyCard/assets/PB180C.PICT example/SmirkyCard/assets/PB550C.PICT example/SmirkyCard/assets/PB5300C.PICT --expect example/SmirkyCard/tests/LAPTOP.audit
+```
+
+The whole LOG.TXT is the [expected audit](tests/LAPTOP.audit).

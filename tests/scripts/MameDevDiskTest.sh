@@ -93,7 +93,7 @@ for app in HelloWorld/LokaHello MineSweeper/LokaMine SimpleViewer/LokaSimpleView
   touch "$binary"
 done
 touch "$SANDBOX/repo/build/retro68/68k/Release/example/ScrapbookUI/ASSETS.LRP"
-touch "$SANDBOX/repo/example/SmirkyCard/MAIN.JS" "$SANDBOX/repo/example/SmirkyCard/MINES.JS" "$SANDBOX/repo/example/SmirkyCard/VIEWER.JS"
+touch "$SANDBOX/repo/example/SmirkyCard/MAIN.JS" "$SANDBOX/repo/example/SmirkyCard/MINES.JS" "$SANDBOX/repo/example/SmirkyCard/VIEWER.JS" "$SANDBOX/repo/example/SmirkyCard/LAPTOP.JS"
 cp "$REPO_DIR/example/SmirkyCard/disk-scripts.txt" "$SANDBOX/repo/example/SmirkyCard/"
 cp "$REPO_DIR/example/SmirkyCard/disk-pictures.txt" "$SANDBOX/repo/example/SmirkyCard/"
 cp -R "$REPO_DIR/example/SmirkyCard/assets" "$SANDBOX/repo/example/SmirkyCard/"
@@ -109,8 +109,8 @@ run_all() {
 run_all
 [ "$(grep -c '^hformat ' "$SANDBOX/all.log")" -eq 1 ] || fail "All reformatted more than once"
 [ "$(grep -c '^hcopy <-m>' "$SANDBOX/all.log")" -eq 10 ] || fail "All must copy ten apps"
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 9 ] || fail "All must copy all nine assets"
-for script in MAIN.JS MINES.JS VIEWER.JS; do
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 10 ] || fail "All must copy all ten assets"
+for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "All omitted SmirkyCard $script"
 done
@@ -123,13 +123,13 @@ printf '\r\n  # extra card\r\n\r\n  FOURTH.JS  ' >> "$SANDBOX/repo/example/Smirk
 touch "$SANDBOX/repo/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 10 ] || fail "manifest addition did not copy ten assets"
-for script in MAIN.JS MINES.JS VIEWER.JS FOURTH.JS; do
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 11 ] || fail "manifest addition did not copy eleven assets"
+for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "extended manifest omitted $script"
 done
 cp "$SANDBOX/all.hd" "$SANDBOX/previous.hd"
-for script in MAIN.JS MINES.JS VIEWER.JS FOURTH.JS; do
+for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS FOURTH.JS; do
   mv "$SANDBOX/repo/example/SmirkyCard/$script" "$SANDBOX/missing.js"
   if run_all 2>/dev/null; then
     fail "All accepted missing $script"

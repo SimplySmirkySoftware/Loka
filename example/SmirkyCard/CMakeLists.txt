@@ -225,6 +225,7 @@ endfunction()
 smirkycard_add_scenario_runner(SmirkyCard CARD MINES.JS FLOW MINES.FLOW.JS
   SCENARIO mines APP_NAME "SmirkyCard Mines" SEED 7)
 smirkycard_add_scenario_runner(SmirkyView CARD VIEWER.JS FLOW VIEWER.FLOW.JS SCENARIO viewer APP_NAME "SmirkyCard Viewer" SEED 7)
+smirkycard_add_scenario_runner(Laptop CARD LAPTOP.JS FLOW LAPTOP.FLOW.JS SCENARIO laptop APP_NAME "LaptopTracker" SEED 7)
 if(TARGET LokaSmirkyCardTests)
   target_link_libraries(LokaSmirkyCardTests PRIVATE SmirkyCardScenarioInputs)
   target_sources(LokaSmirkyCardTests PRIVATE src/StandaloneFlowAppConfig.cpp
