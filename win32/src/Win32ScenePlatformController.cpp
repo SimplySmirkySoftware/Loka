@@ -1,3 +1,4 @@
+#include "app/nodes/controls/Card.hpp"
 #include "Win32PaintGround.hpp"
 #include "Win32Window.hpp"
 #include "Win32InputDoor.hpp"
@@ -128,6 +129,7 @@ namespace
       {loka::app::scene::NODE_KIND_EDIT_TEXT, loka::app::scene::NodeTypeToken<loka::app::EditTextNode>()},
       {loka::app::scene::NODE_KIND_TEXT_EDITOR, loka::app::scene::NodeTypeToken<loka::app::TextEditorNode>()},
       {loka::app::scene::NODE_KIND_POPUP_MENU, loka::app::scene::NodeTypeToken<loka::app::PopupMenuNode>()},
+      {loka::app::scene::NODE_KIND_CARD_BAND, loka::app::scene::NodeTypeToken<loka::app::CardBandNode>()},
       {loka::app::scene::NODE_KIND_RIBBON_GROUP_EDGE,
        loka::app::scene::NodeTypeToken<loka::app::RibbonGroupEdgeNode>()},
       {loka::app::scene::NODE_KIND_CELL, loka::app::scene::NodeTypeToken<loka::app::CellNode>()},

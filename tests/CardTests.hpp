@@ -5,4 +5,5 @@ void testCardInsertionFormsReachContent();
 void testCardGeometryAndLimits();
 void testCardNaturalWidthAndSeats();
 void testCardSingleStyleRetainedAndRefusal();
+void testCardBodyReconstruction();
 #endif
