@@ -1166,11 +1166,8 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     rootWidth = 0;
   }
-  const LayoutState state(rootInset,
-                          rootInset,
-                          rootWidth,
-                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
-                          Win32SceneLayout::kGap);
+  const LayoutState state(
+      rootInset, rootInset, rootWidth, clientHeight > 0 ? clientHeight - 2 * rootInset : 0, Win32SceneLayout::kGap);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -1434,12 +1431,12 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
     return state.y;
   }
   // Deliberate macOS twin: resolve into a local copy before dispatching any layout branch.
-  const LayoutState local(state.x,
-                          state.y,
-                          state.width,
-                          state.height,
-                          loka::app::layout::resolveLayoutGap(
-                              node, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap));
+  const LayoutState local(
+      state.x,
+      state.y,
+      state.width,
+      state.height,
+      loka::app::layout::resolveLayoutGap(node, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap));
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
