@@ -5,4 +5,11 @@ void testWin32LayoutPresentsRootOnceAfterPositioningChildren();
 void testWin32ReentrantLayoutSharesOutermostPresentation();
 void testWin32PopupRelayoutPreservesNativeItems();
 
+void testWin32WindowUnspecifiedContentMargin();
+void testWin32WindowZeroContentMargin();
+void testWin32WindowExplicitContentMargin();
+void testWin32WindowStandardContentMargin();
+void testWin32WindowOversizedContentMargin();
+void testWin32RootWithoutWindowUsesStandardContentMargin();
+
 #endif // LOKA_TESTS_WIN32_LIVE_RESIZE_TESTS_HPP
