@@ -107,15 +107,15 @@ card('first', class {
     this.showBrowse();
   }
 
-  // List and carousel cells have distinct ids throughout the tree. The
-  // carousel's cards use a Button: a horizontal ScrollView measures its Row
-  // through Text, Button and ImageView widths, and a Cell has no natural width
-  // on any rail yet, so a Cell there would collapse the Row to the viewport.
-  machineCard(i, width, height, label, testId, asButton) {
-    const open = () => this.open(i);
+  // List and carousel cards have distinct ids throughout the tree. The click
+  // target is a Button on both: a Cell fills whatever height its column has
+  // left (the first list row took the whole viewport), and a horizontal
+  // ScrollView measures its Row through Text, Button and ImageView widths,
+  // which a Cell does not answer on any rail yet.
+  machineCard(i, width, height, label, testId) {
     return Card(VStack(
       ImageView(this.pics[i], {width: width, height: height, fit: 'contain'}),
-      (asButton ? Button(label, open) : Cell(label, open)).TEST_ID(testId)));
+      Button(label, () => this.open(i)).TEST_ID(testId)));
   }
 
   toolbar() {
@@ -134,7 +134,7 @@ card('first', class {
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
         Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
       ScrollView(Row(...MACHINES.map((m, i) =>
-        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id, true))).naturalWidth()));
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id))).naturalWidth()));
   }
 
   list() {
