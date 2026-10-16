@@ -232,7 +232,7 @@ namespace loka
               if (resolved < 0)
               {
                 short measured = 0;
-                if (!queryNaturalWidth(seat, gap, source, measured))
+                if (!queryNaturalWidth(seat, spacing, source, measured))
                   return false;
                 resolved = measured;
               }

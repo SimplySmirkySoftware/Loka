@@ -4007,24 +4007,25 @@ namespace
              "(()=>{try{Row(Text('a')).naturalWidth(1);return false}catch(e){return e instanceof TypeError}})()",
              "true");
     LaptopNaturalWidthSource source;
-    const int gap = 4;
+    const loka::app::layout::RailSpacing spacing(12, 4, 9);
+    const int gap = spacing.horizontalGap();
     short width = 0;
     loka::app::scene::Node *scroll = windowNode(window, "WideScroll");
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());
-    LOKA_VERIFY(loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width));
+    LOKA_VERIFY(loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
     const int insets =
         2 * loka::app::CardStyle::kBorderBand + loka::app::CardStyle::kShadowLeft + loka::app::CardStyle::kShadowRight;
     LOKA_VERIFY(width == 5 * (110 + insets) + 4 * gap);
     scroll = windowNode(window, "SharedScroll");
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());
     width = 0;
-    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width) || width == 0);
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width) || width == 0);
     // A Cell inside the card declines on every rail, so the natural Row has no range
     // (the Classic run of the first candidate showed five cards squeezed into the viewport).
     scroll = windowNode(window, "CellScroll");
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());
     width = 0;
-    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width));
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
   }
 
   void checkLaptopLowerings()

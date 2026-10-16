@@ -797,7 +797,7 @@ void testNaturalRowSeesThroughPassThroughWrapper()
   wrapper->addChild(new ImageViewNode(sized));
   StackWidthProbe probe(30, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, layout::RailSpacing(12, 4, 9), &probe, width));
   // widthRow seats "a" and "b" (30 + 40) and the wrapper (75) with two gaps.
   LOKA_VERIFY(width == 30 + 40 + 75 + 2 * 4);
   LOKA_VERIFY(probe.calls == 3);
@@ -807,14 +807,14 @@ void testNaturalRowSeesThroughPassThroughWrapper()
   imageOnly->addChild(new ImageViewNode(sized));
   StackWidthProbe refusing(30, 40, 0);
   width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &refusing, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, layout::RailSpacing(12, 4, 9), &refusing, width));
   LOKA_VERIFY(width == 30 + 40 + 75 + 75 + 3 * 4);
   // A wrapper whose only child the rail declines makes the Row decline.
   FragmentNode *declined = new FragmentNode(FragmentProps());
   row->addChild(declined);
   declined->addChild(new TextNode(TextProps("caption")));
   width = 19;
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, 4, &refusing, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, layout::RailSpacing(12, 4, 9), &refusing, width));
   LOKA_VERIFY(width == 19);
 }
 
