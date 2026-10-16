@@ -95,7 +95,10 @@ public:
           spacing_(spacingValue)
     {
     }
-    int spacing() const { return this->spacing_; }
+    int spacing() const
+    {
+      return this->spacing_;
+    }
 
     int x;
     int y;

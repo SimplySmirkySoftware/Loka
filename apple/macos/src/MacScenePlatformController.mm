@@ -563,11 +563,8 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   {
     rootWidth = 0;
   }
-  const LayoutState state(rootInset,
-                          rootInset,
-                          rootWidth,
-                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
-                          MacSceneLayout::kGap);
+  const LayoutState state(
+      rootInset, rootInset, rootWidth, clientHeight > 0 ? clientHeight - 2 * rootInset : 0, MacSceneLayout::kGap);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -798,12 +795,12 @@ int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const L
     return state.y;
   }
   // Deliberate Win32 twin: resolve into a local copy before dispatching any layout branch.
-  const LayoutState local(state.x,
-                          state.y,
-                          state.width,
-                          state.height,
-                          loka::app::layout::resolveLayoutGap(
-                              node, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap));
+  const LayoutState local(
+      state.x,
+      state.y,
+      state.width,
+      state.height,
+      loka::app::layout::resolveLayoutGap(node, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap));
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
@@ -914,8 +911,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           state,
           this,
           &MacScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              box, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(box, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
