@@ -50,7 +50,7 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {7, 12, 0, blackColor};
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor};
   GrafPtr port = &initialPort;
   Rect clip = {-30000, -30000, 30000, 30000};
   short penX, penY;
@@ -545,7 +545,10 @@ void FrameRoundRect(const Rect *rect, short, short)
   if (recordingCardRegion)
     recordedCardRect = *rect;
   else
+  {
     toolbox_host::roundFrames.push_back(*rect);
+    toolbox_host::cardOperations.push_back('B');
+  }
 }
 void DiffRgn(RgnHandle a, RgnHandle, RgnHandle out)
 {
@@ -558,3 +561,29 @@ void PaintRgn(RgnHandle)
   toolbox_host::shadowMode = toolbox_host::pen.mode;
   toolbox_host::shadowPattern = toolbox_host::pen.pattern;
 }
+
+namespace toolbox_host
+{
+  std::vector<char> cardOperations;
+  std::vector<StencilTransfer> stencilTransfers;
+  std::vector<Fill> stencilRuns;
+} // namespace toolbox_host
+void CopyBits(const BitMap *source, const BitMap *, const Rect *, const Rect *dest, short mode, RgnHandle)
+{
+  toolbox_host::cardOperations.push_back('T');
+  toolbox_host::StencilTransfer transfer;
+  transfer.rect = *dest;
+  transfer.mode = mode;
+  transfer.rowBytes = source->rowBytes;
+  const unsigned char *bytes = reinterpret_cast<const unsigned char *>(source->baseAddr);
+  transfer.bytes.assign(bytes, bytes + source->rowBytes * (source->bounds.bottom - source->bounds.top));
+  toolbox_host::stencilTransfers.push_back(transfer);
+}
+#ifndef LOKA_HOST_RECT_SURFACE
+void PaintRect(const Rect *rect)
+{
+  toolbox_host::cardOperations.push_back('R');
+  toolbox_host::Fill run = {*rect, toolbox_host::pen.pattern, toolbox_host::pen.mode};
+  toolbox_host::stencilRuns.push_back(run);
+}
+#endif

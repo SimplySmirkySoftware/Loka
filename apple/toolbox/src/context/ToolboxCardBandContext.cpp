@@ -1,6 +1,8 @@
 #include "context/ToolboxCardBandContext.hpp"
 #include "ToolboxScenePlatformController.hpp"
-#include "ToolboxPaintGradient.hpp"
+#include "app/style/CardShadow.hpp"
+#include <cstring>
+#include "core/Profiler.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -76,29 +78,118 @@ loka::app::scene::PaintAnswer ToolboxCardBandContext::queryPaintDamage(const lok
 
 namespace
 {
-  /** Owns both temporary masks; no region survives a draw or a refused allocation. */
-  class CardInkRegions
+  /** Toolbox has no alpha transfer. Props retain the requested ink. */
+  loka::app::CardStyle ToolboxStencilStyle(const loka::app::CardStyle &requested)
   {
-  public:
-    CardInkRegions()
-        : body(NewRgn()),
-          shadow(NewRgn())
-    {
-    }
-    ~CardInkRegions()
-    {
-      if (this->shadow)
-        DisposeRgn(this->shadow);
-      if (this->body)
-        DisposeRgn(this->body);
-    }
-    RgnHandle body;
-    RgnHandle shadow;
+    return loka::app::CardStyle(requested.extent(), loka::app::CARD_SHADOW_STENCIL);
+  }
 
-  private:
-    CardInkRegions(const CardInkRegions &);
-    CardInkRegions &operator=(const CardInkRegions &);
-  };
+  /** Once per nonempty band paint; walks only this band's intersecting tiles
+      and constant-density edge rows. All storage dies with the call. */
+  void PaintCardStencil(const loka::app::CardStyle &requested,
+                        const loka::core::Frame &body,
+                        const Rect &band,
+                        const ToolboxPaintClip &clip)
+  {
+    using namespace loka::app;
+    const CardStyle style = ToolboxStencilStyle(requested);
+    if (style.extent() == CARD_SHADOW_NONE)
+      return;
+    const detail::CardShadowTable &g = style.geometry();
+    enum
+    {
+      rowBytes = 2 * ((detail::kCardShadowMaximumTileWidth + 15) / 16)
+    };
+    unsigned char bits[rowBytes * detail::kCardShadowMaximumTileHeight];
+    // Overlapping cuts meet at the same midline used by the common sampler.
+    const int left = g.cut[0] + g.cut[2] <= body.width
+                         ? g.cut[0]
+                         : (body.width / 2 > body.width - g.cut[2] ? body.width / 2 : body.width - g.cut[2]);
+    const int right = g.cut[0] + g.cut[2] <= body.width ? body.width - g.cut[2] : left;
+    const int top = g.cut[1] + g.cut[3] <= body.height
+                        ? g.cut[1]
+                        : (body.height / 2 > body.height - g.cut[3] ? body.height / 2 : body.height - g.cut[3]);
+    const int bottom = g.cut[1] + g.cut[3] <= body.height ? body.height - g.cut[3] : top;
+    const int xs[] = {body.x - g.allowance[0], body.x + left, body.x + right, body.x + body.width + g.allowance[2]};
+    const int ys[] = {body.y - g.allowance[1], body.y + top, body.y + bottom, body.y + body.height + g.allowance[3]};
+    GrafPtr port;
+    GetPort(&port);
+    for (int v = 0; v < 3; ++v)
+      for (int h = 0; h < 3; ++h)
+      {
+        if (v == 1 && h == 1)
+          continue;
+        // Intersect in wide arithmetic before narrowing virtual body edges.
+        const int x0 = xs[h] > band.left ? xs[h] : band.left;
+        const int y0 = ys[v] > band.top ? ys[v] : band.top;
+        const int x1 = xs[h + 1] < band.right ? xs[h + 1] : band.right;
+        const int y1 = ys[v + 1] < band.bottom ? ys[v + 1] : band.bottom;
+        if (x0 >= x1 || y0 >= y1)
+          continue;
+        Rect dest;
+        SetRect(&dest, x0, y0, x1, y1);
+        if (!clip.touches(dest))
+          continue;
+        if (v != 1 && h != 1)
+        {
+          const int width = x1 - x0, height = y1 - y0;
+          if (width > detail::kCardShadowMaximumTileWidth || height > detail::kCardShadowMaximumTileHeight)
+            continue;
+          {
+            PROFILE_SECTION("card.buffer-clear");
+            std::memset(bits, 0, sizeof(bits));
+          }
+          {
+            PROFILE_SECTION("card.threshold");
+            for (int y = 0; y < height; ++y)
+              for (int x = 0; x < width; ++x)
+                if (CardShadowStencilInk(CardShadowDensity(style, body, x0 + x, y0 + y), x0 + x, y0 + y))
+                  bits[y * rowBytes + x / 8] |= 0x80 >> (x & 7);
+          }
+          BitMap source;
+          source.baseAddr = reinterpret_cast<Ptr>(bits);
+          source.rowBytes = rowBytes;
+          SetRect(&source.bounds, 0, 0, width, height);
+          {
+            PROFILE_SECTION("card.copy-bits");
+            CopyBits(&source, &port->portBits, &source.bounds, &dest, srcOr, 0);
+          }
+        }
+        else
+        {
+          const int count = v == 1 ? x1 - x0 : y1 - y0;
+          for (int i = 0; i < count; ++i)
+          {
+            const unsigned char density = CardShadowDensity(style, body, x0 + (v == 1 ? i : 0), y0 + (v == 1 ? 0 : i));
+            if (!density)
+              continue;
+            Pattern pattern;
+            unsigned char *bytes = reinterpret_cast<unsigned char *>(&pattern);
+            {
+              PROFILE_SECTION("card.pattern-prepare");
+              for (int y = 0; y < 8; ++y)
+              {
+                bytes[y] = 0;
+                for (int x = 0; x < 8; ++x)
+                  if (CardShadowStencilInk(density, x, y))
+                    bytes[y] |= 0x80 >> x;
+              }
+            }
+            Rect run = dest;
+            if (v == 1)
+              run.left = x0 + i, run.right = run.left + 1;
+            else
+              run.top = y0 + i, run.bottom = run.top + 1;
+            {
+              PROFILE_SECTION("card.paint-run");
+              PenPat(&pattern);
+              PenMode(patOr);
+              PaintRect(&run);
+            }
+          }
+        }
+      }
+  }
 
   /** Restore the caller's pen, including pattern, mode, size and position. */
   class CardPenScope
@@ -124,13 +215,11 @@ namespace
 
 void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
 {
+  PROFILE_SECTION("card.band");
   if (EmptyRect(&this->rect_) || EmptyRect(&this->paintRect_))
     return;
   ToolboxPaintClip clip(this->paintRect_);
   if (!clip.isActive() || !clip.touches(this->paintRect_))
-    return;
-  CardInkRegions regions;
-  if (!regions.body || !regions.shadow)
     return;
   CardPenScope pen;
   loka::toolbox::ToolboxTextInkScope ink(blackColor);
@@ -142,18 +231,7 @@ void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
   Rect body;
   SetRect(&body, recovered.x, recovered.y, recovered.x + recovered.width, recovered.y + recovered.height);
   const short oval = 2 * this->node_->props.style.kCornerRadius;
-  OpenRgn();
-  FrameRoundRect(&body, oval, oval);
-  CloseRgn(regions.body);
-  Rect shadow = body;
-  OffsetRect(&shadow, this->node_->props.style.kShadowRight, this->node_->props.style.kShadowBottom);
-  OpenRgn();
-  FrameRoundRect(&shadow, oval, oval);
-  CloseRgn(regions.shadow);
-  DiffRgn(regions.shadow, regions.body, regions.shadow);
-  PenPat(&loka::toolbox::kToolboxGradientPatterns[4]);
-  PenMode(patOr);
-  PaintRgn(regions.shadow);
+  PaintCardStencil(this->node_->props.style, recovered, this->paintRect_, clip);
   PenNormal();
   FrameRoundRect(&body, oval, oval);
 }

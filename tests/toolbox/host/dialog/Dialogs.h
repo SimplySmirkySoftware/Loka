@@ -6,7 +6,6 @@ typedef char **Handle;
 typedef unsigned char Boolean;
 typedef GrafPtr WindowPtr;
 typedef GrafPtr DialogPtr;
-struct BitMap { Rect bounds; };
 struct QDGlobals { BitMap screenBits; };
 extern QDGlobals qd;
 short GetMBarHeight();

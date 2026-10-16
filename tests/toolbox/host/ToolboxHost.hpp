@@ -547,6 +547,15 @@ namespace toolbox_host
     Pattern pattern;
     long ink;
   };
+  struct StencilTransfer
+  {
+    Rect rect;
+    short mode, rowBytes;
+    std::vector<unsigned char> bytes;
+  };
+  extern std::vector<char> cardOperations;
+  extern std::vector<StencilTransfer> stencilTransfers;
+  extern std::vector<Fill> stencilRuns;
   extern std::vector<Fill> fills;
   extern std::vector<Rect> roundFrames;
   extern int shadowPaints, regionDifferences;

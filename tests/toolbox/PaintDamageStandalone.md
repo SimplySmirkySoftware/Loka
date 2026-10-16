@@ -136,3 +136,48 @@ unchanged and the Card lines added after `ribbon-partial-restores-edge`. The
 standalone is not part of the preset's default build, so rebuild it with
 `scripts/retro68-cmake.sh --build --preset retro68-68k-release --target
 LokaPaintDamage68K_APPL` before running the command above.
+
+## Shared card stencil acceptance (P2-2)
+
+The candidate adds 237 checks (408 total if every arm passes); these are
+build-verified only until the maciix run is recorded. The tracked v1 audit is
+intentionally unchanged pending that run and owner review of DROP differences.
+
+`card-stencil-matrix-whole` covers DROP and WIDE at 64 paired origin/size
+residues each: `(x,y) = (16+i,16+3i mod 8)` and dimensions from the minimum
+plus `(j,5j mod 8)`. The diagonal cases also check ALPHA equality, patterned
+ground, and partial clips across tile/run and band/band joins. Eight NONE
+cases use `card-none-border-only`. The whole-card oracle uses common density
+and stencil sampling plus QuickDraw's border; it does not use band recovery
+or the painter's transfer partition.
+
+The independent v1 region oracle remains in `CardPixels::reference`. Every
+DROP case prints its difference count; a nonzero count emits both captures
+as rows of `0`/`1`, preceded by `card-dump` with window coordinates and
+size. Preserve these for owner inspection before changing any golden image.
+`card-scroll-applied-visible-wide` checks the attached fixture's nonzero
+scroll and visible WIDE bands before `card-scroll-incremental-equals-full`
+compares the incremental result with a fresh window redraw.
+
+Timing lines are observations in `CARDTIME.TXT`, separate from the deterministic
+`LOG.TXT` audit. The two timing-log-open arms must also pass. Extract that
+file from the run's `LokaDev.hd` with hfsutils after the runner exits. Add `card-scroll`
+ticks to `card-new-arms` ticks and require at most 3600 ticks (60 seconds).
+`card-timing` paths are -2 for small damage, -1 for all four bands, and 0–3
+for individual band roles; each runs 16 repetitions. `card-v1-whole` times
+the independent whole-body region oracle, not four v1 band paints.
+
+For the timing breakdown, compile the painter and this standalone with
+`LOKA_PROFILE_FUNC_TICKS=1`. The existing profiler reports `card.threshold`,
+`card.buffer-clear`, `card.copy-bits`, `card.pattern-prepare`,
+`card.paint-run`, and inclusive `card.band` calls/ticks. Compare uninstrumented
+wall time too: profiler calls perturb the measurement and sub-tick buckets
+can report zero. `card-stack before-draw` reports available native stack;
+combine it with the candidate compiler's stack-usage report, including
+callers and native QuickDraw overhead, rather than inferring headroom from
+the application's SIZE resource.
+
+Host transfer pins observe bytes, padding, transparent modes, partition
+coverage, call order, props, and allocation-refusal restoration. The host
+fake does not rasterize QuickDraw; pixel and scroll acceptance remains the
+maciix run.

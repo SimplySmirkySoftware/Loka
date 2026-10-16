@@ -184,7 +184,7 @@ namespace
     const int selections = toolbox_host::selections;
     GrafPtr before = 0;
     GetPort(&before);
-    GrafPort ambient = {7, 12, 0, blackColor};
+    GrafPort ambient = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor};
     SetPort(&ambient);
     f.focus.post(SECOND);
     {
