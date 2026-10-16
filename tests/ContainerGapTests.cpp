@@ -1247,6 +1247,11 @@ void testWindowMarginBoxRefusal()
   }
   BoxNode unpadded(Box().props);
   unpadded.addChild(new TextNode(TextProps("upper offer")));
+  // A fixed-size Box offers its own size, so a wide outer offer is not its inner extent.
+  BoxProps fixedProps;
+  fixedProps.setSize(100, 100);
+  BoxNode fixedBox(fixedProps);
+  fixedBox.addChild(new TextNode(TextProps("fixed in a wide offer")));
   for (unsigned axis = 0; axis < 2; ++axis)
   {
     WideOffer offer;
@@ -1257,6 +1262,9 @@ void testWindowMarginBoxRefusal()
     WideRecorder rejected;
     computeBoxLayoutResultY(&unpadded, spacing, offer, &rejected, &WideRecorder::child, 0, 0);
     LOKA_VERIFY(rejected.calls == 0);
+    WideRecorder fixedAccepted;
+    computeBoxLayoutResultY(&fixedBox, spacing, offer, &fixedAccepted, &WideRecorder::child, 0, 0);
+    LOKA_VERIFY(fixedAccepted.calls == 1);
   }
   struct PartialTraversal
   {
