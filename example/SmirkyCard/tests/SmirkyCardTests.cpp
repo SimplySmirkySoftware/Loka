@@ -3940,12 +3940,18 @@ namespace
              "return tree.width===120&&tree.height===80&&tree.fit===1})()",
              "true");
     expectJs(runtime, "Object.isFrozen(ImageView(pic,Object.assign(Object.create(null),{fit:'cover'})))", "true");
+    checkComposeRefusal("card('first',c=>({compose(){return ScrollView(ScrollView(Text('x')))}}));",
+                        "cannot contain another ScrollView");
+    checkComposeRefusal("card('first',c=>{const s=c.state(true);return {compose(){return ScrollView(VStack(Text('a'),"
+                        "Card(Show(s,ScrollView(Text('x'))))))}}});",
+                        "cannot contain another ScrollView");
+    // A ScrollView may not nest, so its depth chain is one ScrollView over Cards.
     const char *wrappers[] = {"ScrollView", "Card"};
     for (unsigned i = 0; i < 2; ++i)
     {
       std::string tree = "Text('deep').TEST_ID('Deep')";
       for (int depth = 0; depth < 8; ++depth)
-        tree = std::string(wrappers[i]) + "(" + tree + ")";
+        tree = std::string(depth == 7 ? wrappers[i] : "Card") + "(" + tree + ")";
       smirkycard::ScriptRuntime deepRuntime;
       const std::string source = "card('first',c=>({compose(){return " + tree + "}}));";
       LOKA_VERIFY(deepRuntime.loadBuiltin(source.c_str(), error));
@@ -3954,8 +3960,7 @@ namespace
       NullWindow deepWindow(&context, deepProps, &platform);
       loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
       LOKA_VERIFY(windowNode(deepWindow, "Deep"));
-      const std::string refused =
-          "card('first',c=>({compose(){return " + std::string(wrappers[i]) + "(" + tree + ")}}));";
+      const std::string refused = "card('first',c=>({compose(){return Card(" + tree + ")}}));";
       checkComposeRefusal(refused.c_str(), "exceeds depth 8");
     }
   }

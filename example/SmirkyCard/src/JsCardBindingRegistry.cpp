@@ -565,6 +565,44 @@ namespace smirkycard
       JS_FreeValue(ctx, child);
       return content;
     }
+    /** Every rail refuses a viewport scope inside another: the inner subtree
+        would materialize nothing. Walk the child tree's `child` and `children`
+        properties once per ScrollView lowering (bounded by the card's own tree)
+        so the script sees a refusal instead of a silently empty region. */
+    bool containsKind(JSContext *ctx, JSValueConst tree, int kind, int depth)
+    {
+      if (depth > 8 || !JS_IsObject(tree) || JS_IsArray(tree))
+        return false;
+      JSValue own = JS_GetPropertyStr(ctx, tree, "kind");
+      int32_t value = 0;
+      const bool match = JS_IsNumber(own) && !JS_ToInt32(ctx, &value, own) && value == kind;
+      JS_FreeValue(ctx, own);
+      if (match)
+        return true;
+      JSValue child = JS_GetPropertyStr(ctx, tree, "child");
+      const bool inChild = containsKind(ctx, child, kind, depth + 1);
+      JS_FreeValue(ctx, child);
+      if (inChild)
+        return true;
+      JSValue children = JS_GetPropertyStr(ctx, tree, "children");
+      bool inChildren = false;
+      if (JS_IsArray(children))
+      {
+        JSValue lengthValue = JS_GetPropertyStr(ctx, children, "length");
+        int32_t length = 0;
+        if (JS_IsNumber(lengthValue))
+          JS_ToInt32(ctx, &length, lengthValue);
+        JS_FreeValue(ctx, lengthValue);
+        for (int32_t i = 0; i < length && !inChildren; ++i)
+        {
+          JSValue entry = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
+          inChildren = containsKind(ctx, entry, kind, depth + 1);
+          JS_FreeValue(ctx, entry);
+        }
+      }
+      JS_FreeValue(ctx, children);
+      return inChildren;
+    }
     class ScrollViewLowering : public IJsNodeLowering
     {
     public:
@@ -580,6 +618,14 @@ namespace smirkycard
       virtual loka::app::scene::NodeDefinitionBase *
       lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
       {
+        JSValue child = JS_GetPropertyStr(ctx, tree, "child");
+        const bool nested = containsKind(ctx, child, this->kind, depth + 1);
+        JS_FreeValue(ctx, child);
+        if (nested)
+        {
+          node.fail("JavaScript ScrollView cannot contain another ScrollView.");
+          return 0;
+        }
         loka::app::scene::NodeDefinitionBase *scroll = node.createScrollView();
         if (!scroll)
         {
