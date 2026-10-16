@@ -1,6 +1,6 @@
 #include "HelloWorldStandaloneFlowAppConfig.hpp"
 
-#include "../scenarios/ScenarioWindow.hpp"
+#include "../scenarios/ObservedMainDefinition.hpp"
 #include "StandaloneScenarioSupport.hpp"
 #include "app/core/App.hpp"
 #include "app/core/Window.hpp"
@@ -42,16 +42,14 @@ namespace loka
 
     void HelloWorldStandaloneFlowAppConfig::compose(AppComposition &composition)
     {
-      composition << scenario_tests::MakeScenarioWindow<helloworld::MainProps, helloworld::MainNode>(
-          this->productionMainProps(),
-          &this->borrowedMainNode_,
-          420,
-          330,
-          kHelloWorldStandaloneTitle,
-          app::IdlePolicy::interval(0.1),
-          &HelloWorldStandaloneFlowAppConfig::OnWindowIdle,
-          this,
-          this->runControl_.displayTitleState(kHelloWorldStandaloneTitle));
+      composition << WindowDef(
+          this->productionWindowProps(
+                  scenario_tests::ObservedMainDefinition<helloworld::MainProps, helloworld::MainNode>(
+                      this->productionMainProps(), &this->borrowedMainNode_))
+              .title(kHelloWorldStandaloneTitle)
+              .idlePolicy(app::IdlePolicy::interval(0.1))
+              .onIdle(&HelloWorldStandaloneFlowAppConfig::OnWindowIdle, this)
+              .displayTitleState(this->runControl_.displayTitleState(kHelloWorldStandaloneTitle)));
     }
 
     void HelloWorldStandaloneFlowAppConfig::OnWindowIdle(Window *window, double elapsedSeconds, void *userData)
