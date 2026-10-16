@@ -557,16 +557,13 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   }
   firstEditField_ = 0;
   lastEditField_ = 0;
-  const int rootInset = MacSceneLayout::kRootInset;
-  int rootWidth = measureClientWidth(clientWidth) - 2 * rootInset;
-  if (rootWidth < 0)
-  {
-    rootWidth = 0;
-  }
-  const LayoutState state(rootInset,
-                          rootInset,
-                          rootWidth,
-                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
+  // Deliberate twin of Win32's performLayout: rail lookup, shared margin and inset rules.
+  const Window *window = MacWindow::fromRootView(this->rootView());
+  const int margin = resolveWindowContentMargin(window, MacSceneLayout::spacing());
+  const LayoutState state(margin,
+                          margin,
+                          loka::app::layout::insetExtent(measureClientWidth(clientWidth), margin, margin),
+                          loka::app::layout::insetExtent(clientHeight, margin, margin),
                           MacSceneLayout::spacing().verticalGap());
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
