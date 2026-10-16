@@ -20,6 +20,7 @@ class SelectionTest(unittest.TestCase):
             cards.mkdir(parents=True)
             manifest = cards / "disk-scripts.txt"
             shutil.copy2(ROOT / "example/SmirkyCard/disk-scripts.txt", manifest)
+            shutil.copy2(ROOT / "example/SmirkyCard/disk-pictures.txt", cards)
             shutil.copy2(ROOT / "scripts/mame-dev-disk-app.sh", scripts)
             for name in ("retro68-cmake.sh", "mame-dev-disk.sh", "toolbox-standalone-flow.sh"):
                 path = scripts / name
@@ -48,10 +49,12 @@ class SelectionTest(unittest.TestCase):
                     self.assertIn("build/retro68/" + cpu + "/" + location + "/" + target + ".bin", calls)
                     self.assertIn("mame-dev-disk.sh|" + cpu + "|", calls)
                     if key == "SmirkyCard":
+                        for stem in ("MACPORT", "PB100", "PB180C", "PB550C", "PB5300C"):
+                            self.assertIn(str(cards / "assets" / (stem + ".PICT")), calls)
                         with self.subTest(cpu=cpu, manifest="original"):
                             self.assertIn(str(root / "example/SmirkyCard/MAIN.JS") + " " +
                                           str(root / "example/SmirkyCard/MINES.JS") + " " +
-                                          str(root / "example/SmirkyCard/VIEWER.JS") + "\n", calls)
+                                          str(root / "example/SmirkyCard/VIEWER.JS") + " ", calls)
                     elif key == "ScrapbookUI":
                         self.assertIn(str(root / ("build/retro68/" + cpu +
                                                  "/Release/example/ScrapbookUI/ASSETS.LRP")) + "\n", calls)
@@ -63,7 +66,7 @@ class SelectionTest(unittest.TestCase):
                 calls = Path(env["CALL_LOG"]).read_text()
                 with self.subTest(cpu=cpu, manifest="fourth card"):
                     self.assertIn(" ".join(str(cards / name) for name in
-                                           ("MAIN.JS", "MINES.JS", "VIEWER.JS", "FOURTH.JS")) + "\n", calls)
+                                           ("MAIN.JS", "MINES.JS", "VIEWER.JS", "FOURTH.JS")) + " ", calls)
                 manifest.write_bytes(original_manifest)
                 for key, flag in (("All", "--all"), ("AllStandaloneLoops", "--all-loops"),
                                   ("AllStandaloneFlows", "--all-flows")):

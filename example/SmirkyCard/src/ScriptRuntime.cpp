@@ -487,6 +487,32 @@ namespace smirkycard
     this->loadBuiltin(BuiltinMainJs(), ignored);
   }
 
+  bool ScriptRuntime::IsPictureName(const std::string &stem)
+  {
+    if (stem.empty() || stem.size() > 26)
+      return false;
+    for (std::size_t i = 0; i < stem.size(); ++i)
+    {
+      const char c = stem[i];
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'))
+        return false;
+    }
+    return true;
+  }
+
+  loka::core::String ScriptRuntime::PictureFileName(const std::string &stem)
+  {
+    // Toolbox decodes PICT bytes; Win32 (WIC) and macOS (NSImage) take PNG.
+    // The repository ships twins so JS never sees the suffix. Keep this rail
+    // selection parallel with readFile's byte source immediately below.
+#if defined(LOKA_RETRO68)
+    const char *suffix = ".PICT";
+#else
+    const char *suffix = ".PNG";
+#endif
+    return loka::core::String::Utf8(stem.data(), stem.size()) + loka::core::String::Literal(suffix);
+  }
+
   ScriptRuntime::FileReadResult
   ScriptRuntime::readFile(const std::string &name, std::string &text, loka::core::String &error) const
   {

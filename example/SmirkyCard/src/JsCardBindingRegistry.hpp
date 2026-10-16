@@ -26,6 +26,9 @@ namespace smirkycard
   /** Read a separate block dictionary; leave out unchanged and throw on refusal. */
   bool readBlockStyle(JSContext *context, JSValueConst dict, loka::app::BlockStyle &out);
 
+  /** Require an ordinary or null-prototype dictionary, as used by style readers. */
+  bool requirePlainObject(JSContext *context, JSValueConst dict, const char *label);
+
   struct IJsNodeLowering
   {
     const char *name;

@@ -787,7 +787,8 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
         release = release.split("    exit 0", 1)[0]
         for fragment in (
             '$smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"',
-            '$smirkyCardScripts = Get-SmirkyCardScripts',
+            '$smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt")',
+            '(Get-SmirkyCardFiles "disk-pictures.txt" ".PNG")',
             'throw "SmirkyCard card script not found: $smirkyCardScript"',
             'Assert-ExecutableArchitecture $smirkyCard $Architecture',
             'New-Item -ItemType Directory -Path (Join-Path $Destination "smirkycard")',

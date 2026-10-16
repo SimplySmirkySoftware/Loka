@@ -71,6 +71,7 @@
 #include "Win32PropsReconciliationTests.hpp"
 #include "Win32ThreadModalScopeTests.hpp"
 #include "Win32NodeHandlerEnsureTests.hpp"
+#include "Win32CardPainterTests.hpp"
 #include "Win32LiveResizeTests.hpp"
 #include "Win32ScrollViewTests.hpp"
 #include "Win32InputDoorTests.hpp"

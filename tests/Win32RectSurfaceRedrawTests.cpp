@@ -1,3 +1,5 @@
+#include "context/Win32CardBandContext.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "Win32PaintGround.hpp"
@@ -1351,4 +1353,43 @@ void testWin32RibbonGroupEdgePixels()
     controller.drainNativeRetirements();
     LOKA_VERIFY(!IsWindow(child));
   }
+}
+
+void testWin32CardBandTransparentRepaintAndEmpty()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  CardBandNode band((CardBandProps()));
+  Win32CardBandContext context(&controller, root, 11, 17, 74, 3, &band);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(windowPixel(context.hwnd(), 25, 0) == RGB(0, 0, 0));
+  // Make an obsolete ink pixel inside the transparent strip. Props delivery
+  // must ask the parent to replace ground before the child draws only ink.
+  HDC dc = GetDC(context.hwnd());
+  LOKA_VERIFY(dc != NULL);
+  LOKA_VERIFY(SetPixelV(dc, 25, 2, RGB(255, 0, 255)));
+  ReleaseDC(context.hwnd(), dc);
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(windowPixel(context.hwnd(), 25, 2) == GetSysColor(COLOR_BTNFACE));
+  context.relayout(11, 47, 74, 3);
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(windowPixel(root, 36, 17) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(context.hwnd(), 25, 0) == RGB(0, 0, 0));
+  const HWND retained = context.hwnd();
+  context.relayout(11, 47, 0, 0);
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(context.hwnd() == retained);
+  LOKA_VERIFY(windowPixel(root, 36, 47) == GetSysColor(COLOR_BTNFACE));
+  context.relayout(11, 47, 74, 3);
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(context.hwnd() == retained);
+  LOKA_VERIFY(windowPixel(context.hwnd(), 25, 0) == RGB(0, 0, 0));
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
 }

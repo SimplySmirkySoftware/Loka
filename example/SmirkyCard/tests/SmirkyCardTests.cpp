@@ -14,6 +14,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 #include "app/OpenFileDialog.hpp"
 #include "core/util/OwnedDef.hpp"
 #include "support/LokaAllocFailure.hpp"
@@ -68,6 +69,10 @@ namespace smirkycard
         return static_cast<JsCardNode *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*scene));
       }
       static bool active() { return card()->flowAdmission_.hasExecution(); }
+      static int seatCount()
+      {
+        return card()->seats_.count();
+      }
       static loka::core::resource::Image image()
       {
         for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
@@ -2828,8 +2833,12 @@ namespace
       CardRunnerHarness h(scenarioCard, companion.c_str());
       h.mount();
       smirkycard::JsEngine *old = h.runtime.currentEngine();
+      // Two steps: the replacement scenario is invoked after the clock has
+      // advanced, and its steps must still be due one per tick from that
+      // invocation, not from tick 1 (an absolute schedule would be due at once).
       writeMain("_smirky_scenario/CARD.FLOW.JS",
-                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');}));});");
+                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');})"
+                ".step(function(){c.test.log('new second');}));});");
       h.tick();
       LOKA_VERIFY(h.runtime.currentEngine() != old && h.runtime.retiredEngineCount() == 1);
       JS_RunGC(old->jsRuntime());
@@ -2837,8 +2846,10 @@ namespace
       h.admission->flush();
       LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_CANCELED);
       h.tick();
+      LOKA_VERIFY(h.terminalCount == 1 && h.logs.size() == 1 && h.logs[0] == "new engine");
+      h.tick();
       LOKA_VERIFY(h.terminalCount == 2 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
-      LOKA_VERIFY(h.logs.size() == 1 && h.logs[0] == "new engine");
+      LOKA_VERIFY(h.logs.size() == 2 && h.logs[1] == "new second");
       h.admission->flush();
       LOKA_VERIFY(h.runtime.retiredEngineCount() == 0);
     }
@@ -3511,6 +3522,110 @@ namespace
     mutable int opens, decodes, capacityCalls, releases;
   };
 
+  // Null has no image decoder. This fixture pins file bytes and ownership using
+  // the same three-byte decoder-double shape as HandlePlatform and VIEWER.
+  class NamedPicturePlatform : public HandlePlatform
+  {
+  public:
+    NamedPicturePlatform()
+        : HandlePlatform(Success)
+    {
+    }
+    virtual bool openFile(const loka::file::File &file, loka::platform::file::FileHandle &out) const
+    {
+      ++this->opens;
+      LOKA_VERIFY(file.base() == loka::file::File::BASE_APPLICATION);
+      out.displayPath = loka::core::String::Literal("_named_pictures/") + file.relativePath();
+      return true;
+    }
+    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,
+                                     std::size_t offset,
+                                     std::size_t length,
+                                     loka::core::resource::Image &out)
+    {
+      if (length != 3 || std::memcmp(blob.data(), "img", 3))
+        return false;
+      return HandlePlatform::createImageFromBlob(blob, offset, length, out);
+    }
+  };
+
+  void checkNamedPictures()
+  {
+    LOKA_VERIFY(makeDirectory("_named_pictures"));
+    writeMain("_named_pictures/PB100.PNG", "img");
+    writeMain("_named_pictures/CLASSIC.PICT", "img");
+    writeMain("_named_pictures/BROKEN.PNG", "garbage");
+    NamedPicturePlatform context;
+    {
+      CardRunnerHarness h("let facts, budget=false; card('first',class {constructor(c){"
+                          "this.picture=c.state.image('PB100');this.empty=c.state.image();"
+                          "for(let i=0;i<126;i++)c.state.image();"
+                          "try{c.state.image('PB100')}catch(e){budget=e instanceof RangeError}"
+                          "facts=()=>[c.test.imageFacts(this.picture),c.test.imageFacts(this.empty),budget];}"
+                          "compose(){return ImageView(this.picture).TEST_ID('Named.Picture')}});",
+                          "scenario('first',c=>c.run(Flow().step(()=>{let f=facts();"
+                          "if(f[0].empty||f[0].width!==2||f[0].height!==3||!f[1].empty||"
+                          "f[1].width!==0||f[1].height!==0||!f[2])throw Error('facts')})))",
+                          7,
+                          true,
+                          &context);
+      h.mount();
+      loka::app::scene::Node *picture = windowNode(*h.window, "Named.Picture");
+      LOKA_VERIFY(picture && picture->asImageViewNode());
+      h.ticks(10);
+      LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+      LOKA_VERIFY(context.opens == 1 && context.decodes == 1);
+    }
+    LOKA_VERIFY(context.releases == 1);
+    const char *arguments[] = {"'NOPE'",
+                               "'a/b'",
+                               "'a:b'",
+                               "'..'",
+                               "'PB100.PNG'",
+                               "'abcdefghijklmnopqrstuvwxyzA'",
+                               "''",
+                               "5",
+                               "'BROKEN'",
+                               "'CLASSIC'",
+                               "'a\\\\b'",
+                               "'a\\0b'",
+                               "'PB100','extra'"};
+    const char *messages[] = {"NOPE",
+                              "a/b",
+                              "a:b",
+                              "..",
+                              "PB100.PNG",
+                              "abcdefghijklmnopqrstuvwxyzA",
+                              "invalid picture name",
+                              "optional picture name",
+                              "BROKEN: image decode failure",
+                              "CLASSIC",
+                              "invalid picture name",
+                              "invalid picture name",
+                              "optional picture name"};
+    for (std::size_t i = 0; i < sizeof(arguments) / sizeof(arguments[0]); ++i)
+    {
+      const std::string source = std::string("card('first',class {constructor(c){c.state.image(") + arguments[i]
+                                 + ");}compose(){return Text('unexpected').TEST_ID('Unexpected')}});";
+      CardRunnerHarness h(source.c_str(), "scenario('first',c=>{})", 7, true, &context);
+      h.mount();
+      loka::app::scene::Node *status = windowNode(*h.window, "SmirkyCard.Status");
+      LOKA_VERIFY(status && textValue(status->asTextNode()).find(messages[i]) != std::string::npos);
+      LOKA_VERIFY(textValue(status->asTextNode()).find("TypeError") != std::string::npos);
+      LOKA_VERIFY(!windowNode(*h.window, "Unexpected"));
+      smirkycard::testing::CardFlowAccess::scene = h.window->scene();
+      LOKA_VERIFY(!smirkycard::testing::CardFlowAccess::imageState());
+      LOKA_VERIFY(smirkycard::testing::CardFlowAccess::seatCount() == 0);
+    }
+    checkComposeRefusal("card('first',class {constructor(c){c.state.image('PB100')}"
+                        "compose(){return Text('bad')}});",
+                        "PB100: missing PlatformContext");
+    LOKA_VERIFY(std::remove("_named_pictures/PB100.PNG") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/CLASSIC.PICT") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/BROKEN.PNG") == 0);
+    removeDirectory("_named_pictures");
+  }
+
   class ViewerPlatform : public HandlePlatform
   {
   public:
@@ -3784,6 +3899,209 @@ namespace
     LOKA_VERIFY(std::remove("_handle_image.bin") == 0);
   }
 
+  void checkScrollViewportPersistence()
+  {
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>{const visible=c.state(true);return {compose(){"
+                                    "const rows=()=>VStack(VStack(Array.from({length:10},()=>Text('row'))),"
+                                    "VStack(Array.from({length:10},()=>Text('row'))));return VStack("
+                                    "ScrollView(rows()).TEST_ID('Browse'),ScrollView(rows()).TEST_ID('Detail'),"
+                                    "ScrollView(Show(visible,Text('shown').TEST_ID('Shown'))).TEST_ID('Branch'))}}});",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    smirkycard::testing::CardFlowAccess::scene = window.scene();
+    loka::app::scene::Node *browseNode = windowNode(window, "Browse");
+    loka::app::scene::Node *detailNode = windowNode(window, "Detail");
+    LOKA_VERIFY(browseNode && browseNode->asScrollViewNode());
+    LOKA_VERIFY(detailNode && detailNode->asScrollViewNode());
+    loka::app::ScrollViewNode *browse = browseNode->asScrollViewNode();
+    loka::app::ScrollViewNode *detail = detailNode->asScrollViewNode();
+    LOKA_VERIFY(browse->props.viewport_.isValid() && detail->props.viewport_.isValid());
+    LOKA_VERIFY(browse->props.viewport_.state() != detail->props.viewport_.state());
+    LOKA_VERIFY(browse->requestedOrigin().y == 0 && detail->requestedOrigin().y == 0);
+    LOKA_VERIFY(windowNode(window, "Shown"));
+    {
+      loka::core::StateTrackerGuard transaction(smirkycard::testing::CardFlowAccess::card()->tracker());
+      browse->publishOrigin(0, 40);
+    }
+    LOKA_VERIFY(browse->requestedOrigin().y == 40 && detail->requestedOrigin().y == 0);
+    settleLowering(window);
+    LOKA_VERIFY(browse->requestedOrigin().y == 40);
+    {
+      loka::core::StateTrackerGuard transaction(smirkycard::testing::CardFlowAccess::card()->tracker());
+      detail->publishOrigin(0, 80);
+    }
+    settleLowering(window);
+    LOKA_VERIFY(browse->requestedOrigin().y == 40 && detail->requestedOrigin().y == 80);
+  }
+
+  void checkLaptopLowerings()
+  {
+    std::fputs("[pin] LaptopTracker ScrollView, Card, ImageView options and depth\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("var pic;card('first',c=>{pic=c.state.image();return {compose(){return VStack("
+                                    "ScrollView(VStack(Text('a'),Text('b'))).TEST_ID('Scroll'),"
+                                    "Card(Text('x')).TEST_ID('Card'),"
+                                    "ImageView(pic,{width:120,height:80,fit:'contain'}).TEST_ID('Contain'),"
+                                    "ImageView(pic,{fit:'cover'}).TEST_ID('Cover'),"
+                                    "ImageView(pic,{fit:'stretch'}).TEST_ID('Stretch'),"
+                                    "ImageView(pic).TEST_ID('Plain'),ImageView(pic,{}).TEST_ID('Empty'),"
+                                    "ImageView(pic,{width:1,height:4096}).TEST_ID('Size'))}}});",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *scroll = windowNode(window, "Scroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.isValid());
+    LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().x == 0);
+    LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().y == 0);
+    loka::app::scene::Node *column = scroll->asNestable()->childrenHead();
+    LOKA_VERIFY(column && column->asNestable() && !column->nextInComposition);
+    LOKA_VERIFY(column->asStackNode() && column->asStackNode()->props.axis_ == loka::app::STACK_AXIS_COLUMN);
+    loka::app::scene::Node *text = column->asNestable()->childrenHead();
+    LOKA_VERIFY(text && text->asTextNode() && text->nextInComposition);
+    LOKA_VERIFY(text->nextInComposition->asTextNode() && !text->nextInComposition->nextInComposition);
+    LOKA_VERIFY(text->asTextNode()->props.text_->get().compare(loka::core::String::Literal("a")) == 0);
+    LOKA_VERIFY(text->nextInComposition->asTextNode()->props.text_->get().compare(loka::core::String::Literal("b"))
+                == 0);
+    loka::app::scene::Node *card = windowNode(window, "Card");
+    LOKA_VERIFY(card && card->kind() == loka::app::scene::NODE_KIND_CARD);
+    column = card->asNestable()->childrenHead();
+    LOKA_VERIFY(column && column->asNestable());
+    text = column->asNestable()->childrenHead();
+    LOKA_VERIFY(text && text->asTextNode() && !text->nextInComposition);
+    LOKA_VERIFY(text->asTextNode()->props.text_->get().compare(loka::core::String::Literal("x")) == 0);
+    const char *ids[] = {"Contain", "Cover", "Stretch", "Plain", "Empty", "Size"};
+    for (unsigned i = 0; i < 6; ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node && node->asImageViewNode());
+      const loka::app::ImageViewProps &actual = node->asImageViewNode()->props;
+      loka::app::ImageViewProps expected;
+      expected.image(actual.image_);
+      LOKA_VERIFY(actual.image_);
+      if (i == 0)
+        expected.size(120, 80);
+      if (i == 5)
+        expected.size(1, 4096);
+      if (i < 3)
+        expected.attr(loka::app::ImageViewAttr().fit(static_cast<loka::app::ImageFit>(i + 1)));
+      LOKA_VERIFY(!(actual < expected) && !(expected < actual));
+    }
+    const char *badBuilds[] = {"ScrollView()",
+                               "ScrollView(Text('a'),Text('b'))",
+                               "ScrollView(42)",
+                               "ScrollView([])",
+                               "ScrollView({})",
+                               "Card()",
+                               "Card([])",
+                               "Card(Text('a'),Text('b'))",
+                               "Card({})",
+                               "ImageView(pic,5)",
+                               "ImageView(pic,{width:10})",
+                               "ImageView(pic,{height:10})",
+                               "ImageView(pic,{width:10,height:10,fit:'tile'})",
+                               "ImageView(pic,{width:0,height:10})",
+                               "ImageView(pic,{width:10,height:10,bogus:1})",
+                               "ImageView(pic,{width:1.5,height:10})",
+                               "ImageView(pic,{width:10,height:4097})",
+                               "ImageView(pic,{width:'10',height:10})",
+                               "ImageView(pic,{width:NaN,height:10})",
+                               "ImageView(pic,{width:10,height:Infinity})",
+                               "ImageView(pic,{fit:1})",
+                               "ImageView(pic,[])",
+                               "ImageView(pic,null)",
+                               "ImageView(pic,Object.create({width:10}))",
+                               "ImageView(pic,{[Symbol()]:1})",
+                               "ImageView(pic,{fit:'contain\\0'})",
+                               "ImageView(pic,{width:undefined,height:10})"};
+    for (unsigned i = 0; i < sizeof(badBuilds) / sizeof(badBuilds[0]); ++i)
+    {
+      const std::string expression =
+          std::string("(()=>{try{") + badBuilds[i] + ";return false}catch(e){return e instanceof TypeError}})()";
+      expectJs(runtime, expression.c_str(), "true");
+    }
+    expectJs(runtime,
+             "[ScrollView(Text('x')),Card(Text('x')),ImageView(pic,{fit:'cover'})]"
+             ".every(Object.isFrozen)",
+             "true");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{child:42})}}));",
+                        "JavaScript ScrollView has an invalid child.");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Card(Text('x')),{child:[]})}}));",
+                        "JavaScript Card has an invalid child.");
+    checkComposeRefusal("card('first',c=>{const pic=c.state.image();return {compose(){return "
+                        "Object.assign({},ImageView(pic),{width:10})}}});",
+                        "invalid options");
+    checkComposeRefusal("card('first',c=>{const tree=ImageView(c.state.image(),{width:10});"
+                        "return {compose(){return tree}}});",
+                        "provided together");
+    expectJs(runtime,
+             "(()=>{const options={width:120,height:80,fit:'contain'};"
+             "const tree=ImageView(pic,options);options.width=7;options.fit='cover';"
+             "return tree.width===120&&tree.height===80&&tree.fit===1})()",
+             "true");
+    expectJs(runtime, "Object.isFrozen(ImageView(pic,Object.assign(Object.create(null),{fit:'cover'})))", "true");
+    checkComposeRefusal("card('first',c=>({compose(){return ScrollView(ScrollView(Text('x')))}}));",
+                        "cannot contain another ScrollView");
+    checkComposeRefusal("card('first',c=>{const s=c.state(true);return {compose(){return ScrollView(VStack(Text('a'),"
+                        "Card(Show(s,ScrollView(Text('x'))))))}}});",
+                        "cannot contain another ScrollView");
+    // A ScrollView may not nest, so its depth chain is one ScrollView over Cards.
+    const char *wrappers[] = {"ScrollView", "Card"};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      std::string tree = "Text('deep').TEST_ID('Deep')";
+      for (int depth = 0; depth < 8; ++depth)
+        tree = std::string(depth == 7 ? wrappers[i] : "Card") + "(" + tree + ")";
+      smirkycard::ScriptRuntime deepRuntime;
+      const std::string source = "card('first',c=>({compose(){return " + tree + "}}));";
+      LOKA_VERIFY(deepRuntime.loadBuiltin(source.c_str(), error));
+      WindowProps deepProps;
+      deepProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, deepRuntime));
+      NullWindow deepWindow(&context, deepProps, &platform);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
+      LOKA_VERIFY(windowNode(deepWindow, "Deep"));
+      const std::string refused = "card('first',c=>({compose(){return Card(" + tree + ")}}));";
+      checkComposeRefusal(refused.c_str(), "exceeds depth 8");
+    }
+  }
+
+  void checkLaptopScenario()
+  {
+    std::fputs("[pin] LAPTOP.JS scenario under the Null harness\n", stderr);
+    LOKA_VERIFY(makeDirectory("_named_pictures"));
+    const char *stems[] = {"MACPORT", "PB100", "PB180C", "PB550C", "PB5300C"};
+    for (unsigned i = 0; i < 5; ++i)
+      writeMain((std::string("_named_pictures/") + stems[i] + ".PNG").c_str(), "img");
+    NamedPicturePlatform context;
+    const std::string source = readCardSource("LAPTOP.JS");
+    const std::string companion =
+        "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n" + readCardSource("LAPTOP.FLOW.JS");
+    CardRunnerHarness h(source.c_str(), companion.c_str(), 7, true, &context);
+    h.mount();
+    h.ticks(40);
+    for (size_t i = 0; i < h.steps.size(); ++i)
+      if (h.steps[i].status() != loka::dsl::FLOW_STEP_SUCCEEDED)
+        std::fprintf(stderr, "  step %s: %s\n", h.steps[i].name().c_str(), h.steps[i].message().c_str());
+    LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+    for (unsigned i = 0; i < 5; ++i)
+      LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
+    removeDirectory("_named_pictures");
+  }
+
   void checkLoweringRefusals()
   {
     const char *trees[] = {"Show(c.state(1),Text('x'))", "Show({},Text('x'))",
@@ -3798,8 +4116,13 @@ namespace
       source += ";return {compose(){return tree}}});";
       checkComposeRefusal(source.c_str(), messages[i]);
     }
-    const char *badBuilds[] = {"Show()", "Show({},[])", "Show({},Text('x'),Text('y'))",
-      "OpenFileDialog()", "OpenFileDialog({}, {})", "ImageView()", "ImageView({}, {})"};
+    const char *badBuilds[] = {"Show()",
+                               "Show({},[])",
+                               "Show({},Text('x'),Text('y'))",
+                               "OpenFileDialog()",
+                               "OpenFileDialog({}, {})",
+                               "ImageView()",
+                               "ImageView({}, 5)"};
     smirkycard::ScriptRuntime runtime;
     for (unsigned i = 0; i < sizeof(badBuilds) / sizeof(badBuilds[0]); ++i)
     {
@@ -3968,6 +4291,11 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--named-pictures"))
+  {
+    checkNamedPictures();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--viewer-scenario"))
   {
     checkChosenFileDelivery();
@@ -3980,6 +4308,8 @@ int main(int argc, char **argv)
   }
   if (argc == 2 && !std::strcmp(argv[1], "--lowerings"))
   {
+    checkScrollViewportPersistence();
+    checkLaptopLowerings();
     checkMinimumLowerings();
     checkLoweringRefusals();
     return 0;
@@ -4005,6 +4335,11 @@ int main(int argc, char **argv)
     checkProductionFlow();
     checkProductionFlowEdges();
     checkScenarioOff();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--laptop-scenario"))
+  {
+    checkLaptopScenario();
     return 0;
   }
   if (argc == 2 && !std::strcmp(argv[1], "--mines-scenario"))
@@ -4107,6 +4442,8 @@ int main(int argc, char **argv)
     return 0;
   }
   checkExecutionSerial();
+  checkScrollViewportPersistence();
+  checkLaptopLowerings();
   checkMinimumLowerings();
   checkLoweringRefusals();
   checkTypedSeats();
@@ -4123,8 +4460,10 @@ int main(int argc, char **argv)
   checkChosenFileLookupNavigation();
   checkImageFacts();
   checkImageFactsLookupNavigation();
+  checkNamedPictures();
   checkViewerScenario();
   checkMinesScenario();
+  checkLaptopScenario();
   checkStandaloneScenario();
   checkCarry();
   checkMaterializedGetters();

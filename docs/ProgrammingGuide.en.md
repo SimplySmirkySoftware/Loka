@@ -1083,6 +1083,39 @@ while detached configure the next presentation.
 
 The design goal is that memory and lifecycle are visible from the DSL structure.
 
+### `ScrollView()`
+
+`ScrollView(viewport) << content` scrolls one subtree. The app owns one
+`NodeState<Frame>` and lends it to the view; the rail writes the clamped scroll
+origin into it. `x` and `y` are the **content** point shown at the seat's
+top-left corner, not the seat rect; `width` and `height` are not reported yet.
+Initialise it with `Frame(0, 0, 0, 0)`.
+
+```cpp
+this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
+c.declare(ScrollView(this->viewport_) << this->imageView(IMAGE_VIEW_SIZE_INTRINSIC));
+```
+
+The state is the rail's result channel: the rail writes the clamped origin, and
+a value already in range is left alone (a same-value write publishes nothing).
+The initial value is the only origin the app chooses; a negative one reads as 0.
+
+The vertical range is the content height. The horizontal range exists only when
+content overflows the width it is offered: a declared width (including a
+fixed-size `Box`), an intrinsic image or a natural row (text inside a natural
+row counts through the row). Text, buttons and offer-bound boxes placed
+directly in the column are laid out at the offered width and never scroll
+sideways.
+When the width cannot be known, the view does not scroll sideways at all.
+
+The vertical bar is always present; the horizontal bar appears only while there
+is a horizontal range. The user's bar and wheel input publishes into the same
+`Frame`. `ScrollView` does not consume application scroll intent yet
+(`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
+and writing the fact state yourself makes the app a second writer of a rail
+result channel (a recorded debt in SimpleViewer, not a pattern). The rails'
+ranges, bars and commit rules are in [ScrollViewDesign.md](ScrollViewDesign.md).
+
 ### `LazyView()` / `LazyColumn()` / `LazyRow()`
 
 A typed per-item node recipe and positive maximum window are required, including
@@ -1109,8 +1142,9 @@ c.declare(LazyColumn(cards, reservation::SeatNodes<CardNodes>(), 12)
 ```
 
 `LazyRow(cards, reservation::SeatNodes<CardNodes>(), 12)` selects horizontal progression.
-Horizontal viewport movement selects the window but leaves residents in absolute
-content coordinates; horizontal scrolling is pending a ScrollView X offset.
+Horizontal viewport movement selects the window and leaves residents in absolute
+content coordinates; a ScrollView above it translates both axes (#580), so a
+horizontal window follows the viewport's `x`.
 `.wrap(count)` groups cells
 across the other axis. The explicit form is
 `LazyView<CardProps>(cards, layout::FixedGrid(200, 20), reservation::SeatNodes<CardNodes>(), 12)`. The helpers also

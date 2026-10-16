@@ -24,12 +24,18 @@ cp "${REPO_DIR}/scripts/macos/standalone-release-stage.sh" \
   "${FAKE_REPO}/scripts/macos/"
 mkdir -p "${FAKE_REPO}/example/SmirkyCard"
 cp "${REPO_DIR}/example/SmirkyCard/disk-scripts.txt" "${FAKE_REPO}/example/SmirkyCard/"
+cp "${REPO_DIR}/example/SmirkyCard/disk-pictures.txt" "${FAKE_REPO}/example/SmirkyCard/"
 smirkycard_scripts() {
   local script
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
     printf '%s\n' "${script}"
   done < "${FAKE_REPO}/example/SmirkyCard/disk-scripts.txt"
+  # Deliberate twin of the script grammar above.
+  while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
+    case "${script}" in ''|\#*) continue ;; esac
+    printf '%s\n' "${script}.PNG"
+  done < "${FAKE_REPO}/example/SmirkyCard/disk-pictures.txt"
 }
 
 BUILD_LOG="${TEST_ROOT}/build.log"

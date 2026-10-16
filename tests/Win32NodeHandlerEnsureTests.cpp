@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include "support/LifecycleFactTestAccess.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
+#include "context/Win32CardBandContext.hpp"
 #include "support/TextEditorStateOwner.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "Win32NodeHandlerEnsureTests.hpp"
@@ -334,15 +335,18 @@ void testWin32NodeHandlerEnsureContract()
     LOKA_VERIFY(editorContext && IsWindowUnicode(editorContext->hwnd()));
     LOKA_VERIFY(controller.prepareProjectedLayout(&editor, state));
     LOKA_VERIFY(editor.getContext() == editorContext);
-    // Card bands are an explicit refusal in both debug and release builds.
+    // Card bands now install real retained painters in debug and release builds.
     const int beforeBands = countChildWindows(root);
     for (int role = 0; role < loka::app::CARD_BAND_COUNT; ++role)
     {
       loka::app::CardBandNode band(loka::app::CardBandProps(static_cast<loka::app::CardBandRole>(role)));
-      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
-      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
-      LOKA_VERIFY(band.getContext() == 0);
+      LOKA_VERIFY(controller.prepareProjectedLayout(&band, state));
+      loka::app::scene::NodeContext *acceptedBand = band.getContext();
+      LOKA_VERIFY(controller.prepareProjectedLayout(&band, state));
+      LOKA_VERIFY(band.getContext() == acceptedBand && acceptedBand != 0);
+      LOKA_VERIFY(IsWindowUnicode(static_cast<Win32CardBandContext *>(acceptedBand)->hwnd()));
     }
+    controller.drainNativeRetirements();
     LOKA_VERIFY(countChildWindows(root) == beforeBands);
     // -- ScrollBar: Win32 has no native context for it; the registered
     // refusal stub must answer (false, no context) without tripping the
@@ -2365,6 +2369,9 @@ namespace
       case 7:
         node = new RibbonGroupEdgeNode(RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT));
         break;
+      case 9:
+        node = new CardBandNode(CardBandProps(CARD_BAND_LEFT));
+        break;
       case 8:
         node = new AttributedTextNode(AttributedTextProps(Styled("Styled", Bold)));
         break;
@@ -2469,6 +2476,123 @@ void testWin32RibbonGroupEdgeCreationRefusalAndRetry()
 void testWin32AttributedTextCreationRefusalAndRetry()
 {
   verifyResidentCreationRefusalAndRetry(8);
+}
+
+void testWin32CardBandCreationRefusalAndRetry()
+{
+  verifyResidentCreationRefusalAndRetry(9);
+}
+
+void testWin32CardBandsLifecycleAndRepaint()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
+  HWND rootWindow = attributedHost();
+  {
+    Win32ScenePlatformController controller(rootWindow, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    CardNode card((CardProps()));
+    card.addChild(new StackNode(StackProps(STACK_AXIS_COLUMN)));
+    CardBandNode *bands[CARD_BAND_COUNT];
+    HWND windows[CARD_BAND_COUNT];
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      bands[role] = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role)));
+      card.addChild(bands[role]);
+    }
+    NotifySubtreeNodeAttached(&card);
+    controller.onChange(&card, NODE_DIRTY_NONE, false);
+    controller.relayout(200, 100);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      Win32CardBandContext *context = static_cast<Win32CardBandContext *>(bands[role]->getContext());
+      LOKA_VERIFY(context != 0);
+      windows[role] = context->hwnd();
+      LOKA_VERIFY(IsWindowUnicode(windows[role]));
+      Access::flushPendingInvalidations(controller);
+      context->onPropsApplied();
+      Access::PendingInvalidationSnapshot pending;
+      LOKA_VERIFY(Access::queryPendingInvalidation(controller, 0, pending));
+      LOKA_VERIFY(pending.hwnd == rootWindow && pending.includeChildren && !pending.eraseBackground);
+      Access::flushPendingInvalidations(controller);
+      context->relayout(11, 17, 40, 3);
+      LOKA_VERIFY(Access::queryPendingInvalidation(controller, 0, pending));
+      LOKA_VERIFY(pending.hwnd == rootWindow && pending.includeChildren);
+    }
+    // Ribbon parity: empty bands keep their existing zero-sized HWNDs.
+    controller.relayout(1, 100);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      RECT client;
+      LOKA_VERIFY(GetClientRect(windows[role], &client) && IsRectEmpty(&client));
+      LOKA_VERIFY(static_cast<Win32CardBandContext *>(bands[role]->getContext())->hwnd() == windows[role]);
+    }
+    controller.relayout(200, 100);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      RECT client;
+      LOKA_VERIFY(GetClientRect(windows[role], &client) && !IsRectEmpty(&client));
+    }
+    NotifySubtreeNodeDetached(&card);
+    LifecycleFactTestAccess::DeliverFacts(&card);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      LOKA_VERIFY((GetWindowLongPtrW(windows[role], GWL_STYLE) & WS_VISIBLE) == 0);
+    NotifySubtreeNodeAttached(&card);
+    LifecycleFactTestAccess::DeliverFacts(&card);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      LOKA_VERIFY((GetWindowLongPtrW(windows[role], GWL_STYLE) & WS_VISIBLE) != 0);
+    LifecycleFactTestAccess::MarkSubtreeRetired(&card);
+    controller.releaseNodeContexts(&card);
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      LOKA_VERIFY(bands[role]->getContext() == 0 && IsWindow(windows[role]));
+      LOKA_VERIFY(GetWindowLongPtrW(windows[role], GWLP_USERDATA) == 0);
+    }
+    controller.drainNativeRetirements();
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      LOKA_VERIFY(!IsWindow(windows[role]));
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(rootWindow));
+}
+
+void testWin32CardBandPaintOnlyClassification()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace PropsReconciliationSupport;
+  typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
+  HWND rootWindow = attributedHost();
+  {
+    Win32ScenePlatformController controller(rootWindow, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    Card declaration;
+    Scene scene((Boundary<Tree<Card> >(Props<Card>(&declaration))));
+    scene.mount(&controller);
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    settle(scene);
+    BoundaryNode *boundary = root(scene);
+    controller.onChange(boundary, NODE_DIRTY_NONE, false);
+    controller.relayout(200, 100);
+    Node *card = boundary->childrenHead();
+    Node *band = card->asNestable()->childrenHead()->nextInComposition;
+    LOKA_VERIFY(band && band->kind() == NODE_KIND_CARD_BAND && band->getContext());
+    BoundaryLocalApplyInfo info;
+    info.paintKind = LOCAL_APPLY_PAINT_GENERIC;
+    PlatformApplyPlan plan;
+    plan.paintKind = PlatformApplyPlan::PAINT_LOCAL;
+    plan.setPrimaryRoot(boundary);
+    Access::resetRedrawStats(controller);
+    controller.onBoundaryApply(boundary, boundary, info, plan);
+    LOKA_VERIFY(Access::onBoundaryApplyCalls(controller) == 1);
+    LOKA_VERIFY(Access::queuedPaintInvalidates(controller) == 0);
+    // A missing native resident MUST refuse, not disappear as a container.
+    // This second apply discriminates the #1360 skipped-container survivor.
+    band->getContext()->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    controller.onBoundaryApply(boundary, boundary, info, plan);
+    LOKA_VERIFY(Access::queuedPaintInvalidates(controller) == 1);
+  }
+  LOKA_VERIFY(DestroyWindow(rootWindow));
 }
 
 namespace

@@ -120,50 +120,6 @@ namespace
     CardPenScope &operator=(const CardPenScope &);
   };
 
-  /** Three real edges and one virtual opposite edge. The minimum body is 2r;
-      the opposite arc cannot reach this band's inset-wide sample. All virtual
-      edges stay inside the real body, including near the short-coordinate limit.
-      Cost: one call per visible band draw, constant work, no tree/ledger walk. */
-  Rect CardBodyInBand(const Rect &band, const loka::app::CardBandProps &props)
-  {
-    using namespace loka::app;
-    const CardStyle &style = props.style;
-    const int b = style.kBorderBand;
-    const int diameter = 2 * style.kCornerRadius;
-    Rect body = band;
-    switch (props.role)
-    {
-    case CARD_BAND_TOP:
-      body.left += style.kShadowLeft;
-      body.top += style.kShadowTop;
-      body.right += b;
-      body.bottom = body.top + diameter;
-      break;
-    case CARD_BAND_RIGHT:
-      body.top += style.kShadowTop;
-      body.right -= style.kShadowRight;
-      body.bottom += b;
-      body.left = body.right - diameter;
-      break;
-    case CARD_BAND_BOTTOM:
-      body.left -= b;
-      body.right -= style.kShadowRight;
-      body.bottom -= style.kShadowBottom;
-      body.top = body.bottom - diameter;
-      break;
-    case CARD_BAND_LEFT:
-      body.left += style.kShadowLeft;
-      body.top -= b;
-      body.bottom -= style.kShadowBottom;
-      body.right = body.left + diameter;
-      break;
-    case CARD_BAND_COUNT:
-      assert(false && "CardBand requires a role");
-      SetRect(&body, 0, 0, 0, 0);
-      break;
-    }
-    return body;
-  }
 } // namespace
 
 void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
@@ -178,7 +134,13 @@ void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
     return;
   CardPenScope pen;
   loka::toolbox::ToolboxTextInkScope ink(blackColor);
-  Rect body = CardBodyInBand(this->rect_, this->node_->props);
+  const loka::core::Frame recovered = loka::app::CardBodyInBand(loka::core::Frame(this->rect_.left,
+                                                                                  this->rect_.top,
+                                                                                  this->rect_.right - this->rect_.left,
+                                                                                  this->rect_.bottom - this->rect_.top),
+                                                                this->node_->props);
+  Rect body;
+  SetRect(&body, recovered.x, recovered.y, recovered.x + recovered.width, recovered.y + recovered.height);
   const short oval = 2 * this->node_->props.style.kCornerRadius;
   OpenRgn();
   FrameRoundRect(&body, oval, oval);

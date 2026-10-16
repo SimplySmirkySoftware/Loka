@@ -103,6 +103,12 @@ if ($MacBinaryPath -eq "--all") {
             if (!$script -or $script.StartsWith("#")) { continue }
             Join-Path $ProjectDirectory "example/SmirkyCard/$script"
         }
+        # Same grammar as the adjacent script manifest; pictures are data forks.
+        foreach ($line in Get-Content -LiteralPath (Join-Path $ProjectDirectory "example/SmirkyCard/disk-pictures.txt")) {
+            $script = $line.Trim()
+            if (!$script -or $script.StartsWith("#")) { continue }
+            Join-Path $ProjectDirectory "example/SmirkyCard/assets/$script.PICT"
+        }
     )
 }
 $resolvedMacBinaries = @(

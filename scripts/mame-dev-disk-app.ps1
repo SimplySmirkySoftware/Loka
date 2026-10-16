@@ -80,6 +80,12 @@ switch ($Key) {
                 if (!$script -or $script.StartsWith("#")) { continue }
                 "example/SmirkyCard/$script"
             }
+            # Same grammar as the adjacent script manifest; pictures are data forks.
+            foreach ($line in Get-Content -LiteralPath (Join-Path $workspace "example/SmirkyCard/disk-pictures.txt")) {
+                $script = $line.Trim()
+                if (!$script -or $script.StartsWith("#")) { continue }
+                "example/SmirkyCard/assets/$script.PICT"
+            }
         )
     }
     "MineSweeper" { $cmakeTarget = "LokaMine${suffix}_APPL"; $bin = "build/retro68/${cpu}/Release/example/MineSweeper/LokaMine${suffix}.bin" }

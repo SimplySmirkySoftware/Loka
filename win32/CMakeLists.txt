@@ -22,6 +22,8 @@ set(SOURCES
   src/Win32BitmapCapture.cpp
   src/context/Win32ButtonContext.cpp
   src/context/Win32RetirableContext.cpp
+  src/Win32CardPainter.cpp
+  src/context/Win32CardBandContext.cpp
   src/context/Win32RibbonGroupEdgeContext.cpp
   src/context/Win32CellContext.cpp
   src/context/Win32TextContext.cpp

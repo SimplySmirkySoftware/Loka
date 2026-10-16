@@ -332,6 +332,13 @@ if ! cp -f "$SCRIPT_DIR/mame-launch.lua" "$LAUNCHER"; then
 fi
 
 DEV_DISK_ARGUMENTS=("$APPL")
+if [ "$EXAMPLE" = smirkycard ]; then
+  # Same manifest grammar as scripts/mame-*-disk*: binary data forks, no ASCII check.
+  while IFS=$' \t\r' read -r stem || [ -n "$stem" ]; do
+    case "$stem" in ''|\#*) continue ;; esac
+    DEV_DISK_ARGUMENTS+=("$PROJECT_DIR/example/SmirkyCard/assets/$stem.PICT")
+  done < "$PROJECT_DIR/example/SmirkyCard/disk-pictures.txt"
+fi
 if [ "$EXAMPLE" = simpletext ] && [ "$SCENARIO" != startup ]; then
   README="$PROJECT_DIR/tests/scenarios/fixtures/simpletext/ReadMe"
   [ -f "$README" ] || fail_stage mame "SimpleText fixture not found: $README"

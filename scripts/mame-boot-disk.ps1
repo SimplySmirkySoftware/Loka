@@ -117,6 +117,15 @@ if ($All) {
             $plainData += (Resolve-Path -LiteralPath $smirkyCardScript).Path
         }
     }
+    # Same grammar as the adjacent script manifest; pictures are data forks.
+    foreach ($line in Get-Content -LiteralPath (Join-Path $ProjectDirectory "example/SmirkyCard/disk-pictures.txt")) {
+        $script = $line.Trim()
+        if (!$script -or $script.StartsWith("#")) { continue }
+        $smirkyCardScript = Join-Path $ProjectDirectory "example/SmirkyCard/assets/$script.PICT"
+        if (Test-Path -LiteralPath $smirkyCardScript) {
+            $plainData += (Resolve-Path -LiteralPath $smirkyCardScript).Path
+        }
+    }
 } elseif ($MacBinaryPath) {
     $macBinaries += (Resolve-Path -LiteralPath $MacBinaryPath).Path
     foreach ($p in $PlainDataPaths) {
