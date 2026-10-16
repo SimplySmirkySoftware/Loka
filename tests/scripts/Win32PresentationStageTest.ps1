@@ -92,6 +92,10 @@ try {
     $smirkyScripts = @([System.IO.File]::ReadAllLines(
             (Join-Path $ProjectDirectory "example/SmirkyCard/disk-scripts.txt")) |
         ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") })
+    $smirkyScripts += @([System.IO.File]::ReadAllLines(
+            (Join-Path $ProjectDirectory "example/SmirkyCard/disk-pictures.txt")) |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") } |
+        ForEach-Object { $_ + ".PNG" })
     foreach ($name in $smirkyScripts) {
         [System.IO.File]::WriteAllText((Join-Path $smirkyDirectory $name), "// $name")
     }

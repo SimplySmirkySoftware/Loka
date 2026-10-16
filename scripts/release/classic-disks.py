@@ -52,6 +52,14 @@ def payload_files(example, files):
         names.append(name)
     if not names:
         raise ValueError(f"No card scripts listed in {manifest}")
+    # Same whitespace/comment grammar as the adjacent script manifest.
+    pictures = ROOT / "example" / example / "disk-pictures.txt"
+    if not pictures.is_file():
+        raise ValueError(f"Missing input: {pictures}")
+    for line in pictures.read_text(encoding="utf-8").splitlines():
+        stem = line.strip(" \t\r")
+        if stem and not stem.startswith("#"):
+            names.append(f"assets/{stem}.PICT")
     return names
 
 

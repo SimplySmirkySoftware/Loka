@@ -27,7 +27,8 @@ scripts/mame-dev-disk-app.sh --build-and-prepare SmirkyCard
 ```
 
 It builds the app and puts it on the dev disk together with every card script
-listed in [disk-scripts.txt](disk-scripts.txt). `scripts/mame-boot-disk.sh --all`
+listed in [disk-scripts.txt](disk-scripts.txt), plus the pictures listed in
+[disk-pictures.txt](disk-pictures.txt). `scripts/mame-boot-disk.sh --all`
 reads the same list. To ship a new card file, add its name to that list.
 
 `open(name)` loads a sibling script into a fresh engine and shows its `first`
@@ -157,6 +158,17 @@ physical hardware.
 
 ## JS seats and clickables
 
+`c.state.image(name)` declares an ordinary IMAGE seat with a shipped picture
+already decoded as its initial value; `c.state.image()` remains deliberately
+empty. The name is a stem of 1..26 ASCII letters, digits, underscores or hyphens,
+without dots, separators or NUL. The host appends `.PICT` on Classic and `.PNG`
+on Win32/macOS; JS never supplies the suffix. Invalid names, missing files,
+read/decode refusals and a missing platform throw a `TypeError` naming the stem
+and reason; an uncaught error fails the constructor, without declaring the seat.
+[disk-pictures.txt](disk-pictures.txt) lists the stems staged beside the app
+(in macOS bundle Resources); both binary twins live under `assets/`.
+
+
 Declare `state(initial)` only in a card constructor. Initial values may be
 Strings, integers, or Bools; the seat keeps its type. `Text(seat)` formats
 integers and Bools, and `EditText(seat)` requires a String seat.
@@ -174,6 +186,27 @@ only one array level is flattened. The child count must equal `rows * cols`
 (up to 256); a mismatch refuses with `Grid requires exactly rows * cols
 children (N)`. Nested arrays are refused. Grid has its own child limit;
 Row/VStack remain limited to 16. See [the board example](../../docs/smirkycard/clickables.md#grids).
+
+`ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
+card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
+there is no JS viewport seat or viewport argument. `Card(child)` places exactly
+one tree in the native Card body using the default CardStyle; it has no style
+argument yet. Both refuse missing, extra, array, or non-tree children with
+TypeError and each counts one level toward the depth-eight tree limit.
+
+Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
+The modifier seats undeclared-width children at their natural width; a shared-width
+Row (the default) splits the viewport instead. Like `TEST_ID`, it returns a frozen
+modified copy, preserving the original tree; repeating it on that copy returns
+the same tree. It takes no arguments and refuses non-Row trees with TypeError.
+
+`ImageView(imageSeat)` retains the default image props. The optional second
+argument is a plain options object: `ImageView(imageSeat, {width: 120, height: 80,
+fit: 'contain'})`. Width and height must be supplied together as integers in
+1..4096; fit independently accepts `'contain'`, `'cover'`, or `'stretch'`.
+Unknown keys (including symbols), non-plain options, invalid dimensions, missing
+paired dimensions, and unknown fits throw TypeError when the tree is built.
+Validated options are copied into the frozen tree.
 
 Each card has two independent admission budgets, declared in
 [src/CardRecords.hpp](src/CardRecords.hpp): `kCardSeatBudget` (128 seats) and
@@ -273,6 +306,14 @@ validate fresh sources and provide a fresh scenario invocation. Scene admission
 and reclamation happen outside the tick; synchronous detach cancels work already
 on the stack, whose step outcome and canceled terminal are recorded on unwind.
 No JavaScript terminal callback runs after Detaching.
+
+Each JavaScript step is due on its own scenario tick (`due_tick` = step
+ordinal, starting at 1): a step's seat writes complete with the rail's entry
+operation, not with the step, so a Show branch that step k reveals exists only
+on tick k + 1. Toolbox routes those writes when the idle operation that ran the
+tick completes; Null routes them synchronously and used to pass every step on
+tick 1, which hid the dependency. Put a reveal (`click` on a Button that flips a
+Show seat) in one step and the lookups of the revealed nodes in the next.
 
 The immediate test operations are:
 
@@ -380,8 +421,33 @@ terminal status=succeeded
 ```
 
 The whole LOG.TXT for this configuration is the [expected audit](tests/VIEWER.audit)
-(runtime-verified on the maciix rig, 68K runner, 2026-10-01; two runs byte-identical).
+(runtime-verified on the maciix rig, 68K runner, 2026-10-01; re-baked 2026-10-16 when each step moved to its own tick).
 The host decoder double supplies a 256 by 256 image and checks the same records
 through the same runner and audit writer. Runner names must keep the Classic
 target name within HFS's 31-character limit; `smirkycard_add_scenario_runner`
 refuses a longer one at configure time.
+
+## LaptopTracker.JS card
+
+[LAPTOP.JS](LAPTOP.JS) is an illustrated guide to five Apple portable Macs
+(Macintosh Portable, PowerBook 100, 180c, 550c and 5300c): a toolbar, a tall
+card list, a wide horizontal ScrollView carousel, and a detail page, all in one card whose
+seats hold the selection, the page and the presentation. Its five pictures are
+`c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
+when the card is constructed. The carousel holds one Row of five Cards; the
+arrows move the selection (heading and counter), while scrolling is the viewer's.
+Presentation is a toolbar toggle because no viewport fact reaches JavaScript yet. Open it from the first card's `./LAPTOP.JS` button.
+
+[LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
+facts, open details from the list, Back with the selection kept, the carousel
+(selection kept, arrows wrap in both directions), open details from a carousel
+cell, and the way back to the list. Host coverage runs as part of the default
+`LokaSmirkyCardTests` run (or `--laptop-scenario` alone) with a 2 by 3 decoder
+double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. For Classic,
+build `LokaLaptopStandaloneFlow68K_APPL` and stage the five `.PICT` files beside it:
+
+```sh
+LOKA_TAB_COUNT=6 tests/toolbox/run-standalone.sh build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin example/SmirkyCard/assets/MACPORT.PICT example/SmirkyCard/assets/PB100.PICT example/SmirkyCard/assets/PB180C.PICT example/SmirkyCard/assets/PB550C.PICT example/SmirkyCard/assets/PB5300C.PICT --expect example/SmirkyCard/tests/LAPTOP.audit
+```
+
+The whole LOG.TXT is the [expected audit](tests/LAPTOP.audit).
