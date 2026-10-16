@@ -63,8 +63,16 @@ if(LOKA_CLASSIC_MAC)
   target_link_libraries(smirkycard_script PRIVATE LokaClassicNewlibCompat)
 endif()
 
+# Callers outside this directory (tests/toolbox/smirkycard) resolve the card
+# sources and the generated headers against SmirkyCard's own directories.
+set(SMIRKYCARD_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(SMIRKYCARD_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 function(smirkycard_cpp_target target)
-  target_sources(${target} PRIVATE src/CardFlow.cpp src/CardScenario.cpp src/CardCarry.cpp src/ScriptRuntime.cpp src/JsCardNode.cpp src/JsCardBindingRegistry.cpp src/SmirkyMarkup.cpp)
+  target_sources(${target} PRIVATE
+    ${SMIRKYCARD_SOURCE_DIR}/src/CardFlow.cpp ${SMIRKYCARD_SOURCE_DIR}/src/CardScenario.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/CardCarry.cpp ${SMIRKYCARD_SOURCE_DIR}/src/ScriptRuntime.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/JsCardNode.cpp ${SMIRKYCARD_SOURCE_DIR}/src/JsCardBindingRegistry.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/SmirkyMarkup.cpp)
   loka_enable_warnings(${target})
   set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   target_link_libraries(${target} PRIVATE smirkycard_script)
@@ -74,7 +82,7 @@ function(smirkycard_cpp_target target)
   target_link_libraries(${target} PRIVATE smirkycard_quickjs)
   target_include_directories(${target} SYSTEM PRIVATE ${smirkycard_quickjs_source_dir})
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/common)
-  target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+  target_include_directories(${target} PRIVATE ${SMIRKYCARD_BINARY_DIR})
   if(MSVC)
     target_compile_options(${target} PRIVATE /utf-8)
   endif()
@@ -210,7 +218,7 @@ function(smirkycard_add_scenario_runner name)
       message(FATAL_ERROR "${target} is ${target_length} characters; HFS file names allow 31. Shorten the runner name '${name}'.")
     endif()
     loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
-      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp ${SMIRKYCARD_SIZE_R}
+      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp src/ScenarioRunAudit.cpp ${SMIRKYCARD_SIZE_R}
       ${PROJECT_SOURCE_DIR}/tests/standalone/StandaloneScenarioSupport.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioReel.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
@@ -228,9 +236,16 @@ smirkycard_add_scenario_runner(SmirkyView CARD VIEWER.JS FLOW VIEWER.FLOW.JS SCE
 smirkycard_add_scenario_runner(Laptop CARD LAPTOP.JS FLOW LAPTOP.FLOW.JS SCENARIO laptop APP_NAME "LaptopTracker" SEED 7)
 if(TARGET LokaSmirkyCardTests)
   target_link_libraries(LokaSmirkyCardTests PRIVATE SmirkyCardScenarioInputs)
-  target_sources(LokaSmirkyCardTests PRIVATE src/StandaloneFlowAppConfig.cpp
+  target_sources(LokaSmirkyCardTests PRIVATE src/StandaloneFlowAppConfig.cpp src/ScenarioRunAudit.cpp
     ${PROJECT_SOURCE_DIR}/tests/standalone/StandaloneScenarioSupport.cpp
     ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioReel.cpp
     ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp)
   target_include_directories(LokaSmirkyCardTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/standalone)
+endif()
+
+# The Toolbox scenario vehicle is a tests/toolbox resident that needs QuickJS and
+# the SmirkyCard SIZE partition, so it is declared from here but builds into
+# tests/toolbox/smirkycard: the 68K size bank discovers only example/ artifacts.
+if(CMAKE_SYSTEM_NAME STREQUAL "Retro68")
+  add_subdirectory(${PROJECT_SOURCE_DIR}/tests/toolbox/smirkycard ${PROJECT_BINARY_DIR}/tests/toolbox/smirkycard)
 endif()

@@ -2474,9 +2474,13 @@ namespace
   class CardRunnerHarness : public loka::dsl::testing::ScenarioAuditSink
   {
   public:
-    CardRunnerHarness(const char *source, const char *companion, unsigned long seed = 7, bool baked = false,
-                      PlatformContext *nativeContext = 0)
-        : audit(scenarioAuditDestination(), "card"),
+    CardRunnerHarness(const char *source,
+                      const char *companion,
+                      unsigned long seed = 7,
+                      bool baked = false,
+                      PlatformContext *nativeContext = 0,
+                      const char *scenarioName = "card")
+        : audit(scenarioAuditDestination(), scenarioName),
           runtime(nativeContext),
           window(0),
           admission(0),
@@ -4177,13 +4181,44 @@ namespace
     const std::string source = readCardSource("LAPTOP.JS");
     const std::string companion =
         "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n" + readCardSource("LAPTOP.FLOW.JS");
-    CardRunnerHarness h(source.c_str(), companion.c_str(), 7, true, &context);
-    h.mount();
-    h.ticks(40);
-    for (size_t i = 0; i < h.steps.size(); ++i)
-      if (h.steps[i].status() != loka::dsl::FLOW_STEP_SUCCEEDED)
-        std::fprintf(stderr, "  step %s: %s\n", h.steps[i].name().c_str(), h.steps[i].message().c_str());
-    LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+    const char *cells[] = {0, "startup", "laptop-carousel", "laptop-detail", "unknown"};
+    for (unsigned cell = 0; cell < 5; ++cell)
+    {
+      const std::string selected =
+          cells[cell] ? std::string("globalThis.LAPTOP_CELL = \"") + cells[cell] + "\";\n" + companion : companion;
+      CardRunnerHarness h(source.c_str(), selected.c_str(), 7, true, &context, cells[cell] ? cells[cell] : "laptop");
+      LOKA_VERIFY(h.recordLog("seed=7"));
+      h.mount();
+      h.ticks(40);
+      LOKA_VERIFY(h.terminalCount == 1);
+      if (cell == 4)
+      {
+        LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_FAILED);
+        continue;
+      }
+      LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+      if (cell == 2)
+      {
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macport"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Open.pb100"));
+      }
+      else if (cell == 3)
+      {
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Back"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Presentation"));
+      }
+      else
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Open.pb100"));
+      std::string audit = readScenarioAudit();
+      // Only the Null decoder's fixture dimensions differ from the shipped pictures.
+      std::string::size_type position = 0;
+      while ((position = audit.find("%202x3\n", position)) != std::string::npos)
+        audit.replace(position, 7, "%20160x100\n");
+      const std::string expected =
+          cell ? std::string("../../tests/scenarios/expected/smirkycard/") + cells[cell] + ".audit"
+               : "tests/LAPTOP.audit";
+      LOKA_VERIFY(audit == readCardSource(expected.c_str()));
+    }
     for (unsigned i = 0; i < 5; ++i)
       LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
     removeDirectory("_named_pictures");
