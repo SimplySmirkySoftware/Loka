@@ -1316,16 +1316,6 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     return LayoutNodeResult(state.width, state.y);
   }
-  loka::app::scene::ProjectionParentScope childScope;
-  if (!viewportScope.deriveScrolled(viewportScope.nativeParent,
-                                    0,
-                                    requestedOffset,
-                                    viewportClip,
-                                    childScope))
-  {
-    return LayoutNodeResult(state.width, state.y);
-  }
-
   LayoutState childBase = state;
   {
     RECT viewportClient;
@@ -1336,6 +1326,32 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
       // against the client, or they extend underneath the scrollbar.
       childBase.width = this->displayScale_.clientCapacityToLu(viewportClient.right - viewportClient.left);
     }
+  }
+
+  short contentWidthLu = 0;
+  const bool known =
+      loka::app::layout::queryContentOverflowWidth(scrollView, Win32SceneLayout::kGap, this, contentWidthLu);
+  // An unknown range must not scroll: otherwise content cannot be brought back
+  const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
+  const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
+  // The horizontal bar is decided before the children are laid out, because
+  // its presence shortens the client the children, the clip and the vertical
+  // page must share (the Toolbox rule from #1367). The decision is computed
+  // from the system bar height; nothing native changes until the whole layout
+  // has succeeded, so a refused traversal leaves the previous bars in place.
+  const bool horizontalBar = maximumX > 0 && state.height > 0;
+  int viewportHeight = state.height;
+  if (horizontalBar)
+  {
+    viewportHeight = this->displayScale_.clientHeightBelowHorizontalBar(
+        loka::core::Frame(state.x, state.y, state.width, state.height));
+  }
+  childBase.height = static_cast<short>(viewportHeight);
+  const loka::core::Frame childClip(0, 0, state.width, viewportHeight);
+  loka::app::scene::ProjectionParentScope childScope;
+  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, requestedOffset, childClip, childScope))
+  {
+    return LayoutNodeResult(state.width, state.y);
   }
 
   int currentY = state.y;
@@ -1390,10 +1406,11 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
   if (!shortRangeRefused)
   {
-    const int clampedOffset =
-        ctx->setScrollMetrics(contentHeight, state.height, requestedOffset);
+    // Both bars commit together with the successful layout.
+    ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
+    const int clampedOffset = ctx->setScrollMetrics(SB_VERT, contentHeight, viewportHeight, requestedOffset);
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
+    scrollView->publishOrigin(clampedX, clampedOffset);
   }
 
   if (state.height > 0)
