@@ -29,6 +29,7 @@ add_library(LokaAppleMacOSAppKit INTERFACE)
 
 target_link_libraries(LokaAppleMacOSAppKit INTERFACE
   LokaAppleCommonCocoa
+  "-framework ApplicationServices"
   "-framework AppKit"
   "-framework Foundation"
   "-framework CoreFoundation"
@@ -62,6 +63,8 @@ set(LOKA_MACOS_CORE_SOURCES
   src/context/MacButtonContext.mm
   src/context/MacRetirableContext.mm
   src/context/MacCellContext.mm
+  src/MacCardPainter.mm
+  src/context/MacCardBandContext.mm
   src/context/MacRibbonGroupEdgeContext.mm
   src/context/MacEditTextContext.mm
   src/context/MacTextEditorContext.mm
@@ -140,6 +143,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacConfirmDialogTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacWindow.mm
     ${PROJECT_SOURCE_DIR}/apple/common/cocoa/src/AppleString.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacCardPainterTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacGroundTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextColorTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacGround.mm
@@ -152,6 +156,8 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacButtonContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRetirableContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacCellContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/MacCardPainter.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacCardBandContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRibbonGroupEdgeContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacEditTextContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacTextEditorContext.mm
