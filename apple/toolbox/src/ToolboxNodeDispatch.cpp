@@ -2,6 +2,8 @@
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
 #include "app/layout/StackGaps.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include "ToolboxLayoutMetrics.hpp"
 #include <climits>
 #include "app/layout/CanvasLayout.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
@@ -48,6 +50,29 @@
 
 namespace
 {
+  /** Restores the caller's gap on every dispatch return. */
+  class LayoutSpacingScope
+  {
+  public:
+    LayoutSpacingScope(loka::app::scene::LayoutState &state, loka::app::scene::Node *node)
+        : state_(state),
+          previous_(state.spacing)
+    {
+      this->state_.spacing = static_cast<short>(loka::app::layout::resolveLayoutGap(
+          node, this->previous_, ToolboxLayoutMetrics::kDefaultGap, ToolboxLayoutMetrics::kDefaultGap));
+    }
+    ~LayoutSpacingScope()
+    {
+      this->state_.spacing = this->previous_;
+    }
+
+  private:
+    LayoutSpacingScope(const LayoutSpacingScope &);
+    LayoutSpacingScope &operator=(const LayoutSpacingScope &);
+    loka::app::scene::LayoutState &state_;
+    const short previous_;
+  };
+
   class ToolboxLayoutTraversal : public loka::app::scene::IPlatformLayoutTraversal
   {
   public:
@@ -140,6 +165,7 @@ namespace
     {
       return 0;
     }
+    LayoutSpacingScope spacingScope(state, node);
     loka::app::scene::BoundaryNode *boundary = node->asBoundary();
     loka::app::scene::BoundaryNode *activeBoundary = boundary ? boundary : currentBoundary;
     const short startX = state.x;

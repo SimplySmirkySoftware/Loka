@@ -42,6 +42,10 @@
 #include "app/RectSurface.hpp"
 #include "context/Win32RetirableContext.hpp"
 #include "app/ConfirmDialog.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 // After Win32TextEditorContext.hpp: MSVC reads RequestSettlement's 1u << FollowUp as
 // ambiguous with Show's operator<<(const State<bool> &, ...) when Show.hpp comes first.
 #include "app/nodes/nestable/Show.hpp"
@@ -2589,4 +2593,237 @@ void testWin32CardBandPaintOnlyClassification()
     LOKA_VERIFY(Access::queuedPaintInvalidates(controller) == 1);
   }
   LOKA_VERIFY(DestroyWindow(rootWindow));
+}
+
+namespace
+{
+  // Invert only exact projected edges, as in the existing container-gap pins.
+  int gapDoorEdgeLu(const loka::win32::Win32DisplayScale &scale, LONG edge)
+  {
+    int lu = 0;
+    while (lu < SHRT_MAX && scale.projectEdge(lu) < edge)
+      ++lu;
+    LOKA_VERIFY(scale.projectEdge(lu) == edge);
+    return lu;
+  }
+
+  RECT gapDoorFrame(loka::app::scene::Node *node, HWND parent)
+  {
+    LOKA_VERIFY(node->getContext() != 0);
+    return childRectInParent(static_cast<Win32RetirableContext *>(node->getContext())->hwnd(), parent);
+  }
+
+  void verifyGapDoorInterval(Win32ScenePlatformController &controller, HWND parent,
+                             loka::app::scene::Node *first, loka::app::scene::Node *second, int gap)
+  {
+    const RECT before = gapDoorFrame(first, parent);
+    const RECT after = gapDoorFrame(second, parent);
+    const loka::win32::Win32DisplayScale &scale = controller.displayScale();
+    const int bottom = gapDoorEdgeLu(scale, before.bottom);
+    LOKA_VERIFY(after.top == scale.projectEdge(bottom + gap));
+  }
+
+  void verifyGapDoorColumn(bool registered, bool fullSequence)
+  {
+    using namespace loka::app;
+    const loka::win32::Win32DisplayScale scale(96, loka::win32::DefaultRailMetrics());
+    HWND root = buttonHeightHost(scale);
+    {
+      Win32ScenePlatformController controller(root, scale);
+      StackProps props(STACK_AXIS_COLUMN);
+      props.gap(fullSequence ? 16 : 20);
+      StackNode *column = registered ? new StackNode(props) : new DirectNaturalWidthRow(props);
+      TextNode *head = fullSequence ? new TextNode(TextProps("Head")) : 0;
+      FragmentNode *fragment = new FragmentNode((FragmentProps()));
+      TextNode *first = new TextNode(TextProps("First"));
+      TextNode *second = new TextNode(TextProps("Second"));
+      ButtonNode *tail = fullSequence ? new ButtonNode(ButtonProps().text("Tail")) : 0;
+      if (fullSequence)
+        column->addChild(head);
+
+      fragment->addChild(first);
+      fragment->addChild(second);
+      column->addChild(fragment);
+      if (fullSequence)
+        column->addChild(tail);
+
+      controller.onChange(column, scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 400);
+      verifyGapDoorInterval(controller, root, first, second, fullSequence ? 16 : 20);
+      if (fullSequence)
+      {
+        LOKA_VERIFY(gapDoorFrame(head, root).top == scale.projectEdge(Win32SceneLayout::kRootInset));
+        verifyGapDoorInterval(controller, root, head, first, 16);
+        verifyGapDoorInterval(controller, root, second, tail, 16);
+      }
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      delete column;
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+
+  enum GapDoorReset { GAP_DOOR_BOX, GAP_DOOR_ZSTACK, GAP_DOOR_GRID, GAP_DOOR_SCROLL, GAP_DOOR_COLUMN };
+
+  void verifyGapDoorReset(GapDoorReset reset)
+  {
+    using namespace loka::app;
+    const loka::win32::Win32DisplayScale scale(96, loka::win32::DefaultRailMetrics());
+    HWND root = buttonHeightHost(scale);
+    {
+      Win32ScenePlatformController controller(root, scale);
+      StackProps props(STACK_AXIS_COLUMN);
+      props.gap(20);
+      DirectNaturalWidthRow column(props);
+      scene::NestableNode *container = 0;
+      switch (reset)
+      {
+      case GAP_DOOR_BOX: container = new BoxNode((BoxProps())); break;
+      case GAP_DOOR_ZSTACK: container = new ZStackNode((ZStackProps())); break;
+      case GAP_DOOR_GRID: container = new GridNode(GridProps(1, 1)); break;
+      case GAP_DOOR_SCROLL: container = new ScrollViewNode((ScrollViewProps())); break;
+      case GAP_DOOR_COLUMN: container = new StackNode(StackProps(STACK_AXIS_COLUMN)); break;
+      }
+      LOKA_VERIFY(container != 0);
+      FragmentNode *inside = new FragmentNode((FragmentProps()));
+      TextNode *first = new TextNode(TextProps("Inside first"));
+      TextNode *second = new TextNode(TextProps("Inside second"));
+      inside->addChild(first);
+      inside->addChild(second);
+      container->addChild(inside);
+      column.addChild(container);
+      FragmentNode *sibling = new FragmentNode((FragmentProps()));
+      TextNode *third = new TextNode(TextProps("Sibling first"));
+      TextNode *fourth = new TextNode(TextProps("Sibling second"));
+      sibling->addChild(third);
+      sibling->addChild(fourth);
+      column.addChild(sibling);
+      controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 400);
+      // Scroll children use viewport-local coordinates; all other children use root coordinates.
+      if (reset == GAP_DOOR_SCROLL)
+        LOKA_VERIFY(container->getContext() != 0);
+      HWND parent = reset == GAP_DOOR_SCROLL
+          ? static_cast<Win32RetirableContext *>(container->getContext())->hwnd() : root;
+      verifyGapDoorInterval(controller, parent, first, second, 6);
+      verifyGapDoorInterval(controller, root, third, fourth, 20);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+void testWin32GapDoorColumnFragment()
+{
+  verifyGapDoorColumn(false, true);
+}
+
+void testWin32GapDoorBoxSiblingIsolation()
+{
+  verifyGapDoorReset(GAP_DOOR_BOX);
+}
+
+void testWin32GapDoorZStackReset()
+{
+  verifyGapDoorReset(GAP_DOOR_ZSTACK);
+}
+
+void testWin32GapDoorGridReset()
+{
+  verifyGapDoorReset(GAP_DOOR_GRID);
+}
+
+void testWin32GapDoorScrollViewResetAndSiblingIsolation()
+{
+  verifyGapDoorReset(GAP_DOOR_SCROLL);
+}
+
+void testWin32GapDoorUnspecifiedColumnReset()
+{
+  verifyGapDoorReset(GAP_DOOR_COLUMN);
+}
+
+void testWin32GapDoorRegisteredColumnBridge()
+{
+  verifyGapDoorColumn(true, false);
+}
+
+void testWin32GapDoorRowFragment()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scale(96, loka::win32::DefaultRailMetrics());
+  HWND root = buttonHeightHost(scale);
+  {
+    Win32ScenePlatformController controller(root, scale);
+    StackProps props(STACK_AXIS_ROW);
+    props.gap(20);
+    DirectNaturalWidthRow row(props);
+    FragmentNode *fragment = new FragmentNode((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("First"));
+    TextNode *second = new TextNode(TextProps("Second"));
+    fragment->addChild(first);
+    fragment->addChild(second);
+    row.addChild(fragment);
+    controller.onChange(&row, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    verifyGapDoorInterval(controller, root, first, second, 20);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32GapDoorRootFragment()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scale(96, loka::win32::DefaultRailMetrics());
+  HWND root = buttonHeightHost(scale);
+  {
+    Win32ScenePlatformController controller(root, scale);
+    FragmentNode fragment((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("First"));
+    TextNode *second = new TextNode(TextProps("Second"));
+    fragment.addChild(first);
+    fragment.addChild(second);
+    controller.onChange(&fragment, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    LOKA_VERIFY(gapDoorFrame(first, root).top == scale.projectEdge(Win32SceneLayout::kRootInset));
+    verifyGapDoorInterval(controller, root, first, second, 6);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32GapDoorScrollViewContent()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scale(96, loka::win32::DefaultRailMetrics());
+  HWND root = buttonHeightHost(scale);
+  {
+    Win32ScenePlatformController controller(root, scale);
+    StackProps props(STACK_AXIS_COLUMN);
+    props.gap(20);
+    DirectNaturalWidthRow column(props);
+    ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+    BoxNode *box = new BoxNode((BoxProps()));
+    FragmentNode *fragment = new FragmentNode((FragmentProps()));
+    TextNode *first = new TextNode(TextProps("Box first"));
+    TextNode *second = new TextNode(TextProps("Box second"));
+    TextNode *third = new TextNode(TextProps("Fragment first"));
+    TextNode *fourth = new TextNode(TextProps("Fragment second"));
+    box->addChild(first);
+    box->addChild(second);
+    fragment->addChild(third);
+    fragment->addChild(fourth);
+    scroll->addChild(box);
+    scroll->addChild(fragment);
+    column.addChild(scroll);
+    controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
+    controller.relayout(640, 400);
+    LOKA_VERIFY(scroll->getContext() != 0);
+    HWND parent = static_cast<Win32RetirableContext *>(scroll->getContext())->hwnd();
+    verifyGapDoorInterval(controller, parent, first, second, 6);
+    verifyGapDoorInterval(controller, parent, second, third, 6);
+    verifyGapDoorInterval(controller, parent, third, fourth, 6);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
 }

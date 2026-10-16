@@ -501,11 +501,7 @@ bool Win32ScenePlatformController::prepareProjectedLayout(loka::app::scene::Node
 int Win32ScenePlatformController::layoutNodeFromSceneState(loka::app::scene::Node *node,
                                                            const loka::app::scene::LayoutState &state)
 {
-  LayoutState localState;
-  localState.x = state.x;
-  localState.y = state.y;
-  localState.width = state.width;
-  localState.height = state.height;
+  const LayoutState localState(state.x, state.y, state.width, state.height, state.spacing);
   return this->layoutNode(node, localState);
 }
 
@@ -1167,15 +1163,13 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
     return;
   }
   const int rootInset = Win32SceneLayout::kRootInset;
-  LayoutState state;
-  state.x = rootInset;
-  state.y = rootInset;
-  state.width = measureClientWidth(clientWidth) - 2 * rootInset;
-  if (state.width < 0)
+  int rootWidth = measureClientWidth(clientWidth) - 2 * rootInset;
+  if (rootWidth < 0)
   {
-    state.width = 0;
+    rootWidth = 0;
   }
-  state.height = clientHeight > 0 ? clientHeight - 2 * rootInset : 0;
+  const LayoutState state(
+      rootInset, rootInset, rootWidth, clientHeight > 0 ? clientHeight - 2 * rootInset : 0, Win32SceneLayout::kGap);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -1367,7 +1361,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
     loka::app::scene::INestable *nestable = scrollView->asNestable();
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
-    loka::app::layout::StackGaps gaps(Win32SceneLayout::kGap);
+    loka::app::layout::StackGaps gaps(state.spacing());
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
@@ -1438,7 +1432,14 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
     // that poisoned value.
     return state.y;
   }
-  return this->applyBoundaryLayoutResult(node->asBoundary(), state.x, state.y, this->computeLayoutResult(node, state));
+  // Deliberate macOS twin: resolve into a local copy before dispatching any layout branch.
+  const LayoutState local(
+      state.x,
+      state.y,
+      state.width,
+      state.height,
+      loka::app::layout::resolveLayoutGap(node, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap));
+  return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
 Win32ScenePlatformController::LayoutNodeResult
@@ -1483,7 +1484,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           this,
           &Win32ScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              stack, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              stack, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     else
@@ -1496,7 +1497,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           this,
           &Win32ScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              stack, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              stack, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -1549,7 +1550,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           this,
           &Win32ScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              box, Win32SceneLayout::kGap, Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              box, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -1603,7 +1604,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
-    loka::app::layout::StackGaps gaps(Win32SceneLayout::kGap);
+    loka::app::layout::StackGaps gaps(state.spacing());
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
@@ -1691,7 +1692,7 @@ bool Win32ScenePlatformController::narrowLayoutState(
   content.width = static_cast<short>(state.width);
   content.height = static_cast<short>(state.height);
   content.lineHeight = 0;
-  content.spacing = 0;
+  content.spacing = static_cast<short>(state.spacing());
   if (applyProjection && this->projectionParentScopes_.activeDepth() != 0)
   {
     if (!this->projectionParentScopes_.current().project(content, narrowed))

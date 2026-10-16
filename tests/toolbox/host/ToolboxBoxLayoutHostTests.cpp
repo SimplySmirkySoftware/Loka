@@ -77,7 +77,7 @@ namespace
 
   void cardScrollRangePin(ToolboxScenePlatformController &controller)
   {
-    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
     CardNode *card = new CardNode(CardProps());
     Probe *content = new Probe(0);
     Probe *sibling = new Probe(0);
@@ -163,7 +163,7 @@ namespace
     LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.registry));
     loka::core::MutableState<ConfirmResult> storage;
     NodeState<ConfirmResult> result(&storage, 0);
-    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    StackNode column((StackProps(STACK_AXIS_COLUMN).gap(9)));
     FragmentNode *fragment = new FragmentNode(FragmentProps());
     TextProbe *first = new TextProbe(5), *last = new TextProbe(7);
     VisitedDialog *dialog = new VisitedDialog(result);
@@ -186,8 +186,9 @@ namespace
   {
     for (unsigned kind = 0; kind != 3; ++kind)
     {
-      NestableNode *container = kind == 0   ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN)))
-                                : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps()))
+      NestableNode *container = kind == 0
+                                    ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN).gap(9)))
+                                : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps().setGap(9)))
                                             : static_cast<NestableNode *>(new FragmentNode(FragmentProps()));
       Probe *first = new Probe(5), *last = new Probe(7);
       container->addChild(first);
@@ -202,8 +203,8 @@ namespace
       LOKA_VERIFY(first->offer.y == 20 && last->offer.y == 34 && state.y == 41);
       delete container;
 
-      container = kind == 0   ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN)))
-                  : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps()))
+      container = kind == 0   ? static_cast<NestableNode *>(new StackNode(StackProps(STACK_AXIS_COLUMN).gap(12)))
+                  : kind == 1 ? static_cast<NestableNode *>(new BoxNode(BoxProps().setGap(12)))
                               : static_cast<NestableNode *>(new FragmentNode(FragmentProps()));
       BoxProps large;
       large.setSize(10, 32760);
@@ -228,6 +229,7 @@ namespace
   void derivedStackPin(ToolboxScenePlatformController &controller, bool row)
   {
     StackProps props(row ? STACK_AXIS_ROW : STACK_AXIS_COLUMN);
+    props.gap(6);
     props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
     StackNode plain(props);
     DirectStack derived(props);
@@ -284,7 +286,7 @@ namespace
 
   void scrollRangePin(ToolboxScenePlatformController &controller, bool handler, bool refuses)
   {
-    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
     BoxNode *box = new BoxNode(BoxProps().setPadding(10));
     Probe *child = new Probe(0);
     Probe *sibling = new Probe(0);
@@ -331,8 +333,8 @@ namespace
 
   void offsetRangePin(ToolboxScenePlatformController &controller, bool refuses)
   {
-    StackNode column((StackProps(STACK_AXIS_COLUMN)));
-    StackNode *row = new StackNode(StackProps(STACK_AXIS_ROW).alignVertical(VERTICAL_ALIGNMENT_BOTTOM));
+    StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
+    StackNode *row = new StackNode(StackProps(STACK_AXIS_ROW).gap(0).alignVertical(VERTICAL_ALIGNMENT_BOTTOM));
     HeightProbe *child = new HeightProbe(1);
     row->addChild(child);
     row->addChild(new HeightProbe(20));
@@ -382,6 +384,9 @@ namespace
     LayoutState state;
     state.width = 80; state.height = 20; state.lineHeight = 20; state.spacing = 5;
     if (largeAdvance) { state.lineHeight = 30000; state.spacing = 10000; }
+    column.props.gap(state.spacing);
+    if (row)
+      subject->asStackNode()->props.gap(state.spacing);
     const int advance = largeAdvance ? 40000 : (!row && refuses ? 20 : 25);
     state.y = static_cast<short>(SHRT_MAX - advance + (refuses ? 1 : 0));
     LayoutNode(&column, state, &controller, 0);
@@ -401,7 +406,7 @@ namespace
   {
     // Empty selection still reports the cached full extent. No child can cause
     // this refusal: the Column adds the retained total to its new origin.
-    StackNode column((StackProps(STACK_AXIS_COLUMN)));
+    StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
     loka::app::layout::StackSpans spans;
     // A text-kind probe preserves the production band eligibility rule.
     class TextProbe : public Probe
@@ -512,6 +517,7 @@ int main(int argc, char **argv)
   if (std::strcmp(mode, "natural-row") == 0)
   {
     StackProps props;
+    props.gap(6);
     props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
     StackNode row(props);
     Probe *a = new Probe();
@@ -534,7 +540,7 @@ int main(int argc, char **argv)
       std::strcmp(mode, "equal") == 0 ? 10 :
       std::strcmp(mode, "zero") == 0 ? 0 :
       std::strcmp(mode, "negative") == 0 ? -3 : 80;
-  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
   BoxProps props;
   props.setPadding(5);
   if (fixed) props.setSize(100, 60);

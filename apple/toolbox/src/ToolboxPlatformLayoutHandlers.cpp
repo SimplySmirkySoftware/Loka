@@ -15,6 +15,7 @@
 // Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
 // conditional with two lvalue operands binds the member by reference, and
 // C++98 then requires a definition; GCC 4.2 at -O0 links against it.
+const short ToolboxLayoutMetrics::kDefaultGap;
 const short ToolboxLayoutMetrics::kDefaultLineHeight;
 const short ToolboxLayoutMetrics::kImageFallbackHeight;
 const short ToolboxLayoutMetrics::kControlAscentInset;
@@ -454,7 +455,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     return 0;
   }
 
-  short rowStartX = state.x;
+  int rowStartX = state.x;
   int maxHeight = 0;
   const short lineHeight = state.lineHeight > 0 ? state.lineHeight : ToolboxLayoutMetrics::kDefaultLineHeight;
   const short controlAscent = static_cast<short>(lineHeight - ToolboxLayoutMetrics::kControlAscentInset);
@@ -466,7 +467,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
                                                  childCount,
                                                  state.width,
                                                  state.spacing,
-                                                 state.spacing,
+                                                 ToolboxLayoutMetrics::kDefaultGap,
                                                  row->props.rowUndeclaredWidth_,
                                                  traversal);
   if (row->props.hasVerticalAlignment_)
@@ -496,9 +497,14 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     const loka::app::layout::RowChildWidth allocation = widths.next(child);
     if (allocation.hasGapBefore())
     {
-      rowStartX = static_cast<short>(rowStartX + state.spacing);
+      rowStartX += state.spacing;
     }
-    rowState.x = rowStartX;
+    // Deliberate twin of common RowLayout: accept both edges before narrowing.
+    if (traversal->refuseLayoutResultY(rowStartX) || traversal->refuseLayoutResultY(rowStartX + allocation.width()))
+    {
+      return 0;
+    }
+    rowState.x = static_cast<short>(rowStartX);
     rowState.width = static_cast<short>(allocation.width());
     if (row->props.hasVerticalAlignment_)
     {
@@ -530,7 +536,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     DispatchTraversalLayoutChild(traversal, child, rowState);
     if (allocation.isLiveSeat())
     {
-      rowStartX = static_cast<short>(rowStartX + allocation.width());
+      rowStartX += allocation.width();
     }
     const short childResultY = traversal->layoutResultY();
     if (childResultY > state.y && static_cast<short>(childResultY - state.y) > maxHeight)

@@ -344,8 +344,10 @@ completed placement input separates full-list extent from the resident interval;
 LazyView places every resident at its global content coordinates. ScrollView
 alone translates those coordinates. Standalone Canvas keeps its historical
 conservative clipping and viewport subtraction.
-Horizontal viewport movement selects the window but leaves residents in absolute
-content coordinates; horizontal scrolling is pending a ScrollView X offset.
+Horizontal viewport movement selects the window and leaves residents in absolute
+content coordinates; the ScrollView above translates both axes (#580,
+[ScrollViewDesign.md](ScrollViewDesign.md)), so a horizontal window follows the
+viewport's `x`.
 
 Candidate declaration refusal preserves the old LazyScope generation. At an
 already moved ScrollView viewport origin, that old window may be stale or vacant; no

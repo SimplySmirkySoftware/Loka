@@ -53,6 +53,8 @@ namespace loka
       int capacityToLu(CGFloat pt) const;
       int clientCapacityToLu(CGFloat pt) const;
       int measurementToLu(CGFloat pt) const;
+      /** Pure client capacity after horizontal chrome, converted only once. */
+      int clientHeightBelowHorizontalScroller(const core::Frame &seatLu) const;
       int intrinsicPixelsToLu(int pixels) const;
       MacRect projectFrame(const core::Frame &lu) const;
       /** Allocate client capacity outward so the floor inverse preserves the

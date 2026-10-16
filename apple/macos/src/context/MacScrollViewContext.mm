@@ -39,6 +39,15 @@
     MacInputDoor::scrollBoundsChange(*context_);
   }
 }
+
+- (void)preferredScrollerStyleChanged:(NSNotification *)notification
+{
+  (void)notification;
+  if (context_)
+  {
+    MacInputDoor::scrollerStyleChange(*context_);
+  }
+}
 @end
 
 MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controller,
@@ -84,6 +93,14 @@ MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controlle
                                            selector:@selector(clipViewBoundsChanged:)
                                                name:NSViewBoundsDidChangeNotification
                                              object:clipView];
+  // 10.7+ retiles every scroll view when the user switches between overlay
+  // and legacy scrollers; the height offered to the children follows that
+  // through a relayout. The name is spelled out so pre-10.7 SDKs compile; the
+  // notification simply never arrives there.
+  [[NSNotificationCenter defaultCenter] addObserver:scrollView
+                                           selector:@selector(preferredScrollerStyleChanged:)
+                                               name:@"NSPreferredScrollerStyleDidChangeNotification"
+                                             object:nil];
   if (parent)
   {
     [parent addSubview:scrollView];
@@ -122,6 +139,9 @@ void MacScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact pre
       [[NSNotificationCenter defaultCenter] removeObserver:scrollView
                                                       name:NSViewBoundsDidChangeNotification
                                                     object:clipView];
+      [[NSNotificationCenter defaultCenter] removeObserver:scrollView
+                                                      name:@"NSPreferredScrollerStyleDidChangeNotification"
+                                                    object:nil];
       [scrollView setContext:0];
       [scrollView removeFromSuperview];
       this->retireNativeObject(this->scrollView_);
@@ -141,7 +161,7 @@ void *MacScrollViewContext::documentView() const
   return scrollView ? (void *)[scrollView documentView] : 0;
 }
 
-int MacScrollViewContext::contentWidth() const
+int MacScrollViewContext::visibleWidth() const
 {
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   if (!scrollView)
@@ -179,16 +199,13 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   }
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  NSView *documentView = [scrollView documentView];
-  if (documentView)
-  {
-    NSRect frame = [documentView frame];
-    frame.size.width = [scrollView contentSize].width;
-    [documentView setFrame:frame];
-  }
+  // The document frame is not touched here: it is part of the metrics that
+  // commit only after the traversal succeeds, so a refused pass leaves the
+  // previous document, scroller and origin exactly as they were.
 }
 
-int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight, int offset)
+int MacScrollViewContext::commitScrollMetrics(
+    int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar)
 {
   if (contentHeight < 0)
   {
@@ -203,7 +220,7 @@ int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight
   {
     maximum = 0;
   }
-  const int clamped = this->clampOffset(offset, maximum);
+  const int clamped = this->clampOffset(requestedY, maximum);
 
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   NSView *documentView = scrollView ? [scrollView documentView] : nil;
@@ -211,8 +228,20 @@ int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight
   {
     return clamped;
   }
-  loka::macos::SetMacDocumentHeight(scrollView, this->controller()->projection().projectLength(0, contentHeight));
-  loka::macos::ScrollMacDocument(documentView, this->controller()->projection().scrollOffsetToNative(clamped));
+  // Native tiling and document resizing can notify intermediate origins.
+  // Publish only the completed two-axis commit at the caller.
+  NSClipView *clipView = [scrollView contentView];
+  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
+  [clipView setPostsBoundsChangedNotifications:NO];
+  [scrollView setHasHorizontalScroller:horizontalBar];
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const CGFloat width = projection.projectLength(0, contentWidth).pt;
+  const CGFloat clipWidth = [scrollView contentSize].width;
+  loka::macos::SetMacDocumentSize(
+      scrollView, width > clipWidth ? width : clipWidth, projection.projectLength(0, contentHeight));
+  loka::macos::ScrollMacDocument(
+      documentView, projection.scrollOffsetToNative(clampedX), projection.scrollOffsetToNative(clamped));
+  [clipView setPostsBoundsChangedNotifications:postsBounds];
   return clamped;
 }
 
@@ -227,9 +256,25 @@ void MacScrollViewContext::publishClipViewBoundsOrigin()
     return;
   }
   const NSRect bounds = [[scrollView contentView] bounds];
-  int offset = this->controller()->projection().scrollPositionToLu(bounds.origin.y);
-  offset = this->clampOffset(offset, this->maximumOffset());
-  this->publishOffset(offset);
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const int x = this->clampOffset(projection.scrollPositionToLu(bounds.origin.x), this->maximumOffset(true));
+  const int y = this->clampOffset(projection.scrollPositionToLu(bounds.origin.y), this->maximumOffset(false));
+  // Repeated native bounds notifications, including any delayed layout echo,
+  // are same-value no-ops inside publishOrigin, the echo-loop breaker.
+  if (this->node_)
+    this->node_->publishOrigin(x, y);
+}
+
+int MacScrollViewContext::horizontalRange(int contentWidthLu) const
+{
+  NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
+  if (!scrollView || contentWidthLu <= 0)
+  {
+    return 0;
+  }
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const CGFloat extent = projection.projectLength(0, contentWidthLu).pt - [scrollView contentSize].width;
+  return extent > 0 ? projection.scrollPositionToLu(extent) : 0;
 }
 
 int MacScrollViewContext::clampOffset(int value, int maximum) const
@@ -245,7 +290,7 @@ int MacScrollViewContext::clampOffset(int value, int maximum) const
   return value;
 }
 
-int MacScrollViewContext::maximumOffset() const
+int MacScrollViewContext::maximumOffset(bool horizontal) const
 {
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   NSView *documentView = scrollView ? [scrollView documentView] : nil;
@@ -255,15 +300,17 @@ int MacScrollViewContext::maximumOffset() const
   }
   const NSRect documentFrame = [documentView frame];
   const NSRect clipBounds = [[scrollView contentView] bounds];
-  const int contentHeight = this->controller()->projection().capacityToLu(documentFrame.size.height);
-  const int viewportHeight = this->controller()->projection().clientCapacityToLu(clipBounds.size.height);
-  return contentHeight > viewportHeight ? contentHeight - viewportHeight : 0;
+  // One conversion of the native difference, the same one the origin uses:
+  // flooring document and clip separately loses a logical unit at 5/4.
+  const CGFloat extent = horizontal ? documentFrame.size.width - clipBounds.size.width
+                                    : documentFrame.size.height - clipBounds.size.height;
+  return extent > 0 ? this->controller()->projection().scrollPositionToLu(extent) : 0;
 }
 
-void MacScrollViewContext::publishOffset(int value)
+void MacScrollViewContext::handleScrollerStyleChange()
 {
-  // A layout-driven scrollPoint notification arrives here too; its same-value
-  // write is a no-op inside publishOrigin, which is the echo-loop breaker.
-  if (this->node_)
-    this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(this->controller()->borrowPhase().open());
+#endif
+  this->controller()->requestRelayout();
 }
