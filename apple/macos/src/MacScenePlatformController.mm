@@ -356,12 +356,7 @@ bool MacScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *
 int MacScenePlatformController::layoutNodeFromSceneState(loka::app::scene::Node *node,
                                                          const loka::app::scene::LayoutState &state)
 {
-  LayoutState localState;
-  localState.x = state.x;
-  localState.y = state.y;
-  localState.width = state.width;
-  localState.height = state.height;
-  localState.spacing = state.spacing;
+  const LayoutState localState(state.x, state.y, state.width, state.height, state.spacing);
   return this->layoutNode(node, localState);
 }
 
@@ -563,16 +558,16 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   firstEditField_ = 0;
   lastEditField_ = 0;
   const int rootInset = MacSceneLayout::kRootInset;
-  LayoutState state;
-  state.spacing = MacSceneLayout::kGap;
-  state.x = rootInset;
-  state.y = rootInset;
-  state.width = measureClientWidth(clientWidth) - 2 * rootInset;
-  if (state.width < 0)
+  int rootWidth = measureClientWidth(clientWidth) - 2 * rootInset;
+  if (rootWidth < 0)
   {
-    state.width = 0;
+    rootWidth = 0;
   }
-  state.height = clientHeight > 0 ? clientHeight - 2 * rootInset : 0;
+  const LayoutState state(rootInset,
+                          rootInset,
+                          rootWidth,
+                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
+                          MacSceneLayout::kGap);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -738,7 +733,7 @@ MacScenePlatformController::layoutScrollViewNode(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
-    loka::app::layout::StackGaps gaps(state.spacing);
+    loka::app::layout::StackGaps gaps(state.spacing());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
       const int childY = currentY + gaps.before(child);
@@ -803,9 +798,12 @@ int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const L
     return state.y;
   }
   // Deliberate Win32 twin: resolve into a local copy before dispatching any layout branch.
-  LayoutState local = state;
-  local.spacing = loka::app::layout::resolveLayoutGap(
-      node, state.spacing, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap);
+  const LayoutState local(state.x,
+                          state.y,
+                          state.width,
+                          state.height,
+                          loka::app::layout::resolveLayoutGap(
+                              node, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap));
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
@@ -851,7 +849,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           this,
           &MacScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              stack, state.spacing, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              stack, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     else
@@ -864,7 +862,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           this,
           &MacScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              stack, state.spacing, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              stack, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -917,7 +915,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           this,
           &MacScenePlatformController::layoutContainerChild,
           loka::app::layout::resolveLayoutGap(
-              box, state.spacing, MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+              box, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -971,7 +969,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
   if (loka::app::scene::INestable *nestable = node->asNestable())
   {
     LayoutState childState = state;
-    loka::app::layout::StackGaps gaps(state.spacing);
+    loka::app::layout::StackGaps gaps(state.spacing());
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
@@ -1059,7 +1057,7 @@ bool MacScenePlatformController::narrowLayoutState(
   content.width = static_cast<short>(state.width);
   content.height = static_cast<short>(state.height);
   content.lineHeight = 0;
-  content.spacing = static_cast<short>(state.spacing);
+  content.spacing = static_cast<short>(state.spacing());
   if (applyProjection && this->projectionParentScopes_.activeDepth() != 0)
   {
     if (!this->projectionParentScopes_.current().project(content, narrowed))
