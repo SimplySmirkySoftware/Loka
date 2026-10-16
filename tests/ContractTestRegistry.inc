@@ -1322,6 +1322,7 @@ LOKA_TEST(testContentOverflowBoxPaddingIsOfferBound)
 LOKA_TEST(testContentOverflowRibbonUsesNaturalMeasurement)
 LOKA_TEST(testNullIntrinsicImageOverflowWidth)
 LOKA_TEST(testContentOverflowPassThroughIsTransparent)
+LOKA_TEST(testNaturalRowSeesThroughPassThroughWrapper)
 
 LOKA_TEST(testContainerGapSeatsAndTraversal)
 
