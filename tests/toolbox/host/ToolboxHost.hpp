@@ -2,6 +2,8 @@
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 struct ToolboxScrollViewMetrics;
 #include "app/layout/NaturalWidthSource.hpp"
+#include "app/core/Window.hpp"
+#include "ToolboxWindowGeometry.hpp"
 #ifdef LOKA_HOST_GAP_DISPATCH
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 #include "support/TestVerify.hpp"
@@ -114,7 +116,7 @@ public:
   bool empty() const { return true; }
 };
 class ToolboxScenePlatformController;
-class ToolboxWindow
+class ToolboxWindow : public Window
 {
   loka::core::PushStateTracker tracker_;
   loka::core::MutableState<bool> visible_;
@@ -123,7 +125,11 @@ public:
   ToolboxWindowContext context_;
   void (*onFlush)(void *);
   void *flushData;
-  ToolboxWindow() : visible_(true), onFlush(0), flushData(0)
+  explicit ToolboxWindow(const WindowProps &props = WindowProps())
+      : Window(0, props),
+        visible_(true),
+        onFlush(0),
+        flushData(0)
   {
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
@@ -132,6 +138,11 @@ public:
     port.txFace = 0;
     port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
+  }
+  bool querySizeBoxRect(Rect &out) const
+  {
+    out = ToolboxWindowSizeBoxRect(this->port.portRect);
+    return true;
   }
   void requestInvalidate() { ++toolbox_host::invalidations; }
   void requestInvalidateWithReason(const char *) { ++toolbox_host::invalidations; }

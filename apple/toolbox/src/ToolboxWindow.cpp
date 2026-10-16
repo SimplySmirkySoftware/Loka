@@ -403,19 +403,8 @@ void ToolboxWindow::TitleChangedThunk(void *userData)
 
 namespace
 {
-  const short kGrowBoxSize = 15;
   const short kMinimumGrowWidth = 64;  // REALbasic 3.1 floor
   const short kMinimumGrowHeight = 64;
-
-  Rect GrowIconRect(const Rect &portRect)
-  {
-    Rect rect;
-    rect.left = static_cast<short>(portRect.right - kGrowBoxSize);
-    rect.top = static_cast<short>(portRect.bottom - kGrowBoxSize);
-    rect.right = portRect.right;
-    rect.bottom = portRect.bottom;
-    return rect;
-  }
 } // namespace
 
 void ToolboxWindow::handleGrow(const Point &globalPoint)
@@ -466,7 +455,7 @@ void ToolboxWindow::invalidateGrowIcon()
   GrafPtr oldPort;
   GetPort(&oldPort);
   SetPort(window_);
-  const Rect corner = GrowIconRect(window_->portRect);
+  const Rect corner = ToolboxWindowSizeBoxRect(window_->portRect);
   InvalRect(&corner);
   SetPort(oldPort);
 }
@@ -542,7 +531,7 @@ void ToolboxWindow::drawDirty(const Rect &rect)
   GetPort(&oldPort);
   SetPort(window_);
   Rect clip = rect;
-  const Rect corner = GrowIconRect(window_->portRect);
+  const Rect corner = ToolboxWindowSizeBoxRect(window_->portRect);
   Rect growIntersection;
   const bool drawsGrowBox = SectRect(&clip, &corner, &growIntersection) != 0;
   RgnHandle oldClip = NewRgn();
@@ -579,7 +568,7 @@ void ToolboxWindow::drawGrowBox()
     return;
   }
   GetClip(oldClip);
-  const Rect corner = GrowIconRect(this->window_->portRect);
+  const Rect corner = ToolboxWindowSizeBoxRect(this->window_->portRect);
   ClipRect(&corner);
   DrawGrowIcon(this->window_);
   SetClip(oldClip);

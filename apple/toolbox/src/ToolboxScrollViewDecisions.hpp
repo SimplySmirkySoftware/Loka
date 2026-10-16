@@ -51,19 +51,43 @@ template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT 
   return content;
 }
 
-template <typename RectT> inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat, bool horizontalBar)
+/** Intersects a registration rect with the active viewport. Empty edges do
+    not register: QuickDraw's right and bottom edges are exclusive. */
+template <typename RectT>
+inline bool ToolboxScrollViewIntersectHitRect(const RectT &rect, const RectT &viewport, RectT &out)
+{
+  out.left = rect.left > viewport.left ? rect.left : viewport.left;
+  out.top = rect.top > viewport.top ? rect.top : viewport.top;
+  out.right = rect.right < viewport.right ? rect.right : viewport.right;
+  out.bottom = rect.bottom < viewport.bottom ? rect.bottom : viewport.bottom;
+  return out.left < out.right && out.top < out.bottom;
+}
+
+/** An empty size box means the window has none to answer (no native window yet). Edges are exclusive. */
+template <typename RectT> inline bool ToolboxScrollViewReachesSizeBox(const RectT &bar, const RectT &sizeBox)
+{
+  RectT intersection;
+  return ToolboxScrollViewIntersectHitRect(bar, sizeBox, intersection);
+}
+
+template <typename RectT>
+inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat, bool horizontalBar, const RectT &sizeBox)
 {
   RectT bar = ToolboxScrollViewContentRect(seat, horizontalBar);
   bar.left = bar.right;
   bar.right = seat.right;
+  if (ToolboxScrollViewReachesSizeBox(bar, sizeBox))
+    bar.bottom = sizeBox.top > bar.top ? sizeBox.top : bar.top;
   return bar;
 }
 
-template <typename RectT> inline RectT ToolboxScrollViewHorizontalBarRect(const RectT &seat)
+template <typename RectT> inline RectT ToolboxScrollViewHorizontalBarRect(const RectT &seat, const RectT &sizeBox)
 {
   RectT bar = ToolboxScrollViewContentRect(seat, true);
   bar.top = bar.bottom;
   bar.bottom = seat.bottom;
+  if (ToolboxScrollViewReachesSizeBox(bar, sizeBox))
+    bar.right = sizeBox.left > bar.left ? sizeBox.left : bar.left;
   return bar;
 }
 
@@ -92,21 +116,6 @@ inline ToolboxScrollViewMetrics ToolboxScrollViewResolveMetrics(
     clamped = maximum;
   }
   return ToolboxScrollViewMetrics(maximum, clamped);
-}
-
-/** Intersects a registration rect with the active viewport. Empty edges do
-    not register: QuickDraw's right and bottom edges are exclusive. */
-template <typename RectT>
-inline bool ToolboxScrollViewIntersectHitRect(
-    const RectT &rect,
-    const RectT &viewport,
-    RectT &out)
-{
-  out.left = rect.left > viewport.left ? rect.left : viewport.left;
-  out.top = rect.top > viewport.top ? rect.top : viewport.top;
-  out.right = rect.right < viewport.right ? rect.right : viewport.right;
-  out.bottom = rect.bottom < viewport.bottom ? rect.bottom : viewport.bottom;
-  return out.left < out.right && out.top < out.bottom;
 }
 
 #endif // LOKA_TOOLBOX_SCROLL_VIEW_DECISIONS_HPP

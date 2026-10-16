@@ -2,6 +2,7 @@
 #define LOKA_WINDOW_HPP
 
 #include "app/layout/LayoutGap.hpp"
+#include "app/layout/RailSpacing.hpp"
 #include "app/core/DialogResultDelivery.hpp"
 #include "app/core/DocumentFacts.hpp"
 
@@ -900,5 +901,12 @@ protected:
   friend class ::loka::app::testing::WindowTestAccess;
 #endif
 };
+
+/** Resolves a Window's construction-time margin, or the rail standard without a Window. */
+inline int resolveWindowContentMargin(const Window *window, const loka::app::layout::RailSpacing &spacing)
+{
+  const int standard = spacing.standardWindowMargin();
+  return window ? window->contentMargin().resolve(standard, standard) : standard;
+}
 
 #endif // LOKA_WINDOW_HPP

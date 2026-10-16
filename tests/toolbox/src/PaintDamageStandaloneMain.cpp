@@ -1,3 +1,4 @@
+#include "ToolboxLayoutMetrics.hpp"
 #include "context/ToolboxCardBandContext.hpp"
 #include "ToolboxPaintGradient.hpp"
 #include "ToolboxPaintGround.hpp"
@@ -66,14 +67,19 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
 
-  // Mirrors the root in apple/toolbox/src/ToolboxRender.cpp; change these
-  // together with that root. Fixture sizes and local ink offsets are separate.
-  enum { kRootX = 12, kRootY = 12, kRootGap = 8,
-         kScrollSurfaceY = kRootY + 48 + kRootGap - 32,
-         kScrollTextY = kScrollSurfaceY + 50 + kRootGap + 50 + kRootGap,
-         kBoundsViewportY = kRootY + 40 + kRootGap,
-         kCellThirdY = kRootY + 2 * (24 + kRootGap),
-         kOverflowCellX = kRootX + 42 + kRootGap };
+  // These windows keep unspecified margins, so their root origins follow
+  // the rail standard. Fixture sizes and local ink offsets are separate.
+  enum
+  {
+    kRootX = ToolboxLayoutMetrics::kRootInset,
+    kRootY = ToolboxLayoutMetrics::kRootInset,
+    kRootGap = 8,
+    kScrollSurfaceY = kRootY + 48 + kRootGap - 32,
+    kScrollTextY = kScrollSurfaceY + 50 + kRootGap + 50 + kRootGap,
+    kBoundsViewportY = kRootY + 40 + kRootGap,
+    kCellThirdY = kRootY + 2 * (24 + kRootGap),
+    kOverflowCellX = kRootX + 42 + kRootGap
+  };
 
   /** A StateTrackerGuard write inside the idle turn commits at the turn's
       settle (#1080). An arm that reads the result in the same turn settles
