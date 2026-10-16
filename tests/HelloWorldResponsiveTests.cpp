@@ -1,6 +1,8 @@
 #include "HelloWorldResponsiveTests.hpp"
 
 #include "../example/HelloWorld/src/MainNode.hpp"
+#include "../example/HelloWorld/src/MyAppConfig.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include "app/core/Window.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -28,6 +30,31 @@ public:
 
 namespace
 {
+  class ProductionConfig : public HelloWorldAppConfig
+  {
+  public:
+    explicit ProductionConfig(PlatformContext *context)
+        : HelloWorldAppConfig(context, 1)
+    {
+    }
+    using HelloWorldAppConfig::productionWindowProps;
+  };
+
+  class MarginProjection : public NullScenePlatformController
+  {
+  public:
+    loka::app::scene::LayoutState decoration;
+    loka::app::scene::LayoutState title;
+    virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state)
+    {
+      if (node->testId() == "HelloWorld.Decoration")
+        this->decoration = state;
+      if (node->testId() == "HelloWorld.LeftPanel.Title")
+        this->title = state;
+      return NullScenePlatformController::prepareProjectedLayout(node, state);
+    }
+  };
+
   void driveNativeFrameAndLayout(NullWindow &window,
                                  NullScenePlatformController &platform,
                                  const loka::core::Frame &frame)
@@ -185,12 +212,15 @@ namespace
 void testHelloWorldResponsivePanelsFollowNativeFrameAndRetainSeats()
 {
   NullPlatformContext context;
-  NullScenePlatformController platform;
+  MarginProjection platform;
+  ProductionConfig config(&context);
+  WindowProps props =
+      config.productionWindowProps(loka::app::scene::Boundary<helloworld::MainNode>(helloworld::MainProps()));
+  LOKA_VERIFY(props.contentMarginValue == loka::app::layout::LayoutGap::of(0));
+  // This fixture mounts directly rather than running App admission.
   loka::app::scene::NodeDefinitionBase *rootDefinition =
       loka::app::scene::Boundary<helloworld::MainNode>(helloworld::MainProps()).clone();
   LOKA_VERIFY(rootDefinition != 0);
-  WindowProps props;
-  props.frame(50, 50, 420, 330);
   props.scene(new loka::app::scene::Scene(rootDefinition));
   NullWindow *window = new NullWindow(&context, props, &platform);
   LOKA_VERIFY(window->scene() != 0);
@@ -213,6 +243,16 @@ void testHelloWorldResponsivePanelsFollowNativeFrameAndRetainSeats()
   LOKA_VERIFY(rightPanel->nextInComposition == 0);
   const loka::core::Frame wideDefault(50, 50, 420, 330);
   driveNativeFrameAndLayout(*window, platform, wideDefault);
+  LOKA_VERIFY(window->contentMargin() == loka::app::layout::LayoutGap::of(0));
+  loka::app::BoxNode *inset = mainPanelsInset->asBoxNode();
+  LOKA_VERIFY(inset && inset->props.padding == loka::app::StandardWindowMargin());
+  LOKA_VERIFY(inset->props.padding.resolve(0, 9) == 9);
+  LOKA_VERIFY(platform.title.x == 9 && platform.title.y == 9);
+  LOKA_VERIFY(platform.decoration.x == 9 && platform.decoration.y == 9);
+  loka::app::scene::Node *decoration =
+      findByTestId(loka::dsl::testing::SceneTestAccess::rootNode(*window->scene()), "HelloWorld.Decoration");
+  LOKA_VERIFY(decoration && decoration->asTextNode());
+
   LOKA_VERIFY(mainPanels->props.effectiveAxis() == loka::app::STACK_AXIS_ROW);
   LOKA_VERIFY(platform.lastOnChangeFlags() == loka::app::scene::NODE_DIRTY_LAYOUT);
   const unsigned long wideLayoutCount = platform.onChangeCallCount();

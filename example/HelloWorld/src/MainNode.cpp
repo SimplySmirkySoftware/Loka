@@ -21,12 +21,6 @@ namespace helloworld
     kMainPanelsScrollTag = 1,
     kDecorationTag = 2
   };
-  // The panels keep a gap from the scroll bar; ScrollView offers its content
-  // the full width up to the bar on every rail (#1040).
-  enum
-  {
-    kContentInset = 6
-  };
 
   namespace
   {
@@ -293,9 +287,12 @@ namespace helloworld
                   << (MenuItem("Item") << MenuItem("Sub Item"))
                   << MenuItem("Item 2"))
               << randomMenu);
+    // The window's margin is 0 so the ScrollView reaches its edges; the panels
+    // keep the rail's standard margin inside it, from the edges and from the
+    // bar (#950 page 4). The decoration keeps the same margin from the corner.
     ScrollView mainPanels = ScrollView(this->viewport_)
                                 .TEST_ID("HelloWorld.MainPanelsScroll")
-                            << (Box().padding(kContentInset).TEST_ID("HelloWorld.MainPanelsInset")
+                            << (Box().padding(StandardWindowMargin()).TEST_ID("HelloWorld.MainPanelsInset")
                                 << (Stack(this->axis_.state())
                                         .TEST_ID("HelloWorld.MainPanels")
                                     << this->mainLeftPanel()
@@ -308,7 +305,8 @@ namespace helloworld
     mainPanels.tag(kMainPanelsScrollTag);
     TextDefinition decoration = Text("*").TEST_ID("HelloWorld.Decoration");
     decoration.tag(kDecorationTag);
-    c.declare(ZStack().TEST_ID("HelloWorld.Root") << mainPanels << decoration);
+    c.declare(ZStack().TEST_ID("HelloWorld.Root")
+              << mainPanels << (Box().padding(StandardWindowMargin()) << decoration));
   }
 
 

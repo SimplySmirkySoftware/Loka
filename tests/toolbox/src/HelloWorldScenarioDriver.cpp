@@ -27,6 +27,22 @@
 
 namespace loka
 {
+  namespace testing
+  {
+    /** Read the laid-out native seat without changing the projection. */
+    class ToolboxTextContextAccess
+    {
+    public:
+      static Rect rect(const ToolboxTextContext &context)
+      {
+        return context.rect_;
+      }
+    };
+  } // namespace testing
+} // namespace loka
+
+namespace loka
+{
   namespace toolbox_tests
   {
     namespace
@@ -365,21 +381,18 @@ namespace loka
           return false;
         }
 
-        short overlapWidth = titleContext->visibleWidth();
-        const short decorationWidth = decorationContext->visibleWidth();
-        if (decorationWidth < overlapWidth)
-        {
-          overlapWidth = decorationWidth;
-        }
-        // The controller starts the root layout at (12, 24) with a 14-pixel
-        // line height. ToolboxTextContext therefore records both first ZStack
-        // children in [12, 12, 12 + width, 30]. The contexts supply the live
-        // widths; these shared root coordinates need no new production query.
+        // Intersect the live ink widths within the recorded text seats: the
+        // ScrollView and decoration now have independent padded containers.
+        Rect titleRect = loka::testing::ToolboxTextContextAccess::rect(*titleContext);
+        Rect decorationRect = loka::testing::ToolboxTextContextAccess::rect(*decorationContext);
+        titleRect.right = static_cast<short>(titleRect.left + titleContext->visibleWidth());
+        decorationRect.right = static_cast<short>(decorationRect.left + decorationContext->visibleWidth());
         Rect overlap;
-        overlap.left = 12;
-        overlap.top = 12;
-        overlap.right = static_cast<short>(overlap.left + overlapWidth);
-        overlap.bottom = 30;
+        if (!SectRect(&titleRect, &decorationRect, &overlap))
+        {
+          failureMessage = "ZStack dirty replay probe text seats did not overlap";
+          return false;
+        }
         const int width = static_cast<int>(overlap.right) - static_cast<int>(overlap.left);
         if (width <= 0 || width > kDirtyReplayProbeMaxWidth || overlap.left < nativeWindow->portRect.left
             || overlap.right > nativeWindow->portRect.right || overlap.top < nativeWindow->portRect.top
