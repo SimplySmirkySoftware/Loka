@@ -2,6 +2,7 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 
 #include "MacSceneLayout.hpp"
+#include "MacObjCCompat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
@@ -735,7 +736,7 @@ void testMacScrollViewHorizontalScrollerShortensChildHeight()
     NSClipView *clip = [native contentView];
     LOKA_VERIFY([native hasHorizontalScroller] == YES);
     const int seatHeight = 140 - 2 * MacSceneLayout::kRootInset;
-    CGFloat thickness = [NSScroller scrollerWidth];
+    CGFloat thickness = 0;
     if ([NSScroller respondsToSelector:@selector(preferredScrollerStyle)] &&
         [NSScroller respondsToSelector:@selector(scrollerWidthForControlSize:scrollerStyle:)])
     {
@@ -746,8 +747,15 @@ void testMacScrollViewHorizontalScrollerShortensChildHeight()
         thickness = 0;
       }
       else
-        thickness = [NSScroller scrollerWidthForControlSize:NSRegularControlSize
+        thickness = [NSScroller scrollerWidthForControlSize:LOKA_MAC_CONTROL_SIZE_REGULAR
                                               scrollerStyle:[NSScroller preferredScrollerStyle]];
+    }
+    else
+    {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      thickness = [NSScroller scrollerWidth];
+#pragma clang diagnostic pop
     }
     const CGFloat expectedHeight = seatHeight > thickness ? seatHeight - thickness : 0;
     LOKA_VERIFY([[native documentView] frame].size.height == expectedHeight);
