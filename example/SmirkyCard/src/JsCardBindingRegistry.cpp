@@ -1,6 +1,11 @@
 #include "JsCardBindingRegistry.hpp"
 #include "CardNodes.hpp"
 #include "SmirkyMarkup.hpp"
+#include "JsOwnProperties.hpp"
+#include "app/nodes/ImageView.hpp"
+#include "app/nodes/controls/Card.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
+#include <cstring>
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -527,6 +532,179 @@ namespace smirkycard
         return node.lowerOpenFileDialog(ctx, tree);
       }
     };
+    JSValue singleChildTree(JSContext *ctx, int kind, const char *name, int argc, JSValueConst *argv)
+    {
+      if (argc != 1 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
+        return JS_ThrowTypeError(ctx, "%s(child) requires one tree", name);
+      JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
+      const bool valid = JS_IsNumber(childKind);
+      JS_FreeValue(ctx, childKind);
+      if (!valid)
+        return JS_ThrowTypeError(ctx, "%s(child) requires one tree", name);
+      JSValue tree = newTree(ctx, kind);
+      if (JS_IsException(tree))
+        return tree;
+      if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0 || JS_FreezeObject(ctx, tree) < 0)
+      {
+        JS_FreeValue(ctx, tree);
+        return JS_EXCEPTION;
+      }
+      return tree;
+    }
+    loka::app::scene::NodeDefinitionBase *
+    lowerSingleChild(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth, const char *refusal)
+    {
+      JSValue child = JS_GetPropertyStr(ctx, tree, "child");
+      if (!JS_IsObject(child) || JS_IsArray(child))
+      {
+        JS_FreeValue(ctx, child);
+        node.fail(refusal);
+        return 0;
+      }
+      loka::app::scene::NodeDefinitionBase *content = node.lowerChild(ctx, child, depth + 1);
+      JS_FreeValue(ctx, child);
+      return content;
+    }
+    class ScrollViewLowering : public IJsNodeLowering
+    {
+    public:
+      ScrollViewLowering()
+      {
+        this->name = "ScrollView";
+        this->kind = 0;
+      }
+      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      {
+        return singleChildTree(ctx, this->kind, this->name, argc, argv);
+      }
+      virtual loka::app::scene::NodeDefinitionBase *
+      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
+      {
+        loka::app::scene::NodeDefinitionBase *scroll = node.createScrollView();
+        if (!scroll)
+        {
+          node.fail("JavaScript ScrollView allocation refused.");
+          return 0;
+        }
+        loka::app::scene::NodeDefinitionBase *content =
+            lowerSingleChild(node, ctx, tree, depth, "JavaScript ScrollView has an invalid child.");
+        if (!content)
+        {
+          delete scroll;
+          return 0;
+        }
+        scroll->asNestableDefinition()->addOwnedChild(content);
+        return scroll;
+      }
+    };
+    class CardLowering : public IJsNodeLowering
+    {
+    public:
+      CardLowering()
+      {
+        this->name = "Card";
+        this->kind = 0;
+      }
+      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      {
+        return singleChildTree(ctx, this->kind, this->name, argc, argv);
+      }
+      virtual loka::app::scene::NodeDefinitionBase *
+      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
+      {
+        loka::app::CardDefinition *card = new (std::nothrow) loka::app::CardDefinition();
+        if (!card || card->childrenCount() != 1 + loka::app::CARD_BAND_COUNT)
+        {
+          delete card;
+          node.fail("JavaScript Card allocation refused.");
+          return 0;
+        }
+        loka::app::scene::NodeDefinitionBase *content =
+            lowerSingleChild(node, ctx, tree, depth, "JavaScript Card has an invalid child.");
+        if (!content)
+        {
+          delete card;
+          return 0;
+        }
+        *card << content;
+        return card;
+      }
+    };
+    bool copyImageOptions(JSContext *ctx, JSValueConst options, JSValue tree)
+    {
+      if (!requirePlainObject(ctx, options, "ImageView options"))
+        return false;
+      JsOwnProperties names(ctx);
+      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return false;
+      // Zero is outside the accepted range and denotes an absent dimension.
+      int width = 0, height = 0;
+      for (uint32_t i = 0; i < names.count(); ++i)
+      {
+        JSValue key = JS_AtomToValue(ctx, names.atom(i));
+        size_t length = 0;
+        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
+        JS_FreeValue(ctx, key);
+        const bool isWidth = name && length == 5 && !memcmp(name, "width", 5);
+        const bool isHeight = name && length == 6 && !memcmp(name, "height", 6);
+        const bool isFit = name && length == 3 && !memcmp(name, "fit", 3);
+        if (name)
+          JS_FreeCString(ctx, name);
+        if (!isWidth && !isHeight && !isFit)
+        {
+          JS_ThrowTypeError(ctx, "Unknown ImageView options key");
+          return false;
+        }
+        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
+        if (JS_IsException(value))
+          return false;
+        int normalized = 0;
+        if (isFit)
+        {
+          size_t size = 0;
+          const char *fit = JS_IsString(value) ? JS_ToCStringLen(ctx, &size, value) : 0;
+          if (fit)
+          {
+            if (size == 7 && !memcmp(fit, "contain", 7))
+              normalized = loka::app::IMAGE_FIT_CONTAIN;
+            else if (size == 5 && !memcmp(fit, "cover", 5))
+              normalized = loka::app::IMAGE_FIT_COVER;
+            else if (size == 7 && !memcmp(fit, "stretch", 7))
+              normalized = loka::app::IMAGE_FIT_STRETCH;
+            JS_FreeCString(ctx, fit);
+          }
+        }
+        else
+        {
+          double number = 0;
+          if (JS_IsNumber(value) && !JS_ToFloat64(ctx, &number, value) && number >= 1 && number <= 4096
+              && number == static_cast<int>(number))
+            normalized = static_cast<int>(number);
+        }
+        JS_FreeValue(ctx, value);
+        if (!normalized)
+        {
+          JS_ThrowTypeError(ctx,
+                            isFit ? "ImageView fit must be contain, cover or stretch"
+                                  : "ImageView width and height must be integers in 1..4096");
+          return false;
+        }
+        if (isWidth)
+          width = normalized;
+        if (isHeight)
+          height = normalized;
+        if (JS_SetPropertyStr(
+                ctx, tree, isWidth ? "width" : (isHeight ? "height" : "fit"), JS_NewInt32(ctx, normalized))
+            < 0)
+          return false;
+      }
+      if ((width == 0) != (height == 0))
+      {
+        JS_ThrowTypeError(ctx, "ImageView width and height must be provided together");
+        return false;
+      }
+      return true;
+    }
     class ImageViewLowering : public IJsNodeLowering
     {
     public:
@@ -537,9 +715,20 @@ namespace smirkycard
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
-        if (argc != 1)
-          return JS_ThrowTypeError(ctx, "ImageView(imageSeat) requires one seat");
-        return seatTree(ctx, this->kind, argv[0]);
+        if (argc < 1 || argc > 2)
+          return JS_ThrowTypeError(ctx, "ImageView(imageSeat, options?) requires a seat and optional options");
+        if (argc == 1)
+          return seatTree(ctx, this->kind, argv[0]);
+        JSValue tree = newTree(ctx, this->kind);
+        if (JS_IsException(tree))
+          return tree;
+        if (JS_SetPropertyStr(ctx, tree, "seat", JS_DupValue(ctx, argv[0])) < 0 || !copyImageOptions(ctx, argv[1], tree)
+            || JS_FreezeObject(ctx, tree) < 0)
+        {
+          JS_FreeValue(ctx, tree);
+          return JS_EXCEPTION;
+        }
+        return tree;
       }
       virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
       {
@@ -589,6 +778,8 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) GridLowering())
            && registry.registerLowering(new (std::nothrow) ShowLowering())
            && registry.registerLowering(new (std::nothrow) OpenFileDialogLowering())
-           && registry.registerLowering(new (std::nothrow) ImageViewLowering()) && registry.registerGlobal(card);
+           && registry.registerLowering(new (std::nothrow) ImageViewLowering())
+           && registry.registerLowering(new (std::nothrow) ScrollViewLowering())
+           && registry.registerLowering(new (std::nothrow) CardLowering()) && registry.registerGlobal(card);
   }
 } // namespace smirkycard
