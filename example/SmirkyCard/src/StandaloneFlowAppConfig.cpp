@@ -18,33 +18,10 @@ namespace
   }
 } // namespace
 
-SmirkyCardStandaloneFlowAppConfig::Audit::Audit(const loka::platform::file::FileHandle &file)
-    : ScenarioAuditFile(file, SMIRKYCARD_SCENARIO_NAME),
-      phase_(RUNNING)
-{
-}
-
-bool SmirkyCardStandaloneFlowAppConfig::Audit::recordTerminal(loka::dsl::testing::ScenarioAuditTerminalStatus status)
-{
-  const bool written = ScenarioAuditFile::recordTerminal(status);
-  this->phase_ = written && status == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED ? SUCCEEDED : FAILED;
-  return written;
-}
-
-bool SmirkyCardStandaloneFlowAppConfig::Audit::finished() const
-{
-  return this->phase_ != RUNNING;
-}
-
-bool SmirkyCardStandaloneFlowAppConfig::Audit::failed() const
-{
-  return !this->isValid() || this->phase_ == FAILED;
-}
-
 SmirkyCardStandaloneFlowAppConfig::SmirkyCardStandaloneFlowAppConfig(PlatformContext *context,
                                                                      const loka::platform::file::FileHandle *auditFile)
     : AppConfigurable(context),
-      audit_(auditFile ? *auditFile : loka::standalone_tests::ResolveStandaloneAuditFile()),
+      audit_(auditFile ? *auditFile : loka::standalone_tests::ResolveStandaloneAuditFile(), SMIRKYCARD_SCENARIO_NAME),
       runtime_(context),
       app_(0)
 {
