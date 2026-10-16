@@ -78,6 +78,7 @@ namespace smirkycard
     loka::app::scene::NodeDefinitionBase *lowerShow(JSContext *context, JSValueConst tree, int depth);
     loka::app::scene::NodeDefinitionBase *lowerOpenFileDialog(JSContext *context, JSValueConst tree);
     loka::app::scene::NodeDefinitionBase *lowerImageView(JSContext *context, JSValueConst tree);
+    loka::app::scene::NodeDefinitionBase *createScrollView();
     void fail(const char *message);
     loka::app::scene::NodeDefinitionBase *lowerChild(JSContext *context, JSValueConst tree, int depth);
     virtual void declareBindings(loka::app::scene::BindingToken &token);
@@ -138,6 +139,7 @@ namespace smirkycard
     loka::core::String failure_;
     loka::core::EmitterState reloadEmitter_;
     CardRecords<JsSeatRecord> seats_;
+    CardRecords<JsScrollViewport> scrollViewports_;
     CardRecords<JsHandlerRecord> handlers_;
     CardRecords<CardFlow> flows_;
     CardFlow::Admission flowAdmission_;
