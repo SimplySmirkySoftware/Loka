@@ -59,15 +59,21 @@ void testWin32CardPainterPixels()
   using namespace loka::win32;
   using loka::core::Frame;
   const UINT dpis[] = {96, 120, 144, 168, 192};
+  // Body sizes: regular, the admitted minimum (14 lu) on each axis, and zero
+  // shadow clearance (12 lu, below admission). At zero clearance the painter
+  // alone must keep a band's displaced shadow equal to the whole reference:
+  // offsetting the shadow after projection leaked one pixel of the 77x12 body
+  // into the bottom band at scale 1.5 (188ddb2b).
+  const int sizes[][2] = {{77, 57}, {14, 57}, {77, 14}, {14, 14}, {12, 57}, {77, 12}, {12, 12}};
   for (int metricsIndex = 0; metricsIndex < 2; ++metricsIndex)
     for (int dpiIndex = 0; dpiIndex < 5; ++dpiIndex)
-      for (int sizeIndex = 0; sizeIndex < 4; ++sizeIndex)
+      for (int sizeIndex = 0; sizeIndex < 7; ++sizeIndex)
       {
         const RailMetrics metrics(Ratio(), metricsIndex ? Ratio(3, 2) : Ratio());
         const Win32DisplayScale scale(dpis[dpiIndex], metrics);
         // Translated origin and asymmetric allowances exercise absolute-edge rounding.
-        const int width = (sizeIndex & 1) ? 14 : 77;
-        const int height = (sizeIndex & 2) ? 14 : 57;
+        const int width = sizes[sizeIndex][0];
+        const int height = sizes[sizeIndex][1];
         const Frame wholeBody(11, 17, width, height);
         const Frame bands[] = {Frame(11, 17, width - 3, 3),
                                Frame(11, 20, 3, height),
@@ -120,7 +126,7 @@ void testWin32CardPainterPixels()
           for (int x = static_cast<int>(seat.left); x < seat.right; ++x)
             LOKA_VERIFY(GetPixel(split.dc, x, y) == ground(x, y));
         // Straight-side checks need space between top and bottom corner quadrants.
-        if (height == 14)
+        if (height < 57)
           continue;
         const RECT body = scale.projectFrame(wholeBody).r;
         const int middle = static_cast<int>((body.top + body.bottom) / 2);

@@ -134,7 +134,6 @@ void Win32CardBandContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  Win32ScenePlatformController::requestTransparentChildRepaint(this->hwnd());
   this->frame_ = loka::core::Frame(x, y, width, height);
   this->positionNativeWindow(this->hwnd(),
                              this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
