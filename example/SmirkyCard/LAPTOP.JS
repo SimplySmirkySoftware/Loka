@@ -122,7 +122,8 @@ card('first', class {
     return Row(
       Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
       Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
-      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
+      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'),
+      Button('./MAIN.JS', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'));
   }
 
   carousel() {

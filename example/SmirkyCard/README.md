@@ -436,7 +436,7 @@ seats hold the selection, the page and the presentation. Its five pictures are
 `c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
 when the card is constructed. The carousel holds one Row of five Cards; the
 arrows move the selection (heading and counter), while scrolling is the viewer's.
-Presentation is a toolbar toggle because no viewport fact reaches JavaScript yet. Open it from the first card's `./LAPTOP.JS` button.
+Presentation is a toolbar toggle because no viewport fact reaches JavaScript yet. Open it from the first card's `./LAPTOP.JS` button; its toolbar's `./MAIN.JS` button returns to the built-in cards.
 
 [LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
 facts, open details from the list, Back with the selection kept, the carousel
