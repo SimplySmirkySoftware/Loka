@@ -780,6 +780,44 @@ void testContentOverflowPassThroughIsTransparent()
   LOKA_VERIFY(width == 19);
 }
 
+void testNaturalRowSeesThroughPassThroughWrapper()
+{
+  using namespace loka::app;
+  // A natural-width Row whose seat is a pass-through wrapper (a component such
+  // as a JS Button, a Fragment) measures the wrapper as its widest child; a
+  // declared width inside wins before the rail is asked, as in the stack paths.
+  ScrollViewNode scroll((ScrollViewProps()));
+  StackNode *row = widthRow(ROW_UNDECLARED_WIDTH_NATURAL);
+  scroll.addChild(row);
+  FragmentNode *wrapper = new FragmentNode(FragmentProps());
+  row->addChild(wrapper);
+  wrapper->addChild(new TextNode(TextProps("a")));
+  ImageViewProps sized;
+  sized.size(75, 10);
+  wrapper->addChild(new ImageViewNode(sized));
+  StackWidthProbe probe(30, 40, 20);
+  short width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  // widthRow seats "a" and "b" (30 + 40) and the wrapper (75) with two gaps.
+  LOKA_VERIFY(width == 30 + 40 + 75 + 2 * 4);
+  LOKA_VERIFY(probe.calls == 3);
+  // A wrapper holding only a sized image never asks the rail.
+  FragmentNode *imageOnly = new FragmentNode(FragmentProps());
+  row->addChild(imageOnly);
+  imageOnly->addChild(new ImageViewNode(sized));
+  StackWidthProbe refusing(30, 40, 0);
+  width = 19;
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &refusing, width));
+  LOKA_VERIFY(width == 30 + 40 + 75 + 75 + 3 * 4);
+  // A wrapper whose only child the rail declines makes the Row decline.
+  FragmentNode *declined = new FragmentNode(FragmentProps());
+  row->addChild(declined);
+  declined->addChild(new TextNode(TextProps("caption")));
+  width = 19;
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, 4, &refusing, width));
+  LOKA_VERIFY(width == 19);
+}
+
 void testContentOverflowRibbonUsesNaturalMeasurement()
 {
   using namespace loka::app;
