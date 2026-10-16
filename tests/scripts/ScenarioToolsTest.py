@@ -231,12 +231,16 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         registry = os.path.join(PROJECT_DIR, "tests", "scenarios", "scenarios.txt")
         with open(registry, "r", encoding="utf-8") as handle:
             entries = [line.split() for line in handle.read().splitlines()]
-        self.assertEqual(len(entries), 30)
+        self.assertEqual(len(entries), 33)
         self.assertEqual(len(entries), len({tuple(entry) for entry in entries}))
         self.assertEqual(
             [entry for entry in entries if entry[0] == "simpleviewer"],
             [["simpleviewer", "startup"], ["simpleviewer", "open-sun"], ["simpleviewer", "open-bulb"],
              ["simpleviewer", "churn-replace"], ["simpleviewer", "open-wide-scroll"]],
+        )
+        self.assertEqual(
+            [entry[1] for entry in entries if entry[0] == "smirkycard"],
+            ["startup", "laptop-carousel", "laptop-detail"],
         )
         registered_audits = set()
         for entry in entries:
@@ -271,6 +275,11 @@ class ExpectedAuditPinsTest(unittest.TestCase):
                 "simpleviewer": b"SimpleViewer",
                 "simpletext": b"SimpleText",
             }
+            if example == "smirkycard":
+                self.assertIn(b"name=initial-browse\n", audit)
+                self.assertIn(b"name=pictures-loaded\n", audit)
+                self.assertIn(b"log text=picture.MACPORT%20160x100\n", audit)
+                continue
             identity = identities[example]
             self.assertIn(b"test\t" + identity + b"\n", audit)
             self.assertIn(b"step\t" + scenario.encode("ascii") + b"\n", audit)

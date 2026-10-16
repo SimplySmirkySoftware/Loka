@@ -77,6 +77,10 @@ jobs:
                 -B "$build_dir" -DLOKA_TOOLBOX_MULTIVERSAL_INTERFACES=ON \
                 -DLOKA_BUILD_SMIRKYCARD=ON
               cmake --build "$build_dir" --target LokaSmirkyCard68K_APPL
+              # The smirkycard scenario vehicle builds only with SmirkyCard on;
+              # build it here so a source change that breaks it fails in CI
+              # instead of on the MAME rig, as the PaintDamage standalone above.
+              cmake --build "$build_dir" --target LokaSmirkyCardTest68K_APPL
               python3 tests/scripts/ClassicInttypesTest.py --build-dir "$build_dir" \
                 ClassicQuickjsHeadersTest
               python3 tests/scripts/ClassicQuickjsStackTest.py --build-dir "$build_dir"

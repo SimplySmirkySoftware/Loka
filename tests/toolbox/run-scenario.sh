@@ -155,6 +155,15 @@ case "$EXAMPLE" in
     TARGET="LokaSimpleViewerTestsToolbox68K_APPL"
     FINDER_TAB_COUNT=3
     ;;
+  smirkycard)
+    APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/smirkycard/LokaSmirkyCardTest68K.bin"
+    TARGET="LokaSmirkyCardTest68K_APPL"
+    # SmirkyCard is opt-in, so the vehicle exists only in a build configured with it.
+    CONFIGURE_FLAGS=" -DLOKA_BUILD_SMIRKYCARD=ON"
+    # Seven dev-disk items: application, five PICTs, LokaTest.cfg.
+    # The delegator measures this per-disk Finder Tab count on the rig.
+    FINDER_TAB_COUNT=7
+    ;;
   smirkbench)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTestsToolbox68K.bin"
     TARGET="LokaSmirkBenchTestsToolbox68K_APPL"
@@ -228,7 +237,7 @@ fi
 
 if [ ! -f "$APPL" ]; then
   fail_stage mame \
-    "missing $APPL; build it with: cmake --preset retro68-68k-release && cmake --build --preset retro68-68k-release --target $TARGET"
+    "missing $APPL; build it with: cmake --preset retro68-68k-release${CONFIGURE_FLAGS:-} && cmake --build --preset retro68-68k-release --target $TARGET"
 fi
 LRPC="$PROJECT_DIR/build/host/lrpc/lrpc"
 if [ "$EXAMPLE" = "scrapbook" ] && [ ! -x "$LRPC" ]; then

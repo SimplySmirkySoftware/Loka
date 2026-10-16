@@ -15,7 +15,15 @@ scenario('first', function (c) {
     if (facts.empty || facts.width !== size.width || facts.height !== size.height)
       throw Error(stem + ' did not load as ' + size.width + 'x' + size.height);
   }
-  c.run(Flow()
+  const cell = globalThis.LAPTOP_CELL;
+  function detailShowsPb100() {
+    expect('Laptop.Title', 'PowerBook 100');
+    expect('Laptop.Detail.Name', 'PowerBook 100');
+    expect('Laptop.Detail.Year', '1991');
+    expect('Laptop.Detail.cpu', 'CPU: Motorola 68HC000, 16 MHz');
+  }
+  function openDetail() { c.test.click('Laptop.Open.pb100'); }
+  let flow = Flow()
     .step(function () {
       // The card's own status line, or the refusal UI's: either way the audit
       // carries the message when the card did not compose.
@@ -34,17 +42,30 @@ scenario('first', function (c) {
       picture('PB180C', 'pb180c');
       picture('PB550C', 'pb550c');
       picture('PB5300C', 'pb5300c');
-    }).named('pictures-loaded')
+    }).named('pictures-loaded');
+  if (cell === 'startup') { c.run(flow); return; }
+  if (cell === 'laptop-carousel') {
+    c.run(flow.step(function () {
+      c.test.click('Laptop.Presentation');
+    }).named('show-carousel').step(function () {
+      expect('Laptop.Presentation', 'Tall');
+      expect('Laptop.Heading', 'Macintosh Portable');
+      expect('Laptop.Counter', '1 of 5  -  1989');
+    }).named('carousel-shows-macport'));
+    return;
+  }
+  if (cell === 'laptop-detail') {
+    c.run(flow.step(openDetail).named('open-detail')
+      .step(detailShowsPb100).named('detail-shows-pb100'));
+    return;
+  }
+  if (cell !== undefined) throw Error('Unknown LAPTOP_CELL: ' + cell);
+  c.run(flow
     // A Show branch materializes when the step settles, so every click that
     // reveals a pane is followed by its expectations in the next step.
+    .step(openDetail).named('open-detail')
     .step(function () {
-      c.test.click('Laptop.Open.pb100');
-    }).named('open-detail')
-    .step(function () {
-      expect('Laptop.Title', 'PowerBook 100');
-      expect('Laptop.Detail.Name', 'PowerBook 100');
-      expect('Laptop.Detail.Year', '1991');
-      expect('Laptop.Detail.cpu', 'CPU: Motorola 68HC000, 16 MHz');
+      detailShowsPb100();
       c.test.click('Laptop.Back');
     }).named('detail-shows-pb100')
     .step(function () {
