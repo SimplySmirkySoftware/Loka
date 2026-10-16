@@ -210,7 +210,7 @@ function(smirkycard_add_scenario_runner name)
       message(FATAL_ERROR "${target} is ${target_length} characters; HFS file names allow 31. Shorten the runner name '${name}'.")
     endif()
     loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
-      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp ${SMIRKYCARD_SIZE_R}
+      src/StandaloneFlowMain.cpp src/StandaloneFlowAppConfig.cpp src/ScenarioRunAudit.cpp ${SMIRKYCARD_SIZE_R}
       ${PROJECT_SOURCE_DIR}/tests/standalone/StandaloneScenarioSupport.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioReel.cpp
       ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
@@ -228,9 +228,31 @@ smirkycard_add_scenario_runner(SmirkyView CARD VIEWER.JS FLOW VIEWER.FLOW.JS SCE
 smirkycard_add_scenario_runner(Laptop CARD LAPTOP.JS FLOW LAPTOP.FLOW.JS SCENARIO laptop APP_NAME "LaptopTracker" SEED 7)
 if(TARGET LokaSmirkyCardTests)
   target_link_libraries(LokaSmirkyCardTests PRIVATE SmirkyCardScenarioInputs)
-  target_sources(LokaSmirkyCardTests PRIVATE src/StandaloneFlowAppConfig.cpp
+  target_sources(LokaSmirkyCardTests PRIVATE src/StandaloneFlowAppConfig.cpp src/ScenarioRunAudit.cpp
     ${PROJECT_SOURCE_DIR}/tests/standalone/StandaloneScenarioSupport.cpp
     ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioReel.cpp
     ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp)
   target_include_directories(LokaSmirkyCardTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/standalone)
+endif()
+
+# Scenario vehicles participate in the default Retro68 build, unlike standalone runners.
+if(CMAKE_SYSTEM_NAME STREQUAL "Retro68")
+  loka_add_toolbox_test_application(LokaSmirkyCardTest68K LokaAppleToolboxTestCore
+    src/ToolboxScenarioMain.cpp src/ToolboxScenarioAppConfig.cpp src/ScenarioRunAudit.cpp
+    ${SMIRKYCARD_SIZE_R}
+    ${PROJECT_SOURCE_DIR}/tests/toolbox/src/ScenarioDriverSupport.cpp
+    ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
+    ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp)
+  # run-scenario.sh reads provenance beside the vehicle, outside tests/toolbox here.
+  add_custom_target(LokaSmirkyCardScenarioProvenance
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${PROJECT_BINARY_DIR}/tests/toolbox/classic-build-provenance.txt"
+      "${CMAKE_CURRENT_BINARY_DIR}/classic-build-provenance.txt"
+    DEPENDS LokaToolboxBuildProvenance
+    VERBATIM)
+  add_dependencies(LokaSmirkyCardTest68K LokaSmirkyCardScenarioProvenance)
+  smirkycard_cpp_target(LokaSmirkyCardTest68K)
+  target_link_libraries(LokaSmirkyCardTest68K PRIVATE LaptopScenarioInputs)
+  target_include_directories(LokaSmirkyCardTest68K PRIVATE ${PROJECT_SOURCE_DIR}/tests/toolbox/src)
+  target_compile_definitions(LokaSmirkyCardTest68K PRIVATE TEST_BUILD LOKA_DIAG=1)
 endif()

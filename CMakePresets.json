@@ -223,6 +223,7 @@
       "inherits": "retro68-release-base",
       "binaryDir": "build/retro68/68k/Release",
       "cacheVariables": {
+        "LOKA_BUILD_SMIRKYCARD": "ON",
         "RETRO68_CPU": "m68k"
       }
     },
@@ -289,6 +290,7 @@
       "generator": "Ninja",
       "binaryDir": "build/Testing",
       "cacheVariables": {
+        "LOKA_BUILD_SMIRKYCARD": "ON",
         "TEST_BUILD": "ON",
         "LOKA_COMPILE_PINS": "ON",
         "LOKA_LIFECYCLE_AUDIT": "ON",
@@ -337,6 +339,7 @@
       "generator": "Ninja",
       "binaryDir": "build/Testing-ASan",
       "cacheVariables": {
+        "LOKA_BUILD_SMIRKYCARD": "ON",
         "TEST_BUILD": "ON",
         "LOKA_COMPILE_PINS": "ON",
         "LOKA_LIFECYCLE_AUDIT": "ON",

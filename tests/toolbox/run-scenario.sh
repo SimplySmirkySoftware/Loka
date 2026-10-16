@@ -155,6 +155,13 @@ case "$EXAMPLE" in
     TARGET="LokaSimpleViewerTestsToolbox68K_APPL"
     FINDER_TAB_COUNT=3
     ;;
+  smirkycard)
+    APPL="$PROJECT_DIR/build/retro68/68k/Release/example/SmirkyCard/LokaSmirkyCardTest68K.bin"
+    TARGET="LokaSmirkyCardTest68K_APPL"
+    # Seven dev-disk items: application, five PICTs, LokaTest.cfg.
+    # The delegator measures this per-disk Finder Tab count on the rig.
+    FINDER_TAB_COUNT=7
+    ;;
   smirkbench)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTestsToolbox68K.bin"
     TARGET="LokaSmirkBenchTestsToolbox68K_APPL"
