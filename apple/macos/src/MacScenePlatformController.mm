@@ -557,17 +557,12 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   }
   firstEditField_ = 0;
   lastEditField_ = 0;
-  const int rootInset = MacSceneLayout::kRootInset;
-  int rootWidth = measureClientWidth(clientWidth) - 2 * rootInset;
-  if (rootWidth < 0)
-  {
-    rootWidth = 0;
-  }
-  const LayoutState state(rootInset,
-                          rootInset,
-                          rootWidth,
-                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
-                          MacSceneLayout::spacing().verticalGap());
+  // Deliberate Win32 root twin: shared policy resolves the margin and clamps the offer.
+  const Window *window = MacWindow::fromRootView(this->rootView());
+  const int margin = resolveWindowContentMargin(window, MacSceneLayout::spacing());
+  const int width = loka::app::layout::insetExtent(measureClientWidth(clientWidth), margin, margin);
+  const int height = loka::app::layout::insetExtent(clientHeight, margin, margin);
+  const LayoutState state(margin, margin, width, height, MacSceneLayout::spacing().verticalGap());
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);

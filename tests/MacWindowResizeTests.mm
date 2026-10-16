@@ -13,6 +13,8 @@
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/RectSurface.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/controls/Button.hpp"
 #include "core/State.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 
@@ -237,4 +239,82 @@ void testMacWindowNativeFrameClampReentersAndRelayouts()
   // The borrowed stack Window outlives its App; revoke its Scene first.
   loka::dsl::testing::SceneTestAccess::unmount(*window.scene());
   window.setApp(0);
+}
+
+namespace
+{
+  void verifyRootMargin(NSView *root, int margin, int expectedWidth, int expectedHeight)
+  {
+    LOKA_VERIFY(root != nil);
+    {
+      MacScenePlatformController controller(root, loka::macos::DefaultRailMetrics());
+      ScrollViewNode scroll((ScrollViewProps()));
+      scroll.addChild(new ButtonNode(ButtonProps()));
+      controller.onChange(&scroll, NODE_DIRTY_NONE, false);
+      controller.relayout(300, 140);
+      LOKA_VERIFY([[root subviews] count] == 1);
+      NSScrollView *view = (NSScrollView *)[[root subviews] objectAtIndex:0];
+      LOKA_VERIFY([view isKindOfClass:[NSScrollView class]]);
+      // The real MacWindow content view is flipped; frames use its top-left origin.
+      const NSRect expected =
+          controller.projection().projectFrame(Frame(margin, margin, expectedWidth, expectedHeight)).r;
+      const NSRect actual = [view frame];
+      LOKA_VERIFY(NSEqualRects(actual, expected));
+      NSView *document = [view documentView];
+      LOKA_VERIFY([document isFlipped]);
+      LOKA_VERIFY([[document subviews] count] == 1);
+      // A zero root height is still "no height given": content is laid out.
+      LOKA_VERIFY([[[document subviews] objectAtIndex:0] frame].size.height > 0);
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+  }
+
+  void verifyWindowMargin(WindowProps props, int margin, int width, int height)
+  {
+    CocoaHost host;
+    NullPlatformContext platform;
+    props.frame(60, 60, 300, 140).visible(true);
+    MacWindow window(&platform, props);
+    NSView *root = (NSView *)NativeAccess::contentView(window);
+    LOKA_VERIFY(root != nil);
+    LOKA_VERIFY([root isFlipped]);
+    LOKA_VERIFY(MacWindow::fromRootView(root) == &window);
+    verifyRootMargin(root, margin, width, height);
+  }
+} // namespace
+
+void testMacWindowContentMarginUnspecified()
+{
+  verifyWindowMargin(WindowProps(), 16, 268, 108);
+}
+
+void testMacWindowContentMarginZero()
+{
+  verifyWindowMargin(WindowProps().contentMargin(0), 0, 300, 140);
+}
+
+void testMacWindowContentMarginExplicit()
+{
+  verifyWindowMargin(WindowProps().contentMargin(20), 20, 260, 100);
+}
+
+void testMacWindowContentMarginStandard()
+{
+  verifyWindowMargin(WindowProps().contentMargin(StandardWindowMargin()), 16, 268, 108);
+}
+
+void testMacWindowContentMarginOversized()
+{
+  verifyWindowMargin(WindowProps().contentMargin(200), 200, 0, 0);
+}
+
+void testMacWindowContentMarginWithoutWindow()
+{
+  CocoaHost host;
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  LOKA_VERIFY(MacWindow::fromRootView(root) == 0);
+  verifyRootMargin(root, 16, 268, 108);
+  [root release];
 }
