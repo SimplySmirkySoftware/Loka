@@ -101,6 +101,14 @@ content fits keeps the pixels it had before #580.
 | Win32 | Always present (`SIF_DISABLENOSCROLL`), so the client width never moves between passes | `SetScrollInfo(SB_HORZ)` without `SIF_DISABLENOSCROLL`: Windows shows it only while the range exists | The children, the clip and the vertical page get `clientHeightBelowHorizontalBar(seat)`: the bar at the viewport's DPI leaves the seat's projected native height and the remainder converts once |
 | macOS | Always present | `setHasHorizontalScroller:` from the same decision | Legacy scrollers take `clientHeightBelowHorizontalScroller(seat)`; overlay scrollers take nothing |
 
+On Toolbox a bar that reaches the window's size box (the bottom-right 15 × 15 px
+of a document window, answered in one place by `ToolboxWindowSizeBoxRect` in
+[ToolboxWindowGeometry.hpp](../apple/toolbox/src/ToolboxWindowGeometry.hpp))
+stops above it (vertical) or left of it (horizontal). Only the bar's native
+rectangle changes; the viewport, content rect, range and page size do not, so a
+window whose `contentMargin` is 0 still lays its content out to the edge
+(#950 page 4).
+
 ## Decide first, commit once
 
 The shape every rail follows (converged on #1370 after review):
@@ -151,5 +159,3 @@ keeps the value the preceding layout clamped:
   not a pattern to copy.
 - The visible size is not reported; its first reader is the lazy-list window
   fold (LazyColumn reading `viewport_` directly).
-- Toolbox bars that reach a document window's size box follow the #950 page 4
-  rule in its own PR.

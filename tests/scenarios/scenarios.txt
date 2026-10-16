@@ -28,3 +28,6 @@ simpletext startup
 simpletext open-readme
 simpletext save-roundtrip
 simpleviewer open-wide-scroll
+smirkycard startup
+smirkycard laptop-carousel
+smirkycard laptop-detail

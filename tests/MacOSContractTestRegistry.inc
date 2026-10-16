@@ -163,3 +163,8 @@ LOKA_TEST(testMacGapDoorRegisteredColumnBridge)
 LOKA_TEST(testMacGapDoorRowFragment)
 LOKA_TEST(testMacGapDoorRootFragment)
 LOKA_TEST(testMacGapDoorScrollViewContent)
+
+LOKA_TEST(testMacCardPainterPixels)
+LOKA_TEST(testMacCardBandLifecycleAndRetry)
+LOKA_TEST(testMacCardBandMovePropsAndEmpty)
+LOKA_TEST(testMacCardPainterFixedDiameter)

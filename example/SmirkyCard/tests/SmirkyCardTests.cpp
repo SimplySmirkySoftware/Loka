@@ -12,6 +12,8 @@
 #include "app/nodes/controls/Cell.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include "app/style/CardStyle.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -2472,9 +2474,13 @@ namespace
   class CardRunnerHarness : public loka::dsl::testing::ScenarioAuditSink
   {
   public:
-    CardRunnerHarness(const char *source, const char *companion, unsigned long seed = 7, bool baked = false,
-                      PlatformContext *nativeContext = 0)
-        : audit(scenarioAuditDestination(), "card"),
+    CardRunnerHarness(const char *source,
+                      const char *companion,
+                      unsigned long seed = 7,
+                      bool baked = false,
+                      PlatformContext *nativeContext = 0,
+                      const char *scenarioName = "card")
+        : audit(scenarioAuditDestination(), scenarioName),
           runtime(nativeContext),
           window(0),
           admission(0),
@@ -3942,8 +3948,93 @@ namespace
     LOKA_VERIFY(browse->requestedOrigin().y == 40 && detail->requestedOrigin().y == 80);
   }
 
+  /** Answers what the three rails answer (ToolboxNaturalWidth.cpp, Win32 and
+      macOS controllers): Text and Button labels and INTRINSIC images; a Cell
+      has no natural width on any rail, so a card that puts its click target
+      in a Cell gives a horizontal ScrollView no range. */
+  class LaptopNaturalWidthSource : public loka::app::layout::INaturalWidthSource
+  {
+  public:
+    virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const
+    {
+      if (!child || !(child->asTextNode() || child->asButtonNode()))
+        return false;
+      width = 10;
+      return true;
+    }
+  };
+
+  void checkNaturalRowLowering()
+  {
+    std::fputs("[pin] natural-width Row modifier and carousel overflow\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>{const pic=c.state.image();"
+                                    "function cards(cell){return Row(...[0,1,2,3,4].map(i=>"
+                                    "Card(VStack(ImageView(pic,{width:110,height:70}),"
+                                    "cell?Cell('x',()=>{}):Button('x',()=>{})))))}"
+                                    "return {compose(){return VStack("
+                                    "Row(Text('a')).naturalWidth().TEST_ID('Natural'),"
+                                    "Row(Text('a')).TEST_ID('Shared'),"
+                                    "ScrollView(cards(false).naturalWidth()).TEST_ID('WideScroll'),"
+                                    "ScrollView(cards(false)).TEST_ID('SharedScroll'),"
+                                    "ScrollView(cards(true).naturalWidth()).TEST_ID('CellScroll'))}}});",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *natural = windowNode(window, "Natural");
+    loka::app::scene::Node *shared = windowNode(window, "Shared");
+    LOKA_VERIFY(natural && natural->asStackNode());
+    LOKA_VERIFY(shared && shared->asStackNode());
+    LOKA_VERIFY(natural->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_NATURAL);
+    LOKA_VERIFY(shared->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_SHARED);
+    expectJs(runtime,
+             "(()=>{const original=Row(Text('a'));const tree=original.naturalWidth();"
+             "return Object.isFrozen(original)&&Object.isFrozen(tree)&&tree!==original&&"
+             "original.rowWidth===undefined&&tree.rowWidth===1&&tree.naturalWidth()===tree&&"
+             "tree.TEST_ID('x').rowWidth===1&&Row(Text('a')).TEST_ID('y').naturalWidth().testId==='y'})()",
+             "true");
+    const char *wrongKinds[] = {"VStack(Text('a'))", "Card(Text('a'))"};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      const std::string expression = std::string("(()=>{try{") + wrongKinds[i]
+                                     + ".naturalWidth();return false}catch(e){return e instanceof TypeError&&"
+                                       "e.message==='naturalWidth() applies to Row'}})()";
+      expectJs(runtime, expression.c_str(), "true");
+    }
+    expectJs(runtime,
+             "(()=>{try{Row(Text('a')).naturalWidth(1);return false}catch(e){return e instanceof TypeError}})()",
+             "true");
+    LaptopNaturalWidthSource source;
+    const loka::app::layout::RailSpacing spacing(12, 4, 9);
+    const int gap = spacing.horizontalGap();
+    short width = 0;
+    loka::app::scene::Node *scroll = windowNode(window, "WideScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    LOKA_VERIFY(loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
+    const int insets =
+        2 * loka::app::CardStyle::kBorderBand + loka::app::CardStyle::kShadowLeft + loka::app::CardStyle::kShadowRight;
+    LOKA_VERIFY(width == 5 * (110 + insets) + 4 * gap);
+    scroll = windowNode(window, "SharedScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    width = 0;
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width) || width == 0);
+    // A Cell inside the card declines on every rail, so the natural Row has no range
+    // (the Classic run of the first candidate showed five cards squeezed into the viewport).
+    scroll = windowNode(window, "CellScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    width = 0;
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
+  }
+
   void checkLaptopLowerings()
   {
+    checkNaturalRowLowering();
     std::fputs("[pin] LaptopTracker ScrollView, Card, ImageView options and depth\n", stderr);
     NullPlatformContext context;
     NullScenePlatformController platform;
@@ -4090,13 +4181,44 @@ namespace
     const std::string source = readCardSource("LAPTOP.JS");
     const std::string companion =
         "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n" + readCardSource("LAPTOP.FLOW.JS");
-    CardRunnerHarness h(source.c_str(), companion.c_str(), 7, true, &context);
-    h.mount();
-    h.ticks(40);
-    for (size_t i = 0; i < h.steps.size(); ++i)
-      if (h.steps[i].status() != loka::dsl::FLOW_STEP_SUCCEEDED)
-        std::fprintf(stderr, "  step %s: %s\n", h.steps[i].name().c_str(), h.steps[i].message().c_str());
-    LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+    const char *cells[] = {0, "startup", "laptop-carousel", "laptop-detail", "unknown"};
+    for (unsigned cell = 0; cell < 5; ++cell)
+    {
+      const std::string selected =
+          cells[cell] ? std::string("globalThis.LAPTOP_CELL = \"") + cells[cell] + "\";\n" + companion : companion;
+      CardRunnerHarness h(source.c_str(), selected.c_str(), 7, true, &context, cells[cell] ? cells[cell] : "laptop");
+      LOKA_VERIFY(h.recordLog("seed=7"));
+      h.mount();
+      h.ticks(40);
+      LOKA_VERIFY(h.terminalCount == 1);
+      if (cell == 4)
+      {
+        LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_FAILED);
+        continue;
+      }
+      LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+      if (cell == 2)
+      {
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macport"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Open.pb100"));
+      }
+      else if (cell == 3)
+      {
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Back"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Presentation"));
+      }
+      else
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Open.pb100"));
+      std::string audit = readScenarioAudit();
+      // Only the Null decoder's fixture dimensions differ from the shipped pictures.
+      std::string::size_type position = 0;
+      while ((position = audit.find("%202x3\n", position)) != std::string::npos)
+        audit.replace(position, 7, "%20160x100\n");
+      const std::string expected =
+          cell ? std::string("../../tests/scenarios/expected/smirkycard/") + cells[cell] + ".audit"
+               : "tests/LAPTOP.audit";
+      LOKA_VERIFY(audit == readCardSource(expected.c_str()));
+    }
     for (unsigned i = 0; i < 5; ++i)
       LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
     removeDirectory("_named_pictures");

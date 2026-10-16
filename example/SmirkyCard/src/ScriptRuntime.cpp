@@ -27,8 +27,8 @@ namespace smirkycard
     JSValue copyTreeWithId(JSContext *ctx, JSValueConst source, JSValueConst id)
     {
       // Every modifier copies the whole node, including the other modifiers'
-      // results ("testId", "enabledSeat") and the modifier functions
-      // themselves, so TEST_ID and enabled chain in either order.
+      // results ("testId", "enabledSeat", "rowWidth") and the modifier functions
+      // themselves, so modifiers chain in either order.
       JsOwnProperties names(ctx);
       if (!names.read(source, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK | JS_GPN_ENUM_ONLY))
         return JS_EXCEPTION;
@@ -362,6 +362,35 @@ namespace smirkycard
     if (JS_IsException(copy))
       return copy;
     if (JS_FreezeObject(ctx, copy) < 0)
+    {
+      JS_FreeValue(ctx, copy);
+      return JS_EXCEPTION;
+    }
+    return copy;
+  }
+  JSValue ScriptRuntime::naturalWidth(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
+    JSValue kind = JS_GetPropertyStr(ctx, thisValue, "kind");
+    int32_t number = 0;
+    const int converted = JS_ToInt32(ctx, &number, kind);
+    JS_FreeValue(ctx, kind);
+    if (converted < 0)
+      return JS_EXCEPTION;
+    IJsNodeLowering *lowering = runtime ? runtime->registry_.lookup(number) : 0;
+    if (!lowering || std::strcmp(lowering->name, "Row"))
+      return JS_ThrowTypeError(ctx, "naturalWidth() applies to Row");
+    if (argc != 0)
+      return JS_ThrowTypeError(ctx, "naturalWidth() takes no arguments");
+    JSValue policy = JS_GetPropertyStr(ctx, thisValue, "rowWidth");
+    const bool natural = JS_IsNumber(policy) && JS_ToInt32(ctx, &number, policy) == 0 && number == 1;
+    JS_FreeValue(ctx, policy);
+    if (natural)
+      return JS_DupValue(ctx, thisValue);
+    JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
+    if (JS_IsException(copy))
+      return copy;
+    if (JS_SetPropertyStr(ctx, copy, "rowWidth", JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
     {
       JS_FreeValue(ctx, copy);
       return JS_EXCEPTION;

@@ -125,6 +125,8 @@ namespace smirkycard
       JSValue node = JS_NewObject(ctx);
       JS_DefinePropertyValueStr(ctx, node, "kind", JS_NewInt32(ctx, kind), JS_PROP_ENUMERABLE);
       JS_SetPropertyStr(ctx, node, "TEST_ID", JS_NewCFunction(ctx, &ScriptRuntime::testId, "TEST_ID", 1));
+      JS_SetPropertyStr(
+          ctx, node, "naturalWidth", JS_NewCFunction(ctx, &ScriptRuntime::naturalWidth, "naturalWidth", 0));
       return node;
     }
     JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
@@ -241,6 +243,11 @@ namespace smirkycard
         if (row_)
         {
           loka::app::Row *row = new (std::nothrow) loka::app::Row();
+          JSValue policy = JS_GetPropertyStr(ctx, tree, "rowWidth");
+          int32_t widthPolicy = 0;
+          if (row && JS_IsNumber(policy) && JS_ToInt32(ctx, &widthPolicy, policy) == 0 && widthPolicy == 1)
+            row->naturalWidth();
+          JS_FreeValue(ctx, policy);
           stack = row;
           nest = row;
         }
