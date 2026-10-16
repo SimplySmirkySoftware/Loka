@@ -754,7 +754,7 @@ void testCardShadowSixGeometries()
           s.y = SHRT_MIN;
         }
         if (sample == 8)
-          s.y = SHRT_MAX - minimums[extent][1] + 1;
+          s.y = static_cast<short>(SHRT_MAX - minimums[extent][1] + 1);
         CardTraversal t(sample == 9 ? 80 : 0); // Short content rises to the minimum height.
         const int bottom = computeFramedLayoutResultY(&card, s, &t, &recordCard, 0);
         const int expectedHeight = sample == 9 ? 80 + a[1] + a[3] + 6 : minimums[extent][1];
