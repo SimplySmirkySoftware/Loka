@@ -1162,17 +1162,12 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     return;
   }
-  const int rootInset = Win32SceneLayout::kRootInset;
-  int rootWidth = measureClientWidth(clientWidth) - 2 * rootInset;
-  if (rootWidth < 0)
-  {
-    rootWidth = 0;
-  }
-  const LayoutState state(rootInset,
-                          rootInset,
-                          rootWidth,
-                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
-                          Win32SceneLayout::spacing().verticalGap());
+  // Deliberate macOS root twin: shared policy resolves the margin and clamps the offer.
+  const Window *window = Win32Window::FromHwnd(this->rootHwnd_);
+  const int margin = resolveWindowContentMargin(window, Win32SceneLayout::spacing());
+  const int width = loka::app::layout::insetExtent(measureClientWidth(clientWidth), margin, margin);
+  const int height = loka::app::layout::insetExtent(clientHeight, margin, margin);
+  const LayoutState state(margin, margin, width, height, Win32SceneLayout::spacing().verticalGap());
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -1836,8 +1831,7 @@ bool Win32ScenePlatformController::applyNativeFocus(loka::app::scene::NodeContex
 
 void Win32ScenePlatformController::releaseMenu()
 {
-  Win32Window *window = this->rootHwnd_
-      ? reinterpret_cast<Win32Window *>(GetWindowLongPtrW(this->rootHwnd_, GWLP_USERDATA)) : 0;
+  Win32Window *window = Win32Window::FromHwnd(this->rootHwnd_);
   if (window)
     window->menuAttachment().releaseFrom(window->scene());
 }
