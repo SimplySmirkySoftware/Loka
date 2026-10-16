@@ -2833,8 +2833,12 @@ namespace
       CardRunnerHarness h(scenarioCard, companion.c_str());
       h.mount();
       smirkycard::JsEngine *old = h.runtime.currentEngine();
+      // Two steps: the replacement scenario is invoked after the clock has
+      // advanced, and its steps must still be due one per tick from that
+      // invocation, not from tick 1 (an absolute schedule would be due at once).
       writeMain("_smirky_scenario/CARD.FLOW.JS",
-                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');}));});");
+                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');})"
+                ".step(function(){c.test.log('new second');}));});");
       h.tick();
       LOKA_VERIFY(h.runtime.currentEngine() != old && h.runtime.retiredEngineCount() == 1);
       JS_RunGC(old->jsRuntime());
@@ -2842,8 +2846,10 @@ namespace
       h.admission->flush();
       LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_CANCELED);
       h.tick();
+      LOKA_VERIFY(h.terminalCount == 1 && h.logs.size() == 1 && h.logs[0] == "new engine");
+      h.tick();
       LOKA_VERIFY(h.terminalCount == 2 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
-      LOKA_VERIFY(h.logs.size() == 1 && h.logs[0] == "new engine");
+      LOKA_VERIFY(h.logs.size() == 2 && h.logs[1] == "new second");
       h.admission->flush();
       LOKA_VERIFY(h.runtime.retiredEngineCount() == 0);
     }
@@ -4073,6 +4079,29 @@ namespace
     }
   }
 
+  void checkLaptopScenario()
+  {
+    std::fputs("[pin] LAPTOP.JS scenario under the Null harness\n", stderr);
+    LOKA_VERIFY(makeDirectory("_named_pictures"));
+    const char *stems[] = {"MACPORT", "PB100", "PB180C", "PB550C", "PB5300C"};
+    for (unsigned i = 0; i < 5; ++i)
+      writeMain((std::string("_named_pictures/") + stems[i] + ".PNG").c_str(), "img");
+    NamedPicturePlatform context;
+    const std::string source = readCardSource("LAPTOP.JS");
+    const std::string companion =
+        "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n" + readCardSource("LAPTOP.FLOW.JS");
+    CardRunnerHarness h(source.c_str(), companion.c_str(), 7, true, &context);
+    h.mount();
+    h.ticks(40);
+    for (size_t i = 0; i < h.steps.size(); ++i)
+      if (h.steps[i].status() != loka::dsl::FLOW_STEP_SUCCEEDED)
+        std::fprintf(stderr, "  step %s: %s\n", h.steps[i].name().c_str(), h.steps[i].message().c_str());
+    LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+    for (unsigned i = 0; i < 5; ++i)
+      LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
+    removeDirectory("_named_pictures");
+  }
+
   void checkLoweringRefusals()
   {
     const char *trees[] = {"Show(c.state(1),Text('x'))", "Show({},Text('x'))",
@@ -4308,6 +4337,11 @@ int main(int argc, char **argv)
     checkScenarioOff();
     return 0;
   }
+  if (argc == 2 && !std::strcmp(argv[1], "--laptop-scenario"))
+  {
+    checkLaptopScenario();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--mines-scenario"))
   {
     checkBakedCompanionReplacement();
@@ -4429,6 +4463,7 @@ int main(int argc, char **argv)
   checkNamedPictures();
   checkViewerScenario();
   checkMinesScenario();
+  checkLaptopScenario();
   checkStandaloneScenario();
   checkCarry();
   checkMaterializedGetters();

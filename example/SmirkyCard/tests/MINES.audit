@@ -1,14 +1,14 @@
 loka_scenario_audit version=1 scenario=mines
 log text=seed%3D7
-step id=1 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=initial-status
+step id=1 due_tick=1 tick=1 status=succeeded error_kind=0 error_code=0 name=initial-status
 step id=2 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
-step id=3 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=flag-cell
-step id=4 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
-step id=5 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=reveal-mode
-step id=6 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
-step id=7 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=flood-fill
-step id=8 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
+step id=3 due_tick=2 tick=2 status=succeeded error_kind=0 error_code=0 name=flag-cell
+step id=4 due_tick=0 tick=2 status=succeeded error_kind=0 error_code=0 name=
+step id=5 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=reveal-mode
+step id=6 due_tick=0 tick=3 status=succeeded error_kind=0 error_code=0 name=
+step id=7 due_tick=4 tick=4 status=succeeded error_kind=0 error_code=0 name=flood-fill
+step id=8 due_tick=0 tick=4 status=succeeded error_kind=0 error_code=0 name=
 log text=One%20flag%20placed%3B%20zero-cell%20flood%20opened%20neighbours.
-step id=9 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=summary
-step id=10 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
+step id=9 due_tick=5 tick=5 status=succeeded error_kind=0 error_code=0 name=summary
+step id=10 due_tick=0 tick=5 status=succeeded error_kind=0 error_code=0 name=
 terminal status=succeeded
