@@ -39,6 +39,15 @@
     MacInputDoor::scrollBoundsChange(*context_);
   }
 }
+
+- (void)preferredScrollerStyleChanged:(NSNotification *)notification
+{
+  (void)notification;
+  if (context_)
+  {
+    MacInputDoor::scrollerStyleChange(*context_);
+  }
+}
 @end
 
 MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controller,
@@ -84,6 +93,14 @@ MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controlle
                                            selector:@selector(clipViewBoundsChanged:)
                                                name:NSViewBoundsDidChangeNotification
                                              object:clipView];
+  // 10.7+ retiles every scroll view when the user switches between overlay
+  // and legacy scrollers; the height offered to the children follows that
+  // through a relayout. The name is spelled out so pre-10.7 SDKs compile; the
+  // notification simply never arrives there.
+  [[NSNotificationCenter defaultCenter] addObserver:scrollView
+                                           selector:@selector(preferredScrollerStyleChanged:)
+                                               name:@"NSPreferredScrollerStyleDidChangeNotification"
+                                             object:nil];
   if (parent)
   {
     [parent addSubview:scrollView];
@@ -122,6 +139,9 @@ void MacScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact pre
       [[NSNotificationCenter defaultCenter] removeObserver:scrollView
                                                       name:NSViewBoundsDidChangeNotification
                                                     object:clipView];
+      [[NSNotificationCenter defaultCenter] removeObserver:scrollView
+                                                      name:@"NSPreferredScrollerStyleDidChangeNotification"
+                                                    object:nil];
       [scrollView setContext:0];
       [scrollView removeFromSuperview];
       this->retireNativeObject(this->scrollView_);
@@ -274,8 +294,17 @@ int MacScrollViewContext::maximumOffset(bool horizontal) const
   }
   const NSRect documentFrame = [documentView frame];
   const NSRect clipBounds = [[scrollView contentView] bounds];
-  const loka::macos::MacProjection &projection = this->controller()->projection();
-  const int content = projection.capacityToLu(horizontal ? documentFrame.size.width : documentFrame.size.height);
-  const int viewport = projection.clientCapacityToLu(horizontal ? clipBounds.size.width : clipBounds.size.height);
-  return content > viewport ? content - viewport : 0;
+  // One conversion of the native difference, the same one the origin uses:
+  // flooring document and clip separately loses a logical unit at 5/4.
+  const CGFloat extent = horizontal ? documentFrame.size.width - clipBounds.size.width
+                                    : documentFrame.size.height - clipBounds.size.height;
+  return extent > 0 ? this->controller()->projection().scrollPositionToLu(extent) : 0;
+}
+
+void MacScrollViewContext::handleScrollerStyleChange()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(this->controller()->borrowPhase().open());
+#endif
+  this->controller()->requestRelayout();
 }

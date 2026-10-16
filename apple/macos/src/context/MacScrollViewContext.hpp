@@ -38,6 +38,7 @@ private:
   friend class MacInputDoor;
   /** Bounds-notification body; the rail door owns its complete borrow. */
   void publishClipViewBoundsOrigin();
+  void handleScrollerStyleChange();
   void applyAttachedPresentation();
   void applyDetachedPresentation();
   int maximumOffset(bool horizontal) const;

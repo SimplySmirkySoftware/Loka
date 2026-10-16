@@ -12,6 +12,8 @@ void testMacScrollViewContainerGapsAndNoSeats();
 void testMacScrollViewGappedOriginRefuses();
 
 void testMacScrollViewHorizontalRangeAndScroller();
+void testMacScrollViewMaximumSurvivesFractionalScale();
+void testMacScrollViewScrollerStyleChangeRequestsRelayout();
 void testMacScrollViewBoundsObservationPublishesBothAxes();
 void testMacScrollViewRelayoutKeepsDocumentWidth();
 void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics();

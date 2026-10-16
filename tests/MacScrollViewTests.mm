@@ -772,3 +772,69 @@ void testMacScrollViewHorizontalScrollerShortensChildHeight()
   [root release];
   [pool drain];
 }
+
+void testMacScrollViewMaximumSurvivesFractionalScale()
+{
+  std::printf("\n==== [testMacScrollViewMaximumSurvivesFractionalScale] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    // 5/4 space scale: a 401 lu document projects to a fractional edge, and
+    // the maximum the bounds notification clamps with must agree with the
+    // maximum layout admitted, or the notification republishes one unit short.
+    MacScenePlatformController controller((void *)root, RailMetrics(Ratio(), Ratio(5, 4)));
+    ViewportFact offset(0);
+    offset.state().set(loka::core::Frame(1000, 0, 0, 0));
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    StackNode *column = addButtonColumn(scrollView, 2);
+    column->addChild(new ImageViewNode(ImageViewProps().size(401, 10)));
+    establishLayout(controller, &scrollView, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const int admitted = offset.state().get().x;
+    LOKA_VERIFY(admitted > 0);
+    offset.resetChangeCount();
+    NSClipView *clipView = [native contentView];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
+    const int republished = offset.state().get().x;
+    const int changes = offset.changeCount();
+    LOKA_VERIFY(republished == admitted && changes == 0
+                && "the bounds notification must clamp with the maximum layout admitted, not one unit short");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewMaximumSurvivesFractionalScale] PASSED ====\n");
+}
+
+void testMacScrollViewScrollerStyleChangeRequestsRelayout()
+{
+  std::printf("\n==== [testMacScrollViewScrollerStyleChangeRequestsRelayout] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller((void *)root, RailMetrics());
+    ViewportFact offset(0);
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    addButtonColumn(scrollView, 6);
+    establishLayout(controller, &scrollView, 300, 140);
+    LOKA_VERIFY(!controller.hasPendingRelayout());
+    // AppKit retiles every scroll view when the preferred scroller style
+    // changes; the children's offered height must follow through a relayout.
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"NSPreferredScrollerStyleDidChangeNotification"
+                                                        object:nil];
+    LOKA_VERIFY(controller.hasPendingRelayout() && "a scroller style change must request a relayout");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewScrollerStyleChangeRequestsRelayout] PASSED ====\n");
+}
