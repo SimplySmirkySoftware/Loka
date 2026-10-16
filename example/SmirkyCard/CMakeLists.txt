@@ -63,8 +63,16 @@ if(LOKA_CLASSIC_MAC)
   target_link_libraries(smirkycard_script PRIVATE LokaClassicNewlibCompat)
 endif()
 
+# Callers outside this directory (tests/toolbox/smirkycard) resolve the card
+# sources and the generated headers against SmirkyCard's own directories.
+set(SMIRKYCARD_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(SMIRKYCARD_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 function(smirkycard_cpp_target target)
-  target_sources(${target} PRIVATE src/CardFlow.cpp src/CardScenario.cpp src/CardCarry.cpp src/ScriptRuntime.cpp src/JsCardNode.cpp src/JsCardBindingRegistry.cpp src/SmirkyMarkup.cpp)
+  target_sources(${target} PRIVATE
+    ${SMIRKYCARD_SOURCE_DIR}/src/CardFlow.cpp ${SMIRKYCARD_SOURCE_DIR}/src/CardScenario.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/CardCarry.cpp ${SMIRKYCARD_SOURCE_DIR}/src/ScriptRuntime.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/JsCardNode.cpp ${SMIRKYCARD_SOURCE_DIR}/src/JsCardBindingRegistry.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/SmirkyMarkup.cpp)
   loka_enable_warnings(${target})
   set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   target_link_libraries(${target} PRIVATE smirkycard_script)
@@ -74,7 +82,7 @@ function(smirkycard_cpp_target target)
   target_link_libraries(${target} PRIVATE smirkycard_quickjs)
   target_include_directories(${target} SYSTEM PRIVATE ${smirkycard_quickjs_source_dir})
   target_include_directories(${target} PRIVATE ${PROJECT_SOURCE_DIR}/common)
-  target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+  target_include_directories(${target} PRIVATE ${SMIRKYCARD_BINARY_DIR})
   if(MSVC)
     target_compile_options(${target} PRIVATE /utf-8)
   endif()
@@ -235,24 +243,9 @@ if(TARGET LokaSmirkyCardTests)
   target_include_directories(LokaSmirkyCardTests PRIVATE ${PROJECT_SOURCE_DIR}/tests/standalone)
 endif()
 
-# Scenario vehicles participate in the default Retro68 build, unlike standalone runners.
+# The Toolbox scenario vehicle is a tests/toolbox resident that needs QuickJS and
+# the SmirkyCard SIZE partition, so it is declared from here but builds into
+# tests/toolbox/smirkycard: the 68K size bank discovers only example/ artifacts.
 if(CMAKE_SYSTEM_NAME STREQUAL "Retro68")
-  loka_add_toolbox_test_application(LokaSmirkyCardTest68K LokaAppleToolboxTestCore
-    src/ToolboxScenarioMain.cpp src/ToolboxScenarioAppConfig.cpp src/ScenarioRunAudit.cpp
-    ${SMIRKYCARD_SIZE_R}
-    ${PROJECT_SOURCE_DIR}/tests/toolbox/src/ScenarioDriverSupport.cpp
-    ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
-    ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp)
-  # run-scenario.sh reads provenance beside the vehicle, outside tests/toolbox here.
-  add_custom_target(LokaSmirkyCardScenarioProvenance
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${PROJECT_BINARY_DIR}/tests/toolbox/classic-build-provenance.txt"
-      "${CMAKE_CURRENT_BINARY_DIR}/classic-build-provenance.txt"
-    DEPENDS LokaToolboxBuildProvenance
-    VERBATIM)
-  add_dependencies(LokaSmirkyCardTest68K LokaSmirkyCardScenarioProvenance)
-  smirkycard_cpp_target(LokaSmirkyCardTest68K)
-  target_link_libraries(LokaSmirkyCardTest68K PRIVATE LaptopScenarioInputs)
-  target_include_directories(LokaSmirkyCardTest68K PRIVATE ${PROJECT_SOURCE_DIR}/tests/toolbox/src)
-  target_compile_definitions(LokaSmirkyCardTest68K PRIVATE TEST_BUILD LOKA_DIAG=1)
+  add_subdirectory(${PROJECT_SOURCE_DIR}/tests/toolbox/smirkycard ${PROJECT_BINARY_DIR}/tests/toolbox/smirkycard)
 endif()

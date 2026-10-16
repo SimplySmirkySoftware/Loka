@@ -3,7 +3,7 @@
 Status: Null audit expectations; maciix runtime verification and golden approval pending.
 Owns: LaptopTracker scenario selection and Toolbox capture handoff.
 Does not own: Production card behavior or the standalone full browse sequence.
-Code truth: `example/SmirkyCard/src/ToolboxScenarioAppConfig.cpp`,
+Code truth: `tests/toolbox/src/SmirkyCardScenarioDriver.cpp` (built by `tests/toolbox/smirkycard/CMakeLists.txt`),
 `example/SmirkyCard/LAPTOP.FLOW.JS`, and `tests/toolbox/run-scenario.sh`.
 Verification: `checkLaptopScenario`, `ScenarioToolsTest.py`, and
 `ToolboxScenarioRunnerTest.sh`; MAME remains the native presentation verdict.

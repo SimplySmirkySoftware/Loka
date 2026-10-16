@@ -1,5 +1,5 @@
-#ifndef SMIRKYCARD_TOOLBOX_SCENARIO_APP_CONFIG_HPP
-#define SMIRKYCARD_TOOLBOX_SCENARIO_APP_CONFIG_HPP
+#ifndef LOKA_TESTS_TOOLBOX_SMIRKYCARD_SCENARIO_DRIVER_HPP
+#define LOKA_TESTS_TOOLBOX_SMIRKYCARD_SCENARIO_DRIVER_HPP
 
 #include "CardNodes.hpp"
 #include "ScenarioDriverSupport.hpp"
@@ -9,10 +9,10 @@
 #include "testing/snap/SnapFormat.hpp"
 
 /** Owns the JS runner and completion publisher until the App has shut down. */
-class SmirkyCardToolboxScenarioAppConfig : public AppConfigurable
+class SmirkyCardScenarioAppConfig : public AppConfigurable
 {
 public:
-  SmirkyCardToolboxScenarioAppConfig(PlatformContext *context, const loka::dsl::SnapTestConfig::Settings &settings);
+  SmirkyCardScenarioAppConfig(PlatformContext *context, const loka::dsl::SnapTestConfig::Settings &settings);
   void setApp(App *app);
   virtual void compose(AppComposition &composition);
 

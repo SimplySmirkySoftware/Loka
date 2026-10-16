@@ -1,4 +1,4 @@
-#include "ToolboxScenarioAppConfig.hpp"
+#include "SmirkyCardScenarioDriver.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxWindow.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
@@ -20,8 +20,8 @@ namespace
   }
 } // namespace
 
-SmirkyCardToolboxScenarioAppConfig::SmirkyCardToolboxScenarioAppConfig(
-    PlatformContext *context, const loka::dsl::SnapTestConfig::Settings &settings)
+SmirkyCardScenarioAppConfig::SmirkyCardScenarioAppConfig(PlatformContext *context,
+                                                         const loka::dsl::SnapTestConfig::Settings &settings)
     : AppConfigurable(context),
       audit_(loka::toolbox_tests::ResolveScenarioAuditFile(), settings.scenario.c_str()),
       runtime_(context),
@@ -37,28 +37,28 @@ SmirkyCardToolboxScenarioAppConfig::SmirkyCardToolboxScenarioAppConfig(
     this->audit_.recordTerminal(loka::dsl::testing::SCENARIO_AUDIT_FAILED);
 }
 
-void SmirkyCardToolboxScenarioAppConfig::setApp(App *app)
+void SmirkyCardScenarioAppConfig::setApp(App *app)
 {
   this->app_ = app;
 }
 
-void SmirkyCardToolboxScenarioAppConfig::compose(AppComposition &composition)
+void SmirkyCardScenarioAppConfig::compose(AppComposition &composition)
 {
   composition << WindowDef(WindowProps()
                                .frame(60, 60, 420, 340)
                                .title("LaptopTracker")
                                .visible(true)
                                .idlePolicy(loka::app::IdlePolicy::everyTick())
-                               .onIdle(&SmirkyCardToolboxScenarioAppConfig::OnWindowIdle, this)
+                               .onIdle(&SmirkyCardScenarioAppConfig::OnWindowIdle, this)
                                .scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, this->runtime_)));
 }
 
-void SmirkyCardToolboxScenarioAppConfig::OnWindowIdle(Window *window, double elapsedSeconds, void *userData)
+void SmirkyCardScenarioAppConfig::OnWindowIdle(Window *window, double elapsedSeconds, void *userData)
 {
-  static_cast<SmirkyCardToolboxScenarioAppConfig *>(userData)->tick(window, elapsedSeconds);
+  static_cast<SmirkyCardScenarioAppConfig *>(userData)->tick(window, elapsedSeconds);
 }
 
-void SmirkyCardToolboxScenarioAppConfig::tick(Window *window, double elapsedSeconds)
+void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
 {
   if (this->phase_ == LINGERING)
   {
@@ -111,7 +111,7 @@ int RunSmirkyCardScenarioApplication()
   assert(context.get() && "PlatformContext is required");
   if (!context.get())
     return 1;
-  SmirkyCardToolboxScenarioAppConfig config(context.get(), settings);
+  SmirkyCardScenarioAppConfig config(context.get(), settings);
   core::ScopedPtr<App> app(context->createApp(&config, 0, 0));
   assert(app.get() && "App is required");
   if (!app.get())

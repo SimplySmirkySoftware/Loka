@@ -365,15 +365,15 @@ run_case smirkbench surface-ticks 4 unset
 run_case smirkbench add-face 4 unset
 # SmirkyCard launch-only pin: the baked card still needs all five picture data forks.
 printf '%s\n' 'smirkycard startup' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
-mkdir -p "$SANDBOX/repo/build/retro68/68k/Release/example/SmirkyCard" \
+mkdir -p "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard" \
   "$SANDBOX/repo/example/SmirkyCard/assets" "$SANDBOX/repo/tests/scenarios/expected/smirkycard"
-touch "$SANDBOX/repo/build/retro68/68k/Release/example/SmirkyCard/LokaSmirkyCardTest68K.bin"
+touch "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard/LokaSmirkyCardTest68K.bin"
 cp "$REPO_DIR/example/SmirkyCard/disk-pictures.txt" "$SANDBOX/repo/example/SmirkyCard/"
 cp "$REPO_DIR/example/SmirkyCard/assets/"*.PICT "$SANDBOX/repo/example/SmirkyCard/assets/"
 cp "$REPO_DIR/tests/scenarios/expected/smirkycard/startup.audit" \
   "$SANDBOX/repo/tests/scenarios/expected/smirkycard/startup.audit"
 cp "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/classic-build-provenance.txt" \
-  "$SANDBOX/repo/build/retro68/68k/Release/example/SmirkyCard/classic-build-provenance.txt"
+  "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard/classic-build-provenance.txt"
 run_case smirkycard startup 7 unset
 for stem in $(sed '/^#/d; /^$/d' "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"); do
   grep -Fxq -- "$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/dev-disk-arguments" \
@@ -381,7 +381,7 @@ for stem in $(sed '/^#/d; /^$/d' "$REPO_DIR/example/SmirkyCard/disk-pictures.txt
 done
 grep -Fxq -- "$SANDBOX/repo/build/mame-scenario/smirkycard/startup/LokaTest.cfg" "$SANDBOX/dev-disk-arguments" \
   || fail "SmirkyCard did not stage LokaTest.cfg"
-grep -Fxq -- "$SANDBOX/repo/build/retro68/68k/Release/example/SmirkyCard/LokaSmirkyCardTest68K.bin" \
+grep -Fxq -- "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard/LokaSmirkyCardTest68K.bin" \
   "$SANDBOX/dev-disk-arguments" || fail "SmirkyCard vehicle path changed"
 # SimpleViewer launch-only pins: template data forks, no invented audits.
 printf '%s\n' 'simpleviewer startup' 'simpleviewer open-sun' 'simpleviewer open-bulb' 'simpleviewer churn-replace' 'simpleviewer open-wide-scroll' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
