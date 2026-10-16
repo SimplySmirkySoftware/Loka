@@ -699,8 +699,7 @@ MacScenePlatformController::layoutScrollViewNode(
   LayoutState childBase = state;
   childBase.width = ctx->visibleWidth();
   short contentWidthLu = 0;
-  const bool known =
-      loka::app::layout::queryContentOverflowWidth(scrollView, state.spacing(), this, contentWidthLu);
+  const bool known = loka::app::layout::queryContentOverflowWidth(scrollView, state.spacing(), this, contentWidthLu);
   // An unknown range must not scroll: otherwise content cannot be brought back
   // The range is measured in projected points, as the clip is: two logical
   // widths that project to the same native width leave no range.
