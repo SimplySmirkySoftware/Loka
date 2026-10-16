@@ -6,4 +6,9 @@ void testCardGeometryAndLimits();
 void testCardNaturalWidthAndSeats();
 void testCardSingleStyleRetainedAndRefusal();
 void testCardBodyReconstruction();
+void testCardShadowHarnessRetainedValues();
+void testCardShadowValueIdentity();
+void testCardShadowSixGeometries();
+void testCardShadowSeatLookAndReentry();
+void testCardShadowStateWidthRetainsBands();
 #endif

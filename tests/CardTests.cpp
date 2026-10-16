@@ -1,6 +1,7 @@
 #include "CardTests.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/For.hpp"
+#include "app/nodes/nestable/Match.hpp"
 #include "core/Vector.hpp"
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
 #include "app/style/SurfaceGround.hpp"
@@ -159,6 +160,10 @@ namespace
   {
   public:
     LayoutState offered;
+    OfferedContentContext()
+    {
+      this->offered.x = -1234;
+    }
     virtual short layout(IPlatformController *, LayoutState &state)
     {
       this->offered = state;
@@ -469,4 +474,312 @@ void testCardBodyReconstruction()
     const Frame expected(bodies[role].x + 71, bodies[role].y + 93, bodies[role].width, bodies[role].height);
     LOKA_VERIFY(CardBodyInBand(shifted, props) == expected);
   }
+}
+
+/** Values-only harness: explicitly apply the same per-child definitions that
+    the kernel's parked-branch reentry plan applies. This makes no layout claim. */
+void testCardShadowHarnessRetainedValues()
+{
+  using namespace PropsReconciliationSupport;
+  Card declaration;
+  declaration << Button("content");
+  NullScenePlatformController platform;
+  Scene scene((Boundary<Tree<Card> >(Props<Card>(&declaration))));
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  settle(scene);
+  Node *card = root(scene)->childrenHead();
+  Node *bands[4];
+  Node *band = card->asNestable()->childrenHead()->nextInComposition;
+  for (int i = 0; i < 4; ++i, band = band->nextInComposition)
+    bands[i] = band;
+  const CardShadowExtent extents[] = {CARD_SHADOW_NONE,
+                                      CARD_SHADOW_DROP,
+                                      CARD_SHADOW_WIDE,
+                                      CARD_SHADOW_WIDE,
+                                      CARD_SHADOW_WIDE,
+                                      CARD_SHADOW_DROP,
+                                      CARD_SHADOW_NONE,
+                                      CARD_SHADOW_DROP};
+  for (int step = 0; step < 8; ++step)
+  {
+    const CardStyle style(extents[step], step % 2 ? CARD_SHADOW_STENCIL : CARD_SHADOW_ALPHA);
+    Card next(style);
+    next << Button("content");
+    applyProps(scene, next);
+    NodeDefinitionBase *definition = next.childrenHead()->nextInComposition;
+    band = card->asNestable()->childrenHead()->nextInComposition;
+    LOKA_VERIFY(root(scene)->childrenHead() == card);
+    LOKA_VERIFY(static_cast<CardNode *>(card)->props.style == style);
+    for (int i = 0; i < 4; ++i, band = band->nextInComposition, definition = definition->nextInComposition)
+    {
+      LOKA_VERIFY(band == bands[i]);
+      LOKA_VERIFY(definition->applyPropsToNode(band));
+      LOKA_VERIFY(band->asCardBandNode()->props.role == i);
+      LOKA_VERIFY(band->asCardBandNode()->props.style == style);
+      LOKA_VERIFY(band->asCardBandNode()->props.style.ink() == style.ink());
+    }
+  }
+  SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  /** Observes actual Null projection entries without changing refusal or ink. */
+  class CardProjectionPlatform : public NullScenePlatformController
+  {
+  public:
+    LayoutState bands[4];
+    CardBandNode *nodes[4];
+    CardProjectionPlatform()
+    {
+      for (int i = 0; i < 4; ++i)
+        this->nodes[i] = 0;
+      this->resetOffers();
+    }
+    void resetOffers()
+    {
+      for (int i = 0; i < 4; ++i)
+        this->bands[i].width = -1;
+    }
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      if (CardBandNode *band = node ? node->asCardBandNode() : 0)
+      {
+        this->nodes[band->props.role] = band;
+        this->bands[band->props.role] = state;
+      }
+      return NullScenePlatformController::prepareProjectedLayout(node, state);
+    }
+  };
+
+  class CardSeatRoot : public BoundaryNodeFor<CardSeatRoot>
+  {
+  public:
+    NodeState<int> selection;
+    NodeState<int> width;
+    explicit CardSeatRoot(const BoundaryPropsFor<CardSeatRoot> &props)
+        : BoundaryNodeFor<CardSeatRoot>(props)
+    {
+      this->state(this->selection, 0);
+      this->state(this->width, 70);
+    }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(
+          Row() << (Box().width(this->width.state())
+                    << Match(*this->selection.state())
+                           .arm(0, Card(CardStyle(CARD_SHADOW_NONE)).testId("none-card") << Button("content"))
+                           .arm(1, Card(CardStyle(CARD_SHADOW_DROP)).testId("drop-card") << Button("content"))
+                           .arm(2,
+                                Card(CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)).testId("wide-card")
+                                    << Button("content"))));
+    }
+  };
+  CardNode *seatCard(Scene &scene, const char *id)
+  {
+    Node *node = 0;
+    FlowError error;
+    LOKA_VERIFY(LookupNodeById<Node>(&scene, id, node, error) == FLOW_STEP_SUCCEEDED);
+    LOKA_VERIFY(node && node->kind() == NODE_KIND_CARD);
+    return static_cast<CardNode *>(node);
+  }
+  OfferedContentContext *cardContent(CardNode *card)
+  {
+    Node *column = card->childrenHead();
+    OfferedContentContext *context =
+        static_cast<OfferedContentContext *>(column->asNestable()->childrenHead()->getContext());
+    LOKA_VERIFY(context != 0);
+    return context;
+  }
+  void verifySeat(CardNode *card, CardProjectionPlatform &platform, const CardStyle &style, int width)
+  {
+    LOKA_VERIFY(card->props.style == style);
+    const loka::app::detail::CardShadowTable &g = style.geometry();
+    const LayoutState &content = cardContent(card)->offered;
+    const int height = 20 - g.allowance[1] - g.allowance[3] - 6;
+    LOKA_VERIFY(content.x == g.allowance[0] + 3 && content.y == g.allowance[1] + 3);
+    LOKA_VERIFY(content.width == width - g.allowance[0] - g.allowance[2] - 6);
+    LOKA_VERIFY(content.height == (height > 0 ? height : 0));
+    Node *band = card->childrenHead()->nextInComposition;
+    for (int i = 0; i < 4; ++i, band = band->nextInComposition)
+    {
+      LOKA_VERIFY(band == platform.nodes[i]);
+      LOKA_VERIFY(platform.nodes[i]->props.style == style);
+      LOKA_VERIFY(platform.nodes[i]->props.role == i);
+      const bool enabled = width >= g.minimumWidth + g.allowance[0] + g.allowance[2];
+      if (enabled)
+        LOKA_VERIFY(platform.bands[i].width > 0 && platform.bands[i].height > 0);
+      else
+        LOKA_VERIFY(platform.bands[i].width == 0 && platform.bands[i].height == 0);
+    }
+  }
+} // namespace
+
+void testCardShadowSeatLookAndReentry()
+{
+  OfferedContentHandler contentHandler;
+  CardProjectionPlatform platform;
+  LOKA_VERIFY(platform.registerNodeHandler(&contentHandler));
+  Scene scene((Boundary<CardSeatRoot>()));
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  PropsReconciliationSupport::settle(scene);
+  CardSeatRoot *root = static_cast<CardSeatRoot *>(SceneTestAccess::rootBoundary(scene));
+  verifySeat(seatCard(scene, "none-card"), platform, CardStyle(CARD_SHADOW_NONE), 70);
+  CardNode *parkedDrop = 0;
+  CardBandNode *parkedBands[4] = {0, 0, 0, 0};
+  const int arms[] = {1, 2, 1};
+  for (int step = 0; step < 3; ++step)
+  {
+    if (parkedDrop)
+      cardContent(parkedDrop)->offered.x = -1234;
+    platform.resetOffers();
+    {
+      loka::core::StateTrackerGuard guard(root->tracker());
+      root->selection.set(arms[step]);
+    }
+    PropsReconciliationSupport::settle(scene);
+    const bool wide = arms[step] == 2;
+    CardNode *card = seatCard(scene, wide ? "wide-card" : "drop-card");
+    verifySeat(card,
+               platform,
+               CardStyle(wide ? CARD_SHADOW_WIDE : CARD_SHADOW_DROP, wide ? CARD_SHADOW_ALPHA : CARD_SHADOW_STENCIL),
+               70);
+    if (step == 0)
+    {
+      parkedDrop = card;
+      for (int i = 0; i < 4; ++i)
+        parkedBands[i] = platform.nodes[i];
+    }
+    if (step == 2)
+    {
+      LOKA_VERIFY(card == parkedDrop);
+      for (int i = 0; i < 4; ++i)
+        LOKA_VERIFY(platform.nodes[i] == parkedBands[i]);
+    }
+  }
+  SceneTestAccess::unmount(scene);
+}
+
+void testCardShadowStateWidthRetainsBands()
+{
+  OfferedContentHandler contentHandler;
+  CardProjectionPlatform platform;
+  LOKA_VERIFY(platform.registerNodeHandler(&contentHandler));
+  Scene scene((Boundary<CardSeatRoot>()));
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  CardSeatRoot *root = static_cast<CardSeatRoot *>(SceneTestAccess::rootBoundary(scene));
+  {
+    loka::core::StateTrackerGuard guard(root->tracker());
+    root->selection.set(2);
+  }
+  PropsReconciliationSupport::settle(scene);
+  CardNode *card = seatCard(scene, "wide-card");
+  const CardStyle style(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+  verifySeat(card, platform, style, 70);
+  CardBandNode *bands[4];
+  for (int i = 0; i < 4; ++i)
+    bands[i] = platform.nodes[i];
+  const int widths[] = {53, 70};
+  for (int step = 0; step < 2; ++step)
+  {
+    cardContent(card)->offered.x = -1234;
+    platform.resetOffers();
+    {
+      loka::core::StateTrackerGuard guard(root->tracker());
+      root->width.set(widths[step]);
+    }
+    PropsReconciliationSupport::settle(scene);
+    LOKA_VERIFY(seatCard(scene, "wide-card") == card);
+    verifySeat(card, platform, style, widths[step]);
+    for (int i = 0; i < 4; ++i)
+      LOKA_VERIFY(platform.nodes[i] == bands[i]);
+  }
+  SceneTestAccess::unmount(scene);
+}
+
+void testCardShadowValueIdentity()
+{
+  for (int a = 0; a < 6; ++a)
+    for (int b = 0; b < 6; ++b)
+    {
+      const CardStyle first(static_cast<CardShadowExtent>(a / 2), static_cast<CardShadowInk>(a % 2));
+      const CardStyle second(static_cast<CardShadowExtent>(b / 2), static_cast<CardShadowInk>(b % 2));
+      LOKA_VERIFY((first == second) == (a == b));
+      LOKA_VERIFY((first < second) == (a < b));
+      LOKA_VERIFY((first.hash() == second.hash()) == (a == b));
+      const CardBandProps firstBand(CARD_BAND_TOP, first), secondBand(CARD_BAND_TOP, second);
+      LOKA_VERIFY((firstBand < secondBand) == (a < b));
+    }
+}
+
+void testCardShadowSixGeometries()
+{
+  const int allowances[3][4] = {{0, 0, 0, 0}, {0, 0, 3, 3}, {12, 8, 12, 16}};
+  const int minimums[3][2] = {{12, 12}, {17, 17}, {60, 68}};
+  for (int extent = 0; extent < 3; ++extent)
+    for (int ink = 0; ink < 2; ++ink)
+    {
+      const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
+      CardNode card((CardProps(style)));
+      populate(card);
+      const FrameGeometry g = card.frameGeometry();
+      const int *a = allowances[extent];
+      LOKA_VERIFY(g.insets.left == a[0] + 3 && g.insets.top == a[1] + 3);
+      LOKA_VERIFY(g.insets.right == a[2] + 3 && g.insets.bottom == a[3] + 3);
+      LOKA_VERIFY(g.minimumWidth == minimums[extent][0] && g.minimumHeight == minimums[extent][1]);
+      for (int sample = 0; sample < 10; ++sample)
+      {
+        LayoutState s = offer(sample < 3 ? minimums[extent][0] + sample - 1 : 120);
+        if (sample == 3)
+          s.height = 1;
+        if (sample == 4)
+        {
+          s.x = -50;
+          s.y = -80;
+        }
+        if (sample == 5)
+          s.x = SHRT_MAX - s.width;
+        if (sample == 6)
+          s.x = SHRT_MAX - s.width + 1;
+        if (sample == 7)
+        {
+          s.x = SHRT_MIN;
+          s.y = SHRT_MIN;
+        }
+        if (sample == 8)
+          s.y = SHRT_MAX - minimums[extent][1] + 1;
+        CardTraversal t(sample == 9 ? 80 : 0); // Short content rises to the minimum height.
+        const int bottom = computeFramedLayoutResultY(&card, s, &t, &recordCard, 0);
+        const int expectedHeight = sample == 9 ? 80 + a[1] + a[3] + 6 : minimums[extent][1];
+        LOKA_VERIFY(bottom == s.y + expectedHeight);
+        LOKA_VERIFY(t.content.x == static_cast<short>(s.x + a[0] + 3));
+        LOKA_VERIFY(t.content.y == static_cast<short>(s.y + a[1] + 3));
+        LOKA_VERIFY(t.content.width == s.width - a[0] - a[2] - 6);
+        const int contentHeight = s.height - a[1] - a[3] - 6;
+        LOKA_VERIFY(t.content.height == (contentHeight > 0 ? contentHeight : 0));
+        if (sample == 0 || sample == 6 || sample == 8)
+        {
+          emptyBands(t, s);
+          continue;
+        }
+        const int l = s.x, r = s.x + s.width, top = s.y;
+        const loka::core::Frame expected[] = {
+            loka::core::Frame(l, top, s.width - a[2] - 3, a[1] + 3),
+            loka::core::Frame(l, top + a[1] + 3, a[0] + 3, bottom - top - a[1] - 3),
+            loka::core::Frame(r - a[2] - 3, top, a[2] + 3, bottom - top - a[3] - 3),
+            loka::core::Frame(l + a[0] + 3, bottom - a[3] - 3, s.width - a[0] - 3, a[3] + 3)};
+        for (int role = 0; role < 4; ++role)
+        {
+          const LayoutState &band = t.bands[role];
+          LOKA_VERIFY(loka::core::Frame(band.x, band.y, band.width, band.height) == expected[role]);
+        }
+      }
+    }
 }

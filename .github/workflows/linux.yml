@@ -38,6 +38,8 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: python3 tools/ci/check_style_vocab.py
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+      - run: python3 tools/ci/check_card_shadow_tables.py
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: python3 tools/ci/check_native_includes.py
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: python3 tests/scripts/ClassicInttypesTest.py
