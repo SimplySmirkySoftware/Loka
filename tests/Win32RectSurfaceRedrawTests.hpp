@@ -30,4 +30,5 @@ void testWin32StaticTextInks();
 void testWin32StaticTextColorChangeResidue();
 void testWin32RibbonGroupEdgePixels();
 
+void testWin32CardBandTransparentRepaintAndEmpty();
 #endif

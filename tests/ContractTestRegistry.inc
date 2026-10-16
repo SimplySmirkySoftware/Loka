@@ -1349,6 +1349,7 @@ LOKA_TEST(testRectSurfaceScrollViewXExtentUsesContentCoordinates)
 LOKA_TEST(testFramedCapabilityLayoutAndMeasurement)
 
 LOKA_TEST(testCardGeometryAndLimits)
+LOKA_TEST(testCardBodyReconstruction)
 LOKA_TEST(testCardNaturalWidthAndSeats)
 LOKA_TEST(testCardSingleStyleRetainedAndRefusal)
 LOKA_TEST(testCardDefinitionCloneRefusal)

@@ -23,6 +23,7 @@
 #include "context/Win32ButtonContext.hpp"
 #include "context/Win32CellContext.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
+#include "context/Win32CardBandContext.hpp"
 #include "context/Win32EditTextContext.hpp"
 #include "context/Win32TextEditorContext.hpp"
 #include "context/Win32ImageViewContext.hpp"
@@ -34,8 +35,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler
-      gRefusedWin32CardBand(loka::app::scene::NodeTypeToken<loka::app::CardBandNode>());
   // Win32 has no ScrollBar context yet: a known unsupported kind must take
   // the typed-refusal path, not trip the accidental-miss assert. ScrollView
   // is a controller-owned projection-parent arm and does not use this leaf
@@ -47,7 +46,7 @@ namespace
 void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
 {
   RegisterWin32RibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedWin32CardBand);
+  RegisterWin32CardBandNodeHandler(controller.nodeHandlerRegistry_);
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
