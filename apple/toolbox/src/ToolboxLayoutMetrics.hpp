@@ -6,6 +6,8 @@
     ToolboxPlatformLayoutHandlers.cpp; a new member adds one there too. */
 struct ToolboxLayoutMetrics
 {
+  /** Both axes use the same native container gap. */
+  static const short kDefaultGap = 8;
   static const short kDefaultLineHeight = 12;
   static const short kImageFallbackHeight = 80;
   /** LayoutState.y is the top edge of the node's box on every rail;
