@@ -62,23 +62,31 @@ A rail never measures content width during layout. The range comes from
 `queryContentOverflowWidth(parent, gap, source, width)`
 ([LayoutHeuristics.hpp](../common/app/layout/LayoutHeuristics.hpp), the R0
 ruling): only content that **overflows the width it is offered** counts: a
-declared width (`ImageView`/`RectSurface` with `size`), an INTRINSIC image
-whose natural width the rail's leaf answers, or a NATURAL row. Text, buttons
-and boxes are placed at the offered width and contribute 0. The question walks
-the ScrollView's own content children once per layout pass; it measures only
-those leaves.
+declared width (`ImageView`/`RectSurface` with `size`, a fixed-size `Box`), an
+INTRINSIC image whose natural width the rail's leaf answers, or a NATURAL row.
+Text, buttons and offer-bound boxes are placed at the offered width and
+contribute 0 (`testContentOverflowIgnoresOfferBoundText` pins both sides). The
+question walks the ScrollView's own content children once per layout pass; it
+measures only those leaves.
 
-`maximumX = known ? max(0, contentWidth − visibleWidth) : 0`. **An unknown
-width must not scroll**: otherwise content moved out of view could not be
-brought back. This is one expression per rail, and the three rails keep it in
-the same spelling.
+On Toolbox and Win32, which lay out in integer pixels,
+`maximumX = known ? max(0, contentWidth − visibleWidth) : 0`. macOS measures
+the same range in projected points: the projected content width minus the
+native clip width, converted to logical units once
+(`MacScrollViewContext::horizontalRange`), so two logical widths that project
+to the same native width leave no range
+(`testMacScrollViewCongruentWidthsLeaveNoHorizontalRange`). **An unknown width
+must not scroll**: otherwise content moved out of view could not be brought
+back. That fallback is one expression per rail, kept in the same spelling.
 
 The vertical range is the content height the layout accumulates, as before.
 
 ## Bars
 
-A scroll bar for an axis exists only while that axis has a range. Every
-ScrollView whose content fits keeps the pixels it had before #580.
+The vertical bar is always present (inactive when there is no range), which
+keeps the width offered to the children stable between passes. The horizontal
+bar exists only while the horizontal range exists, so every ScrollView whose
+content fits keeps the pixels it had before #580.
 
 | Rail | Vertical bar | Horizontal bar | What the bar's presence changes |
 |---|---|---|---|
@@ -97,8 +105,11 @@ The shape every rail follows (converged on #1370 after review):
    and hit-test with the same rect.
 3. Only when the whole traversal succeeded: apply both bars' native state,
    then `publishOrigin(clampedX, clampedY)` once.
-4. A refused traversal (short-range refusal, requeue) leaves the previous
-   bars, native positions and fact untouched.
+4. A refused traversal (short-range refusal, requeue) leaves the committed
+   scroll state untouched: the bars, their native ranges and positions, the
+   document (macOS) and the fact. Children the refused pass already placed
+   are the rail's own business: Toolbox requeues the whole seat, while Win32
+   leaves them at the refused pass's translation (#1372).
 
 Toolbox applies the bars through its control ledger (`ViewportScrollBarBinding`
 holds one id per axis, allocated together and released together; the content
@@ -126,9 +137,11 @@ keeps the value the preceding layout clamped:
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already
   placed at the refused pass's translation (both axes; pre-#580 for Y).
-- SimpleViewer resets the viewport by writing the fact box directly
-  (`viewport_.set(Frame(0, 0, …))`); the request pipe (`scrollTo_`, #537) is
-  the intended door.
+- The request box (`scrollTo_`, #537) is not consumed by any rail yet, so an
+  app has no sanctioned door to move the viewport; SimpleViewer resets it by
+  writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
+  the app a second writer of a rail result channel. That is a recorded debt,
+  not a pattern to copy.
 - The visible size is not reported; its first reader is the lazy-list window
   fold (LazyColumn reading `viewport_` directly).
 - Toolbox bars that reach a document window's size box follow the #950 page 4

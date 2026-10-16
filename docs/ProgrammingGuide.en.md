@@ -1096,22 +1096,23 @@ this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
 c.declare(ScrollView(this->viewport_) << this->imageView(IMAGE_VIEW_SIZE_INTRINSIC));
 ```
 
-Writing an origin into the state is a request: the next layout clamps it to the
-range and writes the clamped value back, and a value already in range is left
-alone (a same-value write publishes nothing). A negative origin reads as 0.
+The state is the rail's result channel: the rail writes the clamped origin, and
+a value already in range is left alone (a same-value write publishes nothing).
+The initial value is the only origin the app chooses; a negative one reads as 0.
 
 The vertical range is the content height. The horizontal range exists only when
-content overflows the width it is offered: a declared width, an intrinsic image
-or a natural row. Text, buttons and boxes are placed at the offered width and
-never scroll sideways. When the width cannot be known, the view does not scroll
-sideways at all.
+content overflows the width it is offered: a declared width (including a
+fixed-size `Box`), an intrinsic image or a natural row. Text, buttons and
+offer-bound boxes are placed at the offered width and never scroll sideways.
+When the width cannot be known, the view does not scroll sideways at all.
 
-A scroll bar for an axis exists only while that axis has a range; on Toolbox the
-vertical bar is always present and the horizontal one appears along the bottom
-when needed. The user's bar and wheel input publishes into the same `Frame`.
-`ScrollView` does not consume application scroll intent yet (`scrollTo`, #537);
-reset a view by writing the origin. The rails' ranges, bars and commit rules
-are in [ScrollViewDesign.md](ScrollViewDesign.md).
+The vertical bar is always present; the horizontal bar appears only while there
+is a horizontal range. The user's bar and wheel input publishes into the same
+`Frame`. `ScrollView` does not consume application scroll intent yet
+(`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
+and writing the fact state yourself makes the app a second writer of a rail
+result channel (a recorded debt in SimpleViewer, not a pattern). The rails'
+ranges, bars and commit rules are in [ScrollViewDesign.md](ScrollViewDesign.md).
 
 ### `LazyView()` / `LazyColumn()` / `LazyRow()`
 
