@@ -14,6 +14,11 @@ Verification: `checkLaptopScenario`, `ScenarioToolsTest.py`, and
 | laptop-carousel | Wide carousel, Macintosh Portable, 1 of 5 |
 | laptop-detail | PowerBook 100 detail pane |
 
+The vehicle is built only when the Retro68 build is configured with
+`-DLOKA_BUILD_SMIRKYCARD=ON` (SmirkyCard is opt-in; CI builds it in its own
+SmirkyCard build directory, outside the shipping 68K size inventory), and
+`run-scenario.sh` says so when the application is missing.
+
 The vehicle reads `LokaTest.cfg`, prefixes the baked companion with `LAPTOP_CELL`,
 and writes the JS runner's audit under the selected cell name. After native
 presentation settles it publishes the capture rectangle and completion marker,
