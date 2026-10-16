@@ -1,0 +1,52 @@
+#include "app/style/CardShadow.hpp"
+namespace loka
+{
+  namespace app
+  {
+    namespace
+    {
+      // Near/far overlap belongs to the near tile strictly before the midline.
+      int tileSide(int value, int size, int nearCut, int farCut)
+      {
+        const bool near = value < nearCut;
+        const bool far = value >= size - farCut;
+        if (near && far)
+          return value < size / 2 ? 0 : 1;
+        return near ? 0 : far ? 1 : 2;
+      }
+    } // namespace
+    unsigned char CardShadowDensity(const CardStyle &style, const core::Frame &body, int x, int y)
+    {
+      if (style.extent() == CARD_SHADOW_NONE || body.width <= 0 || body.height <= 0)
+        return 0;
+      const detail::CardShadowTable &g = style.geometry();
+      x -= body.x;
+      y -= body.y;
+      if (x < -g.allowance[0] || y < -g.allowance[1] || x >= body.width + g.allowance[2]
+          || y >= body.height + g.allowance[3])
+        return 0;
+      const int horizontal = tileSide(x, body.width, g.cut[0], g.cut[2]);
+      const int vertical = tileSide(y, body.height, g.cut[1], g.cut[3]);
+      if (horizontal != 2 && vertical != 2)
+      {
+        const int tx = horizontal == 0 ? x + g.allowance[0] : x - body.width + g.cut[2];
+        const int ty = vertical == 0 ? y + g.allowance[1] : y - body.height + g.cut[3];
+        const int width = horizontal == 0 ? g.allowance[0] + g.cut[0] : g.allowance[2] + g.cut[2];
+        return detail::CardShadowDensities[g.offset[vertical * 2 + horizontal] + ty * width + tx];
+      }
+      if (x < 0)
+        return detail::CardShadowDensities[g.offset[4] + x + g.allowance[0]];
+      if (y < 0)
+        return detail::CardShadowDensities[g.offset[5] + y + g.allowance[1]];
+      if (x >= body.width)
+        return detail::CardShadowDensities[g.offset[6] + x - body.width];
+      if (y >= body.height)
+        return detail::CardShadowDensities[g.offset[7] + y - body.height];
+      return 0;
+    }
+    bool CardShadowStencilInk(unsigned char density, int windowX, int windowY)
+    {
+      return density > 4 * detail::CardShadowBayer[(windowY & 7) * 8 + (windowX & 7)] + 2;
+    }
+  } // namespace app
+} // namespace loka

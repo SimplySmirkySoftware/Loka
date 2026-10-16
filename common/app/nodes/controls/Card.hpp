@@ -53,14 +53,14 @@ namespace loka
     };
 
     /** Recover three real body edges and one virtual opposite edge in layout
-        units. The virtual span is 2r: its opposite arc cannot reach this
-        band's inset-wide sample. Call only for nonempty admitted bands.
+        units. DROP retains its v1 2r span; other extents use their minimum
+        body span to keep the opposite arc beyond finite kernel reach. Call only for nonempty admitted bands.
         Cost: O(1) per band paint; no tree or ledger walk. */
     inline core::Frame CardBodyInBand(const core::Frame &band, const CardBandProps &props)
     {
       const CardStyle &style = props.style;
       const int b = style.kBorderBand;
-      const int diameter = 2 * style.kCornerRadius;
+      const detail::CardShadowTable &geometry = style.geometry();
       int left = band.x;
       int top = band.y;
       int right = band.x + band.width;
@@ -68,28 +68,28 @@ namespace loka
       switch (props.role)
       {
       case CARD_BAND_TOP:
-        left += style.kShadowLeft;
-        top += style.kShadowTop;
+        left += geometry.allowance[0];
+        top += geometry.allowance[1];
         right += b;
-        bottom = top + diameter;
+        bottom = top + geometry.virtualHeight;
         break;
       case CARD_BAND_RIGHT:
-        top += style.kShadowTop;
-        right -= style.kShadowRight;
+        top += geometry.allowance[1];
+        right -= geometry.allowance[2];
         bottom += b;
-        left = right - diameter;
+        left = right - geometry.virtualWidth;
         break;
       case CARD_BAND_BOTTOM:
         left -= b;
-        right -= style.kShadowRight;
-        bottom -= style.kShadowBottom;
-        top = bottom - diameter;
+        right -= geometry.allowance[2];
+        bottom -= geometry.allowance[3];
+        top = bottom - geometry.virtualHeight;
         break;
       case CARD_BAND_LEFT:
-        left += style.kShadowLeft;
+        left += geometry.allowance[0];
         top -= b;
-        bottom -= style.kShadowBottom;
-        right = left + diameter;
+        bottom -= geometry.allowance[3];
+        right = left + geometry.virtualWidth;
         break;
       case CARD_BAND_COUNT:
         assert(false && "CardBand requires a role");
@@ -176,16 +176,14 @@ namespace loka
       }
       virtual layout::FrameGeometry frameGeometry() const
       {
-        return layout::FrameGeometry(
-            layout::FRAME_PLACEMENT_CARD_BANDS,
-            layout::FrameInsets(CardStyle::kShadowLeft + CardStyle::kBorderBand,
-                                CardStyle::kShadowTop + CardStyle::kBorderBand,
-                                CardStyle::kShadowRight + CardStyle::kBorderBand,
-                                CardStyle::kShadowBottom + CardStyle::kBorderBand),
-            CardStyle::kShadowLeft + CardStyle::kShadowRight
-                + CardStyle::minimumBodyExtent(CardStyle::kShadowLeft, CardStyle::kShadowRight),
-            CardStyle::kShadowTop + CardStyle::kShadowBottom
-                + CardStyle::minimumBodyExtent(CardStyle::kShadowTop, CardStyle::kShadowBottom));
+        const detail::CardShadowTable &g = this->props.style.geometry();
+        return layout::FrameGeometry(layout::FRAME_PLACEMENT_CARD_BANDS,
+                                     layout::FrameInsets(g.allowance[0] + CardStyle::kBorderBand,
+                                                         g.allowance[1] + CardStyle::kBorderBand,
+                                                         g.allowance[2] + CardStyle::kBorderBand,
+                                                         g.allowance[3] + CardStyle::kBorderBand),
+                                     g.allowance[0] + g.allowance[2] + g.minimumWidth,
+                                     g.allowance[1] + g.allowance[3] + g.minimumHeight);
       }
     };
 
