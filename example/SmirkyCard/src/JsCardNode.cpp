@@ -455,26 +455,51 @@ namespace smirkycard
   {
     return this->phase_ == Live && !this->failed_ && this->scene();
   }
-  JSValue JsCardNode::typedFactory(JSContext *ctx, JSValueConst, int argc, JSValueConst *, int kind, JSValue *data)
+  JSValue JsCardNode::typedFactory(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int kind, JSValue *data)
   {
     JsCardNode *card = capabilityNode(data[0]);
-    if (!card || argc)
+    if (kind == JsSeatRecord::IMAGE && (argc > 1 || (argc == 1 && !JS_IsString(argv[0]))))
+      return JS_ThrowTypeError(ctx, "c.state.image(name?) takes an optional picture name");
+    if (!card || (kind != JsSeatRecord::IMAGE && argc))
       return JS_ThrowTypeError(ctx, "typed state factory requires a card constructor and no arguments");
-    return card->mintTypedState(ctx, static_cast<JsSeatRecord::Kind>(kind));
+    return card->mintTypedState(ctx, static_cast<JsSeatRecord::Kind>(kind), argc ? argv[0] : JS_UNDEFINED);
   }
-  JSValue JsCardNode::mintTypedState(JSContext *ctx, JsSeatRecord::Kind kind)
+  JSValue JsCardNode::mintTypedState(JSContext *ctx, JsSeatRecord::Kind kind, JSValueConst name)
   {
     if (this->phase_ != Constructing)
       return JS_ThrowTypeError(ctx, "typed state is only valid in a card constructor");
     if (this->seats_.count() >= kCardSeatBudget)
       return JS_ThrowRangeError(ctx, "kCardSeatBudget exceeded (128 seats)");
+    loka::core::resource::Image image;
+    if (!JS_IsUndefined(name))
+    {
+      std::size_t length = 0;
+      const char *bytes = JS_ToCStringLen(ctx, &length, name);
+      if (!bytes)
+        return JS_EXCEPTION;
+      const std::string stem(bytes, length);
+      JS_FreeCString(ctx, bytes);
+      if (!ScriptRuntime::IsPictureName(stem))
+        return JS_ThrowTypeError(ctx, "c.state.image: %s: invalid picture name", stem.c_str());
+      PlatformContext *platform = this->props.runtime->nativeContext();
+      if (!platform)
+        return JS_ThrowTypeError(ctx, "c.state.image: %s: missing PlatformContext", stem.c_str());
+      const loka::file::File file = loka::file::File::Application()
+                                    << loka::file::File(ScriptRuntime::PictureFileName(stem));
+      loka::core::resource::Blob blob;
+      const loka::platform::file::ReadResult read = loka::app::ReadFileImageBlob(platform, file, blob);
+      if (read != loka::platform::file::READ_OK)
+        return JS_ThrowTypeError(ctx, "c.state.image: %s: %s", stem.c_str(), loka::app::FileImageReadResultName(read));
+      if (!loka::app::DecodeFileImageBlob(platform, blob, image))
+        return JS_ThrowTypeError(ctx, "c.state.image: %s: image decode failure", stem.c_str());
+    }
     JsSeatRecord *record = this->seats_.add(JsSeatRecord::Initial(ctx, kind));
     if (!record)
       return JS_ThrowOutOfMemory(ctx);
     if (kind == JsSeatRecord::FILE_RESULT)
       this->state(record->file, loka::app::FileChooserResult());
     else
-      this->state(record->image, loka::core::resource::Image::Empty());
+      this->state(record->image, image);
     return this->finishSeat(ctx, record);
   }
   JSValue JsCardNode::nativeLoadImage(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv, int, JSValue *data)

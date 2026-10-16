@@ -233,7 +233,8 @@ This is the environment where binaries are actually built.
   `LokaSimpleViewerWin32.exe`, a `simpletext` directory containing
   `LokaSimpleTextWin32.exe`, a `smirkycard` directory containing the
   experimental `LokaSmirkyCardWin32.exe` with the card scripts listed in
-  `example/SmirkyCard/disk-scripts.txt` beside it, and a shared README. Keep each
+  `example/SmirkyCard/disk-scripts.txt` and PNG pictures listed by stem in
+  `example/SmirkyCard/disk-pictures.txt` beside it, and a shared README. Keep each
   executable in its directory; ScrapbookUI's `ASSETS.LRP`, SmirkyCard's scripts
   and each app's `LOG.TXT` belong there.
   The CMake Standalone Flow/Loop build outputs use the same catalog-key

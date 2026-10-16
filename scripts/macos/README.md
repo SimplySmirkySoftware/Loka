@@ -216,7 +216,8 @@ builds linked against the 10.14 SDK or later.
     SDK and compiler variables required by the underlying build script. The
     stage is published only after all eight applications contain every expected
     architecture and SmirkyCard's bundle holds every card script listed in
-    `example/SmirkyCard/disk-scripts.txt`; Scrapbook's `ASSETS.LRP` remains
+    `example/SmirkyCard/disk-scripts.txt` and every PNG picture listed by stem in
+    `example/SmirkyCard/disk-pictures.txt`; Scrapbook's `ASSETS.LRP` remains
     inside its bundle.
   - SmirkyCard's QuickJS engine is downloaded at configure time. On a host
     whose TLS stack cannot reach the pinned archive (the Mavericks route), set

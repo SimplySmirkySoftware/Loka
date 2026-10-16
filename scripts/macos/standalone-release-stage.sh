@@ -24,14 +24,15 @@ loka_source_version() {
 # Resources), scripts/mame-*-disk*, scripts/release/classic-disks.py and
 # scripts/win32-standalone-flow.ps1: blank lines and full-line # comments are
 # skipped, surrounding spaces, tabs and CRs are trimmed.
-loka_smirkycard_scripts() {
+loka_smirkycard_manifest() {
+  local manifest="$1" suffix="$2"
   local stage_dir root script
   stage_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   root="$(cd "${stage_dir}/../.." && pwd)"
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
-    printf '%s\n' "${script}"
-  done < "${root}/example/SmirkyCard/disk-scripts.txt"
+    printf '%s\n' "${script}${suffix}"
+  done < "${root}/example/SmirkyCard/${manifest}"
 }
 
 loka_populate_standalone_release_stage() {
@@ -121,11 +122,14 @@ loka_populate_standalone_release_stage() {
   # SmirkyCard loads its card scripts from its own bundle.
   local script=""
   local scripts=""
-  scripts="$(loka_smirkycard_scripts)" || return 1
+  scripts="$(loka_smirkycard_manifest disk-scripts.txt '')" || return 1
   if [[ -z "${scripts}" ]]; then
     echo "The SmirkyCard script manifest lists no scripts." >&2
     return 1
   fi
+  local pictures=""
+  pictures="$(loka_smirkycard_manifest disk-pictures.txt .PNG)" || return 1
+  scripts="${scripts}${pictures:+$'\n'}${pictures}"
   # One trimmed manifest line is one filename: no word splitting or globbing.
   while IFS= read -r script; do
     if [[ ! -f "${destination}/LokaSmirkyCardMacOS.app/Contents/Resources/${script}" ]]; then

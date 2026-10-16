@@ -48,7 +48,8 @@ After the Retro68 Release builds (both the 68K and the PPC configure with
 Each volume contains its application and the tracked files beside it:
 ScrapbookUI's `ASSETS.LRP`, or every SmirkyCard card script listed in
 `example/SmirkyCard/disk-scripts.txt` (the manifest the development disks and
-the macOS and Win32 builds read), stored as SimpleText text. Packaging reads
+the macOS and Win32 builds read), stored as SimpleText text, plus the
+data-fork `.PICT` pictures listed by stem in `example/SmirkyCard/disk-pictures.txt`. Packaging reads
 back both application forks and every unchanged data file before publishing
 each image. Each image is the smallest floppy that holds the payload plus a
 128 KiB reserve (800 KiB, then 1440 KiB); a larger payload gets an image

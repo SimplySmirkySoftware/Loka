@@ -117,6 +117,8 @@ for app in \
 done
 touch "$ALL_PROJECT/example/ScrapbookUI/ASSETS.LRP" "$ALL_PROJECT/example/SmirkyCard/MAIN.JS" "$ALL_PROJECT/example/SmirkyCard/MINES.JS" "$ALL_PROJECT/example/SmirkyCard/VIEWER.JS"
 cp "$REPO_DIR/example/SmirkyCard/disk-scripts.txt" "$ALL_PROJECT/example/SmirkyCard/"
+cp "$REPO_DIR/example/SmirkyCard/disk-pictures.txt" "$ALL_PROJECT/example/SmirkyCard/"
+cp -R "$REPO_DIR/example/SmirkyCard/assets" "$ALL_PROJECT/example/SmirkyCard/"
 run_all() {
 MAME_BOOT_DISK_TEST_LOG="$SANDBOX/all-apps.log" \
 MAME_ENV_FILE="$SANDBOX/missing.env" \
@@ -138,12 +140,15 @@ for script in MAIN.JS MINES.JS VIEWER.JS; do
     fail "all-apps did not copy SmirkyCard $script"
 done
 
+for stem in MACPORT PB100 PB180C PB550C PB5300C; do
+  grep -F "$ALL_PROJECT/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/all-apps.log" >/dev/null || fail "missing picture $stem"
+done
 # Adding a fourth card needs only a manifest edit; absent entries remain optional.
 printf '\r\n  # extra cards\r\n\r\n  ABSENT.JS  \r\n  FOURTH.JS  ' >> "$ALL_PROJECT/example/SmirkyCard/disk-scripts.txt"
 touch "$ALL_PROJECT/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all-apps.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 5 ] || fail "extended manifest must copy five existing assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 10 ] || fail "extended manifest must copy ten existing assets"
 for script in MAIN.JS MINES.JS VIEWER.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/$script> <:Loka:>" "$SANDBOX/all-apps.log" >/dev/null ||
     fail "extended manifest omitted $script"

@@ -86,6 +86,14 @@ if [ $# -ge 1 ] && { [ "$1" = "--all" ] || [ "$1" = "-a" ]; }; then
       PLAIN_DATA_PATHS+=("$smirkycard_script")
     fi
   done < "$PROJECT_DIR/example/SmirkyCard/disk-scripts.txt"
+  # Same grammar as the adjacent script manifest; pictures are data forks.
+  while IFS=$' \t\r' read -r script || [ -n "$script" ]; do
+    case "$script" in ''|\#*) continue ;; esac
+    smirkycard_script="$PROJECT_DIR/example/SmirkyCard/assets/$script.PICT"
+    if [ -f "$smirkycard_script" ]; then
+      PLAIN_DATA_PATHS+=("$smirkycard_script")
+    fi
+  done < "$PROJECT_DIR/example/SmirkyCard/disk-pictures.txt"
 elif [ $# -ge 1 ]; then
   MACBINARY_PATHS+=("$1")
   shift

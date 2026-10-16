@@ -1,0 +1,14 @@
+# Pictures staged beside SmirkyCard, in copy order.
+# One stem per line; blank lines and full-line # comments are ignored.
+# Stems are 1..26 ASCII letters, digits, underscores or hyphens (no suffix).
+# Keep CMakeLists.txt, scripts/mame-boot-disk.sh/.ps1,
+# scripts/mame-dev-disk.sh/.ps1, scripts/mame-dev-disk-app.sh/.ps1,
+# scripts/release/classic-disks.py, scripts/win32-standalone-flow.ps1,
+# scripts/macos/standalone-release-stage.sh and tests/toolbox/run-scenario.sh parallel.
+# Pictures are binary: the script ASCII check does not apply.
+# Both assets/<stem>.PICT and assets/<stem>.PNG must exist; CMake refuses a missing twin.
+MACPORT
+PB100
+PB180C
+PB550C
+PB5300C
