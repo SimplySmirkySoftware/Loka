@@ -58,8 +58,8 @@ namespace
         : state_(state),
           previous_(state.spacing)
     {
-      this->state_.spacing = static_cast<short>(loka::app::layout::resolveLayoutGap(
-          node, this->previous_, ToolboxLayoutMetrics::kDefaultGap, ToolboxLayoutMetrics::kDefaultGap));
+      this->state_.spacing = static_cast<short>(
+          loka::app::layout::resolveLayoutGap(node, this->previous_, ToolboxLayoutMetrics::spacing()));
     }
     ~LayoutSpacingScope()
     {

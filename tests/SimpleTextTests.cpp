@@ -925,14 +925,15 @@ void testSimpleTextEditorReceivesRemainingWindow()
     StackNode *root = h.main().childrenHead()->asStackNode();
     LOKA_VERIFY(root && root->props.effectiveAxis() == STACK_AXIS_ROW);
     layout::RowLayoutMetrics metrics;
-    metrics.gap = viewport.spacing;
+
     layout::computeRowLayoutResultY(root,
                                     viewport,
                                     metrics,
+                                    loka::app::layout::RailSpacing(12, viewport.spacing, 9),
                                     0, // Synthetic allocation probe has no rail source.
                                     &probe,
                                     &LayoutProbe::rowChild,
-                                    metrics.gap,
+                                    viewport.spacing,
                                     0);
     LOKA_VERIFY(probe.calls == 1);
     LOKA_VERIFY(probe.band.height > 0);

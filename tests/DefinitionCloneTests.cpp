@@ -13,6 +13,9 @@
 #include "app/scene/Node.hpp"
 #include "app/scene/node/Conditional.hpp"
 #include "support/LimitedCloneProbe.hpp"
+#include "platform/null/NullPlatformContext.hpp"
+#include "app/nodes/boundary/StdComposition.hpp"
+#include "scenarios/ObservedMainDefinition.hpp"
 
 // Regression pin for the ConditionalDefinition dangling-branch fix (issue #47,
 // docs/TODO.md "DSL definition lifetime safety"): ConditionalDefinition must own
@@ -36,6 +39,17 @@ namespace DefinitionCloneTestSupport
 namespace
 {
   using namespace DefinitionCloneTestSupport;
+
+  class MarginRoot : public loka::app::scene::BoundaryNodeFor<MarginRoot>
+  {
+  public:
+    typedef loka::app::scene::BoundaryPropsFor<MarginRoot> Props;
+    explicit MarginRoot(const Props &props)
+        : loka::app::scene::BoundaryNodeFor<MarginRoot>(props)
+    {
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &) {}
+  };
 
   struct OomCloneProbeDefinition : public CloneProbeDefinition
   {
@@ -330,7 +344,7 @@ void testNestableDefinitionAssignmentPreservesStableChildOnOomClone()
 
   stableTarget = sourceWithBadChild;
 
-  assert(stableTarget.props.padding == 10);
+  LOKA_VERIFY(stableTarget.props.padding == loka::app::layout::LayoutGap::of(10));
   LOKA_VERIFY(stableTarget.childrenCount() == 1);
   LOKA_VERIFY(stableTarget.childrenHead() != 0);
   loka::app::scene::NodeDefinitionBase *childClone = stableTarget.childrenHead()->clone();
@@ -414,11 +428,14 @@ void testWindowPropsAssignmentPreservesOwnedSceneOnOomClone()
 
   WindowProps stableTarget;
   stableTarget.rootDefinition = new CloneProbeDefinition();
+  stableTarget.contentMargin(17);
 
   WindowProps sourceWithBadRoot;
   sourceWithBadRoot.rootDefinition = new OomCloneProbeDefinition();
+  sourceWithBadRoot.contentMargin(loka::app::StandardWindowMargin());
 
   stableTarget = sourceWithBadRoot;
+  LOKA_VERIFY(stableTarget.contentMarginValue == loka::app::layout::LayoutGap::of(17));
 
   assert(stableTarget.rootDefinition != 0);
   loka::app::scene::NodeDefinitionBase *childClone = stableTarget.rootDefinition->clone();
@@ -500,4 +517,38 @@ void testConditionalDefinitionCopyDegradesToEmptyOnCloneFailure()
   assert(g_probeNodesAlive == 0);
 
   printf("==== [testConditionalDefinitionCopyDegradesToEmptyOnCloneFailure] end ====\n");
+}
+
+void testWindowContentMarginRetention()
+{
+  using loka::app::layout::LayoutGap;
+  NullPlatformContext context;
+  LOKA_VERIFY(WindowProps().contentMarginValue == LayoutGap::unspecified());
+  WindowDefinition<WindowProps> definition = WindowDef(WindowProps().contentMargin(23));
+  loka::core::OwnedDef<WindowDefinitionBase> copy(definition.clone());
+  LOKA_VERIFY(copy.get());
+  Window *window = copy.get()->create(&context);
+  LOKA_VERIFY(window && window->contentMargin() == LayoutGap::of(23));
+  definition.props.contentMargin(0);
+  LOKA_VERIFY(window->contentMargin() == LayoutGap::of(23));
+  delete window;
+  WindowProps assigned;
+  assigned = WindowProps().contentMargin(loka::app::StandardWindowMargin());
+  LOKA_VERIFY(assigned.contentMarginValue == loka::app::StandardWindowMargin());
+  Window *named = context.createWindow(assigned);
+  LOKA_VERIFY(named && named->contentMargin() == loka::app::StandardWindowMargin());
+  delete named;
+  WindowProps stable = WindowProps().contentMargin(17);
+  WindowProps source;
+  source.contentMargin(29).scene(
+      loka::scenario_tests::ObservedMainDefinition<MarginRoot::Props, MarginRoot>(MarginRoot::Props(), 0));
+  LOKA_VERIFY(source.rootDefinition);
+  loka::scenario_tests::testing::failObservedMainDefinitionClones(1);
+  stable = source;
+  loka::scenario_tests::testing::allowObservedMainDefinitionClones();
+  LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(17));
+  LOKA_VERIFY(stable.rootDefinition == 0);
+  stable = source;
+  LOKA_VERIFY(stable.contentMarginValue == LayoutGap::of(29));
+  LOKA_VERIFY(stable.rootDefinition);
 }

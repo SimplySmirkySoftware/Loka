@@ -88,7 +88,7 @@ short ToolboxScenePlatformController::layoutScrollView(
 
   short contentWidth = 0;
   const bool widthKnown =
-      loka::app::layout::queryContentOverflowWidth(scrollView, ToolboxLayoutMetrics::kDefaultGap, this, contentWidth);
+      loka::app::layout::queryContentOverflowWidth(scrollView, ToolboxLayoutMetrics::spacing(), this, contentWidth);
   // An unknown range must not scroll: otherwise content cannot be brought back.
   const ToolboxScrollViewMetrics horizontal = ToolboxScrollViewResolveMetrics(
       widthKnown ? contentWidth : 0, ToolboxScrollViewChildWidth(state.width), scrollView->requestedOrigin().x);

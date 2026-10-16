@@ -1,6 +1,7 @@
 #ifndef LOKA_WINDOW_HPP
 #define LOKA_WINDOW_HPP
 
+#include "app/layout/LayoutGap.hpp"
 #include "app/core/DialogResultDelivery.hpp"
 #include "app/core/DocumentFacts.hpp"
 
@@ -67,6 +68,7 @@ struct WindowProps
   int positionY;
   int width;
   int height;
+  loka::app::layout::LayoutGap contentMarginValue;
   loka::app::IdlePolicy idlePolicyValue;
   OnIdleFn onIdleFn;
   void *onIdleUserData;
@@ -141,6 +143,7 @@ public:
         positionY(-1),
         width(-1),
         height(-1),
+        contentMarginValue(),
         idlePolicyValue(loka::app::IdlePolicy::none()),
         onIdleFn(0),
         onIdleUserData(0),
@@ -164,6 +167,7 @@ public:
         positionY(rhs.positionY),
         width(rhs.width),
         height(rhs.height),
+        contentMarginValue(rhs.contentMarginValue),
         idlePolicyValue(rhs.idlePolicyValue),
         onIdleFn(rhs.onIdleFn),
         onIdleUserData(rhs.onIdleUserData),
@@ -213,6 +217,7 @@ public:
     positionY = rhs.positionY;
     width = rhs.width;
     height = rhs.height;
+    this->contentMarginValue = rhs.contentMarginValue;
     idlePolicyValue = rhs.idlePolicyValue;
     onIdleFn = rhs.onIdleFn;
     onIdleUserData = rhs.onIdleUserData;
@@ -277,6 +282,15 @@ public:
     return *this;
   }
 
+  WindowProps &contentMargin(int value)
+  {
+    return this->contentMargin(loka::app::layout::LayoutGap::of(value));
+  }
+  WindowProps &contentMargin(loka::app::layout::LayoutGap value)
+  {
+    this->contentMarginValue = value;
+    return *this;
+  }
   WindowProps &idlePolicy(const loka::app::IdlePolicy &policy)
   {
     idlePolicyValue = policy;
@@ -483,6 +497,7 @@ public:
         displayTitle_(&titleStorage_),
         visibility_(&visibilityStorage_),
         frameStatePtr_(&frameState_),
+        contentMargin_(props.contentMarginValue),
         idlePolicy_(props.idlePolicyValue),
         onIdleFn_(props.onIdleFn),
         onIdleUserData_(props.onIdleUserData),
@@ -544,6 +559,12 @@ public:
       sceneManager_.seedScene(initialScene);
     }
   }
+  /** Construction-time outer margin; rails resolve unspecified to their standard. */
+  loka::app::layout::LayoutGap contentMargin() const
+  {
+    return this->contentMargin_;
+  }
+
   virtual ~Window()
   {
     if (this->tracker_)
@@ -867,6 +888,7 @@ protected:
   loka::core::State<loka::core::String> *displayTitle_;
   loka::core::MutableState<bool> *visibility_;
   loka::core::MutableState<loka::core::Frame> *frameStatePtr_;
+  const loka::app::layout::LayoutGap contentMargin_;
   loka::app::IdlePolicy idlePolicy_;
   WindowProps::OnIdleFn onIdleFn_;
   void *onIdleUserData_;

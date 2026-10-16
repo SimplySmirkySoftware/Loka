@@ -14,4 +14,8 @@ void testGapDoorResets();
 void testGapDoorOverflow();
 void testGapDoorNaturalWidths();
 void testGapDoorSpans();
+void testWindowMarginSpacingValues();
+void testWindowMarginSpacingLayout();
+void testWindowMarginBoxRefusal();
+
 #endif

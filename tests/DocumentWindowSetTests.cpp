@@ -226,6 +226,7 @@ namespace
         LOKA_VERIFY(config.roster.close(closing) == EDIT_OK);
       }
       WindowProps props;
+      props.contentMargin(17 + value);
       DocumentProps root(config.roots[value]);
       root.closeRoster = &config.roster;
       root.id = id;
@@ -306,6 +307,7 @@ void testDocumentWindowOpenAddsKeyedRow()
   app.tail();
   LOKA_VERIFY(app.group().getComponents().size() == 1);
   LOKA_VERIFY(app.group().keyOf(app.window(id)) == id);
+  LOKA_VERIFY(app.window(id)->contentMargin() == loka::app::layout::LayoutGap::of(17));
   LOKA_VERIFY(app.adoptedWindows().size() == 1 && app.adoptedWindows()[0] == app.window(id));
   LOKA_VERIFY(config.factories == 1);
 }

@@ -10,11 +10,11 @@ namespace loka
   {
     namespace layout
     {
-      /** A container's gap between seats: unspecified resolves to the rail default,
+      /** A named spacing value: unspecified resolves to the property default,
           of(0) makes the boxes touch, and of(n) is checked before narrowing (a
           negative n asserts and becomes 0 in release; above SHRT_MAX it asserts and
-          becomes SHRT_MAX). The unspecified sentinel is private; identity, order and
-          hash distinguish it from every explicit value. */
+          becomes SHRT_MAX). Both unspecified and standard-window-margin sentinels are private;
+          identity, order and hash distinguish them from every explicit value. */
       class LayoutGap
       {
       public:
@@ -31,9 +31,13 @@ namespace loka
           assert(n >= 0 && n <= SHRT_MAX);
           return LayoutGap(static_cast<short>(n < 0 ? 0 : n > SHRT_MAX ? SHRT_MAX : n));
         }
-        int resolve(int railDefault) const
+        static LayoutGap standardWindowMargin()
         {
-          return this->value_ < 0 ? railDefault : this->value_;
+          return LayoutGap(-2);
+        }
+        int resolve(int propertyDefault, int standardWindowMargin) const
+        {
+          return this->value_ == -1 ? propertyDefault : this->value_ == -2 ? standardWindowMargin : this->value_;
         }
         bool operator==(const LayoutGap &other) const
         {
@@ -60,6 +64,11 @@ namespace loka
         short value_;
       };
     } // namespace layout
+    /** Names the rail standard outer margin, independently of a Window override. */
+    inline layout::LayoutGap StandardWindowMargin()
+    {
+      return layout::LayoutGap::standardWindowMargin();
+    }
   } // namespace app
 } // namespace loka
 #endif

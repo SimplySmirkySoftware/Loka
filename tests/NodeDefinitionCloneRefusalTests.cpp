@@ -48,8 +48,8 @@ void testNodeDefinitionAssignmentPreservesDestination()
 {
   Box source, destination;
   fillSource(source);
-  source.props.padding = 23;
-  destination.props.padding = 7;
+  source.props.padding = loka::app::layout::LayoutGap::of(23);
+  destination.props.padding = loka::app::layout::LayoutGap::of(7);
   destination.setNodeTag(9);
   destination << ZStack();
   NodeDefinitionBase *oldHead = destination.childrenHead();
@@ -62,7 +62,7 @@ void testNodeDefinitionAssignmentPreservesDestination()
   LOKA_VERIFY(destination.childrenCount() == 1);
   LOKA_VERIFY(destination.childrenHead() == oldHead);
   LOKA_VERIFY(destination.childrenHead()->nodeKind() == NODE_KIND_ZSTACK);
-  LOKA_VERIFY(destination.props.padding == 7);
+  LOKA_VERIFY(destination.props.padding == loka::app::layout::LayoutGap::of(7));
   LOKA_VERIFY(destination.nodeTag() == 9);
   LOKA_VERIFY(g_probePropsAlive == alive);
   verifyStructure(source);
@@ -72,7 +72,7 @@ void testNodeDefinitionCopiesFullStructure()
 {
   Box source, destination;
   fillSource(source);
-  source.props.padding = 23;
+  source.props.padding = loka::app::layout::LayoutGap::of(23);
   destination << ZStack();
   OwnedDef<NodeDefinitionBase> copy(source.clone());
   LOKA_VERIFY(copy.isSet());
@@ -81,9 +81,9 @@ void testNodeDefinitionCopiesFullStructure()
   Box byValue(source);
   verifyStructure(destination);
   verifyStructure(byValue);
-  LOKA_VERIFY(destination.props.padding == 23 && destination.nodeTag() == 42);
-  LOKA_VERIFY(byValue.props.padding == 23 && byValue.nodeTag() == 42);
-  LOKA_VERIFY(static_cast<const BoxProps *>(copy->propsBase())->padding == 23);
+  LOKA_VERIFY(destination.props.padding == loka::app::layout::LayoutGap::of(23) && destination.nodeTag() == 42);
+  LOKA_VERIFY(byValue.props.padding == loka::app::layout::LayoutGap::of(23) && byValue.nodeTag() == 42);
+  LOKA_VERIFY(static_cast<const BoxProps *>(copy->propsBase())->padding == loka::app::layout::LayoutGap::of(23));
   LOKA_VERIFY(copy->nodeTag() == 42);
   LOKA_VERIFY(destination.childrenHead() != source.childrenHead());
   LOKA_VERIFY(copy->asNestableDefinition()->childrenHead() != source.childrenHead());
@@ -95,7 +95,7 @@ void testNodeDefinitionByValueRefusalLeavesEmpty()
 {
   Box source;
   fillSource(source);
-  source.props.padding = 23;
+  source.props.padding = loka::app::layout::LayoutGap::of(23);
   const int alive = g_probePropsAlive;
   g_limitedCloneCalls = 0;
   g_limitedCloneBudget = 1;
@@ -103,7 +103,7 @@ void testNodeDefinitionByValueRefusalLeavesEmpty()
   g_limitedCloneBudget = -1;
   LOKA_VERIFY(g_limitedCloneCalls == 2);
   LOKA_VERIFY(copy.childrenCount() == 0);
-  LOKA_VERIFY(copy.props.padding == 0 && copy.nodeTag() == 0);
+  LOKA_VERIFY(copy.props.padding == loka::app::layout::LayoutGap::unspecified() && copy.nodeTag() == 0);
   LOKA_VERIFY(g_probePropsAlive == alive);
   verifyStructure(source);
 }

@@ -289,7 +289,13 @@ void testContainerGapSeatsAndTraversal()
     box.addChild(noSeat(kind, result));
     box.addChild(new TextNode(TextProps("b")));
     Recorder b;
-    LOKA_VERIFY(computeBoxLayoutResultY(&box, seat(), &b, &Recorder::child, 12, &loka::testing::acceptShortLayoutY)
+    LOKA_VERIFY(computeBoxLayoutResultY(&box,
+                                        loka::app::layout::RailSpacing(12, 4, 9),
+                                        seat(),
+                                        &b,
+                                        &Recorder::child,
+                                        12,
+                                        &loka::testing::acceptShortLayoutY)
                 == 42);
     LOKA_VERIFY(b.calls == 3 && b.states[2].y == 37);
     {
@@ -313,11 +319,12 @@ void testContainerGapSeatsAndTraversal()
       row.addChild(noSeat(kind, result));
       row.addChild(new TextNode(TextProps("b")));
       RowLayoutMetrics metrics;
-      metrics.gap = 4;
+
       metrics.fallbackHeight = 90;
       metrics.textHeight = 5;
       Recorder r;
-      computeRowLayoutResultY(&row, seat(), metrics, 0, &r, &Recorder::child, metrics.gap, 0);
+      computeRowLayoutResultY(
+          &row, seat(), metrics, loka::app::layout::RailSpacing(12, 4, 9), 0, &r, &Recorder::child, 4, 0);
       LOKA_VERIFY(r.calls == 3 && r.states[0].width == 48 && r.states[1].width == 0);
       LOKA_VERIFY(r.states[2].x == 62 && r.states[2].width == 48);
       LOKA_VERIFY(r.states[0].height == (aligned ? 5 : 100));
@@ -546,8 +553,13 @@ void testContainerGapNaturalColumn()
   nestedRow->addChild(new ConfirmDialogNode(ConfirmDialogProps().result(result)));
   nestedRow->addChild(new ButtonNode(Button("bb").props));
   row.addChild(nestedRow);
-  RowWidthConsultation widths(
-      row.childrenHead(), row.childrenCount(), 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  RowWidthConsultation widths(row.childrenHead(),
+                              row.childrenCount(),
+                              100,
+                              4,
+                              loka::app::layout::RailSpacing(12, 4, 9),
+                              ROW_UNDECLARED_WIDTH_NATURAL,
+                              &platform);
   LOKA_VERIFY(widths.next(column).width() == 24);
   LOKA_VERIFY(widths.next(column->nextInComposition).width() == 32);
 }
@@ -718,13 +730,13 @@ namespace
 void testGapDoorValuesAndIdentity()
 {
   LOKA_VERIFY(sizeof(LayoutGap) == sizeof(short));
-  LOKA_VERIFY(LayoutGap::unspecified().resolve(7) == 7);
-  LOKA_VERIFY(LayoutGap::of(0).resolve(7) == 0);
-  LOKA_VERIFY(LayoutGap::of(SHRT_MAX).resolve(7) == SHRT_MAX);
+  LOKA_VERIFY(LayoutGap::unspecified().resolve(7, 9) == 7);
+  LOKA_VERIFY(LayoutGap::of(0).resolve(7, 9) == 0);
+  LOKA_VERIFY(LayoutGap::of(SHRT_MAX).resolve(7, 9) == SHRT_MAX);
   LOKA_VERIFY(LayoutGap::unspecified() != LayoutGap::of(0));
 #ifdef NDEBUG
-  LOKA_VERIFY(LayoutGap::of(-1).resolve(7) == 0);
-  LOKA_VERIFY(LayoutGap::of(SHRT_MAX + 1).resolve(7) == SHRT_MAX);
+  LOKA_VERIFY(LayoutGap::of(-1).resolve(7, 9) == 0);
+  LOKA_VERIFY(LayoutGap::of(SHRT_MAX + 1).resolve(7, 9) == SHRT_MAX);
 #else
   std::printf("[skip] LayoutGap release clamps require NDEBUG\n");
 #endif
@@ -903,8 +915,15 @@ void testGapDoorOverflow()
     state.x = 0;
     Acceptance acceptance;
     RowLayoutMetrics metrics;
-    const int result = computeRowLayoutResultY(
-        &row, state, metrics, 0, &acceptance, &Acceptance::child, edge ? SHRT_MAX - 1 : SHRT_MAX, &Acceptance::accept);
+    const int result = computeRowLayoutResultY(&row,
+                                               state,
+                                               metrics,
+                                               loka::app::layout::RailSpacing(12, 4, 9),
+                                               0,
+                                               &acceptance,
+                                               &Acceptance::child,
+                                               edge ? SHRT_MAX - 1 : SHRT_MAX,
+                                               &Acceptance::accept);
     LOKA_VERIFY(result == state.y + 1);
     LOKA_VERIFY(acceptance.placed == 1);
     LOKA_VERIFY(acceptance.count == (edge ? 4u : 3u));
@@ -945,18 +964,29 @@ void testGapDoorOverflow()
   row.props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
   for (int i = 0; i < 3; ++i)
     row.addChild(Button("b").create());
-  RowWidthConsultation measure(&row, 1, 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation measure(
+      &row, 1, 100, 4, loka::app::layout::RailSpacing(12, 4, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
   LOKA_VERIFY(measure.next(&row).width() == 100); // Declined natural width becomes a flex seat.
-  RowWidthConsultation allocate(
-      row.childrenHead(), row.childrenCount(), 100, SHRT_MAX, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
+  RowWidthConsultation allocate(row.childrenHead(),
+                                row.childrenCount(),
+                                100,
+                                SHRT_MAX,
+                                loka::app::layout::RailSpacing(12, 4, 9),
+                                ROW_UNDECLARED_WIDTH_SHARED,
+                                &source);
   LOKA_VERIFY(allocate.next(row.childrenHead()).width() == 0);
   // Fixed widths overflow the tally independently of gap multiplication.
   StackNode fixed(Row().props);
   fixed.addChild(Box().size(20000, 1).create());
   fixed.addChild(Box().size(20000, 1).create());
   fixed.addChild(Button("flex").create());
-  RowWidthConsultation fixedAllocation(
-      fixed.childrenHead(), fixed.childrenCount(), 100, 0, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
+  RowWidthConsultation fixedAllocation(fixed.childrenHead(),
+                                       fixed.childrenCount(),
+                                       100,
+                                       0,
+                                       loka::app::layout::RailSpacing(12, 4, 9),
+                                       ROW_UNDECLARED_WIDTH_SHARED,
+                                       &source);
   fixedAllocation.next(fixed.childrenHead());
   fixedAllocation.next(fixed.childrenHead()->nextInComposition);
   LOKA_VERIFY(fixedAllocation.next(fixed.childrenHead()->nextInComposition->nextInComposition).width() == 0);
@@ -972,10 +1002,12 @@ void testGapDoorOverflow()
   StackNode sharedWide(Row().gap(0).props);
   sharedWide.addChild(Button("one").create());
   sharedWide.addChild(Button("two").create());
-  RowWidthConsultation flexProduct(&sharedWide, 1, 100, 0, 4, ROW_UNDECLARED_WIDTH_NATURAL, &wide);
+  RowWidthConsultation flexProduct(
+      &sharedWide, 1, 100, 0, loka::app::layout::RailSpacing(12, 4, 9), ROW_UNDECLARED_WIDTH_NATURAL, &wide);
   LOKA_VERIFY(flexProduct.next(&sharedWide).width() == 100);
   row.props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_SHARED;
-  RowWidthConsultation shared(&row, 1, 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation shared(
+      &row, 1, 100, 4, loka::app::layout::RailSpacing(12, 4, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
   LOKA_VERIFY(shared.next(&row).width() == 100);
 }
 
@@ -1002,11 +1034,17 @@ void testGapDoorNaturalWidths()
       }
       outer.addChild(nested);
       const int innerWidth = shape == 1 ? 23 : 24;
-      RowWidthConsultation local(
-          outer.childrenHead(), outer.childrenCount(), 200, 20, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+      RowWidthConsultation local(outer.childrenHead(),
+                                 outer.childrenCount(),
+                                 200,
+                                 20,
+                                 loka::app::layout::RailSpacing(12, 4, 9),
+                                 ROW_UNDECLARED_WIDTH_NATURAL,
+                                 &source);
       LOKA_VERIFY(local.next(outer.childrenHead()).width() == 10);
       LOKA_VERIFY(local.next(nested).width() == innerWidth);
-      RowWidthConsultation natural(&outer, 1, 200, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+      RowWidthConsultation natural(
+          &outer, 1, 200, 4, loka::app::layout::RailSpacing(12, 4, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
       const int expected = policy ? 10 + 20 + innerWidth : 2 * innerWidth + 20;
       LOKA_VERIFY(natural.next(&outer).width() == expected);
       // A framed parent makes both Row policies eligible for overflow measurement.
@@ -1029,7 +1067,7 @@ void testGapDoorNaturalWidths()
       // The frame's lifetime belongs to this stack frame, so detach before teardown.
       parent.addChild(&frame);
       short width = 0;
-      const bool known = queryContentOverflowWidth(&parent, 4, &source, width);
+      const bool known = queryContentOverflowWidth(&parent, loka::app::layout::RailSpacing(12, 4, 9), &source, width);
       parent.detachChildren();
       LOKA_VERIFY(known);
       LOKA_VERIFY(width == expected + frame.frameGeometry().insets.left + frame.frameGeometry().insets.right);
@@ -1060,4 +1098,219 @@ void testGapDoorSpans()
     LOKA_VERIFY(band == platform.projectLayoutForTesting(&column, seat(), 0, &fresh));
     LOKA_VERIFY(spans.total() == fresh.total());
   }
+}
+
+void testWindowMarginSpacingValues()
+{
+  const LayoutGap values[] = {LayoutGap::unspecified(), StandardWindowMargin(), LayoutGap::of(9)};
+  LOKA_VERIFY(values[0].resolve(7, 9) == 7);
+  LOKA_VERIFY(values[1].resolve(7, 19) == 19);
+  LOKA_VERIFY(values[2].resolve(7, 19) == 9);
+  for (unsigned i = 0; i < 3; ++i)
+    for (unsigned j = i + 1; j < 3; ++j)
+    {
+      LOKA_VERIFY(values[i] != values[j]);
+      LOKA_VERIFY(values[i] < values[j] || values[j] < values[i]);
+      LOKA_VERIFY(values[i].hash() != values[j].hash());
+    }
+  BoxProps unspecified, zero;
+  zero.setPadding(0);
+  LOKA_VERIFY(unspecified < zero || zero < unspecified);
+  LOKA_VERIFY(unspecified.hash() != zero.hash());
+  LOKA_VERIFY(unspecified.padding.resolve(0, 9) == zero.padding.resolve(0, 9));
+#ifdef NDEBUG
+  LOKA_VERIFY(LayoutGap::of(-2) == LayoutGap::of(0));
+  LOKA_VERIFY(Box().padding(-2).props.padding == LayoutGap::of(0));
+  LOKA_VERIFY(Box().padding(SHRT_MAX + 1).props.padding == LayoutGap::of(SHRT_MAX));
+#else
+  std::printf("[skip] named margin numeric rejection and padding clamps require NDEBUG\n");
+#endif
+  LOKA_VERIFY(Box().gap(StandardWindowMargin()).props.gap == values[1]);
+  LOKA_VERIFY(Stack(STACK_AXIS_COLUMN).gap(StandardWindowMargin()).props.gap_ == values[1]);
+  LOKA_VERIFY(Row().gap(StandardWindowMargin()).props.gap_ == values[1]);
+  LOKA_VERIFY(Column().gap(StandardWindowMargin()).props.gap_ == values[1]);
+}
+
+void testWindowMarginSpacingLayout()
+{
+  const RailSpacing spacing(12, 4, 9);
+  BoxNode box(Box().padding(StandardWindowMargin()).props);
+  box.addChild(new TextNode(TextProps("pad")));
+  Recorder r;
+  LOKA_VERIFY(
+      computeBoxLayoutResultY(&box, spacing, seat(), &r, &Recorder::child, 12, &loka::testing::acceptShortLayoutY)
+      == seat().y + 9 + 5 + 9);
+  LOKA_VERIFY(r.calls == 1);
+  LOKA_VERIFY(r.states[0].x == seat().x + 9 && r.states[0].y == seat().y + 9);
+  LOKA_VERIFY(r.states[0].width == seat().width - 18 && r.states[0].height == seat().height - 18);
+  NullScenePlatformController platform;
+  platform.projectLayoutForTesting(&box, seat());
+  LOKA_VERIFY(gapTextY(platform, box.childrenHead()) == seat().y + 9);
+  StackNode column(VStack().gap(StandardWindowMargin()).props);
+  column.addChild(new TextNode(TextProps("a")));
+  column.addChild(new TextNode(TextProps("b")));
+  platform.projectLayoutForTesting(&column, seat());
+  LOKA_VERIFY(gapTextY(platform, column.childrenHead()->nextInComposition) == seat().y + 12 + 9);
+  StackNode nested(HStack().gap(StandardWindowMargin()).props);
+  nested.props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+  nested.addChild(Button("one").create());
+  nested.addChild(Button("two").create());
+  GapNaturalSource source;
+  RowWidthConsultation widths(&nested, 1, 100, 4, spacing, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(widths.next(&nested).width() == 29);
+  StackNode overflowParent(Column().props);
+  StackNode *overflowRow = new StackNode(nested.props);
+  overflowRow->addChild(Button("one").create());
+  overflowRow->addChild(Button("two").create());
+  overflowParent.addChild(overflowRow);
+  short overflowWidth = 0;
+  LOKA_VERIFY(queryContentOverflowWidth(&overflowParent, spacing, &source, overflowWidth));
+  LOKA_VERIFY(overflowWidth == 29);
+
+  BoxNode namedGap(Box().gap(StandardWindowMargin()).props);
+  namedGap.addChild(new TextNode(TextProps("first")));
+  namedGap.addChild(new TextNode(TextProps("second")));
+  platform.projectLayoutForTesting(&namedGap, seat());
+  LOKA_VERIFY(gapTextY(platform, namedGap.childrenHead()->nextInComposition) == seat().y + 12 + 9);
+  for (unsigned explicitZero = 0; explicitZero < 2; ++explicitZero)
+  {
+    BoxProps props;
+    if (explicitZero)
+      props.setPadding(0);
+    BoxNode zero(props);
+    zero.addChild(new TextNode(TextProps("zero")));
+    Recorder zeroOffer;
+    computeBoxLayoutResultY(
+        &zero, spacing, seat(), &zeroOffer, &Recorder::child, 12, &loka::testing::acceptShortLayoutY);
+    LOKA_VERIFY(zeroOffer.calls == 1 && zeroOffer.states[0].x == seat().x && zeroOffer.states[0].y == seat().y
+                && zeroOffer.states[0].width == seat().width && zeroOffer.states[0].height == seat().height);
+  }
+  Recorder toolbox;
+  LOKA_VERIFY(ComputeToolboxBoxLayout(&box, seat(), &toolbox) == seat().width);
+  LOKA_VERIFY(toolbox.states[0].x == seat().x + 12);
+  LOKA_VERIFY(toolbox.states[0].width == seat().width - 24);
+}
+
+namespace
+{
+  // Modern rail offers use int coordinates; the Box still refuses above short range.
+  struct WideOffer
+  {
+    typedef int Coordinate;
+    int x, y, width, height;
+    WideOffer()
+        : x(0),
+          y(0),
+          width(10),
+          height(10)
+    {
+    }
+  };
+  struct WideRecorder
+  {
+    unsigned calls;
+    WideRecorder()
+        : calls(0)
+    {
+    }
+    static int child(void *context, Node *, const WideOffer &offer)
+    {
+      ++static_cast<WideRecorder *>(context)->calls;
+      return offer.y;
+    }
+  };
+} // namespace
+
+void testWindowMarginBoxRefusal()
+{
+  const RailSpacing spacing(12, 4, 9);
+  BoxNode box(Box().padding(20000).props);
+  box.addChild(new TextNode(TextProps("zero offer")));
+  LayoutState state = seat();
+  state.x = state.y = 0;
+  Recorder r;
+  computeBoxLayoutResultY(&box, spacing, state, &r, &Recorder::child, 12, &loka::testing::acceptShortLayoutY);
+  LOKA_VERIFY(r.calls == 1 && r.states[0].width == 0 && r.states[0].height == 0);
+  for (unsigned axis = 0; axis < 2; ++axis)
+  {
+    NullScenePlatformController platform;
+    ScrollViewNode scroll((ScrollViewProps()));
+    BoxNode *inner = new BoxNode(Box().padding(20000).props);
+    TextNode *unreached = new TextNode(TextProps("refused origin"));
+    inner->addChild(unreached);
+    scroll.addChild(inner);
+    state.x = axis ? 0 : 20000;
+    state.y = axis ? 20000 : 0;
+    platform.projectLayoutForTesting(&scroll, state);
+    LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == 1);
+    LOKA_VERIFY(unreached->getContext() == 0);
+  }
+  BoxNode unpadded(Box().props);
+  unpadded.addChild(new TextNode(TextProps("upper offer")));
+  // A fixed-size Box offers its own size, so a wide outer offer is not its inner extent.
+  BoxProps fixedProps;
+  fixedProps.setSize(100, 100);
+  BoxNode fixedBox(fixedProps);
+  fixedBox.addChild(new TextNode(TextProps("fixed in a wide offer")));
+  for (unsigned axis = 0; axis < 2; ++axis)
+  {
+    WideOffer offer;
+    if (axis)
+      offer.height = SHRT_MAX + 1;
+    else
+      offer.width = SHRT_MAX + 1;
+    WideRecorder rejected;
+    computeBoxLayoutResultY(&unpadded, spacing, offer, &rejected, &WideRecorder::child, 0, 0);
+    LOKA_VERIFY(rejected.calls == 0);
+    WideRecorder fixedAccepted;
+    computeBoxLayoutResultY(&fixedBox, spacing, offer, &fixedAccepted, &WideRecorder::child, 0, 0);
+    LOKA_VERIFY(fixedAccepted.calls == 1);
+  }
+  struct PartialTraversal
+  {
+    static int child(void *, Node *, const LayoutState &)
+    {
+      return SHRT_MAX;
+    }
+  };
+  // An empty Box has no child acceptance call to mask a missing origin preflight.
+  BoxNode emptyRefused(Box().padding(20000).props);
+  state.x = 0;
+  state.y = 20000;
+  LOKA_VERIFY(computeBoxLayoutResultY(
+                  &emptyRefused, spacing, state, 0, &PartialTraversal::child, 0, &loka::testing::acceptShortLayoutY)
+              == state.y);
+  for (unsigned fixed = 0; fixed < 2; ++fixed)
+  {
+    BoxProps props = Box().padding(1).props;
+    if (fixed)
+      props.setSize(100, 100);
+    BoxNode partial(props);
+    partial.addChild(new TextNode(TextProps("first")));
+    partial.addChild(new TextNode(TextProps("refused second")));
+    state.x = state.y = 0;
+    const int bottom = computeBoxLayoutResultY(
+        &partial, spacing, state, 0, &PartialTraversal::child, 1, &loka::testing::acceptShortLayoutY);
+    LOKA_VERIFY(bottom == SHRT_MAX);
+  }
+  // An accepting caller owns the range policy; an empty result retains the int origin.
+  BoxNode empty(Box().padding(1).props);
+  state.y = SHRT_MAX;
+  LOKA_VERIFY(computeBoxLayoutResultY(&empty, spacing, state, 0, &PartialTraversal::child, 0, 0) == SHRT_MAX + 2);
+  struct RefusingRecorder : Recorder
+  {
+    virtual bool refuseLayoutResultY(int y)
+    {
+      return y < SHRT_MIN || y > SHRT_MAX;
+    }
+    virtual int layoutChild(Node *, const LayoutState &s)
+    {
+      this->bottom = static_cast<short>(s.y + 1);
+      return SHRT_MAX;
+    }
+  } toolbox;
+  BoxNode wide(Box().padding(1).props);
+  wide.addChild(new TextNode(TextProps("wide")));
+  state.x = state.y = 0;
+  LOKA_VERIFY(ComputeToolboxBoxLayout(&wide, state, &toolbox) == 0);
 }
