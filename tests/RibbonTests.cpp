@@ -250,7 +250,7 @@ void testRibbonGroupExpansionAndGeometry()
   LOKA_VERIFY(first.y == viewport.y + p);
   LOKA_VERIFY(layout::preferredChildWidthForRow(frame) == -1);
   LOKA_VERIFY(layout::declaredChildWidthForColumn(frame) == -1);
-  layout::RowWidthConsultation measured(frame, 1, 640, gap, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  layout::RowWidthConsultation measured(frame, 1, 640, gap, gap, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(measured.next(frame).width() == 40 + gap + 48 + 2 * p);
   const LayoutState after = static_cast<RibbonGeometryContext *>(ribbonButton(scene, "Groups", 3)->getContext())->rect;
   LOKA_VERIFY(after.x - first.x - gap == 40 + gap + 48 + RibbonGroupNode::kFrameInset);
@@ -371,17 +371,17 @@ void testRibbonGroupInsetAndDecliningNaturalWidth()
   LOKA_VERIFY(anchor && anchor->asStackNode());
   RibbonGroupNode *group = anchor->asStackNode()->childrenHead()->asRibbonGroupNode();
   LOKA_VERIFY(group && group->childrenCount() == 4);
-  layout::RowWidthConsultation declined(group, 1, 311, 7, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  layout::RowWidthConsultation declined(group, 1, 311, 7, 7, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(declined.next(group).width() == 311);
 
   RibbonConstantWidth natural(100);
-  layout::RowWidthConsultation measured(group, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
+  layout::RowWidthConsultation measured(group, 1, 311, 0, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
   LOKA_VERIFY(measured.next(group).width() == 108);
   short overflow = -1;
   LOKA_VERIFY(layout::queryContentOverflowWidth(anchor, 0, &natural, overflow));
   LOKA_VERIFY(overflow == 108);
   RibbonConstantWidth excessive(32767);
-  layout::RowWidthConsultation tooWide(group, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &excessive);
+  layout::RowWidthConsultation tooWide(group, 1, 311, 0, 0, ROW_UNDECLARED_WIDTH_NATURAL, &excessive);
   LOKA_VERIFY(tooWide.next(group).width() == 311);
   overflow = -1;
   LOKA_VERIFY(!layout::queryContentOverflowWidth(anchor, 0, &excessive, overflow));
@@ -504,7 +504,7 @@ void testFramedCapabilityLayoutAndMeasurement()
   LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].y == 68);
   LOKA_VERIFY(traversal.edgeSeats[RIBBON_GROUP_EDGE_BOTTOM].width == 100);
   RibbonConstantWidth natural(100);
-  layout::RowWidthConsultation measured(&frame, 1, 311, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
+  layout::RowWidthConsultation measured(&frame, 1, 311, 0, 0, ROW_UNDECLARED_WIDTH_NATURAL, &natural);
   LOKA_VERIFY(measured.next(&frame).width() == 112);
   // Stack owns the frame below, so use a distinct heap resident for overflow.
   StackNode parent((StackProps(STACK_AXIS_COLUMN)));

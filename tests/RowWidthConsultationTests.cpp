@@ -426,8 +426,8 @@ void testRowNaturalWidthConsultation()
   row.addChild(declined);
   row.addChild(fixed);
   NaturalWidthProbe source(answered);
-  RowWidthConsultation widths(row.childrenHead(), row.childrenCount(), 300, 4,
-                             ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation widths(
+      row.childrenHead(), row.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
   LOKA_VERIFY(source.calls_ == 2);
   const RowChildWidth a = widths.next(answered);
   const RowChildWidth b = widths.next(declined);
@@ -436,8 +436,7 @@ void testRowNaturalWidthConsultation()
   LOKA_VERIFY(b.width() == 135 && b.hasGapBefore());
   LOKA_VERIFY(c.width() == 120 && c.hasGapBefore());
   LOKA_VERIFY(source.calls_ == 4);
-  RowWidthConsultation narrow(row.childrenHead(), row.childrenCount(), 10, 4,
-                             ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation narrow(row.childrenHead(), row.childrenCount(), 10, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
   LOKA_VERIFY(narrow.next(answered).width() == 37);
   LOKA_VERIFY(narrow.next(declined).width() == 0);
   LOKA_VERIFY(narrow.next(fixed).width() == 120);
@@ -454,14 +453,18 @@ void testRowSharedWidthNeverQueriesSource()
   row.addChild(a);
   row.addChild(b);
   NaturalWidthProbe source(a);
-  RowWidthConsultation shared(row.childrenHead(), row.childrenCount(), 300, 4,
-                             ROW_UNDECLARED_WIDTH_SHARED, &source);
+  RowWidthConsultation shared(row.childrenHead(), row.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
   LOKA_VERIFY(source.calls_ == 0);
   LOKA_VERIFY(shared.next(a).width() == 148);
   LOKA_VERIFY(shared.next(b).width() == 148);
   LOKA_VERIFY(source.calls_ == 0);
-  RowWidthConsultation absent(row.childrenHead(), row.childrenCount(), 300, 4,
-                             ROW_UNDECLARED_WIDTH_NATURAL, 0); // Null-source fallback under test.
+  RowWidthConsultation absent(row.childrenHead(),
+                              row.childrenCount(),
+                              300,
+                              4,
+                              4,
+                              ROW_UNDECLARED_WIDTH_NATURAL,
+                              0); // Null-source fallback under test.
   LOKA_VERIFY(absent.next(a).width() == 148);
   LOKA_VERIFY(absent.next(b).width() == 148);
   StackProps defaults;
@@ -529,7 +532,7 @@ namespace
   {
     using namespace loka::app;
     layout::RowWidthConsultation widths(
-        outer.childrenHead(), outer.childrenCount(), 300, 4, ROW_UNDECLARED_WIDTH_NATURAL, &probe);
+        outer.childrenHead(), outer.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &probe);
     return widths.next(outer.childrenHead()).width();
   }
 } // namespace

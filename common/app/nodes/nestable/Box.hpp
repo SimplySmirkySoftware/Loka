@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "core/State.hpp"
+#include "app/layout/LayoutGap.hpp"
 
 namespace loka
 {
@@ -18,6 +19,7 @@ namespace loka
     {
       typedef BoxTypeTag TypeTag;
       typedef BoxNode NodeType;
+      layout::LayoutGap gap;
       int padding;
       short width;
       short height;
@@ -32,7 +34,12 @@ namespace loka
       }
       int hash() const
       {
-        return padding + width + height;
+        return padding + width + height + this->gap.hash();
+      }
+      BoxProps &setGap(int value)
+      {
+        this->gap = layout::LayoutGap::of(value);
+        return *this;
       }
       BoxProps &setPadding(int value)
       {
@@ -62,6 +69,8 @@ namespace loka
         if (rhs.propsTypeId() != propsTypeId())
           return false;
         const BoxProps &other = static_cast<const BoxProps &>(rhs);
+        if (this->gap != other.gap)
+          return this->gap < other.gap;
         if (padding != other.padding)
           return padding < other.padding;
         if (this->widthState_ != other.widthState_)
@@ -117,6 +126,11 @@ namespace loka
       BoxDefinition(const BoxDefinition &other)
           : BaseType(other)
       {
+      }
+      BoxDefinition &gap(int value)
+      {
+        this->props.setGap(value);
+        return *this;
       }
       BoxDefinition &padding(int value)
       {

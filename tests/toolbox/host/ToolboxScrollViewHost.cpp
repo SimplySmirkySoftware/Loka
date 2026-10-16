@@ -8,6 +8,8 @@
 
 // The host substitutes dispatch/OS neighbors, but executes the production
 // ScrollView body, Column handler, attributed context and viewport ledger.
+
+#ifndef LOKA_HOST_GAP_DISPATCH
 namespace
 {
   class Traversal : public loka::app::scene::IPlatformLayoutTraversal
@@ -83,6 +85,7 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
     return 0;
   return width;
 }
+#endif
 #include "ToolboxScrollViewLayout.cpp"
 #include "ToolboxViewportScrollBar.cpp"
 #include "ToolboxControlPresentation.cpp"

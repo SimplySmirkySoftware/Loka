@@ -16,6 +16,9 @@ namespace loka
     {
       /** Shape-only classification; independent of rail handler registration. */
       bool isLayoutPassThrough(scene::Node *node);
+      /** Resolves child spacing from own props, or carries it through a transparent node.
+          Shape-only: no descendant walk. */
+      int resolveLayoutGap(scene::Node *node, int received, int verticalDefault, int horizontalDefault);
       /** Dialogs and pass-through subtrees without a seat consume no layout gap. */
       bool childTakesLayoutSeat(scene::Node *child);
 
@@ -109,26 +112,33 @@ namespace loka
 
       /** Answers the maximum offer-independent width within the parent's composed child count,
           treating children as vertically stacked ScrollView content and recursing into Columns;
-          gap is used only for natural Row measurement, and a null parent or offer-bound children answer zero.
-          Unavailable measurements or results above SHRT_MAX refuse without changing width. */
+          gap is the rail horizontal default, forwarded unchanged; each Row resolves its own gap, and a null parent or
+         offer-bound children answer zero. Unavailable measurements or results above SHRT_MAX refuse without changing
+         width. */
       bool queryContentOverflowWidth(scene::Node *parent, int gap, const INaturalWidthSource *source, short &width);
 
       /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
           leaf answers (including intrinsic images) at most twice, SHARED rows never consult them.
+          The resolved gap allocates this Row; horizontalDefault measures nested Rows.
           Private recursive natural measurement walks each Stack's subtree without caching to find
           the smallest seating width, independently of ScrollView's offer-bound overflow rule. */
       class RowWidthConsultation
       {
       public:
-        RowWidthConsultation(loka::app::scene::Node *childrenHead, size_t childCount, int availableWidth, int gap,
-                             RowUndeclaredWidth policy, const INaturalWidthSource *source);
+        RowWidthConsultation(loka::app::scene::Node *childrenHead,
+                             size_t childCount,
+                             int availableWidth,
+                             int gap,
+                             int horizontalDefault,
+                             RowUndeclaredWidth policy,
+                             const INaturalWidthSource *source);
 
         RowChildWidth next(loka::app::scene::Node *child);
 
       private:
         int preferredWidth(loka::app::scene::Node *child) const;
         const INaturalWidthSource *source_;
-        int gap_;
+        int horizontalDefault_;
         int baseFlexWidth_;
         int flexRemainder_;
         int liveSeatsSeen_;

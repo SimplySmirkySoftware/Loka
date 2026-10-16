@@ -399,6 +399,8 @@ void testToolboxRowSpacing(const char *mode)
   state.spacing = 6;
   if (std::strcmp(mode, "spacing-group") == 0 || std::strcmp(mode, "spacing-caption-wins") == 0)
   {
+    // Direct handlers must offer the rail default that nested natural measurement uses.
+    state.spacing = ToolboxLayoutMetrics::kDefaultGap;
     GroupNaturalPins(scene, controller, traversal, state, std::strcmp(mode, "spacing-caption-wins") == 0);
     Access::unmount(scene);
     return;

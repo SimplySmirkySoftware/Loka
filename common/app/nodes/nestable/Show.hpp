@@ -200,28 +200,39 @@ namespace loka
       scene::ConditionalProps props_;
     };
 
-    inline ShowDefinition Show(loka::core::State<bool> &condition)
+    namespace detail
     {
-      return ShowDefinition(&condition);
+      template <typename T> struct ShowCondition
+      {
+        static char test(const loka::core::State<bool> *);
+        static long test(...);
+        enum
+        {
+          value = sizeof(test(static_cast<T *>(0))) == sizeof(char)
+        };
+      };
+
+      template <bool Accepted> struct ShowResult
+      {
+      };
+
+      template <> struct ShowResult<true>
+      {
+        typedef ShowDefinition Type;
+      };
+    } // namespace detail
+
+    /** Borrow a boolean State lvalue; deduction preserves const and refuses temporaries. */
+    template <typename ConditionT>
+    inline typename detail::ShowResult<detail::ShowCondition<ConditionT>::value>::Type Show(ConditionT &condition)
+    {
+      const loka::core::State<bool> *state = &condition;
+      return ShowDefinition(const_cast<loka::core::State<bool> *>(state));
     }
 
-    inline ShowDefinition Show(const loka::core::State<bool> &condition)
-    {
-      return ShowDefinition(const_cast<loka::core::State<bool> *>(&condition));
-    }
-
-    template <typename ChildDefinitionT>
-    inline ShowDefinition operator<<(loka::core::State<bool> &condition,
-                                     const ChildDefinitionT &child)
-    {
-      ShowDefinition definition = Show(condition);
-      definition << child;
-      return definition;
-    }
-
-    template <typename ChildDefinitionT>
-    inline ShowDefinition operator<<(const loka::core::State<bool> &condition,
-                                     const ChildDefinitionT &child)
+    template <typename ConditionT, typename ChildDefinitionT>
+    inline typename detail::ShowResult<detail::ShowCondition<ConditionT>::value>::Type
+    operator<<(ConditionT &condition, const ChildDefinitionT &child)
     {
       ShowDefinition definition = Show(condition);
       definition << child;

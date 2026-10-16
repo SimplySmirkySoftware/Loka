@@ -15,6 +15,7 @@
 // Out-of-class definitions for ToolboxLayoutMetrics (see its header). A
 // conditional with two lvalue operands binds the member by reference, and
 // C++98 then requires a definition; GCC 4.2 at -O0 links against it.
+const short ToolboxLayoutMetrics::kDefaultGap;
 const short ToolboxLayoutMetrics::kDefaultLineHeight;
 const short ToolboxLayoutMetrics::kImageFallbackHeight;
 const short ToolboxLayoutMetrics::kControlAscentInset;
@@ -198,7 +199,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     spans = 0;
   }
   const unsigned count = static_cast<unsigned>(column->childrenCount());
-  bool band = range && spans && spans->valid() && spans->size() == count && range->first <= count
+  bool band = range && spans && spans->validForGap(state.spacing) && spans->size() == count && range->first <= count
               && range->count <= count - range->first;
   // Keep selection/repair paired with common ColumnLayout.hpp; this rail
   // additionally returns the maximum width through its traversal channel.
@@ -207,7 +208,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     const unsigned first = band ? range->first : 0;
     const unsigned last = band ? first + range->count : count;
     if (!band && spans)
-      spans->begin(count);
+      spans->begin(count, state.spacing);
     // Every cached start is nonnegative and bounded by total(). Check
     // the full advance before narrowing either the start or the result.
     if (band && traversal->refuseLayoutResultY(state.y + spans->total()))
@@ -454,7 +455,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     return 0;
   }
 
-  short rowStartX = state.x;
+  int rowStartX = state.x;
   int maxHeight = 0;
   const short lineHeight = state.lineHeight > 0 ? state.lineHeight : ToolboxLayoutMetrics::kDefaultLineHeight;
   const short controlAscent = static_cast<short>(lineHeight - ToolboxLayoutMetrics::kControlAscentInset);
@@ -462,8 +463,13 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
   const short editTextHeight = static_cast<short>(controlAscent + ToolboxLayoutMetrics::kEditTextDescent);
   short rowHeight = lineHeight;
   const size_t childCount = row->childrenCount();
-  loka::app::layout::RowWidthConsultation widths(row->childrenHead(), childCount, state.width, state.spacing,
-      row->props.rowUndeclaredWidth_, traversal);
+  loka::app::layout::RowWidthConsultation widths(row->childrenHead(),
+                                                 childCount,
+                                                 state.width,
+                                                 state.spacing,
+                                                 ToolboxLayoutMetrics::kDefaultGap,
+                                                 row->props.rowUndeclaredWidth_,
+                                                 traversal);
   if (row->props.hasVerticalAlignment_)
   {
     rowHeight = 0;
@@ -491,9 +497,14 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     const loka::app::layout::RowChildWidth allocation = widths.next(child);
     if (allocation.hasGapBefore())
     {
-      rowStartX = static_cast<short>(rowStartX + state.spacing);
+      rowStartX += state.spacing;
     }
-    rowState.x = rowStartX;
+    // Deliberate twin of common RowLayout: accept both edges before narrowing.
+    if (traversal->refuseLayoutResultY(rowStartX) || traversal->refuseLayoutResultY(rowStartX + allocation.width()))
+    {
+      return 0;
+    }
+    rowState.x = static_cast<short>(rowStartX);
     rowState.width = static_cast<short>(allocation.width());
     if (row->props.hasVerticalAlignment_)
     {
@@ -525,7 +536,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     DispatchTraversalLayoutChild(traversal, child, rowState);
     if (allocation.isLiveSeat())
     {
-      rowStartX = static_cast<short>(rowStartX + allocation.width());
+      rowStartX += allocation.width();
     }
     const short childResultY = traversal->layoutResultY();
     if (childResultY > state.y && static_cast<short>(childResultY - state.y) > maxHeight)

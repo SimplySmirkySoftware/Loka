@@ -634,6 +634,22 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
+  # Gap routing runs the real dispatch and ScrollView body against the OS host neighbors.
+  get_target_property(_gap_host_sources LokaToolboxAttributedTextTests SOURCES)
+  list(REMOVE_ITEM _gap_host_sources tests/toolbox/host/ToolboxAttributedTextHostTests.cpp)
+  add_executable(LokaToolboxGapTests tests/toolbox/host/ToolboxGapHostTests.cpp
+    apple/toolbox/src/ToolboxNodeDispatch.cpp ${_gap_host_sources})
+  target_include_directories(LokaToolboxGapTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxGapTests PRIVATE LOKA_HOST_GAP_DISPATCH)
+  target_compile_options(LokaToolboxGapTests PRIVATE
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxGapTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxGapTests)
+  set_target_properties(LokaToolboxGapTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root)
+    add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
+  endforeach()
+
   add_executable(LokaToolboxTextEditorTests tests/toolbox/host/ToolboxTextEditorHostTests.cpp)
   get_target_property(_editor_host_sources LokaToolboxAttributedTextTests SOURCES)
   target_sources(LokaToolboxAttributedTextTests PRIVATE example/SmirkyCard/src/SmirkyMarkup.cpp)
