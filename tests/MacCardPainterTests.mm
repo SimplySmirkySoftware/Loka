@@ -412,7 +412,10 @@ void testMacCardBandMovePropsAndEmpty()
     }
     // There is one style value in v1; a role change discriminates the props
     // copy, while needsDisplay pins the invalidation required by future styles.
-    [first setNeedsDisplay:NO];
+    // setNeedsDisplay:NO does not clear a pending request on macOS 26; only a
+    // display does, so the flag is proved clear before props are applied.
+    [first displayIfNeeded];
+    LOKA_VERIFY(![first needsDisplay]);
     bands[0]->getContext()->onPropsApplied();
     LOKA_VERIFY([first needsDisplay]);
     // Four rows satisfy both TOP (4 < radius) and BOTTOM (4-3 > 0) samples.
