@@ -264,6 +264,11 @@ int GetDeviceCaps(HDC, int)
 {
   return 96;
 }
+int GetSystemMetrics(int index)
+{
+  // The classic 96 dpi scroll bar thickness; the host asks for nothing else.
+  return index == SM_CYHSCROLL ? 17 : 0;
+}
 int MulDiv(int value, int numerator, int denominator)
 {
   const int product = value * numerator;

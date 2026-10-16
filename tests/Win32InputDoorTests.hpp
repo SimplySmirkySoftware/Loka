@@ -5,4 +5,6 @@ void testWin32InputDoorPopupLifetime();
 void testWin32InputDoorWheelLifetime();
 void testWin32InputDoorExtentOrdering();
 void testWin32InputDoorCloseDuringLayout();
+void testWin32InputDoorHorizontalScrollLifetime();
+
 #endif
