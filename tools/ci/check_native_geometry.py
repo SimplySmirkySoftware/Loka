@@ -33,8 +33,7 @@ MAC_ALLOWLIST = {
     # drawRect edge blend: one-point rows of the view's native bounds.
     "apple/macos/src/context/MacRibbonGroupEdgeContext.mm": {"NSMakeRect"},
     # Constructor: initial document width is AppKit contentSize, height zero.
-    # relayout: preserve document width, growing to at least AppKit clip width.
-    "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect", "setFrame"},
+    "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect"},
     # FrameRectForContent: already-projected/native content plus native chrome.
     # FrameChangedThunk/createNativeWindow: desktop placement and #712 clamp.
     "apple/macos/src/MacWindow.mm": {"NSMakeRect", "setFrame"},

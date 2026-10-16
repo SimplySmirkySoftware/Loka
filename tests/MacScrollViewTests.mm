@@ -901,3 +901,43 @@ void testMacScrollViewCongruentWidthsLeaveNoHorizontalRange()
   [pool drain];
   std::printf("==== [testMacScrollViewCongruentWidthsLeaveNoHorizontalRange] PASSED ====\n");
 }
+
+void testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth()
+{
+  std::printf("\n==== [testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    int visits = 0;
+    ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(400, 100));
+    scroll.addChild(leading);
+    scroll.addChild(new GapDispatchText(visits));
+    fact.state().set(loka::core::Frame(50, 0, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const NSRect before = [[native documentView] frame];
+    LOKA_VERIFY(visits > 0);
+    visits = 0;
+    // The seat widens past the committed document while the traversal
+    // refuses: the document keeps the width of the last successful layout.
+    leading->props.size(400, SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1);
+    controller.relayout(900, 140);
+    LOKA_VERIFY(visits == 0);
+    const bool clipWider = [native contentSize].width > before.size.width;
+    LOKA_VERIFY(clipWider && "the fixture must widen the clip past the committed document");
+    const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(documentUnchanged && "a refused pass must not grow the document before the commit");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth] PASSED ====\n");
+}

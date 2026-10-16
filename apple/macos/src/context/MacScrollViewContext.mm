@@ -199,15 +199,9 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   }
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  NSView *documentView = [scrollView documentView];
-  if (documentView)
-  {
-    NSRect frame = [documentView frame];
-    const CGFloat clipWidth = [scrollView contentSize].width;
-    if (frame.size.width < clipWidth)
-      frame.size.width = clipWidth;
-    [documentView setFrame:frame];
-  }
+  // The document frame is not touched here: it is part of the metrics that
+  // commit only after the traversal succeeds, so a refused pass leaves the
+  // previous document, scroller and origin exactly as they were.
 }
 
 int MacScrollViewContext::commitScrollMetrics(
