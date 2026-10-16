@@ -459,8 +459,14 @@ int main(int argc, char **argv)
     if (natural)
       LayoutProbe::child(&p, rowButton, seat(0));
     else
-      layout::computeRowLayoutResultY(lookup(scene, "row")->asStackNode(), seat(width),
-          layout::RowLayoutMetrics(), &controller, &p, LayoutProbe::child);
+      layout::computeRowLayoutResultY(lookup(scene, "row")->asStackNode(),
+                                      seat(width),
+                                      layout::RowLayoutMetrics(),
+                                      &controller,
+                                      &p,
+                                      LayoutProbe::child,
+                                      0,
+                                      0);
     ToolboxButtonContext *context = static_cast<ToolboxButtonContext *>(rowButton->context);
     const Rect before = toolbox_host::controlRect;
     { StateTrackerGuard guard(root->tracker()); root->title.set(String::Literal("Flag mode: on")); }

@@ -63,7 +63,7 @@ void testStackSpansSelection()
 {
   StackSpans spans;
   LOKA_VERIFY(!spans.valid());
-  LOKA_VERIFY(spans.begin(5));
+  LOKA_VERIFY(spans.begin(5, 12));
   LOKA_VERIFY(spans.append(0, 10));
   LOKA_VERIFY(spans.append(10, 10));
   LOKA_VERIFY(spans.append(10, 25));
@@ -85,10 +85,10 @@ void testStackSpansSelection()
   spans.invalidate();
   LOKA_VERIFY(!spans.valid());
   LOKA_VERIFY(spans.placedViewport().height == 0);
-  LOKA_VERIFY(spans.begin(0));
+  LOKA_VERIFY(spans.begin(0, 12));
   LOKA_VERIFY(spans.finish());
   window(spans, 0, 20, 0, 0);
-  LOKA_VERIFY(spans.begin(1));
+  LOKA_VERIFY(spans.begin(1, 12));
   LOKA_VERIFY(!spans.append(0, SHRT_MAX + 1));
   LOKA_VERIFY(!spans.valid());
 }
@@ -98,11 +98,11 @@ void testStackSpansAllocationRefusal()
   {
     StackSpans spans;
     loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 1);
-    const bool built = spans.begin(100);
+    const bool built = spans.begin(100, 12);
     loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 0);
     LOKA_VERIFY(!built);
     LOKA_VERIFY(!spans.valid());
-    LOKA_VERIFY(spans.begin(100));
+    LOKA_VERIFY(spans.begin(100, 12));
     for (int i = 0; i < 100; ++i)
       LOKA_VERIFY(spans.append(i, i + 1));
     LOKA_VERIFY(spans.finish());

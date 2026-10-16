@@ -26,6 +26,11 @@
 #include "app/scene/boundary/Boundary.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 
+namespace
+{
+  const int kNullHorizontalGap = 4;
+}
+
 /** Null measures intrinsic images 1:1 in pixels and push buttons at eight units per
     UTF-32 scalar plus sixteen units of title inset; answers remain stable during layout. */
 bool NullScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
@@ -166,7 +171,7 @@ NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepth
   this->layoutState_.height = 20;
   this->layoutState_.lineHeight = 20;
   loka::app::layout::RowLayoutMetrics rowMetrics;
-  rowMetrics.gap = 4;
+  rowMetrics.gap = kNullHorizontalGap;
   rowMetrics.fallbackHeight = 10;
   rowMetrics.buttonHeight = 10;
   rowMetrics.editTextHeight = 10;
@@ -764,10 +769,13 @@ NullScenePlatformController::findLedgerRow(FakeControlHandle *handle)
 }
 
 int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
-                                            const loka::app::scene::LayoutState &state,
-    const loka::app::layout::LazyWindow *range,
-    loka::app::layout::StackSpans *spans)
+                                            const loka::app::scene::LayoutState &received,
+                                            const loka::app::layout::LazyWindow *range,
+                                            loka::app::layout::StackSpans *spans)
 {
+  loka::app::scene::LayoutState state = received;
+  state.spacing = static_cast<short>(loka::app::layout::resolveLayoutGap(
+      node, received.spacing, loka::app::layout::FallbackControlMetrics::kVerticalSpacing, kNullHorizontalGap));
   if (!node)
   {
     return state.y;
@@ -863,7 +871,7 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
     return state.y;
   }
   loka::app::scene::LayoutState childState = state;
-  loka::app::layout::StackGaps gaps(loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  loka::app::layout::StackGaps gaps(state.spacing);
   for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
   {
     const int childY = childState.y + gaps.before(child);
@@ -940,7 +948,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
                             && column->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN;
   if (spans && !directColumn)
     spans->invalidate();
-  loka::app::layout::StackGaps gaps(loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+  loka::app::layout::StackGaps gaps(state.spacing);
   for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child; child = child->nextInComposition)
   {
     const int childY = currentY + gaps.before(child);
@@ -1016,7 +1024,9 @@ int NullScenePlatformController::projectLayout(loka::app::scene::Node *node,
   }
   const loka::app::scene::PaintScope scope = {1, 0, 0, state.x, state.y, state.width, state.height};
   this->paintScope_ = scope;
-  const int result = this->layoutNode(node, state, range, spans);
+  loka::app::scene::LayoutState rootState = state;
+  rootState.spacing = loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+  const int result = this->layoutNode(node, rootState, range, spans);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a projection pass must restore the root scope");
   if (node && node->asBoundary())

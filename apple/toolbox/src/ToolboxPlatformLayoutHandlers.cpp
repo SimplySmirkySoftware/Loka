@@ -198,7 +198,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     spans = 0;
   }
   const unsigned count = static_cast<unsigned>(column->childrenCount());
-  bool band = range && spans && spans->valid() && spans->size() == count && range->first <= count
+  bool band = range && spans && spans->validForGap(state.spacing) && spans->size() == count && range->first <= count
               && range->count <= count - range->first;
   // Keep selection/repair paired with common ColumnLayout.hpp; this rail
   // additionally returns the maximum width through its traversal channel.
@@ -207,7 +207,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     const unsigned first = band ? range->first : 0;
     const unsigned last = band ? first + range->count : count;
     if (!band && spans)
-      spans->begin(count);
+      spans->begin(count, state.spacing);
     // Every cached start is nonnegative and bounded by total(). Check
     // the full advance before narrowing either the start or the result.
     if (band && traversal->refuseLayoutResultY(state.y + spans->total()))
@@ -462,8 +462,13 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
   const short editTextHeight = static_cast<short>(controlAscent + ToolboxLayoutMetrics::kEditTextDescent);
   short rowHeight = lineHeight;
   const size_t childCount = row->childrenCount();
-  loka::app::layout::RowWidthConsultation widths(row->childrenHead(), childCount, state.width, state.spacing,
-      row->props.rowUndeclaredWidth_, traversal);
+  loka::app::layout::RowWidthConsultation widths(row->childrenHead(),
+                                                 childCount,
+                                                 state.width,
+                                                 state.spacing,
+                                                 state.spacing,
+                                                 row->props.rowUndeclaredWidth_,
+                                                 traversal);
   if (row->props.hasVerticalAlignment_)
   {
     rowHeight = 0;
