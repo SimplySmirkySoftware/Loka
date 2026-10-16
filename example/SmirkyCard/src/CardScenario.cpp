@@ -169,9 +169,11 @@ namespace smirkycard
     // idle operation that ran the tick completes, so a Show branch revealed by
     // step k exists only on tick k + 1. Null routes synchronously and passed
     // every step on tick 1, which hid the dependency; the due tick makes the
-    // audit the same on every rail.
+    // audit the same on every rail. The ticks count from this invocation, not
+    // from 1: a scenario installed by reload or open arrives after the runner's
+    // clock has advanced, and an absolute schedule would be due all at once.
     const JsFlowDescription::StepRecord *s = description->steps();
-    long due = 1;
+    long due = this->clock_.currentTick();
     ScenarioFlowChain<ScenePtr, ScenePtr> flow =
         ScenarioFlow(this->clock_, &this->input_).auditTo(&this->sink_)
         | AtTick(due, RunOnce(JsStepAdapter(*this, s->fn))).named(s->name.c_str());

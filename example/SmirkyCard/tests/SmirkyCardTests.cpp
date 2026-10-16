@@ -2833,8 +2833,12 @@ namespace
       CardRunnerHarness h(scenarioCard, companion.c_str());
       h.mount();
       smirkycard::JsEngine *old = h.runtime.currentEngine();
+      // Two steps: the replacement scenario is invoked after the clock has
+      // advanced, and its steps must still be due one per tick from that
+      // invocation, not from tick 1 (an absolute schedule would be due at once).
       writeMain("_smirky_scenario/CARD.FLOW.JS",
-                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');}));});");
+                "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('new engine');})"
+                ".step(function(){c.test.log('new second');}));});");
       h.tick();
       LOKA_VERIFY(h.runtime.currentEngine() != old && h.runtime.retiredEngineCount() == 1);
       JS_RunGC(old->jsRuntime());
@@ -2842,8 +2846,10 @@ namespace
       h.admission->flush();
       LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_CANCELED);
       h.tick();
+      LOKA_VERIFY(h.terminalCount == 1 && h.logs.size() == 1 && h.logs[0] == "new engine");
+      h.tick();
       LOKA_VERIFY(h.terminalCount == 2 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
-      LOKA_VERIFY(h.logs.size() == 1 && h.logs[0] == "new engine");
+      LOKA_VERIFY(h.logs.size() == 2 && h.logs[1] == "new second");
       h.admission->flush();
       LOKA_VERIFY(h.runtime.retiredEngineCount() == 0);
     }
