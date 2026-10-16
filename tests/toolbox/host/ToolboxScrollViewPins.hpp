@@ -20,9 +20,13 @@ namespace
     NodeState<loka::core::Frame> fact;
     ScrollViewNode scroll;
     StackNode *column;
-    explicit ScrollFixture(unsigned count = 20, bool button = false)
-        : controller(&window), offset(loka::core::Frame(0, 0, 0, 0)), fact(&offset, &tracker),
-          scroll(ScrollViewProps().viewport(fact)), column(new StackNode(StackProps(STACK_AXIS_COLUMN)))
+    explicit ScrollFixture(unsigned count = 20, bool button = false, const WindowProps &props = WindowProps())
+        : window(props),
+          controller(&window),
+          offset(loka::core::Frame(0, 0, 0, 0)),
+          fact(&offset, &tracker),
+          scroll(ScrollViewProps().viewport(fact)),
+          column(new StackNode(StackProps(STACK_AXIS_COLUMN)))
     {
       tracker.addState(&offset);
       LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
@@ -100,6 +104,76 @@ namespace
   bool SameScrollRect(const Rect &a, const Rect &b)
   {
     return a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+  }
+
+  void ScrollViewSizeBoxPins()
+  {
+    Pin("ToolboxScrollViewWindowSizeBox");
+    for (unsigned mode = 0; mode != 4; ++mode)
+    {
+      const int margin = mode == 1 ? 12 : 0;
+      ScrollFixture f(20, false, mode == 1 ? WindowProps() : WindowProps().contentMargin(0));
+      Rect box;
+      LOKA_VERIFY(f.window.querySizeBoxRect(box));
+      LOKA_VERIFY(box.left == 345 && box.top == 245 && box.right == 360 && box.bottom == 260);
+      if (mode == 3)
+        f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      LayoutState seat = Seat(mode == 2 ? 100 : 360 - margin * 2);
+      seat.x = margin;
+      seat.y = margin;
+      seat.height = mode == 2 ? 34 : 260 - margin * 2;
+      seat.spacing = 0;
+      f.controller.layoutScrollView(&f.scroll, seat, 0);
+      const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
+      const Rect expectedSeat = {static_cast<short>(margin),
+                                 static_cast<short>(margin),
+                                 static_cast<short>(mode == 2 ? 34 : 260 - margin),
+                                 static_cast<short>(mode == 2 ? 100 : 360 - margin)};
+      LOKA_VERIFY(SameScrollRect(binding.rect, expectedSeat));
+      const Rect content = ToolboxScrollViewContentRect(expectedSeat, mode == 3);
+      LOKA_VERIFY(SameScrollRect(binding.contentRect, content));
+      LOKA_VERIFY(content.left == margin && content.top == margin);
+      LOKA_VERIFY(content.right == (mode == 2 ? 84 : 344 - margin));
+      LOKA_VERIFY(content.bottom == (mode == 2 ? 34 : mode == 3 ? 244 : 260 - margin));
+      const ToolboxScenePlatformController::ScrollCall &vertical = f.controller.scrollCalls[0];
+      LOKA_VERIFY(vertical.rect.left == content.right && vertical.rect.right == expectedSeat.right);
+      LOKA_VERIFY(vertical.rect.top == margin);
+      LOKA_VERIFY(vertical.rect.bottom == (mode == 2 ? 34 : mode == 3 ? 244 : 245));
+      LOKA_VERIFY(vertical.maximum == (mode == 2 ? 306 : mode == 3 ? 106 : mode == 1 ? 104 : 80));
+      LOKA_VERIFY(vertical.pageStep == (mode == 2 ? 33 : mode == 3 ? 243 : mode == 1 ? 235 : 259));
+      if (mode == 3)
+      {
+        const ToolboxScenePlatformController::ScrollCall &horizontal = f.controller.scrollCalls[1];
+        LOKA_VERIFY(horizontal.rect.left == 0 && horizontal.rect.top == 244);
+        LOKA_VERIFY(horizontal.rect.right == 344 && horizontal.rect.bottom == 260);
+        LOKA_VERIFY(horizontal.maximum == 56 && horizontal.pageStep == 343);
+      }
+    }
+    for (unsigned mode = 0; mode != 2; ++mode)
+    {
+      ToolboxWindow window;
+      ToolboxScenePlatformController controller(mode == 0 ? &window : 0);
+      ScrollViewNode scroll((ScrollViewProps()));
+      const Rect seat = {0, 0, 260, 370};
+      LOKA_VERIFY(
+          controller.ensureViewportScrollBarControl(seat, &scroll, 500, 244, 0, ToolboxScrollViewMetrics(46, 0), true)
+          == 0);
+      LOKA_VERIFY(controller.scrollCalls.size() == 2);
+      LOKA_VERIFY(controller.scrollCalls[0].rect.bottom == 244);
+      LOKA_VERIFY(controller.scrollCalls[1].rect.right == (mode == 0 ? 345 : 354));
+      LOKA_VERIFY(controller.scrollCalls[1].maximum == 46 && controller.scrollCalls[1].pageStep == 353);
+    }
+    // Offset seats also exercise the horizontal stop and each empty-bar floor.
+    const ToolboxScrollViewRect box(345, 245, 360, 260);
+    const ToolboxScrollViewRect crossing(0, 0, 370, 260);
+    LOKA_VERIFY(ToolboxScrollViewHorizontalBarRect(crossing, box).right == 345);
+    const ToolboxScrollViewRect low(344, 250, 360, 260);
+    LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(low, false, box).bottom == 250);
+    const ToolboxScrollViewRect right(350, 244, 380, 260);
+    LOKA_VERIFY(ToolboxScrollViewHorizontalBarRect(right, box).right == 350);
+    const ToolboxScrollViewRect away(0, 0, 100, 260);
+    LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(away, false, box).bottom == 260);
+    LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(crossing, false, ToolboxScrollViewRect()).bottom == 260);
   }
 
   void ScrollViewHorizontalPins()
@@ -275,6 +349,7 @@ namespace
 
   void ScrollViewPins()
   {
+    ScrollViewSizeBoxPins();
     Pin("ToolboxScrollViewColumnBoxesGapRefusal");
     {
       ScrollFixture f(0);

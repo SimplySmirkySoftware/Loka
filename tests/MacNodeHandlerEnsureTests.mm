@@ -318,14 +318,26 @@ void testMacNodeHandlerEnsureContract()
     loka::app::TextEditorNode editor((loka::app::TextEditorProps()));
     LOKA_VERIFY(controller.prepareProjectedLayout(&editor, state));
     LOKA_VERIFY(editor.getContext());
-    // Card bands are an explicit refusal in both debug and release builds.
+    // Card bands install a real transparent view, retained across ensures.
     const NSUInteger beforeBands = countChildViews(root);
     for (int role = 0; role < loka::app::CARD_BAND_COUNT; ++role)
     {
       loka::app::CardBandNode band(loka::app::CardBandProps(static_cast<loka::app::CardBandRole>(role)));
-      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
-      LOKA_VERIFY(!controller.prepareProjectedLayout(&band, state));
-      LOKA_VERIFY(band.getContext() == 0);
+      const loka::core::Frame frames[] = {loka::core::Frame(11, 17, 74, 3),
+                                          loka::core::Frame(11, 20, 3, 57),
+                                          loka::core::Frame(85, 17, 6, 54),
+                                          loka::core::Frame(14, 71, 77, 6)};
+      state.x = static_cast<short>(frames[role].x);
+      state.y = static_cast<short>(frames[role].y);
+      state.width = static_cast<short>(frames[role].width);
+      state.height = static_cast<short>(frames[role].height);
+      LOKA_VERIFY(controller.prepareProjectedLayout(&band, state));
+      loka::app::scene::NodeContext *context = band.getContext();
+      LOKA_VERIFY(context != 0);
+      LOKA_VERIFY(controller.prepareProjectedLayout(&band, state));
+      LOKA_VERIFY(band.getContext() == context);
+      LOKA_VERIFY(countChildViews(root) == beforeBands + 1);
+      LOKA_VERIFY(![[[root subviews] lastObject] isOpaque]);
     }
     LOKA_VERIFY(countChildViews(root) == beforeBands);
     // -- ScrollBar: known unsupported kinds take the typed-refusal path --

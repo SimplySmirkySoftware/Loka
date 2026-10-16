@@ -4,6 +4,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 
 #include "../apple/toolbox/src/ToolboxScrollViewDecisions.hpp"
+#include "../apple/toolbox/src/ToolboxWindowGeometry.hpp"
 
 void testToolboxScrollViewChildWidthAlwaysReservesScrollbar()
 {
@@ -84,14 +85,32 @@ void testToolboxScrollViewContentRectExcludesScrollbar()
 
 void testToolboxScrollViewTwoBarGeometry()
 {
+  const ToolboxScrollViewRect port(0, 0, 420, 260);
+  const ToolboxScrollViewRect sizeBox = ToolboxWindowSizeBoxRect(port);
+  LOKA_VERIFY(sizeBox.left == 405 && sizeBox.top == 245 && sizeBox.right == 420 && sizeBox.bottom == 260);
+  const ToolboxScrollViewRect edgeBar = ToolboxScrollViewVerticalBarRect(port, false, sizeBox);
+  LOKA_VERIFY(edgeBar.left == 404 && edgeBar.top == 0 && edgeBar.right == 420 && edgeBar.bottom == 245);
+  const ToolboxScrollViewRect marginSeat(12, 12, 408, 248);
+  LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(marginSeat, false, sizeBox).bottom == 245);
+  // Touching edges do not intersect; neither axis clips a distant bar.
+  const ToolboxScrollViewRect touching(0, 0, 405, 260);
+  LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(touching, false, sizeBox).bottom == 260);
+  const ToolboxScrollViewRect emptyVertical(410, 250, 410, 260);
+  LOKA_VERIFY(ToolboxScrollViewVerticalBarRect(emptyVertical, false, sizeBox).bottom == 260);
+  const ToolboxScrollViewRect emptyHorizontal(0, 250, 450, 250);
+  LOKA_VERIFY(ToolboxScrollViewHorizontalBarRect(emptyHorizontal, sizeBox).right == 434);
+  const ToolboxScrollViewRect above(0, 0, 450, 245);
+  LOKA_VERIFY(ToolboxScrollViewHorizontalBarRect(above, sizeBox).right == 434);
+
+  const ToolboxScrollViewRect noSizeBox;
   const ToolboxScrollViewRect seat(10, 20, 110, 54);
   const ToolboxScrollViewRect content = ToolboxScrollViewContentRect(seat, true);
-  const ToolboxScrollViewRect vertical = ToolboxScrollViewVerticalBarRect(seat, true);
-  const ToolboxScrollViewRect horizontal = ToolboxScrollViewHorizontalBarRect(seat);
+  const ToolboxScrollViewRect vertical = ToolboxScrollViewVerticalBarRect(seat, true, noSizeBox);
+  const ToolboxScrollViewRect horizontal = ToolboxScrollViewHorizontalBarRect(seat, noSizeBox);
   LOKA_VERIFY(content.left == 10 && content.top == 20 && content.right == 94 && content.bottom == 38);
   LOKA_VERIFY(vertical.left == 94 && vertical.top == 20 && vertical.right == 110 && vertical.bottom == 38);
   LOKA_VERIFY(horizontal.left == 10 && horizontal.top == 38 && horizontal.right == 94 && horizontal.bottom == 54);
-  const ToolboxScrollViewRect fullVertical = ToolboxScrollViewVerticalBarRect(seat, false);
+  const ToolboxScrollViewRect fullVertical = ToolboxScrollViewVerticalBarRect(seat, false, noSizeBox);
   LOKA_VERIFY(fullVertical.left == 94 && fullVertical.top == 20 && fullVertical.right == 110
               && fullVertical.bottom == 54);
   ToolboxScrollViewRect out;
@@ -104,8 +123,8 @@ void testToolboxScrollViewTwoBarGeometry()
     {
       const ToolboxScrollViewRect small(10, 20, 10 + width, 20 + height);
       const ToolboxScrollViewRect c = ToolboxScrollViewContentRect(small, true);
-      const ToolboxScrollViewRect v = ToolboxScrollViewVerticalBarRect(small, true);
-      const ToolboxScrollViewRect h = ToolboxScrollViewHorizontalBarRect(small);
+      const ToolboxScrollViewRect v = ToolboxScrollViewVerticalBarRect(small, true, noSizeBox);
+      const ToolboxScrollViewRect h = ToolboxScrollViewHorizontalBarRect(small, noSizeBox);
       LOKA_VERIFY(c.right >= c.left && c.bottom >= c.top);
       LOKA_VERIFY(v.right >= v.left && v.bottom >= v.top);
       LOKA_VERIFY(h.right >= h.left && h.bottom >= h.top);

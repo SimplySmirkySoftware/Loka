@@ -12,6 +12,15 @@ namespace loka
       class MacScenePlatformTestAccess
       {
       public:
+        /** Exercise framed layout at an explicit origin without exposing the
+            controller's internal traversal on its production surface. */
+        static int layoutNode(::MacScenePlatformController &controller,
+                              ::loka::app::scene::Node *node,
+                              const ::loka::app::scene::LayoutState &state)
+        {
+          return controller.layoutNodeFromSceneState(node, state);
+        }
+
         static bool hasPendingRelayout(const ::MacScenePlatformController &controller)
         {
           return controller.relayoutPending_;

@@ -1,4 +1,5 @@
 #include "ToolboxLayoutMetrics.hpp"
+#include "app/layout/BoxLayout.hpp"
 /** Included by the production controller and Linux host fixture. */
 void ToolboxScenePlatformController::render()
 {
@@ -43,24 +44,21 @@ void ToolboxScenePlatformController::render()
     pendingDirtyRects_.clear();
   }
   loka::app::scene::LayoutState state;
-  state.x = 12;
-  state.y = 12;
+  const int margin = resolveWindowContentMargin(this->window_, ToolboxLayoutMetrics::spacing());
+  state.x = static_cast<short>(margin);
+  state.y = static_cast<short>(margin);
   state.lineHeight = 14;
   state.spacing = static_cast<short>(ToolboxLayoutMetrics::spacing().verticalGap());
   {
-    Rect port = window_->window()->portRect;
-    short width = static_cast<short>(port.right - port.left - state.x * 2);
-    short height = static_cast<short>(port.bottom - port.top - state.y * 2);
-    if (width < 0)
-    {
-      width = 0;
-    }
-    if (height < 0)
-    {
-      height = 0;
-    }
-    state.width = width;
-    state.height = height;
+    const Rect port = this->window_->window()->portRect;
+    const int width = loka::app::layout::insetExtent(port.right - port.left, margin, margin);
+    const int height = loka::app::layout::insetExtent(port.bottom - port.top, margin, margin);
+    // Window ports normally start at zero; refuse even a nonzero-origin port
+    // whose difference exceeds the LayoutState short range before narrowing.
+    if (width > SHRT_MAX || height > SHRT_MAX)
+      return;
+    state.width = static_cast<short>(width);
+    state.height = static_cast<short>(height);
   }
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must begin at the root scope");
