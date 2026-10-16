@@ -95,6 +95,11 @@ namespace loka
         this->gap_ = layout::LayoutGap::of(value);
         return *this;
       }
+      StackProps &gap(layout::LayoutGap value)
+      {
+        this->gap_ = value;
+        return *this;
+      }
       StackProps &alignVertical(VerticalAlignment value)
       {
         this->hasVerticalAlignment_ = true;
@@ -179,6 +184,11 @@ namespace loka
         this->props.gap(value);
         return *this;
       }
+      StackDefinition &gap(layout::LayoutGap value)
+      {
+        this->props.gap(value);
+        return *this;
+      }
       StackDefinition &alignVertical(VerticalAlignment value)
       {
         this->props.alignVertical(value);
@@ -216,6 +226,11 @@ namespace loka
         this->props.gap(value);
         return *this;
       }
+      RowDefinition &gap(layout::LayoutGap value)
+      {
+        this->props.gap(value);
+        return *this;
+      }
       RowDefinition &alignVertical(VerticalAlignment value)
       {
         this->props.alignVertical(value);
@@ -237,6 +252,11 @@ namespace loka
       {
       }
       ColumnDefinition &gap(int value)
+      {
+        this->props.gap(value);
+        return *this;
+      }
+      ColumnDefinition &gap(layout::LayoutGap value)
       {
         this->props.gap(value);
         return *this;

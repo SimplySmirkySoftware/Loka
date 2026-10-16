@@ -128,7 +128,7 @@ namespace
                                                    row->childrenCount(),
                                                    500,
                                                    4,
-                                                   4,
+                                                   loka::app::layout::RailSpacing(12, 4, 9),
                                                    row->props.rowUndeclaredWidth_,
                                                    0); // Heuristic-only probe, without a rail.
     const loka::app::layout::RowChildWidth nav = widths.next(navSeat);

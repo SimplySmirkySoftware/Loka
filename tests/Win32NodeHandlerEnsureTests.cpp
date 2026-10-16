@@ -2027,12 +2027,12 @@ void testWin32ButtonDeclinedHeightKeepsRowAligned()
     const int nativeHeight = expectedPushButtonHeightPixels(*controller);
     LOKA_VERIFY(scale.measurementToLu(nativeHeight) != layout::FallbackControlMetrics::kButtonHeight);
     LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
-    LOKA_VERIFY(controller->rowLayoutMetrics().gap == Win32SceneLayout::kGap);
+    LOKA_VERIFY(Win32SceneLayout::spacing().horizontalGap() == Win32SceneLayout::kGap);
     verifyButtonCenteredRow(*controller, root, direct != 0, true);
     // A DPI change must not split the cached Stack copy from the Button reader.
     controller->updateDisplayScale(loka::win32::Win32DisplayScale(144));
     LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
-    LOKA_VERIFY(controller->rowLayoutMetrics().gap == Win32SceneLayout::kGap);
+    LOKA_VERIFY(Win32SceneLayout::spacing().horizontalGap() == Win32SceneLayout::kGap);
     verifyButtonCenteredRow(*controller, root, direct != 0, true);
     delete controller;
     LOKA_VERIFY(DestroyWindow(root));

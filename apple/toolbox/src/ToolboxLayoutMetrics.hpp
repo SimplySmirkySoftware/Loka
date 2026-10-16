@@ -1,6 +1,8 @@
 #ifndef LOKA_TOOLBOX_LAYOUT_METRICS_HPP
 #define LOKA_TOOLBOX_LAYOUT_METRICS_HPP
 
+#include "app/layout/RailSpacing.hpp"
+
 /** Toolbox-native geometry shared by layout projections and control painters.
     Each member has its out-of-class definition in
     ToolboxPlatformLayoutHandlers.cpp; a new member adds one there too. */
@@ -8,6 +10,7 @@ struct ToolboxLayoutMetrics
 {
   /** Both axes use the same native container gap. */
   static const short kDefaultGap = 8;
+  static const short kRootInset = 12;
   static const short kDefaultLineHeight = 12;
   static const short kImageFallbackHeight = 80;
   /** LayoutState.y is the top edge of the node's box on every rail;
@@ -17,6 +20,11 @@ struct ToolboxLayoutMetrics
   /** Horizontal title inset on each side of a native push button. */
   static const short kPushButtonTitleInset = 8;
   static const short kEditTextDescent = 8;
+  static const loka::app::layout::RailSpacing &spacing()
+  {
+    static const loka::app::layout::RailSpacing value(kDefaultGap, kDefaultGap, kRootInset);
+    return value;
+  }
 };
 
 #endif // LOKA_TOOLBOX_LAYOUT_METRICS_HPP

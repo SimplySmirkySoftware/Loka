@@ -426,8 +426,13 @@ void testRowNaturalWidthConsultation()
   row.addChild(declined);
   row.addChild(fixed);
   NaturalWidthProbe source(answered);
-  RowWidthConsultation widths(
-      row.childrenHead(), row.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation widths(row.childrenHead(),
+                              row.childrenCount(),
+                              300,
+                              4,
+                              loka::app::layout::RailSpacing(12, 4, 9),
+                              ROW_UNDECLARED_WIDTH_NATURAL,
+                              &source);
   LOKA_VERIFY(source.calls_ == 2);
   const RowChildWidth a = widths.next(answered);
   const RowChildWidth b = widths.next(declined);
@@ -436,7 +441,13 @@ void testRowNaturalWidthConsultation()
   LOKA_VERIFY(b.width() == 135 && b.hasGapBefore());
   LOKA_VERIFY(c.width() == 120 && c.hasGapBefore());
   LOKA_VERIFY(source.calls_ == 4);
-  RowWidthConsultation narrow(row.childrenHead(), row.childrenCount(), 10, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  RowWidthConsultation narrow(row.childrenHead(),
+                              row.childrenCount(),
+                              10,
+                              4,
+                              loka::app::layout::RailSpacing(12, 4, 9),
+                              ROW_UNDECLARED_WIDTH_NATURAL,
+                              &source);
   LOKA_VERIFY(narrow.next(answered).width() == 37);
   LOKA_VERIFY(narrow.next(declined).width() == 0);
   LOKA_VERIFY(narrow.next(fixed).width() == 120);
@@ -453,7 +464,13 @@ void testRowSharedWidthNeverQueriesSource()
   row.addChild(a);
   row.addChild(b);
   NaturalWidthProbe source(a);
-  RowWidthConsultation shared(row.childrenHead(), row.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
+  RowWidthConsultation shared(row.childrenHead(),
+                              row.childrenCount(),
+                              300,
+                              4,
+                              loka::app::layout::RailSpacing(12, 4, 9),
+                              ROW_UNDECLARED_WIDTH_SHARED,
+                              &source);
   LOKA_VERIFY(source.calls_ == 0);
   LOKA_VERIFY(shared.next(a).width() == 148);
   LOKA_VERIFY(shared.next(b).width() == 148);
@@ -462,7 +479,7 @@ void testRowSharedWidthNeverQueriesSource()
                               row.childrenCount(),
                               300,
                               4,
-                              4,
+                              loka::app::layout::RailSpacing(12, 4, 9),
                               ROW_UNDECLARED_WIDTH_NATURAL,
                               0); // Null-source fallback under test.
   LOKA_VERIFY(absent.next(a).width() == 148);
@@ -531,8 +548,13 @@ namespace
   int consultedStackWidth(loka::app::StackNode &outer, const StackWidthProbe &probe)
   {
     using namespace loka::app;
-    layout::RowWidthConsultation widths(
-        outer.childrenHead(), outer.childrenCount(), 300, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &probe);
+    layout::RowWidthConsultation widths(outer.childrenHead(),
+                                        outer.childrenCount(),
+                                        300,
+                                        4,
+                                        loka::app::layout::RailSpacing(12, 4, 9),
+                                        ROW_UNDECLARED_WIDTH_NATURAL,
+                                        &probe);
     return widths.next(outer.childrenHead()).width();
   }
 } // namespace
@@ -653,7 +675,7 @@ void testContentOverflowIgnoresOfferBoundText()
   column.addChild(new BoxNode(fixed));
   StackWidthProbe probe(500, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 300);
   LOKA_VERIFY(probe.calls == 0);
 }
@@ -665,13 +687,13 @@ void testContentOverflowOfferBoundAnswersZero()
   column.addChild(new TextNode(TextProps("a")));
   StackWidthProbe probe(500, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 0);
   column.addChild(widthRow(ROW_UNDECLARED_WIDTH_SHARED));
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 0);
   LOKA_VERIFY(probe.calls == 0);
-  LOKA_VERIFY(layout::queryContentOverflowWidth(0, 4, 0, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(0, loka::app::layout::RailSpacing(12, 4, 9), 0, width));
   LOKA_VERIFY(width == 0);
 }
 
@@ -682,7 +704,7 @@ void testContentOverflowNaturalDeclinePreservesOutput()
   column.addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
   StackWidthProbe probe(30, 0, 20);
   short width = 19;
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 19);
 }
 
@@ -698,20 +720,20 @@ void testContentOverflowNestedMaximumAndOverflow()
   column.addChild(new BoxNode(fixed));
   StackWidthProbe probe(30, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 74);
   StackWidthProbe overflow(32767, 40, 20);
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &overflow, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &overflow, width));
   LOKA_VERIFY(width == 74);
   ImageViewProps imageProps;
   imageProps.size(SHRT_MAX, 10);
   StackNode images((StackProps(STACK_AXIS_COLUMN)));
   ImageViewNode *image = new ImageViewNode(imageProps);
   images.addChild(image);
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&images, 4, 0, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&images, loka::app::layout::RailSpacing(12, 4, 9), 0, width));
   LOKA_VERIFY(width == SHRT_MAX);
   image->props.width_ = static_cast<int>(SHRT_MAX) + 1;
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&images, 4, 0, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&images, loka::app::layout::RailSpacing(12, 4, 9), 0, width));
   LOKA_VERIFY(width == SHRT_MAX);
 }
 
@@ -720,13 +742,13 @@ void testContentOverflowBoxPaddingIsOfferBound()
   using namespace loka::app;
   ScrollViewNode scroll((ScrollViewProps()));
   BoxProps props;
-  props.padding = 8;
+  props.padding = loka::app::layout::LayoutGap::of(8);
   BoxNode *box = new BoxNode(props);
   scroll.addChild(box);
   box->addChild(new TextNode(TextProps("a")));
   StackWidthProbe probe(500, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 0);
   LOKA_VERIFY(probe.calls == 0);
 }
@@ -745,7 +767,7 @@ void testContentOverflowPassThroughIsTransparent()
   fragment->addChild(new BoxNode(fixed));
   StackWidthProbe probe(500, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 300);
   LOKA_VERIFY(probe.calls == 0);
   // Nested pass-through wrappers stay transparent; a decline inside propagates.
@@ -754,7 +776,7 @@ void testContentOverflowPassThroughIsTransparent()
   inner->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
   StackWidthProbe refused(30, 0, 20);
   width = 19;
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, 4, &refused, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&scroll, loka::app::layout::RailSpacing(12, 4, 9), &refused, width));
   LOKA_VERIFY(width == 19);
 }
 
@@ -767,10 +789,10 @@ void testContentOverflowRibbonUsesNaturalMeasurement()
   group->addChild(widthRow(ROW_UNDECLARED_WIDTH_NATURAL));
   StackWidthProbe probe(30, 40, 20);
   short width = 19;
-  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, 4, &probe, width));
+  LOKA_VERIFY(layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &probe, width));
   LOKA_VERIFY(width == 74 + 2 * RibbonGroupNode::kFrameInset);
   StackWidthProbe refused(30, 0, 20);
   width = 19;
-  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, 4, &refused, width));
+  LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &refused, width));
   LOKA_VERIFY(width == 19);
 }

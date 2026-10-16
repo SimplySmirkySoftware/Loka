@@ -46,7 +46,7 @@ void ToolboxScenePlatformController::render()
   state.x = 12;
   state.y = 12;
   state.lineHeight = 14;
-  state.spacing = ToolboxLayoutMetrics::kDefaultGap;
+  state.spacing = static_cast<short>(ToolboxLayoutMetrics::spacing().verticalGap());
   {
     Rect port = window_->window()->portRect;
     short width = static_cast<short>(port.right - port.left - state.x * 2);

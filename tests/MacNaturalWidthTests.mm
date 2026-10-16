@@ -368,7 +368,7 @@ void testMacButtonDeclinedHeightKeepsRowAligned()
       controller = new MacScenePlatformController(root, loka::macos::DefaultRailMetrics());
     }
     LOKA_VERIFY(controller->rowLayoutMetrics().buttonHeight == layout::FallbackControlMetrics::kButtonHeight);
-    LOKA_VERIFY(controller->rowLayoutMetrics().gap == MacSceneLayout::kGap);
+    LOKA_VERIFY(MacSceneLayout::spacing().horizontalGap() == MacSceneLayout::kGap);
     StackNode *row = direct ? new DirectRow() : new StackNode(StackProps(STACK_AXIS_ROW));
     row->props.alignVertical(VERTICAL_ALIGNMENT_CENTER);
     row->addChild(new ButtonNode(ButtonProps().text(loka::core::String::Literal("Button"))));

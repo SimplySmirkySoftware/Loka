@@ -20,13 +20,13 @@ namespace loka
       typedef BoxTypeTag TypeTag;
       typedef BoxNode NodeType;
       layout::LayoutGap gap;
-      int padding;
+      layout::LayoutGap padding;
       short width;
       short height;
       /** Borrowed live width claim; null selects the constant width. */
       loka::core::State<int> *widthState_;
       BoxProps()
-          : padding(0),
+          : padding(),
             width(0),
             height(0),
             widthState_(0)
@@ -34,7 +34,7 @@ namespace loka
       }
       int hash() const
       {
-        return padding + width + height + this->gap.hash();
+        return this->padding.hash() + width + height + this->gap.hash();
       }
       BoxProps &setGap(int value)
       {
@@ -43,7 +43,7 @@ namespace loka
       }
       BoxProps &setPadding(int value)
       {
-        padding = value;
+        this->padding = layout::LayoutGap::of(value);
         return *this;
       }
       /** Declares the fixed outer area owned by this container. */
@@ -130,6 +130,16 @@ namespace loka
       BoxDefinition &gap(int value)
       {
         this->props.setGap(value);
+        return *this;
+      }
+      BoxDefinition &gap(layout::LayoutGap value)
+      {
+        this->props.gap = value;
+        return *this;
+      }
+      BoxDefinition &padding(layout::LayoutGap value)
+      {
+        this->props.padding = value;
         return *this;
       }
       BoxDefinition &padding(int value)
