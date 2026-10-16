@@ -141,7 +141,7 @@ void *MacScrollViewContext::documentView() const
   return scrollView ? (void *)[scrollView documentView] : 0;
 }
 
-int MacScrollViewContext::contentWidth() const
+int MacScrollViewContext::visibleWidth() const
 {
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   if (!scrollView)
@@ -183,12 +183,15 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   if (documentView)
   {
     NSRect frame = [documentView frame];
-    frame.size.width = [scrollView contentSize].width;
+    const CGFloat clipWidth = [scrollView contentSize].width;
+    if (frame.size.width < clipWidth)
+      frame.size.width = clipWidth;
     [documentView setFrame:frame];
   }
 }
 
-int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight, int offset)
+int MacScrollViewContext::commitScrollMetrics(
+    int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar)
 {
   if (contentHeight < 0)
   {
@@ -203,7 +206,7 @@ int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight
   {
     maximum = 0;
   }
-  const int clamped = this->clampOffset(offset, maximum);
+  const int clamped = this->clampOffset(requestedY, maximum);
 
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   NSView *documentView = scrollView ? [scrollView documentView] : nil;
@@ -211,8 +214,20 @@ int MacScrollViewContext::setScrollMetrics(int contentHeight, int viewportHeight
   {
     return clamped;
   }
-  loka::macos::SetMacDocumentHeight(scrollView, this->controller()->projection().projectLength(0, contentHeight));
-  loka::macos::ScrollMacDocument(documentView, this->controller()->projection().scrollOffsetToNative(clamped));
+  // Native tiling and document resizing can notify intermediate origins.
+  // Publish only the completed two-axis commit at the caller.
+  NSClipView *clipView = [scrollView contentView];
+  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
+  [clipView setPostsBoundsChangedNotifications:NO];
+  [scrollView setHasHorizontalScroller:horizontalBar];
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const CGFloat width = projection.projectLength(0, contentWidth).pt;
+  const CGFloat clipWidth = [scrollView contentSize].width;
+  loka::macos::SetMacDocumentSize(
+      scrollView, width > clipWidth ? width : clipWidth, projection.projectLength(0, contentHeight));
+  loka::macos::ScrollMacDocument(
+      documentView, projection.scrollOffsetToNative(clampedX), projection.scrollOffsetToNative(clamped));
+  [clipView setPostsBoundsChangedNotifications:postsBounds];
   return clamped;
 }
 
@@ -227,9 +242,13 @@ void MacScrollViewContext::publishClipViewBoundsOrigin()
     return;
   }
   const NSRect bounds = [[scrollView contentView] bounds];
-  int offset = this->controller()->projection().scrollPositionToLu(bounds.origin.y);
-  offset = this->clampOffset(offset, this->maximumOffset());
-  this->publishOffset(offset);
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const int x = this->clampOffset(projection.scrollPositionToLu(bounds.origin.x), this->maximumOffset(true));
+  const int y = this->clampOffset(projection.scrollPositionToLu(bounds.origin.y), this->maximumOffset(false));
+  // Repeated native bounds notifications, including any delayed layout echo,
+  // are same-value no-ops inside publishOrigin, the echo-loop breaker.
+  if (this->node_)
+    this->node_->publishOrigin(x, y);
 }
 
 int MacScrollViewContext::clampOffset(int value, int maximum) const
@@ -245,7 +264,7 @@ int MacScrollViewContext::clampOffset(int value, int maximum) const
   return value;
 }
 
-int MacScrollViewContext::maximumOffset() const
+int MacScrollViewContext::maximumOffset(bool horizontal) const
 {
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
   NSView *documentView = scrollView ? [scrollView documentView] : nil;
@@ -255,15 +274,8 @@ int MacScrollViewContext::maximumOffset() const
   }
   const NSRect documentFrame = [documentView frame];
   const NSRect clipBounds = [[scrollView contentView] bounds];
-  const int contentHeight = this->controller()->projection().capacityToLu(documentFrame.size.height);
-  const int viewportHeight = this->controller()->projection().clientCapacityToLu(clipBounds.size.height);
-  return contentHeight > viewportHeight ? contentHeight - viewportHeight : 0;
-}
-
-void MacScrollViewContext::publishOffset(int value)
-{
-  // A layout-driven scrollPoint notification arrives here too; its same-value
-  // write is a no-op inside publishOrigin, which is the echo-loop breaker.
-  if (this->node_)
-    this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  const int content = projection.capacityToLu(horizontal ? documentFrame.size.width : documentFrame.size.height);
+  const int viewport = projection.clientCapacityToLu(horizontal ? clipBounds.size.width : clipBounds.size.height);
+  return content > viewport ? content - viewport : 0;
 }

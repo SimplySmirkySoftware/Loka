@@ -25,16 +25,16 @@ namespace loka
       return NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX);
     }
 
-    /** Document width belongs to AppKit; only content height comes from layout. */
-    inline void SetMacDocumentHeight(NSScrollView *scrollView, const MacLength &height)
+    /** Native document width includes at least the clip width; height is projected layout. */
+    inline void SetMacDocumentSize(NSScrollView *scrollView, CGFloat width, const MacLength &height)
     {
-      [[scrollView documentView] setFrame:NSMakeRect(0, 0, [scrollView contentSize].width, height.pt)];
+      [[scrollView documentView] setFrame:NSMakeRect(0, 0, width, height.pt)];
     }
 
     /** Clip translation is applied by AppKit, never repeated for child frames. */
-    inline void ScrollMacDocument(NSView *documentView, const MacEdge &offset)
+    inline void ScrollMacDocument(NSView *documentView, const MacEdge &x, const MacEdge &y)
     {
-      [documentView scrollPoint:NSMakePoint(0, offset.pt)];
+      [documentView scrollPoint:NSMakePoint(x.pt, y.pt)];
     }
   }
 }

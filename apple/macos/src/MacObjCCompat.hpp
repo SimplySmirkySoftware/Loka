@@ -156,4 +156,11 @@ typedef float CGFloat;
 - (void)discardMarkedText;
 @end
 
+// Declaration-only compatibility with legacy SDKs, like backingScaleFactor.
+// NSInteger is the ABI of NSScrollerStyle; 0 is legacy, 1 is overlay.
+@interface NSScroller (LokaScrollerStyleCompat)
++ (NSInteger)preferredScrollerStyle;
++ (CGFloat)scrollerWidthForControlSize:(NSControlSize)controlSize scrollerStyle:(NSInteger)style;
+@end
+
 #endif // LOKA_MAC_OBJC_COMPAT_HPP

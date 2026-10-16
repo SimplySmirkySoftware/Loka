@@ -70,6 +70,21 @@ namespace loka
       return capacity;
     }
 
+    int MacProjection::clientHeightBelowHorizontalScroller(const core::Frame &seatLu) const
+    {
+      CGFloat thickness = [NSScroller scrollerWidth];
+      if ([NSScroller respondsToSelector:@selector(preferredScrollerStyle)] &&
+          [NSScroller respondsToSelector:@selector(scrollerWidthForControlSize:scrollerStyle:)])
+      {
+        const NSInteger style = [NSScroller preferredScrollerStyle];
+        thickness = style == 1 ? 0
+                               : [NSScroller scrollerWidthForControlSize:NSRegularControlSize
+                                                           scrollerStyle:[NSScroller preferredScrollerStyle]];
+      }
+      const CGFloat height = this->projectFrame(seatLu).r.size.height - thickness;
+      return height > 0 ? this->clientCapacityToLu(height) : 0;
+    }
+
     int MacProjection::measurementToLu(CGFloat pt) const
     {
       return static_cast<int>(std::ceil(pt / this->spaceScale()));

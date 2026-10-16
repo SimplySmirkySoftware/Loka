@@ -702,7 +702,21 @@ MacScenePlatformController::layoutScrollViewNode(
   }
 
   const int requestedOffset = scrollView->requestedOrigin().y;
-  const loka::core::Frame viewportClip(0, 0, state.width, state.height);
+  LayoutState childBase = state;
+  childBase.width = ctx->visibleWidth();
+  short contentWidthLu = 0;
+  const bool known =
+      loka::app::layout::queryContentOverflowWidth(scrollView, MacSceneLayout::kGap, this, contentWidthLu);
+  // An unknown range must not scroll: otherwise content cannot be brought back
+  const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
+  const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
+  // Like Win32, decide chrome before traversal without changing native metrics.
+  const bool horizontalBar = maximumX > 0 && state.height > 0;
+  const int viewportHeight = horizontalBar ? this->projection().clientHeightBelowHorizontalScroller(
+                                                 loka::core::Frame(state.x, state.y, state.width, state.height))
+                                           : state.height;
+  childBase.height = viewportHeight;
+  const loka::core::Frame viewportClip(0, 0, state.width, viewportHeight);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
@@ -718,8 +732,6 @@ MacScenePlatformController::layoutScrollViewNode(
     return LayoutNodeResult(state.width, state.y);
   }
 
-  LayoutState childBase = state;
-  childBase.width = ctx->contentWidth();
   int currentY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
@@ -772,10 +784,10 @@ MacScenePlatformController::layoutScrollViewNode(
 
   if (!shortRangeRefused)
   {
-    const int clampedOffset =
-        ctx->setScrollMetrics(contentHeight, state.height, requestedOffset);
+    const int clampedOffset = ctx->commitScrollMetrics(
+        known ? contentWidthLu : 0, contentHeight, viewportHeight, clampedX, requestedOffset, horizontalBar);
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(scrollView->requestedOrigin().x, clampedOffset);
+    scrollView->publishOrigin(clampedX, clampedOffset);
   }
 
   if (state.height > 0)
