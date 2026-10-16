@@ -4,6 +4,7 @@
 #include "app/core/Window.hpp"
 #include "app/core/DialogResultTransport.hpp"
 #include "ToolboxActivationPhase.hpp"
+#include "ToolboxWindowGeometry.hpp"
 #include <Windows.h>
 #include <vector>
 
@@ -82,6 +83,14 @@ public:
   WindowPtr window() const
   {
     return window_;
+  }
+  /** Answers the size box in port coordinates when the native window exists. */
+  bool querySizeBoxRect(Rect &out) const
+  {
+    if (!this->window_)
+      return false;
+    out = ToolboxWindowSizeBoxRect(this->window_->portRect);
+    return true;
   }
   ToolboxWindowContext *context() const
   {

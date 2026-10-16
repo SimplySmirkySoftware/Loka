@@ -64,8 +64,9 @@ namespace
   {
     ToolboxWindow window;
     ToolboxScenePlatformController controller;
-    Fixture()
-        : controller(&window)
+    explicit Fixture(const WindowProps &props = WindowProps())
+        : window(props),
+          controller(&window)
     {
       const bool registered = RegisterToolboxPlatformLayoutHandlers(this->controller.gapLayoutRegistry);
       LOKA_VERIFY(registered);
@@ -384,8 +385,87 @@ namespace
     f.controller.releaseNodeContexts(&scroll);
   }
 
+  class RootOffer : public TextNode
+  {
+  public:
+    LayoutState offer;
+    unsigned calls;
+    RootOffer()
+        : TextNode(Text("root").props),
+          calls(0)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &state)
+    {
+      this->offer = state;
+      ++this->calls;
+      return state.width;
+    }
+  };
+
+  void windowMarginPin()
+  {
+    const layout::RailSpacing &spacing = ToolboxLayoutMetrics::spacing();
+    LOKA_VERIFY(resolveWindowContentMargin(0, spacing) == 12);
+    const layout::RailSpacing other(3, 4, 19);
+    LOKA_VERIFY(resolveWindowContentMargin(0, other) == 19);
+    const layout::LayoutGap margins[] = {layout::LayoutGap(),
+                                         layout::LayoutGap::of(0),
+                                         layout::LayoutGap::of(20),
+                                         StandardWindowMargin(),
+                                         layout::LayoutGap::of(SHRT_MAX),
+                                         layout::LayoutGap::of(211)};
+    const int origins[] = {12, 0, 20, 12, SHRT_MAX, 211};
+    const int widths[] = {396, 420, 380, 396, 0, 0};
+    const int heights[] = {236, 260, 220, 236, 0, 0};
+    for (unsigned i = 0; i != 6; ++i)
+    {
+      Fixture f(WindowProps().contentMargin(margins[i]));
+      SetRect(&f.window.port.portRect, 0, 0, 420, 260);
+      RootOffer root;
+      f.controller.rootNode_ = &root;
+      LOKA_VERIFY(resolveWindowContentMargin(&f.window, spacing) == origins[i]);
+      ToolboxInputDoor::render(f.controller);
+      LOKA_VERIFY(root.calls == 1);
+      LOKA_VERIFY(root.offer.x == origins[i] && root.offer.y == origins[i]);
+      LOKA_VERIFY(root.offer.width == widths[i] && root.offer.height == heights[i]);
+      f.controller.rootNode_ = 0;
+    }
+    for (unsigned i = 0; i != 2; ++i)
+    {
+      Fixture f(i == 0 ? WindowProps().contentMargin(0) : WindowProps());
+      ScrollViewNode root((ScrollViewProps()));
+      root.addChild(new BoxNode(Box().size(100, 500).props));
+      f.controller.rootNode_ = &root;
+      ToolboxInputDoor::render(f.controller);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == 1);
+      const ToolboxScenePlatformController::ScrollCall &bar = f.controller.scrollCalls[0];
+      const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
+      LOKA_VERIFY(binding.rect.left == (i == 0 ? 0 : 12) && binding.rect.top == (i == 0 ? 0 : 12));
+      LOKA_VERIFY(binding.rect.right == (i == 0 ? 360 : 348) && binding.rect.bottom == (i == 0 ? 260 : 248));
+      LOKA_VERIFY(binding.contentRect.right == (i == 0 ? 344 : 332));
+      LOKA_VERIFY(binding.contentRect.bottom == (i == 0 ? 260 : 248));
+      LOKA_VERIFY(bar.rect.bottom == 245 && bar.rect.top == (i == 0 ? 0 : 12));
+      LOKA_VERIFY(bar.maximum == (i == 0 ? 240 : 264));
+      LOKA_VERIFY(bar.pageStep == (i == 0 ? 259 : 235));
+      f.controller.releaseNodeContexts(&root);
+      f.controller.rootNode_ = 0;
+    }
+    Fixture f(WindowProps().contentMargin(0));
+    RootOffer root;
+    f.controller.rootNode_ = &root;
+    SetRect(&f.window.port.portRect, -1, 0, SHRT_MAX, 260);
+    ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(root.calls == 0);
+    SetRect(&f.window.port.portRect, 0, -1, 420, SHRT_MAX);
+    ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(root.calls == 0);
+    f.controller.rootNode_ = 0;
+  }
+
   void rootPin()
   {
+    windowMarginPin();
     Fixture f;
     FragmentNode root((FragmentProps()));
     GapText *a = new GapText(), *b = new GapText();
