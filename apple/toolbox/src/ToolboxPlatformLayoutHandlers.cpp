@@ -16,6 +16,7 @@
 // conditional with two lvalue operands binds the member by reference, and
 // C++98 then requires a definition; GCC 4.2 at -O0 links against it.
 const short ToolboxLayoutMetrics::kDefaultGap;
+const short ToolboxLayoutMetrics::kRootInset;
 const short ToolboxLayoutMetrics::kDefaultLineHeight;
 const short ToolboxLayoutMetrics::kImageFallbackHeight;
 const short ToolboxLayoutMetrics::kControlAscentInset;
@@ -416,15 +417,26 @@ int ComputeToolboxBoxLayout(loka::app::BoxNode *box,
   }
   ToolboxBoxTraversal adapter(*traversal);
   // Common BoxLayout owns padding, clamping and child advancement on every rail.
-  const int resultY = loka::app::layout::computeBoxLayoutResultY(
-      box, state, &adapter, &ToolboxBoxTraversal::layoutChild, state.spacing, &ToolboxBoxTraversal::acceptY);
+  const int resultY = loka::app::layout::computeBoxLayoutResultY(box,
+                                                                 ToolboxLayoutMetrics::spacing(),
+                                                                 state,
+                                                                 &adapter,
+                                                                 &ToolboxBoxTraversal::layoutChild,
+                                                                 state.spacing,
+                                                                 &ToolboxBoxTraversal::acceptY);
   if (traversal->refuseLayoutResultY(resultY))
   {
     return 0;
   }
   traversal->setLayoutResultY(static_cast<short>(resultY));
-  return box->props.hasFixedSize() ? box->props.effectiveWidth()
-                                  : static_cast<short>(adapter.maxWidth + box->props.padding * 2);
+  const int width =
+      box->props.hasFixedSize()
+          ? box->props.effectiveWidth()
+          : adapter.maxWidth
+                + 2 * box->props.padding.resolve(0, ToolboxLayoutMetrics::spacing().standardWindowMargin());
+  if (traversal->refuseLayoutResultY(width))
+    return 0;
+  return static_cast<short>(width);
 }
 
 int ComputeToolboxFramedLayout(loka::app::scene::Node *group,
@@ -467,7 +479,7 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
                                                  childCount,
                                                  state.width,
                                                  state.spacing,
-                                                 ToolboxLayoutMetrics::kDefaultGap,
+                                                 ToolboxLayoutMetrics::spacing(),
                                                  row->props.rowUndeclaredWidth_,
                                                  traversal);
   if (row->props.hasVerticalAlignment_)

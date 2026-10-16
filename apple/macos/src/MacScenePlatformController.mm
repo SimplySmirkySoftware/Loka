@@ -134,7 +134,7 @@ namespace
   loka::app::layout::RowLayoutMetrics MeasureRowLayoutMetrics(const loka::macos::MacProjection &projection)
   {
     loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
-    metrics.gap = MacSceneLayout::kGap;
+
     NSButton *button = [[NSButton alloc] initWithFrame:NSZeroRect];
     if (!button)
       return metrics;
@@ -563,8 +563,11 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   {
     rootWidth = 0;
   }
-  const LayoutState state(
-      rootInset, rootInset, rootWidth, clientHeight > 0 ? clientHeight - 2 * rootInset : 0, MacSceneLayout::kGap);
+  const LayoutState state(rootInset,
+                          rootInset,
+                          rootWidth,
+                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
+                          MacSceneLayout::spacing().verticalGap());
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -699,7 +702,8 @@ MacScenePlatformController::layoutScrollViewNode(
   LayoutState childBase = state;
   childBase.width = ctx->visibleWidth();
   short contentWidthLu = 0;
-  const bool known = loka::app::layout::queryContentOverflowWidth(scrollView, state.spacing(), this, contentWidthLu);
+  const bool known =
+      loka::app::layout::queryContentOverflowWidth(scrollView, MacSceneLayout::spacing(), this, contentWidthLu);
   // An unknown range must not scroll: otherwise content cannot be brought back
   // The range is measured in projected points, as the clip is: two logical
   // widths that project to the same native width leave no range.
@@ -808,12 +812,11 @@ int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const L
     return state.y;
   }
   // Deliberate Win32 twin: resolve into a local copy before dispatching any layout branch.
-  const LayoutState local(
-      state.x,
-      state.y,
-      state.width,
-      state.height,
-      loka::app::layout::resolveLayoutGap(node, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap));
+  const LayoutState local(state.x,
+                          state.y,
+                          state.width,
+                          state.height,
+                          loka::app::layout::resolveLayoutGap(node, state.spacing(), MacSceneLayout::spacing()));
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
@@ -858,8 +861,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           state,
           this,
           &MacScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              stack, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(stack, state.spacing(), MacSceneLayout::spacing()),
           0);
     }
     else
@@ -868,11 +870,11 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
           stack,
           state,
           this->rowLayoutMetrics_,
+          MacSceneLayout::spacing(),
           this,
           this,
           &MacScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              stack, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(stack, state.spacing(), MacSceneLayout::spacing()),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -921,10 +923,11 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
           box,
+          MacSceneLayout::spacing(),
           state,
           this,
           &MacScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(box, state.spacing(), MacSceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(box, state.spacing(), MacSceneLayout::spacing()),
           0);
     }
     return LayoutNodeResult(state.width, resultY);

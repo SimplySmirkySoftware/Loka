@@ -27,23 +27,24 @@ namespace loka
         return node && node->kind() == scene::NODE_KIND_UNKNOWN && unknownKindPassesThrough(node);
       }
 
-      int resolveLayoutGap(scene::Node *node, int received, int verticalDefault, int horizontalDefault)
+      int resolveLayoutGap(scene::Node *node, int received, const RailSpacing &spacing)
       {
         if (!node)
-          return verticalDefault;
+          return spacing.verticalGap();
         // One virtual kind() call: every dispatch visit resolves (#950 PR 6, 68k timing).
         switch (node->kind())
         {
         case scene::NODE_KIND_STACK:
         {
           StackNode *stack = static_cast<StackNode *>(node);
-          return stack->props.gap_.resolve(stack->props.effectiveAxis() == STACK_AXIS_ROW ? horizontalDefault
-                                                                                          : verticalDefault);
+          return stack->props.gap_.resolve(stack->props.effectiveAxis() == STACK_AXIS_ROW ? spacing.horizontalGap()
+                                                                                          : spacing.verticalGap(),
+                                           spacing.standardWindowMargin());
         }
         case scene::NODE_KIND_BOX:
-          return static_cast<BoxNode *>(node)->props.gap.resolve(verticalDefault);
+          return static_cast<BoxNode *>(node)->props.gap.resolve(spacing.verticalGap(), spacing.standardWindowMargin());
         case scene::NODE_KIND_UNKNOWN:
-          return unknownKindPassesThrough(node) ? received : verticalDefault;
+          return unknownKindPassesThrough(node) ? received : spacing.verticalGap();
         // Containers without a gap reset to the vertical default; a leaf's value is never read.
         case scene::NODE_KIND_ZSTACK:
         case scene::NODE_KIND_GRID:
@@ -67,7 +68,7 @@ namespace loka
         case scene::NODE_KIND_CARD_BAND:
           break;
         }
-        return verticalDefault;
+        return spacing.verticalGap();
       }
 
       bool childTakesLayoutSeat(scene::Node *child)
@@ -207,7 +208,10 @@ namespace loka
           long flex_;
         };
 
-        bool queryNaturalWidth(scene::Node *child, int gap, const INaturalWidthSource *source, short &width)
+        bool queryNaturalWidth(scene::Node *child,
+                               const RailSpacing &spacing,
+                               const INaturalWidthSource *source,
+                               short &width)
         {
           // A pass-through wrapper (a component such as a JS Button or Cell, a
           // Show arm) lays its children out in place and is as wide as the
@@ -228,7 +232,7 @@ namespace loka
               if (resolved < 0)
               {
                 short measured = 0;
-                if (!queryNaturalWidth(seat, gap, source, measured))
+                if (!queryNaturalWidth(seat, spacing, source, measured))
                   return false;
                 resolved = measured;
               }
@@ -245,7 +249,7 @@ namespace loka
             scene::INestable *group = child->asNestable();
             short contentWidth = 0;
             if (!group || !group->childrenHead()
-                || !queryNaturalWidth(group->childrenHead(), gap, source, contentWidth))
+                || !queryNaturalWidth(group->childrenHead(), spacing, source, contentWidth))
               return false;
             const FrameGeometry geometry = frame->frameGeometry();
             long answer = static_cast<long>(contentWidth) + geometry.insets.left + geometry.insets.right;
@@ -277,7 +281,7 @@ namespace loka
               if (declared < 0)
               {
                 short natural = 0;
-                if (!queryNaturalWidth(seat, gap, source, natural))
+                if (!queryNaturalWidth(seat, spacing, source, natural))
                   return false;
                 resolved = natural;
                 if (natural > maximum)
@@ -287,7 +291,7 @@ namespace loka
                         takesSeat);
             }
             {
-              LayoutWidthSum sum = tally.occupied(resolveLayoutGap(stack, gap, gap, gap));
+              LayoutWidthSum sum = tally.occupied(resolveLayoutGap(stack, spacing.horizontalGap(), spacing));
               sum.addProduct(tally.flexSeats(), maximum);
               answer = sum.value();
             }
@@ -301,7 +305,7 @@ namespace loka
               if (resolved < 0)
               {
                 short natural = 0;
-                if (!queryNaturalWidth(seat, gap, source, natural))
+                if (!queryNaturalWidth(seat, spacing, source, natural))
                   return false;
                 resolved = natural;
               }
@@ -317,7 +321,10 @@ namespace loka
         }
       } // namespace
 
-      bool queryContentOverflowWidth(scene::Node *parent, int gap, const INaturalWidthSource *source, short &width)
+      bool queryContentOverflowWidth(scene::Node *parent,
+                                     const RailSpacing &spacing,
+                                     const INaturalWidthSource *source,
+                                     short &width)
       {
         int maximum = 0;
         scene::INestable *content = parent ? parent->asNestable() : 0;
@@ -336,7 +343,7 @@ namespace loka
             // overflow by their widest child.
             if ((stack && stack->props.effectiveAxis() == STACK_AXIS_COLUMN) || isLayoutPassThrough(child))
             {
-              if (!queryContentOverflowWidth(child, gap, source, measured))
+              if (!queryContentOverflowWidth(child, spacing, source, measured))
                 return false;
             }
             else if ((stack && stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL)
@@ -344,7 +351,7 @@ namespace loka
                      || (image && image->props.hasAttr_ && image->props.attr_.hasSizePolicyValue_
                          && image->props.attr_.sizePolicyValue_ == IMAGE_VIEW_SIZE_INTRINSIC))
             {
-              if (!queryNaturalWidth(child, gap, source, measured))
+              if (!queryNaturalWidth(child, spacing, source, measured))
                 return false;
             }
             resolved = measured;
@@ -362,11 +369,11 @@ namespace loka
                                                  size_t childCount,
                                                  int availableWidth,
                                                  int gap,
-                                                 int horizontalDefault,
+                                                 const RailSpacing &spacing,
                                                  RowUndeclaredWidth policy,
                                                  const INaturalWidthSource *source)
           : source_(0),
-            horizontalDefault_(horizontalDefault),
+            spacing_(spacing),
             baseFlexWidth_(0),
             flexRemainder_(0),
             liveSeatsSeen_(0)
@@ -404,8 +411,8 @@ namespace loka
       {
         const int declaredWidth = preferredChildWidthForRow(child);
         short naturalWidth = 0;
-        if (declaredWidth < 0 && this->source_
-            && queryNaturalWidth(child, this->horizontalDefault_, this->source_, naturalWidth) && naturalWidth > 0)
+        if (declaredWidth < 0 && this->source_ && queryNaturalWidth(child, this->spacing_, this->source_, naturalWidth)
+            && naturalWidth > 0)
           return naturalWidth;
         return declaredWidth;
       }

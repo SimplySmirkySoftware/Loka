@@ -27,7 +27,6 @@ namespace loka
         static RowLayoutMetrics rowLayout()
         {
           RowLayoutMetrics metrics;
-          metrics.gap = kHorizontalSpacing;
           metrics.fallbackHeight = kTextHeight;
           metrics.buttonHeight = kButtonHeight;
           metrics.editTextHeight = kEditTextHeight;

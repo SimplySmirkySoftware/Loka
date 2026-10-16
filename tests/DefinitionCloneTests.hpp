@@ -15,4 +15,6 @@ void testWindowPropsAssignmentPreservesOwnedSceneOnOomClone();
 void testWindowDefinitionCreateReturnsNullOnOomRootClone();
 void testWindowDefinitionCreateTransfersSingleRootClone();
 
+void testWindowContentMarginRetention();
+
 #endif // LOKA_DEFINITION_CLONE_TESTS_HPP

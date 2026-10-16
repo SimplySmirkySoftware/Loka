@@ -13,8 +13,6 @@ namespace loka
     {
       struct RowLayoutMetrics
       {
-        /** The rail horizontal default, also used to measure nested Rows. */
-        int gap;
         int fallbackHeight;
         int buttonHeight;
         int editTextHeight;
@@ -23,8 +21,7 @@ namespace loka
         int imageFallbackHeight;
 
         RowLayoutMetrics()
-            : gap(0),
-              fallbackHeight(0),
+            : fallbackHeight(0),
               buttonHeight(0),
               editTextHeight(0),
               popupMenuHeight(0),
@@ -38,6 +35,7 @@ namespace loka
       int computeRowLayoutResultY(loka::app::StackNode *row,
                                   const LayoutStateT &state,
                                   const RowLayoutMetrics &metrics,
+                                  const RailSpacing &spacing,
                                   const INaturalWidthSource *source,
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
@@ -56,7 +54,7 @@ namespace loka
         }
 
         RowWidthConsultation widths(
-            row->childrenHead(), childCount, state.width, gap, metrics.gap, row->props.rowUndeclaredWidth_, source);
+            row->childrenHead(), childCount, state.width, gap, spacing, row->props.rowUndeclaredWidth_, source);
         int rowHeight = state.height > 0 ? state.height : 0;
         if (row->props.hasVerticalAlignment_)
         {

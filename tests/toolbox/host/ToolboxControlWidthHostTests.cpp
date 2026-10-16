@@ -462,6 +462,7 @@ int main(int argc, char **argv)
       layout::computeRowLayoutResultY(lookup(scene, "row")->asStackNode(),
                                       seat(width),
                                       layout::RowLayoutMetrics(),
+                                      loka::app::layout::RailSpacing(12, 4, 9),
                                       &controller,
                                       &p,
                                       LayoutProbe::child,

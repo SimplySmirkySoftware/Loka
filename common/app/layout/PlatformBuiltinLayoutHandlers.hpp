@@ -37,8 +37,8 @@ namespace loka
       class BoxPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
-        explicit BoxPlatformLayoutHandler(int gap)
-            : gap_(gap)
+        explicit BoxPlatformLayoutHandler(const RailSpacing &spacing)
+            : spacing_(spacing)
         {
         }
 
@@ -58,17 +58,17 @@ namespace loka
           {
             return state.y;
           }
-          return loka::app::layout::computeBoxLayoutResultY(
-              box,
-              state,
-              traversal,
-              &DispatchTraversalLayoutChild,
-              resolveLayoutGap(box, state.spacing, this->gap_, this->gap_),
-              &AcceptTraversalLayoutY);
+          return loka::app::layout::computeBoxLayoutResultY(box,
+                                                            this->spacing_,
+                                                            state,
+                                                            traversal,
+                                                            &DispatchTraversalLayoutChild,
+                                                            resolveLayoutGap(box, state.spacing, this->spacing_),
+                                                            &AcceptTraversalLayoutY);
         }
 
       private:
-        const int gap_;
+        const RailSpacing spacing_;
       };
 
       template <typename NodeT> class FramedPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
@@ -121,9 +121,9 @@ namespace loka
       class StackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
-        explicit StackPlatformLayoutHandler(const RowLayoutMetrics &metrics, int gap)
+        explicit StackPlatformLayoutHandler(const RowLayoutMetrics &metrics, const RailSpacing &spacing)
             : metrics_(metrics),
-              gap_(gap)
+              spacing_(spacing)
         {
         }
 
@@ -145,30 +145,29 @@ namespace loka
           }
           if (stack->props.effectiveAxis() == loka::app::STACK_AXIS_COLUMN)
           {
-            return loka::app::layout::computeColumnLayoutResultY(
-                stack,
-                state,
-                traversal,
-                &DispatchTraversalLayoutChild,
-                resolveLayoutGap(stack, state.spacing, this->gap_, this->metrics_.gap),
-                &AcceptTraversalLayoutY,
-                range,
-                spans);
+            return loka::app::layout::computeColumnLayoutResultY(stack,
+                                                                 state,
+                                                                 traversal,
+                                                                 &DispatchTraversalLayoutChild,
+                                                                 resolveLayoutGap(stack, state.spacing, this->spacing_),
+                                                                 &AcceptTraversalLayoutY,
+                                                                 range,
+                                                                 spans);
           }
-          return loka::app::layout::computeRowLayoutResultY(
-              stack,
-              state,
-              this->metrics_,
-              traversal,
-              traversal,
-              &DispatchTraversalLayoutChild,
-              resolveLayoutGap(stack, state.spacing, this->gap_, this->metrics_.gap),
-              &AcceptTraversalLayoutY);
+          return loka::app::layout::computeRowLayoutResultY(stack,
+                                                            state,
+                                                            this->metrics_,
+                                                            this->spacing_,
+                                                            traversal,
+                                                            traversal,
+                                                            &DispatchTraversalLayoutChild,
+                                                            resolveLayoutGap(stack, state.spacing, this->spacing_),
+                                                            &AcceptTraversalLayoutY);
         }
 
       private:
         RowLayoutMetrics metrics_;
-        const int gap_;
+        const RailSpacing spacing_;
       };
 
       class GridPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
@@ -206,16 +205,16 @@ namespace loka
       inline void RegisterBuiltinPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry,
                                                         const RowLayoutMetrics *rowMetrics,
                                                         const GridLayoutMetrics *gridMetrics,
-                                                        int verticalGap)
+                                                        const RailSpacing &spacing)
       {
-        registry.registerHandler(new BoxPlatformLayoutHandler(verticalGap));
+        registry.registerHandler(new BoxPlatformLayoutHandler(spacing));
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::CardNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)
         {
-          registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, verticalGap));
+          registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, spacing));
         }
         if (gridMetrics)
         {
