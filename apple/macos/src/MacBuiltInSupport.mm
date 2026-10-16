@@ -19,6 +19,7 @@
 #include "context/MacButtonContext.hpp"
 #include "context/MacCellContext.hpp"
 #include "context/MacRibbonGroupEdgeContext.hpp"
+#include "context/MacCardBandContext.hpp"
 #include "context/MacEditTextContext.hpp"
 #include "context/MacTextEditorContext.hpp"
 #include "context/MacImageViewContext.hpp"
@@ -30,7 +31,6 @@
 
 namespace
 {
-  loka::app::scene::RefusedNodeHandler gRefusedMacCardBand(loka::app::scene::NodeTypeToken<loka::app::CardBandNode>());
   // Mac has no ScrollBar context yet: a known unsupported kind must take the
   // typed-refusal path, not trip the accidental-miss assert. ScrollView is a
   // controller-owned projection-parent arm and does not use this leaf ensure
@@ -42,7 +42,7 @@ namespace
 void RegisterMacBuiltInSupport(MacScenePlatformController &controller)
 {
   RegisterMacRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_);
-  controller.nodeHandlerRegistry_.registerHandler(&gRefusedMacCardBand);
+  RegisterMacCardBandNodeHandler(controller.nodeHandlerRegistry_);
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
