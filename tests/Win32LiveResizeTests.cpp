@@ -11,6 +11,12 @@
 
 #include "Win32BuiltInSupport.hpp"
 #include "Win32ScenePlatformController.hpp"
+#include "Win32Window.hpp"
+#include "platform/null/NullPlatformContext.hpp"
+#include "support/WindowAdmissionTestApp.hpp"
+#include "core/util/StateTrackerGuard.hpp"
+#include "context/Win32ButtonContext.hpp"
+#include "context/Win32ScrollViewContext.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/controls/PopupMenu.hpp"
@@ -186,6 +192,51 @@ namespace
     MapWindowPoints(NULL, parent, reinterpret_cast<POINT *>(&rect), 2);
     return rect;
   }
+  void verifyRootMargin(HWND root, int margin)
+  {
+    // One logical unit per native pixel, independent of the desktop's DPI.
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    loka::app::ScrollViewNode viewport((loka::app::ScrollViewProps()));
+    loka::app::ButtonNode *button = new loka::app::ButtonNode(loka::app::ButtonProps().text("Content"));
+    viewport.addChild(button);
+    controller.onChange(&viewport, loka::app::scene::NODE_DIRTY_NONE, false);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(root, &client));
+    const int clientWidth = client.right - client.left;
+    const int clientHeight = client.bottom - client.top;
+    LOKA_VERIFY(clientWidth > 0 && clientWidth < 1000 && clientHeight > 0 && clientHeight < 1000);
+    const int expectedWidth = clientWidth > 2 * margin ? clientWidth - 2 * margin : 0;
+    const int expectedHeight = clientHeight > 2 * margin ? clientHeight - 2 * margin : 0;
+    controller.relayout(clientWidth, clientHeight);
+    LOKA_VERIFY(viewport.getContext());
+    const HWND child = static_cast<Win32ScrollViewContext *>(viewport.getContext())->hwnd();
+    const RECT frame = childRectInParent(child, root);
+    LOKA_VERIFY(frame.left == margin && frame.top == margin);
+    LOKA_VERIFY(frame.right - frame.left == expectedWidth);
+    LOKA_VERIFY(frame.bottom - frame.top == expectedHeight);
+    // Zero root height still means no height given: the child keeps its natural height.
+    LOKA_VERIFY(button->getContext());
+    const RECT content = childRectInParent(static_cast<Win32ButtonContext *>(button->getContext())->hwnd(), child);
+    LOKA_VERIFY(content.left == 0 && content.top == 0);
+    LOKA_VERIFY(content.bottom - content.top == controller.rowLayoutMetrics().buttonHeight);
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+
+  void verifyWindowMargin(WindowProps props, int margin)
+  {
+    NullPlatformContext platform;
+    props.frame(40, 40, 360, 240).visible(false);
+    Win32Window window(&platform, props);
+    {
+      loka::core::StateTrackerGuard guard(window.getTracker());
+      window.visibilityState().set(true, true);
+    }
+    WindowAdmissionTestApp admission(window);
+    admission.flush();
+    LOKA_VERIFY(window.hwnd());
+    verifyRootMargin(window.hwnd(), margin);
+  }
 } // namespace
 
 // #549: every Text relayout used to synchronously redraw its parent subtree.
@@ -324,4 +375,37 @@ void testWin32PopupRelayoutPreservesNativeItems()
   }
   LOKA_VERIFY(DestroyWindow(root));
   std::printf("==== [testWin32PopupRelayoutPreservesNativeItems] PASSED ====\n");
+}
+
+void testWin32WindowUnspecifiedContentMargin()
+{
+  verifyWindowMargin(WindowProps(), 10);
+}
+
+void testWin32WindowZeroContentMargin()
+{
+  verifyWindowMargin(WindowProps().contentMargin(0), 0);
+}
+
+void testWin32WindowExplicitContentMargin()
+{
+  verifyWindowMargin(WindowProps().contentMargin(20), 20);
+}
+
+void testWin32WindowStandardContentMargin()
+{
+  verifyWindowMargin(WindowProps().contentMargin(loka::app::StandardWindowMargin()), 10);
+}
+
+void testWin32WindowOversizedContentMargin()
+{
+  // Twice this valid margin exceeds short range; subtract before any narrowing.
+  verifyWindowMargin(WindowProps().contentMargin(20000), 20000);
+}
+
+void testWin32RootWithoutWindowUsesStandardContentMargin()
+{
+  HWND root = createLiveResizeHost();
+  verifyRootMargin(root, 10);
+  LOKA_VERIFY(DestroyWindow(root));
 }
