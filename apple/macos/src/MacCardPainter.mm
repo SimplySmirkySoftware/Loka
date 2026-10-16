@@ -77,7 +77,9 @@ namespace
 
   /** At most one visit per backing pixel of this paint's clipped shadow bounds.
       No image resampling: AA is off and every black dot is exactly one pixel.
-      Alternating parity is the AA/55 eight-row stencil, with transparent gaps. */
+      Alternating parity is the AA/55 eight-row stencil, with transparent gaps.
+      For N bounding pixels and B black dots (B <= ceil(N/2)), submit
+      ceil(B/64) fill calls using one fixed local rectangle batch. */
   void FillCardStencil(CGContextRef graphics, NSPoint phase)
   {
     const CGAffineTransform transform = CGContextGetCTM(graphics);
@@ -97,18 +99,34 @@ namespace
     // The enclosing paint scope restores the transform. Device rectangles
     // stay pixel-aligned even when a scrolled view has a fractional origin.
     CGContextConcatCTM(graphics, CGAffineTransformInvert(transform));
+    enum
+    {
+      kDotBatchSize = 64
+    };
+    CGRect dots[kDotBatchSize];
+    size_t count = 0;
     for (int y = top; y < bottom; ++y)
       for (int x = left; x < right; ++x)
       {
         const int column = transform.a > 0 ? x - originX : originX - x - 1;
         const int row = transform.d > 0 ? y - originY : originY - y - 1;
         if ((column + row) & 1)
-          CGContextFillRect(graphics, CGRectMake(x, y, 1, 1));
+        {
+          dots[count++] = CGRectMake(x, y, 1, 1);
+          if (count == kDotBatchSize)
+          {
+            CGContextFillRects(graphics, dots, count);
+            count = 0;
+          }
+        }
       }
+    if (count != 0)
+      CGContextFillRects(graphics, dots, count);
   }
 
-  /** Per nonempty draw: three owned paths, two clips, one fill per black
-      backing dot and one border stroke. Walks only the clipped band pixels. */
+  /** Per nonempty draw: three owned paths, two clips, ceil(B/64) fills for
+      B black backing dots and one border stroke. Walks only the clipped
+      band pixels; B <= ceil(N/2) for N pixels in the shadow clip bounds. */
   void PaintNativeCardInk(
       CGContextRef graphics, CGRect body, CGRect shadow, CGFloat diameter, CGFloat pen, NSPoint phase, unsigned corners)
   {

@@ -1,6 +1,7 @@
 #include "MacCardPainterTests.hpp"
 #include "MacCardPainter.hpp"
 #include "MacScenePlatformController.hpp"
+#include "testing/MacScenePlatformTestAccess.hpp"
 #include "app/scene/Scene.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/MacNativeRefusal.hpp"
@@ -345,7 +346,7 @@ void testMacCardBandMovePropsAndEmpty()
     for (int pass = 0; pass < 3; ++pass)
     {
       LayoutState state = BandState(Frame(21, 27, pass == 1 ? 16 : 80, 60));
-      controller.layoutNodeFromSceneState(&card, state);
+      loka::dsl::testing::MacScenePlatformTestAccess::layoutNode(controller, &card, state);
       LOKA_VERIFY([[root subviews] count] == 4);
       LOKA_VERIFY([[root subviews] objectAtIndex:0] == first);
       CardBitmap actual(180, 150, 2), expected(180, 150, 2);
@@ -474,7 +475,7 @@ void testMacCardBandNativeRepaint()
     }
     controller.onChange(&card, NODE_DIRTY_NONE, false);
     LayoutState state = BandState(Frame(21, 27, 80, 60));
-    controller.layoutNodeFromSceneState(&card, state);
+    loka::dsl::testing::MacScenePlatformTestAccess::layoutNode(controller, &card, state);
     LOKA_VERIFY([[root subviews] count] == 4);
     [window orderFront:nil];
     [window display];
@@ -485,7 +486,7 @@ void testMacCardBandNativeRepaint()
       {
         // Move, suppress all four bands, then enable at the new position.
         state = BandState(Frame(43, 51, pass == 1 ? 16 : 80, 60));
-        controller.layoutNodeFromSceneState(&card, state);
+        loka::dsl::testing::MacScenePlatformTestAccess::layoutNode(controller, &card, state);
       }
       else
       {
