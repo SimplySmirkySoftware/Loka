@@ -68,6 +68,10 @@ public:
   {
     collect(c.controller(), c, &MacScrollViewContext::publishClipViewBoundsOrigin, 0, 0);
   }
+  static void scrollerStyleChange(MacScrollViewContext &c)
+  {
+    collect(c.controller(), c, &MacScrollViewContext::handleScrollerStyleChange, 0, 0);
+  }
   static void cellClick(MacCellContext &c, void *event)
   {
     collect(c.controller(), c, &MacCellContext::handleClick, event, 0);
