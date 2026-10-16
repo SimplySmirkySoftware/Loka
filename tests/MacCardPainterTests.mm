@@ -259,10 +259,17 @@ namespace
           // cannot include its antialiased border. No outer clip exclusion.
           if (RoundedCardDistance(nativeBody, radius, centerX, centerY) <= 1.0 / backing)
             continue;
+          // CoreGraphics' aliased fill is not center sampling at an arc (a
+          // pixel whose center is 0.36 px outside was filled on macOS 26), so
+          // the shadow outline gets the same one-pixel guard. A misplaced
+          // shadow (1 pt at 3/2) still moves pixels beyond it at backing 2.
+          const double shadowDistance = RoundedCardDistance(shadow, radius, centerX, centerY);
+          if (std::fabs(shadowDistance) <= 1.0 / backing)
+            continue;
           NSUInteger pixel[4], wanted[4];
           [actual.bitmap() getPixel:pixel atX:x y:y];
           GroundPixel(x, y, wanted);
-          const bool member = RoundedCardDistance(shadow, radius, centerX, centerY) <= 0;
+          const bool member = shadowDistance < 0;
           if (member && ((x + y + static_cast<int>((phase.x + phase.y) * backing)) & 1))
             wanted[0] = wanted[1] = wanted[2] = 0;
           for (int channel = 0; channel < 4; ++channel)
