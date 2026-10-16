@@ -3944,11 +3944,17 @@ namespace
     LOKA_VERIFY(browse->requestedOrigin().y == 40 && detail->requestedOrigin().y == 80);
   }
 
+  /** Answers what the three rails answer (ToolboxNaturalWidth.cpp, Win32 and
+      macOS controllers): Text and Button labels and INTRINSIC images; a Cell
+      has no natural width on any rail, so a card that puts its click target
+      in a Cell gives a horizontal ScrollView no range. */
   class LaptopNaturalWidthSource : public loka::app::layout::INaturalWidthSource
   {
   public:
-    virtual bool queryNaturalWidth(loka::app::scene::Node *, short &width) const
+    virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const
     {
+      if (!child || !(child->asTextNode() || child->asButtonNode()))
+        return false;
       width = 10;
       return true;
     }
@@ -3962,13 +3968,15 @@ namespace
     smirkycard::ScriptRuntime runtime;
     loka::core::String error;
     LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>{const pic=c.state.image();"
-                                    "function cards(){return Row(...[0,1,2,3,4].map(i=>"
-                                    "Card(VStack(ImageView(pic,{width:110,height:70}),Cell('x',()=>{})))))}"
+                                    "function cards(cell){return Row(...[0,1,2,3,4].map(i=>"
+                                    "Card(VStack(ImageView(pic,{width:110,height:70}),"
+                                    "cell?Cell('x',()=>{}):Button('x',()=>{})))))}"
                                     "return {compose(){return VStack("
                                     "Row(Text('a')).naturalWidth().TEST_ID('Natural'),"
                                     "Row(Text('a')).TEST_ID('Shared'),"
-                                    "ScrollView(cards().naturalWidth()).TEST_ID('WideScroll'),"
-                                    "ScrollView(cards()).TEST_ID('SharedScroll'))}}});",
+                                    "ScrollView(cards(false).naturalWidth()).TEST_ID('WideScroll'),"
+                                    "ScrollView(cards(false)).TEST_ID('SharedScroll'),"
+                                    "ScrollView(cards(true).naturalWidth()).TEST_ID('CellScroll'))}}});",
                                     error));
     WindowProps props;
     props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
@@ -4011,6 +4019,12 @@ namespace
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());
     width = 0;
     LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width) || width == 0);
+    // A Cell inside the card declines on every rail, so the natural Row has no range
+    // (the Classic run of the first candidate showed five cards squeezed into the viewport).
+    scroll = windowNode(window, "CellScroll");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    width = 0;
+    LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, gap, &source, width));
   }
 
   void checkLaptopLowerings()

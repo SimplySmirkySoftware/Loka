@@ -209,6 +209,30 @@ namespace loka
 
         bool queryNaturalWidth(scene::Node *child, int gap, const INaturalWidthSource *source, short &width)
         {
+          // A pass-through wrapper (a component such as a JS Button or Cell, a
+          // Show arm) lays its children out in place and is as wide as the
+          // widest of them, as queryContentOverflowWidth already treats it.
+          if (isLayoutPassThrough(child))
+          {
+            scene::INestable *group = child->asNestable();
+            loka::dsl::CompositionCursor<scene::Node> inner(group ? group->childrenHead() : 0,
+                                                            group ? group->childrenCount() : 0);
+            int widest = 0;
+            for (scene::Node *seat = inner.next(); seat; seat = inner.next())
+            {
+              if (!childTakesLayoutSeat(seat))
+                continue;
+              short measured = 0;
+              if (!queryNaturalWidth(seat, gap, source, measured))
+                return false;
+              if (measured > widest)
+                widest = measured;
+            }
+            if (widest <= 0)
+              return false;
+            width = static_cast<short>(widest);
+            return true;
+          }
           if (scene::IFramedNode *frame = child->asFramedNode())
           {
             scene::INestable *group = child->asNestable();
