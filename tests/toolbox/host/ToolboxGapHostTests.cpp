@@ -215,8 +215,13 @@ namespace
       inner->addChild(c);
       short buttonWidth = 0;
       LOKA_VERIFY(f.controller.queryNaturalWidth(a, buttonWidth));
-      loka::app::layout::RowWidthConsultation widths(
-          outer.childrenHead(), 2, 200, mode == 2 ? 20 : 8, 8, ROW_UNDECLARED_WIDTH_NATURAL, &f.controller);
+      loka::app::layout::RowWidthConsultation widths(outer.childrenHead(),
+                                                     2,
+                                                     200,
+                                                     mode == 2 ? 20 : 8,
+                                                     loka::app::layout::RailSpacing(12, 8, 9),
+                                                     ROW_UNDECLARED_WIDTH_NATURAL,
+                                                     &f.controller);
       widths.next(a);
       const int innerWidth = widths.next(inner).width();
       const int gap = mode == 0 ? 20 : 8;

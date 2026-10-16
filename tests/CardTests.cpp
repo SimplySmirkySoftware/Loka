@@ -195,7 +195,8 @@ namespace
   };
   int measured(CardNode &card, const INaturalWidthSource &source)
   {
-    RowWidthConsultation width(&card, 1, 301, 0, 0, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+    RowWidthConsultation width(
+        &card, 1, 301, 0, loka::app::layout::RailSpacing(12, 0, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
     return width.next(&card).width();
   }
 } // namespace
@@ -205,7 +206,7 @@ void testCardGeometryAndLimits()
   CardNode card((CardProps()));
   populate(card);
   PlatformLayoutHandlerRegistry registry;
-  RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0, 0);
+  RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0, loka::app::layout::RailSpacing(0, 0, 9));
   IPlatformLayoutHandler *handler = registry.find(&card);
   LOKA_VERIFY(handler != 0);
   const FrameGeometry g = card.frameGeometry();

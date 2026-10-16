@@ -327,14 +327,15 @@ namespace
     state.height = 400;
     state.spacing = kRowGap;
     loka::app::layout::RowLayoutMetrics metrics;
-    metrics.gap = kRowGap;
+
     loka::app::layout::computeRowLayoutResultY(rootRow,
                                                state,
                                                metrics,
+                                               loka::app::layout::RailSpacing(12, kRowGap, 9),
                                                0, // Synthetic allocation probe has no rail source.
                                                &record,
                                                &recordRowSeat,
-                                               metrics.gap,
+                                               kRowGap,
                                                0);
   }
 

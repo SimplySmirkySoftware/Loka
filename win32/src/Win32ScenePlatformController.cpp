@@ -99,7 +99,7 @@ namespace
       HWND root, const loka::win32::Win32DisplayScale &scale, HFONT font)
   {
     loka::app::layout::RowLayoutMetrics metrics = loka::app::layout::FallbackControlMetrics::rowLayout();
-    metrics.gap = Win32SceneLayout::kGap;
+
     PushButtonMeasurementDC dc(root, font);
     TEXTMETRICW text;
     if (!dc.get() || !GetTextMetricsW(dc.get(), &text) || text.tmHeight <= 0)
@@ -1168,8 +1168,11 @@ void Win32ScenePlatformController::performLayout(int clientWidth, int clientHeig
   {
     rootWidth = 0;
   }
-  const LayoutState state(
-      rootInset, rootInset, rootWidth, clientHeight > 0 ? clientHeight - 2 * rootInset : 0, Win32SceneLayout::kGap);
+  const LayoutState state(rootInset,
+                          rootInset,
+                          rootWidth,
+                          clientHeight > 0 ? clientHeight - 2 * rootInset : 0,
+                          Win32SceneLayout::spacing().verticalGap());
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Win32 projection pass must begin at the root scope");
   const loka::core::Frame rootClip(0, 0, clientWidth, clientHeight);
@@ -1324,7 +1327,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
 
   short contentWidthLu = 0;
   const bool known =
-      loka::app::layout::queryContentOverflowWidth(scrollView, Win32SceneLayout::kGap, this, contentWidthLu);
+      loka::app::layout::queryContentOverflowWidth(scrollView, Win32SceneLayout::spacing(), this, contentWidthLu);
   // An unknown range must not scroll: otherwise content cannot be brought back
   const int maximumX = known ? (contentWidthLu > childBase.width ? contentWidthLu - childBase.width : 0) : 0;
   const int clampedX = ctx->clampOffset(scrollView->requestedOrigin().x, maximumX);
@@ -1433,12 +1436,11 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
     return state.y;
   }
   // Deliberate macOS twin: resolve into a local copy before dispatching any layout branch.
-  const LayoutState local(
-      state.x,
-      state.y,
-      state.width,
-      state.height,
-      loka::app::layout::resolveLayoutGap(node, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap));
+  const LayoutState local(state.x,
+                          state.y,
+                          state.width,
+                          state.height,
+                          loka::app::layout::resolveLayoutGap(node, state.spacing(), Win32SceneLayout::spacing()));
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
@@ -1483,8 +1485,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           state,
           this,
           &Win32ScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              stack, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(stack, state.spacing(), Win32SceneLayout::spacing()),
           0);
     }
     else
@@ -1493,11 +1494,11 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           stack,
           state,
           this->rowLayoutMetrics_,
+          Win32SceneLayout::spacing(),
           this,
           this,
           &Win32ScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              stack, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(stack, state.spacing(), Win32SceneLayout::spacing()),
           0);
     }
     return LayoutNodeResult(state.width, resultY);
@@ -1546,11 +1547,11 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     {
       resultY = loka::app::layout::computeBoxLayoutResultY(
           box,
+          Win32SceneLayout::spacing(),
           state,
           this,
           &Win32ScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(
-              box, state.spacing(), Win32SceneLayout::kGap, this->rowLayoutMetrics_.gap),
+          loka::app::layout::resolveLayoutGap(box, state.spacing(), Win32SceneLayout::spacing()),
           0);
     }
     return LayoutNodeResult(state.width, resultY);

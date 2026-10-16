@@ -3,6 +3,7 @@
 
 #include "app/RectSurface.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/RailSpacing.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -18,7 +19,7 @@ namespace loka
       bool isLayoutPassThrough(scene::Node *node);
       /** Resolves child spacing from own props, or carries it through a transparent node.
           Shape-only: no descendant walk. */
-      int resolveLayoutGap(scene::Node *node, int received, int verticalDefault, int horizontalDefault);
+      int resolveLayoutGap(scene::Node *node, int received, const RailSpacing &spacing);
       /** Dialogs and pass-through subtrees without a seat consume no layout gap. */
       bool childTakesLayoutSeat(scene::Node *child);
 
@@ -112,14 +113,17 @@ namespace loka
 
       /** Answers the maximum offer-independent width within the parent's composed child count,
           treating children as vertically stacked ScrollView content and recursing into Columns;
-          gap is the rail horizontal default, forwarded unchanged; each Row resolves its own gap, and a null parent or
+          rail spacing is forwarded unchanged; each Row resolves its own gap, and a null parent or
          offer-bound children answer zero. Unavailable measurements or results above SHRT_MAX refuse without changing
          width. */
-      bool queryContentOverflowWidth(scene::Node *parent, int gap, const INaturalWidthSource *source, short &width);
+      bool queryContentOverflowWidth(scene::Node *parent,
+                                     const RailSpacing &spacing,
+                                     const INaturalWidthSource *source,
+                                     short &width);
 
       /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
           leaf answers (including intrinsic images) at most twice, SHARED rows never consult them.
-          The resolved gap allocates this Row; horizontalDefault measures nested Rows.
+          The resolved gap allocates this Row; rail spacing resolves named values in nested Rows.
           Private recursive natural measurement walks each Stack's subtree without caching to find
           the smallest seating width, independently of ScrollView's offer-bound overflow rule. */
       class RowWidthConsultation
@@ -129,7 +133,7 @@ namespace loka
                              size_t childCount,
                              int availableWidth,
                              int gap,
-                             int horizontalDefault,
+                             const RailSpacing &spacing,
                              RowUndeclaredWidth policy,
                              const INaturalWidthSource *source);
 
@@ -138,7 +142,7 @@ namespace loka
       private:
         int preferredWidth(loka::app::scene::Node *child) const;
         const INaturalWidthSource *source_;
-        int horizontalDefault_;
+        const RailSpacing spacing_;
         int baseFlexWidth_;
         int flexRemainder_;
         int liveSeatsSeen_;

@@ -1054,8 +1054,13 @@ void testContainerLayoutHelpersAdvanceResultY()
     loka::app::BoxNode box(props);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeBoxLayoutResultY(
-        &box, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
+    const int resultY = loka::app::layout::computeBoxLayoutResultY(&box,
+                                                                   loka::app::layout::RailSpacing(12, 4, 9),
+                                                                   state,
+                                                                   &recorder,
+                                                                   &recordLayoutChild,
+                                                                   0,
+                                                                   &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 0);
     (void)resultY;
     assert(resultY == 32);
@@ -1071,8 +1076,13 @@ void testContainerLayoutHelpersAdvanceResultY()
     box.addChild(second);
 
     AttrDslLayoutCallRecorder recorder;
-    const int resultY = loka::app::layout::computeBoxLayoutResultY(
-        &box, state, &recorder, &recordLayoutChild, 0, &loka::testing::acceptShortLayoutY);
+    const int resultY = loka::app::layout::computeBoxLayoutResultY(&box,
+                                                                   loka::app::layout::RailSpacing(12, 4, 9),
+                                                                   state,
+                                                                   &recorder,
+                                                                   &recordLayoutChild,
+                                                                   0,
+                                                                   &loka::testing::acceptShortLayoutY);
     assert(recorder.count == 2);
     assert(recorder.calls[0].state.x == 14);
     assert(recorder.calls[0].state.y == 24);
@@ -1233,7 +1243,7 @@ void testContainerLayoutHelpersAdvanceResultY()
     row.addChild(third);
 
     loka::app::layout::RowLayoutMetrics metrics;
-    metrics.gap = 2;
+
     metrics.fallbackHeight = 18;
     metrics.buttonHeight = 24;
     metrics.editTextHeight = 22;
@@ -1245,10 +1255,11 @@ void testContainerLayoutHelpersAdvanceResultY()
     const int resultY = loka::app::layout::computeRowLayoutResultY(&row,
                                                                    state,
                                                                    metrics,
+                                                                   loka::app::layout::RailSpacing(12, 2, 9),
                                                                    0, // Synthetic allocation probe has no rail source.
                                                                    &recorder,
                                                                    &recordLayoutChild,
-                                                                   metrics.gap,
+                                                                   2,
                                                                    0);
     assert(recorder.count == 3);
     assert(recorder.calls[0].state.width == 32);
@@ -1272,7 +1283,7 @@ void testContainerLayoutHelpersAdvanceResultY()
     row.addChild(third);
 
     loka::app::layout::RowLayoutMetrics metrics;
-    metrics.gap = 2;
+
     metrics.fallbackHeight = 18;
     metrics.buttonHeight = 24;
     metrics.editTextHeight = 22;
@@ -1286,10 +1297,11 @@ void testContainerLayoutHelpersAdvanceResultY()
     const int resultY = loka::app::layout::computeRowLayoutResultY(&row,
                                                                    unevenState,
                                                                    metrics,
+                                                                   loka::app::layout::RailSpacing(12, 2, 9),
                                                                    0, // Synthetic allocation probe has no rail source.
                                                                    &recorder,
                                                                    &recordLayoutChild,
-                                                                   metrics.gap,
+                                                                   2,
                                                                    0);
     assert(recorder.count == 3);
     assert(recorder.calls[0].state.width == 33);
@@ -1316,7 +1328,7 @@ void testContainerLayoutHelpersAdvanceResultY()
     row.addChild(button);
 
     loka::app::layout::RowLayoutMetrics metrics;
-    metrics.gap = 2;
+
     metrics.fallbackHeight = 18;
     metrics.buttonHeight = 24;
     metrics.editTextHeight = 22;
@@ -1328,10 +1340,11 @@ void testContainerLayoutHelpersAdvanceResultY()
     const int resultY = loka::app::layout::computeRowLayoutResultY(&row,
                                                                    state,
                                                                    metrics,
+                                                                   loka::app::layout::RailSpacing(12, 2, 9),
                                                                    0, // Synthetic allocation probe has no rail source.
                                                                    &recorder,
                                                                    &recordLayoutChild,
-                                                                   metrics.gap,
+                                                                   2,
                                                                    0);
     assert(recorder.count == 2);
     assert(recorder.calls[0].state.height == 16);

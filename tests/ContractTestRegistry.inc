@@ -1364,3 +1364,8 @@ LOKA_TEST(testGapDoorResets)
 LOKA_TEST(testGapDoorOverflow)
 LOKA_TEST(testGapDoorNaturalWidths)
 LOKA_TEST(testGapDoorSpans)
+LOKA_TEST(testWindowMarginSpacingValues)
+LOKA_TEST(testWindowMarginSpacingLayout)
+LOKA_TEST(testWindowMarginBoxRefusal)
+
+LOKA_TEST(testWindowContentMarginRetention)

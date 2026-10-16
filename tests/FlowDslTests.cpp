@@ -2445,9 +2445,9 @@ void testLokaFlowDslV1Core()
   {
     loka::app::Box box = buildTypedBox();
   LOKA_VERIFY(box.childrenCount() == 1);
-    assert(box.props.padding == 8);
-    assert(box.hasTestId());
-    assert(box.testIdValue() == "TypedBox");
+  assert(box.props.padding == loka::app::layout::LayoutGap::of(8));
+  assert(box.hasTestId());
+  assert(box.testIdValue() == "TypedBox");
   }
 
   {

@@ -28,7 +28,7 @@
 
 namespace
 {
-  const int kNullHorizontalGap = 4;
+  const loka::app::layout::RailSpacing kNullSpacing(12, 4, 9);
 }
 
 /** Null measures intrinsic images 1:1 in pixels and push buttons at eight units per
@@ -171,7 +171,6 @@ NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepth
   this->layoutState_.height = 20;
   this->layoutState_.lineHeight = 20;
   loka::app::layout::RowLayoutMetrics rowMetrics;
-  rowMetrics.gap = kNullHorizontalGap;
   rowMetrics.fallbackHeight = 10;
   rowMetrics.buttonHeight = 10;
   rowMetrics.editTextHeight = 10;
@@ -182,7 +181,7 @@ NullScenePlatformController::NullScenePlatformController(std::size_t bucketDepth
   gridMetrics.gapX = 2;
   gridMetrics.gapY = 4;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      this->layoutHandlers_, &rowMetrics, &gridMetrics, loka::app::layout::FallbackControlMetrics::kVerticalSpacing);
+      this->layoutHandlers_, &rowMetrics, &gridMetrics, kNullSpacing);
   RegisterNullButtonNodeHandler(*this);
   RegisterNullEditTextNodeHandler(*this);
   RegisterNullTextEditorNodeHandler(*this);
@@ -774,8 +773,7 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
                                             loka::app::layout::StackSpans *spans)
 {
   loka::app::scene::LayoutState state = received;
-  state.spacing = static_cast<short>(loka::app::layout::resolveLayoutGap(
-      node, received.spacing, loka::app::layout::FallbackControlMetrics::kVerticalSpacing, kNullHorizontalGap));
+  state.spacing = static_cast<short>(loka::app::layout::resolveLayoutGap(node, received.spacing, kNullSpacing));
   if (!node)
   {
     return state.y;
@@ -1025,7 +1023,7 @@ int NullScenePlatformController::projectLayout(loka::app::scene::Node *node,
   const loka::app::scene::PaintScope scope = {1, 0, 0, state.x, state.y, state.width, state.height};
   this->paintScope_ = scope;
   loka::app::scene::LayoutState rootState = state;
-  rootState.spacing = loka::app::layout::FallbackControlMetrics::kVerticalSpacing;
+  rootState.spacing = static_cast<short>(kNullSpacing.verticalGap());
   const int result = this->layoutNode(node, rootState, range, spans);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a projection pass must restore the root scope");

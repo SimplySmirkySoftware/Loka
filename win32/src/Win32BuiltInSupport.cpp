@@ -51,7 +51,7 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
   loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
-      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, Win32SceneLayout::kGap);
+      controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, Win32SceneLayout::spacing());
   RegisterWin32TextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32ButtonNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32TextNodeHandler(controller.nodeHandlerRegistry_);
