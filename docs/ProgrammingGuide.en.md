@@ -1102,8 +1102,10 @@ The initial value is the only origin the app chooses; a negative one reads as 0.
 
 The vertical range is the content height. The horizontal range exists only when
 content overflows the width it is offered: a declared width (including a
-fixed-size `Box`), an intrinsic image or a natural row. Text, buttons and
-offer-bound boxes are placed at the offered width and never scroll sideways.
+fixed-size `Box`), an intrinsic image or a natural row (text inside a natural
+row counts through the row). Text, buttons and offer-bound boxes placed
+directly in the column are laid out at the offered width and never scroll
+sideways.
 When the width cannot be known, the view does not scroll sideways at all.
 
 The vertical bar is always present; the horizontal bar appears only while there

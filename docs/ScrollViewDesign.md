@@ -63,11 +63,18 @@ A rail never measures content width during layout. The range comes from
 ([LayoutHeuristics.hpp](../common/app/layout/LayoutHeuristics.hpp), the R0
 ruling): only content that **overflows the width it is offered** counts: a
 declared width (`ImageView`/`RectSurface` with `size`, a fixed-size `Box`), an
-INTRINSIC image whose natural width the rail's leaf answers, or a NATURAL row.
-Text, buttons and offer-bound boxes are placed at the offered width and
-contribute 0 (`testContentOverflowIgnoresOfferBoundText` pins both sides). The
-question walks the ScrollView's own content children once per layout pass; it
-measures only those leaves.
+INTRINSIC image whose natural width the rail's leaf answers, or a NATURAL row
+(whose natural width sums its leaves, text included:
+`testContentOverflowNestedMaximumAndOverflow`). Text, buttons and offer-bound
+boxes placed directly in the content column are laid out at the offered width
+and contribute 0 (`testContentOverflowIgnoresOfferBoundText`).
+
+Cost: the question runs once per ScrollView layout pass and walks the
+ScrollView's content subtree, not only its direct children: it descends into
+Columns and pass-through nodes (`Fragment`, `Show`), and a NATURAL row's
+answer visits that row's subtree through `queryNaturalWidth`. Every row it
+walks belongs to the ScrollView's own content; measurement happens only at the
+leaves named above.
 
 On Toolbox and Win32, which lay out in integer pixels,
 `maximumX = known ? max(0, contentWidth − visibleWidth) : 0`. macOS measures
