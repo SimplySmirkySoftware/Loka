@@ -6,27 +6,27 @@
 // Nothing reloads when a page or presentation switches.
 
 const MACHINES = [
-  {id: 'macport', art: 'MACPORT', name: 'Macintosh Portable', year: '1989',
+  {id: 'macport', art: 'MACPORT', short: 'Portable', name: 'Macintosh Portable', year: '1989',
    cpu: 'Motorola 68000, 16 MHz', ram: '1 MB (up to 8 MB)',
    display: '9.8-inch 640x400 active-matrix, 1-bit', storage: '40 MB SCSI HDD, 1.44 MB floppy',
    weight: '7.2 kg (15.8 lb)',
    blurb: "Apple's first battery-powered Mac: a desktop-class active-matrix screen in a 7 kg slab, with the trackball beside the keyboard."},
-  {id: 'pb100', art: 'PB100', name: 'PowerBook 100', year: '1991',
+  {id: 'pb100', art: 'PB100', short: 'PB 100', name: 'PowerBook 100', year: '1991',
    cpu: 'Motorola 68HC000, 16 MHz', ram: '2 MB (up to 8 MB)',
    display: '9-inch 640x400 passive-matrix, 1-bit', storage: '20 MB HDD, external floppy',
    weight: '2.3 kg (5.1 lb)',
    blurb: 'A Sony-built shrink of the Portable: the trackball moved to a palm rest in front of the keyboard, the shape every laptop since has copied.'},
-  {id: 'pb180c', art: 'PB180C', name: 'PowerBook 180c', year: '1993',
+  {id: 'pb180c', art: 'PB180C', short: 'PB 180c', name: 'PowerBook 180c', year: '1993',
    cpu: 'Motorola 68030, 33 MHz + 68882 FPU', ram: '4 MB (up to 14 MB)',
    display: '8.4-inch 640x480 active-matrix, 256 colors', storage: '80 or 160 MB HDD',
    weight: '3.2 kg (7.1 lb)',
    blurb: 'The first PowerBook with a 640x480 active-matrix colour panel; the top of the 100-series line.'},
-  {id: 'pb550c', art: 'PB550C', name: 'PowerBook 550c', year: '1995',
+  {id: 'pb550c', art: 'PB550C', short: 'PB 550c', name: 'PowerBook 550c', year: '1995',
    cpu: 'Motorola 68040, 33 MHz (FPU built in)', ram: '8 MB (up to 36 MB)',
    display: '10.4-inch 640x480 active-matrix, 256 colors', storage: '500 or 750 MB HDD',
    weight: '3.3 kg (7.3 lb)',
    blurb: 'Sold only in Japan: a black 500-series body with a full 68040 and the largest 68k PowerBook screen.'},
-  {id: 'pb5300c', art: 'PB5300C', name: 'PowerBook 5300c/100', year: '1995',
+  {id: 'pb5300c', art: 'PB5300C', short: 'PB 5300c', name: 'PowerBook 5300c/100', year: '1995',
    cpu: 'PowerPC 603e, 100 MHz', ram: '8 or 16 MB (up to 64 MB)',
    display: '10.4-inch 640x480 active-matrix, thousands of colors', storage: '500 or 750 MB HDD',
    weight: '2.8 kg (6.2 lb)',
@@ -116,11 +116,10 @@ card('first', class {
 
   // Test ids must be unique in the whole tree; the carousel ring repeats two
   // machines, so each card names its seat (slot k or list entry).
-  machineCard(i, width, height, testId) {
-    const m = MACHINES[i];
+  machineCard(i, width, height, label, testId) {
     return Card(VStack(
       ImageView(this.pics[i], {width: width, height: height, fit: 'contain'}),
-      Cell(m.name + ' (' + m.year + ')', () => this.open(i)).TEST_ID(testId)));
+      Cell(label, () => this.open(i)).TEST_ID(testId)));
   }
 
   toolbar() {
@@ -134,17 +133,20 @@ card('first', class {
     return VStack(
       Text(this.heading, TITLE, {align: 'center'}).TEST_ID('Laptop.Heading'),
       Text(this.counter, LABEL, {align: 'center'}).TEST_ID('Laptop.Counter'),
-      Row(...RING.map((i, k) => Show(this.slotShown[k], this.machineCard(i, 110, 70, 'Laptop.Slot.' + k)))),
+      // Arrows above the ring: the cards take the remaining height, so a row
+      // below them would sit under the fold of the 420x340 window.
       Row(
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
-        Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')));
+        Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
+      Row(...RING.map((i, k) => Show(this.slotShown[k], this.machineCard(i, 110, 70, MACHINES[i].short, 'Laptop.Slot.' + k)))));
   }
 
   list() {
     const rows = [];
     for (let i = 0; i < COUNT; i += 2) {
-      const cards = [this.machineCard(i, 150, 94, 'Laptop.Open.' + MACHINES[i].id)];
-      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, 'Laptop.Open.' + MACHINES[i + 1].id));
+      const label = j => MACHINES[j].name + ' (' + MACHINES[j].year + ')';
+      const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Open.' + MACHINES[i].id)];
+      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id));
       rows.push(Row(...cards));
     }
     return ScrollView(VStack(...rows));
