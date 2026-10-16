@@ -8,4 +8,10 @@ void testContainerGapShapeVerdicts();
 void testContainerGapRefusedTextRecovery();
 void testContainerGapNaturalColumn();
 void testContainerGapKindCharacterization();
+void testGapDoorValuesAndIdentity();
+void testGapDoorDelivery();
+void testGapDoorResets();
+void testGapDoorOverflow();
+void testGapDoorNaturalWidths();
+void testGapDoorSpans();
 #endif

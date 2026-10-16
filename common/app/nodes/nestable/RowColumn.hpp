@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "core/State.hpp"
+#include "app/layout/LayoutGap.hpp"
 
 namespace loka
 {
@@ -45,6 +46,7 @@ namespace loka
     {
       typedef StackTypeTag TypeTag;
       typedef StackNode NodeType;
+      layout::LayoutGap gap_;
       StackAxis axis_;
       RowUndeclaredWidth rowUndeclaredWidth_;
       /** Borrowed live axis; null selects the constant value. */
@@ -88,6 +90,11 @@ namespace loka
       {
         return this->axisState_ ? this->axisState_->get() : this->axis_;
       }
+      StackProps &gap(int value)
+      {
+        this->gap_ = layout::LayoutGap::of(value);
+        return *this;
+      }
       StackProps &alignVertical(VerticalAlignment value)
       {
         this->hasVerticalAlignment_ = true;
@@ -105,6 +112,8 @@ namespace loka
         if (rhs.propsTypeId() != propsTypeId())
           return false;
         const StackProps &other = static_cast<const StackProps &>(rhs);
+        if (this->gap_ != other.gap_)
+          return this->gap_ < other.gap_;
         if (this->axisState_ != other.axisState_)
           return this->axisState_ < other.axisState_;
         if (this->axis_ != other.axis_)
@@ -165,6 +174,11 @@ namespace loka
           : BaseType(other)
       {
       }
+      StackDefinition &gap(int value)
+      {
+        this->props.gap(value);
+        return *this;
+      }
       StackDefinition &alignVertical(VerticalAlignment value)
       {
         this->props.alignVertical(value);
@@ -197,6 +211,11 @@ namespace loka
           : BaseType(other)
       {
       }
+      RowDefinition &gap(int value)
+      {
+        this->props.gap(value);
+        return *this;
+      }
       RowDefinition &alignVertical(VerticalAlignment value)
       {
         this->props.alignVertical(value);
@@ -216,6 +235,11 @@ namespace loka
       ColumnDefinition(const ColumnDefinition &other)
           : BaseType(other)
       {
+      }
+      ColumnDefinition &gap(int value)
+      {
+        this->props.gap(value);
+        return *this;
       }
       ColumnDefinition &alignHorizontal(HorizontalAlignment value)
       {

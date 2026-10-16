@@ -13,6 +13,7 @@ namespace loka
     {
       struct RowLayoutMetrics
       {
+        /** The rail horizontal default, also used to measure nested Rows. */
         int gap;
         int fallbackHeight;
         int buttonHeight;
@@ -39,7 +40,9 @@ namespace loka
                                   const RowLayoutMetrics &metrics,
                                   const INaturalWidthSource *source,
                                   void *context,
-                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &))
+                                  int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
+                                  int gap,
+                                  bool (*acceptCoordinate)(void *, int))
       {
         if (!row)
         {
@@ -52,8 +55,8 @@ namespace loka
           return state.y;
         }
 
-        RowWidthConsultation widths(row->childrenHead(), childCount, state.width, metrics.gap,
-                                    row->props.rowUndeclaredWidth_, source);
+        RowWidthConsultation widths(
+            row->childrenHead(), childCount, state.width, gap, metrics.gap, row->props.rowUndeclaredWidth_, source);
         int rowHeight = state.height > 0 ? state.height : 0;
         if (row->props.hasVerticalAlignment_)
         {
@@ -88,8 +91,11 @@ namespace loka
           const RowChildWidth allocation = widths.next(child);
           if (allocation.hasGapBefore())
           {
-            currentX += metrics.gap;
+            currentX += gap;
           }
+          if (acceptCoordinate
+              && (!acceptCoordinate(context, currentX) || !acceptCoordinate(context, currentX + allocation.width())))
+            return maxY;
           childState.x = layoutCoordinate<LayoutStateT>(currentX);
           childState.y = state.y;
           childState.width = layoutCoordinate<LayoutStateT>(allocation.width());

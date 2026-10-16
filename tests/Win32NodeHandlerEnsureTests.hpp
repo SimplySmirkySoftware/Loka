@@ -47,4 +47,16 @@ void testWin32TextEditorCreationRefusalAndRetry();
 void testWin32RibbonGroupEdgeCreationRefusalAndRetry();
 void testWin32AttributedTextCreationRefusalAndRetry();
 
+void testWin32GapDoorColumnFragment();
+void testWin32GapDoorBoxSiblingIsolation();
+void testWin32GapDoorZStackReset();
+void testWin32GapDoorGridReset();
+void testWin32GapDoorScrollViewResetAndSiblingIsolation();
+void testWin32GapDoorUnspecifiedColumnReset();
+void testWin32GapDoorRegisteredColumnBridge();
+void testWin32GapDoorRowFragment();
+void testWin32GapDoorRootFragment();
+
+void testWin32GapDoorScrollViewContent();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP

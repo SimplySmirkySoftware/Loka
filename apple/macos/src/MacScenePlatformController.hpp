@@ -79,14 +79,34 @@ public:
   {
     this->rectSurfaceExtentLedger_.cancel(surface);
   }
+  /** A layout offer in lu. Geometry moves along a pass; the carried gap is fixed
+      when the offer is made (root seed, common-to-native bridge, or the dispatch
+      entry's resolution), so the constructor is its only writer. Deliberate twin of
+      Win32ScenePlatformController::LayoutState. */
   struct LayoutState
   {
     typedef int Coordinate;
+
+    LayoutState(int xValue, int yValue, int widthValue, int heightValue, int spacingValue)
+        : x(xValue),
+          y(yValue),
+          width(widthValue),
+          height(heightValue),
+          spacing_(spacingValue)
+    {
+    }
+    int spacing() const
+    {
+      return this->spacing_;
+    }
 
     int x;
     int y;
     int width;
     int height;
+
+  private:
+    int spacing_;
   };
 
   struct LayoutNodeResult
