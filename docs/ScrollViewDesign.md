@@ -59,7 +59,7 @@ is one write, and `State<Frame>` costs no new template family on 68k.
 ## The horizontal range
 
 A rail never measures content width during layout. The range comes from
-`queryContentOverflowWidth(parent, gap, source, width)`
+`queryContentOverflowWidth(parent, spacing, source, width)`
 ([LayoutHeuristics.hpp](../common/app/layout/LayoutHeuristics.hpp), the R0
 ruling): only content that **overflows the width it is offered** counts: a
 declared width (`ImageView`/`RectSurface` with `size`, a fixed-size `Box`), an
