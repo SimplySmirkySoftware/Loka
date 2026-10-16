@@ -23,8 +23,8 @@ ALLOWLIST = {
 # adapters; allowing NSMakeRect here does not also license a raw setFrame.
 MAC_ALLOWLIST = {
     "apple/macos/src/platform/MacProjection.mm": {"NSMakeRect"},
-    # SetMacFrame, MacMeasurementBounds, SetMacDocumentHeight, ScrollMacDocument:
-    # typed inputs; the latter two preserve AppKit-owned width/clip translation.
+    # SetMacFrame, MacMeasurementBounds, SetMacDocumentSize, ScrollMacDocument:
+    # projected/native inputs; AppKit applies the clip translation.
     "apple/macos/src/platform/MacNativeGeometry.hpp": {"NSMakeRect", "setFrame", "scrollPoint"},
     # drawRect text centring: native bounds and native measured glyph size.
     "apple/macos/src/context/MacCellContext.mm": {"NSMakeRect"},
@@ -33,8 +33,7 @@ MAC_ALLOWLIST = {
     # drawRect edge blend: one-point rows of the view's native bounds.
     "apple/macos/src/context/MacRibbonGroupEdgeContext.mm": {"NSMakeRect"},
     # Constructor: initial document width is AppKit contentSize, height zero.
-    # relayout: refresh document width from AppKit, preserving native height.
-    "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect", "setFrame"},
+    "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect"},
     # FrameRectForContent: already-projected/native content plus native chrome.
     # FrameChangedThunk/createNativeWindow: desktop placement and #712 clamp.
     "apple/macos/src/MacWindow.mm": {"NSMakeRect", "setFrame"},

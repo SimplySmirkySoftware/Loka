@@ -25,22 +25,27 @@ public:
 
   bool isValid() const;
   void *documentView() const;
-  int contentWidth() const;
+  int visibleWidth() const;
   void relayout(int x, int y, int width, int height);
 
-  /** Sets the measured document height and native position, returning the
-      exact logical offset represented after clamping. */
-  int setScrollMetrics(int contentHeight, int viewportHeight, int offset);
+  /** Commits both native axes after successful traversal, returning clamped Y.
+      The caller publishes the completed origin after this commit. */
+  int commitScrollMetrics(
+      int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar);
+  int clampOffset(int value, int maximum) const;
+  /** The horizontal range a content width would give this viewport: the
+      projected content width minus the native clip width, converted once,
+      so admission and the bounds notification clamp with the same number. */
+  int horizontalRange(int contentWidthLu) const;
 
 private:
   friend class MacInputDoor;
   /** Bounds-notification body; the rail door owns its complete borrow. */
   void publishClipViewBoundsOrigin();
+  void handleScrollerStyleChange();
   void applyAttachedPresentation();
   void applyDetachedPresentation();
-  int clampOffset(int value, int maximum) const;
-  int maximumOffset() const;
-  void publishOffset(int value);
+  int maximumOffset(bool horizontal) const;
 
   loka::app::ScrollViewNode *node_;
   void *scrollView_;

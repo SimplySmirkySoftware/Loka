@@ -70,6 +70,30 @@ namespace loka
       return capacity;
     }
 
+    int MacProjection::clientHeightBelowHorizontalScroller(const core::Frame &seatLu) const
+    {
+      CGFloat thickness = 0;
+      if ([NSScroller respondsToSelector:@selector(preferredScrollerStyle)] &&
+          [NSScroller respondsToSelector:@selector(scrollerWidthForControlSize:scrollerStyle:)])
+      {
+        // Overlay scrollers (style 1) take no space; legacy ones do.
+        const NSInteger style = [NSScroller preferredScrollerStyle];
+        thickness = style == 1 ? 0
+                               : [NSScroller scrollerWidthForControlSize:LOKA_MAC_CONTROL_SIZE_REGULAR
+                                                           scrollerStyle:[NSScroller preferredScrollerStyle]];
+      }
+      else
+      {
+        // Tiger through Snow Leopard: the one scroller width there is.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        thickness = [NSScroller scrollerWidth];
+#pragma clang diagnostic pop
+      }
+      const CGFloat height = this->projectFrame(seatLu).r.size.height - thickness;
+      return height > 0 ? this->clientCapacityToLu(height) : 0;
+    }
+
     int MacProjection::measurementToLu(CGFloat pt) const
     {
       return static_cast<int>(std::ceil(pt / this->spaceScale()));
