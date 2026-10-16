@@ -9,6 +9,11 @@ namespace loka
     class CardStyle
     {
     public:
+      // User-provided, so `const CardStyle look;` compiles under C++98 rules
+      // (GCC 4.2 and Xcode 6.2 clang refuse it otherwise; #1380).
+      CardStyle()
+      {
+      }
       enum
       {
         kCornerRadius = 6,
