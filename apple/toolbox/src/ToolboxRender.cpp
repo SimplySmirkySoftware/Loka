@@ -1,3 +1,4 @@
+#include "ToolboxLayoutMetrics.hpp"
 /** Included by the production controller and Linux host fixture. */
 void ToolboxScenePlatformController::render()
 {
@@ -45,7 +46,7 @@ void ToolboxScenePlatformController::render()
   state.x = 12;
   state.y = 12;
   state.lineHeight = 14;
-  state.spacing = 8;
+  state.spacing = ToolboxLayoutMetrics::kDefaultGap;
   {
     Rect port = window_->window()->portRect;
     short width = static_cast<short>(port.right - port.left - state.x * 2);

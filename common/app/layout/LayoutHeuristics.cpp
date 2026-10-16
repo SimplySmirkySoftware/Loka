@@ -12,23 +12,62 @@ namespace loka
   {
     namespace layout
     {
+      namespace
+      {
+        /** The shape half of the pass-through verdict, for a node already known to be NODE_KIND_UNKNOWN. */
+        bool unknownKindPassesThrough(scene::Node *node)
+        {
+          return node->asNestable() && !node->asProjectedLayoutNode();
+        }
+      } // namespace
+
       bool isLayoutPassThrough(scene::Node *node)
       {
         // Built-in containers have known kinds; pass-through wrappers do not.
-        return node && node->kind() == scene::NODE_KIND_UNKNOWN && node->asNestable() && !node->asProjectedLayoutNode();
+        return node && node->kind() == scene::NODE_KIND_UNKNOWN && unknownKindPassesThrough(node);
       }
 
       int resolveLayoutGap(scene::Node *node, int received, int verticalDefault, int horizontalDefault)
       {
-        if (node)
+        if (!node)
+          return verticalDefault;
+        // One virtual kind() call: every dispatch visit resolves (#950 PR 6, 68k timing).
+        switch (node->kind())
         {
-          if (StackNode *stack = node->asStackNode())
-            return stack->props.gap_.resolve(stack->props.effectiveAxis() == STACK_AXIS_ROW ? horizontalDefault
-                                                                                            : verticalDefault);
-          if (BoxNode *box = node->asBoxNode())
-            return box->props.gap.resolve(verticalDefault);
+        case scene::NODE_KIND_STACK:
+        {
+          StackNode *stack = static_cast<StackNode *>(node);
+          return stack->props.gap_.resolve(stack->props.effectiveAxis() == STACK_AXIS_ROW ? horizontalDefault
+                                                                                          : verticalDefault);
         }
-        return isLayoutPassThrough(node) ? received : verticalDefault;
+        case scene::NODE_KIND_BOX:
+          return static_cast<BoxNode *>(node)->props.gap.resolve(verticalDefault);
+        case scene::NODE_KIND_UNKNOWN:
+          return unknownKindPassesThrough(node) ? received : verticalDefault;
+        // Containers without a gap reset to the vertical default; a leaf's value is never read.
+        case scene::NODE_KIND_ZSTACK:
+        case scene::NODE_KIND_GRID:
+        case scene::NODE_KIND_SCROLL_VIEW:
+        case scene::NODE_KIND_CANVAS:
+        case scene::NODE_KIND_RIBBON_GROUP:
+        case scene::NODE_KIND_CARD:
+        case scene::NODE_KIND_CELL:
+        case scene::NODE_KIND_TEXT:
+        case scene::NODE_KIND_BUTTON:
+        case scene::NODE_KIND_EDIT_TEXT:
+        case scene::NODE_KIND_POPUP_MENU:
+        case scene::NODE_KIND_OPEN_FILE_DIALOG:
+        case scene::NODE_KIND_IMAGE_VIEW:
+        case scene::NODE_KIND_RECT_SURFACE:
+        case scene::NODE_KIND_SCROLL_BAR:
+        case scene::NODE_KIND_ATTRIBUTED_TEXT:
+        case scene::NODE_KIND_TEXT_EDITOR:
+        case scene::NODE_KIND_CONFIRM_DIALOG:
+        case scene::NODE_KIND_RIBBON_GROUP_EDGE:
+        case scene::NODE_KIND_CARD_BAND:
+          break;
+        }
+        return verticalDefault;
       }
 
       bool childTakesLayoutSeat(scene::Node *child)

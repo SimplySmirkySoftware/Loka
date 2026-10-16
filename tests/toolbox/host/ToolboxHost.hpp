@@ -2,6 +2,11 @@
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 struct ToolboxScrollViewMetrics;
 #include "app/layout/NaturalWidthSource.hpp"
+#ifdef LOKA_HOST_GAP_DISPATCH
+#include "app/scene/projection/PlatformLayoutHandler.hpp"
+#include "support/TestVerify.hpp"
+#define LOKA_TOOLBOX_RECT_SURFACE_CONTEXT_HPP
+#endif
 #include "ToolboxEditInstalled.hpp"
 // Replace OS/controller neighbors; compile the actual context, table, measure
 // scope, lifecycle base and built-in registration source without alteration.
@@ -209,6 +214,23 @@ class ToolboxScenePlatformController : public loka::app::scene::IPlatformControl
     public loka::app::layout::INaturalWidthSource
 {
 public:
+#ifdef LOKA_HOST_GAP_DISPATCH
+  loka::app::scene::PlatformLayoutHandlerRegistry gapLayoutRegistry;
+  loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry()
+  {
+    return &this->gapLayoutRegistry;
+  }
+  loka::app::scene::BoundaryNode *activeLayoutBoundary()
+  {
+    return 0;
+  }
+  void setActiveLayoutBoundary(loka::app::scene::BoundaryNode *) {}
+  void renderScrollView(loka::app::ScrollViewNode *) {}
+  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &)
+  {
+    LOKA_VERIFY(false);
+  }
+#endif
   ToolboxPendingDialogs pendingDialogs_;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Push-button measurement shared by allocation and standalone layout.
@@ -531,4 +553,19 @@ namespace toolbox_host
   extern int refuseRegionAttempt;
   void reset();
 } // namespace toolbox_host
+#ifdef LOKA_HOST_GAP_DISPATCH
+// RectSurface painting is outside the gap fixture; accidental routing is a failure.
+class ToolboxRectSurfaceContext : public loka::app::scene::NodeContext
+{
+public:
+  void setBoundary(loka::app::scene::BoundaryNode *)
+  {
+    LOKA_VERIFY(false);
+  }
+};
+inline void EnsureToolboxRectSurfaceContext(loka::app::RectSurfaceNode *, ToolboxScenePlatformController *)
+{
+  LOKA_VERIFY(false);
+}
 #endif
+#endif // LOKA_TEST_TOOLBOX_HOST_HPP
