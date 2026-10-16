@@ -256,8 +256,8 @@ namespace
       NSScrollView *view = (NSScrollView *)[[root subviews] objectAtIndex:0];
       LOKA_VERIFY([view isKindOfClass:[NSScrollView class]]);
       // The real MacWindow content view is flipped; frames use its top-left origin.
-      const NSRect expected = controller.projection()
-                                  .projectFrame(Frame(margin, margin, expectedWidth, expectedHeight)).r;
+      const NSRect expected =
+          controller.projection().projectFrame(Frame(margin, margin, expectedWidth, expectedHeight)).r;
       const NSRect actual = [view frame];
       LOKA_VERIFY(NSEqualRects(actual, expected));
       NSView *document = [view documentView];
