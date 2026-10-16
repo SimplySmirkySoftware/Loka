@@ -442,11 +442,16 @@ namespace
 #include "context/ToolboxPopupMenuInput.cpp"
 #endif
 
+#ifdef LOKA_HOST_GAP_DISPATCH
+#include "ToolboxNodeDispatch.hpp"
+#endif
+
 // The host substitutes geometry traversal; the complete production render
 // operation (including extent publication and its continuation) runs below.
 namespace
 {
   short MaxExplicitControlId(loka::app::scene::Node *) { return 0; }
+#ifndef LOKA_HOST_GAP_DISPATCH
   void LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &state,
                   ToolboxScenePlatformController *controller, loka::app::scene::BoundaryNode *)
   {
@@ -463,6 +468,7 @@ namespace
   {
     if (controller->renderContext) controller->renderContext->render(controller);
   }
+#endif
 }
 #include "core/Profiler.hpp"
 #include "ToolboxRender.cpp"

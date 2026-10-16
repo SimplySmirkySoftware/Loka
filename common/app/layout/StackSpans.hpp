@@ -14,24 +14,28 @@ namespace loka
 
       /** Measured, content-relative Column advances: each span starts at the
           previous child's bottom and includes the gap before its own child.
-          Valid while child order, heights, gap and width remain unchanged.
+          Valid while child order, each child height, resolved gap and width
+          remain unchanged since recording.
           Construction is pass-local;
           only finish() publishes a reusable table. No resident pointers are retained.
           The owner invalidates on constraints, structure, props, reattach or lost
-          eligibility, and records the viewport only after successful placement. */
+          eligibility. Reuse also compares the resolved gap recorded by begin().
+          The owner records the viewport only after successful placement. */
       class StackSpans
       {
       public:
         StackSpans()
-            : filled_(0),
+            : gap_(0),
+              filled_(0),
               completed_(false),
               placedViewport_(0, 0, 0, 0)
         {
         }
 
-        bool begin(unsigned count)
+        bool begin(unsigned count, int gap)
         {
           this->invalidate();
+          this->gap_ = static_cast<short>(gap);
           if (count == UINT_MAX || !this->ends_.allocate(static_cast<std::size_t>(count) + 1))
             return false;
           this->ends_[0] = 0;
@@ -59,6 +63,10 @@ namespace loka
         bool valid() const
         {
           return this->completed_;
+        }
+        bool validForGap(int gap) const
+        {
+          return this->valid() && this->gap_ == gap;
         }
         void invalidate()
         {
@@ -136,6 +144,7 @@ namespace loka
 
       private:
         detail::TextMeasureTable<short> ends_;
+        short gap_;
         unsigned filled_;
         bool completed_;
         core::Frame placedViewport_;

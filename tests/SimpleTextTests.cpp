@@ -926,9 +926,14 @@ void testSimpleTextEditorReceivesRemainingWindow()
     LOKA_VERIFY(root && root->props.effectiveAxis() == STACK_AXIS_ROW);
     layout::RowLayoutMetrics metrics;
     metrics.gap = viewport.spacing;
-    layout::computeRowLayoutResultY(
-        root, viewport, metrics, 0, // Synthetic allocation probe has no rail source.
-        &probe, &LayoutProbe::rowChild);
+    layout::computeRowLayoutResultY(root,
+                                    viewport,
+                                    metrics,
+                                    0, // Synthetic allocation probe has no rail source.
+                                    &probe,
+                                    &LayoutProbe::rowChild,
+                                    metrics.gap,
+                                    0);
     LOKA_VERIFY(probe.calls == 1);
     LOKA_VERIFY(probe.band.height > 0);
     LOKA_VERIFY(probe.band.y + probe.band.height <= probe.editor.y);

@@ -11,4 +11,14 @@ void testMacScrollViewButtonClickReachesLokaHandler();
 void testMacScrollViewContainerGapsAndNoSeats();
 void testMacScrollViewGappedOriginRefuses();
 
+void testMacScrollViewHorizontalRangeAndScroller();
+void testMacScrollViewMaximumSurvivesFractionalScale();
+void testMacScrollViewCongruentWidthsLeaveNoHorizontalRange();
+void testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth();
+void testMacScrollViewScrollerStyleChangeRequestsRelayout();
+void testMacScrollViewBoundsObservationPublishesBothAxes();
+void testMacScrollViewRelayoutKeepsDocumentWidth();
+void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics();
+void testMacScrollViewHorizontalScrollerShortensChildHeight();
+
 #endif // LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP

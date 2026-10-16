@@ -956,7 +956,7 @@ short MacTextEditorContext::layout(loka::app::scene::IPlatformController *, loka
   [view setMinSize:size];
   const loka::macos::MacProjection &projection = this->controller()->projection();
   const int documentHeight = projection.measurementToLu(std::max(size.height, [view frame].size.height));
-  loka::macos::SetMacDocumentHeight(scroll, projection.projectLength(0, documentHeight));
+  loka::macos::SetMacDocumentSize(scroll, [scroll contentSize].width, projection.projectLength(0, documentHeight));
   this->onPropsApplied();
   return static_cast<short>(state.y + state.height);
 }
@@ -1076,7 +1076,9 @@ loka::app::scene::FollowUp MacTextEditorContext::syncFromNode(RailOperation &op,
   if (!op.hasSameContext() || op.node()->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
     return loka::app::scene::FOLLOW_NONE;
   const loka::macos::MacProjection &projection = this->controller()->projection();
-  loka::macos::ScrollMacDocument(view, projection.scrollOffsetToNative(projection.scrollPositionToLu(visible.origin.y)));
+  loka::macos::ScrollMacDocument(view,
+                                 projection.scrollOffsetToNative(0),
+                                 projection.scrollOffsetToNative(projection.scrollPositionToLu(visible.origin.y)));
   [scroll reflectScrolledClipView:[scroll contentView]];
   [view setEditable:YES];
   p.phase = completion;

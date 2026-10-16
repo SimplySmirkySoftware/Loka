@@ -22,7 +22,6 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/scene/node/ComponentNode.hpp"
-#include "app/nodes/nestable/Show.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/scene/Scene.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -30,6 +29,11 @@
 #include "platform/null/context/NullTextContext.hpp"
 #include "platform/null/context/NullRectSurfaceContext.hpp"
 #include "../apple/toolbox/src/ToolboxPlatformLayoutHandlers.hpp"
+
+#include "app/nodes/controls/Card.hpp"
+#include "app/layout/LayoutWidthSum.hpp"
+#include <cstdio>
+#include "app/nodes/nestable/Show.hpp"
 
 namespace
 {
@@ -313,7 +317,7 @@ void testContainerGapSeatsAndTraversal()
       metrics.fallbackHeight = 90;
       metrics.textHeight = 5;
       Recorder r;
-      computeRowLayoutResultY(&row, seat(), metrics, 0, &r, &Recorder::child);
+      computeRowLayoutResultY(&row, seat(), metrics, 0, &r, &Recorder::child, metrics.gap, 0);
       LOKA_VERIFY(r.calls == 3 && r.states[0].width == 48 && r.states[1].width == 0);
       LOKA_VERIFY(r.states[2].x == 62 && r.states[2].width == 48);
       LOKA_VERIFY(r.states[0].height == (aligned ? 5 : 100));
@@ -393,7 +397,7 @@ void testContainerGapPassThroughLimits()
   fragment->addChild(new TextNode(TextProps("a")));
   fragment->addChild(new TextNode(TextProps("b")));
   row.addChild(fragment);
-  LOKA_VERIFY(platform.projectLayoutForTesting(&row, seat()) == 56);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&row, seat()) == 48);
   StackNode column((StackProps(STACK_AXIS_COLUMN)));
   column.addChild(new TextNode(TextProps("head")));
   FragmentNode *middle = new FragmentNode(FragmentProps());
@@ -542,7 +546,8 @@ void testContainerGapNaturalColumn()
   nestedRow->addChild(new ConfirmDialogNode(ConfirmDialogProps().result(result)));
   nestedRow->addChild(new ButtonNode(Button("bb").props));
   row.addChild(nestedRow);
-  RowWidthConsultation widths(row.childrenHead(), row.childrenCount(), 100, 4, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
+  RowWidthConsultation widths(
+      row.childrenHead(), row.childrenCount(), 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &platform);
   LOKA_VERIFY(widths.next(column).width() == 24);
   LOKA_VERIFY(widths.next(column->nextInComposition).width() == 32);
 }
@@ -637,4 +642,422 @@ void testContainerGapKindCharacterization()
   verifySeatVerdicts(&projected);
   ProjectedNestable projectedNestable;
   verifySeatVerdicts(&projectedNestable);
+}
+
+namespace
+{
+  FragmentNode *gapPair()
+  {
+    FragmentNode *pair = new FragmentNode(FragmentProps());
+    pair->addChild(new TextNode(TextProps("a")));
+    pair->addChild(new TextNode(TextProps("b")));
+    return pair;
+  }
+
+  int gapTextY(NullScenePlatformController &platform, Node *node)
+  {
+    TextNode *text = node->asTextNode();
+    LOKA_VERIFY(text != 0);
+    NullTextContext *context = static_cast<NullTextContext *>(text->getContext());
+    LOKA_VERIFY(context != 0);
+    LOKA_VERIFY(context->commitPresented(text->props.text_->get(), platform.paintScope()));
+    const PaintQuery query = {platform.paintScope(), PLACEMENT_ELIGIBLE};
+    return context->queryPaintDamage(query).damage.y;
+  }
+
+  void verifyPairGap(NullScenePlatformController &platform, FragmentNode *pair, int gap)
+  {
+    LOKA_VERIFY(gapTextY(platform, pair->childrenHead()->nextInComposition) - gapTextY(platform, pair->childrenHead())
+                == 12 + gap);
+  }
+
+  class GapDelivery : public BoundaryNodeFor<GapDelivery>
+  {
+  public:
+    typedef BoundaryPropsFor<GapDelivery> Props;
+    explicit GapDelivery(const Props &props)
+        : BoundaryNodeFor<GapDelivery>(props)
+    {
+      this->state(this->visible_, true);
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(Column().gap(16)
+                          << Text("one")
+                          << (Show(*this->visible_.state()) << (Fragment() << Text("two") << Text("three")))
+                          << Button("end"));
+      composition.declare(Box().gap(16) << Text(
+                              "one") << (Show(*this->visible_.state()) << (Fragment() << Text("two") << Text("three")))
+                                        << Button("end"));
+    }
+
+  private:
+    NodeState<bool> visible_;
+  };
+
+  void collectGapTexts(Node *node, Node **texts, unsigned &count)
+  {
+    if (node->asTextNode())
+      texts[count++] = node;
+    INestable *content = node->asNestable();
+    for (Node *child = content ? content->childrenHead() : 0; child; child = child->nextInComposition)
+      collectGapTexts(child, texts, count);
+  }
+
+  class GapNaturalSource : public INaturalWidthSource
+  {
+  public:
+    virtual bool queryNaturalWidth(Node *, short &width) const
+    {
+      width = 10;
+      return true;
+    }
+  };
+} // namespace
+
+void testGapDoorValuesAndIdentity()
+{
+  LOKA_VERIFY(sizeof(LayoutGap) == sizeof(short));
+  LOKA_VERIFY(LayoutGap::unspecified().resolve(7) == 7);
+  LOKA_VERIFY(LayoutGap::of(0).resolve(7) == 0);
+  LOKA_VERIFY(LayoutGap::of(SHRT_MAX).resolve(7) == SHRT_MAX);
+  LOKA_VERIFY(LayoutGap::unspecified() != LayoutGap::of(0));
+#ifdef NDEBUG
+  LOKA_VERIFY(LayoutGap::of(-1).resolve(7) == 0);
+  LOKA_VERIFY(LayoutGap::of(SHRT_MAX + 1).resolve(7) == SHRT_MAX);
+#else
+  std::printf("[skip] LayoutGap release clamps require NDEBUG\n");
+#endif
+  StackProps a, b;
+  b.gap(0);
+  LOKA_VERIFY(a < b || b < a);
+  a.gap(20);
+  LOKA_VERIFY(a < b || b < a);
+  BoxProps c, d;
+  d.setGap(0);
+  LOKA_VERIFY(c < d || d < c);
+  LOKA_VERIFY(c.hash() != d.hash());
+  c.setGap(20);
+  LOKA_VERIFY(c < d || d < c);
+  LOKA_VERIFY(c.hash() != d.hash());
+  LOKA_VERIFY(VStack().gap(2).props.gap_ == LayoutGap::of(2));
+  LOKA_VERIFY(HStack().gap(3).props.gap_ == LayoutGap::of(3));
+  loka::core::MutableState<StackAxis> axis(STACK_AXIS_COLUMN);
+  LOKA_VERIFY(Stack(&axis).gap(4).props.gap_ == LayoutGap::of(4));
+
+  NullScenePlatformController platform;
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  column.setPropsTypeId(StackProps::staticTypeId());
+  column.addChild(new TextNode(TextProps("a")));
+  column.addChild(new TextNode(TextProps("b")));
+  platform.projectLayoutForTesting(&column, seat());
+  LOKA_VERIFY(gapTextY(platform, column.childrenHead()->nextInComposition) == seat().y + 24);
+  LOKA_VERIFY(Column().gap(20).applyPropsToNode(&column));
+  platform.projectLayoutForTesting(&column, seat());
+  LOKA_VERIFY(gapTextY(platform, column.childrenHead()->nextInComposition) == seat().y + 32);
+}
+
+void testGapDoorDelivery()
+{
+  NullScenePlatformController platform;
+  Scene scene((Boundary<GapDelivery>()));
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  BoundaryNode *owner = loka::dsl::testing::SceneTestAccess::rootBoundary(scene);
+  for (Node *container = owner->childrenHead(); container; container = container->nextInComposition)
+  {
+    platform.projectLayoutForTesting(container, seat());
+    Node *texts[3];
+    unsigned count = 0;
+    collectGapTexts(container, texts, count);
+    LOKA_VERIFY(count == 3);
+    for (unsigned i = 0; i < 3; ++i)
+      LOKA_VERIFY(gapTextY(platform, texts[i]) == seat().y + static_cast<int>(i) * 28);
+    // The final Button starts after the same gap (its height is 32).
+    LOKA_VERIFY(platform.projectLayoutForTesting(container, seat()) == seat().y + 3 * 28 + 32);
+  }
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+
+  for (unsigned wrapper = 0; wrapper < 3; ++wrapper)
+  {
+    Node *root = wrapper == 0   ? static_cast<Node *>((Column().gap(20)).create())
+                 : wrapper == 1 ? static_cast<Node *>(ScrollView().create())
+                                : static_cast<Node *>(Fragment().create());
+    BoxNode *box = new BoxNode(BoxProps());
+    FragmentNode *inside = gapPair();
+    box->addChild(inside);
+    FragmentNode *after = gapPair();
+    root->asNestable()->addChild(box);
+    root->asNestable()->addChild(after);
+    LayoutState state = seat();
+    state.spacing = 0;
+    state.height = 0;
+    platform.projectLayoutForTesting(root, state);
+    verifyPairGap(platform, inside, 12);
+    verifyPairGap(platform, after, wrapper == 0 ? 20 : 12);
+    LOKA_VERIFY(gapTextY(platform, after->childrenHead()) == state.y + 36 + (wrapper == 0 ? 20 : 12));
+    LOKA_VERIFY(state.spacing == 0);
+    DestroyHeapNode(root);
+  }
+  // The generic walker reuses its child offer; a callee must not write into it.
+  {
+    StackNode outer(Column().gap(20).props);
+    FragmentNode *siblings = new FragmentNode(FragmentProps());
+    siblings->addChild(Box().gap(3).create());
+    FragmentNode *pair = gapPair();
+    siblings->addChild(pair);
+    outer.addChild(siblings);
+    platform.projectLayoutForTesting(&outer, seat());
+    verifyPairGap(platform, pair, 20);
+  }
+  for (unsigned specified = 0; specified < 2; ++specified)
+  {
+    StackProps props(STACK_AXIS_ROW);
+    if (specified)
+      props.gap(20);
+    StackNode row(props);
+    FragmentNode *pair = gapPair();
+    row.addChild(pair);
+    platform.projectLayoutForTesting(&row, seat());
+    verifyPairGap(platform, pair, specified ? 20 : 4);
+  }
+}
+
+void testGapDoorResets()
+{
+  NullScenePlatformController platform;
+  for (unsigned kind = 0; kind < 6; ++kind)
+  {
+    StackNode outer(Column().gap(20).props);
+    Node *reset = 0;
+    switch (kind)
+    {
+    case 0:
+      reset = ZStack().create();
+      break;
+    case 1:
+      reset = Grid().create();
+      break;
+    case 2:
+      reset = new CardNode(CardProps());
+      break;
+    case 3:
+      reset = new RibbonGroupNode(RibbonGroupProps());
+      break;
+    case 4:
+      reset = ScrollView().create();
+      break;
+    case 5:
+      reset = Column().create();
+      break;
+    }
+    FragmentNode *pair = gapPair();
+    reset->asNestable()->addChild(pair);
+    outer.addChild(reset);
+    LayoutState state = seat();
+    state.height = 0;
+    platform.projectLayoutForTesting(&outer, state);
+    verifyPairGap(platform, pair, 12);
+  }
+  FragmentNode root((FragmentProps()));
+  root.addChild(new TextNode(TextProps("a")));
+  root.addChild(new TextNode(TextProps("b")));
+  LayoutState state = seat();
+  state.spacing = 0;
+  platform.projectLayoutForTesting(&root, state);
+  verifyPairGap(platform, &root, 12);
+}
+
+void testGapDoorOverflow()
+{
+  // Pin both calls to the shared acceptance door, including the origin which
+  // a positive-width right-edge check would otherwise subsume on Null.
+  struct Acceptance
+  {
+    int coordinates[4];
+    unsigned count;
+    unsigned placed;
+    Acceptance()
+        : count(0),
+          placed(0)
+    {
+    }
+    static bool accept(void *context, int coordinate)
+    {
+      Acceptance &self = *static_cast<Acceptance *>(context);
+      self.coordinates[self.count++] = coordinate;
+      return coordinate <= SHRT_MAX;
+    }
+    static int child(void *context, Node *, const LayoutState &state)
+    {
+      ++static_cast<Acceptance *>(context)->placed;
+      return state.y + 1;
+    }
+  };
+  for (unsigned edge = 0; edge < 2; ++edge)
+  {
+    StackNode row(Row().props);
+    row.addChild(Box().size(1, 1).create());
+    row.addChild(Box().size(1, 1).create());
+    LayoutState state = seat();
+    state.x = 0;
+    Acceptance acceptance;
+    RowLayoutMetrics metrics;
+    const int result = computeRowLayoutResultY(
+        &row, state, metrics, 0, &acceptance, &Acceptance::child, edge ? SHRT_MAX - 1 : SHRT_MAX, &Acceptance::accept);
+    LOKA_VERIFY(result == state.y + 1);
+    LOKA_VERIFY(acceptance.placed == 1);
+    LOKA_VERIFY(acceptance.count == (edge ? 4u : 3u));
+    LOKA_VERIFY(acceptance.coordinates[0] == 0 && acceptance.coordinates[1] == 1);
+    LOKA_VERIFY(acceptance.coordinates[2] == (edge ? SHRT_MAX : SHRT_MAX + 1));
+    if (edge)
+      LOKA_VERIFY(acceptance.coordinates[3] == SHRT_MAX + 1);
+  }
+
+  for (unsigned rightEdge = 0; rightEdge < 2; ++rightEdge)
+  {
+    NullScenePlatformController platform;
+    ScrollViewNode scroll((ScrollViewProps()));
+    StackNode *row = new StackNode(Row().gap(rightEdge ? SHRT_MAX - 1 : SHRT_MAX).props);
+    row->addChild(Box().size(1, 1).create());
+    BoxNode *last = new BoxNode(Box().size(1, 1).props);
+    TextNode *unreached = new TextNode(TextProps("never"));
+    last->addChild(unreached);
+    row->addChild(last);
+    scroll.addChild(row);
+    LayoutState state = seat();
+    state.x = state.y = 0;
+    platform.projectLayoutForTesting(&scroll, state);
+    LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == 1);
+    LOKA_VERIFY(unreached->getContext() == 0);
+  }
+  LayoutWidthSum sum;
+  for (long i = 0; i < 65540; ++i)
+    sum.add(SHRT_MAX);
+  LOKA_VERIFY(sum.value() == SHRT_MAX + 1L);
+  sum.add(0);
+  LOKA_VERIFY(sum.value() == SHRT_MAX + 1L);
+  LayoutWidthSum product;
+  product.addProduct(65540, SHRT_MAX);
+  LOKA_VERIFY(product.value() == SHRT_MAX + 1L);
+  GapNaturalSource source;
+  StackNode row(Row().gap(SHRT_MAX).props);
+  row.props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+  for (int i = 0; i < 3; ++i)
+    row.addChild(Button("b").create());
+  RowWidthConsultation measure(&row, 1, 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(measure.next(&row).width() == 100); // Declined natural width becomes a flex seat.
+  RowWidthConsultation allocate(
+      row.childrenHead(), row.childrenCount(), 100, SHRT_MAX, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
+  LOKA_VERIFY(allocate.next(row.childrenHead()).width() == 0);
+  // Fixed widths overflow the tally independently of gap multiplication.
+  StackNode fixed(Row().props);
+  fixed.addChild(Box().size(20000, 1).create());
+  fixed.addChild(Box().size(20000, 1).create());
+  fixed.addChild(Button("flex").create());
+  RowWidthConsultation fixedAllocation(
+      fixed.childrenHead(), fixed.childrenCount(), 100, 0, 4, ROW_UNDECLARED_WIDTH_SHARED, &source);
+  fixedAllocation.next(fixed.childrenHead());
+  fixedAllocation.next(fixed.childrenHead()->nextInComposition);
+  LOKA_VERIFY(fixedAllocation.next(fixed.childrenHead()->nextInComposition->nextInComposition).width() == 0);
+  class WideSource : public INaturalWidthSource
+  {
+  public:
+    virtual bool queryNaturalWidth(Node *, short &width) const
+    {
+      width = 20000;
+      return true;
+    }
+  } wide;
+  StackNode sharedWide(Row().gap(0).props);
+  sharedWide.addChild(Button("one").create());
+  sharedWide.addChild(Button("two").create());
+  RowWidthConsultation flexProduct(&sharedWide, 1, 100, 0, 4, ROW_UNDECLARED_WIDTH_NATURAL, &wide);
+  LOKA_VERIFY(flexProduct.next(&sharedWide).width() == 100);
+  row.props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_SHARED;
+  RowWidthConsultation shared(&row, 1, 100, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(shared.next(&row).width() == 100);
+}
+
+void testGapDoorNaturalWidths()
+{
+  GapNaturalSource source;
+  for (unsigned policy = 0; policy < 2; ++policy)
+  {
+    for (unsigned shape = 0; shape < 3; ++shape)
+    {
+      StackNode outer(Row().gap(20).props);
+      outer.props.rowUndeclaredWidth_ = policy ? ROW_UNDECLARED_WIDTH_NATURAL : ROW_UNDECLARED_WIDTH_SHARED;
+      outer.addChild(Button("a").create());
+      StackNode *inner = new StackNode(shape == 1 ? Row().gap(3).props : Row().props);
+      inner->props.rowUndeclaredWidth_ = outer.props.rowUndeclaredWidth_;
+      inner->addChild(Button("b").create());
+      inner->addChild(Button("c").create());
+      Node *nested = inner;
+      if (shape == 2)
+      {
+        StackNode *column = new StackNode(Column().gap(30).props);
+        column->addChild(inner);
+        nested = column;
+      }
+      outer.addChild(nested);
+      const int innerWidth = shape == 1 ? 23 : 24;
+      RowWidthConsultation local(
+          outer.childrenHead(), outer.childrenCount(), 200, 20, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+      LOKA_VERIFY(local.next(outer.childrenHead()).width() == 10);
+      LOKA_VERIFY(local.next(nested).width() == innerWidth);
+      RowWidthConsultation natural(&outer, 1, 200, 4, 4, ROW_UNDECLARED_WIDTH_NATURAL, &source);
+      const int expected = policy ? 10 + 20 + innerWidth : 2 * innerWidth + 20;
+      LOKA_VERIFY(natural.next(&outer).width() == expected);
+      // A framed parent makes both Row policies eligible for overflow measurement.
+      CardNode frame((CardProps()));
+      StackNode *copy = new StackNode(outer.props);
+      copy->addChild(Button("a").create());
+      StackNode *copyInner = new StackNode(inner->props);
+      copyInner->addChild(Button("b").create());
+      copyInner->addChild(Button("c").create());
+      if (shape == 2)
+      {
+        StackNode *column = new StackNode(Column().gap(30).props);
+        column->addChild(copyInner);
+        copy->addChild(column);
+      }
+      else
+        copy->addChild(copyInner);
+      frame.addChild(copy);
+      FragmentNode parent((FragmentProps()));
+      // The frame's lifetime belongs to this stack frame, so detach before teardown.
+      parent.addChild(&frame);
+      short width = 0;
+      const bool known = queryContentOverflowWidth(&parent, 4, &source, width);
+      parent.detachChildren();
+      LOKA_VERIFY(known);
+      LOKA_VERIFY(width == expected + frame.frameGeometry().insets.left + frame.frameGeometry().insets.right);
+    }
+  }
+}
+
+void testGapDoorSpans()
+{
+  NullScenePlatformController platform;
+  StackNode column((Column().props));
+  column.setPropsTypeId(StackProps::staticTypeId());
+  for (int i = 0; i < 3; ++i)
+    column.addChild(Text("x").create());
+  const LazyWindow bands[] = {{1, 1}, {0, 1}, {0, 0}};
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    LOKA_VERIFY(Column().applyPropsToNode(&column));
+    StackSpans spans;
+    const int old = platform.projectLayoutForTesting(&column, seat(), 0, &spans);
+    LOKA_VERIFY(old == seat().y + 60);
+    LOKA_VERIFY(Column().gap(20).applyPropsToNode(&column));
+    const unsigned long before = platform.leafLayoutVisitsForTesting();
+    const int band = platform.projectLayoutForTesting(&column, seat(), &bands[i], &spans);
+    LOKA_VERIFY(platform.leafLayoutVisitsForTesting() - before == 3);
+    LOKA_VERIFY(band == seat().y + 76);
+    StackSpans fresh;
+    LOKA_VERIFY(band == platform.projectLayoutForTesting(&column, seat(), 0, &fresh));
+    LOKA_VERIFY(spans.total() == fresh.total());
+  }
 }

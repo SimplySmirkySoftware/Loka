@@ -33,4 +33,15 @@ void testMacContainerGapNoSeats();
 void testMacContainerGapBox();
 void testMacContainerGapRow();
 
+void testMacGapDoorColumnFragment();
+void testMacGapDoorBoxSiblingIsolation();
+void testMacGapDoorZStackReset();
+void testMacGapDoorGridReset();
+void testMacGapDoorScrollViewResetAndSiblingIsolation();
+void testMacGapDoorUnspecifiedColumnReset();
+void testMacGapDoorRegisteredColumnBridge();
+void testMacGapDoorRowFragment();
+void testMacGapDoorRootFragment();
+void testMacGapDoorScrollViewContent();
+
 #endif // LOKA_TESTS_MAC_NODE_HANDLER_ENSURE_TESTS_HPP

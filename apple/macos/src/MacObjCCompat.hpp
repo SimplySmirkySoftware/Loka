@@ -156,4 +156,20 @@ typedef float CGFloat;
 - (void)discardMarkedText;
 @end
 
+// The 10.7 SDK declares the scroller-style selectors on NSScroller. Older SDKs
+// need the declarations so the capability-guarded calls remain type-correct.
+// NSInteger is the ABI of NSScrollerStyle; 0 is legacy, 1 is overlay.
+#if !defined(MAC_OS_X_VERSION_MAX_ALLOWED) || (MAC_OS_X_VERSION_MAX_ALLOWED < 1070)
+@interface NSScroller (LokaScrollerStyleCompat)
++ (NSInteger)preferredScrollerStyle;
++ (CGFloat)scrollerWidthForControlSize:(NSControlSize)controlSize scrollerStyle:(NSInteger)style;
+@end
+#endif
+
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && (MAC_OS_X_VERSION_MAX_ALLOWED >= 101200)
+#define LOKA_MAC_CONTROL_SIZE_REGULAR NSControlSizeRegular
+#else
+#define LOKA_MAC_CONTROL_SIZE_REGULAR NSRegularControlSize
+#endif
+
 #endif // LOKA_MAC_OBJC_COMPAT_HPP

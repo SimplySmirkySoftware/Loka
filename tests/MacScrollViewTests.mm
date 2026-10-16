@@ -2,6 +2,7 @@
 #include "app/layout/FallbackControlMetrics.hpp"
 
 #include "MacSceneLayout.hpp"
+#include "MacObjCCompat.hpp"
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
@@ -10,6 +11,9 @@
 
 #include "MacScenePlatformController.hpp"
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/ImageView.hpp"
+#include "app/RectSurface.hpp"
+#include "context/MacScrollViewContext.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/scene/state/NodeState.hpp"
@@ -522,4 +526,418 @@ void testMacScrollViewGappedOriginRefuses()
     [root release];
   }
   [pool drain];
+}
+
+void testMacScrollViewHorizontalRangeAndScroller()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(400, 10));
+    column->addChild(image);
+    scroll.addChild(column);
+    fact.state().set(loka::core::Frame(1000, 0, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    NSClipView *clip = [native contentView];
+    const loka::macos::MacProjection &projection = controller.projection();
+    const int maximum = 400 - projection.clientCapacityToLu([native contentSize].width);
+    LOKA_VERIFY([[native documentView] frame].size.width == projection.projectLength(0, 400).pt);
+    LOKA_VERIFY([native hasHorizontalScroller] == YES);
+    const loka::core::Frame clamped = fact.state().get();
+    LOKA_VERIFY(clamped.x == maximum);
+    LOKA_VERIFY([clip bounds].origin.x == projection.scrollOffsetToNative(maximum).pt);
+    fact.state().set(loka::core::Frame(-7, 0, 0, 0));
+    controller.relayout(300, 140);
+    const loka::core::Frame negative = fact.state().get();
+    LOKA_VERIFY(negative.x == 0);
+    image->props.size(50, 10);
+    controller.relayout(300, 140);
+    const loka::core::Frame narrow = fact.state().get();
+    LOKA_VERIFY([native hasHorizontalScroller] == NO);
+    LOKA_VERIFY(narrow.x == 0);
+    LOKA_VERIFY([[native documentView] frame].size.width == [native contentSize].width);
+    // An intrinsic image without a source refuses width measurement.
+    image->props.size(0, 10).attr(ImageViewAttr().sizePolicy(IMAGE_VIEW_SIZE_INTRINSIC));
+    fact.state().set(loka::core::Frame(50, 0, 0, 0));
+    controller.relayout(300, 140);
+    const loka::core::Frame unknown = fact.state().get();
+    LOKA_VERIFY(unknown.x == 0);
+    LOKA_VERIFY([native hasHorizontalScroller] == NO);
+    LOKA_VERIFY([clip bounds].origin.x == 0);
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacScrollViewBoundsObservationPublishesBothAxes()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(400, 10));
+    column->addChild(image);
+    scroll.addChild(column);
+    image->props.size(400, 300);
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    NSClipView *clip = [native contentView];
+    LOKA_VERIFY([native hasHorizontalScroller] == YES);
+    fact.resetChangeCount();
+    [clip setBoundsOrigin:NSMakePoint(12, 7)];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clip];
+    const loka::core::Frame moved = fact.state().get();
+    LOKA_VERIFY(moved.x == 12 && moved.y == 7);
+    LOKA_VERIFY(moved.width == 0 && moved.height == 0);
+    const bool publishedOnce = fact.changeCount() == 1;
+    LOKA_VERIFY(publishedOnce);
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clip];
+    const bool duplicateIsNoOp = fact.changeCount() == 1;
+    LOKA_VERIFY(duplicateIsNoOp);
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacScrollViewRelayoutKeepsDocumentWidth()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(400, 10));
+    column->addChild(image);
+    scroll.addChild(column);
+    fact.state().set(loka::core::Frame(50, 0, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    NSClipView *clip = [native contentView];
+    const NSRect before = [[native documentView] frame];
+    const NSPoint origin = [clip bounds].origin;
+    LOKA_VERIFY(origin.x == controller.projection().scrollOffsetToNative(50).pt);
+    fact.resetChangeCount();
+    // Pin relayout itself: the subsequent metrics commit must not hide shrinkage.
+    MacScrollViewContext *context = static_cast<MacScrollViewContext *>(scroll.getContext());
+    context->relayout(MacSceneLayout::kRootInset,
+                      MacSceneLayout::kRootInset,
+                      300 - 2 * MacSceneLayout::kRootInset,
+                      140 - 2 * MacSceneLayout::kRootInset);
+    const bool relayoutPreservedDocument = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(relayoutPreservedDocument);
+    LOKA_VERIFY(NSEqualPoints([clip bounds].origin, origin));
+    controller.relayout(300, 140);
+    const bool layoutPreservedDocument = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(layoutPreservedDocument);
+    LOKA_VERIFY(NSEqualPoints([clip bounds].origin, origin));
+    const loka::core::Frame unchanged = fact.state().get();
+    LOKA_VERIFY(unchanged.x == 50);
+    const bool noRepublish = fact.changeCount() == 0;
+    LOKA_VERIFY(noRepublish);
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    int visits = 0;
+    ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(400, 100));
+    scroll.addChild(leading);
+    scroll.addChild(new GapDispatchText(visits));
+    fact.state().set(loka::core::Frame(50, 0, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    NSClipView *clip = [native contentView];
+    const NSRect before = [[native documentView] frame];
+    const NSRect clipBefore = [clip bounds];
+    const BOOL barBefore = [native hasHorizontalScroller];
+    const loka::core::Frame factBefore = fact.state().get();
+    LOKA_VERIFY(barBefore == YES && factBefore.x == 50);
+    LOKA_VERIFY(visits > 0);
+    visits = 0;
+    fact.resetChangeCount();
+    leading->props.size(1000, SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1);
+    controller.relayout(300, 140);
+    LOKA_VERIFY(visits == 0);
+    const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(documentUnchanged);
+    LOKA_VERIFY([native hasHorizontalScroller] == barBefore);
+    const bool clipUnchanged = NSEqualRects([clip bounds], clipBefore);
+    LOKA_VERIFY(clipUnchanged);
+    const loka::core::Frame refused = fact.state().get();
+    LOKA_VERIFY(refused.x == factBefore.x && refused.y == factBefore.y);
+    const bool factUnchanged = fact.changeCount() == 0;
+    LOKA_VERIFY(factUnchanged);
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacScrollViewHorizontalScrollerShortensChildHeight()
+{
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    scroll.addChild(new RectSurfaceNode(RectSurfaceProps().size(400, 0)));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    NSClipView *clip = [native contentView];
+    LOKA_VERIFY([native hasHorizontalScroller] == YES);
+    const int seatHeight = 140 - 2 * MacSceneLayout::kRootInset;
+    CGFloat thickness = 0;
+    if ([NSScroller respondsToSelector:@selector(preferredScrollerStyle)] &&
+        [NSScroller respondsToSelector:@selector(scrollerWidthForControlSize:scrollerStyle:)])
+    {
+      const NSInteger style = [NSScroller preferredScrollerStyle];
+      if (style == 1)
+      {
+        std::printf("[skip] overlay scrollers take no space\n");
+        thickness = 0;
+      }
+      else
+        thickness = [NSScroller scrollerWidthForControlSize:LOKA_MAC_CONTROL_SIZE_REGULAR
+                                              scrollerStyle:[NSScroller preferredScrollerStyle]];
+    }
+    else
+    {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+      thickness = [NSScroller scrollerWidth];
+#pragma clang diagnostic pop
+    }
+    const CGFloat expectedHeight = seatHeight > thickness ? seatHeight - thickness : 0;
+    LOKA_VERIFY([[native documentView] frame].size.height == expectedHeight);
+    LOKA_VERIFY([clip bounds].size.height == expectedHeight);
+    fact.state().set(loka::core::Frame(0, 1000, 0, 0));
+    controller.relayout(300, 140);
+    const loka::core::Frame clamped = fact.state().get();
+    LOKA_VERIFY(clamped.y == 0);
+    LOKA_VERIFY([clip bounds].origin.y == 0);
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacScrollViewMaximumSurvivesFractionalScale()
+{
+  std::printf("\n==== [testMacScrollViewMaximumSurvivesFractionalScale] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    // 5/4 space scale: a 401 lu document projects to a fractional edge, and
+    // the maximum the bounds notification clamps with must agree with the
+    // maximum layout admitted, or the notification republishes one unit short.
+    MacScenePlatformController controller((void *)root, RailMetrics(Ratio(), Ratio(5, 4)));
+    ViewportFact offset(0);
+    offset.state().set(loka::core::Frame(1000, 0, 0, 0));
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    StackNode *column = addButtonColumn(scrollView, 2);
+    column->addChild(new ImageViewNode(ImageViewProps().size(401, 10)));
+    establishLayout(controller, &scrollView, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const int admitted = offset.state().get().x;
+    LOKA_VERIFY(admitted > 0);
+    offset.resetChangeCount();
+    NSClipView *clipView = [native contentView];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
+    const int republished = offset.state().get().x;
+    const int changes = offset.changeCount();
+    LOKA_VERIFY(republished == admitted && changes == 0
+                && "the bounds notification must clamp with the maximum layout admitted, not one unit short");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewMaximumSurvivesFractionalScale] PASSED ====\n");
+}
+
+void testMacScrollViewScrollerStyleChangeRequestsRelayout()
+{
+  std::printf("\n==== [testMacScrollViewScrollerStyleChangeRequestsRelayout] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller((void *)root, RailMetrics());
+    ViewportFact offset(0);
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    addButtonColumn(scrollView, 6);
+    establishLayout(controller, &scrollView, 300, 140);
+    LOKA_VERIFY(!controller.hasPendingRelayout());
+    // AppKit retiles every scroll view when the preferred scroller style
+    // changes; the children's offered height must follow through a relayout.
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"NSPreferredScrollerStyleDidChangeNotification"
+                                                        object:nil];
+    LOKA_VERIFY(controller.hasPendingRelayout() && "a scroller style change must request a relayout");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewScrollerStyleChangeRequestsRelayout] PASSED ====\n");
+}
+
+void testMacScrollViewCongruentWidthsLeaveNoHorizontalRange()
+{
+  std::printf("\n==== [testMacScrollViewCongruentWidthsLeaveNoHorizontalRange] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 420, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    // 5/4 space scale: a content width one logical unit wider than the clip
+    // can project to the same native width; then there is nothing to scroll.
+    MacScenePlatformController controller((void *)root, RailMetrics(Ratio(), Ratio(5, 4)));
+    ViewportFact offset(0);
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    StackNode *column = addButtonColumn(scrollView, 2);
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(10, 10));
+    column->addChild(image);
+    establishLayout(controller, &scrollView, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    // Search a few seat widths for a clip whose projected width a wider
+    // logical width still fits into (341 pt holds both 272 and 273 lu).
+    int congruent = 0;
+    int width = 300;
+    CGFloat clipWidth = 0;
+    int visible = 0;
+    for (width = 289; width <= 300 && !congruent; ++width)
+    {
+      controller.relayout(width, 140);
+      clipWidth = [native contentSize].width;
+      visible = controller.projection().clientCapacityToLu(clipWidth);
+      for (int candidate = visible + 1; candidate <= visible + 4; ++candidate)
+      {
+        if (controller.projection().projectLength(0, candidate).pt <= clipWidth)
+        {
+          congruent = candidate;
+          break;
+        }
+      }
+      if (congruent)
+        break;
+    }
+    if (!congruent)
+    {
+      std::printf("[skip] no logical width wider than the clip projects into it at 5/4 for seat widths 289..300\n");
+    }
+    else
+    {
+      image->props.size(congruent, 10);
+      offset.state().set(loka::core::Frame(50, 0, 0, 0));
+      controller.relayout(width, 140);
+      const bool scroller = [native hasHorizontalScroller] == YES;
+      const int x = offset.state().get().x;
+      LOKA_VERIFY(!scroller && x == 0 && "widths that project to the same native width leave no range");
+    }
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewCongruentWidthsLeaveNoHorizontalRange] PASSED ====\n");
+}
+
+void testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth()
+{
+  std::printf("\n==== [testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    int visits = 0;
+    ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(400, 100));
+    scroll.addChild(leading);
+    scroll.addChild(new GapDispatchText(visits));
+    fact.state().set(loka::core::Frame(50, 0, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const NSRect before = [[native documentView] frame];
+    LOKA_VERIFY(visits > 0);
+    visits = 0;
+    // The seat widens past the committed document while the traversal
+    // refuses: the document keeps the width of the last successful layout.
+    leading->props.size(400, SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1);
+    controller.relayout(900, 140);
+    LOKA_VERIFY(visits == 0);
+    const bool clipWider = [native contentSize].width > before.size.width;
+    LOKA_VERIFY(clipWider && "the fixture must widen the clip past the committed document");
+    const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(documentUnchanged && "a refused pass must not grow the document before the commit");
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth] PASSED ====\n");
 }
