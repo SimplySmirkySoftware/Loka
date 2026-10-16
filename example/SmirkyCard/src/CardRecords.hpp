@@ -4,6 +4,7 @@
 #include "ScriptRuntime.hpp"
 #include "app/OpenFileDialog.hpp"
 #include "core/resource/Image.hpp"
+#include "core/Frame.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "core/LokaAlloc.hpp"
 
@@ -46,9 +47,18 @@ namespace smirkycard
         ++count;
       return count;
     }
+    T *add()
+    {
+      return this->link(loka::core::LokaNew<T>(this->site_));
+    }
     template <class A> T *add(const A &args)
     {
-      T *record = loka::core::LokaNew<T>(this->site_, args);
+      return this->link(loka::core::LokaNew<T>(this->site_, args));
+    }
+
+  private:
+    T *link(T *record)
+    {
       if (record)
       {
         record->next = this->head_;
@@ -56,12 +66,21 @@ namespace smirkycard
       }
       return record;
     }
-
-  private:
     CardRecords(const CardRecords &);
     CardRecords &operator=(const CardRecords &);
     T *head_;
     const loka::core::LokaAllocationSite site_;
+  };
+
+  /** One private card-owned viewport handle; rails borrow its write seat. */
+  struct JsScrollViewport
+  {
+    JsScrollViewport()
+        : next(0)
+    {
+    }
+    JsScrollViewport *next;
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
   };
 
   /** Stable handles registered through the card's constructor declaration doors. */

@@ -5,6 +5,7 @@
 
 #include "CardNodes.hpp"
 #include "JsClickNode.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 #include "JsOwnProperties.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/controls/Button.hpp"
@@ -197,6 +198,7 @@ namespace smirkycard
         failed_(false),
         instance_(JS_UNDEFINED),
         seats_("Seat"),
+        scrollViewports_("ScrollViewport"),
         handlers_("Handler"),
         flows_("Flow"),
         errorSeat_(JS_UNDEFINED),
@@ -1046,32 +1048,29 @@ namespace smirkycard
     }
     return out;
   }
-  namespace
+  bool requirePlainObject(JSContext *ctx, JSValueConst dict, const char *label)
   {
-    bool requirePlainStyleObject(JSContext *ctx, JSValueConst dict, const char *label)
+    // Compare to an ordinary object without consulting replaceable JS globals.
+    JSValue plain = JS_NewObject(ctx);
+    if (JS_IsException(plain))
+      return false;
+    JSValue prototype = JS_IsObject(dict) ? JS_GetPrototype(ctx, dict) : JS_UNDEFINED;
+    JSValue plainPrototype = JS_GetPrototype(ctx, plain);
+    const bool valid = JS_IsObject(dict) && JS_GetClassID(dict) == JS_GetClassID(plain)
+                       && (JS_IsNull(prototype) || JS_IsStrictEqual(ctx, prototype, plainPrototype));
+    const bool exception = JS_IsException(prototype) || JS_IsException(plainPrototype);
+    JS_FreeValue(ctx, plainPrototype);
+    JS_FreeValue(ctx, prototype);
+    JS_FreeValue(ctx, plain);
+    if (exception)
+      return false;
+    if (!valid)
     {
-      // Compare to an ordinary object without consulting replaceable JS globals.
-      JSValue plain = JS_NewObject(ctx);
-      if (JS_IsException(plain))
-        return false;
-      JSValue prototype = JS_IsObject(dict) ? JS_GetPrototype(ctx, dict) : JS_UNDEFINED;
-      JSValue plainPrototype = JS_GetPrototype(ctx, plain);
-      const bool valid = JS_IsObject(dict) && JS_GetClassID(dict) == JS_GetClassID(plain)
-                         && (JS_IsNull(prototype) || JS_IsStrictEqual(ctx, prototype, plainPrototype));
-      const bool exception = JS_IsException(prototype) || JS_IsException(plainPrototype);
-      JS_FreeValue(ctx, plainPrototype);
-      JS_FreeValue(ctx, prototype);
-      JS_FreeValue(ctx, plain);
-      if (exception)
-        return false;
-      if (!valid)
-      {
-        JS_ThrowTypeError(ctx, "%s requires a plain object", label);
-        return false;
-      }
-      return true;
+      JS_ThrowTypeError(ctx, "%s requires a plain object", label);
+      return false;
     }
-  } // namespace
+    return true;
+  }
 
   template <typename Row, size_t N> const Row *findStyleName(const char *name, size_t length, const Row (&values)[N])
   {
@@ -1084,7 +1083,7 @@ namespace smirkycard
   bool readTextStyle(JSContext *ctx, JSValueConst dict, loka::app::TextStyle &out)
   {
     using namespace loka::app;
-    if (!requirePlainStyleObject(ctx, dict, "Text style"))
+    if (!requirePlainObject(ctx, dict, "Text style"))
       return false;
     JsOwnProperties names(ctx);
     if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
@@ -1180,7 +1179,7 @@ namespace smirkycard
   bool readBlockStyle(JSContext *ctx, JSValueConst dict, loka::app::BlockStyle &out)
   {
     using namespace loka::app;
-    if (!requirePlainStyleObject(ctx, dict, "Block style"))
+    if (!requirePlainObject(ctx, dict, "Block style"))
       return false;
     JsOwnProperties names(ctx);
     if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
@@ -1303,6 +1302,16 @@ namespace smirkycard
     }
     return new (std::nothrow) loka::app::EditText(seat->string);
   }
+  loka::app::scene::NodeDefinitionBase *JsCardNode::createScrollView()
+  {
+    JsScrollViewport *record = this->scrollViewports_.add();
+    if (!record)
+      return 0;
+    this->state(record->viewport, loka::core::Frame(0, 0, 0, 0));
+    if (!record->viewport.isValid())
+      return 0;
+    return new (std::nothrow) loka::app::ScrollView(record->viewport);
+  }
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerShow(JSContext *ctx, JSValueConst tree, int depth)
   {
     JSValue value = JS_GetPropertyStr(ctx, tree, "seat");
@@ -1346,7 +1355,33 @@ namespace smirkycard
       this->fail("JavaScript ImageView requires an own Image state seat.");
       return 0;
     }
-    return new (std::nothrow) loka::app::ImageView(loka::app::ImageView().image(seat->image.state()));
+    loka::app::ImageViewProps props;
+    props.image(seat->image.state());
+    JSValue width = JS_GetPropertyStr(ctx, tree, "width");
+    JSValue height = JS_GetPropertyStr(ctx, tree, "height");
+    JSValue fit = JS_GetPropertyStr(ctx, tree, "fit");
+    int32_t w = 0, h = 0, f = 0;
+    const bool hasSize = !JS_IsUndefined(width) || !JS_IsUndefined(height);
+    const bool hasFit = !JS_IsUndefined(fit);
+    const bool valid =
+        (!hasSize
+         || (integerNumber(ctx, width, w) && integerNumber(ctx, height, h) && w >= 1 && w <= 4096 && h >= 1
+             && h <= 4096))
+        && (!hasFit
+            || (integerNumber(ctx, fit, f) && f >= loka::app::IMAGE_FIT_CONTAIN && f <= loka::app::IMAGE_FIT_STRETCH));
+    JS_FreeValue(ctx, width);
+    JS_FreeValue(ctx, height);
+    JS_FreeValue(ctx, fit);
+    if (!valid)
+    {
+      this->fail("JavaScript ImageView has invalid options.");
+      return 0;
+    }
+    if (hasSize)
+      props.size(w, h);
+    if (hasFit)
+      props.attr(loka::app::ImageViewAttr().fit(static_cast<loka::app::ImageFit>(f)));
+    return new (std::nothrow) loka::app::ImageView(props);
   }
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerClickable(JSContext *ctx, JSValueConst tree, bool cell)
   {

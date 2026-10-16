@@ -187,6 +187,21 @@ only one array level is flattened. The child count must equal `rows * cols`
 children (N)`. Nested arrays are refused. Grid has its own child limit;
 Row/VStack remain limited to 16. See [the board example](../../docs/smirkycard/clickables.md#grids).
 
+`ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
+card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
+there is no JS viewport seat or viewport argument. `Card(child)` places exactly
+one tree in the native Card body using the default CardStyle; it has no style
+argument yet. Both refuse missing, extra, array, or non-tree children with
+TypeError and each counts one level toward the depth-eight tree limit.
+
+`ImageView(imageSeat)` retains the default image props. The optional second
+argument is a plain options object: `ImageView(imageSeat, {width: 120, height: 80,
+fit: 'contain'})`. Width and height must be supplied together as integers in
+1..4096; fit independently accepts `'contain'`, `'cover'`, or `'stretch'`.
+Unknown keys (including symbols), non-plain options, invalid dimensions, missing
+paired dimensions, and unknown fits throw TypeError when the tree is built.
+Validated options are copied into the frozen tree.
+
 Each card has two independent admission budgets, declared in
 [src/CardRecords.hpp](src/CardRecords.hpp): `kCardSeatBudget` (128 seats) and
 `kCardClickableBudget` (128 total Buttons plus Cells). Exceeding either shows
