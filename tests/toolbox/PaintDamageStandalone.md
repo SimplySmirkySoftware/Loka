@@ -11,6 +11,9 @@ byte-identical `LOG.TXT` from both builds (#1240).
 six arms: 153 PASS / 0 FAIL on the same rig, with a `LOG.TXT` byte-identical to
 the tracked log from the Multiversal build. The Card bands (#1364) add eighteen
 arms: 171 PASS / 0 FAIL on the same rig, byte-identical to the tracked log.
+The stencil painter (decoration rally 1, P2-2) adds the card matrix, ALPHA,
+ground, seam, scroll and timing arms: 408 PASS / 0 FAIL on the same rig, every
+`card-v1` line at zero differences, and identical normal and profile logs.
 Owns: Toolbox native paint-damage pins that need real QuickDraw and the
 Control Manager: exact versus whole-window delivery, presentation history,
 control and popup geometry, and busy-cursor borrows.
