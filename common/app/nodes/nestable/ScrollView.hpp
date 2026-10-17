@@ -42,8 +42,14 @@ namespace loka
         return result;
       }
 
-      int top() const { return this->top_; }
-      int bottom() const { return this->bottom_; }
+      int top() const
+      {
+        return this->top_;
+      }
+      int bottom() const
+      {
+        return this->bottom_;
+      }
 
       bool operator==(const ScrollViewContentInsets &other) const
       {
