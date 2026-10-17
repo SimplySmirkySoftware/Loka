@@ -32,6 +32,13 @@ short ToolboxScenePlatformController::layoutScrollView(
 {
   const loka::app::scene::Node::LayoutInputsCheckpoint checkpoint(*scrollView);
   const loka::app::scene::NodeDirtyFlags inputs = scrollView->takeLayoutInputs();
+  Rect port = Rect();
+  const bool hasPort = this->window_ && this->window_->queryPortRect(port);
+  const ToolboxScrollViewRect seat(
+      state.x, state.y, static_cast<int>(state.x) + state.width, static_cast<int>(state.y) + state.height);
+  const ToolboxScrollViewRect portEdges(port.left, port.top, port.right, port.bottom);
+  const ToolboxScrollViewEdges edges = ToolboxScrollViewFrameEdges(seat, portEdges, hasPort);
+  const int childWidth = ToolboxScrollViewChildWidth(seat, edges);
   loka::core::Managed<loka::app::layout::StackSpans> spans;
   for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
   {
@@ -39,10 +46,12 @@ short ToolboxScenePlatformController::layoutScrollView(
     if (binding.scrollView != scrollView)
       continue;
     spans = binding.spans;
-    if (spans.isValid() &&
-        (inputs != loka::app::scene::NODE_DIRTY_LAYOUT ||
-         ToolboxScrollViewChildWidth(binding.rect.right - binding.rect.left) !=
-             ToolboxScrollViewChildWidth(state.width)))
+    // A resized port can change contact while the stored seat stays fixed.
+    if (spans.isValid()
+        && (inputs != loka::app::scene::NODE_DIRTY_LAYOUT
+            || ToolboxScrollViewChildWidth(binding.rect, ToolboxScrollViewFrameEdges(binding.rect, port, hasPort))
+                   != childWidth
+            || binding.contentRect.right - binding.contentRect.left != childWidth))
       spans->invalidate();
     break;
   }
@@ -90,15 +99,26 @@ short ToolboxScenePlatformController::layoutScrollView(
   const bool widthKnown =
       loka::app::layout::queryContentOverflowWidth(scrollView, ToolboxLayoutMetrics::spacing(), this, contentWidth);
   // An unknown range must not scroll: otherwise content cannot be brought back.
-  const ToolboxScrollViewMetrics horizontal = ToolboxScrollViewResolveMetrics(
-      widthKnown ? contentWidth : 0, ToolboxScrollViewChildWidth(state.width), scrollView->requestedOrigin().x);
+  const ToolboxScrollViewMetrics horizontal =
+      ToolboxScrollViewResolveMetrics(widthKnown ? contentWidth : 0, childWidth, scrollView->requestedOrigin().x);
   const bool horizontalBar = horizontal.maximum > 0 && state.height > 0;
+  if (viewportRight + edges.right > SHRT_MAX || viewportBottom + edges.bottom > SHRT_MAX
+      || static_cast<int>(state.y) - edges.top < SHRT_MIN
+      || (horizontalBar && static_cast<int>(state.x) - edges.left < SHRT_MIN))
+  {
+    // Frame-sharing bars must fit QuickDraw's shorts just like the seat itself.
+    checkpoint.requeue();
+    if (spans.isValid())
+      spans->invalidate();
+    return 0;
+  }
   // The vertical bar always reserves width: horizontal range has no feedback from horizontalBar.
   // An X step revisits every row; the next pass recaptures the band.
   if (spans.isValid() && spans->valid() && spans->placedViewport().x != horizontal.clampedOffset)
     spans->invalidate();
 
-  const Rect contentRect = ToolboxScrollViewContentRect(viewportRect, horizontalBar);
+  const Rect contentRect =
+      ToolboxScrollViewContentRect(ToolboxScrollViewFrameRect(viewportRect, horizontalBar, edges), horizontalBar);
   const loka::core::Frame viewportClip(
       contentRect.left, contentRect.top, contentRect.right - contentRect.left, contentRect.bottom - contentRect.top);
   loka::app::scene::ProjectionParentScope childScope;
@@ -157,8 +177,7 @@ short ToolboxScenePlatformController::layoutScrollView(
 
     loka::app::scene::LayoutState childState = state;
     childState.height = static_cast<short>(contentRect.bottom - contentRect.top);
-    childState.width = static_cast<short>(
-        ToolboxScrollViewChildWidth(state.width));
+    childState.width = static_cast<short>(childWidth);
     const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::app::layout::StackGaps gaps(state.spacing);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(

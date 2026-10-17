@@ -35,26 +35,70 @@ struct ToolboxScrollViewMetrics
   int clampedOffset;
 };
 
+/** Completed frame contacts, derived only from an answered window port. */
+struct ToolboxScrollViewEdges
+{
+  ToolboxScrollViewEdges(bool l, bool t, bool r, bool b)
+      : left(l),
+        top(t),
+        right(r),
+        bottom(b)
+  {
+  }
+  const bool left;
+  const bool top;
+  const bool right;
+  const bool bottom;
+};
+
+template <typename RectT>
+inline ToolboxScrollViewEdges ToolboxScrollViewFrameEdges(const RectT &seat, const RectT &port, bool hasPort)
+{
+  return ToolboxScrollViewEdges(hasPort && seat.left == port.left,
+                                hasPort && seat.top == port.top,
+                                hasPort && seat.right == port.right,
+                                hasPort && seat.bottom == port.bottom);
+}
+
+/** Only a horizontal bar may occupy the window's bottom frame line. */
+template <typename RectT>
+inline RectT ToolboxScrollViewFrameRect(const RectT &seat, bool horizontalBar, const ToolboxScrollViewEdges &edges)
+{
+  RectT frame = seat;
+  frame.right += edges.right;
+  if (horizontalBar)
+    frame.bottom += edges.bottom;
+  return frame;
+}
+
 inline int ToolboxScrollViewChildWidth(int viewportWidth)
 {
   const int width = viewportWidth - loka::app::SCROLL_BAR_THICKNESS;
   return width > 0 ? width : 0;
 }
 
+/** Stores an edge computed in int into the rect's own coordinate type (short
+    for QuickDraw). Callers pass a value between the rect's existing edges. */
+template <typename CoordT> inline void ToolboxScrollViewStoreEdge(CoordT &edge, int value)
+{
+  edge = static_cast<CoordT>(value);
+}
+
 /** Bars exclude the bottom-right corner, which remains window ground. */
 template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT &seat, bool horizontalBar)
 {
   RectT content = seat;
-  content.right = content.left + ToolboxScrollViewChildWidth(seat.right - seat.left);
+  // The child width never exceeds the seat's width, so the new edge stays within the seat.
+  ToolboxScrollViewStoreEdge(content.right, content.left + ToolboxScrollViewChildWidth(seat.right - seat.left));
   if (horizontalBar)
-    content.bottom = content.top + ToolboxScrollViewChildWidth(seat.bottom - seat.top);
+    ToolboxScrollViewStoreEdge(content.bottom, content.top + ToolboxScrollViewChildWidth(seat.bottom - seat.top));
   return content;
 }
 
 /** Intersects a registration rect with the active viewport. Empty edges do
     not register: QuickDraw's right and bottom edges are exclusive. */
-template <typename RectT>
-inline bool ToolboxScrollViewIntersectHitRect(const RectT &rect, const RectT &viewport, RectT &out)
+template <typename RectT, typename ViewportT>
+inline bool ToolboxScrollViewIntersectHitRect(const RectT &rect, const ViewportT &viewport, RectT &out)
 {
   out.left = rect.left > viewport.left ? rect.left : viewport.left;
   out.top = rect.top > viewport.top ? rect.top : viewport.top;
@@ -64,30 +108,53 @@ inline bool ToolboxScrollViewIntersectHitRect(const RectT &rect, const RectT &vi
 }
 
 /** An empty size box means the window has none to answer (no native window yet). Edges are exclusive. */
-template <typename RectT> inline bool ToolboxScrollViewReachesSizeBox(const RectT &bar, const RectT &sizeBox)
+template <typename RectT, typename SizeBoxT>
+inline bool ToolboxScrollViewReachesSizeBox(const RectT &bar, const SizeBoxT &sizeBox)
 {
   RectT intersection;
   return ToolboxScrollViewIntersectHitRect(bar, sizeBox, intersection);
 }
 
-template <typename RectT>
-inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat, bool horizontalBar, const RectT &sizeBox)
+/** Child width and bar placement share the same frame expansion. */
+template <typename RectT> inline int ToolboxScrollViewChildWidth(const RectT &seat, const ToolboxScrollViewEdges &edges)
 {
-  RectT bar = ToolboxScrollViewContentRect(seat, horizontalBar);
+  const RectT frame = ToolboxScrollViewFrameRect(seat, false, edges);
+  return ToolboxScrollViewChildWidth(frame.right - frame.left);
+}
+
+template <typename RectT>
+inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat,
+                                              bool horizontalBar,
+                                              const RectT &sizeBox,
+                                              const ToolboxScrollViewEdges &edges)
+{
+  const RectT frame = ToolboxScrollViewFrameRect(seat, horizontalBar, edges);
+  RectT bar = ToolboxScrollViewContentRect(frame, horizontalBar);
   bar.left = bar.right;
-  bar.right = seat.right;
-  if (ToolboxScrollViewReachesSizeBox(bar, sizeBox))
-    bar.bottom = sizeBox.top > bar.top ? sizeBox.top : bar.top;
+  bar.right = frame.right;
+  bar.top = seat.top - edges.top;
+  if (!horizontalBar)
+    bar.bottom = seat.bottom + edges.bottom;
+  ToolboxScrollViewRect reach(bar.left, bar.top, bar.right, bar.bottom);
+  ++reach.bottom;
+  if (ToolboxScrollViewReachesSizeBox(reach, sizeBox))
+    bar.bottom = sizeBox.top + 1 > bar.top ? sizeBox.top + 1 : bar.top;
   return bar;
 }
 
-template <typename RectT> inline RectT ToolboxScrollViewHorizontalBarRect(const RectT &seat, const RectT &sizeBox)
+template <typename RectT>
+inline RectT
+ToolboxScrollViewHorizontalBarRect(const RectT &seat, const RectT &sizeBox, const ToolboxScrollViewEdges &edges)
 {
-  RectT bar = ToolboxScrollViewContentRect(seat, true);
+  const RectT frame = ToolboxScrollViewFrameRect(seat, true, edges);
+  RectT bar = ToolboxScrollViewContentRect(frame, true);
   bar.top = bar.bottom;
-  bar.bottom = seat.bottom;
-  if (ToolboxScrollViewReachesSizeBox(bar, sizeBox))
-    bar.right = sizeBox.left > bar.left ? sizeBox.left : bar.left;
+  bar.bottom = frame.bottom;
+  bar.left = seat.left - edges.left;
+  ToolboxScrollViewRect reach(bar.left, bar.top, bar.right, bar.bottom);
+  ++reach.right;
+  if (ToolboxScrollViewReachesSizeBox(reach, sizeBox))
+    bar.right = sizeBox.left + 1 > bar.left ? sizeBox.left + 1 : bar.left;
   return bar;
 }
 
