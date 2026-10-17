@@ -892,7 +892,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   // in composition order too; that part walks the projection tree once per
   // dirty delivery, like the ZStack check below.
   const bool compositionReplay = this->compositionReplay_.required()
-      || (HasImageViewNode(rootNode_) && ToolboxTreeHasKind(rootNode_, loka::app::scene::NODE_KIND_ZSTACK));
+                                 || (HasImageViewNode(rootNode_) && ToolboxTreeHasStackingContainer(rootNode_));
   if (!compositionReplay && hitLedger_.textHits_.empty() && hitLedger_.popupHits_.empty() && hitLedger_.cellHits_.empty()
       && buttonControls_.empty() && scrollBarLedger_.scrollBarControls_.empty() && editControls_.empty())
   {
@@ -919,7 +919,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
     dirtyIntersectsText = RectsIntersect(rect, hitLedger_.cellHits_[i].rect);
   for (size_t i = 0; i < hitLedger_.popupHits_.size() && !dirtyIntersectsText; ++i)
     dirtyIntersectsText = RectsIntersect(rect, hitLedger_.popupHits_[i].rect);
-  if (compositionReplay || (dirtyIntersectsText && ToolboxTreeHasKind(rootNode_, loka::app::scene::NODE_KIND_ZSTACK)))
+  if (compositionReplay || (dirtyIntersectsText && ToolboxTreeHasStackingContainer(rootNode_)))
   {
     ToolboxRenderDirtyInCompositionOrder(*this, rect);
     return;

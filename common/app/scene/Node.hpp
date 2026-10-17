@@ -188,7 +188,8 @@ namespace loka
         NODE_KIND_RIBBON_GROUP = 20,
         NODE_KIND_RIBBON_GROUP_EDGE = 21,
         NODE_KIND_CARD = 22,
-        NODE_KIND_CARD_BAND = 23
+        NODE_KIND_CARD_BAND = 23,
+        NODE_KIND_LAYER = 24
       };
 
       typedef unsigned short NodeTag;
@@ -258,6 +259,7 @@ namespace loka
     class RibbonGroupNode;
     class RibbonGroupEdgeNode;
     class ZStackNode;
+    class LayerNode;
     class GridNode;
     class CellNode;
     class StackNode;
@@ -635,6 +637,10 @@ namespace loka
           return 0;
         }
         virtual ::loka::app::ZStackNode *asZStackNode()
+        {
+          return 0;
+        }
+        virtual ::loka::app::LayerNode *asLayerNode()
         {
           return 0;
         }

@@ -9,6 +9,7 @@
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/Layer.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 
 namespace
@@ -246,6 +247,64 @@ void testNullLayoutZStackProducesFixedChildGeometry()
   assertGeometry(front, 10, 20, 80, 40);
   (void)resultY;
   assert(resultY == 33);
+}
+
+void testNullLayoutLayerSharesZStackSeat()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  // Compare the same nesting with both containers; no ScrollView participates.
+  for (int useLayer = 0; useLayer != 2; ++useLayer)
+  {
+    ZStackNode stack((ZStackProps()));
+    FixedLayoutProbeNode *back = new FixedLayoutProbeNode(31);
+    scene::Node *overlay = useLayer ? Layer().create() : ZStack().create();
+    scene::Node *box = Box().size(100, 20).create();
+    FixedLayoutProbeNode *boxContent = new FixedLayoutProbeNode(7);
+    FixedLayoutProbeNode *seat = new FixedLayoutProbeNode(13);
+    box->asNestable()->addChild(boxContent);
+    overlay->asNestable()->addChild(box);
+    overlay->asNestable()->addChild(seat);
+    stack.addChild(back);
+    stack.addChild(overlay);
+
+    LOKA_VERIFY(platform.projectLayoutForTesting(&stack, makeState(10, 20, 180, 60)) == 51);
+    assertGeometry(back, 10, 20, 180, 60);
+    assertGeometry(seat, 10, 20, 180, 60);
+    // The offer is full width; the fixed Box narrows its own content to 100.
+    assertGeometry(boxContent, 10, 20, 100, 20);
+    LOKA_VERIFY(platform.projectLayoutForTesting(overlay, makeState(10, 20, 180, 60)) == 40);
+  }
+}
+
+void testNullLayoutLayerStacksChildren()
+{
+  NullScenePlatformController platform;
+  loka::app::LayerNode layer((loka::app::LayerProps()));
+  FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
+  FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);
+  layer.addChild(back);
+  layer.addChild(front);
+
+  LOKA_VERIFY(platform.projectLayoutForTesting(&layer, makeState(10, 20, 80, 40)) == 33);
+  assertGeometry(back, 10, 20, 80, 40);
+  assertGeometry(front, 10, 20, 80, 40);
+}
+
+void testNullLayerIdentityAndPaintSkip()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  LayerNode layer((LayerProps()));
+  ZStackNode stack((ZStackProps()));
+  scene::Node *node = &layer;
+  LOKA_VERIFY(node->asLayerNode() == &layer);
+  LOKA_VERIFY(stack.asLayerNode() == 0);
+  LOKA_VERIFY(layer.asZStackNode() == 0);
+  LOKA_VERIFY(layer.kind() == scene::NODE_KIND_LAYER);
+  const scene::PaintQuery query = {platform.paintScope(), scene::PLACEMENT_ELIGIBLE};
+  scene::PaintAnswer answer = scene::PaintAnswer::nativeScheduled();
+  LOKA_VERIFY(!platform.queryPaintAnswer(&layer, 0, query, answer));
 }
 
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry()

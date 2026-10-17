@@ -1594,6 +1594,24 @@ VStack().gap(StandardWindowMargin())
 See [ScrollView design](ScrollViewDesign.md) for how
 scroll bars meet the window edge on each rail.
 
+### Stacking: ZStack and Layer
+
+A `Layer` is the unit of stacking inside a `ZStack`: it sits at its composition
+position (a later ZStack child is on top) and paints its own ground over its
+whole frame. In this PR only the node exists; rails adopt Layer in the following
+PRs, and until then a Layer renders as a transparent container that offers its
+seat to its children, exactly like a ZStack.
+
+Do not place layers over live controls: a Layer goes over non-interactive
+ground: the ScrollView inset gap or a modal dim. Its ground by kind is the
+window ground (`GroundForKind(NODE_KIND_LAYER) == SURFACE_GROUND_WINDOW`),
+while ZStack has transparent ground. An optional own drawing surface is
+reserved for a later page of the overlay contract.
+
+See [`Layer.hpp`](../common/app/nodes/nestable/Layer.hpp),
+[`SurfaceGround.hpp`](../common/app/style/SurfaceGround.hpp), and the stacking
+pins in [`NullLayoutTests.cpp`](../tests/NullLayoutTests.cpp).
+
 ### Fixed-Cell Layout
 
 `Canvas` places ordinary composition children in fixed cells, in declaration

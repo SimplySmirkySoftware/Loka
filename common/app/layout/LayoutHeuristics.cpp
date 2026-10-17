@@ -47,6 +47,7 @@ namespace loka
           return unknownKindPassesThrough(node) ? received : spacing.verticalGap();
         // Containers without a gap reset to the vertical default; a leaf's value is never read.
         case scene::NODE_KIND_ZSTACK:
+        case scene::NODE_KIND_LAYER:
         case scene::NODE_KIND_GRID:
         case scene::NODE_KIND_SCROLL_VIEW:
         case scene::NODE_KIND_CANVAS:
@@ -84,6 +85,7 @@ namespace loka
           break;
         case scene::NODE_KIND_BOX:
         case scene::NODE_KIND_ZSTACK:
+        case scene::NODE_KIND_LAYER:
         case scene::NODE_KIND_GRID:
         case scene::NODE_KIND_CELL:
         case scene::NODE_KIND_STACK:

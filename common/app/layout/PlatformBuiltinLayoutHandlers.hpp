@@ -8,6 +8,8 @@
 #include "app/layout/GridLayout.hpp"
 #include "app/layout/RowLayout.hpp"
 #include "app/layout/ZStackLayout.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/Layer.hpp"
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 
 namespace loka
@@ -95,12 +97,12 @@ namespace loka
         }
       };
 
-      class ZStackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+      template <typename NodeT> class ZStackPlatformLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
       {
       public:
         virtual const void *nodeTypeKey() const
         {
-          return loka::app::scene::NodeTypeToken<loka::app::ZStackNode>();
+          return loka::app::scene::NodeTypeToken<NodeT>();
         }
 
         virtual int layoutNode(loka::app::scene::Node *node,
@@ -109,7 +111,7 @@ namespace loka
                                const loka::app::layout::LazyWindow * = 0,
                                loka::app::layout::StackSpans * = 0)
         {
-          loka::app::ZStackNode *stack = node ? node->asZStackNode() : 0;
+          loka::app::scene::INestable *stack = node ? node->asNestable() : 0;
           if (!stack || !traversal)
           {
             return state.y;
@@ -211,7 +213,8 @@ namespace loka
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::CardNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
-        registry.registerHandler(new ZStackPlatformLayoutHandler());
+        registry.registerHandler(new ZStackPlatformLayoutHandler<loka::app::ZStackNode>());
+        registry.registerHandler(new ZStackPlatformLayoutHandler<loka::app::LayerNode>());
         if (rowMetrics)
         {
           registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, spacing));

@@ -168,6 +168,7 @@ namespace
       case NODE_KIND_CARD:
       case NODE_KIND_RIBBON_GROUP:
       case NODE_KIND_ZSTACK:
+      case NODE_KIND_LAYER:
       case NODE_KIND_GRID:
       case NODE_KIND_STACK:
       case NODE_KIND_CANVAS:
@@ -1589,10 +1590,10 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     return LayoutNodeResult(state.width, resultY);
   }
 
-  if (loka::app::ZStackNode *stack = node->asZStackNode())
+  if (node->asZStackNode() || node->asLayerNode())
   {
     int maxY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(stack);
+    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(node);
     if (handler)
     {
       loka::app::scene::LayoutState handlerState;
@@ -1601,12 +1602,12 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
         return LayoutNodeResult(state.width, state.y);
       }
       loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
-      maxY = handler->layoutNode(stack, handlerState, &traversal);
+      maxY = handler->layoutNode(node, handlerState, &traversal);
     }
     else
     {
       maxY = loka::app::layout::computeZStackLayoutResultY(
-          stack, state, this, &Win32ScenePlatformController::layoutContainerChild);
+          node->asNestable(), state, this, &Win32ScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, maxY);
   }

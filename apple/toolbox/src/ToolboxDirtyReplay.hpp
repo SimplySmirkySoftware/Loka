@@ -6,13 +6,13 @@
 
 /** Composition-order fallback for drawers without hit-ledger replay. Walks
     the current projection tree once per dirty delivery, without retained rows. */
-inline bool ToolboxTreeHasKind(loka::app::scene::Node *node, loka::app::scene::NodeKind kind)
+inline bool ToolboxTreeHasStackingContainer(loka::app::scene::Node *node)
 {
   if (!node)
   {
     return false;
   }
-  if (node->kind() == kind)
+  if (node->kind() == loka::app::scene::NODE_KIND_ZSTACK || node->kind() == loka::app::scene::NODE_KIND_LAYER)
   {
     return true;
   }
@@ -21,7 +21,7 @@ inline bool ToolboxTreeHasKind(loka::app::scene::Node *node, loka::app::scene::N
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
-      if (ToolboxTreeHasKind(child, kind))
+      if (ToolboxTreeHasStackingContainer(child))
       {
         return true;
       }

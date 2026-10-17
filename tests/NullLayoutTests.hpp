@@ -10,6 +10,9 @@ void testNullLayoutFixedBoxOwnsDeclaredExtent();
 void testNullLayoutGridProducesFixedChildGeometry();
 void testNullLayoutGridReturnedHeight();
 void testNullLayoutZStackProducesFixedChildGeometry();
+void testNullLayoutLayerSharesZStackSeat();
+void testNullLayoutLayerStacksChildren();
+void testNullLayerIdentityAndPaintSkip();
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry();
 void testNullLayoutOnChangeUsesRegisteredTraversal();
 

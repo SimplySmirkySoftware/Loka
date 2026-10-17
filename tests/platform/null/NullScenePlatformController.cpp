@@ -290,6 +290,7 @@ namespace
     case NODE_KIND_CARD:
     case NODE_KIND_RIBBON_GROUP:
     case NODE_KIND_ZSTACK:
+    case NODE_KIND_LAYER:
     case NODE_KIND_GRID:
     case NODE_KIND_STACK:
     case NODE_KIND_CANVAS:

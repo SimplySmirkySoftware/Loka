@@ -37,7 +37,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
                                loka::app::layout::StackSpans *spans = 0);
 
 /** Applies Toolbox ZStack layout through the supplied traversal. */
-int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
+int ComputeToolboxZStackLayout(loka::app::scene::INestable *stack,
                                const loka::app::scene::LayoutState &state,
                                loka::app::scene::IPlatformLayoutTraversal *traversal);
 

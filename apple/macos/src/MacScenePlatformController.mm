@@ -959,10 +959,10 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
     return LayoutNodeResult(state.width, resultY);
   }
 
-  if (loka::app::ZStackNode *stack = node->asZStackNode())
+  if (node->asZStackNode() || node->asLayerNode())
   {
     int maxY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(stack);
+    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(node);
     if (handler)
     {
       loka::app::scene::LayoutState handlerState;
@@ -971,12 +971,12 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
         return LayoutNodeResult(state.width, state.y);
       }
       loka::app::scene::MacPlatformLayoutTraversal traversal(this);
-      maxY = handler->layoutNode(stack, handlerState, &traversal);
+      maxY = handler->layoutNode(node, handlerState, &traversal);
     }
     else
     {
       maxY = loka::app::layout::computeZStackLayoutResultY(
-          stack, state, this, &MacScenePlatformController::layoutContainerChild);
+          node->asNestable(), state, this, &MacScenePlatformController::layoutContainerChild);
     }
     return LayoutNodeResult(state.width, maxY);
   }

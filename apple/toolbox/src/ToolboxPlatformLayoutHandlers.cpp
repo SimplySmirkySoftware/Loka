@@ -7,6 +7,7 @@
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/Layer.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/BoxLayout.hpp"
 #include "app/layout/FramedLayout.hpp"
@@ -117,12 +118,12 @@ namespace
     }
   };
 
-  class ToolboxZStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
+  template <typename NodeT> class ToolboxZStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
   {
   public:
     virtual const void *nodeTypeKey() const
     {
-      return loka::app::scene::NodeTypeToken<loka::app::ZStackNode>();
+      return loka::app::scene::NodeTypeToken<NodeT>();
     }
 
     virtual int layoutNode(loka::app::scene::Node *node,
@@ -131,7 +132,7 @@ namespace
                                const loka::app::layout::LazyWindow * = 0,
                                loka::app::layout::StackSpans * = 0)
     {
-      return ComputeToolboxZStackLayout(node ? node->asZStackNode() : 0, state, traversal);
+      return ComputeToolboxZStackLayout(node ? node->asNestable() : 0, state, traversal);
     }
   };
 
@@ -296,7 +297,7 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
   }
 }
 
-int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
+int ComputeToolboxZStackLayout(loka::app::scene::INestable *stack,
                                const loka::app::scene::LayoutState &state,
                                loka::app::scene::IPlatformLayoutTraversal *traversal)
 {
@@ -307,22 +308,19 @@ int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
 
   short maxWidth = 0;
   short maxY = state.y;
-  if (loka::app::scene::INestable *nestable = stack->asNestable())
+  loka::dsl::CompositionCursor<loka::app::scene::Node> it(stack->childrenHead(), stack->childrenCount());
+  for (loka::app::scene::Node *child = it.next(); child; child = it.next())
   {
-    loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-    for (loka::app::scene::Node *child = it.next(); child; child = it.next())
+    loka::app::scene::LayoutState childState = state;
+    const int width = DispatchTraversalLayoutChild(traversal, child, childState);
+    if (width > maxWidth)
     {
-      loka::app::scene::LayoutState childState = state;
-      const int width = DispatchTraversalLayoutChild(traversal, child, childState);
-      if (width > maxWidth)
-      {
-        maxWidth = static_cast<short>(width);
-      }
-      const short childResultY = traversal->layoutResultY();
-      if (childResultY > maxY)
-      {
-        maxY = childResultY;
-      }
+      maxWidth = static_cast<short>(width);
+    }
+    const short childResultY = traversal->layoutResultY();
+    if (childResultY > maxY)
+    {
+      maxY = childResultY;
     }
   }
   traversal->setLayoutResultY(maxY);
@@ -594,7 +592,8 @@ bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandl
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::RibbonGroupNode>()) && ok;
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::CardNode>()) && ok;
-  ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
+  ok = registry.registerHandler(new ToolboxZStackLayoutHandler<loka::app::ZStackNode>()) && ok;
+  ok = registry.registerHandler(new ToolboxZStackLayoutHandler<loka::app::LayerNode>()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;
   return ok;

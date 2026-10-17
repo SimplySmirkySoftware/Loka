@@ -286,15 +286,16 @@ namespace
       return width;
     }
     case loka::app::scene::NODE_KIND_ZSTACK:
+    case loka::app::scene::NODE_KIND_LAYER:
     {
-      loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
+      loka::app::scene::INestable *stack = node->asNestable();
       short maxWidth = 0;
       bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
       {
         ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
-            *controller->layoutHandlerRegistry(), *stack, state, traversal, maxWidth);
+        usedHandler =
+            ApplyToolboxPlatformLayoutHandler(*controller->layoutHandlerRegistry(), *node, state, traversal, maxWidth);
       }
       if (!usedHandler)
       {
@@ -486,6 +487,7 @@ namespace
     case loka::app::scene::NODE_KIND_UNKNOWN:
     case loka::app::scene::NODE_KIND_BOX:
     case loka::app::scene::NODE_KIND_ZSTACK:
+    case loka::app::scene::NODE_KIND_LAYER:
     case loka::app::scene::NODE_KIND_GRID:
     case loka::app::scene::NODE_KIND_CANVAS:
     case loka::app::scene::NODE_KIND_CARD:

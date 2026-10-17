@@ -9,6 +9,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/nestable/Layer.hpp"
 #include "app/nodes/ImageView.hpp"
 #include <cstdio>
 #include <cstring>
@@ -265,9 +266,9 @@ namespace
     LOKA_VERIFY(state.y == baseline.y);
   }
 
-  void zStackPin(ToolboxScenePlatformController &controller, bool handler)
+  template <typename NodeT, typename PropsT> void zStackPin(ToolboxScenePlatformController &controller, bool handler)
   {
-    ZStackNode stack((ZStackProps()));
+    NodeT stack((PropsT()));
     Probe *a = new Probe(7);
     Probe *b = new Probe(11);
     stack.addChild(a);
@@ -498,7 +499,8 @@ int main(int argc, char **argv)
   }
   if (std::strcmp(mode, "zstack") == 0)
   {
-    zStackPin(controller, handler);
+    zStackPin<ZStackNode, ZStackProps>(controller, handler);
+    zStackPin<LayerNode, LayerProps>(controller, handler);
     return 0;
   }
   if (argc == 4)
