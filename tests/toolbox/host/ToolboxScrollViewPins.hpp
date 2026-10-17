@@ -361,8 +361,8 @@ namespace
       ScrollFixture f(0);
       ProjectionParentScope scope(0, SHRT_MIN, 0, loka::core::Frame(0, 0, 100, 34));
       loka::app::scene::ProjectionMeasurementChannel measurement;
-      scope.channel = &measurement;
-      ProjectionParentScopeGuard guard(f.controller.projectionParentScopes_, scope);
+
+      ProjectionViewportScopeGuard guard(f.controller.projectionParentScopes_, scope, measurement);
       LOKA_VERIFY(guard.isActive());
       LayoutState state = Seat(100);
       state.x = 0;

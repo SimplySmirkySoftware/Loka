@@ -10,4 +10,10 @@ void testWin32ZStackUnitCreationRefusalLaysOutNothing();
 void testWin32ScrollViewRefusedInsideUnit();
 void testWin32ZStackUnitForwardsWheelToViewport();
 
+void testWin32ZStackNestedInUnitLaysOutNothing();
+void testWin32ScrollViewHandlerChildRefusalBlocksCommit();
+void testWin32ZStackGroundRefusalStopsUpperChildren();
+void testWin32ZStackFirstPassRefusalKeepsUnitEmpty();
+void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick();
+
 #endif

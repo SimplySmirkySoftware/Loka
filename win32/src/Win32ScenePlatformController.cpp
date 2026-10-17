@@ -1344,9 +1344,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionMeasurementChannel measurement;
-    childScope.channel = &measurement;
-    loka::app::scene::ProjectionParentScopeGuard scopeGuard(
-        this->projectionParentScopes_, childScope);
+
+    loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope, measurement);
     if (!scopeGuard.isActive())
     {
       return LayoutNodeResult(state.width, state.y);
@@ -1586,7 +1585,10 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     // Deliberate twin of common/app/layout/ZStackLayout.hpp: every child
     // receives the full seat and the result is the maximum child bottom.
     // Native units implement docs/ProgrammingGuide.en.md#stacking-zstack.
-    // One composition walk and one own-unit ordering walk per layout pass.
+    // One composition walk; at most two own-unit ordering walks per layout pass.
+    // A nested ZStack is refused as a whole before even its ground projects.
+    if (this->projectionParentScopes_.insideUnit())
+      return LayoutNodeResult(state.width, state.y);
     int maxY = state.y;
     Win32ZStackContext *ctx = static_cast<Win32ZStackContext *>(stack->getContext());
     Win32ZStackContext::Unit **cursor = ctx ? ctx->unitsBegin() : 0;
@@ -1596,7 +1598,11 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     {
       int childY = state.y;
       if (index == 0)
+      {
         childY = layoutContainerChild(this, child, state);
+        if (this->refuseNarrowingInScrollScope(childY))
+          break;
+      }
       else
       {
         if (this->projectionParentScopes_.current().hasShortRangeRefusal())
@@ -1613,7 +1619,8 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
         loka::app::scene::LayoutState projected;
         if (!unit || !this->narrowLayoutState(state, projected, true))
           continue;
-        const loka::core::Frame seat(projected.x, projected.y, projected.width, projected.height);
+        // Creation cannot expose a refused or not-yet-measured child.
+        const loka::core::Frame seat(projected.x, projected.y, projected.width, 0);
         if (!unit->ensure(this->projectionParentHwnd(), this->displayScale_.projectFrame(seat)))
           continue;
         loka::app::scene::ProjectionParentScope unitFrame;
@@ -1626,7 +1633,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
                                         unitFrame))
           continue;
         {
-          loka::app::scene::ProjectionParentScopeGuard unitGuard(this->projectionParentScopes_, unitFrame, false);
+          loka::app::scene::ProjectionUnitScopeGuard unitGuard(this->projectionParentScopes_, unitFrame);
           if (!unitGuard.isActive())
             continue; // Never parent the child's HWNDs flat on refusal.
           childY = layoutContainerChild(this, child, state);
@@ -1639,6 +1646,9 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
       if (childY > maxY)
         maxY = childY;
     }
+    // Refused passes may stop early; only a completed walk proves the tail.
+    if (ctx && index == stack->childrenCount())
+      assert(!*cursor && "ZStack composition children must remain fixed");
     if (ctx)
       ctx->orderUnits();
     return LayoutNodeResult(state.width, maxY);

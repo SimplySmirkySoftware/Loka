@@ -1594,6 +1594,22 @@ VStack().gap(StandardWindowMargin())
 See [ScrollView design](ScrollViewDesign.md) for how
 scroll bars meet the window edge on each rail.
 
+### Stacking: ZStack
+
+A ZStack's first child is the ground (live content). Each later child forms a
+full-width opaque band: the seat's width and that child's laid-out height. Units
+sit above the ground and earlier units in composition order, with one native
+window/view per unit. `ZStack(scrollView, Row(toolbar))` keeps the toolbar subtree
+together. Place units only over non-reactive regions, such as a ScrollView's
+inset gap or modal dimming; the framework does not check placement. A transparent
+upper child is unsupported. Tab visits a unit before every earlier sibling under
+the same native parent, including siblings outside the ZStack. In v1 a ScrollView
+or nested ZStack inside an upper child lays out nothing.
+
+Win32 implements opaque units here. macOS and Toolbox follow in page 2a PR 3 and
+PR 4 respectively; until those changes, their ZStack children are laid out flat
+without opaque units.
+
 ### Fixed-Cell Layout
 
 `Canvas` places ordinary composition children in fixed cells, in declaration
@@ -1940,14 +1956,3 @@ Avoid black boxes.
 
 If application code reads naturally while ownership and lifecycle remain
 inspectable, it is moving in the right direction for Loka.
-
-### Stacking: ZStack
-
-A ZStack's first child is the ground (live content). Each later child is an
-opaque unit above the ground and all earlier units, in composition order, with
-one native window/view per unit. For example, `ZStack(scrollView, Row(toolbar))`
-keeps the toolbar subtree together. Place units only over non-reactive regions,
-such as a ScrollView's inset gap or modal dimming; the framework does not check
-this placement. Tab visits units before the ground. A transparent upper child
-is unsupported. Win32 implements this contract here; Toolbox and macOS adopt
-the same rule in their own PRs.

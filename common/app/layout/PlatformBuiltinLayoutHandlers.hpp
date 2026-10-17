@@ -202,16 +202,15 @@ namespace loka
         GridLayoutMetrics metrics_;
       };
 
-      inline void RegisterBuiltinPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry,
-                                                        const RowLayoutMetrics *rowMetrics,
-                                                        const GridLayoutMetrics *gridMetrics,
-                                                        const RailSpacing &spacing)
+      inline void RegisterBuiltinNonZStackLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry,
+                                                         const RowLayoutMetrics *rowMetrics,
+                                                         const GridLayoutMetrics *gridMetrics,
+                                                         const RailSpacing &spacing)
       {
         registry.registerHandler(new BoxPlatformLayoutHandler(spacing));
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::CardNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
-        registry.registerHandler(new ZStackPlatformLayoutHandler());
         if (rowMetrics)
         {
           registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, spacing));
@@ -220,6 +219,14 @@ namespace loka
         {
           registry.registerHandler(new GridPlatformLayoutHandler(*gridMetrics));
         }
+      }
+      inline void RegisterBuiltinPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry,
+                                                        const RowLayoutMetrics *rowMetrics,
+                                                        const GridLayoutMetrics *gridMetrics,
+                                                        const RailSpacing &spacing)
+      {
+        RegisterBuiltinNonZStackLayoutHandlers(registry, rowMetrics, gridMetrics, spacing);
+        registry.registerHandler(new ZStackPlatformLayoutHandler());
       }
     } // namespace layout
   } // namespace app

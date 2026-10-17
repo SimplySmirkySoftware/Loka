@@ -71,10 +71,20 @@ Win32ZStackContext::Unit *Win32ZStackContext::unitFor(unsigned index, Unit **&cu
 
 void Win32ZStackContext::orderUnits()
 {
+  HWND previous = 0;
+  bool ordered = true;
   for (Unit *unit = this->units_; unit; unit = unit->next)
   {
-    unit->raise();
+    if (!unit->hwnd())
+      continue;
+    if (previous && GetWindow(previous, GW_HWNDPREV) != unit->hwnd())
+      ordered = false;
+    previous = unit->hwnd();
   }
+  if (ordered && (!previous || !GetWindow(previous, GW_HWNDPREV)))
+    return;
+  for (Unit *unit = this->units_; unit; unit = unit->next)
+    unit->raise();
 }
 
 void Win32ZStackContext::retireUnits()
@@ -85,12 +95,11 @@ void Win32ZStackContext::retireUnits()
 
 void Win32ZStackContext::onFactChanged(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact next)
 {
+  for (Unit *unit = this->units_; unit; unit = unit->next)
+    if (unit->hwnd())
+      ShowWindow(unit->hwnd(), next == loka::app::scene::NODE_FACT_ATTACHED ? SW_SHOW : SW_HIDE);
   if (next == loka::app::scene::NODE_FACT_RETIRED)
     this->retireUnits();
-  else
-    for (Unit *unit = this->units_; unit; unit = unit->next)
-      if (unit->hwnd())
-        ShowWindow(unit->hwnd(), next == loka::app::scene::NODE_FACT_ATTACHED ? SW_SHOW : SW_HIDE);
 }
 
 void Win32ZStackContext::Unit::EnsureClassRegistered()

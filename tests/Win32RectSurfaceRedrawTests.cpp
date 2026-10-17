@@ -695,6 +695,9 @@ namespace
       this->admission.flush();
       LOKA_VERIFY(this->window.hwnd() != NULL);
       ShowWindow(this->window.hwnd(), SW_HIDE);
+      // Pixel fixtures must not depend on an earlier test's desktop z order.
+      LOKA_VERIFY(
+          SetWindowPos(this->window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
     }
   };
 
@@ -707,12 +710,16 @@ namespace
 
   COLORREF windowPixel(HWND hwnd, int x, int y)
   {
-    // Read existing pixels; do not issue PrintWindow or an extra invalidation
-    // that could hide a missing parent repaint in the change path.
-    HDC dc = GetDC(hwnd);
+    // Observe the displayed root surface, as production capture does. A child
+    // DC can exclude sibling-covered pixels under WS_CLIPSIBLINGS. No repaint
+    // or PrintWindow here: either would hide a missing invalidation.
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    POINT point = {x, y};
+    MapWindowPoints(hwnd, root, &point, 1);
+    HDC dc = GetDC(root);
     LOKA_VERIFY(dc != NULL);
-    const COLORREF pixel = GetPixel(dc, x, y);
-    ReleaseDC(hwnd, dc);
+    const COLORREF pixel = GetPixel(dc, point.x, point.y);
+    ReleaseDC(root, dc);
     LOKA_VERIFY(pixel != CLR_INVALID);
     return pixel;
   }
@@ -1544,12 +1551,15 @@ static void checkCardOverPatternedImage()
   ImageViewNode imageNode(props);
   Win32ImageViewContext imageContext(&controller, root, 21, 31, 100, 19, &imageNode);
   CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));
-  Win32CardBandContext context(&controller, root, 21, 31, 100, 19, &band);
+  // Patterned ground belongs to the parent, never to an overlapping sibling.
+  Win32CardBandContext context(&controller, imageContext.hwnd(), 0, 0, 100, 19, &band);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   context.onPropsApplied();
   flushTransparentPaint(controller, root);
-  const loka::core::Frame frame(21, 31, 100, 19);
+  const loka::core::Frame frame(0, 0, 100, 19);
   const loka::core::Frame body = CardBodyInBand(frame, band.props);
+  POINT phaseOrigin = {0, 0};
+  MapWindowPoints(context.hwnd(), root, &phaseOrigin, 1);
   std::vector<COLORREF> first;
   for (int y = 0; y < 19; ++y)
     for (int x = 0; x < 100; ++x)
@@ -1559,7 +1569,7 @@ static void checkCardOverPatternedImage()
       if (y >= 3)
       {
         const bool dot = CardShadowStencilInk(
-            CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y), frame.x + x, frame.y + y);
+            CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y), phaseOrigin.x + x, phaseOrigin.y + y);
         LOKA_VERIFY(pixel == (dot ? RGB(0, 0, 0) : ground[y * 100 + x]));
       }
     }

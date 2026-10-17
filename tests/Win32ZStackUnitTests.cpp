@@ -14,6 +14,7 @@
 #include "testing/scene/SceneTestFlow.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/ImageView.hpp"
+#include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -382,8 +383,11 @@ void testWin32ZStackUnitForwardsWheelToViewport()
   LOKA_VERIFY(ClientToScreen(unit, &point));
   HWND hit = WindowFromPoint(point);
   LOKA_VERIFY(hit == unit || GetParent(hit) == unit);
-  LOKA_VERIFY(Win32ScrollViewContext::forwardMouseWheel(
-      f.root(), WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), MAKELPARAM(point.x, point.y)));
+  HWND button = childOfClass(unit, L"Button");
+  LOKA_VERIFY(button);
+  // The control's default handling must reach the unit proc, whose default
+  // handling in turn propagates to the viewport. Do not bypass it via lookup.
+  SendMessageW(button, WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), MAKELPARAM(point.x, point.y));
   UINT lines = 3;
   LOKA_VERIFY(SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0));
   const SCROLLINFO info = metrics(viewport);
@@ -392,4 +396,138 @@ void testWin32ZStackUnitForwardsWheelToViewport()
                         : lines > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
                                                                   : lines * 16;
   LOKA_VERIFY(origin.get().y == (distance > static_cast<UINT>(maximum) ? maximum : static_cast<int>(distance)));
+}
+
+void testWin32ZStackNestedInUnitLaysOutNothing()
+{
+  Fixture f;
+  ZStackNode *outer = stackWithGround(f);
+  ZStackNode *inner = new ZStackNode((ZStackProps()));
+  RectSurfaceNode *innerGround = new RectSurfaceNode(RectSurfaceProps().size(120, 80));
+  inner->addChild(innerGround);
+  StackNode *buttons = buttonColumn("Nested");
+  inner->addChild(buttons);
+  outer->addChild(inner);
+  f.layout();
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(unit);
+  const RECT rect = rectInParent(unit);
+  LOKA_VERIFY(rect.bottom == rect.top);
+  LOKA_VERIFY(!GetWindow(unit, GW_CHILD));
+  LOKA_VERIFY(!inner->getContext() && !innerGround->getContext());
+  LOKA_VERIFY(!buttons->childrenHead()->getContext());
+}
+
+void testWin32ScrollViewHandlerChildRefusalBlocksCommit()
+{
+  loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 1000, 0, 0));
+  NodeState<loka::core::Frame> origin(&storage, 0);
+  Fixture f;
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(origin));
+  f.tree = scroll;
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  scroll->addChild(column);
+  BoxNode *box = new BoxNode(BoxProps().setSize(180, 400));
+  column->addChild(box);
+  column->addChild(new TextNode(TextProps("After")));
+  f.layout(300, 140); // First pass publishes the exposed clamp.
+  const int clamped = origin.get().y;
+  LOKA_VERIFY(clamped > 0 && clamped < 1000);
+  f.layout(300, 140); // Next pass consumes that origin before the refusal.
+  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  const SCROLLINFO before = metrics(viewport);
+  box->props.setSize(180, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset + 1));
+  f.layout(300, 140);
+  const SCROLLINFO after = metrics(viewport);
+  LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
+  LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
+  LOKA_VERIFY(origin.get().y == clamped);
+}
+
+void testWin32ZStackGroundRefusalStopsUpperChildren()
+{
+  Fixture f;
+  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  f.tree = scroll;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  scroll->addChild(stack);
+  // The surface returns an int bottom beyond short range without a container
+  // handler. The ZStack's ground traversal must propagate that refusal itself.
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(180, SHRT_MAX)));
+  StackNode *buttons = buttonColumn("Must not materialize");
+  stack->addChild(buttons);
+  f.layout(300, 140);
+  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  LOKA_VERIFY(viewport);
+  LOKA_VERIFY(childOfClass(viewport, L"LOKA_RECT_SURFACE"));
+  LOKA_VERIFY(!childOfClass(viewport, L"LOKA_STACK_UNIT"));
+  LOKA_VERIFY(!buttons->childrenHead()->getContext());
+}
+
+void testWin32ZStackFirstPassRefusalKeepsUnitEmpty()
+{
+  Fixture f;
+  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  f.tree = scroll;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  scroll->addChild(stack);
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(180, 80)));
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  column->addChild(new BoxNode(BoxProps().setSize(180, SHRT_MAX)));
+  column->addChild(new TextNode(TextProps("Must not materialize")));
+  stack->addChild(column);
+  f.layout(300, 140);
+  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND unit = childOfClass(viewport, L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(unit);
+  const RECT rect = rectInParent(unit);
+  LOKA_VERIFY(rect.bottom == rect.top);
+  LOKA_VERIFY(!GetWindow(unit, GW_CHILD));
+}
+
+void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
+{
+  loka::core::PushStateTracker tracker;
+  RectSurfaceModel ink;
+  ink.rectCount = 1;
+  ink.rects[0] = RectSprite(0, 0, 200, 160);
+  loka::core::MutableState<RectSurfaceModel> model(ink);
+  tracker.addState(&model);
+  Fixture f;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  f.tree = stack;
+  ScrollViewNode *scroll = new ScrollViewNode((ScrollViewProps()));
+  scroll->addChild(new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 160)));
+  stack->addChild(scroll);
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  // Fixed narrow content leaves a bare part of the full-width opaque band.
+  BoxNode *box = new BoxNode(BoxProps().setSize(40, 80));
+  box->addChild(new ButtonNode(ButtonProps().text("B")));
+  column->addChild(box);
+  stack->addChild(column);
+  f.layout();
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  HWND button = native(box->childrenHead());
+  LOKA_VERIFY(unit && GetParent(button) == unit);
+  const RECT rect = rectInParent(unit);
+  ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+  LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+  flushPaint(f);
+  LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
+  for (int phase = 0; phase < 2; ++phase)
+  {
+    Access::resetRedrawStats(f.controller);
+    {
+      loka::core::StateTrackerGuard guard(&tracker);
+      model.set(phase == 0 ? RectSurfaceModel() : ink);
+    }
+    LOKA_VERIFY(Access::queuedRectInvalidates(f.controller) > 0);
+    LOKA_VERIFY(!Access::lastOnChangeRequiredLayout(f.controller));
+    flushPaint(f);
+    LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
+    const POINT point = {2, 2};
+    LOKA_VERIFY(ChildWindowFromPointEx(unit, point, CWP_SKIPINVISIBLE) == button);
+    const POINT rootPoint = {rect.left + 2, rect.top + 2};
+    LOKA_VERIFY(ChildWindowFromPointEx(f.root(), rootPoint, CWP_SKIPINVISIBLE) == unit);
+  }
 }

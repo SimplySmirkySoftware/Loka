@@ -730,9 +730,8 @@ MacScenePlatformController::layoutScrollViewNode(
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionMeasurementChannel measurement;
-    childScope.channel = &measurement;
-    loka::app::scene::ProjectionParentScopeGuard scopeGuard(
-        this->projectionParentScopes_, childScope);
+
+    loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope, measurement);
     if (!scopeGuard.isActive())
     {
       return LayoutNodeResult(state.width, state.y);

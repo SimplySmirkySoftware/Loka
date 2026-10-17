@@ -178,7 +178,8 @@ namespace loka
         }
       };
 
-      /** Allocation-free LIFO stack. V1 admits one viewport followed by one unit.
+      /** Allocation-free LIFO stack. V1 admits root -> viewport -> unit or
+          root -> unit; a viewport is admitted only directly under the root.
           Admission is always-on; no new walk, one borrowed channel pointer per frame. */
       class ProjectionParentScopeStack
       {
@@ -212,27 +213,30 @@ namespace loka
           return true;
         }
 
-        bool push(const ProjectionParentScope &scope, bool ownsChannel = true)
+        bool pushViewport(const ProjectionParentScope &scope, ProjectionMeasurementChannel &measurement)
         {
-          if (this->activeDepth_ >= MAX_ACTIVE_SCOPES)
-          {
+          if (this->activeDepth_ != 0)
             return false;
-          }
-          if (ownsChannel)
-          {
-            if (!scope.channel || this->current().channel)
-              return false;
-          }
-          else
-          {
-            // Equal adjacent channels identify a unit, including a root unit
-            // whose inherited channel is null. No separate kind can drift.
-            if (scope.channel != this->current().channel
-                || (this->activeDepth_ && this->current().channel == this->frames_[this->activeDepth_ - 1].channel))
-              return false;
-          }
-          ++this->activeDepth_;
-          this->frames_[this->activeDepth_] = scope;
+          this->frames_[++this->activeDepth_] = scope;
+          this->current().channel = &measurement;
+          return true;
+        }
+
+        /** Equal adjacent channels identify a unit only for the closed set
+            {root, viewport, unit}. A future channel-inheriting frame kind
+            would also read as a unit and must revisit this rule. */
+        bool insideUnit() const
+        {
+          return this->activeDepth_ && this->current().channel == this->frames_[this->activeDepth_ - 1].channel;
+        }
+
+        bool pushUnit(const ProjectionParentScope &scope)
+        {
+          if (this->activeDepth_ >= MAX_ACTIVE_SCOPES || this->insideUnit())
+            return false;
+          ProjectionParentScope child = scope;
+          child.channel = this->current().channel;
+          this->frames_[++this->activeDepth_] = child;
           return true;
         }
 
@@ -273,14 +277,13 @@ namespace loka
       /** Pairs one successful push with its pop on every return path. */
       class ProjectionParentScopeGuard
       {
-      public:
-        ProjectionParentScopeGuard(ProjectionParentScopeStack &stack,
-                                   const ProjectionParentScope &scope,
-                                   bool ownsChannel = true)
-            : stack_(stack.push(scope, ownsChannel) ? &stack : 0)
+      protected:
+        explicit ProjectionParentScopeGuard(ProjectionParentScopeStack *stack)
+            : stack_(stack)
         {
         }
 
+      public:
         ~ProjectionParentScopeGuard()
         {
           if (this->stack_)
@@ -301,6 +304,27 @@ namespace loka
 
         ProjectionParentScopeGuard(const ProjectionParentScopeGuard &);
         ProjectionParentScopeGuard &operator=(const ProjectionParentScopeGuard &);
+      };
+      /** Owns one admitted viewport frame and its balanced pop. */
+      class ProjectionViewportScopeGuard : public ProjectionParentScopeGuard
+      {
+      public:
+        ProjectionViewportScopeGuard(ProjectionParentScopeStack &stack,
+                                     const ProjectionParentScope &scope,
+                                     ProjectionMeasurementChannel &measurement)
+            : ProjectionParentScopeGuard(stack.pushViewport(scope, measurement) ? &stack : 0)
+        {
+        }
+      };
+
+      /** Owns one admitted unit frame; the stack supplies its inherited channel. */
+      class ProjectionUnitScopeGuard : public ProjectionParentScopeGuard
+      {
+      public:
+        ProjectionUnitScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
+            : ProjectionParentScopeGuard(stack.pushUnit(scope) ? &stack : 0)
+        {
+        }
       };
     } // namespace scene
   } // namespace app

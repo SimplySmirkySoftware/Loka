@@ -32,9 +32,10 @@ public:
     {
       this->window_.raise();
     }
-    Unit *next;
 
   private:
+    friend class Win32ZStackContext;
+    Unit *next;
     static void EnsureClassRegistered();
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     Win32OwnedChildWindow window_;
@@ -50,7 +51,8 @@ public:
   {
     return &this->units_;
   }
-  /** One own-list walk per layout pass, one SetWindowPos per misplaced unit. */
+  /** One own-list order check per layout pass; only a mismatch adds a second
+      walk raising units. Correct order issues no SetWindowPos. */
   void orderUnits();
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 

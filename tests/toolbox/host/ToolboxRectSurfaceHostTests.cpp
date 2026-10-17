@@ -84,8 +84,8 @@ namespace
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
     ProjectionMeasurementChannel measurement;
-    scope.channel = &measurement;
-    if (scroll) LOKA_VERIFY(controller.projectionParentScopes_.push(scope));
+    if (scroll)
+      LOKA_VERIFY(controller.projectionParentScopes_.pushViewport(scope, measurement));
     const short width = LayoutNode(&node, state, &controller, 0);
     std::printf("layout: width=%d y=%d extent records=%u\n", width, state.y, controller.extentRecords);
     std::fflush(stdout);

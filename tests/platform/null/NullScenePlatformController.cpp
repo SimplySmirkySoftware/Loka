@@ -929,8 +929,8 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
   }
 
   loka::app::scene::ProjectionMeasurementChannel measurement;
-  childScope.channel = &measurement;
-  loka::app::scene::ProjectionParentScopeGuard scopeGuard(this->projectionParentScopes_, childScope);
+
+  loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope, measurement);
   if (!scopeGuard.isActive())
   {
     this->refuseNestedScrollView();
