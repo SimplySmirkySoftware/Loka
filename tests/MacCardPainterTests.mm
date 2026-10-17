@@ -1,5 +1,15 @@
 #include "MacCardPainterTests.hpp"
 #include "MacCardPainter.hpp"
+#include "app/style/CardShadow.hpp"
+#include "support/MacCardV1Oracle.hpp"
+#include "context/MacScrollViewContext.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    void failMacCardBitmaps(unsigned count);
+  }
+} // namespace loka
 #include "MacScenePlatformController.hpp"
 #include "testing/MacScenePlatformTestAccess.hpp"
 #include "app/scene/Scene.hpp"
@@ -66,7 +76,7 @@ namespace
     {
       [this->bitmap_ release];
     }
-    CGContextRef begin()
+    CGContextRef begin(bool flipped = true)
     {
       NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:this->bitmap_];
       LOKA_VERIFY(context != nil);
@@ -76,8 +86,13 @@ namespace
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
       CGContextRef graphics = static_cast<CGContextRef>([context graphicsPort]);
 #pragma clang diagnostic pop
-      CGContextTranslateCTM(graphics, 0, [this->bitmap_ pixelsHigh]);
-      CGContextScaleCTM(graphics, this->backing_, -this->backing_);
+      if (flipped)
+      {
+        CGContextTranslateCTM(graphics, 0, [this->bitmap_ pixelsHigh]);
+        CGContextScaleCTM(graphics, this->backing_, -this->backing_);
+      }
+      else
+        CGContextScaleCTM(graphics, this->backing_, this->backing_);
       return graphics;
     }
     void end()
@@ -87,6 +102,13 @@ namespace
     NSBitmapImageRep *bitmap() const
     {
       return this->bitmap_;
+    }
+    void clear()
+    {
+      NSUInteger pixel[4] = {0, 0, 0, 0};
+      for (NSInteger y = 0; y < [this->bitmap_ pixelsHigh]; ++y)
+        for (NSInteger x = 0; x < [this->bitmap_ pixelsWide]; ++x)
+          [this->bitmap_ setPixel:pixel atX:x y:y];
     }
     void composite(const CardBitmap &strip, NSPoint origin)
     {
@@ -212,86 +234,6 @@ namespace
     result.end();
   }
 
-  // Signed distance to the outline: straight sides and four corner circles.
-  // The inner rectangle locates the nearest circle center in a corner quadrant.
-  // This is independent of the production arc paths and their rasterizer.
-  double RoundedCardDistance(NSRect rect, double radius, double x, double y)
-  {
-    const double dx = std::fabs(x - NSMidX(rect)) - (rect.size.width / 2 - radius);
-    const double dy = std::fabs(y - NSMidY(rect)) - (rect.size.height / 2 - radius);
-    const double outsideX = dx > 0 ? dx : 0;
-    const double outsideY = dy > 0 ? dy : 0;
-    const double inside = dx > dy ? dx : dy;
-    return std::sqrt(outsideX * outsideX + outsideY * outsideY) + (inside < 0 ? inside : 0) - radius;
-  }
-
-  void VerifyShadowOracle(const CardBitmap &actual,
-                          const Frame &body,
-                          const Frame *bands,
-                          const MacProjection &projection,
-                          NSPoint phase,
-                          int backing)
-  {
-    // Absolute layout edges are the oracle's only shadow geometry source.
-    const double left = projection.projectEdge(body.x + 3).pt;
-    const double top = projection.projectEdge(body.y + 3).pt;
-    const double right = projection.projectEdge(body.x + body.width + 3).pt;
-    const double bottom = projection.projectEdge(body.y + body.height + 3).pt;
-    const NSRect shadow = NSMakeRect(left, top, right - left, bottom - top);
-    const NSRect nativeBody = projection.projectFrame(body).r;
-    const double radius = projection.projectLength(0, 12).pt / 2;
-    const CardBandRole roles[] = {CARD_BAND_RIGHT, CARD_BAND_BOTTOM};
-    for (int side = 0; side < 2; ++side)
-    {
-      const NSRect band = projection.projectFrame(bands[roles[side]]).r;
-      unsigned compared = 0;
-      for (int y = static_cast<int>(NSMinY(band) * backing); y < NSMaxY(band) * backing; ++y)
-        for (int x = static_cast<int>(NSMinX(band) * backing); x < NSMaxX(band) * backing; ++x)
-        {
-          const double centerX = (x + 0.5) / backing;
-          const double centerY = (y + 0.5) / backing;
-          // Sample only the exposed top-right / bottom-left corner quadrants.
-          // Include both sides of the shadow arc and the outermost frame pixels.
-          if (side == 0 ? (centerX < right - radius || centerY > top + radius)
-                        : (centerX > left + radius || centerY < bottom - radius))
-            continue;
-          // Exterior samples farther than one backing pixel from the body
-          // cannot include its antialiased border. No outer clip exclusion.
-          if (RoundedCardDistance(nativeBody, radius, centerX, centerY) <= 1.0 / backing)
-            continue;
-          // CoreGraphics' aliased fill is not center sampling at an arc (a
-          // pixel whose center is 0.36 px outside was filled on macOS 26), so
-          // the shadow outline gets the same one-pixel guard. A misplaced
-          // shadow (1 pt at 3/2) still moves pixels beyond it at backing 2.
-          const double shadowDistance = RoundedCardDistance(shadow, radius, centerX, centerY);
-          if (std::fabs(shadowDistance) <= 1.0 / backing)
-            continue;
-          NSUInteger pixel[4], wanted[4];
-          [actual.bitmap() getPixel:pixel atX:x y:y];
-          GroundPixel(x, y, wanted);
-          const bool member = shadowDistance < 0;
-          if (member && ((x + y + static_cast<int>((phase.x + phase.y) * backing)) & 1))
-            wanted[0] = wanted[1] = wanted[2] = 0;
-          for (int channel = 0; channel < 4; ++channel)
-          {
-            if (pixel[channel] != wanted[channel])
-              std::printf("shadow oracle side=%d backing=%d pixel=(%d,%d) channel=%d actual=%lu expected=%lu\n",
-                          side,
-                          backing,
-                          x,
-                          y,
-                          channel,
-                          static_cast<unsigned long>(pixel[channel]),
-                          static_cast<unsigned long>(wanted[channel]));
-            LOKA_VERIFY(pixel[channel] == wanted[channel]);
-          }
-          ++compared;
-        }
-      std::printf("shadow oracle side=%d backing=%d compared=%u\n", side, backing, compared);
-      LOKA_VERIFY(compared != 0);
-    }
-  }
-
   id RefuseCardView(id object, SEL, NSRect)
   {
     [object release];
@@ -299,100 +241,321 @@ namespace
   }
 } // namespace
 
+namespace
+{
+  void CardBands(const Frame &body, const CardStyle &style, Frame *bands)
+  {
+    const loka::app::detail::CardShadowTable &g = style.geometry();
+    const int x = body.x, y = body.y, w = body.width, h = body.height;
+    bands[0] = Frame(x - g.allowance[0], y - g.allowance[1], w + g.allowance[0] - 3, g.allowance[1] + 3);
+    bands[1] = Frame(x - g.allowance[0], y + 3, g.allowance[0] + 3, h + g.allowance[3] - 3);
+    bands[2] = Frame(x + w - 3, y - g.allowance[1], g.allowance[2] + 3, h + g.allowance[1] - 3);
+    bands[3] = Frame(x + 3, y + h - 3, w + g.allowance[2] - 3, g.allowance[3] + 3);
+  }
+
+  void ClipRing(CGContextRef graphics, const Frame &body, const CardStyle &style, const MacProjection &projection)
+  {
+    const loka::app::detail::CardShadowTable &g = style.geometry();
+    const NSRect outer = projection
+                             .projectFrame(Frame(body.x - g.allowance[0],
+                                                 body.y - g.allowance[1],
+                                                 body.width + g.allowance[0] + g.allowance[2],
+                                                 body.height + g.allowance[1] + g.allowance[3]))
+                             .r;
+    const NSRect seat = projection.projectFrame(Frame(body.x + 3, body.y + 3, body.width - 6, body.height - 6)).r;
+    CGContextBeginPath(graphics);
+    CGContextAddRect(graphics, CGRectMake(outer.origin.x, outer.origin.y, outer.size.width, outer.size.height));
+    CGContextAddRect(graphics, CGRectMake(seat.origin.x, seat.origin.y, seat.size.width, seat.size.height));
+    CGContextEOClip(graphics);
+  }
+
+  /** Independent oracle: expand each logical table cell through projected
+      endpoints, then threshold each backing pixel on the window lattice. */
+  void TableOracle(CGContextRef graphics,
+                   const Frame &body,
+                   const CardStyle &style,
+                   const MacProjection &projection,
+                   NSPoint phase,
+                   int backing)
+  {
+    const CardShadowGridLines grid = CardShadowGrid(style, body);
+    CGContextSaveGState(graphics);
+    CGContextSetShouldAntialias(graphics, false);
+    for (int y = grid.y[0]; y < grid.y[3]; ++y)
+      for (int x = grid.x[0]; x < grid.x[3]; ++x)
+      {
+        const unsigned char density = CardShadowDensity(style, body, x, y);
+        const NSRect cell = projection.projectFrame(Frame(x, y, 1, 1)).r;
+        for (int py = static_cast<int>(NSMinY(cell) * backing); py < NSMaxY(cell) * backing; ++py)
+          for (int px = static_cast<int>(NSMinX(cell) * backing); px < NSMaxX(cell) * backing; ++px)
+          {
+            const bool dot = CardShadowStencilInk(
+                density, px + static_cast<int>(phase.x * backing), py + static_cast<int>(phase.y * backing));
+            if (style.ink() == CARD_SHADOW_STENCIL && !dot)
+              continue;
+            CGContextSetRGBFillColor(
+                graphics, 0, 0, 0, style.ink() == CARD_SHADOW_ALPHA ? static_cast<CGFloat>(density) / 255 : 1);
+            CGContextFillRect(graphics,
+                              CGRectMake(static_cast<CGFloat>(px) / backing,
+                                         static_cast<CGFloat>(py) / backing,
+                                         static_cast<CGFloat>(1) / backing,
+                                         static_cast<CGFloat>(1) / backing));
+          }
+      }
+    CGContextRestoreGState(graphics);
+    PaintCardInk(graphics, body, CardStyle(CARD_SHADOW_NONE), projection, NSZeroPoint, phase);
+  }
+
+  void DumpPBM(const CardBitmap &bitmap, const char *path)
+  {
+    FILE *file = std::fopen(path, "wb");
+    LOKA_VERIFY(file != 0);
+    std::fprintf(file,
+                 "P1\n%ld %ld\n",
+                 static_cast<long>([bitmap.bitmap() pixelsWide]),
+                 static_cast<long>([bitmap.bitmap() pixelsHigh]));
+    for (NSInteger y = 0; y < [bitmap.bitmap() pixelsHigh]; ++y)
+    {
+      for (NSInteger x = 0; x < [bitmap.bitmap() pixelsWide]; ++x)
+      {
+        NSUInteger pixel[4];
+        [bitmap.bitmap() getPixel:pixel atX:x y:y];
+        std::fprintf(file, "%d ", pixel[3] != 0 && pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 ? 1 : 0);
+      }
+      std::fprintf(file, "\n");
+    }
+    std::fclose(file);
+  }
+
+  void CompareV1(const CardBitmap &actual,
+                 const Frame &body,
+                 const MacProjection &projection,
+                 NSPoint phase,
+                 int backing,
+                 int metric,
+                 int residue)
+  {
+    CardBitmap old(180, 150, backing);
+    old.clear();
+    CGContextRef graphics = old.begin();
+    ClipRing(graphics, body, CardStyle(), projection);
+    MacCardV1::PaintCardInk(graphics, body, CardStyle(), projection, NSZeroPoint, phase);
+    old.end();
+    unsigned differences = 0;
+    for (NSInteger y = 0; y < [old.bitmap() pixelsHigh]; ++y)
+      for (NSInteger x = 0; x < [old.bitmap() pixelsWide]; ++x)
+        if (!SamePixel(actual.bitmap(), old.bitmap(), x, y))
+          ++differences;
+    std::printf(
+        "macOS DROP v1 differences=%u backing=%d metric=%d residue=%d\n", differences, backing, metric, residue);
+    if (differences)
+    {
+      char path[160];
+      std::sprintf(path, "/tmp/loka-card-v1-b%d-m%d-r%d.pbm", backing, metric, residue);
+      DumpPBM(old, path);
+      std::sprintf(path, "/tmp/loka-card-table-b%d-m%d-r%d.pbm", backing, metric, residue);
+      DumpPBM(actual, path);
+    }
+  }
+
+  void VerifyAlphaBytes()
+  {
+    const MacProjection projection;
+    const Frame body(20, 20, 50, 50);
+    const CardStyle style(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+    for (int backing = 1; backing <= 2; ++backing)
+    {
+      CardBitmap actual(100, 100, backing), border(100, 100, backing), twice(100, 100, backing);
+      actual.clear();
+      border.clear();
+      twice.clear();
+      CGContextRef graphics = actual.begin();
+      PaintCardInk(graphics, body, style, projection, NSZeroPoint, NSZeroPoint);
+      actual.end();
+      graphics = border.begin();
+      PaintCardInk(graphics, body, CardStyle(CARD_SHADOW_NONE), projection, NSZeroPoint, NSZeroPoint);
+      border.end();
+      graphics = twice.begin();
+      PaintCardInk(graphics, body, style, projection, NSZeroPoint, NSZeroPoint);
+      PaintCardInk(graphics, body, style, projection, NSZeroPoint, NSZeroPoint);
+      twice.end();
+      CardBitmap patterned(100, 100, backing), patternedExpected(100, 100, backing);
+      graphics = patterned.begin();
+      PaintCardInk(graphics, body, style, projection, NSZeroPoint, NSZeroPoint);
+      patterned.end();
+      graphics = patternedExpected.begin();
+      TableOracle(graphics, body, style, projection, NSZeroPoint, backing);
+      patternedExpected.end();
+      EqualBitmaps(patterned, patternedExpected, true);
+      unsigned samples = 0, different = 0;
+      bool densities[256] = {false};
+      for (int y = 0; y < 100 * backing; ++y)
+        for (int x = 0; x < 100 * backing; ++x)
+        {
+          NSUInteger pixel[4], edge[4];
+          [actual.bitmap() getPixel:pixel atX:x y:y];
+          [border.bitmap() getPixel:edge atX:x y:y];
+          if (edge[3])
+            continue;
+          const unsigned char density = CardShadowDensity(style, body, x / backing, y / backing);
+          LOKA_VERIFY(pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == density);
+          if (density)
+          {
+            ++samples;
+            densities[density] = true;
+          }
+          if (!SamePixel(actual.bitmap(), twice.bitmap(), x, y))
+            ++different;
+        }
+      unsigned distinct = 0;
+      for (int i = 1; i < 255; ++i)
+        if (densities[i])
+          ++distinct;
+      LOKA_VERIFY(samples > 0 && distinct > 3 && different > 0);
+      std::printf("alpha bytes backing=%d samples=%u densities=%u double-blend differences=%u\n",
+                  backing,
+                  samples,
+                  distinct,
+                  different);
+    }
+  }
+
+  void VerifyFailureAndState()
+  {
+    const MacProjection projection;
+    CardBitmap actual(100, 100, 2), expected(100, 100, 2);
+    CGContextRef graphics = actual.begin();
+    CGContextSetLineWidth(graphics, 7);
+    CGContextClipToRect(graphics, CGRectMake(5, 7, 88, 83));
+    const CGRect clip = CGContextGetClipBoundingBox(graphics);
+    const CGAffineTransform transform = CGContextGetCTM(graphics);
+    loka::testing::failMacCardBitmaps(1);
+    PaintCardInk(graphics,
+                 Frame(20, 20, 50, 50),
+                 CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA),
+                 projection,
+                 NSZeroPoint,
+                 NSZeroPoint);
+    LOKA_VERIFY(CGAffineTransformEqualToTransform(transform, CGContextGetCTM(graphics)));
+    LOKA_VERIFY(CGRectEqualToRect(clip, CGContextGetClipBoundingBox(graphics)));
+    CGContextMoveToPoint(graphics, 8, 10);
+    CGContextAddLineToPoint(graphics, 18, 10);
+    CGContextStrokePath(graphics);
+    actual.end();
+    graphics = expected.begin();
+    CGContextClipToRect(graphics, CGRectMake(5, 7, 88, 83));
+    PaintCardInk(graphics, Frame(20, 20, 50, 50), CardStyle(CARD_SHADOW_NONE), projection, NSZeroPoint, NSZeroPoint);
+    CGContextSetLineWidth(graphics, 7);
+    CGContextMoveToPoint(graphics, 8, 10);
+    CGContextAddLineToPoint(graphics, 18, 10);
+    CGContextStrokePath(graphics);
+    expected.end();
+    EqualBitmaps(actual, expected);
+  }
+} // namespace
+
 void testMacCardPainterPixels()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
-  const int sizes[][2] = {{77, 57}, {14, 57}, {77, 14}, {14, 14}, {12, 57}, {77, 12}, {12, 12}};
   for (int metric = 0; metric < 2; ++metric)
     for (int backing = 1; backing <= 2; ++backing)
-      for (int sample = 0; sample < 7; ++sample)
-      {
-        NSAutoreleasePool *iteration = [[NSAutoreleasePool alloc] init];
-        NSView *root = [[LokaCardTestRoot alloc] initWithFrame:NSMakeRect(0, 0, 180, 150)];
-        NSWindow *window = nil;
-        NSPoint phase = NSZeroPoint;
-        if (sample == 0 && metric == 0)
-        {
-          // A nested flipped view in an unflipped window content view makes
-          // the window-origin phase observably different from the local one.
-          window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 200, 180)
-                                               styleMask:0
-                                                 backing:NSBackingStoreBuffered
-                                                   defer:NO];
-          LOKA_VERIFY(window != nil && ![[window contentView] isFlipped]);
-          [root setFrameOrigin:NSMakePoint(3, 4)];
-          [[window contentView] addSubview:root];
-          phase = NSMakePoint(3, 26);
-        }
-        {
-          const RailMetrics metrics(Ratio(), metric ? Ratio(3, 2) : Ratio());
-          MacScenePlatformController controller(root, metrics);
-          const int width = sizes[sample][0], height = sizes[sample][1];
-          const int originX = 11;
-          const Frame body(originX, 17, width, height);
-          const Frame bands[] = {Frame(originX, 17, width - 3, 3),
-                                 Frame(originX, 20, 3, height),
-                                 Frame(originX + width - 3, 17, 6, height - 3),
-                                 Frame(originX + 3, 17 + height - 3, width, 6)};
-          CardBandNode *nodes[4];
-          for (int role = 0; role < CARD_BAND_COUNT; ++role)
+      for (int residue = 0; residue < 8; ++residue)
+        for (int extent = CARD_SHADOW_NONE; extent < CARD_SHADOW_EXTENT_COUNT; ++extent)
+          for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
           {
-            nodes[role] = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role)));
-            LayoutState state = BandState(bands[role]);
-            nodes[role]->layoutProjected(&controller, state);
-            LOKA_VERIFY(nodes[role]->getContext() != 0);
-            NSView *view = [[root subviews] objectAtIndex:role];
-            LOKA_VERIFY([view isFlipped] && ![view isOpaque]);
-            LOKA_VERIFY(NSEqualRects([view frame], controller.projection().projectFrame(bands[role]).r));
+            NSAutoreleasePool *iteration = [[NSAutoreleasePool alloc] init];
+            const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
+            const Frame body(16 + residue, 16 + (residue * 3) % 8, 64 + residue, 48 + (residue * 5) % 8);
+            const NSPoint phase = NSMakePoint(3, 5);
+            const MacProjection projection(0, RailMetrics(Ratio(), metric ? Ratio(3, 2) : Ratio()));
+            Frame bands[4];
+            CardBands(body, style, bands);
+            CardBitmap actual(180, 150, backing), expected(180, 150, backing), whole(180, 150, backing);
+            CardBitmap partialBands(180, 150, backing);
+            partialBands.clear();
+            actual.clear();
+            expected.clear();
+            whole.clear();
+            for (int role = 0; role < CARD_BAND_COUNT; ++role)
+            {
+              const NSRect native = projection.projectFrame(bands[role]).r;
+              CardBitmap strip(static_cast<int>(native.size.width),
+                               static_cast<int>(native.size.height),
+                               backing,
+                               static_cast<int>(native.origin.x),
+                               static_cast<int>(native.origin.y));
+              strip.clear();
+              CGContextRef graphics = strip.begin();
+              PaintCardBandInk(graphics,
+                               bands[role],
+                               CardBandProps(static_cast<CardBandRole>(role), style),
+                               projection,
+                               NSMakePoint(phase.x + native.origin.x, phase.y + native.origin.y));
+              strip.end();
+              actual.composite(strip, native.origin);
+              CardBitmap clippedStrip(
+                  static_cast<int>(native.size.width), static_cast<int>(native.size.height), backing);
+              clippedStrip.clear();
+              graphics = clippedStrip.begin();
+              CGContextClipToRect(graphics, CGRectMake(33 - native.origin.x, 29 - native.origin.y, 61, 53));
+              PaintCardBandInk(graphics,
+                               bands[role],
+                               CardBandProps(static_cast<CardBandRole>(role), style),
+                               projection,
+                               NSMakePoint(phase.x + native.origin.x, phase.y + native.origin.y));
+              clippedStrip.end();
+              partialBands.composite(clippedStrip, native.origin);
+            }
+            CGContextRef graphics = expected.begin();
+            ClipRing(graphics, body, style, projection);
+            TableOracle(graphics, body, style, projection, phase, backing);
+            expected.end();
+            graphics = whole.begin();
+            ClipRing(graphics, body, style, projection);
+            PaintCardInk(graphics, body, style, projection, NSZeroPoint, phase);
+            whole.end();
+            std::printf("table matrix backing=%d metric=%d residue=%d extent=%d ink=%d\n",
+                        backing,
+                        metric,
+                        residue,
+                        extent,
+                        ink);
+            EqualBitmaps(actual, expected, true);
+            EqualBitmaps(actual, whole, true);
+            CardBitmap partial(180, 150, backing), partialExpected(180, 150, backing);
+            partial.clear();
+            partialExpected.clear();
+            graphics = partial.begin();
+            CGContextClipToRect(graphics, CGRectMake(33, 29, 61, 53));
+            ClipRing(graphics, body, style, projection);
+            PaintCardInk(graphics, body, style, projection, NSZeroPoint, phase);
+            partial.end();
+            graphics = partialExpected.begin();
+            CGContextClipToRect(graphics, CGRectMake(33, 29, 61, 53));
+            ClipRing(graphics, body, style, projection);
+            TableOracle(graphics, body, style, projection, phase, backing);
+            partialExpected.end();
+            EqualBitmaps(partial, partialExpected, true);
+            EqualBitmaps(partialBands, partialExpected, true);
+            CardBitmap upright(180, 150, backing), uprightExpected(180, 150, backing);
+            upright.clear();
+            uprightExpected.clear();
+            graphics = upright.begin(false);
+            ClipRing(graphics, body, style, projection);
+            PaintCardInk(graphics, body, style, projection, NSZeroPoint, phase);
+            upright.end();
+            graphics = uprightExpected.begin(false);
+            ClipRing(graphics, body, style, projection);
+            TableOracle(graphics, body, style, projection, phase, backing);
+            uprightExpected.end();
+            EqualBitmaps(upright, uprightExpected, true);
+            if (extent == CARD_SHADOW_DROP && ink == CARD_SHADOW_STENCIL)
+              CompareV1(whole, body, projection, phase, backing, metric, residue);
+            [iteration drain];
           }
-          LOKA_VERIFY([[root subviews] count] == 4);
-          CardBitmap actual(180, 150, backing), expected(180, 150, backing), ground(180, 150, backing);
-          WholeReference(expected, body, controller.projection(), phase);
-          RenderViews(root, actual, backing);
-          std::printf("card pixels space=%d backing=%d body=%dx%d\n", metric, backing, width, height);
-          EqualBitmaps(actual, expected, true);
-          VerifyShadowOracle(actual, body, bands, controller.projection(), phase, backing);
-          const NSRect seat = controller.projection().projectFrame(Frame(originX + 3, 20, width - 6, height - 6)).r;
-          for (int y = static_cast<int>(NSMinY(seat) * backing); y < NSMaxY(seat) * backing; ++y)
-            for (int x = static_cast<int>(NSMinX(seat) * backing); x < NSMaxX(seat) * backing; ++x)
-            {
-              // No band owns the content seat (Q1), so the bands never paint it.
-              LOKA_VERIFY(SamePixel(actual.bitmap(), ground.bitmap(), x, y));
-            }
-          if (height == 57)
-          {
-            const NSRect native = controller.projection().projectFrame(body).r;
-            const int middle = static_cast<int>((NSMinY(native) + NSMaxY(native)) * backing / 2);
-            const int shadowX = static_cast<int>(NSMaxX(native) * backing) + 1;
-            const int left = static_cast<int>(NSMinX(native) * backing);
-            const int pen = static_cast<int>(controller.projection().projectLength(0, 1).pt * backing);
-            for (int x = left; x < left + pen; ++x)
-            {
-              NSUInteger pixel[4];
-              [actual.bitmap() getPixel:pixel atX:x y:middle];
-              LOKA_VERIFY(pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0 && pixel[3] == 255);
-            }
-            LOKA_VERIFY(SamePixel(actual.bitmap(), ground.bitmap(), left + pen, middle));
-            for (int y = middle; y < middle + 8; ++y)
-            {
-              NSUInteger pixel[4], wanted[4];
-              [actual.bitmap() getPixel:pixel atX:shadowX y:y];
-              GroundPixel(shadowX, y, wanted);
-              if ((shadowX + y + static_cast<int>((phase.x + phase.y) * backing)) & 1)
-                wanted[0] = wanted[1] = wanted[2] = 0;
-              for (int c = 0; c < 4; ++c)
-                LOKA_VERIFY(pixel[c] == wanted[c]);
-            }
-          }
-          for (int role = 0; role < CARD_BAND_COUNT; ++role)
-            delete nodes[role];
-        }
-        [root removeFromSuperview];
-        [root release];
-        [window release];
-        [iteration drain];
-      }
+  VerifyAlphaBytes();
+  VerifyFailureAndState();
   [pool drain];
 }
 
@@ -442,6 +605,232 @@ void testMacCardBandLifecycleAndRetry()
   [root release];
   [pool drain];
 }
+
+// Declared for the 10.4 SDK; called only after the runtime selector check.
+@interface NSView (LokaCardLayerTest)
+- (void)setWantsLayer:(BOOL)value;
+@end
+
+@interface LokaCardGround : LokaCardTestRoot
+{
+  unsigned paints_;
+}
+- (unsigned)paints;
+@end
+@implementation LokaCardGround
+- (BOOL)isOpaque
+{
+  return YES;
+}
+- (unsigned)paints
+{
+  return paints_;
+}
+- (void)drawRect:(NSRect)dirty
+{
+  ++paints_;
+  for (int y = static_cast<int>(NSMinY(dirty)); y < NSMaxY(dirty); ++y)
+    for (int x = static_cast<int>(NSMinX(dirty)); x < NSMaxX(dirty); ++x)
+    {
+      NSUInteger pixel[4];
+      GroundPixel(x, y, pixel);
+      [[NSColor colorWithDeviceRed:static_cast<CGFloat>(pixel[0]) / 255
+                             green:static_cast<CGFloat>(pixel[1]) / 255
+                              blue:static_cast<CGFloat>(pixel[2]) / 255
+                             alpha:1] set];
+      NSRectFill(NSMakeRect(x, y, 1, 1));
+    }
+}
+@end
+
+namespace
+{
+  /** Read the existing window backing, never cacheDisplay (which repaints).
+      The draw counter proves that taking the snapshot did not freshen ground. */
+  NSBitmapImageRep *CaptureCardWindow(LokaCardGround *root)
+  {
+    const unsigned before = [root paints];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [root lockFocus];
+    NSBitmapImageRep *image = [[NSBitmapImageRep alloc] initWithFocusedViewRect:[root bounds]];
+    [root unlockFocus];
+#pragma clang diagnostic pop
+    LOKA_VERIFY(image != nil && [root paints] == before);
+    return image;
+  }
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  void DisplayMatchesFresh(LokaCardGround *root,
+                           MacScenePlatformController &controller,
+                           CardBandNode **nodes,
+                           const Frame *bands,
+                           const char *label)
+  {
+    [[root window] flushWindow];
+    NSBitmapImageRep *incremental = CaptureCardWindow(root);
+    // New views have new backing/layers. Repainting only the parent cannot
+    // establish a fresh reference when a child keeps its own layer contents.
+    for (int role = 0; role < CARD_BAND_COUNT; ++role)
+    {
+      const CardBandProps props = nodes[role]->props;
+      delete nodes[role];
+      nodes[role] = new CardBandNode(props);
+      LayoutState state = BandState(bands[role]);
+      nodes[role]->layoutProjected(&controller, state);
+      LOKA_VERIFY(nodes[role]->getContext() != 0);
+    }
+    [root setNeedsDisplay:YES];
+    [root displayIfNeeded];
+    [[root window] flushWindow];
+    NSBitmapImageRep *fresh = CaptureCardWindow(root);
+    LOKA_VERIFY([incremental pixelsWide] == [fresh pixelsWide] && [incremental pixelsHigh] == [fresh pixelsHigh]);
+    unsigned differences = 0;
+    for (NSInteger y = 0; y < [fresh pixelsHigh]; ++y)
+      for (NSInteger x = 0; x < [fresh pixelsWide]; ++x)
+        if (!SamePixel(incremental, fresh, x, y))
+          ++differences;
+    std::printf("card real display %s differences=%u ground paints=%u\n", label, differences, [root paints]);
+    [incremental release];
+    [fresh release];
+    LOKA_VERIFY(differences == 0);
+  }
+
+#pragma clang diagnostic pop
+
+  void VerifyFreshGround(bool layered, bool scrolling)
+  {
+    LokaCardGround *root = [[LokaCardGround alloc] initWithFrame:NSMakeRect(0, 0, 180, 150)];
+    if (layered && ![root respondsToSelector:@selector(setWantsLayer:)])
+    {
+      std::printf("[skip] card layer repaint: setWantsLayer: unavailable\n");
+      [root release];
+      return;
+    }
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 180, 150)
+                                                   styleMask:0
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    LOKA_VERIFY(window != nil);
+    [window setReleasedWhenClosed:NO];
+    [window setContentView:root];
+    if (layered)
+      [root setWantsLayer:YES];
+    [window orderFront:nil];
+    {
+      MacScenePlatformController outer(root, RailMetrics());
+      ScrollViewNode scroll((ScrollViewProps()));
+      NSView *host = [[LokaCardTestRoot alloc] initWithFrame:NSMakeRect(3, 5, 160, 130)];
+      NSScrollView *nativeScroll = nil;
+      if (scrolling)
+      {
+        outer.onChange(&scroll, NODE_DIRTY_NONE, false);
+        outer.relayout(180, 150);
+        for (NSUInteger i = 0; i < [[root subviews] count]; ++i)
+          if ([[[root subviews] objectAtIndex:i] isKindOfClass:[NSScrollView class]])
+            nativeScroll = [[root subviews] objectAtIndex:i];
+        LOKA_VERIFY(nativeScroll != nil);
+        MacScrollViewContext *context = static_cast<MacScrollViewContext *>(scroll.getContext());
+        LOKA_VERIFY(context != 0);
+        context->commitScrollMetrics(160, 400, 130, 0, 0, false);
+        [host release];
+        host = [[nativeScroll documentView] retain];
+      }
+      else
+        [root addSubview:host];
+      {
+        MacScenePlatformController controller(host, RailMetrics());
+        [root setNeedsDisplay:YES];
+        [root displayIfNeeded];
+        NSBitmapImageRep *ground = CaptureCardWindow(root);
+        CardBandNode *nodes[4];
+        Frame bands[4];
+        const CardStyle style(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+        CardBands(Frame(25, 25, 90, 65), style, bands);
+        for (int role = 0; role < 4; ++role)
+        {
+          nodes[role] = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role), style));
+          LayoutState state = BandState(bands[role]);
+          nodes[role]->layoutProjected(&controller, state);
+          LOKA_VERIFY(nodes[role]->getContext() != 0);
+        }
+        [root setNeedsDisplay:YES];
+        [root displayIfNeeded];
+        NSBitmapImageRep *painted = CaptureCardWindow(root);
+        unsigned changed = 0;
+        for (NSInteger y = 0; y < [ground pixelsHigh]; ++y)
+          for (NSInteger x = 0; x < [ground pixelsWide]; ++x)
+            if (!SamePixel(ground, painted, x, y))
+              ++changed;
+        [ground release];
+        [painted release];
+        LOKA_VERIFY(changed != 0);
+        for (int repaint = 0; repaint < 3; ++repaint)
+        {
+          NSView *band = [[host subviews] objectAtIndex:CARD_BAND_RIGHT];
+          const NSRect rect = repaint == 2 ? NSInsetRect([band bounds], 1, 3) : [band bounds];
+          [band setNeedsDisplayInRect:rect];
+          [band displayIfNeeded];
+          LOKA_VERIFY(![band needsDisplay]);
+          if (repaint == 1)
+          {
+            [band setNeedsDisplayInRect:[band bounds]];
+            [band displayIfNeeded];
+          }
+          std::printf("repaint mode layer=%d scroll=%d pass=%d\n", layered, scrolling, repaint);
+          DisplayMatchesFresh(root, controller, nodes, bands, repaint == 2 ? "partial band" : "band alone");
+        }
+        if (scrolling)
+        {
+          for (int role = 0; role < 4; ++role)
+          {
+            nodes[role]->props.style = CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_STENCIL);
+            nodes[role]->getContext()->onPropsApplied();
+          }
+          [root displayIfNeeded];
+          [[nativeScroll contentView] scrollToPoint:NSMakePoint(0, 5)];
+          [nativeScroll reflectScrolledClipView:[nativeScroll contentView]];
+          [root displayIfNeeded];
+          DisplayMatchesFresh(root, controller, nodes, bands, "incremental scroll 5");
+          [[nativeScroll contentView] scrollToPoint:NSMakePoint(0, 11)];
+          [nativeScroll reflectScrolledClipView:[nativeScroll contentView]];
+          [root displayIfNeeded];
+          DisplayMatchesFresh(root, controller, nodes, bands, "incremental scroll 11");
+          const NSPoint phase = [host convertPoint:NSZeroPoint toView:root];
+          CardBitmap actual(180, 420, 1), expected(180, 420, 1);
+          RenderViews(host, actual, 1);
+          CGContextRef graphics = expected.begin();
+          const CardStyle stencil(CARD_SHADOW_WIDE, CARD_SHADOW_STENCIL);
+          ClipRing(graphics, Frame(25, 25, 90, 65), stencil, controller.projection());
+          TableOracle(graphics, Frame(25, 25, 90, 65), stencil, controller.projection(), phase, 1);
+          expected.end();
+          EqualBitmaps(actual, expected, true);
+        }
+        else
+        {
+          CardBands(Frame(38, 32, 62, 48), style, bands);
+          for (int role = 0; role < 4; ++role)
+          {
+            LayoutState state = BandState(bands[role]);
+            nodes[role]->layoutProjected(&controller, state);
+          }
+          [root displayIfNeeded];
+          DisplayMatchesFresh(root, controller, nodes, bands, "move and shrink old ring");
+        }
+        for (int role = 0; role < 4; ++role)
+          delete nodes[role];
+      }
+      if (!scrolling)
+        [host removeFromSuperview];
+      [host release];
+      outer.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    [window orderOut:nil];
+    [window release];
+    [root release];
+  }
+} // namespace
 
 void testMacCardBandMovePropsAndEmpty()
 {
@@ -505,6 +894,7 @@ void testMacCardBandMovePropsAndEmpty()
     LayoutState state = BandState(strip);
     bands[0]->layoutProjected(&controller, state);
     bands[0]->props.role = CARD_BAND_BOTTOM;
+    bands[0]->props.style = CardStyle(CARD_SHADOW_DROP, CARD_SHADOW_ALPHA);
     bands[0]->getContext()->onPropsApplied();
     CardBitmap changed(74, 4, 2, 21, 27), reference(74, 4, 2, 21, 27);
     changed.begin();
@@ -519,6 +909,10 @@ void testMacCardBandMovePropsAndEmpty()
   }
   [root release];
   [window release];
+  VerifyFreshGround(false, false);
+  VerifyFreshGround(false, true);
+  VerifyFreshGround(true, false);
+  VerifyFreshGround(true, true);
   [pool drain];
 }
 

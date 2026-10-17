@@ -13,6 +13,28 @@
 
 #ifdef TEST_BUILD
 
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned macCardBitmapFailures = 0;
+    }
+    void failMacCardBitmaps(unsigned count)
+    {
+      macCardBitmapFailures = count;
+    }
+    bool declineMacCardBitmap()
+    {
+      if (!macCardBitmapFailures)
+        return false;
+      --macCardBitmapFailures;
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
+
 #ifdef LOKA_HOST_MENU_ATTACHMENT
 namespace toolbox_host { unsigned menuInitializations = 0; }
 void InitMenus() { ++toolbox_host::menuInitializations; }
