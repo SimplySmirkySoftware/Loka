@@ -11,4 +11,9 @@ void testScrollViewXOriginIsReappliedOnEveryRelayout();
 void testScrollViewRequestedOriginNormalizesBothAxes();
 void testScrollViewPublishesOnlyChangedOriginAndPreservesSize();
 
+void testScrollViewContentTranslationSubtractsTopInset();
+void testScrollViewPublishOriginWritesContentCoordinates();
+void testScrollViewContentInsetsPlaceChildrenAndGrowHeightlessExtent();
+void testScrollViewContentInsetsValueAndPropsIdentity();
+
 #endif // LOKA_TESTS_SCROLL_VIEW_SCOPE_TESTS_HPP

@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_NODES_NESTABLE_SCROLL_VIEW_HPP
 #define LOKA_APP_NODES_NESTABLE_SCROLL_VIEW_HPP
 
+#include <cassert>
 #include <climits>
 
 #include "app/scene/Node.hpp"
@@ -19,6 +20,49 @@ namespace loka
 
     class ScrollViewNode;
 
+    /** Completed content insets: the extent grows by top + bottom and content is
+        placed top below its start. Checked on construction like LayoutGap::of. */
+    struct ScrollViewContentInsets
+    {
+      short top;
+      short bottom;
+
+      ScrollViewContentInsets()
+          : top(0),
+            bottom(0)
+      {
+      }
+
+      /** Checks each logical inset in [0, SHRT_MAX], clamping in release. */
+      static ScrollViewContentInsets of(int top, int bottom)
+      {
+        assert(top >= 0 && top <= SHRT_MAX);
+        assert(bottom >= 0 && bottom <= SHRT_MAX);
+        ScrollViewContentInsets result;
+        result.top = static_cast<short>(top < 0 ? 0 : top > SHRT_MAX ? SHRT_MAX : top);
+        result.bottom = static_cast<short>(bottom < 0 ? 0 : bottom > SHRT_MAX ? SHRT_MAX : bottom);
+        return result;
+      }
+
+      bool operator==(const ScrollViewContentInsets &other) const
+      {
+        return this->top == other.top && this->bottom == other.bottom;
+      }
+      bool operator!=(const ScrollViewContentInsets &other) const
+      {
+        return !(*this == other);
+      }
+      bool operator<(const ScrollViewContentInsets &other) const
+      {
+        return this->top != other.top ? this->top < other.top : this->bottom < other.bottom;
+      }
+      /** Extra extent in int arithmetic, without narrowing the sum to short. */
+      int extentExtra() const
+      {
+        return this->top + this->bottom;
+      }
+    };
+
     /** Stable inputs for a scrollable projection-parent scope. viewport_ is the
         rail-published fact; scrollTo_ is application intent, stored by the
         contract but deliberately not yet consumed by any rail — wiring it
@@ -34,20 +78,38 @@ namespace loka
           width/height are carried through unchanged; !hasSize() means not
           reported yet. Initialise apps with Frame(0, 0, 0, 0); a nonzero
           origin publishes a clamp on first layout, as the int door did.
+          topOrigin() requests the top with the gap visible; origin.y may be
+          negative down to -top while the gap shows.
           The whole WriteSeat retains the owner's tracked transaction door. */
       scene::WriteSeat<loka::core::Frame> viewport_;
       scene::WriteSeat<int> scrollTo_;
+      ScrollViewContentInsets contentInsets_;
 
       ScrollViewProps()
           : viewport_(),
-            scrollTo_(0)
+            scrollTo_(0),
+            contentInsets_()
       {
       }
 
       explicit ScrollViewProps(const scene::NodeState<loka::core::Frame> &viewport)
           : viewport_(viewport.writeSeat()),
-            scrollTo_(0)
+            scrollTo_(0),
+            contentInsets_()
       {
+      }
+
+      /** Requests the extent start with the top gap visible for every inset. */
+      static loka::core::Frame topOrigin()
+      {
+        return loka::core::Frame(0, SHRT_MIN, 0, 0);
+      }
+
+      /** Declares the completed vertical content insets. */
+      ScrollViewProps &contentInsets(const ScrollViewContentInsets &value)
+      {
+        this->contentInsets_ = value;
+        return *this;
       }
 
       /** Binds the rail-published visible content rect. */
@@ -86,7 +148,9 @@ namespace loka
         {
           return mine < theirs;
         }
-        return this->scrollTo_.state() < other.scrollTo_.state();
+        if (this->scrollTo_.state() != other.scrollTo_.state())
+          return this->scrollTo_.state() < other.scrollTo_.state();
+        return this->contentInsets_ < other.contentInsets_;
       }
     };
 
@@ -116,24 +180,34 @@ namespace loka
         return this;
       }
 
-      /** Requested origin, safely representable by every rail. An unbound
-          seat or Frame()'s negative origin requests zero. */
+      /** Requested extent offset, safely representable by every rail. An unbound
+          seat requests zero on both axes. Content y below -top reads as -top;
+          clamp before adding top so even an INT_MAX request is safe. */
       loka::core::Frame requestedOrigin() const
       {
-        const loka::core::Frame current =
-            this->props.viewport_.isValid() ? this->props.viewport_.state()->get() : loka::core::Frame(0, 0, 0, 0);
-        return loka::core::Frame(current.x < 0 ? 0 : (current.x > SHRT_MAX ? SHRT_MAX : current.x),
-                                 current.y < 0 ? 0 : (current.y > SHRT_MAX ? SHRT_MAX : current.y),
-                                 current.width,
-                                 current.height);
+        if (!this->props.viewport_.isValid())
+          return loka::core::Frame(0, 0, 0, 0);
+        const loka::core::Frame current = this->props.viewport_.state()->get();
+        const int top = this->props.contentInsets_.top;
+        const int y = current.y < -top ? -top : (current.y > SHRT_MAX - top ? SHRT_MAX - top : current.y);
+        return loka::core::Frame(
+            current.x < 0 ? 0 : (current.x > SHRT_MAX ? SHRT_MAX : current.x), y + top, current.width, current.height);
       }
 
-      /** Publishes one changed origin through the owner's tracker, preserving
-          the current size. An unbound seat has no fact to publish. */
-      void publishOrigin(int x, int y)
+      /** Translation subtracted from content coordinates by projection rails. */
+      loka::core::Frame contentTranslation() const
+      {
+        const loka::core::Frame origin = this->requestedOrigin();
+        return loka::core::Frame(origin.x, origin.y - this->props.contentInsets_.top, origin.width, origin.height);
+      }
+
+      /** Publishes one changed extent offset as a content origin through the
+          owner's tracker, preserving size. An unbound seat has no fact. */
+      void publishOrigin(int x, int extentY)
       {
         if (!this->props.viewport_.isValid())
           return;
+        const int y = extentY - this->props.contentInsets_.top;
         const loka::core::Frame current = this->props.viewport_.state()->get();
         if (current.x != x || current.y != y)
           this->props.viewport_.set(loka::core::Frame(x, y, current.width, current.height));
@@ -175,6 +249,13 @@ namespace loka
       ScrollViewDefinition(const ScrollViewDefinition &other)
           : BaseType(other)
       {
+      }
+
+      /** Grows the scrollable extent and places content below the top inset. */
+      ScrollViewDefinition &contentInsets(int top, int bottom)
+      {
+        this->props.contentInsets(ScrollViewContentInsets::of(top, bottom));
+        return *this;
       }
 
       ScrollViewDefinition &viewport(const scene::NodeState<loka::core::Frame> &value)

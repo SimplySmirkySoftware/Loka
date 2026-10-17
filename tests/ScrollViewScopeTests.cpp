@@ -4,6 +4,8 @@
 #include "support/TestVerify.hpp"
 #include <climits>
 
+#include "app/layout/StackSpans.hpp"
+#include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -377,6 +379,22 @@ void testScrollViewRequestedOriginNormalizesBothAxes()
   fact.state().set(Frame());
   LOKA_VERIFY(node.requestedOrigin().x == 0);
   LOKA_VERIFY(node.requestedOrigin().y == 0);
+  fact.state().set(loka::app::ScrollViewProps::topOrigin());
+  LOKA_VERIFY(node.requestedOrigin() == Frame(0, 0, 0, 0));
+  node.props.contentInsets(loka::app::ScrollViewContentInsets::of(12, 0));
+  const int requests[] = {-5, -12, -40, 0, SHRT_MAX, INT_MAX, INT_MIN};
+  const int expected[] = {7, 0, 0, 12, SHRT_MAX, SHRT_MAX, 0};
+  for (unsigned i = 0; i < sizeof(requests) / sizeof(requests[0]); ++i)
+  {
+    fact.state().set(Frame(-7, requests[i], 0, 0));
+    LOKA_VERIFY(node.requestedOrigin().x == 0);
+    LOKA_VERIFY(node.requestedOrigin().y == expected[i]);
+  }
+  fact.state().set(loka::app::ScrollViewProps::topOrigin());
+  LOKA_VERIFY(node.requestedOrigin().x == 0);
+  LOKA_VERIFY(node.requestedOrigin().y == 0);
+  unbound.props.contentInsets(loka::app::ScrollViewContentInsets::of(12, 0));
+  LOKA_VERIFY(unbound.requestedOrigin() == Frame(0, 0, 0, 0));
 }
 
 void testScrollViewPublishesOnlyChangedOriginAndPreservesSize()
@@ -402,4 +420,104 @@ void testScrollViewPublishesOnlyChangedOriginAndPreservesSize()
   loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
   unbound.publishOrigin(1, 2);
   LOKA_VERIFY(!unbound.props.viewport_.isValid());
+}
+
+void testScrollViewContentTranslationSubtractsTopInset()
+{
+  using loka::core::Frame;
+  ViewportFact fact(0);
+  loka::app::ScrollViewNode node(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 3)));
+  fact.state().set(loka::app::ScrollViewProps::topOrigin());
+  LOKA_VERIFY(node.contentTranslation() == Frame(0, -12, 0, 0));
+  fact.state().set(Frame(5, 8, 123, 456));
+  LOKA_VERIFY(node.contentTranslation() == Frame(5, 8, 123, 456));
+  fact.state().set(Frame(5, -3, 123, 456));
+  LOKA_VERIFY(node.contentTranslation() == Frame(5, -3, 123, 456));
+}
+
+void testScrollViewPublishOriginWritesContentCoordinates()
+{
+  using loka::core::Frame;
+  ViewportFact fact(0);
+  fact.state().set(Frame(0, 0, 123, 456));
+  int writes = 0;
+  fact.state().state()->bind(&countOriginWrites, &writes, false);
+  loka::app::ScrollViewNode node(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 0)));
+  node.publishOrigin(0, 0);
+  LOKA_VERIFY(fact.state().get() == Frame(0, -12, 123, 456));
+  LOKA_VERIFY(writes == 1);
+  node.publishOrigin(0, 0);
+  LOKA_VERIFY(writes == 1);
+  node.publishOrigin(0, 12);
+  LOKA_VERIFY(fact.state().get() == Frame(0, 0, 123, 456));
+  LOKA_VERIFY(writes == 2);
+  node.publishOrigin(0, 12);
+  LOKA_VERIFY(writes == 2);
+  fact.state().state()->unbind(&countOriginWrites, &writes);
+}
+
+void testScrollViewContentInsetsPlaceChildrenAndGrowHeightlessExtent()
+{
+  NullScenePlatformController platform;
+  ViewportFact fact(0);
+  fact.state().set(loka::app::ScrollViewProps::topOrigin());
+  loka::app::ScrollViewNode node(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 3)));
+  FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
+  node.addChild(child);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(10, 20, 80, 30)) == 50);
+  const loka::app::scene::LayoutState atTop = child->geometry();
+  LOKA_VERIFY(atTop.y == 32);
+  LOKA_VERIFY(atTop.height == 30);
+  fact.state().set(loka::core::Frame(0, 6, 0, 0));
+  LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(10, 20, 80, 30)) == 50);
+  const short scrolledY = child->geometry().y;
+  LOKA_VERIFY(scrolledY == 14);
+  fact.state().set(loka::app::ScrollViewProps::topOrigin());
+  LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(0, 0, 100, 0)) == 22);
+  const unsigned long refusalsBeforeOverflow = platform.scrollViewShortRangeRefusalCount();
+  LOKA_VERIFY(refusalsBeforeOverflow == 0);
+
+  loka::app::ScrollViewNode collected(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 3)));
+  loka::app::StackNode *column = new loka::app::StackNode(loka::app::StackProps(loka::app::STACK_AXIS_COLUMN));
+  column->addChild(loka::app::Text("content").create());
+  collected.addChild(column);
+  loka::app::layout::StackSpans spans;
+  LOKA_VERIFY(platform.projectLayoutForTesting(&collected, makeState(0, 0, 100, 30), 0, &spans) == 30);
+  LOKA_VERIFY(spans.valid());
+  LOKA_VERIFY(spans.placedViewport() == loka::core::Frame(0, -12, 100, 30));
+
+  // Keep content at zero so only the inset-adjusted extent exceeds the limit.
+  fact.state().set(loka::core::Frame(0, 0, 0, 0));
+  loka::app::ScrollViewNode overflow(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 0)));
+  FixedLayoutProbeNode *probe = new FixedLayoutProbeNode(1);
+  overflow.addChild(makeTallBox(static_cast<short>(SHRT_MAX - 1), probe));
+  LOKA_VERIFY(platform.projectLayoutForTesting(&overflow, makeState(0, 0, 100, 0)) == 0);
+  const bool laidOutBeforeRefusal = probe->wasLaidOut();
+  LOKA_VERIFY(laidOutBeforeRefusal);
+  const unsigned long refusalsAfterOverflow = platform.scrollViewShortRangeRefusalCount();
+  LOKA_VERIFY(refusalsAfterOverflow == 1);
+}
+
+void testScrollViewContentInsetsValueAndPropsIdentity()
+{
+  using loka::app::ScrollViewContentInsets;
+  const ScrollViewContentInsets zero;
+  LOKA_VERIFY(sizeof(ScrollViewContentInsets) == 4);
+  LOKA_VERIFY(zero == ScrollViewContentInsets::of(0, 0));
+  LOKA_VERIFY(zero != ScrollViewContentInsets::of(0, 1));
+  LOKA_VERIFY(ScrollViewContentInsets::of(0, 2) < ScrollViewContentInsets::of(1, 0));
+  LOKA_VERIFY(ScrollViewContentInsets::of(1, 2) < ScrollViewContentInsets::of(1, 3));
+  LOKA_VERIFY(ScrollViewContentInsets::of(SHRT_MAX, SHRT_MAX).extentExtra() == 2 * SHRT_MAX);
+  const loka::app::ScrollView small = loka::app::ScrollView().contentInsets(12, 3);
+  const loka::app::ScrollView equal = loka::app::ScrollView().contentInsets(12, 3);
+  const loka::app::ScrollView larger = loka::app::ScrollView().contentInsets(12, 4);
+  LOKA_VERIFY(!(small.props < equal.props));
+  LOKA_VERIFY(!(equal.props < small.props));
+  LOKA_VERIFY(small.props < larger.props);
+  LOKA_VERIFY(!(larger.props < small.props));
 }

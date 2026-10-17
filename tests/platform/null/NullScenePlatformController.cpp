@@ -916,11 +916,11 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     return state.y;
   }
 
-  const loka::core::Frame origin = scrollView->requestedOrigin();
+  const loka::core::Frame translation = scrollView->contentTranslation();
   const loka::core::Frame clip(state.x, state.y, state.width, state.height);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();
-  if (!parentScope.deriveScrolled(parentScope.nativeParent, origin.x, origin.y, clip, childScope))
+  if (!parentScope.deriveScrolled(parentScope.nativeParent, translation.x, translation.y, clip, childScope))
   {
     this->refuseScrollViewShortRange();
     if (spans)
@@ -974,7 +974,8 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     }
     currentY = nextY;
   }
-  if (!refused && state.height <= 0 && currentY > SHRT_MAX)
+  const int extentBottom = currentY + scrollView->props.contentInsets_.extentExtra();
+  if (!refused && state.height <= 0 && extentBottom > SHRT_MAX)
   {
     this->refuseScrollViewShortRange();
     refused = true;
@@ -988,7 +989,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
   }
 
   if (!refused && spans && spans->valid())
-    spans->placed(loka::core::Frame(origin.x, origin.y, state.width, state.height));
+    spans->placed(loka::core::Frame(translation.x, translation.y, state.width, state.height));
   if (state.height > 0)
   {
     return state.y + state.height;
@@ -997,7 +998,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
   {
     return state.y;
   }
-  return currentY;
+  return extentBottom;
 }
 
 int NullScenePlatformController::projectLayout(loka::app::scene::Node *node,
