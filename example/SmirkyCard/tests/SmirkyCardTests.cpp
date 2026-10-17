@@ -4046,6 +4046,7 @@ namespace
                                     "ScrollView(Text('empty'),{}).TEST_ID('EmptyScroll'),"
                                     "ScrollView(Text('zero'),{insets:{}}).TEST_ID('ZeroScroll'),"
                                     "ScrollView(Text('top'),{insets:{top:12}}).TEST_ID('TopScroll'),"
+                                    "ScrollView(Text('bottom'),{insets:{bottom:3}}).TEST_ID('BottomScroll'),"
                                     "Card(Text('x')).TEST_ID('Card'),"
                                     "ImageView(pic,{width:120,height:80,fit:'contain'}).TEST_ID('Contain'),"
                                     "ImageView(pic,{fit:'cover'}).TEST_ID('Cover'),"
@@ -4064,14 +4065,14 @@ namespace
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().x == 0);
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().y == 0);
     LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 0));
-    const char *scrollIds[] = {"Inset", "EmptyScroll", "ZeroScroll", "TopScroll"};
-    for (unsigned i = 0; i < 4; ++i)
+    const char *scrollIds[] = {"Inset", "EmptyScroll", "ZeroScroll", "TopScroll", "BottomScroll"};
+    for (unsigned i = 0; i < 5; ++i)
     {
       loka::app::scene::Node *node = windowNode(window, scrollIds[i]);
       LOKA_VERIFY(node && node->asScrollViewNode());
       const loka::app::ScrollViewProps &actual = node->asScrollViewNode()->props;
       const int top = i == 0 || i == 3 ? 12 : 0;
-      const int bottom = i == 0 ? 3 : 0;
+      const int bottom = i == 0 || i == 4 ? 3 : 0;
       LOKA_VERIFY(actual.contentInsets_ == loka::app::ScrollViewContentInsets::of(top, bottom));
       LOKA_VERIFY(actual.viewport_.state()->get()
                   == (top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0)));

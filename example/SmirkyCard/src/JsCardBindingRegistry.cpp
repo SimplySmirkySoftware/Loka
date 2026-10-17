@@ -741,15 +741,15 @@ namespace smirkycard
           node.fail("JavaScript ScrollView has invalid insets.");
           return 0;
         }
-        loka::app::ScrollView *scroll = node.createScrollView(top || bottom ? loka::app::ScrollViewProps::topOrigin()
-                                                                            : loka::core::Frame(0, 0, 0, 0));
+        // Only a top inset has a gap to show: origin.y reaches down to -top, never below 0 for bottom alone.
+        loka::app::ScrollView *scroll =
+            node.createScrollView(top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0));
         if (!scroll)
         {
           node.fail("JavaScript ScrollView allocation refused.");
           return 0;
         }
-        if (top || bottom)
-          scroll->contentInsets(top, bottom);
+        scroll->contentInsets(top, bottom);
         loka::app::scene::NodeDefinitionBase *content =
             lowerSingleChild(node, ctx, tree, depth, "JavaScript ScrollView has an invalid child.");
         if (!content)

@@ -193,7 +193,7 @@ there is no JS viewport seat or viewport argument. The optional plain options ob
 `ScrollView(child, {insets: {top: 44, bottom: 8}})` accepts integer insets in
 0..32767, with omitted values defaulting to zero. Unknown keys are refused.
 The scrollable extent grows by top + bottom; content starts top units below the
-viewport's start and scrolls under the first top units. With nonzero insets the
+viewport's start and scrolls into the top gap. With a nonzero top inset the
 viewport starts at the top with the gap visible. No scroll bar moves; an overlay
 in the gap is a later page of the same rally. `LAPTOP.JS` does not use it yet.
 A ScrollView cannot contain another ScrollView.
