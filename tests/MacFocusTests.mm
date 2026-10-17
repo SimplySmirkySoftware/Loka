@@ -1,4 +1,5 @@
 #include "MacFocusTests.hpp"
+#include "support/MacWindowSession.hpp"
 #include "MacApp.hpp"
 #include "MacObjCCompat.hpp"
 #include "MacWindow.hpp"
@@ -167,16 +168,7 @@ namespace
   /** Diagnostic only; the discriminating condition is the window's key status. */
   const char *keyRefusalReason()
   {
-    bool locked = false;
-    CFDictionaryRef session = CGSessionCopyCurrentDictionary();
-    if (session)
-    {
-      // Not a documented key: present and true while the console screen is locked.
-      id value = [(NSDictionary *)session objectForKey:@"CGSSessionScreenIsLocked"];
-      locked = value && [value respondsToSelector:@selector(boolValue)] && [value boolValue];
-      CFRelease(session);
-    }
-    if (locked)
+    if (loka::testing::MacConsoleScreenIsLocked())
       return "the console screen is locked";
     return [NSApp isActive] ? "the application is active but the window is not key"
                             : "the application was not activated";

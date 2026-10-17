@@ -1294,7 +1294,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     ctx->readLifecycleFactOnAttach();
   }
 
-  const int requestedOffset = scrollView->requestedOrigin().y;
+  const int requestedExtent = scrollView->requestedOrigin().y;
+  const int translation = scrollView->contentTranslation().y;
   const loka::core::Frame viewportClip(0, 0, state.width, state.height);
   loka::app::scene::ProjectionParentScope viewportScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
@@ -1341,7 +1342,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   childBase.height = static_cast<short>(viewportHeight);
   const loka::core::Frame childClip(0, 0, state.width, viewportHeight);
   loka::app::scene::ProjectionParentScope childScope;
-  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, requestedOffset, childClip, childScope))
+  if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, translation, childClip, childScope))
   {
     return LayoutNodeResult(state.width, state.y);
   }
@@ -1349,6 +1350,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   int currentY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
+  const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionParentScopeGuard scopeGuard(
         this->projectionParentScopes_, childScope);
@@ -1358,7 +1360,6 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     }
 
     loka::app::scene::INestable *nestable = scrollView->asNestable();
-    const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::app::layout::StackGaps gaps(state.spacing());
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
@@ -1389,18 +1390,29 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     contentHeight = this->projectionParentScopes_.current().contentHeight();
     shortRangeRefused =
         this->projectionParentScopes_.current().hasShortRangeRefusal();
-    if (shortRangeRefused)
-    {
-      // Seats recorded under a refused scope are not facts.
-      this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
-    }
+  }
+
+  const int extent = contentHeight + scrollView->props.contentInsets_.extentExtra();
+  // On success currentY - state.y is the content height, so the measured
+  // bottom is the seat origin plus the extent (the Toolbox spelling).
+  const int extentBottom = state.y + extent;
+  // The extent and the heightless bottom follow the Toolbox short-range rule;
+  // SCROLLINFO is int, the short is the fact's and the twins' range.
+  if (extent > SHRT_MAX || (state.height <= 0 && extentBottom > SHRT_MAX))
+  {
+    shortRangeRefused = true;
+  }
+  if (shortRangeRefused)
+  {
+    // Seats recorded under a refused scope are not facts, whichever check refused.
+    this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
   }
 
   if (!shortRangeRefused)
   {
     // Both bars commit together with the successful layout.
     ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
-    const int clampedOffset = ctx->setScrollMetrics(SB_VERT, contentHeight, viewportHeight, requestedOffset);
+    const int clampedOffset = ctx->setScrollMetrics(SB_VERT, extent, viewportHeight, requestedExtent);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishOrigin(clampedX, clampedOffset);
   }
@@ -1409,11 +1421,13 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     return LayoutNodeResult(state.width, state.y + state.height);
   }
-  if (currentY < SHRT_MIN || currentY > SHRT_MAX)
+  if (shortRangeRefused || extentBottom > SHRT_MAX)
   {
     return LayoutNodeResult(state.width, state.y);
   }
-  return LayoutNodeResult(state.width, currentY);
+  // The measured bottom includes both insets and must fit the short before
+  // narrowing (the Toolbox heightless arm refuses the same wrap).
+  return LayoutNodeResult(state.width, extentBottom);
 }
 
 int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const LayoutState &state)
