@@ -411,9 +411,26 @@ namespace
     }
   }
 
+  void ScrollViewInsetExtentPins()
+  {
+    Pin("ToolboxScrollViewInsetsRefuseAnExtentAboveShort");
+    {
+      // A seat with a height has no heightless check: the native maximum would
+      // wrap negative once content + insets passes the short range.
+      ScrollFixture f(1);
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(SHRT_MAX, 0));
+      const std::size_t committedCalls = f.controller.scrollCalls.size();
+      f.step(0, 100, 10, 20);
+      LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == committedCalls);
+      LOKA_VERIFY(f.fact.get().y == 0);
+    }
+  }
+
   void ScrollViewPins()
   {
     ScrollViewInsetPins();
+    ScrollViewInsetExtentPins();
     ScrollViewSizeBoxPins();
     Pin("ToolboxScrollViewColumnBoxesGapRefusal");
     {

@@ -212,7 +212,9 @@ short ToolboxScenePlatformController::layoutScrollView(
   if (!shortRangeRefused && spans.isValid() && spans->valid())
     contentHeight = spans->total();
   const int extent = contentHeight + scrollView->props.contentInsets_.extentExtra();
-  if (!shortRangeRefused && state.height <= 0 && static_cast<int>(seatY) + extent > SHRT_MAX)
+  // The extent itself must fit the short the bar's maximum is stored in, and
+  // on the heightless path the seat origin rides on top of it.
+  if (!shortRangeRefused && (extent > SHRT_MAX || (state.height <= 0 && static_cast<int>(seatY) + extent > SHRT_MAX)))
     shortRangeRefused = true;
   if (shortRangeRefused)
   {
@@ -249,7 +251,8 @@ short ToolboxScenePlatformController::layoutScrollView(
   }
   else if (!shortRangeRefused && static_cast<int>(seatY) + extent <= SHRT_MAX)
   {
-    // The measured bottom includes both insets and must fit before narrowing.
+    // The measured bottom includes both insets and must fit the short before
+    // narrowing (the Win32 heightless arm refuses the same wrap).
     state.y = static_cast<short>(seatY + extent);
   }
   else
