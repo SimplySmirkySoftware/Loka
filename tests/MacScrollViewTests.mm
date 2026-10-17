@@ -733,8 +733,12 @@ void testMacScrollViewRefusedResizeDoesNotPublish()
     MacScenePlatformController controller(root, RailMetrics());
     ViewportFact fact(0);
     ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    int visits = 0;
     ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(200, 400));
     scroll.addChild(leading);
+    // The trailing child is what pushes the refused pass past the short, as
+    // in the refused-layout pin above.
+    scroll.addChild(new GapDispatchText(visits));
     fact.state().set(loka::core::Frame(0, 100, 0, 0));
     establishLayout(controller, &scroll, 300, 140);
     NSScrollView *native = scrollViewUnderRoot(root);
@@ -743,8 +747,10 @@ void testMacScrollViewRefusedResizeDoesNotPublish()
     LOKA_VERIFY(factBefore.y == 100);
     const NSRect before = [[native documentView] frame];
     fact.resetChangeCount();
+    visits = 0;
     leading->props.size(200, SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1);
     controller.relayout(300, 600);
+    LOKA_VERIFY(visits == 0);
     const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
     LOKA_VERIFY(documentUnchanged);
     const loka::core::Frame refused = fact.state().get();
