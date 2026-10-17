@@ -405,15 +405,23 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     LOKA_VERIFY(offsetState.get().y == -12);
 
     offset.state().set(loka::core::Frame(0, 100, 0, 0));
+    offset.resetChangeCount();
     controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
-    const RECT scrolled = childRectInParent(child, root);
     const SCROLLINFO after = scrollInfo(viewport);
     // Extent maximum 22 clamps the requested content origin 100: the bar
     // settles extent 22 and the published fact reads 22 - 12 = 10, so the
     // fact assertion proves the clamp was published, not merely preserved.
-    LOKA_VERIFY(scrolled.top == seat.top - 10);
+    // This pass placed on the request (the reclamp pin's rule); the next
+    // pass places on the published clamp.
     LOKA_VERIFY(after.nPos == 22);
     LOKA_VERIFY(offsetState.get().y == 10);
+    const unsigned published = offset.changeCount();
+    LOKA_VERIFY(published == 1);
+    controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
+    const RECT scrolled = childRectInParent(child, root);
+    LOKA_VERIFY(scrolled.top == seat.top - 10);
+    const unsigned settled = offset.changeCount();
+    LOKA_VERIFY(settled == 1);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY(DestroyWindow(root));
