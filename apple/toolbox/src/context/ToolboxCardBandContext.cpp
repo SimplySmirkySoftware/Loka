@@ -3,6 +3,7 @@
 #include "app/style/CardShadow.hpp"
 #include <cstring>
 #include "core/Profiler.hpp"
+#include "ToolboxAlignedPattern.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
@@ -176,8 +177,9 @@ namespace
             const unsigned char density = CardShadowDensity(style, body, x0 + (v == 1 ? i : 0), y0 + (v == 1 ? 0 : i));
             if (!density)
               continue;
-            Pattern pattern;
-            unsigned char *bytes = reinterpret_cast<unsigned char *>(&pattern);
+            // PenPat copies the pattern with long moves; keep it word-aligned (#1398).
+            loka::toolbox::ToolboxAlignedPattern pattern;
+            unsigned char *bytes = reinterpret_cast<unsigned char *>(&pattern.pattern);
             {
               PROFILE_SECTION("card.pattern-prepare");
               CardShadowStencilPattern(density, bytes);
@@ -194,7 +196,7 @@ namespace
             i = end - 1;
             {
               PROFILE_SECTION("card.paint-run");
-              PenPat(&pattern);
+              PenPat(&pattern.pattern);
               PaintRect(&run);
             }
           }
