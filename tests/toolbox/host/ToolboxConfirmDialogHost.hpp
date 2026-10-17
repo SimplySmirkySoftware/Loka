@@ -18,7 +18,7 @@ static Handle confirmItems;
 static long confirmItemsSize;
 static std::string confirmText;
 static GrafPort confirmPort;
-QDGlobals qd = {{{0, 0, 342, 512}}};
+QDGlobals qd = {{0, 0, {0, 0, 342, 512}}};
 short GetMBarHeight() { return 20; }
 Handle NewHandle(long size)
 {

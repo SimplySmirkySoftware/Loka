@@ -1,4 +1,7 @@
 #include "ToolboxLayoutMetrics.hpp"
+#include "app/style/CardShadow.hpp"
+#include "core/Profiler.hpp"
+#include "ToolboxProfiler.hpp"
 #include "context/ToolboxCardBandContext.hpp"
 #include "ToolboxPaintGradient.hpp"
 #include "ToolboxPaintGround.hpp"
@@ -8,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <Fonts.h>
+#include <MacMemory.h>
 
 #include "StandaloneFlowRunner.hpp"
 #include "ObservedMainDefinition.hpp"
@@ -577,18 +581,135 @@ namespace
     unsigned long siblingInk_;
   };
 
+  /** Fixture-local timing stream completion; always closes, including write failure. */
+  bool CloseCardTiming(std::FILE *timing)
+  {
+    const bool written = std::ferror(timing) == 0;
+    const bool closed = std::fclose(timing) == 0;
+    return written && closed;
+  }
+
+  /** One-arm packed native pixel capture. Nullable storage is released before
+      the arm returns; a second packed plane holds each current-port comparison. */
+  class CardCapture
+  {
+  public:
+    explicit CardCapture(const Rect &frame)
+        : frame_(frame),
+          pixels_(NewPtrClear(2 * stride(frame) * (frame.bottom - frame.top)))
+    {
+      if (this->pixels_)
+        this->capture(this->pixels_);
+    }
+    ~CardCapture()
+    {
+      if (this->pixels_)
+        DisposePtr(this->pixels_);
+    }
+    bool ready() const
+    {
+      return this->pixels_ != 0;
+    }
+    /** Small independent native pin for packed capture phase and right padding. */
+    bool matchesProbe() const
+    {
+      const int width = this->frame_.right - this->frame_.left;
+      const int height = this->frame_.bottom - this->frame_.top;
+      for (int y = 0; y < 8 && y < height; ++y)
+        for (int probe = 0; probe < 9; ++probe)
+        {
+          const int x = probe == 8 ? width - 1 : probe;
+          if (x >= width)
+            continue;
+          const bool bit = (this->pixels_[y * stride(this->frame_) + x / 8] & (0x80 >> (x & 7))) != 0;
+          if (bit != (GetPixel(this->frame_.left + x, this->frame_.top + y) != 0))
+            return false;
+        }
+      return true;
+    }
+    int differences(const Pattern *ground = 0) const
+    {
+      Ptr current = this->pixels_ + stride(this->frame_) * (this->frame_.bottom - this->frame_.top);
+      this->capture(current);
+      const unsigned char *pattern = reinterpret_cast<const unsigned char *>(ground);
+      const int width = this->frame_.right - this->frame_.left;
+      int differences = 0;
+      for (int y = 0; y < this->frame_.bottom - this->frame_.top; ++y)
+      {
+        unsigned char background = pattern ? pattern[(this->frame_.top + y) & 7] : 0;
+        const int phase = this->frame_.left & 7;
+        background = static_cast<unsigned char>((background << phase) | (background >> (8 - phase)));
+        for (int x = 0; x < (width + 7) / 8; ++x)
+        {
+          const int index = y * stride(this->frame_) + x;
+          unsigned char changed = static_cast<unsigned char>(current[index] ^ (this->pixels_[index] | background));
+          if (x * 8 + 8 > width)
+            changed &= 0xff << (8 - (width & 7));
+          while (changed)
+          {
+            differences += changed & 1;
+            changed >>= 1;
+          }
+        }
+      }
+      return differences;
+    }
+    void dump(std::FILE *log, const char *label, bool current) const
+    {
+      Ptr pixels = this->pixels_;
+      if (current)
+      {
+        pixels += stride(this->frame_) * (this->frame_.bottom - this->frame_.top);
+        this->capture(pixels);
+      }
+      std::fprintf(log,
+                   "card-dump %s x=%d y=%d w=%d h=%d\r",
+                   label,
+                   this->frame_.left,
+                   this->frame_.top,
+                   this->frame_.right - this->frame_.left,
+                   this->frame_.bottom - this->frame_.top);
+      for (int y = 0; y < this->frame_.bottom - this->frame_.top; ++y)
+      {
+        for (int x = 0; x < this->frame_.right - this->frame_.left; ++x)
+          std::fputc((pixels[y * stride(this->frame_) + x / 8] & (0x80 >> (x & 7))) ? '1' : '0', log);
+        std::fputc('\r', log);
+      }
+    }
+
+  private:
+    const Rect frame_;
+    Ptr pixels_;
+    static int stride(const Rect &frame)
+    {
+      return 2 * ((frame.right - frame.left + 15) / 16);
+    }
+    void capture(Ptr pixels) const
+    {
+      GrafPtr port;
+      GetPort(&port);
+      BitMap bitmap;
+      bitmap.baseAddr = pixels;
+      bitmap.rowBytes = stride(this->frame_);
+      bitmap.bounds = this->frame_;
+      CopyBits(&port->portBits, &bitmap, &this->frame_, &bitmap.bounds, srcCopy, 0);
+    }
+    CardCapture(const CardCapture &);
+    CardCapture &operator=(const CardCapture &);
+  };
+
   /** Pixel fixture using production framed placement and production band contexts.
         The enclosing standalone window supplies the real QuickDraw port. */
   class CardPixels
   {
   public:
-    CardPixels()
-        : card_(CardProps())
+    explicit CardPixels(const CardStyle &style = CardStyle())
+        : card_(CardProps(style))
     {
       this->card_.addChild(new Node());
       for (int role = 0; role < CARD_BAND_COUNT; ++role)
       {
-        CardBandNode *band = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role)));
+        CardBandNode *band = new CardBandNode(CardBandProps(static_cast<CardBandRole>(role), style));
         band->setContext(new ToolboxCardBandContext(band, 0));
         this->card_.addChild(band);
       }
@@ -614,6 +735,74 @@ namespace
       for (short y = frame.top; y < frame.bottom; ++y)
         for (short x = frame.left; x < frame.right; ++x)
           *pixels++ = GetPixel(x, y) != 0;
+    }
+    /** Whole-card common oracle with the native border, independent of band partitioning. */
+    static bool tableReference(const Rect &frame, const CardStyle &style = CardStyle())
+    {
+      const loka::app::detail::CardShadowTable &g = style.geometry();
+      const loka::core::Frame body(frame.left + g.allowance[0],
+                                   frame.top + g.allowance[1],
+                                   frame.right - frame.left - g.allowance[0] - g.allowance[2],
+                                   frame.bottom - frame.top - g.allowance[1] - g.allowance[3]);
+      PenState pen;
+      GetPenState(&pen);
+      PenNormal();
+      PenMode(patOr);
+      // The oracle walks whole rows, never the painter's tile/band partition.
+      // CopyBits avoids one QuickDraw trap per black pixel.
+      union
+      {
+        unsigned char bytes[12];
+        long alignment;
+      } bits;
+      unsigned char densities[96], thresholds[8];
+      const int width = frame.right - frame.left;
+      if (width > 96)
+      {
+        SetPenState(&pen);
+        return false;
+      }
+      GrafPtr port;
+      GetPort(&port);
+      BitMap bitmap;
+      bitmap.baseAddr = reinterpret_cast<Ptr>(bits.bytes);
+      bitmap.rowBytes = 2 * ((width + 15) / 16);
+      SetRect(&bitmap.bounds, 0, 0, width, 1);
+      for (int y = frame.top; y < frame.bottom; ++y)
+      {
+        std::memset(bits.bytes, 0, sizeof(bits.bytes));
+        CardShadowDensityRun(style, body, frame.left, y, width, densities);
+        CardShadowStencilThresholdRow(y, thresholds);
+        for (int x = 0; x < width; ++x)
+          if (densities[x] > thresholds[(frame.left + x) & 7])
+            bits.bytes[x / 8] |= 0x80 >> (x & 7);
+        Rect row;
+        SetRect(&row, frame.left, y, frame.right, y + 1);
+        CopyBits(&bitmap, &port->portBits, &bitmap.bounds, &row, srcOr, 0);
+      }
+      Rect nativeBody;
+      SetRect(&nativeBody, body.x, body.y, body.x + body.width, body.y + body.height);
+      PenNormal();
+      FrameRoundRect(&nativeBody, 12, 12);
+      SetPenState(&pen);
+      return true;
+    }
+    /** One byte per pixel; header gives window origin and dimensions. */
+    static void dump(std::FILE *log, const Rect &frame, const unsigned char *pixels, const char *label)
+    {
+      std::fprintf(log,
+                   "card-dump %s x=%d y=%d w=%d h=%d\r",
+                   label,
+                   frame.left,
+                   frame.top,
+                   frame.right - frame.left,
+                   frame.bottom - frame.top);
+      for (int y = frame.top; y < frame.bottom; ++y)
+      {
+        for (int x = frame.left; x < frame.right; ++x)
+          std::fputc(*pixels++ ? '1' : '0', log);
+        std::fputc('\r', log);
+      }
     }
     /** Independent oracle: actual whole body, no local reconstruction or band clips. */
     static bool reference(const Rect &frame)
@@ -833,12 +1022,23 @@ namespace
         : StdCompositionBoundaryNodeBase<CardReplayProps>(props)
     {
       this->state(this->width_, 96);
+      this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
     }
     virtual void composeNode(NodeComposition &composition)
     {
       // A width-only Box is a Row seat claim (#576); as the root it would pass the full window width through.
-      composition.declare(
-          Row() << (Box().width(this->width_.state()) << (Card().TEST_ID("Card.Replay") << Box().size(1, 63))));
+      composition.declare(Column() << (Row() << (Box().width(this->width_.state())
+                                                 << (Card().TEST_ID("Card.Replay") << Box().size(1, 63))))
+                                   << (Box().size(180, 70)
+                                       << (ScrollView(this->offset_).TEST_ID("Card.Viewport")
+                                           << (Column() << (Card(CardStyle(CARD_SHADOW_WIDE)).TEST_ID("Card.Scrolled")
+                                                            << Box().size(220, 80))
+                                                        << Box().size(220, 80)))));
+    }
+    void scroll()
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->offset_.set(loka::core::Frame(3, 5, 0, 0));
     }
     void narrow(bool narrow)
     {
@@ -848,6 +1048,7 @@ namespace
 
   private:
     NodeState<int> width_;
+    NodeState<loka::core::Frame> offset_;
   };
 
   /** Snapshot owned by the finite attached-Card replay fixture. */
@@ -898,6 +1099,36 @@ namespace
         if (this->pixels_[i])
           return READY;
       return CHECK_OLD_INK;
+    }
+    /** Reuse the completed replay snapshot for one visible pre-scroll row. */
+    bool captureScrollRow(Node *card)
+    {
+      const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+      if (!card || !card->asNestable())
+        return false;
+      for (Node *child = card->asNestable()->childrenHead(); child; child = child->nextInComposition)
+        if (child->asCardBandNode() && child->getContext() && child->asCardBandNode()->props.role == CARD_BAND_TOP)
+        {
+          const PaintAnswer answer = static_cast<NativeNodeContext *>(child->getContext())->queryPaintDamage(query);
+          if (answer.kind != PAINT_ANSWER_EXACT || answer.damage.width <= 0 || answer.damage.height <= 0
+              || answer.damage.width > static_cast<int>(sizeof(this->pixels_)))
+            return false;
+          SetRect(&this->frame_,
+                  answer.damage.x,
+                  answer.damage.y + answer.damage.height - 1,
+                  answer.damage.x + answer.damage.width,
+                  answer.damage.y + answer.damage.height);
+          CardPixels::capture(this->frame_, this->pixels_);
+          return true;
+        }
+      return false;
+    }
+    bool scrollRowChanged() const
+    {
+      for (int x = 0; x < this->frame_.right - this->frame_.left; ++x)
+        if ((GetPixel(this->frame_.left + x, this->frame_.top) != 0) != (this->pixels_[x] != 0))
+          return true;
+      return false;
     }
     bool matches(bool disabled) const
     {
@@ -1131,7 +1362,8 @@ namespace
           ribbonWindow_(0),
           cardWindow_(0),
           card_(0),
-          cardReplay_()
+          cardReplay_(),
+          scrollStart_(0)
     {
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
@@ -1296,6 +1528,7 @@ namespace
                  CARD_CAPTURE,
                  CARD_DISABLED,
                  CARD_RESTORED,
+                 CARD_SCROLLED,
                  COMPLETE
     };
     App *app_;
@@ -1351,6 +1584,7 @@ namespace
     Window *cardWindow_;
     CardReplayNode *card_;
     CardReplayPixels cardReplay_;
+    unsigned long scrollStart_;
 
     void recordArm(const char *name, bool pass, Phase next)
     {
@@ -1440,6 +1674,7 @@ namespace
       case CARD_CAPTURE:
       case CARD_DISABLED:
       case CARD_RESTORED:
+      case CARD_SCROLLED:
         target = self->cardWindow_;
         break;
       case COMPLETE:
@@ -2803,6 +3038,8 @@ namespace
 
     static void OnCardIdle(Window *window, PaintDamageConfig *self)
     {
+      Rect frame;
+      SetRect(&frame, 0, 0, 220, 180);
       ToolboxWindow *native = window->asToolboxWindow();
       if (self->phase_ == CARD_SHOW)
       {
@@ -2840,9 +3077,70 @@ namespace
         self->recordArm("card-attached-disabled-erases-old-ink", self->cardReplay_.matches(true), CARD_RESTORED);
         self->card_->narrow(false);
       }
+      else if (self->phase_ == CARD_RESTORED)
+      {
+        self->recordArm("card-attached-reenabled-restores-ink", self->cardReplay_.matches(false), CARD_SCROLLED);
+        self->scrollStart_ = TickCount();
+        Node *scrolled = 0;
+        loka::dsl::FlowError error;
+        if (!loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Card.Scrolled", scrolled, error)
+            || !self->cardReplay_.captureScrollRow(scrolled))
+        {
+          self->recordArm("card-scroll-row-capture", false, COMPLETE);
+          self->finish(false);
+          SetPort(saved);
+          return;
+        }
+        self->card_->scroll();
+      }
       else
       {
-        self->recordArm("card-attached-reenabled-restores-ink", self->cardReplay_.matches(false), COMPLETE);
+        const CardCapture incremental(frame);
+        if (!incremental.ready())
+        {
+          self->recordArm("card-scroll-capture-allocation", false, COMPLETE);
+          self->finish(false);
+          SetPort(saved);
+          return;
+        }
+        const bool captureCorrect = incremental.matchesProbe();
+        Node *viewport = 0, *card = 0;
+        loka::dsl::FlowError error;
+        const bool foundViewport =
+            loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Card.Viewport", viewport, error);
+        const bool foundCard = loka::dsl::testing::LookupNodeById<Node>(window->scene(), "Card.Scrolled", card, error);
+        bool visibleWide = false;
+        const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+        if (foundCard && card && card->asNestable())
+          for (Node *child = card->asNestable()->childrenHead(); child; child = child->nextInComposition)
+            if (child->asCardBandNode() && child->getContext()
+                && child->asCardBandNode()->props.style.extent() == CARD_SHADOW_WIDE)
+            {
+              const PaintAnswer answer = static_cast<NativeNodeContext *>(child->getContext())->queryPaintDamage(query);
+              visibleWide =
+                  visibleWide
+                  || (answer.kind == PAINT_ANSWER_EXACT && answer.damage.width > 0 && answer.damage.height > 0);
+            }
+        const loka::core::Frame origin = foundViewport && viewport && viewport->asScrollViewNode()
+                                             ? viewport->asScrollViewNode()->requestedOrigin()
+                                             : loka::core::Frame();
+        self->recordArm("card-scroll-applied-visible-wide",
+                        origin.x == 3 && origin.y == 5 && visibleWide && self->cardReplay_.scrollRowChanged(),
+                        CARD_SCROLLED);
+        // Synchronous production full draw keeps the capture within this arm.
+        native->draw();
+        self->recordArm(
+            "card-scroll-incremental-equals-full", captureCorrect && incremental.differences() == 0, COMPLETE);
+        std::FILE *timing = std::fopen("CARDTIME.TXT", "a");
+        self->recordArm("card-scroll-timing-log-open", timing != 0, COMPLETE);
+        if (timing)
+        {
+          std::fprintf(timing,
+                       "card-scroll ticks=%lu (add to card-new-arms for 3600-tick budget)\r",
+                       TickCount() - self->scrollStart_);
+          if (!CloseCardTiming(timing))
+            self->result_ = 1;
+        }
         self->finish(true);
       }
       SetPort(saved);
@@ -2863,7 +3161,7 @@ namespace
         SetRect(&frame, 17, 19, 17 + (size ? 96 : 17), 19 + (size ? 72 : 17));
         ToolboxPaintClip clip(frame);
         EraseRect(&frame);
-        const bool madeReference = CardPixels::reference(frame);
+        const bool madeReference = CardPixels::tableReference(frame);
         CardPixels::capture(frame, reference);
         const int width = frame.right - frame.left, height = frame.bottom - frame.top;
         const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
@@ -2877,6 +3175,18 @@ namespace
         card.layout(frame);
         card.draw();
         CardPixels::capture(frame, actual);
+        EraseRect(&frame);
+        const bool madeV1 = CardPixels::reference(frame);
+        CardPixels::capture(frame, ground);
+        int differences = 0;
+        for (std::size_t i = 0; i < pixelCount; ++i)
+          differences += ground[i] != actual[i];
+        std::fprintf(this->log_, "card-v1 size=%d available=%d differences=%d\r", size, madeV1, differences);
+        if (differences)
+        {
+          CardPixels::dump(this->log_, frame, ground, "v1");
+          CardPixels::dump(this->log_, frame, actual, "table");
+        }
         this->recordArm(size ? "card-large-bands-equal-whole" : "card-minimum-bands-equal-whole",
                         std::memcmp(reference, actual, pixelCount) == 0,
                         COMPLETE);
@@ -2922,7 +3232,165 @@ namespace
           restored = restored && actual[i] == (ground[i] || reference[i]);
         this->recordArm(size ? "card-large-reenabled" : "card-minimum-reenabled", restored, COMPLETE);
       }
+      const unsigned long stencilStart = TickCount();
+      std::FILE *timing = std::fopen("CARDTIME.TXT", "w");
+      this->recordArm("card-timing-log-open", timing != 0, COMPLETE);
+      if (timing)
+      {
+        this->checkCardStencilMatrix(timing);
+        this->timeCardStencil(timing);
+        const unsigned long stencilTicks = TickCount() - stencilStart;
+        std::fprintf(timing, "card-new-arms ticks=%lu budget_ticks=3600\r", stencilTicks);
+        if (!CloseCardTiming(timing))
+          this->result_ = 1;
+        this->recordArm("card-stencil-runtime-budget", stencilTicks <= 3600, COMPLETE);
+      }
       SetPenState(&savedPen);
+    }
+
+    void timeCardStencil(std::FILE *timing)
+    {
+      InitToolboxProfiler();
+      Rect frame;
+      SetRect(&frame, 17, 19, 177, 139);
+      ToolboxPaintClip clip(frame);
+      for (int extent = CARD_SHADOW_DROP; extent <= CARD_SHADOW_WIDE; ++extent)
+      {
+        CardPixels card(CardStyle(static_cast<CardShadowExtent>(extent)));
+        card.layout(frame);
+        for (int path = -2; path < CARD_BAND_COUNT; ++path)
+        {
+          Rect damage = frame;
+          if (path == -2)
+            SetRect(&damage, 165, 125, 177, 139);
+          ToolboxPaintClip partial(damage);
+          loka::core::ResetFuncProfile();
+          std::fprintf(timing, "card-stack before-draw=%ld bytes\r", static_cast<long>(StackSpace()));
+          const unsigned long start = TickCount();
+          for (int repeat = 0; repeat < 16; ++repeat)
+            card.draw(path < 0 ? -1 : path);
+          std::fprintf(
+              timing, "card-timing extent=%d path=%d repeats=16 ticks=%lu\r", extent, path, TickCount() - start);
+#if LOKA_PROFILE_FUNC_TICKS
+          for (int i = 0; i < loka::core::gProfileSlotCount; ++i)
+          {
+            const loka::core::FuncProfileSlot &slot = *loka::core::gProfileSlots[i];
+            if (std::strncmp(slot.func, "card.", 5) == 0)
+              std::fprintf(timing, "%s calls=%d ticks=%ld\r", slot.func, slot.callCount, slot.totalTicks);
+          }
+#else
+          std::fprintf(timing, "card-breakdown requires LOKA_PROFILE_FUNC_TICKS=1\r");
+#endif
+        }
+      }
+      const unsigned long start = TickCount();
+      for (int repeat = 0; repeat < 16; ++repeat)
+        CardPixels::reference(frame);
+      std::fprintf(timing, "card-v1-whole repeats=16 ticks=%lu\r", TickCount() - start);
+    }
+
+    void checkCardStencilMatrix(std::FILE *timing)
+    {
+      const unsigned long started = TickCount();
+      for (int extent = CARD_SHADOW_NONE; extent <= CARD_SHADOW_WIDE; ++extent)
+        for (int origin = 0; origin < 8; ++origin)
+          for (int residue = 0; residue < 8; ++residue)
+          {
+            if (extent == CARD_SHADOW_NONE && origin != residue)
+              continue;
+            const CardStyle style(static_cast<CardShadowExtent>(extent));
+            CardPixels card(style), alpha(CardStyle(static_cast<CardShadowExtent>(extent), CARD_SHADOW_ALPHA));
+            const int minimumWidth =
+                style.geometry().minimumWidth + style.geometry().allowance[0] + style.geometry().allowance[2];
+            const int minimumHeight =
+                style.geometry().minimumHeight + style.geometry().allowance[1] + style.geometry().allowance[3];
+            Rect frame;
+            SetRect(&frame,
+                    16 + origin,
+                    16 + (3 * origin) % 8,
+                    16 + origin + minimumWidth + residue,
+                    16 + (3 * origin) % 8 + minimumHeight + (5 * residue) % 8);
+            ToolboxPaintClip clip(frame);
+            EraseRect(&frame);
+            const unsigned long oracleStart = TickCount();
+            CardPixels::tableReference(frame, style);
+            const unsigned long oracleTicks = TickCount() - oracleStart;
+            const unsigned long captureStart = TickCount();
+            const CardCapture expected(frame);
+            const unsigned long captureTicks = TickCount() - captureStart;
+            if (!expected.ready())
+            {
+              this->recordArm("card-matrix-capture-allocation", false, COMPLETE);
+              continue;
+            }
+            const bool captureCorrect = expected.matchesProbe();
+            EraseRect(&frame);
+            card.layout(frame);
+            const unsigned long paintStart = TickCount();
+            card.draw();
+            const unsigned long paintTicks = TickCount() - paintStart;
+            std::fprintf(timing,
+                         "card-matrix extent=%d origin=%d size=%d paint_ticks=%lu\r",
+                         extent,
+                         origin,
+                         residue,
+                         paintTicks);
+            const unsigned long verificationStart = TickCount();
+            this->recordArm(extent == CARD_SHADOW_NONE ? "card-none-border-only" : "card-stencil-matrix-whole",
+                            captureCorrect && expected.differences() == 0,
+                            COMPLETE);
+            if (origin == residue)
+            {
+              EraseRect(&frame);
+              alpha.layout(frame);
+              alpha.draw();
+              this->recordArm("card-alpha-equals-stencil", expected.differences() == 0, COMPLETE);
+              FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
+              card.draw();
+              this->recordArm("card-stencil-patterned-ground",
+                              expected.differences(&loka::toolbox::kToolboxGradientPatterns[2].pattern) == 0,
+                              COMPLETE);
+              // Intersect both a corner/run join and the TOP/RIGHT band join.
+              for (int seam = 0; seam < 2; ++seam)
+              {
+                Rect damage;
+                const int x = seam ? frame.right - style.geometry().allowance[2] - CardStyle::kBorderBand
+                                   : frame.left + style.geometry().allowance[0] + style.geometry().cut[0];
+                SetRect(&damage, x - 2, frame.top, x + 2, frame.top + 6);
+                {
+                  ToolboxPaintClip partial(damage);
+                  FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
+                  card.draw();
+                }
+                this->recordArm(seam ? "card-band-seam-partial" : "card-tile-run-seam-partial",
+                                expected.differences(&loka::toolbox::kToolboxGradientPatterns[2].pattern) == 0,
+                                COMPLETE);
+              }
+            }
+            if (extent == CARD_SHADOW_DROP)
+            {
+              EraseRect(&frame);
+              CardPixels::reference(frame);
+              const int differences = expected.differences();
+              std::fprintf(this->log_, "card-v1 origin=%d size=%d differences=%d\r", origin, residue, differences);
+              if (differences)
+              {
+                expected.dump(this->log_, "v1", true);
+                expected.dump(this->log_, "table", false);
+              }
+            }
+            std::fprintf(timing,
+                         "card-matrix-work extent=%d origin=%d size=%d oracle_ticks=%lu capture_ticks=%lu "
+                         "verification_ticks=%lu\r",
+                         extent,
+                         origin,
+                         residue,
+                         oracleTicks,
+                         captureTicks,
+                         TickCount() - verificationStart);
+          }
+      const unsigned long ticks = TickCount() - started;
+      std::fprintf(timing, "card-matrix total_ticks=%lu budget_ticks=3600\r", ticks);
     }
 
     void checkFontCursor(ToolboxScenePlatformController &controller, GrafPtr port)

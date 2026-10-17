@@ -15,6 +15,7 @@ enum
   redColor = 205, greenColor = 341, blueColor = 409, cyanColor = 273, magentaColor = 137, yellowColor = 69,
   bold = 1,
   italic = 2,
+  srcOr = 1,
   patCopy = 8,
   patOr = 9
 };
@@ -44,8 +45,17 @@ void FrameRoundRect(const Rect *, short, short);
 void OffsetRect(Rect *, short, short);
 void DiffRgn(RgnHandle, RgnHandle, RgnHandle);
 void PaintRgn(RgnHandle);
+typedef char *Ptr;
+struct BitMap
+{
+  Ptr baseAddr;
+  short rowBytes;
+  Rect bounds;
+};
+void CopyBits(const BitMap *, const BitMap *, const Rect *, const Rect *, short, RgnHandle);
 struct GrafPort
 {
+  BitMap portBits;
   short txFont, txSize;
   Style txFace;
   long fgColor;
