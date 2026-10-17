@@ -10,6 +10,7 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/layout/RowLayout.hpp"
 #include "app/layout/ColumnLayout.hpp"
+#include "app/layout/BoxLayout.hpp"
 #include <sys/stat.h>
 #include "platform/null/NullPlatformContext.hpp"
 #include "platform/null/NullApp.hpp"
@@ -879,10 +880,31 @@ namespace
         probe.editor = state;
         return state.y + state.height;
       }
+      if (node->asBoxNode())
+        return layout::computeBoxLayoutResultY(
+            node->asBoxNode(),
+            layout::RailSpacing(12, 4, 9),
+            state,
+            context,
+            &LayoutProbe::columnChild,
+            layout::resolveLayoutGap(node, state.spacing, layout::RailSpacing(12, 4, 9)),
+            &loka::testing::acceptShortLayoutY);
       if (node->asStackNode() && node->testId() != "SimpleText.Ribbon")
         return rowChild(context, node, state);
+      if (node->asNestable() && node->testId() != "SimpleText.Ribbon")
+        return layout::computeInsetLayoutResultY(node->asNestable()->childrenHead(),
+                                                 node->asNestable()->childrenCount(),
+                                                 layout::FrameInsets(0),
+                                                 false,
+                                                 0,
+                                                 0,
+                                                 state,
+                                                 context,
+                                                 &LayoutProbe::columnChild,
+                                                 state.spacing,
+                                                 &loka::testing::acceptShortLayoutY);
       const int bottom = probe.harness.platform.projectLayoutForTesting(node, state);
-      if (find(node, "SimpleText.Error"))
+      if (node->testId() == "SimpleText.Error")
       {
         probe.error = state;
         probe.error.height = static_cast<short>(bottom - state.y);
@@ -915,6 +937,9 @@ namespace
 void testSimpleTextEditorReceivesRemainingWindow()
 {
   Harness h;
+  SimpleTextApp app(h.config);
+  app.run();
+  LOKA_VERIFY(app.window(0).contentMargin() == layout::LayoutGap::of(0));
   scene::LayoutState viewport;
   viewport.x = 20;
   viewport.y = 30;
@@ -940,8 +965,8 @@ void testSimpleTextEditorReceivesRemainingWindow()
     StackNode *root = h.main().childrenHead()->asStackNode();
     LOKA_VERIFY(root && root->props.effectiveAxis() == STACK_AXIS_ROW);
     StackNode *column = root->childrenHead()->asStackNode();
-    LOKA_VERIFY(column && column->props.gap_ == StandardWindowMargin());
-    // Follow every nested Stack with the production column allocation routine.
+    LOKA_VERIFY(column && column->props.gap_ == layout::LayoutGap::of(0));
+    // Follow Stack and Box nodes with the production allocation routines.
     // Only the editor is intercepted: Null's fake native editor is fixed at 80.
     int consumed = 0;
     for (int size = 0; size != 3; ++size)
@@ -959,12 +984,15 @@ void testSimpleTextEditorReceivesRemainingWindow()
                                       viewport.spacing,
                                       0);
       LOKA_VERIFY(probe.band.height > 0);
+      LOKA_VERIFY(probe.band.x == viewport.x + 9 && probe.band.y == viewport.y + 9);
+      LOKA_VERIFY(probe.band.width == viewport.width - 18);
       const int bandBottom = probe.band.y + probe.band.height;
       if (error)
       {
-        LOKA_VERIFY(probe.error.y == bandBottom + 9);
+        LOKA_VERIFY(probe.error.y == bandBottom + 18);
+        LOKA_VERIFY(probe.error.x == viewport.x + 9 && probe.error.width == viewport.width - 18);
         LOKA_VERIFY(probe.error.height > 0);
-        LOKA_VERIFY(probe.editor.y == probe.error.y + probe.error.height + 12);
+        LOKA_VERIFY(probe.editor.y == probe.error.y + probe.error.height + 9);
       }
       else
         LOKA_VERIFY(probe.editor.y == bandBottom + 9);

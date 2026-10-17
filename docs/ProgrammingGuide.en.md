@@ -1575,20 +1575,29 @@ ScrollView mainPanels = ScrollView(this->viewport_)
         ));
 ```
 
-[SimpleText](../example/SimpleText/src/MainNode.hpp) groups its error row and
-editor in an inner stack. The outer named gap places the ribbon one standard
-margin above that group; the error row and editor use the default gap:
+[SimpleText](../example/SimpleText/src/MainNode.hpp) also removes the window
+margin in [its window props](../example/SimpleText/src/MyAppConfig.hpp). The
+editor reaches the window edges; the ribbon band and optional error row each
+keep the standard margin inside a padded box:
 
 ```cpp
-VStack().gap(StandardWindowMargin())
-    << (RibbonControl()
-        // ... ribbon groups and items omitted
-    )
-    << (VStack()
-        << (Show(errorVisible) << Text(this->error_.state()))
-        << TextEditor(this->lines_, this->cursor_)
-        // ... caret request and test IDs omitted
-    );
+// ... inside documentWindow:
+return WindowProps()
+    .frame(16 + offset, 16 + offset, 480, 320)
+    .contentMargin(0)
+    .visible(true);
+    // ... scene omitted
+
+// ... inside MainNode::composeNode:
+VStack().gap(0)
+    << (Box().padding(StandardWindowMargin())
+        << (RibbonControl()
+            // ... ribbon groups and items omitted
+        ))
+    << (Show(errorVisible)
+        << (Box().padding(StandardWindowMargin()) << Text(this->error_.state())))
+    << TextEditor(this->lines_, this->cursor_);
+    // ... caret request and test IDs omitted
 ```
 
 See [ScrollView design](ScrollViewDesign.md) for how
