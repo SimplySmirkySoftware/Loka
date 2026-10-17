@@ -1524,6 +1524,76 @@ This avoids turning every literal into a global or shared `State<T>`. Fixed
 menu items and unchanging configuration also belong in Props or Definitions;
 only inputs that actually change need live State.
 
+### Spacing: Gaps, Padding, And The Window Margin
+
+Use `gap(...)` on `VStack`, `HStack`, `Stack`, or `Box` for the space between
+adjacent children. A hidden `Show` occupies no space and adds no gap.
+Use `Box().padding(...)` for space inside the box around its content.
+Use `WindowProps::contentMargin(...)` to lay the window's root inside a margin
+on every side. The window margin is a construction-time value.
+
+These properties accept [`layout::LayoutGap`](../common/app/layout/LayoutGap.hpp):
+`LayoutGap::unspecified()` (also the default-constructed value) selects the
+property's rail default; `LayoutGap::of(0)` makes the boxes touch;
+`LayoutGap::of(n)` gives `n` units, for `n` from zero through `SHRT_MAX`.
+The units are the rail's layout units.
+The integer overloads `gap(n)`, `padding(n)`, and `contentMargin(n)` mean
+`LayoutGap::of(n)`.
+
+`StandardWindowMargin()` selects the rail's standard outer margin, even if the
+window has a different explicit margin. An unspecified window `contentMargin`
+uses that standard margin; `contentMargin(0)` lets the root reach the window
+edges. The current rail defaults live in
+[ToolboxLayoutMetrics.hpp](../apple/toolbox/src/ToolboxLayoutMetrics.hpp),
+[Win32SceneLayout.hpp](../win32/src/Win32SceneLayout.hpp), and
+[MacSceneLayout.hpp](../apple/macos/src/MacSceneLayout.hpp);
+Null defines its own in [NullScenePlatformController.cpp](../tests/platform/null/NullScenePlatformController.cpp).
+
+HelloWorld lets its `ScrollView` reach the window edges, then pads the scroll
+content with the standard margin. This keeps content the standard distance
+from the window edge and from the scroll bar. These excerpts come from
+[`productionWindowProps`](../example/HelloWorld/src/MyAppConfig.hpp) and
+[`MainNode.cpp`](../example/HelloWorld/src/MainNode.cpp):
+
+```cpp
+WindowProps productionWindowProps(const loka::app::scene::NodeDefinitionBase &scene) const
+{
+    return WindowProps()
+        .frame(50, 50, 420, 330)
+        .contentMargin(0)
+        .scene(scene)
+        .title("LokaSample")
+        .visible(true);
+}
+
+// ... inside MainNode::composeNode:
+ScrollView mainPanels = ScrollView(this->viewport_)
+    << (Box().padding(StandardWindowMargin())
+        << (Stack(this->axis_.state())
+            << this->mainLeftPanel()
+            // ... MainRightPanel and test IDs omitted
+        ));
+```
+
+[SimpleText](../example/SimpleText/src/MainNode.hpp) groups its error row and
+editor in an inner stack. The outer named gap places the ribbon one standard
+margin above that group; the error row and editor use the default gap:
+
+```cpp
+VStack().gap(StandardWindowMargin())
+    << (RibbonControl()
+        // ... ribbon groups and items omitted
+    )
+    << (VStack()
+        << (Show(errorVisible) << Text(this->error_.state()))
+        << TextEditor(this->lines_, this->cursor_)
+        // ... caret request and test IDs omitted
+    );
+```
+
+See [ScrollView design](ScrollViewDesign.md) for how
+scroll bars meet the window edge on each rail.
+
 ### Fixed-Cell Layout
 
 `Canvas` places ordinary composition children in fixed cells, in declaration
