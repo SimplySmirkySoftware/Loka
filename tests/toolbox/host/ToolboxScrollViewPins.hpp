@@ -214,6 +214,7 @@ namespace
       const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
       LOKA_VERIFY(binding.barId[SCROLL_BAR_VERTICAL] != binding.barId[SCROLL_BAR_HORIZONTAL]);
       LOKA_VERIFY(f.controller.scrollControls().size() == 2);
+      LOKA_VERIFY(!f.controller.scrollControl(0).editor.editor() && !f.controller.scrollControl(1).editor.editor());
       const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
       LOKA_VERIFY(horizontal.resourceId == binding.barId[SCROLL_BAR_HORIZONTAL]);
       LOKA_VERIFY(horizontal.maximum == 316 && horizontal.pageStep == 83);
@@ -263,6 +264,7 @@ namespace
       toolbox_host::controlCalls = toolbox_host::ControlCalls();
       f.step(0, 500);
       LOKA_VERIFY(f.controller.scrollControls().size() == 2);
+      LOKA_VERIFY(!f.controller.scrollControl(0).editor.editor() && !f.controller.scrollControl(1).editor.editor());
       LOKA_VERIFY(f.controller.scrollControl(0).usedThisFrame);
       LOKA_VERIFY(!f.controller.scrollControl(1).usedThisFrame);
       // The departing bar is hidden by the layout pass itself, before render.

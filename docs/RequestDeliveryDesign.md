@@ -507,7 +507,9 @@ row. Single-seat behavior and command-free golden records remain unchanged
 Null: attach, props sync, input completion. Toolbox: `onPropsApplied`,
 `finishInput`, native creation in `render`, `retryProjection`; layout settles
 only when the TextEdit record exists, and before it render's attach settle
-delivers (#1141). Win32:
+delivers (#1141). The Toolbox editor bar's `scrollInput` uses the existing
+`finishInput` completion; `idleTick` and `syncPresentation` never take requests
+([Toolbox editor bar](ToolboxTextEditorScrollBar.md)). Win32:
 `syncFromNode`, outside-input `handleCommand`, the outer `WindowProc` after a
 rejected input is restored, the RETRY timer handler. macOS: ordinary sync
 completion, selection completion, `VIEW_CHANGE` completion, the deferred

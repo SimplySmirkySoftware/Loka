@@ -99,12 +99,8 @@ void ToolboxScenePlatformController::clearControls()
   buttonControls_.clear();
   for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
   {
-    if (scrollBarLedger_.scrollBarControls_[i].control)
-    {
-      HideControl(scrollBarLedger_.scrollBarControls_[i].control);
-      queueRetiredScrollBarControl(scrollBarLedger_.scrollBarControls_[i].control, scrollBarLedger_.scrollBarControls_[i].lifetimeHint);
-      scrollBarLedger_.scrollBarControls_[i].control = 0;
-    }
+    this->retireScrollBarBinding(this->scrollBarLedger_.scrollBarControls_[i],
+                                 this->scrollBarLedger_.scrollBarControls_[i].lifetimeHint);
   }
   scrollBarLedger_.scrollBarControls_.clear();
   // Bulk teardown also returns ids whose axis never materialized a control.
@@ -188,5 +184,17 @@ void ToolboxScenePlatformController::disposeNativeHandle(ControlRef control)
   if (control)
   {
     DisposeControl(control);
+  }
+}
+
+void ToolboxScenePlatformController::retireScrollBarBinding(ScrollBarControlBinding &row,
+                                                            loka::app::scene::NativeLifetimeHint hint)
+{
+  row.editor.revoke();
+  if (row.control)
+  {
+    HideControl(row.control);
+    this->queueRetiredScrollBarControl(row.control, hint);
+    row.control = 0;
   }
 }

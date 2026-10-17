@@ -7,9 +7,15 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
 {
   // The binding's rect is the visible box (hit testing, invalidation); only
   // TextEdit's own rects sit inside the frame.
-  const Rect textRect = ToolboxTextEditorTextRect(rect);
+  Rect port = Rect(), sizeBox = Rect();
+  const bool hasPort = this->window_ && this->window_->queryPortRect(port);
+  if (this->window_)
+    this->window_->querySizeBoxRect(sizeBox);
+  const ToolboxTextEditorRects geometry = ToolboxTextEditorGeometry(rect, port, hasPort, sizeBox);
+  const Rect textRect = geometry.text;
   Rect visibleBox, clipped;
-  if (!this->intersectWithProjectionClip(rect, visibleBox) || !this->intersectWithProjectionClip(textRect, clipped))
+  if (!this->intersectWithProjectionClip(geometry.hit, visibleBox)
+      || !this->intersectWithProjectionClip(textRect, clipped))
     return 0;
   std::size_t index = 0;
   if (this->editControls_.find(context, index))
@@ -68,6 +74,17 @@ bool ToolboxScenePlatformController::handleEditClick(const Point &point)
   for (size_t i = 0; i < this->editControls_.size(); ++i)
   {
     EditTextControlBinding &binding = this->editControls_[i];
+    if (binding.editor)
+    {
+      const ToolboxTextEditorRects geometry = binding.editor->geometry();
+      // FindControl declines inactive and invisible controls. Their column
+      // still consumes the press without activating or clicking TextEdit.
+      Rect column = geometry.frame;
+      column.left = geometry.hit.right;
+      Rect clipped;
+      if (this->intersectWithProjectionClip(column, clipped) && PtInRect(point, &clipped))
+        return true;
+    }
     if (binding.te && PtInRect(point, &binding.rect))
     {
       this->activateEditControl(i);
@@ -87,7 +104,10 @@ void ToolboxScenePlatformController::idleTextEdits()
     if (editControls_[i].editor) editControls_[i].editor->retryProjection();
     if (&editControls_[i] == editControls_.focused() && editControls_[i].te)
     {
-      TEIdle(editControls_[i].te);
+      if (editControls_[i].editor)
+        editControls_[i].editor->idleTick();
+      else
+        TEIdle(editControls_[i].te);
     }
   }
 }

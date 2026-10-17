@@ -31,3 +31,4 @@ simpleviewer open-wide-scroll
 smirkycard startup
 smirkycard laptop-carousel
 smirkycard laptop-detail
+smirkbench text-editor-scroll

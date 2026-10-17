@@ -336,6 +336,8 @@ fi
 if ! printf 'scenario %s\nlinger_seconds 120\n%s' "$SCENARIO" "$PROBE_LINE" >"$CONFIG"; then
   fail_stage mame "could not write LokaTest.cfg"
 fi
+# The launcher keys any cell-specific native gesture on the cell's name.
+export LOKA_SCENARIO_CELL="$EXAMPLE/$SCENARIO"
 if ! cp -f "$SCRIPT_DIR/mame-launch.lua" "$LAUNCHER"; then
   fail_stage mame "could not stage mame-launch.lua"
 fi
@@ -457,7 +459,7 @@ if [ -n "${LOKA_SETTLE_TIMEOUT:-}" ]; then
   export LOKA_SETTLE_TIMEOUT
 fi
 export LOKA_SNAP_LOG; LOKA_SNAP_LOG="$(winpath "$LAUNCH_LOG")"
-FORWARD="LOKA_SNAP_LOG:LOKA_TAB_COUNT"
+FORWARD="LOKA_SNAP_LOG:LOKA_TAB_COUNT:LOKA_SCENARIO_CELL"
 if [ -n "${LOKA_LAUNCH_WAIT:-}" ]; then
   FORWARD="$FORWARD:LOKA_LAUNCH_WAIT"
 fi
