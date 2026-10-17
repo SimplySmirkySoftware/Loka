@@ -10,6 +10,7 @@
 #include "support/PropsReconciliation.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
+#include <cstdio>
 
 #ifdef LOKA_CARD_CLONE_FAULT_PINS
 namespace
@@ -208,7 +209,7 @@ namespace
 
 void testCardGeometryAndLimits()
 {
-  CardNode card((CardProps()));
+  CardNode card((CardProps(CardStyle(CARD_SHADOW_DROP))));
   populate(card);
   PlatformLayoutHandlerRegistry registry;
   RegisterBuiltinPlatformLayoutHandlers(registry, 0, 0, loka::app::layout::RailSpacing(0, 0, 9));
@@ -266,7 +267,7 @@ void testCardGeometryAndLimits()
   CardTraversal refused;
   LOKA_VERIFY(computeFramedLayoutResultY(&card, offer(), &refused, &recordCard, &refuseCardY) == 37);
   LOKA_VERIFY(refused.visits == 4);
-  CardNode absent((CardProps()));
+  CardNode absent((CardProps(CardStyle(CARD_SHADOW_DROP))));
   CardTraversal none;
   LOKA_VERIFY(handler->layoutNode(&absent, offer(), &none) == 37);
   LOKA_VERIFY(none.visits == 0);
@@ -275,7 +276,8 @@ void testCardGeometryAndLimits()
   OfferedContentHandler contentHandler;
   NullScenePlatformController platform;
   LOKA_VERIFY(platform.registerNodeHandler(&contentHandler));
-  Scene scene((Card().testId("card-limit") << (Box().size(100, 2) << Button("wide"))).clone());
+  Scene scene(
+      (Card(CardStyle(CARD_SHADOW_DROP)).testId("card-limit") << (Box().size(100, 2) << Button("wide"))).clone());
   LOKA_VERIFY(scene.mount(&platform));
   SceneTestAccess::updateAttached(scene, true);
   Node *node = 0;
@@ -292,7 +294,7 @@ void testCardGeometryAndLimits()
 
   loka::core::MutableState<loka::core::Frame> viewport(loka::core::Frame(0, 0, 100, 100));
   CanvasNode grid(CanvasProps(20, 3, &viewport));
-  CardNode *gridCard = new CardNode(CardProps());
+  CardNode *gridCard = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
   populate(*gridCard);
   grid.addChild(gridCard);
   CanvasPlatformLayoutHandler gridHandler;
@@ -305,15 +307,15 @@ void testCardGeometryAndLimits()
 void testCardNaturalWidthAndSeats()
 {
   CardWidth natural(20), tiny(1), excessive(SHRT_MAX), declining(-1), zero(0);
-  CardNode absent((CardProps()));
+  CardNode absent((CardProps(CardStyle(CARD_SHADOW_DROP))));
   LOKA_VERIFY(childTakesLayoutSeat(&absent));
   LOKA_VERIFY(!isLayoutPassThrough(&absent));
   LOKA_VERIFY(measured(absent, natural) == 301);
-  CardNode empty((CardProps()));
+  CardNode empty((CardProps(CardStyle(CARD_SHADOW_DROP))));
   empty.addChild(new StackNode(StackProps(STACK_AXIS_COLUMN)));
   LOKA_VERIFY(childTakesLayoutSeat(&empty));
   LOKA_VERIFY(measured(empty, natural) == 301);
-  CardNode card((CardProps()));
+  CardNode card((CardProps(CardStyle(CARD_SHADOW_DROP))));
   populate(card);
   LOKA_VERIFY(measured(card, natural) == 29);
   LOKA_VERIFY(measured(card, tiny) == 17);
@@ -331,11 +333,13 @@ void testCardSingleStyleRetainedAndRefusal()
   const CardStyle style;
   const CardStyle copy(style);
   LOKA_VERIFY(copy == style && !(copy < style) && copy.hash() == style.hash());
-  Card declaration(copy);
+  Card declaration;
+  LOKA_VERIFY(declaration.props.style == style);
   declaration << Text("projected");
   Card copied(declaration);
   loka::core::OwnedDef<NodeDefinitionBase> cloned(copied.clone());
   LOKA_VERIFY(cloned.isSet());
+  LOKA_VERIFY(static_cast<const CardProps *>(cloned->propsBase())->style == style);
   LOKA_VERIFY(static_cast<const CardProps *>(cloned->propsBase())->hash() == declaration.props.hash());
   NullScenePlatformController platform;
   Scene scene((Boundary<Tree<Card> >(Props<Card>(&declaration))));
@@ -367,6 +371,7 @@ void testCardSingleStyleRetainedAndRefusal()
   LOKA_VERIFY(band == 0);
   applyProps(scene, copied);
   LOKA_VERIFY(root(scene)->childrenHead() == card);
+  LOKA_VERIFY(static_cast<CardNode *>(card)->props.style == style);
   NodeDefinitionBase *bandDefinition = cloned->asNestableDefinition()->childrenHead()->nextInComposition;
   band = card->asNestable()->childrenHead()->nextInComposition;
   for (int i = 0; i < 4; ++i, band = band->nextInComposition)
@@ -468,7 +473,7 @@ void testCardBodyReconstruction()
   const Frame bodies[] = {Frame(10, 20, 37, 12), Frame(10, 20, 12, 37), Frame(35, 20, 12, 37), Frame(10, 45, 37, 12)};
   for (int role = 0; role < CARD_BAND_COUNT; ++role)
   {
-    const CardBandProps props(static_cast<CardBandRole>(role));
+    const CardBandProps props(static_cast<CardBandRole>(role), CardStyle(CARD_SHADOW_DROP));
     LOKA_VERIFY(CardBodyInBand(bands[role], props) == bodies[role]);
     const Frame shifted(bands[role].x + 71, bands[role].y + 93, bands[role].width, bands[role].height);
     const Frame expected(bodies[role].x + 71, bodies[role].y + 93, bodies[role].width, bodies[role].height);
@@ -782,4 +787,28 @@ void testCardShadowSixGeometries()
         }
       }
     }
+}
+
+void testCardStandardStyle()
+{
+  using namespace loka::platform;
+  const CardStyle drop = StandardCardStyleFor(CPU_CLASS_68K);
+  LOKA_VERIFY(drop.extent() == CARD_SHADOW_DROP && drop.ink() == CARD_SHADOW_STENCIL);
+  const CardStyle ppc = StandardCardStyleFor(CPU_CLASS_PPC_60X);
+  LOKA_VERIFY(ppc.extent() == CARD_SHADOW_WIDE && ppc.ink() == CARD_SHADOW_STENCIL);
+  const CardStyle fast = StandardCardStyleFor(CPU_CLASS_G3_OR_FASTER);
+  LOKA_VERIFY(fast.extent() == CARD_SHADOW_WIDE && fast.ink() == CARD_SHADOW_ALPHA);
+  CpuClass answer;
+  const bool answered = queryCpuClass(answer);
+#if defined(__linux__)
+  LOKA_VERIFY(!answered);
+#else
+  std::printf("[skip] Linux-only queryCpuClass decline pin on non-Linux target\n");
+#endif
+  if (!answered)
+    answer = CPU_CLASS_68K;
+  LOKA_VERIFY(StandardCardStyle() == StandardCardStyleFor(answer));
+  LOKA_VERIFY(CardStyle() == StandardCardStyle());
+  const CardStyle explicitStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+  LOKA_VERIFY(explicitStyle.extent() == CARD_SHADOW_WIDE && explicitStyle.ink() == CARD_SHADOW_ALPHA);
 }

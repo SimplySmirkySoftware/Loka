@@ -9,6 +9,7 @@ target_include_directories(LokaClassicNewlibCompat BEFORE INTERFACE
 add_library(LokaAppleToolbox INTERFACE)
 
 set(LOKA_TOOLBOX_SOURCES
+  src/ToolboxCpuClass.cpp
   src/ToolboxBootstrap.cpp
   src/ToolboxOperatorNew.cpp
   src/ToolboxOutOfMemory.cpp

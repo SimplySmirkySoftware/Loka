@@ -4017,8 +4017,9 @@ namespace
     loka::app::scene::Node *scroll = windowNode(window, "WideScroll");
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());
     LOKA_VERIFY(loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
-    const int insets =
-        2 * loka::app::CardStyle::kBorderBand + loka::app::CardStyle::kShadowLeft + loka::app::CardStyle::kShadowRight;
+    const loka::app::CardStyle style = loka::app::StandardCardStyle();
+    const loka::app::detail::CardShadowTable &geometry = style.geometry();
+    const int insets = 2 * loka::app::CardStyle::kBorderBand + geometry.allowance[0] + geometry.allowance[2];
     LOKA_VERIFY(width == 5 * (110 + insets) + 4 * gap);
     scroll = windowNode(window, "SharedScroll");
     LOKA_VERIFY(scroll && scroll->asScrollViewNode());

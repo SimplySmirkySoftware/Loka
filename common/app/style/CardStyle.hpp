@@ -2,6 +2,7 @@
 #define LOKA_APP_STYLE_CARD_STYLE_HPP
 
 #include "app/style/CardShadowTables.hpp"
+#include "platform/CpuClass.hpp"
 #include <cassert>
 
 namespace loka
@@ -27,7 +28,16 @@ namespace loka
     public:
       // User-provided, so `const CardStyle look;` compiles under C++98 rules
       // (GCC 4.2 and Xcode 6.2 clang refuse it otherwise; #1380).
-      explicit CardStyle(CardShadowExtent extent = CARD_SHADOW_DROP, CardShadowInk ink = CARD_SHADOW_STENCIL)
+      /** Snapshot of StandardCardStyle() at construction; later answers never
+          change this value. Construct default styles inside main: PPC Gestalt
+          before InitGraf is unverified; this requirement is not enforced.
+          One query per default construction (declarations, CardProps/CardBandProps
+          default arguments, clone shells and nestable definition copies).
+          Constant on 68k/macOS/Win32/Linux; one or two Gestalt calls on PPC from
+          #1425 PR 2. Walks no rows. Ordinary value copies do not query. */
+      CardStyle();
+      /** Explicit look, independent of the process standard; no query or row walk. */
+      explicit CardStyle(CardShadowExtent extent, CardShadowInk ink = CARD_SHADOW_STENCIL)
           : extent_(extent),
             ink_(ink)
       {
@@ -86,6 +96,17 @@ namespace loka
       CardShadowExtent extent_;
       CardShadowInk ink_;
     };
+    /** Concrete standard look for a capability class: 68K DROP/STENCIL,
+        PPC 60x WIDE/STENCIL, G3 or faster WIDE/ALPHA. One constant-time table
+        selection per call by StandardCardStyle or an explicit caller; no query
+        or row walk. The returned value never follows later platform answers. */
+    CardStyle StandardCardStyleFor(platform::CpuClass cpuClass);
+    /** Snapshot of this process's standard look; a decline means CPU_CLASS_68K.
+        Call inside main (PPC Gestalt before InitGraf is unverified, not enforced).
+        Called once by each default CardStyle construction, or explicitly by apps;
+        one query, constant on 68k/macOS/Win32/Linux, one or two Gestalt calls on
+        PPC from #1425 PR 2, no rows walked. Later answers never change the value. */
+    CardStyle StandardCardStyle();
   } // namespace app
 } // namespace loka
 #endif

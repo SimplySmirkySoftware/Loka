@@ -199,7 +199,10 @@ in the gap is a later page of the same rally. `LAPTOP.JS` does not use it yet.
 A ScrollView cannot contain another ScrollView.
 `Card(child)` places exactly
 one tree in the native Card body using the default CardStyle; it has no style
-argument yet. Both refuse missing, extra, array, or non-tree children with
+argument yet. The default CardStyle is the machine's standard look: a DROP shadow
+on 68k, a WIDE shadow on PowerPC 601-604, and a WIDE shadow with ALPHA ink on G3
+or faster where the rail can draw it (#1425). Until each rail answers its CPU
+class, every target still draws DROP. Both refuse missing, extra, array, or non-tree children with
 TypeError and each counts one level toward the depth-eight tree limit.
 
 Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
