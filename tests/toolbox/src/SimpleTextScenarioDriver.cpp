@@ -175,6 +175,7 @@ namespace loka
               SimpleTextTestAccess::props(*this), &this->borrowedMain_);
           composition << WindowDef(WindowProps()
                                        .frame(16, 41, 480, 320)
+                                       .contentMargin(0)
                                        .scene(mainDefinition)
                                        .title("LokaSimpleText")
                                        .visible(true)

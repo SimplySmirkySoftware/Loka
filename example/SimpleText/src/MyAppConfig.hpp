@@ -38,6 +38,7 @@ private:
     const int offset = 24 * ((id.seq - 1) % kMaxDocuments);
     return WindowProps()
         .frame(16 + offset, 16 + offset, 480, 320)
+        .contentMargin(0)
         .visible(true)
         .scene(loka::app::scene::Boundary<MainNode>( //
             MainProps().platformContext(config->getPlatformContext()).documents(&config->documents_).document(id)));
