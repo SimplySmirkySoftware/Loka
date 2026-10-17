@@ -51,8 +51,10 @@ public:
   {
     return &this->units_;
   }
-  /** One own-list order check per layout pass; only a mismatch adds a second
-      walk raising units. Correct order issues no SetWindowPos. */
+  /** One own-list order check per layout pass; a successor-adjacency mismatch
+      or any window above the last unit adds a second walk raising units.
+      Zero raises requires contiguous own units at the top of the parent;
+      sibling ZStacks sharing that parent can trigger the raise walk each pass. */
   void orderUnits();
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 

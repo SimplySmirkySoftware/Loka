@@ -1344,7 +1344,6 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionMeasurementChannel measurement;
-
     loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope, measurement);
     if (!scopeGuard.isActive())
     {

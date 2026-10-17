@@ -7,6 +7,7 @@
 #include "Win32SceneLayout.hpp"
 #include "Win32ScenePlatformController.hpp"
 #include "context/Win32RetirableContext.hpp"
+#include "context/Win32ZStackContext.hpp"
 #include "context/Win32ScrollViewContext.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
@@ -119,8 +120,17 @@ namespace
     }
     UpdateWindow(fixture.root());
   }
+  void completePaint(HWND window)
+  {
+    // Complete existing damage only; invalidating the unit here would repair
+    // a lower sibling overwriting it and conceal the clipping mutation.
+    UpdateWindow(window);
+    for (HWND child = GetWindow(window, GW_CHILD); child; child = GetWindow(child, GW_HWNDNEXT))
+      completePaint(child);
+  }
   COLORREF capturedPixel(Fixture &fixture, int x, int y)
   {
+    completePaint(fixture.root());
     loka::core::resource::Image image;
     LOKA_VERIFY(Access::captureWindowClientBitmap(fixture.host.platform, fixture.root(), image));
     HDC dc = CreateCompatibleDC(NULL);
@@ -133,6 +143,58 @@ namespace
     DeleteDC(dc);
     return color;
   }
+  // Thread-local hook lifetime is bounded by one synchronous test pass.
+  class UnitOrderProbe
+  {
+  public:
+    UnitOrderProbe(HWND first, HWND second)
+        : first_(first),
+          second_(second),
+          changes_(0),
+          hook_(0)
+    {
+      LOKA_VERIFY(!active_);
+      active_ = this;
+      this->hook_ = SetWindowsHookExW(WH_CALLWNDPROC, callback, NULL, GetCurrentThreadId());
+      LOKA_VERIFY(this->hook_);
+    }
+    ~UnitOrderProbe()
+    {
+      LOKA_VERIFY(UnhookWindowsHookEx(this->hook_));
+      active_ = 0;
+    }
+    unsigned changes() const
+    {
+      return this->changes_;
+    }
+
+  private:
+    static LRESULT CALLBACK callback(int code, WPARAM wParam, LPARAM lParam)
+    {
+      if (code >= 0 && active_)
+      {
+        const CWPSTRUCT *message = reinterpret_cast<const CWPSTRUCT *>(lParam);
+        if (message->message == WM_WINDOWPOSCHANGING
+            && (message->hwnd == active_->first_ || message->hwnd == active_->second_))
+        {
+          const WINDOWPOS *position = reinterpret_cast<const WINDOWPOS *>(message->lParam);
+          // Layout's MoveWindow also sends this message. Only z-order work
+          // belongs to orderUnits; unchanged geometry is a separate contract.
+          if (!(position->flags & SWP_NOZORDER))
+            ++active_->changes_;
+        }
+      }
+      return CallNextHookEx(NULL, code, wParam, lParam);
+    }
+    HWND first_;
+    HWND second_;
+    unsigned changes_;
+    HHOOK hook_;
+    static UnitOrderProbe *active_;
+    UnitOrderProbe(const UnitOrderProbe &);
+    UnitOrderProbe &operator=(const UnitOrderProbe &);
+  };
+  UnitOrderProbe *UnitOrderProbe::active_ = 0;
   SCROLLINFO metrics(HWND viewport)
   {
     SCROLLINFO info;
@@ -181,8 +243,8 @@ void testWin32ZStackUnitPaintsOpaqueGround()
   ZStackNode *stack = new ZStackNode((ZStackProps()));
   f.tree = stack;
   stack->addChild(new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 160)));
-  BoxNode *unitChild = new BoxNode(BoxProps().setSize(0, 80));
-  unitChild->addChild(new ButtonNode(ButtonProps().text("B")));
+  // A narrow surface has a fixed native height and leaves bare unit ground.
+  RectSurfaceNode *unitChild = new RectSurfaceNode(RectSurfaceProps().size(40, 80));
   stack->addChild(unitChild);
   f.layout();
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
@@ -191,6 +253,8 @@ void testWin32ZStackUnitPaintsOpaqueGround()
   LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
   flushPaint(f);
   const RECT rect = rectInParent(unit);
+  LOKA_VERIFY(rect.bottom - rect.top == 80);
+  LOKA_VERIFY(rect.right - rect.left > 100);
   LOKA_VERIFY(GetSysColor(COLOR_BTNFACE) != GetSysColor(COLOR_WINDOWTEXT));
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
   // Positive control: the same lower surface really paints ink outside the unit.
@@ -202,8 +266,7 @@ void testWin32ZStackUnitPaintsOpaqueGround()
       loka::core::StateTrackerGuard guard(&tracker);
       model.set(phase == 0 ? RectSurfaceModel() : ink);
     }
-    // Paint-only observer path: no relayout, root invalidation, or unit repaint.
-    LOKA_VERIFY(Access::queuedRectInvalidates(f.controller) > 0);
+    // Observer-only tick: visible ground changes below prove the repaint.
     LOKA_VERIFY(!Access::lastOnChangeRequiredLayout(f.controller));
     flushPaint(f);
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
@@ -327,10 +390,7 @@ void testWin32ZStackUnitCreationRefusalLaysOutNothing()
   Fixture f;
   ZStackNode *stack = stackWithGround(f);
   // Establish only the ground HWND, so the injected refusal hits the unit.
-  LayoutState seat;
-  seat.width = 200;
-  seat.height = 160;
-  LOKA_VERIFY(f.controller.prepareProjectedLayout(stack->childrenHead(), seat));
+  f.layout();
   StackNode *column = buttonColumn("B");
   stack->addChild(column);
   loka::win32::testing::failNativeChildWindowCreations(1);
@@ -436,7 +496,7 @@ void testWin32ScrollViewHandlerChildRefusalBlocksCommit()
   f.layout(300, 140); // Next pass consumes that origin before the refusal.
   HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
   const SCROLLINFO before = metrics(viewport);
-  box->props.setSize(180, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset + 1));
+  box->props.setSize(180, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset - Win32SceneLayout::kGap + 1));
   f.layout(300, 140);
   const SCROLLINFO after = metrics(viewport);
   LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
@@ -500,20 +560,22 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
   scroll->addChild(new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 160)));
   stack->addChild(scroll);
   StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
-  // Fixed narrow content leaves a bare part of the full-width opaque band.
-  BoxNode *box = new BoxNode(BoxProps().setSize(40, 80));
-  box->addChild(new ButtonNode(ButtonProps().text("B")));
-  column->addChild(box);
+  column->addChild(new ButtonNode(ButtonProps().text("B")));
+  // The surface contributes exactly 80; the column adds the Button and gap.
+  column->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
   stack->addChild(column);
   f.layout();
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
-  HWND button = native(box->childrenHead());
+  HWND button = native(column->childrenHead());
   LOKA_VERIFY(unit && GetParent(button) == unit);
   const RECT rect = rectInParent(unit);
+  LOKA_VERIFY(rect.bottom - rect.top == f.controller.rowLayoutMetrics().buttonHeight + Win32SceneLayout::kGap + 80);
+  LOKA_VERIFY(rect.bottom - rect.top < 120 && rect.right - rect.left > 100);
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
   LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
   flushPaint(f);
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120) == GetSysColor(COLOR_WINDOWTEXT));
   for (int phase = 0; phase < 2; ++phase)
   {
     Access::resetRedrawStats(f.controller);
@@ -521,13 +583,56 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
       loka::core::StateTrackerGuard guard(&tracker);
       model.set(phase == 0 ? RectSurfaceModel() : ink);
     }
-    LOKA_VERIFY(Access::queuedRectInvalidates(f.controller) > 0);
+    // Model observers queue native damage without incrementing boundary-plan counters.
     LOKA_VERIFY(!Access::lastOnChangeRequiredLayout(f.controller));
     flushPaint(f);
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
+    LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120)
+                == GetSysColor(phase == 0 ? COLOR_WINDOW : COLOR_WINDOWTEXT));
     const POINT point = {2, 2};
     LOKA_VERIFY(ChildWindowFromPointEx(unit, point, CWP_SKIPINVISIBLE) == button);
     const POINT rootPoint = {rect.left + 2, rect.top + 2};
     LOKA_VERIFY(ChildWindowFromPointEx(f.root(), rootPoint, CWP_SKIPINVISIBLE) == unit);
   }
+}
+
+void testWin32ZStackSettledUnitsSkipOrdering()
+{
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->addChild(buttonColumn("B"));
+  stack->addChild(buttonColumn("C"));
+  f.layout();
+  HWND upper = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  HWND lower = FindWindowExW(f.root(), upper, L"LOKA_STACK_UNIT", NULL);
+  LOKA_VERIFY(upper && lower && GetWindow(lower, GW_HWNDPREV) == upper);
+  {
+    UnitOrderProbe probe(lower, upper);
+    f.layout();
+    LOKA_VERIFY(probe.changes() == 0);
+  }
+  // Positive control: the same hook sees an actual native raise.
+  {
+    UnitOrderProbe probe(lower, upper);
+    LOKA_VERIFY(SetWindowPos(lower, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW));
+    LOKA_VERIFY(probe.changes() > 0);
+  }
+}
+
+void testWin32ZStackRetirementHidesBeforeDrain()
+{
+  Fixture f;
+  Win32ZStackContext context(&f.controller);
+  Win32ZStackContext::Unit **cursor = context.unitsBegin();
+  Win32ZStackContext::Unit *unit = context.unitFor(1, cursor);
+  LOKA_VERIFY(unit
+              && unit->ensure(f.root(), f.controller.displayScale().projectFrame(loka::core::Frame(10, 10, 80, 80))));
+  HWND hwnd = unit->hwnd();
+  ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+  LOKA_VERIFY(IsWindowVisible(hwnd));
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  LOKA_VERIFY(IsWindow(hwnd));
+  LOKA_VERIFY(!IsWindowVisible(hwnd));
+  f.controller.drainNativeRetirements();
+  LOKA_VERIFY(!IsWindow(hwnd));
 }

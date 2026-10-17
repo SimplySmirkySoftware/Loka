@@ -1596,19 +1596,19 @@ scroll bars meet the window edge on each rail.
 
 ### Stacking: ZStack
 
-A ZStack's first child is the ground (live content). Each later child forms a
-full-width opaque band: the seat's width and that child's laid-out height. Units
+A ZStack's first child is the ground (live content). Each later child forms a unit, a
+full-width opaque band with the seat's width and that child's laid-out height. Units
 sit above the ground and earlier units in composition order, with one native
 window/view per unit. `ZStack(scrollView, Row(toolbar))` keeps the toolbar subtree
 together. Place units only over non-reactive regions, such as a ScrollView's
 inset gap or modal dimming; the framework does not check placement. A transparent
-upper child is unsupported. Tab visits a unit before every earlier sibling under
-the same native parent, including siblings outside the ZStack. In v1 a ScrollView
-or nested ZStack inside an upper child lays out nothing.
+upper child is unsupported. On Win32, stacking order makes Tab visit a unit before
+every earlier sibling under the same native parent, including siblings outside
+the ZStack. In v1 a ScrollView or nested ZStack inside an upper child lays out
+nothing.
 
-Win32 implements opaque units here. macOS and Toolbox follow in page 2a PR 3 and
-PR 4 respectively; until those changes, their ZStack children are laid out flat
-without opaque units.
+Win32 uses opaque units. macOS and Toolbox lay out children flat, without opaque
+units, until their adoption of this contract.
 
 ### Fixed-Cell Layout
 

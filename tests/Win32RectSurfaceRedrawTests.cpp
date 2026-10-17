@@ -599,6 +599,9 @@ void testWin32TextUnitClipsLowerSiblingInk()
     Win32ZStackContext::Unit *unit = units.unitFor(1, cursor);
     LOKA_VERIFY(unit && unit->ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 160, 24))));
     units.orderUnits();
+    RECT unitRect;
+    LOKA_VERIFY(GetWindowRect(unit->hwnd(), &unitRect));
+    LOKA_VERIFY(unitRect.bottom - unitRect.top == 24 && unitRect.right - unitRect.left == 160);
     loka::app::TextNode textNode((loka::app::TextProps("*")));
     Win32TextContext text(&controller, unit->hwnd(), 0, 0, 160, 24, &textNode);
     HWND textHwnd = FindWindowExW(unit->hwnd(), NULL, L"STATIC", L"*");
@@ -624,6 +627,10 @@ void testWin32TextUnitClipsLowerSiblingInk()
         pumpMessages();
         UpdateWindow(root);
       }
+      // Drain both siblings before capture without repainting a clean upper unit.
+      UpdateWindow(unit->hwnd());
+      UpdateWindow(textHwnd);
+      UpdateWindow(surface.hwnd());
       NullPlatformContext captureOwner;
       loka::core::resource::Image capture;
       LOKA_VERIFY(Access::captureWindowClientBitmap(captureOwner, root, capture));
@@ -632,6 +639,7 @@ void testWin32TextUnitClipsLowerSiblingInk()
       HGDIOBJ previous = SelectObject(pixels, static_cast<HBITMAP>(capture.nativeHandle()));
       LOKA_VERIFY(previous != NULL && previous != HGDI_ERROR);
       const COLORREF below = GetPixel(pixels, 80, 60);
+      const COLORREF changedGround = GetPixel(pixels, 80, 78);
       const COLORREF overlap = GetPixel(pixels, 150, 12);
       const COLORREF ground = GetPixel(pixels, 200, 100);
       // Font smoothing can render the glyph without pure text-role pixels (#829).
@@ -654,6 +662,7 @@ void testWin32TextUnitClipsLowerSiblingInk()
                   static_cast<int>(fontSmoothing), static_cast<unsigned int>(fontSmoothingType));
       std::fflush(stdout);
       LOKA_VERIFY(below == GetSysColor(COLOR_WINDOWTEXT));
+      LOKA_VERIFY(changedGround == GetSysColor(phase == 0 ? COLOR_WINDOWTEXT : COLOR_WINDOW));
       // The opaque unit excludes lower sibling ink even after a surface-only tick.
       LOKA_VERIFY(overlap == GetSysColor(COLOR_BTNFACE));
       LOKA_VERIFY(inkPixels > 0);
@@ -695,9 +704,6 @@ namespace
       this->admission.flush();
       LOKA_VERIFY(this->window.hwnd() != NULL);
       ShowWindow(this->window.hwnd(), SW_HIDE);
-      // Pixel fixtures must not depend on an earlier test's desktop z order.
-      LOKA_VERIFY(
-          SetWindowPos(this->window.hwnd(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
     }
   };
 
@@ -710,16 +716,11 @@ namespace
 
   COLORREF windowPixel(HWND hwnd, int x, int y)
   {
-    // Observe the displayed root surface, as production capture does. A child
-    // DC can exclude sibling-covered pixels under WS_CLIPSIBLINGS. No repaint
-    // or PrintWindow here: either would hide a missing invalidation.
-    HWND root = GetAncestor(hwnd, GA_ROOT);
-    POINT point = {x, y};
-    MapWindowPoints(hwnd, root, &point, 1);
-    HDC dc = GetDC(root);
+    // A child DC also verifies that this window owns a visible pixel here.
+    HDC dc = GetDC(hwnd);
     LOKA_VERIFY(dc != NULL);
-    const COLORREF pixel = GetPixel(dc, point.x, point.y);
-    ReleaseDC(root, dc);
+    const COLORREF pixel = GetPixel(dc, x, y);
+    ReleaseDC(hwnd, dc);
     LOKA_VERIFY(pixel != CLR_INVALID);
     return pixel;
   }
@@ -773,6 +774,9 @@ void testWin32AttributedTextUnitClipsLowerSiblingInk()
   Win32ZStackContext::Unit *unit = units.unitFor(1, cursor);
   LOKA_VERIFY(unit && unit->ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 160, 24))));
   units.orderUnits();
+  RECT unitRect;
+  LOKA_VERIFY(GetWindowRect(unit->hwnd(), &unitRect));
+  LOKA_VERIFY(unitRect.bottom - unitRect.top == 24 && unitRect.right - unitRect.left == 160);
   AttributedTextNode textNode((AttributedTextProps(Styled("*", FontSize<12>()))));
   Win32AttributedTextContext text(&controller, unit->hwnd(), 0, 0, 160, 24, &textNode);
   LOKA_VERIFY(text.paintHwnd() != NULL);
@@ -782,20 +786,32 @@ void testWin32AttributedTextUnitClipsLowerSiblingInk()
   LOKA_VERIFY(state.height > 4);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   flushTransparentPaint(controller, root);
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
   // The upper text belongs to an opaque unit; surface-only ticks cannot show through.
   LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOWTEXT));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(RectSurfaceModel());
   }
   flushTransparentPaint(controller, root);
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
   LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOW));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(initial);
   }
   flushTransparentPaint(controller, root);
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
   LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOWTEXT));
   text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   surface.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   units.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);

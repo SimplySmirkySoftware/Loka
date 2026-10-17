@@ -16,4 +16,6 @@ void testWin32ZStackGroundRefusalStopsUpperChildren();
 void testWin32ZStackFirstPassRefusalKeepsUnitEmpty();
 void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick();
 
+void testWin32ZStackSettledUnitsSkipOrdering();
+void testWin32ZStackRetirementHidesBeforeDrain();
 #endif

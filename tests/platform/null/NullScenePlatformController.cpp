@@ -929,7 +929,6 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
   }
 
   loka::app::scene::ProjectionMeasurementChannel measurement;
-
   loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope, measurement);
   if (!scopeGuard.isActive())
   {
