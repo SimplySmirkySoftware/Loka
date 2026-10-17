@@ -583,7 +583,7 @@ public:
   }
   loka::app::scene::Scene *scene() const
   {
-    return sceneManager_.getCurrentScene().get();
+    return sceneManager_.currentScene_;
   }
   SceneManager *sceneManager()
   {
