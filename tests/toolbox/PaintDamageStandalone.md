@@ -156,8 +156,16 @@ DROP case prints its difference count; a nonzero count emits both captures
 as rows of `0`/`1`, preceded by `card-dump` with window coordinates and
 size. Preserve these for owner inspection before changing any golden image.
 `card-scroll-applied-visible-wide` checks the attached fixture's nonzero
-scroll and visible WIDE bands before `card-scroll-incremental-equals-full`
-compares the incremental result with a fresh window redraw.
+scroll, visible WIDE bands, and a changed row of actual pixels before
+`card-scroll-incremental-equals-full`
+compares the incremental result with a synchronous production full-window redraw.
+
+Matrix comparisons retain one packed native capture (at most 675 bytes), then
+read the current port directly. The scroll arm retains one 5,040-byte packed
+capture. Both use nullable `NewPtrClear` storage disposed within the arm.
+Refusal records `card-matrix-capture-allocation FAIL` or
+`card-scroll-capture-allocation FAIL`; neither arm dereferences refused storage.
+No new full-frame static buffer remains, and the SIZE partition is unchanged.
 
 Timing lines are observations in `CARDTIME.TXT`, separate from the deterministic
 `LOG.TXT` audit. The two timing-log-open arms must also pass. Extract that

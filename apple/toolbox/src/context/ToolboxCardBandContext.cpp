@@ -95,23 +95,12 @@ namespace
     const CardStyle style = ToolboxStencilStyle(requested);
     if (style.extent() == CARD_SHADOW_NONE)
       return;
-    const detail::CardShadowTable &g = style.geometry();
+    const CardShadowGridLines grid = CardShadowGrid(style, body);
     enum
     {
       rowBytes = 2 * ((detail::kCardShadowMaximumTileWidth + 15) / 16)
     };
     unsigned char bits[rowBytes * detail::kCardShadowMaximumTileHeight];
-    // Overlapping cuts meet at the same midline used by the common sampler.
-    const int left = g.cut[0] + g.cut[2] <= body.width
-                         ? g.cut[0]
-                         : (body.width / 2 > body.width - g.cut[2] ? body.width / 2 : body.width - g.cut[2]);
-    const int right = g.cut[0] + g.cut[2] <= body.width ? body.width - g.cut[2] : left;
-    const int top = g.cut[1] + g.cut[3] <= body.height
-                        ? g.cut[1]
-                        : (body.height / 2 > body.height - g.cut[3] ? body.height / 2 : body.height - g.cut[3]);
-    const int bottom = g.cut[1] + g.cut[3] <= body.height ? body.height - g.cut[3] : top;
-    const int xs[] = {body.x - g.allowance[0], body.x + left, body.x + right, body.x + body.width + g.allowance[2]};
-    const int ys[] = {body.y - g.allowance[1], body.y + top, body.y + bottom, body.y + body.height + g.allowance[3]};
     GrafPtr port;
     GetPort(&port);
     for (int v = 0; v < 3; ++v)
@@ -120,10 +109,10 @@ namespace
         if (v == 1 && h == 1)
           continue;
         // Intersect in wide arithmetic before narrowing virtual body edges.
-        const int x0 = xs[h] > band.left ? xs[h] : band.left;
-        const int y0 = ys[v] > band.top ? ys[v] : band.top;
-        const int x1 = xs[h + 1] < band.right ? xs[h + 1] : band.right;
-        const int y1 = ys[v + 1] < band.bottom ? ys[v + 1] : band.bottom;
+        const int x0 = grid.x[h] > band.left ? grid.x[h] : band.left;
+        const int y0 = grid.y[v] > band.top ? grid.y[v] : band.top;
+        const int x1 = grid.x[h + 1] < band.right ? grid.x[h + 1] : band.right;
+        const int y1 = grid.y[v + 1] < band.bottom ? grid.y[v + 1] : band.bottom;
         if (x0 >= x1 || y0 >= y1)
           continue;
         Rect dest;
@@ -133,7 +122,10 @@ namespace
         if (v != 1 && h != 1)
         {
           const int width = x1 - x0, height = y1 - y0;
-          if (width > detail::kCardShadowMaximumTileWidth || height > detail::kCardShadowMaximumTileHeight)
+          const bool fits =
+              width <= detail::kCardShadowMaximumTileWidth && height <= detail::kCardShadowMaximumTileHeight;
+          assert(fits && "CardShadowGrid exceeds generated tile capacity");
+          if (!fits)
             continue;
           {
             PROFILE_SECTION("card.buffer-clear");
