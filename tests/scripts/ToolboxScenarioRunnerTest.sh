@@ -497,6 +497,22 @@ run_case simpletext startup 2 unset
 cp "$SANDBOX/shared-scenarios.txt" "$SANDBOX/repo/tests/scenarios/scenarios.txt"
 run_case helloworld toggle-action-probe 9 unset 9
 
+# --probe is admitted only on a cell whose driver has a probe leg. The
+# toggle-action-probe leg retired with the ZStack overlay contract (page 2a,
+# PR 0), so the runner refuses it before MAME and names bmi-roundtrip as the
+# one remaining probe cell.
+rm -f "$SANDBOX/tab-count"
+if MAME_ENV_FILE="$SANDBOX/mame.env" env -u WSL_INTEROP -u LOKA_TAB_COUNT \
+    bash "$SANDBOX/repo/tests/toolbox/run-scenario.sh" \
+      helloworld toggle-action-probe --probe >"$SANDBOX/runner-probe-refused.log" 2>&1; then
+  fail "--probe on toggle-action-probe unexpectedly passed"
+fi
+grep -Fxq "no probe leg exists for 'helloworld toggle-action-probe'; probe cells: helloworld bmi-roundtrip" \
+  "$SANDBOX/runner-probe-refused.log" \
+  || fail "--probe on toggle-action-probe was not refused as a missing probe leg"
+[ ! -f "$SANDBOX/tab-count" ] \
+  || fail "--probe on toggle-action-probe reached MAME launch"
+
 IDENTITY_HELPER="$SANDBOX/repo/scripts/rig/toolbox/classic_golden_identity.py"
 RIG_DESCRIPTOR="$SANDBOX/repo/scripts/rig/toolbox/rigs/toolbox-maciix.ini"
 GOLDEN_BUNDLE="$SANDBOX/repo/build/mame-scenario/golden"

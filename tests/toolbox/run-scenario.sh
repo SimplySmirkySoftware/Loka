@@ -325,7 +325,7 @@ fi
 # linger_seconds keeps the scenario window alive after the audit is written,
 # so the emulator-side snapshot captures the scene instead of the desktop the
 # application would otherwise have quit back to.
-# --probe opts the driver into the dirty-replay probes (#436, #412). Off by
+# --probe opts the driver into the dirty-replay probes (#436). Off by
 # default so tracked cells keep their audits byte-identical.
 PROBE_LINE=""
 if [ "$PROBE" -eq 1 ]; then
