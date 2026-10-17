@@ -1,6 +1,7 @@
 #ifndef LOKA_TEST_QUICKDRAW_H
 #define LOKA_TEST_QUICKDRAW_H
 #include <cstddef>
+#include <vector>
 typedef unsigned char Style;
 struct Pattern
 {
@@ -53,12 +54,26 @@ struct BitMap
   Rect bounds;
 };
 void CopyBits(const BitMap *, const BitMap *, const Rect *, const Rect *, short, RgnHandle);
+struct HostControl;
+/** Per-port OS state; update rectangles retain disjoint damage. */
+struct HostPortState
+{
+  Rect clip;
+  std::vector<Rect> update;
+  std::vector<HostControl *> controls;
+  HostPortState()
+  {
+    clip.top = clip.left = -30000;
+    clip.bottom = clip.right = 30000;
+  }
+};
 struct GrafPort
 {
   BitMap portBits;
   short txFont, txSize;
   Style txFace;
   long fgColor;
+  HostPortState native;
 };
 typedef GrafPort *GrafPtr;
 struct FontInfo
@@ -67,6 +82,26 @@ struct FontInfo
 };
 void GetPort(GrafPtr *);
 void SetPort(GrafPtr);
+/** Test entry scope, mirroring a native window operation's selected port. */
+class HostPortScope
+{
+  GrafPtr previous_;
+
+public:
+  explicit HostPortScope(GrafPtr port)
+  {
+    GetPort(&this->previous_);
+    SetPort(port);
+  }
+  ~HostPortScope()
+  {
+    SetPort(this->previous_);
+  }
+
+private:
+  HostPortScope(const HostPortScope &);
+  HostPortScope &operator=(const HostPortScope &);
+};
 void TextFont(short);
 void TextSize(short);
 void TextFace(Style);

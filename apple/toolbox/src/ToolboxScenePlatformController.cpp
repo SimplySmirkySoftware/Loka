@@ -1091,37 +1091,6 @@ bool ToolboxScenePlatformController::hasLiveBinding(loka::core::State<loka::core
   return false;
 }
 
-bool ToolboxScenePlatformController::hasLiveBinding(loka::core::State<bool> *enabled) const
-{
-  for (size_t i = 0; i < this->buttonControls_.size(); ++i)
-  {
-    if (this->buttonControls_[i].enabled == enabled)
-      return true;
-  }
-  for (size_t i = 0; i < hitLedger_.buttonHits_.size(); ++i)
-  {
-    if (hitLedger_.buttonHits_[i].enabled == enabled)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < hitLedger_.popupHits_.size(); ++i)
-  {
-    if (hitLedger_.popupHits_[i].enabled == enabled)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
-  {
-    if (scrollBarLedger_.scrollBarControls_[i].enabled == enabled)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
 void ToolboxScenePlatformController::handleTextChanged(loka::core::State<loka::core::String> *text)
 {
   if (!window_)
@@ -1628,84 +1597,7 @@ void ToolboxScenePlatformController::clearEnabledBindings()
   this->enabledStateBindingPath_.clear();
 }
 
-void ToolboxScenePlatformController::clearControls()
-{
-  for (size_t i = 0; i < buttonControls_.size(); ++i)
-  {
-    if (buttonControls_[i].context)
-      buttonControls_[i].context->forgetPresentedControl();
-    if (buttonControls_[i].control)
-    {
-      HideControl(buttonControls_[i].control);
-      queueRetiredControl(buttonControls_[i].control, buttonControls_[i].lifetimeHint);
-      buttonControls_[i].control = 0;
-    }
-  }
-  buttonControls_.clear();
-  for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
-  {
-    if (scrollBarLedger_.scrollBarControls_[i].control)
-    {
-      HideControl(scrollBarLedger_.scrollBarControls_[i].control);
-      queueRetiredScrollBarControl(scrollBarLedger_.scrollBarControls_[i].control, scrollBarLedger_.scrollBarControls_[i].lifetimeHint);
-      scrollBarLedger_.scrollBarControls_[i].control = 0;
-    }
-  }
-  scrollBarLedger_.scrollBarControls_.clear();
-  // Bulk teardown also returns ids whose axis never materialized a control.
-  for (size_t i = 0; i < scrollBarLedger_.viewportScrollBars_.size(); ++i)
-  {
-    this->controlIds_.release(scrollBarLedger_.viewportScrollBars_[i].barId[loka::app::SCROLL_BAR_VERTICAL]);
-    this->controlIds_.release(scrollBarLedger_.viewportScrollBars_[i].barId[loka::app::SCROLL_BAR_HORIZONTAL]);
-  }
-  scrollBarLedger_.viewportScrollBars_.clear();
-  for (size_t i = 0; i < editControls_.size(); ++i)
-  {
-    this->retireEditTextBinding(this->editControls_[i], this->editControls_[i].lifetimeHint);
-  }
-  editControls_.clear();
-}
-
 #include "ToolboxNativeRetirement.cpp"
-
-void ToolboxScenePlatformController::queueRetiredControl(ControlRef control,
-                                                         loka::app::scene::NativeLifetimeHint lifetimeHint)
-{
-  queueRetiredNativeHandle(retiredControls_, control, lifetimeHint);
-}
-
-void ToolboxScenePlatformController::queueRetiredScrollBarControl(ControlRef control,
-                                                                   loka::app::scene::NativeLifetimeHint lifetimeHint)
-{
-  queueRetiredNativeHandle(retiredScrollBarControls_, control, lifetimeHint);
-}
-
-bool ToolboxScenePlatformController::hasLiveBinding(ControlRef control) const
-{
-  for (size_t i = 0; i < buttonControls_.size(); ++i)
-  {
-    if (buttonControls_[i].control == control)
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
-  {
-    if (scrollBarLedger_.scrollBarControls_[i].control == control)
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
-void ToolboxScenePlatformController::disposeNativeHandle(ControlRef control)
-{
-  if (control)
-  {
-    DisposeControl(control);
-  }
-}
 
 void ToolboxScenePlatformController::flushRetiredNativeHandles()
 {

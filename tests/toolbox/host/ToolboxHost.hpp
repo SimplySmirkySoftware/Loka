@@ -125,11 +125,14 @@ public:
   ToolboxWindowContext context_;
   void (*onFlush)(void *);
   void *flushData;
+  /** False models a window with no grow box: the size box query declines. */
+  bool answersSizeBox;
   explicit ToolboxWindow(const WindowProps &props = WindowProps())
       : Window(0, props),
         visible_(true),
         onFlush(0),
-        flushData(0)
+        flushData(0),
+        answersSizeBox(true)
   {
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
@@ -146,6 +149,8 @@ public:
   }
   bool querySizeBoxRect(Rect &out) const
   {
+    if (!this->answersSizeBox)
+      return false;
     out = ToolboxWindowSizeBoxRect(this->port.portRect);
     return true;
   }
@@ -190,6 +195,7 @@ public:
   Rect rect_;
   ToolboxButtonContext() : emitter_(0), enabled_(0) {}
   void repaint(ControlRef, std::string &) {}
+  void forgetPresentedControl() {}
   bool handleMouseDown(const Point &, ToolboxScenePlatformController *);
 };
 #else
@@ -275,19 +281,17 @@ public:
 public:
 #include "ToolboxScrollViewProjection.hpp"
   unsigned leafLayouts;
-  struct ScrollCall
+  const std::vector<ToolboxScrollBarLedger::ScrollBarControlBinding> &scrollControls() const
   {
-    short id;
-    Rect rect;
-    int maximum;
-    int pageStep;
-  };
-  std::vector<ScrollCall> scrollCalls;
-  int scrollMaximum(short id = 100) const
+    return this->scrollBarLedger_.scrollBarControls_;
+  }
+  int scrollMaximum(short id = 0) const
   {
-    for (std::size_t i = this->scrollCalls.size(); i > 0; --i)
-      if (this->scrollCalls[i - 1].id == id)
-        return this->scrollCalls[i - 1].maximum;
+    if (!id && !this->scrollBarLedger_.viewportScrollBars_.empty())
+      id = this->scrollBarLedger_.viewportScrollBars_[0].barId[loka::app::SCROLL_BAR_VERTICAL];
+    for (std::size_t i = 0; i < this->scrollControls().size(); ++i)
+      if (this->scrollControls()[i].resourceId == id)
+        return this->scrollControls()[i].maximum;
     return 0;
   }
   ToolboxScrollBarLedger::ViewportScrollBarBinding &viewportScroll()
@@ -320,36 +324,26 @@ public:
       const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
   short allocateControlId() { return this->controlIds_.allocate(); }
-  void destroyScrollBarControl(short id, loka::app::scene::NativeLifetimeHint) { this->controlIds_.release(id); }
+  void destroyScrollBarControl(short, loka::app::scene::NativeLifetimeHint);
   bool handleControlClick(const Point &);
   void emitHitEmitter(loka::core::EmitterState *);
   void applyPopupSelectionChange(const Rect &, loka::app::scene::BoundaryNode *,
       loka::core::State<int> *, const loka::app::scene::WriteSeat<int> &, loka::core::EmitterState *, int);
   typedef ToolboxScrollBarLedger::ScrollBarControlBinding ScrollBarControlBinding;
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
-  bool ensureScrollBarBinding(short id,
-                              const Rect &rect,
-                              int,
-                              int maximum,
-                              int,
-                              int pageStep,
-                              loka::app::scene::NativeLifetimeHint,
-                              ScrollBarControlBinding *&out)
-  {
-    const ScrollCall call = {id, rect, maximum, pageStep};
-    this->scrollCalls.push_back(call);
-    out = 0;
-    for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
-      if (this->scrollBarLedger_.scrollBarControls_[i].resourceId == id)
-      {
-        out = &this->scrollBarLedger_.scrollBarControls_[i];
-        out->maximum = maximum;
-        out->rect = rect;
-        out->usedThisFrame = true;
-        break;
-      }
-    return true;
-  }
+  bool ensureScrollBarBinding(
+      short, const Rect &, int, int, int, int, loka::app::scene::NativeLifetimeHint, ScrollBarControlBinding *&);
+  bool
+  ensureScrollBarControl(short, const Rect &, const loka::app::ScrollBarProps &, loka::app::scene::NativeLifetimeHint);
+  void bindEnabledState(loka::core::State<bool> *) {}
+  void unbindEnabledState(loka::core::State<bool> *) {}
+  bool hasLiveBinding(loka::core::State<bool> *) const;
+  void clearControls();
+  void queueRetiredScrollBarControl(ControlRef, loka::app::scene::NativeLifetimeHint);
+  void queueRetiredControl(ControlRef, loka::app::scene::NativeLifetimeHint);
+  bool hasLiveBinding(ControlRef) const;
+  void disposeNativeHandle(ControlRef);
+  void flushControls();
   loka::app::layout::StackSpans *scrollSpans()
   { return this->scrollBarLedger_.viewportScrollBars_.empty() ? 0 : this->scrollBarLedger_.viewportScrollBars_[0].spans.get(); }
   ToolboxScrollBarLedger scrollBarLedger_;
@@ -362,13 +356,16 @@ public:
     loka::core::EmitterState *emitter;
     loka::core::State<bool> *enabled;
     bool usedThisFrame;
+    loka::app::scene::NativeLifetimeHint lifetimeHint;
   };
   std::vector<ButtonControlBinding> buttonControls_;
   void commitScrollBarValueAt(std::size_t);
   void
   commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &, loka::app::ScrollBarOrientation);
-  void addPendingDirty(const Rect &rect) { this->pendingDirtyRects_.push_back(rect); }
-  void installScroll(const ScrollBarControlBinding &row) { this->scrollBarLedger_.scrollBarControls_.push_back(row); }
+  void addPendingDirty(const Rect &rect)
+  {
+    this->pendingDirtyRects_.push_back(rect);
+  }
 
   bool handleTextKey(char);
   void beginBatchUpdate() {}
@@ -395,6 +392,7 @@ public:
     T handle;
     loka::app::scene::NativeLifetimeHint lifetimeHint;
   };
+  std::vector<RetiredNativeEntry<ControlRef> > retiredControls_, retiredScrollBarControls_;
   std::vector<RetiredNativeEntry<TEHandle> > retiredTextEdits_;
   loka::app::scene::ExactMatchHandleBucket<TEHandle> textEditBucket_;
   unsigned poolIntakeAuditFailCount_;
@@ -455,10 +453,9 @@ public:
   loka::app::scene::NodeContext *renderContext;
   explicit ToolboxScenePlatformController(ToolboxWindow *window)
       : leafLayouts(0),
-        scrollCalls(),
         scrollViewClipRgn_(NewRgn()),
         paintSuppressClipRgn_(NewRgn()),
-        scrollBarLedger_(0),
+        scrollBarLedger_(4),
         poolIntakeAuditFailCount_(0),
         inBatchUpdate_(false),
         window_(window),
@@ -472,6 +469,9 @@ public:
   {
     if (this->scrollViewClipRgn_) DisposeRgn(this->scrollViewClipRgn_);
     if (this->paintSuppressClipRgn_) DisposeRgn(this->paintSuppressClipRgn_);
+    this->clearControls();
+    this->flushControls();
+    this->scrollBarLedger_.scrollBarBucket_.drainWith(DisposeControl);
     this->flushTE();
     this->textEditBucket_.drainWith(TEDispose);
   }

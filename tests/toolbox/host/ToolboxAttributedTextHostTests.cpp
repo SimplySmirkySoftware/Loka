@@ -68,6 +68,7 @@ namespace
   void MemoryPin()
   {
     ToolboxWindow window;
+    HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
     const AttributedString word = Styled(loka::core::String(std::string("a ") + std::string(9000, 'x')), TextStyle());
     loka::core::LokaAllocSetBackend(CountAlloc, CountFree);
@@ -113,6 +114,7 @@ namespace
   {
     Pin("AttributedSpanInkAndEllipsisRestore");
     ToolboxWindow window;
+    HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
     window.port.fgColor = greenColor;
     ToolboxAttributedTextTable table;
@@ -138,6 +140,7 @@ namespace
   {
     Pin("AttributedNativeStyleWrapAndMalformedMarkup");
     ToolboxWindow window;
+    HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
     LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
     ToolboxAttributedTextTable table;
@@ -240,6 +243,7 @@ namespace
   {
     Pin("AttributedPaintOnlySourceChangeHistoryAndRefusalRecovery");
     ToolboxWindow window;
+    HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
     LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
     AttributedTextNode *node = new AttributedTextNode(AttributedText(Styled("old", Bold)).props);
@@ -366,6 +370,7 @@ int main(int argc, char **argv)
   LOKA_VERIFY(utf8->queryUtf8(view) && view.length == 3 && std::string(view.bytes, view.length) == std::string("a\0\xff", 3));
 
   ToolboxWindow window;
+  HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
 

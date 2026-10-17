@@ -297,7 +297,6 @@ namespace
     loka::testing::StandaloneMountTestPlatformContext platform;
     InputWindow window;
     ToolboxApp app;
-    HostControl control;
     explicit InputFixture(InputKind kind, bool parent)
         : facts(kind, parent), controller(&native), window(&platform, controller, facts), app(window)
     {
@@ -305,9 +304,7 @@ namespace
       facts.app = &app;
       facts.controller = &controller;
       controller.rootNode_ = root();
-      control.value = 0;
     }
-    ~InputFixture() { toolbox_host::hitControl = 0; }
     Node *root() { return loka::dsl::testing::SceneTestAccess::rootBoundary(*window.scene()); }
     template <class Context> Context *observe(Node *node)
     {
@@ -352,21 +349,11 @@ namespace
       case SCROLL_INPUT:
       {
         observe<NativeNodeContext>(node);
-        ToolboxScenePlatformController::ScrollBarControlBinding row = ToolboxScenePlatformController::ScrollBarControlBinding();
-        row.control = &control;
-        row.resourceId = 1;
-        row.value = facts.offsetFact.state();
-        row.valueSeat = node->asScrollBarNode()->props.value_;
-        row.onChange = &facts.change;
-        row.active = true;
-        row.rect = rect;
-        controller.installScroll(row);
-        toolbox_host::hitControl = &control;
-        toolbox_host::trackedValue = 42;
+        LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, node->asScrollBarNode()->props, NATIVE_HINT_DEFAULT));
+        controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 42);
         const unsigned tracks = toolbox_host::tracks;
         facts.bind();
         ToolboxInputDoor::mouseDown(controller, point);
-        toolbox_host::hitControl = 0;
         LOKA_VERIFY(toolbox_host::tracks == tracks + 1 && facts.offset.get() == 42 && facts.emits == 1);
         break;
       }
@@ -489,9 +476,7 @@ namespace
     LOKA_VERIFY(node != 0);
     const Rect rect = {0, 0, 40, 120};
     const Point point = {5, 5};
-    HostControl control = {0};
     const short previousPopupItem = toolbox_host::popupItem;
-    const short previousTrackedValue = toolbox_host::trackedValue;
     if (kind == BUTTON_INPUT)
     {
       ToolboxButtonContext *context = new ToolboxButtonContext();
@@ -525,17 +510,8 @@ namespace
     {
       const ScrollBarProps &props = node->asScrollBarNode()->props;
       LOKA_VERIFY(props.value_.usesTracker(owner->tracker()));
-      ToolboxScenePlatformController::ScrollBarControlBinding row =
-          ToolboxScenePlatformController::ScrollBarControlBinding();
-      row.control = &control;
-      row.resourceId = 1;
-      row.value = props.value_.state();
-      row.valueSeat = props.value_;
-      row.active = true;
-      row.rect = rect;
-      controller.installScroll(row);
-      toolbox_host::hitControl = &control;
-      toolbox_host::trackedValue = 3;
+      LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, props, NATIVE_HINT_DEFAULT));
+      controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 3);
     }
     if (clocked)
     {
@@ -559,8 +535,6 @@ namespace
     LOKA_VERIFY(owner->value.get() == 3);
     LOKA_VERIFY(owner->doubled.get() == 6);
     LOKA_VERIFY(owner->tracker()->phase() == TRACKER_IDLE);
-    toolbox_host::hitControl = 0;
-    toolbox_host::trackedValue = previousTrackedValue;
     toolbox_host::popupItem = previousPopupItem;
   }
   void controlWriteUsesOwnerTracker(InputKind kind)

@@ -721,6 +721,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME testToolboxAppShutdownReleasesMenuBeforeAttachmentDestruction
     COMMAND LokaToolboxMenuTests testToolboxAppShutdownReleasesMenuBeforeAttachmentDestruction)
 
+  add_executable(LokaToolboxControlTests tests/toolbox/host/ToolboxControlHostTests.cpp ${_editor_host_sources})
+  target_include_directories(LokaToolboxControlTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_options(LokaToolboxControlTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxControlTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxControlTests)
+  set_target_properties(LokaToolboxControlTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_control_case app-page app-off-arrow app-cancel viewport-page viewport-off-arrow viewport-cancel
+      native-hit setters lifetime clear ports te-movement)
+    add_test(NAME testToolboxControl_${_control_case} COMMAND LokaToolboxControlTests ${_control_case})
+  endforeach()
+
   add_executable(LokaToolboxFocusTests tests/toolbox/host/ToolboxFocusHostTests.cpp ${_editor_host_sources})
   target_include_directories(LokaToolboxFocusTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_options(LokaToolboxFocusTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)

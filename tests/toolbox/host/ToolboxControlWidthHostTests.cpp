@@ -346,7 +346,8 @@ int main(int argc, char **argv)
   {
     const String label = String::Literal("Open\xE2\x80\xA6 \xC3\xA9");
     const std::string expected("Open\xC9 \x8E", 7);
-    HostControl control = {0};
+    HostControl control;
+    control.owner = window.window();
     std::string installed;
     toolbox_host::controlTitles.clear();
     LOKA_VERIFY(ReconcileToolboxButtonControl(&control, label, 0, installed));
