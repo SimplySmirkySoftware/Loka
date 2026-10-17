@@ -379,6 +379,135 @@ void testWin32ScrollViewOffsetIsRelayoutInput()
   std::printf("==== [testWin32ScrollViewOffsetIsRelayoutInput] PASSED ====\n");
 }
 
+void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(ScrollViewProps::topOrigin().y);
+    scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    ScrollViewNode scrollView(ScrollViewProps(offset.state()).contentInsets(ScrollViewContentInsets::of(12, 3)));
+    scrollView.addChild(new ImageViewNode(ImageViewProps().size(100, 17)));
+    establishLayout(controller, &scrollView, 300, 10 + 2 * Win32SceneLayout::kRootInset);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    HWND child = findChildWindowByClass(viewport, L"LOKA_IMAGE_VIEW");
+    LOKA_VERIFY(child);
+    const RECT seat = childRectInParent(viewport, root);
+    const RECT atTop = childRectInParent(child, root);
+    const SCROLLINFO info = scrollInfo(viewport);
+    LOKA_VERIFY(atTop.top == seat.top + 12);
+    LOKA_VERIFY(info.nMax == 17 + 15 - 1);
+    LOKA_VERIFY(info.nPage == 10);
+    LOKA_VERIFY(offsetState.get().y == -12);
+
+    offset.state().set(loka::core::Frame(0, 100, 0, 0));
+    offset.resetChangeCount();
+    controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
+    const SCROLLINFO after = scrollInfo(viewport);
+    // Extent maximum 22 clamps the requested content origin 100: the bar
+    // settles extent 22 and the published fact reads 22 - 12 = 10, so the
+    // fact assertion proves the clamp was published, not merely preserved.
+    // This pass placed on the request (the reclamp pin's rule); the next
+    // pass places on the published clamp.
+    LOKA_VERIFY(after.nPos == 22);
+    LOKA_VERIFY(offsetState.get().y == 10);
+    const int published = offset.changeCount();
+    LOKA_VERIFY(published == 1);
+    controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
+    const RECT scrolled = childRectInParent(child, root);
+    LOKA_VERIFY(scrolled.top == seat.top - 10);
+    const int settled = offset.changeCount();
+    LOKA_VERIFY(settled == 1);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewInsetsGrowTheHeightlessExtent()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(ScrollViewProps::topOrigin().y);
+    scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    StackNode column(StackProps(STACK_AXIS_COLUMN).gap(0));
+    BoxNode *leading = new BoxNode(BoxProps().setSize(100, 1));
+    ScrollViewNode *scrollView =
+        new ScrollViewNode(ScrollViewProps(offset.state()).contentInsets(ScrollViewContentInsets::of(12, 3)));
+    scrollView->addChild(new BoxNode(BoxProps().setSize(100, 7)));
+    column.addChild(leading);
+    column.addChild(scrollView);
+    column.addChild(new ImageViewNode(ImageViewProps().size(100, 1)));
+    // The following sibling exposes the heightless return without a test API.
+    establishLayout(controller, &column, 300, 2 * Win32SceneLayout::kRootInset);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    HWND following = findChildWindowByClass(root, L"LOKA_IMAGE_VIEW");
+    LOKA_VERIFY(viewport && following);
+    const RECT seat = childRectInParent(viewport, root);
+    const RECT afterSeat = childRectInParent(following, root);
+    LOKA_VERIFY(afterSeat.top == seat.top + 7 + 15);
+
+    // SHRT_MAX - 25 + 22 still fits; pin that near-limit success too.
+    leading->props.setSize(100, static_cast<short>(SHRT_MAX - 25 - Win32SceneLayout::kRootInset));
+    controller.relayout(300, 2 * Win32SceneLayout::kRootInset);
+    const RECT nearLimit = childRectInParent(following, root);
+    LOKA_VERIFY(nearLimit.top == SHRT_MAX - 3);
+    const SCROLLINFO before = scrollInfo(viewport);
+    offset.state().set(loka::core::Frame(0, 6, 0, 0));
+    offset.resetChangeCount();
+    leading->props.setSize(100, static_cast<short>(SHRT_MAX - 20 - Win32SceneLayout::kRootInset));
+    controller.relayout(300, 2 * Win32SceneLayout::kRootInset);
+    const RECT refused = childRectInParent(following, root);
+    const SCROLLINFO after = scrollInfo(viewport);
+    LOKA_VERIFY(refused.top == SHRT_MAX - 20);
+    LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
+    LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
+    LOKA_VERIFY(offsetState.get().y == 6);
+    const int changes = offset.changeCount();
+    LOKA_VERIFY(changes == 0);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewInsetsRefuseAnExtentAboveShort()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    scene::NodeState<loka::core::Frame> &offsetState = offset.state();
+    ScrollViewNode scrollView((ScrollViewProps(offset.state())));
+    scrollView.addChild(new BoxNode(BoxProps().setSize(100, 17)));
+    establishLayout(controller, &scrollView, 300, 10 + 2 * Win32SceneLayout::kRootInset);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    const SCROLLINFO before = scrollInfo(viewport);
+    scrollView.props.contentInsets(ScrollViewContentInsets::of(SHRT_MAX, 0));
+    // Content origin zero keeps placement representable: only extent refuses.
+    offset.resetChangeCount();
+    controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
+    const SCROLLINFO after = scrollInfo(viewport);
+    LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
+    LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
+    LOKA_VERIFY(offsetState.get().y == 0);
+    const int changes = offset.changeCount();
+    LOKA_VERIFY(changes == 0);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
 void testWin32ScrollViewMessagePublishesOffsetFact()
 {
   std::printf("\n==== [testWin32ScrollViewMessagePublishesOffsetFact] start ====\n");
