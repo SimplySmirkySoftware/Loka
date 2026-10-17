@@ -589,6 +589,8 @@ LOKA_HOST_OTHER_HANDLER(ScrollBar)
 namespace toolbox_host
 {
   extern std::vector<std::string> paintOperations;
+  /** Every EraseRect's rect, in call order; paintOperations logs each as "erase". */
+  extern std::vector<Rect> erasedRects;
   struct Draw
   {
     short x, y, size;

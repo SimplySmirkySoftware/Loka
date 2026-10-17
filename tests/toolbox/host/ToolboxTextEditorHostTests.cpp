@@ -441,6 +441,42 @@ int main(int argc, char **argv)
     LOKA_VERIFY((**f.te()).viewRect.right == 192);
     return 0;
   }
+  if (argc == 2 && std::strcmp(argv[1], "shrink-repaint") == 0)
+  {
+    // #1429: TEUpdate redraws only the lines the text has. After a projection
+    // shortens the text, the plain retained replay paints the document ground
+    // below the last line before TEUpdate; a view the text fills gets none.
+    Fixture f(20);
+    HostPortScope port(f.window.window());
+    f.controller.rootNode_ = &f.node;
+    f.controller.renderContext = f.context;
+    f.window.scenePlatformController_ = &f.controller;
+    f.controller.activateEditControl(0);
+    toolbox_host::paintOperations.clear();
+    ToolboxInputDoor::renderDirty(f.controller, f.context->chromeRect());
+    for (std::size_t i = 0; i < toolbox_host::paintOperations.size(); ++i)
+      LOKA_VERIFY(toolbox_host::paintOperations[i] != "erase");
+    TESetSelect(0, 32767, f.te());
+    LOKA_VERIFY(f.context->paste("bc", 2) == EDITOR_OK);
+    LOKA_VERIFY(f.native() == "bc" && (**f.te()).nLines == 1);
+    loka::toolbox::ToolboxPlanarColor documentGround, windowGround;
+    LOKA_VERIFY(loka::toolbox::QueryToolboxGroundColor(SURFACE_GROUND_DOCUMENT, documentGround));
+    LOKA_VERIFY(loka::toolbox::QueryToolboxGroundColor(SURFACE_GROUND_WINDOW, windowGround));
+    toolbox_host::paintOperations.clear();
+    toolbox_host::erasedRects.clear();
+    toolbox_host::backgroundColors.clear();
+    ToolboxInputDoor::renderDirty(f.controller, f.context->chromeRect());
+    const std::vector<std::string> &ops = toolbox_host::paintOperations;
+    LOKA_VERIFY(ops.size() == 4 && ops[0] == "frame" && ops[1] == "erase" && ops[2] == "text" && ops[3] == "bar");
+    const TERec &te = **f.te();
+    Rect below = te.viewRect;
+    below.top = static_cast<short>(te.destRect.top + te.lineHeight);
+    LOKA_VERIFY(toolbox_host::erasedRects.size() == 1 && EqualRect(&toolbox_host::erasedRects[0], &below));
+    LOKA_VERIFY(toolbox_host::backgroundColors.size() == 2);
+    LOKA_VERIFY(toolbox_host::backgroundColors[0] == static_cast<long>(documentGround));
+    LOKA_VERIFY(toolbox_host::backgroundColors[1] == static_cast<long>(windowGround));
+    return 0;
+  }
   if (argc == 2 && (std::strcmp(argv[1], "pre-context-request") == 0
                     || std::strcmp(argv[1], "pre-context-refused") == 0))
   {
