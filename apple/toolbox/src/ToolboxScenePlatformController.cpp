@@ -564,8 +564,7 @@ void ToolboxScenePlatformController::renderScrollView(
   GetClip(this->scrollViewClipRgn_);
   ClipRect(&viewportRect);
   {
-    loka::app::scene::ProjectionMeasurementChannel measurement;
-    loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, renderScope, measurement);
+    loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, renderScope);
     if (scopeGuard.isActive())
     {
       RenderChildren(scrollView, this);

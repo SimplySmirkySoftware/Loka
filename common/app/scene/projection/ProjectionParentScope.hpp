@@ -13,8 +13,9 @@ namespace loka
   {
     namespace scene
     {
-      /** Stack-local measurement owned by one viewport traversal. Unit frames
-          borrow the same channel; the projection root has none. */
+      /** Measurement owned by the frame stack for one viewport admission.
+          The ScrollView arm reads it through its frame; unit frames borrow
+          the same channel pointer, and the projection root has none. */
       class ProjectionMeasurementChannel
       {
       public:
@@ -48,7 +49,7 @@ namespace loka
 
         /** Refusal belongs to the viewport traversal, including its units.
             Nested containers read it before narrowing another child result.
-            The fact expires when the owning layout returns. */
+            The fact expires when the viewport admission ends. */
         void markShortRangeRefused()
         {
           this->shortRangeRefused_ = true;
@@ -180,7 +181,8 @@ namespace loka
 
       /** Allocation-free LIFO stack. V1 admits root -> viewport -> unit or
           root -> unit; a viewport is admitted only directly under the root.
-          Admission is always-on; no new walk, one borrowed channel pointer per frame. */
+          Admission is always-on; no new walk, one borrowed channel pointer per frame
+          and one small viewport channel value on the stack. */
       class ProjectionParentScopeStack
       {
       public:
@@ -213,12 +215,13 @@ namespace loka
           return true;
         }
 
-        bool pushViewport(const ProjectionParentScope &scope, ProjectionMeasurementChannel &measurement)
+        bool pushViewport(const ProjectionParentScope &scope)
         {
           if (this->activeDepth_ != 0)
             return false;
+          this->viewportChannel_ = ProjectionMeasurementChannel();
           this->frames_[++this->activeDepth_] = scope;
-          this->current().channel = &measurement;
+          this->current().channel = &this->viewportChannel_;
           return true;
         }
 
@@ -247,6 +250,7 @@ namespace loka
             assert(false && "projection-parent scope pop must be LIFO");
             return false;
           }
+          this->current().channel = 0;
           --this->activeDepth_;
           return true;
         }
@@ -269,6 +273,7 @@ namespace loka
       private:
         ProjectionParentScope frames_[MAX_ACTIVE_SCOPES + 1];
         unsigned activeDepth_;
+        ProjectionMeasurementChannel viewportChannel_;
 
         ProjectionParentScopeStack(const ProjectionParentScopeStack &);
         ProjectionParentScopeStack &operator=(const ProjectionParentScopeStack &);
@@ -309,10 +314,8 @@ namespace loka
       class ProjectionViewportScopeGuard : public ProjectionParentScopeGuard
       {
       public:
-        ProjectionViewportScopeGuard(ProjectionParentScopeStack &stack,
-                                     const ProjectionParentScope &scope,
-                                     ProjectionMeasurementChannel &measurement)
-            : ProjectionParentScopeGuard(stack.pushViewport(scope, measurement) ? &stack : 0)
+        ProjectionViewportScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
+            : ProjectionParentScopeGuard(stack.pushViewport(scope) ? &stack : 0)
         {
         }
       };
