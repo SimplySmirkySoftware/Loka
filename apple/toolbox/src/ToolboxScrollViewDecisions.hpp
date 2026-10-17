@@ -77,13 +77,21 @@ inline int ToolboxScrollViewChildWidth(int viewportWidth)
   return width > 0 ? width : 0;
 }
 
+/** Stores an edge computed in int into the rect's own coordinate type (short
+    for QuickDraw). Callers pass a value between the rect's existing edges. */
+template <typename CoordT> inline void ToolboxScrollViewStoreEdge(CoordT &edge, int value)
+{
+  edge = static_cast<CoordT>(value);
+}
+
 /** Bars exclude the bottom-right corner, which remains window ground. */
 template <typename RectT> inline RectT ToolboxScrollViewContentRect(const RectT &seat, bool horizontalBar)
 {
   RectT content = seat;
-  content.right = content.left + ToolboxScrollViewChildWidth(seat.right - seat.left);
+  // The child width never exceeds the seat's width, so the new edge stays within the seat.
+  ToolboxScrollViewStoreEdge(content.right, content.left + ToolboxScrollViewChildWidth(seat.right - seat.left));
   if (horizontalBar)
-    content.bottom = content.top + ToolboxScrollViewChildWidth(seat.bottom - seat.top);
+    ToolboxScrollViewStoreEdge(content.bottom, content.top + ToolboxScrollViewChildWidth(seat.bottom - seat.top));
   return content;
 }
 
