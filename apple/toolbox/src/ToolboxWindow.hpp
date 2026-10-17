@@ -84,6 +84,14 @@ public:
   {
     return window_;
   }
+  /** Answers port coordinates only while the native window exists. */
+  bool queryPortRect(Rect &out) const
+  {
+    if (!this->window_)
+      return false;
+    out = this->window_->portRect;
+    return true;
+  }
   /** Answers the size box in port coordinates when the native window exists. */
   bool querySizeBoxRect(Rect &out) const
   {
