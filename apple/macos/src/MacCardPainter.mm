@@ -246,8 +246,9 @@ namespace
     CGContextRestoreGState(graphics);
   }
 
-  /** Once per band/whole paint, one owned border path. Shadow refusal cannot
-      suppress the unchanged antialiased border, which is always drawn last. */
+  /** Once per band/whole paint, acquire the border path before any ink so path
+      refusal draws nothing. Shadow bitmap refusal still cannot suppress the
+      unchanged antialiased border, which is always drawn last. */
   void PaintNativeCardInk(CGContextRef graphics,
                           CGRect body,
                           const loka::core::Frame &logical,
@@ -257,12 +258,12 @@ namespace
                           NSPoint phase,
                           unsigned corners)
   {
-    PaintTableInk(graphics, logical, style, projection, origin, phase);
-    const CGFloat diameter = projection.projectLength(0, 2 * style.kCornerRadius).pt;
-    const CGFloat pen = projection.projectLength(0, 1).pt;
     CardPath borderPath;
     if (!borderPath.get())
       return;
+    PaintTableInk(graphics, logical, style, projection, origin, phase);
+    const CGFloat diameter = projection.projectLength(0, 2 * style.kCornerRadius).pt;
+    const CGFloat pen = projection.projectLength(0, 1).pt;
     BuildCardPath(borderPath.get(), CGRectInset(body, pen / 2, pen / 2), (diameter - pen) / 2, corners);
     CGContextSaveGState(graphics);
     CGContextSetShouldAntialias(graphics, true);
