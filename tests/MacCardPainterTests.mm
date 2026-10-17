@@ -1116,10 +1116,13 @@ namespace
     NSBitmapImageRep *ground = CaptureCardWindow(root, layered);
     if (!ground)
       return;
-    // A test-owned change missing from capture is a named stale skip; missing
+    // A test-owned marker missing from capture is a named stale skip; missing
     // band ink on a live capture is a rendering failure.
     audit.begin("capture liveness");
-    [root setHidden:YES];
+    // Shifting the local 5 x 7 checkerboard by one 5-point cell flips every marker pixel.
+    LokaCardGround *marker = [[LokaCardGround alloc] initWithFrame:NSMakeRect(5, 0, 40, 28)];
+    [root addSubview:marker];
+    [marker release];
     NSBitmapImageRep *covered = CaptureCardWindow(root, layered);
     if (!covered)
       return;
@@ -1129,7 +1132,7 @@ namespace
       return;
     }
     audit.begin("ground restored");
-    [root setHidden:NO];
+    [marker removeFromSuperview];
     [root setNeedsDisplay:YES];
     [root displayIfNeeded];
     NSBitmapImageRep *restored = CaptureCardWindow(root, layered);
