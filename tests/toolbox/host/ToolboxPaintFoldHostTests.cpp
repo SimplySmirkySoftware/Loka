@@ -440,7 +440,7 @@ void CardPins()
   HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
-  CardBandNode node((CardBandProps()));
+  CardBandNode node((CardBandProps(CARD_BAND_TOP, CardStyle(CARD_SHADOW_DROP))));
   IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(&node);
   LOKA_VERIFY(handler != 0);
   LayoutState seat = Seat(10, 20, 34);

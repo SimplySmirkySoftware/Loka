@@ -1302,12 +1302,12 @@ namespace smirkycard
     }
     return new (std::nothrow) loka::app::EditText(seat->string);
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::createScrollView()
+  loka::app::ScrollView *JsCardNode::createScrollView(const loka::core::Frame &initialViewport)
   {
     JsScrollViewport *record = this->scrollViewports_.add();
     if (!record)
       return 0;
-    this->state(record->viewport, loka::core::Frame(0, 0, 0, 0));
+    this->state(record->viewport, initialViewport);
     if (!record->viewport.isValid())
       return 0;
     return new (std::nothrow) loka::app::ScrollView(record->viewport);

@@ -21,4 +21,8 @@ void testMacScrollViewRelayoutKeepsDocumentWidth();
 void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics();
 void testMacScrollViewHorizontalScrollerShortensChildHeight();
 
+void testMacScrollViewInsetsPlaceContentBelowTheTopInset();
+void testMacScrollViewInsetsGrowTheHeightlessExtent();
+void testMacScrollViewInsetsRefuseAnExtentAboveShort();
+
 #endif // LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP
