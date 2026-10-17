@@ -7,10 +7,16 @@ namespace loka
 {
   namespace platform
   {
-    bool queryCpuClass(CpuClass &)
+    bool queryCpuClass(CpuClass &out)
     {
-      // Win32 and macOS answer CPU_CLASS_G3_OR_FASTER in #1425 PR 3 and PR 4.
+#if defined(_WIN32)
+      out = CPU_CLASS_G3_OR_FASTER;
+      return true;
+#else
+      // macOS answers CPU_CLASS_G3_OR_FASTER in #1425 PR 4.
+      (void)out;
       return false;
+#endif
     }
   } // namespace platform
 } // namespace loka

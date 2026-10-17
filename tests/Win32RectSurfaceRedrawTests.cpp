@@ -1374,7 +1374,7 @@ static void checkCardOriginalTransparentRepaintAndEmpty()
   TransparentPaintWindow host;
   HWND root = host.window.hwnd();
   Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
-  CardBandNode band((CardBandProps()));
+  CardBandNode band(CardBandProps(CARD_BAND_TOP, CardStyle(CARD_SHADOW_DROP)));
   Win32CardBandContext context(&controller, root, 11, 17, 74, 3, &band);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   context.onPropsApplied();
