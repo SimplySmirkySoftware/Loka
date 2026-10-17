@@ -119,9 +119,13 @@ card('first', class {
   }
 
   toolbar() {
+    // Two buttons share the left half so the title keeps its half on a
+    // 420 px Classic window (three equal cells clipped "LaptopTracker").
     return Row(
-      Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
-      Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
+      Row(
+        Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
+        Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
+        Button('./MAIN.JS', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain')),
       Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
   }
 

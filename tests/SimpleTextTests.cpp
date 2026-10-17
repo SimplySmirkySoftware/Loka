@@ -864,23 +864,29 @@ namespace
         : harness(h),
           editor(),
           band(),
-          calls(0)
+          error()
     {
     }
     Harness &harness;
     scene::LayoutState editor;
     scene::LayoutState band;
-    unsigned calls;
+    scene::LayoutState error;
     static int columnChild(void *context, scene::Node *node, const scene::LayoutState &state)
     {
       LayoutProbe &probe = *static_cast<LayoutProbe *>(context);
       if (node->testId() == "SimpleText.Editor")
       {
         probe.editor = state;
-        ++probe.calls;
         return state.y + state.height;
       }
+      if (node->asStackNode() && node->testId() != "SimpleText.Ribbon")
+        return rowChild(context, node, state);
       const int bottom = probe.harness.platform.projectLayoutForTesting(node, state);
+      if (find(node, "SimpleText.Error"))
+      {
+        probe.error = state;
+        probe.error.height = static_cast<short>(bottom - state.y);
+      }
       if (node->testId() == "SimpleText.Ribbon")
       {
         probe.band = state;
@@ -891,8 +897,16 @@ namespace
     static int rowChild(void *context, scene::Node *node, const scene::LayoutState &state)
     {
       if (node->asStackNode())
+      {
+        LOKA_VERIFY(node->asStackNode()->props.effectiveAxis() == STACK_AXIS_COLUMN);
         return layout::computeColumnLayoutResultY(
-            node->asStackNode(), state, context, &LayoutProbe::columnChild, 0, &loka::testing::acceptShortLayoutY);
+            node->asStackNode(),
+            state,
+            context,
+            &LayoutProbe::columnChild,
+            layout::resolveLayoutGap(node, state.spacing, layout::RailSpacing(12, 4, 9)),
+            &loka::testing::acceptShortLayoutY);
+      }
       return state.y;
     }
   };
@@ -914,34 +928,52 @@ void testSimpleTextEditorReceivesRemainingWindow()
     {
       SimpleTextTestAccess::commands(h.main()).slot<simpletext::OPEN_DOCUMENT>()->emit();
       h.flush();
+      h.choose(false, FileChooserResult::Error(5));
     }
     if (phase == 2)
-      h.choose(false, FileChooserResult::Error(5));
+    {
+      h.put("first.txt", "loaded");
+      h.open("first.txt");
+    }
     scene::Node *error = find(&h.main(), "SimpleText.Error");
-    LOKA_VERIFY((error != 0) == (phase == 2));
-    if (error)
-      LOKA_VERIFY(layout::childTakesLayoutSeat(error));
-    LayoutProbe probe(h);
+    LOKA_VERIFY((error != 0) == (phase == 1));
     StackNode *root = h.main().childrenHead()->asStackNode();
     LOKA_VERIFY(root && root->props.effectiveAxis() == STACK_AXIS_ROW);
-    layout::RowLayoutMetrics metrics;
-
-    layout::computeRowLayoutResultY(root,
-                                    viewport,
-                                    metrics,
-                                    loka::app::layout::RailSpacing(12, viewport.spacing, 9),
-                                    0, // Synthetic allocation probe has no rail source.
-                                    &probe,
-                                    &LayoutProbe::rowChild,
-                                    viewport.spacing,
-                                    0);
-    LOKA_VERIFY(probe.calls == 1);
-    LOKA_VERIFY(probe.band.height > 0);
-    LOKA_VERIFY(probe.band.y + probe.band.height <= probe.editor.y);
-    LOKA_VERIFY(probe.editor.x == viewport.x && probe.editor.width == viewport.width);
-    LOKA_VERIFY(probe.editor.y > viewport.y);
-    LOKA_VERIFY(probe.editor.height > 80);
-    LOKA_VERIFY(probe.editor.y + probe.editor.height == viewport.y + viewport.height);
+    StackNode *column = root->childrenHead()->asStackNode();
+    LOKA_VERIFY(column && column->props.gap_ == StandardWindowMargin());
+    // Follow every nested Stack with the production column allocation routine.
+    // Only the editor is intercepted: Null's fake native editor is fixed at 80.
+    int consumed = 0;
+    for (int size = 0; size != 3; ++size)
+    {
+      viewport.height = static_cast<short>(size == 0 ? 320 : consumed + (size == 1 ? 3 : 0));
+      LayoutProbe probe(h);
+      layout::RowLayoutMetrics metrics;
+      layout::computeRowLayoutResultY(root,
+                                      viewport,
+                                      metrics,
+                                      layout::RailSpacing(12, viewport.spacing, 9),
+                                      0,
+                                      &probe,
+                                      &LayoutProbe::rowChild,
+                                      viewport.spacing,
+                                      0);
+      LOKA_VERIFY(probe.band.height > 0);
+      const int bandBottom = probe.band.y + probe.band.height;
+      if (error)
+      {
+        LOKA_VERIFY(probe.error.y == bandBottom + 9);
+        LOKA_VERIFY(probe.error.height > 0);
+        LOKA_VERIFY(probe.editor.y == probe.error.y + probe.error.height + 12);
+      }
+      else
+        LOKA_VERIFY(probe.editor.y == bandBottom + 9);
+      LOKA_VERIFY(probe.editor.x == viewport.x && probe.editor.width == viewport.width);
+      consumed = probe.editor.y - viewport.y;
+      LOKA_VERIFY(probe.editor.height == viewport.height - consumed);
+      LOKA_VERIFY(probe.editor.y + probe.editor.height == viewport.y + viewport.height);
+      LOKA_VERIFY(size == 0 ? probe.editor.height > 80 : probe.editor.height == (size == 1 ? 3 : 0));
+    }
   }
 }
 

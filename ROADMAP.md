@@ -268,7 +268,7 @@ In practice, that means `v0.1.0` should ideally reach the point where:
 * New node/control behavior does not require `PlatformController` growth by default.
 * New retained layout/container behavior can follow shared layout helpers and internal layout handler seams rather than ad-hoc platform branches.
 * Layout helper contracts are polished enough that container layout work is predictable: return values, child traversal callbacks, sizing heuristics, and platform projection responsibilities are named and tested explicitly.
-* `Boundary` responsibilities are understood well enough that future Menu/Window DSL work can reuse the same kernel ideas instead of inventing separate update/apply models.
+* `Boundary` responsibilities are understood well enough that future Menu/Window DSL work can reuse the same kernel ideas instead of inventing separate update/apply models. The window set already does at the kernel level: it shares the `KeySnapshot` needs rule with the node seats but walks on its own clock (App admission at rail completion, after the admitted windows' Scene runs where the Boundary seats apply), while keeping its own declaration form (`DocumentWindows`) and commit policy (`docs/KeyedSeatDesign.md`), so "reuse the kernel ideas" does not mean one declaration mechanism for nodes, menus and windows.
 * Common State/Flow interaction hazards have named framework patterns instead
   of app-local mutable tricks: distinct-until-changed, quantized values,
   throttle/debounce gates, stale-result dropping, owner-side apply adapters,
