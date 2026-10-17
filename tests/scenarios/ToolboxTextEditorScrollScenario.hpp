@@ -181,8 +181,8 @@ namespace loka
               TESetSelect(0, 32767, te);
               if (ok)
                 // Typing over the selection lets TextEdit redraw the shorter
-                // document itself; a projected replacement would leave the old
-                // lines on screen (a separate, pre-existing repaint gap, #1429).
+                // document itself. The cell keeps this gesture; a projected
+                // replacement now repaints the ground below the text (#1429).
                 ok = editor->key('F') == app::EDITOR_OK;
               this->selection_ = Selection((**te).selStart, (**te).selEnd);
               this->phase_ = INACTIVE;
