@@ -1,3 +1,8 @@
+namespace toolbox_host
+{
+  void (*beforeHide)(ControlRef) = 0;
+  unsigned refuseControls = 0;
+} // namespace toolbox_host
 // Included by ToolboxHost.cpp: all OS control calls share this one model.
 namespace
 {
@@ -22,6 +27,11 @@ ControlRef NewControl(GrafPtr owner,
                       short,
                       long)
 {
+  if (toolbox_host::refuseControls)
+  {
+    --toolbox_host::refuseControls;
+    return 0;
+  }
   ControlRef c = new HostControl(value);
   c->owner = owner;
   c->rect = *rect;
@@ -84,12 +94,15 @@ void ShowControl(ControlRef c)
 }
 void Draw1Control(ControlRef c)
 {
+  toolbox_host::paintOperations.push_back("bar");
   ++toolbox_host::controlCalls.draws;
   toolbox_host::controlCalls.drawClip = toolbox_host::currentClip();
   RecordControl(c, "draw", c->visible);
 }
 void HideControl(ControlRef c)
 {
+  if (toolbox_host::beforeHide)
+    toolbox_host::beforeHide(c);
   ++toolbox_host::controlCalls.hides;
   toolbox_host::controlCalls.lastHidden = c;
   RecordControl(c, "hide", c->visible);

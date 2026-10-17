@@ -111,6 +111,20 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
     {
       continue;
     }
+    if (this->scrollBarLedger_.scrollBarControls_[i].editor.editor())
+    {
+      const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+      if (!row.active)
+        return true;
+      gActiveScrollBarLineStep = row.lineStep;
+      gActiveScrollBarPageStep = row.pageStep;
+      TrackControl(control, point, part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
+      const int settled = GetControlValue(control);
+      const ToolboxEditorScrollBarAssociation source = row.editor;
+      if (settled != row.appliedValue)
+        source.editor()->scrollInput(settled);
+      return true;
+    }
     std::size_t viewportIndex = scrollBarLedger_.viewportScrollBars_.size();
     loka::app::ScrollBarOrientation axis = loka::app::SCROLL_BAR_VERTICAL;
     for (size_t j = 0; j < scrollBarLedger_.viewportScrollBars_.size(); ++j)

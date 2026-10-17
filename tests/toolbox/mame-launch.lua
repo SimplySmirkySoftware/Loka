@@ -134,6 +134,84 @@ if STANDALONE then
     return
 end
 
+-- Native gestures for one cell (#1414): move, press, wait and release, with
+-- coordinates read from the live native bar, not a guessed screen position.
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
+    local cpu = manager.machine.devices[":maincpu"]
+    assert(not cpu.shortname:match("^ppc"), "editor gesture cell currently targets maciix")
+    local mem = cpu.spaces["program"]
+    local button = field(":macadb:MOUSE0", "Mouse Button 0")
+    local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
+    local function signed(address)
+        local n = mem:read_u16(address)
+        return n >= 32768 and n - 65536 or n
+    end
+    local function barPoint(active)
+        local window = ptr(0x9D6) -- WindowList, frontmost NewWindow GrafPort.
+        if window == 0 then return nil end
+        local handle = ptr(window + 140) -- offsetof(WindowRecord, controlList), pinned in the cell.
+        for _ = 1, 64 do
+            if handle == 0 then return nil end
+            local control = ptr(handle)
+            if control == 0 then return nil end
+            local top, left = signed(control + 8), signed(control + 10)
+            local bottom, right = signed(control + 12), signed(control + 14)
+            local maximum = signed(control + 22)
+            if right - left == 16 and bottom - top > 48
+                and mem:read_u8(control + 16) ~= 0 and (maximum > 0) == active then
+                -- GrafPort.portBits.bounds is in local coordinates; negate its
+                -- origin to convert the audited local point to screen coordinates.
+                return left + 8 - signed(window + 10), bottom - 24 - signed(window + 8),
+                    top - signed(window + 8), signed(control + 18)
+            end
+            handle = ptr(control)
+        end
+        return nil
+    end
+    -- wanted = nil accepts any value; a number waits for the app to settle there.
+    local function awaitBar(active, wanted)
+        for _ = 1, 200 do
+            local x, y, top, value = barPoint(active)
+            if x and (wanted == nil or value == wanted) then return x, y, top, value end
+            emu.wait(0.1)
+        end
+        error("editor bar did not reach requested presentation")
+    end
+    local function move(x, y)
+        mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+        mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+        mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+        emu.wait(0.2)
+    end
+    local function press() button:set_value(1); say("editor operation press") end
+    local function release() button:clear_value(); say("editor operation release") end
+    -- A failed gesture must not stop the completion transport below; the
+    -- cell's own audit then records how far the app got.
+    local gestureOk, gestureError = pcall(function()
+    local x, y, top = awaitBar(true)
+    say("editor selection drag from=(%d,%d) below=(%d,%d)", x - 50, top + 5, x - 50, y + 60)
+    -- The ADB driver stamps mouseDown with the cursor position when it posts
+    -- the event, so hold still after each press before moving.
+    move(x - 50, top + 5); press(); emu.wait(0.3)
+    for step = 1, 4 do move(x - 50, top + 5 + step * (y + 60 - top - 5) // 4) end
+    emu.wait(0.5); release()
+    -- The cell scrolls back to the top after it sees the drag auto-scroll.
+    x, y, top = awaitBar(true, 0)
+    say("editor thumb cancellation")
+    move(x, top + 24); press(); emu.wait(0.3)
+    move(x + 50, top + 24); move(x + 100, top + 24); emu.wait(0.3); release(); emu.wait(0.5)
+    local _, _, _, value = barPoint(true)
+    assert(value == 0, "cancelled thumb drag changed the value")
+    say("editor page point global=(%d,%d), release outside", x, y)
+    move(x, y); press(); emu.wait(0.2); move(x + 100, y); release()
+    x, y = awaitBar(false)
+    say("editor inactive point global=(%d,%d)", x, y)
+    move(x, y); press(); emu.wait(0.2); release()
+    move(0, 0)
+    end)
+    if not gestureOk then say("editor gesture failed: %s", tostring(gestureError)) end
+end
+
 -- Completion transport: reading a marker from the development HFS disk while
 -- the guest owns it would add unsafe cross-mount coordination. After the
 -- durable audit write returns, the test app opens an owned black marker.

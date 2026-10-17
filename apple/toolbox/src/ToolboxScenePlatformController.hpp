@@ -144,6 +144,14 @@ public:
                               loka::app::scene::NativeLifetimeHint lifetimeHint =
                                   loka::app::scene::NATIVE_HINT_DEFAULT);
   void destroyScrollBarControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
+  bool presentEditorScrollBar(short, const ToolboxEditorScrollBarPresentation &);
+  void revokeEditorScrollBar(short);
+  bool ensureEditorScrollBar(short,
+                             const Rect &,
+                             ToolboxTextEditorContext *,
+                             const ToolboxEditorScrollBarPresentation &,
+                             loka::app::scene::NativeLifetimeHint);
+
   /** Projects the ScrollView viewport's own scrollBarProc without borrowing
       the DSL ScrollBar binding or its window-tracker commit clock. */
   int ensureViewportScrollBarControl(const Rect &viewportRect,
@@ -359,6 +367,7 @@ public:
   void clearEnabledBindings();
   void clearControls();
   void queueRetiredControl(ControlRef control, loka::app::scene::NativeLifetimeHint lifetimeHint);
+  void retireScrollBarBinding(ScrollBarControlBinding &, loka::app::scene::NativeLifetimeHint);
   void queueRetiredScrollBarControl(ControlRef control, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Publishes the value a finished tracking loop settled on, in the order
       the ruling fixes: binding first, then onChange. */

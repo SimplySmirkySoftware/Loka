@@ -426,8 +426,21 @@ namespace
     std::fflush(stdout);
   }
 } // namespace
+#include "ToolboxEditorScrollBarPins.hpp"
+
 int main(int argc, char **argv)
 {
+  if (argc == 2 && RunBarPin(argv[1]))
+    return 0;
+  if (argc == 2 && std::strcmp(argv[1], "scroll-bar") == 0)
+  {
+    Fixture f(20);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 1);
+    ControlRef bar = f.controller.scrollControl(0).control;
+    LOKA_VERIFY(bar->visible && bar->maximum > 0);
+    LOKA_VERIFY((**f.te()).viewRect.right == 192);
+    return 0;
+  }
   if (argc == 2 && (std::strcmp(argv[1], "pre-context-request") == 0
                     || std::strcmp(argv[1], "pre-context-refused") == 0))
   {
@@ -470,7 +483,7 @@ int main(int argc, char **argv)
   {
     Fixture f(30);
     Rect expected;
-    SetRect(&expected, 13, 23, 207, 97);
+    SetRect(&expected, 13, 23, 192, 97);
     LOKA_VERIFY(EqualRect(&(**f.te()).destRect, &expected));
     LOKA_VERIFY(EqualRect(&(**f.te()).viewRect, &expected));
     const Rect frame = f.context->chromeRect();
@@ -489,7 +502,7 @@ int main(int argc, char **argv)
     state.width = 200;
     state.height = 56;
     f.context->layout(&f.controller, state);
-    SetRect(&expected, 13, 23, 207, 73);
+    SetRect(&expected, 13, 23, 192, 73);
     LOKA_VERIFY(EqualRect(&(**f.te()).destRect, &expected));
     LOKA_VERIFY(EqualRect(&(**f.te()).viewRect, &expected));
     // Monaco fake metrics: 9 ascent + 3 descent + 2 leading = 14.
@@ -509,7 +522,7 @@ int main(int argc, char **argv)
     LOKA_VERIFY(EqualRect(&(**f.te()).viewRect, &expected));
     state.y = 40;
     f.context->layout(&f.controller, state);
-    SetRect(&expected, 13, 43, 207, 93);
+    SetRect(&expected, 13, 43, 192, 93);
     LOKA_VERIFY((**f.te()).destRect.top == 23 && (**f.te()).destRect.bottom == 73);
     LOKA_VERIFY(EqualRect(&(**f.te()).viewRect, &expected));
     f.context->render(&f.controller);
@@ -534,8 +547,8 @@ int main(int argc, char **argv)
       SetRect(&narrow, 10, 40, 10 + dimension, 96);
       SetRect(&shallow, 10, 40, 210, 40 + dimension);
       SetRect(&empty, 10, 40, 10, 40);
-      const Rect narrowText = ToolboxTextEditorTextRect(narrow);
-      const Rect shallowText = ToolboxTextEditorTextRect(shallow);
+      const Rect narrowText = ToolboxTextEditorGeometry(narrow, Rect(), false, Rect()).text;
+      const Rect shallowText = ToolboxTextEditorGeometry(shallow, Rect(), false, Rect()).text;
       LOKA_VERIFY(EqualRect(&narrowText, &empty) && EqualRect(&shallowText, &empty));
       LOKA_VERIFY(!f.controller.ensureTextEditorControl(f.context, narrow, NATIVE_HINT_DEFAULT));
       LOKA_VERIFY(!f.controller.ensureTextEditorControl(f.context, shallow, NATIVE_HINT_DEFAULT));
@@ -1173,6 +1186,13 @@ int main(int argc, char **argv)
     SetPort(previous);
     LOKA_VERIFY(edit && edit != editor);
     LOKA_VERIFY((**edit).txFont == 3 && (**edit).txSize == 12);
+    f.window.scenePlatformController_ = &f.controller;
+    f.controller.activateEditControl(0);
+    const int idleBefore = (**edit).idleCalls;
+    f.window.idleControls(ACTIVATION_FOREGROUND);
+    LOKA_VERIFY((**edit).idleCalls == idleBefore + 1);
+    f.window.idleControls(ACTIVATION_BACKGROUND);
+    LOKA_VERIFY((**edit).idleCalls == idleBefore + 1);
     LOKA_VERIFY((**edit).lineHeight == 17 && (**edit).fontAscent == 12);
     f.controller.retireEditTextControl(&ordinary, hint);
     f.controller.flushTE();
@@ -1345,11 +1365,11 @@ int main(int argc, char **argv)
     state.width = 200;
     state.height = 80;
     f.context->layout(&f.controller, state);
-    LOKA_VERIFY((**f.te()).destRect.top == -9);
+    LOKA_VERIFY((**f.te()).destRect.top == 23); // Successful recovery clamps the now-fitting document.
     state.y = 40;
     state.width = 240;
     f.context->layout(&f.controller, state);
-    LOKA_VERIFY((**f.te()).destRect.top == 11 && (**f.te()).viewRect.top == 43);
+    LOKA_VERIFY((**f.te()).destRect.top == 43 && (**f.te()).viewRect.top == 43);
     pin("checked replacement blocks keys until idle retry; scroll survives restore and relayout");
   }
   {
@@ -1474,7 +1494,7 @@ int main(int argc, char **argv)
     f.context->layout(&f.controller, state);
     f.context->render(&f.controller);
     LOKA_VERIFY((**f.te()).viewRect.left == 30 && (**f.te()).viewRect.right == 80);
-    LOKA_VERIFY((**f.te()).destRect.left == 13 && (**f.te()).destRect.right == 207);
+    LOKA_VERIFY((**f.te()).destRect.left == 13 && (**f.te()).destRect.right == 192);
     LOKA_VERIFY(f.controller.editControls_[0].rect.left == 30);
     f.controller.editControls_[0].usedThisFrame = false;
     SetRect(&f.controller.projectionClip, 300, 300, 310, 310);

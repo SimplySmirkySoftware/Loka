@@ -7,17 +7,16 @@
 #include <Memory.h>
 #include <algorithm>
 #include <cstring>
+#include "ToolboxPortScope.hpp"
 using namespace loka::app;
-Rect ToolboxTextEditorTextRect(const Rect &frame)
+ToolboxTextEditorRects ToolboxTextEditorContext::geometry() const
 {
-  const short inset = 3;
-  Rect text = frame;
-  if (static_cast<long>(frame.right) - frame.left <= 2 * inset
-      || static_cast<long>(frame.bottom) - frame.top <= 2 * inset)
-    SetRect(&text, frame.left, frame.top, frame.left, frame.top);
-  else
-    SetRect(&text, frame.left + inset, frame.top + inset, frame.right - inset, frame.bottom - inset);
-  return text;
+  Rect port = Rect(), sizeBox = Rect();
+  const bool hasPort =
+      this->controller() && this->controller()->window_ && this->controller()->window_->queryPortRect(port);
+  if (this->controller() && this->controller()->window_)
+    this->controller()->window_->querySizeBoxRect(sizeBox);
+  return ToolboxTextEditorGeometry(this->rect_, port, hasPort, sizeBox);
 }
 
 namespace
@@ -63,8 +62,9 @@ namespace
     Handle handle_;
   };
 } // namespace
-ToolboxTextEditorContext::ToolboxTextEditorContext(TextEditorNode *n, ToolboxScenePlatformController *c,
-                                                 const scene::SeamKey<TextEditorNode> &key)
+ToolboxTextEditorContext::ToolboxTextEditorContext(TextEditorNode *n,
+                                                   ToolboxScenePlatformController *c,
+                                                   const scene::SeamKey<TextEditorNode> &key)
     : ToolboxProjectedNodeContext(c),
       key_(key),
       node_(n),
@@ -77,7 +77,8 @@ ToolboxTextEditorContext::ToolboxTextEditorContext(TextEditorNode *n, ToolboxSce
       revision_(),
       phase_(IDLE),
       status_(EDITOR_UNAVAILABLE),
-      restores_(0)
+      restores_(0),
+      scrollBarId_(0)
 {
 }
 ToolboxTextEditorContext::~ToolboxTextEditorContext()
@@ -87,6 +88,8 @@ ToolboxTextEditorContext::~ToolboxTextEditorContext()
 }
 void ToolboxTextEditorContext::invalidateNativePresentation()
 {
+  if (this->controller())
+    this->controller()->revokeEditorScrollBar(this->scrollBarId_);
   this->te_ = 0;
   this->source_ = 0;
   this->status_ = EDITOR_UNAVAILABLE;
@@ -94,10 +97,18 @@ void ToolboxTextEditorContext::invalidateNativePresentation()
 void ToolboxTextEditorContext::onFactChanged(scene::NodeLifecycleFact previous, scene::NodeLifecycleFact next)
 {
   if (next != scene::NODE_FACT_ATTACHED && this->controller())
+  {
+    this->controller()->revokeEditorScrollBar(this->scrollBarId_);
     this->controller()->retireTextEditorControl(this, this->lifetimeHint());
+  }
   if (next == scene::NODE_FACT_RETIRED)
     this->node_ = 0;
   ToolboxProjectedNodeContext::onFactChanged(previous, next);
+}
+void ToolboxTextEditorContext::retireNativeProjection()
+{
+  if (this->scrollBarId_ && this->controller())
+    this->controller()->destroyScrollBarControl(this->scrollBarId_, this->lifetimeHint());
 }
 short ToolboxTextEditorContext::offsetOf(LineCursor cursor) const
 {
@@ -344,6 +355,7 @@ public:
     if ((follow.contains(scene::REPAINT) || this->follow_.contains(scene::REPAINT)) && c.controller()
         && c.controller()->window_)
       c.controller()->window_->requestInvalidateRect(c.paintRect_);
+    c.syncPresentation();
     // No timer arm: foreground idle retries directly from status_/TE presence.
     return scene::FOLLOW_UP_NONE;
   }
@@ -387,7 +399,7 @@ bool ToolboxTextEditorContext::queryVisibleLines(unsigned &lines) const
   if (!text.bytes())
     return false;
   const TERec &te = **this->te_;
-  const Rect textRect = ToolboxTextEditorTextRect(this->rect_);
+  const Rect textRect = this->geometry().text;
   const long height = te.lineHeight;
   short first = 0;
   for (short end = 1; end <= te.nLines; ++end)
@@ -411,7 +423,7 @@ void ToolboxTextEditorContext::scrollTo(LineCursor target)
 {
   const short offset = this->offsetOf(target);
   const TERec &te = **this->te_;
-  const Rect textRect = ToolboxTextEditorTextRect(this->rect_);
+  const Rect textRect = this->geometry().text;
   short visual = 0;
   while (visual < te.nLines && te.lineStarts[visual + 1] <= offset)
     ++visual;
@@ -541,6 +553,107 @@ void ToolboxTextEditorContext::settle(scene::Settlement stimulus, RailOperation 
 #endif
   );
 }
+namespace
+{
+  bool EditorShort(long value)
+  {
+    return value >= SHRT_MIN && value <= SHRT_MAX;
+  }
+  /** Stack snapshot of this TE's visual line range; never stored on a context. */
+  struct EditorScrollMetrics
+  {
+    long line, maximumPixels, maximum, offset, clamped, value, page;
+    bool read(TEHandle handle, const Rect &textRect)
+    {
+      if (!handle || EmptyRect(&textRect))
+        return false;
+      const TERec &te = **handle;
+      TextLock text(handle);
+      const long height = static_cast<long>(textRect.bottom) - textRect.top;
+      this->line = te.lineHeight;
+      if (!text.bytes() || te.teLength < 0 || te.nLines < 0 || this->line <= 0 || height < this->line)
+        return false;
+      const long extra = (te.teLength == 0 || text.bytes()[te.teLength - 1] == '\r')
+                                 && (te.nLines == 0 || te.lineStarts[te.nLines - 1] < te.teLength)
+                             ? 1
+                             : 0;
+      const long total = (static_cast<long>(te.nLines) + extra) * this->line;
+      // Conservative supported range, not a mathematical requirement of line-unit controls.
+      if (!EditorShort(total))
+        return false;
+      this->maximumPixels = std::max(0L, total - height);
+      this->maximum = (this->maximumPixels + this->line - 1) / this->line;
+      this->offset = static_cast<long>(textRect.top) - te.destRect.top;
+      this->clamped = std::max(0L, std::min(this->offset, this->maximumPixels));
+      this->value =
+          this->maximumPixels > 0 && this->clamped == this->maximumPixels ? this->maximum : this->clamped / this->line;
+      this->page = std::max(1L, height / this->line - 1);
+      return EditorShort(this->maximumPixels) && EditorShort(this->maximum) && EditorShort(this->value)
+             && EditorShort(this->page);
+    }
+    bool move(TEHandle te, long target) const
+    {
+      const long delta = this->offset - target;
+      if (!EditorShort(delta) || !EditorShort((**te).destRect.top + delta)
+          || !EditorShort((**te).destRect.bottom + delta))
+        return false;
+      if (delta)
+        TEScroll(0, static_cast<short>(delta), te);
+      return true;
+    }
+  };
+} // namespace
+void ToolboxTextEditorContext::syncPresentation()
+{
+  if (this->phase_ != IDLE || !this->controller() || !this->controller()->window_)
+    return;
+  ToolboxPortScope port(this->controller()->window_->window());
+  EditorScrollMetrics metrics;
+  if (!this->te_ || this->status_ != EDITOR_OK || !metrics.read(this->te_, this->geometry().text)
+      || !metrics.move(this->te_, metrics.clamped))
+  {
+    this->controller()->presentEditorScrollBar(this->scrollBarId_, ToolboxEditorScrollBarPresentation());
+    return;
+  }
+  if (metrics.offset != metrics.clamped)
+    this->controller()->window_->requestInvalidateRect(this->paintRect_);
+  this->controller()->presentEditorScrollBar(this->scrollBarId_,
+                                             ToolboxEditorScrollBarPresentation(static_cast<short>(metrics.maximum),
+                                                                                static_cast<short>(metrics.value),
+                                                                                static_cast<short>(metrics.page)));
+}
+void ToolboxTextEditorContext::idleTick()
+{
+  if (!this->te_ || !this->controller() || !this->controller()->window_)
+    return;
+  ToolboxPortScope port(this->controller()->window_->window());
+  const Rect before = (**this->te_).destRect;
+  TEIdle(this->te_);
+  if (!EqualRect(&before, &(**this->te_).destRect))
+  {
+    this->controller()->window_->requestInvalidateRect(this->paintRect_);
+    this->syncPresentation();
+  }
+}
+EditorResult ToolboxTextEditorContext::scrollInput(int value)
+{
+  RailOperation op(*this);
+  const EditorResult ready = this->beginInput();
+  if (ready != EDITOR_OK)
+    return ready;
+  ToolboxPortScope port(this->controller()->window_->window());
+  EditorScrollMetrics metrics;
+  if (metrics.read(this->te_, this->geometry().text))
+  {
+    const long target = std::min(std::max(0L, std::min(static_cast<long>(value), metrics.maximum)) * metrics.line,
+                                 metrics.maximumPixels);
+    if (metrics.move(this->te_, target) && target != metrics.offset)
+      this->controller()->window_->requestInvalidateRect(this->paintRect_);
+  }
+  // Operation-only refusal is a successful no-op, never a document restore.
+  return this->finishInput(EDITOR_OK, CARET_CHANGE, op);
+}
+
 void ToolboxTextEditorContext::retryProjection()
 {
   // Called once by the foreground idle pass, outside scheduler drain callbacks.
@@ -686,27 +799,42 @@ EditorResult ToolboxTextEditorContext::paste(const char *bytes, std::size_t leng
 }
 void ToolboxTextEditorContext::updateRect(const Rect &rect)
 {
-  this->paintRect_ = rect;
-  if (this->controller() && !this->controller()->intersectWithProjectionClip(rect, this->paintRect_))
+  const ToolboxTextEditorRects before = this->geometry();
+  const Rect oldPaint = this->paintRect_;
+  this->rect_ = rect;
+  const ToolboxTextEditorRects geometry = this->geometry();
+  this->paintRect_ = geometry.frame;
+  if (this->controller() && !this->controller()->intersectWithProjectionClip(geometry.frame, this->paintRect_))
     SetRect(&this->paintRect_, 0, 0, 0, 0);
   if (this->te_)
   {
-    const Rect textRect = ToolboxTextEditorTextRect(rect);
-    if (!EqualRect(&rect, &this->rect_))
+    const Rect textRect = geometry.text;
+    if (!EqualRect(&geometry.text, &before.text))
     {
-      const Rect previousTextRect = ToolboxTextEditorTextRect(this->rect_);
-      const short dx = (**this->te_).destRect.left - previousTextRect.left;
-      const short dy = (**this->te_).destRect.top - previousTextRect.top;
-      (**this->te_).destRect = textRect;
-      OffsetRect(&(**this->te_).destRect, dx, dy);
-      TECalText(this->te_);
+      const Rect previousTextRect = before.text;
+      const long dx = static_cast<long>((**this->te_).destRect.left) - previousTextRect.left;
+      const long dy = static_cast<long>((**this->te_).destRect.top) - previousTextRect.top;
+      if (EditorShort(textRect.left + dx) && EditorShort(textRect.right + dx) && EditorShort(textRect.top + dy)
+          && EditorShort(textRect.bottom + dy))
+      {
+        const Rect destination = {static_cast<short>(textRect.top + dy),
+                                  static_cast<short>(textRect.left + dx),
+                                  static_cast<short>(textRect.bottom + dy),
+                                  static_cast<short>(textRect.right + dx)};
+        (**this->te_).destRect = destination;
+        TECalText(this->te_);
+      }
     }
     Rect view = textRect;
     if (this->controller() && !this->controller()->intersectWithProjectionClip(textRect, view))
       SetRect(&view, 0, 0, 0, 0);
     (**this->te_).viewRect = view;
   }
-  this->rect_ = rect;
+  if (!EqualRect(&oldPaint, &this->paintRect_) && this->controller() && this->controller()->window_)
+  {
+    this->controller()->window_->requestInvalidateRect(oldPaint);
+    this->controller()->window_->requestInvalidateRect(this->paintRect_);
+  }
 }
 scene::PaintAnswer ToolboxTextEditorContext::queryPaintDamage(const scene::PaintQuery &query) const
 {
@@ -717,7 +845,12 @@ scene::PaintAnswer ToolboxTextEditorContext::queryPaintDamage(const scene::Paint
 short ToolboxTextEditorContext::layout(scene::IPlatformController *, scene::LayoutState &state)
 {
   Rect rect;
-  SetRect(&rect, state.x, state.y, state.x + state.width, state.y + (state.height > 0 ? state.height : 80));
+  const long right = static_cast<long>(state.x) + state.width;
+  const long bottom = static_cast<long>(state.y) + (state.height > 0 ? state.height : 80);
+  if (EditorShort(right) && EditorShort(bottom))
+    SetRect(&rect, state.x, state.y, static_cast<short>(right), static_cast<short>(bottom));
+  else
+    SetRect(&rect, state.x, state.y, state.x, state.y);
   this->updateRect(rect);
   // Without a TextEdit record, render's attach settle later in this pass
   // delivers the request (or refuses it when creation fails); settling here
@@ -734,14 +867,15 @@ void ToolboxTextEditorContext::repaint(TEHandle te)
   ToolboxPaintClip clip(this->paintRect_);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
-  FrameRect(&this->rect_);
+  const Rect frame = this->geometry().frame;
+  FrameRect(&frame);
   if (te && this->status_ == EDITOR_OK)
     TEUpdate(&(**te).viewRect, te);
   else
   {
     // This fallback stands in for the native editor's document ground.
-    loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_DOCUMENT, this->rect_);
-    FrameRect(&this->rect_);
+    loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_DOCUMENT, frame);
+    FrameRect(&frame);
     MoveTo(this->rect_.left + 3, this->rect_.top + 14);
     const char label[] = "Editor unavailable";
     DrawText(label, 0, sizeof(label) - 1);
@@ -762,7 +896,22 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
   else if (!te)
     this->settle(scene::SETTLE_ATTACH, op);
   if (op.hasSameContext())
+  {
+    if (!this->scrollBarId_)
+      this->scrollBarId_ = this->controller()->allocateControlId();
+    EditorScrollMetrics metrics;
+    const bool measured =
+        this->phase_ == IDLE && this->status_ == EDITOR_OK && metrics.read(this->te_, this->geometry().text);
+    const ToolboxEditorScrollBarPresentation presentation =
+        measured ? ToolboxEditorScrollBarPresentation(static_cast<short>(metrics.maximum),
+                                                      static_cast<short>(metrics.value),
+                                                      static_cast<short>(metrics.page))
+                 : ToolboxEditorScrollBarPresentation();
+    if (this->controller()->ensureEditorScrollBar(
+            this->scrollBarId_, this->geometry().bar, this->te_ ? this : 0, presentation, this->lifetimeHint()))
+      this->syncPresentation();
     this->repaint(this->te_);
+  }
 }
 bool RegisterToolboxTextEditorNodeHandler(scene::PlatformNodeHandlerRegistry &registry)
 {
