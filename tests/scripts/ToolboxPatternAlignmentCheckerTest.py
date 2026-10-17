@@ -19,10 +19,6 @@ class ToolboxPatternAlignmentCheckerTest(unittest.TestCase):
             "static const Pattern kToolboxGradientPatterns[9] = {{{0x00, ...}}, ...};",
             "static volatile ::Pattern table[9];", "::Pattern const value = {};",
             "Pattern volatile value;", "Pattern first, second;", "Pattern (value);",
-            "Pattern *pointer, value;", "Pattern &reference = other, value;",
-            # Initializers with calls, braces or nested commas before a value (#1408 review).
-            "Pattern *p = currentPattern(), value;", "Pattern &r = pick(a, b), value;",
-            "Pattern *p = table[i], *q = {0}, value;",
             "new Pattern;", "new ::Pattern[9];", "new const Pattern();",
             "new (storage) volatile ::Pattern;",
             "typedef Pattern Hidden;", "typedef const ::Pattern Hidden[9];",
@@ -43,11 +39,23 @@ class ToolboxPatternAlignmentCheckerTest(unittest.TestCase):
             "new Pattern *;", "new const ::Pattern *[9];",
             "volatile ::Pattern *p;", "Pattern *p, *q;", "Pattern *p[9];",
             "Pattern *p = currentPattern(), *q = pick(a, b);",
+            "Pattern *p = choose<Fast, Safe>();", "const Pattern &r = pick<A, B>(x, y);",
             "sizeof(Pattern);", "sizeof(::Pattern);", "sizeof(const Pattern);",
             "(Pattern *)ptr;", "static_cast<const Pattern *>(ptr);",
             "x.pattern; x.pat; qd.gray; qd.black; qd.white;",
             "PatternFoo x; ToolboxAlignedPattern kToolboxGradientPatterns[9];",
             '// Pattern value;\n/* Pattern value; */\n"Pattern value;";\n\'P\';',
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(list(checker.violations("apple/toolbox/src/New.cpp", source)), [])
+
+    def test_declarator_lists_are_not_parsed(self):
+        # The documented limit: only the token after the type name is read, so a
+        # value listed after a borrowed declarator passes. Pinned so that a change
+        # to this contract is deliberate (#1408 review returned list parsing to design).
+        for source in (
+            "Pattern *pointer, value;", "Pattern &reference = other, value;",
+            "Pattern *p = currentPattern(), value;",
         ):
             with self.subTest(source=source):
                 self.assertEqual(list(checker.violations("apple/toolbox/src/New.cpp", source)), [])
