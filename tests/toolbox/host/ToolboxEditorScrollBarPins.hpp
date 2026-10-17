@@ -214,6 +214,37 @@ namespace
       LOKA_VERIFY(!PtInRect(point, &f.controller.editControls_[0].rect));
     }
   }
+  void BarClippedHit()
+  {
+    Fixture f;
+    // Render under a viewport clip, then pop it before native input arrives.
+    SetRect(&f.controller.projectionClip, 10, 20, 210, 60);
+    f.context->render(&f.controller);
+    SetRect(&f.controller.projectionClip, -30000, -30000, 30000, 30000);
+    ToolboxScrollBarLedger::ScrollBarControlBinding &row = f.controller.scrollControl(0);
+    LOKA_VERIFY(row.usedThisFrame && row.editor.editor() == f.context);
+    LOKA_VERIFY(row.rect.bottom == 60 && row.control->hilite == 255);
+    const Point outside = {75, 200}, inside = {50, 200};
+    const Rect column = f.context->geometry().bar;
+    LOKA_VERIFY(PtInRect(outside, &column) && !PtInRect(outside, &row.rect));
+    LOKA_VERIFY(PtInRect(inside, &row.rect));
+    TERec &te = **f.te();
+    const short selection = te.selStart;
+    HostTECompletion click = {te.destRect, 0, 0};
+    te.clickCompletions.push_back(click);
+    LOKA_VERIFY(!f.controller.handleEditClick(outside));
+    LOKA_VERIFY(!f.controller.handleControlClick(inside));
+    LOKA_VERIFY(f.controller.handleEditClick(inside));
+    LOKA_VERIFY(te.clickCompletions.size() == 1 && te.selStart == selection);
+    LOKA_VERIFY(!f.controller.editControls_.focused() && !te.active);
+    LOKA_VERIFY(!PtInRect(outside, &f.controller.editControls_[0].rect));
+    LOKA_VERIFY(!PtInRect(inside, &f.controller.editControls_[0].rect));
+    row.usedThisFrame = false;
+    LOKA_VERIFY(!f.controller.handleEditClick(inside));
+    row.usedThisFrame = true;
+    row.editor.revoke();
+    LOKA_VERIFY(!f.controller.handleEditClick(inside));
+  }
   ToolboxScenePlatformController *retiringController = 0;
   void VerifyRevokedBeforeHide(ControlRef control)
   {
@@ -360,6 +391,8 @@ namespace
       BarPortIdle();
     else if (std::strcmp(which, "bar-gesture") == 0)
       BarGesture();
+    else if (std::strcmp(which, "bar-clipped-hit") == 0)
+      BarClippedHit();
     else if (std::strcmp(which, "bar-inactive") == 0)
       BarInactiveHit();
     else if (std::strcmp(which, "bar-bulk") == 0 || std::strcmp(which, "bar-retained") == 0

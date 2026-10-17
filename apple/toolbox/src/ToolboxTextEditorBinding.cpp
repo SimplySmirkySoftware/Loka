@@ -71,20 +71,17 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
 /** Click owns hit testing and caret work; requests share only activation. */
 bool ToolboxScenePlatformController::handleEditClick(const Point &point)
 {
+  // FindControl declines inactive and invisible controls. Only their placed,
+  // projection-clipped rows consume a press after projection scopes have ended.
+  for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+  {
+    const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+    if (row.usedThisFrame && row.editor.editor() && PtInRect(point, &row.rect))
+      return true;
+  }
   for (size_t i = 0; i < this->editControls_.size(); ++i)
   {
     EditTextControlBinding &binding = this->editControls_[i];
-    if (binding.editor)
-    {
-      const ToolboxTextEditorRects geometry = binding.editor->geometry();
-      // FindControl declines inactive and invisible controls. Their column
-      // still consumes the press without activating or clicking TextEdit.
-      Rect column = geometry.frame;
-      column.left = geometry.hit.right;
-      Rect clipped;
-      if (this->intersectWithProjectionClip(column, clipped) && PtInRect(point, &clipped))
-        return true;
-    }
     if (binding.te && PtInRect(point, &binding.rect))
     {
       this->activateEditControl(i);
