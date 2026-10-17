@@ -1116,6 +1116,27 @@ namespace
     NSBitmapImageRep *ground = CaptureCardWindow(root, layered);
     if (!ground)
       return;
+    // A test-owned change missing from capture is a named stale skip; missing
+    // band ink on a live capture is a rendering failure.
+    audit.begin("capture liveness");
+    [root setHidden:YES];
+    NSBitmapImageRep *covered = CaptureCardWindow(root, layered);
+    if (!covered)
+      return;
+    if (CardCaptureDifferences(ground, covered) == 0)
+    {
+      SkipCardCapture(layered, "capture did not observe a test-owned change (stale capture)");
+      return;
+    }
+    audit.begin("ground restored");
+    [root setHidden:NO];
+    [root setNeedsDisplay:YES];
+    [root displayIfNeeded];
+    NSBitmapImageRep *restored = CaptureCardWindow(root, layered);
+    if (!restored)
+      return;
+    const unsigned restoredDifference = CardCaptureDifferences(ground, restored);
+    LOKA_VERIFY(restoredDifference == 0);
     audit.begin("show bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
       [[[host subviews] objectAtIndex:i] setHidden:NO];
@@ -1124,7 +1145,6 @@ namespace
     NSBitmapImageRep *painted = CaptureCardWindow(root, layered);
     if (!painted)
       return;
-    // A capture that misses the band layers must not pass blank-to-blank.
     const unsigned appeared = CardCaptureDifferences(ground, painted);
     audit.begin("hide bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
@@ -1143,10 +1163,8 @@ namespace
                 disappeared,
                 groundDifference);
     if (!appeared || !disappeared)
-    {
-      SkipCardCapture(layered, "capture did not observe band ink appear and disappear");
-      return;
-    }
+      std::printf("card capture control failed: band ink did not appear and disappear on a live capture\n");
+    LOKA_VERIFY(appeared && disappeared);
     LOKA_VERIFY(groundDifference == 0);
     audit.begin("show bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
