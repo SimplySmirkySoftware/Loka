@@ -21,6 +21,10 @@ namespace loka
 #include "support/TestVerify.hpp"
 #include <cmath>
 #include <cstdio>
+#include <map>
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+#include <dlfcn.h>
+#endif
 
 @interface LokaCardTestRoot : NSView
 @end
@@ -232,7 +236,7 @@ namespace
     CGContextAddRect(graphics, CGRectMake(outer.origin.x, outer.origin.y, outer.size.width, outer.size.height));
     CGContextAddRect(graphics, CGRectMake(seat.origin.x, seat.origin.y, seat.size.width, seat.size.height));
     CGContextEOClip(graphics);
-    PaintCardInk(graphics, body, CardStyle(), projection, NSZeroPoint, phase);
+    PaintCardInk(graphics, body, CardStyle(CARD_SHADOW_DROP), projection, NSZeroPoint, phase);
     result.end();
   }
 
@@ -340,8 +344,8 @@ namespace
     CardBitmap old(180, 150, backing);
     old.clear();
     CGContextRef graphics = old.begin();
-    ClipRing(graphics, body, CardStyle(), projection);
-    MacCardV1::PaintCardInk(graphics, body, CardStyle(), projection, NSZeroPoint, phase);
+    ClipRing(graphics, body, CardStyle(CARD_SHADOW_DROP), projection);
+    MacCardV1::PaintCardInk(graphics, body, CardStyle(CARD_SHADOW_DROP), projection, NSZeroPoint, phase);
     old.end();
     unsigned differences = 0;
     for (NSInteger y = 0; y < [old.bitmap() pixelsHigh]; ++y)
@@ -643,13 +647,7 @@ void testMacCardBandLifecycleAndRetry()
   [pool drain];
 }
 
-// Declared for the 10.4 SDK; called only after the runtime selector check.
-// Messaging an existing AppKit layer needs no QuartzCore class symbol or
-// framework link. The runtime selector checks also preserve the 10.4 SDK build.
-@protocol LokaCardLayerCapture
-- (void)renderInContext:(CGContextRef)context;
-@end
-
+// Selector-only access preserves compilation and loading with the 10.4 SDK.
 @interface NSView (LokaCardLayerTest)
 - (void)setWantsLayer:(BOOL)value;
 @end
@@ -688,90 +686,340 @@ void testMacCardBandLifecycleAndRetry()
 
 namespace
 {
-  /** Capture existing layer contents without lockFocus, display, or a transaction
-      flush. Once per snapshot, O(root backing area + this fixture's layers).
-      The caller owns the returned bitmap; the graphics wrapper is autoreleased. */
-  NSBitmapImageRep *CaptureCardLayers(LokaCardGround *root)
-  {
-    if (![root respondsToSelector:@selector(layer)])
-      return nil;
-    id layer = [root performSelector:@selector(layer)];
-    if (!layer || ![layer respondsToSelector:@selector(renderInContext:)])
-      return nil;
-    const NSRect bounds = [root bounds];
-    CGFloat scale = 1;
-    if ([[root window] respondsToSelector:@selector(backingScaleFactor)])
-      scale = [[root window] backingScaleFactor];
-    const NSInteger width = static_cast<NSInteger>(std::ceil(bounds.size.width * scale));
-    const NSInteger height = static_cast<NSInteger>(std::ceil(bounds.size.height * scale));
-    NSBitmapImageRep *image = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
-                                                                      pixelsWide:width
-                                                                      pixelsHigh:height
-                                                                   bitsPerSample:8
-                                                                 samplesPerPixel:4
-                                                                        hasAlpha:YES
-                                                                        isPlanar:NO
-                                                                  colorSpaceName:NSDeviceRGBColorSpace
-                                                                     bytesPerRow:0
-                                                                    bitsPerPixel:0];
-    if (!image)
-      return nil;
-    NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:image];
-    if (!context)
-    {
-      [image release];
-      return nil;
-    }
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    CGContextRef graphics = static_cast<CGContextRef>([context graphicsPort]);
-#pragma clang diagnostic pop
-    if (!graphics)
-    {
-      [image release];
-      return nil;
-    }
-    CGContextClearRect(graphics, CGRectMake(0, 0, width, height));
-    CGContextScaleCTM(graphics, scale, scale);
-    CGContextTranslateCTM(graphics, -bounds.origin.x, -bounds.origin.y);
-    [(id<LokaCardLayerCapture>)layer renderInContext:graphics];
-    return image;
-  }
+  // This fixture runs serially; the label is copied, never a borrowed stack pointer.
+  char cardCaptureMode[96] = "unselected";
 
   /** Report an unavailable observation, never a successful pixel comparison. */
   void SkipCardCapture(bool layered, const char *reason)
   {
-    std::printf("[skip] %s: %s on %s\n",
+    std::printf("[skip] %s %s: %s on %s\n",
                 layered ? "layer-backed fresh-ground capture" : "card real-window fresh-ground capture",
+                cardCaptureMode,
                 reason,
                 [[[NSProcessInfo processInfo] operatingSystemVersionString] UTF8String]);
   }
 
-  /** Read existing contents, never cacheDisplay (which repaints). Layer-backed
-      views require their layer tree, not the window backing store. The counter
-      brackets the entire capture to detect any implicit drawRect invocation. */
+  class CardPaintAudit;
+  CardPaintAudit *cardPaintAudit = 0;
+
+  /** One scoped observer owns the drawRect replacements for this fixture tree.
+      Collect original methods before installing any thunk (including inherited
+      methods). Each thunk calls its own original, so super calls remain valid.
+      Per step, walk only this fixture's paint records; nested super calls count
+      once per receiver. No product view gains a test door or counter. */
+  class CardPaintAudit
+  {
+    struct Paint
+    {
+      unsigned count;
+      unsigned depth;
+      Paint()
+          : count(0),
+            depth(0)
+      {
+      }
+    };
+    typedef std::map<NSView *, Paint> Paints;
+    NSView *root_;
+    Method methods_[16];
+    IMP originals_[16];
+    unsigned methodsCount_;
+    Paints paints_;
+    const char *step_;
+    NSView *requested_;
+    unsigned requests_;
+
+    void collect(NSView *view)
+    {
+      Method method = class_getInstanceMethod([view class], @selector(drawRect:));
+      unsigned i = 0;
+      while (i < this->methodsCount_ && this->methods_[i] != method)
+        ++i;
+      if (i == this->methodsCount_)
+      {
+        LOKA_VERIFY(i < 16 && method != 0);
+        this->methods_[i] = method;
+        this->originals_[i] = method_getImplementation(method);
+        ++this->methodsCount_;
+      }
+      for (NSUInteger child = 0; child < [[view subviews] count]; ++child)
+        this->collect([[view subviews] objectAtIndex:child]);
+    }
+    template <unsigned Index> static void draw(id receiver, SEL selector, NSRect dirty)
+    {
+      cardPaintAudit->record(Index, receiver, selector, dirty);
+    }
+    void record(unsigned index, NSView *view, SEL selector, NSRect dirty)
+    {
+      NSView *ancestor = view;
+      while (ancestor && ancestor != this->root_)
+        ancestor = [ancestor superview];
+      Paint *paint = ancestor ? &this->paints_[view] : 0;
+      if (paint && paint->depth++ == 0)
+        ++paint->count;
+      reinterpret_cast<void (*)(id, SEL, NSRect)>(this->originals_[index])(view, selector, dirty);
+      if (paint)
+        --paint->depth;
+    }
+    CardPaintAudit(const CardPaintAudit &);
+    CardPaintAudit &operator=(const CardPaintAudit &);
+
+  public:
+    explicit CardPaintAudit(NSView *root)
+        : root_(root),
+          methodsCount_(0),
+          step_("initial"),
+          requested_(nil),
+          requests_(0)
+    {
+      LOKA_VERIFY(cardPaintAudit == 0);
+      this->collect(root);
+      const IMP replacements[] = {reinterpret_cast<IMP>(&draw<0>),
+                                  reinterpret_cast<IMP>(&draw<1>),
+                                  reinterpret_cast<IMP>(&draw<2>),
+                                  reinterpret_cast<IMP>(&draw<3>),
+                                  reinterpret_cast<IMP>(&draw<4>),
+                                  reinterpret_cast<IMP>(&draw<5>),
+                                  reinterpret_cast<IMP>(&draw<6>),
+                                  reinterpret_cast<IMP>(&draw<7>),
+                                  reinterpret_cast<IMP>(&draw<8>),
+                                  reinterpret_cast<IMP>(&draw<9>),
+                                  reinterpret_cast<IMP>(&draw<10>),
+                                  reinterpret_cast<IMP>(&draw<11>),
+                                  reinterpret_cast<IMP>(&draw<12>),
+                                  reinterpret_cast<IMP>(&draw<13>),
+                                  reinterpret_cast<IMP>(&draw<14>),
+                                  reinterpret_cast<IMP>(&draw<15>)};
+      cardPaintAudit = this;
+      for (unsigned i = 0; i < this->methodsCount_; ++i)
+        method_setImplementation(this->methods_[i], replacements[i]);
+    }
+    ~CardPaintAudit()
+    {
+      for (unsigned i = 0; i < this->methodsCount_; ++i)
+        method_setImplementation(this->methods_[i], this->originals_[i]);
+      cardPaintAudit = 0;
+    }
+    /** The mode calls once before each action. A full update admits at most
+        one paint per receiver; a band action admits exactly its request count
+        and zero ancestor/sibling paints. Observation admits zero everywhere. */
+    void begin(const char *step, NSView *requested = nil, unsigned requests = 1)
+    {
+      std::printf("card step=%s\n", step);
+      this->paints_.clear();
+      this->step_ = step;
+      this->requested_ = requested;
+      this->requests_ = requests;
+    }
+    bool covers(NSView *view) const
+    {
+      Method method = class_getInstanceMethod([view class], @selector(drawRect:));
+      unsigned i = 0;
+      while (i < this->methodsCount_ && this->methods_[i] != method)
+        ++i;
+      if (i == this->methodsCount_)
+        return false;
+      for (NSUInteger child = 0; child < [[view subviews] count]; ++child)
+        if (!this->covers([[view subviews] objectAtIndex:child]))
+          return false;
+      return true;
+    }
+    bool accept(bool layered, bool observing = false) const
+    {
+      for (Paints::const_iterator it = this->paints_.begin(); it != this->paints_.end(); ++it)
+      {
+        const unsigned allowed = observing                                              ? 0
+                                 : (!this->requested_ || it->first == this->requested_) ? this->requests_
+                                                                                        : 0;
+        std::printf("card paint step=%s view=%p count=%u allowed=%u\n",
+                    this->step_,
+                    static_cast<void *>(it->first),
+                    it->second.count,
+                    allowed);
+        if (it->second.count > allowed)
+        {
+          std::printf("card invalid step=%s\n", this->step_);
+          SkipCardCapture(layered, observing ? "paint during window-server capture" : "extra repaint while settling");
+          return false;
+        }
+      }
+      if (!observing && this->requested_)
+      {
+        Paints::const_iterator it = this->paints_.find(this->requested_);
+        if (it == this->paints_.end() || it->second.count != this->requests_)
+        {
+          SkipCardCapture(layered, "requested band repaint did not occur");
+          return false;
+        }
+      }
+      return true;
+    }
+  };
+
+  bool CardHasLayer(NSView *view)
+  {
+    return [view respondsToSelector:@selector(layer)] && [view performSelector:@selector(layer)] != nil;
+  }
+
+  /** Once per snapshot, walk the fixture tree to record actual band backing. */
+  bool CheckCardBandLayers(NSView *view, bool layered)
+  {
+    if ([view isKindOfClass:NSClassFromString(@"LokaCardBandView")])
+    {
+      std::printf("card capture band=%p layer=%d\n", static_cast<void *>(view), CardHasLayer(view));
+      if (layered && !CardHasLayer(view))
+      {
+        SkipCardCapture(layered, "band has no layer");
+        return false;
+      }
+    }
+    for (NSUInteger i = 0; i < [[view subviews] count]; ++i)
+      if (!CheckCardBandLayers([[view subviews] objectAtIndex:i], layered))
+        return false;
+    return true;
+  }
+
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+  /** One server read per snapshot; O(window pixels), followed by O(content
+      pixels) normalization. The caller owns the bitmap. dlsym adds no 10.5
+      load-time symbol requirement when a newer SDK deploys to Tiger. */
+  NSBitmapImageRep *ReadCardWindowServer(LokaCardGround *root, const char *&reason)
+  {
+    typedef CGImageRef (*Capture)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
+    Capture capture = reinterpret_cast<Capture>(dlsym(RTLD_DEFAULT, "CGWindowListCreateImage"));
+    if (!capture)
+    {
+      reason = "window-server capture unavailable (requires 10.5)";
+      return nil;
+    }
+    CGWindowImageOption options = kCGWindowImageBoundsIgnoreFraming;
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
+    options |= kCGWindowImageBestResolution;
+#endif
+    NSWindow *window = [root window];
+    CGImageRef image = capture(
+        CGRectNull, kCGWindowListOptionIncludingWindow, static_cast<CGWindowID>([window windowNumber]), options);
+    if (!image)
+    {
+      reason = "window-server capture returned nil (possibly permission refused)";
+      return nil;
+    }
+    // BoundsIgnoreFraming removes the shadow, not the title bar. Derive backing
+    // scale from server pixels / window points, avoiding newer AppKit APIs.
+    // convertRect:toView:nil changes flipped root coordinates to window y-up;
+    // CGImage cropping uses top-down pixels.
+    const NSRect frame = [window frame];
+    const NSRect content = [root convertRect:[root bounds] toView:nil];
+    const CGFloat sx = CGImageGetWidth(image) / frame.size.width;
+    const CGFloat sy = CGImageGetHeight(image) / frame.size.height;
+    const CGRect crop = CGRectMake(std::floor(NSMinX(content) * sx),
+                                   std::floor((frame.size.height - NSMaxY(content)) * sy),
+                                   std::ceil(content.size.width * sx),
+                                   std::ceil(content.size.height * sy));
+    CGImageRef cropped = CGImageCreateWithImageInRect(image, crop);
+    CGImageRelease(image);
+    if (!cropped || CGImageGetWidth(cropped) == 0 || CGImageGetHeight(cropped) == 0)
+    {
+      if (cropped)
+        CGImageRelease(cropped);
+      reason = "window-server capture empty content crop";
+      return nil;
+    }
+    const size_t width = CGImageGetWidth(cropped), height = CGImageGetHeight(cropped);
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                       pixelsWide:width
+                                                                       pixelsHigh:height
+                                                                    bitsPerSample:8
+                                                                  samplesPerPixel:4
+                                                                         hasAlpha:YES
+                                                                         isPlanar:NO
+                                                                   colorSpaceName:NSDeviceRGBColorSpace
+                                                                      bytesPerRow:width * 4
+                                                                     bitsPerPixel:32];
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context =
+        bitmap && space
+            ? CGBitmapContextCreate(
+                  [bitmap bitmapData], width, height, 8, [bitmap bytesPerRow], space, kCGImageAlphaPremultipliedLast)
+            : 0;
+    if (space)
+      CGColorSpaceRelease(space);
+    if (!context)
+    {
+      CGImageRelease(cropped);
+      [bitmap release];
+      reason = "window-server capture normalization allocation refused";
+      return nil;
+    }
+    CGContextClearRect(context, CGRectMake(0, 0, width, height));
+    CGContextSetBlendMode(context, kCGBlendModeCopy);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), cropped);
+    CGContextRelease(context);
+    CGImageRelease(cropped);
+    bool visible = false;
+    for (size_t y = 0; y < height && !visible; ++y)
+      for (size_t x = 0; x < width; ++x)
+        if ([bitmap bitmapData][y * [bitmap bytesPerRow] + x * 4 + 3])
+        {
+          visible = true;
+          break;
+        }
+    if (!visible)
+    {
+      [bitmap release];
+      reason = "window-server capture all-transparent (possibly permission refused)";
+      return nil;
+    }
+    return bitmap;
+  }
+#endif
+
+  /** Settle after the intentional action, enforce its budget, then observe
+      without asking views to draw. The mode's pool owns successful snapshots. */
   NSBitmapImageRep *CaptureCardWindow(LokaCardGround *root, bool layered)
   {
-    const unsigned before = [root paints];
-    NSBitmapImageRep *image = nil;
-    if (layered)
-      image = CaptureCardLayers(root);
-    else
+    if (!cardPaintAudit->covers(root))
     {
+      SkipCardCapture(layered, "fixture acquired an uninstrumented drawRect method");
+      return nil;
+    }
+    if (!cardPaintAudit->accept(layered))
+      return nil;
+    cardPaintAudit->begin("settling", nil, 0);
+    [root displayIfNeeded];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-      [root lockFocus];
-      image = [[NSBitmapImageRep alloc] initWithFocusedViewRect:[root bounds]];
-      [root unlockFocus];
+    [[root window] flushWindow];
 #pragma clang diagnostic pop
-    }
-    if (!image || [root paints] != before)
+    if (!cardPaintAudit->accept(layered))
+      return nil;
+    std::printf("card capture root layer=%d\n", CardHasLayer(root));
+    if (layered && !CardHasLayer(root))
     {
-      SkipCardCapture(layered, !image ? "capture returned nil" : "capture caused the ground to draw");
+      SkipCardCapture(layered, "root has no layer");
+      return nil;
+    }
+    if (!cardPaintAudit->covers(root))
+    {
+      SkipCardCapture(layered, "settling acquired an uninstrumented drawRect method");
+      return nil;
+    }
+    if (!CheckCardBandLayers(root, layered))
+      return nil;
+    cardPaintAudit->begin("observation", nil, 0);
+    const char *reason = "window-server capture unavailable (requires 10.5)";
+    NSBitmapImageRep *image = nil;
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+    image = ReadCardWindowServer(root, reason);
+#endif
+    if (!cardPaintAudit->accept(layered, true))
+    {
       [image release];
       return nil;
     }
-    // The mode's autorelease pool owns successful snapshots through all comparisons.
+    if (!image)
+      SkipCardCapture(layered, reason);
     return [image autorelease];
   }
 
@@ -801,6 +1049,7 @@ namespace
     NSBitmapImageRep *incremental = CaptureCardWindow(root, layered);
     if (!incremental)
       return false;
+    cardPaintAudit->begin("fresh reference");
     // New views have new backing/layers. Repainting only the parent cannot
     // establish a fresh reference when a child keeps its own layer contents.
     for (int role = 0; role < CARD_BAND_COUNT; ++role)
@@ -836,9 +1085,17 @@ namespace
                           Frame *bands,
                           NSScrollView *nativeScroll,
                           bool layered,
-                          bool scrolling)
+                          bool scrolling,
+                          CardShadowInk ink)
   {
-    const CardStyle style(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+    CardPaintAudit audit(root);
+    audit.begin("initial display");
+    [root setNeedsDisplay:YES];
+    [root displayIfNeeded];
+    if (!CaptureCardWindow(root, layered))
+      return;
+    audit.begin("ground control");
+    const CardStyle style(CARD_SHADOW_WIDE, ink);
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
       [[[host subviews] objectAtIndex:i] setHidden:YES];
     [root setNeedsDisplay:YES];
@@ -846,6 +1103,7 @@ namespace
     NSBitmapImageRep *ground = CaptureCardWindow(root, layered);
     if (!ground)
       return;
+    audit.begin("show bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
       [[[host subviews] objectAtIndex:i] setHidden:NO];
     [root setNeedsDisplay:YES];
@@ -855,6 +1113,7 @@ namespace
       return;
     // A capture that misses the band layers must not pass blank-to-blank.
     const unsigned appeared = CardCaptureDifferences(ground, painted);
+    audit.begin("hide bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
       [[[host subviews] objectAtIndex:i] setHidden:YES];
     [root setNeedsDisplay:YES];
@@ -876,13 +1135,21 @@ namespace
       return;
     }
     LOKA_VERIFY(groundDifference == 0);
+    audit.begin("show bands");
     for (NSUInteger i = 0; i < [[host subviews] count]; ++i)
       [[[host subviews] objectAtIndex:i] setHidden:NO];
     [root setNeedsDisplay:YES];
     [root displayIfNeeded];
+    if (!CaptureCardWindow(root, layered))
+      return;
     for (int repaint = 0; repaint < 3; ++repaint)
     {
       NSView *band = [[host subviews] objectAtIndex:CARD_BAND_RIGHT];
+      audit.begin(repaint == 2   ? "partial band"
+                  : repaint == 1 ? "band twice"
+                                 : "band alone",
+                  band,
+                  repaint == 1 ? 2 : 1);
       const NSRect rect = repaint == 2 ? NSInsetRect([band bounds], 1, 3) : [band bounds];
       [band setNeedsDisplayInRect:rect];
       [band displayIfNeeded];
@@ -893,22 +1160,25 @@ namespace
         [band displayIfNeeded];
       }
       std::printf("repaint mode layer=%d scroll=%d pass=%d\n", layered, scrolling, repaint);
-      if (!DisplayMatchesFresh(root, controller, nodes, bands, repaint == 2 ? "partial band" : "band alone", layered))
+      if (!DisplayMatchesFresh(root,
+                               controller,
+                               nodes,
+                               bands,
+                               repaint == 2   ? "partial band"
+                               : repaint == 1 ? "band twice"
+                                              : "band alone",
+                               layered))
         return;
     }
     if (scrolling)
     {
-      for (int role = 0; role < 4; ++role)
-      {
-        nodes[role]->props.style = CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_STENCIL);
-        nodes[role]->getContext()->onPropsApplied();
-      }
-      [root displayIfNeeded];
+      audit.begin("scroll 5");
       [[nativeScroll contentView] scrollToPoint:NSMakePoint(0, 5)];
       [nativeScroll reflectScrolledClipView:[nativeScroll contentView]];
       [root displayIfNeeded];
       if (!DisplayMatchesFresh(root, controller, nodes, bands, "incremental scroll 5", layered))
         return;
+      audit.begin("scroll 11");
       [[nativeScroll contentView] scrollToPoint:NSMakePoint(0, 11)];
       [nativeScroll reflectScrolledClipView:[nativeScroll contentView]];
       [root displayIfNeeded];
@@ -917,6 +1187,7 @@ namespace
     }
     else
     {
+      audit.begin("move and shrink");
       CardBands(Frame(38, 32, 62, 48), style, bands);
       for (int role = 0; role < 4; ++role)
       {
@@ -927,6 +1198,7 @@ namespace
       if (!DisplayMatchesFresh(root, controller, nodes, bands, "move and shrink old ring", layered))
         return;
     }
+    std::printf("[pass] card fresh-ground %s\n", cardCaptureMode);
   }
 
   /** Offscreen scroll-phase pin: no window, capture, or unlocked console needed. */
@@ -954,17 +1226,35 @@ namespace
     EqualBitmaps(actual, expected, true);
   }
 
-  void VerifyFreshGround(bool layered, bool scrolling, bool capture = true)
+  void VerifyFreshGround(bool layered, bool scrolling, bool capture = true, CardShadowInk ink = CARD_SHADOW_ALPHA)
   {
+    ::snprintf(cardCaptureMode,
+               sizeof(cardCaptureMode),
+               "layer=%d scroll=%d ink=%s",
+               layered,
+               scrolling,
+               ink == CARD_SHADOW_ALPHA ? "ALPHA" : "STENCIL");
+    std::printf("card mode layer=%d scroll=%d ink=%s capture=%d\n",
+                layered,
+                scrolling,
+                ink == CARD_SHADOW_ALPHA ? "ALPHA" : "STENCIL",
+                capture);
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1050
+    if (capture)
+    {
+      SkipCardCapture(layered, "window-server capture unavailable (requires 10.5)");
+      return;
+    }
+#endif
     if (capture && loka::testing::MacConsoleScreenIsLocked())
     {
-      std::printf("[skip] card real-window fresh-ground capture: the console screen is locked\n");
+      SkipCardCapture(layered, "console screen is locked");
       return;
     }
     LokaCardGround *root = [[LokaCardGround alloc] initWithFrame:NSMakeRect(0, 0, 180, 150)];
     if (layered && ![root respondsToSelector:@selector(setWantsLayer:)])
     {
-      std::printf("[skip] card layer repaint: setWantsLayer: unavailable\n");
+      SkipCardCapture(layered, "setWantsLayer: unavailable");
       [root release];
       return;
     }
@@ -1004,7 +1294,7 @@ namespace
         MacScenePlatformController controller(host, RailMetrics());
         CardBandNode *nodes[4];
         Frame bands[4];
-        const CardStyle style(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+        const CardStyle style(CARD_SHADOW_WIDE, ink);
         CardBands(Frame(25, 25, 90, 65), style, bands);
         for (int role = 0; role < 4; ++role)
         {
@@ -1015,7 +1305,7 @@ namespace
         }
         NSAutoreleasePool *captures = [[NSAutoreleasePool alloc] init];
         if (capture)
-          RunCardCaptureMode(root, host, controller, nodes, bands, nativeScroll, layered, scrolling);
+          RunCardCaptureMode(root, host, controller, nodes, bands, nativeScroll, layered, scrolling, ink);
         else
           VerifyScrolledCardPhase(root, host, controller, nodes, nativeScroll);
         [captures drain];
@@ -1048,12 +1338,12 @@ void testMacCardBandMovePropsAndEmpty()
   [window setContentView:root];
   {
     MacScenePlatformController controller(root, RailMetrics());
-    CardNode card((CardProps()));
+    CardNode card((CardProps(CardStyle(CARD_SHADOW_DROP))));
     card.addChild(new StackNode(StackProps(STACK_AXIS_COLUMN)));
     CardBandNode *bands[4];
     for (int i = 0; i < CARD_BAND_COUNT; ++i)
     {
-      bands[i] = new CardBandNode(CardBandProps(static_cast<CardBandRole>(i)));
+      bands[i] = new CardBandNode(CardBandProps(static_cast<CardBandRole>(i), CardStyle(CARD_SHADOW_DROP)));
       card.addChild(bands[i]);
     }
     controller.onChange(&card, NODE_DIRTY_NONE, false);
@@ -1115,6 +1405,10 @@ void testMacCardBandMovePropsAndEmpty()
   VerifyFreshGround(false, true);
   VerifyFreshGround(true, false);
   VerifyFreshGround(true, true);
+  VerifyFreshGround(false, false, true, CARD_SHADOW_STENCIL);
+  VerifyFreshGround(false, true, true, CARD_SHADOW_STENCIL);
+  VerifyFreshGround(true, false, true, CARD_SHADOW_STENCIL);
+  VerifyFreshGround(true, true, true, CARD_SHADOW_STENCIL);
   [pool drain];
 }
 
@@ -1129,7 +1423,7 @@ void testMacCardPainterFixedDiameter()
   CardBitmap actual(80, 120, 2), expected(80, 120, 2);
   CGContextRef graphics = actual.begin();
   CGContextClipToRect(graphics, CGRectMake(20, 27, 4, 5));
-  PaintCardInk(graphics, Frame(14, 17, 12, 57), CardStyle(), projection, NSZeroPoint, NSZeroPoint);
+  PaintCardInk(graphics, Frame(14, 17, 12, 57), CardStyle(CARD_SHADOW_DROP), projection, NSZeroPoint, NSZeroPoint);
   actual.end();
   graphics = expected.begin();
   CGContextClipToRect(graphics, CGRectMake(20, 27, 4, 5));
