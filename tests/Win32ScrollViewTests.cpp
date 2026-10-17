@@ -415,12 +415,12 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     // pass places on the published clamp.
     LOKA_VERIFY(after.nPos == 22);
     LOKA_VERIFY(offsetState.get().y == 10);
-    const unsigned published = offset.changeCount();
+    const int published = offset.changeCount();
     LOKA_VERIFY(published == 1);
     controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
     const RECT scrolled = childRectInParent(child, root);
     LOKA_VERIFY(scrolled.top == seat.top - 10);
-    const unsigned settled = offset.changeCount();
+    const int settled = offset.changeCount();
     LOKA_VERIFY(settled == 1);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
