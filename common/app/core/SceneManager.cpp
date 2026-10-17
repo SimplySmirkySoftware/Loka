@@ -14,7 +14,7 @@ SceneManager::~SceneManager()
 {
   assert(!this->applying_ && "SceneManager cannot die during seat apply");
   this->window_ = 0;
-  loka::app::scene::Scene *current = this->currentScene_.get();
+  loka::app::scene::Scene *current = this->currentScene_;
   if (current)
   {
     if (current->getLifecycleState()->get() != ON_DETACH)
@@ -32,14 +32,9 @@ bool SceneManager::commitTransaction(loka::app::scene::Scene *, loka::app::scene
     return false;
   loka::app::scene::Scene *superseded = this->desired_;
   this->desired_ = to;
-  if (superseded != to && superseded != this->currentScene_.get() && superseded != this->applying_)
+  if (superseded != to && superseded != this->currentScene_ && superseded != this->applying_)
     this->retiredScenes_.retire(superseded);
   return true;
-}
-
-const loka::core::State<loka::app::scene::Scene *> &SceneManager::getCurrentScene() const
-{
-  return this->currentScene_;
 }
 
 void SceneManager::requestDetach()
@@ -59,7 +54,7 @@ bool SceneManager::applyPendingWork()
   const SceneRequest request = this->request_;
   this->request_ = REQUEST_NONE;
   const bool replaced = this->applyReplacement();
-  loka::app::scene::Scene *current = this->currentScene_.get();
+  loka::app::scene::Scene *current = this->currentScene_;
   if (!current)
   {
     // Retry refused preparation unless it recorded newer intent.
@@ -97,7 +92,7 @@ bool SceneManager::applyPendingWork()
 
 void SceneManager::seedScene(loka::app::scene::Scene *scene)
 {
-  assert(!this->currentScene_.get() && !this->desired_);
+  assert(!this->currentScene_ && !this->desired_);
   this->commitTransaction(0, scene);
   this->applying_ = scene;
   this->installScene(scene);
@@ -152,14 +147,14 @@ void SceneManager::retireScene(loka::app::scene::Scene *scene)
 
 void SceneManager::retireCurrentScene()
 {
-  loka::app::scene::Scene *current = this->currentScene_.get();
+  loka::app::scene::Scene *current = this->currentScene_;
   if (current)
     this->retireScene(current);
 }
 
 void SceneManager::installScene(loka::app::scene::Scene *next)
 {
-  loka::app::scene::Scene *old = this->currentScene_.get();
+  loka::app::scene::Scene *old = this->currentScene_;
   if (old)
   {
     this->retireScene(old);
@@ -170,7 +165,7 @@ void SceneManager::installScene(loka::app::scene::Scene *next)
       next->platformController_ = 0;
     }
   }
-  this->currentScene_.set(next);
+  this->currentScene_ = next;
   next->setWindow(this->window_);
   // Outgoing detach resets the shared controller. Attach the prepared scene,
   // project its root, then publish ON_ATTACH; applying protects reentrant adoption.
