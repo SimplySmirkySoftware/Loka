@@ -101,13 +101,15 @@ content fits keeps the pixels it had before #580.
 | Win32 | Always present (`SIF_DISABLENOSCROLL`), so the client width never moves between passes | `SetScrollInfo(SB_HORZ)` without `SIF_DISABLENOSCROLL`: Windows shows it only while the range exists | The children, the clip and the vertical page get `clientHeightBelowHorizontalBar(seat)`: the bar at the viewport's DPI leaves the seat's projected native height and the remainder converts once |
 | macOS | Always present | `setHasHorizontalScroller:` from the same decision | Legacy scrollers take `clientHeightBelowHorizontalScroller(seat)`; overlay scrollers take nothing |
 
-On Toolbox a bar that reaches the window's size box (the bottom-right 15 × 15 px
-of a document window, answered in one place by `ToolboxWindowSizeBoxRect` in
-[ToolboxWindowGeometry.hpp](../apple/toolbox/src/ToolboxWindowGeometry.hpp))
-stops above it (vertical) or left of it (horizontal). Only the bar's native
-rectangle changes; the viewport, content rect, range and page size do not, so a
-window whose `contentMargin` is 0 still lays its content out to the edge
-(#950 page 4).
+On Toolbox, a ScrollView touching an answered window port shares its bars' borders
+with the frame: the right edge adds one pixel to child/content width, and the
+bottom adds one pixel to content height only with a horizontal bar; top/left
+extensions belong only to the bars (#950 page 4, ruling 5 amended).
+A bar touching or intersecting the window's 15 × 15 size box (answered by
+`ToolboxWindowSizeBoxRect` in [ToolboxWindowGeometry.hpp](../apple/toolbox/src/ToolboxWindowGeometry.hpp))
+ends one pixel past its top/left edge, sharing that line, floored at the bar's start.
+The enlarged content rect governs clipping, hit registration, ranges and pages;
+without an answered port, frame contacts are absent.
 
 ## Decide first, commit once
 

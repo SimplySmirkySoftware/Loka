@@ -10,6 +10,7 @@
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/Text.hpp"
+#include "app/nodes/ImageView.hpp"
 #include <cstdio>
 #include <cstring>
 
@@ -403,6 +404,22 @@ namespace
     }
   };
 
+  class ScrollOffer : public ImageViewNode
+  {
+  public:
+    LayoutState offer;
+    explicit ScrollOffer(bool horizontal)
+        : ImageViewNode(ImageViewProps().size(horizontal ? 400 : 100, 500))
+    {
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &state)
+    {
+      this->offer = state;
+      state.y = static_cast<short>(state.y + 500);
+      return state.width;
+    }
+  };
+
   void windowMarginPin()
   {
     const layout::RailSpacing &spacing = ToolboxLayoutMetrics::spacing();
@@ -431,23 +448,34 @@ namespace
       LOKA_VERIFY(root.offer.width == widths[i] && root.offer.height == heights[i]);
       f.controller.rootNode_ = 0;
     }
-    for (unsigned i = 0; i != 2; ++i)
+    for (unsigned i = 0; i != 3; ++i)
     {
-      Fixture f(i == 0 ? WindowProps().contentMargin(0) : WindowProps());
+      Fixture f(i != 1 ? WindowProps().contentMargin(0) : WindowProps());
       ScrollViewNode root((ScrollViewProps()));
-      root.addChild(new BoxNode(Box().size(100, 500).props));
+      ScrollOffer *child = new ScrollOffer(i == 2);
+      root.addChild(child);
       f.controller.rootNode_ = &root;
       ToolboxInputDoor::render(f.controller);
-      LOKA_VERIFY(f.controller.scrollCalls.size() == 1);
+      LOKA_VERIFY(child->offer.width == (i == 1 ? 320 : 345));
+      LOKA_VERIFY(f.controller.scrollCalls.size() == (i == 2 ? 2 : 1));
       const ToolboxScenePlatformController::ScrollCall &bar = f.controller.scrollCalls[0];
       const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
-      LOKA_VERIFY(binding.rect.left == (i == 0 ? 0 : 12) && binding.rect.top == (i == 0 ? 0 : 12));
-      LOKA_VERIFY(binding.rect.right == (i == 0 ? 360 : 348) && binding.rect.bottom == (i == 0 ? 260 : 248));
-      LOKA_VERIFY(binding.contentRect.right == (i == 0 ? 344 : 332));
-      LOKA_VERIFY(binding.contentRect.bottom == (i == 0 ? 260 : 248));
-      LOKA_VERIFY(bar.rect.bottom == 245 && bar.rect.top == (i == 0 ? 0 : 12));
-      LOKA_VERIFY(bar.maximum == (i == 0 ? 240 : 264));
-      LOKA_VERIFY(bar.pageStep == (i == 0 ? 259 : 235));
+      LOKA_VERIFY(binding.rect.left == (i == 1 ? 12 : 0) && binding.rect.top == (i == 1 ? 12 : 0));
+      LOKA_VERIFY(binding.rect.right == (i == 1 ? 348 : 360) && binding.rect.bottom == (i == 1 ? 248 : 260));
+      LOKA_VERIFY(binding.contentRect.left == (i == 1 ? 12 : 0) && binding.contentRect.top == (i == 1 ? 12 : 0));
+      LOKA_VERIFY(binding.contentRect.right == (i == 1 ? 332 : 345));
+      LOKA_VERIFY(binding.contentRect.bottom == (i == 1 ? 248 : i == 2 ? 245 : 260));
+      LOKA_VERIFY(bar.rect.left == (i == 1 ? 332 : 345) && bar.rect.right == (i == 1 ? 348 : 361));
+      LOKA_VERIFY(bar.rect.bottom == 246 && bar.rect.top == (i == 1 ? 12 : -1));
+      LOKA_VERIFY(bar.maximum == (i == 1 ? 264 : i == 2 ? 255 : 240));
+      LOKA_VERIFY(bar.pageStep == (i == 1 ? 235 : i == 2 ? 244 : 259));
+      if (i == 2)
+      {
+        const ToolboxScenePlatformController::ScrollCall &horizontal = f.controller.scrollCalls[1];
+        LOKA_VERIFY(horizontal.rect.left == -1 && horizontal.rect.top == 245);
+        LOKA_VERIFY(horizontal.rect.right == 346 && horizontal.rect.bottom == 261);
+        LOKA_VERIFY(horizontal.maximum == 55 && horizontal.pageStep == 344);
+      }
       f.controller.releaseNodeContexts(&root);
       f.controller.rootNode_ = 0;
     }

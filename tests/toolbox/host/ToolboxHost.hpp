@@ -139,6 +139,11 @@ public:
     port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
   }
+  bool queryPortRect(Rect &out) const
+  {
+    out = this->port.portRect;
+    return true;
+  }
   bool querySizeBoxRect(Rect &out) const
   {
     out = ToolboxWindowSizeBoxRect(this->port.portRect);

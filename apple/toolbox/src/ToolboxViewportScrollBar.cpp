@@ -57,12 +57,15 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
   binding->usedThisFrame = true;
   binding->rect = viewportRect;
 
+  Rect port = Rect();
+  const bool hasPort = this->window_ && this->window_->queryPortRect(port);
+  const ToolboxScrollViewEdges edges = ToolboxScrollViewFrameEdges(viewportRect, port, hasPort);
   Rect sizeBox = Rect();
   if (this->window_)
     this->window_->querySizeBoxRect(sizeBox);
   ScrollBarControlBinding *native = 0;
   if (!this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_VERTICAL],
-                                    ToolboxScrollViewVerticalBarRect(viewportRect, horizontalBar, sizeBox),
+                                    ToolboxScrollViewVerticalBarRect(viewportRect, horizontalBar, sizeBox, edges),
                                     0,
                                     metrics.maximum,
                                     1,
@@ -75,9 +78,9 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
   ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
   if (horizontalBar)
   {
-    const int childWidth = ToolboxScrollViewChildWidth(viewportRect.right - viewportRect.left);
+    const int childWidth = ToolboxScrollViewChildWidth(viewportRect, edges);
     if (this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_HORIZONTAL],
-                                     ToolboxScrollViewHorizontalBarRect(viewportRect, sizeBox),
+                                     ToolboxScrollViewHorizontalBarRect(viewportRect, sizeBox, edges),
                                      0,
                                      horizontal.maximum,
                                      1,

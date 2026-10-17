@@ -10,4 +10,7 @@ void testToolboxScrollViewContentRectExcludesScrollbar();
 
 void testToolboxScrollViewTwoBarGeometry();
 
+void testToolboxScrollViewFrameContacts();
+void testToolboxScrollViewSizeBoxSharedLines();
+
 #endif // LOKA_TESTS_TOOLBOX_SCROLL_VIEW_CONTRACT_TESTS_HPP
