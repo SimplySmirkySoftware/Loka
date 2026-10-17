@@ -248,7 +248,8 @@ void testWin32ZStackUnitPaintsOpaqueGround()
   stack->addChild(unitChild);
   f.layout();
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
-  LOKA_VERIFY(unit);
+  HWND ground = childOfClass(f.root(), L"LOKA_RECT_SURFACE");
+  LOKA_VERIFY(unit && ground);
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
   LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
   flushPaint(f);
@@ -266,8 +267,13 @@ void testWin32ZStackUnitPaintsOpaqueGround()
       loka::core::StateTrackerGuard guard(&tracker);
       model.set(phase == 0 ? RectSurfaceModel() : ink);
     }
-    // Observer-only tick: visible ground changes below prove the repaint.
-    LOKA_VERIFY(!Access::lastOnChangeRequiredLayout(f.controller));
+    // Paint-only tick: the ground carries the damage and the unit none (a
+    // broad repaint would damage both). The COLOR_WINDOW read in phase 0 is
+    // the proof that the ground painted; black also reads from an unpainted
+    // surface, so the ink read alone would not be one.
+    Access::flushPendingInvalidations(f.controller);
+    LOKA_VERIFY(GetUpdateRect(ground, NULL, FALSE));
+    LOKA_VERIFY(!GetUpdateRect(unit, NULL, FALSE));
     flushPaint(f);
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120)
@@ -567,7 +573,9 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
   f.layout();
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
   HWND button = native(column->childrenHead());
-  LOKA_VERIFY(unit && GetParent(button) == unit);
+  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND ground = viewport ? childOfClass(viewport, L"LOKA_RECT_SURFACE") : NULL;
+  LOKA_VERIFY(unit && ground && GetParent(button) == unit);
   const RECT rect = rectInParent(unit);
   LOKA_VERIFY(rect.bottom - rect.top == f.controller.rowLayoutMetrics().buttonHeight + Win32SceneLayout::kGap + 80);
   LOKA_VERIFY(rect.bottom - rect.top < 120 && rect.right - rect.left > 100);
@@ -583,8 +591,12 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
       loka::core::StateTrackerGuard guard(&tracker);
       model.set(phase == 0 ? RectSurfaceModel() : ink);
     }
-    // Model observers queue native damage without incrementing boundary-plan counters.
-    LOKA_VERIFY(!Access::lastOnChangeRequiredLayout(f.controller));
+    // Paint-only tick through the viewport: the ground carries the damage and
+    // the unit none. The COLOR_WINDOW read in phase 0 proves the ground painted
+    // (black also reads from an unpainted surface).
+    Access::flushPendingInvalidations(f.controller);
+    LOKA_VERIFY(GetUpdateRect(ground, NULL, FALSE));
+    LOKA_VERIFY(!GetUpdateRect(unit, NULL, FALSE));
     flushPaint(f);
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
     LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120)
@@ -605,7 +617,7 @@ void testWin32ZStackSettledUnitsSkipOrdering()
   f.layout();
   HWND upper = childOfClass(f.root(), L"LOKA_STACK_UNIT");
   HWND lower = FindWindowExW(f.root(), upper, L"LOKA_STACK_UNIT", NULL);
-  LOKA_VERIFY(upper && lower && GetWindow(lower, GW_HWNDPREV) == upper);
+  LOKA_VERIFY(upper && lower && GetWindow(lower, GW_HWNDPREV) == upper && !GetWindow(upper, GW_HWNDPREV));
   {
     UnitOrderProbe probe(lower, upper);
     f.layout();

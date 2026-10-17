@@ -1602,13 +1602,12 @@ sit above the ground and earlier units in composition order, with one native
 window/view per unit. `ZStack(scrollView, Row(toolbar))` keeps the toolbar subtree
 together. Place units only over non-reactive regions, such as a ScrollView's
 inset gap or modal dimming; the framework does not check placement. A transparent
-upper child is unsupported. On Win32, stacking order makes Tab visit a unit before
+later child is unsupported. On Win32, stacking order makes Tab visit a unit before
 every earlier sibling under the same native parent, including siblings outside
-the ZStack. In v1 a ScrollView or nested ZStack inside an upper child lays out
-nothing.
+the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
 Win32 uses opaque units. macOS and Toolbox lay out children flat, without opaque
-units, until their adoption of this contract.
+units, until those rails adopt units.
 
 ### Fixed-Cell Layout
 
