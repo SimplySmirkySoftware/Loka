@@ -774,25 +774,26 @@ namespace
     {
       LOKA_VERIFY(cardPaintAudit == 0);
       this->collect(root);
-      const IMP replacements[] = {reinterpret_cast<IMP>(&draw<0>),
-                                  reinterpret_cast<IMP>(&draw<1>),
-                                  reinterpret_cast<IMP>(&draw<2>),
-                                  reinterpret_cast<IMP>(&draw<3>),
-                                  reinterpret_cast<IMP>(&draw<4>),
-                                  reinterpret_cast<IMP>(&draw<5>),
-                                  reinterpret_cast<IMP>(&draw<6>),
-                                  reinterpret_cast<IMP>(&draw<7>),
-                                  reinterpret_cast<IMP>(&draw<8>),
-                                  reinterpret_cast<IMP>(&draw<9>),
-                                  reinterpret_cast<IMP>(&draw<10>),
-                                  reinterpret_cast<IMP>(&draw<11>),
-                                  reinterpret_cast<IMP>(&draw<12>),
-                                  reinterpret_cast<IMP>(&draw<13>),
-                                  reinterpret_cast<IMP>(&draw<14>),
-                                  reinterpret_cast<IMP>(&draw<15>)};
+      typedef void (*CardDrawThunk)(id, SEL, NSRect);
+      const CardDrawThunk replacements[] = {&draw<0>,
+                                            &draw<1>,
+                                            &draw<2>,
+                                            &draw<3>,
+                                            &draw<4>,
+                                            &draw<5>,
+                                            &draw<6>,
+                                            &draw<7>,
+                                            &draw<8>,
+                                            &draw<9>,
+                                            &draw<10>,
+                                            &draw<11>,
+                                            &draw<12>,
+                                            &draw<13>,
+                                            &draw<14>,
+                                            &draw<15>};
       cardPaintAudit = this;
       for (unsigned i = 0; i < this->methodsCount_; ++i)
-        method_setImplementation(this->methods_[i], replacements[i]);
+        method_setImplementation(this->methods_[i], reinterpret_cast<IMP>(replacements[i]));
     }
     ~CardPaintAudit()
     {
@@ -801,10 +802,12 @@ namespace
       cardPaintAudit = 0;
     }
     /** The mode calls once before each action. A full update admits at most
-        one paint per receiver; a band action admits exactly its request count
-        and zero ancestor/sibling paints. The budget covers the action and first
-        settle: a layer-backed window may paint on the next run-loop turn.
-        The second settle and observation admit zero paints. */
+        one paint per receiver; a band action admits exactly its request count,
+        at most that count per ancestor, and zero other paints. Without layers,
+        AppKit repaints ancestors in the same pass for fresh ground; they cannot
+        repair band pixels without repainting the band, whose count stays exact.
+        The budget covers the action and first settle: a layer-backed window may
+        paint on the next run-loop turn. Second settle and observation admit zero. */
     void begin(const char *step, NSView *requested = nil, unsigned requests = 1)
     {
       std::printf("card step=%s\n", step);
@@ -830,9 +833,11 @@ namespace
     {
       for (Paints::const_iterator it = this->paints_.begin(); it != this->paints_.end(); ++it)
       {
-        const unsigned allowed = observing                                              ? 0
-                                 : (!this->requested_ || it->first == this->requested_) ? this->requests_
-                                                                                        : 0;
+        const unsigned allowed =
+            observing ? 0
+            : (!this->requested_ || it->first == this->requested_ || [this->requested_ isDescendantOf:it->first])
+                ? this->requests_
+                : 0;
         std::printf("card paint step=%s view=%p count=%u allowed=%u\n",
                     this->step_,
                     static_cast<void *>(it->first),
