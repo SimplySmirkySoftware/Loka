@@ -33,6 +33,7 @@ protected:
   {
     return WindowProps()
         .frame(50, 50, 420, 330)
+        .contentMargin(0)
         .scene(scene)
         .title("LokaSample")
         .visible(true);
