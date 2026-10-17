@@ -3,6 +3,9 @@
 
 void testWin32ScrollViewParentsAndClipsProjectedChildren();
 void testWin32ScrollViewOffsetIsRelayoutInput();
+void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset();
+void testWin32ScrollViewInsetsGrowTheHeightlessExtent();
+void testWin32ScrollViewInsetsRefuseAnExtentAboveShort();
 void testWin32ScrollViewMessagePublishesOffsetFact();
 void testWin32ScrollViewWheelStepsOffsetThroughLinePath();
 void testWin32ScrollViewResizeReclampsOffsetOnce();
