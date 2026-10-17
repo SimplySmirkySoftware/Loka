@@ -9,6 +9,7 @@ namespace loka
   namespace testing
   {
     void failMacCardBitmaps(unsigned count);
+    void failMacCardPaths(unsigned count);
   }
 } // namespace loka
 #include "MacScenePlatformController.hpp"
@@ -423,6 +424,38 @@ namespace
     }
   }
 
+  void VerifyPathRefusalAndState()
+  {
+    const MacProjection projection;
+    const Frame body(20, 20, 50, 50);
+    for (int backing = 1; backing <= 2; ++backing)
+      for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
+        for (int bandPaint = 0; bandPaint < 2; ++bandPaint)
+        {
+          const CardStyle style(CARD_SHADOW_WIDE, static_cast<CardShadowInk>(ink));
+          Frame bands[4];
+          CardBands(body, style, bands);
+          CardBitmap actual(100, 100, backing), untouched(100, 100, backing);
+          CGContextRef graphics = actual.begin();
+          CGContextClipToRect(graphics, CGRectMake(5, 7, 88, 83));
+          const CGRect clip = CGContextGetClipBoundingBox(graphics);
+          const CGAffineTransform transform = CGContextGetCTM(graphics);
+          loka::testing::failMacCardPaths(1);
+          if (bandPaint)
+            PaintCardBandInk(
+                graphics, bands[CARD_BAND_RIGHT], CardBandProps(CARD_BAND_RIGHT, style), projection, NSMakePoint(3, 5));
+          else
+            PaintCardInk(graphics, body, style, projection, NSZeroPoint, NSZeroPoint);
+          loka::testing::failMacCardPaths(0);
+          LOKA_VERIFY(CGAffineTransformEqualToTransform(transform, CGContextGetCTM(graphics)));
+          LOKA_VERIFY(CGRectEqualToRect(clip, CGContextGetClipBoundingBox(graphics)));
+          actual.end();
+          std::printf("card path refusal backing=%d ink=%d band=%d: must draw nothing\n", backing, ink, bandPaint);
+          std::fflush(stdout);
+          EqualBitmaps(actual, untouched);
+        }
+  }
+
   void VerifyFailureAndState()
   {
     const MacProjection projection;
@@ -559,6 +592,7 @@ void testMacCardPainterPixels()
           }
   VerifyAlphaBytes();
   VerifyFailureAndState();
+  VerifyPathRefusalAndState();
   [pool drain];
 }
 

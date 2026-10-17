@@ -9,6 +9,7 @@ namespace loka
   namespace testing
   {
     bool declineMacCardBitmap();
+    bool declineMacCardPath();
   }
 } // namespace loka
 #endif
@@ -20,8 +21,13 @@ namespace
   {
   public:
     CardPath()
-        : value_(CGPathCreateMutable())
+        : value_(0)
     {
+#ifdef TEST_BUILD
+      if (loka::testing::declineMacCardPath())
+        return;
+#endif
+      this->value_ = CGPathCreateMutable();
     }
     ~CardPath()
     {

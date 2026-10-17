@@ -20,6 +20,7 @@ namespace loka
     namespace
     {
       unsigned macCardBitmapFailures = 0;
+      unsigned macCardPathFailures = 0;
     }
     void failMacCardBitmaps(unsigned count)
     {
@@ -30,6 +31,17 @@ namespace loka
       if (!macCardBitmapFailures)
         return false;
       --macCardBitmapFailures;
+      return true;
+    }
+    void failMacCardPaths(unsigned count)
+    {
+      macCardPathFailures = count;
+    }
+    bool declineMacCardPath()
+    {
+      if (!macCardPathFailures)
+        return false;
+      --macCardPathFailures;
       return true;
     }
   } // namespace testing
