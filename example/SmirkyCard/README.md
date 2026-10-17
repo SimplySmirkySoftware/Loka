@@ -189,7 +189,15 @@ Row/VStack remain limited to 16. See [the board example](../../docs/smirkycard/c
 
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
-there is no JS viewport seat or viewport argument. `Card(child)` places exactly
+there is no JS viewport seat or viewport argument. The optional plain options object
+`ScrollView(child, {insets: {top: 44, bottom: 8}})` accepts integer insets in
+0..32767, with omitted values defaulting to zero. Unknown keys are refused.
+The scrollable extent grows by top + bottom; content starts top units below the
+viewport's start and scrolls into the top gap. With a nonzero top inset the
+viewport starts at the top with the gap visible. No scroll bar moves; an overlay
+in the gap is a later page of the same rally. `LAPTOP.JS` does not use it yet.
+A ScrollView cannot contain another ScrollView.
+`Card(child)` places exactly
 one tree in the native Card body using the default CardStyle; it has no style
 argument yet. Both refuse missing, extra, array, or non-tree children with
 TypeError and each counts one level toward the depth-eight tree limit.

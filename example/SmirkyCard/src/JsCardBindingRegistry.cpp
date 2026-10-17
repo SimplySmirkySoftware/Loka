@@ -610,6 +610,81 @@ namespace smirkycard
       JS_FreeValue(ctx, children);
       return inChildren;
     }
+    bool scrollInsetNumber(JSContext *ctx, JSValueConst value, int &out)
+    {
+      double number = 0;
+      if (!JS_IsNumber(value) || JS_ToFloat64(ctx, &number, value) || !(number >= 0 && number <= SHRT_MAX)
+          || number != static_cast<int>(number))
+        return false;
+      out = static_cast<int>(number);
+      return true;
+    }
+    bool readScrollInsets(JSContext *ctx, JSValueConst object, int &top, int &bottom)
+    {
+      if (!requirePlainObject(ctx, object, "ScrollView insets"))
+        return false;
+      JsOwnProperties names(ctx);
+      if (!names.read(object, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return false;
+      for (uint32_t i = 0; i < names.count(); ++i)
+      {
+        JSValue key = JS_AtomToValue(ctx, names.atom(i));
+        size_t length = 0;
+        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
+        JS_FreeValue(ctx, key);
+        const bool isTop = name && length == 3 && !memcmp(name, "top", 3);
+        const bool isBottom = name && length == 6 && !memcmp(name, "bottom", 6);
+        if (name)
+          JS_FreeCString(ctx, name);
+        if (!isTop && !isBottom)
+        {
+          JS_ThrowTypeError(ctx, "ScrollView insets accept only top and bottom");
+          return false;
+        }
+        JSValue value = JS_GetProperty(ctx, object, names.atom(i));
+        if (JS_IsException(value))
+          return false;
+        int number = 0;
+        const bool valid = scrollInsetNumber(ctx, value, number);
+        JS_FreeValue(ctx, value);
+        if (!valid)
+        {
+          JS_ThrowTypeError(ctx, "ScrollView insets must be integers in 0..32767");
+          return false;
+        }
+        (isTop ? top : bottom) = number;
+      }
+      return true;
+    }
+    bool readScrollOptions(JSContext *ctx, JSValueConst options, int &top, int &bottom)
+    {
+      if (!requirePlainObject(ctx, options, "ScrollView options"))
+        return false;
+      JsOwnProperties names(ctx);
+      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return false;
+      for (uint32_t i = 0; i < names.count(); ++i)
+      {
+        JSValue key = JS_AtomToValue(ctx, names.atom(i));
+        size_t length = 0;
+        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
+        JS_FreeValue(ctx, key);
+        const bool isInsets = name && length == 6 && !memcmp(name, "insets", 6);
+        if (name)
+          JS_FreeCString(ctx, name);
+        if (!isInsets)
+        {
+          JS_ThrowTypeError(ctx, "ScrollView options accept only insets");
+          return false;
+        }
+        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
+        const bool valid = !JS_IsException(value) && readScrollInsets(ctx, value, top, bottom);
+        JS_FreeValue(ctx, value);
+        if (!valid)
+          return false;
+      }
+      return true;
+    }
     class ScrollViewLowering : public IJsNodeLowering
     {
     public:
@@ -620,7 +695,28 @@ namespace smirkycard
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
-        return singleChildTree(ctx, this->kind, this->name, argc, argv);
+        if (argc < 1 || argc > 2 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
+          return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
+        JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
+        const bool valid = JS_IsNumber(childKind);
+        JS_FreeValue(ctx, childKind);
+        if (!valid)
+          return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
+        int top = 0, bottom = 0;
+        if (argc == 2 && !readScrollOptions(ctx, argv[1], top, bottom))
+          return JS_EXCEPTION;
+        JSValue tree = newTree(ctx, this->kind);
+        if (JS_IsException(tree))
+          return tree;
+        if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
+            || JS_SetPropertyStr(ctx, tree, "insetTop", JS_NewInt32(ctx, top)) < 0
+            || JS_SetPropertyStr(ctx, tree, "insetBottom", JS_NewInt32(ctx, bottom)) < 0
+            || JS_FreezeObject(ctx, tree) < 0)
+        {
+          JS_FreeValue(ctx, tree);
+          return JS_EXCEPTION;
+        }
+        return tree;
       }
       virtual loka::app::scene::NodeDefinitionBase *
       lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
@@ -633,12 +729,27 @@ namespace smirkycard
           node.fail("JavaScript ScrollView cannot contain another ScrollView.");
           return 0;
         }
-        loka::app::scene::NodeDefinitionBase *scroll = node.createScrollView();
+        int top = 0, bottom = 0;
+        JSValue topValue = JS_GetPropertyStr(ctx, tree, "insetTop");
+        JSValue bottomValue = JS_GetPropertyStr(ctx, tree, "insetBottom");
+        const bool valid = (JS_IsUndefined(topValue) || scrollInsetNumber(ctx, topValue, top))
+                           && (JS_IsUndefined(bottomValue) || scrollInsetNumber(ctx, bottomValue, bottom));
+        JS_FreeValue(ctx, topValue);
+        JS_FreeValue(ctx, bottomValue);
+        if (!valid)
+        {
+          node.fail("JavaScript ScrollView has invalid insets.");
+          return 0;
+        }
+        // Only a top inset has a gap to show: origin.y reaches down to -top, never below 0 for bottom alone.
+        loka::app::ScrollView *scroll =
+            node.createScrollView(top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0));
         if (!scroll)
         {
           node.fail("JavaScript ScrollView allocation refused.");
           return 0;
         }
+        scroll->contentInsets(top, bottom);
         loka::app::scene::NodeDefinitionBase *content =
             lowerSingleChild(node, ctx, tree, depth, "JavaScript ScrollView has an invalid child.");
         if (!content)
