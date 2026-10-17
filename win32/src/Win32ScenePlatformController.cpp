@@ -1389,7 +1389,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     contentHeight = this->projectionParentScopes_.current().contentHeight();
     shortRangeRefused =
         this->projectionParentScopes_.current().hasShortRangeRefusal();
-      if (shortRangeRefused)
+    if (shortRangeRefused)
     {
       // Seats recorded under a refused scope are not facts.
       this->rectSurfaceExtentLedger_.discardSince(ledgerMark);

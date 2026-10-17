@@ -719,6 +719,44 @@ void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics()
   [pool drain];
 }
 
+void testMacScrollViewRefusedResizeDoesNotPublish()
+{
+  // A refused pass must leave the fact untouched even when the provisional
+  // relayout made the clip taller than the old document's remainder: AppKit
+  // would clamp the bounds and route the notification before the refusal.
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(200, 400));
+    scroll.addChild(leading);
+    fact.state().set(loka::core::Frame(0, 100, 0, 0));
+    establishLayout(controller, &scroll, 300, 140);
+    NSScrollView *native = scrollViewUnderRoot(root);
+    LOKA_VERIFY(native != nil);
+    const loka::core::Frame factBefore = fact.state().get();
+    LOKA_VERIFY(factBefore.y == 100);
+    const NSRect before = [[native documentView] frame];
+    fact.resetChangeCount();
+    leading->props.size(200, SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1);
+    controller.relayout(300, 600);
+    const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
+    LOKA_VERIFY(documentUnchanged);
+    const loka::core::Frame refused = fact.state().get();
+    const int changes = fact.changeCount();
+    LOKA_VERIFY(refused.y == factBefore.y && changes == 0);
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
 void testMacScrollViewHorizontalScrollerShortensChildHeight()
 {
   using namespace loka::app;

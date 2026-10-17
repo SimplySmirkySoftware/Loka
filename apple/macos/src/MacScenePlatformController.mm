@@ -658,14 +658,15 @@ MacScenePlatformController::layoutScrollViewNode(
     // view so the outer document remains the only structural clipping parent.
     return LayoutNodeResult(state.width, state.y);
   }
-  if (state.x < SHRT_MIN || state.x > SHRT_MAX ||
-      state.y < SHRT_MIN || state.y > SHRT_MAX ||
-      state.width < 0 || state.width > SHRT_MAX ||
-      state.height < 0 || state.height > SHRT_MAX ||
-      (state.height > 0 && state.y > SHRT_MAX - state.height))
+  const int top = scrollView->props.contentInsets_.top();
+  if (state.x < SHRT_MIN || state.x > SHRT_MAX || state.y < SHRT_MIN || state.y > SHRT_MAX || state.width < 0
+      || state.width > SHRT_MAX || state.height < 0 || state.height > SHRT_MAX
+      || (state.height > 0 && state.y > SHRT_MAX - state.height) || state.y - top < SHRT_MIN)
   {
     // The shared traversal above consumes a short result. Refuse the viewport
-    // itself before its bottom or any child coordinate would narrow.
+    // itself before its bottom, its document origin (the seat less the top
+    // inset) or any child coordinate would narrow, and before the native
+    // view is created or moved.
     return LayoutNodeResult(state.width, state.y);
   }
 
@@ -694,11 +695,6 @@ MacScenePlatformController::layoutScrollViewNode(
   }
 
   const int requestedExtent = scrollView->requestedOrigin().y;
-  const int top = scrollView->props.contentInsets_.top();
-  if (state.y - top < SHRT_MIN)
-  {
-    return LayoutNodeResult(state.width, state.y);
-  }
   LayoutState childBase = state;
   childBase.width = ctx->visibleWidth();
   short contentWidthLu = 0;

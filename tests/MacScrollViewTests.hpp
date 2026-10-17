@@ -19,6 +19,7 @@ void testMacScrollViewScrollerStyleChangeRequestsRelayout();
 void testMacScrollViewBoundsObservationPublishesBothAxes();
 void testMacScrollViewRelayoutKeepsDocumentWidth();
 void testMacScrollViewRefusedLayoutKeepsHorizontalMetrics();
+void testMacScrollViewRefusedResizeDoesNotPublish();
 void testMacScrollViewHorizontalScrollerShortensChildHeight();
 
 void testMacScrollViewInsetsPlaceContentBelowTheTopInset();
