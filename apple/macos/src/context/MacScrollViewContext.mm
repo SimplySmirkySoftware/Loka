@@ -197,16 +197,8 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  // A taller clip can make AppKit clamp the old document's bounds during the
-  // frame change and route the clip-view notification synchronously. That
-  // would publish a fact before the traversal has succeeded, so the bracket
-  // the commit uses holds here too: a refused pass publishes nothing.
-  NSClipView *clipView = [scrollView contentView];
-  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
-  [clipView setPostsBoundsChangedNotifications:NO];
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [clipView setPostsBoundsChangedNotifications:postsBounds];
   // The document frame is not touched here: it is part of the metrics that
   // commit only after the traversal succeeds, so a refused pass leaves the
   // previous document, scroller and origin exactly as they were.
