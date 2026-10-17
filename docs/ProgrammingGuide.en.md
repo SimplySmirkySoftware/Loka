@@ -1576,26 +1576,26 @@ ScrollView mainPanels = ScrollView(this->viewport_)
 ```
 
 [SimpleText](../example/SimpleText/src/MainNode.hpp) also removes the window
-margin in [its window props](../example/SimpleText/src/MyAppConfig.hpp). The
-editor reaches the window edges; the ribbon band and optional error row each
-keep the standard margin inside a padded box:
+margin in [its window props](../example/SimpleText/src/MyAppConfig.hpp), so
+the editor reaches the window edges. The ribbon band and the optional error
+row share one box that keeps the standard margin around them and between
+them:
 
 ```cpp
 // ... inside documentWindow:
 return WindowProps()
     .frame(16 + offset, 16 + offset, 480, 320)
     .contentMargin(0)
-    .visible(true);
     // ... scene omitted
+    .visible(true);
 
 // ... inside MainNode::composeNode:
 VStack().gap(0)
-    << (Box().padding(StandardWindowMargin())
+    << (Box().padding(StandardWindowMargin()).gap(StandardWindowMargin())
         << (RibbonControl()
             // ... ribbon groups and items omitted
-        ))
-    << (Show(errorVisible)
-        << (Box().padding(StandardWindowMargin()) << Text(this->error_.state())))
+        )
+        << (Show(errorVisible) << Text(this->error_.state())))
     << TextEditor(this->lines_, this->cursor_);
     // ... caret request and test IDs omitted
 ```

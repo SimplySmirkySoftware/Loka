@@ -340,20 +340,19 @@ namespace simpletext
           .arm(SAVE_FOR_CLOSE, saveDialog)
           .otherwise(Fragment());
       // The band and File menu fire the same emitters. The window has no
-      // margin, so the editor reaches the window edges and the band and the
-      // error row keep the standard margin inside their own boxes.
+      // margin, so the editor reaches the window edges; the band and the
+      // error row keep the standard margin inside one padded box.
       c.declare(
           HStack()
           << (VStack().gap(0)
-              << (Box().padding(StandardWindowMargin())
+              << (Box().padding(StandardWindowMargin()).gap(StandardWindowMargin())
                   << (RibbonControl().TEST_ID("SimpleText.Ribbon")
                       << (RibbonGroup("File")
                           << RibbonItem("New").onClick(this->commands_.slot<simpletext::NEW_DOCUMENT>())
                           << RibbonItem("Open...").onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                           << RibbonItem("Save").onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
-                          << RibbonItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>()))))
-              << (Show(errorVisible) << (Box().padding(StandardWindowMargin())
-                                         << Text(this->error_.state()).TEST_ID("SimpleText.Error")))
+                          << RibbonItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())))
+                  << (Show(errorVisible) << Text(this->error_.state()).TEST_ID("SimpleText.Error")))
               << TextEditor(this->lines_, this->cursor_) //
                      .moveCaretTo(this->caret_)
                      .TEST_ID("SimpleText.Editor"))

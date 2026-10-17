@@ -989,7 +989,7 @@ void testSimpleTextEditorReceivesRemainingWindow()
       const int bandBottom = probe.band.y + probe.band.height;
       if (error)
       {
-        LOKA_VERIFY(probe.error.y == bandBottom + 18);
+        LOKA_VERIFY(probe.error.y == bandBottom + 9);
         LOKA_VERIFY(probe.error.x == viewport.x + 9 && probe.error.width == viewport.width - 18);
         LOKA_VERIFY(probe.error.height > 0);
         LOKA_VERIFY(probe.editor.y == probe.error.y + probe.error.height + 9);
