@@ -26,13 +26,13 @@ namespace loka
       }
     };
 
-    /** A Layer is the unit of stacking inside a ZStack: it sits at its composition
-        position (a later ZStack child is on top) and paints its own ground over
-        its whole frame. In this PR only the node exists; until rails adopt it,
-        they treat it exactly like a ZStack: a transparent container offering
-        its seat to its children, with an optional own drawing surface deferred.
-        ground: the window ground (GroundForKind); z: composition order inside
-        a ZStack; rails adopt in later PRs. */
+    /** A Layer is the unit of stacking inside a ZStack: it sits at its
+        composition position (a later ZStack child draws on top) and fills its
+        whole frame with the window ground (GroundForKind). Place a Layer only
+        over ground that does not respond to input, such as the gap a
+        ScrollView's content insets leave or a modal dim, never over live
+        controls. Rails that have not adopted Layer treat it exactly like a
+        ZStack: a transparent container offering its seat to its children. */
     class LayerNode : public scene::NestableNode
     {
     public:
@@ -77,11 +77,6 @@ namespace loka
     };
 
     typedef LayerDefinition Layer;
-
-    inline LayerNode *createNode(const LayerProps &props)
-    {
-      return new LayerNode(props);
-    }
   } // namespace app
 } // namespace loka
 

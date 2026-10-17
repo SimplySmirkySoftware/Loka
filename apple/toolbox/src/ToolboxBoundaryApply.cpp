@@ -78,8 +78,7 @@ void ToolboxScenePlatformController::onBoundaryApply(loka::app::scene::Node *roo
       firstChild = it.next();
     }
     if (boundary->kind() == loka::app::scene::NODE_KIND_UNKNOWN && boundary->testId().empty() && firstChild
-        && (firstChild->kind() == loka::app::scene::NODE_KIND_ZSTACK
-            || firstChild->kind() == loka::app::scene::NODE_KIND_LAYER))
+        && firstChild->kind() == loka::app::scene::NODE_KIND_ZSTACK)
     {
       return;
     }

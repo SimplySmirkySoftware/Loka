@@ -33,7 +33,7 @@ inline bool ToolboxTreeHasStackingContainer(loka::app::scene::Node *node)
     text does not erase already-rendered siblings. The controller owns the walk. */
 template <class Controller> void ToolboxRenderDirtyInCompositionOrder(Controller &controller, const Rect &rect)
 {
-  // A ZStack declares shared pixels. Rebuild the registries only before any
+  // A stacking container (ZStack or Layer) declares shared pixels. Rebuild the registries only before any
   // replay prefix is frozen (#315), and let the clipped render walk own the
   // dirty pixels instead of letting one text run erase its siblings.
   GrafPtr oldPort;

@@ -14,6 +14,7 @@
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/nodes/nestable/Layer.hpp"
 #include "app/scene/projection/CollectPaintAnswers.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "debug/ToolboxSceneDebugStats.hpp"
@@ -572,6 +573,19 @@ int main()
   LOKA_VERIFY(source.queryPaintAnswer(&band, 0, query, answer));
   LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED);
   testToolboxGradientPatternsAreWordAligned();
+  {
+    // A Layer anywhere below the root selects composition-order replay, like a
+    // ZStack; a plain column does not. Pins the stacking-container walk that
+    // the replay selection and the boundary apply both read.
+    loka::app::StackNode plain((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
+    plain.addChild(new loka::app::TextNode((loka::app::TextProps("a"))));
+    LOKA_VERIFY(!ToolboxTreeHasStackingContainer(&plain));
+    loka::app::StackNode outer((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
+    loka::app::StackNode *inner = new loka::app::StackNode((loka::app::StackProps(loka::app::STACK_AXIS_COLUMN)));
+    inner->addChild(new loka::app::LayerNode((loka::app::LayerProps())));
+    outer.addChild(inner);
+    LOKA_VERIFY(ToolboxTreeHasStackingContainer(&outer));
+  }
   CardPins();
   CardStencilPins();
   GradientPins();

@@ -209,12 +209,14 @@ namespace loka
                                                         const GridLayoutMetrics *gridMetrics,
                                                         const RailSpacing &spacing)
       {
+        // The registry prepends, so the rarest kind registers first and sits at
+        // the tail of every lookup.
+        registry.registerHandler(new ZStackPlatformLayoutHandler<loka::app::LayerNode>());
         registry.registerHandler(new BoxPlatformLayoutHandler(spacing));
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::RibbonGroupNode>());
         registry.registerHandler(new FramedPlatformLayoutHandler<loka::app::CardNode>());
         registry.registerHandler(new CanvasPlatformLayoutHandler());
         registry.registerHandler(new ZStackPlatformLayoutHandler<loka::app::ZStackNode>());
-        registry.registerHandler(new ZStackPlatformLayoutHandler<loka::app::LayerNode>());
         if (rowMetrics)
         {
           registry.registerHandler(new StackPlatformLayoutHandler(*rowMetrics, spacing));

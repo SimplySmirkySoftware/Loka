@@ -1590,7 +1590,8 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
     return LayoutNodeResult(state.width, resultY);
   }
 
-  if (node->asZStackNode() || node->asLayerNode())
+  const loka::app::scene::NodeKind stackingKind = node->kind();
+  if (stackingKind == loka::app::scene::NODE_KIND_ZSTACK || stackingKind == loka::app::scene::NODE_KIND_LAYER)
   {
     int maxY = state.y;
     loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(node);

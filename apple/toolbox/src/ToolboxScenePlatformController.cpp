@@ -888,7 +888,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   }
   // Text-like contexts supply this fact through their attach/retire
   // membership. A transparent ImageView (#1199) also replays after surfaces
-  // regardless of composition order, so a ZStack window holding one replays
+  // regardless of composition order, so a window with a stacking container (ZStack or Layer) holding one replays
   // in composition order too; that part walks the projection tree once per
   // dirty delivery, like the ZStack check below.
   const bool compositionReplay = this->compositionReplay_.required()
@@ -909,7 +909,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   }
   // Any drawer whose kind order the replay below does not preserve (text-like
   // drawers replay after surfaces and images regardless of composition order)
-  // sends a ZStack window through the clipped full render instead.
+  // sends a window with a stacking container through the clipped full render instead.
   bool dirtyIntersectsText = compositionReplay;
   for (size_t i = 0; i < hitLedger_.textHits_.size() && !dirtyIntersectsText; ++i)
     dirtyIntersectsText = RectsIntersect(rect, hitLedger_.textHits_[i].rect);

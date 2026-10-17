@@ -589,11 +589,13 @@ bool ApplyToolboxPlatformLayoutHandler(
 
 bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandlerRegistry &registry)
 {
-  bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
+  // The registry prepends, so the rarest kind registers first and sits at the
+  // tail of every lookup.
+  bool ok = registry.registerHandler(new ToolboxZStackLayoutHandler<loka::app::LayerNode>());
+  ok = registry.registerHandler(new ToolboxBoxLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::RibbonGroupNode>()) && ok;
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::CardNode>()) && ok;
   ok = registry.registerHandler(new ToolboxZStackLayoutHandler<loka::app::ZStackNode>()) && ok;
-  ok = registry.registerHandler(new ToolboxZStackLayoutHandler<loka::app::LayerNode>()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;
   return ok;
