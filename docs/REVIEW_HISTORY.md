@@ -27,7 +27,7 @@ An owned `State` with a single write door, tracker registration, and explicit re
 
 ### DSL unification topic 5
 
-Ruling of 2026-10-17 (DSL unification page 3, REFUTE held with corrections). Making `DocumentWindows` a For-shaped node seat, or sharing a declaration part between the Boundary seats and the window seat, was refused on Gate 1 check 1 read by deletion: neither removes code, because the window seat has no candidate and no declaration to share, and its commit means "walked this revision" while a Boundary commit means "published this candidate". What the consumers share is the `KeySnapshot` type and the needs rule (k1, #1190), recorded in `docs/KeyedSeatDesign.md`; the one-window rail's conflict with increase-before-decrease is tracked in #1399.
+Ruling of 2026-10-17 (DSL unification page 3, REFUTE held with corrections). Making `DocumentWindows` a For-shaped node seat, or sharing a declaration part between the Boundary seats and the window seat, was refused on Gate 1 check 1 read by deletion: neither removes code, because the window seat builds no candidate and has no declaration part in common with the Boundary seats, and its commit means "walked this revision" while a Boundary commit means "published this candidate or vacated the seat". What the consumers share is the `KeySnapshot` type and the needs rule (k1, #1190), recorded in `docs/KeyedSeatDesign.md`; the one-window rail's conflict with increase-before-decrease is tracked in #1399.
 
 ### 610 — Gate 2 check 1: foreign ledger walk
 

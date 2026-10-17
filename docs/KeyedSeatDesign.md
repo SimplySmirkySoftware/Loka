@@ -24,15 +24,17 @@ Every keyed consumer shares one rule: a committed result holds a key snapshot
 committed result or its snapshot no longer matches the live key. What a commit
 records, and where a failure is recorded, is each consumer's own policy and is
 not shared. A Boundary seat (Keyed, LazyScope) commits a declaration it built as
-a candidate, or an empty seat (vacated before a reserved build, or cleared after
-rejected initial children): the Boundary owns the candidate until it is
-complete, a failed candidate never touches the committed declaration, and the
-failure is recorded in the request's phase, never in the key. The App's window
-seat has no candidate: one admission walk is its unit, it commits the revision
-read at the start of the walk whether or not every window was adopted, and it
-records a refusal by dropping the refused document from the roster, which edits
-its own key source. The consumers therefore share the snapshot type and the
-needs rule, not a declaration mechanism; see
+a candidate, or an empty seat (vacated before a reserved build, cleared after
+rejected initial children, or cleared when its enclosing declaration retires):
+the Boundary owns the candidate until it is complete, a failed candidate never
+touches the committed declaration (for a reserved seat, already vacated), and
+the failure is recorded in the request's phase (a refusal) or the Boundary's
+compose allocation record, never in the key. The App's window seat has no
+candidate: one admission walk is its unit, it commits the revision read at the
+start of the walk whether or not every window was adopted, and it records a
+runtime refusal by dropping the refused document from the roster, which edits
+its own key source (launch takes the bootstrap door). The consumers therefore
+share the snapshot type and the needs rule, not a declaration mechanism; see
 [Document-driven window set](#document-driven-window-set) and the ruling in
 [REVIEW_HISTORY](REVIEW_HISTORY.md#dsl-unification-topic-5).
 
@@ -85,7 +87,8 @@ or per-source reference counts describe the pass.
 ## Document-driven window set
 
 The App's window seat is a keyed consumer under the shared needs rule above,
-with the window seat's own commit and failure policy; its driver is App admission. A config-owned `DocumentRoster<T, N>` owns the list
+with the window seat's own commit and failure policy; its driver is App
+admission. A config-owned `DocumentRoster<T, N>` owns the list
 and its tracker. The application removes a document with `DocumentRoster::close`.
 The factory receives the document's `ItemId` so the window's content can close its
 own document with `close`.
@@ -95,7 +98,9 @@ close takes. This order keeps a close-then-open replacement from emptying the
 group between the two. The guarantee assumes the rail admits a second logical
 Window for the duration of one walk: a rail that refuses adoption while one
 window is open cannot tell a replacement from an addition, because the desired
-copy is never shown to the rail (#1399, decided with the first one-window rail). The seat always advances its snapshot to the revision
+copy is never shown to the rail; on such a rail a close-then-open replacement
+drops the new document and quits (#1399, decided with the first one-window
+rail). The seat always advances its snapshot to the revision
 read at the start of the walk. It copies desired identities first, so edits
 during a factory or mount leave structural work for a following admission.
 The walk copies identities at its start but reads each entry's facts live at
