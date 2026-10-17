@@ -19,22 +19,31 @@ occupant first and waits for its node slots to return. The vacant interval is
 observable; a refused candidate never restores the old incarnation. The surviving
 request resamples the current key when it can build again.
 
-Every keyed consumer shares one rule: a committed result holds a key snapshot
-(`KeySnapshot`), and the consumer needs a new walk if and only if there is no
-committed result or its snapshot no longer matches the live key. What a commit
-records, and where a failure is recorded, is each consumer's own policy and is
-not shared. A Boundary seat (Keyed, LazyScope) commits a declaration it built as
-a candidate, or an empty seat (vacated before a reserved build, cleared after
-rejected initial children, or cleared when its enclosing declaration retires):
-the Boundary owns the candidate until it is complete, a failed candidate never
-touches the committed declaration (for a reserved seat, already vacated), and
-the failure is recorded in the request's phase (a refusal) or the Boundary's
-compose allocation record, never in the key. The App's window seat has no
-candidate: one admission walk is its unit, it commits the revision read at the
-start of the walk whether or not every window was adopted, and it records a
-runtime refusal by dropping the refused document from the roster, which edits
-its own key source (launch takes the bootstrap door). The consumers therefore
-share the snapshot type and the needs rule, not a declaration mechanism; see
+Every keyed consumer shares one rule: the consumer needs a new walk if and only
+if there is no committed result or the committed result no longer matches the
+live key. How the match is taken is each consumer's own: a Boundary seat and the
+App's window seat keep a copy of the key in the committed result
+(`KeySnapshot`); the Window's Scene seat compares two identities, the desired
+Scene and the installed one, so the installed pointer is its own snapshot. What
+a commit records, and where a failure is recorded, is each consumer's own policy
+and is not shared. A Boundary seat (Keyed, LazyScope) commits a declaration it
+built as a candidate, or an empty seat (vacated before a reserved build, cleared
+after rejected initial children, or cleared when its enclosing declaration
+retires): the Boundary owns the candidate until it is complete, a failed
+candidate never touches the committed declaration (for a reserved seat, already
+vacated), and the failure is recorded in the request's phase (a refusal) or the
+Boundary's compose allocation record, never in the key. The App's window seat
+has no candidate: one admission walk is its unit, it commits the revision read
+at the start of the walk whether or not every window was adopted, and it records
+a runtime refusal by dropping the refused document from the roster, which edits
+its own key source (launch takes the bootstrap door). The Window's Scene seat
+(`SceneManager`) carries two keyed parts: replacement commits only on a
+successful install and records no failure, because a refused candidate leaves
+the desired identity standing and the next admission sees the mismatch again;
+the detach and rearm request is a last-wins value whose refused renewal is
+recorded by re-posting the request unless newer intent was recorded meanwhile.
+The consumers therefore share the needs rule, not a snapshot type or a
+declaration mechanism; see
 [Document-driven window set](#document-driven-window-set) and the ruling in
 [REVIEW_HISTORY](REVIEW_HISTORY.md#dsl-unification-topic-5).
 
