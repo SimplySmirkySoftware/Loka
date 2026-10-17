@@ -3,6 +3,7 @@
 #include "context/ToolboxProjectedNodeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include <TextEdit.h>
+#include "ToolboxTextEditorGeometry.hpp"
 #include "app/scene/state/RequestSettlement.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 namespace loka
@@ -13,8 +14,6 @@ namespace loka
     struct ToolboxTextEditorAdmission;
   }
 } // namespace loka
-/** TextEdit interior: one frame pixel and two margin pixels; empty at frame origin if too small. */
-Rect ToolboxTextEditorTextRect(const Rect &frame);
 
 /** Plain whole-document projection. The controller's edit ledger owns TE;
     this context owns cancellation storage and the synchronous input phase. */
@@ -30,10 +29,13 @@ public:
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);
   virtual void render(loka::app::scene::IPlatformController *);
   void repaint(TEHandle);
-  const Rect &chromeRect() const
+  ToolboxTextEditorRects geometry() const;
+  Rect chromeRect() const
   {
-    return this->rect_;
+    return this->geometry().frame;
   }
+  void idleTick();
+  loka::app::EditorResult scrollInput(int);
   loka::app::EditorResult key(char);
   loka::app::EditorResult click(const Point &);
   /** Bounded selection replacement door, also used by the scenario's paste action. */
@@ -52,6 +54,8 @@ private:
     RECONCILE,
     PROJECT
   };
+  virtual void retireNativeProjection();
+  void syncPresentation();
   bool hasStaleCaret() const;
   loka::app::EditorResult beginInput();
   enum Change
@@ -83,6 +87,7 @@ private:
   Phase phase_;
   loka::app::EditorResult status_;
   unsigned restores_;
+  short scrollBarId_;
 };
 #ifdef TEST_BUILD
 namespace loka

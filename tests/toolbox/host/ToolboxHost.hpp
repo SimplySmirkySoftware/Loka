@@ -1,5 +1,7 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "ToolboxActivationPhase.hpp"
+#include "support/TestVerify.hpp"
 struct ToolboxScrollViewMetrics;
 #include "app/layout/NaturalWidthSource.hpp"
 #include "app/core/Window.hpp"
@@ -127,12 +129,15 @@ public:
   void *flushData;
   /** False models a window with no grow box: the size box query declines. */
   bool answersSizeBox;
+  ToolboxScenePlatformController *scenePlatformController_;
+  void idleControls(ActivationPhase);
   explicit ToolboxWindow(const WindowProps &props = WindowProps())
       : Window(0, props),
         visible_(true),
         onFlush(0),
         flushData(0),
-        answersSizeBox(true)
+        answersSizeBox(true),
+        scenePlatformController_(0)
   {
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
@@ -180,6 +185,10 @@ public:
   virtual loka::core::State<loka::core::String> *projectedTextState()
   { return this->projectedWriteSeat().state(); }
   void invalidateNativePresentation() {}
+  void repaint(const ToolboxEditPresentation &)
+  {
+    LOKA_VERIFY(false);
+  }
   const Rect &chromeRect() const { static const Rect rect = {0, 0, 0, 0}; return rect; }
 };
 #else
@@ -208,6 +217,10 @@ public:
   loka::app::CellNode *node_;
   Rect rect_;
   ToolboxCellContext() : node_(0) {}
+  void draw(ToolboxScenePlatformController *)
+  {
+    LOKA_VERIFY(false);
+  }
   bool handleMouseDown(const Point &, ToolboxScenePlatformController *);
 };
 #else
@@ -326,6 +339,14 @@ public:
   short allocateControlId() { return this->controlIds_.allocate(); }
   void destroyScrollBarControl(short, loka::app::scene::NativeLifetimeHint);
   bool handleControlClick(const Point &);
+  bool presentEditorScrollBar(short, const ToolboxEditorScrollBarPresentation &);
+  void revokeEditorScrollBar(short);
+  bool ensureEditorScrollBar(short,
+                             const Rect &,
+                             ToolboxTextEditorContext *,
+                             const ToolboxEditorScrollBarPresentation &,
+                             loka::app::scene::NativeLifetimeHint);
+
   void emitHitEmitter(loka::core::EmitterState *);
   void applyPopupSelectionChange(const Rect &, loka::app::scene::BoundaryNode *,
       loka::core::State<int> *, const loka::app::scene::WriteSeat<int> &, loka::core::EmitterState *, int);
@@ -339,11 +360,17 @@ public:
   void unbindEnabledState(loka::core::State<bool> *) {}
   bool hasLiveBinding(loka::core::State<bool> *) const;
   void clearControls();
+  void retireScrollBarBinding(ScrollBarControlBinding &, loka::app::scene::NativeLifetimeHint);
   void queueRetiredScrollBarControl(ControlRef, loka::app::scene::NativeLifetimeHint);
   void queueRetiredControl(ControlRef, loka::app::scene::NativeLifetimeHint);
   bool hasLiveBinding(ControlRef) const;
   void disposeNativeHandle(ControlRef);
   void flushControls();
+  void flushRetiredNativeHandles()
+  {
+    this->flushTE();
+    this->flushControls();
+  }
   loka::app::layout::StackSpans *scrollSpans()
   { return this->scrollBarLedger_.viewportScrollBars_.empty() ? 0 : this->scrollBarLedger_.viewportScrollBars_[0].spans.get(); }
   ToolboxScrollBarLedger scrollBarLedger_;
@@ -441,6 +468,8 @@ public:
   void retireTextEditorControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   void flushTE();
   ToolboxCompositionReplay compositionReplay;
+  ToolboxCompositionReplay &compositionReplay_;
+  bool forceFullRedraw_;
   void registerCompositionReplay(ToolboxCompositionReplay::Registration &registration)
   {
     registration.attach(this->compositionReplay);
@@ -458,6 +487,8 @@ public:
         scrollBarLedger_(4),
         poolIntakeAuditFailCount_(0),
         inBatchUpdate_(false),
+        compositionReplay_(compositionReplay),
+        forceFullRedraw_(false),
         window_(window),
         renderContext(0),
         rootNode_(0),
@@ -500,12 +531,31 @@ public:
   struct RenderStats
   {
     unsigned renderCalls, totalRenderCalls, totalBoundaryApplyCount;
+    unsigned renderDirtyCalls, totalRenderDirtyCalls;
     unsigned controlDrawCount, totalControlDrawCount;
-    RenderStats() : renderCalls(0), totalRenderCalls(0), totalBoundaryApplyCount(0), controlDrawCount(0), totalControlDrawCount(0) {}
+    RenderStats()
+        : renderCalls(0),
+          totalRenderCalls(0),
+          totalBoundaryApplyCount(0),
+          renderDirtyCalls(0),
+          totalRenderDirtyCalls(0),
+          controlDrawCount(0),
+          totalControlDrawCount(0)
+    {
+    }
     void refreshHitCounts(int, int, int, int, int) {}
   } debugStats_;
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
+  typedef ToolboxHitLedger::TextHit TextHit;
+  void redrawPopupHit(PopupHit &)
+  {
+    LOKA_VERIFY(false);
+  }
+  void redrawTextHit(TextHit &)
+  {
+    LOKA_VERIFY(false);
+  }
   virtual void synchronize() {}
   virtual bool hasPendingSync() const
   {
@@ -538,6 +588,7 @@ LOKA_HOST_OTHER_HANDLER(ScrollBar)
 
 namespace toolbox_host
 {
+  extern std::vector<std::string> paintOperations;
   struct Draw
   {
     short x, y, size;

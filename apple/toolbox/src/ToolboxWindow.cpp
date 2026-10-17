@@ -485,19 +485,7 @@ bool ToolboxWindow::handleKeyDown(char key)
   return ToolboxInputDoor::keyDown(*scenePlatformController_, key);
 }
 
-void ToolboxWindow::idleControls(ActivationPhase phase)
-{
-  if (scenePlatformController_)
-  {
-    // Caret blink and other text-edit idle work is foreground-only; native
-    // handle reclamation runs in every phase.
-    if (phase == ACTIVATION_FOREGROUND)
-    {
-      ToolboxInputDoor::idleTextEdits(*scenePlatformController_);
-    }
-    scenePlatformController_->flushRetiredNativeHandles();
-  }
-}
+#include "ToolboxWindowIdle.cpp"
 
 ToolboxApp *ToolboxWindow::toolboxApp() const
 {
