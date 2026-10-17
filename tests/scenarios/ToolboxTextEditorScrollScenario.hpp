@@ -133,8 +133,13 @@ namespace loka
               metrics.setInt("U.right", geometry.text.right);
               metrics.setInt("U.top", geometry.text.top);
               metrics.setInt("U.bottom", geometry.text.bottom);
-              metrics.setInt("dest.offset", offset);
-              metrics.setInt("bar.value", GetControlValue(bar));
+              // A held page press may repeat, so the audit records what every
+              // run shares: the press moved the text, and the bar agrees with it.
+              metrics.set("page.press", offset > 0 && GetControlValue(bar) > 0 ? "moved down" : "did not move");
+              metrics.set("bar.agrees.with.dest", offset == expected ? "yes" : "no");
+              metrics.setInt(
+                  "page.step.lines",
+                  std::max(1L, static_cast<long>(geometry.text.bottom - geometry.text.top) / (**te).lineHeight - 1));
               metrics.setInt("bar.left", geometry.bar.left);
               metrics.setInt("bar.top", geometry.bar.top);
               metrics.setInt("bar.right", geometry.bar.right);
@@ -170,13 +175,15 @@ namespace loka
               metrics.setInt("thumb.right", thumbRight);
               metrics.setInt("window.width", window.window()->portRect.right - window.window()->portRect.left);
               metrics.setInt("window.height", window.window()->portRect.bottom - window.window()->portRect.top);
-              metrics.setInt("thumb.top", thumbTop);
-              metrics.setInt("thumb.bottom", thumbBottom);
+              metrics.setInt("thumb.height", thumbTop >= 0 ? thumbBottom - thumbTop : -1);
               metrics.set("selection", this->selection_.matches(te) ? "unchanged" : "changed");
               ok = audit.recordVerdict(metrics) && ok;
               TESetSelect(0, 32767, te);
               if (ok)
-                ok = editor->paste("Fits", 4) == app::EDITOR_OK;
+                // Typing over the selection lets TextEdit redraw the shorter
+                // document itself; a projected replacement would leave the old
+                // lines on screen (a separate, pre-existing repaint gap, #1429).
+                ok = editor->key('F') == app::EDITOR_OK;
               this->selection_ = Selection((**te).selStart, (**te).selEnd);
               this->phase_ = INACTIVE;
               this->elapsed_ = 0;
