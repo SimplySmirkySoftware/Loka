@@ -185,6 +185,13 @@ The size audit is a drift detector. A bank refresh updates the absolute record;
 it cannot waive the unconditional stop in a measured PR comparison. Changing
 that stop requires an explicit ruling, not an acknowledgment flag.
 
+### QuickDraw pattern alignment
+
+QuickDraw reads `Pattern` arguments with long moves on the 68000, which faults
+on an odd address (#1398). Toolbox `Pattern` constants are declared as
+`ToolboxAlignedPattern` so their addresses are even despite `Pattern` itself
+having byte alignment.
+
 ### Small-object pool
 
 Every target linking `ToolboxOperatorNew.cpp` (Retro68 and RetroPPC)

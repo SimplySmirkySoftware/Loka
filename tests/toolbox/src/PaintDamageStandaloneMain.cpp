@@ -831,7 +831,7 @@ namespace
       FrameRoundRect(&shadow, 12, 12);
       CloseRgn(shadowRegion);
       DiffRgn(shadowRegion, bodyRegion, shadowRegion);
-      PenPat(&loka::toolbox::kToolboxGradientPatterns[4]);
+      PenPat(&loka::toolbox::kToolboxGradientPatterns[4].pattern);
       PenMode(patOr);
       PaintRgn(shadowRegion);
       PenNormal();
@@ -3190,7 +3190,7 @@ namespace
         this->recordArm(size ? "card-large-bands-equal-whole" : "card-minimum-bands-equal-whole",
                         std::memcmp(reference, actual, pixelCount) == 0,
                         COMPLETE);
-        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
         CardPixels::capture(frame, ground);
         card.draw();
         CardPixels::capture(frame, actual);
@@ -3206,7 +3206,7 @@ namespace
         damage.bottom -= 7;
         {
           ToolboxPaintClip partial(damage);
-          FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2]);
+          FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
           card.draw(CARD_BAND_RIGHT);
         }
         CardPixels::capture(frame, ground);
@@ -3217,7 +3217,7 @@ namespace
         Rect narrow = frame;
         narrow.right = narrow.left + 14;
         card.layout(narrow);
-        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
         CardPixels::capture(frame, ground);
         card.draw();
         CardPixels::capture(frame, actual);
@@ -3345,10 +3345,10 @@ namespace
               alpha.layout(frame);
               alpha.draw();
               this->recordArm("card-alpha-equals-stencil", expected.differences() == 0, COMPLETE);
-              FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+              FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
               card.draw();
               this->recordArm("card-stencil-patterned-ground",
-                              expected.differences(&loka::toolbox::kToolboxGradientPatterns[2]) == 0,
+                              expected.differences(&loka::toolbox::kToolboxGradientPatterns[2].pattern) == 0,
                               COMPLETE);
               // Intersect both a corner/run join and the TOP/RIGHT band join.
               for (int seam = 0; seam < 2; ++seam)
@@ -3359,11 +3359,11 @@ namespace
                 SetRect(&damage, x - 2, frame.top, x + 2, frame.top + 6);
                 {
                   ToolboxPaintClip partial(damage);
-                  FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2]);
+                  FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
                   card.draw();
                 }
                 this->recordArm(seam ? "card-band-seam-partial" : "card-tile-run-seam-partial",
-                                expected.differences(&loka::toolbox::kToolboxGradientPatterns[2]) == 0,
+                                expected.differences(&loka::toolbox::kToolboxGradientPatterns[2].pattern) == 0,
                                 COMPLETE);
               }
             }

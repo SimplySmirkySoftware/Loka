@@ -90,9 +90,9 @@ atomicity gap (slice 3 of #144). Replacement and declaration staging are outside
 this initial-mount guarantee.
 
 Change the root's shape through `SceneManager::commitTransaction`, or put a
-`Match` one level below it. Scene adoption updates a desired identity; `scene()`
-and `getCurrentScene()` continue to expose the installed scene until the next
-App admission. Pending replacement is the comparison of those identities.
+`Match` one level below it. Scene adoption updates a desired identity;
+`Window::scene()` continues to expose the installed scene until the next App
+admission. Pending replacement is the comparison of those identities.
 
 The Window root seat prepares the candidate on its rail and composes it while
 the old scene remains installed. Preparation withholds global native projection;
