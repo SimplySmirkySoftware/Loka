@@ -851,7 +851,7 @@ void testGapDoorResets()
       reset = Grid().create();
       break;
     case 2:
-      reset = new CardNode(CardProps());
+      reset = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
       break;
     case 3:
       reset = new RibbonGroupNode(RibbonGroupProps());
@@ -1048,7 +1048,7 @@ void testGapDoorNaturalWidths()
       const int expected = policy ? 10 + 20 + innerWidth : 2 * innerWidth + 20;
       LOKA_VERIFY(natural.next(&outer).width() == expected);
       // A framed parent makes both Row policies eligible for overflow measurement.
-      CardNode frame((CardProps()));
+      CardNode frame((CardProps(CardStyle(CARD_SHADOW_DROP))));
       StackNode *copy = new StackNode(outer.props);
       copy->addChild(Button("a").create());
       StackNode *copyInner = new StackNode(inner->props);

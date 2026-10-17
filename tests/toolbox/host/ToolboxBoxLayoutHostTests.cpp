@@ -58,7 +58,7 @@ namespace
 
   void cardRoutingPin(ToolboxScenePlatformController &controller, bool handler)
   {
-    CardNode card((CardProps()));
+    CardNode card((CardProps(CardStyle(CARD_SHADOW_DROP))));
     Probe *content = new Probe(1);
     card.addChild(content);
     for (int role = 0; role < CARD_BAND_COUNT; ++role)
@@ -78,7 +78,7 @@ namespace
   void cardScrollRangePin(ToolboxScenePlatformController &controller)
   {
     StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
-    CardNode *card = new CardNode(CardProps());
+    CardNode *card = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
     Probe *content = new Probe(0);
     Probe *sibling = new Probe(0);
     card->addChild(content);

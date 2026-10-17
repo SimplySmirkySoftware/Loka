@@ -1,5 +1,6 @@
 #ifndef LOKA_TESTS_CARD_TESTS_HPP
 #define LOKA_TESTS_CARD_TESTS_HPP
+void testCardStandardStyle();
 void testCardDefinitionCloneRefusal();
 void testCardInsertionFormsReachContent();
 void testCardGeometryAndLimits();
