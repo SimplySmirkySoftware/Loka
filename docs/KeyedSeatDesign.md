@@ -41,9 +41,10 @@ its own key source (launch takes the bootstrap door). The Window's Scene seat
 successful install and records no failure, because a refused candidate leaves
 the desired identity standing and the next admission sees the mismatch again;
 the detach and rearm request is a last-wins value whose refused renewal is
-recorded by re-posting the request. The consumers therefore share the needs
-rule, not a snapshot type or a declaration mechanism; see [Document-driven
-window set](#document-driven-window-set) and the ruling in
+recorded by re-posting the request unless newer intent was recorded meanwhile.
+The consumers therefore share the needs rule, not a snapshot type or a
+declaration mechanism; see
+[Document-driven window set](#document-driven-window-set) and the ruling in
 [REVIEW_HISTORY](REVIEW_HISTORY.md#dsl-unification-topic-5).
 
 The seat window uses a separate NodeComposition and a runtime generation state
