@@ -8,6 +8,12 @@ struct Point
 };
 typedef char **Handle;
 typedef Handle CharsHandle;
+/** One scripted native completion, including selection-drag auto-scroll. */
+struct HostTECompletion
+{
+  Rect destRect;
+  short selStart, selEnd;
+};
 struct TERec
 {
   Rect destRect, viewRect;
@@ -19,6 +25,7 @@ struct TERec
   bool autoView;
   bool active;
   int idleCalls;
+  std::vector<HostTECompletion> keyCompletions, clickCompletions, idleCompletions;
 };
 typedef TERec **TEHandle;
 TEHandle TENew(const Rect *, const Rect *);
