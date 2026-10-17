@@ -1290,6 +1290,38 @@ void testWin32ProbeZStackOrder()
     UpdateWindow(root);
     probeSample(root, "B-truez-after-scroll");
 
+    // Variant D: true z with every overlapping sibling clipping, and the Static
+    // marked WS_EX_TRANSPARENT so the ground still paints under its glyph.
+    {
+      HWND overlays[3] = {groundHwnd, toolbarButton, textHwnd};
+      for (int i = 0; i < 3; ++i)
+      {
+        SetWindowLongPtrW(overlays[i], GWL_STYLE, GetWindowLongPtrW(overlays[i], GWL_STYLE) | WS_CLIPSIBLINGS);
+        SetWindowPos(overlays[i], 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      }
+      probeListZ(root, "D-truez-clipall");
+      probeSample(root, "D-truez-clipall");
+      SetWindowLongPtrW(textHwnd, GWL_EXSTYLE, GetWindowLongPtrW(textHwnd, GWL_EXSTYLE) | WS_EX_TRANSPARENT);
+      SetWindowPos(textHwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+      probeSample(root, "D2-truez-clipall-extransparent");
+      // Glyph check: any non-ground pixel inside the text cell?
+      HDC dc = GetDC(root);
+      int ink = 0;
+      for (int y = 12; y < 28; ++y)
+        for (int x = 155; x < 200; ++x)
+          if (GetPixel(dc, x, y) != RGB(0, 0, 0)) ++ink;
+      ReleaseDC(root, dc);
+      std::printf("PROBE D2 non-black pixels in text cell: %d\n", ink);
+      offset.state().set(loka::core::Frame(0, 15, 0, 0));
+      controller.relayout(300, 200);
+      probePump();
+      UpdateWindow(root);
+      probeSample(root, "D2-after-scroll");
+      SetWindowLongPtrW(textHwnd, GWL_EXSTYLE, GetWindowLongPtrW(textHwnd, GWL_EXSTYLE) & ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT));
+      for (int i = 0; i < 3; ++i)
+        SetWindowLongPtrW(overlays[i], GWL_STYLE, GetWindowLongPtrW(overlays[i], GWL_STYLE) & ~static_cast<LONG_PTR>(WS_CLIPSIBLINGS));
+    }
+
     // Variant C: paint-order z. Overlay roots to the bottom in composition order (last child lowest); no clipping.
     SetWindowLongPtrW(scrollHwnd, GWL_STYLE, GetWindowLongPtrW(scrollHwnd, GWL_STYLE) & ~static_cast<LONG_PTR>(WS_CLIPSIBLINGS));
     SetWindowPos(scrollHwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
