@@ -361,8 +361,59 @@ namespace
     }
   }
 
+  void ScrollViewInsetPins()
+  {
+    Pin("ToolboxScrollViewInsetsPlaceContentBelowTheTopInset");
+    {
+      ScrollFixture f(1);
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(12, 3));
+      const short seatTop = 20;
+      const short viewportHeight = 10;
+      const int childHeight = 17;
+      LOKA_VERIFY(f.step(ScrollViewProps::topOrigin().y, 100, viewportHeight, seatTop) == 1);
+      LOKA_VERIFY(f.rect(0).top == seatTop + 12);
+      LOKA_VERIFY(f.rect(0).bottom - f.rect(0).top == childHeight);
+      LOKA_VERIFY(f.controller.scrollMaximum() == childHeight + 15 - viewportHeight);
+      LOKA_VERIFY(f.fact.get().y == -12);
+      LOKA_VERIFY(f.controller.scrollSpans() && f.controller.scrollSpans()->valid());
+      LOKA_VERIFY(f.controller.scrollSpans()->placedViewport().y == -12);
+      LOKA_VERIFY(f.step(6, 100, viewportHeight, seatTop) == 1);
+      LOKA_VERIFY(f.rect(0).top == seatTop - 6);
+      LOKA_VERIFY(f.controller.scrollMaximum() == childHeight + 15 - viewportHeight);
+      LOKA_VERIFY(f.fact.get().y == 6);
+      LOKA_VERIFY(f.controller.scrollSpans()->placedViewport().y == 6);
+    }
+    Pin("ToolboxScrollViewInsetsHeightlessExtentAndRefusal");
+    for (unsigned banded = 0; banded != 2; ++banded)
+    {
+      ScrollFixture f(1);
+      if (!banded)
+        f.scroll.addChild(new FragmentNode(FragmentProps()));
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(12, 3));
+      LayoutState seat = Seat(100);
+      seat.x = 0;
+      seat.y = 20;
+      seat.height = 0;
+      seat.spacing = 0;
+      f.controller.layoutScrollView(&f.scroll, seat, 0);
+      LOKA_VERIFY(seat.y == 20 + 17 + 15);
+      LOKA_VERIFY(f.controller.scrollMaximum() == 32);
+      const std::size_t committedCalls = f.controller.scrollCalls.size();
+      seat.y = SHRT_MAX - 25;
+      f.scroll.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
+      f.controller.layoutScrollView(&f.scroll, seat, 0);
+      LOKA_VERIFY(seat.y == SHRT_MAX - 25);
+      LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(f.controller.scrollCalls.size() == committedCalls);
+      LOKA_VERIFY(f.fact.get().y == 0);
+      if (banded)
+        LOKA_VERIFY(!f.controller.scrollSpans()->valid());
+    }
+  }
+
   void ScrollViewPins()
   {
+    ScrollViewInsetPins();
     ScrollViewSizeBoxPins();
     Pin("ToolboxScrollViewColumnBoxesGapRefusal");
     {
