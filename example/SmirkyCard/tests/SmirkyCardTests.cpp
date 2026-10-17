@@ -4042,6 +4042,11 @@ namespace
     loka::core::String error;
     LOKA_VERIFY(runtime.loadBuiltin("var pic;card('first',c=>{pic=c.state.image();return {compose(){return VStack("
                                     "ScrollView(VStack(Text('a'),Text('b'))).TEST_ID('Scroll'),"
+                                    "ScrollView(Text('inset'),{insets:{top:12,bottom:3}}).TEST_ID('Inset'),"
+                                    "ScrollView(Text('empty'),{}).TEST_ID('EmptyScroll'),"
+                                    "ScrollView(Text('zero'),{insets:{}}).TEST_ID('ZeroScroll'),"
+                                    "ScrollView(Text('top'),{insets:{top:12}}).TEST_ID('TopScroll'),"
+                                    "ScrollView(Text('bottom'),{insets:{bottom:3}}).TEST_ID('BottomScroll'),"
                                     "Card(Text('x')).TEST_ID('Card'),"
                                     "ImageView(pic,{width:120,height:80,fit:'contain'}).TEST_ID('Contain'),"
                                     "ImageView(pic,{fit:'cover'}).TEST_ID('Cover'),"
@@ -4059,6 +4064,20 @@ namespace
     LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.isValid());
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().x == 0);
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().y == 0);
+    LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 0));
+    const char *scrollIds[] = {"Inset", "EmptyScroll", "ZeroScroll", "TopScroll", "BottomScroll"};
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, scrollIds[i]);
+      LOKA_VERIFY(node && node->asScrollViewNode());
+      const loka::app::ScrollViewProps &actual = node->asScrollViewNode()->props;
+      const int top = i == 0 || i == 3 ? 12 : 0;
+      const int bottom = i == 0 || i == 4 ? 3 : 0;
+      LOKA_VERIFY(actual.contentInsets_ == loka::app::ScrollViewContentInsets::of(top, bottom));
+      LOKA_VERIFY(actual.viewport_.state()->get()
+                  == (top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0)));
+      LOKA_VERIFY(actual.viewport_.state()->get().y == (top ? SHRT_MIN : 0));
+    }
     loka::app::scene::Node *column = scroll->asNestable()->childrenHead();
     LOKA_VERIFY(column && column->asNestable() && !column->nextInComposition);
     LOKA_VERIFY(column->asStackNode() && column->asStackNode()->props.axis_ == loka::app::STACK_AXIS_COLUMN);
@@ -4093,6 +4112,26 @@ namespace
       LOKA_VERIFY(!(actual < expected) && !(expected < actual));
     }
     const char *badBuilds[] = {"ScrollView()",
+                               "ScrollView(Text('a'),[])",
+                               "ScrollView(Text('a'),{insets:5})",
+                               "ScrollView(Text('a'),{insets:{top:-1}})",
+                               "ScrollView(Text('a'),{insets:{top:1.5}})",
+                               "ScrollView(Text('a'),{insets:{left:1}})",
+                               "ScrollView(Text('a'),{padding:1})",
+                               "ScrollView(Text('a'),{padding:{}})",
+                               "ScrollView(Text('a'),{insets:{top:40000}})",
+                               "ScrollView(Text('a'),{insets:{bottom:1.5}})",
+                               "ScrollView(Text('a'),{insets:{top:NaN}})",
+                               "ScrollView(Text('a'),{insets:{top:Infinity}})",
+                               "ScrollView(Text('a'),{insets:{top:'12'}})",
+                               "ScrollView(Text('a'),{insets:[]})",
+                               "ScrollView(Text('a'),null)",
+                               "ScrollView(Text('a'),Object.create({insets:{top:1}}))",
+                               "ScrollView(Text('a'),{insets:Object.create({top:1})})",
+                               "ScrollView(Text('a'),{[Symbol()]:1})",
+                               "ScrollView(Text('a'),{insets:{[Symbol()]:1}})",
+                               "ScrollView(Text('a'),{insets:{'top\\0':1}})",
+                               "ScrollView(Text('a'),{}, {})",
                                "ScrollView(Text('a'),Text('b'))",
                                "ScrollView(42)",
                                "ScrollView([])",
@@ -4126,9 +4165,20 @@ namespace
       expectJs(runtime, expression.c_str(), "true");
     }
     expectJs(runtime,
-             "[ScrollView(Text('x')),Card(Text('x')),ImageView(pic,{fit:'cover'})]"
+             "[ScrollView(Text('x'),{insets:{top:12}}).TEST_ID('FrozenInset'),ScrollView(Text('x')),Card(Text('x')),"
+             "ImageView(pic,{fit:'cover'})]"
              ".every(Object.isFrozen)",
              "true");
+    expectJs(runtime,
+             "(()=>{const t=ScrollView(Text('x'),{insets:{top:32767,bottom:32767}});"
+             "return Object.isFrozen(t)&&t.insetTop===32767&&t.insetBottom===32767})()",
+             "true");
+    checkComposeRefusal(
+        "card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{insetTop:40000})}}));",
+        "invalid insets");
+    checkComposeRefusal(
+        "card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{insetBottom:1.5})}}));",
+        "invalid insets");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{child:42})}}));",
                         "JavaScript ScrollView has an invalid child.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Card(Text('x')),{child:[]})}}));",
