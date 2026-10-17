@@ -505,6 +505,10 @@ static void checkCardDensityMatrix()
         loka::testing::failWin32CardStencils(1);
         PaintCardInk(refused.dc, body, style, scale, 0, 0, 0, 0);
         loka::testing::failWin32CardStencils(0);
+        // GetPixel answers CLR_INVALID outside a DC's clip region, which would
+        // make every outside comparison pass vacuously; read without a clip.
+        for (int i = 0; i < 6; ++i)
+          LOKA_VERIFY(SelectClipRgn(targets[i], NULL) != ERROR);
         for (int y = 0; y < size; ++y)
           for (int x = 0; x < size; ++x)
           {
@@ -527,6 +531,7 @@ static void checkCardDensityMatrix()
           LOKA_VERIFY(IntersectClipRect(v1.dc, outer.left, outer.top, outer.right, outer.bottom) != ERROR);
           LOKA_VERIFY(ExcludeClipRect(v1.dc, seat.left, seat.top, seat.right, seat.bottom) != ERROR);
           Win32CardV1Oracle::PaintCardInk(v1.dc, body, style, scale, 0, 0, 0, 0);
+          LOKA_VERIFY(SelectClipRgn(v1.dc, NULL) != ERROR);
           int difference = 0;
           for (int y = 0; y < size; ++y)
             for (int x = 0; x < size; ++x)
