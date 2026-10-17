@@ -15,31 +15,13 @@
 #include "app/core/App.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/AppConfigurable.hpp"
-#include "app/nodes/Text.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "context/ToolboxEditTextContext.hpp"
-#include "context/ToolboxTextContext.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/StringUTF8.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
-
-namespace loka
-{
-  namespace testing
-  {
-    /** Read the laid-out native seat without changing the projection. */
-    class ToolboxTextContextAccess
-    {
-    public:
-      static Rect rect(const ToolboxTextContext &context)
-      {
-        return context.rect_;
-      }
-    };
-  } // namespace testing
-} // namespace loka
 
 namespace loka
 {
@@ -50,7 +32,6 @@ namespace loka
       const char *kConfigPath = "LokaTest.cfg";
       const char *kDefaultScenarioName = "toggle-action-probe";
       const char *kBmiRoundtripScenarioName = "bmi-roundtrip";
-      const char *kZStackDirtyReplayScenarioName = "toggle-action-probe";
       const char *kDirtyReplayProbeKey = "probe_dirty_replay";
 
       /** The probe stays opt-in. Its original reason is gone -- the BMI fields
@@ -95,8 +76,6 @@ namespace loka
         std::fclose(fp);
         return requested;
       }
-      const char *kLeftPanelTitleTestId = "HelloWorld.LeftPanel.Title";
-      const char *kDecorationTestId = "HelloWorld.Decoration";
       const short kDirtyReplayProbeMaxWidth = 256;
 
       dsl::testing::NodeSelector<app::EditTextNode> BmiHeightInputSelector()
@@ -346,159 +325,6 @@ namespace loka
         return true;
       }
 
-      bool ProbeZStackTextDirtyReplay(Window *window, const char *&failureMessage)
-      {
-        failureMessage = "ZStack dirty replay probe was not run";
-        ToolboxWindow *toolboxWindow = window ? window->asToolboxWindow() : 0;
-        WindowPtr nativeWindow = toolboxWindow ? toolboxWindow->window() : 0;
-        if (!window || !window->scene() || !toolboxWindow || !nativeWindow)
-        {
-          failureMessage = "ZStack dirty replay probe window was unavailable";
-          return false;
-        }
-
-        app::TextNode *title = 0;
-        app::TextNode *decoration = 0;
-        dsl::FlowError titleLookupError;
-        dsl::FlowError decorationLookupError;
-        if (dsl::testing::LookupNodeById<app::TextNode>(
-                window->scene(), kLeftPanelTitleTestId, title, titleLookupError)
-                != dsl::FLOW_STEP_SUCCEEDED
-            || dsl::testing::LookupNodeById<app::TextNode>(
-                   window->scene(), kDecorationTestId, decoration, decorationLookupError)
-                   != dsl::FLOW_STEP_SUCCEEDED)
-        {
-          failureMessage = "ZStack dirty replay probe could not find the overlapping text nodes";
-          return false;
-        }
-        ToolboxTextContext *titleContext =
-            title ? static_cast<ToolboxTextContext *>(title->getContext()) : 0;
-        ToolboxTextContext *decorationContext =
-            decoration ? static_cast<ToolboxTextContext *>(decoration->getContext()) : 0;
-        if (!titleContext || !decorationContext)
-        {
-          failureMessage = "ZStack dirty replay probe found no Toolbox Text context";
-          return false;
-        }
-
-        // Intersect the live ink widths within the recorded text seats: the
-        // ScrollView and decoration now have independent padded containers.
-        Rect titleRect = loka::testing::ToolboxTextContextAccess::rect(*titleContext);
-        Rect decorationRect = loka::testing::ToolboxTextContextAccess::rect(*decorationContext);
-        titleRect.right = static_cast<short>(titleRect.left + titleContext->visibleWidth());
-        decorationRect.right = static_cast<short>(decorationRect.left + decorationContext->visibleWidth());
-        Rect overlap;
-        if (!SectRect(&titleRect, &decorationRect, &overlap))
-        {
-          failureMessage = "ZStack dirty replay probe text seats did not overlap";
-          return false;
-        }
-        const int width = static_cast<int>(overlap.right) - static_cast<int>(overlap.left);
-        if (width <= 0 || width > kDirtyReplayProbeMaxWidth || overlap.left < nativeWindow->portRect.left
-            || overlap.right > nativeWindow->portRect.right || overlap.top < nativeWindow->portRect.top
-            || overlap.bottom > nativeWindow->portRect.bottom)
-        {
-          failureMessage = "ZStack dirty replay probe strip was outside the window port";
-          return false;
-        }
-
-        unsigned char savedPixels[kDirtyReplayProbeMaxWidth];
-        unsigned char titlePixels[kDirtyReplayProbeMaxWidth];
-        unsigned char decorationPixels[kDirtyReplayProbeMaxWidth];
-        Rect row = overlap;
-        bool foundUnderlyingTitlePixel = false;
-        short underlyingTitleX = 0;
-        GrafPtr previousPort = 0;
-        GetPort(&previousPort);
-        SetPort(nativeWindow);
-        RgnHandle previousClip = NewRgn();
-        if (!previousClip)
-        {
-          SetPort(previousPort);
-          failureMessage = "ZStack dirty replay probe could not preserve the clip region";
-          return false;
-        }
-        GetClip(previousClip);
-        for (short y = overlap.top; y < overlap.bottom; ++y)
-        {
-          row.top = y;
-          row.bottom = static_cast<short>(y + 1);
-          CapturePixelRow(row, savedPixels);
-          SetClip(previousClip);
-          ClipRect(&row);
-          EraseRect(&row);
-          titleContext->draw(0);
-          CapturePixelRow(row, titlePixels);
-          EraseRect(&row);
-          decorationContext->draw(0);
-          CapturePixelRow(row, decorationPixels);
-          for (short x = row.left; x < row.right; ++x)
-          {
-            const short index = static_cast<short>(x - row.left);
-            if (titlePixels[index] != 0 && decorationPixels[index] == 0)
-            {
-              foundUnderlyingTitlePixel = true;
-              underlyingTitleX = x;
-              break;
-            }
-          }
-          if (foundUnderlyingTitlePixel)
-          {
-            break;
-          }
-        }
-        SetClip(previousClip);
-        DisposeRgn(previousClip);
-
-        // Restore every row touched while separating the two glyph masks.
-        // Damage only the selected title pixel: it lies inside the decoration
-        // hit rect but carries no decoration ink. This is also the setup
-        // positive control for the expected composite.
-        if (foundUnderlyingTitlePixel)
-        {
-          savedPixels[0] = savedPixels[underlyingTitleX - overlap.left];
-          row.left = underlyingTitleX;
-          row.right = static_cast<short>(underlyingTitleX + 1);
-        }
-        toolboxWindow->draw();
-        const bool setupCompositeRestored =
-            foundUnderlyingTitlePixel && PixelRowMatches(row, savedPixels);
-        if (setupCompositeRestored)
-        {
-          EraseRect(&row);
-        }
-        const bool damageObserved = setupCompositeRestored && !PixelRowMatches(row, savedPixels);
-        SetPort(previousPort);
-        if (!foundUnderlyingTitlePixel)
-        {
-          failureMessage = "ZStack dirty replay probe found no title-only pixel under the decoration";
-          return false;
-        }
-        if (!setupCompositeRestored)
-        {
-          failureMessage = "ZStack dirty replay probe could not restore its setup damage";
-          return false;
-        }
-        if (!damageObserved)
-        {
-          failureMessage = "ZStack dirty replay probe positive control did not change pixels";
-          return false;
-        }
-
-        toolboxWindow->drawDirty(row);
-
-        SetPort(nativeWindow);
-        const bool replayRestoredPixels = PixelRowMatches(row, savedPixels);
-        SetPort(previousPort);
-        if (!replayRestoredPixels)
-        {
-          failureMessage = "dirty replay did not restore title pixels beneath the ZStack decoration";
-          return false;
-        }
-        failureMessage = 0;
-        return true;
-      }
-
       bool IsSuccessfulRecord(const dsl::SnapRecord &record)
       {
         std::string status;
@@ -618,16 +444,6 @@ namespace loka
                       kBmiRoundtripScenarioName,
                       BmiHeightInputSelector().describe().c_str(),
                       probeFailure);
-                }
-              }
-              if (!this->startup_ && this->scenario_.name() == kZStackDirtyReplayScenarioName
-                  && IsSuccessfulRecord(record) && DirtyReplayProbeRequested(kConfigPath))
-              {
-                const char *probeFailure = 0;
-                if (!ProbeZStackTextDirtyReplay(window, probeFailure))
-                {
-                  SetDirtyReplayProbeFailure(
-                      record, 2405, kZStackDirtyReplayScenarioName, kLeftPanelTitleTestId, probeFailure);
                 }
               }
               if (this->startup_)

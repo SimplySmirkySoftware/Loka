@@ -43,12 +43,9 @@ namespace
   class MarginProjection : public NullScenePlatformController
   {
   public:
-    loka::app::scene::LayoutState decoration;
     loka::app::scene::LayoutState title;
     virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state)
     {
-      if (node->testId() == "HelloWorld.Decoration")
-        this->decoration = state;
       if (node->testId() == "HelloWorld.LeftPanel.Title")
         this->title = state;
       return NullScenePlatformController::prepareProjectedLayout(node, state);
@@ -248,10 +245,9 @@ void testHelloWorldResponsivePanelsFollowNativeFrameAndRetainSeats()
   LOKA_VERIFY(inset && inset->props.padding == loka::app::StandardWindowMargin());
   LOKA_VERIFY(inset->props.padding.resolve(0, 9) == 9);
   LOKA_VERIFY(platform.title.x == 9 && platform.title.y == 9);
-  LOKA_VERIFY(platform.decoration.x == 9 && platform.decoration.y == 9);
-  loka::app::scene::Node *decoration =
-      findByTestId(loka::dsl::testing::SceneTestAccess::rootNode(*window->scene()), "HelloWorld.Decoration");
-  LOKA_VERIFY(decoration && decoration->asTextNode());
+  LOKA_VERIFY(loka::dsl::testing::SceneTestAccess::rootNode(*window->scene())->asNestable()->childrenHead()
+              == mainPanelsScroll);
+  LOKA_VERIFY(mainPanelsScroll->nextInComposition == 0);
 
   LOKA_VERIFY(mainPanels->props.effectiveAxis() == loka::app::STACK_AXIS_ROW);
   LOKA_VERIFY(platform.lastOnChangeFlags() == loka::app::scene::NODE_DIRTY_LAYOUT);
@@ -299,10 +295,7 @@ namespace
       helloworld::MainNode::composeNode(composition);
       // Inspect the declaration before a late immediate watch could trigger
       // another composition and hide the first frame's axis.
-      loka::app::scene::INestableDefinition *root =
-          composition.root()->asNestableDefinition();
-      LOKA_VERIFY(root != 0);
-      loka::app::scene::NodeDefinitionBase *scroll = root->childrenHead();
+      loka::app::scene::NodeDefinitionBase *scroll = composition.root();
       LOKA_VERIFY(scroll != 0);
       const std::string scrollId = scroll->testIdValue();
       LOKA_VERIFY(scrollId == "HelloWorld.MainPanelsScroll");
