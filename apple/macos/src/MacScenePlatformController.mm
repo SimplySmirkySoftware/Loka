@@ -719,8 +719,10 @@ MacScenePlatformController::layoutScrollViewNode(
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
-  // The clip view scrolls, so the placement is a constant top inset, not the request.
-  // Unlike Win32 and Toolbox, this rail does not use contentTranslation().
+  // The clip view scrolls, so the placement is a constant top inset, not the
+  // request: AppKit applies the request through the clip bounds, so applying
+  // it here would move children twice. Unlike Win32 and Toolbox, this rail
+  // does not use contentTranslation().
   if (!parentScope.deriveScrolled(ctx->documentView(), state.x, state.y - top, viewportClip, childScope))
   {
     return LayoutNodeResult(state.width, state.y);

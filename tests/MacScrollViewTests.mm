@@ -1022,6 +1022,9 @@ void testMacScrollViewInsetsGrowTheHeightlessExtent()
     const loka::core::Frame factBefore = fact.state().get();
     fact.resetChangeCount();
     seat.y = SHRT_MAX - 20;
+    // A narrower seat too: only a commit would resize the document to it, so
+    // the unchanged document proves the refusal skipped the commit.
+    seat.width = 150;
     const int refused = loka::dsl::testing::MacScenePlatformTestAccess::layoutNode(controller, &scroll, seat);
     LOKA_VERIFY(refused == seat.y);
     const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
