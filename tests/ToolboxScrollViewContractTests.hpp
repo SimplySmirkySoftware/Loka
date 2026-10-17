@@ -5,6 +5,7 @@ void testToolboxScrollViewChildWidthAlwaysReservesScrollbar();
 void testToolboxScrollViewHitIntersectionGatesViewport();
 void testToolboxScrollViewOffsetClampRepublishesOnlyChangedFacts();
 void testToolboxScrollViewRangeMapsContentMinusViewport();
+void testToolboxScrollViewInsetsGrowTheRange();
 
 void testToolboxScrollViewContentRectExcludesScrollbar();
 

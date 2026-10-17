@@ -92,8 +92,8 @@ short ToolboxScenePlatformController::layoutScrollView(
   viewportRect.right = static_cast<short>(viewportRight);
   viewportRect.bottom = static_cast<short>(viewportBottom);
 
-  const int requestedFact = scrollView->requestedOrigin().y;
-  const int projectedOffset = requestedFact;
+  const int requestedExtent = scrollView->requestedOrigin().y;
+  const int translation = scrollView->contentTranslation().y;
 
   short contentWidth = 0;
   const bool widthKnown =
@@ -125,7 +125,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
   if (!parentScope.deriveScrolled(
-          parentScope.nativeParent, horizontal.clampedOffset, projectedOffset, viewportClip, childScope))
+          parentScope.nativeParent, horizontal.clampedOffset, translation, viewportClip, childScope))
   {
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
@@ -144,7 +144,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   else if (!spans.isValid())
     spans = BuildScrollViewSpans();
 
-  const loka::core::Frame newViewport(horizontal.clampedOffset, projectedOffset, state.width, state.height);
+  const loka::core::Frame newViewport(horizontal.clampedOffset, translation, state.width, state.height);
   loka::app::layout::LazyWindow band = {0, 0};
   const loka::app::layout::LazyWindow *range = 0;
   if (column && spans.isValid() && spans->valid() && inputs == loka::app::scene::NODE_DIRTY_LAYOUT)
@@ -165,6 +165,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   const short seatY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
+  const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionParentScopeGuard scopeGuard(
         this->projectionParentScopes_, childScope);
@@ -178,7 +179,6 @@ short ToolboxScenePlatformController::layoutScrollView(
     loka::app::scene::LayoutState childState = state;
     childState.height = static_cast<short>(contentRect.bottom - contentRect.top);
     childState.width = static_cast<short>(childWidth);
-    const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::app::layout::StackGaps gaps(state.spacing);
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         scrollView->childrenHead(), scrollView->childrenCount());
@@ -207,32 +207,31 @@ short ToolboxScenePlatformController::layoutScrollView(
     contentHeight = this->projectionParentScopes_.current().contentHeight();
     shortRangeRefused =
         this->projectionParentScopes_.current().hasShortRangeRefusal();
-    if (shortRangeRefused)
-    {
-      // Seats recorded under a refused scope are not facts.
-      this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
-    }
   }
 
-  if (!shortRangeRefused && state.height <= 0 && static_cast<int>(seatY) + contentHeight > SHRT_MAX)
+  if (!shortRangeRefused && spans.isValid() && spans->valid())
+    contentHeight = spans->total();
+  const int extent = contentHeight + scrollView->props.contentInsets_.extentExtra();
+  // The extent itself must fit the short the bar's maximum is stored in, and
+  // on the heightless path the seat origin rides on top of it.
+  if (!shortRangeRefused && (extent > SHRT_MAX || (state.height <= 0 && static_cast<int>(seatY) + extent > SHRT_MAX)))
     shortRangeRefused = true;
   if (shortRangeRefused)
   {
+    // Seats recorded under a refused scope are not facts.
+    this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
   }
   if (!shortRangeRefused)
   {
     if (spans.isValid() && spans->valid())
-    {
-      contentHeight = spans->total();
       spans->placed(newViewport);
-    }
     const int clampedOffset = this->ensureViewportScrollBarControl(viewportRect,
                                                                    scrollView,
-                                                                   contentHeight,
+                                                                   extent,
                                                                    contentRect.bottom - contentRect.top,
-                                                                   requestedFact,
+                                                                   requestedExtent,
                                                                    horizontal,
                                                                    horizontalBar);
     for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
@@ -250,13 +249,11 @@ short ToolboxScenePlatformController::layoutScrollView(
   {
     state.y = static_cast<short>(viewportBottom);
   }
-  else if (!shortRangeRefused &&
-           static_cast<int>(seatY) + contentHeight <= SHRT_MAX)
+  else if (!shortRangeRefused && static_cast<int>(seatY) + extent <= SHRT_MAX)
   {
-    // The channel caps contentHeight at SHRT_MAX, but the seat origin rides
-    // on top of it: the measured bottom must also fit the short before it
-    // narrows (the same wrap the Win32 arm refuses on its heightless path).
-    state.y = static_cast<short>(seatY + contentHeight);
+    // The measured bottom includes both insets and must fit the short before
+    // narrowing (the Win32 heightless arm refuses the same wrap).
+    state.y = static_cast<short>(seatY + extent);
   }
   else
   {

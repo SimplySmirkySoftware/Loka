@@ -65,6 +65,24 @@ void testToolboxScrollViewOffsetClampRepublishesOnlyChangedFacts()
     LOKA_VERIFY(fact.get().y == expected[i]);
     storage.unbind(&countClampWrites, &writes);
   }
+  node.props.contentInsets(loka::app::ScrollViewContentInsets::of(12, 0));
+  fact.set(loka::app::ScrollViewProps::topOrigin());
+  LOKA_VERIFY(node.requestedOrigin().y == 0);
+  node.publishOrigin(0, 0);
+  LOKA_VERIFY(fact.get().y == -12);
+  node.publishOrigin(0, 12);
+  LOKA_VERIFY(fact.get().y == 0);
+}
+
+void testToolboxScrollViewInsetsGrowTheRange()
+{
+  const loka::app::ScrollViewContentInsets insets = loka::app::ScrollViewContentInsets::of(12, 3);
+  const int fullExtent = 100 + insets.extentExtra();
+  const int smallExtent = 80 + insets.extentExtra();
+  LOKA_VERIFY(fullExtent == 115);
+  LOKA_VERIFY(smallExtent == 95);
+  LOKA_VERIFY(ToolboxScrollViewMaximum(fullExtent, 100) == 15);
+  LOKA_VERIFY(ToolboxScrollViewMaximum(smallExtent, 100) == 0);
 }
 
 void testToolboxScrollViewRangeMapsContentMinusViewport()
