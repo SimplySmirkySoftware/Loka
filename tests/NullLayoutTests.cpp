@@ -284,3 +284,45 @@ void testNullLayoutOnChangeUsesRegisteredTraversal()
   assertGeometry(first, 0, 0, 48, 20);
   assertGeometry(second, 52, 0, 48, 20);
 }
+
+void testProjectionMeasurementChannelAndUnitAdmission()
+{
+  using namespace loka::app::scene;
+  ProjectionParentScopeStack scopes;
+  LOKA_VERIFY(!scopes.current().channel);
+  LOKA_VERIFY(!scopes.current().tryAccumulateContentHeight(0, 10));
+  scopes.current().markShortRangeRefused();
+  LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+  ProjectionMeasurementChannel measurement;
+  ProjectionParentScope viewport;
+  viewport.channel = &measurement;
+  LOKA_VERIFY(scopes.push(viewport));
+  ProjectionMeasurementChannel other;
+  ProjectionParentScope secondViewport;
+  secondViewport.channel = &other;
+  LOKA_VERIFY(!scopes.push(secondViewport));
+  ProjectionParentScope unit;
+  LOKA_VERIFY(scopes.current().deriveScrolled(0, 10, 20, loka::core::Frame(0, 0, 80, 80), unit));
+  LOKA_VERIFY(scopes.push(unit, false));
+  LOKA_VERIFY(scopes.current().tryAccumulateContentHeight(0, 10));
+  LOKA_VERIFY(measurement.contentHeight() == 10);
+  scopes.current().markShortRangeRefused();
+  LOKA_VERIFY(measurement.hasShortRangeRefusal());
+  LOKA_VERIFY(!scopes.push(unit, false));
+  LOKA_VERIFY(scopes.pop());
+  LOKA_VERIFY(scopes.current().hasShortRangeRefusal());
+  LOKA_VERIFY(scopes.pop());
+  LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+  ProjectionParentScope rootUnit;
+  LOKA_VERIFY(scopes.current().deriveScrolled(0, 10, 20, loka::core::Frame(0, 0, 80, 80), rootUnit));
+  LOKA_VERIFY(scopes.push(rootUnit, false));
+  LOKA_VERIFY(!scopes.push(rootUnit, false));
+  LayoutState seat;
+  seat.x = 10;
+  seat.y = 20;
+  LayoutState projected;
+  LOKA_VERIFY(scopes.current().project(seat, projected));
+  LOKA_VERIFY(projected.x == 0 && projected.y == 0);
+  LOKA_VERIFY(!scopes.current().channel);
+  LOKA_VERIFY(scopes.pop());
+}

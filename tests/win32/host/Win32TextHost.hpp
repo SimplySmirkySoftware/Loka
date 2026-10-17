@@ -95,6 +95,7 @@ public:
   void ensureDisplayFont();
   void applyDisplayFontToNativeSubtree(const loka::win32::Win32DisplayFont &);
   void positionNativeWindow(HWND, const loka::win32::NativeRect &);
+  void raiseNativeWindow(HWND);
   void resizeNativeWindow(HWND h, const loka::win32::NativeRect &r)
   {
     this->positionNativeWindow(h, r);

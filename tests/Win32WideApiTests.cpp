@@ -1,3 +1,4 @@
+#include "context/Win32ZStackContext.hpp"
 #include "Win32WideApiTests.hpp"
 #include "support/TestVerify.hpp"
 
@@ -121,6 +122,13 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     Win32ScrollViewContext scrollView(
         &controller, root, 90, 0, 80, 60, &scrollViewNode);
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");
+
+    Win32ZStackContext units(&controller);
+    Win32ZStackContext::Unit **cursor = units.unitsBegin();
+    Win32ZStackContext::Unit *unit = units.unitFor(1, cursor);
+    LOKA_VERIFY(unit && unit->ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 80, 30))));
+    verifyWideChildWindow(root, L"LOKA_STACK_UNIT");
+    units.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
 
     attributed.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     band.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);

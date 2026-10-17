@@ -87,6 +87,8 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(
         controller.projectionParentScopes_.current().deriveScrolled(0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    scope.channel = &measurement;
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
@@ -215,6 +217,8 @@ namespace
       LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
           0, 0, 0, loka::core::Frame(0, 0, 100, 100), scope));
       {
+        loka::app::scene::ProjectionMeasurementChannel measurement;
+        scope.channel = &measurement;
         ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
         state.y = 0;
         state.spacing = 12;
@@ -297,6 +301,8 @@ namespace
     ProjectionParentScope scrollScope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scrollScope));
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    scrollScope.channel = &measurement;
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scrollScope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
@@ -344,6 +350,8 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    scope.channel = &measurement;
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
@@ -379,6 +387,8 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    scope.channel = &measurement;
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
@@ -423,6 +433,8 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    scope.channel = &measurement;
     ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;

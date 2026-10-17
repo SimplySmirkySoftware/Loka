@@ -1940,3 +1940,14 @@ Avoid black boxes.
 
 If application code reads naturally while ownership and lifecycle remain
 inspectable, it is moving in the right direction for Loka.
+
+### Stacking: ZStack
+
+A ZStack's first child is the ground (live content). Each later child is an
+opaque unit above the ground and all earlier units, in composition order, with
+one native window/view per unit. For example, `ZStack(scrollView, Row(toolbar))`
+keeps the toolbar subtree together. Place units only over non-reactive regions,
+such as a ScrollView's inset gap or modal dimming; the framework does not check
+this placement. Tab visits units before the ground. A transparent upper child
+is unsupported. Win32 implements this contract here; Toolbox and macOS adopt
+the same rule in their own PRs.

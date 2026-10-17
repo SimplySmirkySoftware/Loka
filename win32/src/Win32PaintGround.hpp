@@ -30,12 +30,10 @@ namespace loka
       return answered && FillRect(dc, &rect, GetSysColorBrush(index)) != 0;
     }
 
-    /** Shared root/viewport WM_CTLCOLORSTATIC response for native static text
-        on the WINDOW ground. A STATIC stays transparent so a ZStack Text
-        overlaps the sibling it sits on (HelloWorld's decoration); the parent
-        paints the ground under it whenever the parent itself is invalidated.
-        A surface tick no longer invalidates the root, which is what removed
-        the per-tick flicker. */
+    /** Shared parent WM_CTLCOLORSTATIC response. Static text stays transparent
+        to show its own parent's ground, which that parent paints. Overlapping
+        transparent siblings are unsupported; ZStack upper children live in
+        opaque units and every context window clips its siblings. */
     inline HBRUSH Win32StaticTextColors(HDC dc, HWND child)
     {
       if (dc)

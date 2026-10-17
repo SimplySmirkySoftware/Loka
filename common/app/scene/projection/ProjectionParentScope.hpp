@@ -13,6 +13,57 @@ namespace loka
   {
     namespace scene
     {
+      /** Stack-local measurement owned by one viewport traversal. Unit frames
+          borrow the same channel; the projection root has none. */
+      class ProjectionMeasurementChannel
+      {
+      public:
+        ProjectionMeasurementChannel()
+            : contentHeight_(0),
+              shortRangeRefused_(false)
+        {
+        }
+
+        /** Extends the explicit int measurement channel without ever
+            assigning an out-of-range value to LayoutState. */
+        bool tryAccumulateContentHeight(int childStartY, int childEndY)
+        {
+          if (childEndY < childStartY)
+          {
+            return false;
+          }
+          const int remaining = SHRT_MAX - this->contentHeight_;
+          if (childStartY > INT_MAX - remaining || childEndY > childStartY + remaining)
+          {
+            return false;
+          }
+          this->contentHeight_ += childEndY - childStartY;
+          return true;
+        }
+
+        int contentHeight() const
+        {
+          return this->contentHeight_;
+        }
+
+        /** Refusal belongs to the viewport traversal, including its units.
+            Nested containers read it before narrowing another child result.
+            The fact expires when the owning layout returns. */
+        void markShortRangeRefused()
+        {
+          this->shortRangeRefused_ = true;
+        }
+
+        bool hasShortRangeRefusal() const
+        {
+          return this->shortRangeRefused_;
+        }
+
+      private:
+        int contentHeight_;
+        bool shortRangeRefused_;
+      };
+
       /** One platform-projection parent frame. Native parent identity is
           deliberately opaque at the shared wall; each rail owns the cast. */
       struct ProjectionParentScope
@@ -22,21 +73,16 @@ namespace loka
               translationX(0),
               translationY(0),
               clipRect(0, 0, 0, 0),
-              contentHeight_(0),
-              shortRangeRefused_(false)
+              channel(0)
         {
         }
 
-        ProjectionParentScope(void *parent,
-                              int translateX,
-                              int translateY,
-                              const loka::core::Frame &clip)
+        ProjectionParentScope(void *parent, int translateX, int translateY, const loka::core::Frame &clip)
             : nativeParent(parent),
               translationX(translateX),
               translationY(translateY),
               clipRect(clip),
-              contentHeight_(0),
-              shortRangeRefused_(false)
+              channel(0)
         {
         }
 
@@ -56,6 +102,7 @@ namespace loka
             return false;
           }
           out = ProjectionParentScope(parent, childTranslationX, childTranslationY, clip);
+          out.channel = this->channel;
           return true;
         }
 
@@ -83,54 +130,31 @@ namespace loka
           return trySubtract(projectedY, this->translationY, contentY);
         }
 
-        /** Extends the explicit int measurement channel without ever
-            assigning an out-of-range value to LayoutState. */
         bool tryAccumulateContentHeight(int childStartY, int childEndY)
         {
-          if (childEndY < childStartY)
-          {
-            return false;
-          }
-          const int remaining = SHRT_MAX - this->contentHeight_;
-          if (childStartY > INT_MAX - remaining ||
-              childEndY > childStartY + remaining)
-          {
-            return false;
-          }
-          this->contentHeight_ += childEndY - childStartY;
-          return true;
+          return this->channel && this->channel->tryAccumulateContentHeight(childStartY, childEndY);
         }
-
         int contentHeight() const
         {
-          return this->contentHeight_;
+          return this->channel ? this->channel->contentHeight() : 0;
         }
-
-        /** Frame-resident fact: the measurement channel refused inside this
-            scope, so no further child result may narrow into a LayoutState
-            coordinate. Set through the one door below, cleared by the frame
-            being popped; nested containers run their own accumulate-then-
-            narrow loops, so the rail's traversal edge reads this to stop
-            materializing siblings after a refusal. */
         void markShortRangeRefused()
         {
-          this->shortRangeRefused_ = true;
+          if (this->channel)
+            this->channel->markShortRangeRefused();
         }
-
         bool hasShortRangeRefusal() const
         {
-          return this->shortRangeRefused_;
+          return this->channel && this->channel->hasShortRangeRefusal();
         }
 
         void *nativeParent;
         int translationX;
         int translationY;
         loka::core::Frame clipRect;
+        ProjectionMeasurementChannel *channel;
 
       private:
-        int contentHeight_;
-        bool shortRangeRefused_;
-
         static bool tryAdd(int lhs, int rhs, int &out)
         {
           if ((rhs > 0 && lhs > INT_MAX - rhs) ||
@@ -154,14 +178,14 @@ namespace loka
         }
       };
 
-      /** Allocation-free LIFO stack. V1 admits the root frame and one active
-          ScrollView frame; a second push is an always-on refusal. */
+      /** Allocation-free LIFO stack. V1 admits one viewport followed by one unit.
+          Admission is always-on; no new walk, one borrowed channel pointer per frame. */
       class ProjectionParentScopeStack
       {
       public:
         enum
         {
-          MAX_ACTIVE_SCOPES = 1
+          MAX_ACTIVE_SCOPES = 2
         };
 
         explicit ProjectionParentScopeStack(void *rootParent = 0)
@@ -188,11 +212,24 @@ namespace loka
           return true;
         }
 
-        bool push(const ProjectionParentScope &scope)
+        bool push(const ProjectionParentScope &scope, bool ownsChannel = true)
         {
           if (this->activeDepth_ >= MAX_ACTIVE_SCOPES)
           {
             return false;
+          }
+          if (ownsChannel)
+          {
+            if (!scope.channel || this->current().channel)
+              return false;
+          }
+          else
+          {
+            // Equal adjacent channels identify a unit, including a root unit
+            // whose inherited channel is null. No separate kind can drift.
+            if (scope.channel != this->current().channel
+                || (this->activeDepth_ && this->current().channel == this->frames_[this->activeDepth_ - 1].channel))
+              return false;
           }
           ++this->activeDepth_;
           this->frames_[this->activeDepth_] = scope;
@@ -238,8 +275,9 @@ namespace loka
       {
       public:
         ProjectionParentScopeGuard(ProjectionParentScopeStack &stack,
-                                   const ProjectionParentScope &scope)
-            : stack_(stack.push(scope) ? &stack : 0)
+                                   const ProjectionParentScope &scope,
+                                   bool ownsChannel = true)
+            : stack_(stack.push(scope, ownsChannel) ? &stack : 0)
         {
         }
 

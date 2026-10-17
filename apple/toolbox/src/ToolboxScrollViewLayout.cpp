@@ -167,6 +167,8 @@ short ToolboxScenePlatformController::layoutScrollView(
   bool shortRangeRefused = false;
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
+    loka::app::scene::ProjectionMeasurementChannel measurement;
+    childScope.channel = &measurement;
     loka::app::scene::ProjectionParentScopeGuard scopeGuard(
         this->projectionParentScopes_, childScope);
     if (!scopeGuard.isActive())
