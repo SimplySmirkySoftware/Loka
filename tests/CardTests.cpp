@@ -805,6 +805,9 @@ void testCardStandardStyle()
 #else
   std::printf("[skip] Linux-only queryCpuClass decline pin on non-Linux target\n");
 #endif
+#if defined(_WIN32)
+  LOKA_VERIFY(answered && answer == CPU_CLASS_G3_OR_FASTER);
+#endif
   if (!answered)
     answer = CPU_CLASS_68K;
   LOKA_VERIFY(StandardCardStyle() == StandardCardStyleFor(answer));

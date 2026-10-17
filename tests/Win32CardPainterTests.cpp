@@ -327,7 +327,7 @@ void testWin32CardPainterPixels()
         LOKA_VERIFY(savedReference != 0);
         LOKA_VERIFY(IntersectClipRect(reference.dc, outer.left, outer.top, outer.right, outer.bottom) != ERROR);
         LOKA_VERIFY(ExcludeClipRect(reference.dc, seat.left, seat.top, seat.right, seat.bottom) != ERROR);
-        PaintCardInk(reference.dc, wholeBody, CardStyle(), scale, 0, 0, 0, 0);
+        PaintCardInk(reference.dc, wholeBody, CardStyle(CARD_SHADOW_DROP), scale, 0, 0, 0, 0);
         LOKA_VERIFY(RestoreDC(reference.dc, savedReference));
         for (int role = 0; role < CARD_BAND_COUNT; ++role)
         {
@@ -339,8 +339,12 @@ void testWin32CardPainterPixels()
           const COLORREF oldBack = SetBkColor(strip.dc, RGB(78, 90, 12));
           POINT oldOrigin;
           LOKA_VERIFY(SetBrushOrgEx(strip.dc, 5, 7, &oldOrigin));
-          PaintCardBandInk(
-              strip.dc, bands[role], CardBandProps(static_cast<CardBandRole>(role)), scale, native.left, native.top);
+          PaintCardBandInk(strip.dc,
+                           bands[role],
+                           CardBandProps(static_cast<CardBandRole>(role), CardStyle(CARD_SHADOW_DROP)),
+                           scale,
+                           native.left,
+                           native.top);
           LOKA_VERIFY(GetTextColor(strip.dc) == RGB(12, 34, 56) && GetBkColor(strip.dc) == RGB(78, 90, 12));
           POINT restored;
           LOKA_VERIFY(GetBrushOrgEx(strip.dc, &restored) && restored.x == 5 && restored.y == 7);
