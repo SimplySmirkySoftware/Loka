@@ -15,7 +15,8 @@
 > [ToolboxScrollViewLayout.cpp](../apple/toolbox/src/ToolboxScrollViewLayout.cpp),
 > [ToolboxScrollViewDecisions.hpp](../apple/toolbox/src/ToolboxScrollViewDecisions.hpp),
 > [Win32ScrollViewContext.cpp](../win32/src/context/Win32ScrollViewContext.cpp),
-> [MacScrollViewContext.mm](../apple/macos/src/context/MacScrollViewContext.mm)
+> [MacScrollViewContext.mm](../apple/macos/src/context/MacScrollViewContext.mm),
+> [NullScenePlatformController.cpp](../tests/platform/null/NullScenePlatformController.cpp)
 >
 > **Verification:** [ScrollViewScopeTests.cpp](../tests/ScrollViewScopeTests.cpp) (Null),
 > [ToolboxScrollViewPins.hpp](../tests/toolbox/host/ToolboxScrollViewPins.hpp),
@@ -39,15 +40,19 @@ The viewport is one `Frame` in **content coordinates**, not the seat rect.
 top-left corner. `width` and `height` are reserved for the visible size and are
 not reported today; `!hasSize()` means "not reported yet", and every rail
 carries the stored size through unchanged. Apps initialise the state with
-`Frame(0, 0, 0, 0)`.
+`Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
+top inset visible (see [Content insets](#content-insets)).
 
-Two helpers on `ScrollViewNode` are the only doors (#1357):
+Three helpers on `ScrollViewNode` are the coordinate doors (origin publication
+introduced in #1357; content insets use the conversions below):
 
-- `requestedOrigin()` reads the app's value as a request: an unbound state or
-  a negative coordinate reads as 0, a coordinate above `SHRT_MAX` reads as
-  `SHRT_MAX`.
-- `publishOrigin(x, y)` writes the clamped origin back, keeping the stored
-  size, and only when `x` or `y` differs from what is stored. The same-value
+- `requestedOrigin()` reads the app's value as an extent-offset request: an
+  unbound state requests 0 on both axes. X is clamped to `[0, SHRT_MAX]`;
+  content Y below `-top` reads as `-top`, then converts to extent coordinates.
+  With no insets, negative coordinates read as 0 as before.
+- `contentTranslation()` gives the content-coordinate translation for placement.
+- `publishOrigin(x, extentY)` writes the clamped content origin back, keeping the stored
+  size, and only when the converted origin differs from what is stored. The same-value
   no-op is the echo-loop breaker on every rail: a layout that re-applies the
   published origin publishes nothing.
 
@@ -55,6 +60,49 @@ Option D (one `Frame`, frozen 2026-10-15) was chosen over a second
 `NodeState<int>` for X because every other two-axis carrier in Loka is one
 `Frame` (`laidOutExtent`, the Canvas and LazyView viewports), a diagonal scroll
 is one write, and `State<Frame>` costs no new template family on 68k.
+
+## Content insets
+
+Declare vertical content insets with `ScrollView().contentInsets(top, bottom)`.
+Each inset is a logical-unit value checked on construction; the completed value
+lives in the props. For laid-out content height H, the scrollable extent is
+`H + top + bottom`, and content is placed `top` below the extent's start.
+Children are offered the full seat height: insets do not shrink their offer or
+change their content coordinates.
+
+The viewport fact keeps its content-coordinate meaning. While the top gap is
+visible, its Y origin may be negative down to `-top`. The rail remains its only
+writer, through `publishOrigin`. The three node doors contain the conversion:
+
+- `requestedOrigin()` returns extent offsets: X is unchanged from its existing
+  normalization; Y is `clamp(fact.y, -top, SHRT_MAX - top) + top`. **Clamp before
+  adding top** to avoid overflow even near `INT_MAX`. An unbound seat requests
+  extent 0 on both axes.
+- `contentTranslation()` returns
+  `Frame(requestedOrigin().x, requestedOrigin().y - top, w, h)`, carrying the
+  fact's stored size. Null passes this to `deriveScrolled` and records it in
+  placement spans; Toolbox and Win32 will do the same. macOS will instead place
+  its document at a constant `+top` without using this translation door.
+- `publishOrigin(x, extentY)` writes `Frame(x, extentY - top, w, h)`, preserving
+  size and publishing only a changed origin.
+
+`ScrollViewProps::topOrigin()` names the request for the top with the gap
+visible, independently of the inset. Its Y sentinel is below every allowed
+`-top`, so it requests extent 0. `Frame(0, 0, 0, 0)` continues to mean content
+origin zero; with insets it requests extent `top`, hiding the top gap.
+
+Rails keep their nonnegative extent-offset math, maximum
+`max(0, extent - viewport)`, and existing clamps. Null has no bar or maximum
+clamp; its heightless result includes both insets, with short-range refusal
+checked after their addition. No scroll bar moves in this PR: track lowering
+and the native-bar column are page 2 questions of the ScrollView insets rally.
+Toolbox, Win32 and macOS adopt the doors in the following PRs; until then a
+non-zero inset on those rails is unsupported: their call sites already go
+through the converting doors, but their extent does not grow, so content would
+be misplaced by `top`. Nothing outside the tests declares an inset yet.
+
+The LazyList example's `publishViewport` 0-floor is application work to resolve
+before a lazy-list demo uses insets.
 
 ## The horizontal range
 
@@ -86,7 +134,8 @@ to the same native width leave no range
 must not scroll**: otherwise content moved out of view could not be brought
 back. That fallback is one expression per rail, kept in the same spelling.
 
-The vertical range is the content height the layout accumulates, as before.
+The vertical range uses the accumulated content height plus the content insets
+on rails that honour them (see Content insets above).
 
 ## Bars
 

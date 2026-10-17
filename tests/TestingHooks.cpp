@@ -369,3 +369,52 @@ namespace loka { namespace testing {
   }
 } }
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned win32CardStencilFailures = 0;
+    }
+    void failWin32CardStencils(unsigned count)
+    {
+      win32CardStencilFailures = count;
+    }
+    bool declineWin32CardStencil()
+    {
+      if (!win32CardStencilFailures)
+        return false;
+      --win32CardStencilFailures;
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned win32CardPaintOrder = 0;
+    }
+    void resetWin32CardPaintOrder()
+    {
+      win32CardPaintOrder = 0;
+    }
+    void noteWin32CardPaintStage(unsigned stage)
+    {
+      win32CardPaintOrder = win32CardPaintOrder * 10 + stage;
+    }
+    unsigned readWin32CardPaintOrder()
+    {
+      return win32CardPaintOrder;
+    }
+  } // namespace testing
+} // namespace loka
+#endif
