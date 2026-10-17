@@ -1264,7 +1264,7 @@ void testWin32ProbeZStackOrder()
     HWND scrollHwnd = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     HWND groundHwnd = findChildWindowByClass(root, L"LOKA_RECT_SURFACE");
     HWND textHwnd = FindWindowExW(root, NULL, L"STATIC", L"*");
-    std::vector<HWND> buttons = directChildWindowsByClass(root, L"BUTTON");
+    std::vector<HWND> buttons = directChildWindowsByClass(root, L"Button");
     std::printf("PROBE lookups: scroll=%p ground=%p text=%p rootButtons=%u\n", (void *)scrollHwnd, (void *)groundHwnd,
                 (void *)textHwnd, static_cast<unsigned>(buttons.size()));
     probeListZ(root, "A-lookup");
