@@ -66,11 +66,8 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
       return 0;
     return state.width;
   }
-  const loka::app::scene::ProjectionParentScope &scope = controller->projectionParentScopes_.current();
   if (!controller->projectLayoutState(state))
     return 0;
-  const loka::core::Frame &clip = scope.clipRect;
-  SetRect(&controller->projectionClip, clip.x, clip.y, clip.x + clip.width, clip.y + clip.height);
   loka::app::scene::IPlatformNodeHandler *handler = controller->nodeHandlerRegistry_.find(node);
   assert(handler);
   loka::app::scene::NodeContext *previous = node->getContext();
@@ -87,7 +84,6 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
 }
 #endif
 #include "ToolboxScrollViewLayout.cpp"
-#include "ToolboxViewportScrollBar.cpp"
 #include "ToolboxControlPresentation.cpp"
 #include "ToolboxStructurePresent.cpp"
 

@@ -302,7 +302,7 @@ namespace
     state.x = edge ? -1 : 0;
     LayoutNode(&scroll, state, &f.controller, 0);
     LOKA_VERIFY(a->visits == 1 && b->visits == 0);
-    LOKA_VERIFY(f.controller.scrollCalls.empty());
+    LOKA_VERIFY(f.controller.scrollControls().empty());
     LOKA_VERIFY(scroll.takeLayoutInputs() != NODE_DIRTY_NONE);
     LOKA_VERIFY(state.spacing == 31);
     f.controller.releaseNodeContexts(&scroll);
@@ -381,8 +381,8 @@ namespace
     LayoutState state = f.seat(23);
     state.width = 100;
     f.controller.layoutScrollView(&scroll, state, 0);
-    LOKA_VERIFY(f.controller.scrollCalls.size() == 2);
-    LOKA_VERIFY(f.controller.scrollCalls[1].maximum == 64);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 2);
+    LOKA_VERIFY(f.controller.scrollControls()[1].maximum == 64);
     f.controller.releaseNodeContexts(&scroll);
   }
 
@@ -457,8 +457,8 @@ namespace
       f.controller.rootNode_ = &root;
       ToolboxInputDoor::render(f.controller);
       LOKA_VERIFY(child->offer.width == (i == 1 ? 320 : 345));
-      LOKA_VERIFY(f.controller.scrollCalls.size() == (i == 2 ? 2 : 1));
-      const ToolboxScenePlatformController::ScrollCall &bar = f.controller.scrollCalls[0];
+      LOKA_VERIFY(f.controller.scrollControls().size() == (i == 2 ? 2 : 1));
+      const ToolboxScenePlatformController::ScrollBarControlBinding &bar = f.controller.scrollControls()[0];
       const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
       LOKA_VERIFY(binding.rect.left == (i == 1 ? 12 : 0) && binding.rect.top == (i == 1 ? 12 : 0));
       LOKA_VERIFY(binding.rect.right == (i == 1 ? 348 : 360) && binding.rect.bottom == (i == 1 ? 248 : 260));
@@ -471,7 +471,7 @@ namespace
       LOKA_VERIFY(bar.pageStep == (i == 1 ? 235 : i == 2 ? 244 : 259));
       if (i == 2)
       {
-        const ToolboxScenePlatformController::ScrollCall &horizontal = f.controller.scrollCalls[1];
+        const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
         LOKA_VERIFY(horizontal.rect.left == -1 && horizontal.rect.top == 245);
         LOKA_VERIFY(horizontal.rect.right == 346 && horizontal.rect.bottom == 261);
         LOKA_VERIFY(horizontal.maximum == 55 && horizontal.pageStep == 344);

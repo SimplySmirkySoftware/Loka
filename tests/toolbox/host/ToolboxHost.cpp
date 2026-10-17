@@ -50,9 +50,8 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor};
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState()};
   GrafPtr port = &initialPort;
-  Rect clip = {-30000, -30000, 30000, 30000};
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)
   {
@@ -61,11 +60,26 @@ namespace
     return r;
   }
 } // namespace
-namespace toolbox_host { Rect currentClip() { return clip; } }
+namespace toolbox_host
+{
+  Rect currentClip()
+  {
+    return port->native.clip;
+  }
+} // namespace toolbox_host
 
 bool ToolboxScenePlatformController::intersectWithProjectionClip(const Rect &rect, Rect &out) const
 {
   out = Intersection(rect, projectionClip);
+  if (this->projectionParentScopes_.activeDepth())
+  {
+    const loka::core::Frame &clip = this->projectionParentScopes_.current().clipRect;
+    const Rect viewport = {static_cast<short>(clip.y),
+                           static_cast<short>(clip.x),
+                           static_cast<short>(clip.y + clip.height),
+                           static_cast<short>(clip.x + clip.width)};
+    out = Intersection(out, viewport);
+  }
   return !EmptyRect(&out);
 }
 void GetPort(GrafPtr *out)
@@ -173,7 +187,7 @@ void DisposeRgn(RgnHandle r)
 }
 void GetClip(RgnHandle r)
 {
-  (*r)->rgnBBox = clip;
+  (*r)->rgnBBox = port->native.clip;
 }
 void RectRgn(RgnHandle r, const Rect *rect)
 {
@@ -185,7 +199,7 @@ void SectRgn(RgnHandle a, RgnHandle b, RgnHandle out)
 }
 void SetClip(RgnHandle r)
 {
-  clip = (*r)->rgnBBox;
+  port->native.clip = (*r)->rgnBBox;
 }
 bool RectInRgn(const Rect *r, RgnHandle region)
 {
@@ -204,7 +218,7 @@ void EraseRect(const Rect *)
 
 void ClipRect(const Rect *rect)
 {
-  clip = *rect;
+  port->native.clip = *rect;
 }
 
 #include "context/ToolboxTextEditorContext.hpp"
@@ -285,6 +299,18 @@ void TESetSelect(short a, short b, TEHandle te)
   (**te).selStart = a;
   (**te).selEnd = b;
 }
+namespace
+{
+  void ApplyTECompletion(TEHandle te, std::vector<HostTECompletion> &script)
+  {
+    if (script.empty())
+      return;
+    (**te).destRect = script.front().destRect;
+    (**te).selStart = script.front().selStart;
+    (**te).selEnd = script.front().selEnd;
+    script.erase(script.begin());
+  }
+} // namespace
 void TEKey(char key, TEHandle te)
 {
   TERec &t = **te;
@@ -292,6 +318,7 @@ void TEKey(char key, TEHandle te)
   {
     t.selStart = std::max(0, std::min(static_cast<int>(t.teLength), t.selStart + (key == 28 ? -1 : 1)));
     t.selEnd = t.selStart;
+    ApplyTECompletion(te, t.keyCompletions);
     return;
   }
   if (t.selStart != t.selEnd)
@@ -306,6 +333,7 @@ void TEKey(char key, TEHandle te)
   t.selEnd = t.selStart;
   t.teLength = static_cast<short>(t.text.size());
   TECalText(te);
+  ApplyTECompletion(te, t.keyCompletions);
   if (toolbox_host::afterKey) toolbox_host::afterKey(te);
 }
 void TEClick(Point p, bool, TEHandle te)
@@ -317,6 +345,7 @@ void TEClick(Point p, bool, TEHandle te)
       --row;
   offset = std::min(static_cast<int>((**te).teLength), offset + std::max(0, (p.h - (**te).viewRect.left) / 6));
   TESetSelect(offset, offset, te);
+  ApplyTECompletion(te, (**te).clickCompletions);
 }
 void TEAutoView(bool value, TEHandle te)
 {
@@ -391,7 +420,11 @@ void ToolboxScenePlatformController::flushTE()
 
 void TEActivate(TEHandle te) { GetPort(&toolbox_host::activationPort); (**te).active = true; }
 void TEDeactivate(TEHandle te) { GetPort(&toolbox_host::deactivationPort); (**te).active = false; }
-void TEIdle(TEHandle te) { ++(**te).idleCalls; }
+void TEIdle(TEHandle te)
+{
+  ++(**te).idleCalls;
+  ApplyTECompletion(te, (**te).idleCompletions);
+}
 bool PtInRect(Point p, const Rect *r)
 {
   return p.h >= r->left && p.h < r->right && p.v >= r->top && p.v < r->bottom;
@@ -419,18 +452,10 @@ short ToolboxScenePlatformController::measureTextWidth(
 #include "core/util/StateTrackerGuard.hpp"
 namespace toolbox_host
 {
-  ControlRef hitControl = 0;
-  short trackedValue = 1;
   short popupItem = 2;
   unsigned tracks = 0;
-}
-namespace
-{
-  int gActiveScrollBarLineStep = 1, gActiveScrollBarPageStep = 1;
-  ControlActionUPP ScrollBarActionUPP() { return 0; }
-
-}
-#include "ToolboxControlInput.cpp"
+} // namespace toolbox_host
+#include "ToolboxScrollBarLedger.cpp"
 #include "ToolboxInputPublication.cpp"
 #ifndef LOKA_HOST_CONTROL_WIDTH
 #include "context/ToolboxButtonInput.cpp"
@@ -488,7 +513,7 @@ void ForeColor(long ink)
 void FillRect(const Rect *rect, const Pattern *pattern)
 {
   toolbox_host::Fill fill;
-  fill.rect = Intersection(*rect, clip);
+  fill.rect = Intersection(*rect, port->native.clip);
   fill.pattern = *pattern;
   fill.ink = port->fgColor;
   if (!EmptyRect(&fill.rect))
@@ -587,3 +612,13 @@ void PaintRect(const Rect *rect)
   toolbox_host::stencilRuns.push_back(run);
 }
 #endif
+
+void ToolboxScenePlatformController::flushControls()
+{
+  // Same shared intake as the production flush; unrelated button pooling is
+  // outside this fixture, so its queue uses a zero-capacity bucket.
+  loka::app::scene::ExactMatchHandleBucket<ControlRef> buttons(0);
+  this->flushRetiredEntriesInto(this->retiredControls_, buttons);
+  this->flushRetiredEntriesInto(this->retiredScrollBarControls_, this->scrollBarLedger_.scrollBarBucket_);
+}
+#include "ToolboxControlFake.cpp"

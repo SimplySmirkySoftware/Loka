@@ -3,15 +3,35 @@
 #include "TextEdit.h"
 #include <string>
 #include <vector>
-struct HostControl { short value; };
+struct HostControl;
 typedef HostControl *ControlRef;
 typedef short ControlPartCode;
 typedef void (*ControlActionUPP)(ControlRef, ControlPartCode);
+#ifndef pascal
+#define pascal
+#endif
 enum { kControlIndicatorPart = 129 };
 namespace toolbox_host
 {
-  extern ControlRef hitControl;
-  extern short trackedValue;
+  /** One gesture; callbacks are delivered only for non-thumb presses. */
+  struct TrackScript
+  {
+    short press, release, finalValue;
+    std::vector<short> callbacks;
+    TrackScript(short part = kControlIndicatorPart, short up = kControlIndicatorPart, short value = 0)
+        : press(part),
+          release(up),
+          finalValue(value)
+    {
+    }
+  };
+  struct ControlCall
+  {
+    std::string operation;
+    GrafPtr currentPort;
+    Rect currentClip, ownerClip;
+    bool painted;
+  };
   extern short popupItem;
   extern unsigned tracks;
   Rect currentClip();
@@ -36,37 +56,55 @@ namespace toolbox_host
   };
   extern ControlCalls controlCalls;
 }
-inline short GetControlValue(ControlRef c) { return c->value; }
-inline void SetControlValue(ControlRef c, short value)
+/** The fake OS owns heap controls; window control lists borrow them. */
+struct HostControl
 {
-  ++toolbox_host::controlCalls.values;
-  toolbox_host::controlCalls.valueClip = toolbox_host::currentClip();
-  c->value = value;
-}
-inline void HiliteControl(ControlRef, short)
+  short value, minimum, maximum, hilite;
+  GrafPtr owner;
+  Rect rect;
+  bool visible;
+  toolbox_host::TrackScript tracking;
+  std::vector<toolbox_host::ControlCall> calls;
+  HostControl(short initial = 0)
+      : value(initial),
+        minimum(0),
+        maximum(32767),
+        hilite(0),
+        owner(0),
+        rect(),
+        visible(false)
+  {
+  }
+};
+ControlRef NewControl(GrafPtr, const Rect *, const unsigned char *, bool, short, short, short, short, long);
+void DisposeControl(ControlRef);
+void MoveControl(ControlRef, short, short);
+void SizeControl(ControlRef, short, short);
+void SetControlMinimum(ControlRef, short);
+void SetControlMaximum(ControlRef, short);
+inline short GetControlMinimum(ControlRef c)
 {
-  ++toolbox_host::controlCalls.hilites;
-  toolbox_host::controlCalls.hiliteClip = toolbox_host::currentClip();
+  return c->minimum;
 }
-inline void ShowControl(ControlRef)
+inline short GetControlMaximum(ControlRef c)
 {
-  ++toolbox_host::controlCalls.shows;
-  toolbox_host::controlCalls.showClip = toolbox_host::currentClip();
+  return c->maximum;
 }
-inline void Draw1Control(ControlRef)
+inline short GetControlValue(ControlRef c)
 {
-  ++toolbox_host::controlCalls.draws;
-  toolbox_host::controlCalls.drawClip = toolbox_host::currentClip();
+  return c->value;
 }
-inline void HideControl(ControlRef c)
+inline ControlActionUPP NewControlActionUPP(ControlActionUPP action)
 {
-  ++toolbox_host::controlCalls.hides;
-  toolbox_host::controlCalls.lastHidden = c;
+  return action;
 }
-inline short FindControl(Point, GrafPtr, ControlRef *out)
-{ *out = toolbox_host::hitControl; return *out ? kControlIndicatorPart : 0; }
-inline short TrackControl(ControlRef c, Point, ControlActionUPP)
-{ ++toolbox_host::tracks; c->value = toolbox_host::trackedValue; return kControlIndicatorPart; }
+void SetControlValue(ControlRef, short);
+void HiliteControl(ControlRef, short);
+void ShowControl(ControlRef);
+void Draw1Control(ControlRef);
+void HideControl(ControlRef);
+short FindControl(Point, GrafPtr, ControlRef *);
+short TrackControl(ControlRef, Point, ControlActionUPP);
 #ifdef LOKA_HOST_CONTROL_WIDTH
 namespace toolbox_host { extern Rect controlRect; extern std::vector<std::string> controlTitles; }
 struct HostQD { int gray; };

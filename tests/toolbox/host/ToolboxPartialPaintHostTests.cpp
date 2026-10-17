@@ -87,6 +87,7 @@ int main(int argc, char **argv)
   const char *mode = argv[1];
   const std::string id(mode, std::strcspn(mode, "-"));
   ToolboxWindow window;
+  HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   Scene scene((Boundary<PaintNode>(PaintProps())));
   scene.mount(&controller);
@@ -201,7 +202,8 @@ int main(int argc, char **argv)
   toolbox_host::reset();
   LayoutState seat = Seat();
   context->layout(&controller, seat);
-  HostControl control = {0};
+  HostControl control;
+  control.owner = window.window();
   std::string installedLabel;
   const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
   Draw(*context, controller, mode, control, installedLabel);

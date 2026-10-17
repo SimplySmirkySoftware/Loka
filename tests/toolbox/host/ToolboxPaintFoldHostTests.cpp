@@ -93,6 +93,7 @@ void Run(bool statusLast, bool partialNeighbour = false)
   gStatusLast = statusLast;
   using loka::dsl::testing::SceneTestAccess;
   ToolboxWindow window;
+  HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   Scene scene((Boundary<FoldNode>(FoldProps())));
   scene.mount(&controller);
@@ -347,6 +348,7 @@ void GradientPins()
 void CardStencilPins()
 {
   ToolboxWindow window;
+  HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   for (int extent = CARD_SHADOW_NONE; extent <= CARD_SHADOW_WIDE; ++extent)
     for (int residue = 0; residue < 8; ++residue)
@@ -435,6 +437,7 @@ void CardStencilPins()
 void CardPins()
 {
   ToolboxWindow window;
+  HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
   LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
   CardBandNode node((CardBandProps(CARD_BAND_TOP, CardStyle(CARD_SHADOW_DROP))));
