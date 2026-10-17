@@ -800,13 +800,12 @@ void testCardStandardStyle()
   LOKA_VERIFY(fast.extent() == CARD_SHADOW_WIDE && fast.ink() == CARD_SHADOW_ALPHA);
   CpuClass answer;
   const bool answered = queryCpuClass(answer);
-#if defined(__linux__)
+#if defined(_WIN32) || (defined(__APPLE__) && defined(__MACH__))
+  LOKA_VERIFY(answered && answer == CPU_CLASS_G3_OR_FASTER);
+#elif defined(__linux__)
   LOKA_VERIFY(!answered);
 #else
-  std::printf("[skip] Linux-only queryCpuClass decline pin on non-Linux target\n");
-#endif
-#if defined(_WIN32)
-  LOKA_VERIFY(answered && answer == CPU_CLASS_G3_OR_FASTER);
+  std::printf("[skip] queryCpuClass answer pin: no expected answer for this target\n");
 #endif
   if (!answered)
     answer = CPU_CLASS_68K;
