@@ -191,6 +191,9 @@ QuickDraw reads `Pattern` arguments with long moves on the 68000, which faults
 on an odd address (#1398). Toolbox `Pattern` constants are declared as
 `ToolboxAlignedPattern` so their addresses are even despite `Pattern` itself
 having byte alignment.
+`tools/ci/check_toolbox_pattern_alignment.py` refuses a `Pattern` declared by value
+outside `ToolboxAlignedPattern`; bitmap bit buffers (`BitMap.baseAddr`) need word
+alignment too but are not covered by this guard.
 
 ### Small-object pool
 
