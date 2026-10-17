@@ -20,11 +20,31 @@ EXCLUDED = ("tests/toolbox/host/", "tests/win32/", "tests/macos/", "tests/platfo
 PATTERN = re.compile(r"\bPattern\b")
 QUALIFIERS = r"(?:(?:const|volatile|static)\s+)*"
 VALUE = re.compile(r"\s*" + QUALIFIERS + r"(?:\(\s*)?(?!(?:const|volatile|static)\b)[A-Za-z_]\w*\b")
-# Also catch a value following simple pointer/reference declarators in a list.
-BORROWED = re.compile(r"\s*" + QUALIFIERS + r"[*&][^;,{}()]*,")
 POINTER_TYPE = re.compile(r"\s*" + QUALIFIERS + r"[*&]")
 NEW = re.compile(r"\bnew\s+(?:\([^;{}]*\)\s*)?" + QUALIFIERS + r"(?:::)?\s*$")
 TYPEDEF = re.compile(r"\btypedef\b[^;{}]*$")
+
+
+def skip_borrowed(tail):
+    """Skips leading pointer/reference declarators, initializers included, so a
+    value declared after them in the same list is still seen."""
+    while POINTER_TYPE.match(tail):
+        depth = 0
+        for i, ch in enumerate(tail):
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+                if depth < 0:
+                    return tail[i:]
+            elif depth == 0 and ch == ";":
+                return tail[i:]
+            elif depth == 0 and ch == ",":
+                tail = tail[i + 1:]
+                break
+        else:
+            return ""
+    return tail
 
 
 def violations(path, source):
@@ -40,11 +60,11 @@ def violations(path, source):
         # A comma inside a parameter list starts another type, not another
         # declarator of Pattern. Statement/block boundaries exclude outer calls.
         context = re.split(r"[;{}]", prefix)[-1]
+        borrowed = POINTER_TYPE.match(tail)
         if context.count("(") == context.count(")"):
-            while borrowed := BORROWED.match(tail):
-                tail = tail[borrowed.end():]
+            tail = skip_borrowed(tail)
         if (TYPEDEF.search(prefix)
-                or (NEW.search(prefix) and not POINTER_TYPE.match(tail))
+                or (NEW.search(prefix) and not borrowed)
                 or VALUE.match(tail)):
             yield source.count("\n", 0, match.start()) + 1, "Pattern"
 

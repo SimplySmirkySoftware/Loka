@@ -20,6 +20,9 @@ class ToolboxPatternAlignmentCheckerTest(unittest.TestCase):
             "static volatile ::Pattern table[9];", "::Pattern const value = {};",
             "Pattern volatile value;", "Pattern first, second;", "Pattern (value);",
             "Pattern *pointer, value;", "Pattern &reference = other, value;",
+            # Initializers with calls, braces or nested commas before a value (#1408 review).
+            "Pattern *p = currentPattern(), value;", "Pattern &r = pick(a, b), value;",
+            "Pattern *p = table[i], *q = {0}, value;",
             "new Pattern;", "new ::Pattern[9];", "new const Pattern();",
             "new (storage) volatile ::Pattern;",
             "typedef Pattern Hidden;", "typedef const ::Pattern Hidden[9];",
@@ -39,6 +42,7 @@ class ToolboxPatternAlignmentCheckerTest(unittest.TestCase):
             "void draw(Pattern const *pattern, int width);",
             "new Pattern *;", "new const ::Pattern *[9];",
             "volatile ::Pattern *p;", "Pattern *p, *q;", "Pattern *p[9];",
+            "Pattern *p = currentPattern(), *q = pick(a, b);",
             "sizeof(Pattern);", "sizeof(::Pattern);", "sizeof(const Pattern);",
             "(Pattern *)ptr;", "static_cast<const Pattern *>(ptr);",
             "x.pattern; x.pat; qd.gray; qd.black; qd.white;",
