@@ -20,6 +20,8 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
+#include "core/PushStateTracker.hpp"
 #include "app/RectSurface.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "core/State.hpp"
@@ -1176,4 +1178,131 @@ void testWin32ScrollViewRefusedLayoutKeepsHorizontalMetrics()
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  void probePump()
+  {
+    MSG msg;
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE))
+    {
+      TranslateMessage(&msg);
+      DispatchMessageW(&msg);
+    }
+  }
+  void probeListZ(HWND root, const char *label)
+  {
+    std::printf("PROBE %s z-order (top to bottom):\n", label);
+    for (HWND h = GetWindow(root, GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT))
+    {
+      wchar_t cls[64]; wchar_t txt[32];
+      GetClassNameW(h, cls, 64); GetWindowTextW(h, txt, 32);
+      RECT r; GetWindowRect(h, &r); POINT tl = {r.left, r.top}; ScreenToClient(root, &tl);
+      std::printf("PROBE   %ls '%ls' at (%ld,%ld) %ldx%ld style=%08lX\n", cls, txt, tl.x, tl.y, r.right - r.left, r.bottom - r.top,
+                  static_cast<unsigned long>(GetWindowLongPtrW(h, GWL_STYLE)));
+    }
+  }
+  void probeSample(HWND root, const char *label)
+  {
+    InvalidateRect(root, NULL, TRUE);
+    RedrawWindow(root, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    probePump();
+    UpdateWindow(root);
+    const POINT pts[4] = {{280, 30}, {40, 30}, {165, 30}, {150, 150}};
+    const char *names[4] = {"ground-over-content", "toolbar-button", "text-cell", "content-below"};
+    HDC dc = GetDC(root);
+    for (int i = 0; i < 4; ++i)
+    {
+      const COLORREF c = GetPixel(dc, pts[i].x, pts[i].y);
+      POINT sp = pts[i]; ClientToScreen(root, &sp);
+      HWND hit = WindowFromPoint(sp);
+      wchar_t cls[64] = L""; if (hit) GetClassNameW(hit, cls, 64);
+      std::printf("PROBE %s %s (%ld,%ld): pixel=%08lX hit=%ls%s\n", label, names[i], pts[i].x, pts[i].y,
+                  static_cast<unsigned long>(c), cls, hit == root ? " (root)" : "");
+    }
+    ReleaseDC(root, dc);
+    std::printf("PROBE %s colors: WINDOW=%08lX BTNFACE=%08lX WINDOWTEXT=%08lX\n", label,
+                static_cast<unsigned long>(GetSysColor(COLOR_WINDOW)), static_cast<unsigned long>(GetSysColor(COLOR_BTNFACE)),
+                static_cast<unsigned long>(GetSysColor(COLOR_WINDOWTEXT)));
+    std::fflush(stdout);
+  }
+} // namespace
+
+void testWin32ProbeZStackOrder()
+{
+  std::printf("\n==== [testWin32ProbeZStackOrder] start ====\n");
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    loka::app::RectSurfaceModel initial;
+    initial.rectCount = 1;
+    initial.rects[0] = loka::app::RectSprite(0, 0, 300, 40);
+    loka::core::PushStateTracker tracker;
+    loka::core::MutableState<loka::app::RectSurfaceModel> model(initial);
+    tracker.addState(&model);
+    loka::app::ZStackNode stack((loka::app::ZStackProps()));
+    loka::app::ScrollViewNode *scroll = new loka::app::ScrollViewNode((loka::app::ScrollViewProps(offset.state())));
+    addButtonColumn(*scroll, 8);
+    stack.addChild(scroll);
+    loka::app::ZStackNode *overlay = new loka::app::ZStackNode((loka::app::ZStackProps()));
+    loka::app::RectSurfaceProps groundProps;
+    groundProps.model(&model).size(300, 40);
+    overlay->addChild(new loka::app::RectSurfaceNode(groundProps));
+    loka::app::StackNode *row = new loka::app::StackNode((loka::app::StackProps(loka::app::STACK_AXIS_ROW)));
+    row->addChild(new loka::app::ButtonNode((loka::app::ButtonProps())));
+    row->addChild(new loka::app::TextNode((loka::app::TextProps("*"))));
+    overlay->addChild(row);
+    stack.addChild(overlay);
+    establishLayout(controller, &stack, 300, 200);
+    ShowWindow(root, SW_SHOWNOACTIVATE);
+    probePump();
+    UpdateWindow(root);
+
+    HWND scrollHwnd = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    HWND groundHwnd = findChildWindowByClass(root, L"LOKA_RECT_SURFACE");
+    HWND textHwnd = FindWindowExW(root, NULL, L"STATIC", L"*");
+    std::vector<HWND> buttons = directChildWindowsByClass(root, L"BUTTON");
+    LOKA_VERIFY(scrollHwnd && groundHwnd && textHwnd && buttons.size() == 1);
+    HWND toolbarButton = buttons[0];
+
+    probeListZ(root, "A-today");
+    probeSample(root, "A-today");
+
+    // Variant B: true z. Overlay roots to the top in composition order; the lower ScrollView clips siblings.
+    SetWindowPos(groundHwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(toolbarButton, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(textHwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowLongPtrW(scrollHwnd, GWL_STYLE, GetWindowLongPtrW(scrollHwnd, GWL_STYLE) | WS_CLIPSIBLINGS);
+    SetWindowPos(scrollHwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    probeListZ(root, "B-truez");
+    probeSample(root, "B-truez");
+    // B2: scroll the content by one line through the fact and relayout, then sample again (does the overlay survive a scroll repaint?).
+    offset.state().set(loka::core::Frame(0, 10, 0, 0));
+    controller.relayout(300, 200);
+    probePump();
+    UpdateWindow(root);
+    probeSample(root, "B-truez-after-scroll");
+
+    // Variant C: paint-order z. Overlay roots to the bottom in composition order (last child lowest); no clipping.
+    SetWindowLongPtrW(scrollHwnd, GWL_STYLE, GetWindowLongPtrW(scrollHwnd, GWL_STYLE) & ~static_cast<LONG_PTR>(WS_CLIPSIBLINGS));
+    SetWindowPos(scrollHwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    SetWindowPos(groundHwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(toolbarButton, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(textHwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    probeListZ(root, "C-paintorder");
+    probeSample(root, "C-paintorder");
+    offset.state().set(loka::core::Frame(0, 20, 0, 0));
+    controller.relayout(300, 200);
+    probePump();
+    UpdateWindow(root);
+    probeSample(root, "C-paintorder-after-scroll");
+
+    controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+  std::printf("==== [testWin32ProbeZStackOrder] PASSED ====\n");
 }
