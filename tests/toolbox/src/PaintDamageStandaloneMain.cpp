@@ -703,7 +703,7 @@ namespace
   class CardPixels
   {
   public:
-    explicit CardPixels(const CardStyle &style = CardStyle())
+    explicit CardPixels(const CardStyle &style = CardStyle(CARD_SHADOW_DROP))
         : card_(CardProps(style))
     {
       this->card_.addChild(new Node());
@@ -737,7 +737,7 @@ namespace
           *pixels++ = GetPixel(x, y) != 0;
     }
     /** Whole-card common oracle with the native border, independent of band partitioning. */
-    static bool tableReference(const Rect &frame, const CardStyle &style = CardStyle())
+    static bool tableReference(const Rect &frame, const CardStyle &style = CardStyle(CARD_SHADOW_DROP))
     {
       const loka::app::detail::CardShadowTable &g = style.geometry();
       const loka::core::Frame body(frame.left + g.allowance[0],
