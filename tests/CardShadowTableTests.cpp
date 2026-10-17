@@ -68,18 +68,59 @@ namespace
       return static_cast<int>((255L * sum + 531441L / 2) / 531441L);
     }
   };
+  /** Historical sampler choice is an independent discriminator for the new
+      transfer grid, including near-only pixels past a small body's midline. */
+  int referenceSide(int value, int size, int nearCut, int farCut)
+  {
+    const bool near = value < nearCut, far = value >= size - farCut;
+    return near && far ? (value < size / 2 ? 0 : 1) : near ? 0 : far ? 1 : 2;
+  }
+  void verifyGridSample(const CardStyle &style, const Frame &body, const CardShadowGridLines &grid, int x, int y)
+  {
+    const detail::CardShadowTable &g = style.geometry();
+    LOKA_VERIFY(grid.x[0] == body.x - g.allowance[0] && grid.x[3] == body.x + body.width + g.allowance[2]);
+    LOKA_VERIFY(grid.y[0] == body.y - g.allowance[1] && grid.y[3] == body.y + body.height + g.allowance[3]);
+    const int horizontal = x < grid.x[1] ? 0 : x >= grid.x[2] ? 1 : 2;
+    const int vertical = y < grid.y[1] ? 0 : y >= grid.y[2] ? 1 : 2;
+    LOKA_VERIFY(horizontal == referenceSide(x - body.x, body.width, g.cut[0], g.cut[2]));
+    LOKA_VERIFY(vertical == referenceSide(y - body.y, body.height, g.cut[1], g.cut[3]));
+    LOKA_VERIFY(grid.x[1] <= grid.x[2] && grid.y[1] <= grid.y[2]);
+    LOKA_VERIFY(grid.x[1] - grid.x[0] <= detail::kCardShadowMaximumTileWidth);
+    LOKA_VERIFY(grid.x[3] - grid.x[2] <= detail::kCardShadowMaximumTileWidth);
+    LOKA_VERIFY(grid.y[1] - grid.y[0] <= detail::kCardShadowMaximumTileHeight);
+    LOKA_VERIFY(grid.y[3] - grid.y[2] <= detail::kCardShadowMaximumTileHeight);
+  }
   void verifyBody(CardShadowExtent extent, const Frame &body)
   {
     const Oracle oracle(body);
     const CardStyle style(extent);
+    const CardShadowGridLines grid = CardShadowGrid(style, body);
     for (int y = body.y - 9; y < body.y + body.height + 17; ++y)
+    {
+      unsigned char run[256];
+      const int count = body.width + 26;
+      LOKA_VERIFY(count + 2 <= static_cast<int>(sizeof(run)));
+      run[0] = run[count + 1] = 0xa5;
+      CardShadowDensityRun(style, body, body.x - 13, y, count, run + 1);
+      LOKA_VERIFY(run[0] == 0xa5 && run[count + 1] == 0xa5);
       for (int x = body.x - 13; x < body.x + body.width + 13; ++x)
       {
+        verifyGridSample(style, body, grid, x, y);
         const int expected = oracle.density(extent, x, y);
+        LOKA_VERIFY(run[x - body.x + 14] == expected);
         LOKA_VERIFY(CardShadowDensity(style, body, x, y) == expected);
         LOKA_VERIFY(CardShadowDensity(CardStyle(extent, CARD_SHADOW_ALPHA), body, x, y) == expected);
+        // Vary run starts and lengths across cuts, and guard both output ends.
+        unsigned char partial[19];
+        partial[0] = partial[18] = 0xa5;
+        CardShadowDensityRun(style, body, x, y, 17, partial + 1);
+        LOKA_VERIFY(partial[0] == 0xa5 && partial[18] == 0xa5);
+        for (int i = 0; i < 17; ++i)
+          LOKA_VERIFY(partial[i + 1] == CardShadowDensity(style, body, x + i, y));
       }
+    }
   }
+
   int verifyBands(CardShadowExtent extent, const Frame &body)
   {
     const CardStyle style(extent);
@@ -95,16 +136,26 @@ namespace
     {
       const Frame &band = bands[role];
       const Frame local = CardBodyInBand(band, CardBandProps(static_cast<CardBandRole>(role), style));
+      const CardShadowGridLines grid = CardShadowGrid(style, local);
       for (int y = band.y; y < band.y + band.height; ++y)
+      {
+        unsigned char run[256];
+        LOKA_VERIFY(band.width + 2 <= static_cast<int>(sizeof(run)));
+        run[0] = run[band.width + 1] = 0xa5;
+        CardShadowDensityRun(style, local, band.x, y, band.width, run + 1);
+        LOKA_VERIFY(run[0] == 0xa5 && run[band.width + 1] == 0xa5);
         for (int x = band.x; x < band.x + band.width; ++x)
         {
+          verifyGridSample(style, local, grid, x, y);
           const int expected = CardShadowDensity(style, body, x, y);
           const int actual = CardShadowDensity(style, local, x, y);
+          LOKA_VERIFY(run[x - band.x + 1] == actual);
           if (expected != actual)
             ++mismatches;
           if (extent == CARD_SHADOW_WIDE)
             LOKA_VERIFY(actual == expected);
         }
+      }
       if (extent == CARD_SHADOW_WIDE)
       {
         // Enumerate the changed far-side caster, expanded by finite support
@@ -142,6 +193,10 @@ void testCardShadowIndependentOracle()
 
 void testCardShadowBandLocality()
 {
+  // A virtual DROP body is only promised to reconstruct its own band. Pin the
+  // sampler's corner choice separately outside that band: the final corner
+  // column is zero here, while the adjacent bottom profile would ink it.
+  LOKA_VERIFY(CardShadowDensity(CardStyle(CARD_SHADOW_DROP), Frame(-31, -18, 12, 12), -26, -4) == 0);
   int dropMismatch = 0;
   for (int extent = CARD_SHADOW_DROP; extent <= CARD_SHADOW_WIDE; ++extent)
   {
@@ -162,6 +217,24 @@ void testCardShadowBandLocality()
 
 void testCardShadowStencilLattice()
 {
+  unsigned char thresholds[8], pattern[8];
+  for (int density = 0; density < 256; ++density)
+  {
+    CardShadowStencilPattern(static_cast<unsigned char>(density), pattern);
+    for (int y = -8; y < 16; ++y)
+    {
+      CardShadowStencilThresholdRow(y, thresholds);
+      for (int x = -8; x < 16; ++x)
+      {
+        const bool ink = CardShadowStencilInk(static_cast<unsigned char>(density), x, y);
+        LOKA_VERIFY((density > thresholds[x & 7]) == ink);
+        LOKA_VERIFY(((pattern[y & 7] & (0x80 >> (x & 7))) != 0) == ink);
+      }
+    }
+  }
+  unsigned char untouched = 0xa5;
+  CardShadowDensityRun(CardStyle(), Frame(0, 0, 14, 14), 0, 0, 0, &untouched);
+  LOKA_VERIFY(untouched == 0xa5);
   const unsigned char expected[64] = {0,  48, 12, 60, 3,  51, 15, 63, 32, 16, 44, 28, 35, 19, 47, 31,
                                       8,  56, 4,  52, 11, 59, 7,  55, 40, 24, 36, 20, 43, 27, 39, 23,
                                       2,  50, 14, 62, 1,  49, 13, 61, 34, 18, 46, 30, 33, 17, 45, 29,
