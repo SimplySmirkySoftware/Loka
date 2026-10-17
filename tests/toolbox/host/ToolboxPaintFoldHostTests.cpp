@@ -19,6 +19,7 @@
 #include "support/TestVerify.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include <cstdio>
+#include <cstddef>
 
 namespace
 {
@@ -147,7 +148,7 @@ void Run(bool statusLast, bool partialNeighbour = false)
       LOKA_VERIFY(toolbox_host::fills[band].ink == blackColor);
       for (unsigned y = 0; y < 8; ++y)
         LOKA_VERIFY(toolbox_host::fills[band].pattern.pat[y]
-                    == loka::toolbox::kToolboxGradientPatterns[8 - 2 * band].pat[y]);
+                    == loka::toolbox::kToolboxGradientPatterns[8 - 2 * band].pattern.pat[y]);
     }
   }
   edge->props.edge = RIBBON_GROUP_EDGE_LEFT;
@@ -276,6 +277,22 @@ void Run(bool statusLast, bool partialNeighbour = false)
   SceneTestAccess::unmount(scene);
   LOKA_VERIFY(!controller.compositionReplay.required());
 }
+namespace
+{
+  template <typename T, size_t N> size_t ElementAlignment(const T (&)[N])
+  {
+    struct Probe
+    {
+      char c;
+      T element;
+    };
+    return offsetof(Probe, element);
+  }
+} // namespace
+void testToolboxGradientPatternsAreWordAligned()
+{
+  LOKA_VERIFY(ElementAlignment(loka::toolbox::kToolboxGradientPatterns) >= 2);
+}
 void GradientPins()
 {
   using namespace loka::toolbox;
@@ -285,12 +302,12 @@ void GradientPins()
       unsigned row = 0, column = 0;
       for (unsigned b = 0; b < 8; ++b)
       {
-        row += (kToolboxGradientPatterns[k].pat[a] >> b) & 1;
-        column += (kToolboxGradientPatterns[k].pat[b] >> a) & 1;
+        row += (kToolboxGradientPatterns[k].pattern.pat[a] >> b) & 1;
+        column += (kToolboxGradientPatterns[k].pattern.pat[b] >> a) & 1;
       }
       LOKA_VERIFY(row == k && column == k);
-      LOKA_VERIFY(kToolboxGradientPatterns[0].pat[a] == 0);
-      LOKA_VERIFY(kToolboxGradientPatterns[8].pat[a] == 255);
+      LOKA_VERIFY(kToolboxGradientPatterns[0].pattern.pat[a] == 0);
+      LOKA_VERIFY(kToolboxGradientPatterns[8].pattern.pat[a] == 255);
     }
   const unsigned char levels[] = {8, 6, 4, 2};
   const int heights[] = {1, 3, 4, 41, 43};
@@ -320,7 +337,7 @@ void GradientPins()
         LOKA_VERIFY(toolbox_host::fills[i].rect.bottom == boundaries[i]);
         LOKA_VERIFY(toolbox_host::fills[i].rect.top == boundaries[i + 1]);
         for (unsigned y = 0; y < 8; ++y)
-          LOKA_VERIFY(toolbox_host::fills[i].pattern.pat[y] == kToolboxGradientPatterns[levels[i]].pat[y]);
+          LOKA_VERIFY(toolbox_host::fills[i].pattern.pat[y] == kToolboxGradientPatterns[levels[i]].pattern.pat[y]);
       }
     }
   }
@@ -375,7 +392,7 @@ void CardPins()
     PenMode(42);
     toolbox_host::pen.width = 2;
     toolbox_host::pen.height = 3;
-    PenPat(&loka::toolbox::kToolboxGradientPatterns[2]);
+    PenPat(&loka::toolbox::kToolboxGradientPatterns[2].pattern);
     const Rect savedClip = toolbox_host::currentClip();
     PenState saved;
     GetPenState(&saved);
@@ -384,7 +401,7 @@ void CardPins()
     LOKA_VERIFY(toolbox_host::shadowPaints == paints + 1 && toolbox_host::regionDifferences == differences + 1);
     LOKA_VERIFY(toolbox_host::shadowMode == patOr);
     for (int row = 0; row < 8; ++row)
-      LOKA_VERIFY(toolbox_host::shadowPattern.pat[row] == loka::toolbox::kToolboxGradientPatterns[4].pat[row]);
+      LOKA_VERIFY(toolbox_host::shadowPattern.pat[row] == loka::toolbox::kToolboxGradientPatterns[4].pattern.pat[row]);
     LOKA_VERIFY(toolbox_host::roundFrames.size() == 1 && EqualRect(&toolbox_host::roundFrames[0], &bodies[role]));
     LOKA_VERIFY(toolbox_host::erases == erases && toolbox_host::backgroundColors.empty());
     LOKA_VERIFY(window.port.fgColor == greenColor && toolbox_host::pen.mode == saved.mode);
@@ -455,6 +472,7 @@ int main()
   LOKA_VERIFY(!source.queryPaintAnswer(&card, 0, query, answer));
   LOKA_VERIFY(source.queryPaintAnswer(&band, 0, query, answer));
   LOKA_VERIFY(answer.kind == PAINT_ANSWER_REFUSED);
+  testToolboxGradientPatternsAreWordAligned();
   CardPins();
   GradientPins();
   Run(false);

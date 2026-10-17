@@ -151,7 +151,7 @@ void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
   FrameRoundRect(&shadow, oval, oval);
   CloseRgn(regions.shadow);
   DiffRgn(regions.shadow, regions.body, regions.shadow);
-  PenPat(&loka::toolbox::kToolboxGradientPatterns[4]);
+  PenPat(&loka::toolbox::kToolboxGradientPatterns[4].pattern);
   PenMode(patOr);
   PaintRgn(regions.shadow);
   PenNormal();
