@@ -10,8 +10,9 @@ namespace loka
     namespace scene
     {
       /** One key value read at construction and compared against the live key
-          later. It lives inside the declaration it describes: a committed
-          declaration owns its key snapshot (KeyedSeatDesign.md). */
+          later. It belongs to a keyed consumer's committed result: a Boundary
+          seat's committed declaration owns it, and the App's window seat holds
+          it inline (KeyedSeatDesign.md). */
       template <class K> class KeySnapshot
       {
       public:
