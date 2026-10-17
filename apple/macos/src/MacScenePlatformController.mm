@@ -658,14 +658,15 @@ MacScenePlatformController::layoutScrollViewNode(
     // view so the outer document remains the only structural clipping parent.
     return LayoutNodeResult(state.width, state.y);
   }
-  if (state.x < SHRT_MIN || state.x > SHRT_MAX ||
-      state.y < SHRT_MIN || state.y > SHRT_MAX ||
-      state.width < 0 || state.width > SHRT_MAX ||
-      state.height < 0 || state.height > SHRT_MAX ||
-      (state.height > 0 && state.y > SHRT_MAX - state.height))
+  const int top = scrollView->props.contentInsets_.top();
+  if (state.x < SHRT_MIN || state.x > SHRT_MAX || state.y < SHRT_MIN || state.y > SHRT_MAX || state.width < 0
+      || state.width > SHRT_MAX || state.height < 0 || state.height > SHRT_MAX
+      || (state.height > 0 && state.y > SHRT_MAX - state.height) || state.y - top < SHRT_MIN)
   {
     // The shared traversal above consumes a short result. Refuse the viewport
-    // itself before its bottom or any child coordinate would narrow.
+    // itself before its bottom, its document origin (the seat less the top
+    // inset) or any child coordinate would narrow, and before the native
+    // view is created or moved.
     return LayoutNodeResult(state.width, state.y);
   }
 
@@ -693,7 +694,7 @@ MacScenePlatformController::layoutScrollViewNode(
     ctx->readLifecycleFactOnAttach();
   }
 
-  const int requestedOffset = scrollView->requestedOrigin().y;
+  const int requestedExtent = scrollView->requestedOrigin().y;
   LayoutState childBase = state;
   childBase.width = ctx->visibleWidth();
   short contentWidthLu = 0;
@@ -714,14 +715,11 @@ MacScenePlatformController::layoutScrollViewNode(
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
-  // AppKit applies scrolling through the clip view's bounds origin. Children
-  // therefore subtract the seat origin only; applying requestedOffset here
-  // would move them twice.
-  if (!parentScope.deriveScrolled(ctx->documentView(),
-                                  state.x,
-                                  state.y,
-                                  viewportClip,
-                                  childScope))
+  // The clip view scrolls, so the placement is a constant top inset, not the
+  // request: AppKit applies the request through the clip bounds, so applying
+  // it here would move children twice. Unlike Win32 and Toolbox, this rail
+  // does not use contentTranslation().
+  if (!parentScope.deriveScrolled(ctx->documentView(), state.x, state.y - top, viewportClip, childScope))
   {
     return LayoutNodeResult(state.width, state.y);
   }
@@ -729,6 +727,7 @@ MacScenePlatformController::layoutScrollViewNode(
   int currentY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
+  const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
     loka::app::scene::ProjectionParentScopeGuard scopeGuard(
         this->projectionParentScopes_, childScope);
@@ -741,7 +740,6 @@ MacScenePlatformController::layoutScrollViewNode(
     loka::dsl::CompositionCursor<loka::app::scene::Node> it(
         nestable ? nestable->childrenHead() : 0,
         nestable ? nestable->childrenCount() : 0);
-    const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
     loka::app::layout::StackGaps gaps(state.spacing());
     for (loka::app::scene::Node *child = it.next(); child; child = it.next())
     {
@@ -769,17 +767,26 @@ MacScenePlatformController::layoutScrollViewNode(
     contentHeight = this->projectionParentScopes_.current().contentHeight();
     shortRangeRefused =
         this->projectionParentScopes_.current().hasShortRangeRefusal();
-      if (shortRangeRefused)
-    {
-      // Seats recorded under a refused scope are not facts.
-      this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
-    }
+  }
+
+  const int extent = contentHeight + scrollView->props.contentInsets_.extentExtra();
+  const int extentBottom = state.y + extent;
+  // The extent and heightless bottom follow the Win32 and Toolbox short range;
+  // requestedOrigin() clamps the content fact to SHRT_MAX - top before conversion.
+  if (extent > SHRT_MAX || (state.height <= 0 && extentBottom > SHRT_MAX))
+  {
+    shortRangeRefused = true;
+  }
+  if (shortRangeRefused)
+  {
+    // Seats recorded under a refused scope are not facts, whichever check refused.
+    this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
   }
 
   if (!shortRangeRefused)
   {
     const int clampedOffset = ctx->commitScrollMetrics(
-        known ? contentWidthLu : 0, contentHeight, viewportHeight, clampedX, requestedOffset, horizontalBar);
+        known ? contentWidthLu : 0, extent, viewportHeight, clampedX, requestedExtent, horizontalBar);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishOrigin(clampedX, clampedOffset);
   }
@@ -788,11 +795,12 @@ MacScenePlatformController::layoutScrollViewNode(
   {
     return LayoutNodeResult(state.width, state.y + state.height);
   }
-  if (currentY < SHRT_MIN || currentY > SHRT_MAX)
+  if (shortRangeRefused || extentBottom > SHRT_MAX)
   {
     return LayoutNodeResult(state.width, state.y);
   }
-  return LayoutNodeResult(state.width, currentY);
+  // The Win32 and Toolbox heightless arms refuse the same wrap.
+  return LayoutNodeResult(state.width, extentBottom);
 }
 
 int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const LayoutState &state)
