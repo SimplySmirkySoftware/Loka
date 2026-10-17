@@ -8,6 +8,7 @@
 #include "core/Managed.hpp"
 #include "app/layout/StackSpans.hpp"
 #include "app/scene/state/WriteSeat.hpp"
+#include "ToolboxEditorScrollBar.hpp"
 #include <Quickdraw.h>
 #include <Controls.h>
 #include <cstddef>
@@ -32,6 +33,7 @@ public:
       a value copy removes the question entirely, the way PopupHit does. */
   struct ScrollBarControlBinding
   {
+    ToolboxEditorScrollBarAssociation editor;
     short resourceId;
     ControlRef control;
     loka::core::State<int> *value;

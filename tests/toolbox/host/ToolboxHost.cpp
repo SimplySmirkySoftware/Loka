@@ -6,6 +6,7 @@
 #include <cstring>
 namespace toolbox_host
 {
+  std::vector<std::string> paintOperations;
   long systemScript = smRoman;
   long keyboardScript = smRoman;
   unsigned beeps = 0;
@@ -376,6 +377,7 @@ void TEScroll(short horizontal, short vertical, TEHandle te)
 }
 void TEUpdate(const Rect *, TEHandle)
 {
+  toolbox_host::paintOperations.push_back("text");
   ++toolbox_host::updates;
 }
 signed char HGetState(Handle) { return 0; }
@@ -401,9 +403,16 @@ void OffsetRect(Rect *r, short x, short y)
 #ifdef LOKA_HOST_CONTROL_WIDTH
 namespace toolbox_host { Rect controlRect; }
 HostQD qd;
-void FrameRect(const Rect *rect) { toolbox_host::controlRect = *rect; }
+void FrameRect(const Rect *rect)
+{
+  toolbox_host::paintOperations.push_back("frame");
+  toolbox_host::controlRect = *rect;
+}
 #else
-void FrameRect(const Rect *) {}
+void FrameRect(const Rect *)
+{
+  toolbox_host::paintOperations.push_back("frame");
+}
 #endif
 #include "ToolboxTextEditorBinding.cpp"
 #include "ToolboxNativeRetirement.cpp"
@@ -497,7 +506,29 @@ namespace
 }
 #include "core/Profiler.hpp"
 #include "ToolboxRender.cpp"
+#ifdef LOKA_HOST_EDITOR_SCROLL
+#include "ToolboxDirtyReplay.hpp"
+namespace
+{
+  bool RectsIntersect(const Rect &a, const Rect &b)
+  {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+  }
+  bool HasImageViewNode(loka::app::scene::Node *)
+  {
+    return false;
+  }
+  bool HasRectSurfaceNode(loka::app::scene::Node *)
+  {
+    return false;
+  }
+  void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
+  void RenderDirtyImageViews(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
+} // namespace
+#include "ToolboxDirtyPresentation.cpp"
+#else
 void ToolboxScenePlatformController::renderDirty(const Rect &) { this->render(); }
+#endif
 
 short ToolboxScenePlatformController::measureTextWidth(const loka::core::String &value) const
 {
@@ -622,3 +653,5 @@ void ToolboxScenePlatformController::flushControls()
   this->flushRetiredEntriesInto(this->retiredScrollBarControls_, this->scrollBarLedger_.scrollBarBucket_);
 }
 #include "ToolboxControlFake.cpp"
+
+#include "ToolboxWindowIdle.cpp"

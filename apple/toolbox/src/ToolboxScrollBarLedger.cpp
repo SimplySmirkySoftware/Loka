@@ -208,8 +208,8 @@ void ToolboxScenePlatformController::destroyScrollBarControl(short resourceId,
     {
       continue;
     }
-    ControlRef control = binding.control;
     loka::core::State<bool> *enabled = binding.enabled;
+    this->retireScrollBarBinding(binding, lifetimeHint);
     binding.control = 0;
     binding.value = 0;
     binding.valueSeat = loka::app::scene::WriteSeat<int>();
@@ -225,13 +225,6 @@ void ToolboxScenePlatformController::destroyScrollBarControl(short resourceId,
     {
       unbindEnabledState(enabled);
     }
-    if (control)
-    {
-      // Context destruction can run inside an update pass; disposal waits for
-      // the platform safe point like every other retired native handle.
-      HideControl(control);
-      queueRetiredScrollBarControl(control, lifetimeHint);
-    }
     return;
   }
   // An auto id can exist before NewControl succeeds. The viewport ledger
@@ -240,5 +233,7 @@ void ToolboxScenePlatformController::destroyScrollBarControl(short resourceId,
 }
 
 #include "ToolboxViewportScrollBar.cpp"
+
+#include "ToolboxEditorScrollBar.cpp"
 
 #include "ToolboxControlInput.cpp"

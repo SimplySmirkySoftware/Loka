@@ -34,6 +34,8 @@ namespace toolbox_host
   };
   extern short popupItem;
   extern unsigned tracks;
+  extern unsigned refuseControls;
+  extern void (*beforeHide)(ControlRef);
   Rect currentClip();
   struct ControlCalls
   {
@@ -63,6 +65,11 @@ struct HostControl
   GrafPtr owner;
   Rect rect;
   bool visible;
+  bool &contrlVis;
+  HostControl &operator*()
+  {
+    return *this;
+  }
   toolbox_host::TrackScript tracking;
   std::vector<toolbox_host::ControlCall> calls;
   HostControl(short initial = 0)
@@ -72,7 +79,8 @@ struct HostControl
         hilite(0),
         owner(0),
         rect(),
-        visible(false)
+        visible(false),
+        contrlVis(visible)
   {
   }
 };

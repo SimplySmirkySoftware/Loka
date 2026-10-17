@@ -9,6 +9,18 @@ namespace loka
     class ToolboxTextEditorAccess
     {
     public:
+      static void sync(ToolboxTextEditorContext &c)
+      {
+        c.syncPresentation();
+      }
+      static short barId(ToolboxTextEditorContext &c)
+      {
+        return c.scrollBarId_;
+      }
+      static void busy(ToolboxTextEditorContext &c, bool value)
+      {
+        c.phase_ = value ? ToolboxTextEditorContext::INPUT : ToolboxTextEditorContext::IDLE;
+      }
       static bool visibleLines(ToolboxTextEditorContext &c, unsigned &lines)
       {
         return c.queryVisibleLines(lines);
