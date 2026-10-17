@@ -273,6 +273,30 @@ void testHelloWorldStandaloneMenuMatchesExample()
   std::printf("testHelloWorldStandaloneMenuMatchesExample passed\n");
 }
 
+void testHelloWorldStandaloneWindowMatchesExample()
+{
+  NullPlatformContext context;
+  HelloWorldAppConfig example(&context, 0x13579BDFUL);
+  loka::standalone_tests::HelloWorldStandaloneFlowAppConfig standalone(&context);
+  AppComposition exampleComposition(&context), standaloneComposition(&context);
+  example.compose(exampleComposition);
+  standalone.compose(standaloneComposition);
+  std::vector<AppComponent *> exampleComponents = exampleComposition.build();
+  std::vector<AppComponent *> standaloneComponents = standaloneComposition.build();
+  LOKA_VERIFY(exampleComponents.size() == 1 && standaloneComponents.size() == 1);
+  Window *exampleWindow = exampleComponents[0]->asWindow();
+  Window *standaloneWindow = standaloneComponents[0]->asWindow();
+  LOKA_VERIFY(exampleWindow && standaloneWindow);
+  LOKA_VERIFY(standaloneWindow->contentMargin() == exampleWindow->contentMargin());
+  LOKA_VERIFY(exampleWindow->contentMargin() == loka::app::layout::LayoutGap::of(0));
+  LOKA_VERIFY(standaloneWindow->frameState().get().width == exampleWindow->frameState().get().width);
+  LOKA_VERIFY(standaloneWindow->frameState().get().height == exampleWindow->frameState().get().height);
+  delete exampleWindow;
+  delete standaloneWindow;
+
+  std::printf("testHelloWorldStandaloneWindowMatchesExample passed\n");
+}
+
 void testHelloWorldStandaloneMountRefusalFailsClosed()
 {
   const char *auditPath = "_loka_hello_standalone_mount_refusal.log";

@@ -341,17 +341,17 @@ namespace simpletext
           .otherwise(Fragment());
       // The band and File menu fire the same emitters.
       c.declare(HStack()
-                << (VStack()
+                << (VStack().gap(StandardWindowMargin())
                     << (RibbonControl().TEST_ID("SimpleText.Ribbon")
                         << (RibbonGroup("File")
                             << RibbonItem("New").onClick(this->commands_.slot<simpletext::NEW_DOCUMENT>())
                             << RibbonItem("Open...").onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                             << RibbonItem("Save").onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
                             << RibbonItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())))
-                    << (Show(errorVisible) << Text(this->error_.state()).TEST_ID("SimpleText.Error"))
-                    << TextEditor(this->lines_, this->cursor_) //
-                           .moveCaretTo(this->caret_)
-                           .TEST_ID("SimpleText.Editor"))
+                    << (VStack() << (Show(errorVisible) << Text(this->error_.state()).TEST_ID("SimpleText.Error"))
+                                 << TextEditor(this->lines_, this->cursor_) //
+                                        .moveCaretTo(this->caret_)
+                                        .TEST_ID("SimpleText.Editor")))
                 << dialog);
     }
 
