@@ -24,29 +24,30 @@ namespace loka
         placed top below its start. Checked on construction like LayoutGap::of. */
     struct ScrollViewContentInsets
     {
-      short top;
-      short bottom;
-
       ScrollViewContentInsets()
-          : top(0),
-            bottom(0)
+          : top_(0),
+            bottom_(0)
       {
       }
 
-      /** Checks each logical inset in [0, SHRT_MAX], clamping in release. */
+      /** Checks each logical inset in [0, SHRT_MAX], clamping in release.
+          The default constructor and this door are the only writers. */
       static ScrollViewContentInsets of(int top, int bottom)
       {
         assert(top >= 0 && top <= SHRT_MAX);
         assert(bottom >= 0 && bottom <= SHRT_MAX);
         ScrollViewContentInsets result;
-        result.top = static_cast<short>(top < 0 ? 0 : top > SHRT_MAX ? SHRT_MAX : top);
-        result.bottom = static_cast<short>(bottom < 0 ? 0 : bottom > SHRT_MAX ? SHRT_MAX : bottom);
+        result.top_ = static_cast<short>(top < 0 ? 0 : top > SHRT_MAX ? SHRT_MAX : top);
+        result.bottom_ = static_cast<short>(bottom < 0 ? 0 : bottom > SHRT_MAX ? SHRT_MAX : bottom);
         return result;
       }
 
+      int top() const { return this->top_; }
+      int bottom() const { return this->bottom_; }
+
       bool operator==(const ScrollViewContentInsets &other) const
       {
-        return this->top == other.top && this->bottom == other.bottom;
+        return this->top_ == other.top_ && this->bottom_ == other.bottom_;
       }
       bool operator!=(const ScrollViewContentInsets &other) const
       {
@@ -54,13 +55,17 @@ namespace loka
       }
       bool operator<(const ScrollViewContentInsets &other) const
       {
-        return this->top != other.top ? this->top < other.top : this->bottom < other.bottom;
+        return this->top_ != other.top_ ? this->top_ < other.top_ : this->bottom_ < other.bottom_;
       }
       /** Extra extent in int arithmetic, without narrowing the sum to short. */
       int extentExtra() const
       {
-        return this->top + this->bottom;
+        return this->top_ + this->bottom_;
       }
+
+    private:
+      short top_;
+      short bottom_;
     };
 
     /** Stable inputs for a scrollable projection-parent scope. viewport_ is the
@@ -76,10 +81,10 @@ namespace loka
       /** Visible content rect in CONTENT coordinates, not the seat rect.
           x/y are the scroll origin. Rails publish only origin in this phase:
           width/height are carried through unchanged; !hasSize() means not
-          reported yet. Initialise apps with Frame(0, 0, 0, 0); a nonzero
-          origin publishes a clamp on first layout, as the int door did.
-          topOrigin() requests the top with the gap visible; origin.y may be
-          negative down to -top while the gap shows.
+          reported yet. Initialise apps with Frame(0, 0, 0, 0), or with
+          topOrigin() to start with the top inset visible; a nonzero origin
+          publishes a clamp on first layout, as the int door did. origin.y may
+          be negative down to -top while the gap shows.
           The whole WriteSeat retains the owner's tracked transaction door. */
       scene::WriteSeat<loka::core::Frame> viewport_;
       scene::WriteSeat<int> scrollTo_;
@@ -188,7 +193,7 @@ namespace loka
         if (!this->props.viewport_.isValid())
           return loka::core::Frame(0, 0, 0, 0);
         const loka::core::Frame current = this->props.viewport_.state()->get();
-        const int top = this->props.contentInsets_.top;
+        const int top = this->props.contentInsets_.top();
         const int y = current.y < -top ? -top : (current.y > SHRT_MAX - top ? SHRT_MAX - top : current.y);
         return loka::core::Frame(
             current.x < 0 ? 0 : (current.x > SHRT_MAX ? SHRT_MAX : current.x), y + top, current.width, current.height);
@@ -198,7 +203,7 @@ namespace loka
       loka::core::Frame contentTranslation() const
       {
         const loka::core::Frame origin = this->requestedOrigin();
-        return loka::core::Frame(origin.x, origin.y - this->props.contentInsets_.top, origin.width, origin.height);
+        return loka::core::Frame(origin.x, origin.y - this->props.contentInsets_.top(), origin.width, origin.height);
       }
 
       /** Publishes one changed extent offset as a content origin through the
@@ -207,7 +212,7 @@ namespace loka
       {
         if (!this->props.viewport_.isValid())
           return;
-        const int y = extentY - this->props.contentInsets_.top;
+        const int y = extentY - this->props.contentInsets_.top();
         const loka::core::Frame current = this->props.viewport_.state()->get();
         if (current.x != x || current.y != y)
           this->props.viewport_.set(loka::core::Frame(x, y, current.width, current.height));

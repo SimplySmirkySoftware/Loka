@@ -40,7 +40,8 @@ The viewport is one `Frame` in **content coordinates**, not the seat rect.
 top-left corner. `width` and `height` are reserved for the visible size and are
 not reported today; `!hasSize()` means "not reported yet", and every rail
 carries the stored size through unchanged. Apps initialise the state with
-`Frame(0, 0, 0, 0)`.
+`Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
+top inset visible (see [Content insets](#content-insets)).
 
 Three helpers on `ScrollViewNode` are the coordinate doors (origin publication
 introduced in #1357; content insets use the conversions below):
@@ -96,7 +97,9 @@ clamp; its heightless result includes both insets, with short-range refusal
 checked after their addition. No scroll bar moves in this PR: track lowering
 and the native-bar column are page 2 questions of the ScrollView insets rally.
 Toolbox, Win32 and macOS adopt the doors in the following PRs; until then a
-non-zero inset on those rails is not honoured.
+non-zero inset on those rails is unsupported: their call sites already go
+through the converting doors, but their extent does not grow, so content would
+be misplaced by `top`. Nothing outside the tests declares an inset yet.
 
 The LazyList example's `publishViewport` 0-floor is application work to resolve
 before a lazy-list demo uses insets.
