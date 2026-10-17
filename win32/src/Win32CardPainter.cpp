@@ -1,19 +1,19 @@
 #include "Win32CardPainter.hpp"
+#include "app/style/CardShadow.hpp"
+#include <climits>
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    bool declineWin32CardStencil();
+    void noteWin32CardPaintStage(unsigned stage);
+  }
+} // namespace loka
+#endif
 
 namespace
 {
-  /** Offset in layout units before projection, so every real shadow edge has
-      the same absolute rounding in a band and in the whole-card reference. */
-  RECT ProjectCardShadow(const loka::core::Frame &body,
-                         const loka::app::CardStyle &style,
-                         const loka::win32::Win32DisplayScale &scale)
-  {
-    return scale
-        .projectFrame(
-            loka::core::Frame(body.x + style.kShadowRight, body.y + style.kShadowBottom, body.width, body.height))
-        .r;
-  }
-
   /** A temporary region with a single lexical owner. */
   class CardRegion
   {
@@ -25,7 +25,11 @@ namespace
     ~CardRegion()
     {
       if (this->value_)
-        DeleteObject(this->value_);
+      {
+        const BOOL deleted = DeleteObject(this->value_);
+        assert(deleted);
+        (void)deleted;
+      }
     }
     HRGN get() const
     {
@@ -83,63 +87,6 @@ namespace
     return true;
   }
 
-  /** All masks and stencil storage belong to one paint, including refusal. */
-  class CardInkObjects
-  {
-  public:
-    CardInkObjects()
-        : body_(CreateRectRgn(0, 0, 0, 0)),
-          shadow_(CreateRectRgn(0, 0, 0, 0)),
-          inner_(CreateRectRgn(0, 0, 0, 0)),
-          border_(CreateRectRgn(0, 0, 0, 0)),
-          bitmap_(0),
-          brush_(0)
-    {
-      // WORD-aligned monochrome rows; dots never scale with the geometry.
-      const WORD rows[8] = {0x00aa, 0x0055, 0x00aa, 0x0055, 0x00aa, 0x0055, 0x00aa, 0x0055};
-      this->bitmap_ = CreateBitmap(8, 8, 1, 1, rows);
-      if (this->bitmap_)
-        this->brush_ = CreatePatternBrush(this->bitmap_);
-    }
-    ~CardInkObjects()
-    {
-      if (this->brush_)
-        DeleteObject(this->brush_);
-      if (this->bitmap_)
-        DeleteObject(this->bitmap_);
-    }
-    bool prepare(const RECT &body, const RECT &shadow, int diameter, int pen, unsigned corners)
-    {
-      RECT inner = body;
-      InflateRect(&inner, -pen, -pen);
-      return this->body_.get() && this->shadow_.get() && this->inner_.get() && this->border_.get() && this->bitmap_
-             && this->brush_ && BuildCardBody(this->body_.get(), body, diameter, corners)
-             && BuildCardBody(this->inner_.get(), inner, diameter - 2 * pen, corners)
-             && BuildCardBody(this->shadow_.get(), shadow, diameter, corners)
-             && CombineRgn(this->shadow_.get(), this->shadow_.get(), this->body_.get(), RGN_DIFF) != ERROR
-             && CombineRgn(this->border_.get(), this->body_.get(), this->inner_.get(), RGN_DIFF) != ERROR;
-    }
-    HRGN shadow() const
-    {
-      return this->shadow_.get();
-    }
-    HRGN border() const
-    {
-      return this->border_.get();
-    }
-    HBRUSH brush() const
-    {
-      return this->brush_;
-    }
-
-  private:
-    CardRegion body_, shadow_, inner_, border_;
-    HBITMAP bitmap_;
-    HBRUSH brush_;
-    CardInkObjects(const CardInkObjects &);
-    CardInkObjects &operator=(const CardInkObjects &);
-  };
-
   class CardDCScope
   {
   public:
@@ -151,7 +98,11 @@ namespace
     ~CardDCScope()
     {
       if (this->saved_)
-        RestoreDC(this->dc_, this->saved_);
+      {
+        const BOOL restored = RestoreDC(this->dc_, this->saved_);
+        assert(restored);
+        (void)restored;
+      }
     }
     bool valid() const
     {
@@ -166,39 +117,194 @@ namespace
   };
 } // namespace
 
-/** WM_PAINT: O(1) per nonempty band; 13 regions, one bitmap, one brush (8 objects peak),
-    at most 20 region combinations plus the DC clip intersection. Whole-body
-    rendering uses 19 regions and at most 32 combinations. No cached pixels or objects and no row walks. */
+/** Once per paint; the child paint door does not guarantee fresh ground.
+    Keep requested props intact until child-only repaint can safely blend. */
+static loka::app::CardStyle Win32StencilStyle(const loka::app::CardStyle &requested)
+{
+  return loka::app::CardStyle(requested.extent(), loka::app::CARD_SHADOW_STENCIL);
+}
+
+namespace
+{
+  /** One paint owns the transfer DC and its top-down mask; selection is restored
+      before either object is deleted. No native resource enters retirement. */
+  class CardStencilSurface
+  {
+  public:
+    CardStencilSurface(int width, int height)
+        : dc_(CreateCompatibleDC(NULL)),
+          bitmap_(0),
+          previous_(0),
+          bits_(0)
+    {
+      if (!this->dc_)
+        return;
+#ifdef TEST_BUILD
+      if (loka::testing::declineWin32CardStencil())
+        return;
+#endif
+      BITMAPINFO info;
+      ZeroMemory(&info, sizeof(info));
+      info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+      info.bmiHeader.biWidth = static_cast<LONG>(width);
+      info.bmiHeader.biHeight = -static_cast<LONG>(height);
+      info.bmiHeader.biPlanes = 1;
+      info.bmiHeader.biBitCount = 32;
+      info.bmiHeader.biCompression = BI_RGB;
+      void *bits = 0;
+      this->bitmap_ = CreateDIBSection(this->dc_, &info, DIB_RGB_COLORS, &bits, NULL, 0);
+      if (!this->bitmap_ || !bits)
+        return;
+      this->previous_ = SelectObject(this->dc_, this->bitmap_);
+      if (!this->previous_ || this->previous_ == HGDI_ERROR)
+      {
+        this->previous_ = 0;
+        return;
+      }
+      this->bits_ = static_cast<DWORD *>(bits);
+    }
+    ~CardStencilSurface()
+    {
+      if (this->previous_)
+      {
+        const HGDIOBJ restored = SelectObject(this->dc_, this->previous_);
+        assert(restored && restored != HGDI_ERROR);
+        (void)restored;
+      }
+      // Destroying the private DC also releases any selection if restoration
+      // refused. The bitmap is therefore never deleted while selected here.
+      if (this->dc_)
+      {
+        const BOOL deleted = DeleteDC(this->dc_);
+        assert(deleted);
+        (void)deleted;
+      }
+      if (this->bitmap_)
+      {
+        const BOOL deleted = DeleteObject(this->bitmap_);
+        assert(deleted);
+        (void)deleted;
+      }
+    }
+    DWORD *bits() const
+    {
+      return this->bits_;
+    }
+    HDC dc() const
+    {
+      return this->dc_;
+    }
+
+  private:
+    HDC dc_;
+    HBITMAP bitmap_;
+    HGDIOBJ previous_;
+    DWORD *bits_;
+    CardStencilSurface(const CardStencilSurface &);
+    CardStencilSurface &operator=(const CardStencilSurface &);
+  };
+
+  /** Once per band paint: O(clipped device area), one DC and DIB. Only the
+      current clip's rows are allocated/walked; common owns density and phase. */
+  bool PaintCardStencil(HDC dc,
+                        const loka::core::Frame &body,
+                        const loka::app::CardStyle &requested,
+                        const loka::win32::Win32DisplayScale &scale,
+                        int originX,
+                        int originY,
+                        int phaseX,
+                        int phaseY)
+  {
+#ifdef TEST_BUILD
+    loka::testing::noteWin32CardPaintStage(1);
+#endif
+    using namespace loka::app;
+    const CardStyle style = Win32StencilStyle(requested);
+    if (style.extent() == CARD_SHADOW_NONE)
+      return true;
+    RECT clip;
+    const int clipKind = GetClipBox(dc, &clip);
+    if (clipKind == ERROR)
+      return false;
+    if (clipKind == NULLREGION)
+      return true;
+    const CardShadowGridLines grid = CardShadowGrid(style, body);
+    RECT support =
+        scale.projectFrame(loka::core::Frame(grid.x[0], grid.y[0], grid.x[3] - grid.x[0], grid.y[3] - grid.y[0])).r;
+    if (!OffsetRect(&support, -originX, -originY))
+      return false;
+    if (!IntersectRect(&clip, &clip, &support))
+      return true;
+    const int width = static_cast<int>(clip.right - clip.left);
+    const int height = static_cast<int>(clip.bottom - clip.top);
+    // Bound byte size and row indexing before handing dimensions to GDI.
+    if (width <= 0 || height <= 0 || width > INT_MAX / 4 / height)
+      return false;
+    CardStencilSurface surface(width, height);
+    if (!surface.bits())
+      return false;
+    for (int y = 0; y < height; ++y)
+    {
+      const int deviceY = static_cast<int>(clip.top) + y;
+      const int layoutY = scale.unprojectEdge(deviceY + originY);
+      unsigned char thresholds[8];
+      CardShadowStencilThresholdRow(deviceY + phaseY, thresholds);
+      for (int x = 0; x < width; ++x)
+      {
+        const int deviceX = static_cast<int>(clip.left) + x;
+        const unsigned char density = CardShadowDensity(style, body, scale.unprojectEdge(deviceX + originX), layoutY);
+        surface.bits()[y * width + x] = density > thresholds[(deviceX + phaseX) & 7] ? 0 : 0x00ffffff;
+      }
+    }
+    // SRCAND is the mask equivalent of v1's transparent PDa brush transfer.
+    return BitBlt(
+               dc, static_cast<int>(clip.left), static_cast<int>(clip.top), width, height, surface.dc(), 0, 0, SRCAND)
+           != FALSE;
+  }
+} // namespace
+
+/** Once after shadow transfer, O(1); the region belongs to this paint. */
+static bool FillCardBorder(HDC dc, HRGN border)
+{
+#ifdef TEST_BUILD
+  loka::testing::noteWin32CardPaintStage(2);
+#endif
+  return FillRgn(dc, border, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH))) != FALSE;
+}
+
+/** Once per band/whole paint; border construction is independent of ink refusal.
+    Region geometry and inside-only border are unchanged from v1. */
 static void PaintNativeCardInk(HDC dc,
                                const RECT &native,
-                               const RECT &shadow,
+                               const loka::core::Frame &logicalBody,
                                const loka::app::CardStyle &style,
                                const loka::win32::Win32DisplayScale &scale,
+                               int originX,
+                               int originY,
                                int phaseX,
                                int phaseY,
                                unsigned corners)
 {
+  if (!SetROP2(dc, R2_COPYPEN))
+    return;
   const int diameter = scale.projectLength(2 * style.kCornerRadius);
   const int projectedPen = scale.projectLength(1);
   const int pen = projectedPen > 0 ? projectedPen : 1;
-  CardInkObjects objects;
-  if (!objects.prepare(native, shadow, diameter, pen, corners))
+  CardRegion body(CreateRectRgn(0, 0, 0, 0));
+  CardRegion inner(CreateRectRgn(0, 0, 0, 0));
+  CardRegion border(CreateRectRgn(0, 0, 0, 0));
+  RECT inside = native;
+  if (!InflateRect(&inside, -pen, -pen) || !BuildCardBody(body.get(), native, diameter, corners)
+      || !BuildCardBody(inner.get(), inside, diameter - 2 * pen, corners) || !border.get()
+      || CombineRgn(border.get(), body.get(), inner.get(), RGN_DIFF) == ERROR)
     return;
+  // Ink refusal deliberately falls through to the independently prepared border.
+  if (!PaintCardStencil(dc, logicalBody, style, scale, originX, originY, phaseX, phaseY))
   {
-    CardDCScope saved(dc);
-    if (!saved.valid() || ExtSelectClipRgn(dc, objects.shadow(), RGN_AND) == ERROR)
-      return;
-    const HGDIOBJ previous = SelectObject(dc, objects.brush());
-    if (!previous || previous == HGDI_ERROR)
-      return;
-    SetTextColor(dc, RGB(0, 0, 0));
-    SetBkColor(dc, RGB(255, 255, 255));
-    SetBrushOrgEx(dc, -phaseX, -phaseY, NULL);
-    // Destination AND brush: black dots darken; white leaves any ground intact.
-    PatBlt(dc, shadow.left, shadow.top, shadow.right - shadow.left, shadow.bottom - shadow.top, 0x00A000C9);
+    // No retry within this paint. A later paint may allocate successfully.
   }
-  // A region difference is an inside-only rounded pen, including widths > 1.
-  FillRgn(dc, objects.border(), static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+  if (!FillCardBorder(dc, border.get()))
+    return;
 }
 
 void loka::win32::PaintCardInk(HDC dc,
@@ -212,11 +318,13 @@ void loka::win32::PaintCardInk(HDC dc,
 {
   if (!dc || !body.hasSize())
     return;
+  CardDCScope saved(dc);
+  if (!saved.valid())
+    return;
   RECT native = scale.projectFrame(body).r;
-  RECT shadow = ProjectCardShadow(body, style, scale);
-  OffsetRect(&native, -deviceOriginX, -deviceOriginY);
-  OffsetRect(&shadow, -deviceOriginX, -deviceOriginY);
-  PaintNativeCardInk(dc, native, shadow, style, scale, phaseX, phaseY, 15u);
+  if (!OffsetRect(&native, -deviceOriginX, -deviceOriginY))
+    return;
+  PaintNativeCardInk(dc, native, body, style, scale, deviceOriginX, deviceOriginY, phaseX, phaseY, 15u);
 }
 
 void loka::win32::PaintCardBandInk(HDC dc,
@@ -228,13 +336,19 @@ void loka::win32::PaintCardBandInk(HDC dc,
 {
   if (!dc || !band.hasSize())
     return;
+  CardDCScope saved(dc);
+  if (!saved.valid())
+    return;
   const core::Frame logicalBody = app::CardBodyInBand(band, props);
   RECT body = scale.projectFrame(logicalBody).r;
-  RECT shadow = ProjectCardShadow(logicalBody, props.style, scale);
   const int diameter = scale.projectLength(2 * props.style.kCornerRadius);
   const RECT origin = scale.projectFrame(band).r;
+  if (IntersectClipRect(
+          dc, 0, 0, static_cast<int>(origin.right - origin.left), static_cast<int>(origin.bottom - origin.top))
+      == ERROR)
+    return;
   // Only the border's body-side sample must lie below the corner midpoint;
-  // shadow allowance lies outside the body and is covered by its displaced mask.
+  // the shadow samples the original logical body independently of this border mask.
   int thickness = 0;
   unsigned corners = 0;
   switch (props.role)
@@ -243,25 +357,21 @@ void loka::win32::PaintCardBandInk(HDC dc,
     corners = 3u;
     thickness = static_cast<int>(origin.bottom - body.top);
     body.bottom = body.top + 2 * diameter;
-    shadow.bottom = shadow.top + 2 * diameter;
     break;
   case app::CARD_BAND_LEFT:
     corners = 5u;
     thickness = static_cast<int>(origin.right - body.left);
     body.right = body.left + 2 * diameter;
-    shadow.right = shadow.left + 2 * diameter;
     break;
   case app::CARD_BAND_RIGHT:
     corners = 10u;
     thickness = static_cast<int>(body.right - origin.left);
     body.left = body.right - 2 * diameter;
-    shadow.left = shadow.right - 2 * diameter;
     break;
   case app::CARD_BAND_BOTTOM:
     corners = 12u;
     thickness = static_cast<int>(body.bottom - origin.top);
     body.top = body.bottom - 2 * diameter;
-    shadow.top = shadow.bottom - 2 * diameter;
     break;
   case app::CARD_BAND_COUNT:
     return;
@@ -270,7 +380,16 @@ void loka::win32::PaintCardBandInk(HDC dc,
   assert(bounded && "CardBand body-side thickness must be below the corner radius");
   if (!bounded)
     return;
-  OffsetRect(&body, -origin.left, -origin.top);
-  OffsetRect(&shadow, -origin.left, -origin.top);
-  PaintNativeCardInk(dc, body, shadow, props.style, scale, phaseX, phaseY, corners);
+  if (!OffsetRect(&body, -static_cast<int>(origin.left), -static_cast<int>(origin.top)))
+    return;
+  PaintNativeCardInk(dc,
+                     body,
+                     logicalBody,
+                     props.style,
+                     scale,
+                     static_cast<int>(origin.left),
+                     static_cast<int>(origin.top),
+                     phaseX,
+                     phaseY,
+                     corners);
 }

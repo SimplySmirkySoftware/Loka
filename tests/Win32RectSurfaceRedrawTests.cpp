@@ -1,5 +1,6 @@
 #include "context/Win32CardBandContext.hpp"
 #include "app/nodes/controls/Card.hpp"
+#include "app/style/CardShadow.hpp"
 #include "context/Win32RibbonGroupEdgeContext.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "Win32PaintGround.hpp"
@@ -1355,7 +1356,18 @@ void testWin32RibbonGroupEdgePixels()
   }
 }
 
+static void checkCardChildOnlyAndViewportPhase();
+static void checkCardOverPatternedImage();
+static void checkCardScrollInput();
+
 void testWin32CardBandTransparentRepaintAndEmpty()
+{
+  checkCardChildOnlyAndViewportPhase();
+  checkCardOverPatternedImage();
+  checkCardScrollInput();
+}
+
+static void checkCardOriginalTransparentRepaintAndEmpty()
 {
   using namespace loka::app;
   using namespace loka::app::scene;
@@ -1392,4 +1404,236 @@ void testWin32CardBandTransparentRepaintAndEmpty()
   LOKA_VERIFY(windowPixel(context.hwnd(), 25, 0) == RGB(0, 0, 0));
   context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
+}
+
+/** The native path is intentionally tested separately from offscreen transfer.
+    Child-only paint must remain idempotent until fresh-ground routing exists. */
+static void checkCardChildOnlyAndViewportPhase()
+{
+  checkCardOriginalTransparentRepaintAndEmpty();
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  ScrollViewNode scrollNode((ScrollViewProps()));
+  Win32ScrollViewContext viewport(&controller, root, 13, 11, 180, 100, &scrollNode);
+  LOKA_VERIFY(viewport.isValid());
+  CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));
+  Win32CardBandContext context(&controller, viewport.hwnd(), 20, 30, 100, 19, &band);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  std::vector<COLORREF> first;
+  for (int y = 0; y < 19; ++y)
+    for (int x = 0; x < 100; ++x)
+      first.push_back(windowPixel(context.hwnd(), x, y));
+  const RECT partial = {1, 2, 99, 18};
+  LOKA_VERIFY(InvalidateRect(context.hwnd(), NULL, FALSE));
+  LOKA_VERIFY(UpdateWindow(context.hwnd()));
+  LOKA_VERIFY(RedrawWindow(context.hwnd(), &partial, NULL, RDW_INVALIDATE | RDW_UPDATENOW));
+  for (int y = 0; y < 19; ++y)
+    for (int x = 0; x < 100; ++x)
+      LOKA_VERIFY(windowPixel(context.hwnd(), x, y) == first[y * 100 + x]);
+
+  // Instrument the missing ground refresh with a non-ink sentinel, then prove
+  // the normal props door does restore it. VM execution supplies the verdict.
+  int sentinel = -1;
+  for (int i = 0; i < 1900; ++i)
+    if (first[i] == GetSysColor(COLOR_BTNFACE))
+    {
+      sentinel = i;
+      break;
+    }
+  LOKA_VERIFY(sentinel >= 0);
+  HDC dc = GetDC(context.hwnd());
+  LOKA_VERIFY(dc != NULL);
+  LOKA_VERIFY(SetPixelV(dc, sentinel % 100, sentinel / 100, RGB(255, 0, 255)));
+  LOKA_VERIFY(ReleaseDC(context.hwnd(), dc));
+  LOKA_VERIFY(InvalidateRect(context.hwnd(), NULL, FALSE));
+  LOKA_VERIFY(UpdateWindow(context.hwnd()));
+  LOKA_VERIFY(windowPixel(context.hwnd(), sentinel % 100, sentinel / 100) == RGB(255, 0, 255));
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(windowPixel(context.hwnd(), sentinel % 100, sentinel / 100) == GetSysColor(COLOR_BTNFACE));
+
+  // The projection rail relayouts children at content minus scroll offset;
+  // exercise both signs at a non-eight viewport client origin.
+  for (int offset = 1; offset <= 5; offset += 4)
+  {
+    const loka::core::Frame frame(20 - offset, 30 - offset, 100, 19);
+    context.relayout(frame.x, frame.y, frame.width, frame.height);
+    flushTransparentPaint(controller, root);
+    const loka::core::Frame body = CardBodyInBand(frame, band.props);
+    POINT origin = {0, 0};
+    MapWindowPoints(context.hwnd(), root, &origin, 1);
+    LOKA_VERIFY(origin.x == 13 + frame.x && origin.y == 11 + frame.y);
+    std::vector<COLORREF> incremental;
+    for (int y = 0; y < 19; ++y)
+      for (int x = 0; x < 100; ++x)
+      {
+        const COLORREF pixel = windowPixel(context.hwnd(), x, y);
+        incremental.push_back(pixel);
+        // Below the unchanged border only common-table ink may be present.
+        if (y >= 3)
+        {
+          const bool dot = CardShadowStencilInk(CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y),
+                                                static_cast<int>(origin.x) + x,
+                                                static_cast<int>(origin.y) + y);
+          LOKA_VERIFY(pixel == (dot ? RGB(0, 0, 0) : GetSysColor(COLOR_BTNFACE)));
+        }
+      }
+    LOKA_VERIFY(RedrawWindow(root, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW));
+    for (int y = 0; y < 19; ++y)
+      for (int x = 0; x < 100; ++x)
+        LOKA_VERIFY(windowPixel(context.hwnd(), x, y) == incremental[y * 100 + x]);
+  }
+  ShowWindow(context.hwnd(), SW_HIDE);
+  ShowWindow(context.hwnd(), SW_SHOW);
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  LOKA_VERIFY(band.props.style.ink() == CARD_SHADOW_ALPHA);
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
+}
+
+static void checkCardOverPatternedImage()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  TransparentPaintWindow host;
+  HWND root = host.window.hwnd();
+  Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  HDC screen = GetDC(root);
+  LOKA_VERIFY(screen != NULL);
+  HDC memory = CreateCompatibleDC(screen);
+  HBITMAP bitmap = CreateCompatibleBitmap(screen, 100, 19);
+  LOKA_VERIFY(memory != NULL && bitmap != NULL);
+  HGDIOBJ old = SelectObject(memory, bitmap);
+  LOKA_VERIFY(old && old != HGDI_ERROR);
+  std::vector<COLORREF> ground;
+  for (int y = 0; y < 19; ++y)
+    for (int x = 0; x < 100; ++x)
+    {
+      const COLORREF color = ((x / 5 + y / 7) & 1) ? RGB(81, 137, 193) : RGB(209, 111, 57);
+      ground.push_back(color);
+      LOKA_VERIFY(SetPixelV(memory, x, y, color));
+    }
+  LOKA_VERIFY(SelectObject(memory, old) == bitmap);
+  LOKA_VERIFY(DeleteDC(memory));
+  LOKA_VERIFY(ReleaseDC(root, screen));
+  const loka::core::resource::Image payload =
+      loka::core::resource::Image::FromNative(bitmap, 100, 19, &releaseTestBitmap, NULL);
+  LOKA_VERIFY(payload.isValid());
+  loka::core::MutableState<loka::core::resource::Image> image(payload);
+  ImageViewProps props;
+  props.image(&image).size(100, 19).attr(ImageViewAttr().fit(IMAGE_FIT_NONE));
+  ImageViewNode imageNode(props);
+  Win32ImageViewContext imageContext(&controller, root, 21, 31, 100, 19, &imageNode);
+  CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));
+  Win32CardBandContext context(&controller, root, 21, 31, 100, 19, &band);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  context.onPropsApplied();
+  flushTransparentPaint(controller, root);
+  const loka::core::Frame frame(21, 31, 100, 19);
+  const loka::core::Frame body = CardBodyInBand(frame, band.props);
+  std::vector<COLORREF> first;
+  for (int y = 0; y < 19; ++y)
+    for (int x = 0; x < 100; ++x)
+    {
+      const COLORREF pixel = windowPixel(context.hwnd(), x, y);
+      first.push_back(pixel);
+      if (y >= 3)
+      {
+        const bool dot = CardShadowStencilInk(
+            CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y), frame.x + x, frame.y + y);
+        LOKA_VERIFY(pixel == (dot ? RGB(0, 0, 0) : ground[y * 100 + x]));
+      }
+    }
+  const RECT partial = {2, 4, 98, 18};
+  for (int pass = 0; pass < 3; ++pass)
+  {
+    if (pass == 0)
+    {
+      LOKA_VERIFY(InvalidateRect(context.hwnd(), NULL, FALSE));
+      LOKA_VERIFY(UpdateWindow(context.hwnd()));
+    }
+    else if (pass == 1)
+      LOKA_VERIFY(RedrawWindow(context.hwnd(), &partial, NULL, RDW_INVALIDATE | RDW_UPDATENOW));
+    else
+    {
+      // Cover and uncover the band to exercise ordinary exposure scheduling.
+      HWND cover = CreateWindowExW(
+          0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 21, 31, 100, 19, root, NULL, GetModuleHandleW(NULL), NULL);
+      LOKA_VERIFY(cover != NULL);
+      LOKA_VERIFY(SetWindowPos(cover, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+      LOKA_VERIFY(UpdateWindow(cover));
+      LOKA_VERIFY(DestroyWindow(cover));
+      pumpMessages();
+      LOKA_VERIFY(UpdateWindow(context.hwnd()));
+    }
+    for (int y = 0; y < 19; ++y)
+      for (int x = 0; x < 100; ++x)
+        LOKA_VERIFY(windowPixel(context.hwnd(), x, y) == first[y * 100 + x]);
+  }
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  imageContext.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
+}
+
+/** Native scroll input, fact publication and production child projection are
+    all exercised before comparing incremental and fresh viewport pixels. */
+static void checkCardScrollInput()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace PropsReconciliationSupport;
+  typedef loka::dsl::testing::SceneTestAccess SceneAccess;
+  TransparentPaintWindow host;
+  HWND rootHwnd = host.window.hwnd();
+  Win32ScenePlatformController controller(rootHwnd, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  RegisterWin32BuiltInSupport(controller);
+  loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 0, 0, 0));
+  loka::core::PushStateTracker tracker;
+  tracker.addState(&storage);
+  NodeState<loka::core::Frame> viewportState(&storage, &tracker);
+  Card card = Card(CardStyle(CARD_SHADOW_WIDE)) << Box().size(120, 60);
+  VStack content = VStack() << card << Box().size(120, 300);
+  ScrollView declaration = ScrollView(viewportState) << content;
+  Scene scene((Boundary<Tree<ScrollView> >(Props<ScrollView>(&declaration))));
+  scene.mount(&controller);
+  SceneAccess::updateAttached(scene, true);
+  settle(scene);
+  BoundaryNode *boundary = SceneAccess::rootBoundary(scene);
+  LOKA_VERIFY(boundary != NULL);
+  controller.onChange(boundary, NODE_DIRTY_NONE, false);
+  controller.relayout(200, 140);
+  settle(scene);
+  ShowWindow(rootHwnd, SW_SHOWNOACTIVATE);
+  flushTransparentPaint(controller, rootHwnd);
+  HWND viewport = FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_VIEW", NULL);
+  LOKA_VERIFY(viewport != NULL);
+  HWND band = FindWindowExW(viewport, NULL, L"LOKA_CARD_BAND", NULL);
+  LOKA_VERIFY(band != NULL);
+  RECT before;
+  LOKA_VERIFY(GetWindowRect(band, &before));
+  SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBPOSITION, 5), 0);
+  LOKA_VERIFY(viewportState.get().y == 5);
+  controller.relayout(200, 140);
+  settle(scene);
+  flushTransparentPaint(controller, rootHwnd);
+  RECT after, client;
+  LOKA_VERIFY(GetWindowRect(band, &after));
+  LOKA_VERIFY(after.top == before.top - 5 && after.left == before.left);
+  LOKA_VERIFY(GetClientRect(viewport, &client));
+  LOKA_VERIFY(client.right > 0 && client.bottom > 0);
+  std::vector<COLORREF> incremental;
+  for (int y = 0; y < static_cast<int>(client.bottom); ++y)
+    for (int x = 0; x < static_cast<int>(client.right); ++x)
+      incremental.push_back(windowPixel(viewport, x, y));
+  LOKA_VERIFY(RedrawWindow(rootHwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW));
+  for (int y = 0; y < static_cast<int>(client.bottom); ++y)
+    for (int x = 0; x < static_cast<int>(client.right); ++x)
+      LOKA_VERIFY(windowPixel(viewport, x, y) == incremental[y * static_cast<int>(client.right) + x]);
 }

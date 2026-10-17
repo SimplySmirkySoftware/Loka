@@ -48,6 +48,10 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: python3 tools/ci/check_native_geometry.py
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+      - run: python3 tests/scripts/ToolboxPatternAlignmentCheckerTest.py
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+      - run: python3 tools/ci/check_toolbox_pattern_alignment.py
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: cmake --preset testing -DLOKA_BUILD_SMIRKYCARD=ON
         if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
       - run: cmake --build --preset testing
