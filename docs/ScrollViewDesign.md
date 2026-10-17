@@ -96,10 +96,11 @@ Rails keep their nonnegative extent-offset math, maximum
 clamp; its heightless result includes both insets, with short-range refusal
 checked after their addition. No scroll bar moves in this PR: track lowering
 and the native-bar column are page 2 questions of the ScrollView insets rally.
-Toolbox, Win32 and macOS adopt the doors in the following PRs; until then a
-non-zero inset on those rails is unsupported: their call sites already go
-through the converting doors, but their extent does not grow, so content would
-be misplaced by `top`. Nothing outside the tests declares an inset yet.
+Toolbox, Win32 and macOS adopt the doors the same way, each in its own PR:
+Null, Toolbox and Win32 subtract `contentTranslation()` from content
+coordinates, while macOS places the document at a constant top inset because
+the clip view applies the request. All four grow their extent by both insets
+and refuse an extent above the short range on every path.
 
 The LazyList example's `publishViewport` 0-floor is application work to resolve
 before a lazy-list demo uses insets.
