@@ -105,11 +105,14 @@ namespace
     // type instead of by the frame layout the compiler happens to choose.
     union
     {
-      unsigned char bytes[rowBytes * detail::kCardShadowMaximumTileHeight];
+      unsigned char bytes[rowBytes * detail::kCardShadowMaximumTileHeight + detail::kCardShadowMaximumTileWidth + 8];
       long alignment;
     } bits;
+    unsigned char *densities = bits.bytes + rowBytes * detail::kCardShadowMaximumTileHeight;
+    unsigned char *thresholds = densities + detail::kCardShadowMaximumTileWidth;
     GrafPtr port;
     GetPort(&port);
+    PenMode(patOr);
     for (int v = 0; v < 3; ++v)
       for (int h = 0; h < 3; ++h)
       {
@@ -138,13 +141,24 @@ namespace
             PROFILE_SECTION("card.buffer-clear");
             std::memset(bits.bytes, 0, sizeof(bits.bytes));
           }
+          bool hasInk = false;
           {
             PROFILE_SECTION("card.threshold");
             for (int y = 0; y < height; ++y)
+            {
+              CardShadowDensityRun(style, body, x0, y0 + y, width, densities);
+              CardShadowStencilThresholdRow(y0 + y, thresholds);
+              unsigned char *row = bits.bytes + y * rowBytes;
               for (int x = 0; x < width; ++x)
-                if (CardShadowStencilInk(CardShadowDensity(style, body, x0 + x, y0 + y), x0 + x, y0 + y))
-                  bits.bytes[y * rowBytes + x / 8] |= 0x80 >> (x & 7);
+                if (densities[x] > thresholds[(x0 + x) & 7])
+                {
+                  row[x / 8] |= 0x80 >> (x & 7);
+                  hasInk = true;
+                }
+            }
           }
+          if (!hasInk)
+            continue;
           BitMap source;
           source.baseAddr = reinterpret_cast<Ptr>(bits.bytes);
           source.rowBytes = rowBytes;
@@ -166,23 +180,21 @@ namespace
             unsigned char *bytes = reinterpret_cast<unsigned char *>(&pattern);
             {
               PROFILE_SECTION("card.pattern-prepare");
-              for (int y = 0; y < 8; ++y)
-              {
-                bytes[y] = 0;
-                for (int x = 0; x < 8; ++x)
-                  if (CardShadowStencilInk(density, x, y))
-                    bytes[y] |= 0x80 >> x;
-              }
+              CardShadowStencilPattern(density, bytes);
             }
+            int end = i + 1;
+            while (end < count
+                   && CardShadowDensity(style, body, x0 + (v == 1 ? end : 0), y0 + (v == 1 ? 0 : end)) == density)
+              ++end;
             Rect run = dest;
             if (v == 1)
-              run.left = x0 + i, run.right = run.left + 1;
+              run.left = x0 + i, run.right = x0 + end;
             else
-              run.top = y0 + i, run.bottom = run.top + 1;
+              run.top = y0 + i, run.bottom = y0 + end;
+            i = end - 1;
             {
               PROFILE_SECTION("card.paint-run");
               PenPat(&pattern);
-              PenMode(patOr);
               PaintRect(&run);
             }
           }

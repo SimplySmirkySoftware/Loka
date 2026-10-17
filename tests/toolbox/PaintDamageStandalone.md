@@ -160,9 +160,13 @@ scroll, visible WIDE bands, and a changed row of actual pixels before
 `card-scroll-incremental-equals-full`
 compares the incremental result with a synchronous production full-window redraw.
 
-Matrix comparisons retain one packed native capture (at most 675 bytes), then
-read the current port directly. The scroll arm retains one 5,040-byte packed
-capture. Both use nullable `NewPtrClear` storage disposed within the arm.
+Matrix comparisons use one nullable `NewPtrClear` allocation for two packed
+images (at most 1,500 bytes); scroll uses 10,080 bytes. `CopyBits` captures the
+port into word-aligned images with even row strides. Comparisons mask padding
+and OR window-phase ground bytes into the expected image. Both images are
+released within the arm. A small independent `GetPixel` probe checks capture
+phase and the right edge before repainting. The whole-card oracle transfers
+rows instead of issuing one `PaintRect` per ink pixel.
 Refusal records `card-matrix-capture-allocation FAIL` or
 `card-scroll-capture-allocation FAIL`; neither arm dereferences refused storage.
 No new full-frame static buffer remains, and the SIZE partition is unchanged.
@@ -171,6 +175,10 @@ Timing lines are observations in `CARDTIME.TXT`, separate from the deterministic
 `LOG.TXT` audit. The two timing-log-open arms must also pass. Extract that
 file from the run's `LokaDev.hd` with hfsutils after the runner exits. Add `card-scroll`
 ticks to `card-new-arms` ticks and require at most 3600 ticks (60 seconds).
+`card-matrix-work` reports oracle generation, initial capture, and verification
+ticks per case. Verification includes extra rendering, v1 comparison, dumps,
+and audit writes; capture excludes the small probe, which is included in total
+matrix time. These components are diagnostic, not separate budget allowances.
 `card-timing` paths are -2 for small damage, -1 for all four bands, and 0–3
 for individual band roles; each runs 16 repetitions. `card-v1-whole` times
 the independent whole-body region oracle, not four v1 band paints.

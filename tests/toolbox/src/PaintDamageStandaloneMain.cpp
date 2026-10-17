@@ -590,21 +590,16 @@ namespace
   }
 
   /** One-arm packed native pixel capture. Nullable storage is released before
-      the arm returns; comparisons read the current port without another image. */
+      the arm returns; a second packed plane holds each current-port comparison. */
   class CardCapture
   {
   public:
     explicit CardCapture(const Rect &frame)
         : frame_(frame),
-          pixels_(NewPtrClear(((frame.right - frame.left + 7) / 8) * (frame.bottom - frame.top)))
+          pixels_(NewPtrClear(2 * stride(frame) * (frame.bottom - frame.top)))
     {
-      if (!this->pixels_)
-        return;
-      const int stride = (frame.right - frame.left + 7) / 8;
-      for (int y = frame.top; y < frame.bottom; ++y)
-        for (int x = frame.left; x < frame.right; ++x)
-          if (GetPixel(x, y))
-            this->pixels_[(y - frame.top) * stride + (x - frame.left) / 8] |= 0x80 >> ((x - frame.left) & 7);
+      if (this->pixels_)
+        this->capture(this->pixels_);
     }
     ~CardCapture()
     {
@@ -615,20 +610,58 @@ namespace
     {
       return this->pixels_ != 0;
     }
+    /** Small independent native pin for packed capture phase and right padding. */
+    bool matchesProbe() const
+    {
+      const int width = this->frame_.right - this->frame_.left;
+      const int height = this->frame_.bottom - this->frame_.top;
+      for (int y = 0; y < 8 && y < height; ++y)
+        for (int probe = 0; probe < 9; ++probe)
+        {
+          const int x = probe == 8 ? width - 1 : probe;
+          if (x >= width)
+            continue;
+          const bool bit = (this->pixels_[y * stride(this->frame_) + x / 8] & (0x80 >> (x & 7))) != 0;
+          if (bit != (GetPixel(this->frame_.left + x, this->frame_.top + y) != 0))
+            return false;
+        }
+      return true;
+    }
     int differences(const Pattern *ground = 0) const
     {
-      int differences = 0;
+      Ptr current = this->pixels_ + stride(this->frame_) * (this->frame_.bottom - this->frame_.top);
+      this->capture(current);
       const unsigned char *pattern = reinterpret_cast<const unsigned char *>(ground);
-      for (int y = this->frame_.top; y < this->frame_.bottom; ++y)
-        for (int x = this->frame_.left; x < this->frame_.right; ++x)
+      const int width = this->frame_.right - this->frame_.left;
+      int differences = 0;
+      for (int y = 0; y < this->frame_.bottom - this->frame_.top; ++y)
+      {
+        unsigned char background = pattern ? pattern[(this->frame_.top + y) & 7] : 0;
+        const int phase = this->frame_.left & 7;
+        background = static_cast<unsigned char>((background << phase) | (background >> (8 - phase)));
+        for (int x = 0; x < (width + 7) / 8; ++x)
         {
-          const bool expected = this->pixel(x, y) || (pattern && (pattern[y & 7] & (0x80 >> (x & 7))));
-          differences += (GetPixel(x, y) != 0) != expected;
+          const int index = y * stride(this->frame_) + x;
+          unsigned char changed = static_cast<unsigned char>(current[index] ^ (this->pixels_[index] | background));
+          if (x * 8 + 8 > width)
+            changed &= 0xff << (8 - (width & 7));
+          while (changed)
+          {
+            differences += changed & 1;
+            changed >>= 1;
+          }
         }
+      }
       return differences;
     }
     void dump(std::FILE *log, const char *label, bool current) const
     {
+      Ptr pixels = this->pixels_;
+      if (current)
+      {
+        pixels += stride(this->frame_) * (this->frame_.bottom - this->frame_.top);
+        this->capture(pixels);
+      }
       std::fprintf(log,
                    "card-dump %s x=%d y=%d w=%d h=%d\r",
                    label,
@@ -636,10 +669,10 @@ namespace
                    this->frame_.top,
                    this->frame_.right - this->frame_.left,
                    this->frame_.bottom - this->frame_.top);
-      for (int y = this->frame_.top; y < this->frame_.bottom; ++y)
+      for (int y = 0; y < this->frame_.bottom - this->frame_.top; ++y)
       {
-        for (int x = this->frame_.left; x < this->frame_.right; ++x)
-          std::fputc((current ? GetPixel(x, y) != 0 : this->pixel(x, y)) ? '1' : '0', log);
+        for (int x = 0; x < this->frame_.right - this->frame_.left; ++x)
+          std::fputc((pixels[y * stride(this->frame_) + x / 8] & (0x80 >> (x & 7))) ? '1' : '0', log);
         std::fputc('\r', log);
       }
     }
@@ -647,12 +680,19 @@ namespace
   private:
     const Rect frame_;
     Ptr pixels_;
-    bool pixel(int x, int y) const
+    static int stride(const Rect &frame)
     {
-      const int stride = (this->frame_.right - this->frame_.left + 7) / 8;
-      return (this->pixels_[(y - this->frame_.top) * stride + (x - this->frame_.left) / 8]
-              & (0x80 >> ((x - this->frame_.left) & 7)))
-             != 0;
+      return 2 * ((frame.right - frame.left + 15) / 16);
+    }
+    void capture(Ptr pixels) const
+    {
+      GrafPtr port;
+      GetPort(&port);
+      BitMap bitmap;
+      bitmap.baseAddr = pixels;
+      bitmap.rowBytes = stride(this->frame_);
+      bitmap.bounds = this->frame_;
+      CopyBits(&port->portBits, &bitmap, &this->frame_, &bitmap.bounds, srcCopy, 0);
     }
     CardCapture(const CardCapture &);
     CardCapture &operator=(const CardCapture &);
@@ -696,7 +736,7 @@ namespace
         for (short x = frame.left; x < frame.right; ++x)
           *pixels++ = GetPixel(x, y) != 0;
     }
-    /** Whole-card common oracle with the native border, independent of transfers. */
+    /** Whole-card common oracle with the native border, independent of band partitioning. */
     static bool tableReference(const Rect &frame, const CardStyle &style = CardStyle())
     {
       const loka::app::detail::CardShadowTable &g = style.geometry();
@@ -708,14 +748,38 @@ namespace
       GetPenState(&pen);
       PenNormal();
       PenMode(patOr);
+      // The oracle walks whole rows, never the painter's tile/band partition.
+      // CopyBits avoids one QuickDraw trap per black pixel.
+      union
+      {
+        unsigned char bytes[12];
+        long alignment;
+      } bits;
+      unsigned char densities[96], thresholds[8];
+      const int width = frame.right - frame.left;
+      if (width > 96)
+      {
+        SetPenState(&pen);
+        return false;
+      }
+      GrafPtr port;
+      GetPort(&port);
+      BitMap bitmap;
+      bitmap.baseAddr = reinterpret_cast<Ptr>(bits.bytes);
+      bitmap.rowBytes = 2 * ((width + 15) / 16);
+      SetRect(&bitmap.bounds, 0, 0, width, 1);
       for (int y = frame.top; y < frame.bottom; ++y)
-        for (int x = frame.left; x < frame.right; ++x)
-          if (CardShadowStencilInk(CardShadowDensity(style, body, x, y), x, y))
-          {
-            Rect pixel;
-            SetRect(&pixel, x, y, x + 1, y + 1);
-            PaintRect(&pixel);
-          }
+      {
+        std::memset(bits.bytes, 0, sizeof(bits.bytes));
+        CardShadowDensityRun(style, body, frame.left, y, width, densities);
+        CardShadowStencilThresholdRow(y, thresholds);
+        for (int x = 0; x < width; ++x)
+          if (densities[x] > thresholds[(frame.left + x) & 7])
+            bits.bytes[x / 8] |= 0x80 >> (x & 7);
+        Rect row;
+        SetRect(&row, frame.left, y, frame.right, y + 1);
+        CopyBits(&bitmap, &port->portBits, &bitmap.bounds, &row, srcOr, 0);
+      }
       Rect nativeBody;
       SetRect(&nativeBody, body.x, body.y, body.x + body.width, body.y + body.height);
       PenNormal();
@@ -3039,6 +3103,7 @@ namespace
           SetPort(saved);
           return;
         }
+        const bool captureCorrect = incremental.matchesProbe();
         Node *viewport = 0, *card = 0;
         loka::dsl::FlowError error;
         const bool foundViewport =
@@ -3064,7 +3129,8 @@ namespace
                         CARD_SCROLLED);
         // Synchronous production full draw keeps the capture within this arm.
         native->draw();
-        self->recordArm("card-scroll-incremental-equals-full", incremental.differences() == 0, COMPLETE);
+        self->recordArm(
+            "card-scroll-incremental-equals-full", captureCorrect && incremental.differences() == 0, COMPLETE);
         std::FILE *timing = std::fopen("CARDTIME.TXT", "a");
         self->recordArm("card-scroll-timing-log-open", timing != 0, COMPLETE);
         if (timing)
@@ -3246,13 +3312,18 @@ namespace
                     16 + (3 * origin) % 8 + minimumHeight + (5 * residue) % 8);
             ToolboxPaintClip clip(frame);
             EraseRect(&frame);
+            const unsigned long oracleStart = TickCount();
             CardPixels::tableReference(frame, style);
+            const unsigned long oracleTicks = TickCount() - oracleStart;
+            const unsigned long captureStart = TickCount();
             const CardCapture expected(frame);
+            const unsigned long captureTicks = TickCount() - captureStart;
             if (!expected.ready())
             {
               this->recordArm("card-matrix-capture-allocation", false, COMPLETE);
               continue;
             }
+            const bool captureCorrect = expected.matchesProbe();
             EraseRect(&frame);
             card.layout(frame);
             const unsigned long paintStart = TickCount();
@@ -3264,8 +3335,9 @@ namespace
                          origin,
                          residue,
                          paintTicks);
+            const unsigned long verificationStart = TickCount();
             this->recordArm(extent == CARD_SHADOW_NONE ? "card-none-border-only" : "card-stencil-matrix-whole",
-                            expected.differences() == 0,
+                            captureCorrect && expected.differences() == 0,
                             COMPLETE);
             if (origin == residue)
             {
@@ -3307,6 +3379,15 @@ namespace
                 expected.dump(this->log_, "table", false);
               }
             }
+            std::fprintf(timing,
+                         "card-matrix-work extent=%d origin=%d size=%d oracle_ticks=%lu capture_ticks=%lu "
+                         "verification_ticks=%lu\r",
+                         extent,
+                         origin,
+                         residue,
+                         oracleTicks,
+                         captureTicks,
+                         TickCount() - verificationStart);
           }
       const unsigned long ticks = TickCount() - started;
       std::fprintf(timing, "card-matrix total_ticks=%lu budget_ticks=3600\r", ticks);

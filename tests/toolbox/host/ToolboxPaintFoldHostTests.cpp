@@ -359,12 +359,16 @@ void CardStencilPins()
           LOKA_VERIFY(toolbox_host::roundFrames.size() == 1);
           if (extent == CARD_SHADOW_NONE)
             LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty());
-          else
-            LOKA_VERIFY(!toolbox_host::stencilTransfers.empty());
+          // Empty tiles need no native transfer. Required ink is pinned by the
+          // complete expected-black coverage check below.
           for (std::size_t t = 0; t < toolbox_host::stencilTransfers.size(); ++t)
           {
             const toolbox_host::StencilTransfer &transfer = toolbox_host::stencilTransfers[t];
             LOKA_VERIFY(transfer.mode == srcOr && transfer.rowBytes == 4);
+            bool hasInk = false;
+            for (std::size_t byte = 0; byte < transfer.bytes.size(); ++byte)
+              hasInk = hasInk || transfer.bytes[byte] != 0;
+            LOKA_VERIFY(hasInk);
             const int width = transfer.rect.right - transfer.rect.left;
             const int height = transfer.rect.bottom - transfer.rect.top;
             LOKA_VERIFY(width <= 30 && height <= 30 && transfer.bytes.size() <= 120);
