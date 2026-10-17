@@ -1,3 +1,4 @@
+#include "context/Win32ZStackContext.hpp"
 #include "context/Win32CardBandContext.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/style/CardShadow.hpp"
@@ -558,7 +559,7 @@ void testWin32PopupMenuPaintDelivery()
   DestroyWindow(root);
 }
 
-void testWin32TextOverlapPinsSiblingRepaint()
+void testWin32TextUnitClipsLowerSiblingInk()
 {
   typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
   BOOL fontSmoothing = FALSE;
@@ -584,7 +585,7 @@ void testWin32TextOverlapPinsSiblingRepaint()
     Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
     loka::app::RectSurfaceModel initial;
     initial.rectCount = 1;
-    initial.rects[0] = loka::app::RectSprite(0, 40, 160, 40);
+    initial.rects[0] = loka::app::RectSprite(0, 0, 160, 80);
     loka::core::PushStateTracker tracker;
     loka::core::MutableState<loka::app::RectSurfaceModel> model(initial);
     tracker.addState(&model);
@@ -593,9 +594,17 @@ void testWin32TextOverlapPinsSiblingRepaint()
     loka::app::RectSurfaceNode node(props);
     Win32RectSurfaceContext surface(&controller, root, 0, 0, 160, 80, &node);
     LOKA_VERIFY(surface.hasNativeSurface());
+    Win32ZStackContext units(&controller);
+    Win32ZStackContext::Unit **cursor = units.unitsBegin();
+    Win32ZStackContext::Unit *unit = units.unitFor(1, cursor);
+    LOKA_VERIFY(unit && unit->ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 160, 24))));
+    units.orderUnits();
+    RECT unitRect;
+    LOKA_VERIFY(GetWindowRect(unit->hwnd(), &unitRect));
+    LOKA_VERIFY(unitRect.bottom - unitRect.top == 24 && unitRect.right - unitRect.left == 160);
     loka::app::TextNode textNode((loka::app::TextProps("*")));
-    Win32TextContext text(&controller, root, 0, 0, 160, 24, &textNode);
-    HWND textHwnd = FindWindowExW(root, NULL, L"STATIC", L"*");
+    Win32TextContext text(&controller, unit->hwnd(), 0, 0, 160, 24, &textNode);
+    HWND textHwnd = FindWindowExW(unit->hwnd(), NULL, L"STATIC", L"*");
     LOKA_VERIFY(textHwnd != NULL);
 
     ShowWindow(root, SW_SHOWNOACTIVATE);
@@ -609,7 +618,7 @@ void testWin32TextOverlapPinsSiblingRepaint()
       {
         loka::app::RectSurfaceModel next;
         next.rectCount = 1;
-        next.rects[0] = loka::app::RectSprite(0, 44, 160, 36);
+        next.rects[0] = loka::app::RectSprite(0, 0, 160, 76);
         {
           loka::core::StateTrackerGuard guard(&tracker);
           model.set(next);
@@ -618,6 +627,10 @@ void testWin32TextOverlapPinsSiblingRepaint()
         pumpMessages();
         UpdateWindow(root);
       }
+      // Drain both siblings before capture without repainting a clean upper unit.
+      UpdateWindow(unit->hwnd());
+      UpdateWindow(textHwnd);
+      UpdateWindow(surface.hwnd());
       NullPlatformContext captureOwner;
       loka::core::resource::Image capture;
       LOKA_VERIFY(Access::captureWindowClientBitmap(captureOwner, root, capture));
@@ -626,6 +639,7 @@ void testWin32TextOverlapPinsSiblingRepaint()
       HGDIOBJ previous = SelectObject(pixels, static_cast<HBITMAP>(capture.nativeHandle()));
       LOKA_VERIFY(previous != NULL && previous != HGDI_ERROR);
       const COLORREF below = GetPixel(pixels, 80, 60);
+      const COLORREF changedGround = GetPixel(pixels, 80, 78);
       const COLORREF overlap = GetPixel(pixels, 150, 12);
       const COLORREF ground = GetPixel(pixels, 200, 100);
       // Font smoothing can render the glyph without pure text-role pixels (#829).
@@ -634,7 +648,7 @@ void testWin32TextOverlapPinsSiblingRepaint()
       {
         for (int x = 0; x < 160; ++x)
         {
-          if (GetPixel(pixels, x, y) != GetSysColor(COLOR_WINDOW))
+          if (GetPixel(pixels, x, y) != GetSysColor(COLOR_BTNFACE))
           {
             ++inkPixels;
           }
@@ -648,14 +662,16 @@ void testWin32TextOverlapPinsSiblingRepaint()
                   static_cast<int>(fontSmoothing), static_cast<unsigned int>(fontSmoothingType));
       std::fflush(stdout);
       LOKA_VERIFY(below == GetSysColor(COLOR_WINDOWTEXT));
-      // Win32 sibling-repaint path pin, not a cross-rail overlap promise.
-      LOKA_VERIFY(overlap == GetSysColor(COLOR_WINDOW));
+      LOKA_VERIFY(changedGround == GetSysColor(phase == 0 ? COLOR_WINDOWTEXT : COLOR_WINDOW));
+      // The opaque unit excludes lower sibling ink even after a surface-only tick.
+      LOKA_VERIFY(overlap == GetSysColor(COLOR_BTNFACE));
       LOKA_VERIFY(inkPixels > 0);
       LOKA_VERIFY(ground == GetSysColor(COLOR_BTNFACE));
     }
 
     text.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     surface.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
+    units.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
     controller.drainNativeRetirements();
   }
 }
@@ -671,7 +687,7 @@ namespace
     return props;
   }
 
-  // Same production root and admission as testWin32TextOverlapPinsSiblingRepaint.
+  // Same production root and admission as testWin32TextUnitClipsLowerSiblingInk.
   struct TransparentPaintWindow
   {
     NullPlatformContext platform;
@@ -700,8 +716,7 @@ namespace
 
   COLORREF windowPixel(HWND hwnd, int x, int y)
   {
-    // Read existing pixels; do not issue PrintWindow or an extra invalidation
-    // that could hide a missing parent repaint in the change path.
+    // A child DC also verifies that this window owns a visible pixel here.
     HDC dc = GetDC(hwnd);
     LOKA_VERIFY(dc != NULL);
     const COLORREF pixel = GetPixel(dc, x, y);
@@ -736,7 +751,7 @@ namespace
   }
 } // namespace
 
-void testWin32AttributedTextTransparentOverSprite()
+void testWin32AttributedTextUnitClipsLowerSiblingInk()
 {
   using namespace loka::app;
   using namespace loka::app::scene;
@@ -754,8 +769,16 @@ void testWin32AttributedTextTransparentOverSprite()
   RectSurfaceNode node(props);
   Win32RectSurfaceContext surface(&controller, root, 0, 0, 160, 80, &node);
   LOKA_VERIFY(surface.hasNativeSurface());
+  Win32ZStackContext units(&controller);
+  Win32ZStackContext::Unit **cursor = units.unitsBegin();
+  Win32ZStackContext::Unit *unit = units.unitFor(1, cursor);
+  LOKA_VERIFY(unit && unit->ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 160, 24))));
+  units.orderUnits();
+  RECT unitRect;
+  LOKA_VERIFY(GetWindowRect(unit->hwnd(), &unitRect));
+  LOKA_VERIFY(unitRect.bottom - unitRect.top == 24 && unitRect.right - unitRect.left == 160);
   AttributedTextNode textNode((AttributedTextProps(Styled("*", FontSize<12>()))));
-  Win32AttributedTextContext text(&controller, root, 0, 0, 160, 24, &textNode);
+  Win32AttributedTextContext text(&controller, unit->hwnd(), 0, 0, 160, 24, &textNode);
   LOKA_VERIFY(text.paintHwnd() != NULL);
   LayoutState state;
   state.width = 160;
@@ -763,23 +786,35 @@ void testWin32AttributedTextTransparentOverSprite()
   LOKA_VERIFY(state.height > 4);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   flushTransparentPaint(controller, root);
-  // Native ZStack arrangement, just like the Text pin above. This is a Win32
-  // sibling-path pin, not a promise of cross-rail RectSurface overlays.
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOWTEXT));
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
+  // The upper text belongs to an opaque unit; surface-only ticks cannot show through.
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOWTEXT));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(RectSurfaceModel());
   }
   flushTransparentPaint(controller, root);
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOW));
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOW));
   {
     loka::core::StateTrackerGuard guard(&tracker);
     model.set(initial);
   }
   flushTransparentPaint(controller, root);
-  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_WINDOWTEXT));
+  UpdateWindow(unit->hwnd());
+  UpdateWindow(text.paintHwnd());
+  UpdateWindow(surface.hwnd());
+  LOKA_VERIFY(windowPixel(text.paintHwnd(), 150, 2) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(surface.hwnd(), 80, 60) == GetSysColor(COLOR_WINDOWTEXT));
   text.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   surface.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  units.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
 }
 
@@ -1532,12 +1567,15 @@ static void checkCardOverPatternedImage()
   ImageViewNode imageNode(props);
   Win32ImageViewContext imageContext(&controller, root, 21, 31, 100, 19, &imageNode);
   CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));
-  Win32CardBandContext context(&controller, root, 21, 31, 100, 19, &band);
+  // Patterned ground belongs to the parent, never to an overlapping sibling.
+  Win32CardBandContext context(&controller, imageContext.hwnd(), 0, 0, 100, 19, &band);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   context.onPropsApplied();
   flushTransparentPaint(controller, root);
-  const loka::core::Frame frame(21, 31, 100, 19);
+  const loka::core::Frame frame(0, 0, 100, 19);
   const loka::core::Frame body = CardBodyInBand(frame, band.props);
+  POINT phaseOrigin = {0, 0};
+  MapWindowPoints(context.hwnd(), root, &phaseOrigin, 1);
   std::vector<COLORREF> first;
   for (int y = 0; y < 19; ++y)
     for (int x = 0; x < 100; ++x)
@@ -1547,7 +1585,7 @@ static void checkCardOverPatternedImage()
       if (y >= 3)
       {
         const bool dot = CardShadowStencilInk(
-            CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y), frame.x + x, frame.y + y);
+            CardShadowDensity(band.props.style, body, frame.x + x, frame.y + y), phaseOrigin.x + x, phaseOrigin.y + y);
         LOKA_VERIFY(pixel == (dot ? RGB(0, 0, 0) : ground[y * 100 + x]));
       }
     }

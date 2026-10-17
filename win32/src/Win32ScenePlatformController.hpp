@@ -21,7 +21,7 @@ class Win32ButtonContext;
 class Win32EditTextContext;
 class Win32NativeLayoutPass;
 class Win32PopupMenuContext;
-class Win32RetirableContext;
+class Win32OwnedChildWindow;
 class Win32TextContext;
 class Win32AttributedTextContext;
 class Win32ScrollViewContext;
@@ -235,7 +235,7 @@ private:
   friend class ::loka::dsl::testing::Win32ScenePlatformTestAccess;
   friend class ::loka::app::scene::Win32PlatformLayoutTraversal;
   friend class ::Win32NativeLayoutPass;
-  friend class ::Win32RetirableContext;
+  friend class ::Win32OwnedChildWindow;
   friend class ::Win32TextContext;
   friend class ::Win32AttributedTextContext;
   friend void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller);
@@ -354,6 +354,7 @@ private:
       repaint and presents the completed native layout once at the pass end. */
   void positionNativeWindow(HWND hwnd, const loka::win32::NativeRect &geometry);
   void resizeNativeWindow(HWND hwnd, const loka::win32::NativeRect &geometry);
+  void raiseNativeWindow(HWND hwnd);
   HWND createNativeChildWindow(DWORD exStyle,
                                LPCWSTR className,
                                LPCWSTR windowName,
@@ -371,7 +372,7 @@ private:
   int measureClientWidth(int requestedWidth) const;
   void queueDirtyRect(HWND targetHwnd, const loka::win32::NativeRect *rect, BOOL eraseBackground, bool includeChildren);
   static UINT pendingInvalidationFlags(const PendingInvalidate &entry);
-  /** Flush native damage and replay intersecting later siblings without erasing. */
+  /** Flush queued native damage; opaque sibling units are excluded by clipping. */
   void flushPendingInvalidations(bool updateNow);
   void dumpRedrawStatsIfNeeded();
 

@@ -87,7 +87,7 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(
         controller.projectionParentScopes_.current().deriveScrolled(0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
-    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+    ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
     state.width = 80;
@@ -215,7 +215,7 @@ namespace
       LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
           0, 0, 0, loka::core::Frame(0, 0, 100, 100), scope));
       {
-        ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+        ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scope);
         state.y = 0;
         state.spacing = 12;
         LayoutNode(container, state, &controller, 0);
@@ -297,7 +297,7 @@ namespace
     ProjectionParentScope scrollScope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scrollScope));
-    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scrollScope);
+    ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scrollScope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
     state.width = 80; state.height = 80;
@@ -344,7 +344,7 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
-    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+    ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
     state.width = 80;
@@ -379,7 +379,7 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
-    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+    ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
     state.width = 80; state.height = 20; state.lineHeight = 20; state.spacing = 5;
@@ -423,7 +423,7 @@ namespace
     ProjectionParentScope scope;
     LOKA_VERIFY(controller.projectionParentScopes_.current().deriveScrolled(
         0, 0, 0, loka::core::Frame(0, 0, 80, 80), scope));
-    ProjectionParentScopeGuard guard(controller.projectionParentScopes_, scope);
+    ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, scope);
     LOKA_VERIFY(guard.isActive());
     LayoutState state;
     state.y = static_cast<short>(SHRT_MAX - 20 + (refuses ? 1 : 0));

@@ -50,7 +50,8 @@ void RegisterWin32BuiltInSupport(Win32ScenePlatformController &controller)
   loka::app::layout::GridLayoutMetrics gridMetrics;
   gridMetrics.gapX = 0;
   gridMetrics.gapY = 0;
-  loka::app::layout::RegisterBuiltinPlatformLayoutHandlers(
+  // Win32 owns the ZStack unit loop; only flat-layout rails register its handler.
+  loka::app::layout::RegisterBuiltinNonZStackLayoutHandlers(
       controller.layoutHandlerRegistry_, &controller.rowLayoutMetrics(), &gridMetrics, Win32SceneLayout::spacing());
   RegisterWin32TextEditorNodeHandler(controller.nodeHandlerRegistry_);
   RegisterWin32ButtonNodeHandler(controller.nodeHandlerRegistry_);

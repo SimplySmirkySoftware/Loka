@@ -5,7 +5,6 @@
 #include "app/core/Window.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
-#include "app/nodes/nestable/ZStack.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/StringUTF8.hpp"
 
@@ -18,8 +17,7 @@ namespace helloworld
   using namespace loka::core;
   enum
   {
-    kMainPanelsScrollTag = 1,
-    kDecorationTag = 2
+    kMainPanelsScrollTag = 1
   };
 
   namespace
@@ -289,7 +287,7 @@ namespace helloworld
               << randomMenu);
     // The window's margin is 0 so the ScrollView reaches its edges; the panels
     // keep the rail's standard margin inside it, from the edges and from the
-    // bar (#950 page 4). The decoration keeps the same margin from the corner.
+    // bar (#950 page 4).
     ScrollView mainPanels = ScrollView(this->viewport_)
                                 .TEST_ID("HelloWorld.MainPanelsScroll")
                             << (Box().padding(StandardWindowMargin()).TEST_ID("HelloWorld.MainPanelsInset")
@@ -303,10 +301,7 @@ namespace helloworld
                                                       this->weightInput_,
                                                       this->bmiResult_.state())));
     mainPanels.tag(kMainPanelsScrollTag);
-    TextDefinition decoration = Text("*").TEST_ID("HelloWorld.Decoration");
-    decoration.tag(kDecorationTag);
-    c.declare(ZStack().TEST_ID("HelloWorld.Root")
-              << mainPanels << (Box().padding(StandardWindowMargin()) << decoration));
+    c.declare(mainPanels);
   }
 
 

@@ -1,5 +1,6 @@
 #include "platform/Win32DisplayScale.cpp"
 #include "platform/Win32DisplayFont.cpp"
+#include "context/Win32OwnedChildWindow.cpp"
 #include "context/Win32RetirableContext.cpp"
 #include "context/Win32AttributedTextContext.cpp"
 #include "context/Win32TextContext.cpp"
@@ -383,3 +384,5 @@ COLORREF GetTextColor(HDC dc)
 {
   return dc->textColor;
 }
+
+void Win32ScenePlatformController::raiseNativeWindow(HWND) {}

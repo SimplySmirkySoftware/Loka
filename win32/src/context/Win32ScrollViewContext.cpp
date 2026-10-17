@@ -337,6 +337,7 @@ void Win32ScrollViewContext::EnsureClassRegistered()
   registered = true;
 }
 
+// Deliberate twin of Win32ZStackContext::Unit::WndProc, with viewport input.
 LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
                                                  UINT msg,
                                                  WPARAM wParam,
