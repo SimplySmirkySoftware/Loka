@@ -100,7 +100,7 @@ namespace
     column->addChild(new ButtonNode(ButtonProps().text(label)));
     return column;
   }
-  ZStackNode *stackWithGround(Fixture &fixture, int height = 160)
+  ZStackNode *stackWithGround(Fixture &fixture, short height = 160)
   {
     ZStackNode *stack = new ZStackNode((ZStackProps()));
     stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(200, height)));
