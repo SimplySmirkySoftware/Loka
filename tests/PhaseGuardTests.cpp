@@ -448,7 +448,7 @@ namespace
     {
       DetachObserverRequest *self = static_cast<DetachObserverRequest *>(data);
       ++self->calls;
-      if (!self->seat->getCurrentScene().get()->getAttachedState()->get())
+      if (!self->seat->window()->scene()->getAttachedState()->get())
       {
         self->seat->requestRearm();
         self->app->flush();

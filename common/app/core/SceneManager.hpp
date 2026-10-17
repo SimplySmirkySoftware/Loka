@@ -3,8 +3,6 @@
 
 #include "core/diag/LifecycleAudit.hpp"
 #include "app/scene/Scene.hpp"
-#include "core/State.hpp"
-#include "core/StateTracker.hpp"
 
 class Window;
 
@@ -132,8 +130,6 @@ public:
       live Window owner are refused; a refused new target remains caller-owned. */
   bool commitTransaction(loka::app::scene::Scene *ignoredFrom,
                          loka::app::scene::Scene *to);
-  // Return the currently attached scene state.
-  const loka::core::State<loka::app::scene::Scene *> &getCurrentScene() const;
   /** Records detach for the next App admission; the last request wins.
       Callback callers do O(1) work and walk no composition rows. */
   void requestDetach();
@@ -150,7 +146,7 @@ public:
   /** The admission predicate is derived from the desired and installed identities. */
   bool hasPendingReplacement() const
   {
-    return this->desired_ != this->currentScene_.get();
+    return this->desired_ != this->currentScene_;
   }
   bool hasRetiredScenes() const
   {
@@ -175,7 +171,7 @@ private:
       receives the captured request. Observer requests wait for next admission. */
   bool applyPendingWork();
   bool applyReplacement();
-  /** Publishes currentScene_ synchronously inside seat apply, with applying_ set. */
+  /** Installs the identity synchronously inside seat apply, with applying_ set. */
   void installScene(loka::app::scene::Scene *scene);
   /** Publishes retirement synchronously and unmounts the Scene. */
   void retireScene(loka::app::scene::Scene *scene);
@@ -187,7 +183,7 @@ private:
   void request(SceneRequest value) { this->request_ = value; }
   SceneRequest request_;
 
-  loka::core::MutableState<loka::app::scene::Scene *> currentScene_;
+  loka::app::scene::Scene *currentScene_;
   loka::app::scene::Scene *desired_;
   loka::app::scene::Scene *applying_;
   loka::app::detail::SceneRetirePool retiredScenes_;
