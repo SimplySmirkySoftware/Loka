@@ -642,7 +642,7 @@ namespace
       FrameRoundRect(&shadow, 12, 12);
       CloseRgn(shadowRegion);
       DiffRgn(shadowRegion, bodyRegion, shadowRegion);
-      PenPat(&loka::toolbox::kToolboxGradientPatterns[4]);
+      PenPat(&loka::toolbox::kToolboxGradientPatterns[4].pattern);
       PenMode(patOr);
       PaintRgn(shadowRegion);
       PenNormal();
@@ -2880,7 +2880,7 @@ namespace
         this->recordArm(size ? "card-large-bands-equal-whole" : "card-minimum-bands-equal-whole",
                         std::memcmp(reference, actual, pixelCount) == 0,
                         COMPLETE);
-        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
         CardPixels::capture(frame, ground);
         card.draw();
         CardPixels::capture(frame, actual);
@@ -2896,7 +2896,7 @@ namespace
         damage.bottom -= 7;
         {
           ToolboxPaintClip partial(damage);
-          FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2]);
+          FillRect(&damage, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
           card.draw(CARD_BAND_RIGHT);
         }
         CardPixels::capture(frame, ground);
@@ -2907,7 +2907,7 @@ namespace
         Rect narrow = frame;
         narrow.right = narrow.left + 14;
         card.layout(narrow);
-        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2]);
+        FillRect(&frame, &loka::toolbox::kToolboxGradientPatterns[2].pattern);
         CardPixels::capture(frame, ground);
         card.draw();
         CardPixels::capture(frame, actual);
