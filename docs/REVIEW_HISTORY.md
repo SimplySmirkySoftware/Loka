@@ -25,6 +25,10 @@ Two primitives carrying one meaning — a `bool` beside an index, a hand-rolled 
 
 An owned `State` with a single write door, tracker registration, and explicit readers (`Window::nativeFrame()`, #525) is a box, not a flag, and is exempt. A bit whose meaning depends on event order — an echo-suppression flag armed before a native call and cleared by whichever observer fires first — is the worst case: the first draft of #525 failed three different ways under observer count, notification timing, and re-entry.
 
+### DSL unification topic 5
+
+Ruling of 2026-10-17 (DSL unification page 3, REFUTE held with corrections). Making `DocumentWindows` a For-shaped node seat, or sharing a declaration part between the Boundary seats and the window seat, was refused on Gate 1 check 1 read by deletion: neither removes code, because the window seat builds no candidate and has no declaration part in common with the Boundary seats, and its commit means "walked this revision" while a Boundary commit means "published this candidate or vacated the seat". What the consumers share is the `KeySnapshot` type and the needs rule (k1, #1190), recorded in `docs/KeyedSeatDesign.md`; the one-window rail's conflict with increase-before-decrease is tracked in #1399.
+
 ### 610 — Gate 2 check 1: foreign ledger walk
 
 A door that walks rows owned by someone else — every ledger in a controller to find one context's entries, every hit to answer whether a State still has a user — is returned for reshaping, not noted as a medium smell: the rows belong with their owner, and a walk over foreign rows is the same misplaced-invariant shape as a foreign reader of a flag (#610's `refreshContextProps` walked seven ledgers on every retained props apply and was accepted from a smell list that had named it).
