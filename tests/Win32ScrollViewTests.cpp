@@ -404,14 +404,16 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     LOKA_VERIFY(info.nPage == 10);
     LOKA_VERIFY(offsetState.get().y == -12);
 
-    offset.state().set(loka::core::Frame(0, 6, 0, 0));
+    offset.state().set(loka::core::Frame(0, 100, 0, 0));
     controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
     const RECT scrolled = childRectInParent(child, root);
     const SCROLLINFO after = scrollInfo(viewport);
-    // Extent maximum 22 admits the requested content origin 6 (extent 18).
-    LOKA_VERIFY(scrolled.top == seat.top - 6);
-    LOKA_VERIFY(after.nPos == 18);
-    LOKA_VERIFY(offsetState.get().y == 6);
+    // Extent maximum 22 clamps the requested content origin 100: the bar
+    // settles extent 22 and the published fact reads 22 - 12 = 10, so the
+    // fact assertion proves the clamp was published, not merely preserved.
+    LOKA_VERIFY(scrolled.top == seat.top - 10);
+    LOKA_VERIFY(after.nPos == 22);
+    LOKA_VERIFY(offsetState.get().y == 10);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY(DestroyWindow(root));

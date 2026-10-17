@@ -1393,9 +1393,12 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   }
 
   const int extent = contentHeight + scrollView->props.contentInsets_.extentExtra();
-  const int extentBottom = currentY + scrollView->props.contentInsets_.extentExtra();
-  // The extent and the heightless bottom follow the Toolbox short-range rule.
-  if (extent > SHRT_MAX || (state.height <= 0 && (extentBottom < SHRT_MIN || extentBottom > SHRT_MAX)))
+  // On success currentY - state.y is the content height, so the measured
+  // bottom is the seat origin plus the extent (the Toolbox spelling).
+  const int extentBottom = state.y + extent;
+  // The extent and the heightless bottom follow the Toolbox short-range rule;
+  // SCROLLINFO is int, the short is the fact's and the twins' range.
+  if (extent > SHRT_MAX || (state.height <= 0 && extentBottom > SHRT_MAX))
   {
     shortRangeRefused = true;
   }
@@ -1418,7 +1421,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     return LayoutNodeResult(state.width, state.y + state.height);
   }
-  if (shortRangeRefused || extentBottom < SHRT_MIN || extentBottom > SHRT_MAX)
+  if (shortRangeRefused || extentBottom > SHRT_MAX)
   {
     return LayoutNodeResult(state.width, state.y);
   }
