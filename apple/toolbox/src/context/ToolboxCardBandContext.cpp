@@ -100,7 +100,14 @@ namespace
     {
       rowBytes = 2 * ((detail::kCardShadowMaximumTileWidth + 15) / 16)
     };
-    unsigned char bits[rowBytes * detail::kCardShadowMaximumTileHeight];
+    // CopyBits reads a BitMap by words, and the 68000 faults on a word access
+    // at an odd address (#1398); the union gives the buffer word alignment by
+    // type instead of by the frame layout the compiler happens to choose.
+    union
+    {
+      unsigned char bytes[rowBytes * detail::kCardShadowMaximumTileHeight];
+      long alignment;
+    } bits;
     GrafPtr port;
     GetPort(&port);
     for (int v = 0; v < 3; ++v)
@@ -129,17 +136,17 @@ namespace
             continue;
           {
             PROFILE_SECTION("card.buffer-clear");
-            std::memset(bits, 0, sizeof(bits));
+            std::memset(bits.bytes, 0, sizeof(bits.bytes));
           }
           {
             PROFILE_SECTION("card.threshold");
             for (int y = 0; y < height; ++y)
               for (int x = 0; x < width; ++x)
                 if (CardShadowStencilInk(CardShadowDensity(style, body, x0 + x, y0 + y), x0 + x, y0 + y))
-                  bits[y * rowBytes + x / 8] |= 0x80 >> (x & 7);
+                  bits.bytes[y * rowBytes + x / 8] |= 0x80 >> (x & 7);
           }
           BitMap source;
-          source.baseAddr = reinterpret_cast<Ptr>(bits);
+          source.baseAddr = reinterpret_cast<Ptr>(bits.bytes);
           source.rowBytes = rowBytes;
           SetRect(&source.bounds, 0, 0, width, height);
           {
