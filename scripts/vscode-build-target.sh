@@ -27,6 +27,7 @@ case "$key" in
     HelloWorld) target=LokaHelloMacOS ;;
     MineSweeper) target=LokaMineMacOS ;;
     SimpleViewer) target=LokaSimpleViewerMacOS ;;
+    CardShowcase) target=LokaCardShowcaseMacOS ;;
     SimpleText) target=LokaSimpleTextMacOS ;;
     ScrapbookUI) target=ScrapbookUIMacOS ;;
     FloppyBird) target=LokaFloppyBirdMacOS ;;
