@@ -71,11 +71,25 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
 
-  /** Observe the delivery that actually ran, not the intended routing rule. */
-  const char *PaintDeliveryRoute(const ToolboxSceneDebugStats &before, const ToolboxSceneDebugStats &after)
+  /** Observe one write-to-check interval, including any intervening OS update. */
+  const char *PaintDeliveryRoute(const ToolboxSceneDebugStats &before,
+                                 const ToolboxSceneDebugStats &after,
+                                 FILE *log,
+                                 const char *step)
   {
     if (after.totalDrawCalls > before.totalDrawCalls)
+    {
+      // A dirty replay and an OS update can both run before the next idle.
+      // Keep the full-draw evidence instead of labelling that interval clipped.
+      if (after.totalRenderDirtyCalls > before.totalRenderDirtyCalls)
+        std::fprintf(log,
+                     "%s route-interval draws=%d dirty_replays=%d renders=%d\r",
+                     step,
+                     after.totalDrawCalls - before.totalDrawCalls,
+                     after.totalRenderDirtyCalls - before.totalRenderDirtyCalls,
+                     after.totalRenderCalls - before.totalRenderCalls);
       return "full";
+    }
     if (after.totalRenderDirtyCalls > before.totalRenderDirtyCalls)
       return after.totalRenderCalls > before.totalRenderCalls ? "composition" : "kind";
     return "none";
@@ -1940,6 +1954,7 @@ namespace
         self->recordArm("scrollview-first-text-placement", placedInside, COMPOSITED_WRITE);
         self->recordArm("startup-text-baseline", !above && inside, COMPOSITED_WRITE);
         self->checkBlockingWorkCursor(*controller, COMPOSITED_WRITE);
+        // This snapshot belongs only to the following write-to-check interval.
         self->initial_ = controller->debugStatsForTesting();
         self->composited_->advance();
         self->phase_ = COMPOSITED_CHECK;
@@ -1951,7 +1966,8 @@ namespace
       const PaintApplyVerdict verdict = CollectPaintAnswers(*self->composited_, query, answers, source);
       // zstack-overlap-replay retired with the ZStack overlay contract
       // (page 2a §16/§18, #1438, #1442). Keep non-overlapping text history.
-      const char *route = PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting());
+      const char *route =
+          PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting(), self->log_, "contained-text-history");
       std::fprintf(self->log_, "contained-text-history route=%s\r", route);
       self->recordArm(
           "contained-text-history", verdict.refusedCount() == 0 && std::strcmp(route, "composition") == 0, EDIT_WRITE);
@@ -2467,11 +2483,15 @@ namespace
             blank = GetPixel(static_cast<short>(x), static_cast<short>(y)) == 0 && blank;
         const bool spriteVisible = GetPixel(self->marker_.h, self->marker_.v) != 0;
         SetPort(previousPort);
-        const char *route = PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting());
+        const char *route = PaintDeliveryRoute(self->initial_,
+                                               controller->debugStatsForTesting(),
+                                               self->log_,
+                                               Popup ? "popup-history-setup" : "history-setup");
         std::fprintf(self->log_, "%s route=%s\r", Popup ? "popup-history-setup" : "history-setup", route);
         self->recordArm(Popup ? "popup-history-setup" : "history-setup",
                         blank && spriteVisible && std::strcmp(route, "full") == 0,
                         Popup ? POPUP_HISTORY_SECOND : HISTORY_SECOND);
+        // This snapshot belongs only to the following write-to-check interval.
         self->initial_ = controller->debugStatsForTesting();
         node->writeFirst();
         self->phase_ = Popup ? POPUP_HISTORY_SECOND : HISTORY_SECOND;
@@ -2482,13 +2502,16 @@ namespace
         const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
         const bool flushed = stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
                              && stats.windowFullRequestCount == self->initial_.windowFullRequestCount;
-        const char *route = PaintDeliveryRoute(self->initial_, stats);
+        const char *route = PaintDeliveryRoute(
+            self->initial_, stats, self->log_, Popup ? "popup-history-first-clipped" : "history-first-clipped");
         std::fprintf(
             self->log_, "%s route=%s\r", Popup ? "popup-history-first-clipped" : "history-first-clipped", route);
         self->recordArm(Popup ? "popup-history-first-clipped" : "history-first-clipped",
                         flushed && std::strcmp(route, "composition") == 0,
                         Popup ? POPUP_HISTORY_CHECK : HISTORY_CHECK);
-        self->initial_ = stats;
+        // Fresh value snapshot immediately before this step's write. An OS
+        // update before CHECK is inside this interval, not setup-time history.
+        self->initial_ = controller->debugStatsForTesting();
         node->writeSecond();
         return;
       }
@@ -2506,7 +2529,7 @@ namespace
       const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
       const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
       const char *name = Popup ? "popup-history-survives" : "history-survives-clipped-render";
-      const char *route = PaintDeliveryRoute(self->initial_, stats);
+      const char *route = PaintDeliveryRoute(self->initial_, stats, self->log_, name);
       std::fprintf(self->log_,
                    "%s whole_window=%d rect_requests=%d sprite_preserved=%d new_text_visible=%d route=%s\r",
                    name,
