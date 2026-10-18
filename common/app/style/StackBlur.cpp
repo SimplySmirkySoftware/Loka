@@ -13,9 +13,11 @@ namespace loka
         return line + static_cast<size_t>(clamped) * step;
       }
 
-      // Original implementation of Klingemann's StackBlur triangular running sums.
-      // The source pass stays immutable, so it supplies the moving stack's samples
-      // directly. Each axis uses weights r+1-|offset| and replicated edge pixels.
+      // Written for Loka from the published StackBlur algorithm (Mario Klingemann,
+      // 2004): triangular weights r+1-|offset| kept as running sums. No code or
+      // lookup tables come from the original implementations; this pass reads the
+      // immutable source line instead of a circular stack, divides exactly, and
+      // replicates edge pixels.
       static void StackBlurPass(const unsigned char *source,
                                 unsigned char *destination,
                                 int length,
