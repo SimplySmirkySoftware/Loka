@@ -41,9 +41,9 @@ The viewport is one `Frame` in **content coordinates**, not the seat rect.
 top-left corner. `width` and `height` report the visible content area (the seat
 minus scroll bars), in the same content units as the origin. Insets do not
 shrink this size. Zero width and height mean "not reported yet", before the
-first layout. Null reports size now; Toolbox, Win32 and macOS will adopt size
-publication in the following PRs and currently preserve the stored size. Apps
-initialise the state with `Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
+first layout. The Null rail reports it; Toolbox, Win32 and macOS do not report
+it yet and carry the stored size through. Apps initialise the state with
+`Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
 top inset visible (see [Content insets](#content-insets)).
 
 Four helpers on `ScrollViewNode` are the coordinate doors (origin publication
@@ -216,6 +216,6 @@ keeps the value the preceding layout clamped:
   writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
   the app a second writer of a rail result channel. That is a recorded debt,
   not a pattern to copy.
-- Null reports visible size; Toolbox, Win32 and macOS size publication is
-  scheduled for the following PRs. Its first reader is the lazy-list window
+- Only the Null rail reports the visible size; Toolbox, Win32 and macOS still
+  carry the stored size through. Its first reader is the lazy-list window
   fold (LazyColumn reading `viewport_` directly).

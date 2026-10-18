@@ -1090,8 +1090,8 @@ The design goal is that memory and lifecycle are visible from the DSL structure.
 origin into it. `x` and `y` are the **content** point shown at the seat's
 top-left corner, not the seat rect. After the first layout, `width` and
 `height` report the visible content size (seat minus scroll bars), in the same
-content units; insets do not shrink it. Null reports size now; Toolbox, Win32
-and macOS follow in subsequent PRs and currently preserve the stored size.
+content units; insets do not shrink it. The Null rail reports it; Toolbox,
+Win32 and macOS do not report it yet and carry the stored size through.
 Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
