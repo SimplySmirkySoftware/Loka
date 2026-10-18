@@ -1639,9 +1639,9 @@ beneath showing through. The other rails keep the window ground.
 On macOS before 10.10, the experimental user default `LokaExpLiveBlur` (or the
 launch argument `-LokaExpLiveBlur YES`) turns on live CPU blur instead. This
 choice is made when the unit is created. It reflects the content beneath as
-AppKit last redrew the unit: some changes, such as a caret blinking beneath it
-on 10.4/10.5, are not reflected until the next redraw. A change only within
-eight pixels outside the unit can leave its blurred edge stale. Layer-backed
+AppKit last redrew the unit. A change beneath that AppKit redraws only partly,
+such as a caret blinking or a small control change, can leave the blur around
+it stale until the next full redraw of the unit, such as a scroll. Layer-backed
 views fall back to the static frosted ground.
 
 The macOS unit ground is chosen when the ZStack is first projected, including

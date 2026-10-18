@@ -104,8 +104,12 @@ namespace
   }
 
   /** One prefix walk of the parent's native z order per CPU draw. Each visible
-      intersecting lower sibling renders once into the expanded bitmap.
-      The unit and higher siblings never participate in their own underlay. */
+      intersecting lower sibling renders into the expanded bitmap, including
+      units of a ZStack nested in the ground. A lower live unit re-renders its
+      own lower siblings through its drawRect:, one level per nesting depth.
+      Although each ZStack has at most one blurred unit, overlapping nested
+      units repeat these prefix walks and can multiply work exponentially with
+      depth. The unit and higher siblings never participate in their own underlay. */
   bool RenderUnderlay(NSView *unit, NSGraphicsContext *context, NSRect bounds)
   {
     loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW,
@@ -117,7 +121,7 @@ namespace
       NSView *sibling = [siblings objectAtIndex:i];
       if (sibling == unit)
         break;
-      if ([sibling isHidden] || [sibling isKindOfClass:[LokaStackUnitView class]])
+      if ([sibling isHidden])
         continue;
       const NSRect clip = NSIntersectionRect([sibling bounds], [sibling convertRect:bounds fromView:unit]);
       if (NSIsEmptyRect(clip))
@@ -244,34 +248,10 @@ namespace
 }
 @end
 
-/** Experimental CPU projection; the run loop owns the sole pending repair. */
+/** Experimental CPU projection; AppKit clips each draw to its dirty region. */
 @interface LokaStackCPUUnitView : LokaStackFrostedUnitView
-- (void)lokaInvalidateWhole;
 @end
 @implementation LokaStackCPUUnitView
-- (void)lokaInvalidateWhole
-{
-  [self setNeedsDisplay:YES];
-}
-- (void)viewWillMoveToWindow:(NSWindow *)window
-{
-  if (!window)
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
-  [super viewWillMoveToWindow:window];
-}
-- (void)removeFromSuperview
-{
-  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
-  [super removeFromSuperview];
-}
-- (void)setHidden:(BOOL)hidden
-{
-  if (hidden)
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
-  else if ([self isHidden])
-    [self setNeedsDisplay:YES];
-  [super setHidden:hidden];
-}
 - (void)drawRect:(NSRect)rect
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -281,34 +261,6 @@ namespace
     PaintBlurTint([self bounds]);
   else
     [super drawRect:rect];
-  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
-  // AppKit cannot paint beyond the visible region, even for a whole-unit
-  // invalidation. Its dirty rectangles do not overlap; sum their intersections
-  // rather than trusting drawRect:'s enclosing rectangle, which can have holes.
-  const NSRect drawable = NSIntersectionRect([self bounds], [self visibleRect]);
-  if (blurred && !NSIsEmptyRect(drawable) && [self window] && ![self isHidden])
-  {
-    const NSRect *drawnRects = 0;
-    NSInteger count = 0;
-    [self getRectsBeingDrawn:&drawnRects count:&count];
-    double drawnArea = 0;
-    for (NSInteger i = 0; i < count; ++i)
-    {
-      const NSRect intersection = NSIntersectionRect(drawable, drawnRects[i]);
-      if (!NSIsEmptyRect(intersection))
-        drawnArea += static_cast<double>(NSWidth(intersection)) * NSHeight(intersection);
-    }
-    const double drawableArea = static_cast<double>(NSWidth(drawable)) * NSHeight(drawable);
-    // Half a square point absorbs rounding, so an exactly tiled region never loops.
-    if (drawnArea + 0.5 < drawableArea)
-      [self performSelector:@selector(lokaInvalidateWhole)
-                 withObject:nil
-                 afterDelay:0
-                    inModes:[NSArray arrayWithObjects:NSDefaultRunLoopMode,
-                                                      NSEventTrackingRunLoopMode,
-                                                      NSModalPanelRunLoopMode,
-                                                      nil]];
-  }
   [pool release];
 }
 @end
