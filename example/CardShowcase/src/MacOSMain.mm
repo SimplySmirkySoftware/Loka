@@ -51,6 +51,15 @@ static NSScrollView *FindScrollView(NSView *view)
     origin.y += dy;
     [clip scrollToPoint:origin];
     [scroll reflectScrolledClipView:clip];
+    // DIAG: 10.5/10.6 blur the whole scrolled area once the clip scrolls under a
+    // filtered sibling; LOKA_PROBE_REDISPLAY=1 asks the document and clip to redraw.
+    if (std::getenv("LOKA_PROBE_REDISPLAY"))
+    {
+      [[scroll documentView] setNeedsDisplay:YES];
+      [clip setNeedsDisplay:YES];
+      [scroll setNeedsDisplay:YES];
+      [[window contentView] setNeedsDisplay:YES];
+    }
     std::fprintf(stderr, "probe: scrolled by %.0f copiesOnScroll=%d\n", dy, [clip copiesOnScroll] ? 1 : 0);
     return;
   }
