@@ -964,28 +964,14 @@ void ToolboxScenePlatformController::refreshEditTextBindingForStateChange(EditTe
 
 void ToolboxScenePlatformController::refreshPopupEnabled(PopupHit &binding)
 {
-  if (this->inBatchUpdate_)
-  {
-    this->addPendingDirty(binding.rect);
-  }
-  else
-  {
-    this->window_->requestInvalidateRect(binding.rect);
-  }
+  this->requestControlRepaint(binding.rect);
 }
 
 #include "ToolboxEnabledControls.cpp"
 
 void ToolboxScenePlatformController::refreshButtonHitEnabled(ButtonHit &binding)
 {
-  if (this->inBatchUpdate_)
-  {
-    this->addPendingDirty(binding.rect);
-  }
-  else
-  {
-    this->window_->requestInvalidateRect(binding.rect);
-  }
+  this->requestControlRepaint(binding.rect);
 }
 
 bool ToolboxScenePlatformController::applyEnabledChangeForKind(

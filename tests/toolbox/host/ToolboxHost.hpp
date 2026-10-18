@@ -409,6 +409,7 @@ public:
   loka::app::scene::ExactMatchHandleBucket<ControlRef> pushButtonBucket_;
   void renderScrollView(loka::app::ScrollViewNode *);
 #endif
+  void requestControlRepaint(const Rect &rect);
   void refreshButtonEnabled(ButtonControlBinding &);
   void refreshScrollBarEnabled(ScrollBarControlBinding &);
   void commitScrollBarValueAt(std::size_t);

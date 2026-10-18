@@ -2,6 +2,15 @@
 #include "ToolboxPaintSuppressScope.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 
+/** Enabled observers queue into the existing batch, or request one rect directly. */
+void ToolboxScenePlatformController::requestControlRepaint(const Rect &rect)
+{
+  if (this->inBatchUpdate_)
+    this->addPendingDirty(rect);
+  else
+    this->window_->requestInvalidateRect(rect);
+}
+
 /** Shared setter door: suppress native painting, then replay in composition order. */
 void ToolboxScenePlatformController::refreshButtonEnabled(ButtonControlBinding &binding)
 {
@@ -9,7 +18,7 @@ void ToolboxScenePlatformController::refreshButtonEnabled(ButtonControlBinding &
   {
     ToolboxPortScope port(this->window_->window());
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
-    this->window_->requestInvalidateRect(binding.rect);
+    this->requestControlRepaint(binding.rect);
     if (binding.enabled->get())
     {
       HiliteControl(binding.control, 0);
@@ -30,7 +39,7 @@ void ToolboxScenePlatformController::refreshScrollBarEnabled(ScrollBarControlBin
   {
     ToolboxPortScope port(this->window_->window());
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
-    this->window_->requestInvalidateRect(binding.rect);
+    this->requestControlRepaint(binding.rect);
     HiliteControl(binding.control, binding.active ? 0 : 255);
   }
 }

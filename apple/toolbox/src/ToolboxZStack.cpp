@@ -96,8 +96,12 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
   }
 }
 
-/** Native tracking/caret paints can flash until update. O(units) on this
-    controller per native paint; only an overlapping unit requests repair. */
+/** O(units) per native paint; repair each partial overlap. Full containment
+    deliberately has no repair: own controls must fit inside their unit, and
+    fully covered ground/earlier-unit controls are outside the v1 contract.
+    Their selection highlight, TEActivate/TEDeactivate paint, and TrackControl
+    hilite stay on screen until an unrelated repaint presents the unit area.
+    Registration ownership belongs to the 2b hit shield, not this geometry test. */
 void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
 {
   if (!this->window_ || this->unitLedger_.contains(rect))

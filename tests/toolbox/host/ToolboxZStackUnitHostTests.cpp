@@ -8,6 +8,10 @@
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstring>
+#include <cstdio>
+#include "support/TextEditorStateOwner.hpp"
+#include "ToolboxBuiltInSupport.hpp"
+#include "toolbox/ToolboxTextEditorAccess.hpp"
 
 using namespace loka::app;
 using namespace loka::app::scene;
@@ -68,6 +72,12 @@ namespace
   void equal(const Rect &a, const Rect &b)
   {
     LOKA_VERIFY(EqualRect(&a, &b));
+  }
+  const ToolboxUnitLedger::UnitSeat *
+  unitRow(const ToolboxScenePlatformController &controller, ZStackNode *stack, unsigned index)
+  {
+    ToolboxUnitLedger::Mark cursor = 0;
+    return controller.unitLedger_.find(stack, index, cursor);
   }
   class ShowingNode;
   typedef BoundaryPropsFor<ShowingNode> ShowingProps;
@@ -175,6 +185,13 @@ namespace
     }
     LOKA_VERIFY(toolbox_host::invalidations == beforeInvalidation + 1);
     LOKA_VERIFY(native->hilite == 255);
+    controller.pendingDirtyRects_.clear();
+    controller.inBatchUpdate_ = true;
+    controller.refreshButtonEnabled(controller.buttonControls_[0]);
+    LOKA_VERIFY(toolbox_host::invalidations == beforeInvalidation + 1);
+    LOKA_VERIFY(controller.pendingDirtyRects_.size() == 1);
+    equal(controller.pendingDirtyRects_[0], rect);
+    controller.inBatchUpdate_ = false;
     for (size_t i = 0; i < native->calls.size(); ++i)
       LOKA_VERIFY(!native->calls[i].painted);
     controller.clearControls();
@@ -222,7 +239,7 @@ namespace
     LayoutState state = seat();
     LayoutNode(&viewport, state, &controller, 0);
     LOKA_VERIFY(controller.unitLedger_.mark() == 1);
-    const Rect row = controller.unitLedger_.find(stack, 1)->rect;
+    const Rect row = unitRow(controller, stack, 1)->rect;
     const Rect clip = controller.viewportScroll().contentRect;
     LOKA_VERIFY(row.top == clip.top && row.bottom == 51);
     LOKA_VERIFY(row.left >= clip.left && row.right <= clip.right);
@@ -272,6 +289,94 @@ namespace
   void toggleCaret(TEHandle te)
   {
     (**te).caretState = (**te).caretState ? 0 : -1;
+  }
+  bool requested(const Rect &rect)
+  {
+    for (std::size_t i = 0; i < toolbox_host::invalidatedRects.size(); ++i)
+      if (EqualRect(&rect, &toolbox_host::invalidatedRects[i]))
+        return true;
+    return false;
+  }
+  void editorIdleRepair()
+  {
+    loka::app::testing::TextEditorStateOwner owner;
+    ObservableList<String> lines;
+    LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
+    LOKA_VERIFY(lines.insert(0, String("abcd")) == EDIT_OK);
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    stack.addChild(new Probe("unit", 40));
+    stack.addChild(new Probe("second-unit", 30));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    LayoutState state = seat();
+    LayoutNode(&stack, state, &controller, 0);
+    TextEditorNode node(TextEditorProps(lines, owner.cursor));
+    state.x = 5;
+    state.y = 25;
+    state.width = 85;
+    state.height = 50;
+    IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(&node);
+    LOKA_VERIFY(handler);
+    ToolboxTextEditorContext *context =
+        static_cast<ToolboxTextEditorContext *>(handler->ensureContext(&node, &controller, state));
+    LOKA_VERIFY(context);
+    context->layout(&controller, state);
+    context->render(&controller);
+    LOKA_VERIFY(controller.editControls_.size() == 1);
+    State<bool> barEnabled(false);
+    ToolboxScrollBarLedger::ScrollBarControlBinding &bar = controller.scrollControl(0);
+    bar.enabled = &barEnabled;
+    const unsigned beforeBar = toolbox_host::invalidations;
+    controller.pendingDirtyRects_.clear();
+    controller.inBatchUpdate_ = true;
+    controller.refreshScrollBarEnabled(bar);
+    LOKA_VERIFY(toolbox_host::invalidations == beforeBar);
+    LOKA_VERIFY(controller.pendingDirtyRects_.size() == 1);
+    equal(controller.pendingDirtyRects_[0], bar.rect);
+    controller.inBatchUpdate_ = false;
+    controller.refreshScrollBarEnabled(bar);
+    LOKA_VERIFY(toolbox_host::invalidations == beforeBar + 1);
+    controller.editControls_.focus(0);
+    TEHandle te = loka::testing::ToolboxTextEditorAccess::te(*context);
+    LOKA_VERIFY(te);
+    const Point point = {(**te).viewRect.top, (**te).viewRect.left};
+    LOKA_VERIFY(context->click(point) == EDITOR_OK);
+    toolbox_host::invalidatedRects.clear();
+    ToolboxInputDoor::idleTextEdits(controller);
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    toolbox_host::afterIdle = toggleCaret;
+    ToolboxInputDoor::idleTextEdits(controller);
+    const Rect first = {25, 10, 60, 90};
+    const Rect second = {25, 10, 50, 90};
+    LOKA_VERIFY(toolbox_host::invalidatedRects.size() == 2);
+    equal(toolbox_host::invalidatedRects[0], first);
+    equal(toolbox_host::invalidatedRects[1], second);
+    toolbox_host::afterIdle = 0;
+    toolbox_host::invalidatedRects.clear();
+    LOKA_VERIFY(context->key('x') == EDITOR_OK);
+    LOKA_VERIFY(requested(first) && requested(second));
+    toolbox_host::invalidatedRects.clear();
+    LOKA_VERIFY(context->click(point) == EDITOR_OK);
+    LOKA_VERIFY(requested(first) && requested(second));
+    state = seat();
+    state.x = 15;
+    state.y = 25;
+    state.width = 75;
+    state.height = 20;
+    context->layout(&controller, state);
+    context->render(&controller);
+    toolbox_host::invalidatedRects.clear();
+    toolbox_host::afterIdle = toggleCaret;
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    toolbox_host::afterIdle = 0;
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    controller.flushTE();
   }
   void idleRepair()
   {
@@ -443,9 +548,8 @@ namespace
     }
     LOKA_VERIFY(controller.unitLedger_.mark() == 1);
     const Rect expected = {20, 10, 60, 110};
-    equal(controller.unitLedger_.find(&stack, 1)->rect, expected);
-    LOKA_VERIFY(controller.unitLedger_.find(&stack, 1)->stack == &stack
-                && controller.unitLedger_.find(&stack, 1)->index == 1);
+    equal(unitRow(controller, &stack, 1)->rect, expected);
+    LOKA_VERIFY(unitRow(controller, &stack, 1)->stack == &stack && unitRow(controller, &stack, 1)->index == 1);
     LOKA_VERIFY(state.y == 90 && upper->layouts == 1 && ground->layouts == 1);
     LOKA_VERIFY(toolbox_host::paintOperations.size() == 3);
     LOKA_VERIFY(toolbox_host::paintOperations[0] == "ground");
@@ -474,11 +578,34 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  LOKA_VERIFY(argc == 2);
+  const char *names[] = {"TextDirtyClipStaysBelowUnit",
+                         "IdleRepairOnlyToggledOverlaps",
+                         "LedgerRebuiltEachPass",
+                         "UnitFrameInheritsParentClip",
+                         "UnitInsideViewportRowIsProjected",
+                         "LaterChildGetsUnitRow",
+                         "UnitErasesGroundBeforeChild",
+                         "UnitClipsChild",
+                         "RefusedChildHasNoRowAndNoRender",
+                         "NestedZStackInUnitLaysOutNothing",
+                         "ScrollViewRefusedInsideUnit",
+                         "DirtyTouchingUnitTakesCompositionReplay"};
+  bool known = false;
+  if (argc == 2)
+    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+      known = known || std::strcmp(argv[1], names[i]) == 0;
+  if (!known)
+  {
+    std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
+    return 1;
+  }
   if (std::strcmp(argv[1], "TextDirtyClipStaysBelowUnit") == 0)
     textDirtyClip();
   else if (std::strcmp(argv[1], "IdleRepairOnlyToggledOverlaps") == 0)
+  {
     idleRepair();
+    editorIdleRepair();
+  }
   else if (std::strcmp(argv[1], "LedgerRebuiltEachPass") == 0)
     rebuilt();
   else if (std::strcmp(argv[1], "UnitFrameInheritsParentClip") == 0)

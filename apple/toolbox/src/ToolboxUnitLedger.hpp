@@ -37,11 +37,6 @@ public:
   {
     this->rows_.resize(mark);
   }
-  const UnitSeat *find(loka::app::ZStackNode *stack, unsigned index) const
-  {
-    Mark cursor = 0;
-    return this->find(stack, index, cursor);
-  }
   const UnitSeat *find(loka::app::ZStackNode *stack, unsigned index, Mark &cursor) const
   {
     while (cursor < this->rows_.size())

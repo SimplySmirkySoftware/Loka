@@ -16,7 +16,6 @@
 #include "ToolboxEditControlLedger.hpp"
 #include "ToolboxEnabledChangeDispatch.hpp"
 #include "ToolboxHitLedger.hpp"
-#include "app/nodes/nestable/ZStack.hpp"
 #include "ToolboxCompositionReplay.hpp"
 #include "ToolboxScrollBarLedger.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
@@ -362,6 +361,7 @@ public:
   bool applyEnabledChangeForKind(ToolboxEnabledControlKind kind,
                                  loka::core::State<bool> *enabled);
   void refreshPopupEnabled(PopupHit &binding);
+  void requestControlRepaint(const Rect &rect);
   void refreshButtonEnabled(ButtonControlBinding &binding);
   void refreshScrollBarEnabled(ScrollBarControlBinding &binding);
   void refreshButtonHitEnabled(ButtonHit &binding);
