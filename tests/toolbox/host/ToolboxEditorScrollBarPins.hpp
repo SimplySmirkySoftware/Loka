@@ -324,10 +324,14 @@ namespace
     toolbox_host::paintOperations.clear();
     ToolboxInputDoor::renderDirty(f.controller, f.context->chromeRect());
     LOKA_VERIFY(toolbox_host::updates > updates && bar->calls.back().operation == "draw");
-    LOKA_VERIFY(toolbox_host::paintOperations.size() == 3);
-    LOKA_VERIFY(toolbox_host::paintOperations[0] == "frame");
-    LOKA_VERIFY(toolbox_host::paintOperations[1] == "text");
-    LOKA_VERIFY(toolbox_host::paintOperations[2] == "bar");
+    // Composition replay erases the dirty rect first; the editor adds no
+    // ground of its own, because the text fills its view (#1429).
+    const std::size_t replayErase = composition ? 1 : 0;
+    LOKA_VERIFY(toolbox_host::paintOperations.size() == 3 + replayErase);
+    LOKA_VERIFY(!composition || toolbox_host::paintOperations[0] == "erase");
+    LOKA_VERIFY(toolbox_host::paintOperations[replayErase] == "frame");
+    LOKA_VERIFY(toolbox_host::paintOperations[replayErase + 1] == "text");
+    LOKA_VERIFY(toolbox_host::paintOperations[replayErase + 2] == "bar");
     LOKA_VERIFY(f.controller.debugStats_.totalRenderCalls == renders + (composition ? 1 : 0));
     toolbox_host::failSets = 1;
     LOKA_VERIFY(f.context->paste("", TextEditorProps::kMaxBytes + 1) == EDITOR_CAPACITY);

@@ -7,6 +7,7 @@
 namespace toolbox_host
 {
   std::vector<std::string> paintOperations;
+  std::vector<Rect> erasedRects;
   long systemScript = smRoman;
   long keyboardScript = smRoman;
   unsigned beeps = 0;
@@ -212,9 +213,11 @@ void BackColor(long color)
   toolbox_host::backgroundColors.push_back(color);
 }
 
-void EraseRect(const Rect *)
+void EraseRect(const Rect *rect)
 {
   ++toolbox_host::erases;
+  toolbox_host::paintOperations.push_back("erase");
+  toolbox_host::erasedRects.push_back(*rect);
 }
 
 void ClipRect(const Rect *rect)
