@@ -795,7 +795,7 @@ MacScenePlatformController::layoutScrollViewNode(
     const int clampedOffset = ctx->commitScrollMetrics(
         known ? contentWidthLu : 0, extent, viewportHeight, clampedX, requestedExtent, horizontalBar);
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(clampedX, clampedOffset);
+    scrollView->publishViewport(clampedX, clampedOffset, childBase.width, viewportHeight);
   }
 
   if (state.height > 0)

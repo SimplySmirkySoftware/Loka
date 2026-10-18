@@ -41,8 +41,8 @@ The viewport is one `Frame` in **content coordinates**, not the seat rect.
 top-left corner. `width` and `height` report the visible content area (the seat
 minus scroll bars), in the same content units as the origin. Insets do not
 shrink this size. Zero width and height mean "not reported yet", before the
-first layout. The Null, Toolbox and Win32 rails report it; macOS does not report
-it yet and carries the stored size through. Apps initialise the state with
+first layout. The Null, Toolbox, Win32 and macOS rails report it. Apps initialise
+the state with
 `Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
 top inset visible (see [Content insets](#content-insets)).
 
@@ -216,6 +216,9 @@ keeps the value the preceding layout clamped:
   writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
   the app a second writer of a rail result channel. That is a recorded debt,
   not a pattern to copy.
-- The Null, Toolbox and Win32 rails report the visible size; macOS still
-  carries the stored size through. Its first reader is the lazy-list window
-  fold (LazyColumn reading `viewport_` directly).
+- macOS layout measures width from the actual NSScrollView (`visibleWidth`),
+  but horizontal chrome height comes from the system preferred scroller style
+  (`MacProjection::clientHeightBelowHorizontalScroller`), not the view's style.
+  If those styles differ, the reported height can differ from the actual clip.
+  Viewport publication preserves these existing layout sources; aligning them
+  is deferred.
