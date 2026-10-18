@@ -406,6 +406,9 @@ void MacWindow::createNativeWindow()
                                                      defer:NO];
   // MacWindow owns the allocation; hide and destruction release after close.
   [window setReleasedWhenClosed:NO];
+  // Tab follows AppKit's geometric key-view loop, recomputed as Show, Keyed and
+  // LazyView add or remove fields; a chain kept by the rail went stale (129d353a).
+  [window setAutorecalculatesKeyViewLoop:YES];
   NSScreen *screen = [NSScreen mainScreen];
   NSRect frame = FrameRectForContent(x, y, width, height, style, screen);
   frame = ClampFrameToVisibleFrame(frame, screen);
