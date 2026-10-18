@@ -1642,7 +1642,9 @@ choice is made when the unit is created. It reflects the content beneath as
 AppKit last redrew the unit. A change beneath that AppKit redraws only partly,
 such as a caret blinking or a small control change, can leave the blur around
 it stale until the next full redraw of the unit, such as a scroll. Layer-backed
-views fall back to the static frosted ground.
+views fall back to the static frosted ground. A blurred ZStack nested in the
+ground of another blurred ZStack is rendered again for each level above it, so
+the live blur's cost grows quickly with such nesting.
 
 The macOS unit ground is chosen when the ZStack is first projected, including
 when no upper unit exists yet. Retained props changes keep that choice for
