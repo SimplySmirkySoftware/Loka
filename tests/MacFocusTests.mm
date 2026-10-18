@@ -246,13 +246,18 @@ void testMacFocusReadAndCompletion()
       app.flushInvalidationsTick();
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
 
-      // Drive the field editor's Tab command through AppKit's key-view loop.
-      [first setNextKeyView:second];
+      // Drive the field editor's Tab command through the window's own
+      // key-view loop: the rail builds no chain, so none is built here.
       [(NSTextView *)[first currentEditor] insertTab:nil];
       LOKA_VERIFY([second currentEditor] != nil);
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
       app.flushInvalidationsTick();
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(2u)));
+      // Shift-Tab walks the same loop back.
+      [(NSTextView *)[second currentEditor] insertBacktab:nil];
+      LOKA_VERIFY([first currentEditor] != nil);
+      app.flushInvalidationsTick();
+      LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
 
       // Exercise today's native capture/restore without replacing the Scene.
       LOKA_VERIFY([native makeFirstResponder:first]);
