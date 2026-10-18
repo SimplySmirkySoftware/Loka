@@ -22,6 +22,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <new>
+#include <climits>
+#include <mach/mach_time.h>
 
 #ifdef TEST_BUILD
 namespace loka
@@ -90,6 +92,196 @@ namespace loka
 
 #endif
 
+namespace
+{
+  bool ProbeSoftBlurEnabled()
+  {
+    static const bool enabled = std::getenv("LOKA_PROBE_SOFT_BLUR") && !NSClassFromString(@"NSVisualEffectView");
+    return enabled;
+  }
+
+  int ProbeSoftBlurRadius()
+  {
+    const char *value = std::getenv("LOKA_PROBE_BLUR_RADIUS");
+    if (!value)
+      return 8;
+    char *end = 0;
+    const double radius = std::strtod(value, &end);
+    if (end == value || *end != '\0' || radius != radius)
+      return 8;
+    return radius < 1.0 ? 1 : radius > 32.0 ? 32 : static_cast<int>(radius);
+  }
+
+  static const unsigned char *ProbeBlurPixel(const unsigned char *line, int index, int length, size_t step)
+  {
+    const int clamped = index < 0 ? 0 : index >= length ? length - 1 : index;
+    return line + static_cast<size_t>(clamped) * step;
+  }
+
+  // Original implementation of Klingemann's StackBlur triangular running sums.
+  // The source pass stays immutable, so it supplies the moving stack's samples
+  // directly. Each axis uses weights r+1-|offset| and replicated edge pixels.
+  static void ProbeStackBlurPass(const unsigned char *source, unsigned char *destination,
+                                 int length, int lines, size_t sourceStep, size_t sourceLineStep,
+                                 size_t destinationStep, size_t destinationLineStep, int radius)
+  {
+    const int divisor = (radius + 1) * (radius + 1);
+    for (int line = 0; line < lines; ++line)
+    {
+      const unsigned char *input = source + static_cast<size_t>(line) * sourceLineStep;
+      unsigned char *output = destination + static_cast<size_t>(line) * destinationLineStep;
+      int weighted[4] = {0, 0, 0, 0};
+      int outgoing[4] = {0, 0, 0, 0};
+      int incoming[4] = {0, 0, 0, 0};
+      for (int offset = -radius; offset <= radius + 1; ++offset)
+      {
+        const unsigned char *pixel = ProbeBlurPixel(input, offset, length, sourceStep);
+        const int weight = radius + 1 - (offset < 0 ? -offset : offset);
+        for (int channel = 0; channel < 4; ++channel)
+        {
+          weighted[channel] += pixel[channel] * weight;
+          if (offset <= 0)
+            outgoing[channel] += pixel[channel];
+          else
+            incoming[channel] += pixel[channel];
+        }
+      }
+      for (int position = 0; position < length; ++position)
+      {
+        for (int channel = 0; channel < 4; ++channel)
+          output[channel] = static_cast<unsigned char>(weighted[channel] / divisor);
+        if (position + 1 == length)
+          break;
+        const unsigned char *departing = ProbeBlurPixel(input, position - radius, length, sourceStep);
+        const unsigned char *middle = ProbeBlurPixel(input, position + 1, length, sourceStep);
+        const unsigned char *arriving = ProbeBlurPixel(input, position + radius + 2, length, sourceStep);
+        for (int channel = 0; channel < 4; ++channel)
+        {
+          weighted[channel] += incoming[channel] - outgoing[channel];
+          outgoing[channel] += middle[channel] - departing[channel];
+          incoming[channel] += arriving[channel] - middle[channel];
+        }
+        output += destinationStep;
+      }
+    }
+  }
+
+  static bool ProbeStackBlur(unsigned char *pixels, int width, int height, size_t rowBytes, int radius)
+  {
+    if (!pixels || width <= 0 || height <= 0 || width > INT_MAX / 4 || height > INT_MAX - 64 ||
+        radius < 1 || radius > 32)
+      return false;
+    const size_t packedRow = static_cast<size_t>(width) * 4;
+    if (rowBytes < packedRow || rowBytes > static_cast<size_t>(-1) / static_cast<size_t>(height))
+      return false;
+    const size_t bytes = packedRow * static_cast<size_t>(height);
+    unsigned char *temporary = static_cast<unsigned char *>(std::malloc(bytes));
+    if (!temporary)
+      return false;
+    ProbeStackBlurPass(pixels, temporary, width, height, 4, rowBytes, 4, packedRow, radius);
+    ProbeStackBlurPass(temporary, pixels, height, width, packedRow, 4, rowBytes, 4, radius);
+    std::free(temporary);
+    return true;
+  }
+
+  void ProbePaintBlurTint(NSRect bounds)
+  {
+    NSColor *ground = nil;
+    if (loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground))
+    {
+      // Preserve the RGB fix and the existing raw/no-tint diagnostic switches.
+      if (std::getenv("LOKA_PROBE_NO_TINT"))
+        return;
+      NSColor *rgb = std::getenv("LOKA_PROBE_TINT_RAW") ? ground : [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+      if (!rgb)
+        rgb = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
+      [[rgb colorWithAlphaComponent:0.6] set];
+      NSRectFillUsingOperation(bounds, LOKA_MAC_COMPOSITING_SOURCE_OVER);
+    }
+  }
+
+  // Focus is already locked by AppKit's drawRect. All reps are draw-local.
+  bool ProbeDrawSoftBlur(NSRect bounds, int &width, int &height)
+  {
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    NSBitmapImageRep *capture = [[NSBitmapImageRep alloc] initWithFocusedViewRect:bounds];
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)
+#pragma GCC diagnostic pop
+#endif
+    const long capturedWidth = [capture pixelsWide];
+    const long capturedHeight = [capture pixelsHigh];
+    if (!capture || capturedWidth <= 0 || capturedHeight <= 0 ||
+        capturedWidth > INT_MAX / 4 || capturedHeight > INT_MAX - 64 ||
+        static_cast<size_t>(capturedWidth) * 4 > static_cast<size_t>(-1) / static_cast<size_t>(capturedHeight))
+    {
+      [capture release];
+      return false;
+    }
+    width = static_cast<int>(capturedWidth);
+    height = static_cast<int>(capturedHeight);
+    // The legacy initializer specifies alpha-last, interleaved RGBA bytes;
+    // byte channels avoid endian-dependent packed-word tricks on PPC.
+    NSBitmapImageRep *rgba = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+        colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+    NSGraphicsContext *context = rgba ? [NSGraphicsContext graphicsContextWithBitmapImageRep:rgba] : nil;
+    bool drawn = false;
+    const long actualRowBytes = [rgba bytesPerRow];
+    if (context && [rgba bitmapData] && actualRowBytes >= width * 4 &&
+        static_cast<size_t>(actualRowBytes) <= static_cast<size_t>(-1) / static_cast<size_t>(height))
+    {
+      const size_t rowBytes = static_cast<size_t>(actualRowBytes);
+      std::memset([rgba bitmapData], 0, rowBytes * static_cast<size_t>(height));
+      [NSGraphicsContext saveGraphicsState];
+      [NSGraphicsContext setCurrentContext:context];
+      const BOOL converted = [capture drawInRect:NSMakeRect(0, 0, width, height)];
+      [NSGraphicsContext restoreGraphicsState];
+      if (converted && ProbeStackBlur([rgba bitmapData], width, height, rowBytes, ProbeSoftBlurRadius()))
+        drawn = [rgba drawInRect:bounds] != NO;
+    }
+    [rgba release];
+    [capture release];
+    return drawn;
+  }
+
+  /** Process-wide draw measurements, updated only by the main-thread paint door. */
+  class ProbeSoftBlurTiming
+  {
+  public:
+    ProbeSoftBlurTiming() : draws_(0), totalMicroseconds_(0), maximumMicroseconds_(0), microsecondsPerTick_(0)
+    {
+      mach_timebase_info_data_t timebase = {0, 0};
+      if (mach_timebase_info(&timebase) == KERN_SUCCESS && timebase.denom)
+        this->microsecondsPerTick_ = static_cast<double>(timebase.numer) / timebase.denom / 1000.0;
+    }
+    void record(uint64_t ticks, int width, int height)
+    {
+      const double elapsed = static_cast<double>(ticks) * this->microsecondsPerTick_;
+      ++this->draws_;
+      this->totalMicroseconds_ += elapsed;
+      if (elapsed > this->maximumMicroseconds_)
+        this->maximumMicroseconds_ = elapsed;
+      if (this->draws_ % 20 == 0)
+        std::fprintf(stderr, "probe: soft blur draws=%lu avg=%.0f max=%.0f px=%dx%d\n", this->draws_,
+                     this->totalMicroseconds_ / this->draws_, this->maximumMicroseconds_, width, height);
+    }
+  private:
+    unsigned long draws_;
+    double totalMicroseconds_;
+    double maximumMicroseconds_;
+    double microsecondsPerTick_;
+  };
+} // namespace
+
 @interface LokaStackBlurUnitView : NSView
 @end
 @implementation LokaStackBlurUnitView
@@ -131,6 +323,29 @@ namespace loka
 - (void)drawRect:(NSRect)rect
 {
   (void)rect;
+  if (ProbeSoftBlurEnabled())
+  {
+    static ProbeSoftBlurTiming timing;
+    const uint64_t started = mach_absolute_time();
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    int width = 0;
+    int height = 0;
+    if (ProbeDrawSoftBlur([self bounds], width, height))
+      ProbePaintBlurTint([self bounds]);
+    else
+    {
+      static bool refusedReported = false;
+      if (!refusedReported)
+      {
+        std::fprintf(stderr, "probe: soft blur capture/normalize/blur declined\n");
+        refusedReported = true;
+      }
+      loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, [self bounds]);
+    }
+    [pool release];
+    timing.record(mach_absolute_time() - started, width, height);
+    return;
+  }
   // Native filter presence is the tint policy; visual-effect units stay clear.
   // DIAG: LOKA_PROBE_TINT_ALWAYS=1 tints without filters, and the first call reports.
   static bool drawReported = false;
@@ -143,23 +358,7 @@ namespace loka
   }
   if (std::getenv("LOKA_PROBE_TINT_ALWAYS") ||
       ([self respondsToSelector:@selector(backgroundFilters)] && [[self backgroundFilters] count]))
-  {
-    NSColor *ground = nil;
-    if (loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground))
-    {
-      // DIAG: 10.9 painted the bar black: windowBackgroundColor is a pattern
-      // color there, and a pattern drawn into a layer-backed view comes out
-      // black. Convert to calibrated RGB (pattern colors refuse and fall back to
-      // a plain light gray). LOKA_PROBE_NO_TINT=1 skips the tint entirely.
-      if (std::getenv("LOKA_PROBE_NO_TINT"))
-        return;
-      NSColor *rgb = std::getenv("LOKA_PROBE_TINT_RAW") ? ground : [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-      if (!rgb)
-        rgb = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
-      [[rgb colorWithAlphaComponent:0.6] set];
-      NSRectFillUsingOperation([self bounds], LOKA_MAC_COMPOSITING_SOURCE_OVER);
-    }
-  }
+    ProbePaintBlurTint([self bounds]);
 }
 @end
 
@@ -361,6 +560,16 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
       if (!reported)
       {
         std::fprintf(stderr, "probe: exp blur unit material=%d\n", material);
+        reported = true;
+      }
+    }
+    else if (ProbeSoftBlurEnabled())
+    {
+      // Software capture deliberately leaves both parent and unit unlayered.
+      view = [[LokaStackBlurUnitView alloc] initWithFrame:seat.r];
+      if (view && !reported)
+      {
+        std::fprintf(stderr, "probe: exp blur soft radius=%d\n", ProbeSoftBlurRadius());
         reported = true;
       }
     }

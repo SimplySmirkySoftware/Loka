@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <cerrno>
+#include <climits>
+#include <mach/mach_time.h>
 #if defined(MAC_OS_X_VERSION_10_5) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_5
 #import <QuartzCore/CALayer.h>
 #define CARDSHOWCASE_PROBE_LAYERS 1
@@ -22,6 +25,7 @@ typedef CGImageRef (*CardShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWi
 @interface CardShowcaseProbeSnapshot : NSObject
 - (void)capture:(NSTimer *)timer;
 - (void)scrollBy:(NSTimer *)timer;
+- (void)benchmark:(NSTimer *)timer;
 @end
 @implementation CardShowcaseProbeSnapshot
 // PROBE ONLY: LOKA_PROBE_SCROLL_BY=<points> scrolls the first NSScrollView through
@@ -39,6 +43,67 @@ static NSScrollView *FindScrollView(NSView *view)
   }
   return nil;
 }
+// PROBE ONLY: synchronous scroll/display work; no snapshot API or CA headers.
+- (void)benchmark:(NSTimer *)timer
+{
+  const long steps = [[timer userInfo] longValue];
+  NSWindow *window = nil;
+  NSScrollView *scroll = nil;
+  NSArray *windows = [NSApp windows];
+  for (unsigned int i = 0; i < (unsigned int)[windows count]; ++i)
+  {
+    NSWindow *candidate = [windows objectAtIndex:i];
+    if (![candidate isVisible])
+      continue;
+    scroll = FindScrollView([candidate contentView]);
+    if (scroll)
+    {
+      window = candidate;
+      break;
+    }
+  }
+  if (!scroll || ![scroll documentView])
+  {
+    std::fprintf(stderr, "probe: bench scroll target not found\n");
+    std::exit(2);
+  }
+  NSClipView *clip = [scroll contentView];
+  const NSRect document = [[scroll documentView] bounds];
+  const double top = NSMinY(document);
+  const double end = NSMaxY(document) - [clip bounds].size.height;
+  Class transaction = NSClassFromString(@"CATransaction");
+  const bool canFlush = transaction && [transaction respondsToSelector:@selector(flush)];
+  mach_timebase_info_data_t timebase = {0, 0};
+  if (mach_timebase_info(&timebase) != KERN_SUCCESS || !timebase.denom)
+  {
+    std::fprintf(stderr, "probe: bench timebase unavailable\n");
+    std::exit(2);
+  }
+  [window displayIfNeeded];
+  if (canFlush)
+    [transaction performSelector:@selector(flush)];
+  const uint64_t started = mach_absolute_time();
+  for (long step = 0; step < steps; ++step)
+  {
+    NSAutoreleasePool *iterationPool = [[NSAutoreleasePool alloc] init];
+    NSPoint origin = [clip bounds].origin;
+    origin.y += 4;
+    if (origin.y >= end)
+      origin.y = top;
+    [clip scrollToPoint:origin];
+    [scroll reflectScrolledClipView:clip];
+    [window displayIfNeeded];
+    if (canFlush)
+      [transaction performSelector:@selector(flush)];
+    [iterationPool release];
+  }
+  const double milliseconds = static_cast<double>(mach_absolute_time() - started) *
+                              timebase.numer / timebase.denom / 1000000.0;
+  std::fprintf(stderr, "probe: bench steps=%ld total=%.3f per-step=%.3f\n",
+               steps, milliseconds, milliseconds / steps);
+  std::exit(0);
+}
+
 - (void)scrollBy:(NSTimer *)timer
 {
   const double dy = [[timer userInfo] doubleValue];
@@ -183,8 +248,27 @@ int main(int argc, char **argv)
   // sample turns them on too; LOKA_PROBE_NO_LEGACY_FILTERS=1 keeps the opaque bar there.
   if (!std::getenv("LOKA_PROBE_NO_BLUR") && !std::getenv("LOKA_PROBE_NO_LEGACY_FILTERS"))
     setenv("LOKA_PROBE_LEGACY_FILTERS", "1", 0);
+  const char *benchmark = std::getenv("LOKA_PROBE_SCROLL_BENCH");
+  if (benchmark)
+  {
+    char *end = 0;
+    errno = 0;
+    const long steps = std::strtol(benchmark, &end, 10);
+    if (errno == ERANGE || end == benchmark || *end != '\0' || steps < 1 || steps > INT_MAX)
+    {
+      std::fprintf(stderr, "probe: bench requires steps in 1..INT_MAX\n");
+      return 2;
+    }
+    CardShowcaseProbeSnapshot *probe = [[CardShowcaseProbeSnapshot alloc] init];
+    [NSTimer scheduledTimerWithTimeInterval:1.5
+                                     target:probe
+                                   selector:@selector(benchmark:)
+                                   userInfo:[NSNumber numberWithLong:steps]
+                                    repeats:NO];
+    [probe release]; // The timer retains its target until it fires.
+  }
   const char *snapshot = std::getenv("LOKA_PROBE_SNAPSHOT");
-  if (snapshot)
+  if (snapshot && !benchmark)
   {
     const char *scrollBy = std::getenv("LOKA_PROBE_SCROLL_BY");
     CardShowcaseProbeSnapshot *probe = [[CardShowcaseProbeSnapshot alloc] init];
