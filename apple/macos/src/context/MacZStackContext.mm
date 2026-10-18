@@ -299,7 +299,8 @@ namespace
         drawnArea += static_cast<double>(NSWidth(intersection)) * NSHeight(intersection);
     }
     const double drawableArea = static_cast<double>(NSWidth(drawable)) * NSHeight(drawable);
-    if (drawnArea < drawableArea)
+    // Half a square point absorbs rounding, so an exactly tiled region never loops.
+    if (drawnArea + 0.5 < drawableArea)
       [self performSelector:@selector(lokaInvalidateWhole)
                  withObject:nil
                  afterDelay:0
