@@ -99,14 +99,22 @@ namespace
     ShowingNode *root = static_cast<ShowingNode *>(Access::rootBoundary(scene));
     controller.rootNode_ = root;
     ToolboxInputDoor::render(controller);
-    LOKA_VERIFY(controller.unitLedger_.size() == 1);
+    LOKA_VERIFY(controller.unitLedger_.mark() == 1);
+    BoundaryLocalApplyInfo info;
+    info.paintKind = LOCAL_APPLY_PAINT_COMPOSITED;
+    PlatformApplyPlan plan;
+    plan.paintKind = PlatformApplyPlan::PAINT_LOCAL;
+    plan.setPrimaryRoot(root);
+    const unsigned before = toolbox_host::invalidations;
+    controller.onBoundaryApply(root, root, info, plan);
+    LOKA_VERIFY(toolbox_host::invalidations > before);
     {
       StateTrackerGuard guard(root->tracker());
       root->visible.set(false);
     }
     Access::flushInvalidation(scene);
     ToolboxInputDoor::render(controller);
-    LOKA_VERIFY(controller.unitLedger_.empty());
+    LOKA_VERIFY(controller.unitLedger_.mark() == 0);
     controller.rootNode_ = 0;
     Access::unmount(scene);
   }
@@ -144,7 +152,7 @@ namespace
     state.height = 0;
     state.lineHeight = 40;
     LayoutNode(&stack, state, &controller, 0);
-    LOKA_VERIFY(controller.unitLedger_.size() == 1);
+    LOKA_VERIFY(controller.unitLedger_.mark() == 1);
     RenderNode(&stack, &controller);
     LOKA_VERIFY(controller.buttonControls_.size() == 1);
     const Rect rect = controller.buttonControls_[0].rect;
@@ -213,8 +221,8 @@ namespace
     LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
     LayoutState state = seat();
     LayoutNode(&viewport, state, &controller, 0);
-    LOKA_VERIFY(controller.unitLedger_.size() == 1);
-    const Rect row = controller.unitLedger_[0].rect;
+    LOKA_VERIFY(controller.unitLedger_.mark() == 1);
+    const Rect row = controller.unitLedger_.find(stack, 1)->rect;
     const Rect clip = controller.viewportScroll().contentRect;
     LOKA_VERIFY(row.top == clip.top && row.bottom == 51);
     LOKA_VERIFY(row.left >= clip.left && row.right <= clip.right);
@@ -225,7 +233,7 @@ namespace
     controller.unitLedger_.clear();
     state = seat();
     LayoutNode(&viewport, state, &controller, 0);
-    LOKA_VERIFY(controller.unitLedger_.empty());
+    LOKA_VERIFY(controller.unitLedger_.mark() == 0);
     controller.clearControls();
   }
   void clippedUnitExtent()
@@ -240,8 +248,146 @@ namespace
     ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, viewport);
     LayoutState state = seat();
     LayoutNode(&stack, state, &controller, 0);
-    LOKA_VERIFY(controller.unitLedger_.empty());
+    LOKA_VERIFY(controller.unitLedger_.mark() == 0);
     LOKA_VERIFY(state.y == 60);
+  }
+  void rootOverflowRepro()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    StackNode *column = new StackNode(Column().gap(0).props);
+    column->addChild(new Probe("first", 10));
+    column->addChild(new BoxNode(Box().size(100, SHRT_MAX).props));
+    column->addChild(new Probe("after-refusal", 40));
+    stack.addChild(column);
+    LayoutState state = seat();
+    LayoutNode(&stack, state, &controller, 0);
+    LOKA_VERIFY(controller.unitLedger_.mark() == 0);
+  }
+  void toggleCaret(TEHandle te)
+  {
+    (**te).caretState = (**te).caretState ? 0 : -1;
+  }
+  void idleRepair()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    stack.addChild(new Probe("unit", 40));
+    stack.addChild(new Probe("second-unit", 30));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    LayoutState state = seat();
+    LayoutNode(&stack, state, &controller, 0);
+    ToolboxScenePlatformController::EditTextControlBinding binding;
+    binding.ownerContext = 0;
+    binding.editor = 0;
+    binding.text = 0;
+    binding.rect = Rect();
+    binding.rect.left = 5;
+    binding.rect.top = 25;
+    binding.rect.right = 90;
+    binding.rect.bottom = 75;
+    binding.te = TENew(&binding.rect, &binding.rect);
+    binding.usedThisFrame = true;
+    binding.lifetimeHint = NATIVE_HINT_EAGER_RELEASE;
+    controller.editControls_.add(binding);
+    controller.editControls_.focus(0);
+    toolbox_host::invalidatedRects.clear();
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    toolbox_host::afterIdle = toggleCaret;
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.size() == 2);
+    const Rect first = {25, 10, 60, 90};
+    const Rect second = {25, 10, 50, 90};
+    equal(toolbox_host::invalidatedRects[0], first);
+    equal(toolbox_host::invalidatedRects[1], second);
+    toolbox_host::invalidatedRects.clear();
+    const Rect contained = {25, 15, 45, 90};
+    controller.editControls_[0].rect = contained;
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    const Rect touching = {60, 10, 80, 90};
+    controller.editControls_[0].rect = touching;
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    controller.rootNode_ = &stack;
+    const unsigned before = controller.debugStats_.totalRenderCalls;
+    ToolboxInputDoor::renderDirty(controller, touching);
+    LOKA_VERIFY(controller.debugStats_.totalRenderCalls == before);
+    controller.rootNode_ = 0;
+    toolbox_host::afterIdle = 0;
+    controller.clearControls();
+    // A vanished window cannot supply a safe deactivation port. Its active
+    // record must retire eagerly instead of entering the EditText churn pool.
+    binding.te = TENew(&binding.rect, &binding.rect);
+    TEActivate(binding.te);
+    controller.window_ = 0;
+    controller.retireEditTextBinding(binding, NATIVE_HINT_DEFAULT);
+    LOKA_VERIFY(!binding.te);
+    LOKA_VERIFY(controller.retiredTextEdits_.back().lifetimeHint == NATIVE_HINT_EAGER_RELEASE);
+    controller.window_ = &window;
+  }
+  void textDirtyClip()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    stack.addChild(new Probe("unit", 40));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    LayoutState state = seat();
+    LayoutNode(&stack, state, &controller, 0);
+    State<String> text(String("Ground text partly below unit"));
+    ToolboxScenePlatformController::TextHit hit;
+    hit.context = 0;
+    hit.rect = Rect();
+    hit.rect.left = 10;
+    hit.rect.top = 50;
+    hit.rect.right = 110;
+    hit.rect.bottom = 80;
+    hit.x = 10;
+    hit.y = 65;
+    hit.text = &text;
+    hit.boundary = 0;
+    hit.lastMeasuredWidth = 100;
+    hit.needsRelayoutOnChange = false;
+    controller.recordTextHit(hit.rect, hit.x, hit.y, hit.text, hit.boundary, false, hit.lastMeasuredWidth, 0);
+    controller.rootNode_ = &stack;
+    const Rect dirty = {65, 10, 80, 110};
+    ClipRect(&dirty); // drawDirty's outer clip, supplied by the native window.
+    toolbox_host::draws.clear();
+    const unsigned before = controller.debugStats_.totalRenderCalls;
+    ToolboxInputDoor::renderDirty(controller, dirty);
+    LOKA_VERIFY(controller.debugStats_.totalRenderCalls == before);
+    LOKA_VERIFY(toolbox_host::draws.size() == 1);
+    equal(toolbox_host::draws[0].clip, dirty);
+    toolbox_host::draws.clear();
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    ToolboxInputDoor::renderDirty(controller, dirty);
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(toolbox_host::draws.empty());
+    State<String> shorter(String("x"));
+    hit.text = &shorter;
+    hit.lastMeasuredWidth = 100;
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    controller.redrawTextHit(hit);
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(hit.lastMeasuredWidth == 100);
+    toolbox_host::erasedRects.clear();
+    controller.redrawTextHit(hit);
+    LOKA_VERIFY(toolbox_host::erasedRects.size() == 1);
+    LOKA_VERIFY(toolbox_host::erasedRects[0].right == 110);
+    LOKA_VERIFY(hit.lastMeasuredWidth < 100);
+    controller.rootNode_ = 0;
   }
   void run(const char *mode)
   {
@@ -260,7 +406,10 @@ namespace
     {
       ZStackNode *inner = new ZStackNode(ZStackProps());
       inner->addChild(upper);
-      stack.addChild(inner);
+      StackNode *column = new StackNode(Column().gap(0).props);
+      column->addChild(new Probe("unit-content", 10));
+      column->addChild(inner);
+      stack.addChild(column);
     }
     else if (scroll)
     {
@@ -271,33 +420,15 @@ namespace
     else
       stack.addChild(upper);
     LayoutState state = seat();
-    const Rect outer = {25, 15, 55, 90};
+    const Rect outer = {25, 5, 75, 90};
     ClipRect(&outer);
-    const bool projected = std::strcmp(mode, "UnitInsideViewportRowIsProjected") == 0;
-    const bool refused = std::strcmp(mode, "RefusedChildHasNoRowAndNoRender") == 0;
-    const bool inherited = std::strcmp(mode, "UnitFrameInheritsParentClip") == 0;
-    if (projected || refused || inherited)
+    if (std::strcmp(mode, "RefusedChildHasNoRowAndNoRender") == 0)
     {
-      ProjectionParentScope viewport(window.window(), -7, -9, Frame(15, 25, 75, 30));
-      ProjectionViewportScopeGuard guard(controller.projectionParentScopes_, viewport);
-      upper->refuse = refused;
-      if (inherited)
-        state.height = 0;
+      upper->refuse = true;
       LayoutNode(&stack, state, &controller, 0);
-      if (refused)
-      {
-        LOKA_VERIFY(controller.unitLedger_.empty());
-        RenderNode(&stack, &controller);
-        LOKA_VERIFY(upper->renders == 0);
-      }
-      else
-      {
-        LOKA_VERIFY(controller.unitLedger_.size() == 1);
-        const Rect expected = {25, 15, 51, 90};
-        equal(controller.unitLedger_[0].rect, expected);
-        // A heightless seat must inherit the viewport; clip=seat erases this row.
-        LOKA_VERIFY(upper->layouts == 1);
-      }
+      LOKA_VERIFY(controller.unitLedger_.mark() == 0);
+      RenderNode(&stack, &controller);
+      LOKA_VERIFY(upper->renders == 0);
       return;
     }
     LayoutNode(&stack, state, &controller, 0);
@@ -307,21 +438,22 @@ namespace
     if (nested || scroll)
     {
       LOKA_VERIFY(upper->layouts == 0 && upper->renders == 0);
-      LOKA_VERIFY(controller.unitLedger_.empty());
+      LOKA_VERIFY(controller.unitLedger_.mark() == (nested ? 1u : 0u));
       return;
     }
-    LOKA_VERIFY(controller.unitLedger_.size() == 1);
+    LOKA_VERIFY(controller.unitLedger_.mark() == 1);
     const Rect expected = {20, 10, 60, 110};
-    equal(controller.unitLedger_[0].rect, expected);
-    LOKA_VERIFY(controller.unitLedger_[0].stack == &stack && controller.unitLedger_[0].index == 1);
+    equal(controller.unitLedger_.find(&stack, 1)->rect, expected);
+    LOKA_VERIFY(controller.unitLedger_.find(&stack, 1)->stack == &stack
+                && controller.unitLedger_.find(&stack, 1)->index == 1);
     LOKA_VERIFY(state.y == 90 && upper->layouts == 1 && ground->layouts == 1);
     LOKA_VERIFY(toolbox_host::paintOperations.size() == 3);
     LOKA_VERIFY(toolbox_host::paintOperations[0] == "ground");
     LOKA_VERIFY(toolbox_host::paintOperations[1] == "erase");
     LOKA_VERIFY(toolbox_host::paintOperations[2] == "upper");
     equal(toolbox_host::erasedRects[0], expected);
-    equal(upper->clip, outer);
-    if (std::strcmp(mode, "RefusedChildHasNoRowAndNoRender") != 0)
+    const Rect clipped = {25, 10, 60, 90};
+    equal(upper->clip, clipped);
     {
       toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
       const unsigned before = upper->renders;
@@ -338,19 +470,16 @@ namespace
       LOKA_VERIFY(upper->renders >= 2);
       controller.rootNode_ = 0;
     }
-    if (std::strcmp(mode, "LedgerRebuiltEachPass") == 0)
-    {
-      controller.rootNode_ = ground;
-      ToolboxInputDoor::render(controller);
-      LOKA_VERIFY(controller.unitLedger_.empty());
-      controller.rootNode_ = 0;
-    }
   }
 } // namespace
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strcmp(argv[1], "LedgerRebuiltEachPass") == 0)
+  if (std::strcmp(argv[1], "TextDirtyClipStaysBelowUnit") == 0)
+    textDirtyClip();
+  else if (std::strcmp(argv[1], "IdleRepairOnlyToggledOverlaps") == 0)
+    idleRepair();
+  else if (std::strcmp(argv[1], "LedgerRebuiltEachPass") == 0)
     rebuilt();
   else if (std::strcmp(argv[1], "UnitFrameInheritsParentClip") == 0)
     inheritedButton();
@@ -362,7 +491,10 @@ int main(int argc, char **argv)
     if (std::strcmp(argv[1], "LaterChildGetsUnitRow") == 0)
       clippedUnitExtent();
     if (std::strcmp(argv[1], "RefusedChildHasNoRowAndNoRender") == 0)
+    {
       refusedControlCleanup();
+      rootOverflowRepro();
+    }
   }
   return 0;
 }

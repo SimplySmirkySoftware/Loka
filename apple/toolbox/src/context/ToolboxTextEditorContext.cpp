@@ -629,8 +629,10 @@ void ToolboxTextEditorContext::idleTick()
     return;
   ToolboxPortScope port(this->controller()->window_->window());
   const Rect before = (**this->te_).destRect;
+  const short caretBefore = (**this->te_).caretState;
   TEIdle(this->te_);
-  this->controller()->invalidateUnitOverlap(this->paintRect_);
+  if (caretBefore != (**this->te_).caretState)
+    this->controller()->invalidateUnitOverlap(this->paintRect_);
   if (!EqualRect(&before, &(**this->te_).destRect))
   {
     this->controller()->window_->requestInvalidateRect(this->paintRect_);

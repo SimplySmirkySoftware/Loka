@@ -1616,8 +1616,10 @@ every earlier sibling under the same native parent, including siblings outside
 the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
 Win32, macOS, and Toolbox use opaque units. Toolbox still lacks the 2b hit shield,
-so do not place a unit over a live control. A focused editor or dragged bar under
-a Toolbox unit may flash until the next update. On macOS, units are ordered relative to their own ZStack only; later
+so do not place a unit over a live control, and a unit's own live control must lie
+entirely inside its unit (a partly contained editor is unspecified). A focused
+editor or dragged bar under a Toolbox unit may flash until the next update. On
+macOS, units are ordered relative to their own ZStack only; later
 siblings or another ZStack's units in the same parent may sit above them, with
 geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.

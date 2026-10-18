@@ -69,17 +69,6 @@ namespace
 
   static const short kAutoControlBaseId = 128;
 
-  void DrawStringAt(short x, short y, const loka::core::String &value)
-  {
-    Str255 text;
-    if (!ToolboxEncodePascal(value, text))
-    {
-      return;
-    }
-    MoveTo(x, y);
-    DrawString(text);
-  }
-
   bool UseBoundaryDirty(const loka::app::scene::BoundaryNode *boundary)
   {
     return boundary && boundary->parentBoundary() && boundary->hasLayoutBounds();
@@ -261,8 +250,9 @@ namespace
       Rect intersection;
       if (ctx && SectRect(&ctx->rect(), &dirtyRect, &intersection))
       {
-        // Same erase-before-render ritual as composition replay. ZStack takes
-        // that replay; disjoint ImageViews have only window ground beneath.
+        // Same erase-before-render ritual as composition replay. Unit-touching
+        // rects take that replay through the ledger gate; disjoint ImageViews
+        // have only window ground beneath.
         EraseRect(&intersection);
         ctx->render(controller);
       }
@@ -1199,61 +1189,7 @@ bool ToolboxScenePlatformController::dumpDebugStatsToTimestampedFile() const
 #endif
 }
 
-void ToolboxScenePlatformController::redrawTextHit(TextHit &hit)
-{
-  if (!window_ || !window_->window())
-  {
-    return;
-  }
-  if (hit.context)
-  {
-    GrafPtr previous;
-    GetPort(&previous);
-    SetPort(this->window_->window());
-    hit.context->repaint();
-    hit.lastMeasuredWidth = hit.context->visibleWidth();
-    SetPort(previous);
-    return;
-  }
-  short measuredWidth = hit.text ? this->measureTextWidth(hit.text->get()) : 0;
-  const short maxWidth = static_cast<short>(hit.rect.right - hit.rect.left);
-  if (maxWidth > 0 && measuredWidth > maxWidth)
-  {
-    measuredWidth = maxWidth;
-  }
-  Rect dirtyRect = hit.rect;
-  short redrawWidth = hit.lastMeasuredWidth;
-  if (measuredWidth > redrawWidth)
-  {
-    redrawWidth = measuredWidth;
-  }
-  if (maxWidth > 0 && redrawWidth > maxWidth)
-  {
-    redrawWidth = maxWidth;
-  }
-  dirtyRect.right = static_cast<short>(dirtyRect.left + redrawWidth);
-  GrafPtr oldPort;
-  GetPort(&oldPort);
-  SetPort(window_->window());
-  EraseRect(&dirtyRect);
-  RgnHandle oldClip = NewRgn();
-  if (oldClip != 0)
-  {
-    GetClip(oldClip);
-    ClipRect(&dirtyRect);
-    if (hit.text)
-      DrawStringAt(hit.x, hit.y, hit.text->get());
-    SetClip(oldClip);
-    DisposeRgn(oldClip);
-  }
-  else
-  {
-    if (hit.text)
-      DrawStringAt(hit.x, hit.y, hit.text->get());
-  }
-  hit.lastMeasuredWidth = measuredWidth;
-  SetPort(oldPort);
-}
+#include "ToolboxTextHitPaint.cpp"
 
 void ToolboxScenePlatformController::redrawPopupHit(const PopupHit &hit)
 {

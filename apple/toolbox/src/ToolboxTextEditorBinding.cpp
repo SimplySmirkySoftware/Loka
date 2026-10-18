@@ -113,8 +113,10 @@ void ToolboxScenePlatformController::idleTextEdits()
         editControls_[i].editor->idleTick();
       else
       {
+        const short caretBefore = (**editControls_[i].te).caretState;
         TEIdle(editControls_[i].te);
-        this->invalidateUnitOverlap(editControls_[i].rect);
+        if (caretBefore != (**editControls_[i].te).caretState)
+          this->invalidateUnitOverlap(editControls_[i].rect);
       }
     }
   }

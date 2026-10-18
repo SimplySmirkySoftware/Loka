@@ -20,6 +20,8 @@ namespace toolbox_host
   std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
   unsigned invalidations = 0;
+  std::vector<Rect> invalidatedRects;
+  void (*afterIdle)(TEHandle) = 0;
   GrafPtr activationPort = 0, deactivationPort = 0;
   int failRegions = 0;
   int regions = 0;
@@ -148,7 +150,8 @@ void MoveTo(short x, short y)
 }
 void DrawText(const void *bytes, short offset, short length)
 {
-  const toolbox_host::Draw draw = {penX,
+  const toolbox_host::Draw draw = {toolbox_host::currentClip(),
+                                   penX,
                                    penY,
                                    port->txSize,
                                    port->txFace,
@@ -255,6 +258,7 @@ TEHandle TENew(const Rect *dest, const Rect *view)
   (**te).autoView = false;
   (**te).active = false;
   (**te).idleCalls = 0;
+  (**te).caretState = 0;
   TECalText(te);
   return te;
 }
@@ -437,6 +441,8 @@ void TEIdle(TEHandle te)
 {
   ++(**te).idleCalls;
   ApplyTECompletion(te, (**te).idleCompletions);
+  if (toolbox_host::afterIdle)
+    toolbox_host::afterIdle(te);
 }
 bool PtInRect(Point p, const Rect *r)
 {
@@ -449,6 +455,7 @@ namespace toolbox_host { GrafPtr frontWindow = 0; }
 
 // Compile the real plain leaf alongside the real attributed leaf in this fixture.
 #include "context/ToolboxTextContext.cpp"
+#include "ToolboxTextHitPaint.cpp"
 void DrawString(const unsigned char *text)
 {
   toolbox_host::pascalDraws.push_back(HostPascalBytes(text));

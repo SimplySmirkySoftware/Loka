@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "ToolboxUnitLedger.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxActivationPhase.hpp"
 #include "support/TestVerify.hpp"
@@ -168,7 +169,11 @@ public:
   ToolboxScenePlatformController *scenePlatformController() { return 0; }
   void flushInvalidate() { if (this->onFlush) this->onFlush(this->flushData); }
   loka::core::StateTracker *getTracker() { return &this->tracker_; }
-  void requestInvalidateRect(const Rect &) { ++toolbox_host::invalidations; }
+  void requestInvalidateRect(const Rect &rect)
+  {
+    ++toolbox_host::invalidations;
+    toolbox_host::invalidatedRects.push_back(rect);
+  }
   WindowPort *window()
   {
     return &port;
@@ -498,8 +503,23 @@ public:
       loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *) {}
 #endif
+#ifdef LOKA_HOST_ZSTACK_UNITS
+  void recordTextHit(const Rect &rect,
+                     short x,
+                     short y,
+                     loka::core::State<loka::core::String> *text,
+                     loka::app::scene::BoundaryNode *boundary,
+                     bool relayout,
+                     short width,
+                     ToolboxTextContext *context)
+  {
+    const ToolboxHitLedger::TextHit hit = {context, rect, x, y, text, boundary, width, relayout};
+    this->hitLedger_.textHits_.push_back(hit);
+  }
+#else
   void recordTextHit(const Rect &, short, short, loka::core::State<loka::core::String> *,
                      loka::app::scene::BoundaryNode *, bool, short, ToolboxTextContext *) { ++toolbox_host::textHits; }
+#endif
   void bindTextState(loka::core::State<loka::core::String> *) {}
   void unbindTextState(loka::core::State<loka::core::String> *) {}
   bool hasLiveBinding(loka::core::State<loka::core::String> *s) const
@@ -576,13 +596,7 @@ public:
   loka::app::scene::Node *rootNode_;
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
-  struct UnitSeat
-  {
-    loka::app::ZStackNode *stack;
-    unsigned index;
-    Rect rect;
-  };
-  std::vector<UnitSeat> unitLedger_;
+  ToolboxUnitLedger unitLedger_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;
@@ -613,10 +627,7 @@ public:
   {
     LOKA_VERIFY(false);
   }
-  void redrawTextHit(TextHit &)
-  {
-    LOKA_VERIFY(false);
-  }
+  void redrawTextHit(TextHit &);
   virtual void synchronize() {}
   virtual bool hasPendingSync() const
   {
@@ -658,6 +669,7 @@ namespace toolbox_host
   extern std::vector<Rect> erasedRects;
   struct Draw
   {
+    Rect clip;
     short x, y, size;
     Style face;
     int length;

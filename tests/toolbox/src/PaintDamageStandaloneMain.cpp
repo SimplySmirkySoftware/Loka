@@ -133,6 +133,13 @@ namespace
       ink.rects[0] = RectSprite(0, 0, 150, 70);
       this->state(this->ink_, ink);
     }
+    void changeInk()
+    {
+      StateTrackerGuard guard(this->tracker());
+      RectSurfaceModel ink = this->ink_.get();
+      ink.rects[0] = RectSprite(0, 0, 149, 70);
+      this->ink_.set(ink);
+    }
     virtual void composeNode(NodeComposition &composition)
     {
       if (WithButton)
@@ -1277,7 +1284,7 @@ namespace
           composited_(0),
           edit_(0),
           log_(0),
-          phase_(UNIT_SHOW),
+          phase_(SETTLE),
           result_(0),
           initial_(),
           marker_(),
@@ -1807,8 +1814,13 @@ namespace
         self->recordArm(
             name, unitGround && outsideInk && controls == (button ? 1u : 0u), button ? UNIT_CHECK : UNIT_SURFACE_CHECK);
         self->initial_ = controller->debugStatsForTesting();
-        const Rect ground = {kRootY, kRootX, kRootY + 70, kRootX + 150};
-        native->requestInvalidateRect(ground);
+        BoundaryNode *root = loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene());
+        if (button)
+          static_cast<UnitGroundNode<true> *>(root)->changeInk();
+        else
+          static_cast<UnitGroundNode<false> *>(root)->changeInk();
+        SettleTurn();
+        window->flushSceneInvalidation();
       }
       else
       {
@@ -1816,11 +1828,19 @@ namespace
         const char *route = PaintDeliveryRoute(self->initial_, stats, self->log_, name);
         const bool unchanged = !GetPixel(kRootX + 8, kRootY + 8);
         const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
-        std::fprintf(
-            self->log_, "%s replay unit_unchanged=%d whole_window=%d route=%s\r", name, unchanged, whole, route);
+        const unsigned draws = stats.totalDrawCalls - self->initial_.totalDrawCalls;
+        std::fprintf(self->log_,
+                     "%s replay unit_unchanged=%d whole_window=%d route=%s draws=%u\r",
+                     name,
+                     unchanged,
+                     whole,
+                     route,
+                     draws);
         self->recordArm(name,
-                        unchanged && whole == 0 && std::strcmp(route, "composition") == 0,
-                        button ? UNIT_SURFACE_SHOW : SETTLE);
+                        unchanged && whole == 0 && draws == 0 && std::strcmp(route, "composition") == 0,
+                        button ? UNIT_SURFACE_SHOW : COMPLETE);
+        if (!button)
+          self->finish(true);
       }
       SetPort(previous);
     }
@@ -3052,7 +3072,7 @@ namespace
           if (!CloseCardTiming(timing))
             self->result_ = 1;
         }
-        self->finish(true);
+        self->phase_ = UNIT_SHOW;
       }
       SetPort(saved);
     }

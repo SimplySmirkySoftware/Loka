@@ -48,8 +48,8 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
         // Unlike Win32's retained rectangle, a refused Toolbox unit disappears
         // for this pass. No row means no render (and no control re-registration).
         // Layout appends once per visible unit; vector OOM follows the hit ledgers.
-        const UnitSeat row = {stack, index, clipped};
-        this->unitLedger_.push_back(row);
+        const ToolboxUnitLedger::UnitSeat row = {stack, index, clipped};
+        this->unitLedger_.push(row);
       }
       // Clipping removes pixels, not a successfully measured child's extent.
       // An offscreen unit must still contribute to the viewport scroll range.
@@ -68,9 +68,8 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
   if (this->projectionParentScopes_.insideUnit())
     return;
   unsigned index = 0;
-  // Scan this controller's rows once per stack, advancing with child order.
-  // Each admitted unit costs one erase and one two-region intersecting clip.
-  size_t rowIndex = 0;
+  // One forward scan per stack; each unit erases and intersects its clip.
+  ToolboxUnitLedger::Mark cursor = 0;
   loka::dsl::CompositionCursor<loka::app::scene::Node> children(stack->childrenHead(), stack->childrenCount());
   for (loka::app::scene::Node *child = children.next(); child; child = children.next(), ++index)
   {
@@ -79,12 +78,10 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
       RenderNode(child, this);
       continue;
     }
-    while (rowIndex < this->unitLedger_.size()
-           && (this->unitLedger_[rowIndex].stack != stack || this->unitLedger_[rowIndex].index < index))
-      ++rowIndex;
-    if (rowIndex == this->unitLedger_.size() || this->unitLedger_[rowIndex].index != index)
+    const ToolboxUnitLedger::UnitSeat *seat = this->unitLedger_.find(stack, index, cursor);
+    if (!seat)
       continue;
-    const UnitSeat &row = this->unitLedger_[rowIndex];
+    const ToolboxUnitLedger::UnitSeat &row = *seat;
     const loka::app::scene::ProjectionParentScope &parent = this->projectionParentScopes_.current();
     loka::app::scene::ProjectionParentScope frame;
     if (!parent.deriveScrolled(parent.nativeParent, 0, 0, parent.clipRect, frame))
@@ -103,13 +100,10 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     controller per native paint; only an overlapping unit requests repair. */
 void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
 {
-  for (size_t i = 0; i < this->unitLedger_.size(); ++i)
-  {
-    const Rect &unit = this->unitLedger_[i].rect;
-    if (rect.left < unit.right && rect.right > unit.left && rect.top < unit.bottom && rect.bottom > unit.top)
-    {
-      this->window_->requestInvalidateRect(rect);
-      return;
-    }
-  }
+  if (!this->window_ || this->unitLedger_.contains(rect))
+    return;
+  ToolboxUnitLedger::Mark cursor = 0;
+  Rect overlap;
+  while (this->unitLedger_.nextOverlap(rect, cursor, overlap))
+    this->window_->requestInvalidateRect(overlap);
 }

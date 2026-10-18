@@ -574,8 +574,6 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
   endforeach()
 
-  foreach(_layout_path handler fallback)
-  endforeach()
   foreach(_stack_axis column row)
     add_test(NAME testToolboxLayout_derived-${_stack_axis}
       COMMAND LokaToolboxBoxLayoutTests handler derived-${_stack_axis})
@@ -834,7 +832,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxZStackUnitTests)
   set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip)
+  foreach(_order_case TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 

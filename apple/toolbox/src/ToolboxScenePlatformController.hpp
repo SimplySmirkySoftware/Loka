@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxUnitLedger.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
 #include "ToolboxEditInstalled.hpp"
@@ -306,14 +307,12 @@ private:
   const loka::app::TextShaping textShaping_;
 public:
   ToolboxWindow *window_;
+
+private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
-  struct UnitSeat
-  {
-    loka::app::ZStackNode *stack;
-    unsigned index;
-    Rect rect;
-  };
-  std::vector<UnitSeat> unitLedger_;
+  ToolboxUnitLedger unitLedger_;
+
+public:
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::Node *rootNode_;
   loka::app::scene::Node *pendingRootNode_;
