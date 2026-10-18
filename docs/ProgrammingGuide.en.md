@@ -1625,13 +1625,8 @@ stacking order.
 a blur of the content beneath it instead of the window ground. A rail that cannot
 blur keeps the window ground. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
-material on 10.10–10.13 and HUD material from 10.14. On 10.4–10.9, unlayered
-units freshly render the window ground and intersecting lower sibling views
-into a full-unit bitmap, apply CPU StackBlur at radius eight pixels,
-and tint with the calibrated RGB window ground at 0.6 alpha (light gray when
-RGB conversion is unavailable). An explicitly disabled global
-`AppleEnableMenuBarTransparency` setting or a failed allocation keeps
-the window ground. Other rails keep the window ground.
+material on 10.10–10.13 and HUD material from 10.14. Earlier macOS and the
+other rails keep the window ground.
 
 The macOS unit ground is chosen when the ZStack is first projected, including
 when no upper unit exists yet. Retained props changes keep that choice for

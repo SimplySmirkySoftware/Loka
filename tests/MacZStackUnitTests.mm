@@ -29,8 +29,6 @@ namespace loka
   namespace testing
   {
     void failMacStackUnitViews(unsigned count);
-    void setMacStackCPUBlur(bool enabled);
-    void setMacStackMenuBarTransparency(int value);
   }
 } // namespace loka
 
@@ -40,78 +38,6 @@ namespace loka
 - (BOOL)isFlipped
 {
   return YES;
-}
-@end
-
-namespace
-{
-  void PaintStackStripes(NSRect bounds, bool changed)
-  {
-    [[NSColor blackColor] set];
-    NSRectFill(bounds);
-    [[NSColor redColor] set];
-    NSRectFill(NSMakeRect(NSMinX(bounds), NSMinY(bounds), bounds.size.width, 24));
-    [[NSColor blueColor] set];
-    NSRectFill(NSMakeRect(NSMinX(bounds), NSMinY(bounds) + 56, bounds.size.width, 24));
-    [[NSColor whiteColor] set];
-    NSRectFill(NSMakeRect(NSMinX(bounds), NSMinY(bounds) + 24, 100, 32));
-    if (changed)
-    {
-      [[NSColor yellowColor] set];
-      NSRectFill(NSMakeRect(NSMinX(bounds) + 92, NSMinY(bounds) + 30, 16, 20));
-    }
-  }
-} // namespace
-
-@interface LokaStackStripeGround : NSView
-{
-  BOOL changed_;
-}
-- (void)setChanged:(BOOL)changed;
-@end
-@implementation LokaStackStripeGround
-- (BOOL)isFlipped
-{
-  return YES;
-}
-- (void)setChanged:(BOOL)changed
-{
-  changed_ = changed;
-}
-- (void)drawRect:(NSRect)rect
-{
-  (void)rect;
-  [NSGraphicsContext saveGraphicsState];
-  if (![self isFlipped])
-  {
-    NSAffineTransform *flip = [NSAffineTransform transform];
-    [flip translateXBy:0 yBy:NSMinY([self bounds]) + NSMaxY([self bounds])];
-    [flip scaleXBy:1 yBy:-1];
-    [flip concat];
-  }
-  // The fixture's frame extends past the unit on every side. Its nonzero
-  // bounds origin and inset pattern expose both translation and clipping bugs.
-  PaintStackStripes(NSInsetRect([self bounds], 13, 9), changed_ != NO);
-  [NSGraphicsContext restoreGraphicsState];
-}
-@end
-
-@interface LokaStackUnflippedStripeGround : LokaStackStripeGround
-@end
-@implementation LokaStackUnflippedStripeGround
-- (BOOL)isFlipped
-{
-  return NO;
-}
-@end
-
-@interface LokaStackExcludedGround : NSView
-@end
-@implementation LokaStackExcludedGround
-- (void)drawRect:(NSRect)rect
-{
-  (void)rect;
-  LOKA_VERIFY(false && "blur must exclude hidden, disjoint and higher siblings");
 }
 @end
 
@@ -618,7 +544,7 @@ void testMacZStackFirstPassRefusalKeepsUnitEmpty()
 
 namespace
 {
-  void verifyComposite(bool scrolling, bool layered)
+  void verifyComposite(bool scrolling, bool layered, ZStackUnitGround unitGround = ZSTACK_UNIT_GROUND_WINDOW)
   {
     std::printf("ZStack composite layer=%d scroll=%d\n", layered, scrolling);
     RectSurfaceModel ink;
@@ -627,6 +553,7 @@ namespace
     loka::core::MutableState<RectSurfaceModel> model(ink);
     Fixture f;
     ZStackNode *stack = new ZStackNode((ZStackProps()));
+    stack->props.unitGround = unitGround;
     f.tree = stack;
     RectSurfaceNode *ground = new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 400));
     if (scrolling)
@@ -809,128 +736,6 @@ void testMacZStackGroundSuffixPreservesOrder()
 - (NSInteger)state;
 @end
 
-namespace
-{
-  class CPUBlurScope
-  {
-  public:
-    CPUBlurScope()
-    {
-      loka::testing::setMacStackCPUBlur(true);
-      loka::testing::setMacStackMenuBarTransparency(1);
-    }
-    ~CPUBlurScope()
-    {
-      loka::testing::setMacStackCPUBlur(false);
-      loka::testing::setMacStackMenuBarTransparency(-1);
-    }
-
-  private:
-    CPUBlurScope(const CPUBlurScope &);
-    CPUBlurScope &operator=(const CPUBlurScope &);
-  };
-
-  ZStackNode *blurStack(Fixture &f)
-  {
-    ZStackNode *stack = stackWithGround(f);
-    stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
-    stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
-    return stack;
-  }
-
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#endif
-  /** Owns one offscreen backing store and its focus interval. The retained
-      pixels let the partial repaint pin reproduce a stale window backing store. */
-  class CPUCanvas
-  {
-  public:
-    explicit CPUCanvas(NSView *unit)
-        : image_([[NSImage alloc] initWithSize:[unit bounds].size])
-    {
-      [this->image_ lockFocus];
-      NSAffineTransform *flip = [NSAffineTransform transform];
-      [flip translateXBy:0 yBy:[unit bounds].size.height];
-      [flip scaleXBy:1 yBy:-1];
-      [flip concat];
-    }
-    ~CPUCanvas()
-    {
-      [this->image_ unlockFocus];
-      [this->image_ release];
-    }
-    NSBitmapImageRep *snapshot(NSRect bounds)
-    {
-      NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithFocusedViewRect:bounds];
-      LOKA_VERIFY(bitmap);
-      return [bitmap autorelease];
-    }
-
-  private:
-    NSImage *const image_;
-    CPUCanvas(const CPUCanvas &);
-    CPUCanvas &operator=(const CPUCanvas &);
-  };
-
-  NSBitmapImageRep *paintCPUUnit(NSView *unit, bool drawUnit, bool groundOnly)
-  {
-    CPUCanvas canvas(unit);
-    PaintStackStripes([unit bounds], false);
-    if (groundOnly)
-      loka::macos::MacPaintGround(SURFACE_GROUND_WINDOW, [unit bounds]);
-    else if (drawUnit)
-      [unit drawRect:[unit bounds]];
-    return canvas.snapshot([unit bounds]);
-  }
-
-  LokaStackStripeGround *installStripeGround(NSView *unit, bool flipped)
-  {
-    NSView *parent = [unit superview];
-    Class stripeClass = flipped ? [LokaStackStripeGround class] : [LokaStackUnflippedStripeGround class];
-    LokaStackStripeGround *stripes = [[stripeClass alloc] initWithFrame:NSInsetRect([unit frame], -13, -9)];
-    [stripes setBoundsOrigin:NSMakePoint(7, 11)];
-    [parent addSubview:stripes positioned:NSWindowBelow relativeTo:unit];
-    [stripes release]; // Native parent owns the fixture from here.
-    NSView *hidden = [[LokaStackExcludedGround alloc] initWithFrame:[unit frame]];
-    [hidden setHidden:YES];
-    [parent addSubview:hidden positioned:NSWindowBelow relativeTo:unit];
-    [hidden release];
-    NSView *disjoint = [[LokaStackExcludedGround alloc] initWithFrame:NSMakeRect(500, 500, 20, 20)];
-    [parent addSubview:disjoint positioned:NSWindowBelow relativeTo:unit];
-    [disjoint release];
-    NSView *higher = [[LokaStackExcludedGround alloc] initWithFrame:[unit frame]];
-    [parent addSubview:higher positioned:NSWindowAbove relativeTo:unit];
-    [higher release];
-    return stripes;
-  }
-
-  NSColor *expectedBlurTintOverBlack()
-  {
-    NSColor *ground = nil;
-    LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_WINDOW, ground));
-    NSColor *rgb = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-    // Mavericks' pattern ground declines RGB conversion: the contract then
-    // requires light gray, not the black produced by tinting with that pattern.
-    if (!rgb)
-      return [NSColor colorWithCalibratedWhite:0.93 * 0.6 alpha:1.0];
-    return [NSColor colorWithCalibratedRed:[rgb redComponent] * 0.6
-                                     green:[rgb greenComponent] * 0.6
-                                      blue:[rgb blueComponent] * 0.6
-                                     alpha:1.0];
-  }
-  NSColor *cpuPixel(NSBitmapImageRep *bitmap, CGFloat x, CGFloat y)
-  {
-    return [[bitmap colorAtX:static_cast<NSInteger>(x * [bitmap pixelsWide] / 200)
-                           y:static_cast<NSInteger>(y * [bitmap pixelsHigh] / 80)]
-        colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-  }
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-} // namespace
-
 void testMacZStackBlurNativeEffect()
 {
   Fixture f;
@@ -966,44 +771,6 @@ void testMacZStackBlurNativeEffect()
   LOKA_VERIFY(unitUnder(blurred.host.root) == unit && NSEqualRects([effect frame], [unit bounds]));
 }
 
-void testMacZStackBlurCPUPixels()
-{
-  CPUBlurScope forced;
-  for (int flipped = 0; flipped != 2; ++flipped)
-  {
-    Fixture f;
-    blurStack(f);
-    f.layout();
-    NSView *unit = unitUnder(f.host.root);
-    LOKA_VERIFY(unit && ![unit isOpaque] && [[unit subviews] count] == 0);
-    [unit setFrame:NSMakeRect(30, 20, 200, 80)];
-    installStripeGround(unit, flipped != 0);
-    NSBitmapImageRep *before = paintCPUUnit(unit, false, false);
-    NSBitmapImageRep *after = paintCPUUnit(unit, true, false);
-    LOKA_VERIFY(!sameColor(cpuPixel(before, 102, 40), cpuPixel(after, 102, 40)));
-    // This region is black farther than radius eight from every edge. Gradient
-    // and orientation alone cannot distinguish a correct tint from black tint.
-    LOKA_VERIFY(sameColor(cpuPixel(before, 150, 40), [NSColor blackColor]));
-    LOKA_VERIFY(sameColor(cpuPixel(after, 150, 40), expectedBlurTintOverBlack()));
-    // A radius-eight edge has intermediate levels on each side, not just tint.
-    const CGFloat left = [cpuPixel(after, 90, 40) redComponent];
-    const CGFloat nearLeft = [cpuPixel(after, 98, 40) redComponent];
-    const CGFloat nearRight = [cpuPixel(after, 102, 40) redComponent];
-    const CGFloat right = [cpuPixel(after, 110, 40) redComponent];
-    LOKA_VERIFY(left > nearLeft + 0.02 && nearLeft > nearRight + 0.02 && nearRight > right + 0.02);
-    const CGFloat beforeDirection = [cpuPixel(before, 150, 12) redComponent] - [cpuPixel(before, 150, 68) redComponent];
-    const CGFloat afterDirection = [cpuPixel(after, 150, 12) redComponent] - [cpuPixel(after, 150, 68) redComponent];
-    LOKA_VERIFY(beforeDirection * afterDirection > 0.2);
-    // An explicit NO is injected, never written to the user's global defaults.
-    loka::testing::setMacStackMenuBarTransparency(0);
-    NSBitmapImageRep *disabled = paintCPUUnit(unit, true, false);
-    NSBitmapImageRep *ground = paintCPUUnit(unit, false, true);
-    LOKA_VERIFY(sameColor(cpuPixel(disabled, 50, 12), cpuPixel(ground, 50, 12)));
-    LOKA_VERIFY(sameColor(cpuPixel(disabled, 150, 68), cpuPixel(ground, 150, 68)));
-    loka::testing::setMacStackMenuBarTransparency(1);
-  }
-}
-
 void testMacZStackBlurGroundIsCreationTimeConstant()
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
@@ -1011,7 +778,11 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
   // lifecycle-audit assertion. Exercise the ignore contract in a non-audit build.
   std::printf("[skip] ZStack retained ground: requires LOKA_LIFECYCLE_AUDIT=OFF; mismatch asserts in onPropsApplied\n");
 #else
-  CPUBlurScope forced;
+  if (!NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack retained ground: requires NSVisualEffectView to distinguish the grounds\n");
+    return;
+  }
   for (int initiallyBlurred = 0; initiallyBlurred != 2; ++initiallyBlurred)
   {
     Fixture f;
@@ -1045,54 +816,23 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
 #endif
 }
 
-void testMacZStackBlurCPUPartialRepaint()
+void testMacZStackBlurWithoutEffectUsesWindowGround()
 {
-  CPUBlurScope forced;
+  if (NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack blur fallback: requires a host without NSVisualEffectView (Mavericks rig)\n");
+    return;
+  }
   Fixture f;
-  blurStack(f);
+  ZStackNode *stack = stackWithGround(f);
+  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
   f.layout();
   NSView *unit = unitUnder(f.host.root);
-  LOKA_VERIFY(unit && ![unit isOpaque]);
-  [unit setFrame:NSMakeRect(30, 20, 200, 80)];
-  LokaStackStripeGround *stripes = installStripeGround(unit, true);
-  const NSRect dirty = NSMakeRect(92, 30, 16, 20);
-  NSBitmapImageRep *partial = nil;
-  NSBitmapImageRep *old = nil;
-  {
-    CPUCanvas canvas(unit);
-    PaintStackStripes([unit bounds], false);
-    [unit drawRect:[unit bounds]];
-    old = canvas.snapshot([unit bounds]);
-    // Foreground controls outside the dirty rect must never feed the next blur.
-    [[NSColor magentaColor] set];
-    NSRectFill(NSMakeRect(90, 30, 2, 20));
-    NSRectFill(NSMakeRect(108, 30, 2, 20));
-    [stripes setChanged:YES];
-    [stripes setNeedsDisplayInRect:[stripes convertRect:dirty fromView:unit]];
-    [unit setNeedsDisplayInRect:dirty];
-    // Model AppKit's bounded update: only dirty source pixels are refreshed.
-    // Everything outside still contains the preceding tint/foreground pixels.
-    for (int repaint = 0; repaint != 2; ++repaint)
-    {
-      [NSGraphicsContext saveGraphicsState];
-      NSRectClip(dirty);
-      PaintStackStripes([unit bounds], true);
-      [unit drawRect:dirty];
-      [NSGraphicsContext restoreGraphicsState];
-    }
-    partial = canvas.snapshot([unit bounds]);
-  }
-  NSBitmapImageRep *fresh = nil;
-  {
-    CPUCanvas canvas(unit);
-    PaintStackStripes([unit bounds], true);
-    [unit drawRect:[unit bounds]];
-    fresh = canvas.snapshot([unit bounds]);
-  }
-  LOKA_VERIFY(!sameColor(cpuPixel(old, 106, 40), cpuPixel(fresh, 106, 40)));
-  // Near each dirty edge the blur kernel reaches old backing pixels. Compare
-  // only the repainted area: the external clip intentionally preserves the rest.
-  for (int y = 32; y <= 47; y += 5)
-    for (int x = 93; x <= 106; ++x)
-      LOKA_VERIFY(sameColor(cpuPixel(partial, x, y), cpuPixel(fresh, x, y)));
+  LOKA_VERIFY(unit && [unit class] == NSClassFromString(@"LokaStackUnitView"));
+  LOKA_VERIFY([unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
+  LOKA_VERIFY([[unit subviews] count] == 0);
+  // Reuse the WINDOW pixel/underlay-redraw pin, including pattern-ground handling.
+  verifyComposite(false, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
+  verifyComposite(true, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
 }

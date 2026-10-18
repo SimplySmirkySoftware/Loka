@@ -20,26 +20,8 @@ namespace loka
     namespace
     {
       unsigned macStackUnitViewFailures = 0;
-      bool macStackCPUBlur = false;
-      int macStackTransparency = -1;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
-    }
-    void setMacStackCPUBlur(bool enabled)
-    {
-      macStackCPUBlur = enabled;
-    }
-    bool forceMacStackCPUBlur()
-    {
-      return macStackCPUBlur;
-    }
-    void setMacStackMenuBarTransparency(int value)
-    {
-      macStackTransparency = value;
-    }
-    int macStackMenuBarTransparency()
-    {
-      return macStackTransparency;
     }
     void failMacStackUnitViews(unsigned count)
     {
