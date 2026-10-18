@@ -39,7 +39,7 @@ typedef CGImageRef (*ShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWindow
   }
   NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:image];
   CGImageRelease(image);
-  NSData *png = [rep representationUsingType:NSPNGFileType properties:[NSDictionary dictionary]];
+  NSData *png = [rep representationUsingType:(NSBitmapImageFileType)4 /* PNG on every SDK */ properties:[NSDictionary dictionary]];
   BOOL ok = [png writeToFile:path atomically:YES];
   std::fprintf(stderr, "probe: snapshot %s %dx%d -> %s\n", ok ? "written" : "NOT written", (int)[rep pixelsWide],
                (int)[rep pixelsHigh], [path UTF8String]);
