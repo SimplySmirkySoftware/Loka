@@ -9,6 +9,22 @@ namespace loka
     class ToolboxTextEditorAccess
     {
     public:
+      static void projecting(ToolboxTextEditorContext &c, bool value)
+      {
+        c.phase_ = value ? ToolboxTextEditorContext::PROJECT : ToolboxTextEditorContext::IDLE;
+      }
+      static bool isProjecting(ToolboxTextEditorContext &c)
+      {
+        return c.phase_ == ToolboxTextEditorContext::PROJECT;
+      }
+      static bool reconciling(ToolboxTextEditorContext &c)
+      {
+        return c.phase_ == ToolboxTextEditorContext::RECONCILE;
+      }
+      static void unavailable(ToolboxTextEditorContext &c)
+      {
+        c.status_ = app::EDITOR_UNAVAILABLE;
+      }
       static void sync(ToolboxTextEditorContext &c)
       {
         c.syncPresentation();

@@ -427,9 +427,12 @@ namespace
   }
 } // namespace
 #include "ToolboxEditorScrollBarPins.hpp"
+#include "ToolboxScrollKeyPins.hpp"
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && RunScrollKeyPin(argv[1]))
+    return 0;
   if (argc == 2 && RunBarPin(argv[1]))
     return 0;
   if (argc == 2 && std::strcmp(argv[1], "scroll-bar") == 0)

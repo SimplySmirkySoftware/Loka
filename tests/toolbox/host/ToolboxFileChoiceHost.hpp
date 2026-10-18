@@ -5,6 +5,7 @@
 #define LOKA_TOOLBOX_APP_HPP
 #include "app/scene/projection/PlatformController.hpp"
 #include "Quickdraw.h"
+#include "ToolboxScrollKey.hpp"
 #include "ToolboxPendingDialogs.hpp"
 #include "app/core/DialogResultTransport.hpp"
 struct Point { short v, h; };
@@ -30,6 +31,10 @@ public:
   void renderDirty(const Rect &) { this->render(); }
   bool handleMouseDown(const Point &) { return false; }
   bool handleKeyDown(char) { return false; }
+  bool handleScrollKey(ToolboxScrollKey)
+  {
+    return false;
+  }
   void idleTextEdits() {}
   void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   void synchronize() {}

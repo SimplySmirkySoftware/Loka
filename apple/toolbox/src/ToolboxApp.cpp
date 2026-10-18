@@ -453,7 +453,12 @@ void ToolboxApp::run()
 #endif
       if (!command)
       {
-        handled = active && active->handleKeyDown(key);
+        const unsigned char keyCode = static_cast<unsigned char>((event.message & keyCodeMask) >> 8);
+        ToolboxScrollKey scrollKey;
+        if (QueryToolboxScrollKey(keyCode, scrollKey))
+          handled = active && active->handleScrollKey(scrollKey);
+        if (!handled)
+          handled = active && active->handleKeyDown(key);
         if (!handled)
         {
           handled = this->handleKeyPress(key);

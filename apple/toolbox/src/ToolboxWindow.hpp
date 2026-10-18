@@ -1,6 +1,7 @@
 #ifndef LOKA_TOOLBOX_WINDOW_HPP
 #define LOKA_TOOLBOX_WINDOW_HPP
 
+#include "ToolboxScrollKey.hpp"
 #include "app/core/Window.hpp"
 #include "app/core/DialogResultTransport.hpp"
 #include "ToolboxActivationPhase.hpp"
@@ -56,6 +57,7 @@ public:
       window's current hilite state. */
   void invalidateGrowIcon();
   bool handleKeyDown(char key);
+  bool handleScrollKey(ToolboxScrollKey key);
   void drawDirty(const Rect &rect);
   void idleControls(ActivationPhase phase);
   void updateCursor(bool force = false);

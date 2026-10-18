@@ -7,4 +7,5 @@ private:
   void renderDirty(const Rect &rect);
   bool handleMouseDown(const Point &point);
   bool handleKeyDown(char key);
+  bool handleScrollKey(ToolboxScrollKey key);
   void idleTextEdits();
