@@ -12,11 +12,16 @@ namespace
     LOKA_VERIFY(bar->maximum == 15 && bar->value == 0 && bar->visible);
     const short selection = te.selStart;
     const unsigned restores = f.restores();
+    const unsigned damage = toolbox_host::invalidations;
     LOKA_VERIFY(f.context->scrollInput(15) == EDITOR_OK);
+    LOKA_VERIFY(toolbox_host::invalidations > damage);
     LOKA_VERIFY(text.top - te.destRect.top == 206 && bar->value == 15);
     LOKA_VERIFY(te.selStart == selection && f.restores() == restores);
     LOKA_VERIFY(f.context->scrollInput(2) == EDITOR_OK);
     LOKA_VERIFY(text.top - te.destRect.top == 28 && bar->value == 2);
+    const unsigned unchangedDamage = toolbox_host::invalidations;
+    LOKA_VERIFY(f.context->scrollInput(2) == EDITOR_OK);
+    LOKA_VERIFY(toolbox_host::invalidations == unchangedDamage);
     OffsetRect(&te.destRect, 0, -3);
     ToolboxTextEditorAccess::sync(*f.context);
     LOKA_VERIFY(text.top - te.destRect.top == 31 && bar->value == 2);

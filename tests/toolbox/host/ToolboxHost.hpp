@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "ToolboxScrollKey.hpp"
 #include "ToolboxActivationPhase.hpp"
 #include "support/TestVerify.hpp"
 struct ToolboxScrollViewMetrics;

@@ -596,6 +596,13 @@ namespace
     const CGFloat y = [unit frame].origin.y;
     NSColor *windowGround = nil;
     LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_WINDOW, windowGround));
+    // On 10.5-10.13 the window ground is a pattern colour that has no RGB form;
+    // the bare root margin shows that ground, so sample it as the reference.
+    if (![windowGround colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]])
+    {
+      std::printf("[note] ZStack composite: window ground is a pattern; comparing against the margin pixel\n");
+      windowGround = pixel(before, f.host.root, 2, 2);
+    }
     LOKA_VERIFY(sameColor(pixel(before, f.host.root, x, y + 50), windowGround));
     // Positive control: actual composited sprite ink outside the opaque unit.
     // The context binds the model on construction; no Scene attach is needed.

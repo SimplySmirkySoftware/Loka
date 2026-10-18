@@ -485,6 +485,13 @@ bool ToolboxWindow::handleKeyDown(char key)
   return ToolboxInputDoor::keyDown(*scenePlatformController_, key);
 }
 
+bool ToolboxWindow::handleScrollKey(ToolboxScrollKey key)
+{
+  if (!scenePlatformController_)
+    return false;
+  return ToolboxInputDoor::scrollKey(*scenePlatformController_, key);
+}
+
 #include "ToolboxWindowIdle.cpp"
 
 ToolboxApp *ToolboxWindow::toolboxApp() const

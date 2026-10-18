@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxScrollKey.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
 #include "ToolboxEditInstalled.hpp"
 #include "ToolboxPendingDialogs.hpp"

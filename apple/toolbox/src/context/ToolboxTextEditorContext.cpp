@@ -638,6 +638,27 @@ void ToolboxTextEditorContext::idleTick()
 }
 EditorResult ToolboxTextEditorContext::scrollInput(int value)
 {
+  return this->scrollView(SCROLL_AIM_LINE, value);
+}
+
+EditorResult ToolboxTextEditorContext::scrollKey(ToolboxScrollKey key)
+{
+  switch (key)
+  {
+  case SCROLL_PAGE_UP:
+    return this->scrollView(SCROLL_AIM_PAGE_UP, 0);
+  case SCROLL_PAGE_DOWN:
+    return this->scrollView(SCROLL_AIM_PAGE_DOWN, 0);
+  case SCROLL_HOME:
+    return this->scrollView(SCROLL_AIM_TOP, 0);
+  case SCROLL_END:
+    return this->scrollView(SCROLL_AIM_BOTTOM, 0);
+  }
+  return EDITOR_OK;
+}
+
+EditorResult ToolboxTextEditorContext::scrollView(ScrollAim aim, int line)
+{
   RailOperation op(*this);
   const EditorResult ready = this->beginInput();
   if (ready != EDITOR_OK)
@@ -646,8 +667,26 @@ EditorResult ToolboxTextEditorContext::scrollInput(int value)
   EditorScrollMetrics metrics;
   if (metrics.read(this->te_, this->geometry().text))
   {
-    const long target = std::min(std::max(0L, std::min(static_cast<long>(value), metrics.maximum)) * metrics.line,
-                                 metrics.maximumPixels);
+    long target = 0;
+    switch (aim)
+    {
+    case SCROLL_AIM_LINE:
+      target = line;
+      break;
+    case SCROLL_AIM_PAGE_UP:
+      target = metrics.value - metrics.page;
+      break;
+    case SCROLL_AIM_PAGE_DOWN:
+      target = metrics.value + metrics.page;
+      break;
+    case SCROLL_AIM_TOP:
+      target = 0;
+      break;
+    case SCROLL_AIM_BOTTOM:
+      target = metrics.maximum;
+      break;
+    }
+    target = std::min(std::max(0L, std::min(target, metrics.maximum)) * metrics.line, metrics.maximumPixels);
     if (metrics.move(this->te_, target) && target != metrics.offset)
       this->controller()->window_->requestInvalidateRect(this->paintRect_);
   }
