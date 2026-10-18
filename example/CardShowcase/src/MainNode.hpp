@@ -98,19 +98,19 @@ namespace cardshowcase
                       << Text("A little color, a quiet shadow, and room to breathe. "
                               "Scroll to watch these cards and colors pass beneath the toolbar.")
                              + BlockStyle().wrap(TEXT_WRAP_WORD)
-                      << (Card() << (Column().gap(6) << Text("Made for the moment") + FontSize<18>() + Blue
+                      << (Card(ProbeCardStyle()) << (Column().gap(6) << Text("Made for the moment") + FontSize<18>() + Blue
                                                      << Text("Native controls keep familiar gestures close at hand.")
                                                             + BlockStyle().wrap(TEXT_WRAP_WORD)))
-                      << (Card() << (Column().gap(6) << Text("A softer edge") + FontSize<18>() + Magenta
+                      << (Card(ProbeCardStyle()) << (Column().gap(6) << Text("A softer edge") + FontSize<18>() + Magenta
                                                      << Text("Default card shadows give each thought a little space.")
                                                             + BlockStyle().wrap(TEXT_WRAP_WORD)))
-                      << (Card() << (Column().gap(6)
+                      << (Card(ProbeCardStyle()) << (Column().gap(6)
                                      << Text("Color in motion") + FontSize<18>() + Green
                                      << Text("Move slowly through the page and notice what changes above.")
                                             + BlockStyle().wrap(TEXT_WRAP_WORD)))
-                      << (Row().gap(6) << (Card() << (Column() << Text("Sky") + Blue << Text("Look up")))
-                                       << (Card() << (Column() << Text("Bloom") + Magenta << Text("Look closer")))
-                                       << (Card() << (Column() << Text("Leaf") + Green << Text("Take a breath"))))
+                      << (Row().gap(6) << (Card(ProbeCardStyle()) << (Column() << Text("Sky") + Blue << Text("Look up")))
+                                       << (Card(ProbeCardStyle()) << (Column() << Text("Bloom") + Magenta << Text("Look closer")))
+                                       << (Card(ProbeCardStyle()) << (Column() << Text("Leaf") + Green << Text("Take a breath"))))
                       << Text("Make something bright.") + FontSize<24>() + Red
                       << Text("Leave room for wonder.") + FontSize<24>() + Blue
                       << Text("Follow a new color.") + FontSize<24>() + Magenta
@@ -122,6 +122,25 @@ namespace cardshowcase
     }
 
   private:
+    // PROBE ONLY: LOKA_PROBE_CARD_SHADOW=none|drop|wide-stencil|wide-alpha picks every card's
+    // style, so the scroll cost of shadows and of blur can be measured apart.
+    static loka::app::CardStyle ProbeCardStyle()
+    {
+      using namespace loka::app;
+      const char *value = std::getenv("LOKA_PROBE_CARD_SHADOW");
+      if (!value)
+        return CardStyle();
+      if (std::strcmp(value, "none") == 0)
+        return CardStyle(CARD_SHADOW_NONE);
+      if (std::strcmp(value, "drop") == 0)
+        return CardStyle(CARD_SHADOW_DROP, CARD_SHADOW_STENCIL);
+      if (std::strcmp(value, "wide-stencil") == 0)
+        return CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_STENCIL);
+      if (std::strcmp(value, "wide-alpha") == 0)
+        return CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA);
+      return CardStyle();
+    }
+
     // PROBE ONLY: called once per composition; the completed Column owns its definitions.
     loka::app::Column ProbeColumn() const
     {
