@@ -1,9 +1,19 @@
+// The probe deliberately exercises legacy OpenGL on modern SDKs too.
+#ifndef GL_SILENCE_DEPRECATION
+#define GL_SILENCE_DEPRECATION
+#endif
+#include <OpenGL/OpenGL.h>
+#include <OpenGL/gl.h>
+#include <ApplicationServices/ApplicationServices.h>
+#import <QuartzCore/CIFilter.h>
 #include "MacZStackContext.hpp"
+#include "../MacObjCCompat.hpp"
 #include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <new>
 
 #ifdef TEST_BUILD
@@ -46,6 +56,10 @@ namespace loka
 - (void)setBlendingMode:(NSInteger)mode;
 - (void)setMaterial:(NSInteger)material;
 - (void)setState:(NSInteger)state;
+- (void)setWantsLayer:(BOOL)value;
+- (void)setLayerUsesCoreImageFilters:(BOOL)value;
+- (void)setBackgroundFilters:(NSArray *)filters;
+- (NSArray *)backgroundFilters;
 @end
 
 @interface LokaStackBlurUnitView : NSView
@@ -66,8 +80,134 @@ namespace loka
 - (void)drawRect:(NSRect)rect
 {
   (void)rect;
+  // Native filter presence is the tint policy; visual-effect units stay clear.
+  if ([self respondsToSelector:@selector(backgroundFilters)] && [[self backgroundFilters] count])
+  {
+    NSColor *ground = nil;
+    if (loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground))
+    {
+      [[ground colorWithAlphaComponent:0.6] set];
+      NSRectFillUsingOperation([self bounds], LOKA_MAC_COMPOSITING_SOURCE_OVER);
+    }
+  }
 }
 @end
+
+namespace
+{
+  bool ProbeAcceleratedFragmentProgram()
+  {
+    CGLPixelFormatAttribute attributes[] = {
+        kCGLPFAAccelerated, kCGLPFANoRecovery, kCGLPFADisplayMask,
+        static_cast<CGLPixelFormatAttribute>(CGDisplayIDToOpenGLDisplayMask(CGMainDisplayID())),
+        static_cast<CGLPixelFormatAttribute>(0)};
+    CGLPixelFormatObj format = 0;
+    CGLContextObj context = 0;
+    CGLContextObj previous = CGLGetCurrentContext();
+    GLint count = 0;
+    bool supported = false;
+    if (CGLChoosePixelFormat(attributes, &format, &count) == kCGLNoError && format && count > 0 &&
+        CGLCreateContext(format, 0, &context) == kCGLNoError && context &&
+        CGLSetCurrentContext(context) == kCGLNoError)
+    {
+      const char *extensions = reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
+      const char *token = "GL_ARB_fragment_program";
+      const size_t length = std::strlen(token);
+      const char *match = extensions;
+      while (match && (match = std::strstr(match, token)) != 0)
+      {
+        if ((match == extensions || match[-1] == ' ') &&
+            (match[length] == ' ' || match[length] == '\0'))
+        {
+          supported = true;
+          break;
+        }
+        match += length;
+      }
+    }
+    // One exit pairs every temporary acquisition, including partial failures.
+    if (context)
+    {
+      const CGLError restored = CGLSetCurrentContext(previous);
+      assert(restored == kCGLNoError && "probe must restore the caller's CGL context");
+      if (restored != kCGLNoError)
+        supported = false;
+      CGLDestroyContext(context);
+    }
+    if (format)
+      CGLDestroyPixelFormat(format);
+    return supported;
+  }
+
+  bool ProbeMenuBarTransparency()
+  {
+    NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+    id value = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+    return !value || ![value respondsToSelector:@selector(boolValue)] || [value boolValue];
+  }
+
+  double ProbeBlurRadius()
+  {
+    const char *value = std::getenv("LOKA_PROBE_BLUR_RADIUS");
+    if (!value)
+      return 8.0;
+    char *end = 0;
+    const double radius = std::strtod(value, &end);
+    return end != value && *end == '\0' && radius >= 0.0 && radius <= 128.0 ? radius : 8.0;
+  }
+
+  // Called only for a missing visual-effect class, once per uncreated unit.
+  NSView *CreateProbeFilterUnit(NSView *parent, NSRect frame)
+  {
+    static const bool gpu = ProbeAcceleratedFragmentProgram();
+    const bool menubar = ProbeMenuBarTransparency();
+    NSView *view = nil;
+    Class filterClass = NSClassFromString(@"CIFilter");
+    if (gpu && menubar && [parent respondsToSelector:@selector(setWantsLayer:)] &&
+        [filterClass respondsToSelector:@selector(filterWithName:)])
+    {
+      CIFilter *filter = [filterClass filterWithName:@"CIGaussianBlur"];
+      if ([filter respondsToSelector:@selector(setDefaults)] &&
+          [filter respondsToSelector:@selector(setValue:forKey:)])
+      {
+        view = [[LokaStackBlurUnitView alloc] initWithFrame:frame];
+        if ([view respondsToSelector:@selector(setWantsLayer:)] &&
+            [view respondsToSelector:@selector(setBackgroundFilters:)])
+        {
+          [filter setDefaults];
+          [filter setValue:[NSNumber numberWithDouble:ProbeBlurRadius()] forKey:@"inputRadius"];
+          NSArray *filters = [NSArray arrayWithObject:filter];
+          if (filters)
+          {
+            [parent setWantsLayer:YES];
+            [view setWantsLayer:YES];
+            if ([view respondsToSelector:@selector(setLayerUsesCoreImageFilters:)])
+              [view setLayerUsesCoreImageFilters:YES];
+            [view setBackgroundFilters:filters];
+          }
+          else
+          {
+            [view release];
+            view = nil;
+          }
+        }
+        else
+        {
+          [view release];
+          view = nil;
+        }
+      }
+    }
+    static bool reported = false;
+    if (!reported)
+    {
+      std::fprintf(stderr, "probe: exp blur filters gpu=%d menubar=%d -> %s\n",
+                   gpu ? 1 : 0, menubar ? 1 : 0, view ? "applied" : "declined");
+      reported = true;
+    }
+    return view;
+  }
+} // namespace
 
 MacZStackContext::Unit::Unit(unsigned index)
     : index_(index),
@@ -118,11 +258,8 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
         reported = true;
       }
     }
-    else if (!reported)
-    {
-      std::fprintf(stderr, "probe: exp blur declined (no NSVisualEffectView)\n");
-      reported = true;
-    }
+    else
+      view = CreateProbeFilterUnit((NSView *)parent, seat.r);
   }
   if (!view)
     view = [[LokaStackUnitView alloc] initWithFrame:seat.r];

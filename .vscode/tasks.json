@@ -173,7 +173,7 @@
       "problemMatcher": "$gcc"
     },
     {
-      "label": "Build: macOS Showcase",
+      "label": "Build: macOS CardShowcase",
       "hide": true,
       "type": "shell",
       "command": "cmake",
@@ -182,7 +182,7 @@
         "--preset",
         "macos-debug",
         "--target",
-        "LokaShowcaseMacOS"
+        "LokaCardShowcaseMacOS"
       ],
       "dependsOn": [
         "Configure: macOS Native"

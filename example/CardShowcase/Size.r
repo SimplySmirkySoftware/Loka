@@ -1,4 +1,4 @@
-// Unmeasured partition for the Showcase probe.
+// Unmeasured partition for the CardShowcase probe.
 #include "Processes.r"
 #include "LokaClassicTarget.r"
 

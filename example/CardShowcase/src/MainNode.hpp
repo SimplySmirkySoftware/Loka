@@ -1,5 +1,5 @@
-#ifndef LOKA_SHOWCASE_MAIN_NODE_HPP
-#define LOKA_SHOWCASE_MAIN_NODE_HPP
+#ifndef LOKA_CARDSHOWCASE_MAIN_NODE_HPP
+#define LOKA_CARDSHOWCASE_MAIN_NODE_HPP
 
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/controls/Card.hpp"
@@ -9,22 +9,62 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/Text.hpp"
 #include <cstdlib>
+#include <cstdio>
+#if !defined(LOKA_RETRO68)
+#include "app/FileImageSource.hpp"
+#endif
+#include "app/nodes/ImageView.hpp"
+#include "app/scene/BorrowedKeys.hpp"
 
-namespace showcase
+namespace cardshowcase
 {
   // Approximate per rail: nominal macOS button height 32 + two 8 LU pads.
   // macOS measures its actual button; the app has no laid-out bar-height fact yet.
   const int kBarHeight = 48;
 
-  class MainNode : public loka::app::scene::BoundaryNodeFor<MainNode>
+  class MainNode;
+  struct MainTypeTag
+  {
+  };
+
+  /** Borrows the application platform for one-time photo decoding. */
+  struct MainProps : public loka::app::scene::NodePropsBase<MainProps>
+  {
+    typedef MainTypeTag TypeTag;
+    typedef MainNode NodeType;
+
+    MainProps &platformContext(PlatformContext *context)
+    {
+      this->keys_.set(0, context);
+      return *this;
+    }
+    PlatformContext *platformContext() const
+    {
+      return static_cast<PlatformContext *>(const_cast<void *>(this->keys_.get(0)));
+    }
+    bool operator<(const loka::app::scene::PropsBase &rhs) const
+    {
+      return rhs.propsTypeId() == this->propsTypeId() &&
+             this->keys_ < static_cast<const MainProps &>(rhs).keys_;
+    }
+
+  private:
+    loka::app::scene::BorrowedKeys<1> keys_;
+  };
+
+  class MainNode : public loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>
   {
   public:
-    typedef loka::app::scene::BoundaryPropsFor<MainNode> PropsType;
+    typedef MainProps PropsType;
 
     explicit MainNode(const PropsType &p)
-        : loka::app::scene::BoundaryNodeFor<MainNode>(p),
-          viewport_()
+        : loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>(p),
+          viewport_(),
+          laptops_(),
+          flyer_()
     {
+      this->state(this->laptops_, LoadPhoto(p.platformContext(), "LokaLaptops.jpg"));
+      this->state(this->flyer_, LoadPhoto(p.platformContext(), "LokaFlyer_0.0.1_PBG4.jpg"));
       // PROBE ONLY: start scrolled so content sits under the toolbar for a capture.
       const char *probeY = std::getenv("LOKA_PROBE_SCROLL_Y");
       this->state(this->viewport_,
@@ -41,6 +81,13 @@ namespace showcase
               << (Box().padding(12)
                   << (Column().gap(12)
                       << Text("Expressive Loka") + FontSize<24>() + Red
+#if !defined(LOKA_RETRO68)
+                      << (Row().gap(12)
+                          << ImageView().image(this->laptops_.state()).size(210, 180)
+                                 .attr(ImageViewAttr().fit(IMAGE_FIT_COVER))
+                          << ImageView().image(this->flyer_.state()).size(210, 180)
+                                 .attr(ImageViewAttr().fit(IMAGE_FIT_COVER)))
+#endif
                       << Text("A little color, a quiet shadow, and room to breathe. "
                               "Scroll to watch these cards and colors pass beneath the toolbar.")
                              + BlockStyle().wrap(TEXT_WRAP_WORD)
@@ -76,8 +123,27 @@ namespace showcase
     }
 
   private:
-    loka::app::scene::NodeState<loka::core::Frame> viewport_;
-  };
-} // namespace showcase
+    static loka::core::resource::Image LoadPhoto(PlatformContext *context, const char *name)
+    {
+      loka::core::resource::Image image;
+#if !defined(LOKA_RETRO68)
+      loka::core::resource::Blob blob;
+      const loka::file::File file = loka::file::File::Application() << loka::file::File(name);
+      if (loka::app::ReadFileImageBlob(context, file, blob) != loka::platform::file::READ_OK ||
+          !loka::app::DecodeFileImageBlob(context, blob, image))
+        std::fprintf(stderr, "probe: photo unavailable: %s\n", name);
+#else
+      // Classic's native decoder accepts PICT, not these JPEG photographs.
+      (void)context;
+      (void)name;
+#endif
+      return image;
+    }
 
-#endif // LOKA_SHOWCASE_MAIN_NODE_HPP
+    loka::app::scene::NodeState<loka::core::Frame> viewport_;
+    loka::app::scene::NodeState<loka::core::resource::Image> laptops_;
+    loka::app::scene::NodeState<loka::core::resource::Image> flyer_;
+  };
+} // namespace cardshowcase
+
+#endif // LOKA_CARDSHOWCASE_MAIN_NODE_HPP

@@ -8,15 +8,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 {
   (void)hPrevInstance;
   (void)lpCmdLine;
-  return loka::platform::RunApp<ShowcaseAppConfig>(hInstance, nCmdShow);
+  return loka::platform::RunApp<CardShowcaseAppConfig>(hInstance, nCmdShow);
 }
 #elif defined(LOKA_RETRO68)
 int main(int argc, char **argv)
 {
   (void)argc;
   (void)argv;
-  return loka::platform::RunApp<ShowcaseAppConfig>();
+  return loka::platform::RunApp<CardShowcaseAppConfig>();
 }
 #else
-#error Unsupported platform for Showcase main.cpp
+#error Unsupported platform for CardShowcase main.cpp
 #endif

@@ -189,7 +189,7 @@ add_subdirectory(example/FloppyBird)
 add_subdirectory(example/SmirkBench)
 add_subdirectory(example/LazyList)
 add_subdirectory(example/Tutorial)
-add_subdirectory(example/Showcase)
+add_subdirectory(example/CardShowcase)
 
 if(WIN32 AND TARGET LokaStandaloneLoopWin32All)
   add_dependencies(LokaStandaloneLoopWin32All LokaSimpleViewerWin32 LokaSimpleTextWin32)

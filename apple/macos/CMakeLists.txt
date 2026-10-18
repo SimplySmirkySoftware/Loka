@@ -33,6 +33,8 @@ target_link_libraries(LokaAppleMacOSAppKit INTERFACE
   "-framework AppKit"
   "-framework Foundation"
   "-framework CoreFoundation"
+  "-framework OpenGL"
+  "-framework QuartzCore"
 )
 
 target_include_directories(LokaAppleMacOSAppKit INTERFACE

@@ -10,12 +10,12 @@
       "preLaunchTask": "Build: macOS App"
     },
     {
-      "name": "Run (macOS Showcase)",
+      "name": "Run (macOS CardShowcase)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/Showcase/LokaShowcaseMacOS",
+      "program": "${workspaceFolder}/build/macos/Debug/example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS",
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "Build: macOS Showcase"
+      "preLaunchTask": "Build: macOS CardShowcase"
     },
     {
       "name": "Run (macOS MineSweeper)",
