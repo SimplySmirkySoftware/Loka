@@ -308,7 +308,8 @@ namespace loka
           return result;
         }
 
-        // Like Null's traversal, a handler's pre-narrowing refusal must reach
+        // Deliberate twin of MacPlatformLayoutTraversal::refuseLayoutResultY
+        // in apple/macos/src/MacScenePlatformController.mm. Like Null, refusal must reach
         // the viewport channel even when no projected child is dispatched.
         // Constant work per handler admission; no rows are walked here.
         virtual bool refuseLayoutResultY(int y)
@@ -1580,7 +1581,7 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
 
   if (loka::app::ZStackNode *stack = node->asZStackNode())
   {
-    // Deliberate twin of common/app/layout/ZStackLayout.hpp: every child
+    // Deliberate twin of MacScenePlatformController and ZStackLayout.hpp: every child
     // receives the full seat and the result is the maximum child bottom.
     // Native units implement docs/ProgrammingGuide.en.md#stacking-zstack.
     // One composition walk; at most two own-unit ordering walks per layout pass.

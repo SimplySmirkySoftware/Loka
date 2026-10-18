@@ -77,6 +77,7 @@ set(LOKA_MACOS_CORE_SOURCES
   src/context/MacImageViewContext.mm
   src/context/MacRectSurfaceContext.mm
   src/context/MacScrollViewContext.mm
+  src/context/MacZStackContext.mm
   ${PROJECT_SOURCE_DIR}/apple/common/cocoa/src/AppleString.mm
 )
 
@@ -132,6 +133,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacInputDoorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextEditorTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacScrollViewTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacZStackUnitTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacFocusTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacBitmapCapture.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacPlatformContext.mm
@@ -170,6 +172,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacImageViewContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacRectSurfaceContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/context/MacScrollViewContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/context/MacZStackContext.mm
     ${LOKA_MACOS_TEST_HEADERS}
   )
   loka_enable_warnings(LokaTestsMacOS)

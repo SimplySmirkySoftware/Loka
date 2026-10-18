@@ -9,6 +9,7 @@
 #include "platform/MacNativeGeometry.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
+#include "support/MacRetirementProbe.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "platform/StringUTF8.hpp"
 #include "platform/String.hpp"
@@ -1768,8 +1769,8 @@ void testMacTextEditorHighlightAndLifecycle()
   f.edit(@"\u00e9", 1);
   NotifySubtreeNodeDetached(&f.node);
   LifecycleFactTestAccess::DeliverFacts(&f.node);
-  LOKA_VERIFY([f.scroll superview] == nil && [f.view delegate] == nil);
-  LOKA_VERIFY([[f.view textStorage] delegate] == nil);
+  LOKA_VERIFY([f.scroll superview] == [f.host.window contentView] && [f.scroll isHidden]);
+  LOKA_VERIFY([f.view delegate] == nil && [[f.view textStorage] delegate] == nil);
   f.turn();
   LOKA_VERIFY(Access::restores(*f.context) == 0);
   NotifySubtreeNodeAttached(&f.node);
@@ -1789,4 +1790,72 @@ void testMacTextEditorHighlightAndLifecycle()
   LifecycleFactTestAccess::DeliverFacts(&f.node);
   LOKA_VERIFY([f.scroll superview] == nil && [f.view delegate] == nil);
   LOKA_VERIFY([[f.view textStorage] delegate] == nil);
+}
+
+void testMacTextEditorDetachHidesAndRetireRemoves()
+{
+  int released = 0;
+  NativeHost host;
+  if (!host.window)
+  {
+    std::printf("[skip] TextEditor lifecycle: window creation refused\n");
+    return;
+  }
+  loka::app::testing::TextEditorStateOwner owner;
+  ObservableList<String> lines;
+  LOKA_VERIFY(lines.attach(&owner.tracker, 4) == ATTACH_OK);
+  LOKA_VERIFY(lines.insert(0, String("abcd")) == EDIT_OK);
+  NSView *parent = [host.window contentView];
+  MacScenePlatformController controller(parent, RailMetrics());
+  TextEditorNode node(TextEditorProps(lines, owner.cursor).moveCaretTo(owner.request));
+  NSAutoreleasePool *inner = [[NSAutoreleasePool alloc] init];
+  LayoutState state;
+  state.x = 0;
+  state.y = 0;
+  state.width = 240;
+  state.height = 96;
+  state.spacing = 4;
+  LOKA_VERIFY(controller.prepareProjectedLayout(&node, state));
+  MacTextEditorContext *context = static_cast<MacTextEditorContext *>(node.getContext());
+  LOKA_VERIFY(context && context->layout(&controller, state) == 96);
+  NSScrollView *scroll = (NSScrollView *)[[parent subviews] objectAtIndex:0];
+  NSTextView *view = (NSTextView *)[scroll documentView];
+  observeMacNativeDeallocation(scroll, released);
+  NSView *sibling = [[NSView alloc] initWithFrame:NSZeroRect];
+  [parent addSubview:sibling];
+  [sibling release];
+  const NSUInteger index = [[parent subviews] indexOfObject:scroll];
+  const bool focused = [host.window makeFirstResponder:view] && [host.window firstResponder] == view;
+  if (!focused)
+    std::printf("[skip] TextEditor detach focus: window could not acquire first responder\n");
+  NotifySubtreeNodeDetached(&node);
+  LifecycleFactTestAccess::DeliverFacts(&node);
+  LOKA_VERIFY([scroll isHidden] && [scroll superview] == parent);
+  LOKA_VERIFY([[parent subviews] indexOfObject:scroll] == index);
+  LOKA_VERIFY(![view isEditable] && ![view delegate]);
+  if (focused)
+    LOKA_VERIFY([host.window firstResponder] != view);
+  const LineCursor requested(lines.at(0).id, 3);
+  {
+    StateTrackerGuard guard(&owner.tracker);
+    owner.request.set(requested);
+  }
+  NotifySubtreeNodeAttached(&node);
+  LifecycleFactTestAccess::DeliverFacts(&node);
+  LOKA_VERIFY(![scroll isHidden] && [scroll superview] == parent);
+  LOKA_VERIFY([[parent subviews] indexOfObject:scroll] == index);
+  LOKA_VERIFY([view isEditable] && [view delegate]);
+  // SETTLE_ATTACH still consumes requests after unhiding the existing view.
+  LOKA_VERIFY(owner.request.get().isNone() && owner.cursor.state()->get() == requested);
+  LOKA_VERIFY(NSEqualRanges([view selectedRange], NSMakeRange(3, 0)));
+  LifecycleFactTestAccess::MarkSubtreeRetired(&node);
+  LifecycleFactTestAccess::DeliverFacts(&node);
+  LOKA_VERIFY(![scroll superview] && [scroll isHidden] && released == 0);
+  // Discard removeFromSuperview's autorelease before testing queue ownership.
+  [inner drain];
+  LOKA_VERIFY(released == 0);
+  inner = [[NSAutoreleasePool alloc] init];
+  controller.drainNativeRetirements();
+  [inner drain];
+  LOKA_VERIFY(released == 1);
 }

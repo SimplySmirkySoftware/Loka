@@ -1,0 +1,21 @@
+#ifndef LOKA_MAC_ZSTACK_UNIT_TESTS_HPP
+#define LOKA_MAC_ZSTACK_UNIT_TESTS_HPP
+void testMacZStackLaterChildGetsUnitView();
+void testMacZStackUnitsStackInCompositionOrder();
+void testMacZStackUnitHitTestShadowsGround();
+void testMacZStackSiblingAfterZStackDoesNotReorderUnits();
+void testMacZStackGroundCreatedViewGoesBelowUnits();
+void testMacZStackUnitCreationRefusalLaysOutNothing();
+void testMacZStackLateFirstUnitLandsBelowSecond();
+void testMacScrollViewRefusedInsideUnit();
+void testMacZStackNestedZStackInUnitLaysOutNothing();
+void testMacScrollViewHandlerChildRefusalBlocksCommit();
+void testMacZStackUnitInsideViewportPropagatesRefusal();
+void testMacZStackGroundRefusalStopsUpperChildren();
+void testMacZStackFirstPassRefusalKeepsUnitEmpty();
+void testMacZStackUnitPaintsOpaqueGround();
+void testMacZStackUnitOverScrollViewSurvivesGroundRedraw();
+void testMacZStackRetirementDetachesUnitBeforeDrain();
+void testMacZStackReattachedGroundStaysBelowUnits();
+void testMacZStackGroundSuffixPreservesOrder();
+#endif

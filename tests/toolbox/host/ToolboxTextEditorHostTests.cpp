@@ -1,4 +1,5 @@
 #include "ToolboxGround.hpp"
+#include "ToolboxEditKey.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
@@ -168,6 +169,47 @@ namespace
       loka::testing::TextEditorContractSnapshot::unchanged(f);
       LOKA_VERIFY(f.native() == this->projection);
     }
+  };
+  void ignoreKey(void *value)
+  {
+    Fixture &f = *static_cast<Fixture *>(value);
+    const ListRevision revision = f.lines.revision().get();
+    const LineCursor cursor = f.cursor.state()->get();
+    const std::string native = f.native();
+    const short start = (**f.te()).selStart, end = (**f.te()).selEnd;
+    const int sets = toolbox_host::sets, selections = toolbox_host::selections;
+    const unsigned restores = f.restores();
+    const unsigned settles = loka::app::testing::SettleTrace<LineCursor>::instance().size();
+    LOKA_VERIFY(f.context->key(0x0C) == EDITOR_OK);
+    LOKA_VERIFY(!(revision != f.lines.revision().get()) && cursor == f.cursor.state()->get());
+    LOKA_VERIFY(f.native() == native && (**f.te()).selStart == start && (**f.te()).selEnd == end);
+    LOKA_VERIFY(toolbox_host::sets == sets && toolbox_host::selections == selections);
+    LOKA_VERIFY(f.restores() == restores);
+    LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == settles);
+  }
+  /** Like TextEditorReportRefusal, enters through the real string projection seam. */
+  class IgnoreDuringProjection : public loka::platform::String
+  {
+  public:
+    explicit IgnoreDuringProjection(Fixture &f)
+        : fixture_(f)
+    {
+    }
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    {
+      ignoreKey(&this->fixture_);
+      out.bytes = "abcd";
+      out.length = 4;
+      return true;
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append("abcd");
+      return true;
+    }
+
+  private:
+    Fixture &fixture_;
   };
   struct Observer
   {
@@ -433,6 +475,132 @@ int main(int argc, char **argv)
 {
   if (argc == 2 && RunScrollKeyPin(argv[1]))
     return 0;
+  if (argc == 2 && std::strcmp(argv[1], "key-classification") == 0)
+  {
+    // Independent tables: columns cover each low-control byte in numeric order.
+    const ToolboxTextEditorKey controls[] = {
+        TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,          TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,
+        TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_DELETE_BACKWARD, TEXT_KEY_INSERT, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,
+        TEXT_KEY_IGNORE, TEXT_KEY_INSERT, TEXT_KEY_IGNORE,          TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,
+        TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,          TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,
+        TEXT_KEY_IGNORE, TEXT_KEY_IGNORE, TEXT_KEY_IGNORE,          TEXT_KEY_IGNORE, TEXT_KEY_CARET,  TEXT_KEY_CARET,
+        TEXT_KEY_CARET,  TEXT_KEY_CARET};
+    const ToolboxEditKey editControls[] = {
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_CONSUME,         EDIT_KEY_CONSUME,
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_DELETE_BACKWARD, EDIT_KEY_CONSUME,
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_CONSUME,         EDIT_KEY_CONSUME,
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_CONSUME,         EDIT_KEY_CONSUME,
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_CONSUME,         EDIT_KEY_CONSUME,
+        EDIT_KEY_CONSUME,  EDIT_KEY_CONSUME, EDIT_KEY_CONSUME, EDIT_KEY_NAVIGATE,        EDIT_KEY_NAVIGATE,
+        EDIT_KEY_NAVIGATE, EDIT_KEY_NAVIGATE};
+    for (unsigned byte = 0; byte < 256; ++byte)
+    {
+      const ToolboxTextEditorKey expected = byte < 32     ? controls[byte]
+                                            : byte == 127 ? TEXT_KEY_DELETE_FORWARD
+                                                          : TEXT_KEY_INSERT;
+      LOKA_VERIFY(ClassifyTextEditorKey(static_cast<unsigned char>(byte)) == expected);
+      for (unsigned roman = 0; roman < 2; ++roman)
+      {
+        const ToolboxEditKey edit = byte < 32               ? editControls[byte]
+                                    : byte == 127           ? EDIT_KEY_DELETE_FORWARD
+                                    : byte >= 128 && !roman ? EDIT_KEY_REFUSE_HIGH
+                                                            : EDIT_KEY_INSERT;
+        LOKA_VERIFY(ClassifyEditKey(static_cast<unsigned char>(byte), roman != 0) == edit);
+      }
+    }
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "ignored-keys") == 0)
+  {
+    // Start with form feed to pin the pre-fix document mutation explicitly.
+    const unsigned char bytes[] = {0x0C, 0x00, 0x01, 0x03, 0x04, 0x05, 0x0A, 0x0B, 0x10, 0x1B};
+    Fixture f;
+    f.controller.activateEditControl(0);
+    for (unsigned i = 0; i < sizeof(bytes); ++i)
+    {
+      const Snapshot before(f);
+      LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, static_cast<char>(bytes[i])));
+      std::printf("ignored byte 0x%02X: content revision %lu -> %lu\n",
+                  bytes[i],
+                  static_cast<unsigned long>(before.revision.content),
+                  static_cast<unsigned long>(f.lines.revision().get().content));
+      std::fflush(stdout);
+      before.unchanged(f);
+      loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+      LOKA_VERIFY(f.context->key(static_cast<char>(bytes[i])) == EDITOR_OK);
+      before.unchanged(f);
+      LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 0);
+    }
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "ignore-phases") == 0)
+  {
+    Fixture f;
+    State<ListRevision> &revision = const_cast<State<ListRevision> &>(f.lines.revision());
+    revision.bind(&ignoreKey, &f, false);
+    const unsigned restores = f.restores();
+    LOKA_VERIFY(f.context->key('x') == EDITOR_OK);
+    revision.unbind(&ignoreKey, &f);
+    LOKA_VERIFY(f.native() == "abxcd\rabcd\rabcd" && f.restores() == restores);
+    const String text = String::FromPlatform(Managed<loka::platform::String>::Wrap(new IgnoreDuringProjection(f)));
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, text) == EDIT_OK);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.native() == "abcd\rabcd\rabcd" && f.restores() == restores);
+    // Release the callback-bearing string while its fixture is still alive.
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("abcd")) == EDIT_OK);
+    toolbox_host::failNew = 1;
+    Fixture unavailable;
+    LOKA_VERIFY(!unavailable.te());
+    const loka::testing::TextEditorContractSnapshot before(unavailable);
+    loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+    LOKA_VERIFY(unavailable.context->key(0x0C) == EDITOR_OK);
+    before.unchanged(unavailable);
+    LOKA_VERIFY(!unavailable.te());
+    LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 0);
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "forward-delete") == 0)
+  {
+    for (unsigned scenario = 0; scenario < 5; ++scenario)
+    {
+      Fixture f(scenario == 4 ? 0 : 2);
+      const short start = scenario == 0 ? 2 : scenario == 1 ? 4 : scenario == 2 ? 9 : scenario == 3 ? 1 : 0;
+      const short end = scenario == 3 ? 7 : start;
+      if (scenario != 4)
+      {
+        post(f, LineCursor(f.lines.at(scenario == 2 ? 1 : 0).id, scenario == 2 ? 4 : start));
+        f.context->onPropsApplied();
+      }
+      TESetSelect(start, end, f.te());
+      const Snapshot before(f);
+      const int sets = toolbox_host::sets, selections = toolbox_host::selections;
+      LOKA_VERIFY(f.context->key(0x7F) == EDITOR_OK);
+      std::string document;
+      LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).project(document) == EDITOR_OK);
+      LOKA_VERIFY(f.native() == document);
+      const ListRevision after = f.lines.revision().get();
+      if (scenario == 2 || scenario == 4)
+      {
+        before.unchanged(f);
+        LOKA_VERIFY(toolbox_host::sets == sets && toolbox_host::selections == selections);
+      }
+      else
+      {
+        LOKA_VERIFY(document == (scenario == 0 ? "abd\rabcd" : scenario == 1 ? "abcdabcd" : "acd"));
+        LOKA_VERIFY(after.content == before.revision.content + 1);
+        LOKA_VERIFY(after.structure == before.revision.structure + (scenario == 0 ? 0 : 1));
+        LOKA_VERIFY(toolbox_host::sets == sets);
+        if (scenario == 3)
+        {
+          Fixture backward(2);
+          TESetSelect(start, end, backward.te());
+          LOKA_VERIFY(backward.context->key('\b') == EDITOR_OK);
+          LOKA_VERIFY(backward.native() == document);
+        }
+      }
+    }
+    return 0;
+  }
   if (argc == 2 && RunBarPin(argv[1]))
     return 0;
   if (argc == 2 && std::strcmp(argv[1], "scroll-bar") == 0)
