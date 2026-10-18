@@ -192,8 +192,16 @@ namespace
   }
   bool hitBelongsTo(NSView *parent, NSView *unit, NSPoint point)
   {
-    NSView *hit = [parent hitTest:point];
-    return hit == unit || [hit isDescendantOf:unit];
+    // point is in parent coordinates. Each child's hitTest: takes its
+    // superview's coordinates, even when parent is a detached flipped root.
+    NSArray *children = [parent subviews];
+    for (NSUInteger i = [children count]; i > 0; --i)
+    {
+      NSView *hit = [[children objectAtIndex:i - 1] hitTest:point];
+      if (hit)
+        return hit == unit || [hit isDescendantOf:unit];
+    }
+    return false;
   }
   void settle(NSView *root)
   {
@@ -222,6 +230,19 @@ namespace
     return [[bitmap colorAtX:static_cast<NSInteger>(x * [bitmap pixelsWide] / [root bounds].size.width)
                            y:static_cast<NSInteger>(y * [bitmap pixelsHigh] / [root bounds].size.height)]
         colorUsingColorSpaceName:NSDeviceRGBColorSpace];
+  }
+  // MacRectSurfaceContext paints text-role sprites source-over an opaque
+  // document ground. Match MacGroundTests::checkRect, not raw labelColor.
+  NSColor *spriteColorOverDocument(NSColor *text, NSColor *document)
+  {
+    text = [text colorUsingColorSpaceName:NSDeviceRGBColorSpace];
+    document = [document colorUsingColorSpaceName:NSDeviceRGBColorSpace];
+    LOKA_VERIFY(text && document && [document alphaComponent] == 1.0);
+    const CGFloat alpha = [text alphaComponent];
+    return [NSColor colorWithDeviceRed:alpha * [text redComponent] + (1.0 - alpha) * [document redComponent]
+                                 green:alpha * [text greenComponent] + (1.0 - alpha) * [document greenComponent]
+                                  blue:alpha * [text blueComponent] + (1.0 - alpha) * [document blueComponent]
+                                 alpha:1.0];
   }
   bool sameColor(NSColor *a, NSColor *b)
   {
@@ -284,7 +305,7 @@ void testMacZStackUnitHitTestShadowsGround()
   const NSPoint point = NSMakePoint(NSMidX(frame), NSMidY(frame));
   LOKA_VERIFY(hitBelongsTo(f.host.root, unit, point));
   [unit setHidden:YES];
-  LOKA_VERIFY([f.host.root hitTest:point] == button);
+  LOKA_VERIFY(hitBelongsTo(f.host.root, button, point));
 }
 
 void testMacZStackSiblingAfterZStackDoesNotReorderUnits()
@@ -573,9 +594,13 @@ namespace
     NSColor *windowGround = nil;
     LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_WINDOW, windowGround));
     LOKA_VERIFY(sameColor(pixel(before, f.host.root, x, y + 50), windowGround));
-    // Positive control: actual ground ink outside the opaque unit.
-    NSColor *text = loka::macos::MacTextRoleColor();
-    LOKA_VERIFY(sameColor(pixel(before, f.host.root, x, y + 120), text));
+    // Positive control: actual composited sprite ink outside the opaque unit.
+    // The context binds the model on construction; no Scene attach is needed.
+    NSColor *documentGround = nil;
+    LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_DOCUMENT, documentGround));
+    NSColor *inkColor = spriteColorOverDocument(loka::macos::MacTextRoleColor(), documentGround);
+    LOKA_VERIFY(!sameColor(inkColor, windowGround));
+    LOKA_VERIFY(sameColor(pixel(before, f.host.root, x, y + 120), inkColor));
     // Prove capture liveness; a stale server image is not stacking evidence.
     [unit setHidden:YES];
     NSBitmapImageRep *uncovered = capture(f.host.root);
@@ -587,7 +612,7 @@ namespace
       std::printf("[skip] ZStack composite: server image did not observe hiding the unit\n");
       return;
     }
-    LOKA_VERIFY(sameColor(pixel(uncovered, f.host.root, x, y + 50), text));
+    LOKA_VERIFY(sameColor(pixel(uncovered, f.host.root, x, y + 50), inkColor));
     if (scrolling)
     {
       [[scroll contentView] scrollToPoint:NSMakePoint(0, 30)];
@@ -623,6 +648,7 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
   MacZStackContext context(&f.controller);
   MacZStackContext::Unit **cursor = context.unitsBegin();
   MacZStackContext::Unit *unit = context.unitFor(1, cursor);
+  NSAutoreleasePool *inner = [[NSAutoreleasePool alloc] init];
   LOKA_VERIFY(unit && unit->ensure(f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
   NSView *view = (NSView *)unit->view();
   observeMacNativeDeallocation(view, released);
@@ -632,6 +658,12 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
   LOKA_VERIFY(![view isHidden]);
   context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   LOKA_VERIFY(![view superview] && [view isHidden] && released == 0 && !unit->view());
+  // removeFromSuperview may retain/autorelease the view. Clear those native
+  // temporaries first: only the safe-point queue may keep it alive now.
+  [inner drain];
+  LOKA_VERIFY(released == 0);
+  inner = [[NSAutoreleasePool alloc] init];
   f.controller.drainNativeRetirements();
+  [inner drain];
   LOKA_VERIFY(released == 1);
 }
