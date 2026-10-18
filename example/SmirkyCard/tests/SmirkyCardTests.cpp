@@ -210,11 +210,11 @@ namespace
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
     LOKA_VERIFY(runtime.evaluateToString(
-        loka::core::String::Literal(
-            "[VStack().kind,Text('').kind,EditText({}).kind,Button('',()=>{}).kind,Row().kind].join(',')"),
+        loka::core::String::Literal("[VStack().kind,Text('').kind,EditText({}).kind,Button('',()=>{}).kind,Row().kind,"
+                                    "Card(Text('')).kind,ZStack(Text('')).kind].join(',')"),
         result,
         error));
-    LOKA_VERIFY(result.compare(loka::core::String::Literal("1,2,3,4,5")) == 0);
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("1,2,3,4,5,13,14")) == 0);
   }
   loka::app::scene::Node *find(loka::app::scene::Node *node, const char *id)
   {
@@ -1132,6 +1132,39 @@ namespace
       ++count;
     LOKA_VERIFY(count == 3);
   }
+  void checkZStackLowering()
+  {
+    const char *children[] = {"Text('g'),Text('u')", "[Text('g'),Text('u')]", "Text('g')"};
+    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); ++i)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      const std::string script =
+          std::string("card('first',class{compose(){return ZStack(") + children[i] + ").TEST_ID('Depth')}});";
+      LOKA_VERIFY(runtime.loadBuiltin(script.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      loka::app::scene::Node *stack = find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Depth");
+      LOKA_VERIFY(stack && stack->kind() == loka::app::scene::NODE_KIND_ZSTACK);
+      LOKA_VERIFY(stack->asNestable());
+      loka::app::scene::Node *ground = stack->asNestable()->childrenHead();
+      LOKA_VERIFY(ground && ground->asTextNode());
+      LOKA_VERIFY(ground->asTextNode()->props.text_->get().compare(loka::core::String::Literal("g")) == 0);
+      loka::app::scene::Node *unit = ground->nextInComposition;
+      if (i == 2)
+        LOKA_VERIFY(!unit);
+      else
+      {
+        LOKA_VERIFY(unit && unit->asTextNode() && !unit->nextInComposition);
+        LOKA_VERIFY(unit->asTextNode()->props.text_->get().compare(loka::core::String::Literal("u")) == 0);
+      }
+    }
+  }
   void checkTreePropertyCopy()
   {
     smirkycard::ScriptRuntime runtime;
@@ -1368,7 +1401,7 @@ namespace
     loka::core::String result, error;
     // Validation belongs to the helper call even if its result is never lowered.
     LOKA_VERIFY(!runtime.evaluateToString(loka::core::String::Literal("Grid(0,8,[]);'unused'"), result, error));
-    const char *stacks[] = {"Row", "VStack"};
+    const char *stacks[] = {"Row", "VStack", "ZStack"};
     for (size_t i = 0; i < sizeof(stacks) / sizeof(stacks[0]); ++i)
     {
       const std::string source = std::string("card('first',class{constructor(c){this.c=c;}compose(){return ")
@@ -4667,6 +4700,7 @@ int main(int argc, char **argv)
   checkManyClickables("Cell", 128);
   checkEnabledSeat();
   checkArrayChildren();
+  checkZStackLowering();
   checkLifecycleHooks();
   smirkycard::ScriptRuntime runtime;
   loka::core::String builtinError;

@@ -185,7 +185,16 @@ The third argument accepts a tree node or an array of nodes; like stacks,
 only one array level is flattened. The child count must equal `rows * cols`
 (up to 256); a mismatch refuses with `Grid requires exactly rows * cols
 children (N)`. Nested arrays are refused. Grid has its own child limit;
-Row/VStack remain limited to 16. See [the board example](../../docs/smirkycard/clickables.md#grids).
+Row/VStack/ZStack remain limited to 16. See [the board example](../../docs/smirkycard/clickables.md#grids).
+
+`ZStack(...children)` accepts variadic trees or one array (one flattening level),
+with at most 16 children, like `VStack`. The first child is the ground; later children
+are full-width opaque units above it and earlier units in composition order.
+Follow the [guide's placement rule](../../docs/ProgrammingGuide.en.md#stacking-zstack):
+place units only over non-reactive regions such as a ScrollView inset gap;
+a transparent later child is unsupported. A ScrollView or nested ZStack inside
+a unit lays out nothing today. Toolbox lays out children flat until it adopts
+units. The experimental blur option is not exposed in JavaScript.
 
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;

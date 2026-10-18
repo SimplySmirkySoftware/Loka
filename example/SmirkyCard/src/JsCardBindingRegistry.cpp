@@ -12,6 +12,7 @@
 #include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include <new>
 
 namespace smirkycard
@@ -214,8 +215,15 @@ namespace smirkycard
     class StackLowering : public IJsNodeLowering
     {
     public:
-      StackLowering(const char *n, bool row)
-          : row_(row)
+      enum Axis
+      {
+        STACK_ROW,
+        STACK_COLUMN,
+        STACK_DEPTH
+      };
+
+      StackLowering(const char *n, Axis axis)
+          : axis_(axis)
       {
         name = n;
         kind = 0;
@@ -240,7 +248,9 @@ namespace smirkycard
       {
         loka::app::scene::NodeDefinitionBase *stack = 0;
         loka::app::scene::INestableDefinition *nest = 0;
-        if (row_)
+        switch (this->axis_)
+        {
+        case STACK_ROW:
         {
           loka::app::Row *row = new (std::nothrow) loka::app::Row();
           JSValue policy = JS_GetPropertyStr(ctx, tree, "rowWidth");
@@ -250,12 +260,22 @@ namespace smirkycard
           JS_FreeValue(ctx, policy);
           stack = row;
           nest = row;
+          break;
         }
-        else
+        case STACK_COLUMN:
         {
           loka::app::VStack *column = new (std::nothrow) loka::app::VStack();
           stack = column;
           nest = column;
+          break;
+        }
+        case STACK_DEPTH:
+        {
+          loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
+          stack = depthStack;
+          nest = depthStack;
+          break;
+        }
         }
         if (!stack)
         {
@@ -271,7 +291,7 @@ namespace smirkycard
       }
 
     private:
-      bool row_;
+      const Axis axis_;
     };
     bool readGridDimension(JSContext *ctx, JSValueConst value, short &out)
     {
@@ -932,11 +952,11 @@ namespace smirkycard
   bool RegisterSmirkyCardBindings(JsCardBindingRegistry &registry)
   {
     IJsGlobal card = {"card", &ScriptRuntime::card, 2};
-    return registry.registerLowering(new (std::nothrow) StackLowering("VStack", false))
+    return registry.registerLowering(new (std::nothrow) StackLowering("VStack", StackLowering::STACK_COLUMN))
            && registry.registerLowering(new (std::nothrow) TextLowering())
            && registry.registerLowering(new (std::nothrow) EditTextLowering())
            && registry.registerLowering(new (std::nothrow) ClickableLowering(false))
-           && registry.registerLowering(new (std::nothrow) StackLowering("Row", true))
+           && registry.registerLowering(new (std::nothrow) StackLowering("Row", StackLowering::STACK_ROW))
            && registry.registerLowering(new (std::nothrow) MarkupLowering())
            && registry.registerLowering(new (std::nothrow) ClickableLowering(true))
            && registry.registerLowering(new (std::nothrow) GridLowering())
@@ -944,6 +964,8 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) OpenFileDialogLowering())
            && registry.registerLowering(new (std::nothrow) ImageViewLowering())
            && registry.registerLowering(new (std::nothrow) ScrollViewLowering())
-           && registry.registerLowering(new (std::nothrow) CardLowering()) && registry.registerGlobal(card);
+           && registry.registerLowering(new (std::nothrow) CardLowering())
+           && registry.registerLowering(new (std::nothrow) StackLowering("ZStack", StackLowering::STACK_DEPTH))
+           && registry.registerGlobal(card);
   }
 } // namespace smirkycard
