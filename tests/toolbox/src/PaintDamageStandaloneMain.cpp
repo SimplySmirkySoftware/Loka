@@ -77,22 +77,21 @@ namespace
                                  FILE *log,
                                  const char *step)
   {
-    if (after.totalDrawCalls > before.totalDrawCalls)
-    {
-      // A dirty replay and an OS update can both run before the next idle.
-      // Keep the full-draw evidence instead of labelling that interval clipped.
-      if (after.totalRenderDirtyCalls > before.totalRenderDirtyCalls)
-        std::fprintf(log,
-                     "%s route-interval draws=%d dirty_replays=%d renders=%d\r",
-                     step,
-                     after.totalDrawCalls - before.totalDrawCalls,
-                     after.totalRenderDirtyCalls - before.totalRenderDirtyCalls,
-                     after.totalRenderCalls - before.totalRenderCalls);
-      return "full";
-    }
-    if (after.totalRenderDirtyCalls > before.totalRenderDirtyCalls)
+    const bool dirty = after.totalRenderDirtyCalls > before.totalRenderDirtyCalls;
+    const bool drew = after.totalDrawCalls > before.totalDrawCalls;
+    // A dirty replay and an OS update can both run before the next idle. The
+    // label names the dirty delivery's route; the interval line keeps the
+    // full-draw evidence beside it instead of folding it into the label.
+    if (dirty && drew)
+      std::fprintf(log,
+                   "%s route-interval draws=%d dirty_replays=%d renders=%d\r",
+                   step,
+                   after.totalDrawCalls - before.totalDrawCalls,
+                   after.totalRenderDirtyCalls - before.totalRenderDirtyCalls,
+                   after.totalRenderCalls - before.totalRenderCalls);
+    if (dirty)
       return after.totalRenderCalls > before.totalRenderCalls ? "composition" : "kind";
-    return "none";
+    return drew ? "full" : "none";
   }
 
   // These windows keep unspecified margins, so their root origins follow
