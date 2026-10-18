@@ -490,10 +490,13 @@ namespace
 {
   short MaxExplicitControlId(loka::app::scene::Node *) { return 0; }
 #ifndef LOKA_HOST_GAP_DISPATCH
-  void LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &state,
-                  ToolboxScenePlatformController *controller, loka::app::scene::BoundaryNode *)
+  short LayoutNode(loka::app::scene::Node *node,
+                   loka::app::scene::LayoutState &state,
+                   ToolboxScenePlatformController *controller,
+                   loka::app::scene::BoundaryNode *)
   {
-    if (!node) return;
+    if (!node)
+      return 0;
     loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode();
     if (surface)
       controller->rectSurfaceExtentLedger_.record(surface, loka::core::Frame(0, 0, state.width, state.height));
@@ -501,6 +504,7 @@ namespace
     for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0;
          child; child = child->nextInComposition)
       LayoutNode(child, state, controller, 0);
+    return state.width;
   }
   void RenderNode(loka::app::scene::Node *node, ToolboxScenePlatformController *controller)
   {
@@ -526,6 +530,7 @@ namespace
 #endif
 }
 #include "core/Profiler.hpp"
+#include "ToolboxZStack.cpp"
 #include "ToolboxRender.cpp"
 #ifdef LOKA_HOST_EDITOR_SCROLL
 #include "ToolboxDirtyReplay.hpp"
@@ -539,8 +544,21 @@ namespace
   {
     return false;
   }
-  bool HasRectSurfaceNode(loka::app::scene::Node *)
+  bool HasRectSurfaceNode(loka::app::scene::Node *node)
   {
+#ifdef LOKA_HOST_ZSTACK_UNITS
+    if (!node)
+      return false;
+    if (node->asRectSurfaceNode())
+      return true;
+    loka::app::scene::INestable *nestable = node->asNestable();
+    for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child;
+         child = child->nextInComposition)
+      if (HasRectSurfaceNode(child))
+        return true;
+#else
+    (void)node;
+#endif
     return false;
   }
   void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
@@ -687,7 +705,9 @@ namespace
   };
 } // namespace
 #include "ToolboxButtonControl.cpp"
+#include "ToolboxEnabledControls.cpp"
 #include "ToolboxContextProps.cpp"
+#ifndef LOKA_HOST_GAP_DISPATCH
 namespace
 {
   void RenderChildren(loka::app::scene::INestable *node, ToolboxScenePlatformController *controller)
@@ -696,5 +716,6 @@ namespace
       RenderNode(child, controller);
   }
 } // namespace
+#endif
 #include "ToolboxScrollViewRender.cpp"
 #endif

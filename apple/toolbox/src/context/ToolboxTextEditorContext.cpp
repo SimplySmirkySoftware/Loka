@@ -630,6 +630,7 @@ void ToolboxTextEditorContext::idleTick()
   ToolboxPortScope port(this->controller()->window_->window());
   const Rect before = (**this->te_).destRect;
   TEIdle(this->te_);
+  this->controller()->invalidateUnitOverlap(this->paintRect_);
   if (!EqualRect(&before, &(**this->te_).destRect))
   {
     this->controller()->window_->requestInvalidateRect(this->paintRect_);
@@ -807,6 +808,7 @@ EditorResult ToolboxTextEditorContext::key(char key)
     assert(!"an ignored key is never admitted");
     return this->finishInput(EDITOR_OK, CARET_CHANGE, op);
   }
+  this->controller()->invalidateUnitOverlap(this->paintRect_);
   Change change = from.line != to.line || key == '\r' ? STRUCTURE_CHANGE : LINE_CHANGE;
   if (kind == TEXT_KEY_CARET)
   {
@@ -837,6 +839,7 @@ EditorResult ToolboxTextEditorContext::click(const Point &point)
   if (result != EDITOR_OK)
     return result;
   TEClick(point, false, this->te_);
+  this->controller()->invalidateUnitOverlap(this->paintRect_);
   result = this->node_->seam(this->key_).moveCaret(this->cursorAt((**this->te_).selStart));
   if (!op.hasSameContext())
     return result;

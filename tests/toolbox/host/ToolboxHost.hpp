@@ -51,6 +51,7 @@ class ToolboxTextFontDescriptor;
 #include "TextEdit.h"
 #include "ToolboxEditControlLedger.hpp"
 #include "ToolboxHitLedger.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "app/FocusParticipant.hpp"
 class ToolboxTextEditorContext;
 #include "ToolboxCompositionReplay.hpp"
@@ -263,7 +264,9 @@ public:
     return 0;
   }
   void setActiveLayoutBoundary(loka::app::scene::BoundaryNode *) {}
+#ifndef LOKA_HOST_CONTROL_ORDER
   void renderScrollView(loka::app::ScrollViewNode *) {}
+#endif
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &)
   {
     LOKA_VERIFY(false);
@@ -320,6 +323,9 @@ public:
   }
   RgnHandle scrollViewClipRgn_;
   RgnHandle paintSuppressClipRgn_;
+  void invalidateUnitOverlap(const Rect &);
+  short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
+  void renderZStack(loka::app::ZStackNode *);
   short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void requestStructurePresent();
   virtual void onBoundaryApply(loka::app::scene::Node *, loka::app::scene::BoundaryNode *,
@@ -333,7 +339,11 @@ public:
   bool refuseNarrowingInScrollScope(int y)
   {
     if (!this->projectionParentScopes_.activeDepth()) return false;
-    if (y < SHRT_MIN || y > SHRT_MAX) this->refuseScrollViewShortRange();
+    if (y < SHRT_MIN || y > SHRT_MAX)
+    {
+      this->refuseScrollViewShortRange();
+      return true;
+    }
     return this->projectionParentScopes_.current().hasShortRangeRefusal();
   }
   int ensureViewportScrollBarControl(
@@ -394,6 +404,8 @@ public:
   loka::app::scene::ExactMatchHandleBucket<ControlRef> pushButtonBucket_;
   void renderScrollView(loka::app::ScrollViewNode *);
 #endif
+  void refreshButtonEnabled(ButtonControlBinding &);
+  void refreshScrollBarEnabled(ScrollBarControlBinding &);
   void commitScrollBarValueAt(std::size_t);
   void
   commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &, loka::app::ScrollBarOrientation);
@@ -535,13 +547,15 @@ public:
   }
   ~ToolboxScenePlatformController()
   {
-    if (this->scrollViewClipRgn_) DisposeRgn(this->scrollViewClipRgn_);
-    if (this->paintSuppressClipRgn_) DisposeRgn(this->paintSuppressClipRgn_);
     this->clearControls();
     this->flushControls();
     this->scrollBarLedger_.scrollBarBucket_.drainWith(DisposeControl);
     this->flushTE();
     this->textEditBucket_.drainWith(TEDispose);
+    if (this->scrollViewClipRgn_)
+      DisposeRgn(this->scrollViewClipRgn_);
+    if (this->paintSuppressClipRgn_)
+      DisposeRgn(this->paintSuppressClipRgn_);
   }
   loka::app::TextShaping textShaping() const
   {
@@ -561,6 +575,14 @@ public:
   virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   loka::app::scene::Node *rootNode_;
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
+  /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
+  struct UnitSeat
+  {
+    loka::app::ZStackNode *stack;
+    unsigned index;
+    Rect rect;
+  };
+  std::vector<UnitSeat> unitLedger_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;

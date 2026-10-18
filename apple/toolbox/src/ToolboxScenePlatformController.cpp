@@ -725,6 +725,7 @@ void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeCon
 
 #include "ToolboxContextProps.cpp"
 
+#include "ToolboxZStack.cpp"
 #include "ToolboxRender.cpp"
 
 #include "ToolboxDirtyPresentation.cpp"
@@ -983,31 +984,7 @@ void ToolboxScenePlatformController::refreshPopupEnabled(PopupHit &binding)
   }
 }
 
-void ToolboxScenePlatformController::refreshButtonEnabled(ButtonControlBinding &binding)
-{
-  if (binding.control)
-  {
-    if (binding.enabled->get())
-    {
-      HiliteControl(binding.control, 0);
-    }
-    else
-    {
-      HiliteControl(binding.control, 255);
-    }
-  }
-}
-
-void ToolboxScenePlatformController::refreshScrollBarEnabled(ScrollBarControlBinding &binding)
-{
-  // A disabled bar and an unscrollable one share the inactive
-  // presentation, so re-derive from both rather than from enabled alone.
-  binding.active = binding.enabled->get() && loka::app::ScrollBarIsScrollable(binding.minimum, binding.maximum);
-  if (binding.control)
-  {
-    HiliteControl(binding.control, binding.active ? 0 : 255);
-  }
-}
+#include "ToolboxEnabledControls.cpp"
 
 void ToolboxScenePlatformController::refreshButtonHitEnabled(ButtonHit &binding)
 {

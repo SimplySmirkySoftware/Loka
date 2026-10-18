@@ -57,13 +57,17 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
   GetPort(&previousPort);
   SetPort(this->window_->window());
   if (previousTE)
+  {
     TEDeactivate(previousTE);
+    this->invalidateUnitOverlap(old->rect);
+  }
   this->editControls_.clearFocus();
   if (nextTE)
   {
     this->editControls_.focus(index);
     this->fallbackFocus_.cut();
     TEActivate(nextTE);
+    this->invalidateUnitOverlap(this->editControls_[index].rect);
   }
   SetPort(previousPort);
 }
@@ -86,7 +90,11 @@ bool ToolboxScenePlatformController::handleEditClick(const Point &point)
     {
       this->activateEditControl(i);
       if (binding.editor) binding.editor->click(point);
-      else TEClick(point, false, binding.te);
+      else
+      {
+        TEClick(point, false, binding.te);
+        this->invalidateUnitOverlap(binding.rect);
+      }
       return true;
     }
   }
@@ -104,7 +112,10 @@ void ToolboxScenePlatformController::idleTextEdits()
       if (editControls_[i].editor)
         editControls_[i].editor->idleTick();
       else
+      {
         TEIdle(editControls_[i].te);
+        this->invalidateUnitOverlap(editControls_[i].rect);
+      }
     }
   }
 }

@@ -1,4 +1,6 @@
 #include "platform/ToolboxPascalText.hpp"
+#include "ToolboxPortScope.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
 #include <cstring>
 /** Shared production binding path, also compiled by the host TextEdit fixture. */
 ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(ToolboxEditTextContext *ownerContext,
@@ -102,7 +104,12 @@ void ToolboxScenePlatformController::retireEditTextBinding(
     static_cast<ToolboxEditTextContext *>(binding.ownerContext)->invalidateNativePresentation();
   if (binding.te)
   {
-    TEDeactivate(binding.te);
+    if (this->window_ && this->window_->window())
+    {
+      ToolboxPortScope port(this->window_->window());
+      ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
+      TEDeactivate(binding.te);
+    }
     // The EditText churn pool accepts only ordinary EditText records. Editors
     // capture Monaco 9 and a whole-document layout; dispose at the same clock
     // safe point instead of offering their incompatible recipe to that pool.

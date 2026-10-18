@@ -29,6 +29,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "app/nodes/AttributedText.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/Text.hpp"
@@ -116,6 +117,34 @@ namespace
     if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
       turn->settle();
   }
+
+  /** Opaque units cover the ink, with a control-free twin for the early gate. */
+  template <bool WithButton>
+  class UnitGroundNode : public StdCompositionBoundaryNodeBase<BoundaryPropsFor<UnitGroundNode<WithButton> > >
+  {
+  public:
+    typedef BoundaryPropsFor<UnitGroundNode<WithButton> > Props;
+    typedef typename Props::TypeTag TypeTag;
+    explicit UnitGroundNode(const Props &props)
+        : StdCompositionBoundaryNodeBase<Props>(props)
+    {
+      RectSurfaceModel ink;
+      ink.rectCount = 1;
+      ink.rects[0] = RectSprite(0, 0, 150, 70);
+      this->state(this->ink_, ink);
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      if (WithButton)
+        composition.declare(ZStack() << (Column() << RectSurface(this->ink_.state()).size(150, 70) << Button("Ground"))
+                                     << Box().size(180, 40));
+      else
+        composition.declare(ZStack() << RectSurface(this->ink_.state()).size(150, 70) << Box().size(180, 40));
+    }
+
+  private:
+    NodeState<RectSurfaceModel> ink_;
+  };
 
   template <bool HasViewport> class PaintDamageNode;
 
@@ -1248,7 +1277,7 @@ namespace
           composited_(0),
           edit_(0),
           log_(0),
-          phase_(SETTLE),
+          phase_(UNIT_SHOW),
           result_(0),
           initial_(),
           marker_(),
@@ -1291,7 +1320,9 @@ namespace
           cardWindow_(0),
           card_(0),
           cardReplay_(),
-          scrollStart_(0)
+          scrollStart_(0),
+          unitWindow_(0),
+          unitSurfaceWindow_(0)
     {
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
@@ -1311,6 +1342,26 @@ namespace
     int exitCode() const { return this->result_; }
     virtual void compose(AppComposition &composition)
     {
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 160)
+              .title("Unit ground")
+              .scene(loka::scenario_tests::ObservedMainDefinition<UnitGroundNode<true>::Props, UnitGroundNode<true> >(
+                  UnitGroundNode<true>::Props(), 0))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->unitWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 160)
+              .title("Unit surface ground")
+              .scene(loka::scenario_tests::ObservedMainDefinition<UnitGroundNode<false>::Props, UnitGroundNode<false> >(
+                  UnitGroundNode<false>::Props(), 0))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->unitSurfaceWindow_);
       composition << ObservedWindowDefinition(WindowProps().frame(50, 50, 280, 220).title("Paint damage")
                                .scene(loka::scenario_tests::ObservedMainDefinition<ViewportDamageNode::Props, ViewportDamageNode>(
                                    ViewportDamageNode::Props(), &this->node_))
@@ -1434,49 +1485,84 @@ namespace
     }
 
   private:
-    enum Phase { SETTLE, WRITE, CHECK, PLAIN_WRITE, PLAIN_CHECK, INVALIDATED_WRITE, INVALIDATED_CHECK,
-                 COMPOSITED_WRITE, COMPOSITED_CHECK, EDIT_WRITE, EDIT_CHECK, BOUNDS_SHOW, BOUNDS_CHECK, CELL_SHOW, CELL_REPLAY, CELL_CHECK,
-                 POPUP_SHOW,
-                 POPUP_REPLAY,
-                 POPUP_CHECK,
-                 OVERFLOW_SHOW,
-                 OVERFLOW_REPLAY,
-                 OVERFLOW_CHECK,
-                 IMAGE_VACATED_SHOW,
-                 IMAGE_VACATED_WRITE,
-                 IMAGE_VACATED_CHECK,
-                 EDIT_EXACT_SHOW,
-                 EDIT_EXACT_WRITE,
-                 EDIT_EXACT_CHECK,
-                 POPUP_EXACT_SHOW,
-                 POPUP_SIBLING_WRITE,
-                 POPUP_SIBLING_CHECK,
-                 POPUP_SELECTION_CHECK,
-                 HISTORY_SHOW,
-                 HISTORY_FIRST,
-                 HISTORY_SECOND,
-                 HISTORY_CHECK,
-                 POPUP_HISTORY_SHOW, POPUP_HISTORY_FIRST, POPUP_HISTORY_SECOND, POPUP_HISTORY_CHECK, BUTTON_ENABLED_SHOW, BUTTON_ENABLED_WRITE, BUTTON_ENABLED_CHECK,
-                 BUTTON_LABEL_SHOW, BUTTON_LABEL_WRITE, BUTTON_LABEL_CHECK,
-                 TEXT_WIDTH_SHOW, TEXT_WIDTH_WRITE, TEXT_WIDTH_CHECK, TEXT_WIDTH_RELAYOUT,
-                 TEXT_STYLE_SHOW, TEXT_STYLE_WRITE, TEXT_STYLE_CHECK,
-                 OFFSCREEN_SHOW,
-                 OFFSCREEN_WRITE,
-                 OFFSCREEN_SIBLING_CHECK,
-                 OFFSCREEN_TEXT_CHECK,
-                 OFFSCREEN_HIDDEN_CHECK,
-                 OFFSCREEN_REVEAL_CHECK,
-                 OFFSCREEN_REVEALED_WRITE_CHECK,
-                 OFFSCREEN_DETACH_CHECK,
-                 RIBBON_SHOW,
-                 RIBBON_CHECK,
-                 RIBBON_REPAINT,
-                 CARD_SHOW,
-                 CARD_CAPTURE,
-                 CARD_DISABLED,
-                 CARD_RESTORED,
-                 CARD_SCROLLED,
-                 COMPLETE
+    enum Phase
+    {
+      UNIT_SHOW,
+      UNIT_REPLAY,
+      UNIT_CHECK,
+      UNIT_SURFACE_SHOW,
+      UNIT_SURFACE_REPLAY,
+      UNIT_SURFACE_CHECK,
+      SETTLE,
+      WRITE,
+      CHECK,
+      PLAIN_WRITE,
+      PLAIN_CHECK,
+      INVALIDATED_WRITE,
+      INVALIDATED_CHECK,
+      COMPOSITED_WRITE,
+      COMPOSITED_CHECK,
+      EDIT_WRITE,
+      EDIT_CHECK,
+      BOUNDS_SHOW,
+      BOUNDS_CHECK,
+      CELL_SHOW,
+      CELL_REPLAY,
+      CELL_CHECK,
+      POPUP_SHOW,
+      POPUP_REPLAY,
+      POPUP_CHECK,
+      OVERFLOW_SHOW,
+      OVERFLOW_REPLAY,
+      OVERFLOW_CHECK,
+      IMAGE_VACATED_SHOW,
+      IMAGE_VACATED_WRITE,
+      IMAGE_VACATED_CHECK,
+      EDIT_EXACT_SHOW,
+      EDIT_EXACT_WRITE,
+      EDIT_EXACT_CHECK,
+      POPUP_EXACT_SHOW,
+      POPUP_SIBLING_WRITE,
+      POPUP_SIBLING_CHECK,
+      POPUP_SELECTION_CHECK,
+      HISTORY_SHOW,
+      HISTORY_FIRST,
+      HISTORY_SECOND,
+      HISTORY_CHECK,
+      POPUP_HISTORY_SHOW,
+      POPUP_HISTORY_FIRST,
+      POPUP_HISTORY_SECOND,
+      POPUP_HISTORY_CHECK,
+      BUTTON_ENABLED_SHOW,
+      BUTTON_ENABLED_WRITE,
+      BUTTON_ENABLED_CHECK,
+      BUTTON_LABEL_SHOW,
+      BUTTON_LABEL_WRITE,
+      BUTTON_LABEL_CHECK,
+      TEXT_WIDTH_SHOW,
+      TEXT_WIDTH_WRITE,
+      TEXT_WIDTH_CHECK,
+      TEXT_WIDTH_RELAYOUT,
+      TEXT_STYLE_SHOW,
+      TEXT_STYLE_WRITE,
+      TEXT_STYLE_CHECK,
+      OFFSCREEN_SHOW,
+      OFFSCREEN_WRITE,
+      OFFSCREEN_SIBLING_CHECK,
+      OFFSCREEN_TEXT_CHECK,
+      OFFSCREEN_HIDDEN_CHECK,
+      OFFSCREEN_REVEAL_CHECK,
+      OFFSCREEN_REVEALED_WRITE_CHECK,
+      OFFSCREEN_DETACH_CHECK,
+      RIBBON_SHOW,
+      RIBBON_CHECK,
+      RIBBON_REPAINT,
+      CARD_SHOW,
+      CARD_CAPTURE,
+      CARD_DISABLED,
+      CARD_RESTORED,
+      CARD_SCROLLED,
+      COMPLETE
     };
     App *app_;
     ViewportDamageNode *node_;
@@ -1529,6 +1615,8 @@ namespace
     CardReplayNode *card_;
     CardReplayPixels cardReplay_;
     unsigned long scrollStart_;
+    Window *unitWindow_;
+    Window *unitSurfaceWindow_;
 
     void recordArm(const char *name, bool pass, Phase next)
     {
@@ -1548,6 +1636,16 @@ namespace
       Window *target = 0;
       switch (self->phase_)
       {
+      case UNIT_SHOW:
+      case UNIT_REPLAY:
+      case UNIT_CHECK:
+        target = self->unitWindow_;
+        break;
+      case UNIT_SURFACE_SHOW:
+      case UNIT_SURFACE_REPLAY:
+      case UNIT_SURFACE_CHECK:
+        target = self->unitSurfaceWindow_;
+        break;
       case SETTLE: case WRITE: case CHECK:
         target = self->paintWindow_;
         break;
@@ -1638,7 +1736,9 @@ namespace
         return;
       }
       native->flushInvalidate();
-      if (target == self->paintWindow_)
+      if (target == self->unitWindow_ || target == self->unitSurfaceWindow_)
+        OnUnitIdle(target, target == self->unitWindow_, self);
+      else if (target == self->paintWindow_)
         OnPaintIdle(target, self->node_, self);
       else if (target == self->plainWindow_)
         OnPaintIdle(target, self->plain_, self);
@@ -1672,6 +1772,57 @@ namespace
         OnRibbonIdle(target, self);
       else
         OnDrawerIdle(target, self);
+    }
+
+    static void OnUnitIdle(Window *window, bool button, PaintDamageConfig *self)
+    {
+      ToolboxWindow *native = window->asToolboxWindow();
+      const char *name = button ? "zstack-unit-ground" : "zstack-unit-surface-ground";
+      if (self->phase_ == (button ? UNIT_SHOW : UNIT_SURFACE_SHOW))
+      {
+        ShowWindow(native->window());
+        SelectWindow(native->window());
+        native->requestInvalidate();
+        self->phase_ = button ? UNIT_REPLAY : UNIT_SURFACE_REPLAY;
+        return;
+      }
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(
+          loka::dsl::testing::SceneTestAccess::platformController(*window->scene()));
+      GrafPtr previous;
+      GetPort(&previous);
+      SetPort(native->window());
+      if (self->phase_ == (button ? UNIT_REPLAY : UNIT_SURFACE_REPLAY))
+      {
+        const unsigned before = controller->debugStatsForTesting().totalControlDrawCount;
+        native->draw();
+        const unsigned controls = controller->debugStatsForTesting().totalControlDrawCount - before;
+        const bool unitGround = !GetPixel(kRootX + 8, kRootY + 8);
+        const bool outsideInk = GetPixel(kRootX + 8, kRootY + 50) != 0;
+        std::fprintf(self->log_,
+                     "%s full unit_ground=%d outside_ink=%d control_draws=%u\r",
+                     name,
+                     unitGround,
+                     outsideInk,
+                     controls);
+        self->recordArm(
+            name, unitGround && outsideInk && controls == (button ? 1u : 0u), button ? UNIT_CHECK : UNIT_SURFACE_CHECK);
+        self->initial_ = controller->debugStatsForTesting();
+        const Rect ground = {kRootY, kRootX, kRootY + 70, kRootX + 150};
+        native->requestInvalidateRect(ground);
+      }
+      else
+      {
+        const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
+        const char *route = PaintDeliveryRoute(self->initial_, stats, self->log_, name);
+        const bool unchanged = !GetPixel(kRootX + 8, kRootY + 8);
+        const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
+        std::fprintf(
+            self->log_, "%s replay unit_unchanged=%d whole_window=%d route=%s\r", name, unchanged, whole, route);
+        self->recordArm(name,
+                        unchanged && whole == 0 && std::strcmp(route, "composition") == 0,
+                        button ? UNIT_SURFACE_SHOW : SETTLE);
+      }
+      SetPort(previous);
     }
 
     static bool earlyBusyReturn(CursorOwner &owner, ToolboxScenePlatformController &controller)

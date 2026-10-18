@@ -7,6 +7,17 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   {
     return;
   }
+  // O(units) over this controller's facts per delivery. Every touch runs a
+  // full layout + composition render, including every LAPTOP.JS scroll step.
+  for (size_t i = 0; i < this->unitLedger_.size(); ++i)
+  {
+    if (RectsIntersect(rect, this->unitLedger_[i].rect))
+    {
+      this->forceFullRedraw_ = false;
+      ToolboxRenderDirtyInCompositionOrder(*this, rect);
+      return;
+    }
+  }
   if (forceFullRedraw_)
   {
     forceFullRedraw_ = false;

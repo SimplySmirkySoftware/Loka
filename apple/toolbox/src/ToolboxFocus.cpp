@@ -127,6 +127,7 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       case EDIT_KEY_REFUSE_HIGH: SysBeep(1); return true;
       case EDIT_KEY_NAVIGATE:
         TEKey(key, focusedEdit->te);
+        this->invalidateUnitOverlap(focusedEdit->rect);
         return true;
       case EDIT_KEY_DELETE_BACKWARD:
       case EDIT_KEY_DELETE_FORWARD:
@@ -154,6 +155,7 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       // No certificate is observable for a native mutation awaiting readback.
       focusedEdit->installed.revoke();
       TEKey(kind == EDIT_KEY_INSERT ? key : 8, te);
+      this->invalidateUnitOverlap(focusedEdit->rect);
       this->updateStateFromEdit(*focusedEdit, before);
       // Publication may retire or relocate the row. Do not borrow it again.
     }

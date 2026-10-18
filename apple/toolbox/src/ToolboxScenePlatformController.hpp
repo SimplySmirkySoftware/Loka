@@ -15,6 +15,7 @@
 #include "ToolboxEditControlLedger.hpp"
 #include "ToolboxEnabledChangeDispatch.hpp"
 #include "ToolboxHitLedger.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "ToolboxCompositionReplay.hpp"
 #include "ToolboxScrollBarLedger.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
@@ -201,6 +202,9 @@ public:
   {
     return activeLayoutBoundary_;
   }
+  void invalidateUnitOverlap(const Rect &);
+  short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
+  void renderZStack(loka::app::ZStackNode *);
   short layoutScrollView(loka::app::ScrollViewNode *scrollView,
                          loka::app::scene::LayoutState &state,
                          loka::app::scene::BoundaryNode *currentBoundary);
@@ -302,6 +306,14 @@ private:
   const loka::app::TextShaping textShaping_;
 public:
   ToolboxWindow *window_;
+  /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
+  struct UnitSeat
+  {
+    loka::app::ZStackNode *stack;
+    unsigned index;
+    Rect rect;
+  };
+  std::vector<UnitSeat> unitLedger_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::Node *rootNode_;
   loka::app::scene::Node *pendingRootNode_;
