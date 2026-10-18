@@ -1627,13 +1627,24 @@ geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-
 stacking order.
 
 `ZStack().expBlurUnit()` is experimental: the first unit (second child) shows
-a blur of the content beneath it where the rail supports it. Later units and
-rails that cannot blur keep the window ground. Eligibility follows composition
+a blur of the content beneath it where the rail supports it. Later units keep
+the window ground. Eligibility follows composition
 index for the ZStack identity: hiding the first unit or giving it zero height
 does not promote a later one. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
-material on 10.10–10.13 and HUD material from 10.14. Earlier macOS and the
-other rails keep the window ground.
+material on 10.10–10.13 and HUD material from 10.14. Before 10.10, the first
+unit shows a static frosted ground: a light sheen and a hairline, with nothing
+beneath showing through. The other rails keep the window ground.
+
+On macOS before 10.10, the experimental user default `LokaExpLiveBlur` (or the
+launch argument `-LokaExpLiveBlur YES`) turns on live CPU blur instead. This
+choice is made when the unit is created. It reflects the content beneath as
+AppKit last redrew the unit. A change beneath that AppKit redraws only partly,
+such as a caret blinking or a small control change, can leave the blur around
+it stale until the next full redraw of the unit, such as a scroll. Layer-backed
+views fall back to the static frosted ground. A blurred ZStack nested in the
+ground of another blurred ZStack is rendered again for each level above it, so
+the live blur's cost grows quickly with such nesting.
 
 The macOS unit ground is chosen when the ZStack is first projected, including
 when no upper unit exists yet. Retained props changes keep that choice for

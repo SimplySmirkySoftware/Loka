@@ -32,6 +32,8 @@ MAC_ALLOWLIST = {
     "apple/macos/src/context/MacImageViewContext.mm": {"NSMakeRect"},
     # drawRect edge blend: one-point rows of the view's native bounds.
     "apple/macos/src/context/MacRibbonGroupEdgeContext.mm": {"NSMakeRect"},
+    # Frost rows and CPU capture: native view bounds and bitmap pixels, never layout units.
+    "apple/macos/src/context/MacZStackContext.mm": {"NSMakeRect"},
     # Constructor: initial document width is AppKit contentSize, height zero.
     "apple/macos/src/context/MacScrollViewContext.mm": {"NSMakeRect"},
     # FrameRectForContent: already-projected/native content plus native chrome.
