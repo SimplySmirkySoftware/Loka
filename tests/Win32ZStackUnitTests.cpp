@@ -345,6 +345,27 @@ void testWin32ZStackUnitTakesTabFirst()
   LOKA_VERIFY(GetNextDlgTabItem(f.root(), b, FALSE) == native(a));
 }
 
+void testWin32ZStackRootUnitChildRefusalKeepsPreviousRectangle()
+{
+  // Deliberate twin of the other native rail's root-unit refusal pin.
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(180, 80));
+  column->addChild(leading);
+  column->addChild(new ButtonNode(ButtonProps().text("After")));
+  stack->addChild(column);
+  f.layout(300, 140);
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(unit);
+  const RECT before = rectInParent(unit);
+  LOKA_VERIFY(before.bottom > before.top);
+  leading->props.size(180, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset - Win32SceneLayout::kGap + 1));
+  f.layout(300, 140);
+  const RECT after = rectInParent(unit);
+  LOKA_VERIFY(EqualRect(&after, &before));
+}
+
 void testWin32ZStackUnitInsideViewportPropagatesRefusal()
 {
   loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 1000, 0, 0));

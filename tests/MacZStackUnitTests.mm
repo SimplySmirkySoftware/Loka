@@ -475,6 +475,26 @@ void testMacScrollViewHandlerChildRefusalBlocksCommit()
   LOKA_VERIFY(NSEqualRects([[native contentView] bounds], clip) && origin.get().y == clamped);
 }
 
+void testMacZStackRootUnitChildRefusalKeepsPreviousRectangle()
+{
+  // Deliberate twin of the other native rail's root-unit refusal pin.
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  ImageViewNode *leading = new ImageViewNode(ImageViewProps().size(180, 80));
+  column->addChild(leading);
+  column->addChild(new ButtonNode(ButtonProps().text("After")));
+  stack->addChild(column);
+  f.layout(300, 140);
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(unit);
+  const NSRect before = [unit frame];
+  LOKA_VERIFY(before.size.height > 0);
+  leading->props.size(180, static_cast<short>(SHRT_MAX - MacSceneLayout::kRootInset - MacSceneLayout::kGap + 1));
+  f.layout(300, 140);
+  LOKA_VERIFY(NSEqualRects([unit frame], before));
+}
+
 void testMacZStackUnitInsideViewportPropagatesRefusal()
 {
   loka::core::MutableState<Frame> storage(Frame(0, 1000, 0, 0));

@@ -1745,7 +1745,7 @@ bool Win32ScenePlatformController::narrowLayoutState(
   content.height = static_cast<short>(state.height);
   content.lineHeight = 0;
   content.spacing = static_cast<short>(state.spacing());
-  // Root projection is the identity; a root unit still translates without a channel.
+  // Root projection is the identity; a root unit translates into its native parent.
   if (applyProjection)
   {
     if (!this->projectionParentScopes_.current().project(content, narrowed))
