@@ -72,7 +72,7 @@ namespace smirkycard
     const loka::core::LokaAllocationSite site_;
   };
 
-  /** One private card-owned viewport handle; rails borrow its write seat. */
+  /** One bound card-owned viewport handle; rails borrow its write seat. */
   struct JsScrollViewport
   {
     JsScrollViewport()
@@ -92,7 +92,8 @@ namespace smirkycard
       INTEGER,
       BOOLEAN,
       FILE_RESULT,
-      IMAGE
+      IMAGE,
+      VIEWPORT
     };
     struct Initial
     {
@@ -130,8 +131,17 @@ namespace smirkycard
         return this->file.isValid();
       case IMAGE:
         return this->image.isValid();
+      case VIEWPORT:
+        return this->viewport.isValid();
       }
       return false;
+    }
+    /** Rail facts have no JavaScript write door. */
+    const char *writeRefusal() const
+    {
+      return this->kind == VIEWPORT      ? "viewport is a rail-written fact"
+             : this->kind == FILE_RESULT ? "file seat is rail-written only"
+                                         : 0;
     }
     JsSeatRecord *next;
     JSContext *const context;
@@ -142,6 +152,7 @@ namespace smirkycard
     loka::app::scene::NodeState<bool> boolean;
     loka::app::scene::NodeState<loka::app::FileChooserResult> file;
     loka::app::scene::NodeState<loka::core::resource::Image> image;
+    loka::app::scene::NodeState<loka::core::Frame> viewport;
     loka::app::scene::DerivedNodeState<loka::core::String> formatted;
   };
 

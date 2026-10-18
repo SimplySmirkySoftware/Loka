@@ -15,6 +15,9 @@ scenario('first', function (c) {
     if (facts.empty || facts.width !== size.width || facts.height !== size.height)
       throw Error(stem + ' did not load as ' + size.width + 'x' + size.height);
   }
+  // Null reports a 100-wide seat; the harness requires the one-column arm.
+  // Classic keeps the existing two-column ids at its 420-pixel window size.
+  const listId = globalThis.LAPTOP_NARROW_LIST ? 'Laptop.Narrow.' : 'Laptop.Open.';
   const cell = globalThis.LAPTOP_CELL;
   function detailShowsPb100() {
     expect('Laptop.Title', 'PowerBook 100');
@@ -22,7 +25,7 @@ scenario('first', function (c) {
     expect('Laptop.Detail.Year', '1991');
     expect('Laptop.Detail.cpu', 'CPU: Motorola 68HC000, 16 MHz');
   }
-  function openDetail() { c.test.click('Laptop.Open.pb100'); }
+  function openDetail() { c.test.click(listId + 'pb100'); }
   let flow = Flow()
     .step(function () {
       // The card's own status line, or the refusal UI's: either way the audit
@@ -33,8 +36,8 @@ scenario('first', function (c) {
       // Tall list is the default; the carousel branch is not materialized yet.
       expect('Laptop.Title', 'LaptopTracker');
       expect('Laptop.Presentation', 'Wide');
-      expect('Laptop.Open.macport', 'Macintosh Portable (1989)');
-      expect('Laptop.Open.pb5300c', 'PowerBook 5300c/100 (1995)');
+      expect(listId + 'macport', 'Macintosh Portable (1989)');
+      expect(listId + 'pb5300c', 'PowerBook 5300c/100 (1995)');
     }).named('initial-browse')
     .step(function () {
       picture('MACPORT', 'macport');
@@ -71,7 +74,7 @@ scenario('first', function (c) {
     .step(function () {
       expect('Laptop.Title', 'LaptopTracker');
       expect('Laptop.Presentation', 'Wide');
-      expect('Laptop.Open.pb100', 'PowerBook 100 (1991)');
+      expect(listId + 'pb100', 'PowerBook 100 (1991)');
       c.test.click('Laptop.Presentation');
     }).named('back-to-list')
     .step(function () {
@@ -100,7 +103,7 @@ scenario('first', function (c) {
     }).named('back-to-carousel')
     .step(function () {
       expect('Laptop.Presentation', 'Wide');
-      expect('Laptop.Open.pb5300c', 'PowerBook 5300c/100 (1995)');
+      expect(listId + 'pb5300c', 'PowerBook 5300c/100 (1995)');
       c.test.log('browse, detail, back and both presentations settled');
     }).named('second-machine'));
 });
