@@ -51,6 +51,8 @@ namespace smirkycard
 {
   namespace testing
   {
+    const char *machineCpuClassName(loka::platform::CpuClass cpuClass);
+
     /** Test-only setup of the runtime issuer; production never calls into this TU. */
     class ExecutionSerialAccess
     {
@@ -2159,6 +2161,18 @@ namespace
 
   void checkCardContext()
   {
+    std::puts("[pin] machine CPU class: exact, total, distinct mapping");
+    const char *cpuNames[] = {"68k", "ppc60x", "g3+"};
+    LOKA_VERIFY(sizeof(cpuNames) / sizeof(cpuNames[0]) == loka::platform::CPU_CLASS_COUNT);
+    for (int i = 0; i < loka::platform::CPU_CLASS_COUNT; ++i)
+    {
+      const char *name = smirkycard::testing::machineCpuClassName(static_cast<loka::platform::CpuClass>(i));
+      LOKA_VERIFY(name && name[0]);
+      LOKA_VERIFY(std::strcmp(name, cpuNames[i]) == 0);
+      for (int j = 0; j < i; ++j)
+        LOKA_VERIFY(std::strcmp(name, cpuNames[j]) != 0);
+    }
+    LOKA_VERIFY(!smirkycard::testing::machineCpuClassName(loka::platform::CPU_CLASS_COUNT));
     std::puts("[pin] card context: class, factory, arrow construction exactly once");
     const char *factories[] = {"class {constructor(c){++calls;this.s=c.state('class');this.c=c;globalThis.context=c;}"
                                "compose(d){globalThis.delegate=d;return Text(this.s).TEST_ID('Value')}}",
@@ -2171,7 +2185,13 @@ namespace
     {
       smirkycard::ScriptRuntime runtime;
       loka::core::String error;
-      const std::string source = std::string("var calls=0;card('first',") + factories[i] + ");";
+      // An inherited accessor must not intercept the host's machine snapshot:
+      // both fields are defined as own properties, never assigned (bot P2, #1463).
+      const std::string source =
+          std::string("['cpuClass','machine'].forEach(k=>Object.defineProperty(Object.prototype,k,"
+                      "{configurable:true,get(){return 'spoof'},set(v){throw new TypeError('poison '+k)}}));"
+                      "var calls=0;card('first',")
+          + factories[i] + ");";
       LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
       NullPlatformContext context;
       NullScenePlatformController platform;
@@ -2184,6 +2204,25 @@ namespace
       LOKA_VERIFY(valueNode && valueNode->asTextNode());
       LOKA_VERIFY(textValue(valueNode->asTextNode()) == values[i]);
       expectJs(runtime, "calls", "1");
+#if defined(_WIN32) || (defined(__APPLE__) && defined(__MACH__))
+      expectJs(runtime, "context.machine.cpuClass === 'g3+'", "true");
+      std::puts("[skip] Linux absent CPU class runtime branch on Windows/macOS");
+#else
+      expectJs(runtime, "context.machine.cpuClass === null", "true");
+      std::puts("[skip] G3+ runtime branch: this host's queryCpuClass declines");
+#endif
+      expectJs(runtime, "Object.isFrozen(context.machine)", "true");
+      expectJs(runtime,
+               "Object.prototype.hasOwnProperty.call(context,'machine')&&"
+               "Object.prototype.hasOwnProperty.call(context.machine,'cpuClass')",
+               "true");
+      expectJs(runtime,
+               "new class {check(){const before=context.machine.cpuClass;let refused=false;"
+               "try{context.machine.cpuClass='x'}catch(e){refused=e instanceof TypeError}"
+               "return refused && context.machine.cpuClass===before}}().check()",
+               "true");
+      expectJs(runtime, "Object.isFrozen(context)", "true");
+
       expectJs(runtime,
                "[typeof state,typeof go,typeof open,typeof reload].join(',')",
                "undefined,undefined,undefined,undefined");

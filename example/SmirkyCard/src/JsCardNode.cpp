@@ -18,6 +18,7 @@
 #include "JsNativeClass.hpp"
 #include "app/FileImageSource.hpp"
 #include "core/util/StateTrackerGuard.hpp"
+#include "platform/CpuClass.hpp"
 #ifdef TEST_BUILD
 #include "CardScenario.hpp"
 #endif
@@ -28,6 +29,22 @@ namespace smirkycard
 {
   namespace
   {
+    const char *cpuClassName(loka::platform::CpuClass cpuClass)
+    {
+      switch (cpuClass)
+      {
+      case loka::platform::CPU_CLASS_68K:
+        return "68k";
+      case loka::platform::CPU_CLASS_PPC_60X:
+        return "ppc60x";
+      case loka::platform::CPU_CLASS_G3_OR_FASTER:
+        return "g3+";
+      case loka::platform::CPU_CLASS_COUNT:
+        break;
+      }
+      return 0;
+    }
+
     enum ContextOperation
     {
       ContextState,
@@ -176,6 +193,16 @@ namespace smirkycard
       loka::app::scene::NodeState<bool> *value_;
     };
   } // namespace
+
+#ifdef TEST_BUILD
+  namespace testing
+  {
+    const char *machineCpuClassName(loka::platform::CpuClass cpuClass)
+    {
+      return cpuClassName(cpuClass);
+    }
+  } // namespace testing
+#endif
   void CardScene::replaceWith(CardScene *next)
   {
     assert(next && this->getWindow());
@@ -263,6 +290,23 @@ namespace smirkycard
            && JS_SetPropertyStr(ctx, context, "native", JS_DupValue(ctx, native)) >= 0;
       JS_FreeValue(ctx, state);
       JS_FreeValue(ctx, native);
+    }
+    if (ok)
+    {
+      JSValue machine = JS_NewObject(ctx);
+      loka::platform::CpuClass cpuClass;
+      const char *name = loka::platform::queryCpuClass(cpuClass) ? cpuClassName(cpuClass) : 0;
+      ok = !JS_IsException(machine);
+      if (ok)
+      {
+        JSValue value = name ? JS_NewString(ctx, name) : JS_NULL;
+        // Own data properties, not assignment: a script-installed Object.prototype
+        // accessor must not intercept the snapshot (bot P2 on #1463).
+        ok = !JS_IsException(value) && JS_DefinePropertyValueStr(ctx, machine, "cpuClass", value, JS_PROP_C_W_E) >= 0;
+      }
+      ok = ok && JS_FreezeObject(ctx, machine) >= 0
+           && JS_DefinePropertyValueStr(ctx, context, "machine", JS_DupValue(ctx, machine), JS_PROP_C_W_E) >= 0;
+      JS_FreeValue(ctx, machine);
     }
     if (ok)
     {
