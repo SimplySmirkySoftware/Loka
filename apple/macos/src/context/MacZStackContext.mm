@@ -178,7 +178,7 @@ namespace
                                                                 samplesPerPixel:4
                                                                        hasAlpha:YES
                                                                        isPlanar:NO
-                                                                 colorSpaceName:NSCalibratedRGBColorSpace
+                                                                 colorSpaceName:(ProbeEnabled("LOKA_PROBE_DEVICE_RGB") ? NSDeviceRGBColorSpace : NSCalibratedRGBColorSpace)
                                                                     bytesPerRow:width * 4
                                                                    bitsPerPixel:32];
     NSGraphicsContext *context = rgba ? [NSGraphicsContext graphicsContextWithBitmapImageRep:rgba] : nil;
