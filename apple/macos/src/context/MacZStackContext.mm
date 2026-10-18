@@ -281,6 +281,16 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
       if ([effect respondsToSelector:@selector(setState:)])
         [effect setState:0];
       [effect setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+      // Within-window blending needs layers: an old-SDK build on 10.10-10.13 is
+      // not layer-backed implicitly and AppKit paints a red "requires
+      // setWantsLayer:YES" banner instead (10.11 real machine, 2026-10-18). The
+      // content below must share the layer tree, so the parent asks for one too.
+      if ([(NSView *)parent respondsToSelector:@selector(setWantsLayer:)])
+      {
+        [(NSView *)parent setWantsLayer:YES];
+        [view setWantsLayer:YES];
+        [effect setWantsLayer:YES];
+      }
       // ensure precedes leaf attachment; the effect is the first subview.
       [view addSubview:effect];
       [effect release];

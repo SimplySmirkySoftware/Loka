@@ -16,8 +16,46 @@ typedef CGImageRef (*CardShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWi
 
 @interface CardShowcaseProbeSnapshot : NSObject
 - (void)capture:(NSTimer *)timer;
+- (void)scrollBy:(NSTimer *)timer;
 @end
 @implementation CardShowcaseProbeSnapshot
+// PROBE ONLY: LOKA_PROBE_SCROLL_BY=<points> scrolls the first NSScrollView through
+// its clip view (the user's scrolling path, copiesOnScroll included) before the capture.
+static NSScrollView *FindScrollView(NSView *view)
+{
+  if ([view isKindOfClass:[NSScrollView class]])
+    return (NSScrollView *)view;
+  NSArray *subviews = [view subviews];
+  for (unsigned int i = 0; i < (unsigned int)[subviews count]; ++i)
+  {
+    NSScrollView *found = FindScrollView([subviews objectAtIndex:i]);
+    if (found)
+      return found;
+  }
+  return nil;
+}
+- (void)scrollBy:(NSTimer *)timer
+{
+  const double dy = [[timer userInfo] doubleValue];
+  NSArray *windows = [NSApp windows];
+  for (unsigned int i = 0; i < (unsigned int)[windows count]; ++i)
+  {
+    NSWindow *window = [windows objectAtIndex:i];
+    if (![window isVisible])
+      continue;
+    NSScrollView *scroll = FindScrollView([window contentView]);
+    if (!scroll)
+      break;
+    NSClipView *clip = [scroll contentView];
+    NSPoint origin = [clip bounds].origin;
+    origin.y += dy;
+    [clip scrollToPoint:origin];
+    [scroll reflectScrolledClipView:clip];
+    std::fprintf(stderr, "probe: scrolled by %.0f copiesOnScroll=%d\n", dy, [clip copiesOnScroll] ? 1 : 0);
+    return;
+  }
+  std::fprintf(stderr, "probe: scroll target not found\n");
+}
 - (void)capture:(NSTimer *)timer
 {
   NSString *path = [timer userInfo];
@@ -72,8 +110,15 @@ int main(int argc, char **argv)
   const char *snapshot = std::getenv("LOKA_PROBE_SNAPSHOT");
   if (snapshot)
   {
+    const char *scrollBy = std::getenv("LOKA_PROBE_SCROLL_BY");
     CardShowcaseProbeSnapshot *probe = [[CardShowcaseProbeSnapshot alloc] init];
-    [NSTimer scheduledTimerWithTimeInterval:2.5
+    if (scrollBy)
+      [NSTimer scheduledTimerWithTimeInterval:1.5
+                                       target:probe
+                                     selector:@selector(scrollBy:)
+                                     userInfo:[NSNumber numberWithDouble:std::atof(scrollBy)]
+                                      repeats:NO];
+    [NSTimer scheduledTimerWithTimeInterval:(scrollBy ? 3.0 : 2.5)
                                      target:probe
                                    selector:@selector(capture:)
                                    userInfo:[NSString stringWithUTF8String:snapshot]
