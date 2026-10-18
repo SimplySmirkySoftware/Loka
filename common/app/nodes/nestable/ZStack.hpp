@@ -13,9 +13,7 @@ namespace loka
 
     class ZStackNode;
 
-    /** Ground requested for ZStack units. Experimental blur applies only to the
-        first unit (second child) where the rail supports it; later units and
-        other rails keep the window ground. */
+    /** Ground requested for the units (later children) of a ZStack. */
     enum ZStackUnitGround
     {
       ZSTACK_UNIT_GROUND_WINDOW,
