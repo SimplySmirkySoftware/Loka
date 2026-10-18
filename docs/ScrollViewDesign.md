@@ -118,7 +118,7 @@ A rail never measures content width during layout. The range comes from
 `queryContentOverflowWidth(parent, spacing, source, width)`
 ([LayoutHeuristics.hpp](../common/app/layout/LayoutHeuristics.hpp), the R0
 ruling): only content that **overflows the width it is offered** counts: a
-declared width (`ImageView`/`RectSurface` with `size`, a fixed-size `Box`), an
+declared width (`ImageView`/`RectSurface` with `size`, a positive-width `Box`), an
 INTRINSIC image whose natural width the rail's leaf answers, or a NATURAL row
 (whose natural width sums its leaves, text included:
 `testContentOverflowNestedMaximumAndOverflow`). Text, buttons and offer-bound

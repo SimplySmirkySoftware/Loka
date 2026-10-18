@@ -1107,7 +1107,7 @@ The initial value is the only origin the app chooses; a negative one reads as 0.
 
 The vertical range is the content height. The horizontal range exists only when
 content overflows the width it is offered: a declared width (including a
-fixed-size `Box`), an intrinsic image or a natural row (text inside a natural
+positive-width `Box`), an intrinsic image or a natural row (text inside a natural
 row counts through the row). Text, buttons and offer-bound boxes placed
 directly in the column are laid out at the offered width and never scroll
 sideways.
@@ -1528,6 +1528,24 @@ Constant props and live state must stay distinct:
 This avoids turning every literal into a global or shared `State<T>`. Fixed
 menu items and unchanging configuration also belong in Props or Definitions;
 only inputs that actually change need live State.
+
+### Box Width And Height
+
+`Box().width(300)` sets the content offer to 300 minus the Box's padding under
+any parent. It does not resize the parent, Grid cell, ZStack unit, or viewport.
+`Box().height(40)` independently fixes the content height offer to 40 minus
+padding and the result Y to its origin plus 40, without clipping content.
+`height(int)` preserves both the constant width and any borrowed live width.
+A positive stored height stays fixed even when a live width becomes zero or
+negative. Without a positive height, height stays content-driven.
+`width(State<int>*)` borrows a live width; `width(int)` clears that borrow. Nonpositive widths mean no fixed width; positive values above
+`SHRT_MAX` saturate before narrowing. `size(short, short)` is unchanged.
+
+Reset the live width with a typed null (`width(static_cast<State<int>*>(0))`);
+`width(0)` clears the fixed width; `height(0)` clears the fixed height and leaves
+width alone. Heights also normalize nonpositive values to zero and saturate
+above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
+the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 
 ### Spacing: Gaps, Padding, And The Window Margin
 

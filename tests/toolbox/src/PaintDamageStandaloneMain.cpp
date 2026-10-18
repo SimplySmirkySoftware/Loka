@@ -993,7 +993,7 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      // A width-only Box is a Row seat claim (#576); as the root it would pass the full window width through.
+      // A width-only Box uses its width here and also when placed directly at the root (#575).
       composition.declare(Column() << (Row() << (Box().width(this->width_.state())
                                                  << (Card().TEST_ID("Card.Replay") << Box().size(1, 63))))
                                    << (Box().size(180, 70)

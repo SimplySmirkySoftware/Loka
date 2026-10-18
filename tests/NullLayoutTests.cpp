@@ -1,3 +1,6 @@
+#include <climits>
+#include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/nestable/Canvas.hpp"
 #include "NullLayoutTests.hpp"
 #include "support/TestVerify.hpp"
 
@@ -77,13 +80,13 @@ namespace
     assert(probe);
     assert(probe->wasLaidOut());
     (void)x;
-    assert(probe->geometry().x == x);
+    assert(probe->geometry().x == x); // loka-assert-ok: geometry() only returns the stored observation.
     (void)y;
-    assert(probe->geometry().y == y);
+    assert(probe->geometry().y == y); // loka-assert-ok: geometry() only returns the stored observation.
     (void)width;
-    assert(probe->geometry().width == width);
+    assert(probe->geometry().width == width); // loka-assert-ok: geometry() only returns the stored observation.
     (void)height;
-    assert(probe->geometry().height == height);
+    assert(probe->geometry().height == height); // loka-assert-ok: geometry() only returns the stored observation.
   }
 
   void verifyMetric(int actual, int expected)
@@ -358,4 +361,156 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   }
   LOKA_VERIFY(!admittedRootUnit.channel);
   LOKA_VERIFY(!scopes.insideUnit());
+}
+
+void testNullLayoutWidthOnlyBoxUnderRootAndZStack()
+{
+  NullScenePlatformController platform;
+  loka::app::BoxProps props;
+  props.setWidth(300);
+  loka::app::BoxNode rootBox(props);
+  FixedLayoutProbeNode *rootChild = new FixedLayoutProbeNode(7);
+  rootBox.addChild(rootChild);
+  const int rootY = platform.projectLayoutForTesting(&rootBox, makeState(10, 20, 80, 40));
+  loka::app::ZStackNode stack((loka::app::ZStackProps()));
+  FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
+  loka::app::BoxNode *front = new loka::app::BoxNode(props);
+  FixedLayoutProbeNode *frontChild = new FixedLayoutProbeNode(13);
+  front->addChild(frontChild);
+  stack.addChild(back);
+  stack.addChild(front);
+  const int stackY = platform.projectLayoutForTesting(&stack, makeState(10, 20, 80, 40));
+  assertGeometry(rootChild, 10, 20, 300, 40);
+  LOKA_VERIFY(rootY == 27);
+  assertGeometry(back, 10, 20, 80, 40);
+  assertGeometry(frontChild, 10, 20, 300, 40);
+  LOKA_VERIFY(stackY == 33);
+}
+
+void testBoxHeightDoorPreservesWidthSources()
+{
+  using namespace loka::app;
+  loka::core::MutableState<int> width(125);
+  BoxDefinition box = Box().size(200, 10).width(&width).height(40);
+  LOKA_VERIFY(box.props.width == 200);
+  LOKA_VERIFY(box.props.widthState_ == &width);
+  LOKA_VERIFY(box.props.effectiveWidth() == 125);
+  LOKA_VERIFY(box.props.height == 40);
+  box.width(static_cast<loka::core::State<int> *>(0));
+  LOKA_VERIFY(box.props.effectiveWidth() == 200);
+  box = Box().size(200, 40).height(0);
+  LOKA_VERIFY(box.props.effectiveWidth() == 200);
+  LOKA_VERIFY(box.props.height == 0);
+  box = Box().height(40).size(0, 0);
+  LOKA_VERIFY(box.props.width == 0 && box.props.height == 0);
+  LOKA_VERIFY(Box().height(40000).props.height == SHRT_MAX);
+  LOKA_VERIFY(Box().height(INT_MIN).props.height == 0);
+  LOKA_VERIFY(Box().height(-65535).props.height == 0);
+}
+
+void testBoxHeightOnlyEmptyAndPaddedOffer()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  BoxNode empty(Box().height(40).props);
+  const int emptyY = platform.projectLayoutForTesting(&empty, makeState(10, 20, 100, 15));
+  BoxNode padded(Box().height(40).padding(5).props);
+  FixedLayoutProbeNode *content = new FixedLayoutProbeNode(70);
+  padded.addChild(content);
+  const int paddedY = platform.projectLayoutForTesting(&padded, makeState(10, 20, 100, 15));
+  LOKA_VERIFY(emptyY == 60);
+  LOKA_VERIFY(paddedY == 60);
+  assertGeometry(content, 15, 25, 90, 30);
+  padded.props.setHeight(5);
+  const int smallY = platform.projectLayoutForTesting(&padded, makeState(10, 20, 100, 15));
+  LOKA_VERIFY(content->geometry().height == 0);
+  LOKA_VERIFY(smallY == 25);
+}
+
+void testBoxHeightOnlyColumnAndScrollExtent()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  StackNode column(Column().gap(4).props);
+  column.addChild(new BoxNode(Box().height(40).props));
+  FixedLayoutProbeNode *after = new FixedLayoutProbeNode(7);
+  column.addChild(after);
+  const int columnY = platform.projectLayoutForTesting(&column, makeState(10, 20, 100, 15));
+  ScrollViewNode scroll((ScrollViewProps()));
+  scroll.addChild(new BoxNode(Box().height(40).props));
+  const int scrollY = platform.projectLayoutForTesting(&scroll, makeState(10, 20, 100, 0));
+  LOKA_VERIFY(after->geometry().y == 64);
+  LOKA_VERIFY(columnY == 71);
+  LOKA_VERIFY(scrollY == 60);
+}
+
+void testBoxHeightStaysFixedWhenLiveWidthCrossesZero()
+{
+  using namespace loka::app;
+  loka::core::MutableState<int> width(200);
+  BoxNode box(Box().size(200, 40).width(&width).props);
+  FixedLayoutProbeNode *content = new FixedLayoutProbeNode(7);
+  box.addChild(content);
+  NullScenePlatformController platform;
+  const int widths[] = {200, 0, -100};
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    width.set(widths[i]);
+    const int resultY = platform.projectLayoutForTesting(&box, makeState(10, 20, 100, 15));
+    LOKA_VERIFY(content->geometry().width == (i == 0 ? 200 : 100));
+    LOKA_VERIFY(content->geometry().height == 40);
+    LOKA_VERIFY(resultY == 60);
+  }
+}
+
+void testSharedAlignedRowCharacterizationIncludesBoxHeight()
+{
+  using namespace loka::app;
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  for (unsigned alignment = 0; alignment < 3; ++alignment)
+  {
+    for (unsigned fixedWidth = 0; fixedWidth < 2; ++fixedWidth)
+    {
+      NullScenePlatformController platform;
+      StackNode row(Row().alignVertical(alignments[alignment]).props);
+      BoxProps props = Box().height(200).padding(5).props;
+      if (fixedWidth)
+        props.setWidth(300);
+      BoxNode *box = new BoxNode(props);
+      FixedLayoutProbeNode *content = new FixedLayoutProbeNode(7);
+      box->addChild(content);
+      row.addChild(box);
+      const int resultY = platform.projectLayoutForTesting(&row, makeState(10, 20, 80, 40));
+      // Existing rail difference: Toolbox returns its alignment measurement (30),
+      // while the shared Row includes the Box result even when both axes are fixed.
+      assertGeometry(content, 15, 25, fixedWidth ? 290 : 70, 190);
+      LOKA_VERIFY(resultY == 220);
+    }
+  }
+}
+
+void testBoxHeightExceedsGridAndCanvasCells()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  GridNode grid(GridProps(2, 1));
+  BoxNode *box = new BoxNode(Box().height(80).props);
+  FixedLayoutProbeNode *content = new FixedLayoutProbeNode(7);
+  box->addChild(content);
+  grid.addChild(box);
+  FixedLayoutProbeNode *second = new FixedLayoutProbeNode(7);
+  grid.addChild(second);
+  const int gridY = platform.projectLayoutForTesting(&grid, makeState(10, 20, 100, 40));
+  LOKA_VERIFY(content->geometry().height == 80);
+  LOKA_VERIFY(second->geometry().y == 42);
+  LOKA_VERIFY(gridY == 100);
+  loka::core::State<loka::core::Frame> viewport(loka::core::Frame(0, 0, 100, 40));
+  CanvasNode canvas(CanvasProps(100, 20, &viewport));
+  BoxNode *cell = new BoxNode(Box().height(80).props);
+  FixedLayoutProbeNode *cellContent = new FixedLayoutProbeNode(7);
+  cell->addChild(cellContent);
+  canvas.addChild(cell);
+  const int canvasY = platform.projectLayoutForTesting(&canvas, makeState(10, 20, 100, 40));
+  LOKA_VERIFY(cellContent->geometry().height == 80);
+  LOKA_VERIFY(canvasY == 40);
 }

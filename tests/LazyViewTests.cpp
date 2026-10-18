@@ -7,6 +7,7 @@
 #include "support/TestVerify.hpp"
 #include "support/SeatBuildRequestAccess.hpp"
 #include "app/nodes/nestable/LazyView.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "app/layout/CanvasLayout.hpp"
@@ -1110,4 +1111,75 @@ void testLazyViewSeatGuardOrders()
       f.drain();
       LOKA_VERIFY(f.r.cards[10] && !f.r.cards[0]);
     }
+}
+
+namespace
+{
+  class WidthItemNode;
+  struct WidthItemProps : NodePropsBase<WidthItemProps>
+  {
+    typedef WidthItemProps TypeTag;
+    typedef WidthItemNode NodeType;
+    bool operator!=(const WidthItemProps &) const
+    {
+      return false;
+    }
+    bool operator<(const PropsBase &) const
+    {
+      return false;
+    }
+  };
+
+  class WidthItemNode : public ComponentNodeWithProps<WidthItemProps>
+  {
+  public:
+    explicit WidthItemNode(const WidthItemProps &props)
+        : ComponentNodeWithProps<WidthItemProps>(props)
+    {
+    }
+    virtual void composeChildren(NodeComposition &composition)
+    {
+      composition.declare(Box().width(300) << Text("width"));
+    }
+  };
+
+  class WidthItemPlatform : public NullScenePlatformController
+  {
+  public:
+    LayoutState contentOffer;
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      if (node->asTextNode())
+        this->contentOffer = state;
+      return NullScenePlatformController::prepareProjectedLayout(node, state);
+    }
+  };
+} // namespace
+
+void testLazyViewWidthOnlyBoxExceedsCellOffer()
+{
+  PushStateTracker tracker;
+  ObservableList<WidthItemProps> list;
+  MutableState<Frame> viewport(Frame(0, 0, 100, 40));
+  LOKA_VERIFY(list.attach(&tracker, 1) == ATTACH_OK);
+  LOKA_VERIFY(list.insert(0, WidthItemProps()) == EDIT_OK);
+  typedef reservation::Nodes<WidthItemNode, 1, reservation::Nodes<BoxNode, 1, reservation::Nodes<TextNode, 1> > >
+      WidthItemNodes;
+  WidthItemPlatform platform;
+  Scene scene(LazyColumn(list, reservation::SeatNodes<WidthItemNodes>(), 1).cells(100, 40).viewport(viewport));
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  LayoutState bounds;
+  bounds.width = 100;
+  bounds.height = 40;
+  platform.projectLayoutForTesting(loka::dsl::testing::SceneTestAccess::rootBoundary(scene), bounds);
+  // The declared 100x40 cell remains the offer; only Box content owns 300 pixels.
+  LOKA_VERIFY(platform.contentOffer.x == 0);
+  LOKA_VERIFY(platform.contentOffer.y == 0);
+  LOKA_VERIFY(platform.contentOffer.width == 300);
+  LOKA_VERIFY(platform.contentOffer.height == 40);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+  scene.flushInvalidation();
+  scene.flushInvalidation();
+  platform.drainNativeRetirements();
 }
