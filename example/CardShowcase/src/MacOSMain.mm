@@ -2,6 +2,7 @@
 #include "MyAppConfig.hpp"
 #include <AvailabilityMacros.h>
 #include <Cocoa/Cocoa.h>
+#import <QuartzCore/CALayer.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -73,8 +74,27 @@ static NSScrollView *FindScrollView(NSView *view)
     [scroll reflectScrolledClipView:clip];
     // DIAG: 10.5/10.6 blur the whole scrolled area once the clip scrolls under a
     // filtered sibling; LOKA_PROBE_REDISPLAY=1 asks the document and clip to redraw.
-    // DIAG: LOKA_PROBE_REAPPLY=1 removes and re-sets the blurred unit's filters.
+    // DIAG: report the blurred unit's masksToBounds at scroll time; LOKA_PROBE_MASK_AT_SCROLL=1
+    // sets it again right before the scroll (AppKit may reset properties of a layer it owns).
     Class blurUnit = NSClassFromString(@"LokaStackBlurUnitView");
+    if (blurUnit)
+    {
+      NSArray *peers = [[scroll superview] subviews];
+      for (unsigned int k = 0; k < (unsigned int)[peers count]; ++k)
+      {
+        NSView *unit = [peers objectAtIndex:k];
+        if (![unit isKindOfClass:blurUnit])
+          continue;
+        CALayer *layer = [unit layer];
+        std::fprintf(stderr, "probe: unit layer=%p masksToBounds=%d (before)\n", (void *)layer, layer ? (int)[layer masksToBounds] : -1);
+        if (layer && std::getenv("LOKA_PROBE_MASK_AT_SCROLL"))
+        {
+          [layer setMasksToBounds:YES];
+          std::fprintf(stderr, "probe: unit masksToBounds=%d (set)\n", (int)[layer masksToBounds]);
+        }
+      }
+    }
+    // DIAG: LOKA_PROBE_REAPPLY=1 removes and re-sets the blurred unit's filters.
     if (std::getenv("LOKA_PROBE_REAPPLY") && blurUnit)
     {
       NSArray *siblings = [[scroll superview] subviews];
