@@ -6,4 +6,11 @@
 // ToolboxPascalText.cpp reads.
 #include <Multiverse.h>
 
+// Multiversal declares CharacterByteType but omits its byte-type constants.
+// Match Universal Script.h (CharByte byte types).
+enum
+{
+  smFirstByte = -1
+};
+
 #endif

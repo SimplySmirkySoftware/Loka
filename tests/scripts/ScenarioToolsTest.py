@@ -231,7 +231,7 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         registry = os.path.join(PROJECT_DIR, "tests", "scenarios", "scenarios.txt")
         with open(registry, "r", encoding="utf-8") as handle:
             entries = [line.split() for line in handle.read().splitlines()]
-        self.assertEqual(len(entries), 35)
+        self.assertEqual(len(entries), 36)
         self.assertEqual(len(entries), len({tuple(entry) for entry in entries}))
         self.assertEqual(
             [entry for entry in entries if entry[0] == "simpleviewer"],

@@ -12,6 +12,7 @@
 #include <Menus.h>
 #include <Quickdraw.h>
 #include <Sound.h>
+#include <Script.h>
 #include <TextEdit.h>
 #include <Windows.h>
 #include <Devices.h>
@@ -28,6 +29,12 @@ namespace
       static_cast<unsigned long>(suspendResumeMessage) << 24;
   const unsigned long kResumeEventFlag = resumeFlag;
 #endif
+
+  /** The keyboard script owns byte boundaries, including committed IM text. */
+  bool ToolboxIsLeadByte(unsigned char byte, short script)
+  {
+    return script != smRoman && CharacterByteType(reinterpret_cast<Ptr>(&byte), 0, script) == smFirstByte;
+  }
 
   bool IsSuspendResumeEvent(const EventRecord &event)
   {
@@ -453,9 +460,19 @@ void ToolboxApp::run()
 #endif
       if (!command)
       {
+        const unsigned char byte = static_cast<unsigned char>(key);
+        if (byte >= 0x80 && ToolboxIsLeadByte(byte, static_cast<short>(GetScriptManagerVariable(smKeyScript))))
+        {
+          // Until T2 decodes this unit, consume its available trail and refuse
+          // both bytes together. With no next key, refuse the lead alone (#1439).
+          EventRecord trail;
+          (void)GetNextEvent(keyDownMask | autoKeyMask, &trail);
+          SysBeep(1);
+          handled = true;
+        }
         const unsigned char keyCode = static_cast<unsigned char>((event.message & keyCodeMask) >> 8);
         ToolboxScrollKey scrollKey;
-        if (QueryToolboxScrollKey(keyCode, scrollKey))
+        if (!handled && QueryToolboxScrollKey(keyCode, scrollKey))
           handled = active && active->handleScrollKey(scrollKey);
         if (!handled)
           handled = active && active->handleKeyDown(key);
