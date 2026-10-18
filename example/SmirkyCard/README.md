@@ -219,6 +219,16 @@ or faster where the rail can draw it (#1425). Until each rail answers its CPU
 class, every target still draws DROP. Both refuse missing, extra, array, or non-tree children with
 TypeError and each counts one level toward the depth-eight tree limit.
 
+`Box(child, {width: 300})` gives its child a width of 300;
+`Box(child, {height: 8})` gives it a height of 8, independently, under any parent
+that lays it out, like C++ [`Box().width(n)` / `Box().height(n)`](../../docs/ProgrammingGuide.en.md#box-width-and-height).
+The optional plain object accepts only `width` and `height`, each an integer in
+1..4096. Unknown keys (including symbols), non-plain options, invalid values,
+and missing, extra, array or non-tree children throw TypeError at build time.
+Validated values are copied into the frozen tree. `Box(child)` and
+`Box(child, {})` are plain wrappers. A fixed Box wider than its parent overflows
+rather than shrinking. There are no min/max keys yet.
+
 Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
 The modifier seats undeclared-width children at their natural width; a shared-width
 Row (the default) splits the viewport instead. Like `TEST_ID`, it returns a frozen

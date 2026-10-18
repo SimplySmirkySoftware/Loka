@@ -5,6 +5,7 @@
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include <cstring>
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/Text.hpp"
@@ -814,6 +815,125 @@ namespace smirkycard
         return card;
       }
     };
+    bool boxExtentNumber(JSContext *ctx, JSValueConst value, int &out)
+    {
+      double number = 0;
+      if (!JS_IsNumber(value) || JS_ToFloat64(ctx, &number, value) || !(number >= 1 && number <= 4096)
+          || number != static_cast<int>(number))
+        return false;
+      out = static_cast<int>(number);
+      return true;
+    }
+    bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree)
+    {
+      if (!requirePlainObject(ctx, options, "Box options"))
+        return false;
+      JsOwnProperties names(ctx);
+      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return false;
+      for (uint32_t i = 0; i < names.count(); ++i)
+      {
+        JSValue key = JS_AtomToValue(ctx, names.atom(i));
+        size_t length = 0;
+        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
+        JS_FreeValue(ctx, key);
+        const bool isWidth = name && length == 5 && !memcmp(name, "width", 5);
+        const bool isHeight = name && length == 6 && !memcmp(name, "height", 6);
+        if (name)
+          JS_FreeCString(ctx, name);
+        if (!isWidth && !isHeight)
+        {
+          JS_ThrowTypeError(ctx, "Box options accept only width and height");
+          return false;
+        }
+        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
+        if (JS_IsException(value))
+          return false;
+        int number = 0;
+        const bool valid = boxExtentNumber(ctx, value, number);
+        JS_FreeValue(ctx, value);
+        if (!valid)
+        {
+          JS_ThrowTypeError(ctx, "Box width and height must be integers in 1..4096");
+          return false;
+        }
+        if (JS_SetPropertyStr(ctx, tree, isWidth ? "width" : "height", JS_NewInt32(ctx, number)) < 0)
+          return false;
+      }
+      return true;
+    }
+    bool readBoxExtent(JSContext *ctx, JSValueConst tree, const char *name, int &out)
+    {
+      JSAtom key = JS_NewAtom(ctx, name);
+      if (key == JS_ATOM_NULL)
+        return false;
+      const int present = JS_HasProperty(ctx, tree, key);
+      JSValue value = present > 0 ? JS_GetProperty(ctx, tree, key) : JS_UNDEFINED;
+      JS_FreeAtom(ctx, key);
+      const bool valid = present == 0 || (present > 0 && boxExtentNumber(ctx, value, out));
+      JS_FreeValue(ctx, value);
+      return valid;
+    }
+    class BoxLowering : public IJsNodeLowering
+    {
+    public:
+      BoxLowering()
+      {
+        this->name = "Box";
+        this->kind = 0;
+      }
+      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      {
+        if (argc < 1 || argc > 2 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
+          return JS_ThrowTypeError(ctx, "Box(child, options?) requires one tree and an optional options object");
+        JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
+        const bool valid = JS_IsNumber(childKind);
+        JS_FreeValue(ctx, childKind);
+        if (!valid)
+          return JS_ThrowTypeError(ctx, "Box(child, options?) requires one tree and an optional options object");
+        JSValue tree = newTree(ctx, this->kind);
+        if (JS_IsException(tree))
+          return tree;
+        if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
+            || (argc == 2 && !copyBoxOptions(ctx, argv[1], tree)) || JS_FreezeObject(ctx, tree) < 0)
+        {
+          JS_FreeValue(ctx, tree);
+          return JS_EXCEPTION;
+        }
+        return tree;
+      }
+      virtual loka::app::scene::NodeDefinitionBase *
+      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
+      {
+        loka::app::BoxDefinition *box = new (std::nothrow) loka::app::BoxDefinition();
+        if (!box)
+        {
+          node.fail("JavaScript Box allocation refused.");
+          return 0;
+        }
+        int width = 0, height = 0;
+        const bool valid = readBoxExtent(ctx, tree, "width", width) && readBoxExtent(ctx, tree, "height", height);
+        if (!valid)
+        {
+          delete box;
+          node.fail("JavaScript Box has an invalid width or height.");
+          return 0;
+        }
+        if (width)
+          box->width(width);
+        if (height)
+          box->height(height);
+        loka::app::scene::NodeDefinitionBase *content =
+            lowerSingleChild(node, ctx, tree, depth, "JavaScript Box has an invalid child.");
+        if (!content)
+        {
+          delete box;
+          return 0;
+        }
+        box->asNestableDefinition()->addOwnedChild(content);
+        return box;
+      }
+    };
     bool copyImageOptions(JSContext *ctx, JSValueConst options, JSValue tree)
     {
       if (!requirePlainObject(ctx, options, "ImageView options"))
@@ -966,6 +1086,6 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) ScrollViewLowering())
            && registry.registerLowering(new (std::nothrow) CardLowering())
            && registry.registerLowering(new (std::nothrow) StackLowering("ZStack", StackLowering::STACK_DEPTH))
-           && registry.registerGlobal(card);
+           && registry.registerLowering(new (std::nothrow) BoxLowering()) && registry.registerGlobal(card);
   }
 } // namespace smirkycard
