@@ -2,11 +2,14 @@
 #include "MyAppConfig.hpp"
 #include <AvailabilityMacros.h>
 #include <Cocoa/Cocoa.h>
-#import <QuartzCore/CALayer.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#if defined(MAC_OS_X_VERSION_10_5) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_5
+#import <QuartzCore/CALayer.h>
+#define CARDSHOWCASE_PROBE_LAYERS 1
+#endif
 
 // PROBE ONLY: LOKA_PROBE_SNAPSHOT=<png> captures this process's first visible
 // window from the window server after a short delay, then exits. The window
@@ -77,6 +80,7 @@ static NSScrollView *FindScrollView(NSView *view)
     // DIAG: report the blurred unit's masksToBounds at scroll time; LOKA_PROBE_MASK_AT_SCROLL=1
     // sets it again right before the scroll (AppKit may reset properties of a layer it owns).
     Class blurUnit = NSClassFromString(@"LokaStackBlurUnitView");
+#ifdef CARDSHOWCASE_PROBE_LAYERS
     if (blurUnit)
     {
       NSArray *peers = [[scroll superview] subviews];
@@ -95,6 +99,7 @@ static NSScrollView *FindScrollView(NSView *view)
         }
       }
     }
+#endif
     // DIAG: LOKA_PROBE_REAPPLY=1 removes and re-sets the blurred unit's filters.
     if (std::getenv("LOKA_PROBE_REAPPLY") && blurUnit)
     {

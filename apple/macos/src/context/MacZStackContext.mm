@@ -6,12 +6,18 @@
 #include <OpenGL/gl.h>
 #include <ApplicationServices/ApplicationServices.h>
 #import <QuartzCore/CIFilter.h>
-#import <QuartzCore/CALayer.h>
 #include "MacZStackContext.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
+// CALayer comes after the Loka headers: seen earlier, its -setFrame:(CGRect) wins
+// over NSView's for an id receiver under 32-bit GCC 4.2 (NSRect is not CGRect there).
+// Core Animation starts at 10.5, so a 10.4 SDK build has no masked layer.
+#if defined(MAC_OS_X_VERSION_10_5) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_5
+#import <QuartzCore/CALayer.h>
+#define LOKA_PROBE_MASKED_LAYER 1
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -63,6 +69,7 @@ namespace loka
 - (NSArray *)backgroundFilters;
 @end
 
+#ifdef LOKA_PROBE_MASKED_LAYER
 // DIAG: AppKit resets masksToBounds on the layer it owns (10.7/10.8 read NO at
 // scroll time even after setting YES), and with NO Core Animation blurs the whole
 // background layer (CALayer backgroundFilters documentation). A backing layer that
@@ -81,9 +88,12 @@ namespace loka
 }
 @end
 
+#endif
+
 @interface LokaStackBlurUnitView : NSView
 @end
 @implementation LokaStackBlurUnitView
+#ifdef LOKA_PROBE_MASKED_LAYER
 - (CALayer *)makeBackingLayer
 {
   CALayer *layer = std::getenv("LOKA_PROBE_PLAIN_LAYER") ? [CALayer layer] : [LokaMaskedBackingLayer layer];
@@ -105,6 +115,7 @@ namespace loka
   }
   [super setLayer:layer];
 }
+#endif
 - (BOOL)isFlipped
 {
   return YES;
@@ -251,8 +262,10 @@ namespace
             if (!std::getenv("LOKA_PROBE_NO_PARENT_LAYER"))
               [parent setWantsLayer:YES];
             [view setWantsLayer:YES];
+#ifdef LOKA_PROBE_MASKED_LAYER
             if (std::getenv("LOKA_PROBE_MASK"))
               [[view layer] setMasksToBounds:YES];
+#endif
             if (!std::getenv("LOKA_PROBE_NO_CI_FLAG") && [view respondsToSelector:@selector(setLayerUsesCoreImageFilters:)])
               [view setLayerUsesCoreImageFilters:YES];
             if (!std::getenv("LOKA_PROBE_FILTER_SKIP"))
