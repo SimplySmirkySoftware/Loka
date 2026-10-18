@@ -1,13 +1,18 @@
 #include "app/bootstrap/RunApp.hpp"
 #include "MyAppConfig.hpp"
+#include <AvailabilityMacros.h>
 #include <Cocoa/Cocoa.h>
 #include <cstdio>
 #include <cstdlib>
 #include <dlfcn.h>
 
 // PROBE ONLY: LOKA_PROBE_SNAPSHOT=<png> captures this process's first visible
-// window from the window server after a short delay, then exits.
+// window from the window server after a short delay, then exits. The window
+// list API arrived in 10.5, so a 10.4 SDK build reports the capture as unavailable.
+#if defined(MAC_OS_X_VERSION_10_5) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_5
+#define CARDSHOWCASE_PROBE_CAPTURE 1
 typedef CGImageRef (*CardShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption);
+#endif
 
 @interface CardShowcaseProbeSnapshot : NSObject
 - (void)capture:(NSTimer *)timer;
@@ -16,9 +21,13 @@ typedef CGImageRef (*CardShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWi
 - (void)capture:(NSTimer *)timer
 {
   NSString *path = [timer userInfo];
+#ifndef CARDSHOWCASE_PROBE_CAPTURE
+  std::fprintf(stderr, "probe: snapshot unavailable with this SDK (%s)\n", [path UTF8String]);
+  std::exit(5);
+#else
   NSWindow *target = nil;
   NSArray *windows = [NSApp windows];
-  for (NSUInteger i = 0; i < [windows count]; ++i)
+  for (unsigned int i = 0; i < (unsigned int)[windows count]; ++i)
     if ([[windows objectAtIndex:i] isVisible])
     {
       target = [windows objectAtIndex:i];
@@ -45,6 +54,7 @@ typedef CGImageRef (*CardShowcaseWindowImageFn)(CGRect, CGWindowListOption, CGWi
                (int)[rep pixelsHigh], [path UTF8String]);
   [rep release];
   std::exit(ok ? 0 : 4);
+#endif
 }
 @end
 
