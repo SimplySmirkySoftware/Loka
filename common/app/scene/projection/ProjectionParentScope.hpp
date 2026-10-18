@@ -13,9 +13,10 @@ namespace loka
   {
     namespace scene
     {
-      /** Measurement owned by the frame stack for one viewport admission.
-          The ScrollView arm reads it through its frame; unit frames borrow
-          the same channel pointer, and the projection root has none. */
+      /** Measurement owned by the frame stack for one viewport or root-unit
+          admission. A root unit owns its refusals; a unit inside a viewport
+          borrows the viewport channel, so the viewport refuses metrics commit.
+          The projection root itself has no channel. */
       class ProjectionMeasurementChannel
       {
       public:
@@ -47,9 +48,9 @@ namespace loka
           return this->contentHeight_;
         }
 
-        /** Refusal belongs to the viewport traversal, including its units.
+        /** Refusal belongs to the channel's admission, including descendants.
             Nested containers read it before narrowing another child result.
-            The fact expires when the viewport admission ends. */
+            The fact expires when the owning admission ends. */
         void markShortRangeRefused()
         {
           this->shortRangeRefused_ = true;
@@ -182,7 +183,7 @@ namespace loka
       /** Allocation-free LIFO stack. V1 admits root -> viewport -> unit or
           root -> unit; a viewport is admitted only directly under the root.
           Admission is always-on; no new walk, one borrowed channel pointer per frame
-          and one small viewport channel value on the stack. */
+          and two small owned channel values on the stack. */
       class ProjectionParentScopeStack
       {
       public:
@@ -225,12 +226,15 @@ namespace loka
           return true;
         }
 
-        /** Equal adjacent channels identify a unit only for the closed set
-            {root, viewport, unit}. A future channel-inheriting frame kind
-            would also read as a unit and must revisit this rule. */
+        /** For the closed set {root, viewport, unit}, a unit either binds
+            the root-unit channel or shares its viewport parent's channel.
+            A future channel-inheriting frame kind must revisit this rule. */
         bool insideUnit() const
         {
-          return this->activeDepth_ && this->current().channel == this->frames_[this->activeDepth_ - 1].channel;
+          return this->current().channel == &this->rootUnitChannel_ ||
+                 (this->activeDepth_ >= 1 &&
+                  this->frames_[this->activeDepth_ - 1].channel == &this->viewportChannel_ &&
+                  this->current().channel == this->frames_[this->activeDepth_ - 1].channel);
         }
 
         bool pushUnit(const ProjectionParentScope &scope)
@@ -239,6 +243,11 @@ namespace loka
             return false;
           ProjectionParentScope child = scope;
           child.channel = this->current().channel;
+          if (this->activeDepth_ == 0)
+          {
+            this->rootUnitChannel_ = ProjectionMeasurementChannel();
+            child.channel = &this->rootUnitChannel_;
+          }
           this->frames_[++this->activeDepth_] = child;
           return true;
         }
@@ -274,6 +283,7 @@ namespace loka
         ProjectionParentScope frames_[MAX_ACTIVE_SCOPES + 1];
         unsigned activeDepth_;
         ProjectionMeasurementChannel viewportChannel_;
+        ProjectionMeasurementChannel rootUnitChannel_;
 
         ProjectionParentScopeStack(const ProjectionParentScopeStack &);
         ProjectionParentScopeStack &operator=(const ProjectionParentScopeStack &);
@@ -320,7 +330,7 @@ namespace loka
         }
       };
 
-      /** Owns one admitted unit frame; the stack supplies its inherited channel. */
+      /** Owns one admitted unit frame; the stack supplies its measurement channel. */
       class ProjectionUnitScopeGuard : public ProjectionParentScopeGuard
       {
       public:
