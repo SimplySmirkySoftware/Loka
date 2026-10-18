@@ -240,8 +240,15 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
         [view release];
         return false;
       }
+      // AppKit raises on a material it does not know (10.13: "Unknown material
+      // value: 13"), so the default follows the running AppKit: HUD (13) from
+      // 10.14 (AppKit 1671), titlebar (3) on 10.10-10.13, and any value above the
+      // 10.10-10.13 range is replaced there.
+      const bool mojaveMaterials = NSAppKitVersionNumber >= 1671;
       const char *materialValue = std::getenv("LOKA_PROBE_EXP_BLUR_MATERIAL");
-      const int material = materialValue ? std::atoi(materialValue) : 3;
+      int material = materialValue ? std::atoi(materialValue) : (mojaveMaterials ? 13 : 3);
+      if (!mojaveMaterials && material > 9)
+        material = 3;
       if ([effect respondsToSelector:@selector(setBlendingMode:)])
         [effect setBlendingMode:1];
       if ([effect respondsToSelector:@selector(setMaterial:)])
@@ -258,8 +265,15 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
         reported = true;
       }
     }
-    else
+    else if (std::getenv("LOKA_PROBE_LEGACY_FILTERS"))
       view = CreateProbeFilterUnit((NSView *)parent, seat.r);
+    else if (!reported)
+    {
+      // 10.5-10.9 real machines (2026-10-18): 10.9 painted the bar black, 10.6
+      // blurred the whole scrolled area. The filter path stays opt-in.
+      std::fprintf(stderr, "probe: exp blur declined (no NSVisualEffectView; LOKA_PROBE_LEGACY_FILTERS=1 tries filters)\n");
+      reported = true;
+    }
   }
   if (!view)
     view = [[LokaStackUnitView alloc] initWithFrame:seat.r];

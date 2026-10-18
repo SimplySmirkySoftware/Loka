@@ -65,13 +65,10 @@ int main(int argc, char **argv)
 
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   // PROBE ONLY: CardShowcase turns the blurred bar on by default so a double-click
-  // shows it; LOKA_PROBE_NO_BLUR=1 keeps the opaque bar for comparison. HUD is the
-  // default material because titlebar reads as a flat gray bar (Tahoe, 2026-10-18).
+  // shows it; LOKA_PROBE_NO_BLUR=1 keeps the opaque bar for comparison. The unit
+  // picks the material from the running AppKit.
   if (!std::getenv("LOKA_PROBE_NO_BLUR"))
-  {
     setenv("LOKA_PROBE_EXP_BLUR", "1", 0);
-    setenv("LOKA_PROBE_EXP_BLUR_MATERIAL", "13", 0);
-  }
   const char *snapshot = std::getenv("LOKA_PROBE_SNAPSHOT");
   if (snapshot)
   {
