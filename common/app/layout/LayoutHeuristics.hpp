@@ -67,9 +67,10 @@ namespace loka
         }
         if (loka::app::BoxNode *box = child->asBoxNode())
         {
-          if (box->props.hasFixedSize())
+          const int width = box->props.effectiveWidth();
+          if (width > 0)
           {
-            return box->props.effectiveWidth();
+            return width;
           }
         }
         return -1;

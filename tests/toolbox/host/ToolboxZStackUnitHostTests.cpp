@@ -503,6 +503,106 @@ namespace
     LOKA_VERIFY(hit.lastMeasuredWidth < 100);
     controller.rootNode_ = 0;
   }
+  class WidthOfferProbe : public Probe
+  {
+  public:
+    WidthOfferProbe()
+        : Probe("width-offer", 7)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      // Reuse the fixture's rectangle for the offered frame before projection.
+      this->clip.left = state.x;
+      this->clip.top = state.y;
+      this->clip.right = static_cast<short>(state.x + state.width);
+      this->clip.bottom = static_cast<short>(state.y + state.height);
+      return Probe::layoutProjected(platform, state);
+    }
+  };
+  class WidthLayoutBoundary : public BoundaryNode
+  {
+  public:
+    virtual void composeWithContext(ComponentContext &, ComposeEvent) {}
+  };
+  void widthOnlyDispatch(bool registered)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    if (registered)
+      LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 500, 200)));
+    MutableState<int> liveWidth(300);
+    WidthLayoutBoundary outer;
+    WidthLayoutBoundary *inner = new WidthLayoutBoundary();
+    outer.addChild(inner);
+    BoxNode *box = new BoxNode(Box().padding(5).width(&liveWidth).props);
+    WidthOfferProbe *probe = new WidthOfferProbe();
+    box->addChild(probe);
+    inner->addChild(box);
+    for (int i = 0; i < 2; ++i)
+    {
+      if (i == 1)
+        liveWidth.set(180);
+      LayoutState state = seat();
+      const short width = LayoutNode(&outer, state, &controller, 0);
+      LOKA_VERIFY(width == (i == 0 ? 300 : 180));
+      LOKA_VERIFY(state.y == 37);
+      LOKA_VERIFY(probe->clip.left == 15);
+      LOKA_VERIFY(probe->clip.top == 25);
+      LOKA_VERIFY(probe->clip.right - probe->clip.left == (i == 0 ? 290 : 170));
+      LOKA_VERIFY(probe->clip.bottom - probe->clip.top == 70);
+    }
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    BoxNode *upper = new BoxNode(Box().padding(5).width(300).props);
+    WidthOfferProbe *upperProbe = new WidthOfferProbe();
+    upper->addChild(upperProbe);
+    stack.addChild(upper);
+    LayoutState state = seat();
+    LayoutNode(&stack, state, &controller, 0);
+    LOKA_VERIFY(controller.unitLedger_.mark() == 1);
+    const Rect row = unitRow(controller, &stack, 1)->rect;
+    // The upper unit retains its parent seat even though Box offers wider content.
+    LOKA_VERIFY(row.left == 10);
+    LOKA_VERIFY(row.top == 20);
+    LOKA_VERIFY(row.right - row.left == 100);
+    LOKA_VERIFY(row.bottom - row.top == 17);
+    LOKA_VERIFY(upperProbe->clip.left == 15);
+    LOKA_VERIFY(upperProbe->clip.top == 25);
+    LOKA_VERIFY(upperProbe->clip.right - upperProbe->clip.left == 290);
+    LOKA_VERIFY(upperProbe->clip.bottom - upperProbe->clip.top == 70);
+    LOKA_VERIFY(state.y == 90);
+  }
+  void heightOnlyUnit(bool registered)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    if (registered)
+      LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    BoxNode *upper = new BoxNode(Box().height(40).props);
+    stack.addChild(upper);
+    for (int i = 0; i < 2; ++i)
+    {
+      if (i == 1)
+        upper->props.setHeight(120);
+      controller.unitLedger_.clear();
+      LayoutState state = seat();
+      LayoutNode(&stack, state, &controller, 0);
+      LOKA_VERIFY(controller.unitLedger_.mark() == 1);
+      const Rect row = unitRow(controller, &stack, 1)->rect;
+      LOKA_VERIFY(row.left == 10);
+      LOKA_VERIFY(row.top == 20);
+      LOKA_VERIFY(row.right - row.left == 100);
+      LOKA_VERIFY(row.bottom - row.top == (i == 0 ? 40 : 120));
+      LOKA_VERIFY(state.y == (i == 0 ? 90 : 140));
+    }
+  }
   void run(const char *mode)
   {
     ToolboxWindow window;
@@ -587,7 +687,9 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"TextDirtyClipStaysBelowUnit",
+  const char *names[] = {"HeightOnlyBoxUnit",
+                         "WidthOnlyBoxDispatch",
+                         "TextDirtyClipStaysBelowUnit",
                          "IdleRepairOnlyToggledOverlaps",
                          "LedgerRebuiltEachPass",
                          "UnitFrameInheritsParentClip",
@@ -608,7 +710,17 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
     return 1;
   }
-  if (std::strcmp(argv[1], "TextDirtyClipStaysBelowUnit") == 0)
+  if (std::strcmp(argv[1], "HeightOnlyBoxUnit") == 0)
+  {
+    heightOnlyUnit(false);
+    heightOnlyUnit(true);
+  }
+  else if (std::strcmp(argv[1], "WidthOnlyBoxDispatch") == 0)
+  {
+    widthOnlyDispatch(false);
+    widthOnlyDispatch(true);
+  }
+  else if (std::strcmp(argv[1], "TextDirtyClipStaysBelowUnit") == 0)
     textDirtyClip();
   else if (std::strcmp(argv[1], "IdleRepairOnlyToggledOverlaps") == 0)
   {

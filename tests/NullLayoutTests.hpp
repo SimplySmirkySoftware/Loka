@@ -15,4 +15,13 @@ void testNullLayoutOnChangeUsesRegisteredTraversal();
 
 void testProjectionMeasurementChannelAndUnitAdmission();
 
+void testNullLayoutWidthOnlyBoxUnderRootAndZStack();
+
+void testBoxHeightDoorPreservesWidthSources();
+void testBoxHeightOnlyEmptyAndPaddedOffer();
+void testBoxHeightOnlyColumnAndScrollExtent();
+void testBoxHeightStaysFixedWhenLiveWidthCrossesZero();
+void testSharedAlignedRowCharacterizationIncludesBoxHeight();
+void testBoxHeightExceedsGridAndCanvasCells();
+
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP
