@@ -169,6 +169,11 @@ and reason; an uncaught error fails the constructor, without declaring the seat.
 (in macOS bundle Resources); both binary twins live under `assets/`.
 
 
+`c.machine.cpuClass` is `'68k' | 'ppc60x' | 'g3+'`, or `null` when the
+platform cannot answer. This frozen, read-only snapshot is read once at card-context
+construction from the same CPU query as the default CardStyle, so scripts can
+choose a heavier layout only on faster machines.
+
 Declare `state(initial)` only in a card constructor. Initial values may be
 Strings, integers, or Bools; the seat keeps its type. `Text(seat)` formats
 integers and Bools, and `EditText(seat)` requires a String seat.
