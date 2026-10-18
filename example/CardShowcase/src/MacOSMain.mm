@@ -86,7 +86,8 @@ static NSScrollView *FindScrollView(NSView *view)
         if (![unit isKindOfClass:blurUnit])
           continue;
         CALayer *layer = [unit layer];
-        std::fprintf(stderr, "probe: unit layer=%p masksToBounds=%d (before)\n", (void *)layer, layer ? (int)[layer masksToBounds] : -1);
+        std::fprintf(stderr, "probe: unit layer=%p class=%s masksToBounds=%d (before)\n", (void *)layer,
+                     layer ? [NSStringFromClass([layer class]) UTF8String] : "-", layer ? (int)[layer masksToBounds] : -1);
         if (layer && std::getenv("LOKA_PROBE_MASK_AT_SCROLL"))
         {
           [layer setMasksToBounds:YES];

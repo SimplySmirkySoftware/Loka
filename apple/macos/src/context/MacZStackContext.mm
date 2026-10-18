@@ -88,7 +88,22 @@ namespace loka
 {
   CALayer *layer = std::getenv("LOKA_PROBE_PLAIN_LAYER") ? [CALayer layer] : [LokaMaskedBackingLayer layer];
   [layer setMasksToBounds:YES];
+  std::fprintf(stderr, "probe: makeBackingLayer called\n");
   return layer;
+}
+// DIAG for 10.5 (no makeBackingLayer): log how AppKit hands the view its layer and,
+// with LOKA_PROBE_SUBST_LAYER=1, substitute the always-masking layer there.
+- (void)setLayer:(CALayer *)layer
+{
+  std::fprintf(stderr, "probe: setLayer %s\n", layer ? [NSStringFromClass([layer class]) UTF8String] : "nil");
+  if (layer && std::getenv("LOKA_PROBE_SUBST_LAYER") && ![layer isKindOfClass:[LokaMaskedBackingLayer class]])
+  {
+    CALayer *masked = [LokaMaskedBackingLayer layer];
+    [masked setMasksToBounds:YES];
+    [super setLayer:masked];
+    return;
+  }
+  [super setLayer:layer];
 }
 - (BOOL)isFlipped
 {
