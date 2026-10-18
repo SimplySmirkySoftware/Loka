@@ -197,17 +197,19 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  // A frame change can move the clip view's bounds, and AppKit posts that as a
+  // A frame change moves the clip view's bounds, and AppKit posts that as a
   // bounds notification. The seat is layout's to publish: the notification
   // would write the native origin with the previous visible size before
   // publishViewport writes the completed fact, two writes for one layout.
-  // Mute it here as commitScrollMetrics does; a refused pass then leaves the
-  // previous origin exactly as it was, which is already its contract.
+  // AppKit defers the retile until something reads the layout, so the mute
+  // alone is not enough: tile explicitly inside it. A refused pass then leaves
+  // the previous origin exactly as it was, which is already its contract.
   NSClipView *clipView = [scrollView contentView];
   const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
   [clipView setPostsBoundsChangedNotifications:NO];
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
+  [scrollView tile];
   [clipView setPostsBoundsChangedNotifications:postsBounds];
   // The document frame is not touched here: it is part of the metrics that
   // commit only after the traversal succeeds, so a refused pass leaves the
@@ -251,6 +253,8 @@ int MacScrollViewContext::commitScrollMetrics(
       scrollView, width > clipWidth ? width : clipWidth, projection.projectLength(0, contentHeight));
   loka::macos::ScrollMacDocument(
       documentView, projection.scrollOffsetToNative(clampedX), projection.scrollOffsetToNative(clamped));
+  // The scroller change above is retiled lazily too; finish it under the mute.
+  [scrollView tile];
   [clipView setPostsBoundsChangedNotifications:postsBounds];
   return clamped;
 }
