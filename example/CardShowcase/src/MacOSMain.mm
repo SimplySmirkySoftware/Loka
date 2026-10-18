@@ -58,13 +58,24 @@ static NSTextField *FindTextField(NSView *view)
 - (void)focusCaret:(NSTimer *)timer
 {
   (void)timer;
+  // PROBE ONLY: an ssh-launched app may not be frontmost; activate so the caret blinks,
+  // and report the focus outcome so a silent log is not read as "no unit draws".
+  [NSApp activateIgnoringOtherApps:YES];
   NSWindow *window = [NSApp keyWindow];
+  if (!window && [[NSApp windows] count] > 0)
+  {
+    window = [[NSApp windows] objectAtIndex:0];
+    [window makeKeyAndOrderFront:nil];
+  }
   NSTextField *field = FindTextField([window contentView]);
-  if (field && [window makeFirstResponder:field])
+  const bool focused = field && [window makeFirstResponder:field];
+  if (focused)
   {
     NSText *editor = [field currentEditor];
     [editor setSelectedRange:NSMakeRange([[editor string] length], 0)];
   }
+  std::fprintf(stderr, "probe: caret active=%d key=%d field=%p focused=%d\n", [NSApp isActive] ? 1 : 0,
+               [window isKeyWindow] ? 1 : 0, (void *)field, focused ? 1 : 0);
 }
 // PROBE ONLY: synchronous scroll/display work; no snapshot API or CA headers.
 - (void)benchmark:(NSTimer *)timer
