@@ -18,4 +18,7 @@ void testMacZStackUnitOverScrollViewSurvivesGroundRedraw();
 void testMacZStackRetirementDetachesUnitBeforeDrain();
 void testMacZStackReattachedGroundStaysBelowUnits();
 void testMacZStackGroundSuffixPreservesOrder();
+void testMacZStackBlurNativeEffect();
+void testMacZStackBlurGroundIsCreationTimeConstant();
+void testMacZStackBlurWithoutEffectUsesWindowGround();
 #endif
