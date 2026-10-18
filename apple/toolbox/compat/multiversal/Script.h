@@ -10,7 +10,8 @@
 // Match Universal Script.h (CharByte byte types).
 enum
 {
-  smFirstByte = -1
+  smFirstByte = -1,
+  smLastByte = 1
 };
 
 #endif

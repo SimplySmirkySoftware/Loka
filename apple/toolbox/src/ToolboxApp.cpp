@@ -36,6 +36,12 @@ namespace
     return script != smRoman && CharacterByteType(reinterpret_cast<Ptr>(&byte), 0, script) == smFirstByte;
   }
 
+  bool ToolboxIsTrailByte(unsigned char lead, unsigned char byte, short script)
+  {
+    unsigned char pair[] = {lead, byte};
+    return script != smRoman && CharacterByteType(reinterpret_cast<Ptr>(pair), 1, script) == smLastByte;
+  }
+
   bool IsSuspendResumeEvent(const EventRecord &event)
   {
     return (static_cast<unsigned long>(event.message) & kOsEventMessageMask) ==
@@ -451,6 +457,20 @@ void ToolboxApp::run()
       // autoKey repeats are swallowed so a command runs once per press.
       const bool command = (event.modifiers & cmdKey) != 0;
       bool handled = false;
+      const unsigned char byte = static_cast<unsigned char>(key);
+      const short keyScript = static_cast<short>(GetScriptManagerVariable(smKeyScript));
+      // An input method delivers committed text one byte per key-down, and the
+      // trail may arrive in a later iteration, so the lead is held across
+      // non-key events instead of pulling another event (#1439).
+      if (this->twoByteKey_.holdsLead())
+      {
+        const unsigned char lead = this->twoByteKey_.lead();
+        this->twoByteKey_.release();
+        handled = !command && ToolboxIsTrailByte(lead, byte, keyScript);
+        // Refuse a complete pair once. Otherwise drop only the held lead and
+        // let this event follow its normal path, including holding a new lead.
+        SysBeep(1);
+      }
 #if LOKA_RETRO68_DIAGNOSTICS
       if (active && command && (key == 'd' || key == 'D'))
       {
@@ -460,14 +480,9 @@ void ToolboxApp::run()
 #endif
       if (!command)
       {
-        const unsigned char byte = static_cast<unsigned char>(key);
-        if (byte >= 0x80 && ToolboxIsLeadByte(byte, static_cast<short>(GetScriptManagerVariable(smKeyScript))))
+        if (!handled && byte >= 0x80 && ToolboxIsLeadByte(byte, keyScript))
         {
-          // Until T2 decodes this unit, consume its available trail and refuse
-          // both bytes together. With no next key, refuse the lead alone (#1439).
-          EventRecord trail;
-          (void)GetNextEvent(keyDownMask | autoKeyMask, &trail);
-          SysBeep(1);
+          this->twoByteKey_.hold(byte);
           handled = true;
         }
         const unsigned char keyCode = static_cast<unsigned char>((event.message & keyCodeMask) >> 8);
