@@ -2185,7 +2185,13 @@ namespace
     {
       smirkycard::ScriptRuntime runtime;
       loka::core::String error;
-      const std::string source = std::string("var calls=0;card('first',") + factories[i] + ");";
+      // An inherited accessor must not intercept the host's machine snapshot:
+      // both fields are defined as own properties, never assigned (bot P2, #1463).
+      const std::string source =
+          std::string("['cpuClass','machine'].forEach(k=>Object.defineProperty(Object.prototype,k,"
+                      "{configurable:true,get(){return 'spoof'},set(v){throw new TypeError('poison '+k)}}));"
+                      "var calls=0;card('first',")
+          + factories[i] + ");";
       LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
       NullPlatformContext context;
       NullScenePlatformController platform;
@@ -2206,6 +2212,10 @@ namespace
       std::puts("[skip] G3+ runtime branch: this host's queryCpuClass declines");
 #endif
       expectJs(runtime, "Object.isFrozen(context.machine)", "true");
+      expectJs(runtime,
+               "Object.prototype.hasOwnProperty.call(context,'machine')&&"
+               "Object.prototype.hasOwnProperty.call(context.machine,'cpuClass')",
+               "true");
       expectJs(runtime,
                "new class {check(){const before=context.machine.cpuClass;let refused=false;"
                "try{context.machine.cpuClass='x'}catch(e){refused=e instanceof TypeError}"

@@ -300,10 +300,12 @@ namespace smirkycard
       if (ok)
       {
         JSValue value = name ? JS_NewString(ctx, name) : JS_NULL;
-        ok = !JS_IsException(value) && JS_SetPropertyStr(ctx, machine, "cpuClass", value) >= 0;
+        // Own data properties, not assignment: a script-installed Object.prototype
+        // accessor must not intercept the snapshot (bot P2 on #1463).
+        ok = !JS_IsException(value) && JS_DefinePropertyValueStr(ctx, machine, "cpuClass", value, JS_PROP_C_W_E) >= 0;
       }
       ok = ok && JS_FreezeObject(ctx, machine) >= 0
-           && JS_SetPropertyStr(ctx, context, "machine", JS_DupValue(ctx, machine)) >= 0;
+           && JS_DefinePropertyValueStr(ctx, context, "machine", JS_DupValue(ctx, machine), JS_PROP_C_W_E) >= 0;
       JS_FreeValue(ctx, machine);
     }
     if (ok)
