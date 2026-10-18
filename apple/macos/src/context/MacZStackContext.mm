@@ -81,7 +81,17 @@ namespace loka
 {
   (void)rect;
   // Native filter presence is the tint policy; visual-effect units stay clear.
-  if ([self respondsToSelector:@selector(backgroundFilters)] && [[self backgroundFilters] count])
+  // DIAG: LOKA_PROBE_TINT_ALWAYS=1 tints without filters, and the first call reports.
+  static bool drawReported = false;
+  if (!drawReported)
+  {
+    std::fprintf(stderr, "probe: diag drawRect filters=%d layer=%d\n",
+                 [self respondsToSelector:@selector(backgroundFilters)] ? (int)[[self backgroundFilters] count] : -1,
+                 [self respondsToSelector:@selector(layer)] && [self performSelector:@selector(layer)] ? 1 : 0);
+    drawReported = true;
+  }
+  if (std::getenv("LOKA_PROBE_TINT_ALWAYS") ||
+      ([self respondsToSelector:@selector(backgroundFilters)] && [[self backgroundFilters] count]))
   {
     NSColor *ground = nil;
     if (loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground))
@@ -179,11 +189,17 @@ namespace
           NSArray *filters = [NSArray arrayWithObject:filter];
           if (filters)
           {
-            [parent setWantsLayer:YES];
+            // DIAG switches (10.9 real machine painted the bar black, 2026-10-18).
+            if (!std::getenv("LOKA_PROBE_NO_PARENT_LAYER"))
+              [parent setWantsLayer:YES];
             [view setWantsLayer:YES];
-            if ([view respondsToSelector:@selector(setLayerUsesCoreImageFilters:)])
+            if (!std::getenv("LOKA_PROBE_NO_CI_FLAG") && [view respondsToSelector:@selector(setLayerUsesCoreImageFilters:)])
               [view setLayerUsesCoreImageFilters:YES];
-            [view setBackgroundFilters:filters];
+            if (!std::getenv("LOKA_PROBE_FILTER_SKIP"))
+              [view setBackgroundFilters:filters];
+            std::fprintf(stderr, "probe: diag parentLayer=%d viewLayer=%d filters=%d\n",
+                         [parent performSelector:@selector(layer)] ? 1 : 0, [view performSelector:@selector(layer)] ? 1 : 0,
+                         (int)[[view backgroundFilters] count]);
           }
           else
           {
