@@ -289,6 +289,7 @@ void testProjectionMeasurementChannelAndUnitAdmission()
 {
   using namespace loka::app::scene;
   ProjectionParentScopeStack scopes;
+  LOKA_VERIFY(!scopes.insideUnit());
   LOKA_VERIFY(!scopes.current().channel);
   LOKA_VERIFY(!scopes.current().tryAccumulateContentHeight(0, 10));
   scopes.current().markShortRangeRefused();
@@ -296,12 +297,15 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   ProjectionParentScope viewport;
   LOKA_VERIFY(scopes.pushViewport(viewport));
   ProjectionParentScope &admittedViewport = scopes.current();
+  LOKA_VERIFY(!scopes.insideUnit());
   ProjectionParentScope secondViewport;
   LOKA_VERIFY(!scopes.pushViewport(secondViewport));
   ProjectionParentScope unit;
   LOKA_VERIFY(scopes.current().deriveScrolled(0, 10, 20, loka::core::Frame(0, 0, 80, 80), unit));
   LOKA_VERIFY(scopes.pushUnit(unit));
   ProjectionParentScope &admittedUnit = scopes.current();
+  LOKA_VERIFY(scopes.insideUnit());
+  LOKA_VERIFY(admittedUnit.channel == admittedViewport.channel);
   LOKA_VERIFY(scopes.current().tryAccumulateContentHeight(0, 10));
   LOKA_VERIFY(scopes.current().contentHeight() == 10);
   scopes.current().markShortRangeRefused();
@@ -321,7 +325,14 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   ProjectionParentScope rootUnit;
   LOKA_VERIFY(scopes.current().deriveScrolled(0, 10, 20, loka::core::Frame(0, 0, 80, 80), rootUnit));
   LOKA_VERIFY(scopes.pushUnit(rootUnit));
+  ProjectionParentScope &admittedRootUnit = scopes.current();
+  ProjectionParentScope child;
+  LOKA_VERIFY(scopes.current().deriveScrolled(0, 0, 0, loka::core::Frame(), child));
+  child.markShortRangeRefused();
+  LOKA_VERIFY(scopes.current().hasShortRangeRefusal());
+  LOKA_VERIFY(scopes.insideUnit());
   LOKA_VERIFY(!scopes.pushUnit(rootUnit));
+  // The root-only viewport admission wall (activeDepth != 0) answers here.
   LOKA_VERIFY(!scopes.pushViewport(secondViewport));
   LayoutState seat;
   seat.x = 10;
@@ -329,6 +340,16 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   LayoutState projected;
   LOKA_VERIFY(scopes.current().project(seat, projected));
   LOKA_VERIFY(projected.x == 0 && projected.y == 0);
-  LOKA_VERIFY(!scopes.current().channel);
   LOKA_VERIFY(scopes.pop());
+  LOKA_VERIFY(!admittedRootUnit.channel);
+  LOKA_VERIFY(!scopes.insideUnit());
+  LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+  {
+    ProjectionUnitScopeGuard guard(scopes, rootUnit);
+    LOKA_VERIFY(guard.isActive());
+    LOKA_VERIFY(scopes.insideUnit());
+    LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+  }
+  LOKA_VERIFY(!admittedRootUnit.channel);
+  LOKA_VERIFY(!scopes.insideUnit());
 }

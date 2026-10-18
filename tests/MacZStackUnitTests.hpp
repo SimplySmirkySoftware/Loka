@@ -10,6 +10,7 @@ void testMacZStackLateFirstUnitLandsBelowSecond();
 void testMacScrollViewRefusedInsideUnit();
 void testMacZStackNestedZStackInUnitLaysOutNothing();
 void testMacScrollViewHandlerChildRefusalBlocksCommit();
+void testMacZStackRootUnitChildRefusalKeepsPreviousRectangle();
 void testMacZStackUnitInsideViewportPropagatesRefusal();
 void testMacZStackGroundRefusalStopsUpperChildren();
 void testMacZStackFirstPassRefusalKeepsUnitEmpty();
