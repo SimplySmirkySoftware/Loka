@@ -1398,12 +1398,14 @@ namespace smirkycard
         this->fail("JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
         return 0;
       }
-      for (JsScrollViewport *bound = this->scrollViewports_.head(); bound; bound = bound->next)
-        if (bound->viewport.state() == seat->viewport.state())
-        {
-          this->fail("JavaScript ScrollView viewport seat is already bound");
-          return 0;
-        }
+      // A supplied seat needs no record: the seat owns the handle. Binding the
+      // same seat twice is the app's choice, as with the C++ ScrollView(viewport);
+      // a per-card ledger would outlive a refused declaration capture and turn
+      // its retry into a false "already bound" (bot P2 on #1475).
+      loka::app::ScrollView *bound = new (std::nothrow) loka::app::ScrollView(seat->viewport);
+      if (!bound)
+        this->fail("JavaScript ScrollView allocation refused.");
+      return bound;
     }
     JsScrollViewport *record = this->scrollViewports_.add();
     if (!record)
@@ -1411,10 +1413,7 @@ namespace smirkycard
       this->fail("JavaScript ScrollView allocation refused.");
       return 0;
     }
-    if (seat)
-      record->viewport = seat->viewport;
-    else
-      this->state(record->viewport, initialViewport);
+    this->state(record->viewport, initialViewport);
     loka::app::ScrollView *scroll =
         record->viewport.isValid() ? new (std::nothrow) loka::app::ScrollView(record->viewport) : 0;
     if (!scroll)

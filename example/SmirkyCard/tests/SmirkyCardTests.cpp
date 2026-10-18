@@ -4060,10 +4060,6 @@ namespace
       LOKA_VERIFY(textValue(status->asTextNode())
                   == "JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
     }
-    std::puts("[pin] viewport seat: duplicate binding refusal");
-    checkComposeRefusal("card('first',c=>{const v=c.state.viewport();return {compose(){return VStack("
-                        "ScrollView(Text('a'),{viewport:v}),ScrollView(Text('b'),{viewport:v}))}}});",
-                        "JavaScript ScrollView viewport seat is already bound");
     std::puts("[pin] viewport seat: own typed seat required");
     const char *invalid[] = {"c.state(0)", "c.state.file()", "c.state.image()", "{}", "null", "undefined"};
     for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)

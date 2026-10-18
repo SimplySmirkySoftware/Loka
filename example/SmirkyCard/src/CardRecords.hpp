@@ -72,7 +72,7 @@ namespace smirkycard
     const loka::core::LokaAllocationSite site_;
   };
 
-  /** One bound card-owned viewport handle; rails borrow its write seat. */
+  /** One private card-owned viewport handle; rails borrow its write seat. */
   struct JsScrollViewport
   {
     JsScrollViewport()

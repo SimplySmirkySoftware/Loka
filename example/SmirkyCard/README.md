@@ -204,7 +204,8 @@ units. The experimental blur option is not exposed in JavaScript.
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
 the optional `viewport` option instead borrows this card's `c.state.viewport()`
-seat. Each viewport seat binds at most one ScrollView per compose.
+seat. Give a seat to one ScrollView: a second one would make two rails write one
+fact, exactly as the C++ `ScrollView(viewport)` lets an app do; nothing refuses it.
 `ScrollView(child, {viewport: seat, insets: {top: 44, bottom: 8}})` accepts integer insets in
 0..32767, with omitted values defaulting to zero. Unknown keys are refused.
 The scrollable extent grows by top + bottom; content starts top units below the
