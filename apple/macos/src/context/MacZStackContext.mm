@@ -441,17 +441,17 @@ void MacZStackContext::lowerNewGroundViews(void *parent, void *previousLast)
   // Retirement removal cannot run during this layout pass: the safe point
   // follows layout, so the recorded view must still belong to this parent.
   NSArray *subviews = [host subviews];
-  const NSInteger index = [subviews indexOfObject:(NSView *)previousLast];
+  const NSUInteger index = [subviews indexOfObject:(NSView *)previousLast];
   if (index == NSNotFound)
   {
     assert(false && "ground-pass snapshot must remain parented until the safe point");
     return;
   }
-  const unsigned int count = [subviews count] - 1 - index;
+  const NSUInteger count = [subviews count] - 1 - index;
   NSView *anchor = (NSView *)first->view();
   // Units are inserted at creation and previousLast is at or above unit 0,
   // so no own unit can occur in this suffix. Its fixed size bounds repair.
-  for (unsigned int moved = 0; moved < count; ++moved)
+  for (NSUInteger moved = 0; moved < count; ++moved)
   {
     NSView *view = [[host subviews] lastObject];
     for (Unit *unit = this->units_; unit; unit = unit->next)
