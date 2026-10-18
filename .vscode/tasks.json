@@ -173,6 +173,24 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Build: macOS Showcase",
+      "hide": true,
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "--preset",
+        "macos-debug",
+        "--target",
+        "LokaShowcaseMacOS"
+      ],
+      "dependsOn": [
+        "Configure: macOS Native"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Configure: macOS SmirkyCard",
       "type": "shell",
       "command": "cmake",

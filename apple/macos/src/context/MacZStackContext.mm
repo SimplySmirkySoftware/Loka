@@ -2,6 +2,8 @@
 #include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
 #include <new>
 
 #ifdef TEST_BUILD
@@ -39,6 +41,34 @@ namespace loka
 }
 @end
 
+// Runtime-only declarations keep the probe buildable with pre-10.10 SDKs.
+@interface NSView (LokaProbeVisualEffect)
+- (void)setBlendingMode:(NSInteger)mode;
+- (void)setMaterial:(NSInteger)material;
+- (void)setState:(NSInteger)state;
+@end
+
+@interface LokaStackBlurUnitView : NSView
+@end
+@implementation LokaStackBlurUnitView
+- (BOOL)isFlipped
+{
+  return YES;
+}
+- (BOOL)isOpaque
+{
+  return NO;
+}
+- (BOOL)acceptsFirstResponder
+{
+  return NO;
+}
+- (void)drawRect:(NSRect)rect
+{
+  (void)rect;
+}
+@end
+
 MacZStackContext::Unit::Unit(unsigned index)
     : index_(index),
       next(0),
@@ -54,7 +84,48 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
   if (loka::testing::declineMacStackUnitView())
     return false;
 #endif
-  NSView *view = [[LokaStackUnitView alloc] initWithFrame:seat.r];
+  NSView *view = nil;
+  if (std::getenv("LOKA_PROBE_EXP_BLUR"))
+  {
+    static bool reported = false;
+    Class effectClass = NSClassFromString(@"NSVisualEffectView");
+    if (effectClass)
+    {
+      view = [[LokaStackBlurUnitView alloc] initWithFrame:seat.r];
+      if (!view)
+        return false;
+      NSView *effect = [[effectClass alloc] initWithFrame:[view bounds]];
+      if (!effect)
+      {
+        [view release];
+        return false;
+      }
+      const char *materialValue = std::getenv("LOKA_PROBE_EXP_BLUR_MATERIAL");
+      const int material = materialValue ? std::atoi(materialValue) : 3;
+      if ([effect respondsToSelector:@selector(setBlendingMode:)])
+        [effect setBlendingMode:1];
+      if ([effect respondsToSelector:@selector(setMaterial:)])
+        [effect setMaterial:material];
+      if ([effect respondsToSelector:@selector(setState:)])
+        [effect setState:0];
+      [effect setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+      // ensure precedes leaf attachment; the effect is the first subview.
+      [view addSubview:effect];
+      [effect release];
+      if (!reported)
+      {
+        std::fprintf(stderr, "probe: exp blur unit material=%d\n", material);
+        reported = true;
+      }
+    }
+    else if (!reported)
+    {
+      std::fprintf(stderr, "probe: exp blur declined (no NSVisualEffectView)\n");
+      reported = true;
+    }
+  }
+  if (!view)
+    view = [[LokaStackUnitView alloc] initWithFrame:seat.r];
   if (!view)
     return false;
   this->view_ = view;

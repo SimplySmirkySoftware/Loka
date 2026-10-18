@@ -10,6 +10,14 @@
       "preLaunchTask": "Build: macOS App"
     },
     {
+      "name": "Run (macOS Showcase)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/macos/Debug/example/Showcase/LokaShowcaseMacOS",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build: macOS Showcase"
+    },
+    {
       "name": "Run (macOS MineSweeper)",
       "type": "lldb-dap",
       "request": "launch",
