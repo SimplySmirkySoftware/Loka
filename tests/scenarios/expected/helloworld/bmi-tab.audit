@@ -1,0 +1,13 @@
+loka_scenario_audit version=1 scenario=bmi-tab
+focused.field	height
+format_version	1
+height.text	3
+node	HelloWorld.Bmi
+scenario_version	1
+schema_version	1
+status	ok
+step	bmi-tab
+test	HelloWorld
+tick	1
+weight.text	2
+terminal status=succeeded

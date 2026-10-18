@@ -47,6 +47,15 @@ public:
     return index_ < bindings.size() ? &bindings[index_] : 0;
   }
 
+  /** Report the focused position while it names one of `size` rows; leave out untouched otherwise. */
+  bool query(std::size_t size, std::size_t &out) const
+  {
+    if (index_ >= size)
+      return false;
+    out = index_;
+    return true;
+  }
+
 private:
   static std::size_t noIndex()
   {

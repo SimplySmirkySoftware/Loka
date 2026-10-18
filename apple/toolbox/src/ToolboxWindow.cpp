@@ -492,6 +492,13 @@ bool ToolboxWindow::handleScrollKey(ToolboxScrollKey key)
   return ToolboxInputDoor::scrollKey(*scenePlatformController_, key);
 }
 
+bool ToolboxWindow::handleTabKey(ToolboxTabDirection direction)
+{
+  if (!this->scenePlatformController_)
+    return false;
+  return ToolboxInputDoor::tabKey(*this->scenePlatformController_, direction);
+}
+
 #include "ToolboxWindowIdle.cpp"
 
 ToolboxApp *ToolboxWindow::toolboxApp() const

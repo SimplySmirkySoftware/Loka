@@ -2,6 +2,7 @@
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxTabKey.hpp"
 #include "ToolboxActivationPhase.hpp"
 #include "support/TestVerify.hpp"
 struct ToolboxScrollViewMetrics;
