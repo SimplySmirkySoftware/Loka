@@ -303,8 +303,6 @@ MacScenePlatformController::MacScenePlatformController(void *rootView,
       lastChangeFlags_(loka::app::scene::NODE_DIRTY_NONE),
       clientWidth_(0),
       clientHeight_(0),
-      firstEditField_(0),
-      lastEditField_(0),
       focusedEditTextState_(0),
       focusedEditTextControlTag_(0),
       relayoutPending_(false)
@@ -568,8 +566,6 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   {
     return;
   }
-  firstEditField_ = 0;
-  lastEditField_ = 0;
   // Deliberate Win32 root twin: shared policy resolves the margin and clamps the offer.
   const Window *window = MacWindow::fromRootView(this->rootView());
   const int margin = resolveWindowContentMargin(window, MacSceneLayout::spacing());
@@ -588,7 +584,6 @@ void MacScenePlatformController::performLayout(int clientWidth, int clientHeight
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a macOS projection pass must restore the root scope");
   this->rectSurfaceExtentLedger_.flush();
-  finalizeKeyLoop();
   if (rebuildContexts)
   {
     restoreFocusedEditField();
@@ -1206,50 +1201,6 @@ int MacScenePlatformController::layoutContainerChild(void *context,
     return state.y;
   }
   return controller->layoutNode(child, state);
-}
-
-void MacScenePlatformController::registerEditField(void *field)
-{
-  if (!field)
-  {
-    return;
-  }
-  NSTextField *textField = (NSTextField *)field;
-  if (!firstEditField_)
-  {
-    firstEditField_ = field;
-  }
-  if (lastEditField_)
-  {
-    NSTextField *lastField = (NSTextField *)lastEditField_;
-    [lastField setNextKeyView:textField];
-  }
-  lastEditField_ = field;
-}
-
-void MacScenePlatformController::finalizeKeyLoop()
-{
-  if (!firstEditField_ || !lastEditField_)
-  {
-    return;
-  }
-  if (firstEditField_ == lastEditField_)
-  {
-    return;
-  }
-  NSTextField *firstField = (NSTextField *)firstEditField_;
-  NSTextField *lastField = (NSTextField *)lastEditField_;
-  [lastField setNextKeyView:firstField];
-
-  if (rootView_)
-  {
-    NSView *view = (NSView *)rootView_;
-    NSWindow *window = [view window];
-    if (window)
-    {
-      [window setInitialFirstResponder:firstField];
-    }
-  }
 }
 
 bool MacScenePlatformController::readNativeFocus(loka::app::scene::NodeContext *&out)
