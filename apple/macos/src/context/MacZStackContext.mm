@@ -6,6 +6,7 @@
 #include <OpenGL/gl.h>
 #include <ApplicationServices/ApplicationServices.h>
 #import <QuartzCore/CIFilter.h>
+#import <QuartzCore/CALayer.h>
 #include "MacZStackContext.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../MacGround.hpp"
@@ -62,9 +63,33 @@ namespace loka
 - (NSArray *)backgroundFilters;
 @end
 
+// DIAG: AppKit resets masksToBounds on the layer it owns (10.7/10.8 read NO at
+// scroll time even after setting YES), and with NO Core Animation blurs the whole
+// background layer (CALayer backgroundFilters documentation). A backing layer that
+// always answers YES keeps the blur inside the bar. AppKit asks for it from 10.6.
+@interface LokaMaskedBackingLayer : CALayer
+@end
+@implementation LokaMaskedBackingLayer
+- (BOOL)masksToBounds
+{
+  return YES;
+}
+- (void)setMasksToBounds:(BOOL)value
+{
+  (void)value;
+  [super setMasksToBounds:YES];
+}
+@end
+
 @interface LokaStackBlurUnitView : NSView
 @end
 @implementation LokaStackBlurUnitView
+- (CALayer *)makeBackingLayer
+{
+  CALayer *layer = std::getenv("LOKA_PROBE_PLAIN_LAYER") ? [CALayer layer] : [LokaMaskedBackingLayer layer];
+  [layer setMasksToBounds:YES];
+  return layer;
+}
 - (BOOL)isFlipped
 {
   return YES;
