@@ -195,6 +195,11 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-keys" then
     local keysOk, keysError = pcall(function()
         local _, _, _, _, maximum = awaitBar(true, 0)
         emu.wait(1) -- The cell focuses and snapshots the selection before input.
+        -- Clicking the editor synchronizes the keyboard to its Roman font;
+        -- switch back to the boot template's Japanese script before the keys.
+        commandKey:set_value(1); emu.wait(0.1)
+        tap(field(":macadb:KEY3", "Space")); commandKey:clear_value(); emu.wait(1)
+        say("editor keyboard switched with Command-Space")
         tapScroll("Page Down")
         local _, _, _, down = awaitBar(true)
         assert(down > 0, "Page Down did not move the view")
