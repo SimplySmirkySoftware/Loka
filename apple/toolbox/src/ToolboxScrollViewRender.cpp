@@ -1,3 +1,5 @@
+#include "context/ToolboxPaintSupport.hpp"
+
 // Shared by the controller and host fixture.
 void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode *scrollView)
 {
@@ -10,7 +12,7 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
       break;
     }
   }
-  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_ || !this->paintSuppressClipRgn_
+  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_
       || this->projectionParentScopes_.activeDepth() != 0)
   {
     return;
@@ -23,20 +25,16 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
   loka::app::scene::ProjectionParentScope renderScope(
       this->projectionParentScopes_.current().nativeParent, 0, 0, viewportClip);
 
-  GetClip(this->scrollViewClipRgn_);
-  // Preserve the dirty caller clip while walking viewport children. The
-  // scratch region is free here; setters borrow it only after SetClip copies it.
-  RectRgn(this->paintSuppressClipRgn_, &viewportRect);
-  SectRgn(this->scrollViewClipRgn_, this->paintSuppressClipRgn_, this->paintSuppressClipRgn_);
-  SetClip(this->paintSuppressClipRgn_);
   {
+    ToolboxPaintClip clip(viewportRect, ToolboxPaintClip::INTERSECT);
+    if (!clip.isActive())
+      return;
     loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, renderScope);
     if (scopeGuard.isActive())
     {
       RenderChildren(scrollView, this);
     }
   }
-  SetClip(this->scrollViewClipRgn_);
   this->drawScrollBarControl(binding->barId[loka::app::SCROLL_BAR_VERTICAL]);
   this->drawScrollBarControl(binding->barId[loka::app::SCROLL_BAR_HORIZONTAL]);
 }

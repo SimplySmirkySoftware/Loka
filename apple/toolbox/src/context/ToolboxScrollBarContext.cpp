@@ -1,6 +1,5 @@
 #include "context/ToolboxScrollBarContext.hpp"
 #include "ToolboxScenePlatformController.hpp"
-#include "ToolboxPaintSuppressScope.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 
 namespace
@@ -107,12 +106,7 @@ void ToolboxScrollBarContext::draw(ToolboxScenePlatformController *controller)
   }
   if (controller && resourceId_ > 0)
   {
-    bool ensured;
-    {
-      ToolboxPaintSuppressScope suppress(controller->paintSuppressClipRgn_);
-      ensured = controller->ensureScrollBarControl(resourceId_, rect_, node_->props, lifetimeHint());
-    }
-    if (ensured)
+    if (controller->ensureScrollBarControl(resourceId_, rect_, node_->props, lifetimeHint()))
     {
       controller->drawScrollBarControl(resourceId_);
       return;

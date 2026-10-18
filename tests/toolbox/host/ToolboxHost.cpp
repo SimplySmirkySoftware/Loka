@@ -52,7 +52,7 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState()};
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState(), 0};
   GrafPtr port = &initialPort;
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)
@@ -86,6 +86,7 @@ bool ToolboxScenePlatformController::intersectWithProjectionClip(const Rect &rec
 }
 void GetPort(GrafPtr *out)
 {
+  port->clipRgn = &port->native.clipRegionPointer;
   *out = port;
 }
 void SetPort(GrafPtr value)

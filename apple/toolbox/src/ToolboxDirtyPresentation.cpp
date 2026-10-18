@@ -101,7 +101,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
         ToolboxEditPresentation(binding.te, binding.installed));
   }
   // Kind-ordered replay has no composition walk to draw its controls and
-  // owns the dirty port clip. PR 4b will route unit-touching damage away from
-  // this path, through composition replay.
+  // owns the dirty port clip. Only damage eligible for kind-ordered replay
+  // reaches this pass; composition replay draws controls during its walk.
   drawControlsInRect(rect);
 }

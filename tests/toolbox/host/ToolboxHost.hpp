@@ -580,6 +580,7 @@ public:
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
   void drawScrollBarControl(short);
+  void drawControl(ControlRef);
   typedef ToolboxHitLedger::TextHit TextHit;
   void redrawPopupHit(PopupHit &)
   {

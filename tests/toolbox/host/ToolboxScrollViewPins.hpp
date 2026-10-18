@@ -653,12 +653,10 @@ namespace
       LOKA_VERIFY(!f.controller.scrollSpans()->valid());
       LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
       f.controller.scrollViewClipRgn_ = NewRgn();
-      LOKA_VERIFY(f.step(102, 101) == 20);
+      // Suppression scratch refusal only degrades setters, not admission.
       DisposeRgn(f.controller.paintSuppressClipRgn_);
       f.controller.paintSuppressClipRgn_ = 0;
-      LOKA_VERIFY(f.step(119, 101) == 0);
-      LOKA_VERIFY(!f.controller.scrollSpans()->valid());
-      LOKA_VERIFY(f.scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(f.step(102, 101) == 20);
       f.controller.paintSuppressClipRgn_ = NewRgn();
     }
     Pin("ToolboxScrollViewFrameShortRangeRefusal");

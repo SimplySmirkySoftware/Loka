@@ -29,7 +29,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
-#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/AttributedText.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -70,6 +70,16 @@ namespace
 {
   using namespace loka::app;
   using namespace loka::app::scene;
+
+  /** Observe the delivery that actually ran, not the intended routing rule. */
+  const char *PaintDeliveryRoute(const ToolboxSceneDebugStats &before, const ToolboxSceneDebugStats &after)
+  {
+    if (after.totalDrawCalls > before.totalDrawCalls)
+      return "full";
+    if (after.totalRenderDirtyCalls > before.totalRenderDirtyCalls)
+      return after.totalRenderCalls > before.totalRenderCalls ? "composition" : "kind";
+    return "none";
+  }
 
   // These windows keep unspecified margins, so their root origins follow
   // the rail standard. Fixture sizes and local ink offsets are separate.
@@ -235,7 +245,8 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(Box().size(180, 110) << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
-                                                                << RectSurface(this->model_.state()).size(150, 70)));
+                                                                << RectSurface(this->model_.state()).size(150, 70)
+                                                                << AttributedText(Styled("Replay membership"))));
     }
     void advance()
     {
@@ -866,7 +877,10 @@ namespace
       drawers << Box().size(150, 24)
               << RectSurface(this->model_.state()).size(150, 24)
                   .TEST_ID("History.Surface");
-      composition.declare(ZStack() << drawers);
+      // A real text-context membership keeps these #518/#763 pins on the
+      // clipped composition route without an overlay or a tree-kind heuristic.
+      drawers << AttributedText(Styled("Replay membership"));
+      composition.declare(drawers);
     }
     void writeFirst()
     {
@@ -1926,7 +1940,10 @@ namespace
       const PaintApplyVerdict verdict = CollectPaintAnswers(*self->composited_, query, answers, source);
       // zstack-overlap-replay retired with the ZStack overlay contract
       // (page 2a §16/§18, #1438, #1442). Keep non-overlapping text history.
-      self->recordArm("contained-text-history", verdict.refusedCount() == 0, EDIT_WRITE);
+      const char *route = PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting());
+      std::fprintf(self->log_, "contained-text-history route=%s\r", route);
+      self->recordArm(
+          "contained-text-history", verdict.refusedCount() == 0 && std::strcmp(route, "composition") == 0, EDIT_WRITE);
     }
     static void OnBoundsIdle(Window *window, PaintDamageConfig *self)
     {
@@ -2388,23 +2405,30 @@ namespace
     static void OnHistoryIdle(Window *window, HistoryNode<Popup> *node, PaintDamageConfig *self)
     {
       ToolboxWindow *native = window->asToolboxWindow();
+      ToolboxScenePlatformController *controller =
+          window->scene() ? static_cast<ToolboxScenePlatformController *>(
+                                loka::dsl::testing::SceneTestAccess::platformController(*window->scene()))
+                          : 0;
+      if (!controller)
+      {
+        self->finish(false);
+        return;
+      }
       if (self->phase_ == (Popup ? POPUP_HISTORY_SHOW : HISTORY_SHOW))
       {
+        self->initial_ = controller->debugStatsForTesting();
         ShowWindow(native->window());
         SelectWindow(native->window());
         native->requestInvalidate();
         self->phase_ = Popup ? POPUP_HISTORY_FIRST : HISTORY_FIRST;
         return;
       }
-      ToolboxScenePlatformController *controller = window->scene()
-          ? static_cast<ToolboxScenePlatformController *>(
-              loka::dsl::testing::SceneTestAccess::platformController(*window->scene())) : 0;
       Node *second = 0;
       Node *surface = 0;
       loka::dsl::FlowError error;
       loka::dsl::testing::LookupNodeById<Node>(window->scene(), "History.B", second, error);
       loka::dsl::testing::LookupNodeById<Node>(window->scene(), "History.Surface", surface, error);
-      if (!controller || !node || !second || !second->getContext() || !surface || !surface->getContext())
+      if (!node || !second || !second->getContext() || !surface || !surface->getContext())
       {
         self->finish(false);
         return;
@@ -2432,7 +2456,10 @@ namespace
             blank = GetPixel(static_cast<short>(x), static_cast<short>(y)) == 0 && blank;
         const bool spriteVisible = GetPixel(self->marker_.h, self->marker_.v) != 0;
         SetPort(previousPort);
-        self->recordArm(Popup ? "popup-history-setup" : "history-setup", blank && spriteVisible,
+        const char *route = PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting());
+        std::fprintf(self->log_, "%s route=%s\r", Popup ? "popup-history-setup" : "history-setup", route);
+        self->recordArm(Popup ? "popup-history-setup" : "history-setup",
+                        blank && spriteVisible && std::strcmp(route, "full") == 0,
                         Popup ? POPUP_HISTORY_SECOND : HISTORY_SECOND);
         self->initial_ = controller->debugStatsForTesting();
         node->writeFirst();
@@ -2444,7 +2471,11 @@ namespace
         const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
         const bool flushed = stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
                              && stats.windowFullRequestCount == self->initial_.windowFullRequestCount;
-        self->recordArm(Popup ? "popup-history-first-clipped" : "history-first-clipped", flushed,
+        const char *route = PaintDeliveryRoute(self->initial_, stats);
+        std::fprintf(
+            self->log_, "%s route=%s\r", Popup ? "popup-history-first-clipped" : "history-first-clipped", route);
+        self->recordArm(Popup ? "popup-history-first-clipped" : "history-first-clipped",
+                        flushed && std::strcmp(route, "composition") == 0,
                         Popup ? POPUP_HISTORY_CHECK : HISTORY_CHECK);
         self->initial_ = stats;
         node->writeSecond();
@@ -2464,9 +2495,17 @@ namespace
       const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
       const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
       const char *name = Popup ? "popup-history-survives" : "history-survives-clipped-render";
-      std::fprintf(self->log_, "%s whole_window=%d rect_requests=%d sprite_preserved=%d new_text_visible=%d\r",
-                   name, whole, rects, sprite ? 1 : 0, ink ? 1 : 0);
-      self->recordArm(name, whole == 0 && rects >= 1 && sprite && ink,
+      const char *route = PaintDeliveryRoute(self->initial_, stats);
+      std::fprintf(self->log_,
+                   "%s whole_window=%d rect_requests=%d sprite_preserved=%d new_text_visible=%d route=%s\r",
+                   name,
+                   whole,
+                   rects,
+                   sprite ? 1 : 0,
+                   ink ? 1 : 0,
+                   route);
+      self->recordArm(name,
+                      whole == 0 && rects >= 1 && sprite && ink && std::strcmp(route, "composition") == 0,
                       Popup ? BUTTON_ENABLED_SHOW : POPUP_HISTORY_SHOW);
     }
     static PaintAnswer offscreenAnswer(Window *window, const char *id, const PaintQuery &query)
@@ -3617,6 +3656,18 @@ namespace
       SetPort(native->window());
       if (self->phase_ == (label ? BUTTON_LABEL_WRITE : BUTTON_ENABLED_WRITE))
       {
+        if (!label)
+        {
+          // Exactly one Button and no scrollbar in this window. Exercise the
+          // real full-window entry, including anything after its render walk.
+          const int beforeDraws = controller->debugStatsForTesting().totalDrawCalls;
+          const int beforeControls = controller->debugStatsForTesting().totalControlDrawCount;
+          native->draw();
+          const int draws = controller->debugStatsForTesting().totalDrawCalls - beforeDraws;
+          const int controls = controller->debugStatsForTesting().totalControlDrawCount - beforeControls;
+          std::fprintf(self->log_, "button-full-window draws=%d control_draws=%d\r", draws, controls);
+          self->recordArm("button-full-window-once", draws == 1 && controls == 1, BUTTON_ENABLED_WRITE);
+        }
         const PaintAnswer face = context->queryPaintDamage(query);
         const PaintAnswer sprite = static_cast<NativeNodeContext *>(surface->getContext())->queryPaintDamage(query);
         // Since #1015 the Button takes its Column's width and centres the title,

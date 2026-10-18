@@ -166,6 +166,14 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
         this->presented_.commit(current, ToolboxPaintScope());
       return;
     }
+    // Reconciliation can refuse after acquiring a live handle. Preserve its
+    // installed face rather than leaving a visible control undrawn.
+    if (binding)
+    {
+      if (paints)
+        this->repaint(binding->control, binding->label);
+      return;
+    }
   }
   if (paints)
   {
@@ -219,9 +227,7 @@ void ToolboxButtonContext::repaint(ControlRef control, std::string &installedLab
     ToolboxPaintSuppressScope suppress(this->controller()->paintSuppressClipRgn_);
     submitted = ReconcileToolboxButtonControl(control, label, this->node_->props.enabled_, installedLabel);
   }
-  Draw1Control(control);
-  ++this->controller()->debugStats_.controlDrawCount;
-  ++this->controller()->debugStats_.totalControlDrawCount;
+  this->controller()->drawControl(control);
   if (submitted && completes)
     this->presented_.commit(current, ToolboxPaintScope());
 }

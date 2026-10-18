@@ -129,6 +129,7 @@ public:
   bool handleControlClick(const Point &point);
   void drawControlsInRect(const Rect &rect);
   void drawScrollBarControl(short id);
+  void drawControl(ControlRef control);
   bool ensureButtonControl(short resourceId,
                            const Rect &rect,
                            const loka::core::String &label,
@@ -233,7 +234,6 @@ private:
   friend class ToolboxTextContext;
   friend class ToolboxCellContext;
   friend class ToolboxButtonContext;
-  friend class ToolboxScrollBarContext;
   friend class ToolboxPopupMenuContext;
   friend class ToolboxEditTextContext;
   friend class ToolboxTextEditorContext;

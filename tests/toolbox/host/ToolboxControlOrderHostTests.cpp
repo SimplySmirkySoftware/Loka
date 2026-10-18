@@ -2,6 +2,8 @@
 #include "context/ToolboxScrollBarContext.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxDirtyReplay.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
+#include "platform/String.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -12,6 +14,14 @@ using namespace loka::app::scene;
 using namespace loka::core;
 namespace
 {
+  class RefusingUtf8 : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &) const
+    {
+      return false;
+    }
+  };
   class OrderNode;
   typedef BoundaryPropsFor<OrderNode> OrderProps;
   class OrderNode : public StdCompositionBoundaryNodeBase<OrderProps>
@@ -75,8 +85,7 @@ namespace
     toolbox_host::reset();
     toolbox_host::paintOperations.clear();
     toolbox_host::controlCalls = toolbox_host::ControlCalls();
-    if (std::strcmp(mode, "CompositionReplayDrawsControlsInWalk") == 0
-        || std::strcmp(mode, "NoPostWalkControlPass") == 0)
+    if (std::strcmp(mode, "CompositionReplayDrawsControlsInWalk") == 0)
     {
       const Rect dirty = {0, 0, 100, 120};
       ToolboxRenderDirtyInCompositionOrder(controller, dirty);
@@ -97,11 +106,24 @@ namespace
     }
     else
     {
+      const bool refusedLabel = std::strcmp(mode, "ButtonRefusedLabelDrawsInstalledControl") == 0;
+      if (refusedLabel)
+      {
+        const String refused = String::FromPlatform(Managed<loka::platform::String>::Wrap(new RefusingUtf8()));
+        LOKA_VERIFY(Button(ButtonProps().text(refused)).applyPropsToNode(node));
+      }
       ToolboxInputDoor::render(controller);
       verifyOneDraw(control);
       LOKA_VERIFY(toolbox_host::paintOperations.size() == 2);
       LOKA_VERIFY(toolbox_host::paintOperations[0] == "bar");
       LOKA_VERIFY(toolbox_host::paintOperations[1] == "erase");
+      LOKA_VERIFY(controller.debugStats_.totalControlDrawCount == 2);
+      if (refusedLabel)
+      {
+        const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+        LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+        LOKA_VERIFY(control->visible && controller.buttonControls_[0].label == "First");
+      }
     }
     // Host retirement uses the shared bulk teardown while the contexts live.
     controller.clearControls();
@@ -126,6 +148,15 @@ namespace
       LOKA_VERIFY(toolbox_host::controlCalls.draws == 1);
       verifyOneDraw(controller.scrollControl(0).control);
     }
+    const Rect beforeSuppression = toolbox_host::currentClip();
+    toolbox_host::controlCalls = toolbox_host::ControlCalls();
+    {
+      ToolboxPaintSuppressScope suppress(controller.paintSuppressClipRgn_);
+      controller.drawScrollBarControl(controller.scrollControl(0).resourceId);
+      LOKA_VERIFY(toolbox_host::controlCalls.draws == 0);
+    }
+    const Rect afterSuppression = toolbox_host::currentClip();
+    LOKA_VERIFY(EqualRect(&beforeSuppression, &afterSuppression));
     const Rect miss = {0, 30, 100, 100};
     ClipRect(&miss);
     toolbox_host::controlCalls = toolbox_host::ControlCalls();
@@ -186,6 +217,17 @@ namespace
     ClipRect(&touch);
     controller.renderScrollView(&scroll);
     LOKA_VERIFY(toolbox_host::controlCalls.draws == 1);
+    for (int refused = 1; refused <= 2; ++refused)
+    {
+      ClipRect(&outer);
+      toolbox_host::paintOperations.clear();
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + refused;
+      controller.renderScrollView(&scroll);
+      toolbox_host::refuseRegionAttempt = 0;
+      LOKA_VERIFY(toolbox_host::paintOperations.empty());
+      const Rect restoredOnRefusal = toolbox_host::currentClip();
+      LOKA_VERIFY(EqualRect(&restoredOnRefusal, &outer));
+    }
     controller.clearControls();
   }
 } // namespace
