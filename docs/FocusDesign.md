@@ -458,8 +458,9 @@ first (the content view in the Tahoe pin).
 Legacy `captureFocusedEditField` / `restoreFocusedEditField` remain unchanged.
 The rail builds no key-view chain: each window sets
 `autorecalculatesKeyViewLoop`, so Tab and Shift-Tab follow AppKit's geometric
-loop and reach the fact through the same completion read (#1461). Ordinary pending relayout capture/restore precedes focus
-completion; the one-shot post is not a lock against later restoration. The
-macOS pins cover initial ordering, native snapshots, admission, and an
-end-editing text-bridge observer that retires the target. These pins require
-Tahoe runtime verification; Linux suites do not compile this rail.
+loop and reach the fact through the same completion read (#1461). Ordinary
+pending relayout capture/restore precedes focus completion; the one-shot post is
+not a lock against later restoration. The macOS pins cover initial ordering,
+native snapshots, admission, and an end-editing text-bridge observer that
+retires the target. These pins require Tahoe runtime verification; Linux suites
+do not compile this rail.
