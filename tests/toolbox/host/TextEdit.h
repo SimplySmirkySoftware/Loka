@@ -25,6 +25,7 @@ struct TERec
   bool autoView;
   bool active;
   int idleCalls;
+  short caretState;
   std::vector<HostTECompletion> keyCompletions, clickCompletions, idleCompletions;
 };
 typedef TERec **TEHandle;
@@ -57,6 +58,8 @@ namespace toolbox_host
   extern unsigned corruptSets, refuseReads;
   extern int copied, sets, disposals, failSets, failNew, updates, selections;
   extern unsigned invalidations;
+  extern std::vector<Rect> invalidatedRects;
+  extern void (*afterIdle)(TEHandle);
   extern GrafPtr activationPort, deactivationPort;
 }
 #endif

@@ -265,25 +265,6 @@ namespace
     LOKA_VERIFY(state.y == baseline.y);
   }
 
-  void zStackPin(ToolboxScenePlatformController &controller, bool handler)
-  {
-    ZStackNode stack((ZStackProps()));
-    Probe *a = new Probe(7);
-    Probe *b = new Probe(11);
-    stack.addChild(a);
-    stack.addChild(b);
-    LOKA_VERIFY((controller.registry.find(&stack) != 0) == handler);
-    LayoutState state;
-    state.x = 10; state.y = 20; state.width = 80; state.height = 60;
-    const short width = LayoutNode(&stack, state, &controller, 0);
-    LOKA_VERIFY(a->calls == 1 && b->calls == 1);
-    LOKA_VERIFY(a->offer.x == 10 && b->offer.x == 10);
-    LOKA_VERIFY(a->offer.y == 20 && b->offer.y == 20);
-    LOKA_VERIFY(a->offer.width == 80 && b->offer.width == 80);
-    LOKA_VERIFY(a->offer.height == 60 && b->offer.height == 60);
-    LOKA_VERIFY(width == 23 && state.y == 31);
-  }
-
   void scrollRangePin(ToolboxScenePlatformController &controller, bool handler, bool refuses)
   {
     StackNode column((StackProps(STACK_AXIS_COLUMN).gap(0)));
@@ -494,11 +475,6 @@ int main(int argc, char **argv)
   if (std::strcmp(mode, "derived-column") == 0 || std::strcmp(mode, "derived-row") == 0)
   {
     derivedStackPin(controller, std::strcmp(mode, "derived-row") == 0);
-    return 0;
-  }
-  if (std::strcmp(mode, "zstack") == 0)
-  {
-    zStackPin(controller, handler);
     return 0;
   }
   if (argc == 4)

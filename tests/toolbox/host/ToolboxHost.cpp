@@ -20,6 +20,8 @@ namespace toolbox_host
   std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
   unsigned invalidations = 0;
+  std::vector<Rect> invalidatedRects;
+  void (*afterIdle)(TEHandle) = 0;
   GrafPtr activationPort = 0, deactivationPort = 0;
   int failRegions = 0;
   int regions = 0;
@@ -148,7 +150,8 @@ void MoveTo(short x, short y)
 }
 void DrawText(const void *bytes, short offset, short length)
 {
-  const toolbox_host::Draw draw = {penX,
+  const toolbox_host::Draw draw = {toolbox_host::currentClip(),
+                                   penX,
                                    penY,
                                    port->txSize,
                                    port->txFace,
@@ -255,6 +258,7 @@ TEHandle TENew(const Rect *dest, const Rect *view)
   (**te).autoView = false;
   (**te).active = false;
   (**te).idleCalls = 0;
+  (**te).caretState = 0;
   TECalText(te);
   return te;
 }
@@ -437,6 +441,8 @@ void TEIdle(TEHandle te)
 {
   ++(**te).idleCalls;
   ApplyTECompletion(te, (**te).idleCompletions);
+  if (toolbox_host::afterIdle)
+    toolbox_host::afterIdle(te);
 }
 bool PtInRect(Point p, const Rect *r)
 {
@@ -449,6 +455,7 @@ namespace toolbox_host { GrafPtr frontWindow = 0; }
 
 // Compile the real plain leaf alongside the real attributed leaf in this fixture.
 #include "context/ToolboxTextContext.cpp"
+#include "ToolboxTextHitPaint.cpp"
 void DrawString(const unsigned char *text)
 {
   toolbox_host::pascalDraws.push_back(HostPascalBytes(text));
@@ -490,10 +497,13 @@ namespace
 {
   short MaxExplicitControlId(loka::app::scene::Node *) { return 0; }
 #ifndef LOKA_HOST_GAP_DISPATCH
-  void LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &state,
-                  ToolboxScenePlatformController *controller, loka::app::scene::BoundaryNode *)
+  short LayoutNode(loka::app::scene::Node *node,
+                   loka::app::scene::LayoutState &state,
+                   ToolboxScenePlatformController *controller,
+                   loka::app::scene::BoundaryNode *)
   {
-    if (!node) return;
+    if (!node)
+      return 0;
     loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode();
     if (surface)
       controller->rectSurfaceExtentLedger_.record(surface, loka::core::Frame(0, 0, state.width, state.height));
@@ -501,6 +511,7 @@ namespace
     for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0;
          child; child = child->nextInComposition)
       LayoutNode(child, state, controller, 0);
+    return state.width;
   }
   void RenderNode(loka::app::scene::Node *node, ToolboxScenePlatformController *controller)
   {
@@ -526,6 +537,7 @@ namespace
 #endif
 }
 #include "core/Profiler.hpp"
+#include "ToolboxZStack.cpp"
 #include "ToolboxRender.cpp"
 #ifdef LOKA_HOST_EDITOR_SCROLL
 #include "ToolboxDirtyReplay.hpp"
@@ -539,8 +551,21 @@ namespace
   {
     return false;
   }
-  bool HasRectSurfaceNode(loka::app::scene::Node *)
+  bool HasRectSurfaceNode(loka::app::scene::Node *node)
   {
+#ifdef LOKA_HOST_ZSTACK_UNITS
+    if (!node)
+      return false;
+    if (node->asRectSurfaceNode())
+      return true;
+    loka::app::scene::INestable *nestable = node->asNestable();
+    for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child;
+         child = child->nextInComposition)
+      if (HasRectSurfaceNode(child))
+        return true;
+#else
+    (void)node;
+#endif
     return false;
   }
   void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
@@ -687,7 +712,9 @@ namespace
   };
 } // namespace
 #include "ToolboxButtonControl.cpp"
+#include "ToolboxEnabledControls.cpp"
 #include "ToolboxContextProps.cpp"
+#ifndef LOKA_HOST_GAP_DISPATCH
 namespace
 {
   void RenderChildren(loka::app::scene::INestable *node, ToolboxScenePlatformController *controller)
@@ -696,5 +723,6 @@ namespace
       RenderNode(child, controller);
   }
 } // namespace
+#endif
 #include "ToolboxScrollViewRender.cpp"
 #endif

@@ -1034,7 +1034,7 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
         previousUnit = unit->view();
         loka::app::scene::ProjectionParentScope unitFrame;
         const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();
-        // AppKit native parentage clips; the unit inherits the viewport channel.
+        // AppKit native parentage clips; the stack supplies the unit channel.
         if (!parentScope.deriveScrolled(unit->view(),
                                         projected.x,
                                         projected.y,

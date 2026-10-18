@@ -117,24 +117,6 @@ namespace
     }
   };
 
-  class ToolboxZStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
-  {
-  public:
-    virtual const void *nodeTypeKey() const
-    {
-      return loka::app::scene::NodeTypeToken<loka::app::ZStackNode>();
-    }
-
-    virtual int layoutNode(loka::app::scene::Node *node,
-                           const loka::app::scene::LayoutState &state,
-                           loka::app::scene::IPlatformLayoutTraversal *traversal,
-                               const loka::app::layout::LazyWindow * = 0,
-                               loka::app::layout::StackSpans * = 0)
-    {
-      return ComputeToolboxZStackLayout(node ? node->asZStackNode() : 0, state, traversal);
-    }
-  };
-
   class ToolboxStackLayoutHandler : public loka::app::scene::IPlatformLayoutHandler
   {
   public:
@@ -294,39 +276,6 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
     traversal->setLayoutResultY(currentY);
     return width;
   }
-}
-
-int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
-                               const loka::app::scene::LayoutState &state,
-                               loka::app::scene::IPlatformLayoutTraversal *traversal)
-{
-  if (!stack || !traversal)
-  {
-    return 0;
-  }
-
-  short maxWidth = 0;
-  short maxY = state.y;
-  if (loka::app::scene::INestable *nestable = stack->asNestable())
-  {
-    loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-    for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-    {
-      loka::app::scene::LayoutState childState = state;
-      const int width = DispatchTraversalLayoutChild(traversal, child, childState);
-      if (width > maxWidth)
-      {
-        maxWidth = static_cast<short>(width);
-      }
-      const short childResultY = traversal->layoutResultY();
-      if (childResultY > maxY)
-      {
-        maxY = childResultY;
-      }
-    }
-  }
-  traversal->setLayoutResultY(maxY);
-  return maxWidth;
 }
 
 int ComputeToolboxGridLayout(loka::app::GridNode *grid,
@@ -594,7 +543,6 @@ bool RegisterToolboxPlatformLayoutHandlers(loka::app::scene::PlatformLayoutHandl
   bool ok = registry.registerHandler(new ToolboxBoxLayoutHandler());
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::RibbonGroupNode>()) && ok;
   ok = registry.registerHandler(new ToolboxFramedLayoutHandler<loka::app::CardNode>()) && ok;
-  ok = registry.registerHandler(new ToolboxZStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxStackLayoutHandler()) && ok;
   ok = registry.registerHandler(new ToolboxGridLayoutHandler()) && ok;
   return ok;
