@@ -174,6 +174,10 @@ int main(int argc, char **argv)
   // picks the material from the running AppKit.
   if (!std::getenv("LOKA_PROBE_NO_BLUR"))
     setenv("LOKA_PROBE_EXP_BLUR", "1", 0);
+  // 10.5-10.9 filters are fixed (RGB tint, always-masking backing layer), so the
+  // sample turns them on too; LOKA_PROBE_NO_LEGACY_FILTERS=1 keeps the opaque bar there.
+  if (!std::getenv("LOKA_PROBE_NO_BLUR") && !std::getenv("LOKA_PROBE_NO_LEGACY_FILTERS"))
+    setenv("LOKA_PROBE_LEGACY_FILTERS", "1", 0);
   const char *snapshot = std::getenv("LOKA_PROBE_SNAPSHOT");
   if (snapshot)
   {

@@ -96,7 +96,7 @@ namespace loka
 - (void)setLayer:(CALayer *)layer
 {
   std::fprintf(stderr, "probe: setLayer %s\n", layer ? [NSStringFromClass([layer class]) UTF8String] : "nil");
-  if (layer && std::getenv("LOKA_PROBE_SUBST_LAYER") && ![layer isKindOfClass:[LokaMaskedBackingLayer class]])
+  if (layer && !std::getenv("LOKA_PROBE_NO_SUBST_LAYER") && ![layer isKindOfClass:[LokaMaskedBackingLayer class]])
   {
     CALayer *masked = [LokaMaskedBackingLayer layer];
     [masked setMasksToBounds:YES];
