@@ -12,6 +12,7 @@ loka_target_manifest() {
     "LokaSimpleViewerMacOS|default,standalone-release|bundle|example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS" \
     "LokaSimpleTextMacOS|default,standalone-release|bundle|example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS" \
     "LokaSmirkyCardMacOS|standalone-release|bundle|example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS" \
+    "LokaCardShowcaseMacOS|explicit|bundle|example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS" \
     "LokaSmirkBenchMacOS|default|executable|example/SmirkBench/LokaSmirkBenchMacOS" \
     "LokaLazyListMacOS|default|executable|example/LazyList/LokaLazyListMacOS" \
     "ScrapbookUIMacOS|default|bundle|example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS" \
