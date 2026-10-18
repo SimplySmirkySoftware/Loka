@@ -88,6 +88,10 @@ namespace loka
               out.set("document", current.c_str());
               out.set("roman.positive.control", ok ? "inserted" : "failed");
               out.setInt("key.script", GetScriptManagerVariable(smKeyScript));
+              // Drop focus before completion so a blinking caret cannot keep
+              // the capture from settling (text-editor-keys does the same).
+              Point outside = {0, 0};
+              (void)ToolboxInputDoor::mouseDown(controller, outside);
               return SCENARIO_ADVANCE_DRIVER_COMPLETION_READY;
             }
             else
