@@ -96,7 +96,16 @@ namespace loka
     NSColor *ground = nil;
     if (loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground))
     {
-      [[ground colorWithAlphaComponent:0.6] set];
+      // DIAG: 10.9 painted the bar black: windowBackgroundColor is a pattern
+      // color there, and a pattern drawn into a layer-backed view comes out
+      // black. Convert to calibrated RGB (pattern colors refuse and fall back to
+      // a plain light gray). LOKA_PROBE_NO_TINT=1 skips the tint entirely.
+      if (std::getenv("LOKA_PROBE_NO_TINT"))
+        return;
+      NSColor *rgb = std::getenv("LOKA_PROBE_TINT_RAW") ? ground : [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+      if (!rgb)
+        rgb = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
+      [[rgb colorWithAlphaComponent:0.6] set];
       NSRectFillUsingOperation([self bounds], LOKA_MAC_COMPOSITING_SOURCE_OVER);
     }
   }
