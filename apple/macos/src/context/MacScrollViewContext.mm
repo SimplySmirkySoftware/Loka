@@ -210,7 +210,7 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
     return;
   }
   loka::macos::SetMacFrame(scrollView,
-      this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
+                           this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
   // The document frame is not touched here: it is part of the metrics that
   // commit only after the traversal succeeds, so a refused pass leaves the
   // previous document and scroller metrics intact; restoring notifications
