@@ -81,6 +81,9 @@ namespace
 {
   bool MenuBarTransparency()
   {
+    // PROBE ONLY: compare against the window ground without touching the user's defaults.
+    if (ProbeEnabled("LOKA_PROBE_NO_BLUR"))
+      return false;
     NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
     id value = [global objectForKey:@"AppleEnableMenuBarTransparency"];
     return !value || ![value respondsToSelector:@selector(boolValue)] || [value boolValue];
