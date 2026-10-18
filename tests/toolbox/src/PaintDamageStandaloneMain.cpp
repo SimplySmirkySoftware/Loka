@@ -244,9 +244,10 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      composition.declare(Box().size(180, 110) << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
-                                                                << RectSurface(this->model_.state()).size(150, 70)
-                                                                << AttributedText(Styled("Replay membership", loka::app::TextStyle()))));
+      composition.declare(Box().size(180, 110)
+                          << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
+                                           << RectSurface(this->model_.state()).size(150, 70)
+                                           << AttributedText(Styled("Replay membership", loka::app::TextStyle()))));
     }
     void advance()
     {
@@ -1337,16 +1338,26 @@ namespace
                                    DrawerDamageNode<CELL_OVERFLOW>::Props(), 0))
                                .visible(false).idlePolicy(IdlePolicy::everyTick())
                                .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->overflowWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 160).title("Image vacated")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<ImageVacatedProps, ImageVacatedNode>(
-                                   ImageVacatedProps(), 0))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->imageVacatedWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Edit exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<EditExactProps, EditExactNode>(
-                                   EditExactProps(), &this->editExact_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->editExactWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 160)
+              .title("Image vacated")
+              .scene(loka::scenario_tests::ObservedMainDefinition<ImageVacatedProps, ImageVacatedNode>(
+                  ImageVacatedProps(), 0))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->imageVacatedWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Edit exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<EditExactProps, EditExactNode>(EditExactProps(),
+                                                                                                 &this->editExact_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->editExactWindow_);
       composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Popup exact")
                                .scene(loka::scenario_tests::ObservedMainDefinition<PopupExactProps, PopupExactNode>(
                                    PopupExactProps(), &this->popupExact_))

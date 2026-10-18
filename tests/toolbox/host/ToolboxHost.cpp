@@ -668,9 +668,10 @@ void PaintRect(const Rect *rect)
 void ToolboxScenePlatformController::flushControls()
 {
   // Same shared intake as the production flush; unrelated button pooling is
-  // outside this fixture, so its queue uses a zero-capacity bucket.
+  // outside this fixture, so drain the temporary bucket before it dies.
   loka::app::scene::ExactMatchHandleBucket<ControlRef> buttons(0);
   this->flushRetiredEntriesInto(this->retiredControls_, buttons);
+  buttons.drainWith(DisposeControl);
   this->flushRetiredEntriesInto(this->retiredScrollBarControls_, this->scrollBarLedger_.scrollBarBucket_);
 }
 #include "ToolboxControlFake.cpp"

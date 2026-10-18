@@ -48,10 +48,27 @@ namespace
       }
     LOKA_VERIFY(painted == 1);
   }
+  /** Declared before the controller so its check runs after queue/pool drain. */
+  class ControlCleanupCheck
+  {
+  public:
+    explicit ControlCleanupCheck(ToolboxWindow &window)
+        : window_(window)
+    {
+    }
+    ~ControlCleanupCheck()
+    {
+      LOKA_VERIFY(this->window_.window()->native.controls.empty());
+    }
+
+  private:
+    ToolboxWindow &window_;
+  };
   void button(const char *mode)
   {
     ToolboxWindow window;
     HostPortScope port(window.window());
+    ControlCleanupCheck cleanup(window);
     ToolboxScenePlatformController controller(&window);
     Scene scene((Boundary<OrderNode>(OrderProps())));
     scene.mount(&controller);
@@ -125,7 +142,7 @@ namespace
         LOKA_VERIFY(control->visible && controller.buttonControls_[0].label == "First");
       }
     }
-    // Host retirement uses the shared bulk teardown while the contexts live.
+    // Strip borrowed contexts while their nodes are still alive.
     controller.clearControls();
     controller.rootNode_ = 0;
     Access::unmount(scene);
@@ -134,6 +151,7 @@ namespace
   {
     ToolboxWindow window;
     HostPortScope port(window.window());
+    ControlCleanupCheck cleanup(window);
     ToolboxScenePlatformController controller(&window);
     ScrollBarNode node(ScrollBarProps().range(0, 100));
     ToolboxScrollBarContext context(&node, &controller);
@@ -162,11 +180,14 @@ namespace
     toolbox_host::controlCalls = toolbox_host::ControlCalls();
     context.render(&controller);
     LOKA_VERIFY(toolbox_host::controlCalls.draws == 0);
+    // Strip borrowed contexts while their nodes are still alive.
+    controller.clearControls();
   }
   void viewport()
   {
     ToolboxWindow window;
     HostPortScope port(window.window());
+    ControlCleanupCheck cleanup(window);
     ToolboxScenePlatformController controller(&window);
     ScrollViewNode scroll((ScrollViewProps()));
     scroll.addChild(new RectSurfaceNode(RectSurfaceProps()));
@@ -228,6 +249,7 @@ namespace
       const Rect restoredOnRefusal = toolbox_host::currentClip();
       LOKA_VERIFY(EqualRect(&restoredOnRefusal, &outer));
     }
+    // Strip borrowed contexts while their nodes are still alive.
     controller.clearControls();
   }
 } // namespace
