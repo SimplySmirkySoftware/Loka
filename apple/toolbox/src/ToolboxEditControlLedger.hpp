@@ -83,6 +83,11 @@ public:
     return focused_.resolve(bindings_);
   }
 
+  bool queryFocusedIndex(std::size_t &out) const
+  {
+    return focused_.query(bindings_.size(), out);
+  }
+
   void focus(std::size_t index)
   {
     focused_.focus(index);

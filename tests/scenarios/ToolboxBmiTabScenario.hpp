@@ -11,6 +11,12 @@ namespace loka
 {
   namespace scenario_tests
   {
+    /** The Toolbox-only HelloWorld cell; it never joins the shared reel. */
+    inline bool IsToolboxBmiTabScenario(const std::string &name)
+    {
+      return name == "bmi-tab";
+    }
+
     /** Observes real ADB input supplied by Lua; never injects traversal keys. */
     class ToolboxBmiTabScenario
     {

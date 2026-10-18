@@ -1623,9 +1623,9 @@ are outside the contract and get no repair, leaving selection highlight,
 TEActivate/TEDeactivate paint, and TrackControl hilite on screen until an unrelated
 repaint presents the unit area. On macOS, units are ordered relative to their own
 ZStack only; later siblings or another ZStack's units in the same parent may sit above them, with
-geometry keeping their seats apart. On Toolbox, Tab and Shift-Tab traverse visible native EditText rows by top, left,
-and ledger tie-break, wrapping and selecting all; TextEditor and fallback hits
-are excluded (see [Toolbox Tab traversal](FocusDesign.md#toolbox-tab-traversal-1461)).
+geometry keeping their seats apart. On Toolbox, Tab and Shift-Tab move between the visible EditText fields from
+top to bottom and left to right, wrap at the ends, and select the text of the field they land on; a TextEditor
+is not part of that loop (see [Toolbox Tab traversal](FocusDesign.md#toolbox-tab-traversal-1461)).
 On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 

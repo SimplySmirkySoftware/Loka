@@ -406,7 +406,8 @@ namespace loka
               const scenario_tests::CaptureContentBounds captureBounds = QueryCaptureContentBounds(window);
               ToolboxWindow *native = window->asToolboxWindow();
               const scenario_tests::ScenarioAdvance advance =
-                  this->scenario_.name() == "bmi-tab" && native && native->scenePlatformController()
+                  scenario_tests::IsToolboxBmiTabScenario(this->scenario_.name()) && native
+                          && native->scenePlatformController()
                       ? this->tabScenario_.advance(
                             elapsedSeconds, window->scene(), *native->scenePlatformController(), record)
                   : this->startup_ ? this->startupScenario_.step(
@@ -500,7 +501,8 @@ namespace loka
       }
       if (!settings.hasScenario
           || (!scenario_tests::IsStartupScenario(settings.scenario)
-              && !scenario_tests::IsHelloWorldScenario(settings.scenario) && settings.scenario != "bmi-tab"))
+              && !scenario_tests::IsHelloWorldScenario(settings.scenario)
+              && !scenario_tests::IsToolboxBmiTabScenario(settings.scenario)))
       {
         (void)WriteScenarioErrorAudit(
             settings.hasScenario ? settings.scenario.c_str() : kDefaultScenarioName,

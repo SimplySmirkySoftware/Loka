@@ -125,8 +125,8 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
   if (!this->window_->queryPortRect(portRect))
     return false;
   const std::size_t count = this->editControls_.size();
-  // The ledger stores contiguous rows; resolve the origin without a second walk.
-  const std::size_t origin = focused ? static_cast<std::size_t>(focused - &this->editControls_[0]) : count;
+  std::size_t origin = count;
+  const bool hasOrigin = this->editControls_.queryFocusedIndex(origin);
   std::size_t edge = count;
   std::size_t next = count;
   const bool forward = direction == TAB_FORWARD;
@@ -146,9 +146,9 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
         || (forward ? TabKeyBefore(row.rect, i, this->editControls_[edge].rect, edge)
                     : TabKeyBefore(this->editControls_[edge].rect, edge, row.rect, i)))
       edge = i;
-    if (origin != count
-        && (forward ? TabKeyBefore(focused->rect, origin, row.rect, i)
-                    : TabKeyBefore(row.rect, i, focused->rect, origin))
+    if (hasOrigin
+        && (forward ? TabKeyBefore(this->editControls_[origin].rect, origin, row.rect, i)
+                    : TabKeyBefore(row.rect, i, this->editControls_[origin].rect, origin))
         && (next == count
             || (forward ? TabKeyBefore(row.rect, i, this->editControls_[next].rect, next)
                         : TabKeyBefore(this->editControls_[next].rect, next, row.rect, i))))
