@@ -31,6 +31,9 @@ $Vehicles = @{
 if ($Example -eq "smirkbench" -and $Scenario -notin @("startup", "attributed-editor-line")) {
     throw "SmirkBench scenario is Toolbox-only: $Scenario"
 }
+if ("$Example/$Scenario" -eq "helloworld/bmi-tab") {
+    throw "HelloWorld bmi-tab is Toolbox-only"
+}
 $BuiltExecutable = $null
 $Lrpc = Join-Path $ProjectDirectory "build/host/lrpc/lrpc.exe"
 $MultiConfigLrpc = Join-Path $ProjectDirectory "build/host/lrpc/Debug/lrpc.exe"

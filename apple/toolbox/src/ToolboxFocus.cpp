@@ -1,4 +1,5 @@
 #include "ToolboxEditKey.hpp"
+#include "ToolboxPortScope.hpp"
 #include "platform/ToolboxPascalText.hpp"
 #include "platform/ToolboxMacRoman.hpp"
 #include "core/StringAccess.hpp"
@@ -8,6 +9,20 @@
 
 namespace
 {
+  template <class Row> bool AcceptsNativeFocus(const Row &row)
+  {
+    return row.usedThisFrame && row.te && !EmptyRect(&row.rect);
+  }
+
+  bool TabKeyBefore(const Rect &a, std::size_t aIndex, const Rect &b, std::size_t bIndex)
+  {
+    if (a.top != b.top)
+      return a.top < b.top;
+    if (a.left != b.left)
+      return a.left < b.left;
+    return aIndex < bIndex;
+  }
+
   ToolboxEditKey OrdinaryEditKey(char key)
   {
     const unsigned char byte = static_cast<unsigned char>(key);
@@ -77,7 +92,7 @@ bool ToolboxScenePlatformController::applyNativeFocus(loka::app::scene::NodeCont
   if (this->editControls_.find(&ctx, index))
   {
     const EditTextControlBinding &binding = this->editControls_[index];
-    if (!binding.usedThisFrame || !binding.te || EmptyRect(&binding.rect))
+    if (!AcceptsNativeFocus(binding))
       return false;
     // Activation copies native handles before calling TextEdit; no ctx access follows.
     this->activateEditControl(index);
@@ -97,6 +112,60 @@ bool ToolboxScenePlatformController::applyNativeFocus(loka::app::scene::NodeCont
     return true;
   }
   return false;
+}
+
+bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
+{
+  if (!this->window_ || !this->window_->window())
+    return false;
+  const EditTextControlBinding *focused = this->editControls_.focused();
+  if (focused && focused->editor)
+    return false;
+  Rect portRect;
+  if (!this->window_->queryPortRect(portRect))
+    return false;
+  const std::size_t count = this->editControls_.size();
+  // The ledger stores contiguous rows; resolve the origin without a second walk.
+  const std::size_t origin = focused ? static_cast<std::size_t>(focused - &this->editControls_[0]) : count;
+  std::size_t edge = count;
+  std::size_t next = count;
+  const bool forward = direction == TAB_FORWARD;
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    const EditTextControlBinding &row = this->editControls_[i];
+    if (!AcceptsNativeFocus(row) || row.editor != 0)
+      continue;
+    loka::app::scene::Node *owner = row.ownerContext ? row.ownerContext->owner() : 0;
+    if (!owner || owner->getContext() != row.ownerContext
+        || owner->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+      continue;
+    Rect visible;
+    if (!SectRect(&row.rect, &portRect, &visible))
+      continue;
+    if (edge == count
+        || (forward ? TabKeyBefore(row.rect, i, this->editControls_[edge].rect, edge)
+                    : TabKeyBefore(this->editControls_[edge].rect, edge, row.rect, i)))
+      edge = i;
+    if (origin != count
+        && (forward ? TabKeyBefore(focused->rect, origin, row.rect, i)
+                    : TabKeyBefore(row.rect, i, focused->rect, origin))
+        && (next == count
+            || (forward ? TabKeyBefore(row.rect, i, this->editControls_[next].rect, next)
+                        : TabKeyBefore(this->editControls_[next].rect, next, row.rect, i))))
+      next = i;
+  }
+  const std::size_t target = next != count ? next : edge;
+  if (target == count)
+    return false;
+  TEHandle te = this->editControls_[target].te;
+  const Rect rect = this->editControls_[target].rect;
+  this->activateEditControl(target);
+  {
+    ToolboxPortScope port(this->window_->window());
+    TESetSelect(0, (**te).teLength, te);
+  }
+  this->invalidateUnitOverlap(rect);
+  return true;
 }
 
 bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)

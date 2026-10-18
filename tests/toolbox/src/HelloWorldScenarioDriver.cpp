@@ -10,6 +10,7 @@
 #include "StartupScenarios.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxWindow.hpp"
+#include "ToolboxBmiTabScenario.hpp"
 #include "app/PlatformContext.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "app/core/App.hpp"
@@ -403,11 +404,15 @@ namespace loka
             else
             {
               const scenario_tests::CaptureContentBounds captureBounds = QueryCaptureContentBounds(window);
+              ToolboxWindow *native = window->asToolboxWindow();
               const scenario_tests::ScenarioAdvance advance =
-                  this->startup_ ? this->startupScenario_.step(
-                                       this->tickCount_, window->scene(), ContentLocalBounds(captureBounds), record)
-                                 : this->scenario_.step(
-                                       this->tickCount_, window->scene(), ContentLocalBounds(captureBounds), record);
+                  this->scenario_.name() == "bmi-tab" && native && native->scenePlatformController()
+                      ? this->tabScenario_.advance(
+                            elapsedSeconds, window->scene(), *native->scenePlatformController(), record)
+                  : this->startup_ ? this->startupScenario_.step(
+                                         this->tickCount_, window->scene(), ContentLocalBounds(captureBounds), record)
+                                   : this->scenario_.step(
+                                         this->tickCount_, window->scene(), ContentLocalBounds(captureBounds), record);
               switch (advance)
               {
               case scenario_tests::SCENARIO_ADVANCE_PENDING:
@@ -473,6 +478,7 @@ namespace loka
         dsl::testing::ScenarioAuditFile audit_;
         scenario_tests::StartupScenario startupScenario_;
         scenario_tests::HelloWorldScenario scenario_;
+        scenario_tests::ToolboxBmiTabScenario tabScenario_;
         App *borrowedApp_;
         bool recorded_;
         long tickCount_;
@@ -494,7 +500,7 @@ namespace loka
       }
       if (!settings.hasScenario
           || (!scenario_tests::IsStartupScenario(settings.scenario)
-              && !scenario_tests::IsHelloWorldScenario(settings.scenario)))
+              && !scenario_tests::IsHelloWorldScenario(settings.scenario) && settings.scenario != "bmi-tab"))
       {
         (void)WriteScenarioErrorAudit(
             settings.hasScenario ? settings.scenario.c_str() : kDefaultScenarioName,

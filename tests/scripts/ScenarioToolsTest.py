@@ -227,11 +227,22 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         declarations = golden_identity_guard.read_declarations(root / "tests/scenarios/startup-golden-identities.txt")
         self.assertNotIn(("smirkbench", "attributed-editor-line"), [cell for cell, _ in declarations])
 
+    def test_bmi_tab_is_toolbox_only(self):
+        root = pathlib.Path(PROJECT_DIR)
+        shared = (root / "tests/scenarios/HelloWorldScenarios.cpp").read_text()
+        self.assertNotIn('"bmi-tab"', shared)
+        for rail in ("tests/macos/run-scenario.sh", "tests/win32/run-scenario.ps1"):
+            self.assertIn("helloworld/bmi-tab", (root / rail).read_text())
+        audit = (root / "tests/scenarios/expected/helloworld/bmi-tab.audit").read_text()
+        self.assertIn("height.text\t3\n", audit)
+        self.assertIn("weight.text\t2\n", audit)
+        self.assertIn("focused.field\theight\n", audit)
+
     def test_expected_audits_cover_registry_and_pin_app_identity(self):
         registry = os.path.join(PROJECT_DIR, "tests", "scenarios", "scenarios.txt")
         with open(registry, "r", encoding="utf-8") as handle:
             entries = [line.split() for line in handle.read().splitlines()]
-        self.assertEqual(len(entries), 36)
+        self.assertEqual(len(entries), 37)
         self.assertEqual(len(entries), len({tuple(entry) for entry in entries}))
         self.assertEqual(
             [entry for entry in entries if entry[0] == "simpleviewer"],

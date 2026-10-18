@@ -8,4 +8,5 @@ private:
   bool handleMouseDown(const Point &point);
   bool handleKeyDown(char key);
   bool handleScrollKey(ToolboxScrollKey key);
+  bool handleTabKey(ToolboxTabDirection direction);
   void idleTextEdits();
