@@ -210,6 +210,10 @@ void testMacFocusReadAndCompletion()
         static_cast<MacScenePlatformController *>(SceneAccess::platformController(scene));
     NodeContext *read = 0;
 
+    // The content view takes the window's keys while no field is focused, but it
+    // is no Tab stop: a stop there leaves the loop with no focus ring (#1461).
+    NSView *contentView = (NSView *)NativeAccess::contentView(*window);
+    LOKA_VERIFY([contentView acceptsFirstResponder] && ![contentView canBecomeKeyView]);
     // Class-checked hops need no key status: each resolves only a marked native
     // participant through its typed delegate owner.
     LOKA_VERIFY(MacEditTextContext::fromNativeFocus(first) == firstNode->getContext());
@@ -255,6 +259,41 @@ void testMacFocusReadAndCompletion()
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(2u)));
       // Shift-Tab walks the same loop back.
       [(NSTextView *)[second currentEditor] insertBacktab:nil];
+      LOKA_VERIFY([first currentEditor] != nil);
+      app.flushInvalidationsTick();
+      LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
+      // From the first field it wraps straight to the last participant, and
+      // the window's step past the last participant wraps to the first field.
+      [(NSTextView *)[first currentEditor] insertBacktab:nil];
+      LOKA_VERIFY([native firstResponder] == textEditor);
+      app.flushInvalidationsTick();
+      LOKA_VERIFY(!(facts.focus.state()->get() != Fact(3u)));
+      [native selectKeyViewFollowingView:textEditor];
+      LOKA_VERIFY([first currentEditor] != nil);
+      app.flushInvalidationsTick();
+      LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
+      // With no field focused the content view holds the window's keys, and a
+      // Tab key-down delivered there still lands on the first field.
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && (MAC_OS_X_VERSION_MAX_ALLOWED >= 101200)
+      const NSEventType keyDownType = NSEventTypeKeyDown;
+#else
+      const NSEventType keyDownType = NSKeyDown;
+#endif
+      LOKA_VERIFY([native makeFirstResponder:contentView]);
+      LOKA_VERIFY([first currentEditor] == nil);
+      app.flushInvalidationsTick();
+      LOKA_VERIFY(!(facts.focus.state()->get() != Fact::none()));
+      NSEvent *tab = [NSEvent keyEventWithType:keyDownType
+                                      location:NSZeroPoint
+                                 modifierFlags:0
+                                     timestamp:0
+                                  windowNumber:[native windowNumber]
+                                       context:nil
+                                    characters:@"\t"
+                   charactersIgnoringModifiers:@"\t"
+                                     isARepeat:NO
+                                       keyCode:48];
+      [native sendEvent:tab];
       LOKA_VERIFY([first currentEditor] != nil);
       app.flushInvalidationsTick();
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
@@ -346,16 +385,18 @@ void testMacFocusReadAndCompletion()
       app.flushInvalidationsTick();
       LOKA_VERIFY(!(facts.focus.state()->get() != Fact(1u)));
       std::printf("[pin] macOS focus with a key window: raw read and publication at completion, Tab, "
-                  "rebuild, HELD across key loss, TextEditor publication, unmarked responder, click.\n");
+                  "Shift-Tab, the loop wrapping both ways, Tab from no field, rebuild, HELD across key loss, "
+                  "TextEditor publication, unmarked responder, click.\n");
       std::fflush(stdout);
     }
     else
     {
       std::printf("[skip] macOS focus pins that need a key window (raw read and publication at "
-                  "completion, Tab, rebuild, HELD across key loss, TextEditor publication, "
-                  "unmarked responder, click): window not key after %.1f s because %s; the "
-                  "class-checked hops and the non-key read still run.\n",
-                  kKeyStatusWaitSeconds, keyRefusalReason());
+                  "completion, Tab, Shift-Tab, the loop wrapping both ways, Tab from no field, rebuild, "
+                  "HELD across key loss, TextEditor publication, unmarked responder, click): window not "
+                  "key after %.1f s because %s; the class-checked hops and the non-key read still run.\n",
+                  kKeyStatusWaitSeconds,
+                  keyRefusalReason());
       std::fflush(stdout);
       // HELD: a window that is not key cannot answer, whoever is its first responder.
       LOKA_VERIFY(!rail->readNativeFocus(read));
