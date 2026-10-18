@@ -93,6 +93,25 @@ namespace
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
+  // PROBE ONLY: the static frosted ground proposed as the 10.4-10.9 default (page 4 v0.4):
+  // window ground, a white sheen fading downward in one-point rows (Tiger has no
+  // NSGradient), and a hairline at the bottom edge. Reads nothing beneath the unit.
+  void PaintStaticFrost(NSRect bounds)
+  {
+    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, bounds);
+    const int rows = static_cast<int>(std::ceil(static_cast<double>(bounds.size.height)));
+    for (int row = 0; row < rows; ++row)
+    {
+      const double t = rows > 1 ? static_cast<double>(row) / (rows - 1) : 0.0;
+      [[NSColor colorWithCalibratedWhite:1.0 alpha:static_cast<CGFloat>(0.55 * (1.0 - t) + 0.08 * t)] set];
+      NSRectFillUsingOperation(NSMakeRect(NSMinX(bounds), NSMinY(bounds) + row, NSWidth(bounds), 1),
+                               LOKA_MAC_COMPOSITING_SOURCE_OVER);
+    }
+    [[NSColor colorWithCalibratedWhite:0.0 alpha:0.22] set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(bounds), NSMaxY(bounds) - 1, NSWidth(bounds), 1),
+                             LOKA_MAC_COMPOSITING_SOURCE_OVER);
+  }
+
   void PaintBlurTint(NSRect bounds)
   {
     NSColor *ground = nil;
@@ -265,6 +284,14 @@ namespace
 }
 - (void)drawRect:(NSRect)rect
 {
+  // PROBE ONLY: static frosted ground unless the live blur switch is on
+  // (launch argument -LokaExpLiveBlur YES, or the user default of that name).
+  if (![[NSUserDefaults standardUserDefaults] boolForKey:@"LokaExpLiveBlur"])
+  {
+    (void)rect;
+    PaintStaticFrost([self bounds]);
+    return;
+  }
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   const double elapsed = ProbeMilliseconds(mach_absolute_time() - kProbeLaunch);
   const bool logging = ProbeEnabled("LOKA_PROBE_UNIT_LOG");
