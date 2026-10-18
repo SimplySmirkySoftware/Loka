@@ -141,3 +141,12 @@ short TrackControl(ControlRef c, Point, ControlActionUPP action)
   }
   return script.release;
 }
+
+#ifdef LOKA_HOST_CONTROL_WIDTH
+void SetControlTitle(ControlRef control, const unsigned char *text)
+{
+  toolbox_host::controlTitles.push_back(std::string(reinterpret_cast<const char *>(text + 1), text[0]));
+  if (control)
+    RecordControl(control, "title", control->visible);
+}
+#endif

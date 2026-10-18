@@ -108,6 +108,7 @@ void ToolboxScrollBarContext::draw(ToolboxScenePlatformController *controller)
   {
     if (controller->ensureScrollBarControl(resourceId_, rect_, node_->props, lifetimeHint()))
     {
+      controller->drawScrollBarControl(resourceId_);
       return;
     }
   }

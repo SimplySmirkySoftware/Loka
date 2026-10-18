@@ -1857,5 +1857,17 @@ void testMacTextEditorDetachHidesAndRetireRemoves()
   inner = [[NSAutoreleasePool alloc] init];
   controller.drainNativeRetirements();
   [inner drain];
+  // The controller's queue has released its retain here. 10.9 AppKit keeps one
+  // more reference to a removed NSScrollView until the next run-loop turn
+  // (observed on Mavericks: retainCount 1 after the drain, deallocated after
+  // one turn, with or without first responder); 26.x releases at once. One
+  // bounded turn, so the pin reads the queue's release on both.
+  if (released != 1)
+  {
+    std::printf("[note] TextEditor retire: AppKit deferred the last release to the run loop\n");
+    NSAutoreleasePool *turn = [[NSAutoreleasePool alloc] init];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+    [turn drain];
+  }
   LOKA_VERIFY(released == 1);
 }
