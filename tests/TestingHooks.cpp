@@ -19,8 +19,20 @@ namespace loka
   {
     namespace
     {
+      unsigned macStackUnitViewFailures = 0;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
+    }
+    void failMacStackUnitViews(unsigned count)
+    {
+      macStackUnitViewFailures = count;
+    }
+    bool declineMacStackUnitView()
+    {
+      if (!macStackUnitViewFailures)
+        return false;
+      --macStackUnitViewFailures;
+      return true;
     }
     void failMacCardBitmaps(unsigned count)
     {

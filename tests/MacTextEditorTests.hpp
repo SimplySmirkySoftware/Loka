@@ -20,4 +20,5 @@ void testMacTextEditorPagePriority();
 void testMacTextEditorPageEmptyLine();
 void testMacTextEditorPageGeometryDeclinesWrappedLine();
 
+void testMacTextEditorDetachHidesAndRetireRemoves();
 #endif
