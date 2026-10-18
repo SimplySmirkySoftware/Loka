@@ -3,6 +3,10 @@
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
 #include <new>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
+#include "app/style/StackBlur.hpp"
 
 #ifdef TEST_BUILD
 namespace loka
@@ -10,6 +14,8 @@ namespace loka
   namespace testing
   {
     bool declineMacStackUnitView();
+    bool forceMacStackCPUBlur();
+    int macStackMenuBarTransparency();
   }
 } // namespace loka
 #endif
@@ -39,6 +45,180 @@ namespace loka
 }
 @end
 
+// Runtime declarations keep pre-10.10 SDKs independent of the effect type.
+@interface NSView (LokaStackVisualEffect)
+- (void)setBlendingMode:(NSInteger)mode;
+- (void)setMaterial:(NSInteger)material;
+- (void)setState:(NSInteger)state;
+- (void)setWantsLayer:(BOOL)value;
+@end
+
+namespace
+{
+  bool MenuBarTransparency()
+  {
+#ifdef TEST_BUILD
+    const int overrideValue = loka::testing::macStackMenuBarTransparency();
+    if (overrideValue >= 0)
+      return overrideValue != 0;
+#endif
+    NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+    id value = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+    return !value || ![value respondsToSelector:@selector(boolValue)] || [value boolValue];
+  }
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  void PaintBlurTint(NSRect bounds)
+  {
+    NSColor *ground = nil;
+    loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground);
+    NSColor *rgb = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+    if (!rgb)
+      rgb = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
+    [[rgb colorWithAlphaComponent:0.6] set];
+    NSRectFillUsingOperation(bounds, LOKA_MAC_COMPOSITING_SOURCE_OVER);
+  }
+
+  /** AppKit calls with focus locked. Owns every temporary for one full-bounds
+      draw; O(pixels) storage/work, with the fixed radius of eight pixels. */
+  bool DrawCPUBlur(NSRect bounds)
+  {
+    NSBitmapImageRep *capture = [[NSBitmapImageRep alloc] initWithFocusedViewRect:bounds];
+    const long width = [capture pixelsWide];
+    const long height = [capture pixelsHigh];
+    const size_t bytes = width > 0 && width <= INT_MAX && height > 0 && height <= INT_MAX
+                             ? loka::app::StackBlurScratchBytes(static_cast<int>(width), static_cast<int>(height))
+                             : 0;
+    if (!bytes)
+    {
+      [capture release];
+      return false;
+    }
+    NSBitmapImageRep *rgba = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                     pixelsWide:width
+                                                                     pixelsHigh:height
+                                                                  bitsPerSample:8
+                                                                samplesPerPixel:4
+                                                                       hasAlpha:YES
+                                                                       isPlanar:NO
+                                                                 colorSpaceName:NSCalibratedRGBColorSpace
+                                                                    bytesPerRow:width * 4
+                                                                   bitsPerPixel:32];
+    NSGraphicsContext *context = rgba ? [NSGraphicsContext graphicsContextWithBitmapImageRep:rgba] : nil;
+    unsigned char *scratch = static_cast<unsigned char *>(std::malloc(bytes));
+    bool drawn = false;
+    const long rowBytes = [rgba bytesPerRow];
+    if (context && scratch && [rgba bitmapData] && rowBytes >= width * 4
+        && static_cast<size_t>(rowBytes) <= static_cast<size_t>(-1) / static_cast<size_t>(height))
+    {
+      std::memset([rgba bitmapData], 0, static_cast<size_t>(rowBytes) * height);
+      [NSGraphicsContext saveGraphicsState];
+      [NSGraphicsContext setCurrentContext:context];
+      const BOOL converted = [capture drawInRect:NSMakeRect(0, 0, width, height)];
+      [NSGraphicsContext restoreGraphicsState];
+      if (converted
+          && loka::app::StackBlur([rgba bitmapData],
+                                  static_cast<int>(width),
+                                  static_cast<int>(height),
+                                  static_cast<size_t>(rowBytes),
+                                  8,
+                                  scratch,
+                                  bytes))
+      {
+        // Bitmap reps draw unflipped; restore the flipped unit's orientation.
+        [NSGraphicsContext saveGraphicsState];
+        NSAffineTransform *flip = [NSAffineTransform transform];
+        [flip translateXBy:0 yBy:NSMinY(bounds) + NSMaxY(bounds)];
+        [flip scaleXBy:1 yBy:-1];
+        [flip concat];
+        drawn = [rgba drawInRect:bounds] != NO;
+        [NSGraphicsContext restoreGraphicsState];
+      }
+    }
+    std::free(scratch);
+    [rgba release];
+    [capture release];
+    return drawn;
+  }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+} // namespace
+
+@interface LokaStackEffectUnitView : LokaStackUnitView
+@end
+@implementation LokaStackEffectUnitView
+- (BOOL)isOpaque
+{
+  return NO;
+}
+- (void)drawRect:(NSRect)rect
+{
+  (void)rect; // The bottom effect subview supplies the ground.
+}
+@end
+
+@interface LokaStackCPUUnitView : LokaStackEffectUnitView
+@end
+@implementation LokaStackCPUUnitView
+- (void)drawRect:(NSRect)rect
+{
+  (void)rect;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  if (MenuBarTransparency() && DrawCPUBlur([self bounds]))
+    PaintBlurTint([self bounds]);
+  else
+    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, [self bounds]);
+  [pool release];
+}
+@end
+
+namespace
+{
+  /** Unit admission calls once per missing view; constant work, no row walk.
+      Returns a retained view, whose subviews own the native effect. */
+  NSView *CreateBlurUnit(NSView *parent, NSRect frame)
+  {
+    Class effectClass = NSClassFromString(@"NSVisualEffectView");
+#ifdef TEST_BUILD
+    if (loka::testing::forceMacStackCPUBlur())
+      effectClass = Nil;
+#endif
+    if (!effectClass)
+      return [[LokaStackCPUUnitView alloc] initWithFrame:frame];
+    NSView *view = [[LokaStackEffectUnitView alloc] initWithFrame:frame];
+    if (!view)
+      return nil;
+    NSView *effect = [[effectClass alloc] initWithFrame:[view bounds]];
+    if (!effect)
+    {
+      [view release];
+      return nil;
+    }
+    // 10.13 raises an exception for HUD (13); select by running AppKit.
+    if ([effect respondsToSelector:@selector(setMaterial:)])
+      [effect setMaterial:NSAppKitVersionNumber >= 1671 ? 13 : 3];
+    if ([effect respondsToSelector:@selector(setBlendingMode:)])
+      [effect setBlendingMode:1];
+    if ([effect respondsToSelector:@selector(setState:)])
+      [effect setState:0];
+    [effect setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    // Old SDK builds do not implicitly layer-back within-window blending.
+    if ([parent respondsToSelector:@selector(setWantsLayer:)])
+      [parent setWantsLayer:YES];
+    if ([view respondsToSelector:@selector(setWantsLayer:)])
+      [view setWantsLayer:YES];
+    if ([effect respondsToSelector:@selector(setWantsLayer:)])
+      [effect setWantsLayer:YES];
+    [view addSubview:effect positioned:NSWindowBelow relativeTo:nil];
+    [effect release];
+    return view;
+  }
+} // namespace
+
 MacZStackContext::Unit::Unit(unsigned index)
     : index_(index),
       next(0),
@@ -46,7 +226,8 @@ MacZStackContext::Unit::Unit(unsigned index)
 {
 }
 
-bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &seat, void *below, void *above)
+bool MacZStackContext::Unit::ensure(
+    void *parent, const loka::macos::MacRect &seat, void *below, void *above, loka::app::ZStackUnitGround ground)
 {
   if (this->view_)
     return true;
@@ -54,7 +235,8 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
   if (loka::testing::declineMacStackUnitView())
     return false;
 #endif
-  NSView *view = [[LokaStackUnitView alloc] initWithFrame:seat.r];
+  NSView *view = ground == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR ? CreateBlurUnit((NSView *)parent, seat.r)
+                                                                  : [[LokaStackUnitView alloc] initWithFrame:seat.r];
   if (!view)
     return false;
   this->view_ = view;
@@ -70,10 +252,26 @@ void MacZStackContext::Unit::place(const loka::macos::MacRect &seat)
   loka::macos::SetMacFrame((NSView *)this->view_, seat);
 }
 
-MacZStackContext::MacZStackContext(MacScenePlatformController *controller)
+MacZStackContext::MacZStackContext(MacScenePlatformController *controller, loka::app::ZStackUnitGround ground)
     : MacRetirableContext(controller),
+      ground_(ground),
       units_(0)
 {
+}
+
+bool MacZStackContext::ensureUnit(Unit &unit, void *parent, const loka::macos::MacRect &seat, void *below, void *above)
+{
+  return unit.ensure(parent, seat, below, above, this->ground_);
+}
+
+void MacZStackContext::onPropsApplied()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  const loka::app::ZStackNode *stack = this->owner() ? this->owner()->asZStackNode() : 0;
+  assert(stack && stack->props.unitGround == this->ground_
+         && "ZStack unitGround is chosen at first projection; switch grounds through a seat (Show/Match arm or Keyed) "
+            "for a new ZStack identity");
+#endif
 }
 
 MacZStackContext::~MacZStackContext()

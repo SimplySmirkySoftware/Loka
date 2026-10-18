@@ -29,6 +29,8 @@ namespace loka
   namespace testing
   {
     void failMacStackUnitViews(unsigned count);
+    void setMacStackCPUBlur(bool enabled);
+    void setMacStackMenuBarTransparency(int value);
   }
 } // namespace loka
 
@@ -655,11 +657,13 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
 {
   int released = 0;
   Fixture f;
-  MacZStackContext context(&f.controller);
+  MacZStackContext context(&f.controller, ZSTACK_UNIT_GROUND_WINDOW);
   MacZStackContext::Unit **cursor = context.unitsBegin();
   MacZStackContext::Unit *unit = context.unitFor(1, cursor);
   NSAutoreleasePool *inner = [[NSAutoreleasePool alloc] init];
-  LOKA_VERIFY(unit && unit->ensure(f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
+  LOKA_VERIFY(
+      unit
+      && context.ensureUnit(*unit, f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
   NSView *view = (NSView *)unit->view();
   observeMacNativeDeallocation(view, released);
   context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
@@ -724,4 +728,208 @@ void testMacZStackGroundSuffixPreservesOrder()
   LOKA_VERIFY(probe.insertions() == 0);
   [first release];
   [second release];
+}
+
+// Effect enums are NSInteger at the runtime boundary, including with old SDKs.
+@interface NSView (LokaStackEffectTest)
+- (NSInteger)blendingMode;
+- (NSInteger)material;
+- (NSInteger)state;
+@end
+
+namespace
+{
+  class CPUBlurScope
+  {
+  public:
+    CPUBlurScope()
+    {
+      loka::testing::setMacStackCPUBlur(true);
+      loka::testing::setMacStackMenuBarTransparency(1);
+    }
+    ~CPUBlurScope()
+    {
+      loka::testing::setMacStackCPUBlur(false);
+      loka::testing::setMacStackMenuBarTransparency(-1);
+    }
+
+  private:
+    CPUBlurScope(const CPUBlurScope &);
+    CPUBlurScope &operator=(const CPUBlurScope &);
+  };
+
+  ZStackNode *blurStack(Fixture &f)
+  {
+    ZStackNode *stack = stackWithGround(f);
+    stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+    return stack;
+  }
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  // An offscreen focused canvas exercises the drawRect capture/normalize/blur/
+  // flip/tint door even on hosts with implicit window layers. Capture before
+  // and after through the same door so bitmap row orientation is not assumed.
+  NSBitmapImageRep *paintCPUUnit(NSView *unit, bool drawUnit, bool groundOnly)
+  {
+    NSImage *canvas = [[NSImage alloc] initWithSize:[unit bounds].size];
+    [canvas lockFocus];
+    NSAffineTransform *flip = [NSAffineTransform transform];
+    [flip translateXBy:0 yBy:[unit bounds].size.height];
+    [flip scaleXBy:1 yBy:-1];
+    [flip concat];
+    [[NSColor blackColor] set];
+    NSRectFill([unit bounds]);
+    // Red above, blue below; a vertical white/black edge in the middle band.
+    [[NSColor redColor] set];
+    NSRectFill(NSMakeRect(0, 0, [unit bounds].size.width, 24));
+    [[NSColor blueColor] set];
+    NSRectFill(NSMakeRect(0, 56, [unit bounds].size.width, 24));
+    [[NSColor whiteColor] set];
+    NSRectFill(NSMakeRect(0, 24, 100, 32));
+    if (groundOnly)
+      loka::macos::MacPaintGround(SURFACE_GROUND_WINDOW, [unit bounds]);
+    else if (drawUnit)
+      [unit drawRect:[unit bounds]];
+    NSBitmapImageRep *bitmap = [[NSBitmapImageRep alloc] initWithFocusedViewRect:[unit bounds]];
+    [canvas unlockFocus];
+    [canvas release];
+    LOKA_VERIFY(bitmap);
+    return [bitmap autorelease];
+  }
+  NSColor *expectedBlurTintOverBlack()
+  {
+    NSColor *ground = nil;
+    LOKA_VERIFY(loka::macos::QueryMacGroundColor(SURFACE_GROUND_WINDOW, ground));
+    NSColor *rgb = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+    // Mavericks' pattern ground declines RGB conversion: the contract then
+    // requires light gray, not the black produced by tinting with that pattern.
+    if (!rgb)
+      return [NSColor colorWithCalibratedWhite:0.93 * 0.6 alpha:1.0];
+    return [NSColor colorWithCalibratedRed:[rgb redComponent] * 0.6
+                                     green:[rgb greenComponent] * 0.6
+                                      blue:[rgb blueComponent] * 0.6
+                                     alpha:1.0];
+  }
+  NSColor *cpuPixel(NSBitmapImageRep *bitmap, CGFloat x, CGFloat y)
+  {
+    return [[bitmap colorAtX:static_cast<NSInteger>(x * [bitmap pixelsWide] / 200)
+                           y:static_cast<NSInteger>(y * [bitmap pixelsHigh] / 80)]
+        colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+  }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+} // namespace
+
+void testMacZStackBlurNativeEffect()
+{
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
+  f.layout();
+  NSView *windowUnit = unitUnder(f.host.root);
+  Class effectClass = NSClassFromString(@"NSVisualEffectView");
+  LOKA_VERIFY(windowUnit && [windowUnit isOpaque]);
+  LOKA_VERIFY(!effectClass || !childOfClass(windowUnit, effectClass));
+  if (!effectClass)
+  {
+    std::printf("[skip] ZStack native blur: NSVisualEffectView unavailable\n");
+    return;
+  }
+  Fixture blurred;
+  ZStackNode *blur = stackWithGround(blurred);
+  blur->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  blur->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
+  blurred.layout();
+  NSView *unit = unitUnder(blurred.host.root);
+  LOKA_VERIFY(unit && ![unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
+  NSArray *children = [unit subviews];
+  LOKA_VERIFY([children count] == 2);
+  NSView *effect = [children objectAtIndex:0];
+  LOKA_VERIFY([effect isKindOfClass:effectClass]);
+  LOKA_VERIFY(![[children objectAtIndex:1] isKindOfClass:effectClass]);
+  LOKA_VERIFY([effect blendingMode] == 1 && [effect state] == 0);
+  LOKA_VERIFY([effect material] == (NSAppKitVersionNumber >= 1671 ? 13 : 3));
+  LOKA_VERIFY(NSEqualRects([effect frame], [unit bounds]));
+  LOKA_VERIFY([effect autoresizingMask] == (NSViewWidthSizable | NSViewHeightSizable));
+  blurred.layout(260, 200);
+  LOKA_VERIFY(unitUnder(blurred.host.root) == unit && NSEqualRects([effect frame], [unit bounds]));
+}
+
+void testMacZStackBlurCPUPixels()
+{
+  CPUBlurScope forced;
+  Fixture f;
+  blurStack(f);
+  f.layout();
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(unit && ![unit isOpaque] && [[unit subviews] count] == 0);
+  [unit setFrame:NSMakeRect(0, 0, 200, 80)];
+  NSBitmapImageRep *before = paintCPUUnit(unit, false, false);
+  NSBitmapImageRep *after = paintCPUUnit(unit, true, false);
+  LOKA_VERIFY(!sameColor(cpuPixel(before, 102, 40), cpuPixel(after, 102, 40)));
+  // This region is black farther than radius eight from every edge. Gradient
+  // and orientation alone cannot distinguish a correct tint from black tint.
+  LOKA_VERIFY(sameColor(cpuPixel(before, 150, 40), [NSColor blackColor]));
+  LOKA_VERIFY(sameColor(cpuPixel(after, 150, 40), expectedBlurTintOverBlack()));
+  // A radius-eight edge has intermediate levels on each side, not just tint.
+  const CGFloat left = [cpuPixel(after, 90, 40) redComponent];
+  const CGFloat nearLeft = [cpuPixel(after, 98, 40) redComponent];
+  const CGFloat nearRight = [cpuPixel(after, 102, 40) redComponent];
+  const CGFloat right = [cpuPixel(after, 110, 40) redComponent];
+  LOKA_VERIFY(left > nearLeft + 0.02 && nearLeft > nearRight + 0.02 && nearRight > right + 0.02);
+  const CGFloat beforeDirection = [cpuPixel(before, 150, 12) redComponent] - [cpuPixel(before, 150, 68) redComponent];
+  const CGFloat afterDirection = [cpuPixel(after, 150, 12) redComponent] - [cpuPixel(after, 150, 68) redComponent];
+  LOKA_VERIFY(beforeDirection * afterDirection > 0.2);
+  // An explicit NO is injected, never written to the user's global defaults.
+  loka::testing::setMacStackMenuBarTransparency(0);
+  NSBitmapImageRep *disabled = paintCPUUnit(unit, true, false);
+  NSBitmapImageRep *ground = paintCPUUnit(unit, false, true);
+  LOKA_VERIFY(sameColor(cpuPixel(disabled, 50, 12), cpuPixel(ground, 50, 12)));
+  LOKA_VERIFY(sameColor(cpuPixel(disabled, 150, 68), cpuPixel(ground, 150, 68)));
+}
+
+void testMacZStackBlurGroundIsCreationTimeConstant()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  // The mismatching applyPropsToNode below fires MacZStackContext::onPropsApplied's
+  // lifecycle-audit assertion. Exercise the ignore contract in a non-audit build.
+  std::printf("[skip] ZStack retained ground: requires LOKA_LIFECYCLE_AUDIT=OFF; mismatch asserts in onPropsApplied\n");
+#else
+  CPUBlurScope forced;
+  for (int initiallyBlurred = 0; initiallyBlurred != 2; ++initiallyBlurred)
+  {
+    Fixture f;
+    ZStackNode *stack = stackWithGround(f);
+    stack->setPropsTypeId(ZStackProps::staticTypeId());
+    stack->props.unitGround = initiallyBlurred ? ZSTACK_UNIT_GROUND_EXP_BLUR : ZSTACK_UNIT_GROUND_WINDOW;
+    // First projection has only ground: the context must already own the choice.
+    f.layout();
+    NodeContext *context = stack->getContext();
+    LOKA_VERIFY(context);
+    ZStackProps changed;
+    changed.unitGround = initiallyBlurred ? ZSTACK_UNIT_GROUND_WINDOW : ZSTACK_UNIT_GROUND_EXP_BLUR;
+    LOKA_VERIFY(ZStack(changed).applyPropsToNode(stack));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+    f.layout();
+    NSView *first = unitUnder(f.host.root);
+    LOKA_VERIFY(first && [first isOpaque] == !initiallyBlurred);
+    LOKA_VERIFY(stack->getContext() == context);
+    // A further retained apply must neither reinsert the first view nor change
+    // the choice for another unit admitted afterwards.
+    UnitInsertionProbe probe(first);
+    LOKA_VERIFY(ZStack(changed).applyPropsToNode(stack));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 40)));
+    f.layout();
+    NSArray *views = [f.host.root subviews];
+    LOKA_VERIFY([views count] == 3 && [views objectAtIndex:1] == first);
+    NSView *second = [views objectAtIndex:2];
+    LOKA_VERIFY(second != first && [second isOpaque] == !initiallyBlurred);
+    LOKA_VERIFY(stack->getContext() == context && probe.insertions() == 0);
+  }
+#endif
 }
