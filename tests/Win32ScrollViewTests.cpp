@@ -210,6 +210,27 @@ namespace
                            NULL);
   }
 
+  // Gives the host window the client size an explicit relayout will use. A
+  // Scene-driven pass lays out at the window's real client size, and the
+  // first layout now publishes the viewport size, which dirties layout once;
+  // a host that disagrees with the explicit size would let that second pass
+  // replace the geometry under test.
+  void sizeHostClient(HWND root, int width, int height)
+  {
+    RECT frame = {0, 0, width, height};
+    LOKA_VERIFY(AdjustWindowRectEx(&frame,
+                                   static_cast<DWORD>(GetWindowLongPtrW(root, GWL_STYLE)),
+                                   FALSE,
+                                   static_cast<DWORD>(GetWindowLongPtrW(root, GWL_EXSTYLE))));
+    LOKA_VERIFY(SetWindowPos(root,
+                             NULL,
+                             0,
+                             0,
+                             frame.right - frame.left,
+                             frame.bottom - frame.top,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE));
+  }
+
   void CountClickThunk(void *userData)
   {
     ++*static_cast<int *>(userData);
@@ -922,6 +943,7 @@ void testWin32ScrollViewContainerGapsAndNoSeats()
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
     const int visible = 30;
+    sizeHostClient(root, 300, visible + 2 * Win32SceneLayout::kRootInset);
     controller.relayout(300, visible + 2 * Win32SceneLayout::kRootInset);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport != NULL);
