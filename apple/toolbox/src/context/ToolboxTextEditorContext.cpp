@@ -1,4 +1,5 @@
 #include "ToolboxPaintGround.hpp"
+#include "ToolboxEditKey.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxWindow.hpp"
@@ -727,26 +728,53 @@ EditorResult ToolboxTextEditorContext::finishInput(EditorResult result, Change c
 }
 EditorResult ToolboxTextEditorContext::key(char key)
 {
+  const ToolboxTextEditorKey kind = ClassifyTextEditorKey(static_cast<unsigned char>(key));
+  if (kind == TEXT_KEY_IGNORE)
+    return EDITOR_OK;
   RailOperation op(*this);
   EditorResult result = this->beginInput();
   if (result != EDITOR_OK)
     return result;
   const short start = (**this->te_).selStart, end = (**this->te_).selEnd;
   const Rect scroll = (**this->te_).destRect;
+  // Like EditText, forward delete at the end is an admitted no-op.
+  if (kind == TEXT_KEY_DELETE_FORWARD && start == end && end == (**this->te_).teLength)
+    return this->finishInput(EDITOR_OK, CARET_CHANGE, op);
   // One controller call per key: scan this TE's CR prefix for each endpoint,
   // sharing the scan for an empty selection. No native line copy is needed.
   LineCursor from = this->cursorAt(start);
-  const LineCursor to = start == end ? from : this->cursorAt(end);
-  if (key == '\b' && start == end && start > 0)
-    from = from.column > 0 ? LineCursor(from.line, from.column - 1) : this->cursorAt(start - 1);
+  LineCursor to = start == end ? from : this->cursorAt(end);
+  switch (kind)
+  {
+  case TEXT_KEY_INSERT:
+  case TEXT_KEY_CARET:
+    TEKey(key, this->te_);
+    break;
+  case TEXT_KEY_DELETE_BACKWARD:
+    if (start == end && start > 0)
+      from = from.column > 0 ? LineCursor(from.line, from.column - 1) : this->cursorAt(start - 1);
+    TEKey('\b', this->te_);
+    break;
+  case TEXT_KEY_DELETE_FORWARD:
+    if (start == end)
+    {
+      to = this->cursorAt(start + 1);
+      TESetSelect(start, start + 1, this->te_);
+    }
+    TEKey('\b', this->te_);
+    break;
+  case TEXT_KEY_IGNORE:
+    // Returned before admission above; close the admitted phase if it ever gets here.
+    assert(!"an ignored key is never admitted");
+    return this->finishInput(EDITOR_OK, CARET_CHANGE, op);
+  }
   Change change = from.line != to.line || key == '\r' ? STRUCTURE_CHANGE : LINE_CHANGE;
-  TEKey(key, this->te_);
-  if (key >= 28 && key <= 31)
+  if (kind == TEXT_KEY_CARET)
   {
     change = CARET_CHANGE;
     result = this->node_->seam(this->key_).moveCaret(this->cursorAt((**this->te_).selStart));
   }
-  else if (key == '\b' && start == 0 && start == end)
+  else if (kind == TEXT_KEY_DELETE_BACKWARD && start == 0 && start == end)
   {
     change = CARET_CHANGE;
     result = EDITOR_OK;
@@ -754,7 +782,8 @@ EditorResult ToolboxTextEditorContext::key(char key)
   else if (this->hasStaleCaret())
     result = EDITOR_STALE_ID;
   else
-    result = this->node_->seam(this->key_).applyReplace(from, to, key == '\b' ? "" : &key, key == '\b' ? 0 : 1);
+    result = this->node_->seam(this->key_)
+                 .applyReplace(from, to, kind == TEXT_KEY_INSERT ? &key : "", kind == TEXT_KEY_INSERT ? 1 : 0);
   if (!op.hasSameContext())
     return result;
   const bool refused = result != EDITOR_OK || this->phase_ == RECONCILE;
