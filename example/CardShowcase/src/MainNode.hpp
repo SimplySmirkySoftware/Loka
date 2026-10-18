@@ -12,6 +12,11 @@
 #include "app/nodes/ImageView.hpp"
 #include "app/scene/BorrowedKeys.hpp"
 
+// PROBE ONLY: optional caret controls and initial viewport.
+#include "app/nodes/controls/EditText.hpp"
+#include <cstdlib>
+#include <cstring>
+
 namespace cardshowcase
 {
   // Nominal macOS push button height 32 + two 8-unit bar paddings.
@@ -57,11 +62,19 @@ namespace cardshowcase
         : loka::app::scene::StdCompositionBoundaryNodeBase<MainProps>(p),
           viewport_(),
           laptops_(),
-          flyer_()
+          flyer_(),
+          // PROBE ONLY: immutable launch choice; state remains Boundary-owned.
+          probeCaret_(ProbeCaretEnabled()),
+          probeText_()
     {
       this->state(this->laptops_, LoadPhoto(p.platformContext(), "LokaLaptops.jpg"));
       this->state(this->flyer_, LoadPhoto(p.platformContext(), "LokaFlyer_0.0.1_PBG4.jpg"));
-      this->state(this->viewport_, loka::app::ScrollViewProps::topOrigin());
+      // PROBE ONLY: explicit initial offset; absent means the normal top inset.
+      const char *scrollY = std::getenv("LOKA_PROBE_SCROLL_Y");
+      this->state(this->viewport_, scrollY ? loka::core::Frame(0, std::atoi(scrollY), 0, 0)
+                                          : loka::app::ScrollViewProps::topOrigin());
+      if (this->probeCaret_)
+        this->state(this->probeText_, loka::core::String("Caret probe"));
     }
 
     virtual void composeNode(loka::app::scene::NodeComposition &c)
@@ -71,7 +84,8 @@ namespace cardshowcase
           ZStack().expBlurUnits()
           << (ScrollView(ScrollViewProps(this->viewport_).contentInsets(ScrollViewContentInsets::of(kBarHeight, 0)))
               << (Box().padding(12)
-                  << (Column().gap(12)
+                  // PROBE ONLY: prepend the caret row with a plain conditional declaration.
+                  << (this->ProbeColumn().gap(12)
                       << Text("Expressive Loka") + FontSize<24>() + Red
                       << (Row().gap(12) << ImageView()
                                                .image(this->laptops_.state())
@@ -108,6 +122,23 @@ namespace cardshowcase
     }
 
   private:
+    // PROBE ONLY: called once per composition; the completed Column owns its definitions.
+    loka::app::Column ProbeColumn() const
+    {
+      using namespace loka::app;
+      Column column;
+      if (this->probeCaret_)
+        column << (Row().gap(8) << EditText(this->probeText_) << Button("Probe"));
+      return column;
+    }
+
+    // PROBE ONLY: evaluated once by the constructor; only MainNode reads the result.
+    static bool ProbeCaretEnabled()
+    {
+      const char *value = std::getenv("LOKA_PROBE_CARET");
+      return value && std::strcmp(value, "1") == 0;
+    }
+
     static loka::core::resource::Image LoadPhoto(PlatformContext *context, const char *name)
     {
       loka::core::resource::Image image;
@@ -123,6 +154,9 @@ namespace cardshowcase
     loka::app::scene::NodeState<loka::core::Frame> viewport_;
     loka::app::scene::NodeState<loka::core::resource::Image> laptops_;
     loka::app::scene::NodeState<loka::core::resource::Image> flyer_;
+    // PROBE ONLY: fixed declaration choice and lifecycle-owned editor value.
+    const bool probeCaret_;
+    loka::app::scene::NodeState<loka::core::String> probeText_;
   };
 } // namespace cardshowcase
 
