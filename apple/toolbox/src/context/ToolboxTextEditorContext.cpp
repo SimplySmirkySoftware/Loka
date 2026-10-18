@@ -993,6 +993,7 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
             this->scrollBarId_, this->geometry().bar, this->te_ ? this : 0, presentation, this->lifetimeHint()))
       this->syncPresentation();
     this->repaint(this->te_);
+    this->controller()->drawScrollBarControl(this->scrollBarId_);
   }
 }
 bool RegisterToolboxTextEditorNodeHandler(scene::PlatformNodeHandlerRegistry &registry)

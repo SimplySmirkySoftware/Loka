@@ -1,4 +1,5 @@
 #include "platform/ToolboxPascalText.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
 #include "app/layout/ControlWidth.hpp"
 #include "ToolboxPropsRefresh.hpp"
 #include "context/ToolboxButtonContext.hpp"
@@ -156,10 +157,21 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
   }
   if (controller && resourceId_ > 0)
   {
-    if (controller->ensureButtonControl(resourceId_, rect_, label_, emitter_, enabled_, lifetimeHint(), this))
+    ToolboxScenePlatformController::ButtonControlBinding *binding = 0;
+    if (controller->ensureButtonControl(resourceId_, rect_, label_, emitter_, enabled_, lifetimeHint(), this, binding))
     {
+      if (paints && binding)
+        this->repaint(binding->control, binding->label);
       if (paints && completes)
         this->presented_.commit(current, ToolboxPaintScope());
+      return;
+    }
+    // Reconciliation can refuse after acquiring a live handle. Preserve its
+    // installed face rather than leaving a visible control undrawn.
+    if (binding)
+    {
+      if (paints)
+        this->repaint(binding->control, binding->label);
       return;
     }
   }
@@ -210,8 +222,12 @@ void ToolboxButtonContext::repaint(ControlRef control, std::string &installedLab
   const bool completes = ToolboxPaintCompletes(clip, this->paintRect_, this->presented_,
       this->presented_.isKnown() && current == this->presented_.value());
   this->presented_.invalidate();
-  const bool submitted = ReconcileToolboxButtonControl(control, label, this->node_->props.enabled_, installedLabel);
-  Draw1Control(control);
+  bool submitted;
+  {
+    ToolboxPaintSuppressScope suppress(this->controller()->paintSuppressClipRgn_);
+    submitted = ReconcileToolboxButtonControl(control, label, this->node_->props.enabled_, installedLabel);
+  }
+  this->controller()->drawControl(control);
   if (submitted && completes)
     this->presented_.commit(current, ToolboxPaintScope());
 }

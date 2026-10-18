@@ -254,6 +254,16 @@ namespace
     context->layout(&controller, seat);
     context->render(&controller);
     LOKA_VERIFY(ToolboxAttributedTextContextAccess::known(*context));
+    Pin("AttributedHistorySurvivesMissedCompositionReplay");
+    toolbox_host::reset();
+    {
+      const Rect miss = {200, 200, 220, 280};
+      ToolboxPaintClip clip(miss);
+      context->render(&controller);
+    }
+    LOKA_VERIFY(toolbox_host::draws.empty());
+    const PaintQuery unchanged = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+    LOKA_VERIFY(context->queryPaintDamage(unchanged).kind == PAINT_ANSWER_EXACT);
     node->props = AttributedText(Styled("\xc3\xa9" "AB", Bold)).props;
     context->onPropsApplied();
     LOKA_VERIFY(ToolboxAttributedTextContextAccess::known(*context));

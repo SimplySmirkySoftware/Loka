@@ -12,8 +12,8 @@ namespace
       native->onChange = 0;
       native->enabled = 0;
       // SetControlValue requests drawCntl 129 (indicator movement), not 0
-      // (the whole control). Suppress setter painting; the post-render
-      // Draw1Control still restores the complete bar after content erasure.
+      // (the whole control). Suppress setter painting; renderScrollView's
+      // Draw1Control after restoring the outer clip still restores the complete bar after content erasure.
       ToolboxPaintSuppressScope suppress(paintSuppressClipRgn);
       SetControlValue(native->control, static_cast<short>(metrics.clampedOffset));
       native->appliedValue = metrics.clampedOffset;
