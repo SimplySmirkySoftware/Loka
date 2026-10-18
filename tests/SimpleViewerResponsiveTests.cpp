@@ -11,6 +11,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/scene/Scene.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
+#include "core/Operation.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
@@ -223,6 +224,11 @@ namespace
       }
     }
     return 0;
+  }
+
+  void countViewportWrites(void *context)
+  {
+    ++*static_cast<int *>(context);
   }
 
   void flushScene(loka::app::scene::Scene &scene)
@@ -620,6 +626,7 @@ void testSimpleViewerDisplayModesProjectExpectedNullGeometry()
   LOKA_VERIFY(scroll != 0);
   LOKA_VERIFY(image != 0);
   LOKA_VERIFY(scroll->childrenHead() == image);
+  loka::core::Operation projection;
   harness.platform.projectLayoutForTesting(content, contentState);
   imageContext = static_cast<NullImageGeometryContext *>(image->getContext());
   LOKA_VERIFY(imageContext != 0);
@@ -649,8 +656,28 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
   loka::app::ScrollViewNode *scroll = static_cast<loka::app::ScrollViewNode *>(
       findNode(main, "SimpleViewer.ActualScroll"));
   LOKA_VERIFY(scroll != 0);
+  // Null offers 100 x 20; the 200-wide navigation pane exhausts the Row's
+  // width, leaving this content seat 0 x 20 (confirmed by the layout probe).
   scroll->props.viewport_.set(loka::core::Frame(11, 73, 0, 0));
-  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 0));
+  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 20));
+
+  int writes = 0;
+  scroll->props.viewport_.state()->bind(&countViewportWrites, &writes, false);
+  {
+    loka::core::Operation operation;
+    // A size-only change is corrected by layout, then the next settle is inert.
+    scroll->props.viewport_.set(loka::core::Frame(11, 73, 1, 1));
+    operation.settle();
+    flushScene(*harness.scene);
+    operation.settle();
+    LOKA_VERIFY(writes == 2);
+    LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 20));
+    writes = 0;
+    operation.settle();
+    flushScene(*harness.scene);
+    LOKA_VERIFY(writes == 0);
+  }
+  scroll->props.viewport_.state()->unbind(&countViewportWrites, &writes);
 
   MainAccess::setDisplayMode(*harness.mainNode(),
                                          simpleviewer::DISPLAY_FIT);
@@ -661,7 +688,7 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
   scroll = static_cast<loka::app::ScrollViewNode *>(
       findNode(main, "SimpleViewer.ActualScroll"));
   LOKA_VERIFY(scroll != 0);
-  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 0));
+  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 20));
 
   const loka::core::resource::Image nextImage =
       loka::core::resource::Image::FromNative(reinterpret_cast<void *>(2),
@@ -670,7 +697,7 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
                                               0,
                                               0);
   MainAccess::setLoadedImage(*main, nextImage);
-  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 0));
+  LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 20));
 }
 
 void testSimpleViewerPaneScrollButtonUsesMenuEmitter()

@@ -4137,7 +4137,9 @@ namespace
     LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.isValid());
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().x == 0);
     LOKA_VERIFY(scroll->asScrollViewNode()->requestedOrigin().y == 0);
-    LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 0));
+    // Null offers 100 x 20. The first ScrollView takes that height; later
+    // VStack seats have zero remaining height (confirmed by the layout probe).
+    LOKA_VERIFY(scroll->asScrollViewNode()->props.viewport_.state()->get() == loka::core::Frame(0, 0, 100, 20));
     const char *scrollIds[] = {"Inset", "EmptyScroll", "ZeroScroll", "TopScroll", "BottomScroll"};
     for (unsigned i = 0; i < 5; ++i)
     {
@@ -4147,9 +4149,8 @@ namespace
       const int top = i == 0 || i == 3 ? 12 : 0;
       const int bottom = i == 0 || i == 4 ? 3 : 0;
       LOKA_VERIFY(actual.contentInsets_ == loka::app::ScrollViewContentInsets::of(top, bottom));
-      LOKA_VERIFY(actual.viewport_.state()->get()
-                  == (top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0)));
-      LOKA_VERIFY(actual.viewport_.state()->get().y == (top ? SHRT_MIN : 0));
+      LOKA_VERIFY(actual.viewport_.state()->get() == loka::core::Frame(0, -top, 100, 0));
+      LOKA_VERIFY(actual.viewport_.state()->get().y == -top);
     }
     loka::app::scene::Node *column = scroll->asNestable()->childrenHead();
     LOKA_VERIFY(column && column->asNestable() && !column->nextInComposition);
