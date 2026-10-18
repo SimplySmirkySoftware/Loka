@@ -1088,16 +1088,21 @@ The design goal is that memory and lifecycle are visible from the DSL structure.
 `ScrollView(viewport) << content` scrolls one subtree. The app owns one
 `NodeState<Frame>` and lends it to the view; the rail writes the clamped scroll
 origin into it. `x` and `y` are the **content** point shown at the seat's
-top-left corner, not the seat rect; `width` and `height` are not reported yet.
-Initialise it with `Frame(0, 0, 0, 0)`.
+top-left corner, not the seat rect. After the first layout, `width` and
+`height` report the visible content size (seat minus scroll bars), in the same
+content units; insets do not shrink it. Null reports size now; Toolbox, Win32
+and macOS follow in subsequent PRs and currently preserve the stored size.
+Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
 this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
 c.declare(ScrollView(this->viewport_) << this->imageView(IMAGE_VIEW_SIZE_INTRINSIC));
 ```
 
-The state is the rail's result channel: the rail writes the clamped origin, and
-a value already in range is left alone (a same-value write publishes nothing).
+The state is the rail's result channel: layout publishes origin and visible size
+on reporting rails; input publishes origin while preserving size. Null has no
+maximum clamp. An unchanged fact publishes nothing, so layout settles after a
+size change.
 The initial value is the only origin the app chooses; a negative one reads as 0.
 
 The vertical range is the content height. The horizontal range exists only when

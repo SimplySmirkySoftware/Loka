@@ -28,8 +28,9 @@
 ## From AGENTS.md
 
 `ScrollViewProps::viewport` is a rail result channel: the app lends its
-`NodeState<Frame>`, the rail writes the clamped scroll origin into it through
-`NodeState::set`, and the node reads the handle only for props identity. A
+`NodeState<Frame>`, the rail writes the scroll origin and reported visible
+size into it through `NodeState::set`, and the node reads the handle only for
+props identity. A
 fact the rail reports and a request the app posts are two separate boxes with
 one kind of writer each.
 
@@ -37,13 +38,15 @@ one kind of writer each.
 
 The viewport is one `Frame` in **content coordinates**, not the seat rect.
 `x` and `y` are the scroll origin: the content point shown at the seat's
-top-left corner. `width` and `height` are reserved for the visible size and are
-not reported today; `!hasSize()` means "not reported yet", and every rail
-carries the stored size through unchanged. Apps initialise the state with
-`Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
+top-left corner. `width` and `height` report the visible content area (the seat
+minus scroll bars), in the same content units as the origin. Insets do not
+shrink this size. Zero width and height mean "not reported yet", before the
+first layout. Null reports size now; Toolbox, Win32 and macOS will adopt size
+publication in the following PRs and currently preserve the stored size. Apps
+initialise the state with `Frame(0, 0, 0, 0)`, or with `ScrollViewProps::topOrigin()` to start with the
 top inset visible (see [Content insets](#content-insets)).
 
-Three helpers on `ScrollViewNode` are the coordinate doors (origin publication
+Four helpers on `ScrollViewNode` are the coordinate doors (origin publication
 introduced in #1357; content insets use the conversions below):
 
 - `requestedOrigin()` reads the app's value as an extent-offset request: an
@@ -51,10 +54,12 @@ introduced in #1357; content insets use the conversions below):
   content Y below `-top` reads as `-top`, then converts to extent coordinates.
   With no insets, negative coordinates read as 0 as before.
 - `contentTranslation()` gives the content-coordinate translation for placement.
-- `publishOrigin(x, extentY)` writes the clamped content origin back, keeping the stored
-  size, and only when the converted origin differs from what is stored. The same-value
-  no-op is the echo-loop breaker on every rail: a layout that re-applies the
-  published origin publishes nothing.
+- `publishViewport(x, extentY, width, height)` is the layout writer's door. It
+  converts extent Y to content Y and publishes only when origin or size changes.
+- `publishOrigin(x, extentY)` is the input writer's door: it keeps the stored
+  size because input contexts own no seat. Both doors share one conversion,
+  comparison and write path. The same-value no-op breaks layout echoes: the
+  size publication dirties layout once, and an unchanged next pass writes nothing.
 
 Option D (one `Frame`, frozen 2026-10-15) was chosen over a second
 `NodeState<int>` for X because every other two-axis carrier in Loka is one
@@ -72,7 +77,8 @@ change their content coordinates.
 
 The viewport fact keeps its content-coordinate meaning. While the top gap is
 visible, its Y origin may be negative down to `-top`. The rail remains its only
-writer, through `publishOrigin`. The three node doors contain the conversion:
+writer, through `publishViewport` for layout and `publishOrigin` for input.
+The node doors contain the conversion:
 
 - `requestedOrigin()` returns extent offsets: X is unchanged from its existing
   normalization; Y is `clamp(fact.y, -top, SHRT_MAX - top) + top`. **Clamp before
@@ -83,8 +89,9 @@ writer, through `publishOrigin`. The three node doors contain the conversion:
   fact's stored size. Null passes this to `deriveScrolled` and records it in
   placement spans; Toolbox and Win32 will do the same. macOS will instead place
   its document at a constant `+top` without using this translation door.
-- `publishOrigin(x, extentY)` writes `Frame(x, extentY - top, w, h)`, preserving
-  size and publishing only a changed origin.
+- `publishViewport(x, extentY, width, height)` writes
+  `Frame(x, extentY - top, width, height)` only when any component changes.
+- `publishOrigin(x, extentY)` uses the same write path with the stored size.
 
 `ScrollViewProps::topOrigin()` names the request for the top with the gap
 visible, independently of the inset. Its Y sentinel is below every allowed
@@ -209,5 +216,6 @@ keeps the value the preceding layout clamped:
   writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
   the app a second writer of a rail result channel. That is a recorded debt,
   not a pattern to copy.
-- The visible size is not reported; its first reader is the lazy-list window
+- Null reports visible size; Toolbox, Win32 and macOS size publication is
+  scheduled for the following PRs. Its first reader is the lazy-list window
   fold (LazyColumn reading `viewport_` directly).
