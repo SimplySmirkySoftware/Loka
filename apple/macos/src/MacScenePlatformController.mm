@@ -41,6 +41,8 @@
 #include "context/MacOpenFileDialogContext.hpp"
 #include "context/MacRectSurfaceContext.hpp"
 #include "context/MacScrollViewContext.hpp"
+#include "context/MacZStackContext.hpp"
+#include <new>
 #include "core/Profiler.hpp"
 #include <map>
 
@@ -83,6 +85,17 @@ namespace loka
           }
           this->layoutResultY_ = static_cast<short>(result);
           return result;
+        }
+
+        // Deliberate twin of Win32PlatformLayoutTraversal::refuseLayoutResultY
+        // in win32/src/Win32ScenePlatformController.cpp. Like Null, refusal must reach
+        // the viewport channel even when no projected child is dispatched.
+        // Constant work per handler admission; no rows are walked here.
+        virtual bool refuseLayoutResultY(int y)
+        {
+          if (this->controller_ && this->controller_->refuseNarrowingInScrollScope(y))
+            return true;
+          return IPlatformLayoutTraversal::refuseLayoutResultY(y);
         }
 
         virtual void setLayoutResultY(short y)
@@ -960,23 +973,88 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
 
   if (loka::app::ZStackNode *stack = node->asZStackNode())
   {
+    // Deliberate twin of Win32ScenePlatformController and ZStackLayout.hpp: every child
+    // receives the full seat and the result is the maximum child bottom.
+    // Native units implement docs/ProgrammingGuide.en.md#stacking-zstack.
+    // One composition walk; ground repair visits only views born in that pass.
+    // A nested ZStack is refused as a whole before even its ground projects.
+    if (this->projectionParentScopes_.insideUnit())
+      return LayoutNodeResult(state.width, state.y);
     int maxY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(stack);
-    if (handler)
+    MacZStackContext *ctx = static_cast<MacZStackContext *>(stack->getContext());
+    MacZStackContext::Unit **cursor = ctx ? ctx->unitsBegin() : 0;
+    loka::dsl::CompositionCursor<loka::app::scene::Node> children(stack->childrenHead(), stack->childrenCount());
+    unsigned index = 0;
+    void *previousUnit = 0;
+    for (loka::app::scene::Node *child = children.next(); child; child = children.next(), ++index)
     {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
+      int childY = state.y;
+      if (index == 0)
       {
-        return LayoutNodeResult(state.width, state.y);
+        NSView *parent = (NSView *)this->projectionParentView();
+        NSView *previousLast = [[[parent subviews] lastObject] retain];
+        childY = layoutContainerChild(this, child, state);
+        if (ctx)
+          ctx->lowerNewGroundViews(parent, previousLast);
+        [previousLast release];
+        if (this->refuseNarrowingInScrollScope(childY))
+          break;
       }
-      loka::app::scene::MacPlatformLayoutTraversal traversal(this);
-      maxY = handler->layoutNode(stack, handlerState, &traversal);
+      else
+      {
+        if (this->projectionParentScopes_.current().hasShortRangeRefusal())
+          break;
+        if (!ctx)
+        {
+          ctx = new (std::nothrow) MacZStackContext(this);
+          if (!ctx)
+            continue;
+          stack->setContext(ctx);
+          cursor = ctx->unitsBegin();
+        }
+        MacZStackContext::Unit *unit = ctx->unitFor(index, cursor);
+        loka::app::scene::LayoutState projected;
+        if (!unit || !this->narrowLayoutState(state, projected, true))
+          continue;
+        // Creation cannot expose a refused or not-yet-measured child.
+        const loka::core::Frame seat(projected.x, projected.y, projected.width, 0);
+        void *laterUnit = 0;
+        if (!unit->view())
+          for (MacZStackContext::Unit *later = *cursor; later; later = later->following())
+            if (later->view())
+            {
+              laterUnit = later->view();
+              break;
+            }
+        if (!unit->ensure(this->projectionParentView(), this->projection().projectFrame(seat), laterUnit, previousUnit))
+          continue;
+        previousUnit = unit->view();
+        loka::app::scene::ProjectionParentScope unitFrame;
+        const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();
+        // AppKit native parentage clips; the unit inherits the viewport channel.
+        if (!parentScope.deriveScrolled(unit->view(),
+                                        projected.x,
+                                        projected.y,
+                                        loka::core::Frame(0, 0, projected.width, projected.height),
+                                        unitFrame))
+          continue;
+        {
+          loka::app::scene::ProjectionUnitScopeGuard unitGuard(this->projectionParentScopes_, unitFrame);
+          if (!unitGuard.isActive())
+            continue; // Never parent the child's views flat on refusal.
+          childY = layoutContainerChild(this, child, state);
+          if (this->refuseNarrowingInScrollScope(childY))
+            continue; // Preserve the previous unit rectangle on channel refusal.
+        }
+        unit->place(this->projection().projectFrame(
+            loka::core::Frame(projected.x, projected.y, state.width, childY - state.y)));
+      }
+      if (childY > maxY)
+        maxY = childY;
     }
-    else
-    {
-      maxY = loka::app::layout::computeZStackLayoutResultY(
-          stack, state, this, &MacScenePlatformController::layoutContainerChild);
-    }
+    // Refused passes may stop early; only a completed walk proves the tail.
+    if (ctx && index == stack->childrenCount())
+      assert(!*cursor && "ZStack composition children must remain fixed");
     return LayoutNodeResult(state.width, maxY);
   }
 

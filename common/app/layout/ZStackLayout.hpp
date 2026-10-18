@@ -10,7 +10,8 @@ namespace loka
   {
     namespace layout
     {
-      // Deliberate platform-seam twin: Win32ScenePlatformController owns this
+      // Deliberate platform-seam twins: Win32ScenePlatformController and
+      // MacScenePlatformController own this
       // seat/max-bottom loop to insert opaque native units for upper children.
       template <typename LayoutStateT>
       int computeZStackLayoutResultY(loka::app::ZStackNode *stack,
