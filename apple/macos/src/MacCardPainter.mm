@@ -144,8 +144,8 @@ namespace
     return result;
   }
 
-  /** Both ink transfers call this once per candidate backing pixel. Projection
-      and lookup are O(1); this paint owns the sampled rectangle. */
+  /** Corner/fallback transfers call this once per candidate backing pixel.
+      Projection and lookup are O(1); this paint owns the sampled rectangle. */
   unsigned char DensityAtBackingPixel(const loka::app::CardStyle &style,
                                       const loka::core::Frame &body,
                                       const loka::macos::MacProjection &projection,
@@ -159,9 +159,104 @@ namespace
         style, body, LayoutSample(local.x + origin.x, projection), LayoutSample(local.y + origin.y, projection));
   }
 
-  /** Once per paint, O(clip intersect support backing area). STENCIL submits
-      fixed batches; ALPHA allocates four bytes per pixel and transfers once.
-      Both walk only this paint's pixels; common owns every density/threshold. */
+  /** PaintTableInk calls once per corner or profile step intersecting its clip.
+      Negative density samples the rectangle; a constant uses one ALPHA pixel
+      or walks only this run's integer STENCIL pixels, without inverse sampling. */
+  bool PaintTableRect(CGContextRef graphics,
+                      const loka::core::Frame &body,
+                      const loka::app::CardStyle &style,
+                      const loka::macos::MacProjection &projection,
+                      NSPoint origin,
+                      const CGAffineTransform &transform,
+                      const CGAffineTransform &inverse,
+                      int originX,
+                      int originY,
+                      int left,
+                      int top,
+                      int right,
+                      int bottom,
+                      int density)
+  {
+    using namespace loka::app;
+    const int width = right - left, height = bottom - top;
+    if (width <= 0 || height <= 0 || density == 0)
+      return true;
+    if (style.ink() == CARD_SHADOW_ALPHA)
+    {
+      CardImage image(density < 0 ? width : 1, density < 0 ? height : 1);
+      if (!image.bytes())
+        return false;
+      if (density >= 0)
+        image.bytes()[3] = static_cast<unsigned char>(density);
+      else
+        for (int y = top; y < bottom; ++y)
+          for (int x = left; x < right; ++x)
+          {
+            // Image row zero is its top, while device space grows upward.
+            image.bytes()[((bottom - y - 1) * width + x - left) * 4 + 3] =
+                DensityAtBackingPixel(style, body, projection, origin, inverse, x, y);
+          }
+      CGImageRef sealed = image.seal();
+      if (!sealed)
+        return false;
+      CGContextSetInterpolationQuality(graphics, kCGInterpolationNone);
+      CGContextDrawImage(graphics, CGRectMake(left, top, width, height), sealed);
+    }
+    else
+    {
+      CGRect dots[64];
+      size_t count = 0;
+      for (int y = top; y < bottom; ++y)
+        for (int x = left; x < right; ++x)
+        {
+          const unsigned char sample = density < 0
+                                           ? DensityAtBackingPixel(style, body, projection, origin, inverse, x, y)
+                                           : static_cast<unsigned char>(density);
+          const int column = transform.a > 0 ? x - originX : originX - x - 1;
+          const int row = transform.d > 0 ? y - originY : originY - y - 1;
+          if (CardShadowStencilInk(sample, column, row))
+          {
+            dots[count++] = CGRectMake(x, y, 1, 1);
+            if (count == 64)
+            {
+              CGContextFillRects(graphics, dots, count);
+              count = 0;
+            }
+          }
+        }
+      if (count)
+        CGContextFillRects(graphics, dots, count);
+    }
+    return true;
+  }
+
+  /** Lower bound of the exact pixel-center LayoutSample predicate used above.
+      PaintTableInk calls four times per cell/run, O(log clipped device span),
+      with no table walk. Reversed axes use the complementary half-open test. */
+  int SampleBoundary(int first,
+                     int last,
+                     int edge,
+                     const CGAffineTransform &inverse,
+                     bool horizontal,
+                     CGFloat origin,
+                     const loka::macos::MacProjection &projection)
+  {
+    while (first < last)
+    {
+      const int middle = first + (last - first) / 2;
+      const CGPoint local = CGPointApplyAffineTransform(CGPointMake(middle + 0.5, middle + 0.5), inverse);
+      const int sample = LayoutSample((horizontal ? local.x : local.y) + origin, projection);
+      if ((horizontal ? inverse.a : inverse.d) > 0 ? sample < edge : sample >= edge)
+        first = middle + 1;
+      else
+        last = middle;
+    }
+    return first;
+  }
+
+  /** Once per band/whole paint: four sampled corners and four constant profiles.
+      Grid middle cells may be empty. All work belongs to this paint's clip;
+      non-axis-aligned CTMs retain the original per-pixel transfer. */
   void PaintTableInk(CGContextRef graphics,
                      const loka::core::Frame &body,
                      const loka::app::CardStyle &style,
@@ -200,49 +295,68 @@ namespace
     CGContextConcatCTM(graphics, inverse);
     CGContextSetShouldAntialias(graphics, false);
     CGContextSetRGBFillColor(graphics, 0, 0, 0, 1);
-    if (style.ink() == CARD_SHADOW_ALPHA)
-    {
-      CardImage image(width, height);
-      if (image.bytes())
-      {
-        for (int y = top; y < bottom; ++y)
-          for (int x = left; x < right; ++x)
-          {
-            // Image row zero is its top, while device space grows upward.
-            image.bytes()[((bottom - y - 1) * width + x - left) * 4 + 3] =
-                DensityAtBackingPixel(style, body, projection, origin, inverse, x, y);
-          }
-        CGImageRef sealed = image.seal();
-        if (sealed)
-        {
-          CGContextSetInterpolationQuality(graphics, kCGInterpolationNone);
-          CGContextDrawImage(graphics, CGRectMake(left, top, width, height), sealed);
-        }
-      }
-    }
+    if (transform.b != 0 || transform.c != 0)
+      PaintTableRect(graphics,
+                     body,
+                     style,
+                     projection,
+                     origin,
+                     transform,
+                     inverse,
+                     originX,
+                     originY,
+                     left,
+                     top,
+                     right,
+                     bottom,
+                     -1);
     else
-    {
-      CGRect dots[64];
-      size_t count = 0;
-      for (int y = top; y < bottom; ++y)
-        for (int x = left; x < right; ++x)
+      for (int row = 0; row < 3; ++row)
+        for (int column = 0; column < 3; ++column)
         {
-          const unsigned char density = DensityAtBackingPixel(style, body, projection, origin, inverse, x, y);
-          const int column = transform.a > 0 ? x - originX : originX - x - 1;
-          const int row = transform.d > 0 ? y - originY : originY - y - 1;
-          if (CardShadowStencilInk(density, column, row))
+          if (row == 1 && column == 1)
+            continue;
+          const bool corner = row != 1 && column != 1;
+          const int steps = corner        ? 1
+                            : column == 1 ? grid.y[row + 1] - grid.y[row]
+                                          : grid.x[column + 1] - grid.x[column];
+          for (int step = 0; step < steps; ++step)
           {
-            dots[count++] = CGRectMake(x, y, 1, 1);
-            if (count == 64)
+            const int x = grid.x[column] + (!corner && row == 1 ? step : 0);
+            const int y = grid.y[row] + (!corner && column == 1 ? step : 0);
+            const int endX = !corner && row == 1 ? x + 1 : grid.x[column + 1];
+            const int endY = !corner && column == 1 ? y + 1 : grid.y[row + 1];
+            const int runLeft =
+                SampleBoundary(left, right, transform.a > 0 ? x : endX, inverse, true, origin.x, projection);
+            const int runRight =
+                SampleBoundary(left, right, transform.a > 0 ? endX : x, inverse, true, origin.x, projection);
+            const int runTop =
+                SampleBoundary(top, bottom, transform.d > 0 ? y : endY, inverse, false, origin.y, projection);
+            const int runBottom =
+                SampleBoundary(top, bottom, transform.d > 0 ? endY : y, inverse, false, origin.y, projection);
+            if (runLeft >= runRight || runTop >= runBottom)
+              continue;
+            const int density = corner ? -1 : CardShadowDensity(style, body, x, y);
+            if (!PaintTableRect(graphics,
+                                body,
+                                style,
+                                projection,
+                                origin,
+                                transform,
+                                inverse,
+                                originX,
+                                originY,
+                                runLeft,
+                                runTop,
+                                runRight,
+                                runBottom,
+                                density))
             {
-              CGContextFillRects(graphics, dots, count);
-              count = 0;
+              CGContextRestoreGState(graphics);
+              return;
             }
           }
         }
-      if (count)
-        CGContextFillRects(graphics, dots, count);
-    }
     CGContextRestoreGState(graphics);
   }
 

@@ -13,12 +13,9 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     {
       continue;
     }
+    assert(binding.context && "button rows belong to their creating context");
     if (binding.context)
       binding.context->repaint(binding.control, binding.label);
-    else
-      Draw1Control(binding.control);
-    ++debugStats_.controlDrawCount;
-    ++debugStats_.totalControlDrawCount;
   }
   for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
   {
@@ -32,10 +29,33 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     {
       continue;
     }
-    Draw1Control(binding.control);
-    ++debugStats_.controlDrawCount;
-    ++debugStats_.totalControlDrawCount;
+    this->drawControl(binding.control);
   }
 }
 
+/** One render reach draws one owned scrollbar row under the caller's clip. */
+void ToolboxScenePlatformController::drawScrollBarControl(short id)
+{
+  for (size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+  {
+    ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+    if (row.resourceId != id)
+      continue;
+    if (!row.control || !row.usedThisFrame || !(**row.control).contrlVis)
+      return;
+    GrafPtr port;
+    GetPort(&port);
+    if (!RectInRgn(&row.rect, port->clipRgn))
+      return;
+    this->drawControl(row.control);
+    return;
+  }
+}
 
+/** Submit and count one native draw at its owning paint-path reach. */
+void ToolboxScenePlatformController::drawControl(ControlRef control)
+{
+  Draw1Control(control);
+  ++this->debugStats_.controlDrawCount;
+  ++this->debugStats_.totalControlDrawCount;
+}

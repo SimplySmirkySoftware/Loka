@@ -595,6 +595,24 @@ void testMacCardPainterPixels()
               CompareV1(whole, body, projection, phase, backing, metric, residue);
             [iteration drain];
           }
+  // Long bottom profiles and overlapping corner cuts, with odd device phases.
+  for (int backing = 1; backing <= 2; ++backing)
+    for (int small = 0; small < 2; ++small)
+      for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
+      {
+        const Frame body(21, 23, small ? 5 : 128, small ? 4 : 61);
+        const CardStyle style(CARD_SHADOW_WIDE, static_cast<CardShadowInk>(ink));
+        const MacProjection projection(0, RailMetrics(Ratio(), Ratio(3, 2)));
+        const NSPoint phase = NSMakePoint(3.0 / backing, 5.0 / backing);
+        CardBitmap actual(260, 180, backing), expected(260, 180, backing);
+        CGContextRef graphics = actual.begin();
+        PaintCardInk(graphics, body, style, projection, NSZeroPoint, phase);
+        actual.end();
+        graphics = expected.begin();
+        TableOracle(graphics, body, style, projection, phase, backing);
+        expected.end();
+        EqualBitmaps(actual, expected, true);
+      }
   VerifyAlphaBytes();
   VerifyFailureAndState();
   VerifyPathRefusalAndState();

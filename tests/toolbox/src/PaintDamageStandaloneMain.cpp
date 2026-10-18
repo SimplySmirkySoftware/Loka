@@ -29,7 +29,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
-#include "app/nodes/nestable/ZStack.hpp"
+#include "app/nodes/AttributedText.hpp"
 #include "app/RectSurface.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -70,6 +70,29 @@ namespace
 {
   using namespace loka::app;
   using namespace loka::app::scene;
+
+  /** Observe one write-to-check interval, including any intervening OS update. */
+  const char *PaintDeliveryRoute(const ToolboxSceneDebugStats &before,
+                                 const ToolboxSceneDebugStats &after,
+                                 FILE *log,
+                                 const char *step)
+  {
+    const bool dirty = after.totalRenderDirtyCalls > before.totalRenderDirtyCalls;
+    const bool drew = after.totalDrawCalls > before.totalDrawCalls;
+    // A dirty replay and an OS update can both run before the next idle. The
+    // label names the dirty delivery's route; the interval line keeps the
+    // full-draw evidence beside it instead of folding it into the label.
+    if (dirty && drew)
+      std::fprintf(log,
+                   "%s route-interval draws=%d dirty_replays=%d renders=%d\r",
+                   step,
+                   after.totalDrawCalls - before.totalDrawCalls,
+                   after.totalRenderDirtyCalls - before.totalRenderDirtyCalls,
+                   after.totalRenderCalls - before.totalRenderCalls);
+    if (dirty)
+      return after.totalRenderCalls > before.totalRenderCalls ? "composition" : "kind";
+    return drew ? "full" : "none";
+  }
 
   // These windows keep unspecified margins, so their root origins follow
   // the rail standard. Fixture sizes and local ink offsets are separate.
@@ -235,9 +258,9 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(Box().size(180, 110)
-                          << (ScrollView()
-                              << Text("Baseline").TEST_ID("PaintDamage.Baseline")
-                              << (ZStack() << RectSurface(this->model_.state()).size(150, 70) << Text("ZStack"))));
+                          << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
+                                           << RectSurface(this->model_.state()).size(150, 70)
+                                           << AttributedText(Styled("Replay membership", loka::app::TextStyle()))));
     }
     void advance()
     {
@@ -250,71 +273,7 @@ namespace
     NodeState<RectSurfaceModel> model_;
   };
 
-  class ImageSurfaceNode;
-  typedef BoundaryPropsFor<ImageSurfaceNode> ImageSurfaceProps;
-  /** Only this Boundary owns and changes the overlapping surface model. */
-  class ImageSurfaceNode : public StdCompositionBoundaryNodeBase<ImageSurfaceProps>
-  {
-  public:
-    typedef ImageSurfaceProps::TypeTag TypeTag;
-    explicit ImageSurfaceNode(const ImageSurfaceProps &props)
-        : StdCompositionBoundaryNodeBase<ImageSurfaceProps>(props)
-    {
-      this->setTestId("ImageDamage.Owner");
-      RectSurfaceModel model;
-      model.rectCount = 1;
-      model.rects[0] = RectSprite(0, 0, 120, 24);
-      this->state(this->model_, model);
-    }
-    virtual void composeNode(NodeComposition &composition)
-    {
-      composition.declare(RectSurface(this->model_.state()).size(150, 70)
-                          .TEST_ID("ImageDamage.Surface"));
-    }
-    void advance()
-    {
-      RectSurfaceModel model = this->model_.get();
-      model.rects[0].x = 128;
-      loka::core::StateTrackerGuard guard(this->tracker());
-      this->model_.set(model);
-    }
-  private:
-    NodeState<RectSurfaceModel> model_;
-  };
-
-  class ImagePlaceholderNode;
-  typedef BoundaryPropsFor<ImagePlaceholderNode> ImagePlaceholderProps;
-  /** The image has a separate paint-answer scope from the changing surface. */
-  class ImagePlaceholderNode : public StdCompositionBoundaryNodeBase<ImagePlaceholderProps>
-  {
-  public:
-    typedef ImagePlaceholderProps::TypeTag TypeTag;
-    explicit ImagePlaceholderNode(const ImagePlaceholderProps &props)
-        : StdCompositionBoundaryNodeBase<ImagePlaceholderProps>(props) {}
-    virtual void composeNode(NodeComposition &composition)
-    {
-      composition.declare(ImageView().size(150, 70));
-    }
-  };
-
-  class ImageOverlapNode;
-  typedef BoundaryPropsFor<ImageOverlapNode> ImageOverlapProps;
-  class ImageOverlapNode : public StdCompositionBoundaryNodeBase<ImageOverlapProps>
-  {
-  public:
-    typedef ImageOverlapProps::TypeTag TypeTag;
-    explicit ImageOverlapNode(const ImageOverlapProps &props)
-        : StdCompositionBoundaryNodeBase<ImageOverlapProps>(props) {}
-    virtual void composeNode(NodeComposition &composition)
-    {
-      composition.declare(Box().size(180, 110)
-                          << (ScrollView()
-                              << (ZStack()
-                                  << loka::app::scene::Boundary<ImageSurfaceNode>()
-                                  << loka::app::scene::Boundary<ImagePlaceholderNode>())));
-    }
-  };
-
+  // Retired with the ZStack overlay contract (page 2a §16/§18, #1438, #1442).
   class ImageVacatedNode;
   typedef BoundaryPropsFor<ImageVacatedNode> ImageVacatedProps;
   /** An ImageView alone in its window, so its dirty repaint takes the
@@ -355,38 +314,7 @@ namespace
     NodeState<loka::core::String> text_;
   };
 
-  class EditZStackNode;
-  typedef BoundaryPropsFor<EditZStackNode> EditZStackProps;
-  /** The live edit and its later overlapping surface share one Boundary. */
-  class EditZStackNode : public StdCompositionBoundaryNodeBase<EditZStackProps>
-  {
-  public:
-    typedef EditZStackProps::TypeTag TypeTag;
-    explicit EditZStackNode(const EditZStackProps &props)
-        : StdCompositionBoundaryNodeBase<EditZStackProps>(props)
-    {
-      this->state(this->text_, loka::core::String::Literal(""));
-      RectSurfaceModel model;
-      model.rectCount = 1;
-      model.rects[0] = RectSprite(4, 4, 12, 12);
-      this->state(this->model_, model);
-    }
-    virtual void composeNode(NodeComposition &composition)
-    {
-      composition.declare(ZStack()
-                          << EditText(this->text_).TEST_ID("PaintDamage.Edit")
-                          << RectSurface(this->model_.state()).size(16, 20).TEST_ID("EditZStack.Surface"));
-    }
-    void advance()
-    {
-      loka::core::StateTrackerGuard guard(this->tracker());
-      this->text_.set(loka::core::String::Literal("    HHHH"));
-    }
-  private:
-    NodeState<loka::core::String> text_;
-    NodeState<RectSurfaceModel> model_;
-  };
-
+  // Retired with the ZStack overlay contract (page 2a §16/§18, #1438, #1442).
   class EditExactNode;
   typedef BoundaryPropsFor<EditExactNode> EditExactProps;
   /** One owner makes the paint walk visit the edit and both siblings. */
@@ -963,7 +891,10 @@ namespace
       drawers << Box().size(150, 24)
               << RectSurface(this->model_.state()).size(150, 24)
                   .TEST_ID("History.Surface");
-      composition.declare(ZStack() << drawers);
+      // A real text-context membership keeps these #518/#763 pins on the
+      // clipped composition route without an overlay or a tree-kind heuristic.
+      drawers << AttributedText(Styled("Replay membership", loka::app::TextStyle()));
+      composition.declare(drawers);
     }
     void writeFirst()
     {
@@ -1333,13 +1264,10 @@ namespace
           cellWindow_(0),
           popupWindow_(0),
           overflowWindow_(0),
-          imageWindow_(0),
           imageVacatedWindow_(0),
           popupRow_(),
           editExact_(0),
           editExactWindow_(0),
-          editZStack_(0),
-          editZStackWindow_(0),
           popupExact_(0),
           popupExactWindow_(0),
           popupFaceRows_(),
@@ -1423,26 +1351,26 @@ namespace
                                    DrawerDamageNode<CELL_OVERFLOW>::Props(), 0))
                                .visible(false).idlePolicy(IdlePolicy::everyTick())
                                .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->overflowWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 160).title("Image vacated")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<ImageVacatedProps, ImageVacatedNode>(
-                                   ImageVacatedProps(), 0))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->imageVacatedWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 160).title("Image replay")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<ImageOverlapProps, ImageOverlapNode>(
-                                   ImageOverlapProps(), 0))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->imageWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Edit exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<EditExactProps, EditExactNode>(
-                                   EditExactProps(), &this->editExact_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->editExactWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Edit ZStack order")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<EditZStackProps, EditZStackNode>(
-                                   EditZStackProps(), &this->editZStack_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->editZStackWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 160)
+              .title("Image vacated")
+              .scene(loka::scenario_tests::ObservedMainDefinition<ImageVacatedProps, ImageVacatedNode>(
+                  ImageVacatedProps(), 0))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->imageVacatedWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Edit exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<EditExactProps, EditExactNode>(EditExactProps(),
+                                                                                                 &this->editExact_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->editExactWindow_);
       composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Popup exact")
                                .scene(loka::scenario_tests::ObservedMainDefinition<PopupExactProps, PopupExactNode>(
                                    PopupExactProps(), &this->popupExact_))
@@ -1508,7 +1436,26 @@ namespace
   private:
     enum Phase { SETTLE, WRITE, CHECK, PLAIN_WRITE, PLAIN_CHECK, INVALIDATED_WRITE, INVALIDATED_CHECK,
                  COMPOSITED_WRITE, COMPOSITED_CHECK, EDIT_WRITE, EDIT_CHECK, BOUNDS_SHOW, BOUNDS_CHECK, CELL_SHOW, CELL_REPLAY, CELL_CHECK,
-                 POPUP_SHOW, POPUP_REPLAY, POPUP_CHECK, OVERFLOW_SHOW, OVERFLOW_REPLAY, OVERFLOW_CHECK, IMAGE_SHOW, IMAGE_WRITE, IMAGE_CHECK, IMAGE_VACATED_SHOW, IMAGE_VACATED_WRITE, IMAGE_VACATED_CHECK, EDIT_EXACT_SHOW, EDIT_EXACT_WRITE, EDIT_EXACT_CHECK, EDIT_ZSTACK_SHOW, EDIT_ZSTACK_WRITE, EDIT_ZSTACK_CHECK, POPUP_EXACT_SHOW, POPUP_SIBLING_WRITE, POPUP_SIBLING_CHECK, POPUP_SELECTION_CHECK, HISTORY_SHOW, HISTORY_FIRST, HISTORY_SECOND, HISTORY_CHECK,
+                 POPUP_SHOW,
+                 POPUP_REPLAY,
+                 POPUP_CHECK,
+                 OVERFLOW_SHOW,
+                 OVERFLOW_REPLAY,
+                 OVERFLOW_CHECK,
+                 IMAGE_VACATED_SHOW,
+                 IMAGE_VACATED_WRITE,
+                 IMAGE_VACATED_CHECK,
+                 EDIT_EXACT_SHOW,
+                 EDIT_EXACT_WRITE,
+                 EDIT_EXACT_CHECK,
+                 POPUP_EXACT_SHOW,
+                 POPUP_SIBLING_WRITE,
+                 POPUP_SIBLING_CHECK,
+                 POPUP_SELECTION_CHECK,
+                 HISTORY_SHOW,
+                 HISTORY_FIRST,
+                 HISTORY_SECOND,
+                 HISTORY_CHECK,
                  POPUP_HISTORY_SHOW, POPUP_HISTORY_FIRST, POPUP_HISTORY_SECOND, POPUP_HISTORY_CHECK, BUTTON_ENABLED_SHOW, BUTTON_ENABLED_WRITE, BUTTON_ENABLED_CHECK,
                  BUTTON_LABEL_SHOW, BUTTON_LABEL_WRITE, BUTTON_LABEL_CHECK,
                  TEXT_WIDTH_SHOW, TEXT_WIDTH_WRITE, TEXT_WIDTH_CHECK, TEXT_WIDTH_RELAYOUT,
@@ -1554,13 +1501,10 @@ namespace
     Window *cellWindow_;
     Window *popupWindow_;
     Window *overflowWindow_;
-    Window *imageWindow_;
     Window *imageVacatedWindow_;
     PopupRow popupRow_;
     EditExactNode *editExact_;
     Window *editExactWindow_;
-    EditZStackNode *editZStack_;
-    Window *editZStackWindow_;
     PopupExactNode *popupExact_;
     Window *popupExactWindow_;
     PopupFaceRows popupFaceRows_;
@@ -1631,14 +1575,8 @@ namespace
       case IMAGE_VACATED_SHOW: case IMAGE_VACATED_WRITE: case IMAGE_VACATED_CHECK:
         target = self->imageVacatedWindow_;
         break;
-      case IMAGE_SHOW: case IMAGE_WRITE: case IMAGE_CHECK:
-        target = self->imageWindow_;
-        break;
       case EDIT_EXACT_SHOW: case EDIT_EXACT_WRITE: case EDIT_EXACT_CHECK:
         target = self->editExactWindow_;
-        break;
-      case EDIT_ZSTACK_SHOW: case EDIT_ZSTACK_WRITE: case EDIT_ZSTACK_CHECK:
-        target = self->editZStackWindow_;
         break;
       case POPUP_EXACT_SHOW: case POPUP_SIBLING_WRITE: case POPUP_SIBLING_CHECK: case POPUP_SELECTION_CHECK:
         target = self->popupExactWindow_;
@@ -1712,8 +1650,6 @@ namespace
         OnBoundsIdle(target, self);
       else if (target == self->editExactWindow_)
         OnEditExactIdle(target, self);
-      else if (target == self->editZStackWindow_)
-        OnEditZStackIdle(target, self);
       else if (target == self->popupExactWindow_)
         OnPopupExactIdle(target, self);
       else if (target == self->historyWindow_)
@@ -1734,8 +1670,6 @@ namespace
         OnCardIdle(target, self);
       else if (target == self->ribbonWindow_)
         OnRibbonIdle(target, self);
-      else if (target == self->imageWindow_)
-        OnImageIdle(target, self);
       else
         OnDrawerIdle(target, self);
     }
@@ -2019,37 +1953,23 @@ namespace
         self->recordArm("scrollview-first-text-placement", placedInside, COMPOSITED_WRITE);
         self->recordArm("startup-text-baseline", !above && inside, COMPOSITED_WRITE);
         self->checkBlockingWorkCursor(*controller, COMPOSITED_WRITE);
+        // This snapshot belongs only to the following write-to-check interval.
         self->initial_ = controller->debugStatsForTesting();
         self->composited_->advance();
         self->phase_ = COMPOSITED_CHECK;
         return;
       }
-      const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
-      const int broad = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
       const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
       PaintAnswerBuffer<> answers;
       ProbeSource source;
       const PaintApplyVerdict verdict = CollectPaintAnswers(*self->composited_, query, answers, source);
-      BoundaryLocalApplyInfo info;
-      info.paintKind = LOCAL_APPLY_PAINT_COMPOSITED;
-      const bool gate = verdict.canSkipBroadPaint(info);
-      const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
-      // The ZStack is not classified composited by the Boundary, so the write
-      // is delivered exactly; renderDirty's ZStack branch re-renders the dirty
-      // rect under a clip so the overlapping Text keeps its ink. Sample the
-      // Text ink right of the moved sprite; the ZStack follows a 16px
-      // Text seat and one gap.
-      GrafPtr zPort;
-      GetPort(&zPort);
-      SetPort(native->window());
-      bool textInk = false;
-      for (short y = kRootY + 16 + kRootGap + 2; y < kRootY + 16 + kRootGap + 14; ++y)
-        for (short x = kRootX + 32; x < kRootX + 46; ++x)
-          textInk = textInk || GetPixel(x, y) != 0;
-      SetPort(zPort);
-      std::fprintf(self->log_, "zstack_gate=%d broad_requests=%d rect_requests=%d text_ink=%d\r", gate ? 1 : 0, broad, rects, textInk ? 1 : 0);
-      self->recordArm("contained-text-history", verdict.refusedCount() == 0, COMPOSITED_CHECK);
-      self->recordArm("zstack-overlap-replay", !gate && broad == 0 && rects >= 1 && textInk, EDIT_WRITE);
+      // zstack-overlap-replay retired with the ZStack overlay contract
+      // (page 2a §16/§18, #1438, #1442). Keep non-overlapping text history.
+      const char *route =
+          PaintDeliveryRoute(self->initial_, controller->debugStatsForTesting(), self->log_, "contained-text-history");
+      std::fprintf(self->log_, "contained-text-history route=%s\r", route);
+      self->recordArm(
+          "contained-text-history", verdict.refusedCount() == 0 && std::strcmp(route, "composition") == 0, EDIT_WRITE);
     }
     static void OnBoundsIdle(Window *window, PaintDamageConfig *self)
     {
@@ -2205,109 +2125,9 @@ namespace
             outsideWhite = outsideWhite && GetPixel(x, y) == 0;
       const bool setup = StringWidth(label) > 8 && GetPixel(kOverflowCellX, kRootY) != 0;
       SetPort(previousPort);
-      self->recordArm("cell-ink-clipped-to-rect", setup && outsideWhite, IMAGE_SHOW);
+      self->recordArm("cell-ink-clipped-to-rect", setup && outsideWhite, IMAGE_VACATED_SHOW);
     }
-    static void OnImageIdle(Window *window, PaintDamageConfig *self)
-    {
-      ToolboxWindow *native = window->asToolboxWindow();
-      if (self->phase_ == IMAGE_SHOW)
-      {
-        ShowWindow(native->window());
-        SelectWindow(native->window());
-        native->requestInvalidate();
-        self->phase_ = IMAGE_WRITE;
-        return;
-      }
-      ToolboxScenePlatformController *controller = window->scene()
-          ? static_cast<ToolboxScenePlatformController *>(
-              loka::dsl::testing::SceneTestAccess::platformController(*window->scene())) : 0;
-      if (!controller)
-      {
-        self->finish(false);
-        return;
-      }
-      GrafPtr previousPort;
-      GetPort(&previousPort);
-      SetPort(native->window());
-      if (self->phase_ == IMAGE_WRITE)
-      {
-        Node *ownerNode = 0;
-        Node *surfaceNode = 0;
-        loka::dsl::FlowError error;
-        loka::dsl::testing::LookupNodeById<Node>(
-            window->scene(), "ImageDamage.Owner", ownerNode, error);
-        loka::dsl::testing::LookupNodeById<Node>(
-            window->scene(), "ImageDamage.Surface", surfaceNode, error);
-        ImageSurfaceNode *owner = ownerNode && ownerNode->asBoundary()
-            ? static_cast<ImageSurfaceNode *>(ownerNode) : 0;
-        RectSurfaceNode *surface = surfaceNode ? surfaceNode->asRectSurfaceNode() : 0;
-        const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
-        const PaintAnswer answer = surface && surface->getContext()
-            ? static_cast<NativeNodeContext *>(surface->getContext())->queryPaintDamage(query)
-            : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-        // (110,20) is inside the sprite, below the label baseline (+14),
-        // and away from the frame. It must survive the placeholder draw.
-        const bool spriteVisible = owner && answer.kind == PAINT_ANSWER_EXACT
-            && GetPixel(answer.damage.x + 110, answer.damage.y + 20) != 0;
-        self->recordArm("image-ground-transparent", spriteVisible, IMAGE_WRITE);
-        if (!spriteVisible)
-        {
-          SetPort(previousPort);
-          self->finish(false);
-          return;
-        }
-        bool foundInk = false;
-        if (owner && answer.kind == PAINT_ANSWER_EXACT)
-        {
-          // Sample the placeholder interior, excluding its frame. The old
-          // sprite covers this area; its new position starts at local x=128.
-          const int top = answer.damage.y + 2;
-          const int bottom = answer.damage.y + 14;
-          const int left = answer.damage.x + 6;
-          const int right = answer.damage.x + 100;
-          for (int y = top; y < bottom && !foundInk; ++y)
-            for (int x = left; x < right && !foundInk; ++x)
-              if (GetPixel(static_cast<short>(x), static_cast<short>(y)))
-              {
-                self->marker_.h = static_cast<short>(left);
-                self->marker_.v = static_cast<short>(top);
-                foundInk = true;
-              }
-        }
-        std::fprintf(self->log_, "image_placeholder_setup=%d\r", foundInk ? 1 : 0);
-        self->recordArm("image-overlap-replay-setup", foundInk, IMAGE_CHECK);
-        if (foundInk)
-        {
-          self->initial_ = controller->debugStatsForTesting();
-          owner->advance();
-        }
-        SetPort(previousPort);
-        if (!foundInk)
-          self->finish(false);
-        return;
-      }
-      const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
-      const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
-      const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
-      bool ink = false;
-      // After the sprite moves away, only the replayed label can supply ink.
-      for (int y = self->marker_.v; y < self->marker_.v + 12; ++y)
-        for (int x = self->marker_.h; x < self->marker_.h + 94; ++x)
-          ink = GetPixel(static_cast<short>(x), static_cast<short>(y)) != 0 || ink;
-      // The ZStack makes this exact update a composition-order replay, whose
-      // clipped render() is not a whole-window repaint; whole == 0 pins that.
-      const bool replayed = stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
-                            && stats.windowFlushDirtyCount > self->initial_.windowFlushDirtyCount;
-      // Surface-local (140, 20): the moved sprite (x >= 128) under the
-      // transparent placeholder, right of its label and inside its frame.
-      const bool spriteThrough = GetPixel(static_cast<short>(self->marker_.h - 6 + 140),
-                                          static_cast<short>(self->marker_.v - 2 + 20)) != 0;
-      SetPort(previousPort);
-      std::fprintf(self->log_, "image_whole_window=%d rect_requests=%d placeholder_ink=%d dirty_replayed=%d\r",
-                   whole, rects, ink ? 1 : 0, replayed ? 1 : 0);
-      self->recordArm("image-overlap-shows-surface", spriteThrough, IMAGE_CHECK);
-      self->recordArm("image-overlap-replay", whole == 0 && rects >= 1 && ink && replayed, IMAGE_VACATED_SHOW);
-    }
+    // Retired with the ZStack overlay contract (page 2a §16/§18, #1438, #1442).
     static void OnImageVacatedIdle(Window *window, PaintDamageConfig *self)
     {
       ToolboxWindow *native = window->asToolboxWindow();
@@ -2478,99 +2298,10 @@ namespace
       controller->retireNodeContext(edit.context, edit.context->lifetimeHint());
       self->recordArm("edittext-native-retired-refuses",
                       !controller->queryEditTextGeometryForTesting(edit.context, geometry)
-                      && edit.context->queryPaintDamage(settled).kind == PAINT_ANSWER_REFUSED, EDIT_ZSTACK_SHOW);
+                          && edit.context->queryPaintDamage(settled).kind == PAINT_ANSWER_REFUSED,
+                      POPUP_EXACT_SHOW);
     }
-    static void OnEditZStackIdle(Window *window, PaintDamageConfig *self)
-    {
-      ToolboxWindow *native = window->asToolboxWindow();
-      if (self->phase_ == EDIT_ZSTACK_SHOW)
-      {
-        ShowWindow(native->window());
-        SelectWindow(native->window());
-        native->requestInvalidate();
-        self->phase_ = EDIT_ZSTACK_WRITE;
-        return;
-      }
-      ToolboxScenePlatformController *controller = window->scene()
-          ? static_cast<ToolboxScenePlatformController *>(
-              loka::dsl::testing::SceneTestAccess::platformController(*window->scene())) : 0;
-      FindEdit edit;
-      enumerateAttachedResidents(self->editZStack_, edit);
-      ToolboxScenePlatformController::EditTextGeometry geometry;
-      if (!controller || !self->editZStack_
-          || !controller->queryEditTextGeometryForTesting(edit.context, geometry))
-      {
-        self->recordArm("edittext-zstack-order-geometry", false, COMPLETE);
-        self->finish(false);
-        return;
-      }
-      GrafPtr previousPort;
-      GetPort(&previousPort);
-      SetPort(native->window());
-      if (self->phase_ == EDIT_ZSTACK_WRITE)
-      {
-        Node *surface = 0;
-        loka::dsl::FlowError error;
-        loka::dsl::testing::LookupNodeById<Node>(window->scene(), "EditZStack.Surface", surface, error);
-        const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
-        const PaintAnswer answer = surface && surface->getContext()
-            ? static_cast<NativeNodeContext *>(surface->getContext())->queryPaintDamage(query)
-            : PaintAnswer::refused(PAINT_REFUSED_NO_CONTEXT);
-        // The later sprite occupies local [4,16) x [4,16). The narrow
-        // surface leaves the right TE strip clear for the new H glyphs.
-        self->marker_.h = static_cast<short>(answer.damage.x + 10);
-        self->marker_.v = static_cast<short>(answer.damage.y + 10);
-        // Leading spaces keep the sample free of glyph ink on a bad replay.
-        const unsigned char prefix[] = {4, ' ', ' ', ' ', ' '};
-        const bool blankPrefix = StringWidth(prefix) > self->marker_.h - geometry.view.left;
-        const bool overlaps = geometry.view.left < answer.damage.x + 4
-                              && geometry.view.right >= answer.damage.x + 16
-                              && geometry.view.top <= answer.damage.y + 4
-                              && geometry.view.bottom >= answer.damage.y + 16;
-        bool uncoveredWhite = true;
-        for (int y = geometry.view.top; y < geometry.view.bottom; ++y)
-          for (int x = answer.damage.x + 16; x < geometry.view.right; ++x)
-            uncoveredWhite = GetPixel(static_cast<short>(x), static_cast<short>(y)) == 0 && uncoveredWhite;
-        const bool sprite = GetPixel(self->marker_.h, self->marker_.v) != 0;
-        SetPort(previousPort);
-        std::fprintf(self->log_, "edittext_zstack_setup_sprite_black=%d uncovered_white=%d overlaps_te=%d te=(%d,%d,%d,%d) sample=(%d,%d)\r",
-                     sprite ? 1 : 0, uncoveredWhite ? 1 : 0, overlaps ? 1 : 0,
-                     geometry.view.left, geometry.view.top, geometry.view.right, geometry.view.bottom,
-                     self->marker_.h, self->marker_.v);
-        const bool setup = answer.kind == PAINT_ANSWER_EXACT && overlaps && blankPrefix && uncoveredWhite && sprite;
-        self->recordArm("edittext-zstack-order-setup", setup, EDIT_ZSTACK_CHECK);
-        if (!setup)
-        {
-          self->finish(false);
-          return;
-        }
-        self->editGeometry_ = geometry;
-        self->initial_ = controller->debugStatsForTesting();
-        self->editZStack_->advance();
-        return;
-      }
-      bool newInk = false;
-      // Reuse the setup's all-white strip, excluding the sprite and chrome.
-      for (int y = geometry.view.top; y < geometry.view.bottom; ++y)
-        for (int x = self->marker_.h + 6; x < geometry.view.right; ++x)
-          newInk = GetPixel(static_cast<short>(x), static_cast<short>(y)) != 0 || newInk;
-      const bool sprite = GetPixel(self->marker_.h, self->marker_.v) != 0;
-      SetPort(previousPort);
-      std::string value;
-      const bool newValue = controller->queryEditTextValueForTesting(edit.context, value) && value == "    HHHH";
-      const bool sameGeometry = EqualRect(&geometry.view, &self->editGeometry_.view)
-                                && EqualRect(&geometry.destination, &self->editGeometry_.destination);
-      const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
-      const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
-      const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
-      const bool dirtyFlushed = stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
-                                && stats.windowFlushDirtyCount > self->initial_.windowFlushDirtyCount;
-      std::fprintf(self->log_, "edittext_zstack_whole_window=%d rect_requests=%d sprite_black=%d new_text_visible=%d dirty_flushed=%d same_geometry=%d\r",
-                   whole, rects, sprite ? 1 : 0, newInk && newValue ? 1 : 0,
-                   dirtyFlushed ? 1 : 0, sameGeometry ? 1 : 0);
-      self->recordArm("edittext-zstack-order", whole == 0 && rects >= 1 && sprite
-                      && newInk && newValue && sameGeometry && dirtyFlushed, POPUP_EXACT_SHOW);
-    }
+    // Retired with the ZStack overlay contract (page 2a §16/§18, #1438, #1442).
     static void OnPopupExactIdle(Window *window, PaintDamageConfig *self)
     {
       ToolboxWindow *native = window->asToolboxWindow();
@@ -2700,23 +2431,30 @@ namespace
     static void OnHistoryIdle(Window *window, HistoryNode<Popup> *node, PaintDamageConfig *self)
     {
       ToolboxWindow *native = window->asToolboxWindow();
+      ToolboxScenePlatformController *controller =
+          window->scene() ? static_cast<ToolboxScenePlatformController *>(
+                                loka::dsl::testing::SceneTestAccess::platformController(*window->scene()))
+                          : 0;
+      if (!controller)
+      {
+        self->finish(false);
+        return;
+      }
       if (self->phase_ == (Popup ? POPUP_HISTORY_SHOW : HISTORY_SHOW))
       {
+        self->initial_ = controller->debugStatsForTesting();
         ShowWindow(native->window());
         SelectWindow(native->window());
         native->requestInvalidate();
         self->phase_ = Popup ? POPUP_HISTORY_FIRST : HISTORY_FIRST;
         return;
       }
-      ToolboxScenePlatformController *controller = window->scene()
-          ? static_cast<ToolboxScenePlatformController *>(
-              loka::dsl::testing::SceneTestAccess::platformController(*window->scene())) : 0;
       Node *second = 0;
       Node *surface = 0;
       loka::dsl::FlowError error;
       loka::dsl::testing::LookupNodeById<Node>(window->scene(), "History.B", second, error);
       loka::dsl::testing::LookupNodeById<Node>(window->scene(), "History.Surface", surface, error);
-      if (!controller || !node || !second || !second->getContext() || !surface || !surface->getContext())
+      if (!node || !second || !second->getContext() || !surface || !surface->getContext())
       {
         self->finish(false);
         return;
@@ -2744,8 +2482,15 @@ namespace
             blank = GetPixel(static_cast<short>(x), static_cast<short>(y)) == 0 && blank;
         const bool spriteVisible = GetPixel(self->marker_.h, self->marker_.v) != 0;
         SetPort(previousPort);
-        self->recordArm(Popup ? "popup-history-setup" : "history-setup", blank && spriteVisible,
+        const char *route = PaintDeliveryRoute(self->initial_,
+                                               controller->debugStatsForTesting(),
+                                               self->log_,
+                                               Popup ? "popup-history-setup" : "history-setup");
+        std::fprintf(self->log_, "%s route=%s\r", Popup ? "popup-history-setup" : "history-setup", route);
+        self->recordArm(Popup ? "popup-history-setup" : "history-setup",
+                        blank && spriteVisible && std::strcmp(route, "full") == 0,
                         Popup ? POPUP_HISTORY_SECOND : HISTORY_SECOND);
+        // This snapshot belongs only to the following write-to-check interval.
         self->initial_ = controller->debugStatsForTesting();
         node->writeFirst();
         self->phase_ = Popup ? POPUP_HISTORY_SECOND : HISTORY_SECOND;
@@ -2756,9 +2501,16 @@ namespace
         const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
         const bool flushed = stats.totalRenderDirtyCalls > self->initial_.totalRenderDirtyCalls
                              && stats.windowFullRequestCount == self->initial_.windowFullRequestCount;
-        self->recordArm(Popup ? "popup-history-first-clipped" : "history-first-clipped", flushed,
+        const char *route = PaintDeliveryRoute(
+            self->initial_, stats, self->log_, Popup ? "popup-history-first-clipped" : "history-first-clipped");
+        std::fprintf(
+            self->log_, "%s route=%s\r", Popup ? "popup-history-first-clipped" : "history-first-clipped", route);
+        self->recordArm(Popup ? "popup-history-first-clipped" : "history-first-clipped",
+                        flushed && std::strcmp(route, "composition") == 0,
                         Popup ? POPUP_HISTORY_CHECK : HISTORY_CHECK);
-        self->initial_ = stats;
+        // Fresh value snapshot immediately before this step's write. An OS
+        // update before CHECK is inside this interval, not setup-time history.
+        self->initial_ = controller->debugStatsForTesting();
         node->writeSecond();
         return;
       }
@@ -2776,9 +2528,17 @@ namespace
       const int whole = stats.windowFullRequestCount - self->initial_.windowFullRequestCount;
       const int rects = stats.windowRectRequestCount - self->initial_.windowRectRequestCount;
       const char *name = Popup ? "popup-history-survives" : "history-survives-clipped-render";
-      std::fprintf(self->log_, "%s whole_window=%d rect_requests=%d sprite_preserved=%d new_text_visible=%d\r",
-                   name, whole, rects, sprite ? 1 : 0, ink ? 1 : 0);
-      self->recordArm(name, whole == 0 && rects >= 1 && sprite && ink,
+      const char *route = PaintDeliveryRoute(self->initial_, stats, self->log_, name);
+      std::fprintf(self->log_,
+                   "%s whole_window=%d rect_requests=%d sprite_preserved=%d new_text_visible=%d route=%s\r",
+                   name,
+                   whole,
+                   rects,
+                   sprite ? 1 : 0,
+                   ink ? 1 : 0,
+                   route);
+      self->recordArm(name,
+                      whole == 0 && rects >= 1 && sprite && ink && std::strcmp(route, "composition") == 0,
                       Popup ? BUTTON_ENABLED_SHOW : POPUP_HISTORY_SHOW);
     }
     static PaintAnswer offscreenAnswer(Window *window, const char *id, const PaintQuery &query)
@@ -3929,6 +3689,18 @@ namespace
       SetPort(native->window());
       if (self->phase_ == (label ? BUTTON_LABEL_WRITE : BUTTON_ENABLED_WRITE))
       {
+        if (!label)
+        {
+          // Exactly one Button and no scrollbar in this window. Exercise the
+          // real full-window entry, including anything after its render walk.
+          const int beforeDraws = controller->debugStatsForTesting().totalDrawCalls;
+          const int beforeControls = controller->debugStatsForTesting().totalControlDrawCount;
+          native->draw();
+          const int draws = controller->debugStatsForTesting().totalDrawCalls - beforeDraws;
+          const int controls = controller->debugStatsForTesting().totalControlDrawCount - beforeControls;
+          std::fprintf(self->log_, "button-full-window draws=%d control_draws=%d\r", draws, controls);
+          self->recordArm("button-full-window-once", draws == 1 && controls == 1, BUTTON_ENABLED_WRITE);
+        }
         const PaintAnswer face = context->queryPaintDamage(query);
         const PaintAnswer sprite = static_cast<NativeNodeContext *>(surface->getContext())->queryPaintDamage(query);
         // Since #1015 the Button takes its Column's width and centres the title,

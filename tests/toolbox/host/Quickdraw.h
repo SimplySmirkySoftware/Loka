@@ -58,14 +58,30 @@ struct HostControl;
 /** Per-port OS state; update rectangles retain disjoint damage. */
 struct HostPortState
 {
-  Rect clip;
+  Region clipRegion;
+  Region *clipRegionPointer;
+  Rect &clip;
   std::vector<Rect> update;
   std::vector<HostControl *> controls;
   HostPortState()
+      : clipRegionPointer(&clipRegion),
+        clip(clipRegion.rgnBBox)
   {
+    clipRegion.rgnSize = sizeof(Region);
     clip.top = clip.left = -30000;
     clip.bottom = clip.right = 30000;
   }
+  HostPortState(const HostPortState &other)
+      : clipRegion(other.clipRegion),
+        clipRegionPointer(&clipRegion),
+        clip(clipRegion.rgnBBox),
+        update(other.update),
+        controls(other.controls)
+  {
+  }
+
+private:
+  HostPortState &operator=(const HostPortState &);
 };
 struct GrafPort
 {
@@ -74,6 +90,7 @@ struct GrafPort
   Style txFace;
   long fgColor;
   HostPortState native;
+  RgnHandle clipRgn;
 };
 typedef GrafPort *GrafPtr;
 struct FontInfo

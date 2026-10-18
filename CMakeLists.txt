@@ -813,6 +813,22 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxControlWidth_${_control_width_case} COMMAND LokaToolboxControlWidthTests ${_control_width_case})
   endforeach()
 
+  add_executable(LokaToolboxControlOrderTests tests/toolbox/host/ToolboxControlOrderHostTests.cpp
+    apple/toolbox/src/context/ToolboxScrollBarContext.cpp
+    apple/toolbox/src/context/ToolboxCellContext.cpp
+    apple/toolbox/src/context/ToolboxButtonContext.cpp
+    apple/toolbox/src/context/ToolboxEditTextContext.cpp
+    apple/toolbox/src/context/ToolboxPopupMenuContext.cpp ${_editor_host_sources})
+  target_include_directories(LokaToolboxControlOrderTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxControlOrderTests PRIVATE LOKA_HOST_CONTROL_WIDTH=1 LOKA_HOST_CELL_PAINT=1 LOKA_HOST_CONTROL_ORDER=1)
+  target_compile_options(LokaToolboxControlOrderTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxControlOrderTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxControlOrderTests)
+  set_target_properties(LokaToolboxControlOrderTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_order_case RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
+    add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
+  endforeach()
+
   add_executable(LokaToolboxPartialPaintTests tests/toolbox/host/ToolboxPartialPaintHostTests.cpp
     apple/toolbox/src/context/ToolboxCellContext.cpp
     apple/toolbox/src/context/ToolboxButtonContext.cpp
@@ -828,6 +844,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   foreach(_partial_paint_case cell-encoding cell text text-repaint button button-repaint popup popup-repaint attributed edit edit-refused)
     add_test(NAME testToolboxPartialPaint_${_partial_paint_case} COMMAND LokaToolboxPartialPaintTests ${_partial_paint_case})
   endforeach()
+
+  add_test(NAME testToolboxEditorBarDrawnAtRender COMMAND LokaToolboxTextEditorTests render-bar)
 
   foreach(_editor_request_case input-door request report project input clear epilogue refuse clamp
       take-edit report-edit detach rebind nested retry endless five-reposts
