@@ -64,16 +64,6 @@ public:
         return true;
     return false;
   }
-  bool contains(const Rect &rect) const
-  {
-    for (Mark i = 0; i < this->rows_.size(); ++i)
-    {
-      const Rect &unit = this->rows_[i].rect;
-      if (rect.left >= unit.left && rect.right <= unit.right && rect.top >= unit.top && rect.bottom <= unit.bottom)
-        return true;
-    }
-    return false;
-  }
 
 private:
   std::vector<UnitSeat> rows_;

@@ -97,17 +97,23 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
 }
 
 /** O(units) per native paint; repair each partial overlap. Full containment
-    deliberately has no repair: own controls must fit inside their unit, and
+    skips only that row, never partial overlaps with other rows. It deliberately
+    has no repair for the containing row: own controls must fit inside their unit, and
     fully covered ground/earlier-unit controls are outside the v1 contract.
     Their selection highlight, TEActivate/TEDeactivate paint, and TrackControl
     hilite stay on screen until an unrelated repaint presents the unit area.
     Registration ownership belongs to the 2b hit shield, not this geometry test. */
 void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
 {
-  if (!this->window_ || this->unitLedger_.contains(rect))
+  if (!this->window_)
     return;
   ToolboxUnitLedger::Mark cursor = 0;
   Rect overlap;
   while (this->unitLedger_.nextOverlap(rect, cursor, overlap))
+  {
+    // An intersection equal to the control rect means this row contains it.
+    if (EqualRect(&rect, &overlap))
+      continue;
     this->window_->requestInvalidateRect(overlap);
+  }
 }

@@ -415,6 +415,15 @@ namespace
     equal(toolbox_host::invalidatedRects[0], first);
     equal(toolbox_host::invalidatedRects[1], second);
     toolbox_host::invalidatedRects.clear();
+    // Unit A contains the editor, but the shorter later unit B crosses it.
+    // A caret toggle must repair B without requesting anything for A.
+    const Rect insideAOverlappingB = {25, 15, 55, 90};
+    controller.editControls_[0].rect = insideAOverlappingB;
+    ToolboxInputDoor::idleTextEdits(controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.size() == 1);
+    const Rect overlapB = {25, 15, 50, 90};
+    equal(toolbox_host::invalidatedRects[0], overlapB);
+    toolbox_host::invalidatedRects.clear();
     const Rect contained = {25, 15, 45, 90};
     controller.editControls_[0].rect = contained;
     ToolboxInputDoor::idleTextEdits(controller);
