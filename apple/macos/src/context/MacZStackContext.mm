@@ -254,7 +254,18 @@ namespace
       const BOOL converted = [capture drawInRect:NSMakeRect(0, 0, width, height)];
       [NSGraphicsContext restoreGraphicsState];
       if (converted && ProbeStackBlur([rgba bitmapData], width, height, rowBytes, ProbeSoftBlurRadius()))
+      {
+        // The unit is flipped and a bitmap rep draws in the current CTM, so an
+        // unflipped draw comes out upside down (every machine, 2026-10-18).
+        // Flip around the bounds before drawing the blurred pixels back.
+        [NSGraphicsContext saveGraphicsState];
+        NSAffineTransform *flip = [NSAffineTransform transform];
+        [flip translateXBy:0 yBy:NSMinY(bounds) + NSMaxY(bounds)];
+        [flip scaleXBy:1 yBy:-1];
+        [flip concat];
         drawn = [rgba drawInRect:bounds] != NO;
+        [NSGraphicsContext restoreGraphicsState];
+      }
     }
     [rgba release];
     [capture release];
