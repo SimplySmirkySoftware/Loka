@@ -903,7 +903,9 @@ void MacTextEditorContext::onFactChanged(loka::app::scene::NodeLifecycleFact, lo
   LokaTextEditorDelegate *delegate = (LokaTextEditorDelegate *)this->delegate_;
   if (next == loka::app::scene::NODE_FACT_ATTACHED)
   {
-    [(NSView *)this->parent_ addSubview:scroll];
+    if (![scroll superview])
+      [(NSView *)this->parent_ addSubview:scroll];
+    [scroll setHidden:NO];
     [delegate setOwner:this];
     [view setDelegate:(id)delegate];
     [[view textStorage] setDelegate:(id)delegate];
@@ -920,11 +922,12 @@ void MacTextEditorContext::onFactChanged(loka::app::scene::NodeLifecycleFact, lo
     [view setDelegate:nil];
     [[view textStorage] setDelegate:nil];
     [view setEditable:NO];
-    [scroll removeFromSuperview];
+    [scroll setHidden:YES];
     this->projection_->phase = Projection::UNAVAILABLE;
     this->projection_->clear();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
+      [scroll removeFromSuperview];
       this->retireNativeObjects(this->scroll_, this->delegate_);
       this->node_ = 0;
       this->parent_ = 0;

@@ -16,4 +16,6 @@ void testMacZStackFirstPassRefusalKeepsUnitEmpty();
 void testMacZStackUnitPaintsOpaqueGround();
 void testMacZStackUnitOverScrollViewSurvivesGroundRedraw();
 void testMacZStackRetirementDetachesUnitBeforeDrain();
+void testMacZStackReattachedGroundStaysBelowUnits();
+void testMacZStackGroundSuffixPreservesOrder();
 #endif

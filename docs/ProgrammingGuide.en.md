@@ -1616,7 +1616,9 @@ every earlier sibling under the same native parent, including siblings outside
 the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
 Win32 and macOS use opaque units. Toolbox lays out children flat until it adopts
-units. On macOS, Tab order is AppKit's default key-view loop and does not follow
+units. On macOS, units are ordered relative to their own ZStack only; later
+siblings or another ZStack's units in the same parent may sit above them, with
+geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
 ### Fixed-Cell Layout

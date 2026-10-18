@@ -42,9 +42,9 @@
 #include "context/MacRectSurfaceContext.hpp"
 #include "context/MacScrollViewContext.hpp"
 #include "context/MacZStackContext.hpp"
-#include <new>
 #include "core/Profiler.hpp"
 #include <map>
+#include <new>
 
 namespace
 {
@@ -1020,14 +1020,16 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
         const loka::core::Frame seat(projected.x, projected.y, projected.width, 0);
         void *laterUnit = 0;
         if (!unit->view())
-          for (MacZStackContext::Unit *later = *cursor; later; later = later->following())
+          for (const MacZStackContext::Unit *later = *cursor; later; later = later->following())
             if (later->view())
             {
               laterUnit = later->view();
               break;
             }
+        // Anchors: below the nearest later own view, above the nearest earlier own view.
         if (!unit->ensure(this->projectionParentView(), this->projection().projectFrame(seat), laterUnit, previousUnit))
           continue;
+        // An earlier live row skips ensure only on narrowing refusal, which stops the next row.
         previousUnit = unit->view();
         loka::app::scene::ProjectionParentScope unitFrame;
         const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();

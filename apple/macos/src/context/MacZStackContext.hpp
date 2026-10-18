@@ -26,7 +26,7 @@ public:
     bool ensure(void *parent, const loka::macos::MacRect &seat, void *below, void *above);
     /** Layout follows own rows to find the next admitted view on creation;
         constant access per row, with no parent-subview scan. */
-    Unit *following() const
+    const Unit *following() const
     {
       return this->next;
     }
@@ -55,7 +55,8 @@ public:
       pointer per pass; this door moves only the views ground created in that
       pass, below the first existing own unit. Each candidate checks the own
       unit list before moving; existing units are never re-added. A missing
-      snapshot refuses repair, since its new suffix cannot be identified. */
+      snapshot refuses repair, since its new suffix cannot be identified. One
+      parent-subview scan locates the snapshot; the fixed suffix bounds moves. */
   void lowerNewGroundViews(void *parent, void *previousLast);
   /** One own-unit walk per lifecycle fact; terminal removal precedes the
       controller's safe-point release, on every terminal path. */

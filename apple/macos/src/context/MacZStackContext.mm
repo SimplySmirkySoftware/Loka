@@ -31,7 +31,11 @@ namespace loka
 }
 - (void)drawRect:(NSRect)rect
 {
-  loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, rect);
+  // Paint the unit's own bounds, as LokaRectSurfaceView does: on a layer-backed
+  // window (Tahoe) the dirty rect handed to an opaque view can span the whole
+  // root, and filling it would paint the window ground over the ground child.
+  (void)rect;
+  loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, [self bounds]);
 }
 @end
 
@@ -115,22 +119,28 @@ void MacZStackContext::lowerNewGroundViews(void *parent, void *previousLast)
   NSView *host = (NSView *)parent;
   // Retirement removal cannot run during this layout pass: the safe point
   // follows layout, so the recorded view must still belong to this parent.
-  if ([(NSView *)previousLast superview] != host)
+  NSArray *subviews = [host subviews];
+  const NSUInteger index = [subviews indexOfObject:(NSView *)previousLast];
+  if (index == NSNotFound)
   {
     assert(false && "ground-pass snapshot must remain parented until the safe point");
     return;
   }
+  const NSUInteger count = [subviews count] - 1 - index;
   NSView *anchor = (NSView *)first->view();
-  // Walk the new suffix backwards, preserving its order below the unit.
-  NSView *view = [[host subviews] lastObject];
-  while (view && view != previousLast)
+  // Units are inserted at creation and previousLast is at or above unit 0,
+  // so no own unit can occur in this suffix. Its fixed size bounds repair.
+  for (NSUInteger moved = 0; moved < count; ++moved)
   {
+    NSView *view = [[host subviews] lastObject];
     for (Unit *unit = this->units_; unit; unit = unit->next)
       if (unit->view() == view)
-        return; // Always-on wall: repair must never move an existing own unit.
+      {
+        assert(false && "ground repair must not move an own unit");
+        return;
+      }
     [host addSubview:view positioned:NSWindowBelow relativeTo:anchor];
     anchor = view;
-    view = [[host subviews] lastObject];
   }
 }
 

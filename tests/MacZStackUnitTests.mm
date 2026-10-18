@@ -6,6 +6,8 @@
 #include "support/MacWindowCapture.hpp"
 #include "support/MacWindowSession.hpp"
 #include "support/MacRetirementProbe.hpp"
+#include "support/TextEditorStateOwner.hpp"
+#include "support/LifecycleFactTestAccess.hpp"
 #include "support/MacNativeRefusal.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
@@ -419,13 +421,6 @@ void testMacZStackLateFirstUnitLandsBelowSecond()
   LOKA_VERIFY([[f.host.root subviews] indexOfObject:ground] == groundAfter);
   LOKA_VERIFY([[f.host.root subviews] indexOfObject:unit2] == secondAfter);
   LOKA_VERIFY(probe.insertions() == 0);
-  // A parented snapshot that precedes an own unit cannot authorize moving
-  // that unit. Exercise the always-on wall without violating the snapshot
-  // parentage assertion.
-  static_cast<MacZStackContext *>(stack->getContext())->lowerNewGroundViews(f.host.root, ground);
-  LOKA_VERIFY([[f.host.root subviews] indexOfObject:unit1] == secondAfter - 1);
-  LOKA_VERIFY([[f.host.root subviews] indexOfObject:unit2] == secondAfter);
-  LOKA_VERIFY(probe.insertions() == 0);
 }
 
 void testMacScrollViewRefusedInsideUnit()
@@ -574,11 +569,19 @@ namespace
     LOKA_VERIFY(unit && [unit isOpaque] && [unit frame].size.height == 80);
     NSScrollView *scroll = scrollUnder(f.host.root);
     LOKA_VERIFY(!scrolling || scroll);
-#if MAC_OS_X_VERSION_MAX_ALLOWED < 110000
-    // copiesOnScroll is a no-op from 11.0 on; below that, drawsBackground NO must have turned it off.
     if (scrolling)
-      LOKA_VERIFY(![[scroll contentView] copiesOnScroll]);
-#endif
+    {
+      // NSAppKitVersionNumber11_0 = 2022; numeric like MacTextColorTests for old SDKs.
+      if (NSAppKitVersionNumber < 2022)
+      {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        LOKA_VERIFY(![[scroll contentView] copiesOnScroll]);
+#pragma clang diagnostic pop
+      }
+      else
+        std::printf("[skip] ZStack copiesOnScroll: no-op on 11.0+\n");
+    }
     if (!f.host.show(layered))
       return;
     NSBitmapImageRep *before = capture(f.host.root);
@@ -666,4 +669,52 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
   f.controller.drainNativeRetirements();
   [inner drain];
   LOKA_VERIFY(released == 1);
+}
+
+void testMacZStackReattachedGroundStaysBelowUnits()
+{
+  loka::app::testing::TextEditorStateOwner owner;
+  loka::core::ObservableList<loka::core::String> lines;
+  LOKA_VERIFY(lines.attach(&owner.tracker, 4) == loka::core::ATTACH_OK);
+  LOKA_VERIFY(lines.insert(0, loka::core::String("Ground editor")) == loka::core::EDIT_OK);
+  Fixture f;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  f.tree = stack;
+  TextEditorNode *editor = new TextEditorNode(TextEditorProps(lines, owner.cursor));
+  stack->addChild(editor);
+  stack->addChild(new BoxNode(BoxProps().setSize(40, 80)));
+  f.layout();
+  NSScrollView *scroll = scrollUnder(f.host.root);
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(scroll && unit);
+  LOKA_VERIFY([[f.host.root subviews] indexOfObject:scroll] < [[f.host.root subviews] indexOfObject:unit]);
+  NotifySubtreeNodeDetached(editor);
+  LifecycleFactTestAccess::DeliverFacts(editor);
+  NotifySubtreeNodeAttached(editor);
+  LifecycleFactTestAccess::DeliverFacts(editor);
+  f.layout();
+  LOKA_VERIFY([[f.host.root subviews] indexOfObject:scroll] < [[f.host.root subviews] indexOfObject:unit]);
+}
+
+void testMacZStackGroundSuffixPreservesOrder()
+{
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->addChild(new BoxNode(BoxProps().setSize(40, 80)));
+  f.layout();
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(unit);
+  NSView *previousLast = [[f.host.root subviews] lastObject];
+  NSView *first = [[NSView alloc] initWithFrame:NSZeroRect];
+  NSView *second = [[NSView alloc] initWithFrame:NSZeroRect];
+  [f.host.root addSubview:first];
+  [f.host.root addSubview:second];
+  UnitInsertionProbe probe(unit);
+  static_cast<MacZStackContext *>(stack->getContext())->lowerNewGroundViews(f.host.root, previousLast);
+  NSArray *views = [f.host.root subviews];
+  LOKA_VERIFY([views indexOfObject:first] < [views indexOfObject:second]);
+  LOKA_VERIFY([views indexOfObject:second] < [views indexOfObject:unit]);
+  LOKA_VERIFY(probe.insertions() == 0);
+  [first release];
+  [second release];
 }
