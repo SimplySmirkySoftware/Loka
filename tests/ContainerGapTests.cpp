@@ -1314,3 +1314,27 @@ void testWindowMarginBoxRefusal()
   state.x = state.y = 0;
   LOKA_VERIFY(ComputeToolboxBoxLayout(&wide, state, &toolbox) == 0);
 }
+
+void testWidthOnlyBoxPreflightUsesOwnWidth()
+{
+  BoxNode box(Box().width(300).props);
+  box.addChild(new TextNode(TextProps("width-only in a wide offer")));
+  WideOffer offer;
+  offer.width = SHRT_MAX + 1;
+  WideRecorder recorder;
+  const int result = computeBoxLayoutResultY(&box, RailSpacing(12, 4, 9), offer, &recorder, &WideRecorder::child, 0, 0);
+  LOKA_VERIFY(recorder.calls == 1);
+  LOKA_VERIFY(result == 0);
+}
+
+void testHeightOnlyBoxPreflightUsesOwnHeight()
+{
+  BoxNode box(Box().height(40).props);
+  box.addChild(new TextNode(TextProps("height-only in a tall offer")));
+  WideOffer offer;
+  offer.height = SHRT_MAX + 1;
+  WideRecorder recorder;
+  const int result = computeBoxLayoutResultY(&box, RailSpacing(12, 4, 9), offer, &recorder, &WideRecorder::child, 0, 0);
+  LOKA_VERIFY(recorder.calls == 1);
+  LOKA_VERIFY(result == 40);
+}

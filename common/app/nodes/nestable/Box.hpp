@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "core/State.hpp"
+#include <climits>
 #include "app/layout/LayoutGap.hpp"
 
 namespace loka
@@ -54,15 +55,28 @@ namespace loka
         height = fixedHeight;
         return *this;
       }
-      /** True when this container owns an explicit outer layout extent. */
+      /** Stores a fixed width and clears the borrowed live width. */
+      BoxProps &setWidth(int value)
+      {
+        this->width = normalizedExtent(value);
+        this->widthState_ = 0;
+        return *this;
+      }
+      /** Stores a fixed height without changing either width source. */
+      BoxProps &setHeight(int value)
+      {
+        this->height = normalizedExtent(value);
+        return *this;
+      }
+      /** True when both axes have a positive fixed extent. */
       bool hasFixedSize() const
       {
-        return this->effectiveWidth() > 0 && height > 0;
+        return this->effectiveWidth() > 0 && this->height > 0;
       }
       /** Resolves the width used by Box layout and its parent's seat claim. */
       short effectiveWidth() const
       {
-        return this->widthState_ ? static_cast<short>(this->widthState_->get()) : this->width;
+        return normalizedExtent(this->widthState_ ? this->widthState_->get() : this->width);
       }
       bool operator<(const scene::PropsBase &rhs) const
       {
@@ -78,6 +92,13 @@ namespace loka
         if (width != other.width)
           return width < other.width;
         return height < other.height;
+      }
+
+    private:
+      /** Normalizes before narrowing so negative inputs cannot become positive extents. */
+      static short normalizedExtent(int value)
+      {
+        return value <= 0 ? 0 : static_cast<short>(value > SHRT_MAX ? SHRT_MAX : value);
       }
     };
 
@@ -147,16 +168,29 @@ namespace loka
         this->props.setPadding(value);
         return *this;
       }
-      /** Borrows a live width claim; a nonpositive value leaves it unconstrained.
-          A null State selects the constant width supplied by size(). The claim's
-          domain is the short of size() and of LayoutState::width on every rail;
-          effectiveWidth() narrows the State's int to it like the size() parameter
-          would, so keep the value within short range. (State<short> would carry
-          the domain in the type but costs a second State instantiation family,
-          measured +1792 bytes on LokaSmirkBench68K.) */
+      /** Sets a fixed width, clearing the live width; nonpositive values clear the fixed width.
+          Values above SHRT_MAX saturate. Reset the live width with a typed null
+          (width(static_cast<State<int>*>(0))); width(0) clears the fixed width. */
+      BoxDefinition &width(int value)
+      {
+        this->props.setWidth(value);
+        return *this;
+      }
+      /** Borrows a live width claim; nonpositive values leave it unconstrained and
+          values above SHRT_MAX saturate before narrowing. A typed null State
+          selects the constant width supplied by size() or width(int).
+          State<short> would carry the domain in the type but costs a second State
+          instantiation family (measured +1792 bytes on LokaSmirkBench68K). */
       BoxDefinition &width(loka::core::State<int> *value)
       {
         this->props.widthState_ = value;
+        return *this;
+      }
+      /** Sets only the fixed height; nonpositive values clear it and values above
+          SHRT_MAX saturate. Both constant and borrowed live width are preserved. */
+      BoxDefinition &height(int value)
+      {
+        this->props.setHeight(value);
         return *this;
       }
       /** Declares the fixed outer area owned by this container. */

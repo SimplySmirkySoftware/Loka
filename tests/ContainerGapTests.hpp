@@ -18,4 +18,8 @@ void testWindowMarginSpacingValues();
 void testWindowMarginSpacingLayout();
 void testWindowMarginBoxRefusal();
 
+void testWidthOnlyBoxPreflightUsesOwnWidth();
+
+void testHeightOnlyBoxPreflightUsesOwnHeight();
+
 #endif

@@ -114,6 +114,100 @@ void testToolboxEmptyFixedBoxLayoutCommitsDeclaredExtent()
   LOKA_VERIFY(state.y == 190);
 }
 
+namespace
+{
+  void ProbeToolboxWidthOnlyBox(bool empty, short contentWidth)
+  {
+    loka::app::BoxProps props;
+    props.setPadding(5).setWidth(300);
+    loka::app::BoxNode box(props);
+    if (!empty)
+      box.addChild(new ToolboxLayoutProbeNode());
+    loka::app::scene::PlatformLayoutHandlerRegistry registry;
+    RegisterToolboxPlatformLayoutHandlers(registry);
+    ToolboxLayoutContractTraversal traversal(contentWidth, 7);
+    loka::app::scene::LayoutState state = FixedBoxInputState();
+    short width = 0;
+    const bool usedHandler = ApplyToolboxPlatformLayoutHandler(registry, box, state, traversal, width);
+    LOKA_VERIFY(usedHandler);
+    LOKA_VERIFY(width == 300);
+    LOKA_VERIFY(traversal.callCount_ == (empty ? 0 : 1));
+    LOKA_VERIFY(state.y == (empty ? 30 : 37));
+    LOKA_VERIFY(traversal.layoutResultY() == state.y);
+    if (!empty)
+    {
+      LOKA_VERIFY(traversal.lastState_.x == 15);
+      LOKA_VERIFY(traversal.lastState_.y == 25);
+      LOKA_VERIFY(traversal.lastState_.width == 290);
+      LOKA_VERIFY(traversal.lastState_.height == 30);
+    }
+  }
+
+  class ToolboxNestedBoxTraversal : public ToolboxLayoutContractTraversal
+  {
+  public:
+    ToolboxNestedBoxTraversal()
+        : ToolboxLayoutContractTraversal(23, 7)
+    {
+    }
+
+    virtual int layoutChild(loka::app::scene::Node *child, const loka::app::scene::LayoutState &state)
+    {
+      if (child->asBoxNode())
+        return ComputeToolboxBoxLayout(child->asBoxNode(), state, this);
+      return ToolboxLayoutContractTraversal::layoutChild(child, state);
+    }
+  };
+} // namespace
+
+void testToolboxEmptyWidthOnlyBoxReportsWidth()
+{
+  ProbeToolboxWidthOnlyBox(true, 23);
+}
+
+void testToolboxNarrowWidthOnlyBoxReportsWidth()
+{
+  ProbeToolboxWidthOnlyBox(false, 23);
+}
+
+void testToolboxOverflowingWidthOnlyBoxReportsWidth()
+{
+  ProbeToolboxWidthOnlyBox(false, 450);
+}
+
+void testToolboxWrappedWidthOnlyBoxLiveWidth()
+{
+  // An untracked State notifies synchronously; no tracker transaction is needed.
+  loka::core::MutableState<int> liveWidth(300);
+  loka::app::BoxProps childProps;
+  childProps.setPadding(5);
+  childProps.widthState_ = &liveWidth;
+  loka::app::BoxNode *child = new loka::app::BoxNode(childProps);
+  child->addChild(new ToolboxLayoutProbeNode());
+  loka::app::BoxProps wrapperProps;
+  wrapperProps.setPadding(3);
+  loka::app::BoxNode wrapper(wrapperProps);
+  wrapper.addChild(child);
+  loka::app::scene::PlatformLayoutHandlerRegistry registry;
+  RegisterToolboxPlatformLayoutHandlers(registry);
+  ToolboxNestedBoxTraversal traversal;
+  for (int i = 0; i < 2; ++i)
+  {
+    if (i == 1)
+      liveWidth.set(180);
+    loka::app::scene::LayoutState state = FixedBoxInputState();
+    short width = 0;
+    const bool usedHandler = ApplyToolboxPlatformLayoutHandler(registry, wrapper, state, traversal, width);
+    LOKA_VERIFY(usedHandler);
+    LOKA_VERIFY(width == (i == 0 ? 306 : 186));
+    LOKA_VERIFY(state.y == 43);
+    LOKA_VERIFY(traversal.lastState_.x == 18);
+    LOKA_VERIFY(traversal.lastState_.y == 28);
+    LOKA_VERIFY(traversal.lastState_.width == (i == 0 ? 290 : 170));
+    LOKA_VERIFY(traversal.lastState_.height == 24);
+  }
+}
+
 void testToolboxRowConsultsFixedChildWidth()
 {
   loka::app::StackNode row((loka::app::StackProps(loka::app::STACK_AXIS_ROW)));
@@ -291,4 +385,40 @@ void testToolboxCenteredControlOnlyRowPaintedBounds()
   LOKA_VERIFY(traversal.seats_[0].y == 20);
   LOKA_VERIFY(traversal.seats_[0].height == 14);
   LOKA_VERIFY(state.y == 34);
+}
+
+void testToolboxAlignedRowCharacterizationExcludesBoxHeight()
+{
+  const loka::app::VerticalAlignment alignments[] = {
+      loka::app::VERTICAL_ALIGNMENT_TOP, loka::app::VERTICAL_ALIGNMENT_CENTER, loka::app::VERTICAL_ALIGNMENT_BOTTOM};
+  for (int alignment = 0; alignment < 3; ++alignment)
+  {
+    for (int fixedWidth = 0; fixedWidth < 2; ++fixedWidth)
+    {
+      loka::app::StackNode row(loka::app::StackProps(loka::app::STACK_AXIS_ROW).alignVertical(alignments[alignment]));
+      loka::app::BoxProps props;
+      props.setPadding(5).setHeight(200);
+      if (fixedWidth)
+        props.setWidth(300);
+      loka::app::BoxNode *box = new loka::app::BoxNode(props);
+      box->addChild(new ToolboxLayoutProbeNode());
+      row.addChild(box);
+      loka::app::scene::PlatformLayoutHandlerRegistry registry;
+      RegisterToolboxPlatformLayoutHandlers(registry);
+      ToolboxNestedBoxTraversal traversal;
+      loka::app::scene::LayoutState state = FixedBoxInputState();
+      short width = 0;
+      const bool usedHandler = ApplyToolboxPlatformLayoutHandler(registry, row, state, traversal, width);
+      LOKA_VERIFY(usedHandler);
+      // Preserve Toolbox's existing aligned-row measurement: unlike shared Row,
+      // it replaces the child's result Y (220) with the measured row end (30).
+      LOKA_VERIFY(width == (fixedWidth ? 300 : 80));
+      LOKA_VERIFY(state.y == 30);
+      LOKA_VERIFY(traversal.callCount_ == 1);
+      LOKA_VERIFY(traversal.lastState_.x == 15);
+      LOKA_VERIFY(traversal.lastState_.y == 25);
+      LOKA_VERIFY(traversal.lastState_.width == (fixedWidth ? 290 : 70));
+      LOKA_VERIFY(traversal.lastState_.height == 190);
+    }
+  }
 }
