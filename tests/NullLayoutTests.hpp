@@ -13,4 +13,6 @@ void testNullLayoutZStackProducesFixedChildGeometry();
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry();
 void testNullLayoutOnChangeUsesRegisteredTraversal();
 
+void testProjectionMeasurementChannelAndUnitAdmission();
+
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP

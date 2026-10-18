@@ -1,3 +1,5 @@
+#include "context/Win32ZStackContext.hpp"
+#include <new>
 #include "app/nodes/controls/Card.hpp"
 #include "Win32PaintGround.hpp"
 #include "Win32Window.hpp"
@@ -304,6 +306,16 @@ namespace loka
           }
           this->layoutResultY_ = static_cast<short>(result);
           return result;
+        }
+
+        // Like Null's traversal, a handler's pre-narrowing refusal must reach
+        // the viewport channel even when no projected child is dispatched.
+        // Constant work per handler admission; no rows are walked here.
+        virtual bool refuseLayoutResultY(int y)
+        {
+          if (this->controller_ && this->controller_->refuseNarrowingInScrollScope(y))
+            return true;
+          return IPlatformLayoutTraversal::refuseLayoutResultY(y);
         }
 
         virtual void setLayoutResultY(short y)
@@ -782,34 +794,6 @@ void Win32ScenePlatformController::flushPendingInvalidations(bool updateNow)
     }
     RedrawWindow(entry.hwnd, entry.fullWindow ? NULL : &entry.rect, NULL,
                  pendingInvalidationFlags(entry));
-    if (!(GetWindowLongPtrW(entry.hwnd, GWL_STYLE) & WS_CHILD))
-    {
-      continue;
-    }
-    RECT damage;
-    if (!GetClientRect(entry.hwnd, &damage))
-    {
-      continue;
-    }
-    if (!entry.fullWindow && !IntersectRect(&damage, &damage, &entry.rect))
-    {
-      continue;
-    }
-    MapWindowPoints(entry.hwnd, NULL, reinterpret_cast<POINT *>(&damage), 2);
-    // A transparent sibling needs the freshly painted ground as well as its
-    // own foreground. Clipping the source by the sibling's full bounds would
-    // preserve stale ground instead. Queue all damage before any paint runs.
-    for (HWND sibling = GetWindow(entry.hwnd, GW_HWNDNEXT); sibling;
-         sibling = GetWindow(sibling, GW_HWNDNEXT))
-    {
-      RECT bounds;
-      RECT overlap;
-      if (GetWindowRect(sibling, &bounds) && IntersectRect(&overlap, &damage, &bounds))
-      {
-        MapWindowPoints(NULL, sibling, reinterpret_cast<POINT *>(&overlap), 2);
-        RedrawWindow(sibling, &overlap, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN);
-      }
-    }
   }
   this->pendingInvalidations_.clear();
   if (updateNow)
@@ -1115,6 +1099,13 @@ void Win32ScenePlatformController::resizeNativeWindow(HWND hwnd, const loka::win
                SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
+// Ordering changes no geometry and shares the native layout API door.
+void Win32ScenePlatformController::raiseNativeWindow(HWND hwnd)
+{
+  if (hwnd && GetWindow(hwnd, GW_HWNDPREV))
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOREDRAW);
+}
+
 HWND Win32ScenePlatformController::createNativeChildWindow(DWORD exStyle,
                                                            LPCWSTR className,
                                                            LPCWSTR windowName,
@@ -1133,7 +1124,7 @@ HWND Win32ScenePlatformController::createNativeChildWindow(DWORD exStyle,
   HWND hwnd = CreateWindowExW(exStyle,
                               className,
                               windowName,
-                              style,
+                              style | WS_CLIPSIBLINGS,
                               nativeRect.left,
                               nativeRect.top,
                               nativeRect.right - nativeRect.left,
@@ -1352,8 +1343,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   bool shortRangeRefused = false;
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
   {
-    loka::app::scene::ProjectionParentScopeGuard scopeGuard(
-        this->projectionParentScopes_, childScope);
+    loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope);
     if (!scopeGuard.isActive())
     {
       return LayoutNodeResult(state.width, state.y);
@@ -1436,8 +1426,7 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
   {
     return state.y;
   }
-  if (this->projectionParentScopes_.activeDepth() != 0 &&
-      this->projectionParentScopes_.current().hasShortRangeRefusal())
+  if (this->projectionParentScopes_.current().channel && this->projectionParentScopes_.current().hasShortRangeRefusal())
   {
     // A container above may already have narrowed its next coordinate. Once
     // this frame refuses, nothing else in the subtree may materialize from
@@ -1591,23 +1580,75 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
 
   if (loka::app::ZStackNode *stack = node->asZStackNode())
   {
+    // Deliberate twin of common/app/layout/ZStackLayout.hpp: every child
+    // receives the full seat and the result is the maximum child bottom.
+    // Native units implement docs/ProgrammingGuide.en.md#stacking-zstack.
+    // One composition walk; at most two own-unit ordering walks per layout pass.
+    // A nested ZStack is refused as a whole before even its ground projects.
+    if (this->projectionParentScopes_.insideUnit())
+      return LayoutNodeResult(state.width, state.y);
     int maxY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(stack);
-    if (handler)
+    Win32ZStackContext *ctx = static_cast<Win32ZStackContext *>(stack->getContext());
+    Win32ZStackContext::Unit **cursor = ctx ? ctx->unitsBegin() : 0;
+    loka::dsl::CompositionCursor<loka::app::scene::Node> children(stack->childrenHead(), stack->childrenCount());
+    unsigned index = 0;
+    for (loka::app::scene::Node *child = children.next(); child; child = children.next(), ++index)
     {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
+      int childY = state.y;
+      if (index == 0)
       {
-        return LayoutNodeResult(state.width, state.y);
+        childY = layoutContainerChild(this, child, state);
+        if (this->refuseNarrowingInScrollScope(childY))
+          break;
       }
-      loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
-      maxY = handler->layoutNode(stack, handlerState, &traversal);
+      else
+      {
+        if (this->projectionParentScopes_.current().hasShortRangeRefusal())
+          break;
+        if (!ctx)
+        {
+          ctx = new (std::nothrow) Win32ZStackContext(this);
+          if (!ctx)
+            continue;
+          stack->setContext(ctx);
+          cursor = ctx->unitsBegin();
+        }
+        Win32ZStackContext::Unit *unit = ctx->unitFor(index, cursor);
+        loka::app::scene::LayoutState projected;
+        if (!unit || !this->narrowLayoutState(state, projected, true))
+          continue;
+        // Creation cannot expose a refused or not-yet-measured child.
+        const loka::core::Frame seat(projected.x, projected.y, projected.width, 0);
+        if (!unit->ensure(this->projectionParentHwnd(), this->displayScale_.projectFrame(seat)))
+          continue;
+        loka::app::scene::ProjectionParentScope unitFrame;
+        const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();
+        // Win32 native parentage clips; this logical clip is inert on this rail.
+        if (!parentScope.deriveScrolled(unit->hwnd(),
+                                        projected.x,
+                                        projected.y,
+                                        loka::core::Frame(0, 0, projected.width, projected.height),
+                                        unitFrame))
+          continue;
+        {
+          loka::app::scene::ProjectionUnitScopeGuard unitGuard(this->projectionParentScopes_, unitFrame);
+          if (!unitGuard.isActive())
+            continue; // Never parent the child's HWNDs flat on refusal.
+          childY = layoutContainerChild(this, child, state);
+          if (this->refuseNarrowingInScrollScope(childY))
+            continue; // Preserve the previous unit rectangle on channel refusal.
+        }
+        unit->place(this->displayScale_.projectFrame(
+            loka::core::Frame(projected.x, projected.y, state.width, childY - state.y)));
+      }
+      if (childY > maxY)
+        maxY = childY;
     }
-    else
-    {
-      maxY = loka::app::layout::computeZStackLayoutResultY(
-          stack, state, this, &Win32ScenePlatformController::layoutContainerChild);
-    }
+    // Refused passes may stop early; only a completed walk proves the tail.
+    if (ctx && index == stack->childrenCount())
+      assert(!*cursor && "ZStack composition children must remain fixed");
+    if (ctx)
+      ctx->orderUnits();
     return LayoutNodeResult(state.width, maxY);
   }
 
@@ -1703,7 +1744,8 @@ bool Win32ScenePlatformController::narrowLayoutState(
   content.height = static_cast<short>(state.height);
   content.lineHeight = 0;
   content.spacing = static_cast<short>(state.spacing());
-  if (applyProjection && this->projectionParentScopes_.activeDepth() != 0)
+  // Root projection is the identity; a root unit still translates without a channel.
+  if (applyProjection)
   {
     if (!this->projectionParentScopes_.current().project(content, narrowed))
     {
@@ -1720,7 +1762,7 @@ bool Win32ScenePlatformController::narrowLayoutState(
 
 void Win32ScenePlatformController::refuseScrollViewShortRange()
 {
-  if (this->projectionParentScopes_.activeDepth() != 0)
+  if (this->projectionParentScopes_.current().channel)
   {
     this->projectionParentScopes_.current().markShortRangeRefused();
   }
@@ -1728,7 +1770,7 @@ void Win32ScenePlatformController::refuseScrollViewShortRange()
 
 bool Win32ScenePlatformController::refuseNarrowingInScrollScope(int resultY)
 {
-  if (this->projectionParentScopes_.activeDepth() == 0)
+  if (!this->projectionParentScopes_.current().channel)
   {
     return false;
   }

@@ -1,7 +1,7 @@
 #ifndef LOKA_WIN32_RETIRABLE_CONTEXT_HPP
 #define LOKA_WIN32_RETIRABLE_CONTEXT_HPP
 
-#include <windows.h>
+#include "Win32OwnedChildWindow.hpp"
 #include "platform/Win32DisplayScale.hpp"
 #include "app/scene/projection/NativeNodeContext.hpp"
 
@@ -18,7 +18,7 @@ public:
   /** The one native child, or zero before creation completes and after retirement. */
   HWND hwnd() const
   {
-    return this->hwnd_;
+    return this->window_.hwnd();
   }
   virtual bool acceptsInstallation() const
   {
@@ -63,12 +63,11 @@ protected:
 
   Win32ScenePlatformController *controller() const
   {
-    return this->controller_;
+    return this->window_.controller();
   }
 
 private:
-  Win32ScenePlatformController *controller_;
-  HWND hwnd_;
+  Win32OwnedChildWindow window_;
 };
 
 #endif // LOKA_WIN32_RETIRABLE_CONTEXT_HPP

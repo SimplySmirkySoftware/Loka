@@ -11,9 +11,9 @@ void testWin32PaintAnswerContracts();
 void testWin32EditTextPaintDelivery();
 void testWin32PopupMenuPaintDelivery();
 
-void testWin32TextOverlapPinsSiblingRepaint();
+void testWin32TextUnitClipsLowerSiblingInk();
 
-void testWin32AttributedTextTransparentOverSprite();
+void testWin32AttributedTextUnitClipsLowerSiblingInk();
 void testWin32AttributedTextShrinkRestoresGround();
 void testWin32ImageViewTransparentLetterbox();
 void testWin32ImageViewRemovalRestoresGround();
