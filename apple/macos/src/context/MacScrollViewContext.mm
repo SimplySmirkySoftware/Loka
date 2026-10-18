@@ -197,8 +197,18 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
+  // A frame change can move the clip view's bounds, and AppKit posts that as a
+  // bounds notification. The seat is layout's to publish: the notification
+  // would write the native origin with the previous visible size before
+  // publishViewport writes the completed fact, two writes for one layout.
+  // Mute it here as commitScrollMetrics does; a refused pass then leaves the
+  // previous origin exactly as it was, which is already its contract.
+  NSClipView *clipView = [scrollView contentView];
+  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
+  [clipView setPostsBoundsChangedNotifications:NO];
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
+  [clipView setPostsBoundsChangedNotifications:postsBounds];
   // The document frame is not touched here: it is part of the metrics that
   // commit only after the traversal succeeds, so a refused pass leaves the
   // previous document, scroller and origin exactly as they were.
