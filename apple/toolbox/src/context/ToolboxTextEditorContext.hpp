@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_TOOLBOX_TEXT_EDITOR_CONTEXT_HPP
+#include "ToolboxScrollKey.hpp"
 #include "context/ToolboxProjectedNodeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include <TextEdit.h>
@@ -36,6 +37,7 @@ public:
   }
   void idleTick();
   loka::app::EditorResult scrollInput(int);
+  loka::app::EditorResult scrollKey(ToolboxScrollKey);
   loka::app::EditorResult key(char);
   loka::app::EditorResult click(const Point &);
   /** Bounded selection replacement door, also used by the scenario's paste action. */
@@ -47,6 +49,15 @@ public:
 private:
   friend class loka::testing::ToolboxTextEditorAccess;
   friend struct loka::testing::ToolboxTextEditorAdmission;
+  enum ScrollAim
+  {
+    SCROLL_AIM_LINE,
+    SCROLL_AIM_PAGE_UP,
+    SCROLL_AIM_PAGE_DOWN,
+    SCROLL_AIM_TOP,
+    SCROLL_AIM_BOTTOM
+  };
+  loka::app::EditorResult scrollView(ScrollAim aim, int line);
   enum Phase
   {
     IDLE,

@@ -6,6 +6,7 @@
 #include "SmirkBenchAttributedScenario.hpp"
 #include "SmirkBenchPlainEditorScenario.hpp"
 #include "ToolboxTextEditorScrollScenario.hpp"
+#include "ToolboxTextEditorKeysScenario.hpp"
 #include "ObservedMainDefinition.hpp"
 #include "RectSurfaceScenarioObservation.hpp"
 #include "ScenarioDriverSupport.hpp"
@@ -77,7 +78,8 @@ namespace loka
           // structure rectangle leaves the screen, so the scenario window is
           // placed at (1, 41) with a 636-pixel content width (structure 0..638).
           WindowProps window;
-          if (this->scenario_ == "text-editor-plain" || this->scenario_ == "text-editor-scroll")
+          if (this->scenario_ == "text-editor-plain" || this->scenario_ == "text-editor-scroll"
+              || this->scenario_ == "text-editor-keys")
           {
             window.scene(scenario_tests::ObservedMainDefinition<scenario_tests::SmirkBenchPlainEditorProps,
                                                                scenario_tests::SmirkBenchPlainEditorNode>(
@@ -279,6 +281,21 @@ namespace loka
             }
             return;
           }
+          if (this->scenario_ == "text-editor-keys")
+          {
+            dsl::SnapRecord record;
+            if (this->keysScenario_.advance(
+                    elapsedSeconds, scene, *window->asToolboxWindow(), *controller, this->audit_, record)
+                == scenario_tests::SCENARIO_ADVANCE_DRIVER_COMPLETION_READY)
+            {
+              std::string status;
+              const bool ok = record.get("status", status) && status == dsl::SnapStatusOk();
+              (void)this->terminal_.emit(
+                  ok ? dsl::testing::SCENARIO_AUDIT_SUCCEEDED : dsl::testing::SCENARIO_AUDIT_FAILED, record);
+              (void)this->completionPublisher_.publish(window);
+            }
+            return;
+          }
           if (this->scenario_ == "attributed-editor-line" || this->scenario_ == "text-editor-plain")
           {
             dsl::SnapRecord record;
@@ -346,6 +363,7 @@ namespace loka
         dsl::testing::scenario_audit_detail::TerminalEmitter terminal_;
         App *borrowedApp_;
         scenario_tests::ToolboxTextEditorScrollScenario scrollScenario_;
+        scenario_tests::ToolboxTextEditorKeysScenario keysScenario_;
         long tick_;
         double lingerRemaining_;
         ScenarioCompletionPublisher completionPublisher_;

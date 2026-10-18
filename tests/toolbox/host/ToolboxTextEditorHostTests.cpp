@@ -469,9 +469,12 @@ namespace
   }
 } // namespace
 #include "ToolboxEditorScrollBarPins.hpp"
+#include "ToolboxScrollKeyPins.hpp"
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && RunScrollKeyPin(argv[1]))
+    return 0;
   if (argc == 2 && std::strcmp(argv[1], "key-classification") == 0)
   {
     // Independent tables: columns cover each low-control byte in numeric order.
