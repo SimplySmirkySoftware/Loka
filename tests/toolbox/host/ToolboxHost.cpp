@@ -52,7 +52,7 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState()};
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState(), 0};
   GrafPtr port = &initialPort;
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)
@@ -86,6 +86,7 @@ bool ToolboxScenePlatformController::intersectWithProjectionClip(const Rect &rec
 }
 void GetPort(GrafPtr *out)
 {
+  port->clipRgn = &port->native.clipRegionPointer;
   *out = port;
 }
 void SetPort(GrafPtr value)
@@ -501,9 +502,26 @@ namespace
          child; child = child->nextInComposition)
       LayoutNode(child, state, controller, 0);
   }
-  void RenderNode(loka::app::scene::Node *, ToolboxScenePlatformController *controller)
+  void RenderNode(loka::app::scene::Node *node, ToolboxScenePlatformController *controller)
   {
+#ifdef LOKA_HOST_CONTROL_ORDER
+    if (!node)
+      return;
+    if (node->getContext())
+      node->getContext()->render(controller);
+    if (node->asRectSurfaceNode())
+    {
+      const Rect surface = {80, 0, 100, 100};
+      EraseRect(&surface);
+    }
+    loka::app::scene::INestable *nestable = node->asNestable();
+    for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child;
+         child = child->nextInComposition)
+      RenderNode(child, controller);
+#else
+    (void)node;
     if (controller->renderContext) controller->renderContext->render(controller);
+#endif
   }
 #endif
 }
@@ -650,11 +668,33 @@ void PaintRect(const Rect *rect)
 void ToolboxScenePlatformController::flushControls()
 {
   // Same shared intake as the production flush; unrelated button pooling is
-  // outside this fixture, so its queue uses a zero-capacity bucket.
+  // outside this fixture, so drain the temporary bucket before it dies.
   loka::app::scene::ExactMatchHandleBucket<ControlRef> buttons(0);
   this->flushRetiredEntriesInto(this->retiredControls_, buttons);
+  buttons.drainWith(DisposeControl);
   this->flushRetiredEntriesInto(this->retiredScrollBarControls_, this->scrollBarLedger_.scrollBarBucket_);
 }
 #include "ToolboxControlFake.cpp"
 
 #include "ToolboxWindowIdle.cpp"
+
+#ifdef LOKA_HOST_CONTROL_ORDER
+namespace
+{
+  enum
+  {
+    pushButProc = 0
+  };
+} // namespace
+#include "ToolboxButtonControl.cpp"
+#include "ToolboxContextProps.cpp"
+namespace
+{
+  void RenderChildren(loka::app::scene::INestable *node, ToolboxScenePlatformController *controller)
+  {
+    for (loka::app::scene::Node *child = node->childrenHead(); child; child = child->nextInComposition)
+      RenderNode(child, controller);
+  }
+} // namespace
+#include "ToolboxScrollViewRender.cpp"
+#endif

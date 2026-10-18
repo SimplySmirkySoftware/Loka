@@ -1,4 +1,5 @@
 #include "ToolboxScrollBarLedger.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 #include "ToolboxWindow.hpp"
@@ -168,6 +169,7 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
                                                              const loka::app::ScrollBarProps &props,
                                                              loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
+  ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   ScrollBarControlBinding *binding = 0;
   if (!this->ensureScrollBarBinding(
           resourceId, rect, props.min_, props.max_,
