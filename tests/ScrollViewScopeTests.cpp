@@ -489,6 +489,7 @@ void testScrollViewContentInsetsPlaceChildrenAndGrowHeightlessExtent()
   LOKA_VERIFY(platform.projectLayoutForTesting(&collected, makeState(0, 0, 100, 30), 0, &spans) == 30);
   LOKA_VERIFY(spans.valid());
   LOKA_VERIFY(spans.placedViewport() == loka::core::Frame(0, -12, 100, 30));
+  LOKA_VERIFY(fact.state().get() == spans.placedViewport());
 
   // Keep content at zero so only the inset-adjusted extent exceeds the limit.
   fact.state().set(loka::core::Frame(0, 0, 0, 0));
@@ -501,6 +502,7 @@ void testScrollViewContentInsetsPlaceChildrenAndGrowHeightlessExtent()
   LOKA_VERIFY(laidOutBeforeRefusal);
   const unsigned long refusalsAfterOverflow = platform.scrollViewShortRangeRefusalCount();
   LOKA_VERIFY(refusalsAfterOverflow == 1);
+  LOKA_VERIFY(fact.state().get() == loka::core::Frame(0, 0, 0, 0));
 }
 
 void testScrollViewContentInsetsValueAndPropsIdentity()
@@ -520,4 +522,56 @@ void testScrollViewContentInsetsValueAndPropsIdentity()
   LOKA_VERIFY(!(equal.props < small.props));
   LOKA_VERIFY(small.props < larger.props);
   LOKA_VERIFY(!(larger.props < small.props));
+}
+
+void testScrollViewPublishViewportWritesSizeAndOrigin()
+{
+  using loka::core::Frame;
+  ViewportFact fact(-12, 7);
+  int writes = 0;
+  fact.state().state()->bind(&countOriginWrites, &writes, false);
+  loka::app::ScrollViewNode node(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 3)));
+  node.publishViewport(7, 0, 80, 30);
+  LOKA_VERIFY(fact.state().get() == Frame(7, -12, 80, 30));
+  LOKA_VERIFY(writes == 1);
+  node.publishViewport(7, 0, 80, 30);
+  LOKA_VERIFY(writes == 1);
+  node.publishViewport(7, 0, 90, 30);
+  LOKA_VERIFY(fact.state().get() == Frame(7, -12, 90, 30));
+  LOKA_VERIFY(writes == 2);
+  node.publishViewport(7, 0, 90, 40);
+  LOKA_VERIFY(fact.state().get() == Frame(7, -12, 90, 40));
+  LOKA_VERIFY(writes == 3);
+  node.publishViewport(9, 18, 100, 50);
+  LOKA_VERIFY(fact.state().get() == Frame(9, 6, 100, 50));
+  LOKA_VERIFY(writes == 4);
+  node.publishOrigin(10, 20);
+  LOKA_VERIFY(fact.state().get() == Frame(10, 8, 100, 50));
+  LOKA_VERIFY(writes == 5);
+  node.publishOrigin(10, 20);
+  LOKA_VERIFY(writes == 5);
+  fact.state().state()->unbind(&countOriginWrites, &writes);
+  loka::app::ScrollViewNode unbound((loka::app::ScrollViewProps()));
+  unbound.publishViewport(1, 2, 80, 30);
+  LOKA_VERIFY(!unbound.props.viewport_.isValid());
+}
+
+void testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges()
+{
+  using loka::core::Frame;
+  NullScenePlatformController platform;
+  ViewportFact fact(73, 111);
+  loka::app::ScrollViewNode node(
+      loka::app::ScrollViewProps(fact.state()).contentInsets(loka::app::ScrollViewContentInsets::of(12, 3)));
+  node.addChild(new FixedLayoutProbeNode(7));
+  int writes = 0;
+  fact.state().state()->bind(&countOriginWrites, &writes, false);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(10, 20, 80, 30)) == 50);
+  LOKA_VERIFY(fact.state().get() == Frame(111, 73, 80, 30));
+  LOKA_VERIFY(writes == 1);
+  writes = 0;
+  LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(10, 20, 80, 30)) == 50);
+  LOKA_VERIFY(writes == 0);
+  fact.state().state()->unbind(&countOriginWrites, &writes);
 }
