@@ -1,3 +1,4 @@
+#include "StackBlurTests.hpp"
 #include "ContainerGapTests.hpp"
 #include "DocumentWindowSetTests.hpp"
 #include "AppComponentGroupTests.hpp"
