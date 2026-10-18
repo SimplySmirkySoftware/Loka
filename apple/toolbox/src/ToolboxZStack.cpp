@@ -107,13 +107,19 @@ void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
 {
   if (!this->window_)
     return;
+  extern unsigned long gLokaProbeOverlapCalls, gLokaProbeOverlapRows, gLokaProbeOverlapContained; // PROBE
+  ++gLokaProbeOverlapCalls;
   ToolboxUnitLedger::Mark cursor = 0;
   Rect overlap;
   while (this->unitLedger_.nextOverlap(rect, cursor, overlap))
   {
+    ++gLokaProbeOverlapRows;
     // An intersection equal to the control rect means this row contains it.
     if (EqualRect(&rect, &overlap))
+    {
+      ++gLokaProbeOverlapContained;
       continue;
+    }
     this->window_->requestInvalidateRect(overlap);
   }
 }

@@ -18,6 +18,17 @@
 #include <Devices.h>
 #include "platform/StringUTF8.hpp"
 
+// PROBE (not for merge): click-gate counters read by LokaClickGateProbe.
+unsigned long gLokaProbeContentClicks = 0;
+unsigned long gLokaProbeDroppedClicks = 0;
+unsigned long gLokaProbeDroppedAfterIdlePending = 0;
+unsigned long gLokaProbeIdlePendingIterations = 0;
+bool gLokaProbeIdleMadePending = false;
+unsigned long gLokaProbeCaretToggles = 0;
+unsigned long gLokaProbeOverlapCalls = 0;
+unsigned long gLokaProbeOverlapRows = 0;
+unsigned long gLokaProbeOverlapContained = 0;
+
 namespace
 {
   const unsigned long kOsEventMessageMask = 0xFF000000UL;
@@ -253,6 +264,7 @@ void ToolboxApp::run()
   {
     EventRecord event;
     WaitNextEvent(everyEvent, &event, 1, 0);
+    gLokaProbeIdleMadePending = false; // PROBE (not for merge)
     loka::core::Operation turn;
     // Consume the OS foreground fact before idle work or hover can write the
     // shared cursor on the iteration that delivers a suspend event.
@@ -380,8 +392,15 @@ void ToolboxApp::run()
           {
             if (!clicked->hasPendingInvalidate())
             {
+              ++gLokaProbeContentClicks;
               clicked->handleMouseDown(event.where);
               this->cursorOwner_.reconcile();
+            }
+            else
+            {
+              ++gLokaProbeDroppedClicks;
+              if (gLokaProbeIdleMadePending)
+                ++gLokaProbeDroppedAfterIdlePending;
             }
           }
         }

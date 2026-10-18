@@ -128,6 +128,53 @@ if STANDALONE then
     -- for their own quit; the shell retrieves LOG.TXT only after MAME exits.
     -- Elapsed time alone is not success: --expect checks the complete audit.
     say("standalone opened; waiting %s emulated seconds", RUN_WAIT)
+    -- PROBE (not for merge): real ADB clicks on the click-gate probe's Target button.
+    if os.getenv("LOKA_PROBE_CLICKS") then
+        local probeOk, probeError = pcall(function()
+            local mem = manager.machine.devices[":maincpu"].spaces["program"]
+            local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
+            local function signed(address)
+                local n = mem:read_u16(address)
+                return n >= 32768 and n - 65536 or n
+            end
+            local function buttonPoint()
+                local window = ptr(0x9D6)
+                for _ = 1, 16 do
+                    if window == 0 then return nil end
+                    local handle = ptr(window + 140)
+                    for _ = 1, 64 do
+                        if handle == 0 then break end
+                        local control = ptr(handle)
+                        if control == 0 then break end
+                        local top, left = signed(control + 8), signed(control + 10)
+                        local bottom, right = signed(control + 12), signed(control + 14)
+                        if right - left >= 40 and bottom - top >= 12 and bottom - top <= 30 then
+                            return (left + right) // 2 - signed(window + 10), (top + bottom) // 2 - signed(window + 8)
+                        end
+                        handle = ptr(control)
+                    end
+                    window = ptr(window + 144)
+                end
+                return nil
+            end
+            local button = field(":macadb:MOUSE0", "Mouse Button 0")
+            emu.wait(14)
+            local x, y = buttonPoint()
+            assert(x, "probe button not found")
+            say("probe button at %d,%d", x, y)
+            mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+            mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+            mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+            emu.wait(0.5)
+            math.randomseed(1461)
+            for _ = 1, 100 do
+                button:set_value(1); emu.wait(0.08); button:clear_value()
+                emu.wait(0.12 + math.random() * 0.3)
+            end
+            say("probe clicks done")
+        end)
+        if not probeOk then say("probe clicks failed: %s", tostring(probeError)) end
+    end
     emu.wait(RUN_WAIT)
     say("standalone wait complete")
     manager.machine:exit()

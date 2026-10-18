@@ -116,7 +116,11 @@ void ToolboxScenePlatformController::idleTextEdits()
         const short caretBefore = (**editControls_[i].te).caretState;
         TEIdle(editControls_[i].te);
         if (caretBefore != (**editControls_[i].te).caretState)
+        {
+          extern unsigned long gLokaProbeCaretToggles; // PROBE (not for merge)
+          ++gLokaProbeCaretToggles;
           this->invalidateUnitOverlap(editControls_[i].rect);
+        }
       }
     }
   }
