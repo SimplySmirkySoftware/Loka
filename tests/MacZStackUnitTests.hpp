@@ -25,5 +25,6 @@ void testMacZStackBlurGroundIsCreationTimeConstant();
 void testMacZStackBlurWithoutEffectUsesFrostedGround();
 void testMacZStackFrostedFirstUnit();
 void testMacZStackLiveBlurSwitch();
+void testMacZStackLiveBlurRepairStopsWhenClipped();
 
 #endif

@@ -282,16 +282,32 @@ namespace
   else
     [super drawRect:rect];
   [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
-  // A partial AppKit draw clips the result. Repair the whole unit after that
-  // draw, including during tracking and modal loops; hiding/detach cancels it.
-  if (blurred && !NSContainsRect(rect, [self bounds]) && [self window] && ![self isHidden])
-    [self performSelector:@selector(lokaInvalidateWhole)
-               withObject:nil
-               afterDelay:0
-                  inModes:[NSArray arrayWithObjects:NSDefaultRunLoopMode,
-                                                    NSEventTrackingRunLoopMode,
-                                                    NSModalPanelRunLoopMode,
-                                                    nil]];
+  // AppKit cannot paint beyond the visible region, even for a whole-unit
+  // invalidation. Its dirty rectangles do not overlap; sum their intersections
+  // rather than trusting drawRect:'s enclosing rectangle, which can have holes.
+  const NSRect drawable = NSIntersectionRect([self bounds], [self visibleRect]);
+  if (blurred && !NSIsEmptyRect(drawable) && [self window] && ![self isHidden])
+  {
+    const NSRect *drawnRects = 0;
+    NSInteger count = 0;
+    [self getRectsBeingDrawn:&drawnRects count:&count];
+    double drawnArea = 0;
+    for (NSInteger i = 0; i < count; ++i)
+    {
+      const NSRect intersection = NSIntersectionRect(drawable, drawnRects[i]);
+      if (!NSIsEmptyRect(intersection))
+        drawnArea += static_cast<double>(NSWidth(intersection)) * NSHeight(intersection);
+    }
+    const double drawableArea = static_cast<double>(NSWidth(drawable)) * NSHeight(drawable);
+    if (drawnArea < drawableArea)
+      [self performSelector:@selector(lokaInvalidateWhole)
+                 withObject:nil
+                 afterDelay:0
+                    inModes:[NSArray arrayWithObjects:NSDefaultRunLoopMode,
+                                                      NSEventTrackingRunLoopMode,
+                                                      NSModalPanelRunLoopMode,
+                                                      nil]];
+  }
   [pool release];
 }
 @end

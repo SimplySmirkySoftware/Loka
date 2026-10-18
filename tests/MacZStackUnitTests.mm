@@ -1003,3 +1003,62 @@ void testMacZStackLiveBlurSwitch()
     }
   }
 }
+
+namespace
+{
+  unsigned int liveBlurRepairCount = 0;
+
+  void countLiveBlurRepair(id view, SEL)
+  {
+    ++liveBlurRepairCount;
+    [view setNeedsDisplay:YES];
+  }
+} // namespace
+
+void testMacZStackLiveBlurRepairStopsWhenClipped()
+{
+  LiveBlurDefaultScope setting;
+  if (NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack clipped live blur: requires a host without NSVisualEffectView\n");
+    return;
+  }
+  NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+  id transparency = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+  if (transparency && [transparency respondsToSelector:@selector(boolValue)] && ![transparency boolValue])
+  {
+    std::printf("[skip] ZStack clipped live blur: menu bar transparency is disabled\n");
+    return;
+  }
+  [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"LokaExpLiveBlur"];
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 160)));
+  f.layout();
+  NSView *unit = unitUnder(f.host.root);
+  Class liveClass = NSClassFromString(@"LokaStackCPUUnitView");
+  LOKA_VERIFY(unit && [unit class] == liveClass);
+  if (!f.host.show())
+    return;
+  // Shrink after showing: setContentView: initially sizes the root to the window.
+  [f.host.root setFrameSize:NSMakeSize(300, 60)];
+  const NSRect visible = NSIntersectionRect([unit bounds], [unit visibleRect]);
+  LOKA_VERIFY(!NSIsEmptyRect(visible));
+  LOKA_VERIFY(NSHeight(visible) < NSHeight([unit bounds]));
+  MacNativeRefusal repair(@selector(lokaInvalidateWhole), reinterpret_cast<IMP>(&countLiveBlurRepair), liveClass);
+  liveBlurRepairCount = 0;
+  // Positive control: the replacement must observe the real repair selector.
+  [unit performSelector:@selector(lokaInvalidateWhole)];
+  LOKA_VERIFY(liveBlurRepairCount == 1);
+  liveBlurRepairCount = 0;
+  [unit setNeedsDisplay:YES];
+  [f.host.window displayIfNeeded];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:0.3];
+  do
+  {
+    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    [f.host.window displayIfNeeded];
+  } while ([deadline timeIntervalSinceNow] > 0);
+  LOKA_VERIFY(liveBlurRepairCount <= 1);
+}
