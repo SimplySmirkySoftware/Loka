@@ -473,6 +473,27 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "render-bar") == 0)
+  {
+    Fixture fixture(30);
+    HostPortScope port(fixture.window.window());
+    for (unsigned reach = 0; reach < 2; ++reach)
+    {
+      toolbox_host::paintOperations.clear();
+      toolbox_host::controlCalls = toolbox_host::ControlCalls();
+      fixture.controller.scrollControl(0).control->calls.clear();
+      fixture.context->render(&fixture.controller);
+      LOKA_VERIFY(toolbox_host::controlCalls.draws == 1);
+      LOKA_VERIFY(!toolbox_host::paintOperations.empty());
+      LOKA_VERIFY(toolbox_host::paintOperations.back() == "bar");
+      const std::vector<toolbox_host::ControlCall> &calls = fixture.controller.scrollControl(0).control->calls;
+      for (std::size_t i = 0; i < calls.size(); ++i)
+        if (calls[i].painted)
+          LOKA_VERIFY(calls[i].operation == "draw");
+    }
+    return 0;
+  }
+
   if (argc == 2 && RunScrollKeyPin(argv[1]))
     return 0;
   if (argc == 2 && std::strcmp(argv[1], "key-classification") == 0)
