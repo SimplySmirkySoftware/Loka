@@ -183,11 +183,12 @@ void ToolboxAttributedTextContext::render(loka::app::scene::IPlatformController 
   }
   ToolboxTextMeasureScope port(*this->controller());
   ToolboxPaintClip clip(this->paintRect_);
+  // A missed replay changes no pixels and must preserve the previous history.
+  if (clip.isActive() && !clip.touches(this->paintRect_))
+    return;
   const bool completes = ToolboxPaintCompletes(clip, this->paintRect_, this->presented_,
       this->presented_.isKnown() && this->table_.value() == this->presented_.value());
   this->presented_.invalidate();
-  if (clip.isActive() && !clip.touches(this->paintRect_))
-    return;
   // Classic low-memory fallback (same as Text): an inactive clip keeps the
   // caller's clip and still draws; covers() stays false, so history stays
   // unknown and the next pass repaints in full.
