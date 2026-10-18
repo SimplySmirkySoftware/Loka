@@ -786,6 +786,12 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   set_target_properties(LokaToolboxPaintFoldTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxPaintFoldTests COMMAND LokaToolboxPaintFoldTests)
 
+  add_executable(LokaToolboxTwoByteKeyTests tests/toolbox/host/ToolboxTwoByteKeyHostTests.cpp)
+  target_include_directories(LokaToolboxTwoByteKeyTests PRIVATE tests apple/toolbox/src)
+  loka_enable_warnings(LokaToolboxTwoByteKeyTests)
+  set_target_properties(LokaToolboxTwoByteKeyTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxTwoByteKeyTests COMMAND LokaToolboxTwoByteKeyTests)
+
   add_executable(LokaToolboxCpuClassifyTests tests/toolbox/host/ToolboxCpuClassifyHostTests.cpp)
   target_include_directories(LokaToolboxCpuClassifyTests PRIVATE common tests apple/toolbox/src)
   loka_enable_warnings(LokaToolboxCpuClassifyTests)

@@ -9,6 +9,7 @@
 #include "ToolboxActivationPhase.hpp"
 #include "ToolboxBusy.hpp"
 #include "ToolboxMenuAttachment.hpp"
+#include "ToolboxTwoByteKey.hpp"
 class ToolboxApp;
 class ToolboxSceneDebugStats;
 
@@ -98,6 +99,7 @@ private:
       resume. */
   bool menuBarDrawDeferred_;
   ToolboxMenuAttachment menuAttachment_;
+  ToolboxTwoByteKey twoByteKey_;
   bool running_;
 };
 

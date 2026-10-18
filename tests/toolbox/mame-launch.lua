@@ -195,6 +195,11 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-keys" then
     local keysOk, keysError = pcall(function()
         local _, _, _, _, maximum = awaitBar(true, 0)
         emu.wait(1) -- The cell focuses and snapshots the selection before input.
+        -- Clicking the editor synchronizes the keyboard to its Roman font;
+        -- switch back to the boot template's Japanese script before the keys.
+        commandKey:set_value(1); emu.wait(0.1)
+        tap(field(":macadb:KEY3", "Space")); commandKey:clear_value(); emu.wait(1)
+        say("editor keyboard switched with Command-Space")
         tapScroll("Page Down")
         local _, _, _, down = awaitBar(true)
         assert(down > 0, "Page Down did not move the view")
@@ -215,6 +220,43 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-keys" then
     -- As in text-editor-scroll: a failed key must not stop the completion
     -- transport below; the cell's own audit records how far the app got.
     if not keysOk then say("editor keys failed: %s", tostring(keysError)) end
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-japanese" then
+    local inputOk, inputError = pcall(function()
+        local _, _, awaitBar = editorBarTransport()
+        awaitBar(false, 0)
+        emu.wait(1) -- The short-document cell focuses and snapshots before input.
+        -- TextEdit synchronizes the keyboard to the editor font's script when
+        -- the cell clicks, so the keyboard is Roman here: switch back first.
+        say("switch to Japanese with Command-Space")
+        commandKey:set_value(1); emu.wait(0.1)
+        tap(keyByName("Space")); commandKey:clear_value(); emu.wait(1)
+        local function typeRoman(word)
+            for letter in word:gmatch(".") do
+                tap(keyByName(letter .. "  " .. letter:upper()))
+            end
+        end
+        say("Japanese keyboard unchanged: type nihongo")
+        typeRoman("nihongo")
+        say("convert nihongo with Space")
+        tap(keyByName("Space"))
+        say("commit nihongo with Return")
+        tap(keyByName("Return")); emu.wait(1)
+        say("type ka and commit with Return")
+        typeRoman("ka"); tap(keyByName("Return")); emu.wait(1)
+        -- Paired with the cell's 15-second unchanged observation. Leave a
+        -- generous quiet interval before the Roman positive control.
+        say("Japanese commits complete; waiting for unchanged audit")
+        emu.wait(20)
+        say("switch to Roman with Command-Space")
+        commandKey:set_value(1); emu.wait(0.1)
+        tap(keyByName("Space")); commandKey:clear_value(); emu.wait(1)
+        say("Roman positive control: x")
+        typeRoman("x")
+    end)
+    commandKey:clear_value()
+    if not inputOk then say("editor Japanese input failed: %s", tostring(inputError)) end
 end
 
 if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then

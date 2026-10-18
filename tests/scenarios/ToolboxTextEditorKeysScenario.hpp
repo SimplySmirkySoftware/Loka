@@ -1,6 +1,7 @@
 #ifndef LOKA_TOOLBOX_TEXT_EDITOR_KEYS_SCENARIO_HPP
 #define LOKA_TOOLBOX_TEXT_EDITOR_KEYS_SCENARIO_HPP
 #include "ToolboxTextEditorScrollScenario.hpp"
+#include <Script.h>
 
 namespace loka
 {
@@ -62,7 +63,7 @@ namespace loka
             this->phase_ = DOWN;
             this->elapsed_ = 0;
             if (ok)
-              ok = audit.recordLog("ready: focused long document; Japanese boot keyboard script unchanged");
+              ok = audit.recordLog("ready: focused long document");
           }
           else
           {
@@ -113,6 +114,9 @@ namespace loka
               record.setInt("first.visible.line", offset / (**te).lineHeight);
               record.setInt("offset.pixels", offset);
               record.set("caret.selection.document.revision", "unchanged");
+              // The click above synchronizes the keyboard to the editor's Roman
+              // font; Lua switches back to Japanese, and this records it.
+              record.setInt("key.script", GetScriptManagerVariable(smKeyScript));
               ok = audit.recordVerdict(record);
               if (this->phase_ == UNFOCUSED)
               {

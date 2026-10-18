@@ -982,7 +982,15 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
       return LayoutNodeResult(state.width, state.y);
     int maxY = state.y;
     MacZStackContext *ctx = static_cast<MacZStackContext *>(stack->getContext());
-    MacZStackContext::Unit **cursor = ctx ? ctx->unitsBegin() : 0;
+    if (!ctx)
+    {
+      // Capture the ground at first projection, even before an upper child exists.
+      ctx = new (std::nothrow) MacZStackContext(this, stack->props.unitGround);
+      if (!ctx)
+        return LayoutNodeResult(state.width, state.y);
+      stack->setContext(ctx);
+    }
+    MacZStackContext::Unit **cursor = ctx->unitsBegin();
     loka::dsl::CompositionCursor<loka::app::scene::Node> children(stack->childrenHead(), stack->childrenCount());
     unsigned index = 0;
     void *previousUnit = 0;
@@ -1004,14 +1012,6 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
       {
         if (this->projectionParentScopes_.current().hasShortRangeRefusal())
           break;
-        if (!ctx)
-        {
-          ctx = new (std::nothrow) MacZStackContext(this);
-          if (!ctx)
-            continue;
-          stack->setContext(ctx);
-          cursor = ctx->unitsBegin();
-        }
         MacZStackContext::Unit *unit = ctx->unitFor(index, cursor);
         loka::app::scene::LayoutState projected;
         if (!unit || !this->narrowLayoutState(state, projected, true))
@@ -1027,7 +1027,8 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
               break;
             }
         // Anchors: below the nearest later own view, above the nearest earlier own view.
-        if (!unit->ensure(this->projectionParentView(), this->projection().projectFrame(seat), laterUnit, previousUnit))
+        if (!ctx->ensureUnit(
+                *unit, this->projectionParentView(), this->projection().projectFrame(seat), laterUnit, previousUnit))
           continue;
         // An earlier live row skips ensure only on narrowing refusal, which stops the next row.
         previousUnit = unit->view();
