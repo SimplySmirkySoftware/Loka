@@ -246,7 +246,7 @@ namespace
     {
       composition.declare(Box().size(180, 110) << (ScrollView() << Text("Baseline").TEST_ID("PaintDamage.Baseline")
                                                                 << RectSurface(this->model_.state()).size(150, 70)
-                                                                << AttributedText(Styled("Replay membership"))));
+                                                                << AttributedText(Styled("Replay membership", TextStyle()))));
     }
     void advance()
     {
@@ -879,7 +879,7 @@ namespace
                   .TEST_ID("History.Surface");
       // A real text-context membership keeps these #518/#763 pins on the
       // clipped composition route without an overlay or a tree-kind heuristic.
-      drawers << AttributedText(Styled("Replay membership"));
+      drawers << AttributedText(Styled("Replay membership", TextStyle()));
       composition.declare(drawers);
     }
     void writeFirst()
