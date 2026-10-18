@@ -49,8 +49,10 @@ namespace loka
                && platform::CollectUtf8(weight->props.text_.state()->get(), weightText)
                && controller.readNativeFocus(focused);
         const bool arrived = ok && heightText == "3" && weightText == "2" && focused == height->getContext();
-        // Wait past Lua's mouse move so the capture is quiet; time out on main.
-        if (this->elapsed_ < 20 || (!arrived && this->elapsed_ < 60))
+        // Wait past Lua's input (about 18 s) so the capture is quiet. A missed
+        // arrival records its texts at 35 s, inside Lua's 30 s settle window
+        // that follows the input, so a regression reads as an audit diff.
+        if (this->elapsed_ < 20 || (!arrived && this->elapsed_ < 35))
           return SCENARIO_ADVANCE_PENDING;
         dsl::BuildSnapV1RecordAdapter(
             "HelloWorld", "bmi-tab", "HelloWorld.Bmi", 1, 1, arrived ? dsl::SnapStatusOk() : dsl::SnapStatusError())
