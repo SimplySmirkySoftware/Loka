@@ -1626,9 +1626,11 @@ ZStack only; later siblings or another ZStack's units in the same parent may sit
 geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
-`ZStack().expBlurUnits()` is experimental: it asks each later child's unit to show
-a blur of the content beneath it instead of the window ground. A rail that cannot
-blur keeps the window ground. macOS uses a bottom `NSVisualEffectView` on
+`ZStack().expBlurUnit()` is experimental: the first unit (second child) shows
+a blur of the content beneath it where the rail supports it. Later units and
+rails that cannot blur keep the window ground. Eligibility follows composition
+index for the ZStack identity: hiding the first unit or giving it zero height
+does not promote a later one. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
 material on 10.10–10.13 and HUD material from 10.14. Earlier macOS and the
 other rails keep the window ground.

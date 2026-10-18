@@ -791,6 +791,35 @@ void testMacZStackBlurNativeEffect()
   LOKA_VERIFY(unitUnder(blurred.host.root) == unit && NSEqualRects([effect frame], [unit bounds]));
 }
 
+void testMacZStackBlurFirstUnitOnly()
+{
+  Class effectClass = NSClassFromString(@"NSVisualEffectView");
+  if (!effectClass)
+  {
+    std::printf("[skip] ZStack first-unit blur: NSVisualEffectView unavailable\n");
+    return;
+  }
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(60, 100)));
+  f.layout();
+  NSView *first = unitUnder(f.host.root);
+  NSArray *views = [f.host.root subviews];
+  LOKA_VERIFY([views count] == 3 && [views objectAtIndex:1] == first);
+  NSView *second = [views objectAtIndex:2];
+  LOKA_VERIFY(first && ![first isOpaque]);
+  NSArray *children = [first subviews];
+  LOKA_VERIFY([children count] == 2);
+  LOKA_VERIFY([[children objectAtIndex:0] isKindOfClass:effectClass]);
+  LOKA_VERIFY(![[children objectAtIndex:1] isKindOfClass:effectClass]);
+  LOKA_VERIFY(second != first && [second class] == NSClassFromString(@"LokaStackUnitView"));
+  LOKA_VERIFY([second isOpaque] && [second isFlipped] && ![second acceptsFirstResponder]);
+  LOKA_VERIFY(!childOfClass(second, effectClass));
+  LOKA_VERIFY([[second subviews] count] == 1);
+}
+
 void testMacZStackBlurGroundIsCreationTimeConstant()
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
@@ -822,7 +851,7 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
     LOKA_VERIFY(first && [first isOpaque] == !initiallyBlurred);
     LOKA_VERIFY(stack->getContext() == context);
     // A further retained apply must neither reinsert the first view nor change
-    // the choice for another unit admitted afterwards.
+    // window ground for another unit admitted afterwards.
     UnitInsertionProbe probe(first);
     LOKA_VERIFY(ZStack(changed).applyPropsToNode(stack));
     stack->addChild(new BoxNode(BoxProps().setSize(200, 40)));
@@ -830,7 +859,7 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
     NSArray *views = [f.host.root subviews];
     LOKA_VERIFY([views count] == 3 && [views objectAtIndex:1] == first);
     NSView *second = [views objectAtIndex:2];
-    LOKA_VERIFY(second != first && [second isOpaque] == !initiallyBlurred);
+    LOKA_VERIFY(second != first && [second isOpaque]);
     LOKA_VERIFY(stack->getContext() == context && probe.insertions() == 0);
   }
 #endif

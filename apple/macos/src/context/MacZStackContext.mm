@@ -115,8 +115,11 @@ bool MacZStackContext::Unit::ensure(
   if (loka::testing::declineMacStackUnitView())
     return false;
 #endif
-  NSView *view = ground == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR ? CreateBlurUnit((NSView *)parent, seat.r)
-                                                                  : [[LokaStackUnitView alloc] initWithFrame:seat.r];
+  // Only the first unit (second child) may blur; visibility and height never
+  // promote a later unit from its ordinary window ground.
+  NSView *view = ground == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR && this->index_ == 1
+                     ? CreateBlurUnit((NSView *)parent, seat.r)
+                     : [[LokaStackUnitView alloc] initWithFrame:seat.r];
   if (!view)
     return false;
   this->view_ = view;

@@ -13,10 +13,13 @@ namespace loka
 
     class ZStackNode;
 
-    /** Ground requested for the later children (units) of a ZStack. */
+    /** Ground requested for the units (later children) of a ZStack. */
     enum ZStackUnitGround
     {
       ZSTACK_UNIT_GROUND_WINDOW,
+      /** The first unit (second child) shows a blur of what lies beneath it
+          where the rail supports it; later units and other rails keep the
+          window ground. */
       ZSTACK_UNIT_GROUND_EXP_BLUR
     };
 
@@ -74,10 +77,12 @@ namespace loka
           : BaseType(p)
       {
       }
-      /** Experimental: later children (units) take a blur of content beneath
-          instead of window ground where the rail supports it. Other rails
-          paint window ground. */
-      ZStackDefinition &expBlurUnits()
+      /** Experimental: the first unit (second child) shows a blur of what lies
+          beneath it where the rail supports it. Later units and other rails
+          keep the window ground. Eligibility follows composition index for
+          this ZStack identity; a hidden or zero-height first unit does not
+          promote a later one. */
+      ZStackDefinition &expBlurUnit()
       {
         this->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
         return *this;
