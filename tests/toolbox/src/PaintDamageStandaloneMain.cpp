@@ -135,7 +135,7 @@ namespace
     }
     void changeInk()
     {
-      StateTrackerGuard guard(this->tracker());
+      loka::core::StateTrackerGuard guard(this->tracker());
       RectSurfaceModel ink = this->ink_.get();
       ink.rects[0] = RectSprite(0, 0, 149, 70);
       this->ink_.set(ink);
@@ -143,7 +143,7 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       if (WithButton)
-        composition.declare(ZStack() << (Column() << RectSurface(this->ink_.state()).size(150, 70) << Button("Ground"))
+        composition.declare(ZStack() << (Column() << RectSurface(this->ink_.state()).size(150, 70) << loka::app::Button("Ground"))
                                      << Box().size(180, 40));
       else
         composition.declare(ZStack() << RectSurface(this->ink_.state()).size(150, 70) << Box().size(180, 40));
