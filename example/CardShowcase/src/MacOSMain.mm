@@ -53,6 +53,23 @@ static NSScrollView *FindScrollView(NSView *view)
     [scroll reflectScrolledClipView:clip];
     // DIAG: 10.5/10.6 blur the whole scrolled area once the clip scrolls under a
     // filtered sibling; LOKA_PROBE_REDISPLAY=1 asks the document and clip to redraw.
+    // DIAG: LOKA_PROBE_REAPPLY=1 removes and re-sets the blurred unit's filters.
+    Class blurUnit = NSClassFromString(@"LokaStackBlurUnitView");
+    if (std::getenv("LOKA_PROBE_REAPPLY") && blurUnit)
+    {
+      NSArray *siblings = [[scroll superview] subviews];
+      for (unsigned int k = 0; k < (unsigned int)[siblings count]; ++k)
+      {
+        NSView *unit = [siblings objectAtIndex:k];
+        if (![unit isKindOfClass:blurUnit] || ![unit respondsToSelector:@selector(backgroundFilters)])
+          continue;
+        NSArray *filters = [[unit performSelector:@selector(backgroundFilters)] retain];
+        [unit performSelector:@selector(setBackgroundFilters:) withObject:nil];
+        [unit performSelector:@selector(setBackgroundFilters:) withObject:filters];
+        [filters release];
+        std::fprintf(stderr, "probe: reapplied filters\n");
+      }
+    }
     if (std::getenv("LOKA_PROBE_REDISPLAY"))
     {
       [[scroll documentView] setNeedsDisplay:YES];

@@ -196,12 +196,23 @@ namespace
           [filter setDefaults];
           [filter setValue:[NSNumber numberWithDouble:ProbeBlurRadius()] forKey:@"inputRadius"];
           NSArray *filters = [NSArray arrayWithObject:filter];
+          // DIAG: LOKA_PROBE_CROP=1 appends a CICrop to the unit's own bounds.
+          Class vectorClass = NSClassFromString(@"CIVector");
+          if (std::getenv("LOKA_PROBE_CROP") && vectorClass)
+          {
+            CIFilter *crop = [filterClass filterWithName:@"CICrop"];
+            [crop setDefaults];
+            [crop setValue:[vectorClass vectorWithX:0 Y:0 Z:frame.size.width W:frame.size.height] forKey:@"inputRectangle"];
+            filters = [NSArray arrayWithObjects:filter, crop, nil];
+          }
           if (filters)
           {
             // DIAG switches (10.9 real machine painted the bar black, 2026-10-18).
             if (!std::getenv("LOKA_PROBE_NO_PARENT_LAYER"))
               [parent setWantsLayer:YES];
             [view setWantsLayer:YES];
+            if (std::getenv("LOKA_PROBE_MASK"))
+              [[view layer] setMasksToBounds:YES];
             if (!std::getenv("LOKA_PROBE_NO_CI_FLAG") && [view respondsToSelector:@selector(setLayerUsesCoreImageFilters:)])
               [view setLayerUsesCoreImageFilters:YES];
             if (!std::getenv("LOKA_PROBE_FILTER_SKIP"))
