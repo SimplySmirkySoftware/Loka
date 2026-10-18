@@ -203,8 +203,6 @@ private:
   void clearContexts();
   void clearNodeContexts(loka::app::scene::Node *node);
   int measureClientWidth(int requestedWidth) const;
-  void registerEditField(void *field);
-  void finalizeKeyLoop();
   void captureFocusedEditField();
   void restoreFocusedEditField();
   void *findFocusedEditTextState(loka::app::scene::Node *node) const;
@@ -248,8 +246,6 @@ private:
   loka::app::scene::NodeDirtyFlags lastChangeFlags_;
   int clientWidth_;
   int clientHeight_;
-  void *firstEditField_;
-  void *lastEditField_;
   void *focusedEditTextState_;
   int focusedEditTextControlTag_;
   bool relayoutPending_;

@@ -455,8 +455,13 @@ refusal after take consumes the request without retry.
 Initial focus uses `state(focus, KEY)`: the first eligible completion after the
 window becomes key takes it, moving focus from whatever responder AppKit chose
 first (the content view in the Tahoe pin).
-Legacy `captureFocusedEditField` / `restoreFocusedEditField` and key-loop setup
-remain unchanged. Ordinary pending relayout capture/restore precedes focus
+Legacy `captureFocusedEditField` / `restoreFocusedEditField` remain unchanged.
+The rail builds no key-view chain: each window sets
+`autorecalculatesKeyViewLoop`, so Tab and Shift-Tab follow AppKit's geometric
+loop and reach the fact through the same completion read (#1461). The content
+view accepts first responder, so the window's keys reach it while no field is
+focused, but it is no key view: the loop wraps from the last participant
+straight to the first. Ordinary pending relayout capture/restore precedes focus
 completion; the one-shot post is not a lock against later restoration. The
 macOS pins cover initial ordering, native snapshots, admission, and an
 end-editing text-bridge observer that retires the target. These pins require
