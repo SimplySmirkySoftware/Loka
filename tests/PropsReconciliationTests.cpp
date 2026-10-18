@@ -87,7 +87,7 @@ void testZStackUnitGroundIdentity()
 {
   using namespace loka::app;
   const ZStack ordinary;
-  const ZStack blurred = ZStack().expBlurUnits();
+  const ZStack blurred = ZStack().expBlurUnit();
   const ZStack copied(blurred);
   LOKA_VERIFY(ordinary.props.unitGround == ZSTACK_UNIT_GROUND_WINDOW);
   LOKA_VERIFY(blurred.props.unitGround == ZSTACK_UNIT_GROUND_EXP_BLUR);

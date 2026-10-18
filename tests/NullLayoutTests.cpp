@@ -238,7 +238,7 @@ void testNullLayoutZStackProducesFixedChildGeometry()
     NullScenePlatformController platform;
     loka::app::ZStack definition;
     if (mark)
-      definition.expBlurUnits();
+      definition.expBlurUnit();
     loka::app::ZStackNode stack(definition.props);
     FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
     FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);

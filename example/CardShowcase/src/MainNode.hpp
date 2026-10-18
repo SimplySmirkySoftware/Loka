@@ -68,7 +68,7 @@ namespace cardshowcase
     {
       using namespace loka::app;
       c.declare(
-          ZStack().expBlurUnits()
+          ZStack().expBlurUnit()
           << (ScrollView(ScrollViewProps(this->viewport_).contentInsets(ScrollViewContentInsets::of(kBarHeight, 0)))
               << (Box().padding(12)
                   << (Column().gap(12)

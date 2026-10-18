@@ -20,6 +20,7 @@ void testMacZStackRetirementDetachesUnitBeforeDrain();
 void testMacZStackReattachedGroundStaysBelowUnits();
 void testMacZStackGroundSuffixPreservesOrder();
 void testMacZStackBlurNativeEffect();
+void testMacZStackBlurFirstUnitOnly();
 void testMacZStackBlurGroundIsCreationTimeConstant();
 void testMacZStackBlurWithoutEffectUsesWindowGround();
 #endif
