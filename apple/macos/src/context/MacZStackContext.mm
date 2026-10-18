@@ -3,6 +3,11 @@
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
 #include <new>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
+#include <cmath>
+#include "app/style/StackBlur.hpp"
 
 #ifdef TEST_BUILD
 namespace loka
@@ -39,13 +44,181 @@ namespace loka
 }
 @end
 
+@class CALayer;
+
 // Runtime declarations keep pre-10.10 SDKs independent of the effect type.
 @interface NSView (LokaStackVisualEffect)
 - (void)setBlendingMode:(NSInteger)mode;
 - (void)setMaterial:(NSInteger)material;
 - (void)setState:(NSInteger)state;
 - (void)setWantsLayer:(BOOL)value;
+- (CALayer *)layer;
+- (NSRect)convertRectToBacking:(NSRect)rect;
 @end
+
+namespace
+{
+  bool MenuBarTransparency()
+  {
+    NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+    id value = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+    return !value || ![value respondsToSelector:@selector(boolValue)] || [value boolValue];
+  }
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+  // Win32 and Toolbox will paint this look later (page 4, section 10).
+  // Move these values to common when a second rail paints them.
+  const double kFrostTopAlpha = 0.55;
+  const double kFrostBottomAlpha = 0.08;
+  const double kFrostHairlineAlpha = 0.22;
+
+  void PaintStaticFrost(NSRect bounds)
+  {
+    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, bounds);
+    const int rows = static_cast<int>(std::ceil(static_cast<double>(bounds.size.height)));
+    for (int row = 0; row < rows; ++row)
+    {
+      const double t = rows > 1 ? static_cast<double>(row) / (rows - 1) : 0.0;
+      [[NSColor colorWithCalibratedWhite:1.0
+                                   alpha:static_cast<CGFloat>(kFrostTopAlpha * (1.0 - t) + kFrostBottomAlpha * t)] set];
+      NSRectFillUsingOperation(NSMakeRect(NSMinX(bounds), NSMinY(bounds) + row, NSWidth(bounds), 1),
+                               LOKA_MAC_COMPOSITING_SOURCE_OVER);
+    }
+    [[NSColor colorWithCalibratedWhite:0.0 alpha:kFrostHairlineAlpha] set];
+    NSRectFillUsingOperation(NSMakeRect(NSMinX(bounds), NSMaxY(bounds) - 1, NSWidth(bounds), 1),
+                             LOKA_MAC_COMPOSITING_SOURCE_OVER);
+  }
+
+  void PaintBlurTint(NSRect bounds)
+  {
+    NSColor *ground = nil;
+    loka::macos::QueryMacGroundColor(loka::app::SURFACE_GROUND_WINDOW, ground);
+    NSColor *rgb = [ground colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+    if (!rgb)
+      rgb = [NSColor colorWithCalibratedWhite:0.93 alpha:1.0];
+    [[rgb colorWithAlphaComponent:0.6] set];
+    NSRectFillUsingOperation(bounds, LOKA_MAC_COMPOSITING_SOURCE_OVER);
+  }
+
+  /** One prefix walk of the parent's native z order per CPU draw. Each visible
+      intersecting lower sibling renders once into the expanded bitmap.
+      The unit and higher siblings never participate in their own underlay. */
+  bool RenderUnderlay(NSView *unit, NSGraphicsContext *context, NSRect bounds)
+  {
+    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW,
+                                NSMakeRect(0, 0, bounds.size.width, bounds.size.height));
+    NSView *parent = [unit superview];
+    NSArray *siblings = [parent subviews];
+    for (unsigned int i = 0; i < [siblings count]; ++i)
+    {
+      NSView *sibling = [siblings objectAtIndex:i];
+      if (sibling == unit)
+        break;
+      if ([sibling isHidden] || [sibling isKindOfClass:[LokaStackUnitView class]])
+        continue;
+      const NSRect clip = NSIntersectionRect([sibling bounds], [sibling convertRect:bounds fromView:unit]);
+      if (NSIsEmptyRect(clip))
+        continue;
+      const NSRect frame = [unit convertRect:[sibling frame] fromView:parent];
+      [NSGraphicsContext saveGraphicsState];
+      // An external context applies the view's bounds transform, not its
+      // frame/ancestor transforms. Supply an unflipped frame here; AppKit
+      // handles the sibling's own flipped/unflipped bounds and descendants.
+      NSAffineTransform *placement = [NSAffineTransform transform];
+      if (!placement)
+      {
+        [NSGraphicsContext restoreGraphicsState];
+        return false;
+      }
+      [placement translateXBy:NSMinX(frame) - NSMinX(bounds) yBy:NSMaxY(bounds) - NSMaxY(frame)];
+      [placement concat];
+      [sibling displayRectIgnoringOpacity:clip inContext:context];
+      [NSGraphicsContext restoreGraphicsState];
+    }
+    return true;
+  }
+
+  /** Owns every temporary for one expanded draw; blur uses the fixed radius
+      of eight pixels. Source pixels are rendered afresh, never read from the
+      partially refreshed window backing store. */
+  bool DrawCPUBlur(NSView *unit)
+  {
+    const NSRect bounds = [unit bounds];
+    NSRect backing = bounds;
+    if ([unit respondsToSelector:@selector(convertRectToBacking:)])
+      backing = [unit convertRectToBacking:bounds];
+    if (!(bounds.size.width > 0 && bounds.size.height > 0))
+      return false;
+    const double scaleX = backing.size.width / bounds.size.width;
+    const double scaleY = backing.size.height / bounds.size.height;
+    if (!(scaleX > 0 && scaleY > 0) || ![unit superview])
+      return false;
+    const NSRect expanded = NSIntersectionRect(NSInsetRect(bounds, -8.0 / scaleX, -8.0 / scaleY),
+                                               [unit convertRect:[[unit superview] bounds] fromView:[unit superview]]);
+    NSRect pixels = NSMakeRect(0, 0, expanded.size.width * scaleX, expanded.size.height * scaleY);
+    const double pixelWidth = std::ceil(static_cast<double>(pixels.size.width));
+    const double pixelHeight = std::ceil(static_cast<double>(pixels.size.height));
+    if (!(bounds.size.width > 0 && bounds.size.height > 0 && pixelWidth > 0 && pixelWidth <= INT_MAX / 4
+          && pixelHeight > 0 && pixelHeight <= INT_MAX - 64))
+      return false;
+    const int width = static_cast<int>(pixelWidth);
+    const int height = static_cast<int>(pixelHeight);
+    const size_t bytes = loka::app::StackBlurScratchBytes(width, height);
+    if (!bytes)
+      return false;
+    NSBitmapImageRep *rgba = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                     pixelsWide:width
+                                                                     pixelsHigh:height
+                                                                  bitsPerSample:8
+                                                                samplesPerPixel:4
+                                                                       hasAlpha:YES
+                                                                       isPlanar:NO
+                                                                 colorSpaceName:NSDeviceRGBColorSpace
+                                                                    bytesPerRow:width * 4
+                                                                   bitsPerPixel:32];
+    NSGraphicsContext *context = rgba ? [NSGraphicsContext graphicsContextWithBitmapImageRep:rgba] : nil;
+    unsigned char *scratch = static_cast<unsigned char *>(std::malloc(bytes));
+    NSAffineTransform *scale = [NSAffineTransform transform];
+    NSAffineTransform *flip = [NSAffineTransform transform];
+    bool drawn = false;
+    const long rowBytes = [rgba bytesPerRow];
+    if (context && scratch && scale && flip && [rgba bitmapData] && rowBytes >= width * 4
+        && static_cast<size_t>(rowBytes) <= static_cast<size_t>(-1) / static_cast<size_t>(height))
+    {
+      std::memset([rgba bitmapData], 0, static_cast<size_t>(rowBytes) * height);
+      [NSGraphicsContext saveGraphicsState];
+      [NSGraphicsContext setCurrentContext:context];
+      [scale scaleXBy:width / expanded.size.width yBy:height / expanded.size.height];
+      [scale concat];
+      NSRectClip(NSMakeRect(0, 0, expanded.size.width, expanded.size.height));
+      const bool rendered = RenderUnderlay(unit, context, expanded);
+      [NSGraphicsContext restoreGraphicsState];
+      const bool blurred =
+          rendered
+          && loka::app::StackBlur([rgba bitmapData], width, height, static_cast<size_t>(rowBytes), 8, scratch, bytes);
+      if (blurred)
+      {
+        // Bitmap reps draw unflipped; restore the flipped unit's orientation.
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip(bounds); // Crop the expanded margin in unit coordinates.
+        [flip translateXBy:0 yBy:NSMinY(expanded) + NSMaxY(expanded)];
+        [flip scaleXBy:1 yBy:-1];
+        [flip concat];
+        drawn = [rgba drawInRect:expanded] != NO;
+        [NSGraphicsContext restoreGraphicsState];
+      }
+    }
+    std::free(scratch);
+    [rgba release];
+    return drawn;
+  }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+} // namespace
 
 @interface LokaStackEffectUnitView : LokaStackUnitView
 @end
@@ -60,6 +233,69 @@ namespace loka
 }
 @end
 
+/** Opaque legacy ground; drawing reads no content beneath the unit. */
+@interface LokaStackFrostedUnitView : LokaStackUnitView
+@end
+@implementation LokaStackFrostedUnitView
+- (void)drawRect:(NSRect)rect
+{
+  (void)rect;
+  PaintStaticFrost([self bounds]);
+}
+@end
+
+/** Experimental CPU projection; the run loop owns the sole pending repair. */
+@interface LokaStackCPUUnitView : LokaStackFrostedUnitView
+- (void)lokaInvalidateWhole;
+@end
+@implementation LokaStackCPUUnitView
+- (void)lokaInvalidateWhole
+{
+  [self setNeedsDisplay:YES];
+}
+- (void)viewWillMoveToWindow:(NSWindow *)window
+{
+  if (!window)
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
+  [super viewWillMoveToWindow:window];
+}
+- (void)removeFromSuperview
+{
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
+  [super removeFromSuperview];
+}
+- (void)setHidden:(BOOL)hidden
+{
+  if (hidden)
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
+  else if ([self isHidden])
+    [self setNeedsDisplay:YES];
+  [super setHidden:hidden];
+}
+- (void)drawRect:(NSRect)rect
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  const bool layered = [self respondsToSelector:@selector(layer)] && [self layer] != nil;
+  const bool blurred = !layered && MenuBarTransparency() && DrawCPUBlur(self);
+  if (blurred)
+    PaintBlurTint([self bounds]);
+  else
+    [super drawRect:rect];
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(lokaInvalidateWhole) object:nil];
+  // A partial AppKit draw clips the result. Repair the whole unit after that
+  // draw, including during tracking and modal loops; hiding/detach cancels it.
+  if (blurred && !NSContainsRect(rect, [self bounds]) && [self window] && ![self isHidden])
+    [self performSelector:@selector(lokaInvalidateWhole)
+               withObject:nil
+               afterDelay:0
+                  inModes:[NSArray arrayWithObjects:NSDefaultRunLoopMode,
+                                                    NSEventTrackingRunLoopMode,
+                                                    NSModalPanelRunLoopMode,
+                                                    nil]];
+  [pool release];
+}
+@end
+
 namespace
 {
   /** Unit admission calls once per missing view; constant work, no row walk.
@@ -68,7 +304,11 @@ namespace
   {
     Class effectClass = NSClassFromString(@"NSVisualEffectView");
     if (!effectClass)
-      return [[LokaStackUnitView alloc] initWithFrame:frame];
+    {
+      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"LokaExpLiveBlur"])
+        return [[LokaStackCPUUnitView alloc] initWithFrame:frame];
+      return [[LokaStackFrostedUnitView alloc] initWithFrame:frame];
+    }
     NSView *view = [[LokaStackEffectUnitView alloc] initWithFrame:frame];
     if (!view)
       return nil;
@@ -201,17 +441,17 @@ void MacZStackContext::lowerNewGroundViews(void *parent, void *previousLast)
   // Retirement removal cannot run during this layout pass: the safe point
   // follows layout, so the recorded view must still belong to this parent.
   NSArray *subviews = [host subviews];
-  const NSUInteger index = [subviews indexOfObject:(NSView *)previousLast];
+  const NSInteger index = [subviews indexOfObject:(NSView *)previousLast];
   if (index == NSNotFound)
   {
     assert(false && "ground-pass snapshot must remain parented until the safe point");
     return;
   }
-  const NSUInteger count = [subviews count] - 1 - index;
+  const unsigned int count = [subviews count] - 1 - index;
   NSView *anchor = (NSView *)first->view();
   // Units are inserted at creation and previousLast is at or above unit 0,
   // so no own unit can occur in this suffix. Its fixed size bounds repair.
-  for (NSUInteger moved = 0; moved < count; ++moved)
+  for (unsigned int moved = 0; moved < count; ++moved)
   {
     NSView *view = [[host subviews] lastObject];
     for (Unit *unit = this->units_; unit; unit = unit->next)

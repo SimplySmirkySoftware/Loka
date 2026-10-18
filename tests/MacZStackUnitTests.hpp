@@ -22,5 +22,8 @@ void testMacZStackGroundSuffixPreservesOrder();
 void testMacZStackBlurNativeEffect();
 void testMacZStackBlurFirstUnitOnly();
 void testMacZStackBlurGroundIsCreationTimeConstant();
-void testMacZStackBlurWithoutEffectUsesWindowGround();
+void testMacZStackBlurWithoutEffectUsesFrostedGround();
+void testMacZStackFrostedFirstUnit();
+void testMacZStackLiveBlurSwitch();
+
 #endif

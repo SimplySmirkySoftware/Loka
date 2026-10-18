@@ -865,23 +865,141 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
 #endif
 }
 
-void testMacZStackBlurWithoutEffectUsesWindowGround()
+namespace
 {
+  /** Every exit removes the experimental setting, including fixture skips. */
+  struct LiveBlurDefaultScope
+  {
+    LiveBlurDefaultScope()
+    {
+      [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
+    }
+    ~LiveBlurDefaultScope()
+    {
+      [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
+    }
+  };
+
+  NSBitmapImageRep *captureUnit(NSView *unit)
+  {
+    NSBitmapImageRep *bitmap = [unit bitmapImageRepForCachingDisplayInRect:[unit bounds]];
+    LOKA_VERIFY(bitmap != nil);
+    [unit cacheDisplayInRect:[unit bounds] toBitmapImageRep:bitmap];
+    return bitmap;
+  }
+
+  double brightness(NSColor *color)
+  {
+    return ([color redComponent] + [color greenComponent] + [color blueComponent]) / 3.0;
+  }
+
+  // RectSurface has no color prop. Limit this saturated underlay to its native
+  // draw method with the existing scoped replacement; production APIs stay intact.
+  void drawRedSurface(id view, SEL, NSRect)
+  {
+    [[NSColor colorWithDeviceRed:1 green:0 blue:0 alpha:1] setFill];
+    NSRectFill([view bounds]);
+  }
+} // namespace
+
+void testMacZStackBlurWithoutEffectUsesFrostedGround()
+{
+  LiveBlurDefaultScope setting;
   if (NSClassFromString(@"NSVisualEffectView"))
   {
-    std::printf("[skip] ZStack blur fallback: requires a host without NSVisualEffectView (Mavericks rig)\n");
+    std::printf("[skip] ZStack frosted fallback: requires a host without NSVisualEffectView\n");
     return;
   }
   Fixture f;
   ZStackNode *stack = stackWithGround(f);
   stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
   stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 60)));
   f.layout();
   NSView *unit = unitUnder(f.host.root);
-  LOKA_VERIFY(unit && [unit class] == NSClassFromString(@"LokaStackUnitView"));
+  LOKA_VERIFY(unit && [unit class] == NSClassFromString(@"LokaStackFrostedUnitView"));
   LOKA_VERIFY([unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
   LOKA_VERIFY([[unit subviews] count] == 0);
-  // Reuse the WINDOW pixel/underlay-redraw pin, including pattern-ground handling.
-  verifyComposite(false, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
-  verifyComposite(true, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
+  NSArray *views = [f.host.root subviews];
+  LOKA_VERIFY([views count] == 3);
+  LOKA_VERIFY([[views objectAtIndex:2] class] == NSClassFromString(@"LokaStackUnitView"));
+}
+
+void testMacZStackFrostedFirstUnit()
+{
+  LiveBlurDefaultScope setting;
+  if (NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack frosted pixels: requires a host without NSVisualEffectView\n");
+    return;
+  }
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 60)));
+  f.layout();
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(unit && [unit isOpaque] && [unit isFlipped]);
+  LOKA_VERIFY([unit class] != NSClassFromString(@"LokaStackUnitView"));
+  NSArray *views = [f.host.root subviews];
+  LOKA_VERIFY([views count] == 3);
+  LOKA_VERIFY([[views objectAtIndex:2] class] == NSClassFromString(@"LokaStackUnitView"));
+  if (!f.host.show())
+    return;
+  NSBitmapImageRep *bitmap = captureUnit(unit);
+  const CGFloat bottom = [unit bounds].size.height - 1;
+  LOKA_VERIFY(brightness(pixel(bitmap, unit, 100, 0)) > brightness(pixel(bitmap, unit, 100, 40)) + 0.01);
+  LOKA_VERIFY(brightness(pixel(bitmap, unit, 100, bottom)) < brightness(pixel(bitmap, unit, 100, bottom - 1)) - 0.05);
+}
+
+void testMacZStackLiveBlurSwitch()
+{
+  LiveBlurDefaultScope setting;
+  if (NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack live blur switch: requires a host without NSVisualEffectView\n");
+    return;
+  }
+  NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+  id transparency = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+  if (transparency && [transparency respondsToSelector:@selector(boolValue)] && ![transparency boolValue])
+  {
+    std::printf("[skip] ZStack live blur switch: menu bar transparency is disabled\n");
+    return;
+  }
+  for (unsigned int live = 0; live < 2; ++live)
+  {
+    if (live)
+      [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"LokaExpLiveBlur"];
+    Fixture f;
+    ZStackNode *stack = new ZStackNode((ZStackProps()));
+    f.tree = stack;
+    stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    stack->addChild(new RectSurfaceNode(RectSurfaceProps()));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+    f.layout();
+    NSView *unit = unitUnder(f.host.root);
+    LOKA_VERIFY(unit && [unit isOpaque] && [unit isFlipped]);
+    LOKA_VERIFY([unit class] == NSClassFromString(live ? @"LokaStackCPUUnitView" : @"LokaStackFrostedUnitView"));
+    MacNativeRefusal red(
+        @selector(drawRect:), reinterpret_cast<IMP>(&drawRedSurface), NSClassFromString(@"LokaRectSurfaceView"));
+    if (!f.host.show())
+      return;
+    // Changing the default after admission cannot change the chosen unit view.
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
+    NSBitmapImageRep *bitmap = captureUnit(unit);
+    NSColor *color = pixel(bitmap, unit, 100, 40);
+    LOKA_VERIFY(color != nil);
+    if (live)
+    {
+      LOKA_VERIFY([color redComponent] > [color greenComponent] + 0.15);
+      LOKA_VERIFY([color redComponent] > [color blueComponent] + 0.15);
+    }
+    else
+    {
+      LOKA_VERIFY(std::fabs([color redComponent] - [color greenComponent]) < 0.04);
+      LOKA_VERIFY(std::fabs([color redComponent] - [color blueComponent]) < 0.04);
+    }
+  }
 }
