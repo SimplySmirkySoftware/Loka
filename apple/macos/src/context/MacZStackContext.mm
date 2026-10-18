@@ -94,10 +94,18 @@ namespace loka
 
 namespace
 {
+  // Set once when the Core Image filter path declines (Tiger, or a GPU that fails
+  // the translucent-menu-bar condition), so later units and draws take StackBlur.
+  bool &ProbeSoftFallback()
+  {
+    static bool fallback = false;
+    return fallback;
+  }
+
   bool ProbeSoftBlurEnabled()
   {
     static const bool enabled = std::getenv("LOKA_PROBE_SOFT_BLUR") && !NSClassFromString(@"NSVisualEffectView");
-    return enabled;
+    return enabled || ProbeSoftFallback();
   }
 
   int ProbeSoftBlurRadius()
@@ -574,7 +582,19 @@ bool MacZStackContext::Unit::ensure(void *parent, const loka::macos::MacRect &se
       }
     }
     else if (std::getenv("LOKA_PROBE_LEGACY_FILTERS"))
+    {
       view = CreateProbeFilterUnit((NSView *)parent, seat.r);
+      if (!view && !std::getenv("LOKA_PROBE_NO_SOFT_FALLBACK"))
+      {
+        ProbeSoftFallback() = true;
+        view = [[LokaStackBlurUnitView alloc] initWithFrame:seat.r];
+        if (view && !reported)
+        {
+          std::fprintf(stderr, "probe: exp blur soft fallback radius=%d\n", ProbeSoftBlurRadius());
+          reported = true;
+        }
+      }
+    }
     else if (!reported)
     {
       // 10.5-10.9 real machines (2026-10-18): 10.9 painted the bar black, 10.6
