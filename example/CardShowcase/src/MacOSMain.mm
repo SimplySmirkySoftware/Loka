@@ -155,7 +155,14 @@ static NSTextField *FindTextField(NSView *view)
     origin.y += dy;
     [clip scrollToPoint:origin];
     [scroll reflectScrolledClipView:clip];
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
     std::fprintf(stderr, "probe: scrolled by %.0f copiesOnScroll=%d\n", dy, [clip copiesOnScroll] ? 1 : 0);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
     return;
   }
   std::fprintf(stderr, "probe: scroll target not found\n");
