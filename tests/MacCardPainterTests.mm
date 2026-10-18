@@ -887,7 +887,6 @@ namespace
     return true;
   }
 
-
   void SettleCardWindow(LokaCardGround *root)
   {
     [root displayIfNeeded];

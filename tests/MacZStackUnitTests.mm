@@ -213,6 +213,10 @@ namespace
       std::printf("[skip] ZStack composite: %s\n", reason);
     return [bitmap autorelease];
   }
+  // colorUsingColorSpaceName: is the Tiger-era spelling (deprecated in 10.14);
+  // the same silence as MacGroundTests.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   NSColor *pixel(NSBitmapImageRep *bitmap, NSView *root, CGFloat x, CGFloat y)
   {
     return [[bitmap colorAtX:static_cast<NSInteger>(x * [bitmap pixelsWide] / [root bounds].size.width)
@@ -227,6 +231,7 @@ namespace
            && std::fabs([a greenComponent] - [b greenComponent]) < 0.04
            && std::fabs([a blueComponent] - [b blueComponent]) < 0.04;
   }
+#pragma clang diagnostic pop
 } // namespace
 
 void testMacZStackLaterChildGetsUnitView()
@@ -547,8 +552,12 @@ namespace
     NSView *unit = unitUnder(f.host.root);
     LOKA_VERIFY(unit && [unit isOpaque] && [unit frame].size.height == 80);
     NSScrollView *scroll = scrollUnder(f.host.root);
+    LOKA_VERIFY(!scrolling || scroll);
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 110000
+    // copiesOnScroll is a no-op from 11.0 on; below that, drawsBackground NO must have turned it off.
     if (scrolling)
-      LOKA_VERIFY(scroll && ![[scroll contentView] copiesOnScroll]);
+      LOKA_VERIFY(![[scroll contentView] copiesOnScroll]);
+#endif
     if (!f.host.show(layered))
       return;
     NSBitmapImageRep *before = capture(f.host.root);
@@ -617,9 +626,9 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
   LOKA_VERIFY(unit && unit->ensure(f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
   NSView *view = (NSView *)unit->view();
   observeMacNativeDeallocation(view, released);
-  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED);
+  context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
   LOKA_VERIFY([view isHidden] && [view superview] == f.host.root);
-  context.onFactChanged(NODE_FACT_DETACHED, NODE_FACT_ATTACHED);
+  context.onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
   LOKA_VERIFY(![view isHidden]);
   context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   LOKA_VERIFY(![view superview] && [view isHidden] && released == 0 && !unit->view());
