@@ -10,6 +10,7 @@
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 #include "app/scene/projection/ProjectionParentScope.hpp"
 #include "app/RectSurface.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
 #ifdef LOKA_HOST_RECT_SURFACE
@@ -51,6 +52,15 @@ public:
 #else
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { LOKA_VERIFY(false); }
 #endif
+  short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *)
+  {
+    LOKA_VERIFY(false);
+    return 0;
+  }
+  void renderZStack(loka::app::ZStackNode *)
+  {
+    LOKA_VERIFY(false);
+  }
   short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &,
                         loka::app::scene::BoundaryNode *) { LOKA_VERIFY(false); return 0; }
   void renderScrollView(loka::app::ScrollViewNode *) { LOKA_VERIFY(false); }

@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxUnitLedger.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
 #include "ToolboxEditInstalled.hpp"
@@ -201,6 +202,9 @@ public:
   {
     return activeLayoutBoundary_;
   }
+  void invalidateUnitOverlap(const Rect &);
+  short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
+  void renderZStack(loka::app::ZStackNode *);
   short layoutScrollView(loka::app::ScrollViewNode *scrollView,
                          loka::app::scene::LayoutState &state,
                          loka::app::scene::BoundaryNode *currentBoundary);
@@ -302,6 +306,12 @@ private:
   const loka::app::TextShaping textShaping_;
 public:
   ToolboxWindow *window_;
+
+private:
+  /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
+  ToolboxUnitLedger unitLedger_;
+
+public:
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::Node *rootNode_;
   loka::app::scene::Node *pendingRootNode_;
@@ -351,6 +361,7 @@ public:
   bool applyEnabledChangeForKind(ToolboxEnabledControlKind kind,
                                  loka::core::State<bool> *enabled);
   void refreshPopupEnabled(PopupHit &binding);
+  void requestControlRepaint(const Rect &rect);
   void refreshButtonEnabled(ButtonControlBinding &binding);
   void refreshScrollBarEnabled(ScrollBarControlBinding &binding);
   void refreshButtonHitEnabled(ButtonHit &binding);

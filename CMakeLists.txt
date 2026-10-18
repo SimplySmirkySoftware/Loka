@@ -574,10 +574,6 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxBoxLayoutTests handler band ${_range_case})
   endforeach()
 
-  foreach(_layout_path handler fallback)
-    add_test(NAME testToolboxLayout_${_layout_path}_zstack
-      COMMAND LokaToolboxBoxLayoutTests ${_layout_path} zstack)
-  endforeach()
   foreach(_stack_axis column row)
     add_test(NAME testToolboxLayout_derived-${_stack_axis}
       COMMAND LokaToolboxBoxLayoutTests handler derived-${_stack_axis})
@@ -827,6 +823,23 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   set_target_properties(LokaToolboxControlOrderTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   foreach(_order_case RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
+  endforeach()
+
+  add_executable(LokaToolboxZStackUnitTests tests/toolbox/host/ToolboxZStackUnitHostTests.cpp
+    apple/toolbox/src/ToolboxNodeDispatch.cpp
+    apple/toolbox/src/context/ToolboxScrollBarContext.cpp
+    apple/toolbox/src/context/ToolboxCellContext.cpp
+    apple/toolbox/src/context/ToolboxButtonContext.cpp
+    apple/toolbox/src/context/ToolboxEditTextContext.cpp
+    apple/toolbox/src/context/ToolboxPopupMenuContext.cpp ${_editor_host_sources})
+  target_include_directories(LokaToolboxZStackUnitTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxZStackUnitTests PRIVATE LOKA_HOST_CONTROL_WIDTH=1 LOKA_HOST_CELL_PAINT=1 LOKA_HOST_CONTROL_ORDER=1 LOKA_HOST_GAP_DISPATCH=1 LOKA_HOST_EDITOR_SCROLL=1 LOKA_HOST_ZSTACK_UNITS=1)
+  target_compile_options(LokaToolboxZStackUnitTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxZStackUnitTests)
+  set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_order_case TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip)
+    add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 
   add_executable(LokaToolboxPartialPaintTests tests/toolbox/host/ToolboxPartialPaintHostTests.cpp

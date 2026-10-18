@@ -3,6 +3,7 @@
 #include "ToolboxLayoutMetrics.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxNativeImage.hpp"
+#include "context/ToolboxPaintSupport.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "platform/StringUTF8.hpp"
 #include <cstdio>
@@ -354,19 +355,11 @@ void ToolboxImageViewContext::draw()
     Rect dstRect = ComputeImageDrawRect(rect_, fitMode, image.width(), image.height());
     if (fitMode == loka::app::IMAGE_FIT_COVER)
     {
-      RgnHandle oldClip = NewRgn();
-      if (oldClip)
-      {
-        GetClip(oldClip);
-        ClipRect(&rect_);
+      // A cover image may be inside a unit, viewport, or dirty replay.
+      // Preserve every outer clip and refuse instead of drawing unbounded.
+      ToolboxPaintClip clip(rect_, ToolboxPaintClip::INTERSECT);
+      if (clip.isActive())
         DrawPicture(picture, &dstRect);
-        SetClip(oldClip);
-        DisposeRgn(oldClip);
-      }
-      else
-      {
-        DrawPicture(picture, &dstRect);
-      }
     }
     else
     {

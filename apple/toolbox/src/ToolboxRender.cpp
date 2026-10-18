@@ -1,5 +1,6 @@
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/layout/BoxLayout.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
 /** Included by the production controller and Linux host fixture. */
 void ToolboxScenePlatformController::render()
 {
@@ -18,6 +19,7 @@ void ToolboxScenePlatformController::render()
     controlIds_.raiseBaseAbove(MaxExplicitControlId(rootNode_));
   }
   {
+    this->unitLedger_.clear();
     hitLedger_.buttonHits_.clear();
     hitLedger_.cellHits_.clear();
     for (size_t i = 0; i < buttonControls_.size(); ++i)
@@ -89,6 +91,7 @@ void ToolboxScenePlatformController::render()
     {
       if (!buttonControls_[i].usedThisFrame && buttonControls_[i].control)
       {
+        ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
         HideControl(buttonControls_[i].control);
       }
     }
@@ -96,6 +99,7 @@ void ToolboxScenePlatformController::render()
     {
       if (!scrollBarLedger_.scrollBarControls_[i].usedThisFrame && scrollBarLedger_.scrollBarControls_[i].control)
       {
+        ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
         HideControl(scrollBarLedger_.scrollBarControls_[i].control);
       }
     }

@@ -71,17 +71,6 @@ void ToolboxScenePlatformController::onBoundaryApply(loka::app::scene::Node *roo
       window_->requestInvalidateRect(surfaceDirtyRect);
       return;
     }
-    loka::app::scene::Node *firstChild = 0;
-    if (loka::app::scene::INestable *nestable = boundary->asNestable())
-    {
-      loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-      firstChild = it.next();
-    }
-    if (boundary->kind() == loka::app::scene::NODE_KIND_UNKNOWN && boundary->testId().empty() && firstChild
-        && firstChild->kind() == loka::app::scene::NODE_KIND_ZSTACK)
-    {
-      return;
-    }
     if (boundary->hasLayoutBounds())
     {
       window_->requestInvalidateRect(BoundaryToRect(boundary, window_->window()->portRect));
