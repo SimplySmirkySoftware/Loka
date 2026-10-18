@@ -680,11 +680,7 @@ MacScenePlatformController::layoutScrollViewNode(
 
   MacScrollViewContext *ctx =
       static_cast<MacScrollViewContext *>(scrollView->getContext());
-  if (ctx)
-  {
-    ctx->relayout(state.x, state.y, state.width, state.height);
-  }
-  else
+  if (!ctx)
   {
     ctx = new MacScrollViewContext(this,
                                    this->projectionParentView(),
@@ -701,6 +697,12 @@ MacScenePlatformController::layoutScrollViewNode(
     scrollView->setContext(ctx);
     ctx->readLifecycleFactOnAttach();
   }
+
+  // AppKit can post deferred bounds changes when notifications are restored.
+  // Keep the mute across frame changes, traversal, metrics and publishViewport:
+  // layout alone publishes the seat, then the restored origin echo is a no-op.
+  MacScrollViewContext::BoundsNotificationMute boundsMute(*ctx);
+  ctx->relayout(state.x, state.y, state.width, state.height);
 
   const int requestedExtent = scrollView->requestedOrigin().y;
   LayoutState childBase = state;

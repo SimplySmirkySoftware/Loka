@@ -190,6 +190,18 @@ void MacScrollViewContext::applyDetachedPresentation()
   }
 }
 
+MacScrollViewContext::BoundsNotificationMute::BoundsNotificationMute(MacScrollViewContext &context)
+    : clipView_([(NSScrollView *)context.scrollView_ contentView]),
+      postsBounds_([(NSClipView *)this->clipView_ postsBoundsChangedNotifications] != NO)
+{
+  [(NSClipView *)this->clipView_ setPostsBoundsChangedNotifications:NO];
+}
+
+MacScrollViewContext::BoundsNotificationMute::~BoundsNotificationMute()
+{
+  [(NSClipView *)this->clipView_ setPostsBoundsChangedNotifications:this->postsBounds_ ? YES : NO];
+}
+
 void MacScrollViewContext::relayout(int x, int y, int width, int height)
 {
   NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
@@ -197,23 +209,12 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  // A frame change moves the clip view's bounds, and AppKit posts that as a
-  // bounds notification. The seat is layout's to publish: the notification
-  // would write the native origin with the previous visible size before
-  // publishViewport writes the completed fact, two writes for one layout.
-  // AppKit defers the retile until something reads the layout, so the mute
-  // alone is not enough: tile explicitly inside it. A refused pass then leaves
-  // the previous origin exactly as it was, which is already its contract.
-  NSClipView *clipView = [scrollView contentView];
-  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
-  [clipView setPostsBoundsChangedNotifications:NO];
   loka::macos::SetMacFrame(scrollView,
       this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [scrollView tile];
-  [clipView setPostsBoundsChangedNotifications:postsBounds];
   // The document frame is not touched here: it is part of the metrics that
   // commit only after the traversal succeeds, so a refused pass leaves the
-  // previous document, scroller and origin exactly as they were.
+  // previous document and scroller metrics intact; restoring notifications
+  // after layout still lets AppKit report its native origin.
 }
 
 int MacScrollViewContext::commitScrollMetrics(
@@ -240,11 +241,6 @@ int MacScrollViewContext::commitScrollMetrics(
   {
     return clamped;
   }
-  // Native tiling and document resizing can notify intermediate origins.
-  // Publish only the completed two-axis commit at the caller.
-  NSClipView *clipView = [scrollView contentView];
-  const BOOL postsBounds = [clipView postsBoundsChangedNotifications];
-  [clipView setPostsBoundsChangedNotifications:NO];
   [scrollView setHasHorizontalScroller:horizontalBar];
   const loka::macos::MacProjection &projection = this->controller()->projection();
   const CGFloat width = projection.projectLength(0, contentWidth).pt;
@@ -253,9 +249,6 @@ int MacScrollViewContext::commitScrollMetrics(
       scrollView, width > clipWidth ? width : clipWidth, projection.projectLength(0, contentHeight));
   loka::macos::ScrollMacDocument(
       documentView, projection.scrollOffsetToNative(clampedX), projection.scrollOffsetToNative(clamped));
-  // The scroller change above is retiled lazily too; finish it under the mute.
-  [scrollView tile];
-  [clipView setPostsBoundsChangedNotifications:postsBounds];
   return clamped;
 }
 

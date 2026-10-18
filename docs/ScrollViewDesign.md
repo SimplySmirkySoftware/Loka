@@ -206,6 +206,9 @@ keeps the value the preceding layout clamped:
   positive horizontal delta scrolling right.
 - macOS: AppKit scrolls both axes itself; the clip view's bounds notification
   clamps `origin.x` and `origin.y` and publishes one `Frame`.
+  Layout mutes bounds notifications through viewport publication and restores
+  them on every exit, so AppKit's post-at-restore echo sees the completed fact
+  after success and still reports the native origin after refusal.
 
 ## Known debts
 
