@@ -4,6 +4,7 @@
 #include <Cocoa/Cocoa.h>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <dlfcn.h>
 
 // PROBE ONLY: LOKA_PROBE_SNAPSHOT=<png> captures this process's first visible
@@ -47,6 +48,25 @@ static NSScrollView *FindScrollView(NSView *view)
     if (!scroll)
       break;
     NSClipView *clip = [scroll contentView];
+    // DIAG (owner idea): LOKA_PROBE_NULLFILTER=scroll|clip|doc gives that view an
+    // identity content filter before the scroll, so Core Animation renders it as
+    // its own group.
+    const char *nullTarget = std::getenv("LOKA_PROBE_NULLFILTER");
+    Class filterClass = NSClassFromString(@"CIFilter");
+    if (nullTarget && filterClass)
+    {
+      NSView *target = std::strcmp(nullTarget, "clip") == 0  ? (NSView *)clip
+                       : std::strcmp(nullTarget, "doc") == 0 ? [scroll documentView]
+                                                             : (NSView *)scroll;
+      id identity = [filterClass performSelector:@selector(filterWithName:) withObject:@"CIAffineTransform"];
+      [identity performSelector:@selector(setDefaults)];
+      if (identity && [target respondsToSelector:@selector(setContentFilters:)])
+      {
+        [target setWantsLayer:YES];
+        [target performSelector:@selector(setContentFilters:) withObject:[NSArray arrayWithObject:identity]];
+        std::fprintf(stderr, "probe: null content filter on %s\n", nullTarget);
+      }
+    }
     NSPoint origin = [clip bounds].origin;
     origin.y += dy;
     [clip scrollToPoint:origin];
