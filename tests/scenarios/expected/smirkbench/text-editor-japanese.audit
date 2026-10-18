@@ -1,0 +1,25 @@
+loka_scenario_audit version=1 scenario=text-editor-japanese
+log text=ready%3A%20abc%3B%20caret%20at%20end
+caret.selection.document.revision	unchanged
+document	abc
+format_version	1
+key.script	1
+node	SmirkBench.EditorLine
+scenario_version	1
+schema_version	1
+status	ok
+step	text-editor-japanese
+test	SmirkBench
+tick	1
+document	abcx
+format_version	1
+key.script	0
+node	SmirkBench.EditorLine
+roman.positive.control	inserted
+scenario_version	1
+schema_version	1
+status	ok
+step	text-editor-japanese
+test	SmirkBench
+tick	2
+terminal status=succeeded

@@ -33,3 +33,4 @@ smirkycard laptop-carousel
 smirkycard laptop-detail
 smirkbench text-editor-scroll
 smirkbench text-editor-keys
+smirkbench text-editor-japanese

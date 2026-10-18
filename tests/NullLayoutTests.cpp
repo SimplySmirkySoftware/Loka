@@ -233,19 +233,25 @@ void testNullLayoutGridReturnedHeight()
 
 void testNullLayoutZStackProducesFixedChildGeometry()
 {
-  NullScenePlatformController platform;
-  loka::app::ZStackNode stack((loka::app::ZStackProps()));
-  FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
-  FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);
-  stack.addChild(back);
-  stack.addChild(front);
+  for (int mark = 0; mark != 2; ++mark)
+  {
+    NullScenePlatformController platform;
+    loka::app::ZStack definition;
+    if (mark)
+      definition.expBlurUnits();
+    loka::app::ZStackNode stack(definition.props);
+    FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
+    FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);
+    stack.addChild(back);
+    stack.addChild(front);
 
-  const int resultY = platform.projectLayoutForTesting(&stack, makeState(10, 20, 80, 40));
+    const int resultY = platform.projectLayoutForTesting(&stack, makeState(10, 20, 80, 40));
 
-  assertGeometry(back, 10, 20, 80, 40);
-  assertGeometry(front, 10, 20, 80, 40);
-  (void)resultY;
-  assert(resultY == 33);
+    assertGeometry(back, 10, 20, 80, 40);
+    assertGeometry(front, 10, 20, 80, 40);
+    (void)resultY;
+    LOKA_VERIFY(resultY == 33);
+  }
 }
 
 void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry()

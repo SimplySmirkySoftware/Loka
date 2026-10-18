@@ -3,6 +3,7 @@
 #include "support/TestVerify.hpp"
 #include "support/PropsReconciliation.hpp"
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 
 namespace
@@ -80,4 +81,17 @@ void testRetainedPropsApplicationNotifiesContextExactlyOnce()
   }
   LOKA_VERIFY(context->calls() == 2);
   loka::dsl::testing::SceneTestAccess::unmount(scene);
+}
+
+void testZStackUnitGroundIdentity()
+{
+  using namespace loka::app;
+  const ZStack ordinary;
+  const ZStack blurred = ZStack().expBlurUnits();
+  const ZStack copied(blurred);
+  LOKA_VERIFY(ordinary.props.unitGround == ZSTACK_UNIT_GROUND_WINDOW);
+  LOKA_VERIFY(blurred.props.unitGround == ZSTACK_UNIT_GROUND_EXP_BLUR);
+  LOKA_VERIFY(ordinary.props < blurred.props);
+  LOKA_VERIFY(!(blurred.props < ordinary.props));
+  LOKA_VERIFY(!(copied.props < blurred.props) && !(blurred.props < copied.props));
 }

@@ -1615,7 +1615,7 @@ later child is unsupported. On Win32, stacking order makes Tab visit a unit befo
 every earlier sibling under the same native parent, including siblings outside
 the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
-Win32, macOS, and Toolbox use opaque units. Toolbox still lacks the 2b hit shield,
+Win32, macOS, and Toolbox use opaque units by default. Toolbox still lacks the 2b hit shield,
 so do not place a unit over a live control: a unit's own live control must lie
 entirely inside it (a partly contained own editor is unspecified), partial overlaps
 are repaired on the overlap, and fully covered ground or earlier-unit controls
@@ -1625,6 +1625,19 @@ repaint presents the unit area. On macOS, units are ordered relative to their ow
 ZStack only; later siblings or another ZStack's units in the same parent may sit above them, with
 geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
+
+`ZStack().expBlurUnits()` is experimental: it asks each later child's unit to show
+a blur of the content beneath it instead of the window ground. A rail that cannot
+blur keeps the window ground. macOS uses a bottom `NSVisualEffectView` on
+10.10 and newer (within-window blending, following window activity): titlebar
+material on 10.10–10.13 and HUD material from 10.14. Earlier macOS and the
+other rails keep the window ground.
+
+The macOS unit ground is chosen when the ZStack is first projected, including
+when no upper unit exists yet. Retained props changes keep that choice for
+existing and future units; lifecycle-audit builds assert on a changed ground.
+To switch grounds, declare the ZStack in a Show/Match arm or Keyed so it gets
+a new identity.
 
 ### Fixed-Cell Layout
 

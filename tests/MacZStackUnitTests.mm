@@ -564,7 +564,7 @@ void testMacZStackFirstPassRefusalKeepsUnitEmpty()
 
 namespace
 {
-  void verifyComposite(bool scrolling, bool layered)
+  void verifyComposite(bool scrolling, bool layered, ZStackUnitGround unitGround = ZSTACK_UNIT_GROUND_WINDOW)
   {
     std::printf("ZStack composite layer=%d scroll=%d\n", layered, scrolling);
     RectSurfaceModel ink;
@@ -573,6 +573,7 @@ namespace
     loka::core::MutableState<RectSurfaceModel> model(ink);
     Fixture f;
     ZStackNode *stack = new ZStackNode((ZStackProps()));
+    stack->props.unitGround = unitGround;
     f.tree = stack;
     RectSurfaceNode *ground = new RectSurfaceNode(RectSurfaceProps().model(&model).size(200, 400));
     if (scrolling)
@@ -675,11 +676,13 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
 {
   int released = 0;
   Fixture f;
-  MacZStackContext context(&f.controller);
+  MacZStackContext context(&f.controller, ZSTACK_UNIT_GROUND_WINDOW);
   MacZStackContext::Unit **cursor = context.unitsBegin();
   MacZStackContext::Unit *unit = context.unitFor(1, cursor);
   NSAutoreleasePool *inner = [[NSAutoreleasePool alloc] init];
-  LOKA_VERIFY(unit && unit->ensure(f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
+  LOKA_VERIFY(
+      unit
+      && context.ensureUnit(*unit, f.host.root, f.controller.projection().projectFrame(Frame(10, 10, 80, 80)), 0, 0));
   NSView *view = (NSView *)unit->view();
   observeMacNativeDeallocation(view, released);
   context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
@@ -744,4 +747,112 @@ void testMacZStackGroundSuffixPreservesOrder()
   LOKA_VERIFY(probe.insertions() == 0);
   [first release];
   [second release];
+}
+
+// Effect enums are NSInteger at the runtime boundary, including with old SDKs.
+@interface NSView (LokaStackEffectTest)
+- (NSInteger)blendingMode;
+- (NSInteger)material;
+- (NSInteger)state;
+@end
+
+void testMacZStackBlurNativeEffect()
+{
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
+  f.layout();
+  NSView *windowUnit = unitUnder(f.host.root);
+  Class effectClass = NSClassFromString(@"NSVisualEffectView");
+  LOKA_VERIFY(windowUnit && [windowUnit isOpaque]);
+  LOKA_VERIFY(!effectClass || !childOfClass(windowUnit, effectClass));
+  if (!effectClass)
+  {
+    std::printf("[skip] ZStack native blur: NSVisualEffectView unavailable\n");
+    return;
+  }
+  Fixture blurred;
+  ZStackNode *blur = stackWithGround(blurred);
+  blur->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  blur->addChild(new RectSurfaceNode(RectSurfaceProps().size(40, 80)));
+  blurred.layout();
+  NSView *unit = unitUnder(blurred.host.root);
+  LOKA_VERIFY(unit && ![unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
+  NSArray *children = [unit subviews];
+  LOKA_VERIFY([children count] == 2);
+  NSView *effect = [children objectAtIndex:0];
+  LOKA_VERIFY([effect isKindOfClass:effectClass]);
+  LOKA_VERIFY(![[children objectAtIndex:1] isKindOfClass:effectClass]);
+  LOKA_VERIFY([effect blendingMode] == 1 && [effect state] == 0);
+  LOKA_VERIFY([effect material] == (NSAppKitVersionNumber >= 1671 ? 13 : 3));
+  LOKA_VERIFY(NSEqualRects([effect frame], [unit bounds]));
+  LOKA_VERIFY([effect autoresizingMask] == (NSViewWidthSizable | NSViewHeightSizable));
+  blurred.layout(260, 200);
+  LOKA_VERIFY(unitUnder(blurred.host.root) == unit && NSEqualRects([effect frame], [unit bounds]));
+}
+
+void testMacZStackBlurGroundIsCreationTimeConstant()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  // The mismatching applyPropsToNode below fires MacZStackContext::onPropsApplied's
+  // lifecycle-audit assertion. Exercise the ignore contract in a non-audit build.
+  std::printf("[skip] ZStack retained ground: requires LOKA_LIFECYCLE_AUDIT=OFF; mismatch asserts in onPropsApplied\n");
+#else
+  if (!NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack retained ground: requires NSVisualEffectView to distinguish the grounds\n");
+    return;
+  }
+  for (int initiallyBlurred = 0; initiallyBlurred != 2; ++initiallyBlurred)
+  {
+    Fixture f;
+    ZStackNode *stack = stackWithGround(f);
+    stack->setPropsTypeId(ZStackProps::staticTypeId());
+    stack->props.unitGround = initiallyBlurred ? ZSTACK_UNIT_GROUND_EXP_BLUR : ZSTACK_UNIT_GROUND_WINDOW;
+    // First projection has only ground: the context must already own the choice.
+    f.layout();
+    NodeContext *context = stack->getContext();
+    LOKA_VERIFY(context);
+    ZStackProps changed;
+    changed.unitGround = initiallyBlurred ? ZSTACK_UNIT_GROUND_WINDOW : ZSTACK_UNIT_GROUND_EXP_BLUR;
+    LOKA_VERIFY(ZStack(changed).applyPropsToNode(stack));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+    f.layout();
+    NSView *first = unitUnder(f.host.root);
+    LOKA_VERIFY(first && [first isOpaque] == !initiallyBlurred);
+    LOKA_VERIFY(stack->getContext() == context);
+    // A further retained apply must neither reinsert the first view nor change
+    // the choice for another unit admitted afterwards.
+    UnitInsertionProbe probe(first);
+    LOKA_VERIFY(ZStack(changed).applyPropsToNode(stack));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 40)));
+    f.layout();
+    NSArray *views = [f.host.root subviews];
+    LOKA_VERIFY([views count] == 3 && [views objectAtIndex:1] == first);
+    NSView *second = [views objectAtIndex:2];
+    LOKA_VERIFY(second != first && [second isOpaque] == !initiallyBlurred);
+    LOKA_VERIFY(stack->getContext() == context && probe.insertions() == 0);
+  }
+#endif
+}
+
+void testMacZStackBlurWithoutEffectUsesWindowGround()
+{
+  if (NSClassFromString(@"NSVisualEffectView"))
+  {
+    std::printf("[skip] ZStack blur fallback: requires a host without NSVisualEffectView (Mavericks rig)\n");
+    return;
+  }
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+  stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+  f.layout();
+  NSView *unit = unitUnder(f.host.root);
+  LOKA_VERIFY(unit && [unit class] == NSClassFromString(@"LokaStackUnitView"));
+  LOKA_VERIFY([unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
+  LOKA_VERIFY([[unit subviews] count] == 0);
+  // Reuse the WINDOW pixel/underlay-redraw pin, including pattern-ground handling.
+  verifyComposite(false, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
+  verifyComposite(true, false, ZSTACK_UNIT_GROUND_EXP_BLUR);
 }
