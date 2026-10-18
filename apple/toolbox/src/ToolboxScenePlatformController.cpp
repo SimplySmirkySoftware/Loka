@@ -1,3 +1,4 @@
+#include "ToolboxPaintSuppressScope.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "platform/ToolboxPascalText.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
