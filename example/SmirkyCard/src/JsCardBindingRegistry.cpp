@@ -862,16 +862,22 @@ namespace smirkycard
       }
       return true;
     }
+    /** Reads an own data property only, so a width placed on Object.prototype is
+        not a claim. Absent means no claim; an accessor or an invalid value refuses. */
     bool readBoxExtent(JSContext *ctx, JSValueConst tree, const char *name, int &out)
     {
       JSAtom key = JS_NewAtom(ctx, name);
       if (key == JS_ATOM_NULL)
         return false;
-      const int present = JS_HasProperty(ctx, tree, key);
-      JSValue value = present > 0 ? JS_GetProperty(ctx, tree, key) : JS_UNDEFINED;
+      JSPropertyDescriptor property;
+      const int found = JS_GetOwnProperty(ctx, &property, tree, key);
       JS_FreeAtom(ctx, key);
-      const bool valid = present == 0 || (present > 0 && boxExtentNumber(ctx, value, out));
-      JS_FreeValue(ctx, value);
+      if (found <= 0)
+        return found == 0;
+      JS_FreeValue(ctx, property.getter);
+      JS_FreeValue(ctx, property.setter);
+      const bool valid = boxExtentNumber(ctx, property.value, out);
+      JS_FreeValue(ctx, property.value);
       return valid;
     }
     class BoxLowering : public IJsNodeLowering

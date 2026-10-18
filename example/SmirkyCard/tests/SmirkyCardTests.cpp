@@ -4205,6 +4205,9 @@ namespace
     }
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{child:42})}}));",
                         "JavaScript Box has an invalid child.");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
+                        "'width',{get(){return 10},enumerable:true})}}));",
+                        "JavaScript Box has an invalid width or height.");
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
@@ -4220,6 +4223,19 @@ namespace
     LOKA_VERIFY(windowNode(deepWindow, "DeepBox"));
     const std::string refused = "card('first',c=>({compose(){return Box(" + tree + ")}}));";
     checkComposeRefusal(refused.c_str(), "exceeds depth 8");
+    // A width on Object.prototype is not a claim: lowering reads the tree's own properties only.
+    smirkycard::ScriptRuntime poisonRuntime;
+    LOKA_VERIFY(poisonRuntime.loadBuiltin("Object.prototype.width=300;"
+                                          "card('first',c=>({compose(){return Box(Text('p')).TEST_ID('Poison')}}));",
+                                          error));
+    WindowProps poisonProps;
+    poisonProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, poisonRuntime));
+    NullWindow poisonWindow(&context, poisonProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*poisonWindow.scene(), true);
+    loka::app::scene::Node *poisoned = windowNode(poisonWindow, "Poison");
+    LOKA_VERIFY(poisoned && poisoned->asBoxNode());
+    const loka::app::BoxProps plain;
+    LOKA_VERIFY(!(poisoned->asBoxNode()->props < plain) && !(plain < poisoned->asBoxNode()->props));
   }
 
   void checkLaptopLowerings()
