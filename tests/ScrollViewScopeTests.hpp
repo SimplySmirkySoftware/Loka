@@ -16,4 +16,7 @@ void testScrollViewPublishOriginWritesContentCoordinates();
 void testScrollViewContentInsetsPlaceChildrenAndGrowHeightlessExtent();
 void testScrollViewContentInsetsValueAndPropsIdentity();
 
+void testScrollViewPublishViewportWritesSizeAndOrigin();
+void testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges();
+
 #endif // LOKA_TESTS_SCROLL_VIEW_SCOPE_TESTS_HPP

@@ -988,6 +988,10 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
       spans->invalidate();
   }
 
+  if (!refused)
+    scrollView->publishViewport(
+        translation.x, translation.y + scrollView->props.contentInsets_.top(), state.width, state.height);
+
   if (!refused && spans && spans->valid())
     spans->placed(loka::core::Frame(translation.x, translation.y, state.width, state.height));
   if (state.height > 0)

@@ -85,12 +85,12 @@ namespace loka
       typedef ScrollViewNode NodeType;
 
       /** Visible content rect in CONTENT coordinates, not the seat rect.
-          x/y are the scroll origin. Rails publish only origin in this phase:
-          width/height are carried through unchanged; !hasSize() means not
-          reported yet. Initialise apps with Frame(0, 0, 0, 0), or with
-          topOrigin() to start with the top inset visible; a nonzero origin
-          publishes a clamp on first layout, as the int door did. origin.y may
-          be negative down to -top while the gap shows.
+          x/y are the scroll origin; width/height are the visible content size.
+          hasSize() becomes true for a positive size after the first layout
+          on rails that report it. Zero width and height mean not reported yet.
+          Initialise apps with Frame(0, 0, 0, 0), or with topOrigin() to start
+          with the top inset visible. Rails normalize the origin on layout;
+          origin.y may be negative down to -top while the gap shows.
           The whole WriteSeat retains the owner's tracked transaction door. */
       scene::WriteSeat<loka::core::Frame> viewport_;
       scene::WriteSeat<int> scrollTo_;
@@ -218,10 +218,15 @@ namespace loka
       {
         if (!this->props.viewport_.isValid())
           return;
-        const int y = extentY - this->props.contentInsets_.top();
         const loka::core::Frame current = this->props.viewport_.state()->get();
-        if (current.x != x || current.y != y)
-          this->props.viewport_.set(loka::core::Frame(x, y, current.width, current.height));
+        this->writeViewport(x, extentY, current.width, current.height);
+      }
+
+      /** Publishes the layout's visible content size and extent offset as one
+          content-coordinate fact. Insets do not shrink the visible size. */
+      void publishViewport(int x, int extentY, int width, int height)
+      {
+        this->writeViewport(x, extentY, width, height);
       }
 
       virtual void declareDirtySources(scene::DirtySourceRegistrar &registrar)
@@ -233,6 +238,17 @@ namespace loka
       }
 
       ScrollViewProps props;
+
+    private:
+      void writeViewport(int x, int extentY, int width, int height)
+      {
+        if (!this->props.viewport_.isValid())
+          return;
+        const int y = extentY - this->props.contentInsets_.top();
+        const loka::core::Frame current = this->props.viewport_.state()->get();
+        if (current.x != x || current.y != y || current.width != width || current.height != height)
+          this->props.viewport_.set(loka::core::Frame(x, y, width, height));
+      }
     };
 
     struct ScrollViewDefinition

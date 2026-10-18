@@ -1395,6 +1395,8 @@ LOKA_TEST(testProjectionMeasurementChannelAndUnitAdmission)
 LOKA_TEST(testStackBlurIndependentReference)
 LOKA_TEST(testStackBlurRefusals)
 LOKA_TEST(testZStackUnitGroundIdentity)
+LOKA_TEST(testScrollViewPublishViewportWritesSizeAndOrigin)
+LOKA_TEST(testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges)
 
 LOKA_TEST(testBoxWidthDoorOrderAndSaturation)
 LOKA_TEST(testBoxWidthColumnAlignment)

@@ -6,6 +6,7 @@
 #include "app/core/Window.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "core/Operation.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/scene/Scene.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -334,7 +335,9 @@ void testHelloWorldNarrowMountComposesColumnFirst()
   // Publish before attach; inspect the first tree without a resize/layout pass.
   loka::app::testing::WindowTestAccess::storeNativeFrame(
       window, loka::core::Frame(50, 50, 399, 330));
+  loka::core::Operation operation;
   window.sceneManager()->commitTransaction(0, new loka::app::scene::Scene(root.take()));
+  operation.settle();
   admission.flush();
   LOKA_VERIFY(findMainPanels(*window.scene())->props.effectiveAxis() ==
               loka::app::STACK_AXIS_COLUMN);
