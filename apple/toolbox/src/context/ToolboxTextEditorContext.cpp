@@ -870,7 +870,21 @@ void ToolboxTextEditorContext::repaint(TEHandle te)
   const Rect frame = this->geometry().frame;
   FrameRect(&frame);
   if (te && this->status_ == EDITOR_OK)
+  {
+    // TEUpdate redraws only the lines the text has. The ground below the last
+    // line is ours, or a projection that shortens the text leaves the old
+    // lines and highlight there (#1429). Only that band, so a repaint of a
+    // full view does not flash.
+    const TERec &record = **te;
+    Rect below = record.viewRect;
+    const long textBottom =
+        static_cast<long>(record.destRect.top) + static_cast<long>(record.nLines) * record.lineHeight;
+    if (textBottom > below.top)
+      below.top = static_cast<short>(std::min(textBottom, static_cast<long>(below.bottom)));
+    if (!EmptyRect(&below))
+      loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_DOCUMENT, below);
     TEUpdate(&(**te).viewRect, te);
+  }
   else
   {
     // This fallback stands in for the native editor's document ground.

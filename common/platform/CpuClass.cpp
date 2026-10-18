@@ -9,11 +9,10 @@ namespace loka
   {
     bool queryCpuClass(CpuClass &out)
     {
-#if defined(_WIN32)
+#if defined(_WIN32) || (defined(__APPLE__) && defined(__MACH__))
       out = CPU_CLASS_G3_OR_FASTER;
       return true;
 #else
-      // macOS answers CPU_CLASS_G3_OR_FASTER in #1425 PR 4.
       (void)out;
       return false;
 #endif
