@@ -63,9 +63,9 @@ short ToolboxScenePlatformController::layoutScrollView(
     if (spans.isValid()) spans->invalidate();
     return 0;
   }
-  if (!this->scrollViewClipRgn_)
+  if (!this->scrollViewClipRgn_ || !this->paintSuppressClipRgn_)
   {
-    // NewRgn can refuse under Classic low memory. Without the clip region the
+    // NewRgn can refuse under Classic low memory. Without either clip region the
     // render pass cannot draw the subtree, so refuse the whole seat here -
     // before any ledger, CDEF, or hit registration - instead of leaving a
     // scrollbar over invisible interactive content.

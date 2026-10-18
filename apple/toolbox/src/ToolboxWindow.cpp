@@ -590,7 +590,6 @@ void ToolboxWindow::draw()
   if (scenePlatformController_)
   {
     ToolboxInputDoor::render(*scenePlatformController_);
-    scenePlatformController_->drawControlsInRect(window_->portRect);
   }
   this->drawGrowBox();
 

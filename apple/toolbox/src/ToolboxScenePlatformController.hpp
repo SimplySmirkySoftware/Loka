@@ -50,6 +50,7 @@ class ToolboxScenePlatformController : public loka::app::scene::IPlatformControl
     public loka::app::layout::INaturalWidthSource
 {
 private:
+  struct ButtonControlBinding;
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
@@ -127,13 +128,15 @@ public:
                                  int newIndex);
   bool handleControlClick(const Point &point);
   void drawControlsInRect(const Rect &rect);
+  void drawScrollBarControl(short id);
   bool ensureButtonControl(short resourceId,
                            const Rect &rect,
                            const loka::core::String &label,
                            loka::core::EmitterState *emitter,
                            loka::core::State<bool> *enabled,
-                           loka::app::scene::NativeLifetimeHint lifetimeHint = loka::app::scene::NATIVE_HINT_DEFAULT,
-                           ToolboxButtonContext *context = 0);
+                           loka::app::scene::NativeLifetimeHint lifetimeHint,
+                           ToolboxButtonContext *context,
+                           ButtonControlBinding *&binding);
   void destroyButtonControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Creates or refreshes the scrollBarProc control for one ScrollBar node.
       The declared range and the bound value are pushed on every projection,
@@ -230,6 +233,7 @@ private:
   friend class ToolboxTextContext;
   friend class ToolboxCellContext;
   friend class ToolboxButtonContext;
+  friend class ToolboxScrollBarContext;
   friend class ToolboxPopupMenuContext;
   friend class ToolboxEditTextContext;
   friend class ToolboxTextEditorContext;

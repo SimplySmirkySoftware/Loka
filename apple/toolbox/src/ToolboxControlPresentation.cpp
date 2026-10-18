@@ -16,9 +16,11 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     if (binding.context)
       binding.context->repaint(binding.control, binding.label);
     else
+    {
       Draw1Control(binding.control);
-    ++debugStats_.controlDrawCount;
-    ++debugStats_.totalControlDrawCount;
+      ++debugStats_.controlDrawCount;
+      ++debugStats_.totalControlDrawCount;
+    }
   }
   for (size_t i = 0; i < scrollBarLedger_.scrollBarControls_.size(); ++i)
   {
@@ -38,4 +40,25 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
   }
 }
 
-
+/** One render reach draws one owned scrollbar row under the caller's clip. */
+void ToolboxScenePlatformController::drawScrollBarControl(short id)
+{
+  for (size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+  {
+    ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+    if (row.resourceId != id)
+      continue;
+    if (!row.control || !row.usedThisFrame || !(**row.control).contrlVis)
+      return;
+    if (this->paintSuppressClipRgn_)
+    {
+      GetClip(this->paintSuppressClipRgn_);
+      if (!RectInRgn(&row.rect, this->paintSuppressClipRgn_))
+        return;
+    }
+    Draw1Control(row.control);
+    ++this->debugStats_.controlDrawCount;
+    ++this->debugStats_.totalControlDrawCount;
+    return;
+  }
+}

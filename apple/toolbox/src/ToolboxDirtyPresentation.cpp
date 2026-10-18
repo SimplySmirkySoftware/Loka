@@ -13,13 +13,8 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
     render();
     return;
   }
-  // Text-like contexts supply this fact through their attach/retire
-  // membership. A transparent ImageView (#1199) also replays after surfaces
-  // regardless of composition order, so a ZStack window holding one replays
-  // in composition order too; that part walks the projection tree once per
-  // dirty delivery, like the ZStack check below.
-  const bool compositionReplay = this->compositionReplay_.required()
-      || (HasImageViewNode(rootNode_) && ToolboxTreeHasKind(rootNode_, loka::app::scene::NODE_KIND_ZSTACK));
+  // Text contexts retain their explicit composition replay membership.
+  const bool compositionReplay = this->compositionReplay_.required();
   if (!compositionReplay && hitLedger_.textHits_.empty() && hitLedger_.popupHits_.empty() && hitLedger_.cellHits_.empty()
       && buttonControls_.empty() && scrollBarLedger_.scrollBarControls_.empty() && editControls_.empty())
   {
@@ -34,19 +29,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
     }
     return;
   }
-  // Any drawer whose kind order the replay below does not preserve (text-like
-  // drawers replay after surfaces and images regardless of composition order)
-  // sends a ZStack window through the clipped full render instead.
-  bool dirtyIntersectsText = compositionReplay;
-  for (size_t i = 0; i < hitLedger_.textHits_.size() && !dirtyIntersectsText; ++i)
-    dirtyIntersectsText = RectsIntersect(rect, hitLedger_.textHits_[i].rect);
-  for (size_t i = 0; i < editControls_.size() && !dirtyIntersectsText; ++i)
-    dirtyIntersectsText = editControls_[i].te && RectsIntersect(rect, editControls_[i].rect);
-  for (size_t i = 0; i < hitLedger_.cellHits_.size() && !dirtyIntersectsText; ++i)
-    dirtyIntersectsText = RectsIntersect(rect, hitLedger_.cellHits_[i].rect);
-  for (size_t i = 0; i < hitLedger_.popupHits_.size() && !dirtyIntersectsText; ++i)
-    dirtyIntersectsText = RectsIntersect(rect, hitLedger_.popupHits_[i].rect);
-  if (compositionReplay || (dirtyIntersectsText && ToolboxTreeHasKind(rootNode_, loka::app::scene::NODE_KIND_ZSTACK)))
+  if (compositionReplay)
   {
     ToolboxRenderDirtyInCompositionOrder(*this, rect);
     return;
@@ -117,5 +100,8 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
     else static_cast<ToolboxEditTextContext *>(binding.ownerContext)->repaint(
         ToolboxEditPresentation(binding.te, binding.installed));
   }
+  // Kind-ordered replay has no composition walk to draw its controls and
+  // owns the dirty port clip. PR 4b will route unit-touching damage away from
+  // this path, through composition replay.
   drawControlsInRect(rect);
 }

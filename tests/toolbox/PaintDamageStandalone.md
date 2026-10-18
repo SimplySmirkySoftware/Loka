@@ -62,6 +62,8 @@ contract of the change that moved it:
 
 ## Ground pins (#1199 B2)
 
+PR 4a draws native controls in composition order; the transparent-upper-child ZStack overlap arms described below are retired under the page 2a §16/§18 overlay contract (#1438, #1442), while the non-overlapping image-vacated pins remain.
+
 `image-ground-transparent` reads local (110, 20) inside the ImageDamage
 surface's original sprite, below the ImageView placeholder label and inside
 its frame. It expects black after the full paint. The base and the temporary

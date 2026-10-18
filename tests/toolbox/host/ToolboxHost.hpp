@@ -33,7 +33,9 @@ struct ToolboxScrollViewMetrics;
 #ifndef LOKA_HOST_CONTROL_WIDTH
 #define LOKA_TOOLBOX_POPUP_MENU_CONTEXT_HPP
 #endif
+#ifndef LOKA_HOST_CONTROL_ORDER
 #define LOKA_TOOLBOX_SCROLL_BAR_CONTEXT_HPP
+#endif
 class ToolboxTextContext;
 class ToolboxTextFontDescriptor;
 #include "Quickdraw.h"
@@ -377,6 +379,7 @@ public:
   struct ButtonControlBinding
   {
     Rect rect;
+    short resourceId;
     ToolboxButtonContext *context;
     std::string label;
     ControlRef control;
@@ -386,6 +389,10 @@ public:
     loka::app::scene::NativeLifetimeHint lifetimeHint;
   };
   std::vector<ButtonControlBinding> buttonControls_;
+#ifdef LOKA_HOST_CONTROL_ORDER
+  loka::app::scene::ExactMatchHandleBucket<ControlRef> pushButtonBucket_;
+  void renderScrollView(loka::app::ScrollViewNode *);
+#endif
   void commitScrollBarValueAt(std::size_t);
   void
   commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &, loka::app::ScrollBarOrientation);
@@ -445,8 +452,30 @@ public:
                      ToolboxCellContext *, loka::core::State<loka::core::String> *) {}
 #endif
 #ifdef LOKA_HOST_CONTROL_WIDTH
-  bool ensureButtonControl(short, const Rect &rect, const loka::core::String &, loka::core::EmitterState *,
-      loka::core::State<bool> *, loka::app::scene::NativeLifetimeHint, ToolboxButtonContext *) { toolbox_host::controlRect = rect; return true; }
+#ifdef LOKA_HOST_CONTROL_ORDER
+  bool ensureButtonControl(short,
+                           const Rect &,
+                           const loka::core::String &,
+                           loka::core::EmitterState *,
+                           loka::core::State<bool> *,
+                           loka::app::scene::NativeLifetimeHint,
+                           ToolboxButtonContext *,
+                           ButtonControlBinding *&);
+#else
+  bool ensureButtonControl(short,
+                           const Rect &rect,
+                           const loka::core::String &,
+                           loka::core::EmitterState *,
+                           loka::core::State<bool> *,
+                           loka::app::scene::NativeLifetimeHint,
+                           ToolboxButtonContext *,
+                           ButtonControlBinding *&binding)
+  {
+    binding = 0;
+    toolbox_host::controlRect = rect;
+    return true;
+  }
+#endif
   void destroyButtonControl(short, loka::app::scene::NativeLifetimeHint) {}
   void recordButtonHit(const Rect &, loka::core::EmitterState *, loka::core::State<bool> *,
       loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
@@ -485,6 +514,9 @@ public:
         scrollViewClipRgn_(NewRgn()),
         paintSuppressClipRgn_(NewRgn()),
         scrollBarLedger_(4),
+#ifdef LOKA_HOST_CONTROL_ORDER
+        pushButtonBucket_(0),
+#endif
         poolIntakeAuditFailCount_(0),
         inBatchUpdate_(false),
         compositionReplay_(compositionReplay),
@@ -547,6 +579,7 @@ public:
   } debugStats_;
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
+  void drawScrollBarControl(short);
   typedef ToolboxHitLedger::TextHit TextHit;
   void redrawPopupHit(PopupHit &)
   {
@@ -583,7 +616,11 @@ LOKA_HOST_OTHER_HANDLER(ConfirmDialog)
 #ifndef LOKA_HOST_CONTROL_WIDTH
 LOKA_HOST_OTHER_HANDLER(PopupMenu)
 #endif
+#ifndef LOKA_HOST_CONTROL_ORDER
 LOKA_HOST_OTHER_HANDLER(ScrollBar)
+#else
+bool RegisterToolboxScrollBarNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);
+#endif
 #undef LOKA_HOST_OTHER_HANDLER
 
 namespace toolbox_host
