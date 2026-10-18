@@ -27,6 +27,13 @@
   return YES;
 }
 
+// The window's own keys land here while no field is focused, but Tab passes
+// over it: a stop here leaves the loop with no focus ring (#1461).
+- (BOOL)canBecomeKeyView
+{
+  return NO;
+}
+
 - (void)setOwner:(MacWindow *)owner
 {
   owner_ = owner;
