@@ -6,6 +6,7 @@
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include "app/style/StackBlur.hpp"
 
 #ifdef TEST_BUILD
@@ -51,6 +52,7 @@ namespace loka
 - (void)setMaterial:(NSInteger)material;
 - (void)setState:(NSInteger)state;
 - (void)setWantsLayer:(BOOL)value;
+- (NSRect)convertRectToBacking:(NSRect)rect;
 @end
 
 namespace
@@ -82,21 +84,58 @@ namespace
     NSRectFillUsingOperation(bounds, LOKA_MAC_COMPOSITING_SOURCE_OVER);
   }
 
-  /** AppKit calls with focus locked. Owns every temporary for one full-bounds
-      draw; O(pixels) storage/work, with the fixed radius of eight pixels. */
-  bool DrawCPUBlur(NSRect bounds)
+  /** One prefix walk of the parent's native z order per CPU draw. Each visible
+      intersecting lower sibling renders once into our full-bounds bitmap.
+      The unit and higher siblings never participate in their own underlay. */
+  void RenderUnderlay(NSView *unit, NSGraphicsContext *context)
   {
-    NSBitmapImageRep *capture = [[NSBitmapImageRep alloc] initWithFocusedViewRect:bounds];
-    const long width = [capture pixelsWide];
-    const long height = [capture pixelsHigh];
-    const size_t bytes = width > 0 && width <= INT_MAX && height > 0 && height <= INT_MAX
-                             ? loka::app::StackBlurScratchBytes(static_cast<int>(width), static_cast<int>(height))
-                             : 0;
-    if (!bytes)
+    const NSRect bounds = [unit bounds];
+    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW,
+                                NSMakeRect(0, 0, bounds.size.width, bounds.size.height));
+    NSView *parent = [unit superview];
+    NSArray *siblings = [parent subviews];
+    for (NSUInteger i = 0; i < [siblings count]; ++i)
     {
-      [capture release];
-      return false;
+      NSView *sibling = [siblings objectAtIndex:i];
+      if (sibling == unit)
+        break;
+      if ([sibling isHidden])
+        continue;
+      const NSRect clip = NSIntersectionRect([sibling bounds], [sibling convertRect:bounds fromView:unit]);
+      if (NSIsEmptyRect(clip))
+        continue;
+      const NSRect frame = [unit convertRect:[sibling frame] fromView:parent];
+      [NSGraphicsContext saveGraphicsState];
+      // An external context applies the view's bounds transform, not its
+      // frame/ancestor transforms. Supply an unflipped frame here; AppKit
+      // handles the sibling's own flipped/unflipped bounds and descendants.
+      NSAffineTransform *placement = [NSAffineTransform transform];
+      [placement translateXBy:NSMinX(frame) - NSMinX(bounds) yBy:NSMaxY(bounds) - NSMaxY(frame)];
+      [placement concat];
+      [sibling displayRectIgnoringOpacity:clip inContext:context];
+      [NSGraphicsContext restoreGraphicsState];
     }
+  }
+
+  /** Owns every temporary for one full-bounds draw; blur uses the fixed radius
+      of eight pixels. Source pixels are rendered afresh, never read from the
+      partially refreshed window backing store. */
+  bool DrawCPUBlur(NSView *unit)
+  {
+    const NSRect bounds = [unit bounds];
+    NSRect pixels = bounds;
+    if ([unit respondsToSelector:@selector(convertRectToBacking:)])
+      pixels = [unit convertRectToBacking:bounds];
+    const double pixelWidth = std::ceil(static_cast<double>(pixels.size.width));
+    const double pixelHeight = std::ceil(static_cast<double>(pixels.size.height));
+    if (!(bounds.size.width > 0 && bounds.size.height > 0 && pixelWidth > 0 && pixelWidth <= INT_MAX / 4
+          && pixelHeight > 0 && pixelHeight <= INT_MAX - 64))
+      return false;
+    const int width = static_cast<int>(pixelWidth);
+    const int height = static_cast<int>(pixelHeight);
+    const size_t bytes = loka::app::StackBlurScratchBytes(width, height);
+    if (!bytes)
+      return false;
     NSBitmapImageRep *rgba = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
                                                                      pixelsWide:width
                                                                      pixelsHigh:height
@@ -117,16 +156,13 @@ namespace
       std::memset([rgba bitmapData], 0, static_cast<size_t>(rowBytes) * height);
       [NSGraphicsContext saveGraphicsState];
       [NSGraphicsContext setCurrentContext:context];
-      const BOOL converted = [capture drawInRect:NSMakeRect(0, 0, width, height)];
+      NSAffineTransform *scale = [NSAffineTransform transform];
+      [scale scaleXBy:width / bounds.size.width yBy:height / bounds.size.height];
+      [scale concat];
+      NSRectClip(NSMakeRect(0, 0, bounds.size.width, bounds.size.height));
+      RenderUnderlay(unit, context);
       [NSGraphicsContext restoreGraphicsState];
-      if (converted
-          && loka::app::StackBlur([rgba bitmapData],
-                                  static_cast<int>(width),
-                                  static_cast<int>(height),
-                                  static_cast<size_t>(rowBytes),
-                                  8,
-                                  scratch,
-                                  bytes))
+      if (loka::app::StackBlur([rgba bitmapData], width, height, static_cast<size_t>(rowBytes), 8, scratch, bytes))
       {
         // Bitmap reps draw unflipped; restore the flipped unit's orientation.
         [NSGraphicsContext saveGraphicsState];
@@ -140,7 +176,6 @@ namespace
     }
     std::free(scratch);
     [rgba release];
-    [capture release];
     return drawn;
   }
 #if defined(__clang__)
@@ -168,7 +203,7 @@ namespace
 {
   (void)rect;
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  if (MenuBarTransparency() && DrawCPUBlur([self bounds]))
+  if (MenuBarTransparency() && DrawCPUBlur(self))
     PaintBlurTint([self bounds]);
   else
     loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW, [self bounds]);

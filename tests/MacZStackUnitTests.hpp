@@ -21,4 +21,5 @@ void testMacZStackGroundSuffixPreservesOrder();
 void testMacZStackBlurNativeEffect();
 void testMacZStackBlurCPUPixels();
 void testMacZStackBlurGroundIsCreationTimeConstant();
+void testMacZStackBlurCPUPartialRepaint();
 #endif
