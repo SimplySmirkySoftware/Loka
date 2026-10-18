@@ -910,7 +910,7 @@ void testBoxWidthParentOffersAndHeight()
     else if (parent == 1)
       root = new ScrollViewNode(ScrollViewProps());
     else if (parent == 2)
-      root = new CardNode(CardProps());
+      root = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
     else
       root = new GridNode(GridProps(1, 2));
     BoxNode *box = new BoxNode(Box().width(300).padding(5).props);
@@ -921,7 +921,7 @@ void testBoxWidthParentOffersAndHeight()
     NullScenePlatformController platform;
     const int resultY = platform.projectLayoutForTesting(root, rowState(200));
     g_rowTextSeatRecord = 0;
-    // Padding consumes 10; Card adds its 3/6 insets before offering the Box.
+    // Padding consumes 10; the DROP Card (same insets on every rail) adds 3/6 before offering the Box.
     LOKA_VERIFY(record.calls == 1);
     LOKA_VERIFY(record.state.width == 290);
     LOKA_VERIFY(record.state.x == (parent == 2 ? 8 : 5));
@@ -958,7 +958,7 @@ void testBoxWidthOverflowEstimates()
       content = new StackNode(Row().naturalWidth().props);
     else if (parent == 3)
     {
-      content = new CardNode(CardProps());
+      content = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
       content->addChild(new StackNode(Column().props));
     }
     if (content != &scroll)
@@ -969,7 +969,7 @@ void testBoxWidthOverflowEstimates()
     short width = 0;
     NullScenePlatformController platform;
     const bool known = layout::queryContentOverflowWidth(&scroll, layout::RailSpacing(12, 4, 9), &platform, width);
-    // Card adds left=3 and right=6 to its content's 800-unit claim.
+    // The DROP Card (same insets on every rail) adds left=3 and right=6 to its content's 800-unit claim.
     LOKA_VERIFY(known);
     LOKA_VERIFY(width == (parent == 3 ? 809 : 800));
     LOKA_VERIFY(ToolboxScrollViewMaximum(width, 200) == (parent == 3 ? 609 : 600));
