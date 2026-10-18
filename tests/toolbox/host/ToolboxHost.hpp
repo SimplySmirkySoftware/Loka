@@ -444,7 +444,11 @@ public:
   void retireEditTextControlAt(std::size_t, loka::app::scene::NativeLifetimeHint);
   void retireEditTextControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   void syncEditTextFromState(EditTextControlBinding &);
+#ifdef LOKA_HOST_CONTROL_ORDER
+  void refreshContextProps(loka::app::scene::Node *, short = 0);
+#else
   void refreshContextProps(loka::app::scene::Node *, short = 0) {}
+#endif
   short measureTextWidth(const loka::core::String &, const ToolboxTextFontDescriptor &) const;
   short measureTextWidth(const loka::core::String &) const;
 #if defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)

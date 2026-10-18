@@ -70,6 +70,7 @@ namespace
     HostPortScope port(window.window());
     ControlCleanupCheck cleanup(window);
     ToolboxScenePlatformController controller(&window);
+    State<bool> disabled(false);
     Scene scene((Boundary<OrderNode>(OrderProps())));
     scene.mount(&controller);
     typedef loka::dsl::testing::SceneTestAccess Access;
@@ -129,8 +130,28 @@ namespace
         const String refused = String::FromPlatform(Managed<loka::platform::String>::Wrap(new RefusingUtf8()));
         LOKA_VERIFY(Button(ButtonProps().text(refused)).applyPropsToNode(node));
       }
+      const bool retainedProps = std::strcmp(mode, "RetainedPropsReconcileDoesNotPaint") == 0;
+      if (retainedProps)
+      {
+        toolbox_host::controlTitles.clear();
+        LOKA_VERIFY(Button("Retained").enabled(&disabled).applyPropsToNode(node));
+        LOKA_VERIFY(toolbox_host::controlCalls.draws == 0);
+        LOKA_VERIFY(toolbox_host::controlTitles.size() == 1);
+        LOKA_VERIFY(toolbox_host::controlTitles[0] == "Retained");
+        LOKA_VERIFY(control->hilite == 255);
+        LOKA_VERIFY(controller.buttonControls_[0].label == "Retained");
+        for (std::size_t i = 0; i < control->calls.size(); ++i)
+          LOKA_VERIFY(!control->calls[i].painted);
+        control->calls.clear();
+      }
       ToolboxInputDoor::render(controller);
       verifyOneDraw(control);
+      if (retainedProps)
+      {
+        LOKA_VERIFY(toolbox_host::controlCalls.draws == 1);
+        LOKA_VERIFY(toolbox_host::controlTitles.size() == 1);
+        LOKA_VERIFY(controller.buttonControls_[0].label == "Retained" && control->hilite == 255);
+      }
       LOKA_VERIFY(toolbox_host::paintOperations.size() == 2);
       LOKA_VERIFY(toolbox_host::paintOperations[0] == "bar");
       LOKA_VERIFY(toolbox_host::paintOperations[1] == "erase");

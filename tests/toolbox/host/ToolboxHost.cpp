@@ -687,6 +687,7 @@ namespace
   };
 } // namespace
 #include "ToolboxButtonControl.cpp"
+#include "ToolboxContextProps.cpp"
 namespace
 {
   void RenderChildren(loka::app::scene::INestable *node, ToolboxScenePlatformController *controller)

@@ -118,8 +118,7 @@ namespace toolbox_host { extern Rect controlRect; extern std::vector<std::string
 struct HostQD { int gray; };
 extern HostQD qd;
 inline void PenPat(const int *) {}
-inline void SetControlTitle(ControlRef, const unsigned char *text)
-{ toolbox_host::controlTitles.push_back(std::string(reinterpret_cast<const char *>(text + 1), text[0])); }
+void SetControlTitle(ControlRef, const unsigned char *);
 inline void LineTo(short, short) {}
 #endif
 /** Native call ledger: Pascal payloads are copied at the OS boundary. */
