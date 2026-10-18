@@ -13,16 +13,27 @@ namespace loka
 
     class ZStackNode;
 
+    /** Ground requested for the later children (units) of a ZStack. */
+    enum ZStackUnitGround
+    {
+      ZSTACK_UNIT_GROUND_WINDOW,
+      ZSTACK_UNIT_GROUND_EXP_BLUR
+    };
+
     struct ZStackProps : public scene::NodePropsBase<ZStackProps>
     {
       typedef ZStackTypeTag TypeTag;
       typedef ZStackNode NodeType;
-      ZStackProps() {}
+      ZStackUnitGround unitGround;
+      ZStackProps()
+          : unitGround(ZSTACK_UNIT_GROUND_WINDOW)
+      {
+      }
       bool operator<(const scene::PropsBase &rhs) const
       {
         if (rhs.propsTypeId() != propsTypeId())
           return false;
-        return false;
+        return this->unitGround < static_cast<const ZStackProps &>(rhs).unitGround;
       }
     };
 
@@ -62,6 +73,14 @@ namespace loka
       ZStackDefinition(const ZStackProps &p)
           : BaseType(p)
       {
+      }
+      /** Experimental: later children (units) take a blur of content beneath
+          instead of window ground where the rail supports it. Other rails
+          paint window ground. */
+      ZStackDefinition &expBlurUnits()
+      {
+        this->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+        return *this;
       }
       ZStackDefinition(const ZStackDefinition &other)
           : BaseType(other)
