@@ -134,49 +134,92 @@ if STANDALONE then
     return
 end
 
--- Native gestures for one cell (#1414): move, press, wait and release, with
--- coordinates read from the live native bar, not a guessed screen position.
-if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
+-- Native gestures for the editor bar cells (#1414, #1416), with coordinates
+-- read from the live native bar, not a guessed screen position. The record
+-- offsets are pinned at compile time in each cell's scenario header.
+local function editorBarTransport()
     local cpu = manager.machine.devices[":maincpu"]
-    assert(not cpu.shortname:match("^ppc"), "editor gesture cell currently targets maciix")
+    assert(not cpu.shortname:match("^ppc"), "editor gesture cells currently target maciix")
     local mem = cpu.spaces["program"]
-    local button = field(":macadb:MOUSE0", "Mouse Button 0")
     local function ptr(address) return mem:read_u32(address) & 0xFFFFFF end
     local function signed(address)
         local n = mem:read_u16(address)
         return n >= 32768 and n - 65536 or n
     end
+    -- Walk WindowList front to back: the input method can put a window with no
+    -- controls in front of the app's window (KanjiTalk, after a key press).
     local function barPoint(active)
         local window = ptr(0x9D6) -- WindowList, frontmost NewWindow GrafPort.
-        if window == 0 then return nil end
-        local handle = ptr(window + 140) -- offsetof(WindowRecord, controlList), pinned in the cell.
-        for _ = 1, 64 do
-            if handle == 0 then return nil end
-            local control = ptr(handle)
-            if control == 0 then return nil end
-            local top, left = signed(control + 8), signed(control + 10)
-            local bottom, right = signed(control + 12), signed(control + 14)
-            local maximum = signed(control + 22)
-            if right - left == 16 and bottom - top > 48
-                and mem:read_u8(control + 16) ~= 0 and (maximum > 0) == active then
-                -- GrafPort.portBits.bounds is in local coordinates; negate its
-                -- origin to convert the audited local point to screen coordinates.
-                return left + 8 - signed(window + 10), bottom - 24 - signed(window + 8),
-                    top - signed(window + 8), signed(control + 18)
+        for _ = 1, 16 do
+            if window == 0 then return nil end
+            local handle = ptr(window + 140) -- offsetof(WindowRecord, controlList)
+            for _ = 1, 64 do
+                if handle == 0 then break end
+                local control = ptr(handle)
+                if control == 0 then break end
+                local top, left = signed(control + 8), signed(control + 10)
+                local bottom, right = signed(control + 12), signed(control + 14)
+                local maximum = signed(control + 22)
+                if right - left == 16 and bottom - top > 48
+                    and mem:read_u8(control + 16) ~= 0 and (maximum > 0) == active then
+                    -- GrafPort.portBits.bounds is in local coordinates; negate its
+                    -- origin to convert the audited local point to screen coordinates.
+                    return left + 8 - signed(window + 10), bottom - 24 - signed(window + 8),
+                        top - signed(window + 8), signed(control + 18), maximum
+                end
+                handle = ptr(control)
             end
-            handle = ptr(control)
+            window = ptr(window + 144) -- offsetof(WindowRecord, nextWindow)
         end
         return nil
     end
     -- wanted = nil accepts any value; a number waits for the app to settle there.
     local function awaitBar(active, wanted)
         for _ = 1, 200 do
-            local x, y, top, value = barPoint(active)
-            if x and (wanted == nil or value == wanted) then return x, y, top, value end
+            local x, y, top, value, maximum = barPoint(active)
+            if x and (wanted == nil or value == wanted) then return x, y, top, value, maximum end
             emu.wait(0.1)
         end
         error("editor bar did not reach requested presentation")
     end
+    return mem, barPoint, awaitBar
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-keys" then
+    local _, barPoint, awaitBar = editorBarTransport()
+    local function tapScroll(name)
+        local key = field(":macadb:KEY7", name)
+        key:set_value(1); emu.wait(0.1); key:clear_value(); emu.wait(0.5)
+        say("editor key delivered: %s", name)
+    end
+    local keysOk, keysError = pcall(function()
+        local _, _, _, _, maximum = awaitBar(true, 0)
+        emu.wait(1) -- The cell focuses and snapshots the selection before input.
+        tapScroll("Page Down")
+        local _, _, _, down = awaitBar(true)
+        assert(down > 0, "Page Down did not move the view")
+        tapScroll("Page Up"); awaitBar(true, 0)
+        tapScroll("End"); awaitBar(true, maximum)
+        tapScroll("Home"); awaitBar(true, 0)
+        -- Hold Command for one ADB poll before the key, or the key event can
+        -- be posted before the modifier and arrive without cmdKey.
+        commandKey:set_value(1); emu.wait(0.1); tapScroll("Page Down"); commandKey:clear_value()
+        local _, _, _, value = barPoint(true)
+        assert(value == 0, "Command Page Down moved the view")
+        -- The cell moves to line one and drops focus after auditing Command.
+        -- This marker cannot be produced by an ignored Command Page Down.
+        awaitBar(true, 1)
+        tapScroll("Page Down"); awaitBar(true, 1)
+    end)
+    commandKey:clear_value()
+    -- As in text-editor-scroll: a failed key must not stop the completion
+    -- transport below; the cell's own audit records how far the app got.
+    if not keysOk then say("editor keys failed: %s", tostring(keysError)) end
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
+    local mem, barPoint, awaitBar = editorBarTransport()
+    local button = field(":macadb:MOUSE0", "Mouse Button 0")
     local function move(x, y)
         mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
         mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)

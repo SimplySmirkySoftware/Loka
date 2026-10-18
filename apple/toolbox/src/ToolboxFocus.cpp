@@ -99,6 +99,17 @@ bool ToolboxScenePlatformController::applyNativeFocus(loka::app::scene::NodeCont
   return false;
 }
 
+bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
+{
+  EditTextControlBinding *focusedEdit = this->editControls_.focused();
+  if (focusedEdit && focusedEdit->te && focusedEdit->editor)
+  {
+    focusedEdit->editor->scrollKey(key);
+    return true;
+  }
+  return false;
+}
+
 bool ToolboxScenePlatformController::handleKeyDown(char key)
 {
   EditTextControlBinding *focusedEdit = this->editControls_.focused();

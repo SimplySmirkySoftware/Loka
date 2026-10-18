@@ -22,7 +22,8 @@ namespace loka
                                           "retained-text-rebind",
                                           "attributed-editor-line",
                                           "text-editor-plain",
-                                          "text-editor-scroll"};
+                                          "text-editor-scroll",
+                                          "text-editor-keys"};
       return ScenarioCellTable(cells, sizeof(cells) / sizeof(cells[0]));
     }
     inline ScenarioAdvance AdvanceSmirkBenchPlainEditor(long tick,

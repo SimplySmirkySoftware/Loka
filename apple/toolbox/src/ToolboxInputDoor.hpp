@@ -20,6 +20,10 @@ public:
   {
     return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleKeyDown, key);
   }
+  static bool scrollKey(ToolboxScenePlatformController &c, ToolboxScrollKey key)
+  {
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleScrollKey, key);
+  }
   static void render(ToolboxScenePlatformController &c)
   {
     Invocation(c).operator()(c, &ToolboxScenePlatformController::render);

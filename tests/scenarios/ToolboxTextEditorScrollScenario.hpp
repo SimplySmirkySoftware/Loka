@@ -29,10 +29,13 @@ namespace loka
                               dsl::SnapRecord &out)
       {
         // The external rail reads only these documented System 7 records. Fail
-        // the build if the selected native headers do not match that transport.
+        // the build if the selected native headers do not match that transport
+        // (editorBarTransport in mame-launch.lua, shared with text-editor-keys).
         typedef char WindowControlOffset[(offsetof(WindowRecord, controlList) == 140) ? 1 : -1];
+        typedef char WindowNextOffset[(offsetof(WindowRecord, nextWindow) == 144) ? 1 : -1];
         typedef char ControlRectOffset[(offsetof(ControlRecord, contrlRect) == 8) ? 1 : -1];
         (void)sizeof(WindowControlOffset);
+        (void)sizeof(WindowNextOffset);
         (void)sizeof(ControlRectOffset);
         app::scene::Node *node = 0;
         dsl::FlowError error;
