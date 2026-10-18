@@ -260,6 +260,10 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
           AND NOT _loka_win32_scenario MATCHES "^(startup|attributed-editor-line)$")
         continue()
       endif()
+      # bmi-tab types real ADB keys from the Toolbox Lua; run-scenario.ps1 refuses it.
+      if(_loka_win32_entry STREQUAL "helloworld bmi-tab")
+        continue()
+      endif()
       add_test(NAME "win32Scenario-${_loka_win32_example}-${_loka_win32_scenario}"
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
           ${CMAKE_CURRENT_SOURCE_DIR}/../tests/win32/run-scenario.ps1

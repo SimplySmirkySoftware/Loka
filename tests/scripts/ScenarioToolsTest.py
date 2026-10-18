@@ -233,6 +233,9 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         self.assertNotIn('"bmi-tab"', shared)
         for rail in ("tests/macos/run-scenario.sh", "tests/win32/run-scenario.ps1"):
             self.assertIn("helloworld/bmi-tab", (root / rail).read_text())
+        # Win32 CTest registers every helloworld row; without this skip the
+        # refused cell becomes a guaranteed-failing win32Scenario test.
+        self.assertIn('_loka_win32_entry STREQUAL "helloworld bmi-tab"', (root / "win32/CMakeLists.txt").read_text())
         audit = (root / "tests/scenarios/expected/helloworld/bmi-tab.audit").read_text()
         self.assertIn("height.text\t3\n", audit)
         self.assertIn("weight.text\t2\n", audit)
