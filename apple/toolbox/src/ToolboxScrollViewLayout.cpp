@@ -166,6 +166,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   int contentHeight = 0;
   bool shortRangeRefused = false;
   const std::size_t ledgerMark = this->rectSurfaceExtentLedger_.mark();
+  const ToolboxUnitLedger::Mark unitMark = this->unitLedger_.mark();
   {
     loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope);
     if (!scopeGuard.isActive())
@@ -219,6 +220,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   {
     // Seats recorded under a refused scope are not facts.
     this->rectSurfaceExtentLedger_.discardSince(ledgerMark);
+    this->unitLedger_.discard(unitMark);
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
   }

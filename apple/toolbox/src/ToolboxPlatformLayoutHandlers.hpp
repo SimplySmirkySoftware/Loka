@@ -36,11 +36,6 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
                                const loka::app::layout::LazyWindow *range = 0,
                                loka::app::layout::StackSpans *spans = 0);
 
-/** Applies Toolbox ZStack layout through the supplied traversal. */
-int ComputeToolboxZStackLayout(loka::app::ZStackNode *stack,
-                               const loka::app::scene::LayoutState &state,
-                               loka::app::scene::IPlatformLayoutTraversal *traversal);
-
 /** Applies Toolbox Grid layout through the supplied traversal. */
 int ComputeToolboxGridLayout(loka::app::GridNode *grid,
                              const loka::app::scene::LayoutState &state,

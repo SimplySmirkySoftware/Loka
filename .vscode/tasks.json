@@ -65,6 +65,24 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Build: macOS CardShowcase",
+      "hide": true,
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "--preset",
+        "macos-debug",
+        "--target",
+        "LokaCardShowcaseMacOS"
+      ],
+      "dependsOn": [
+        "Configure: macOS Native"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Build: macOS SimpleText",
       "hide": true,
       "type": "shell",
@@ -1335,7 +1353,7 @@
       "type": "pickString",
       "description": "Select the macOS target to build",
       "default": "All",
-      "options": ["All", "HelloWorld", "MineSweeper", "SimpleViewer", "SimpleText", "ScrapbookUI", "FloppyBird", "SmirkBench", "LazyList", "Tutorial", "SmirkyCard", "Tests"]
+      "options": ["All", "HelloWorld", "MineSweeper", "SimpleViewer", "CardShowcase", "SimpleText", "ScrapbookUI", "FloppyBird", "SmirkBench", "LazyList", "Tutorial", "SmirkyCard", "Tests"]
     },
     {
       "id": "lokaWin32Build",

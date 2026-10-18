@@ -986,6 +986,7 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
                 "Run (macOS HelloWorld)",
                 "Run (macOS MineSweeper)",
                 "Run (macOS SimpleViewer)",
+                "Run (macOS CardShowcase)",
                 "Run (macOS SimpleText)",
                 "Run (macOS SmirkBench)",
                 "Run (macOS LazyList)",

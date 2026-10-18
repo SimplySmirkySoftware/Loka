@@ -288,20 +288,7 @@ namespace
     case loka::app::scene::NODE_KIND_ZSTACK:
     {
       loka::app::ZStackNode *stack = static_cast<loka::app::ZStackNode *>(node);
-      short maxWidth = 0;
-      bool usedHandler = false;
-      if (controller && controller->layoutHandlerRegistry())
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
-            *controller->layoutHandlerRegistry(), *stack, state, traversal, maxWidth);
-      }
-      if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        maxWidth = static_cast<short>(ComputeToolboxZStackLayout(stack, state, &traversal));
-        state.y = traversal.layoutResultY();
-      }
+      const short maxWidth = controller->layoutZStack(stack, state, activeBoundary);
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, maxWidth, static_cast<short>(state.y - startY));
@@ -481,11 +468,13 @@ namespace
             static_cast<loka::app::ScrollViewNode *>(node));
       }
       return;
+    case loka::app::scene::NODE_KIND_ZSTACK:
+      controller->renderZStack(static_cast<loka::app::ZStackNode *>(node));
+      return;
     // Nodes without a built-in kind (boundaries, components, app-defined
     // containers) and these built-in containers render their children.
     case loka::app::scene::NODE_KIND_UNKNOWN:
     case loka::app::scene::NODE_KIND_BOX:
-    case loka::app::scene::NODE_KIND_ZSTACK:
     case loka::app::scene::NODE_KIND_GRID:
     case loka::app::scene::NODE_KIND_CANVAS:
     case loka::app::scene::NODE_KIND_CARD:

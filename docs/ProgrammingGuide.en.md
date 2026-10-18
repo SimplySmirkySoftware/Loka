@@ -1608,16 +1608,21 @@ scroll bars meet the window edge on each rail.
 A ZStack's first child is the ground (live content). Each later child forms a unit, a
 full-width opaque band with the seat's width and that child's laid-out height. Units
 sit above the ground and earlier units in composition order, with one native
-window/view per unit. `ZStack(scrollView, Row(toolbar))` keeps the toolbar subtree
+window/view per unit on Win32/macOS and a painted band on Toolbox. `ZStack(scrollView, Row(toolbar))` keeps the toolbar subtree
 together. Place units only over non-reactive regions, such as a ScrollView's
 inset gap or modal dimming; the framework does not check placement. A transparent
 later child is unsupported. On Win32, stacking order makes Tab visit a unit before
 every earlier sibling under the same native parent, including siblings outside
 the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
-Win32 and macOS use opaque units by default. Toolbox lays out children flat until it adopts
-units. On macOS, units are ordered relative to their own ZStack only; later
-siblings or another ZStack's units in the same parent may sit above them, with
+Win32, macOS, and Toolbox use opaque units by default. Toolbox still lacks the 2b hit shield,
+so do not place a unit over a live control: a unit's own live control must lie
+entirely inside it (a partly contained own editor is unspecified), partial overlaps
+are repaired on the overlap, and fully covered ground or earlier-unit controls
+are outside the contract and get no repair, leaving selection highlight,
+TEActivate/TEDeactivate paint, and TrackControl hilite on screen until an unrelated
+repaint presents the unit area. On macOS, units are ordered relative to their own
+ZStack only; later siblings or another ZStack's units in the same parent may sit above them, with
 geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 

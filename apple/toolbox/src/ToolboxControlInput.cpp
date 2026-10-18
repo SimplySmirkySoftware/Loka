@@ -97,6 +97,7 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
       }
       beginBatchUpdate();
       ControlPartCode tracked = TrackControl(control, point, 0);
+      this->invalidateUnitOverlap(binding.rect);
       if (tracked != 0)
       {
         binding.emitter->emit();
@@ -119,6 +120,7 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
       gActiveScrollBarLineStep = row.lineStep;
       gActiveScrollBarPageStep = row.pageStep;
       TrackControl(control, point, part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
+      this->invalidateUnitOverlap(row.rect);
       const int settled = GetControlValue(control);
       const ToolboxEditorScrollBarAssociation source = row.editor;
       if (settled != row.appliedValue)
@@ -156,6 +158,7 @@ bool ToolboxScenePlatformController::handleControlClick(const Point &point)
     // moving instead of stepping once.
     ControlActionUPP action = (part == kControlIndicatorPart) ? 0 : ScrollBarActionUPP();
     TrackControl(control, point, action);
+    this->invalidateUnitOverlap(scrollBarLedger_.scrollBarControls_[i].rect);
     // Read after the loop has ended, never during it (ruling 1). The return
     // code is deliberately ignored: releasing off an arrow ends the scroll
     // but keeps what already scrolled, and commitScrollBarValueAt is the one
