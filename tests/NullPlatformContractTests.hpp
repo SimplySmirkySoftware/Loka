@@ -50,6 +50,8 @@ void testPolicyScopeDestroyOnDetachWorksInComposeOnceBoundary();
 void testPolicyScopeDeliverWhileDetachedWorksInComposeOnceBoundary();
 void testOpenFileDialogPresentationPoliciesInComposeOnceBoundary();
 void testOpenFileDialogRequiresCompletionBinding();
+void testNullMainDisplayDepthDeclinesWithoutWriting();
+void testMainDisplayDepthAnswersThroughBasePointer();
 void testWindowWithoutDisplayFactsDeclinesEveryAxis();
 void testDisplayFeatureAvailabilityFollowsTheQueriesThatAnswer();
 void testNullPlatformContract_S1_scrollBarProjectsAndRetiresIntoItsOwnBucket();

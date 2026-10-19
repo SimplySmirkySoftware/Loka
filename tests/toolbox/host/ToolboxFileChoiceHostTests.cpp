@@ -49,6 +49,10 @@ ToolboxPlatformContext::~ToolboxPlatformContext() {}
 App *ToolboxPlatformContext::createApp(AppConfigurable *, NativeModuleHandle, int) const { return 0; }
 Window *ToolboxPlatformContext::createWindow(const WindowProps &) { return 0; }
 loka::app::scene::NodeContext *ToolboxPlatformContext::createNodeContext(loka::app::scene::Node *) const { return 0; }
+bool ToolboxPlatformContext::queryMainDisplayDepth(int &) const
+{
+  return false;
+}
 bool ToolboxPlatformContext::queryLargestContiguousAllocation(std::size_t &) const { return false; }
 bool ToolboxPlatformContext::createImageFromBlob(const loka::core::resource::Blob &, std::size_t,
     std::size_t, loka::core::resource::Image &) { return false; }
