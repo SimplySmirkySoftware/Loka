@@ -162,7 +162,7 @@ namespace
     ToolboxRenderDirtyInCompositionOrder(f.controller, small);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
-    const int before = toolbox_host::invalidations;
+    const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before + 1);
     LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
@@ -214,7 +214,7 @@ namespace
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
     f.window.requestInvalidate(); // Swallow the request before its next flush.
     LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
-    const int before = toolbox_host::invalidations;
+    const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before + 1);
     LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
@@ -229,7 +229,7 @@ namespace
     toolbox_host::staticEligible = false;
     f.window.draw();
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
-    const int before = toolbox_host::invalidations;
+    const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before);
@@ -240,7 +240,7 @@ namespace
     g.window.draw();
     g.window.flushInvalidate();
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(g.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
-    const int issued = toolbox_host::invalidations;
+    const unsigned issued = toolbox_host::invalidations;
     g.controller.completedInvalidateFlush();
     g.controller.completedInvalidateFlush();
     LOKA_VERIFY(toolbox_host::invalidations == issued);
