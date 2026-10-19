@@ -274,7 +274,7 @@ namespace
         {
           if (++this->waits_ < 12)
             return;
-          this->record(this->phase_ == 2 ? "static-capture-ready" : "static-swallowed-request", false);
+          this->record(this->phase_ == 2 ? "static-capture-ready" : "static-recaptured-after-reopen", false);
           this->finish();
           return;
         }
@@ -284,7 +284,7 @@ namespace
         if (this->phase_ == 7)
         {
           this->record("static-reconcile", this->captures_ == 2);
-          this->record("static-swallowed-request", true);
+          this->record("static-recaptured-after-reopen", true);
           this->finish();
           return;
         }
@@ -323,12 +323,9 @@ namespace
         this->node_->show(true);
         if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
           turn->settle();
-        window->draw();
-        window->flushInvalidate();
-        this->record("static-requested",
-                     ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::REQUESTED);
-        window->requestInvalidate(); // Swallow the just-issued request in this idle's flush sequence.
-        window->flushInvalidate();
+        // Show reveals its branch on the next tick, so this idle cannot force
+        // the request/swallow sequence natively; the host pins own that phase
+        // machine. Natively, reopening must reach READY again with a new capture.
         this->phase_ = 7;
       }
     }
