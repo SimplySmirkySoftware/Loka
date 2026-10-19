@@ -441,8 +441,62 @@ namespace
     }
   }
 
+  void CountViewportWrites(void *context)
+  {
+    ++*static_cast<int *>(context);
+  }
+
+  void ScrollViewViewportSizePins()
+  {
+    const char *names[] = {
+        "ToolboxViewportSizeDisabledVertical", "ToolboxViewportSizeActiveVertical", "ToolboxViewportSizeBothBars"};
+    for (unsigned mode = 0; mode != 3; ++mode)
+    {
+      Pin(names[mode]);
+      for (unsigned sharedEdge = 0; sharedEdge != 2; ++sharedEdge)
+      {
+        ScrollFixture f(mode == 0 ? 1 : 20);
+        f.scroll.props.contentInsets(ScrollViewContentInsets::of(12, 3));
+        f.fact.set(ScrollViewProps::topOrigin());
+        if (mode == 2)
+          f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+        LayoutState seat = Seat(sharedEdge ? 360 : 100);
+        seat.x = 0;
+        seat.y = 0;
+        seat.height = sharedEdge ? 260 : 100;
+        seat.spacing = 0;
+        // A bar shares one pixel with the window frame at a touching edge:
+        // the reserved thickness is SCROLL_BAR_THICKNESS minus one there.
+        const int reserved = SCROLL_BAR_THICKNESS - static_cast<int>(sharedEdge);
+        const loka::core::Frame expected(0, -12, seat.width - reserved, seat.height - (mode == 2 ? reserved : 0));
+        int writes = 0;
+        f.offset.bind(&CountViewportWrites, &writes, false);
+        LayoutState first = seat;
+        f.controller.layoutScrollView(&f.scroll, first, 0);
+        LOKA_VERIFY(f.fact.get() == expected);
+        LOKA_VERIFY(writes == 1);
+        LOKA_VERIFY(f.controller.scrollControls().size() == (mode == 2 ? 2u : 1u));
+        const HostControl &vertical = *f.controller.scrollControl(0).control;
+        LOKA_VERIFY(vertical.visible);
+        LOKA_VERIFY((vertical.maximum == 0) == (mode == 0));
+        LOKA_VERIFY(vertical.hilite == (mode == 0 ? 255 : 0));
+        if (mode == 2)
+          LOKA_VERIFY(f.controller.scrollControl(1).control->visible);
+        // Do not use step(): its zero-size request seed would itself change the fact.
+        writes = 0;
+        f.scroll.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
+        LayoutState second = seat;
+        f.controller.layoutScrollView(&f.scroll, second, 0);
+        LOKA_VERIFY(f.fact.get() == expected);
+        LOKA_VERIFY(writes == 0);
+        f.offset.unbind(&CountViewportWrites, &writes);
+      }
+    }
+  }
+
   void ScrollViewPins()
   {
+    ScrollViewViewportSizePins();
     ScrollViewInsetPins();
     ScrollViewInsetExtentPins();
     ScrollViewSizeBoxPins();
