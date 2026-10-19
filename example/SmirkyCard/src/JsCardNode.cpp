@@ -279,13 +279,22 @@ namespace smirkycard
       JSValue state = JS_GetPropertyStr(ctx, context, "state");
       JSValue native = JS_NewObject(ctx);
       ok = !JS_IsException(state) && !JS_IsException(native)
-           && installFunction(ctx, state, "file", JS_NewCFunctionData(ctx, typedFactory, 0,
-                               JsSeatRecord::FILE_RESULT, 1, &this->capability_))
-           && installFunction(ctx, state, "image", JS_NewCFunctionData(ctx, typedFactory, 0,
-                               JsSeatRecord::IMAGE, 1, &this->capability_))
+           && installFunction(
+               ctx,
+               state,
+               "file",
+               JS_NewCFunctionData(ctx, typedFactory, 0, JsSeatRecord::FILE_RESULT, 1, &this->capability_))
+           && installFunction(ctx,
+                              state,
+                              "image",
+                              JS_NewCFunctionData(ctx, typedFactory, 0, JsSeatRecord::IMAGE, 1, &this->capability_))
+           && installFunction(ctx,
+                              state,
+                              "viewport",
+                              JS_NewCFunctionData(ctx, typedFactory, 0, JsSeatRecord::VIEWPORT, 1, &this->capability_))
            && JS_FreezeObject(ctx, state) >= 0
-           && installFunction(ctx, native, "loadImage", JS_NewCFunctionData(ctx, nativeLoadImage, 1,
-                               0, 1, &this->capability_))
+           && installFunction(
+               ctx, native, "loadImage", JS_NewCFunctionData(ctx, nativeLoadImage, 1, 0, 1, &this->capability_))
            && JS_FreezeObject(ctx, native) >= 0
            && JS_SetPropertyStr(ctx, context, "native", JS_DupValue(ctx, native)) >= 0;
       JS_FreeValue(ctx, state);
@@ -544,6 +553,8 @@ namespace smirkycard
       return JS_ThrowOutOfMemory(ctx);
     if (kind == JsSeatRecord::FILE_RESULT)
       this->state(record->file, loka::app::FileChooserResult());
+    else if (kind == JsSeatRecord::VIEWPORT)
+      this->state(record->viewport, loka::app::ScrollViewProps::topOrigin());
     else
       this->state(record->image, image);
     return this->finishSeat(ctx, record);
@@ -673,6 +684,25 @@ namespace smirkycard
         return JS_NewInt32(ctx, record->integer.get());
       if (record->kind == JsSeatRecord::BOOLEAN)
         return JS_NewBool(ctx, record->boolean.get());
+      if (record->kind == JsSeatRecord::VIEWPORT)
+      {
+        const loka::core::Frame value = record->viewport.get();
+        const loka::core::Frame fact =
+            value == loka::app::ScrollViewProps::topOrigin() ? loka::core::Frame(0, 0, 0, 0) : value;
+        JSValue snapshot = JS_NewObject(ctx);
+        if (JS_IsException(snapshot))
+          return snapshot;
+        if (JS_DefinePropertyValueStr(ctx, snapshot, "x", JS_NewInt32(ctx, fact.x), JS_PROP_C_W_E) < 0
+            || JS_DefinePropertyValueStr(ctx, snapshot, "y", JS_NewInt32(ctx, fact.y), JS_PROP_C_W_E) < 0
+            || JS_DefinePropertyValueStr(ctx, snapshot, "width", JS_NewInt32(ctx, fact.width), JS_PROP_C_W_E) < 0
+            || JS_DefinePropertyValueStr(ctx, snapshot, "height", JS_NewInt32(ctx, fact.height), JS_PROP_C_W_E) < 0
+            || JS_FreezeObject(ctx, snapshot) < 0)
+        {
+          JS_FreeValue(ctx, snapshot);
+          return JS_EXCEPTION;
+        }
+        return snapshot;
+      }
       if (!this->flowLive())
         return JS_ThrowTypeError(ctx, "typed seat requires a Live mounted card");
       if (record->kind == JsSeatRecord::IMAGE)
@@ -712,12 +742,12 @@ namespace smirkycard
   JSValue JsCardNode::seatSet(JSContext *ctx, JSValueConst seat, JSValueConst value)
   {
     JsSeatRecord *record = this->findSeat(ctx, seat);
+    if (record && record->writeRefusal())
+      return JS_ThrowTypeError(ctx, "%s", record->writeRefusal());
     if (record && !record->isMaterialized())
       return JS_ThrowTypeError(ctx, "state seat is not materialized");
     if (record)
     {
-      if (record->kind == JsSeatRecord::FILE_RESULT)
-        return JS_ThrowTypeError(ctx, "file seat is rail-written only");
       if (record->kind == JsSeatRecord::IMAGE)
       {
         if (!this->flowLive())
@@ -1346,15 +1376,49 @@ namespace smirkycard
     }
     return new (std::nothrow) loka::app::EditText(seat->string);
   }
-  loka::app::ScrollView *JsCardNode::createScrollView(const loka::core::Frame &initialViewport)
+  loka::app::ScrollView *
+  JsCardNode::createScrollView(JSContext *ctx, JSValueConst tree, const loka::core::Frame &initialViewport)
   {
+    JSAtom key = JS_NewAtom(ctx, "viewport");
+    const int supplied = JS_GetOwnProperty(ctx, 0, tree, key);
+    JS_FreeAtom(ctx, key);
+    if (supplied < 0)
+    {
+      this->fail("JavaScript ScrollView viewport lookup refused.");
+      return 0;
+    }
+    JsSeatRecord *seat = 0;
+    if (supplied)
+    {
+      JSValue value = JS_GetPropertyStr(ctx, tree, "viewport");
+      seat = this->findSeat(ctx, value);
+      JS_FreeValue(ctx, value);
+      if (!seat || seat->kind != JsSeatRecord::VIEWPORT)
+      {
+        this->fail("JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
+        return 0;
+      }
+      // A supplied seat needs no record: the seat owns the handle. Binding the
+      // same seat twice is the app's choice, as with the C++ ScrollView(viewport);
+      // a per-card ledger would outlive a refused declaration capture and turn
+      // its retry into a false "already bound" (bot P2 on #1475).
+      loka::app::ScrollView *bound = new (std::nothrow) loka::app::ScrollView(seat->viewport);
+      if (!bound)
+        this->fail("JavaScript ScrollView allocation refused.");
+      return bound;
+    }
     JsScrollViewport *record = this->scrollViewports_.add();
     if (!record)
+    {
+      this->fail("JavaScript ScrollView allocation refused.");
       return 0;
+    }
     this->state(record->viewport, initialViewport);
-    if (!record->viewport.isValid())
-      return 0;
-    return new (std::nothrow) loka::app::ScrollView(record->viewport);
+    loka::app::ScrollView *scroll =
+        record->viewport.isValid() ? new (std::nothrow) loka::app::ScrollView(record->viewport) : 0;
+    if (!scroll)
+      this->fail("JavaScript ScrollView allocation refused.");
+    return scroll;
   }
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerShow(JSContext *ctx, JSValueConst tree, int depth)
   {

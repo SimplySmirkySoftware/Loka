@@ -17,6 +17,7 @@
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "core/Operation.hpp"
 #include "app/OpenFileDialog.hpp"
 #include "core/util/OwnedDef.hpp"
 #include "support/LokaAllocFailure.hpp"
@@ -3977,6 +3978,99 @@ namespace
     LOKA_VERIFY(std::remove("_handle_image.bin") == 0);
   }
 
+  void checkViewportSeat()
+  {
+    std::puts("[pin] viewport seat: seed projection, frozen snapshots, rail-only writes and Null relayout");
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(
+        "var viewport,before,log=[],factoryRefused=false,earlySet=false;card('first',c=>{"
+        "try{c.state.viewport(1)}catch(e){factoryRefused=e instanceof TypeError}"
+        "viewport=c.state.viewport();"
+        "try{viewport.set({})}catch(e){earlySet=e instanceof TypeError&&e.message==='viewport is a rail-written fact'}"
+        "c.flow(Flow().watch(viewport,v=>{log.push(v);return v}));return {compose(){"
+        "before=viewport.get();return ScrollView(Text('content'),{viewport}).TEST_ID('Viewport')}}});",
+        error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    expectJs(runtime, "JSON.stringify(before)", "{\"x\":0,\"y\":0,\"width\":0,\"height\":0}");
+    expectJs(runtime, "factoryRefused&&earlySet&&Object.isFrozen(before)", "true");
+    expectJs(runtime, "JSON.stringify(log)", "[{\"x\":0,\"y\":0,\"width\":100,\"height\":20}]");
+    expectJs(runtime, "Object.isFrozen(log[0])&&Object.isFrozen(viewport.get())", "true");
+    expectJs(runtime,
+             "(()=>{try{viewport.set({x:1,y:2,width:3,height:4});return false}catch(e){"
+             "return e instanceof TypeError&&e.message==='viewport is a rail-written fact'}})()",
+             "true");
+    loka::app::scene::Node *node = windowNode(window, "Viewport");
+    LOKA_VERIFY(node && node->asScrollViewNode());
+    const loka::core::Frame first = node->asScrollViewNode()->props.viewport_.state()->get();
+    std::fprintf(stderr, "[probe] viewport first: %d,%d,%d,%d\n", first.x, first.y, first.width, first.height);
+    loka::app::scene::LayoutState bounds;
+    bounds.width = 240;
+    bounds.height = 60;
+    {
+      loka::core::Operation operation;
+      platform.projectLayoutForTesting(node, bounds);
+    }
+    const loka::core::Frame second = node->asScrollViewNode()->props.viewport_.state()->get();
+    std::fprintf(stderr, "[probe] viewport second: %d,%d,%d,%d\n", second.x, second.y, second.width, second.height);
+    expectJs(runtime,
+             "JSON.stringify(log)",
+             "[{\"x\":0,\"y\":0,\"width\":100,\"height\":20},{\"x\":0,\"y\":0,\"width\":240,\"height\":60}]");
+    {
+      loka::core::Operation operation;
+      platform.projectLayoutForTesting(node, bounds);
+    }
+    expectJs(runtime, "log.length", "2");
+    expectJs(runtime, "JSON.stringify(viewport.get())===JSON.stringify(log[1])&&Object.isFrozen(log[1])", "true");
+    expectJs(runtime,
+             "(()=>{let calls=0;Object.defineProperty(Object.prototype,'x',"
+             "{set(){++calls},configurable:true});const v=viewport.get();delete Object.prototype.x;"
+             "return calls===0&&Object.hasOwn(v,'x')&&v.x===0})()",
+             "true");
+    {
+      smirkycard::ScriptRuntime insetRuntime;
+      LOKA_VERIFY(
+          insetRuntime.loadBuiltin("var previous,initial,seen=[];card('first',c=>{const v=c.state.viewport();"
+                                   "const borrowed=previous;previous=v;c.flow(Flow().watch(v,x=>seen.push(x)));"
+                                   "return {compose(){initial=v.get();return ScrollView(Text('gap'),"
+                                   "{viewport:borrowed||v,insets:{top:12,bottom:3}}).TEST_ID('InsetViewport')}}});",
+                                   error));
+      WindowProps insetProps;
+      insetProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, insetRuntime));
+      NullWindow insetWindow(&context, insetProps);
+      WindowAdmissionTestApp insetAdmission(insetWindow);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*insetWindow.scene(), true);
+      expectJs(insetRuntime, "JSON.stringify(initial)", "{\"x\":0,\"y\":0,\"width\":0,\"height\":0}");
+      expectJs(insetRuntime, "JSON.stringify(previous.get())", "{\"x\":0,\"y\":-12,\"width\":100,\"height\":20}");
+      expectJs(insetRuntime, "Object.isFrozen(seen[0])", "true");
+      // A second card in the same engine cannot borrow the first card's seat.
+      WindowProps foreignProps;
+      foreignProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, insetRuntime));
+      NullWindow foreignWindow(&context, foreignProps);
+      WindowAdmissionTestApp foreignAdmission(foreignWindow);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*foreignWindow.scene(), true);
+      loka::app::scene::Node *status = windowNode(foreignWindow, "SmirkyCard.Status");
+      LOKA_VERIFY(status && status->asTextNode());
+      LOKA_VERIFY(textValue(status->asTextNode())
+                  == "JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
+    }
+    std::puts("[pin] viewport seat: own typed seat required");
+    const char *invalid[] = {"c.state(0)", "c.state.file()", "c.state.image()", "{}", "null", "undefined"};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+    {
+      const std::string source = std::string("card('first',c=>{const v=") + invalid[i]
+                                 + ";return {compose(){return ScrollView(Text('a'),{viewport:v})}}});";
+      checkComposeRefusal(source.c_str(),
+                          "JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
+    }
+  }
+
   void checkScrollViewportPersistence()
   {
     NullPlatformContext context;
@@ -4303,8 +4397,9 @@ namespace
       writeMain((std::string("_named_pictures/") + stems[i] + ".PNG").c_str(), "img");
     NamedPicturePlatform context;
     const std::string source = readCardSource("LAPTOP.JS");
-    const std::string companion =
-        "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n" + readCardSource("LAPTOP.FLOW.JS");
+    const std::string companion = "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n"
+                                  "globalThis.LAPTOP_NARROW_LIST = true;\n"
+                                  + readCardSource("LAPTOP.FLOW.JS");
     const char *cells[] = {0, "startup", "laptop-carousel", "laptop-detail", "unknown"};
     for (unsigned cell = 0; cell < 5; ++cell)
     {
@@ -4312,7 +4407,14 @@ namespace
           cells[cell] ? std::string("globalThis.LAPTOP_CELL = \"") + cells[cell] + "\";\n" + companion : companion;
       CardRunnerHarness h(source.c_str(), selected.c_str(), 7, true, &context, cells[cell] ? cells[cell] : "laptop");
       LOKA_VERIFY(h.recordLog("seed=7"));
-      h.mount();
+      {
+        // Mount's viewport publication settles after the Show seats attach,
+        // as it does inside a rail entry operation.
+        loka::core::Operation operation;
+        h.mount();
+        operation.settle();
+        h.admission->flush();
+      }
       h.ticks(40);
       LOKA_VERIFY(h.terminalCount == 1);
       if (cell == 4)
@@ -4324,7 +4426,7 @@ namespace
       if (cell == 2)
       {
         LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macport"));
-        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Open.pb100"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Narrow.pb100"));
       }
       else if (cell == 3)
       {
@@ -4332,7 +4434,7 @@ namespace
         LOKA_VERIFY(!windowNode(*h.window, "Laptop.Presentation"));
       }
       else
-        LOKA_VERIFY(windowNode(*h.window, "Laptop.Open.pb100"));
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Narrow.pb100"));
       std::string audit = readScenarioAudit();
       // Only the Null decoder's fixture dimensions differ from the shipped pictures.
       std::string::size_type position = 0;
@@ -4342,6 +4444,33 @@ namespace
           cell ? std::string("../../tests/scenarios/expected/smirkycard/") + cells[cell] + ".audit"
                : "tests/LAPTOP.audit";
       LOKA_VERIFY(audit == readCardSource(expected.c_str()));
+      if (cell == 1)
+      {
+        std::fputs("[pin] laptop viewport: 320 wide, 319 narrow, zero unreported, 380 Classic-sized wide\n", stderr);
+        const short widths[] = {320, 319, 0, 380};
+        for (unsigned i = 0; i < sizeof(widths) / sizeof(widths[0]); ++i)
+        {
+          loka::app::scene::LayoutState bounds;
+          bounds.width = widths[i];
+          bounds.height = 340;
+          {
+            loka::core::Operation operation;
+            h.platform.projectLayoutForTesting(loka::dsl::testing::SceneTestAccess::rootNode(*h.window->scene()),
+                                               bounds);
+            operation.settle();
+            h.admission->flush();
+          }
+          const bool narrow = widths[i] == 319;
+          const char *ids[] = {"macport", "pb100", "pb180c", "pb550c", "pb5300c"};
+          for (unsigned j = 0; j < sizeof(ids) / sizeof(ids[0]); ++j)
+          {
+            const std::string oneColumn = std::string("Laptop.Narrow.") + ids[j];
+            const std::string twoColumns = std::string("Laptop.Open.") + ids[j];
+            LOKA_VERIFY((windowNode(*h.window, oneColumn.c_str()) != 0) == narrow);
+            LOKA_VERIFY((windowNode(*h.window, twoColumns.c_str()) != 0) == !narrow);
+          }
+        }
+      }
     }
     for (unsigned i = 0; i < 5; ++i)
       LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
@@ -4537,6 +4666,11 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--viewport-seat"))
+  {
+    checkViewportSeat();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--named-pictures"))
   {
     checkNamedPictures();
@@ -4554,6 +4688,7 @@ int main(int argc, char **argv)
   }
   if (argc == 2 && !std::strcmp(argv[1], "--lowerings"))
   {
+    checkViewportSeat();
     checkScrollViewportPersistence();
     checkLaptopLowerings();
     checkMinimumLowerings();
@@ -4688,6 +4823,7 @@ int main(int argc, char **argv)
     return 0;
   }
   checkExecutionSerial();
+  checkViewportSeat();
   checkScrollViewportPersistence();
   checkLaptopLowerings();
   checkMinimumLowerings();

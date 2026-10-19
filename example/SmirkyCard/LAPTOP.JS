@@ -32,6 +32,8 @@ const MACHINES = [
    weight: '2.8 kg (6.2 lb)',
    blurb: 'The first PowerPC PowerBook: a trackpad instead of a trackball, and a hot-swappable expansion bay.'},
 ];
+// The Classic window is 420 px wide; its list remains above this breakpoint.
+const NARROW = 320;
 const COUNT = MACHINES.length;
 const SPECS = [['CPU', 'cpu'], ['RAM', 'ram'], ['Display', 'display'], ['Storage', 'storage'], ['Weight', 'weight']];
 function counterText(index) { return (index + 1) + ' of ' + COUNT + '  -  ' + MACHINES[index].year; }
@@ -54,6 +56,14 @@ card('first', class {
     this.detail = c.state(false);
     this.carouselShown = c.state(false);
     this.listShown = c.state(true);
+    this.viewport = c.state.viewport();
+    this.narrow = c.state(false);
+    this.wideList = c.state(true);
+    c.flow(Flow().watch(this.viewport, v => v.width > 0 && v.width < NARROW)
+      .onSuccess(narrow => {
+        this.narrow.set(narrow);
+        this.wideList.set(!narrow);
+      }));
     this.toolbarTitle = c.state('LaptopTracker');
     this.presentationLabel = c.state('Wide');
     // Seats materialize after the constructor, so the first machine's values
@@ -143,13 +153,17 @@ card('first', class {
 
   list() {
     const rows = [];
+    const label = j => MACHINES[j].name + ' (' + MACHINES[j].year + ')';
     for (let i = 0; i < COUNT; i += 2) {
-      const label = j => MACHINES[j].name + ' (' + MACHINES[j].year + ')';
       const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Open.' + MACHINES[i].id)];
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id));
-      rows.push(Row(...cards));
+      rows.push(Show(this.wideList, Row(...cards)));
     }
-    return ScrollView(VStack(...rows));
+    // Three wide rows and five narrow cards share this column. Per-row/card
+    // Shows keep the wide leaves at depth 8 (narrow at 7), with eight children.
+    MACHINES.forEach((m, i) => rows.push(Show(this.narrow,
+      this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + m.id))));
+    return ScrollView(VStack(...rows), {viewport: this.viewport});
   }
 
   detailPage() {

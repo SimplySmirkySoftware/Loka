@@ -203,13 +203,23 @@ units. The experimental blur option is not exposed in JavaScript.
 
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
-there is no JS viewport seat or viewport argument. The optional plain options object
-`ScrollView(child, {insets: {top: 44, bottom: 8}})` accepts integer insets in
+the optional `viewport` option instead borrows this card's `c.state.viewport()`
+seat. Give a seat to one ScrollView: a second one would make two rails write one
+fact, exactly as the C++ `ScrollView(viewport)` lets an app do; nothing refuses it.
+`ScrollView(child, {viewport: seat, insets: {top: 44, bottom: 8}})` accepts integer insets in
 0..32767, with omitted values defaulting to zero. Unknown keys are refused.
 The scrollable extent grows by top + bottom; content starts top units below the
 viewport's start and scrolls into the top gap. With a nonzero top inset the
-viewport starts at the top with the gap visible. No scroll bar moves; an overlay
-in the gap is a later page of the same rally. `LAPTOP.JS` does not use it yet.
+viewport starts at the top with the gap visible. Options accept only `insets`
+and `viewport`. `c.state.viewport()` takes no arguments; its `get()` and Flow
+watch adapter receive frozen `{x, y, width, height}` integer snapshots. Before
+the first rail publication the snapshot is all zeros. After publication, x/y
+are the content origin (y can be negative with a top inset) and width/height
+are the visible content size. The rail is the only writer: `seat.set(...)`
+throws `TypeError("viewport is a rail-written fact")`. This is the only JavaScript
+seat-write path; Flow has no seat-write description step.
+No scroll bar moves; an overlay
+in the gap is a later page of the same rally. `LAPTOP.JS` does not use insets yet.
 A ScrollView cannot contain another ScrollView.
 `Card(child)` places exactly
 one tree in the native Card body using the default CardStyle; it has no style
@@ -461,14 +471,22 @@ seats hold the selection, the page and the presentation. Its five pictures are
 `c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
 when the card is constructed. The carousel holds one Row of five Cards; the
 arrows move the selection (heading and counter), while scrolling is the viewer's.
-Presentation is a toolbar toggle because no viewport fact reaches JavaScript yet. Open it from the first card's `./LAPTOP.JS` button; its toolbar's `./MAIN.JS` button returns to the built-in cards.
+The list follows its ScrollView viewport: a positive width below `NARROW = 320`
+selects one column; otherwise it keeps the existing two columns. One Flow watches
+`this.viewport` and writes the `narrow`/`wideList` bool seats (`Show` has no negation
+form). Three per-row wide Shows and five per-card narrow Shows sit directly under
+the list's rows VStack: eight children, with wide leaves at depth 8 and narrow
+leaves at depth 7. The Tall/Wide toolbar toggle still selects the list or carousel;
+it does not follow the viewport. Open it from the first card's `./LAPTOP.JS` button; its toolbar's `./MAIN.JS` button returns to the built-in cards.
 
 [LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
 facts, open details from the list, Back with the selection kept, the carousel
 (selection kept, arrows wrap in both directions), open details from a carousel
 cell, and the way back to the list. Host coverage runs as part of the default
 `LokaSmirkyCardTests` run (or `--laptop-scenario` alone) with a 2 by 3 decoder
-double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. For Classic,
+double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. Its 100-wide
+Null viewport selects the narrow arm; `LAPTOP_NARROW_LIST` makes the scenario
+require that arm's native button ids. For Classic,
 build `LokaLaptopStandaloneFlow68K_APPL` and stage the five `.PICT` files beside it:
 
 ```sh
