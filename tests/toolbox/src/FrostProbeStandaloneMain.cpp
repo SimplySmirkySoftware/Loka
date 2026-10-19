@@ -378,8 +378,17 @@ namespace
   unsigned char gMilkIndex[256];  // CLUT index -> index of its milked colour
   unsigned char gToRes[128];      // 7-bit channel -> milked, at ITab resolution
   unsigned char *gITable = 0;
+  unsigned char gITableCopy[1L << 15];
+  ITabHandle gITabHandle = 0;
+  Ptr gITabMaster = 0;
+  long gITabSeed = 0;
   short gResShift = 0;
   GWorldPtr gIndexWorld = 0;
+#ifndef LOKA_FROST_PROBE_DEPTH
+#define LOKA_FROST_PROBE_DEPTH 8
+#endif
+#define LOKA_FROST_PROBE_FIXED_PALETTE 1
+  const short kScreenDepth = LOKA_FROST_PROBE_DEPTH;
   unsigned long gSmallP[kSmallH][kSmallW];
   unsigned long gWideP[kSmallH][kWidth];
   unsigned long gIdxIn = 0, gIdxMid = 0, gIdxOut = 0;
@@ -396,15 +405,47 @@ namespace
                    (static_cast<unsigned short>(gToRes[(v >> 10) & 127]) << gResShift) | gToRes[v & 127]];
   }
 
+  // The work area is always 8 bit. On an indexed screen it shares the screen's
+  // CLUT, so the copies are byte copies; on a direct screen it takes the
+  // default 8-bit CLUT and CopyBits converts on the way in and out. The tables
+  // come from the work area's own device, made current for Color2Index.
   bool BuildIndexTables(std::FILE *log)
   {
-    GDHandle device = GetMainDevice();
-    CTabHandle clut = (**(**device).gdPMap).pmTable;
+    PixMapHandle screen = (**GetMainDevice()).gdPMap;
+    const bool indexed = (**screen).pixelSize <= 8;
+    const Rect bounds = {0, 0, kFastRows, kWidth};
+#ifdef LOKA_FROST_PROBE_FIXED_PALETTE
+    // The work palette is always the default 8-bit CLUT, whatever the screen.
+    const QDErr error = NewGWorld(&gIndexWorld, 8, &bounds, 0, 0, 0);
+#else
+    const QDErr error = NewGWorld(&gIndexWorld, 8, &bounds, indexed ? (**screen).pmTable : 0, 0, 0);
+#endif
+    std::fprintf(log, "gworld8 err=%d indexed_screen=%d\r", error, indexed ? 1 : 0);
+    if (error != noErr || !LockPixels(GetGWorldPixMap(gIndexWorld)))
+      return false;
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(gIndexWorld, 0);
+    GDHandle device = GetGWorldDevice(gIndexWorld);
+    CTabHandle clut = (**GetGWorldPixMap(gIndexWorld)).pmTable;
     RGBColor probe = {0xFFFF, 0, 0};
     const long red = Color2Index(&probe); // Also brings the device ITab up to date.
     ITabHandle inverse = (**device).gdITable;
     gResShift = (**inverse).iTabRes;
-    gITable = reinterpret_cast<unsigned char *>((**inverse).iTTable);
+    if (gResShift < 3 || gResShift > 5)
+    {
+      std::fprintf(log, "itab res %d refused\r", gResShift);
+      SetGWorld(savedPort, savedDevice);
+      return false;
+    }
+    // QuickDraw owns the inverse table and may rebuild it (moving the handle),
+    // so the effect keeps its own copy.
+    BlockMoveData((**inverse).iTTable, gITableCopy, 1L << (3 * gResShift));
+    gITable = gITableCopy;
+    gITabHandle = inverse;
+    gITabMaster = *reinterpret_cast<Handle>(inverse);
+    gITabSeed = (**inverse).iTabSeed;
     std::fprintf(log, "clut size=%d seed=%ld itab res=%d seed=%ld red_index=%ld\r", (**clut).ctSize + 1,
                  (**clut).ctSeed, gResShift, (**inverse).iTabSeed, red);
     for (short i = 0; i < 256; ++i)
@@ -420,12 +461,10 @@ namespace
       milked.blue = static_cast<unsigned short>(gMilk[c.blue >> 8] * 257);
       gMilkIndex[i] = static_cast<unsigned char>(Color2Index(&milked));
     }
+    SetGWorld(savedPort, savedDevice);
     for (short v = 0; v < 128; ++v)
       gToRes[v] = static_cast<unsigned char>(gMilk[(v << 1) | (v >> 6)] >> (8 - gResShift));
-    const Rect bounds = {0, 0, kFastRows, kWidth};
-    const QDErr error = NewGWorld(&gIndexWorld, 8, &bounds, clut, 0, 0);
-    std::fprintf(log, "gworld8 err=%d\r", error);
-    return error == noErr && LockPixels(GetGWorldPixMap(gIndexWorld));
+    return true;
   }
 
   struct Bytes
@@ -852,10 +891,11 @@ namespace
     GDHandle device = GetMainDevice();
     std::fprintf(gLog, "depth_before=%d\r", (**(**device).gdPMap).pixelSize);
     LogScreen("at_launch");
-    if (HasDepth(device, 8, 1 << gdDevType, 1 << gdDevType))
-      std::fprintf(gLog, "set_depth=8 err=%d\r", SetDepth(device, 8, 1 << gdDevType, 1 << gdDevType));
+    if (HasDepth(device, kScreenDepth, 1 << gdDevType, 1 << gdDevType))
+      std::fprintf(gLog, "set_depth=%d err=%d\r", kScreenDepth,
+                   SetDepth(device, kScreenDepth, 1 << gdDevType, 1 << gdDevType));
     else
-      std::fprintf(gLog, "set_depth=8 unsupported\r");
+      std::fprintf(gLog, "set_depth=%d unsupported\r", kScreenDepth);
     std::fprintf(gLog, "depth_now=%d\r", (**(**GetMainDevice()).gdPMap).pixelSize);
     LogScreen("after_switch");
 
@@ -942,6 +982,10 @@ namespace
     for (short i = 0; i < 3; ++i)
       std::fprintf(gLog, "basic from %s: red=%08lX blue=%08lX\r", kSources[i], gBasicSample[i][0],
                    gBasicSample[i][1]);
+    if (gITabHandle)
+      std::fprintf(gLog, "itab after: res=%d seed=%ld (was %ld) moved=%d\r", (**gITabHandle).iTabRes,
+                   (**gITabHandle).iTabSeed, gITabSeed,
+                   *reinterpret_cast<Handle>(gITabHandle) != gITabMaster ? 1 : 0);
     std::fprintf(gLog, "done\r");
     int result = std::ferror(gLog) ? 1 : 0;
     if (!loka::platform::file::FlushWrite(gLog, file))
