@@ -5,6 +5,7 @@
 void ToolboxScenePlatformController::render()
 {
   PROFILE_FUNC();
+  ToolboxStaticBlur::LayoutScope snapshotLayout(this->staticBlur_);
   ++debugStats_.renderCalls;
   ++debugStats_.totalRenderCalls;
   if (!window_ || !window_->window() || !rootNode_)
@@ -79,6 +80,7 @@ void ToolboxScenePlatformController::render()
   LayoutNode(rootNode_, state, this, 0);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
+  snapshotLayout.commit(this->unitLedger_.firstStaticBlur());
   this->rectSurfaceExtentLedger_.flush();
   RenderNode(rootNode_, this);
   debugStats_.refreshHitCounts(static_cast<int>(hitLedger_.buttonHits_.size()),

@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxErasedPass.hpp"
+#include "ToolboxStaticBlur.hpp"
 #include "ToolboxFrostCache.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
@@ -59,6 +60,7 @@ private:
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
+  void completedInvalidateFlush();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
@@ -318,7 +320,9 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  friend class ToolboxStaticBlurInspection;
   ToolboxFrostCache frostCache_;
+  ToolboxStaticBlur staticBlur_;
   ToolboxErasedPass erasedPass_;
 
 public:

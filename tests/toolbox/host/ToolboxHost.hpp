@@ -2,6 +2,7 @@
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxErasedPass.hpp"
+#include "ToolboxStaticBlur.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
 #include "ToolboxActivationPhase.hpp"
@@ -117,6 +118,11 @@ namespace toolbox_host { extern GrafPtr frontWindow; extern int textHits; }
 inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
 #include "ToolboxPendingDialogs.hpp"
 #include "ToolboxDialogPresenter.hpp"
+namespace toolbox_host
+{
+  extern unsigned staticCaptures, staticCopies, staticReleases;
+  extern bool staticEligible, staticCaptureSucceeds;
+} // namespace toolbox_host
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
 {
@@ -139,6 +145,10 @@ public:
         answersSizeBox(true),
         scenePlatformController_(0)
   {
+#ifdef LOKA_HOST_ZSTACK_UNITS
+    this->window_ = &this->port;
+    this->needsInvalidate_ = false;
+#endif
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
     port.txFont = 3;
@@ -159,19 +169,39 @@ public:
     out = ToolboxWindowSizeBoxRect(this->port.portRect);
     return true;
   }
+#ifdef LOKA_HOST_ZSTACK_UNITS
+  WindowPort *window_;
+  bool needsInvalidate_;
+  std::vector<Rect> pendingInvalidateRects_;
+  void requestInvalidate();
+  void requestInvalidateImpl();
+  void requestInvalidateWithReason(const char *);
+  void requestInvalidateWithReasonImpl(const char *);
+  void requestInvalidateRect(const Rect &);
+  void requestInvalidateRectImpl(const Rect &);
+  void flushInvalidate();
+  bool hasPendingInvalidate() const;
+  void draw();
+  void drawDirty(const Rect &);
+#else
   void requestInvalidate() { ++toolbox_host::invalidations; }
   void requestInvalidateWithReason(const char *) { ++toolbox_host::invalidations; }
+#endif
   ToolboxScenePlatformController *scenePlatformController()
   {
     return this->scenePlatformController_;
   }
+#ifndef LOKA_HOST_ZSTACK_UNITS
   void flushInvalidate() { if (this->onFlush) this->onFlush(this->flushData); }
+#endif
   loka::core::StateTracker *getTracker() { return &this->tracker_; }
+#ifndef LOKA_HOST_ZSTACK_UNITS
   void requestInvalidateRect(const Rect &rect)
   {
     ++toolbox_host::invalidations;
     toolbox_host::invalidatedRects.push_back(rect);
   }
+#endif
   WindowPort *window()
   {
     return &port;
@@ -603,6 +633,7 @@ public:
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxStaticBlur staticBlur_;
   ToolboxErasedPass erasedPass_;
   /** Host observes admission only; native pixels are pinned by FrostStandalone. */
   struct FrostCache
@@ -618,6 +649,11 @@ public:
       return false;
     }
   } frostCache_;
+  void noteWindowFullRequest(const char *) {}
+  void noteWindowRectRequest() {}
+  void noteWindowFlushFull() {}
+  void noteWindowFlushDirty() {}
+  void completedInvalidateFlush();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;

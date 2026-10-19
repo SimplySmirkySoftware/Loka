@@ -737,3 +737,83 @@ namespace
 #endif
 
 #include "ToolboxPendingDialogs.cpp"
+
+namespace toolbox_host
+{
+  unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
+  bool staticEligible = true, staticCaptureSucceeds = true;
+} // namespace toolbox_host
+struct ToolboxStaticBlurPixels::Image
+{
+};
+ToolboxStaticBlurPixels::ToolboxStaticBlurPixels()
+    : image_(0)
+{
+}
+ToolboxStaticBlurPixels::~ToolboxStaticBlurPixels()
+{
+  this->clear();
+}
+void ToolboxStaticBlurPixels::clear()
+{
+  if (this->image_)
+    ++toolbox_host::staticReleases;
+  delete this->image_;
+  this->image_ = 0;
+}
+bool ToolboxStaticBlurPixels::eligible(GrafPtr, const Rect &)
+{
+  return toolbox_host::staticEligible;
+}
+bool ToolboxStaticBlurPixels::capture(GrafPtr, const Rect &)
+{
+  ++toolbox_host::staticCaptures;
+  this->clear();
+  if (!toolbox_host::staticCaptureSucceeds)
+    return false;
+  this->image_ = new Image;
+  return true;
+}
+bool ToolboxStaticBlurPixels::paint(GrafPtr, const Rect &)
+{
+  ++toolbox_host::staticCopies;
+  return this->image_ != 0;
+}
+#ifdef LOKA_HOST_ZSTACK_UNITS
+#define requestInvalidate requestInvalidateImpl
+#define requestInvalidateWithReason requestInvalidateWithReasonImpl
+#define requestInvalidateRect requestInvalidateRectImpl
+#include "ToolboxWindowInvalidate.cpp"
+#undef requestInvalidateRect
+#undef requestInvalidateWithReason
+#undef requestInvalidate
+void ToolboxWindow::requestInvalidate()
+{
+  ++toolbox_host::invalidations;
+  this->requestInvalidateImpl();
+}
+void ToolboxWindow::requestInvalidateWithReason(const char *reason)
+{
+  ++toolbox_host::invalidations;
+  this->requestInvalidateWithReasonImpl(reason);
+}
+void ToolboxWindow::requestInvalidateRect(const Rect &rect)
+{
+  ++toolbox_host::invalidations;
+  toolbox_host::invalidatedRects.push_back(rect);
+  this->requestInvalidateRectImpl(rect);
+}
+void ToolboxWindow::draw()
+{
+  if (!this->scenePlatformController_)
+    return;
+  ToolboxErasedPass::Guard erased(
+      this->scenePlatformController_->erasedPass(), ToolboxErasedPass::FULL_DRAW, this->port.portRect);
+  ToolboxInputDoor::render(*this->scenePlatformController_);
+}
+void ToolboxWindow::drawDirty(const Rect &rect)
+{
+  if (this->scenePlatformController_)
+    ToolboxRenderDirtyInCompositionOrder(*this->scenePlatformController_, rect);
+}
+#endif

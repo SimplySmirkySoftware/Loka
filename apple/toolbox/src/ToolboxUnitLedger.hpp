@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_UNIT_LEDGER_HPP
 #include <Quickdraw.h>
 #include <vector>
+#include "app/nodes/nestable/ZStack.hpp"
 namespace loka
 {
   namespace app
@@ -49,6 +50,15 @@ public:
         return row.index == index ? &row : 0;
       ++cursor;
     }
+    return 0;
+  }
+  /** Once per completed layout: O(rows) over this ledger's own rows. */
+  const UnitSeat *firstStaticBlur() const
+  {
+    for (Mark i = 0; i < this->rows_.size(); ++i)
+      if (this->rows_[i].index == 1
+          && this->rows_[i].stack->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR)
+        return &this->rows_[i];
     return 0;
   }
   /** Strict pixel overlap: touching edges do not schedule replay. */

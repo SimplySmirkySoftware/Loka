@@ -1652,6 +1652,26 @@ is not part of that loop (see [Toolbox Tab traversal](FocusDesign.md#toolbox-tab
 On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
+`ZStack().expStaticBlurUnit()` is experimental. Its first unit (second
+child) shows a blur of the content beneath as it was when the unit appeared.
+On Toolbox that picture stays frozen while the unit is shown; macOS uses the
+live blur effect, and Win32 uses window ground. Later units use window ground.
+Toolbox keeps at most one snapshot per window, for its first static-blur unit;
+other static-blur units use window ground.
+
+On Toolbox the first paint may show window ground until a complete composition
+replay captures the unit. Capture requires 32-bit QuickDraw, an FPU, and a unit
+contained within one screen of at least 8-bit depth. A unit off one screen
+paints window ground. Pixels hidden by other windows at capture stay white for
+that snapshot. Geometry changes cause another capture and blur. A ZStack
+rebuilt at the same address with the same rectangle in one pass keeps the old
+picture. Allocation or capture failure leaves window ground for that lifetime.
+
+**Toolbox input shielding (prerequisite A) is not implemented:** controls and
+fields beneath the unit still take presses, keys, and caret paint. A
+window-covering About overlay is not safe yet; static blur does not provide
+modal input behavior.
+
 `ZStack().expBlurUnit()` is experimental: the first unit (second child) shows
 a blur of the content beneath it where the rail supports it. Later units keep
 the window ground. Eligibility follows composition

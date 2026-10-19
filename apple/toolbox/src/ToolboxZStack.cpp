@@ -89,10 +89,24 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
     if (!guard.isActive())
       continue;
-    // Non-erasing walks (including region refusal and newly scrolled seats)
-    // keep plain ground until a later erased repaint of this area.
-    if (index != 1 || stack->props.unitGround != loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR || !this->erasedPass_.isOpen()
-        || !this->frostCache_.paint(this->window_->window(), row.rect, row.unit))
+    // Milk requires an erased walk. Static blur keeps ground until capture;
+    // a READY snapshot can paint during any walk without reading the backdrop.
+    bool painted = false;
+    if (index == 1)
+    {
+      switch (stack->props.unitGround)
+      {
+      case loka::app::ZSTACK_UNIT_GROUND_WINDOW:
+        break;
+      case loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR:
+        painted = this->erasedPass_.isOpen() && this->frostCache_.paint(this->window_->window(), row.rect, row.unit);
+        break;
+      case loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR:
+        painted = this->staticBlur_.paint(this->window_->window(), row, this->erasedPass_);
+        break;
+      }
+    }
+    if (!painted)
       loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
     ToolboxPaintClip clip(row.rect, ToolboxPaintClip::INTERSECT);
     if (clip.isActive())
@@ -120,4 +134,12 @@ void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
       continue;
     this->window_->requestInvalidateRect(overlap);
   }
+}
+
+/** Window flush completion, once even for an empty flush; O(1), no row walk. */
+void ToolboxScenePlatformController::completedInvalidateFlush()
+{
+  const Rect *request = this->staticBlur_.completedFlush();
+  if (request && this->window_)
+    this->window_->requestInvalidateRect(*request);
 }
