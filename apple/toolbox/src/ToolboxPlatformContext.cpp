@@ -1,5 +1,7 @@
 #include "ToolboxBusy.hpp"
 #include "ToolboxPlatformContext.hpp"
+#include "ToolboxDeviceDepth.hpp"
+#include <Gestalt.h>
 
 #include "core/resource/BlobRange.hpp"
 #include "PictParser.hpp"
@@ -49,6 +51,18 @@ loka::app::scene::NodeContext *ToolboxPlatformContext::createNodeContext(loka::a
     context->setOwner(node);
   }
   return context;
+}
+
+bool ToolboxPlatformContext::queryMainDisplayDepth(int &out) const
+{
+  long version;
+  if (Gestalt(gestaltQuickdrawVersion, &version) != noErr || version < gestalt8BitQD)
+  {
+    // Original QuickDraw is one bit; Color QuickDraw device traps are absent.
+    out = 1;
+    return true;
+  }
+  return loka::toolbox::queryDeviceDepth(GetMainDevice(), out);
 }
 
 bool ToolboxPlatformContext::queryLargestContiguousAllocation(std::size_t &out) const

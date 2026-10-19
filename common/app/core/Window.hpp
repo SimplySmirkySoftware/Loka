@@ -740,6 +740,8 @@ public:
       is untouched. A caller must not supply a fallback of its own and treat it
       as a reading.
 
+      For main-display depth before or without a window, see PlatformContext::queryMainDisplayDepth.
+
       Density is an integer percentage of the platform's own natural density,
       not physical DPI. DPI is not comparable across targets: 144 dpi is 2x on
       macOS and Classic, whose reference is 72, and 1.5x on Windows, whose

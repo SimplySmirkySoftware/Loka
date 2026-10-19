@@ -2,6 +2,7 @@
 #include "platform/ToolboxPascalText.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxWindow.hpp"
+#include "ToolboxDeviceDepth.hpp"
 #include "ToolboxApp.hpp"
 
 #include <cstring>
@@ -739,12 +740,7 @@ bool ToolboxWindow::queryDisplayDepth(int &out) const
     // a substitute for one.
     best = GetMainDevice();
   }
-  if (!best || !(*best)->gdPMap || !*(*best)->gdPMap)
-  {
-    return false;
-  }
-  out = (*(*best)->gdPMap)->pixelSize;
-  return true;
+  return loka::toolbox::queryDeviceDepth(best, out);
 }
 
 void ToolboxWindow::teardownScene()

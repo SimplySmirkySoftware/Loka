@@ -78,6 +78,17 @@ public:
     (void)out;
     return false;
   }
+  /** Main display bits per pixel at the moment of the call; targets that
+      cannot answer decline and leave out untouched. Twin of
+      Window::queryDisplayDepth, which asks about the display a window overlaps
+      most; this query supports choosing resources before or without a window.
+      A plain value, not State: an app that must react writes its own State
+      from its own callback (#194). */
+  virtual bool queryMainDisplayDepth(int &out) const
+  {
+    (void)out;
+    return false;
+  }
   /** Builds an image from `[offset, offset + length)` of `blob`.
       A range rather than the whole buffer, because an LRPK asset is a range
       inside its bag's blob and copying it out to be decoded would put the
