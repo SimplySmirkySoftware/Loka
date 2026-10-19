@@ -28,4 +28,5 @@ void testLazyViewClassRefusalSettles();
 void testLazyViewRecipeCompatibilityAndClones();
 void testLazyViewPartitionReuseWithinTurn();
 void testLazyViewSeatGuardOrders();
+void testLazyViewWidthOnlyBoxExceedsCellOffer();
 #endif

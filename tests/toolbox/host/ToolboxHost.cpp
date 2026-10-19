@@ -171,6 +171,15 @@ bool EmptyRect(const Rect *r)
 {
   return r->left >= r->right || r->top >= r->bottom;
 }
+bool SectRect(const Rect *a, const Rect *b, Rect *out)
+{
+  const Rect intersection = {std::max(a->top, b->top),
+                             std::max(a->left, b->left),
+                             std::min(a->bottom, b->bottom),
+                             std::min(a->right, b->right)};
+  *out = intersection;
+  return !EmptyRect(out);
+}
 RgnHandle NewRgn()
 {
   ++toolbox_host::regions;

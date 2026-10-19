@@ -9,7 +9,16 @@
 
 void testToolboxScrollViewChildWidthAlwaysReservesScrollbar()
 {
-  LOKA_VERIFY(ToolboxScrollViewChildWidth(100) == 84);
+  LOKA_VERIFY(ToolboxScrollViewChildWidth(100) == 100 - loka::app::SCROLL_BAR_THICKNESS);
+  const ToolboxScrollViewRect seat(0, 0, 100, 100);
+  const ToolboxScrollViewEdges shared(true, true, true, true);
+  // The outermost pixel of each bar occupies the shared window frame line.
+  const int reserved = loka::app::SCROLL_BAR_THICKNESS - 1;
+  LOKA_VERIFY(ToolboxScrollViewChildWidth(seat, shared) == 100 - reserved);
+  const ToolboxScrollViewRect content =
+      ToolboxScrollViewContentRect(ToolboxScrollViewFrameRect(seat, true, shared), true);
+  LOKA_VERIFY(content.right - content.left == 100 - reserved);
+  LOKA_VERIFY(content.bottom - content.top == 100 - reserved);
   LOKA_VERIFY(ToolboxScrollViewChildWidth(16) == 0);
   LOKA_VERIFY(ToolboxScrollViewChildWidth(8) == 0);
 }

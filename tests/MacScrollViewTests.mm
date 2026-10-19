@@ -21,6 +21,13 @@
 #include "core/State.hpp"
 #include "core/StateTracker.hpp"
 
+// Match the NSInteger ABI used by MacObjCCompat for pre-10.7 style selectors.
+#if !defined(MAC_OS_X_VERSION_MAX_ALLOWED) || (MAC_OS_X_VERSION_MAX_ALLOWED < 1070)
+@interface NSScrollView (LokaViewportStyleTestCompat)
+- (NSInteger)scrollerStyle;
+@end
+#endif
+
 namespace
 {
   class ViewportFact
@@ -133,7 +140,93 @@ namespace
   {
     return static_cast<int>([[scrollView contentView] bounds].origin.y);
   }
+
+  // Mirrors the layout's two sources deliberately: actual view width, but
+  // preference-derived horizontal chrome height (see ScrollViewDesign debt).
+  loka::core::Frame visibleViewport(MacScenePlatformController &controller,
+                                    loka::app::ScrollViewNode &scroll,
+                                    int x,
+                                    int y,
+                                    int width,
+                                    int height,
+                                    bool horizontalBar)
+  {
+    MacScrollViewContext *context = static_cast<MacScrollViewContext *>(scroll.getContext());
+    LOKA_VERIFY(context != 0);
+    const loka::core::Frame seat(MacSceneLayout::kRootInset,
+                                 MacSceneLayout::kRootInset,
+                                 width - 2 * MacSceneLayout::kRootInset,
+                                 height - 2 * MacSceneLayout::kRootInset);
+    return loka::core::Frame(x,
+                             y,
+                             context->visibleWidth(),
+                             horizontalBar ? controller.projection().clientHeightBelowHorizontalScroller(seat)
+                                           : seat.height);
+  }
+
+  void checkViewportSize(int contentWidth, int contentHeight, bool verticalOverflow, bool horizontalOverflow)
+  {
+    using namespace loka::app;
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+    LOKA_VERIFY(root != nil);
+    {
+      MacScenePlatformController controller(root, RailMetrics());
+      ViewportFact fact(ScrollViewProps::topOrigin().y);
+      ScrollViewNode scroll(ScrollViewProps(fact.state()).contentInsets(ScrollViewContentInsets::of(12, 3)));
+      scroll.addChild(new ImageViewNode(ImageViewProps().size(contentWidth, contentHeight)));
+      establishLayout(controller, &scroll, 300, 140);
+      NSScrollView *native = scrollViewUnderRoot(root);
+      LOKA_VERIFY(native != nil);
+      if ([native respondsToSelector:@selector(scrollerStyle)] &&
+          [NSScroller respondsToSelector:@selector(preferredScrollerStyle)])
+      {
+        std::printf("[style] content=%dx%d actual=%ld preferred=%ld (0=legacy, 1=overlay)\n",
+                    contentWidth,
+                    contentHeight,
+                    static_cast<long>([native scrollerStyle]),
+                    static_cast<long>([NSScroller preferredScrollerStyle]));
+      }
+      else
+        std::printf("[style] legacy-only runtime\n");
+      LOKA_VERIFY([native hasVerticalScroller]);
+      LOKA_VERIFY(([native hasHorizontalScroller] == YES) == horizontalOverflow);
+      LOKA_VERIFY(([[native documentView] frame].size.height > [[native contentView] bounds].size.height)
+                  == verticalOverflow);
+      const loka::core::Frame expected = visibleViewport(controller, scroll, 0, -12, 300, 140, horizontalOverflow);
+      const loka::core::Frame first = fact.state().get();
+      const int firstWrites = fact.changeCount();
+      LOKA_VERIFY(first == expected);
+      LOKA_VERIFY(firstWrites == 1);
+      fact.resetChangeCount();
+      controller.relayout(300, 140);
+      const loka::core::Frame second = fact.state().get();
+      const int secondWrites = fact.changeCount();
+      LOKA_VERIFY(second == expected);
+      LOKA_VERIFY(secondWrites == 0);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+    [pool drain];
+  }
 } // namespace
+
+void testMacScrollViewViewportSizeNoOverflow()
+{
+  checkViewportSize(100, 17, false, false);
+}
+
+void testMacScrollViewViewportSizeVerticalOverflow()
+{
+  checkViewportSize(100, 400, true, false);
+}
+
+void testMacScrollViewViewportSizeBothOverflows()
+{
+  checkViewportSize(400, 400, true, true);
+}
 
 void testMacScrollViewParentsChildrenToFlippedDocumentView()
 {
@@ -248,16 +341,20 @@ void testMacScrollViewBoundsObservationPublishesOffsetFact()
     LOKA_VERIFY(nativeScrollView != nil);
     NSClipView *clipView = [nativeScrollView contentView];
 
+    const loka::core::Frame visible = visibleViewport(controller, scrollView, 0, 0, 300, 140, false);
     offset.resetChangeCount();
     [clipView setBoundsOrigin:NSMakePoint(0, 12)];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
-    assert(offset.state().get().y == 12 && "clip-view bounds observation must publish through the NodeState door");
+    const loka::core::Frame moved = offset.state().get();
+    LOKA_VERIFY(moved == loka::core::Frame(0, 12, visible.width, visible.height));
     assert(offset.changeCount() == 1 && "an explicit duplicate notification must remain a same-value no-op");
 
-    offset.state().set(loka::core::Frame(0, 13, 0, 0));
+    offset.state().set(loka::core::Frame(0, 13, visible.width, visible.height));
     offset.resetChangeCount();
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 13);
+    const loka::core::Frame echoed = offset.state().get();
+    LOKA_VERIFY(echoed == loka::core::Frame(0, 13, visible.width, visible.height));
     assert(offset.changeCount() == 0 && "the layout-driven scrollPoint echo must not republish the same fact");
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
@@ -287,27 +384,43 @@ void testMacScrollViewResizeReclampsOffsetOnce()
     establishLayout(controller, &scrollView, 300, 140);
     NSScrollView *nativeScrollView = scrollViewUnderRoot(root);
     LOKA_VERIFY(nativeScrollView != nil);
-    assert(offset.state().get().y == (initialMax <= 0 ? 0 : initialMax < 100 ? initialMax : 100));
+    const loka::core::Frame initial = offset.state().get();
+    LOKA_VERIFY(initial
+                == visibleViewport(controller,
+                                   scrollView,
+                                   0,
+                                   initialMax <= 0    ? 0
+                                   : initialMax < 100 ? initialMax
+                                                      : 100,
+                                   300,
+                                   140,
+                                   false));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get().y == (resizedMax > 0 ? resizedMax : 0));
+    const loka::core::Frame resized = offset.state().get();
+    LOKA_VERIFY(resized
+                == visibleViewport(controller, scrollView, 0, resizedMax > 0 ? resizedMax : 0, 300, 240, false));
     assert(offset.changeCount() == 1 && "a range-changing resize must publish one clamped fact");
     assert(clipOffset(nativeScrollView) == (resizedMax > 0 ? resizedMax : 0));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1);
 
-    offset.state().set(loka::core::Frame(0, 20, 0, 0));
+    offset.state().set(loka::core::Frame(0, 20, resized.width, resized.height));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == 20);
-    assert(offset.changeCount() == 0 && "a still-valid offset must survive resize without a fact write");
+    const loka::core::Frame smaller = offset.state().get();
+    LOKA_VERIFY(smaller == visibleViewport(controller, scrollView, 0, 20, 300, 100, false));
+    assert(offset.changeCount() == 1 && "a still-valid offset survives resize with one new-size fact write");
 
     offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == contentHeight - (100 - 2 * MacSceneLayout::kRootInset)
-           && "an oversized offset must recover to the exact content maximum");
+    const loka::core::Frame recovered = offset.state().get();
+    LOKA_VERIFY(
+        recovered
+        == visibleViewport(
+            controller, scrollView, 0, contentHeight - (100 - 2 * MacSceneLayout::kRootInset), 300, 100, false));
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);
@@ -434,6 +547,8 @@ void testMacScrollViewContainerGapsAndNoSeats()
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
     const int visible = 30;
+    // A Scene-driven pass uses the real host size after size publication dirties layout.
+    [root setFrameSize:NSMakeSize(300, visible + 2 * MacSceneLayout::kRootInset)];
     controller.relayout(300, visible + 2 * MacSceneLayout::kRootInset);
     NSScrollView *viewport = scrollViewUnderRoot(root);
     LOKA_VERIFY(viewport != nil);
@@ -603,12 +718,14 @@ void testMacScrollViewBoundsObservationPublishesBothAxes()
     LOKA_VERIFY(native != nil);
     NSClipView *clip = [native contentView];
     LOKA_VERIFY([native hasHorizontalScroller] == YES);
+    const loka::core::Frame visible = visibleViewport(controller, scroll, 0, 0, 300, 140, true);
+    const loka::core::Frame laidOut = fact.state().get();
+    LOKA_VERIFY(laidOut == visible);
     fact.resetChangeCount();
     [clip setBoundsOrigin:NSMakePoint(12, 7)];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clip];
     const loka::core::Frame moved = fact.state().get();
-    LOKA_VERIFY(moved.x == 12 && moved.y == 7);
-    LOKA_VERIFY(moved.width == 0 && moved.height == 0);
+    LOKA_VERIFY(moved == loka::core::Frame(12, 7, visible.width, visible.height));
     const bool publishedOnce = fact.changeCount() == 1;
     LOKA_VERIFY(publishedOnce);
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clip];
@@ -660,7 +777,7 @@ void testMacScrollViewRelayoutKeepsDocumentWidth()
     LOKA_VERIFY(layoutPreservedDocument);
     LOKA_VERIFY(NSEqualPoints([clip bounds].origin, origin));
     const loka::core::Frame unchanged = fact.state().get();
-    LOKA_VERIFY(unchanged.x == 50);
+    LOKA_VERIFY(unchanged == visibleViewport(controller, scroll, 50, 0, 300, 140, true));
     const bool noRepublish = fact.changeCount() == 0;
     LOKA_VERIFY(noRepublish);
 
@@ -795,12 +912,13 @@ void testMacScrollViewMaximumSurvivesFractionalScale()
     establishLayout(controller, &scrollView, 300, 140);
     NSScrollView *native = scrollViewUnderRoot(root);
     LOKA_VERIFY(native != nil);
-    const int admitted = offset.state().get().x;
-    LOKA_VERIFY(admitted > 0);
+    const loka::core::Frame admitted = offset.state().get();
+    LOKA_VERIFY(admitted.x > 0);
+    LOKA_VERIFY(admitted == visibleViewport(controller, scrollView, admitted.x, 0, 300, 140, true));
     offset.resetChangeCount();
     NSClipView *clipView = [native contentView];
     [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clipView];
-    const int republished = offset.state().get().x;
+    const loka::core::Frame republished = offset.state().get();
     const int changes = offset.changeCount();
     LOKA_VERIFY(republished == admitted && changes == 0
                 && "the bounds notification must clamp with the maximum layout admitted, not one unit short");
@@ -970,22 +1088,25 @@ void testMacScrollViewInsetsPlaceContentBelowTheTopInset()
     LOKA_VERIFY(childBefore.origin.y == projection.projectLength(0, 12).pt);
     LOKA_VERIFY([document frame].size.height == projection.projectLength(0, childHeight + 15).pt);
     LOKA_VERIFY([[native contentView] bounds].origin.y == 0);
-    const int initial = fact.state().get().y;
-    LOKA_VERIFY(initial == -12);
+    const loka::core::Frame initial = fact.state().get();
+    LOKA_VERIFY(
+        initial
+        == visibleViewport(controller, scroll, 0, -12, 300, viewportHeight + 2 * MacSceneLayout::kRootInset, false));
 
     fact.state().set(loka::core::Frame(0, 100, 0, 0));
     fact.resetChangeCount();
     controller.relayout(300, viewportHeight + 2 * MacSceneLayout::kRootInset);
     const int maximum = childHeight + 15 - viewportHeight;
     LOKA_VERIFY([[native contentView] bounds].origin.y == projection.scrollOffsetToNative(maximum).pt);
-    const int clamped = fact.state().get().y;
+    const loka::core::Frame clamped = fact.state().get();
     const int changes = fact.changeCount();
-    LOKA_VERIFY(clamped == maximum - 12 && changes == 1);
+    LOKA_VERIFY(clamped == loka::core::Frame(0, maximum - 12, initial.width, initial.height) && changes == 1);
     const bool childUnchanged = NSEqualRects([[children objectAtIndex:0] frame], childBefore);
     LOKA_VERIFY(childUnchanged && "the clip view scrolls; the child's document frame stays fixed");
     controller.relayout(300, viewportHeight + 2 * MacSceneLayout::kRootInset);
     const int settledChanges = fact.changeCount();
-    LOKA_VERIFY(settledChanges == 1);
+    const loka::core::Frame settled = fact.state().get();
+    LOKA_VERIFY(settled == clamped && settledChanges == 1);
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY([[root subviews] count] == 0);

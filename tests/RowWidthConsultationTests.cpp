@@ -1,3 +1,6 @@
+#include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/controls/Card.hpp"
+#include "../apple/toolbox/src/ToolboxScrollViewDecisions.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include <climits>
@@ -313,7 +316,7 @@ void testRowWidthOnlyBoxUsesRowHeight()
   LOKA_VERIFY(record.state.height == 20);
 }
 
-void testColumnWidthOnlyBoxKeepsFullAvailableWidth()
+void testColumnWidthOnlyBoxUsesDeclaredWidth()
 {
   loka::app::StackProps columnProps(loka::app::STACK_AXIS_COLUMN);
   columnProps.alignHorizontal(loka::app::HORIZONTAL_ALIGNMENT_LEADING);
@@ -332,7 +335,7 @@ void testColumnWidthOnlyBoxKeepsFullAvailableWidth()
 
   LOKA_VERIFY(record.calls == 1);
   LOKA_VERIFY(record.state.x == 0);
-  LOKA_VERIFY(record.state.width == 500);
+  LOKA_VERIFY(record.state.width == 200);
 }
 
 void testRowOversizedFixedBoxKeepsDeclaredSeatForSibling()
@@ -642,8 +645,8 @@ void testStackNaturalWidthColumnDeclaredWidths()
   surfaceProps.size(90, 10);
   column->addChild(new RectSurfaceNode(surfaceProps));
   LOKA_VERIFY(consultedStackWidth(outer, probe) == 90);
-  fixed->props.setSize(60, 0); // Width-only Boxes do not declare a Column width.
-  LOKA_VERIFY(consultedStackWidth(outer, probe) == 300);
+  fixed->props.setSize(60, 0); // Width-only Boxes also declare a Column width.
+  LOKA_VERIFY(consultedStackWidth(outer, probe) == 90);
 }
 
 void testStackNaturalWidthReadsLiveAxis()
@@ -833,4 +836,142 @@ void testContentOverflowRibbonUsesNaturalMeasurement()
   width = 19;
   LOKA_VERIFY(!layout::queryContentOverflowWidth(&column, loka::app::layout::RailSpacing(12, 4, 9), &refused, width));
   LOKA_VERIFY(width == 19);
+}
+
+void testBoxWidthDoorOrderAndSaturation()
+{
+  using namespace loka::app;
+  loka::core::MutableState<int> live(125);
+  LOKA_VERIFY(Box().size(200, 40).width(&live).width(static_cast<loka::core::State<int> *>(0)).props.effectiveWidth()
+              == 200);
+  LOKA_VERIFY(Box().size(200, 40).width(0).props.effectiveWidth() == 0);
+  LOKA_VERIFY(Box().width(&live).width(300).props.effectiveWidth() == 300);
+  LOKA_VERIFY(Box().width(300).width(&live).props.effectiveWidth() == 125);
+  LOKA_VERIFY(Box().size(200, 40).width(static_cast<short>(0)).props.effectiveWidth() == 0);
+  LOKA_VERIFY(Box().size(200, 40).width(false).props.effectiveWidth() == 0);
+  LOKA_VERIFY(Box().width(40000).props.effectiveWidth() == SHRT_MAX);
+  LOKA_VERIFY(Box().width(INT_MIN).props.effectiveWidth() == 0);
+  live.set(40000);
+  LOKA_VERIFY(Box().width(&live).props.effectiveWidth() == SHRT_MAX);
+  live.set(INT_MIN);
+  LOKA_VERIFY(Box().width(&live).props.effectiveWidth() == 0);
+  live.set(-65535); // Narrowing first would turn this into a positive width.
+  LOKA_VERIFY(Box().width(&live).props.effectiveWidth() == 0);
+  LOKA_VERIFY(!Box().width(200).props.hasFixedSize());
+  LOKA_VERIFY(Box().size(200, 40).props.hasFixedSize());
+}
+
+void testBoxWidthColumnAlignment()
+{
+  using namespace loka::app;
+  const HorizontalAlignment alignments[] = {
+      HORIZONTAL_ALIGNMENT_LEADING, HORIZONTAL_ALIGNMENT_CENTER, HORIZONTAL_ALIGNMENT_TRAILING};
+  for (int mode = 0; mode < 5; ++mode)
+  {
+    for (int oversized = 0; oversized < 2; ++oversized)
+    {
+      StackProps props(STACK_AXIS_COLUMN);
+      if (mode)
+        props.alignHorizontal(alignments[mode == 4 ? 2 : mode - 1]);
+      StackNode column(props);
+      BoxNode *box = new BoxNode(Box().width(oversized ? 600 : 300).props);
+      box->addChild(new RowSeatTextNode(TextProps("box")));
+      if (mode == 4)
+      {
+        FragmentNode *fragment = new FragmentNode(FragmentProps());
+        fragment->setPropsTypeId(FragmentProps::staticTypeId());
+        fragment->addChild(box);
+        column.addChild(fragment);
+      }
+      else
+        column.addChild(box);
+      RowTextSeatRecord record;
+      g_rowTextSeatRecord = &record;
+      NullScenePlatformController platform;
+      platform.projectLayoutForTesting(&column, rowState(500));
+      g_rowTextSeatRecord = 0;
+      // The 500-wide Column has 200 spare units; oversized seats retain offset zero.
+      LOKA_VERIFY(record.calls == 1);
+      LOKA_VERIFY(record.state.x == (oversized || mode < 2 || mode == 4 ? 0 : (mode - 1) * 100));
+      LOKA_VERIFY(record.state.width == (oversized ? 600 : 300));
+      LOKA_VERIFY(record.state.height == 20);
+    }
+  }
+}
+
+void testBoxWidthParentOffersAndHeight()
+{
+  using namespace loka::app;
+  for (int parent = 0; parent < 4; ++parent)
+  {
+    scene::NestableNode *root = 0;
+    if (parent == 0)
+      root = new FragmentNode(FragmentProps());
+    else if (parent == 1)
+      root = new ScrollViewNode(ScrollViewProps());
+    else if (parent == 2)
+      root = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+    else
+      root = new GridNode(GridProps(1, 2));
+    BoxNode *box = new BoxNode(Box().width(300).padding(5).props);
+    box->addChild(new RowSeatTextNode(TextProps("box")));
+    root->addChild(box);
+    RowTextSeatRecord record;
+    g_rowTextSeatRecord = &record;
+    NullScenePlatformController platform;
+    const int resultY = platform.projectLayoutForTesting(root, rowState(200));
+    g_rowTextSeatRecord = 0;
+    // Padding consumes 10; the DROP Card (same insets on every rail) adds 3/6 before offering the Box.
+    LOKA_VERIFY(record.calls == 1);
+    LOKA_VERIFY(record.state.width == 290);
+    LOKA_VERIFY(record.state.x == (parent == 2 ? 8 : 5));
+    LOKA_VERIFY(record.state.height == (parent == 2 ? 1 : 10));
+    LOKA_VERIFY(resultY == (parent == 1 ? 20 : parent == 2 ? 31 : 22));
+    delete root;
+  }
+  for (int fixed = 0; fixed < 2; ++fixed)
+  {
+    BoxNode box(fixed ? Box().size(200, 40).props : Box().width(200).props);
+    box.addChild(new RowSeatTextNode(TextProps("box")));
+    RowTextSeatRecord record;
+    g_rowTextSeatRecord = &record;
+    NullScenePlatformController platform;
+    const int resultY = platform.projectLayoutForTesting(&box, rowState(500));
+    g_rowTextSeatRecord = 0;
+    LOKA_VERIFY(record.calls == 1);
+    LOKA_VERIFY(record.state.width == 200);
+    LOKA_VERIFY(record.state.height == (fixed ? 40 : 20));
+    LOKA_VERIFY(resultY == (fixed ? 40 : 12));
+  }
+}
+
+void testBoxWidthOverflowEstimates()
+{
+  using namespace loka::app;
+  for (int parent = 0; parent < 4; ++parent)
+  {
+    ScrollViewNode scroll((ScrollViewProps()));
+    scene::NestableNode *content = &scroll;
+    if (parent == 1)
+      content = new StackNode(Column().props);
+    else if (parent == 2)
+      content = new StackNode(Row().naturalWidth().props);
+    else if (parent == 3)
+    {
+      content = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+      content->addChild(new StackNode(Column().props));
+    }
+    if (content != &scroll)
+      scroll.addChild(content);
+    if (parent == 3)
+      content = static_cast<scene::NestableNode *>(content->childrenHead());
+    content->addChild(new BoxNode(Box().width(800).props));
+    short width = 0;
+    NullScenePlatformController platform;
+    const bool known = layout::queryContentOverflowWidth(&scroll, layout::RailSpacing(12, 4, 9), &platform, width);
+    // The DROP Card (same insets on every rail) adds left=3 and right=6 to its content's 800-unit claim.
+    LOKA_VERIFY(known);
+    LOKA_VERIFY(width == (parent == 3 ? 809 : 800));
+    LOKA_VERIFY(ToolboxScrollViewMaximum(width, 200) == (parent == 3 ? 609 : 600));
+  }
 }

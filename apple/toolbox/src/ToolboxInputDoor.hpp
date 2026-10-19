@@ -24,6 +24,10 @@ public:
   {
     return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleScrollKey, key);
   }
+  static bool tabKey(ToolboxScenePlatformController &c, ToolboxTabDirection direction)
+  {
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleTabKey, direction);
+  }
   static void render(ToolboxScenePlatformController &c)
   {
     Invocation(c).operator()(c, &ToolboxScenePlatformController::render);

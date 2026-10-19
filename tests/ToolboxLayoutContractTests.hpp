@@ -3,6 +3,10 @@
 
 void testToolboxFixedBoxLayoutCommitsDeclaredExtent();
 void testToolboxEmptyFixedBoxLayoutCommitsDeclaredExtent();
+void testToolboxEmptyWidthOnlyBoxReportsWidth();
+void testToolboxNarrowWidthOnlyBoxReportsWidth();
+void testToolboxOverflowingWidthOnlyBoxReportsWidth();
+void testToolboxWrappedWidthOnlyBoxLiveWidth();
 void testToolboxRowConsultsFixedChildWidth();
 void testToolboxRowConsultsWidthOnlyBoxWidth();
 void testToolboxRowEmptyFragmentConsumesNoSeatOrGap();
@@ -11,5 +15,7 @@ void testToolboxCenteredRowChildHeightSeats();
 void testToolboxUnalignedRowChildHeightSeats();
 
 void testToolboxCenteredControlOnlyRowPaintedBounds();
+
+void testToolboxAlignedRowCharacterizationExcludesBoxHeight();
 
 #endif // LOKA_TESTS_TOOLBOX_LAYOUT_CONTRACT_TESTS_HPP

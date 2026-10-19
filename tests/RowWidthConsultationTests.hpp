@@ -10,7 +10,7 @@ void testRowBranchArmSwitchRelayoutsWidthConsultation();
 void testRowWidthOnlyBranchArmForwardsWidthClaim();
 void testRowHeightOnlyBoxKeepsFlexSeat();
 void testRowWidthOnlyBoxUsesRowHeight();
-void testColumnWidthOnlyBoxKeepsFullAvailableWidth();
+void testColumnWidthOnlyBoxUsesDeclaredWidth();
 void testRowOversizedFixedBoxKeepsDeclaredSeatForSibling();
 void testRowZeroWidthRowKeepsFixedSeatLiveAndGapped();
 void testRowWidthHeuristicForwardsOnlySingleFragmentClaims();
@@ -34,5 +34,10 @@ void testContentOverflowBoxPaddingIsOfferBound();
 void testContentOverflowPassThroughIsTransparent();
 void testNaturalRowSeesThroughPassThroughWrapper();
 void testContentOverflowRibbonUsesNaturalMeasurement();
+
+void testBoxWidthDoorOrderAndSaturation();
+void testBoxWidthColumnAlignment();
+void testBoxWidthParentOffersAndHeight();
+void testBoxWidthOverflowEstimates();
 
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP

@@ -24,7 +24,8 @@ namespace loka
       int computeInsetLayoutResultY(loka::app::scene::Node *childrenHead,
                                     size_t childCount,
                                     const FrameInsets &padding,
-                                    bool hasFixedSize,
+                                    bool hasFixedWidth,
+                                    bool hasFixedHeight,
                                     int fixedWidth,
                                     int fixedHeight,
                                     const LayoutStateT &state,
@@ -37,9 +38,9 @@ namespace loka
         childState.x = layoutCoordinate<LayoutStateT>(state.x + padding.left);
         int currentY = state.y + padding.top;
         childState.width = layoutCoordinate<LayoutStateT>(
-            insetExtent(hasFixedSize ? fixedWidth : state.width, padding.left, padding.right));
+            insetExtent(hasFixedWidth ? fixedWidth : state.width, padding.left, padding.right));
         childState.height = layoutCoordinate<LayoutStateT>(
-            insetExtent(hasFixedSize ? fixedHeight : state.height, padding.top, padding.bottom));
+            insetExtent(hasFixedHeight ? fixedHeight : state.height, padding.top, padding.bottom));
 
         StackGaps gaps(gap);
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(childrenHead, childCount);
@@ -52,8 +53,10 @@ namespace loka
           currentY = layoutChild(context, child, childState);
         }
         const int resultY = currentY + padding.bottom;
-        return hasFixedSize ? state.y + fixedHeight : resultY;
+        return hasFixedHeight ? state.y + fixedHeight : resultY;
       }
+      /** Resolves the Box width once for both its content offer and, when requested,
+          the rail's reported width. The output is borrowed only for this call. */
       template <typename LayoutStateT>
       int computeBoxLayoutResultY(loka::app::BoxNode *box,
                                   const RailSpacing &spacing,
@@ -61,25 +64,30 @@ namespace loka
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
                                   int gap,
-                                  bool (*acceptY)(void *, int))
+                                  bool (*acceptY)(void *, int),
+                                  int *resolvedWidth = 0)
       {
         if (!box)
           return state.y;
+        const int width = box->props.effectiveWidth();
+        if (resolvedWidth)
+          *resolvedWidth = width;
         const int padding = box->props.padding.resolve(0, spacing.standardWindowMargin());
-        const bool fixed = box->props.hasFixedSize();
+        const int height = box->props.height;
         // Box-only preflight (#950 page 4); framed layout shares the helper and keeps its own rules.
         // The helper computes the same extents through insetExtent, so both agree by construction.
-        if (insetExtent(fixed ? box->props.effectiveWidth() : state.width, padding, padding) > SHRT_MAX
-            || insetExtent(fixed ? box->props.height : state.height, padding, padding) > SHRT_MAX)
+        if (insetExtent(width > 0 ? width : state.width, padding, padding) > SHRT_MAX
+            || insetExtent(height > 0 ? height : state.height, padding, padding) > SHRT_MAX)
           return state.y;
         if (acceptY && (!acceptY(context, state.x + padding) || !acceptY(context, state.y + padding)))
           return state.y;
         return computeInsetLayoutResultY(box->childrenHead(),
                                          box->childrenCount(),
                                          FrameInsets(padding),
-                                         fixed,
-                                         box->props.effectiveWidth(),
-                                         box->props.height,
+                                         width > 0,
+                                         height > 0,
+                                         width,
+                                         height,
                                          state,
                                          context,
                                          layoutChild,

@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_WINDOW_HPP
 
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxTabKey.hpp"
 #include "app/core/Window.hpp"
 #include "app/core/DialogResultTransport.hpp"
 #include "ToolboxActivationPhase.hpp"
@@ -58,6 +59,7 @@ public:
   void invalidateGrowIcon();
   bool handleKeyDown(char key);
   bool handleScrollKey(ToolboxScrollKey key);
+  bool handleTabKey(ToolboxTabDirection direction);
   void drawDirty(const Rect &rect);
   void idleControls(ActivationPhase phase);
   void updateCursor(bool force = false);

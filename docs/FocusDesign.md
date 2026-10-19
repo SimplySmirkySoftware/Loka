@@ -285,8 +285,9 @@ Exact storage capacity and representations remain in the code.
 
 ## Not covered here
 
-Focus order, selection, automatic reveal/scrolling, replies, and cross-Scene
-carry-over remain outside this contract.
+Automatic reveal/scrolling, replies, and cross-Scene carry-over remain outside
+this contract. Focus order and selection are specified only for the rail paths
+described below, including Toolbox Tab traversal.
 
 
 ## App-posted focus (#960)
@@ -384,7 +385,9 @@ context afterward.
 
 The write door runs at most once per taken request: O(E) over its controller's
 native edit rows, then O(H) over its fallback hits when no native row exists.
-The shared activation step is O(1), with no allocation or new retained state.
+The shared activation step runs up to two overlap repairs, each O(U) over this
+controller's unit ledger. Each overlapping unit appends a window damage rect
+(`push_back`, which may allocate); activation adds no retained state.
 Host pins cover activation, refusal, key delivery, selection/scroll preservation
 and port restoration; Classic runtime verification belongs to the MAME rig.
 
@@ -466,3 +469,42 @@ completion; the one-shot post is not a lock against later restoration. The
 macOS pins cover initial ordering, native snapshots, admission, and an
 end-editing text-bridge observer that retires the target. These pins require
 Tahoe runtime verification; Linux suites do not compile this rail.
+
+### Toolbox Tab traversal (#1461)
+
+Tab visits EditText rows in geometric order `(rect.top, rect.left, ledger index)`;
+the index breaks exact ties. Shift-Tab reverses that order and both directions
+wrap, including a single field wrapping to itself. Landing selects all text
+using its explicit TE length. With no native focus, including fallback focus,
+Tab starts at the first field and Shift-Tab at the last. Shift-Tab's no-focus
+start is not pinned on other rails and is not a cross-rail parity claim.
+
+Candidates are current, ATTACHED EditText owners with used, nonempty native TE
+rows intersecting the window port. Fallback hits and TextEditor rows never join
+this traversal; when a TextEditor has focus, Tab remains text input. macOS's
+key-view loop includes TextEditor. With no candidate the existing key path runs.
+With eligible fields, Tab no longer reaches the app's `onKeyPress`, even when no
+field has focus. Traversal is defined over `editControls_`; future focusable kinds
+must join that ledger or extend traversal.
+
+The body writes neither focus box. Completion (`ToolboxApp::present` through
+`reconcileFocus`, `FocusPublisher::complete`, and `readNativeFocus`) publishes the
+landing field. A same-turn post is consumed when a previously published field
+of that fact has moved natively; with nothing published yet, the post wins.
+
+Cost: ToolboxApp key-down (`keyDown` and `autoKey`) calls once per Tab. Search is
+one O(E) walk over this controller's own `editControls_`, with no allocation.
+Moving runs up to three `invalidateUnitOverlap` calls, each O(U) over this
+controller's unit ledger; each overlapping unit appends one window damage rect
+(`push_back`, which may allocate), repainted at completion. No foreign rows.
+
+Known limits: immediately after a modal closes, one Tab may use the previous
+layout, though parked rows are excluded. A field fully covered by a ZStack unit
+remains a target and its selection highlight can stay painted over the unit,
+the same unsupported case as clicks. Tab does not resynchronize the keyboard
+script to the landing font. If the app rewrites the field's State before the
+next render, `syncEditTextFromState` moves the caret to the end and loses
+select-all. Typing over the selection retains the existing installation and
+round-trip checks and their refusals. Host evidence covers the traversal;
+`helloworld bmi-tab` is staged for real ADB/MAME verification, not an approved
+runtime verdict.
