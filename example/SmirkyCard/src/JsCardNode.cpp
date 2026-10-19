@@ -313,6 +313,13 @@ namespace smirkycard
         // accessor must not intercept the snapshot (bot P2 on #1463).
         ok = !JS_IsException(value) && JS_DefinePropertyValueStr(ctx, machine, "cpuClass", value, JS_PROP_C_W_E) >= 0;
       }
+      if (ok)
+      {
+        PlatformContext *platform = this->props.runtime->nativeContext();
+        int depth;
+        JSValue value = platform && platform->queryMainDisplayDepth(depth) ? JS_NewInt32(ctx, depth) : JS_NULL;
+        ok = JS_DefinePropertyValueStr(ctx, machine, "displayDepth", value, JS_PROP_C_W_E) >= 0;
+      }
       ok = ok && JS_FreezeObject(ctx, machine) >= 0
            && JS_DefinePropertyValueStr(ctx, context, "machine", JS_DupValue(ctx, machine), JS_PROP_C_W_E) >= 0;
       JS_FreeValue(ctx, machine);

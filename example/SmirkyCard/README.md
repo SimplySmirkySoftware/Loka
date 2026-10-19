@@ -172,7 +172,11 @@ and reason; an uncaught error fails the constructor, without declaring the seat.
 `c.machine.cpuClass` is `'68k' | 'ppc60x' | 'g3+'`, or `null` when the
 platform cannot answer. This frozen, read-only snapshot is read once at card-context
 construction from the same CPU query as the default CardStyle, so scripts can
-choose a heavier layout only on faster machines.
+choose a heavier layout only on faster machines. `c.machine.displayDepth` is the
+main display's bits per pixel (`1 | 2 | 4 | 8 | 16 | 32`), or `null` when the
+platform does not answer (the Linux host; Win32 and macOS until their rail PRs).
+Toolbox answers from the main GDevice, or `1` without Color QuickDraw. It is a
+snapshot taken with `cpuClass`, so scripts can choose pictures with it.
 
 Declare `state(initial)` only in a card constructor. Initial values may be
 Strings, integers, or Bools; the seat keeps its type. `Text(seat)` formats

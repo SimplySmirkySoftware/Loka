@@ -3994,7 +3994,35 @@ namespace
     }
     // queryDisplayAppearance is deliberately left declining.
   };
+
+  class EightBitDisplayContext : public NullPlatformContext
+  {
+  public:
+    virtual bool queryMainDisplayDepth(int &out) const
+    {
+      out = 8;
+      return true;
+    }
+  };
 } // namespace
+
+void testNullMainDisplayDepthDeclinesWithoutWriting()
+{
+  NullPlatformContext context;
+  const PlatformContext *platform = &context;
+  int depth = -7;
+  LOKA_VERIFY(!platform->queryMainDisplayDepth(depth));
+  LOKA_VERIFY(depth == -7);
+}
+
+void testMainDisplayDepthAnswersThroughBasePointer()
+{
+  EightBitDisplayContext context;
+  const PlatformContext *platform = &context;
+  int depth = -7;
+  LOKA_VERIFY(platform->queryMainDisplayDepth(depth));
+  LOKA_VERIFY(depth == 8);
+}
 
 void testWindowWithoutDisplayFactsDeclinesEveryAxis()
 {

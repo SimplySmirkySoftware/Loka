@@ -2184,17 +2184,17 @@ namespace
     const char *values[] = {"class", "factory", "arrow"};
     for (unsigned i = 0; i < 3; ++i)
     {
-      smirkycard::ScriptRuntime runtime;
+      NullPlatformContext context;
+      smirkycard::ScriptRuntime runtime(&context);
       loka::core::String error;
       // An inherited accessor must not intercept the host's machine snapshot:
-      // both fields are defined as own properties, never assigned (bot P2, #1463).
+      // All fields are defined as own properties, never assigned (bot P2, #1463).
       const std::string source =
-          std::string("['cpuClass','machine'].forEach(k=>Object.defineProperty(Object.prototype,k,"
+          std::string("['cpuClass','displayDepth','machine'].forEach(k=>Object.defineProperty(Object.prototype,k,"
                       "{configurable:true,get(){return 'spoof'},set(v){throw new TypeError('poison '+k)}}));"
                       "var calls=0;card('first',")
           + factories[i] + ");";
       LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
-      NullPlatformContext context;
       NullScenePlatformController platform;
       WindowProps props;
       props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
@@ -2212,15 +2212,23 @@ namespace
       expectJs(runtime, "context.machine.cpuClass === null", "true");
       std::puts("[skip] G3+ runtime branch: this host's queryCpuClass declines");
 #endif
+      expectJs(runtime, "context.machine.displayDepth === null", "true");
+      std::puts("[skip] answering displayDepth runtime branch: this context has no native display answer");
       expectJs(runtime, "Object.isFrozen(context.machine)", "true");
       expectJs(runtime,
                "Object.prototype.hasOwnProperty.call(context,'machine')&&"
-               "Object.prototype.hasOwnProperty.call(context.machine,'cpuClass')",
+               "Object.prototype.hasOwnProperty.call(context.machine,'cpuClass')&&"
+               "Object.prototype.hasOwnProperty.call(context.machine,'displayDepth')",
                "true");
       expectJs(runtime,
                "new class {check(){const before=context.machine.cpuClass;let refused=false;"
                "try{context.machine.cpuClass='x'}catch(e){refused=e instanceof TypeError}"
                "return refused && context.machine.cpuClass===before}}().check()",
+               "true");
+      expectJs(runtime,
+               "new class {check(){const before=context.machine.displayDepth;let refused=false;"
+               "try{context.machine.displayDepth=8}catch(e){refused=e instanceof TypeError}"
+               "return refused && context.machine.displayDepth===before}}().check()",
                "true");
       expectJs(runtime, "Object.isFrozen(context)", "true");
 
