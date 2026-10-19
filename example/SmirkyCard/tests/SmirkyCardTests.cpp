@@ -17,6 +17,8 @@
 #include "app/nodes/AttributedText.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "platform/null/context/NullTextContext.hpp"
 #include "core/Operation.hpp"
 #include "app/OpenFileDialog.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -4199,6 +4201,137 @@ namespace
     LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
   }
 
+  void checkBoxLowering()
+  {
+    std::fputs("[pin] Box independent dimensions, validation and depth\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>({compose(){return VStack("
+                                    "Box(Text('w'),{width:300}).TEST_ID('Width'),"
+                                    "Box(Text('h'),{height:8}).TEST_ID('Height'),"
+                                    "Box(Text('b'),{width:120,height:40}).TEST_ID('Both'),"
+                                    "Box(Text('p')).TEST_ID('Plain'),Box(Text('e'),{}).TEST_ID('Empty'),"
+                                    "Box(Text('m'),{width:4096,height:1}).TEST_ID('Max'),"
+                                    "ScrollView(Box(Text('wide'),{width:800})).TEST_ID('WideBox'),"
+                                    "Box(Text('x').TEST_ID('NarrowText'),{width:60}))}}));",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    const char *ids[] = {"Width", "Height", "Both", "Plain", "Empty", "Max"};
+    const char *labels[] = {"w", "h", "b", "p", "e", "m"};
+    const int widths[] = {300, 0, 120, 0, 0, 4096};
+    const int heights[] = {0, 8, 40, 0, 0, 1};
+    for (unsigned i = 0; i < 6; ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node && node->asBoxNode());
+      loka::app::BoxProps expected;
+      if (widths[i])
+        expected.setWidth(widths[i]);
+      if (heights[i])
+        expected.setHeight(heights[i]);
+      const loka::app::BoxProps &actual = node->asBoxNode()->props;
+      LOKA_VERIFY(!(actual < expected) && !(expected < actual));
+      loka::app::scene::Node *text = node->asNestable()->childrenHead();
+      LOKA_VERIFY(text && text->asTextNode() && !text->nextInComposition);
+      LOKA_VERIFY(text->asTextNode()->props.text_->get().compare(loka::core::String::Literal(labels[i])) == 0);
+    }
+    LaptopNaturalWidthSource source;
+    short width = 0;
+    loka::app::scene::Node *scroll = windowNode(window, "WideBox");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    LOKA_VERIFY(
+        loka::app::layout::queryContentOverflowWidth(scroll, loka::app::layout::RailSpacing(12, 4, 9), &source, width));
+    loka::app::scene::Node *text = windowNode(window, "NarrowText");
+    LOKA_VERIFY(text && text->asTextNode() && text->getContext());
+    NullTextContext *textContext = static_cast<NullTextContext *>(text->getContext());
+    // As in NullMeasurementReuseTests, query the completed placement through paint damage.
+    // A different previously presented value makes the answer carry the whole Text seat.
+    LOKA_VERIFY(textContext->commitPresented(loka::core::String::Literal("y"), platform.paintScope()));
+    const loka::app::scene::PaintQuery query = {platform.paintScope(), loka::app::scene::PLACEMENT_ELIGIBLE};
+    const loka::app::scene::PaintAnswer placed = textContext->queryPaintDamage(query);
+    LOKA_VERIFY(placed.kind == loka::app::scene::PAINT_ANSWER_EXACT);
+    LOKA_VERIFY(width == 800);
+    LOKA_VERIFY(placed.damage.width == 60);
+    const char *badBuilds[] = {"Box()",
+                               "Box(Text('a'),{},1)",
+                               "Box([Text('a')])",
+                               "Box(1)",
+                               "Box({})",
+                               "Box(Text('a'),[])",
+                               "Box(Text('a'),5)",
+                               "Box(Text('a'),{width:0})",
+                               "Box(Text('a'),{width:-1})",
+                               "Box(Text('a'),{width:1.5})",
+                               "Box(Text('a'),{width:4097})",
+                               "Box(Text('a'),{height:NaN})",
+                               "Box(Text('a'),{height:Infinity})",
+                               "Box(Text('a'),{width:'12'})",
+                               "Box(Text('a'),{padding:4})",
+                               "Box(Text('a'),{minWidth:10})",
+                               "Box(Text('a'),{[Symbol('w')]:1})",
+                               "Box(Text('a'),Object.create({width:10}))",
+                               "Box(Text('a'),{width:undefined})",
+                               "Box(Text('a'),null)"};
+    for (unsigned i = 0; i < sizeof(badBuilds) / sizeof(badBuilds[0]); ++i)
+    {
+      const std::string expression =
+          std::string("(()=>{try{") + badBuilds[i] + ";return false}catch(e){return e instanceof TypeError}})()";
+      expectJs(runtime, expression.c_str(), "true");
+    }
+    expectJs(runtime,
+             "(()=>{const child=Text('x'),o={width:300,height:8},t=Box(child,o).TEST_ID('copy');"
+             "o.width=1;o.height=2;return Object.isFrozen(t)&&t.child===child&&t.width===300&&t.height===8&&"
+             "![Box(child),Box(child,{})].some(t=>'width' in t||'height' in t)&&"
+             "[Box(child),Box(child,{})].every(Object.isFrozen)})()",
+             "true");
+    const char *invalid[] = {"{width:0}", "{height:1.5}", "{width:'12'}", "{height:Infinity}", "{width:undefined}"};
+    for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+    {
+      const std::string script =
+          std::string("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),") + invalid[i] + ")}}));";
+      checkComposeRefusal(script.c_str(), "JavaScript Box has an invalid width or height.");
+    }
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{child:42})}}));",
+                        "JavaScript Box has an invalid child.");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
+                        "'width',{get(){return 10},enumerable:true})}}));",
+                        "JavaScript Box has an invalid width or height.");
+    checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
+                        "cannot contain another ScrollView");
+    std::string tree = "Text('deep').TEST_ID('DeepBox')";
+    for (int depth = 0; depth < 8; ++depth)
+      tree = "Box(" + tree + ")";
+    smirkycard::ScriptRuntime deepRuntime;
+    const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
+    LOKA_VERIFY(deepRuntime.loadBuiltin(script.c_str(), error));
+    WindowProps deepProps;
+    deepProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, deepRuntime));
+    NullWindow deepWindow(&context, deepProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
+    LOKA_VERIFY(windowNode(deepWindow, "DeepBox"));
+    const std::string refused = "card('first',c=>({compose(){return Box(" + tree + ")}}));";
+    checkComposeRefusal(refused.c_str(), "exceeds depth 8");
+    // A width on Object.prototype is not a claim: lowering reads the tree's own properties only.
+    smirkycard::ScriptRuntime poisonRuntime;
+    LOKA_VERIFY(poisonRuntime.loadBuiltin("Object.prototype.width=300;"
+                                          "card('first',c=>({compose(){return Box(Text('p')).TEST_ID('Poison')}}));",
+                                          error));
+    WindowProps poisonProps;
+    poisonProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, poisonRuntime));
+    NullWindow poisonWindow(&context, poisonProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*poisonWindow.scene(), true);
+    loka::app::scene::Node *poisoned = windowNode(poisonWindow, "Poison");
+    LOKA_VERIFY(poisoned && poisoned->asBoxNode());
+    const loka::app::BoxProps plain;
+    LOKA_VERIFY(!(poisoned->asBoxNode()->props < plain) && !(plain < poisoned->asBoxNode()->props));
+  }
+
   void checkLaptopLowerings()
   {
     checkNaturalRowLowering();
@@ -4691,6 +4824,7 @@ int main(int argc, char **argv)
     checkViewportSeat();
     checkScrollViewportPersistence();
     checkLaptopLowerings();
+    checkBoxLowering();
     checkMinimumLowerings();
     checkLoweringRefusals();
     return 0;
@@ -4826,6 +4960,7 @@ int main(int argc, char **argv)
   checkViewportSeat();
   checkScrollViewportPersistence();
   checkLaptopLowerings();
+  checkBoxLowering();
   checkMinimumLowerings();
   checkLoweringRefusals();
   checkTypedSeats();

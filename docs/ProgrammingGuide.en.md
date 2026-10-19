@@ -1531,7 +1531,8 @@ only inputs that actually change need live State.
 ### Box Width And Height
 
 `Box().width(300)` sets the content offer to 300 minus the Box's padding under
-any parent. It does not resize the parent, Grid cell, ZStack unit, or viewport.
+any parent. It does not change the width of an enclosing Grid cell, ZStack unit,
+or viewport; a Box wider than its parent overflows.
 `Box().height(40)` independently fixes the content height offer to 40 minus
 padding and the result Y to its origin plus 40, without clipping content.
 `height(int)` preserves both the constant width and any borrowed live width.
