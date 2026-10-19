@@ -610,8 +610,8 @@ namespace
     LOKA_VERIFY(f.text.get().equals(String::Literal("ax")));
     LOKA_VERIFY(f.replacement.get().equals(String::Literal("b")));
   }
-  /** Leaving ATTACHED cuts a fallback field's focus source, so its keys stop
-      at the fact write; the native-row refusal in handleKeyDown is not needed. */
+  /** Leaving ATTACHED cuts a fallback field's focus source, so its keys decline
+      from the fact write on, as with no focus; the native-row refusal is not needed. */
   void parkedFallback()
   {
     for (int delivered = 0; delivered != 2; ++delivered)
@@ -624,9 +624,10 @@ namespace
       if (delivered)
         LifecycleFactTestAccess::DeliverFacts(&f.first);
       LOKA_VERIFY(f.first.lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
-      f.expect(0);
+      // The key goes first, so a missing cut fails on the key, not on the focus read.
       LOKA_VERIFY(!ToolboxInputDoor::keyDown(f.controller, 'x'));
       LOKA_VERIFY(f.text.get().equals(String::Literal("a")));
+      f.expect(0);
     }
   }
   void fallback()
