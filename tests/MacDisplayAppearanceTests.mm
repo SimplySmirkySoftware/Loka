@@ -187,5 +187,17 @@ void testMacMainDisplayDepthAnswersFromTheMainScreen()
   [keyProbe release];
   LOKA_VERIFY(answered);
   LOKA_VERIFY(probed == 24);
+  // Controlled empty screen list (bot P1, second round): the no-display
+  // branch above depends on the host, so it is forced here: the query
+  // declines and leaves out untouched.
+  gLokaProbeScreens = [[NSArray alloc] init];
+  swapScreenClassMethods();
+  int untouched = -1;
+  const bool answeredWithoutScreens = base->queryMainDisplayDepth(untouched);
+  swapScreenClassMethods();
+  [gLokaProbeScreens release];
+  gLokaProbeScreens = nil;
+  LOKA_VERIFY(!answeredWithoutScreens);
+  LOKA_VERIFY(untouched == -1);
   printf("==== [testMacMainDisplayDepthAnswersFromTheMainScreen] PASSED ====\n");
 }
