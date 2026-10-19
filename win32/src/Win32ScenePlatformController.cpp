@@ -1405,7 +1405,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
     const int clampedOffset = ctx->setScrollMetrics(SB_VERT, extent, viewportHeight, requestedExtent);
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(clampedX, clampedOffset);
+    scrollView->publishViewport(clampedX, clampedOffset, childBase.width, viewportHeight);
   }
 
   if (state.height > 0)
