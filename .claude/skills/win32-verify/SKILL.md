@@ -95,9 +95,14 @@ executed the other branch's binary and reported every new test as
   - Take `<setup-folder>\desktop.lock` over ssh before `schtasks /Run`, not
     inside the task: starting a task opens its console window, which was the
     foreground in all three #1378 foreground-poller logs.
-  - Release it after the task's result file appears. If no result file
-    appears, end the task (`schtasks /End`) before releasing. A lock left by
-    a session that has ended is cleared by the human, not by another session.
+  - Release it only after the task has finished: a completion marker the
+    script writes as its last step (deleted before `schtasks /Run`, so an
+    earlier run's marker cannot count) exists, or `schtasks /Query` no
+    longer reports the task as Running. An output file is not a completion
+    marker: a redirected log exists from the moment the task starts. If the
+    task never finishes, end it (`schtasks /End`) before releasing. A lock
+    left by a session that has ended is cleared by the human, not by another
+    session.
   - This covers every interactive task: unit runs, scenario cells, golden
     bake/verify, standalone apps, and builds started as a task (their console
     window alone can take the foreground from another session's run). A build
