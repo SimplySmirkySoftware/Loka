@@ -168,12 +168,15 @@ namespace
     void expect(unsigned short key) { LOKA_VERIFY(this->facts.focus.state()->get().is(key)); }
   };
 
+  void skipWithCondition(const char *pin, const char *condition, const char *skipped, const char *kept)
+  {
+    std::printf("[skip] %s: %s, so %s did not run; %s\n", pin, condition, skipped, kept);
+    std::fflush(stdout);
+  }
+
   void skipWithoutActivation(const char *pin, const char *skipped, const char *kept)
   {
-    std::printf("[skip] %s: SetActiveWindow did not make the test window this thread's active window, "
-                "so %s did not run; %s\n",
-                pin, skipped, kept);
-    std::fflush(stdout);
+    skipWithCondition(pin, "SetActiveWindow did not make the test window this thread's active window", skipped, kept);
   }
 
   void tab(HWND root)
@@ -351,13 +354,31 @@ namespace
   {
     Fixture &fixture;
     unsigned step;
-    explicit CompletionProbe(Fixture &f) : fixture(f), step(0) {}
+    const DWORD started;
+    explicit CompletionProbe(Fixture &f)
+        : fixture(f),
+          step(0),
+          started(GetTickCount())
+    {
+    }
     void tick()
     {
       if (this->step < 2)
         this->fixture.none();
-      else
-        this->fixture.expect(static_cast<unsigned short>(this->step - 1));
+      else if (!this->fixture.facts.focus.state()->get().is(static_cast<unsigned short>(this->step - 1)))
+      {
+        // A Tab's publishing completion runs after its message drain; a drain
+        // slower than the timer period can dispatch the next tick first (#1378).
+        // The fixture's window is this pin's only window, so losing activation
+        // means another thread took it; the rail then declines every read.
+        if (GetActiveWindow() != this->fixture.window.hwnd())
+        {
+          PostQuitMessage(0);
+          return;
+        }
+        LOKA_VERIFY(GetTickCount() - this->started < 2000);
+        return;
+      }
       if (this->step == 4)
       {
         PostQuitMessage(0);
@@ -395,6 +416,19 @@ void testWin32FocusCompletion()
     KillTimer(0, timer);
     completionProbe = 0;
     f.window.setApp(0);
+    // Skip only when another thread holds the foreground; a window that lost
+    // activation while this thread kept the foreground stays a red.
+    const HWND foreground = GetForegroundWindow();
+    if (!f.facts.focus.state()->get().is(3) && GetActiveWindow() != f.window.hwnd() && foreground
+        && GetWindowThreadProcessId(foreground, 0) != GetCurrentThreadId())
+    {
+      skipWithCondition("testWin32FocusCompletion",
+                        "the test window lost activation to another thread during the message loop",
+                        "the remaining completion checks of this mode and any next mode",
+                        "initial activation and preceding loop checks ran; testWin32FocusReadAndRestore keeps the "
+                        "checks that need no active window.");
+      return;
+    }
     LOKA_VERIFY(probe.step == 4);
     f.expect(3);
   }

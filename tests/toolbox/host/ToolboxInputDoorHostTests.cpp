@@ -649,6 +649,7 @@ int main(int argc, char **argv)
   {
     parked_press::barParts();
     parked_press::erasedHit();
+    parked_press::silentHit();
     std::puts("[skip] native ordering/unit pins run in LokaToolboxControlOrderTests PressDoor");
   }
   if (argc == 1 || std::strcmp(argv[1], "parked-dialog") == 0)

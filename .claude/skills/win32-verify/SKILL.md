@@ -48,6 +48,8 @@ the way #496 was characterized, rather than assuming the determinism carries.
   scheduled task with an Interactive logon principal for the autologon user,
   have the script write its own output file, and poll that file over ssh. An
   ssh-run scenario dies at the capture stage reporting zero windows found.
+  Such tasks run under the desktop lock (see "Several sessions share one
+  guest").
 - **Everything the rail touches lives on the guest's own virtual disk** — a
   normal clone on the guest, its build tree, its goldens, and its rig
   descriptor (`~/.config/loka/rigs/win32/` in the guest, untracked like every
@@ -84,11 +86,34 @@ executed the other branch's binary and reported every new test as
   - The rig descriptor and the goldens stay in the main clone because the
     checkpoint freezes them together.
   - Outside the lock, never check out or build anything in the main clone.
-- **Take the golden lock atomically and release only your own.** A
+- **Interactive tasks run one at a time across the guest, under the desktop
+  lock.** The guest has one interactive desktop and no user input, so a new
+  window from any process can take the foreground from another session's
+  run. A focus pin whose window loses the foreground mid-run fails or prints
+  a skip. In #1378, a helper injected to take the foreground once during
+  `testWin32FocusCompletion` failed it in 10 runs out of 10 before #1497.
+  - Take `<setup-folder>\desktop.lock` over ssh before `schtasks /Run`, not
+    inside the task: starting a task opens its console window, which was the
+    foreground in all three #1378 foreground-poller logs.
+  - Release it only after the task has finished: a completion marker the
+    script writes as its last step (deleted before `schtasks /Run`, so an
+    earlier run's marker cannot count) exists, or `schtasks /Query` no
+    longer reports the task as Running. An output file is not a completion
+    marker: a redirected log exists from the moment the task starts. If the
+    task never finishes, end it (`schtasks /End`) before releasing. A lock
+    left by a session that has ended is cleared by the human, not by another
+    session.
+  - This covers every interactive task: unit runs, scenario cells, golden
+    bake/verify, standalone apps, and builds started as a task (their console
+    window alone can take the foreground from another session's run). A build
+    run directly over ssh is not in the interactive session and needs no lock.
+  - Golden work takes the golden lock first, then the desktop lock for each
+    task it starts. Desktop-only work never takes the golden lock.
+- **Take either lock atomically and release only your own.** A
   check-then-write lock lets two sessions both see no lock.
   - Take it by creating a directory without `-Force`: `New-Item -ItemType
-    Directory <setup-folder>\golden.lock -ErrorAction Stop` fails when the
-    directory already exists.
+    Directory <setup-folder>\golden.lock -ErrorAction Stop` (or
+    `desktop.lock`) fails when the directory already exists.
   - Then write `owner.txt` inside it with the session and the purpose.
   - When the work ends, remove the directory only if `owner.txt` still names
     your session.

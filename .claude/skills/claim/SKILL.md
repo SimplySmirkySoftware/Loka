@@ -37,6 +37,7 @@ invalid `taken` uses directory mtime. Stale incomplete claims allow `--force`.
 hand. A release race preserves a replacement claim or reports its conflict path.
 Invalid arguments exit 2. Keys and owners use `[a-z0-9][a-z0-9._-]*`.
 
-The Win32 VM golden lock in [win32-verify](../win32-verify/SKILL.md) remains
-the authority for the guest itself. A `vm-golden` claim is the host-side
-courtesy note, not a replacement for that lock.
+The Win32 VM golden lock and desktop lock in
+[win32-verify](../win32-verify/SKILL.md) remain the authority for the guest
+itself. A `vm-golden` claim is the host-side courtesy note, not a replacement
+for the golden lock; no claim stands in for the desktop lock.
