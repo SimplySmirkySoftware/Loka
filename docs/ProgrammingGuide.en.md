@@ -1668,10 +1668,11 @@ that snapshot. Geometry changes cause another capture and blur. A ZStack
 rebuilt at the same address with the same rectangle in one pass keeps the old
 picture. Allocation or capture failure leaves window ground for that lifetime.
 
-**Toolbox input shielding (prerequisite A) is not implemented:** controls and
-fields beneath the unit still take presses, keys, and caret paint. A
-window-covering About overlay is not safe yet; static blur does not provide
-modal input behavior.
+On Toolbox, a press on the unit stops there (the 2b shield), but a field or
+control the unit covers still takes keys and Tab, its caret still blinks, and
+its direct repaints can draw over the unit (#1498). Do not place a static-blur
+unit over editable text or over content that changes while it is shown.
+Static blur does not provide modal input behavior.
 
 `ZStack().expBlurUnit()` is experimental: the first unit (second child) shows
 a blur of the content beneath it where the rail supports it. Later units keep
