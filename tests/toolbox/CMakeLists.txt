@@ -226,6 +226,28 @@ function(loka_add_te_style_probe name core_target)
 endfunction()
 loka_add_te_style_probe(LokaTEStyleProbe LokaAppleToolboxCore)
 
+# Frost probe (decoration rally 2 page 5); probe branch only, not for merge.
+configure_file(
+  ${CMAKE_SOURCE_DIR}/example/HelloWorld/Size.r
+  ${CMAKE_CURRENT_BINARY_DIR}/FrostProbeSize.r
+  COPYONLY
+)
+function(loka_add_frost_probe name core_target)
+  set(target "${name}${LOKA_CLASSIC_TARGET_SUFFIX}")
+  loka_add_toolbox_test_application(
+    ${target}
+    ${core_target}
+    src/FrostProbeStandaloneMain.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/FrostProbeSize.r
+  )
+  if(LOKA_FROST_PROBE_CPU)
+    target_compile_options(${target} PRIVATE "-m${LOKA_FROST_PROBE_CPU}")
+  endif()
+  set_property(TARGET ${target} PROPERTY EXCLUDE_FROM_ALL TRUE)
+  set_property(TARGET ${target}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+endfunction()
+loka_add_frost_probe(LokaFrostProbe LokaAppleToolboxCore)
+
 # Interactive editor; production core, no scenario driver or idle callback.
 # LokaTextEditor68K_APPL.bin is 26 characters (HFS limit: 31).
 set(LOKA_TEXT_EDITOR_TARGET "LokaTextEditor${LOKA_CLASSIC_TARGET_SUFFIX}")

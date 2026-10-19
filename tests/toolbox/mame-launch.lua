@@ -129,6 +129,10 @@ if STANDALONE then
     -- Elapsed time alone is not success: --expect checks the complete audit.
     say("standalone opened; waiting %s emulated seconds", RUN_WAIT)
     emu.wait(RUN_WAIT)
+    if os.getenv("LOKA_STANDALONE_SNAP") == "1" then
+        local ok, err = pcall(function() findScreen():snapshot() end)
+        say("probe snapshot %s", ok and "written" or tostring(err))
+    end
     say("standalone wait complete")
     manager.machine:exit()
     return
