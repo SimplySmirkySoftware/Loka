@@ -2,6 +2,7 @@
 // not register tests whose Objective-C++ translation unit is absent.
 LOKA_TEST(testMacDisplayAppearanceDeclinesWithoutMatchingCapability)
 LOKA_TEST(testMacDisplayAppearanceUsesNativeBestMatch)
+LOKA_TEST(testMacMainDisplayDepthAnswersFromTheMainScreen)
 LOKA_TEST(testMacApplicationItemNamesResourceDirectory)
 LOKA_TEST(testMacApplicationSidecarNamesBundleParent)
 LOKA_TEST(testMacApplicationSidecarDeclinesWhenParentReportsReadOnly)
