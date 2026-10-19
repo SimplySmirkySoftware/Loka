@@ -140,15 +140,16 @@ for script in MAIN.JS MINES.JS VIEWER.JS; do
     fail "all-apps did not copy SmirkyCard $script"
 done
 
-for stem in MACPORT PB100 PB180C PB550C PB5300C; do
+while read -r stem; do
+  case "$stem" in ''|\#*) continue ;; esac
   grep -F "$ALL_PROJECT/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/all-apps.log" >/dev/null || fail "missing picture $stem"
-done
+done < "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"
 # Adding a fourth card needs only a manifest edit; absent entries remain optional.
 printf '\r\n  # extra cards\r\n\r\n  ABSENT.JS  \r\n  FOURTH.JS  ' >> "$ALL_PROJECT/example/SmirkyCard/disk-scripts.txt"
 touch "$ALL_PROJECT/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all-apps.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 10 ] || fail "extended manifest must copy ten existing assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 44 ] || fail "extended manifest must copy 44 existing assets"
 for script in MAIN.JS MINES.JS VIEWER.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/$script> <:Loka:>" "$SANDBOX/all-apps.log" >/dev/null ||
     fail "extended manifest omitted $script"

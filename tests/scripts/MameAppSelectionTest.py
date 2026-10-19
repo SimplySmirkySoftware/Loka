@@ -49,7 +49,10 @@ class SelectionTest(unittest.TestCase):
                     self.assertIn("build/retro68/" + cpu + "/" + location + "/" + target + ".bin", calls)
                     self.assertIn("mame-dev-disk.sh|" + cpu + "|", calls)
                     if key == "SmirkyCard":
-                        for stem in ("MACPORT", "PB100", "PB180C", "PB550C", "PB5300C"):
+                        for line in (cards / "disk-pictures.txt").read_text().splitlines():
+                            stem = line.strip()
+                            if not stem or stem.startswith("#"):
+                                continue
                             self.assertIn(str(cards / "assets" / (stem + ".PICT")), calls)
                         with self.subTest(cpu=cpu, manifest="original"):
                             self.assertIn(str(root / "example/SmirkyCard/MAIN.JS") + " " +

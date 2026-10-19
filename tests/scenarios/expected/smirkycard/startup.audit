@@ -5,11 +5,19 @@ step id=1 due_tick=1 tick=1 status=succeeded error_kind=0 error_code=0 name=stat
 step id=2 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
 step id=3 due_tick=2 tick=2 status=succeeded error_kind=0 error_code=0 name=initial-browse
 step id=4 due_tick=0 tick=2 status=succeeded error_kind=0 error_code=0 name=
-log text=picture.MACPORT%20160x100
-log text=picture.PB100%20160x100
-log text=picture.PB180C%20160x100
-log text=picture.PB550C%20160x100
-log text=picture.PB5300C%20160x100
+log text=picture.MACPLUS%20320x200
+log text=picture.PB180C%20320x200
+log text=picture.PB550C%20320x200
+log text=picture.PDQ%20320x200
+log text=picture.PISMO%20320x200
+log text=picture.TIBOOK%20320x200
+log text=picture.IBOOKG3%20320x200
+log text=picture.MB2006%20320x200
+log text=picture.MBP2011%20320x200
+log text=picture.MBP2015%20320x200
+log text=picture.MBP2019%20320x200
+log text=picture.MBP2023%20320x200
+log text=picture.NEO%20320x200
 step id=5 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=pictures-loaded
 step id=6 due_tick=0 tick=3 status=succeeded error_kind=0 error_code=0 name=
 terminal status=succeeded

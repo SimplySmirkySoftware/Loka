@@ -482,33 +482,48 @@ refuses a longer one at configure time.
 
 ## LaptopTracker.JS card
 
-[LAPTOP.JS](LAPTOP.JS) is an illustrated guide to five Apple portable Macs
-(Macintosh Portable, PowerBook 100, 180c, 550c and 5300c): a toolbar, a tall
-card list, a wide horizontal ScrollView carousel, and a detail page, all in one card whose
-seats hold the selection, the page and the presentation. Its five pictures are
-`c.state.image('MACPORT')` and friends, loaded from [disk-pictures.txt](disk-pictures.txt)
-when the card is constructed. The carousel holds one Row of five Cards; the
-arrows move the selection (heading and counter), while scrolling is the viewer's.
-The list follows its ScrollView viewport: a positive width below `NARROW = 320`
-selects one column; otherwise it keeps the existing two columns. One Flow watches
-`this.viewport` and writes the `narrow`/`wideList` bool seats (`Show` has no negation
-form). Three per-row wide Shows and five per-card narrow Shows sit directly under
-the list's rows VStack: eight children, with wide leaves at depth 8 and narrow
-leaves at depth 7. The Tall/Wide toolbar toggle still selects the list or carousel;
-it does not follow the viewport. Open it from the first card's `./LAPTOP.JS` button; its toolbar's `./MAIN.JS` button returns to the built-in cards.
+[LAPTOP.JS](LAPTOP.JS) shows 13 Macs, from Macintosh Plus to MacBook Neo,
+with a tall list, a horizontal carousel and a detail page. The card loads its
+pictures once: `c.machine.displayDepth !== null && c.machine.displayDepth < 8`
+selects `NAMEM` (320x200 mono) for details and `NAMEMS` (160x100 mono) for
+list/carousel thumbnails; otherwise `NAME` (320x200 color) serves both.
+Named seats always refer to full pictures. Card sizes remain 150x94, 110x70
+and 320x200 respectively. [disk-pictures.txt](disk-pictures.txt) stages all 39
+machine stems; ICON variants are generated but not staged.
 
-[LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) drives it: the initial list, the five picture
-facts, open details from the list, Back with the selection kept, the carousel
-(selection kept, arrows wrap in both directions), open details from a carousel
-cell, and the way back to the list. Host coverage runs as part of the default
-`LokaSmirkyCardTests` run (or `--laptop-scenario` alone) with a 2 by 3 decoder
-double, announced to the scenario through `LAPTOP_PICTURE_SIZE`. Its 100-wide
-Null viewport selects the narrow arm; `LAPTOP_NARROW_LIST` makes the scenario
-require that arm's native button ids. For Classic,
-build `LokaLaptopStandaloneFlow68K_APPL` and stage the five `.PICT` files beside it:
+The list follows its viewport: positive width below 320 selects one column.
+Seven wide row Shows and seven narrow Shows containing paired VStacks give
+14 children, with both arms' leaves at depth 8 (inclusive). Carousel and detail
+rows each contain 13 children, below the 16-child wall. Tall/Wide still selects
+list/carousel independently of viewport width.
+
+The original hand-drawn artwork is by the repository owner, licensed under the
+same license as the repository. Regenerate all 84 PNG/PICT outputs (including
+ICON) with Pillow installed:
 
 ```sh
-LOKA_TAB_COUNT=6 tests/toolbox/run-standalone.sh build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin example/SmirkyCard/assets/MACPORT.PICT example/SmirkyCard/assets/PB100.PICT example/SmirkyCard/assets/PB180C.PICT example/SmirkyCard/assets/PB550C.PICT example/SmirkyCard/assets/PB5300C.PICT --expect example/SmirkyCard/tests/LAPTOP.audit
+python3 example/SmirkyCard/assets/smirkytracker/generate_smirkytracker.py
 ```
 
-The whole LOG.TXT is the [expected audit](tests/LAPTOP.audit).
+[LAPTOP.FLOW.JS](LAPTOP.FLOW.JS) checks all 13 pictures, list/detail navigation,
+selection and carousel wrapping. `LokaSmirkyCardTests --laptop-scenario` uses a
+2x3 decoder fixture (`LAPTOP_PICTURE_SIZE`) and the Null narrow viewport
+(`LAPTOP_NARROW_LIST`). The [expected audit](tests/LAPTOP.audit) uses shipped
+320x200 full-picture dimensions.
+
+For Classic, build `LokaLaptopStandaloneFlow68K_APPL`. The runner takes file
+arguments, so expand the manifest in Bash. `LOKA_TAB_COUNT` is the number of
+items on the staged disk (the application and 39 pictures): the Finder's Tab
+cursor starts on the application and a full cycle lands on it again.
+
+```sh
+pictures=()
+while read -r stem; do
+  case "$stem" in ''|\#*) continue ;; esac
+  pictures+=("example/SmirkyCard/assets/$stem.PICT")
+done < example/SmirkyCard/disk-pictures.txt
+LOKA_TAB_COUNT=40 \
+  tests/toolbox/run-standalone.sh \
+  build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin \
+  "${pictures[@]}" --expect example/SmirkyCard/tests/LAPTOP.audit
+```

@@ -109,21 +109,22 @@ run_all() {
 run_all
 [ "$(grep -c '^hformat ' "$SANDBOX/all.log")" -eq 1 ] || fail "All reformatted more than once"
 [ "$(grep -c '^hcopy <-m>' "$SANDBOX/all.log")" -eq 10 ] || fail "All must copy ten apps"
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 10 ] || fail "All must copy all ten assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 44 ] || fail "All must copy all 44 assets"
 for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "All omitted SmirkyCard $script"
 done
-for stem in MACPORT PB100 PB180C PB550C PB5300C; do
+while read -r stem; do
+  case "$stem" in ''|\#*) continue ;; esac
   grep -F "$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/all.log" >/dev/null || fail "missing picture $stem"
-done
+done < "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"
 # A manifest-only addition must retain the original calls and append one script.
 # Exercise CRLF, whitespace, comments, and an unterminated final line as well.
 printf '\r\n  # extra card\r\n\r\n  FOURTH.JS  ' >> "$SANDBOX/repo/example/SmirkyCard/disk-scripts.txt"
 touch "$SANDBOX/repo/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 11 ] || fail "manifest addition did not copy eleven assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 45 ] || fail "manifest addition did not copy 45 assets"
 for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "extended manifest omitted $script"

@@ -4529,14 +4529,93 @@ namespace
     }
   }
 
+  const char *const laptopStems[] = {"MACPLUS",
+                                     "PB180C",
+                                     "PB550C",
+                                     "PDQ",
+                                     "PISMO",
+                                     "TIBOOK",
+                                     "IBOOKG3",
+                                     "MB2006",
+                                     "MBP2011",
+                                     "MBP2015",
+                                     "MBP2019",
+                                     "MBP2023",
+                                     "NEO"};
+
+  // Exercise the production query through ScriptRuntime; no production test API.
+  template <int Depth> class LaptopPicturePlatform : public NamedPicturePlatform
+  {
+  public:
+    virtual bool queryMainDisplayDepth(int &out) const
+    {
+      if (Depth == 0)
+        return NamedPicturePlatform::queryMainDisplayDepth(out);
+      out = Depth;
+      return true;
+    }
+    virtual bool openFile(const loka::file::File &file, loka::platform::file::FileHandle &out) const
+    {
+      const bool mono = Depth == 1;
+      const int index = this->opens % (mono ? 26 : 13);
+      const std::string expected =
+          std::string(laptopStems[index % 13]) + (mono ? (index < 13 ? "M" : "MS") : "") + ".PNG";
+      LOKA_VERIFY(file.relativePath().compare(loka::core::String::Utf8(expected.data(), expected.size())) == 0);
+      return NamedPicturePlatform::openFile(file, out);
+    }
+  };
+
+  void checkLaptopPictureChoice(NamedPicturePlatform &context, bool mono)
+  {
+    std::string source = readCardSource("LAPTOP.JS");
+    // Register a test subclass solely to retain the actual instance. Its
+    // inherited constructor and all production composition methods are intact.
+    const std::string registration = "card('first', class {";
+    const std::string::size_type start = source.find(registration);
+    LOKA_VERIFY(start != std::string::npos);
+    source.replace(start, registration.size(), "class LaptopUnderTest {");
+    const std::string::size_type end = source.rfind("});");
+    LOKA_VERIFY(end != std::string::npos);
+    source.replace(end,
+                   3,
+                   "}\ncard('first', class extends LaptopUnderTest {"
+                   "constructor(c){super(c);globalThis.laptop=this;}});");
+    CardRunnerHarness h(source.c_str(), "scenario('first',c=>c.run(Flow().step(()=>{})));", 7, true, &context);
+    h.mount();
+    expectJs(h.runtime, "laptop.c.error.get()", "");
+    LOKA_VERIFY(context.decodes == (mono ? 26 : 13));
+    expectJs(h.runtime, "laptop.thumbs === laptop.pics", mono ? "false" : "true");
+    expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
+    expectJs(h.runtime, "laptop.pics.length===13 && laptop.thumbs.length===13", "true");
+    expectJs(h.runtime, "laptop.list().child.children.length", "14");
+    expectJs(h.runtime,
+             "(()=>{const depths=[];function walk(t,d){"
+             "if(t.testId && /Laptop\\.(Open|Narrow)\\./.test(t.testId))depths.push(d);"
+             "if(t.child)walk(t.child,d+1);if(t.children)t.children.forEach(c=>walk(c,d+1));}"
+             "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===8)})()",
+             "true");
+    // Inspect the actual ImageView inputs, not merely the existence of thumbs.
+    expectJs(h.runtime, "laptop.machineCard(0,150,94,'x','x').child.children[0].seat===laptop.thumbs[0]", "true");
+  }
+
   void checkLaptopScenario()
   {
     std::fputs("[pin] LAPTOP.JS scenario under the Null harness\n", stderr);
     LOKA_VERIFY(makeDirectory("_named_pictures"));
-    const char *stems[] = {"MACPORT", "PB100", "PB180C", "PB550C", "PB5300C"};
-    for (unsigned i = 0; i < 5; ++i)
-      writeMain((std::string("_named_pictures/") + stems[i] + ".PNG").c_str(), "img");
-    NamedPicturePlatform context;
+    const char *suffixes[] = {"", "M", "MS"};
+    for (unsigned i = 0; i < 13; ++i)
+      for (unsigned j = 0; j < 3; ++j)
+        writeMain((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str(), "img");
+    {
+      std::fputs("[pin] laptop picture choice: null color, 1-bit full + thumbnails, 8-bit color\n", stderr);
+      LaptopPicturePlatform<0> unknown;
+      checkLaptopPictureChoice(unknown, false);
+      LaptopPicturePlatform<1> mono;
+      checkLaptopPictureChoice(mono, true);
+      LaptopPicturePlatform<8> color;
+      checkLaptopPictureChoice(color, false);
+    }
+    LaptopPicturePlatform<0> context;
     const std::string source = readCardSource("LAPTOP.JS");
     const std::string companion = "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n"
                                   "globalThis.LAPTOP_NARROW_LIST = true;\n"
@@ -4566,8 +4645,8 @@ namespace
       LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
       if (cell == 2)
       {
-        LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macport"));
-        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Narrow.pb100"));
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macplus"));
+        LOKA_VERIFY(!windowNode(*h.window, "Laptop.Narrow.pb180c"));
       }
       else if (cell == 3)
       {
@@ -4575,12 +4654,12 @@ namespace
         LOKA_VERIFY(!windowNode(*h.window, "Laptop.Presentation"));
       }
       else
-        LOKA_VERIFY(windowNode(*h.window, "Laptop.Narrow.pb100"));
+        LOKA_VERIFY(windowNode(*h.window, "Laptop.Narrow.pb180c"));
       std::string audit = readScenarioAudit();
       // Only the Null decoder's fixture dimensions differ from the shipped pictures.
       std::string::size_type position = 0;
       while ((position = audit.find("%202x3\n", position)) != std::string::npos)
-        audit.replace(position, 7, "%20160x100\n");
+        audit.replace(position, 7, "%20320x200\n");
       const std::string expected =
           cell ? std::string("../../tests/scenarios/expected/smirkycard/") + cells[cell] + ".audit"
                : "tests/LAPTOP.audit";
@@ -4602,7 +4681,19 @@ namespace
             h.admission->flush();
           }
           const bool narrow = widths[i] == 319;
-          const char *ids[] = {"macport", "pb100", "pb180c", "pb550c", "pb5300c"};
+          const char *ids[] = {"macplus",
+                               "pb180c",
+                               "pb550c",
+                               "pdq",
+                               "pismo",
+                               "tibook",
+                               "ibookg3",
+                               "mb2006",
+                               "mbp2011",
+                               "mbp2015",
+                               "mbp2019",
+                               "mbp2023",
+                               "neo"};
           for (unsigned j = 0; j < sizeof(ids) / sizeof(ids[0]); ++j)
           {
             const std::string oneColumn = std::string("Laptop.Narrow.") + ids[j];
@@ -4613,8 +4704,10 @@ namespace
         }
       }
     }
-    for (unsigned i = 0; i < 5; ++i)
-      LOKA_VERIFY(std::remove((std::string("_named_pictures/") + stems[i] + ".PNG").c_str()) == 0);
+    for (unsigned i = 0; i < 13; ++i)
+      for (unsigned j = 0; j < 3; ++j)
+        LOKA_VERIFY(std::remove((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str())
+                    == 0);
     removeDirectory("_named_pictures");
   }
 
