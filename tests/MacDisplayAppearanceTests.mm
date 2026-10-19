@@ -94,24 +94,29 @@ void testMacDisplayAppearanceUsesNativeBestMatch()
 void testMacMainDisplayDepthAnswersFromTheMainScreen()
 {
   printf("\n==== [testMacMainDisplayDepthAnswersFromTheMainScreen] start ====\n");
-  // The rail answers from the main screen: presence and value from one call,
-  // through the base pointer the SmirkyCard host holds.
+  // The rail answers from the main display, the first of -screens (the one
+  // with the menu bar), not -mainScreen (the key window's): presence and value
+  // from one call, through the base pointer the SmirkyCard host holds.
   MacPlatformContext context;
   const PlatformContext *base = &context;
   int depth = -1;
-  NSScreen *main = [NSScreen mainScreen];
-  if (!main)
+  NSArray *screens = [NSScreen screens];
+  if (![screens count])
   {
     LOKA_VERIFY(!base->queryMainDisplayDepth(depth));
     LOKA_VERIFY(depth == -1);
-    printf("[skip] no main screen in this session; the decline branch is the one pinned\n");
+    printf("[skip] no screens in this session; the decline branch is the one pinned\n");
   }
   else
   {
+    NSScreen *primary = [screens objectAtIndex:0];
     LOKA_VERIFY(base->queryMainDisplayDepth(depth));
     LOKA_VERIFY(depth > 0);
-    LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([main depth]));
-    printf("[skip] no-main-screen decline branch: this session has a main screen (depth %d)\n", depth);
+    LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([primary depth]));
+    if ([NSScreen mainScreen] == primary || !([NSScreen mainScreen]))
+      printf("[skip] mainScreen-differs-from-primary branch: one screen or the key window is on the primary (depth %d)\n", depth);
+    else
+      LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([primary depth]) && depth != -1);
   }
   printf("==== [testMacMainDisplayDepthAnswersFromTheMainScreen] PASSED ====\n");
 }
