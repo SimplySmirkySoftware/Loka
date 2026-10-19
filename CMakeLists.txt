@@ -863,6 +863,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endforeach()
 
   add_test(NAME testToolboxParkedEditorPress COMMAND LokaToolboxTextEditorTests parked-press)
+  add_test(NAME testToolboxParkedEditorKeys COMMAND LokaToolboxTextEditorTests parked-keys)
   add_test(NAME testToolboxEditorBarDrawnAtRender COMMAND LokaToolboxTextEditorTests render-bar)
 
   foreach(_editor_request_case input-door request report project input clear epilogue refuse clamp
