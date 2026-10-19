@@ -1,6 +1,7 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #include "ToolboxUnitLedger.hpp"
+#include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
 #include "ToolboxFrostCache.hpp"
 #include "ToolboxScrollKey.hpp"
@@ -135,7 +136,6 @@ public:
                                  const loka::app::scene::WriteSeat<int> &selectedIndexSeat,
                                  loka::core::EmitterState *onChange,
                                  int newIndex);
-  bool handleControlClick(const Point &point);
   void drawControlsInRect(const Rect &rect);
   void drawScrollBarControl(short id);
   void drawControl(ControlRef control);
@@ -236,7 +236,10 @@ public:
 
 private:
   void activateEditControl(std::size_t index);
-  bool handleEditClick(const Point &point);
+  void reachNativeButton(short id);
+  void reachNativeBar(short id);
+  void reachEditControl(loka::app::scene::NodeContext *context);
+  void reachPopupHit(ToolboxPopupMenuContext *context);
   friend class ToolboxTextMeasureScope;
   template <typename Controller>
   friend void ReconcileToolboxTextSubscription(Controller &,
@@ -247,6 +250,7 @@ private:
   friend class ToolboxTextContext;
   friend class ToolboxCellContext;
   friend class ToolboxButtonContext;
+  friend class ToolboxScrollBarContext;
   friend class ToolboxPopupMenuContext;
   friend class ToolboxEditTextContext;
   friend class ToolboxTextEditorContext;
@@ -318,6 +322,7 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxPressLedger pressLedger_;
   ToolboxFrostCache frostCache_;
   ToolboxErasedPass erasedPass_;
 

@@ -70,6 +70,7 @@ public:
   }
 
 private:
+  friend class ToolboxScenePlatformController;
   /** Capture local data and report whether existing controller rows need refresh. */
   bool captureProps();
   /** Completed face inputs; only the drawer owns presentation history. */

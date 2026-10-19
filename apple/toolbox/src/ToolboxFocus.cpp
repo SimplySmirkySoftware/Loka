@@ -188,7 +188,7 @@ bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
 bool ToolboxScenePlatformController::handleKeyDown(char key)
 {
   EditTextControlBinding *focusedEdit = this->editControls_.focused();
-  // Same refusal as handleScrollKey; presses use pressLandsOnParkedRow.
+  // Same refusal as handleScrollKey; presses use the resolved press door.
   if (focusedEdit && ParkedContext(focusedEdit->ownerContext))
     return true;
   if (focusedEdit && focusedEdit->te)
@@ -299,132 +299,6 @@ bool ToolboxScenePlatformController::handleTextKey(char key)
   return true;
 }
 
-/** One content press scans this controller's seven row vectors, without allocation.
-    Each rect-matching native bar also scans the controller's viewport bindings. */
-bool ToolboxScenePlatformController::pressLandsOnParkedRow(const Point &point) const
-{
-  for (std::size_t i = 0; i < this->buttonControls_.size(); ++i)
-  {
-    const ButtonControlBinding &row = this->buttonControls_[i];
-    if (row.control && (**row.control).contrlVis && PtInRect(point, &row.rect) && ParkedContext(row.context))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
-  {
-    const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
-    if (!row.control || !(**row.control).contrlVis || !PtInRect(point, &row.rect))
-      continue;
-    if (row.editor.editor())
-    {
-      if (ParkedContext(row.editor.editor()))
-        return true;
-      continue;
-    }
-    const loka::app::ScrollViewNode *scrollView = 0;
-    for (std::size_t j = 0; j < this->scrollBarLedger_.viewportScrollBars_.size(); ++j)
-    {
-      const ViewportScrollBarBinding &viewport = this->scrollBarLedger_.viewportScrollBars_[j];
-      if (viewport.barId[loka::app::SCROLL_BAR_VERTICAL] == row.resourceId
-          || viewport.barId[loka::app::SCROLL_BAR_HORIZONTAL] == row.resourceId)
-      {
-        scrollView = viewport.scrollView;
-        break;
-      }
-    }
-    if (scrollView)
-    {
-      if (scrollView->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
-        return true;
-    }
-    else if (ParkedContext(row.ownerContext))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->editControls_.size(); ++i)
-  {
-    const EditTextControlBinding &row = this->editControls_[i];
-    if (PtInRect(point, &row.rect) && ParkedContext(row.ownerContext))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->hitLedger_.editHits_.size(); ++i)
-  {
-    const EditHit &row = this->hitLedger_.editHits_[i];
-    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
-  {
-    const PopupHit &row = this->hitLedger_.popupHits_[i];
-    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->hitLedger_.cellHits_.size(); ++i)
-  {
-    const CellHit &row = this->hitLedger_.cellHits_[i];
-    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
-      return true;
-  }
-  for (std::size_t i = 0; i < this->hitLedger_.buttonHits_.size(); ++i)
-  {
-    const ButtonHit &row = this->hitLedger_.buttonHits_[i];
-    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
-      return true;
-  }
-  return false;
-}
-
-bool ToolboxScenePlatformController::handleMouseDown(const Point &point)
-{
-  if (this->pressLandsOnParkedRow(point))
-    return false;
-  if (this->handleControlClick(point))
-  {
-    return false;
-  }
-  if (this->handleEditClick(point))
-    return true;
-  for (size_t i = 0; i < this->hitLedger_.editHits_.size(); ++i)
-  {
-    EditHit &hit = this->hitLedger_.editHits_[i];
-    if (hit.text && PtInRect(point, &hit.rect))
-    {
-      loka::app::FocusParticipant *row =
-          hit.context && hit.context->owner()
-              ? loka::app::FocusParticipant::from(hit.context->owner()->asFocusParticipant())
-              : 0;
-      if (!row)
-        continue;
-      row->connectSource(this->fallbackFocus_);
-      return true;
-    }
-  }
-  this->fallbackFocus_.cut();
-  for (size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
-  {
-    PopupHit &hit = this->hitLedger_.popupHits_[i];
-    if (hit.context && PtInRect(point, &hit.rect) && hit.context->handleMouseDown(point, this))
-    {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < this->hitLedger_.cellHits_.size(); ++i)
-  {
-    CellHit &hit = this->hitLedger_.cellHits_[i];
-    if (hit.context && PtInRect(point, &hit.rect) && hit.context->handleMouseDown(point, this))
-    {
-      return false;
-    }
-  }
-  for (size_t i = 0; i < this->hitLedger_.buttonHits_.size(); ++i)
-  {
-    ButtonHit &hit = this->hitLedger_.buttonHits_[i];
-    if (hit.context && PtInRect(point, &hit.rect) && hit.context->handleMouseDown(point, this))
-    {
-      return false;
-    }
-  }
-  return false;
-}
-
 void ToolboxScenePlatformController::recordEditHit(const Rect &rect,
                                                    loka::core::State<loka::core::String> *text,
                                                    loka::app::scene::BoundaryNode *boundary,
@@ -443,5 +317,6 @@ void ToolboxScenePlatformController::recordEditHit(const Rect &rect,
   hit.text = text;
   hit.boundary = boundary;
   this->hitLedger_.editHits_.push_back(hit);
+  this->pressLedger_.append(PressRow::EDIT_HIT, this->hitLedger_.editHits_.size() - 1);
   this->bindTextState(text);
 }

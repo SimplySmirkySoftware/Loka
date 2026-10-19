@@ -24,6 +24,7 @@ void ToolboxScenePlatformController::recordButtonHit(const Rect &rect,
   hit.boundary = boundary;
   hit.context = context;
   hitLedger_.buttonHits_.push_back(hit);
+  this->pressLedger_.append(PressRow::BUTTON_HIT, this->hitLedger_.buttonHits_.size() - 1);
   bindEnabledState(enabled);
 }
 
@@ -45,6 +46,7 @@ void ToolboxScenePlatformController::recordCellHit(const Rect &rect,
   hit.context = context;
   hit.text = text;
   hitLedger_.cellHits_.push_back(hit);
+  this->pressLedger_.append(PressRow::CELL_HIT, this->hitLedger_.cellHits_.size() - 1);
   bindTextState(context->liveTextState());
 }
 

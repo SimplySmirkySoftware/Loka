@@ -379,7 +379,7 @@ void ToolboxApp::run()
           if (clicked)
           {
             // Queued damage never drops a press; the controller refuses presses
-            // on parked rows itself (pressLandsOnParkedRow, #1471).
+            // on parked rows itself through the render-order press door (#1493).
             clicked->handleMouseDown(event.where);
             this->cursorOwner_.reconcile();
           }

@@ -85,6 +85,7 @@ void ToolboxScenePlatformController::flushRetiredEntriesInto(
 
 void ToolboxScenePlatformController::clearControls()
 {
+  this->pressLedger_.clear();
   for (size_t i = 0; i < buttonControls_.size(); ++i)
   {
     if (buttonControls_[i].context)

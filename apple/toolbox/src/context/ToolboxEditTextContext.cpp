@@ -140,6 +140,7 @@ void ToolboxEditTextContext::draw(ToolboxScenePlatformController *controller)
     const ToolboxEditPresentation presentation = controller->ensureEditTextControl(this, textRect_, text_, lifetimeHint());
     if (presentation.te)
     {
+      controller->reachEditControl(this);
       this->repaint(presentation);
       return;
     }

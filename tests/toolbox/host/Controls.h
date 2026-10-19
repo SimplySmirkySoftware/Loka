@@ -10,7 +10,11 @@ typedef void (*ControlActionUPP)(ControlRef, ControlPartCode);
 #ifndef pascal
 #define pascal
 #endif
-enum { kControlIndicatorPart = 129 };
+enum
+{
+  kControlIndicatorPart = 129,
+  kControlButtonPart = 10
+};
 namespace toolbox_host
 {
   /** One gesture; callbacks are delivered only for non-thumb presses. */
@@ -111,6 +115,7 @@ void HiliteControl(ControlRef, short);
 void ShowControl(ControlRef);
 void Draw1Control(ControlRef);
 void HideControl(ControlRef);
+short TestControl(ControlRef, Point);
 short FindControl(Point, GrafPtr, ControlRef *);
 short TrackControl(ControlRef, Point, ControlActionUPP);
 #ifdef LOKA_HOST_CONTROL_WIDTH

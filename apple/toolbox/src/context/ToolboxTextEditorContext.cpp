@@ -974,6 +974,8 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
     return;
   RailOperation op(*this);
   TEHandle te = this->controller()->ensureTextEditorControl(this, this->rect_, this->lifetimeHint());
+  if (te)
+    this->controller()->reachEditControl(this);
   if (te != this->te_)
   {
     this->te_ = te;
@@ -998,6 +1000,7 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
             this->scrollBarId_, this->geometry().bar, this->te_ ? this : 0, presentation, this->lifetimeHint()))
       this->syncPresentation();
     this->repaint(this->te_);
+    this->controller()->reachNativeBar(this->scrollBarId_);
     this->controller()->drawScrollBarControl(this->scrollBarId_);
   }
 }

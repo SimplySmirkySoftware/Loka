@@ -51,6 +51,10 @@ public:
     }
     return 0;
   }
+  const UnitSeat &at(Mark index) const
+  {
+    return this->rows_[index];
+  }
   /** Strict pixel overlap: touching edges do not schedule replay. */
   static bool overlap(const Rect &a, const Rect &b, Rect &out)
   {
