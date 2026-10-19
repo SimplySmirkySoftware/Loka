@@ -1,6 +1,7 @@
 #include "Win32PaintGround.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32Window.hpp"
+#include "Win32DisplayDepth.hpp"
 #include "Win32App.hpp"
 #include <windows.h>
 #include <string>
@@ -632,18 +633,12 @@ bool Win32Window::queryDisplayDepth(int &out) const
     return false;
   }
   HDC dc = GetDC(hwnd_);
-  if (!dc)
+  const bool answered = loka::win32::queryDeviceContextDepth(dc, out);
+  if (dc)
   {
-    return false;
+    ReleaseDC(hwnd_, dc);
   }
-  const int bitsPerPixel = GetDeviceCaps(dc, BITSPIXEL) * GetDeviceCaps(dc, PLANES);
-  ReleaseDC(hwnd_, dc);
-  if (bitsPerPixel <= 0)
-  {
-    return false;
-  }
-  out = bitsPerPixel;
-  return true;
+  return answered;
 }
 
 bool Win32Window::queryDisplayAppearance(DisplayAppearance &out) const

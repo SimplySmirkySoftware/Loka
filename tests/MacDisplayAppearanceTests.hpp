@@ -3,5 +3,6 @@
 
 void testMacDisplayAppearanceDeclinesWithoutMatchingCapability();
 void testMacDisplayAppearanceUsesNativeBestMatch();
+void testMacMainDisplayDepthAnswersFromTheMainScreen();
 
 #endif // LOKA_MAC_DISPLAY_APPEARANCE_TESTS_HPP

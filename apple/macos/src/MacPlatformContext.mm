@@ -4,6 +4,7 @@
 #include "core/resource/BlobRange.hpp"
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
+#include "MacScreenDepth.hpp"
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileHandle.hpp"
 #include "app/core/AppConfigurable.hpp"
@@ -34,6 +35,17 @@ loka::app::scene::NodeContext *MacPlatformContext::createNodeContext(loka::app::
     context->setOwner(node);
   }
   return context;
+}
+
+bool MacPlatformContext::queryMainDisplayDepth(int &out) const
+{
+  // The main display is the one with the menu bar, the first of -screens; not
+  // -mainScreen, which follows the key window (bot P2 on #1481). That matches
+  // the other rails' answer (Toolbox GetMainDevice, Win32 GetDC(0)). A window
+  // asks the screen it overlaps most instead (MacWindow::queryDisplayDepth),
+  // same extraction.
+  NSArray *screens = [NSScreen screens];
+  return loka::macos::queryScreenDepth([screens count] ? [screens objectAtIndex:0] : nil, out);
 }
 
 bool MacPlatformContext::openFile(const loka::file::File &item, loka::platform::file::FileHandle &out) const
