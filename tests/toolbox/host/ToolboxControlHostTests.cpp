@@ -2,6 +2,7 @@
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxScrollViewDecisions.hpp"
 #include "support/TestVerify.hpp"
+#include "support/LifecycleFactTestAccess.hpp"
 #include <cstring>
 #include <cstdio>
 using namespace loka::app;
@@ -33,19 +34,23 @@ namespace
     NodeState<int> seat;
     EmitterState change;
     Changes notices;
+    ScrollBarNode owner;
     Fixture()
         : port(window.window()),
           controller(&window),
           value(10),
-          seat(&value, &tracker)
+          seat(&value, &tracker),
+          owner(ScrollBarProps())
     {
+      NotifySubtreeNodeAttached(&this->owner);
+      this->owner.setContext(new NativeNodeContext());
       tracker.addState(&value);
       change.bind(&Changes::changed, &notices, false);
       LOKA_VERIFY(controller.ensureScrollBarControl(
           controller.allocateControlId(),
           barRect,
           ScrollBarProps().value(seat).range(0, 100).lineStep(2).pageStep(15).onChange(&change),
-          0,
+          this->owner.getContext(),
           NATIVE_HINT_DEFAULT));
     }
     ~Fixture()
@@ -68,7 +73,8 @@ namespace
     const bool off = std::strcmp(which, "app-off-arrow") == 0;
     c->tracking = toolbox_host::TrackScript(page ? 23 : off ? 21 : 129, page ? 23 : 0, 90);
     c->tracking.callbacks.assign(3, page ? 23 : 21);
-    LOKA_VERIFY(f.controller.handleControlClick(center));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, center));
     const int expected = page ? 55 : off ? 16 : 10;
     LOKA_VERIFY(f.value.get() == expected && c->value == expected);
     LOKA_VERIFY(f.notices.count == (page || off ? 1u : 0u));
@@ -87,24 +93,27 @@ namespace
     DisposeControl(front);
     LOKA_VERIFY(FindControl(center, f.window.window(), &found) == 129 && found == c);
     // System 7 MAME maciix probe, 2026-10-17: hilite 255 and invisible
-    // controls return part 0 and NULL, so the inactive swallowing branch is unreachable.
+    // FindControl returns part 0 and NULL; the press door instead shields
+    // a visible inactive row selected from render order.
     LOKA_VERIFY(f.controller.ensureScrollBarControl(f.controller.scrollControl(0).resourceId,
                                                     barRect,
                                                     ScrollBarProps().value(f.seat).range(10, 10),
-                                                    0,
+                                                    f.owner.getContext(),
                                                     NATIVE_HINT_DEFAULT));
     LOKA_VERIFY(!f.controller.scrollControl(0).active && c->hilite == 255);
     const unsigned before = toolbox_host::tracks;
     LOKA_VERIFY(FindControl(center, f.window.window(), &found) == 0 && !found);
-    LOKA_VERIFY(!f.controller.handleControlClick(center));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, center));
     LOKA_VERIFY(f.controller.ensureScrollBarControl(f.controller.scrollControl(0).resourceId,
                                                     barRect,
                                                     ScrollBarProps().value(f.seat).range(0, 100),
-                                                    0,
+                                                    f.owner.getContext(),
                                                     NATIVE_HINT_DEFAULT));
     HideControl(c);
     LOKA_VERIFY(FindControl(center, f.window.window(), &found) == 0 && !found);
-    LOKA_VERIFY(!f.controller.handleControlClick(center));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, center));
     LOKA_VERIFY(toolbox_host::tracks == before && f.notices.count == 0);
   }
   void thumbAction(ControlRef c, ControlPartCode)
@@ -138,7 +147,8 @@ namespace
     c->tracking.callbacks.assign(3, 23);
     const std::size_t before = c->calls.size();
     LOKA_VERIFY(TrackControl(c, center, thumbAction) == 129);
-    LOKA_VERIFY(c->value == 40 && c->calls.size() == before + 1);
+    LOKA_VERIFY(c->value == 40 && c->calls.size() == before + 2);
+    LOKA_VERIFY(c->calls[before].operation == "track-action" && c->calls[before + 1].operation == "value");
     c->tracking.release = 0;
     c->tracking.finalValue = 60;
     LOKA_VERIFY(TrackControl(c, center, thumbAction) == 0 && c->value == 40);
@@ -195,6 +205,7 @@ namespace
     tracker.addState(&value);
     NodeState<Frame> seat(&value, &tracker);
     ScrollViewNode scroll(ScrollViewProps().viewport(seat).contentInsets(ScrollViewContentInsets::of(12, 3)));
+    NotifySubtreeNodeAttached(&scroll);
     const Rect viewport = {0, 0, 80, 100};
     controller.ensureViewportScrollBarControl(
         viewport, &scroll, 300 + 12 + 3, 80, scroll.requestedOrigin().y, ToolboxScrollViewMetrics(0, 0), false);
@@ -207,7 +218,8 @@ namespace
     c->tracking = toolbox_host::TrackScript(page ? 23 : off ? 21 : 129, page ? 23 : 0, 90);
     c->tracking.callbacks.assign(2, page ? 23 : 21);
     const Point point = {40, 90};
-    LOKA_VERIFY(controller.handleControlClick(point));
+    controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
     LOKA_VERIFY(value.get().y == (page ? 166 : off ? 10 : 8));
     LOKA_VERIFY(value.get().x == 7 && value.get().width == 90 && value.get().height == 80);
     LOKA_VERIFY(notices.count == (page || off ? 1u : 0u));
@@ -216,10 +228,12 @@ namespace
     controller.ensureViewportScrollBarControl(viewport, &scroll, 80, 80, 0, ToolboxScrollViewMetrics(0, 0), false);
     LOKA_VERIFY(!controller.scrollControl(0).active && c->hilite == 255);
     // The same System 7 MAME probe applies to viewport-owned bars.
-    LOKA_VERIFY(!controller.handleControlClick(point));
+    controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
     controller.ensureViewportScrollBarControl(viewport, &scroll, 315, 80, 20, ToolboxScrollViewMetrics(0, 0), false);
     HideControl(c);
-    LOKA_VERIFY(!controller.handleControlClick(point));
+    controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
   }
   void ports()
   {

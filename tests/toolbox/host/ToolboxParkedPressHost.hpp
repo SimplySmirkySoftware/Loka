@@ -129,6 +129,7 @@ namespace parked_press
     }
     void install(Kind kind)
     {
+      this->installBeneath();
       switch (kind)
       {
       case NATIVE_BUTTON:
@@ -268,9 +269,66 @@ namespace parked_press
         LOKA_VERIFY(false);
         break;
       }
-      this->installBeneath();
+      this->controller.publishFixturePressOrder();
     }
   };
+
+  void barParts()
+  {
+    Fixture f;
+    f.install(DSL_BAR);
+    ControlRef bar = f.controller.scrollControl(0).control;
+    bar->tracking = toolbox_host::TrackScript(129, 129, 42);
+    ToolboxInputDoor::mouseDown(f.controller, f.point);
+    bool thumb = false;
+    for (std::size_t i = 0; i < bar->calls.size(); ++i)
+      if (bar->calls[i].operation == "track-no-action")
+        thumb = true;
+    LOKA_VERIFY(thumb && f.value.get() == 42);
+    bar->calls.clear();
+    bar->tracking = toolbox_host::TrackScript(21, 21, 0);
+    bar->tracking.callbacks.assign(2, 21);
+    ToolboxInputDoor::mouseDown(f.controller, f.point);
+    bool arrow = false;
+    for (std::size_t i = 0; i < bar->calls.size(); ++i)
+      if (bar->calls[i].operation == "track-action")
+        arrow = true;
+    LOKA_VERIFY(arrow && f.value.get() == 44);
+    std::puts("[pin] N6 thumb has no action UPP, arrow has action UPP passed");
+  }
+#ifndef LOKA_HOST_CONTROL_ORDER
+  void erasedHit()
+  {
+    Fixture f;
+    f.install(BUTTON_HIT);
+    ButtonNode last((ButtonProps()));
+    NotifySubtreeNodeAttached(&last);
+    ToolboxButtonContext *lastContext = new ToolboxButtonContext();
+    last.setContext(lastContext);
+    const Rect away = {200, 200, 220, 240};
+    lastContext->rect_ = away;
+    lastContext->emitter_ = &f.beneathAction;
+    ToolboxHitLedger::ButtonHit hit = f.controller.buttonHits()[0];
+    hit.context = lastContext;
+    hit.rect = away;
+    f.controller.installHit(hit);
+    // A shield between ground and target makes a missing shift observable
+    // even when vector capacity leaves a readable copy past its new end.
+    const ToolboxUnitLedger::UnitSeat unit = {0, 1, f.rect, f.rect};
+    f.controller.unitLedger_.push(unit);
+    f.controller.pressLedger_.begin();
+    f.controller.pressLedger_.append(PressRow::BUTTON_HIT, 0);
+    f.controller.pressLedger_.append(PressRow::UNIT, 0);
+    f.controller.pressLedger_.append(PressRow::BUTTON_HIT, 1);
+    f.controller.pressLedger_.append(PressRow::BUTTON_HIT, 2);
+    f.controller.pressLedger_.commit();
+    f.controller.retireNodeContext(f.beneath.getContext(), NATIVE_HINT_DEFAULT);
+    LOKA_VERIFY(f.controller.buttonHits().size() == 2);
+    ToolboxInputDoor::mouseDown(f.controller, f.point);
+    LOKA_VERIFY(f.actions == 1 && f.beneathActions == 0);
+    std::puts("[pin] N8 hit retirement shifts later index passed");
+  }
+#endif
 
   void pin(Kind kind)
   {
@@ -399,6 +457,7 @@ namespace parked_press
       replacement->onPropsApplied();
       replacement->updateRect(oldRect);
       replacement->render(&f.controller);
+      f.controller.pressLedger_.commit();
       LOKA_VERIFY(!(**control).contrlVis);
       ToolboxInputDoor::mouseDown(f.controller, f.point);
       LOKA_VERIFY(f.actions == 0 && f.beneathActions == 1);

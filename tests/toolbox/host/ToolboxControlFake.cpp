@@ -24,7 +24,7 @@ ControlRef NewControl(GrafPtr owner,
                       short value,
                       short minimum,
                       short maximum,
-                      short,
+                      short proc,
                       long)
 {
   if (toolbox_host::refuseControls)
@@ -33,6 +33,8 @@ ControlRef NewControl(GrafPtr owner,
     return 0;
   }
   ControlRef c = new HostControl(value);
+  if (proc == 0)
+    c->tracking = toolbox_host::TrackScript(kControlButtonPart, kControlButtonPart);
   c->owner = owner;
   c->rect = *rect;
   c->minimum = minimum;
@@ -110,6 +112,12 @@ void HideControl(ControlRef c)
     c->owner->native.update.push_back(c->rect);
   c->visible = false;
 }
+short TestControl(ControlRef control, Point point)
+{
+  return control && control->visible && control->hilite != 255 && PtInRect(point, &control->rect)
+             ? control->tracking.press
+             : 0;
+}
 short FindControl(Point point, GrafPtr owner, ControlRef *out)
 {
   *out = 0;
@@ -127,6 +135,7 @@ short FindControl(Point point, GrafPtr owner, ControlRef *out)
 short TrackControl(ControlRef c, Point, ControlActionUPP action)
 {
   ++toolbox_host::tracks;
+  RecordControl(c, action ? "track-action" : "track-no-action", false);
   const toolbox_host::TrackScript script = c->tracking;
   if (script.press == kControlIndicatorPart)
   {

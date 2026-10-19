@@ -146,6 +146,7 @@ namespace
     void click(int x = 0)
     {
       Point p = {5, static_cast<short>(x + 5)};
+      controller.publishFixturePressOrder();
       LOKA_VERIFY(ToolboxInputDoor::mouseDown(controller, p));
     }
     void expect(EditTextNode *node)
@@ -417,6 +418,7 @@ namespace
     LOKA_VERIFY(cursor.state()->get() == before);
     LOKA_VERIFY(lines.revision().get().content == revision.content);
     Point click = {45, 85};
+    f.controller.publishFixturePressOrder();
     LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, click));
     LOKA_VERIFY((**te).selStart == (**te).selEnd);
     LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD));
@@ -563,6 +565,7 @@ namespace
       ToolboxScenePlatformController reader(&f.nativeWindow);
       reader.recordEditHit(f.rect(), f.text.state(), 0, f.context(f.first));
       Point p = {5, 5};
+      reader.publishFixturePressOrder();
       LOKA_VERIFY(ToolboxInputDoor::mouseDown(reader, p));
       LOKA_VERIFY(SceneFocusTestAccess::sourced(*f.first.asFocusParticipant()));
     }
@@ -689,6 +692,7 @@ namespace
     f.click();
     f.expect(&f.first);
     Point outside = {1000, 1000};
+    f.controller.publishFixturePressOrder();
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, outside));
     f.expect(0);
     LOKA_VERIFY(!ToolboxInputDoor::keyDown(f.controller, 'x'));

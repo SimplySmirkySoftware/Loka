@@ -142,6 +142,7 @@ namespace parked_dialog
     LOKA_VERIFY(controller.buttonHits().size() == 1);
     LOKA_VERIFY(controller.buttonHits()[0].context == context);
     const Point point = {5, 5};
+    controller.publishFixturePressOrder();
     ToolboxInputDoor::mouseDown(controller, point);
     LOKA_VERIFY(root->clicks == 0);
     NodeContext *focused = 0;

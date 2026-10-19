@@ -5,7 +5,11 @@ private:
   friend class ToolboxInputDoor;
   void render();
   void renderDirty(const Rect &rect);
-  bool pressLandsOnParkedRow(const Point &point) const;
+  friend class ToolboxPressLedger;
+  bool resolvePress(const PressRow &, const Point &, ResolvedPress &) const;
+  PressOwnerFact pressOwnerFact(const ResolvedPress &) const;
+  bool dispatchPress(const ResolvedPress &, const Point &);
+  bool pressOnEmptySpace();
   bool handleMouseDown(const Point &point);
   bool handleKeyDown(char key);
   bool handleScrollKey(ToolboxScrollKey key);

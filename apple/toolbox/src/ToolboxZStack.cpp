@@ -108,6 +108,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     }
     if (!painted)
       loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
+    this->pressLedger_.append(PressRow::UNIT, cursor);
     ToolboxPaintClip clip(row.rect, ToolboxPaintClip::INTERSECT);
     if (clip.isActive())
       RenderNode(child, this);
@@ -120,7 +121,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     fully covered ground/earlier-unit controls are outside the v1 contract.
     Their selection highlight, TEActivate/TEDeactivate paint, and TrackControl
     hilite stay on screen until an unrelated repaint presents the unit area.
-    Registration ownership belongs to the 2b hit shield, not this geometry test. */
+    The press ledger shields covered ground independently of this paint repair. */
 void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
 {
   if (!this->window_)

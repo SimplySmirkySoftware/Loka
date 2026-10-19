@@ -825,7 +825,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlOrderTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlOrderTests)
   set_target_properties(LokaToolboxControlOrderTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case ParkedNativeButton RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
+  foreach(_order_case PressDoor ParkedNativeButton RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
   endforeach()
 

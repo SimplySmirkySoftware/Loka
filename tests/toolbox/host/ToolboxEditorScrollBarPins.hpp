@@ -189,17 +189,20 @@ namespace
     const Point point = {50, 200};
     bar->tracking = toolbox_host::TrackScript(23, 0, 0);
     bar->tracking.callbacks.assign(2, 23);
-    LOKA_VERIFY(f.controller.handleControlClick(point));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
     LOKA_VERIFY(bar->value == 8 && f.context->geometry().text.top - te.destRect.top == 112);
     LOKA_VERIFY(te.selStart == start && te.selEnd == end && f.restores() == restores);
     LOKA_VERIFY(!f.controller.editControls_.focused());
     OffsetRect(&te.destRect, 0, -3);
     const Rect before = te.destRect;
     bar->tracking = toolbox_host::TrackScript(129, 0, 12);
-    LOKA_VERIFY(f.controller.handleControlClick(point));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
     LOKA_VERIFY(EqualRect(&before, &te.destRect));
     bar->tracking = toolbox_host::TrackScript(129, 129, bar->value);
-    LOKA_VERIFY(f.controller.handleControlClick(point));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
     LOKA_VERIFY(EqualRect(&before, &te.destRect));
   }
   void BarInactiveHit()
@@ -212,8 +215,10 @@ namespace
     {
       if (i)
         HideControl(bar);
-      LOKA_VERIFY(!f.controller.handleControlClick(point));
-      LOKA_VERIFY(f.controller.handleEditClick(point));
+      f.controller.publishFixturePressOrder();
+      LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
+      f.controller.publishFixturePressOrder();
+      LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
       LOKA_VERIFY(!f.controller.editControls_.focused());
       LOKA_VERIFY(!(**f.te()).active && (**f.te()).selStart == selection);
       LOKA_VERIFY(!PtInRect(point, &f.controller.editControls_[0].rect));
@@ -237,18 +242,23 @@ namespace
     const short selection = te.selStart;
     HostTECompletion click = {te.destRect, 0, 0};
     te.clickCompletions.push_back(click);
-    LOKA_VERIFY(!f.controller.handleEditClick(outside));
-    LOKA_VERIFY(!f.controller.handleControlClick(inside));
-    LOKA_VERIFY(f.controller.handleEditClick(inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, outside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));
     LOKA_VERIFY(te.clickCompletions.size() == 1 && te.selStart == selection);
     LOKA_VERIFY(!f.controller.editControls_.focused() && !te.active);
     LOKA_VERIFY(!PtInRect(outside, &f.controller.editControls_[0].rect));
     LOKA_VERIFY(!PtInRect(inside, &f.controller.editControls_[0].rect));
     row.usedThisFrame = false;
-    LOKA_VERIFY(!f.controller.handleEditClick(inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));
     row.usedThisFrame = true;
     row.editor.revoke();
-    LOKA_VERIFY(!f.controller.handleEditClick(inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));
   }
   ToolboxScenePlatformController *retiringController = 0;
   void VerifyRevokedBeforeHide(ControlRef control)
@@ -290,7 +300,8 @@ namespace
     ShowControl(original);
     original->tracking = toolbox_host::TrackScript(129, 129, 5);
     const Point stalePoint = {50, 200};
-    LOKA_VERIFY(f.controller.handleControlClick(stalePoint));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, stalePoint));
     LOKA_VERIFY(!f.commands.state()->get().isNone());
     HideControl(original);
     LOKA_VERIFY(!f.controller.presentEditorScrollBar(id, ToolboxEditorScrollBarPresentation(5, 2, 1)));

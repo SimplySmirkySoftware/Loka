@@ -1638,8 +1638,9 @@ later child is unsupported. On Win32, stacking order makes Tab visit a unit befo
 every earlier sibling under the same native parent, including siblings outside
 the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today.
 
-Win32, macOS, and Toolbox use opaque units by default. Toolbox still lacks the 2b hit shield,
-so do not place a unit over a live control: a unit's own live control must lie
+Win32, macOS, and Toolbox use opaque units by default. Toolbox has the 2b hit shield:
+a press on a unit's empty area stops there and leaves focus unchanged; controls
+inside it and later units take precedence in render order. A unit's own live control must lie
 entirely inside it (a partly contained own editor is unspecified), partial overlaps
 are repaired on the overlap, and fully covered ground or earlier-unit controls
 are outside the contract and get no repair, leaving selection highlight,

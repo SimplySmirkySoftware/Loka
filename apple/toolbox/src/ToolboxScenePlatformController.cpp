@@ -612,6 +612,7 @@ void ToolboxScenePlatformController::destroy()
     assert(!this->borrowPhase().open());
 #endif
   rootNode_ = 0;
+  this->pressLedger_.clear();
   hitLedger_.popupHits_.clear();
   clearTextBindings();
   clearEnabledBindings();
@@ -626,91 +627,7 @@ void ToolboxScenePlatformController::destroy()
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
-  if (context)
-  {
-    std::vector<loka::core::State<loka::core::String> *> retiredTextStates;
-    std::vector<loka::core::State<bool> *> retiredEnabledStates;
-
-    this->retireEditTextControl(context, lifetimeHint);
-    assert(!editControls_.contains(context) &&
-           "detach must strip the context's native edit binding before context reclaim");
-
-    for (size_t i = 0; i < hitLedger_.buttonHits_.size();)
-    {
-      if (static_cast<loka::app::scene::NodeContext *>(hitLedger_.buttonHits_[i].context) == context)
-      {
-        retiredEnabledStates.push_back(hitLedger_.buttonHits_[i].enabled);
-        hitLedger_.buttonHits_.erase(hitLedger_.buttonHits_.begin() + i);
-      }
-      else
-      {
-        ++i;
-      }
-    }
-    for (size_t i = 0; i < hitLedger_.cellHits_.size();)
-    {
-      if (static_cast<loka::app::scene::NodeContext *>(hitLedger_.cellHits_[i].context) == context)
-      {
-        retiredTextStates.push_back(hitLedger_.cellHits_[i].text);
-        hitLedger_.cellHits_.erase(hitLedger_.cellHits_.begin() + i);
-      }
-      else
-      {
-        ++i;
-      }
-    }
-    for (size_t i = 0; i < hitLedger_.popupHits_.size();)
-    {
-      if (static_cast<loka::app::scene::NodeContext *>(hitLedger_.popupHits_[i].context) == context)
-      {
-        retiredEnabledStates.push_back(hitLedger_.popupHits_[i].enabled);
-        hitLedger_.popupHits_.erase(hitLedger_.popupHits_.begin() + i);
-      }
-      else
-      {
-        ++i;
-      }
-    }
-
-    for (size_t i = 0; i < hitLedger_.editHits_.size();)
-    {
-      if (hitLedger_.editHits_[i].context == context)
-      {
-        loka::core::State<loka::core::String> *text = hitLedger_.editHits_[i].text;
-        retiredTextStates.push_back(text);
-        hitLedger_.editHits_.erase(hitLedger_.editHits_.begin() + i);
-      }
-      else
-        ++i;
-    }
-    for (size_t i = 0; i < hitLedger_.textHits_.size();)
-    {
-      if (hitLedger_.textHits_[i].context == context)
-      {
-        retiredTextStates.push_back(hitLedger_.textHits_[i].text);
-        hitLedger_.textHits_.erase(hitLedger_.textHits_.begin() + i);
-      }
-      else
-        ++i;
-    }
-
-    for (size_t i = 0; i < retiredTextStates.size(); ++i)
-    {
-      loka::core::State<loka::core::String> *text = retiredTextStates[i];
-      if (text && !this->hasLiveBinding(text))
-      {
-        this->unbindTextState(text);
-      }
-    }
-    for (size_t i = 0; i < retiredEnabledStates.size(); ++i)
-    {
-      loka::core::State<bool> *enabled = retiredEnabledStates[i];
-      if (enabled && !this->hasLiveBinding(enabled))
-      {
-        this->unbindEnabledState(enabled);
-      }
-    }
-  }
+#include "ToolboxRetireContextRows.inc"
 }
 
 #include "ToolboxContextProps.cpp"
@@ -1284,38 +1201,6 @@ void ToolboxScenePlatformController::syncNativePoolStats()
 }
 
 #include "ToolboxButtonControl.cpp"
-
-void ToolboxScenePlatformController::destroyButtonControl(short resourceId,
-                                                           loka::app::scene::NativeLifetimeHint lifetimeHint)
-{
-  for (size_t i = 0; i < buttonControls_.size(); ++i)
-  {
-    ButtonControlBinding &binding = buttonControls_[i];
-    if (binding.resourceId != resourceId)
-    {
-      continue;
-    }
-    if (binding.context)
-      binding.context->forgetPresentedControl();
-    ControlRef control = binding.control;
-    binding.control = 0;
-    binding.emitter = 0;
-    loka::core::State<bool> *retiredEnabled = binding.enabled;
-    binding.enabled = 0;
-    buttonControls_.erase(buttonControls_.begin() + i);
-    if (retiredEnabled && !this->hasLiveBinding(retiredEnabled))
-      this->unbindEnabledState(retiredEnabled);
-    controlIds_.release(resourceId);
-    if (control)
-    {
-      // Context destruction can run inside an update pass; disposal waits for
-      // the platform safe point like every other retired native handle.
-      HideControl(control);
-      queueRetiredControl(control, lifetimeHint);
-    }
-    return;
-  }
-}
 
 #include "ToolboxScrollBarLedger.cpp"
 
