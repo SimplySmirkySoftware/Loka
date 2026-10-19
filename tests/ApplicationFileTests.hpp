@@ -2,7 +2,7 @@
 #define LOKA_APPLICATION_FILE_TESTS_HPP
 
 void testApplicationFileCompositionKeepsExplicitBase();
-void testApplicationRelativePredicateEnforcesSingleSegment();
+void testApplicationRelativePredicateEnforcesTwoComponents();
 void testNullApplicationFileUsesOnlyInjectedDirectory();
 void testGenericFlushWriteRefusesClosedDurabilityDoor();
 

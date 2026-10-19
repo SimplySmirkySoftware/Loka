@@ -27,7 +27,7 @@ namespace loka
         return false;
 #else
         Str63 name;
-        if (!loka::toolbox::CopyStringToHfsName(item.relativePath(), name))
+        if (!loka::toolbox::CopyApplicationRelativeToHfsPath(item.relativePath(), name))
         {
           return false;
         }

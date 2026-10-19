@@ -27,7 +27,7 @@ PAYLOADS = (
     ("68k", "SmirkyCard", "LokaSmirkyCard68K", None),
     ("ppc", "SmirkyCard", "LokaSmirkyCardPPC", None),
 )
-TOOL_NAMES = ("hformat", "hcopy", "humount", "hmount", "hls", "hattrib")
+TOOL_NAMES = ("hmkdir", "hformat", "hcopy", "humount", "hmount", "hls", "hattrib")
 FLOPPY_SIZES = (800 * 1024, 1440 * 1024)
 LARGE_IMAGE_STEP = 512 * 1024
 
@@ -136,7 +136,8 @@ def build_image(tools, output, binary, data_files, name, size):
         image.write_bytes(b"")
         with image.open("r+b") as stream:
             stream.truncate(size)
-        env = dict(os.environ, HOME=str(stage))
+        env = dict(os.environ, HOME=str(stage),
+                   RETRO68_TOOLCHAIN_BIN=str(Path(tools["hmkdir"]).parent))
 
         def hfs(tool, *args):
             return subprocess.check_output(
@@ -165,7 +166,11 @@ hfs_populate "$home" "$label" "$image" 0 1 "$binary" "$@"
             # Reopen the persisted image, not the writer's mounted state.
             hfs("hmount", image)
             listing = hfs("hls", "-1a", ":").splitlines()
-            if sorted(listing) != sorted([name, *(data.name for data in data_files)]):
+            def data_path(data):
+                return (":Pictures:" if data.parent == ROOT / "example/SmirkyCard/assets" else ":") + data.name
+
+            expected_root = {name, *(data_path(data).split(":")[1] for data in data_files)}
+            if sorted(listing) != sorted(expected_root):
                 raise ValueError(f"Unexpected root contents in {name}: {listing}")
             hfs("hcopy", "-m", ":" + name, stage / "app.bin")
             if macbinary(stage / "app.bin") != macbinary(binary):
@@ -175,10 +180,10 @@ hfs_populate "$home" "$label" "$image" 0 1 "$binary" "$@"
             for data in data_files:
                 raw = stage / (data.name + ".raw")
                 encoded = stage / (data.name + ".bin")
-                hfs("hcopy", "-r", ":" + data.name, raw)
+                hfs("hcopy", "-r", data_path(data), raw)
                 if raw.read_bytes() != data.read_bytes():
                     raise ValueError(f"Data readback differs: {data}")
-                hfs("hcopy", "-m", ":" + data.name, encoded)
+                hfs("hcopy", "-m", data_path(data), encoded)
                 metadata = macbinary(encoded)
                 if metadata[3] or (is_card_script(data) and metadata[1] != b"TEXTttxt"):
                     raise ValueError(f"Unexpected data forks or Finder signature: {data}")

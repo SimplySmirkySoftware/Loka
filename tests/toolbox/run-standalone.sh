@@ -14,6 +14,8 @@ APP="$1"; shift
 [[ "$APP" = *.bin ]] && [ -f "$APP" ] || usage
 APP_NAME="$(basename "$APP" .bin)"
 [[ "$APP_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || usage
+# mame-dev-disk stages canonical example/SmirkyCard/assets/*.PICT inputs
+# in Pictures/ through hfs_copy_data, just like the scenario runner.
 EXTRA_FILES=()
 EXPECTED=""
 # HFS names are case insensitive. Refuse collisions so staged item count and

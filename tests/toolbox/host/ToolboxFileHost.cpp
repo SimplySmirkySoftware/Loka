@@ -149,8 +149,14 @@ OSErr FSRead(short ref, long *count, void *out)
 OSErr FSMakeFSSpec(short volume, long parent, const unsigned char *name, FSSpec *out)
 {
   if (!name || !out || name[0] > 63 || parent < INT32_MIN || parent > INT32_MAX) return paramErr;
-  *out = toolbox_file_host::Spec(volume, static_cast<int32_t>(parent),
-      std::string(reinterpret_cast<const char *>(name + 1), name[0]));
+  std::string relative(reinterpret_cast<const char *>(name + 1), name[0]);
+  // The flat fixture models a same-directory partial pathname. Nested HFS
+  // directory lookup remains a native runtime check; do not fake its result.
+  if (!relative.empty() && relative[0] == ':')
+    relative.erase(0, 1);
+  if (relative.find(':') != std::string::npos)
+    return paramErr;
+  *out = toolbox_file_host::Spec(volume, static_cast<int32_t>(parent), relative);
   return files.find(Address(*out)) == files.end() ? fnfErr : noErr;
 }
 OSErr GetCurrentProcess(ProcessSerialNumber *out)

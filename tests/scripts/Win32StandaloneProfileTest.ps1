@@ -132,7 +132,8 @@ try {
     $smirkyScripts += @([System.IO.File]::ReadAllLines(
             (Join-Path $ProjectDirectory "example/SmirkyCard/disk-pictures.txt")) |
         ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith("#") } |
-        ForEach-Object { $_ + ".PNG" })
+        ForEach-Object { "Pictures/" + $_ + ".PNG" })
+    New-Item -ItemType Directory -Force -Path (Join-Path $smirkyRoot "Pictures") | Out-Null
     foreach ($name in $smirkyScripts) {
         [System.IO.File]::WriteAllText((Join-Path $smirkyRoot $name), "// $name")
     }

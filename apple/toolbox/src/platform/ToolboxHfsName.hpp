@@ -16,6 +16,12 @@ namespace loka
      * UTF-8, and characters that MacRoman cannot represent.
      */
     bool CopyStringToHfsName(const loka::core::String &value, Str63 out);
+
+    /** Builds a colon-prefixed application partial pathname. Each component
+        uses CopyStringToHfsName; the complete Pascal payload must fit 63 bytes.
+        The caller must first pass ApplicationRelativeIsOpenable. */
+    bool CopyApplicationRelativeToHfsPath(const loka::core::String &value, Str63 out);
+
   } // namespace toolbox
 } // namespace loka
 

@@ -36,7 +36,7 @@ smirkycard_scripts() {
   # Deliberate twin of the script grammar above.
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
-    printf '%s\n' "${script}.PNG"
+    printf '%s\n' "Pictures/${script}.PNG"
   done < "${FAKE_REPO}/example/SmirkyCard/disk-pictures.txt"
 }
 
@@ -81,7 +81,7 @@ while IFS='|' read -r target_name memberships output_shape rel_path; do
       bundle_rel_path="${rel_path%%/Contents/MacOS/*}"
       bundle_root="${UNIVERSAL_ROOT}/$(basename "${bundle_rel_path}")"
       output_path="${bundle_root}/Contents/MacOS/$(basename "${rel_path}")"
-      mkdir -p "$(dirname "${output_path}")" "${bundle_root}/Contents/Resources"
+      mkdir -p "$(dirname "${output_path}")" "${bundle_root}/Contents/Resources/Pictures"
       printf '%s\n' "metadata-${target_name}" >"${bundle_root}/Contents/Info.plist"
       printf '%s\n' "${target_name}" >"${output_path}"
       chmod +x "${output_path}"

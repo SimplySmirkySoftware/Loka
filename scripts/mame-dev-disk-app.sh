@@ -106,7 +106,7 @@ case "$key" in
             case "$script" in ''|\#*) continue ;; esac
             data+=("example/SmirkyCard/$script")
         done < "$workspace_dir/example/SmirkyCard/disk-scripts.txt"
-        # Same grammar as the adjacent script manifest; pictures are data forks.
+        # hfs_copy_data stages these canonical asset paths in Pictures/.
         while IFS=$' \t\r' read -r script || [ -n "$script" ]; do
             case "$script" in ''|\#*) continue ;; esac
             data+=("example/SmirkyCard/assets/$script.PICT")

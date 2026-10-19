@@ -116,35 +116,7 @@ for bin in "${MACBINARY_PATHS[@]}"; do
   fi
 done
 
-find_retro68_tool() {
-  local name="$1"
-  local candidate
-
-  if [ -n "${RETRO68_TOOLCHAIN_BIN:-}" ] \
-    && [ -x "$RETRO68_TOOLCHAIN_BIN/$name" ]; then
-    echo "$RETRO68_TOOLCHAIN_BIN/$name"
-    return
-  fi
-  if command -v "$name" >/dev/null 2>&1; then
-    command -v "$name"
-    return
-  fi
-  if [ -n "${RETRO68_BUILD_DIR:-}" ] \
-    && [ -x "$RETRO68_BUILD_DIR/toolchain/bin/$name" ]; then
-    echo "$RETRO68_BUILD_DIR/toolchain/bin/$name"
-    return
-  fi
-  for candidate in \
-    "$HOME/Retro68-build/toolchain/bin/$name" \
-    "$HOME/Documents/Projects/Retro68-build/toolchain/bin/$name"; do
-    if [ -x "$candidate" ]; then
-      echo "$candidate"
-      return
-    fi
-  done
-  echo "Error: Retro68 tool not found: $name" >&2
-  exit 1
-}
+. "$SCRIPT_DIR/hfs-disk.sh"
 
 HMOUNT="$(find_retro68_tool hmount)"
 HCOPY="$(find_retro68_tool hcopy)"
@@ -189,9 +161,7 @@ for bin in "${MACBINARY_PATHS[@]}"; do
 done
 
 # bash 3.2 (macOS) treats an empty array expansion as unbound under set -u.
-for plain_data in ${PLAIN_DATA_PATHS[@]+"${PLAIN_DATA_PATHS[@]}"}; do
-  HOME="$HFS_HOME" "$HCOPY" -r "$plain_data" "$DEST_DIR"
-done
+hfs_copy_data "$HFS_HOME" "$DEST_DIR" ${PLAIN_DATA_PATHS[@]+"${PLAIN_DATA_PATHS[@]}"}
 
 HOME="$HFS_HOME" "$HUMOUNT"
 MOUNTED=0
