@@ -374,7 +374,7 @@ cp "$REPO_DIR/tests/scenarios/expected/smirkycard/startup.audit" \
   "$SANDBOX/repo/tests/scenarios/expected/smirkycard/startup.audit"
 cp "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/classic-build-provenance.txt" \
   "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard/classic-build-provenance.txt"
-run_case smirkycard startup 7 unset
+run_case smirkycard startup 41 120
 for stem in $(sed '/^#/d; /^$/d' "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"); do
   grep -Fxq -- "$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/dev-disk-arguments" \
     || fail "SmirkyCard did not stage $stem"
