@@ -1,36 +1,76 @@
-// LAPTOP.JS - LaptopTracker: an illustrated guide to Apple's portable Macs.
+// LAPTOP.JS - LaptopTracker: an illustrated guide to Apple's Macs.
 // Different eras. Different CPUs. Same declarative app.
 //
-// One card owns everything: five pictures loaded by name at construction,
+// One card owns everything: pictures loaded by name at construction,
 // the selected index, the browse/detail page and the wide/tall presentation.
 // Nothing reloads when a page or presentation switches.
 
 const MACHINES = [
-  {id: 'macport', art: 'MACPORT', short: 'Portable', name: 'Macintosh Portable', year: '1989',
-   cpu: 'Motorola 68000, 16 MHz', ram: '1 MB (up to 8 MB)',
-   display: '9.8-inch 640x400 active-matrix, 1-bit', storage: '40 MB SCSI HDD, 1.44 MB floppy',
-   weight: '7.2 kg (15.8 lb)',
-   blurb: "Apple's first battery-powered Mac: a desktop-class active-matrix screen in a 7 kg slab, with the trackball beside the keyboard."},
-  {id: 'pb100', art: 'PB100', short: 'PB 100', name: 'PowerBook 100', year: '1991',
-   cpu: 'Motorola 68HC000, 16 MHz', ram: '2 MB (up to 8 MB)',
-   display: '9-inch 640x400 passive-matrix, 1-bit', storage: '20 MB HDD, external floppy',
-   weight: '2.3 kg (5.1 lb)',
-   blurb: 'A Sony-built shrink of the Portable: the trackball moved to a palm rest in front of the keyboard, the shape every laptop since has copied.'},
+  {id: 'macplus', art: 'MACPLUS', short: 'Mac Plus', name: 'Macintosh Plus', year: '1986',
+   cpu: 'Motorola 68000, 8 MHz', ram: '1 MB (up to 4 MB)',
+   display: '9-inch 512x342 monochrome CRT', storage: '800 KB floppy, external SCSI',
+   weight: '7.5 kg (16.5 lb)',
+   blurb: 'Not in the collection, but used now and then in online emulators for 68000 @ 8 MHz tests.'},
   {id: 'pb180c', art: 'PB180C', short: 'PB 180c', name: 'PowerBook 180c', year: '1993',
    cpu: 'Motorola 68030, 33 MHz + 68882 FPU', ram: '4 MB (up to 14 MB)',
    display: '8.4-inch 640x480 active-matrix, 256 colors', storage: '80 or 160 MB HDD',
    weight: '3.2 kg (7.1 lb)',
-   blurb: 'The first PowerBook with a 640x480 active-matrix colour panel; the top of the 100-series line.'},
+   blurb: 'The first PowerBook with a 640x480 active-matrix colour panel; the top of the 100-series line. Bought headless in 2026, without its display; the display was reattached later.'},
   {id: 'pb550c', art: 'PB550C', short: 'PB 550c', name: 'PowerBook 550c', year: '1995',
    cpu: 'Motorola 68040, 33 MHz (FPU built in)', ram: '8 MB (up to 36 MB)',
    display: '10.4-inch 640x480 active-matrix, 256 colors', storage: '500 or 750 MB HDD',
    weight: '3.3 kg (7.3 lb)',
    blurb: 'Sold only in Japan: a black 500-series body with a full 68040 and the largest 68k PowerBook screen.'},
-  {id: 'pb5300c', art: 'PB5300C', short: 'PB 5300c', name: 'PowerBook 5300c/100', year: '1995',
-   cpu: 'PowerPC 603e, 100 MHz', ram: '8 or 16 MB (up to 64 MB)',
-   display: '10.4-inch 640x480 active-matrix, thousands of colors', storage: '500 or 750 MB HDD',
-   weight: '2.8 kg (6.2 lb)',
-   blurb: 'The first PowerPC PowerBook: a trackpad instead of a trackball, and a hot-swappable expansion bay.'},
+  {id: 'pdq', art: 'PDQ', short: 'PDQ', name: 'PowerBook G3 Series "PDQ"', year: '1998',
+   cpu: 'PowerPC G3, 233/266/300 MHz', ram: '32 MB (up to 192 MB)',
+   display: '14.1-inch 1024x768 active-matrix', storage: '2, 4 or 8 GB IDE HDD',
+   weight: '3.5 kg (7.8 lb)',
+   blurb: 'The last Wallstreet revision: expansion bays and a G3 in a curving black case. In the collection since around 2006.'},
+  {id: 'pismo', art: 'PISMO', short: 'Pismo', name: 'PowerBook G3 "Pismo"', year: '2000',
+   cpu: 'PowerPC G3, 400 or 500 MHz', ram: '64 or 128 MB (up to 512 MB)',
+   display: '14.1-inch 1024x768 active-matrix', storage: '6, 12 or 18 GB ATA HDD',
+   weight: '2.8 kg (6.1 lb)',
+   blurb: 'FireWire joins the PowerBook. Added in 2026; stands in for the iBook G3 once owned.'},
+  {id: 'tibook', art: 'TIBOOK', short: 'TiBook', name: 'PowerBook G4 Titanium 1 GHz', year: '2002',
+   cpu: 'PowerPC G4, 1 GHz (now 867 MHz)', ram: '512 MB (up to 1 GB)',
+   display: '15.2-inch 1280x854 widescreen', storage: '60 GB Ultra ATA HDD',
+   weight: '2.45 kg (5.4 lb)',
+   blurb: 'Titanium and a wide screen. Owned since 2022; its logic board failed, so it now runs on an 867 MHz board.'},
+  {id: 'ibookg3', art: 'IBOOKG3', short: 'iBook G3', name: 'iBook G3 500 MHz', year: '2001',
+   cpu: 'PowerPC G3, 500 MHz', ram: '64 or 128 MB (up to 640 MB)',
+   display: '12.1-inch 1024x768 active-matrix', storage: '10 GB Ultra ATA HDD',
+   weight: '2.2 kg (4.9 lb)',
+   blurb: 'The small white iBook, owned from 2001 to 2011: a decade of G3 computing.'},
+  {id: 'mb2006', art: 'MB2006', short: 'MacBook', name: 'MacBook (2006)', year: '2006',
+   cpu: 'Intel Core Duo, 1.83 or 2 GHz', ram: '512 MB (up to 2 GB)',
+   display: '13.3-inch 1280x800 widescreen', storage: '60 or 80 GB SATA HDD',
+   weight: '2.36 kg (5.2 lb)',
+   blurb: 'The white Intel MacBook, in the collection since 2011.'},
+  {id: 'mbp2011', art: 'MBP2011', short: 'MBP 2011', name: 'MacBook Pro 15-inch (2011)', year: '2011',
+   cpu: 'Intel Core i7, 2 or 2.2 GHz quad-core', ram: '4 GB (up to 8 GB)',
+   display: '15.4-inch 1440x900 widescreen', storage: '500 or 750 GB SATA HDD',
+   weight: '2.54 kg (5.6 lb)',
+   blurb: 'My first MacBook Pro, owned since 2011, and the GPU is still fine. This picture also stands for the 2009 15-inch added in 2025 as a spare.'},
+  {id: 'mbp2015', art: 'MBP2015', short: 'MBP 2015', name: 'MacBook Pro 13-inch (2015)', year: '2015',
+   cpu: 'Intel Core i5, 2.7 GHz dual-core', ram: '8 GB (up to 16 GB)',
+   display: '13.3-inch 2560x1600 Retina', storage: '128 GB PCIe flash',
+   weight: '1.58 kg (3.48 lb)',
+   blurb: 'Bought as a stand-in for the 2011; I used one at work. Its shape already resembles the Apple Silicon MacBook Pro.'},
+  {id: 'mbp2019', art: 'MBP2019', short: 'MBP 2019', name: 'MacBook Pro 16-inch (2019)', year: '2019',
+   cpu: 'Intel Core i9, 2.3 GHz; Radeon Pro 5600M', ram: '16 GB (up to 64 GB)',
+   display: '16-inch 3072x1920 Retina', storage: '1 TB SSD',
+   weight: '2.0 kg (4.3 lb)',
+   blurb: 'The last Intel generation, owned since 2025. Runs the Tahoe + Windows 10 + Mavericks VMs for Loka around the clock.'},
+  {id: 'mbp2023', art: 'MBP2023', short: 'M3 Max', name: 'MacBook Pro (2023, M3 Max)', year: '2023',
+   cpu: 'Apple M3 Max, 14-core CPU / 30-core GPU', ram: '36 GB unified memory',
+   display: '16.2-inch 3456x2234 Liquid Retina XDR', storage: '1 TB SSD',
+   weight: '2.16 kg (4.8 lb)',
+   blurb: 'My first Apple Silicon Mac, bought in 2023 to replace a 2018 13-inch i7. The current main machine.'},
+  {id: 'neo', art: 'NEO', short: 'Neo', name: 'MacBook Neo', year: '2026',
+   cpu: 'Apple A18 Pro, 6-core CPU / 5-core GPU', ram: '8 GB unified memory',
+   display: '13-inch 2408x1506 Liquid Retina', storage: '256 or 512 GB SSD',
+   weight: '1.23 kg (2.7 lb)',
+   blurb: 'The A18 Pro comes to the Mac in 2026. Had to buy it.'},
 ];
 // The Classic window is 420 px wide; its list remains above this breakpoint.
 const NARROW = 320;
@@ -45,8 +85,10 @@ card('first', class {
   constructor(c) {
     this.c = c;
     this.index = 0;
-    this.pics = MACHINES.map(m => c.state.image(m.art));
-    // Named seats so a scenario can ask c.test.imageFacts('pb100').
+    const mono = c.machine.displayDepth !== null && c.machine.displayDepth < 8;
+    this.pics = MACHINES.map(m => c.state.image(mono ? m.art + 'M' : m.art));
+    this.thumbs = mono ? MACHINES.map(m => c.state.image(m.art + 'MS')) : this.pics;
+    // Named seats so a scenario can ask c.test.imageFacts('pb180c').
     MACHINES.forEach((m, i) => { this[m.id] = this.pics[i]; });
     // Page and presentation, as the three things that can be on screen.
     // Depth 8 is the JS tree limit, so the page is not a wrapper seat: each
@@ -124,7 +166,7 @@ card('first', class {
   // which a Cell does not answer on any rail yet.
   machineCard(i, width, height, label, testId) {
     return Card(VStack(
-      ImageView(this.pics[i], {width: width, height: height, fit: 'contain'}),
+      ImageView(this.thumbs[i], {width: width, height: height, fit: 'contain'}),
       Button(label, () => this.open(i)).TEST_ID(testId)));
   }
 
@@ -159,10 +201,12 @@ card('first', class {
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id));
       rows.push(Show(this.wideList, Row(...cards)));
     }
-    // Three wide rows and five narrow cards share this column. Per-row/card
-    // Shows keep the wide leaves at depth 8 (narrow at 7), with eight children.
-    MACHINES.forEach((m, i) => rows.push(Show(this.narrow,
-      this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + m.id))));
+    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 8.
+    for (let i = 0; i < COUNT; i += 2) {
+      const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
+      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
+      rows.push(Show(this.narrow, VStack(...cards)));
+    }
     return ScrollView(VStack(...rows), {viewport: this.viewport});
   }
 

@@ -7,8 +7,42 @@
 # scripts/macos/standalone-release-stage.sh and tests/toolbox/run-scenario.sh parallel.
 # Pictures are binary: the script ASCII check does not apply.
 # Both assets/<stem>.PICT and assets/<stem>.PNG must exist; CMake refuses a missing twin.
-MACPORT
-PB100
+MACPLUS
+MACPLUSM
+MACPLUSMS
 PB180C
+PB180CM
+PB180CMS
 PB550C
-PB5300C
+PB550CM
+PB550CMS
+PDQ
+PDQM
+PDQMS
+PISMO
+PISMOM
+PISMOMS
+TIBOOK
+TIBOOKM
+TIBOOKMS
+IBOOKG3
+IBOOKG3M
+IBOOKG3MS
+MB2006
+MB2006M
+MB2006MS
+MBP2011
+MBP2011M
+MBP2011MS
+MBP2015
+MBP2015M
+MBP2015MS
+MBP2019
+MBP2019M
+MBP2019MS
+MBP2023
+MBP2023M
+MBP2023MS
+NEO
+NEOM
+NEOMS

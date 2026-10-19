@@ -292,7 +292,7 @@ class ExpectedAuditPinsTest(unittest.TestCase):
             if example == "smirkycard":
                 self.assertIn(b"name=initial-browse\n", audit)
                 self.assertIn(b"name=pictures-loaded\n", audit)
-                self.assertIn(b"log text=picture.MACPORT%20160x100\n", audit)
+                self.assertIn(b"log text=picture.MACPLUS%20320x200\n", audit)
                 continue
             identity = identities[example]
             self.assertIn(b"test\t" + identity + b"\n", audit)

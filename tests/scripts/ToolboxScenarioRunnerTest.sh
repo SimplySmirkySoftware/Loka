@@ -363,7 +363,7 @@ touch "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTests
 run_case smirkbench startup 4 unset
 run_case smirkbench surface-ticks 4 unset
 run_case smirkbench add-face 4 unset
-# SmirkyCard launch-only pin: the baked card still needs all five picture data forks.
+# SmirkyCard launch-only pin: the baked card still needs every manifest picture data fork.
 printf '%s\n' 'smirkycard startup' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
 mkdir -p "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard" \
   "$SANDBOX/repo/example/SmirkyCard/assets" "$SANDBOX/repo/tests/scenarios/expected/smirkycard"
