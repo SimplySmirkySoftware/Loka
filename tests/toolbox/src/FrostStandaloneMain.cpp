@@ -212,20 +212,12 @@ namespace
     }
     ~FrostConfig()
     {
+      // finish() restores the depth and writes the verdict while the runner can
+      // still read exitCode(); this only covers a run that never reached it.
       if (this->depthReady_)
-      {
-        const OSErr result = SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
-        if (this->log_)
-          std::fprintf(this->log_, "restore-depth err=%d\r", result);
-        if (result != noErr)
-          ++this->fail_;
-      }
+        SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
       if (this->log_)
-      {
-        std::fprintf(this->log_, "RESULT pass=%d fail=%d\r", this->pass_, this->fail_);
-        loka::platform::file::FlushWrite(this->log_, this->file_);
         std::fclose(this->log_);
-      }
     }
     int exitCode() const
     {
@@ -267,7 +259,17 @@ namespace
     }
     void finish()
     {
-      loka::platform::file::FlushWrite(this->log_, this->file_);
+      if (this->depthReady_)
+      {
+        const OSErr result = SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
+        this->depthReady_ = false;
+        std::fprintf(this->log_, "restore-depth err=%d\r", result);
+        if (result != noErr)
+          ++this->fail_;
+      }
+      std::fprintf(this->log_, "RESULT pass=%d fail=%d\r", this->pass_, this->fail_);
+      if (!loka::platform::file::FlushWrite(this->log_, this->file_))
+        ++this->fail_;
       this->app_->quit();
     }
     static void Idle(Window *window, double, void *data)
