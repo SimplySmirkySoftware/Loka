@@ -187,7 +187,7 @@ bool ToolboxFrostCache::prepare(WindowPtr window, short width, short height)
   return true;
 }
 
-bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect)
+bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect, const Rect &unit)
 {
   long version;
   if (this->fpu_ == TOOLBOX_FPU_NONE || Gestalt(gestaltQuickdrawVersion, &version) != noErr || version < gestalt32BitQD)
@@ -218,11 +218,13 @@ bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect)
   CopyBits(&window->portBits, reinterpret_cast<BitMap *>(*pixels.get()), &rect, &work, srcCopy, 0);
   if (QDError() != noErr)
     return false;
+  // A viewport may cut the unit: its last visible row is not its bottom.
+  const int hairline = unit.bottom == rect.bottom ? height - 1 : -1;
   unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(pixels.get()));
   const long stride = (**pixels.get()).rowBytes & 0x3FFF;
   for (int y = 0; y < height; ++y)
     for (int x = 0; x < width; ++x)
-      base[y * stride + x] = y == height - 1 ? this->hairline_ : this->milkIndex_[base[y * stride + x]];
+      base[y * stride + x] = y == hairline ? this->hairline_ : this->milkIndex_[base[y * stride + x]];
   scope.windowCurrent();
   CopyColors();
   // Do not widen the outer dirty clip. A changed screen CLUT leaves existing

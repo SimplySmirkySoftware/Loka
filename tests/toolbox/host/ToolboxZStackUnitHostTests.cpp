@@ -281,6 +281,9 @@ namespace
     LOKA_VERIFY(row.top == clip.top && row.bottom == 51);
     LOKA_VERIFY(row.left >= clip.left && row.right <= clip.right);
     LOKA_VERIFY(row.bottom != 60); // An unprojected seat would end here.
+    // The row also keeps the projected unit before the cut: scrolled 9 up.
+    const Rect unit = unitRow(controller, stack, 1)->unit;
+    LOKA_VERIFY(unit.bottom == row.bottom && unit.top == row.top - 9);
     Probe *refused = new Probe("refused-after-unit", 40);
     refused->refuse = true;
     stack->addChild(refused);

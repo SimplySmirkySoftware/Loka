@@ -21,8 +21,10 @@ public:
   ToolboxFrostCache();
   ~ToolboxFrostCache();
   /** Called once per eligible unit per erased composition walk; O(w*h) over
-      this owner's scratch pixels. False asks the caller to paint window ground. */
-  bool paint(WindowPtr window, const Rect &rect);
+      this owner's scratch pixels. `rect` is the unit's visible part and `unit`
+      the whole projected unit: the hairline is drawn only when the unit's own
+      bottom row is visible. False asks the caller to paint window ground. */
+  bool paint(WindowPtr window, const Rect &rect, const Rect &unit);
 
 private:
   friend class ToolboxFrostCacheInspection;

@@ -351,6 +351,17 @@ namespace
           const Rect line = {UnitHeight - 1, 0, UnitHeight, Width};
           this->record("hairline", captured && ok && actual.equals(reference, line));
           std::fprintf(this->log_, "comparison=byte-exact 8-bit readback after reference screen round-trip\r");
+          // A unit cut by a viewport: its last visible row is milk, as in the
+          // full paint, never a hairline at the cut.
+          EraseRect(&Whole);
+          ZStackNode *cutStack = this->node_->stack();
+          loka::dsl::CompositionCursor<Node> cutChildren(cutStack->childrenHead(), cutStack->childrenCount());
+          RenderNode(cutChildren.next(), controller);
+          ToolboxFrostCache cut;
+          const Rect visible = {0, 0, UnitHeight / 2, Width};
+          Capture cutCapture;
+          const bool cutOk = cut.paint(window->window(), visible, Unit) && cutCapture.read(window->window());
+          this->record("clipped-unit-hairline", captured && cutOk && cutCapture.equals(actual, visible));
           this->tinyAndGrowth(window);
         }
         else
@@ -395,7 +406,7 @@ namespace
           const Rect rect = {60, 60, static_cast<short>(60 + height), static_cast<short>(60 + width)};
           bool ok = before.read(window->window());
           const unsigned long start = Now();
-          ok = cache.paint(window->window(), rect) && ok;
+          ok = cache.paint(window->window(), rect, rect) && ok;
           std::fprintf(this->log_, "frost unit=%dx%d us=%lu\r", width, height, Now() - start);
           ok = after.read(window->window()) && ok;
           for (int y = 0; y < Height; ++y)
@@ -408,7 +419,7 @@ namespace
       this->record("tiny-units", tiny);
       GWorldPtr old = ToolboxFrostCacheInspection::world(cache);
       const unsigned long start = Now();
-      const bool grew = cache.paint(window->window(), Unit);
+      const bool grew = cache.paint(window->window(), Unit, Unit);
       const unsigned long elapsed = Now() - start;
       GWorldPtr replacement = ToolboxFrostCacheInspection::world(cache);
       const Rect bounds = replacement ? (**GetGWorldPixMap(replacement)).bounds : Rect();

@@ -612,7 +612,7 @@ public:
         : paints(0)
     {
     }
-    bool paint(ToolboxWindow::WindowPort *, const Rect &)
+    bool paint(ToolboxWindow::WindowPort *, const Rect &, const Rect &)
     {
       ++paints;
       return false;
