@@ -263,7 +263,7 @@ namespace
     return sourceFile.substr(0, marker) + "/" + (relative ? relative : "");
   }
 
-  /** The cells scenarios.txt registers for one example, in file order. */
+  /** Shared reel cells registered for one example, in file order. */
   std::vector<std::string> RegistryCells(const char *example)
   {
     std::vector<std::string> cells;
@@ -285,6 +285,9 @@ namespace
       {
         continue;
       }
+      // Real ADB input belongs to the Toolbox driver, never the shared reel.
+      if (entry == "helloworld bmi-tab")
+        continue;
       if (entry.substr(0, space) == example)
       {
         cells.push_back(entry.substr(space + 1));
@@ -496,13 +499,15 @@ void testScenarioReelCellTablesMatchSharedRegistry()
   VerifyTableMatchesRegistry("helloworld", loka::scenario_tests::HelloWorldReelCells());
 
   // The registration predicate answers from the same table, so a cell cannot
-  // be registered without joining the reel.
+  // be registered for shared execution without joining the reel.
   LOKA_VERIFY(loka::scenario_tests::IsMineSweeperScenario("new-game-twice"));
   LOKA_VERIFY(loka::scenario_tests::IsMineSweeperScenario("seeded-reveal"));
   LOKA_VERIFY(!loka::scenario_tests::IsMineSweeperScenario("startup"));
   LOKA_VERIFY(loka::scenario_tests::IsHelloWorldScenario("toggle-action-probe"));
   LOKA_VERIFY(loka::scenario_tests::IsHelloWorldScenario("bmi-roundtrip"));
   LOKA_VERIFY(!loka::scenario_tests::IsHelloWorldScenario("startup"));
+  LOKA_VERIFY(!loka::scenario_tests::IsHelloWorldScenario("bmi-tab"));
+  LOKA_VERIFY(!loka::scenario_tests::HelloWorldReelCells().contains("bmi-tab"));
 
   std::printf("testScenarioReelCellTablesMatchSharedRegistry passed\n");
 }

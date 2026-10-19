@@ -210,6 +210,27 @@ namespace
                            NULL);
   }
 
+  // Gives the host window the client size an explicit relayout will use. A
+  // Scene-driven pass lays out at the window's real client size, and the
+  // first layout now publishes the viewport size, which dirties layout once;
+  // a host that disagrees with the explicit size would let that second pass
+  // replace the geometry under test.
+  void sizeHostClient(HWND root, int width, int height)
+  {
+    RECT frame = {0, 0, width, height};
+    LOKA_VERIFY(AdjustWindowRectEx(&frame,
+                                   static_cast<DWORD>(GetWindowLongPtrW(root, GWL_STYLE)),
+                                   FALSE,
+                                   static_cast<DWORD>(GetWindowLongPtrW(root, GWL_EXSTYLE))));
+    LOKA_VERIFY(SetWindowPos(root,
+                             NULL,
+                             0,
+                             0,
+                             frame.right - frame.left,
+                             frame.bottom - frame.top,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE));
+  }
+
   void CountClickThunk(void *userData)
   {
     ++*static_cast<int *>(userData);
@@ -244,7 +265,62 @@ namespace
                         false);
     controller.relayout(width, height);
   }
+
+  void checkViewportSize(int contentWidth, int contentHeight, bool verticalOverflow, bool horizontalOverflow)
+  {
+    using namespace loka::app;
+    HWND root = createHostWindow();
+    LOKA_VERIFY(root);
+    {
+      Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+      RegisterWin32BuiltInSupport(controller);
+      ViewportFact fact(ScrollViewProps::topOrigin().y);
+      ScrollViewNode scroll(ScrollViewProps(fact.state()).contentInsets(ScrollViewContentInsets::of(12, 3)));
+      scroll.addChild(new ImageViewNode(ImageViewProps().size(contentWidth, contentHeight)));
+      establishLayout(controller, &scroll, 300, 140);
+      HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+      LOKA_VERIFY(viewport);
+      // At 96 dpi content units are client pixels. The vertical bar remains
+      // present even when disabled; insets affect the extent, not this size.
+      const int width = 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL);
+      const int height = 140 - 2 * Win32SceneLayout::kRootInset
+                         - (horizontalOverflow ? controller.displayScale().systemMetric(SM_CYHSCROLL) : 0);
+      const LONG_PTR style = GetWindowLongPtrW(viewport, GWL_STYLE);
+      LOKA_VERIFY((style & WS_VSCROLL) != 0);
+      LOKA_VERIFY(((style & WS_HSCROLL) != 0) == horizontalOverflow);
+      const SCROLLINFO vertical = scrollInfo(viewport);
+      LOKA_VERIFY((maximumOffset(vertical) > 0) == verticalOverflow);
+      const loka::core::Frame expected(0, -12, width, height);
+      const loka::core::Frame first = fact.state().get();
+      LOKA_VERIFY(first == expected);
+      const int firstWrites = fact.changeCount();
+      LOKA_VERIFY(firstWrites == 1);
+      fact.resetChangeCount();
+      controller.relayout(300, 140);
+      const loka::core::Frame second = fact.state().get();
+      const int secondWrites = fact.changeCount();
+      LOKA_VERIFY(second == expected);
+      LOKA_VERIFY(secondWrites == 0);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
 } // namespace
+
+void testWin32ScrollViewViewportSizeNoOverflow()
+{
+  checkViewportSize(100, 17, false, false);
+}
+
+void testWin32ScrollViewViewportSizeVerticalOverflow()
+{
+  checkViewportSize(100, 400, true, false);
+}
+
+void testWin32ScrollViewViewportSizeBothOverflows()
+{
+  checkViewportSize(400, 400, true, true);
+}
 
 void testWin32ScrollViewParentsAndClipsProjectedChildren()
 {
@@ -402,7 +478,9 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     LOKA_VERIFY(atTop.top == seat.top + 12);
     LOKA_VERIFY(info.nMax == 17 + 15 - 1);
     LOKA_VERIFY(info.nPage == 10);
-    LOKA_VERIFY(offsetState.get().y == -12);
+    LOKA_VERIFY(
+        offsetState.get()
+        == loka::core::Frame(0, -12, 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL), 10));
 
     offset.state().set(loka::core::Frame(0, 100, 0, 0));
     offset.resetChangeCount();
@@ -414,7 +492,9 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     // This pass placed on the request (the reclamp pin's rule); the next
     // pass places on the published clamp.
     LOKA_VERIFY(after.nPos == 22);
-    LOKA_VERIFY(offsetState.get().y == 10);
+    LOKA_VERIFY(
+        offsetState.get()
+        == loka::core::Frame(0, 10, 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL), 10));
     const int published = offset.changeCount();
     LOKA_VERIFY(published == 1);
     controller.relayout(300, 10 + 2 * Win32SceneLayout::kRootInset);
@@ -422,6 +502,9 @@ void testWin32ScrollViewInsetsPlaceContentBelowTheTopInset()
     LOKA_VERIFY(scrolled.top == seat.top - 10);
     const int settled = offset.changeCount();
     LOKA_VERIFY(settled == 1);
+    LOKA_VERIFY(
+        offsetState.get()
+        == loka::core::Frame(0, 10, 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL), 10));
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY(DestroyWindow(root));
@@ -469,7 +552,7 @@ void testWin32ScrollViewInsetsGrowTheHeightlessExtent()
     LOKA_VERIFY(refused.top == SHRT_MAX - 20);
     LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
     LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
-    LOKA_VERIFY(offsetState.get().y == 6);
+    LOKA_VERIFY(offsetState.get() == loka::core::Frame(0, 6, 0, 0));
     const int changes = offset.changeCount();
     LOKA_VERIFY(changes == 0);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
@@ -500,7 +583,9 @@ void testWin32ScrollViewInsetsRefuseAnExtentAboveShort()
     const SCROLLINFO after = scrollInfo(viewport);
     LOKA_VERIFY(after.nMin == before.nMin && after.nMax == before.nMax);
     LOKA_VERIFY(after.nPage == before.nPage && after.nPos == before.nPos);
-    LOKA_VERIFY(offsetState.get().y == 0);
+    LOKA_VERIFY(
+        offsetState.get()
+        == loka::core::Frame(0, 0, 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL), 10));
     const int changes = offset.changeCount();
     LOKA_VERIFY(changes == 0);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
@@ -659,7 +744,11 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     controller.relayout(300, 140);
     offset.resetChangeCount();
     SendMessageW(viewport, WM_MOUSEWHEEL, down, position);
-    LOKA_VERIFY(offsetState.get().y == maximum);
+    LOKA_VERIFY(offsetState.get()
+                == loka::core::Frame(0,
+                                     maximum,
+                                     300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL),
+                                     140 - 2 * Win32SceneLayout::kRootInset));
     const int clampedChanges = offset.changeCount();
     LOKA_VERIFY(clampedChanges == 0);
     offsetState.set(loka::core::Frame(0, 0, 0, 0));
@@ -721,19 +810,25 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     const int contentHeight = 6 * controller.rowLayoutMetrics().buttonHeight + 5 * Win32SceneLayout::kGap;
     // Nodes after the controller: see the parents-and-clips pin.
     ViewportFact offset(100);
+    loka::app::scene::NodeState<loka::core::Frame> &offsetState = offset.state();
     loka::app::ScrollViewNode scrollView(
         (loka::app::ScrollViewProps(offset.state())));
     addButtonColumn(scrollView, 6);
     establishLayout(controller, &scrollView, 300, 100);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
+    const int visibleWidth = 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL);
     const int initialMax = contentHeight - (100 - 2 * Win32SceneLayout::kRootInset);
     const int resizedMax = contentHeight - (240 - 2 * Win32SceneLayout::kRootInset);
-    assert(offset.state().get().y == (initialMax < 100 ? initialMax : 100));
+    LOKA_VERIFY(offsetState.get()
+                == loka::core::Frame(
+                    0, initialMax < 100 ? initialMax : 100, visibleWidth, 100 - 2 * Win32SceneLayout::kRootInset));
 
     offset.resetChangeCount();
     controller.relayout(300, 240);
-    assert(offset.state().get().y == (resizedMax > 0 ? resizedMax : 0));
+    LOKA_VERIFY(
+        offsetState.get()
+        == loka::core::Frame(0, resizedMax > 0 ? resizedMax : 0, visibleWidth, 240 - 2 * Win32SceneLayout::kRootInset));
     assert(offset.changeCount() == 1 &&
            "a range-changing resize must publish one clamped fact");
     assert(scrollInfo(viewport).nPos == (resizedMax > 0 ? resizedMax : 0));
@@ -741,12 +836,11 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     assert(offset.changeCount() == 1 &&
            "the settled clamp must not be published again");
 
-    offset.state().set(loka::core::Frame(0, 20, 0, 0));
+    offset.state().set(loka::core::Frame(0, 20, visibleWidth, 240 - 2 * Win32SceneLayout::kRootInset));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == 20);
-    assert(offset.changeCount() == 0 &&
-           "a still-valid offset must survive resize without a fact write");
+    LOKA_VERIFY(offsetState.get() == loka::core::Frame(0, 20, visibleWidth, 100 - 2 * Win32SceneLayout::kRootInset));
+    assert(offset.changeCount() == 1 && "a still-valid offset must survive resize with one new-size fact write");
 
     // An offset far beyond the short range must not wedge the viewport in a
     // refusal loop: the arm pre-clamps before deriving the child scope, lays
@@ -754,8 +848,8 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
     offset.state().set(loka::core::Frame(0, 40000, 0, 0));
     offset.resetChangeCount();
     controller.relayout(300, 100);
-    assert(offset.state().get().y == contentHeight - (100 - 2 * Win32SceneLayout::kRootInset)
-           && "an oversized offset must recover to the content maximum");
+    LOKA_VERIFY(offsetState.get()
+                == loka::core::Frame(0, initialMax, visibleWidth, 100 - 2 * Win32SceneLayout::kRootInset));
     assert(offset.changeCount() == 1);
     controller.relayout(300, 100);
     assert(offset.changeCount() == 1);
@@ -849,6 +943,7 @@ void testWin32ScrollViewContainerGapsAndNoSeats()
     LOKA_VERIFY(scene.mount(&controller));
     SceneTestAccess::updateAttached(scene, true);
     const int visible = 30;
+    sizeHostClient(root, 300, visible + 2 * Win32SceneLayout::kRootInset);
     controller.relayout(300, visible + 2 * Win32SceneLayout::kRootInset);
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport != NULL);

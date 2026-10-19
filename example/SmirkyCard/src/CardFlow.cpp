@@ -253,6 +253,9 @@ namespace smirkycard
     case JsSeatRecord::IMAGE:
       state = this->seat_->image.state();
       break;
+    case JsSeatRecord::VIEWPORT:
+      state = this->seat_->viewport.state();
+      break;
     }
     if (!state)
       return;

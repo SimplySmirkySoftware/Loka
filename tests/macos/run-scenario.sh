@@ -31,6 +31,12 @@ if [ "$EXAMPLE" = smirkbench ] && [ "$SCENARIO" != startup ] && [ "$SCENARIO" !=
   exit 2
 fi
 
+# Real ADB Tab traversal is a Toolbox-only cell.
+if [ "$EXAMPLE/$SCENARIO" = helloworld/bmi-tab ]; then
+  usage
+  exit 2
+fi
+
 MODE="verify"
 RUN_MODE="flow"
 if [ $# -eq 3 ]; then

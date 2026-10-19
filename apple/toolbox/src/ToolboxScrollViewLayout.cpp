@@ -243,7 +243,8 @@ short ToolboxScenePlatformController::layoutScrollView(
         break;
       }
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishOrigin(horizontal.clampedOffset, clampedOffset);
+    scrollView->publishViewport(
+        horizontal.clampedOffset, clampedOffset, childWidth, contentRect.bottom - contentRect.top);
   }
 
   if (state.height > 0)

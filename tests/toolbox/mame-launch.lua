@@ -259,6 +259,35 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-japanese" then
     if not inputOk then say("editor Japanese input failed: %s", tostring(inputError)) end
 end
 
+-- Real ADB traversal; the scenario driver only observes the resulting fields.
+if os.getenv("LOKA_SCENARIO_CELL") == "helloworld/bmi-tab" then
+    local inputOk, inputError = pcall(function()
+        local mem = manager.machine.devices[":maincpu"].spaces["program"]
+        local button = field(":macadb:MOUSE0", "Mouse Button 0")
+        local function move(x, y)
+            mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+            mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+            mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+            emu.wait(0.2)
+        end
+        emu.wait(8)
+        move(430, 222)
+        button:set_value(1); emu.wait(0.3); button:clear_value(); emu.wait(2)
+        button:set_value(1); emu.wait(0.3); button:clear_value(); emu.wait(1)
+        commandKey:set_value(1); emu.wait(0.1)
+        tap(keyByName("Space")); commandKey:clear_value(); emu.wait(1)
+        tap(keyByName("1  !")); emu.wait(0.5)
+        tap(keyByName("Tab")); emu.wait(0.5)
+        tap(keyByName("2  @")); emu.wait(0.5)
+        local shift = keyByName("Shift")
+        shift:set_value(1); emu.wait(0.1)
+        tap(keyByName("Tab")); shift:clear_value(); emu.wait(0.5)
+        tap(keyByName("3  #")); emu.wait(0.5)
+        move(600, 450)
+    end)
+    if not inputOk then say("BMI Tab input failed: %s", tostring(inputError)) end
+end
+
 if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-scroll" then
     local mem, barPoint, awaitBar = editorBarTransport()
     local button = field(":macadb:MOUSE0", "Mouse Button 0")

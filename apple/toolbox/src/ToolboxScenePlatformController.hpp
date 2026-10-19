@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxTabKey.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
 #include "ToolboxEditInstalled.hpp"
 #include "ToolboxPendingDialogs.hpp"

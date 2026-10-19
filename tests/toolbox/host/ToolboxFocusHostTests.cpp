@@ -22,7 +22,8 @@ using namespace loka::core;
 enum FieldKey
 {
   FIRST = 1,
-  SECOND = 2
+  SECOND = 2,
+  THIRD = 3
 };
 namespace loka
 {
@@ -169,6 +170,159 @@ namespace
       node.setContext(0);
     }
   };
+  struct TabFixture : Fixture
+  {
+    NodeState<String> thirdText;
+    EditTextNode third;
+    TabFixture()
+        : third(EditTextProps())
+    {
+      StateBatchBase::CreateImmediateState(this, this->thirdText, String::Literal("ccc"));
+      this->second.props.text(this->replacement);
+      this->third.props = EditTextProps(this->thirdText).focusedAs(this->focus, THIRD);
+      this->project(this->third);
+      // Registration order is bottom, top, middle.
+      this->place(this->third, 0, 80);
+      this->place(this->first, 0, 0);
+      this->place(this->second, 0, 40);
+    }
+    ~TabFixture()
+    {
+      this->retire(this->third);
+    }
+    void place(EditTextNode &node, short left, short top)
+    {
+      Rect r;
+      SetRect(&r, left, top, left + 40, top + 20);
+      LOKA_VERIFY(this->controller
+                      .ensureEditTextControl(
+                          this->context(node), r, this->context(node)->projectedTextState(), NATIVE_HINT_DEFAULT)
+                      .te);
+    }
+    void tab(ToolboxTabDirection direction, EditTextNode &target)
+    {
+      LOKA_VERIFY(ToolboxInputDoor::tabKey(this->controller, direction));
+      LOKA_VERIFY(this->controller.editControls_.focused()->ownerContext == target.getContext());
+    }
+  };
+  void tabGeometry()
+  {
+    TabFixture f;
+    f.tab(TAB_FORWARD, f.first);
+    f.tab(TAB_FORWARD, f.second);
+    f.tab(TAB_FORWARD, f.third);
+    f.tab(TAB_FORWARD, f.first);
+    f.tab(TAB_BACKWARD, f.third);
+    f.tab(TAB_BACKWARD, f.second);
+    f.tab(TAB_BACKWARD, f.first);
+    f.controller.activateEditControl(f.controller.editControls_.size());
+    f.tab(TAB_BACKWARD, f.third);
+    // Equal top: left wins; equal top-left: ledger index wins.
+    f.place(f.first, 80, 0);
+    f.place(f.second, 40, 0);
+    f.place(f.third, 40, 0);
+    f.controller.activateEditControl(f.controller.editControls_.size());
+    f.tab(TAB_FORWARD, f.third);
+    f.tab(TAB_FORWARD, f.second);
+    f.tab(TAB_FORWARD, f.first);
+    f.tab(TAB_BACKWARD, f.second);
+    f.tab(TAB_BACKWARD, f.third);
+  }
+  void tabLanding()
+  {
+    TabFixture f;
+    f.tab(TAB_FORWARD, f.first);
+    f.expect(&f.first);
+    TEHandle old = f.controller.editControls_.focused()->te;
+    GrafPort ambient;
+    GrafPtr before = 0, after = 0;
+    GetPort(&before);
+    SetPort(&ambient);
+    f.tab(TAB_FORWARD, f.second);
+    TEHandle te = f.controller.editControls_.focused()->te;
+    GetPort(&after);
+    LOKA_VERIFY(after == &ambient);
+    SetPort(before);
+    LOKA_VERIFY(!(**old).active && (**te).active);
+    const unsigned beeps = toolbox_host::beeps;
+    LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, 'x'));
+    LOKA_VERIFY(f.replacement.get().equals(String::Literal("x")));
+    LOKA_VERIFY(f.text.get().equals(String::Literal("a")));
+    LOKA_VERIFY(f.thirdText.get().equals(String::Literal("ccc")));
+    LOKA_VERIFY(toolbox_host::beeps == beeps);
+    f.tab(TAB_BACKWARD, f.first);
+    te = f.controller.editControls_.focused()->te;
+    LOKA_VERIFY((**te).selStart == 0 && (**te).selEnd == (**te).teLength);
+    f.tab(TAB_FORWARD, f.second);
+    LOKA_VERIFY(f.focus.state()->get().is(FIRST));
+    f.focus.post(FIRST);
+    f.expect(&f.second); // Published first + native move consumes the post.
+    TabFixture fresh;
+    fresh.tab(TAB_FORWARD, fresh.first);
+    fresh.focus.post(SECOND);
+    {
+      loka::core::Operation turn;
+      fresh.app.present(ACTIVATION_FOREGROUND, turn);
+    }
+    fresh.expect(&fresh.second); // No publication yet: the post wins.
+  }
+  void tabEligibility()
+  {
+    TabFixture f;
+    f.controller.editControls_[1].usedThisFrame = false;
+    f.tab(TAB_FORWARD, f.second);
+    f.controller.editControls_[1].usedThisFrame = true;
+    SetRect(&f.controller.editControls_[1].rect, 0, 0, 0, 0);
+    f.tab(TAB_BACKWARD, f.third);
+    f.place(f.first, 0, 0);
+    TEHandle te = f.controller.editControls_[1].te;
+    f.controller.editControls_[1].te = 0;
+    f.tab(TAB_FORWARD, f.second);
+    f.controller.editControls_[1].te = te;
+    f.place(f.first, 0, -40);
+    f.tab(TAB_BACKWARD, f.third);
+    f.place(f.first, 0, 0);
+    LifecycleFactTestAccess::MarkSubtreeRetired(&f.first);
+    f.tab(TAB_FORWARD, f.second);
+    f.controller.editControls_[0].usedThisFrame = false;
+    te = f.controller.editControls_.focused()->te;
+    TESetSelect((**te).teLength, (**te).teLength, te);
+    f.tab(TAB_FORWARD, f.second); // Single candidate wraps to itself.
+    te = f.controller.editControls_.focused()->te;
+    LOKA_VERIFY((**te).selStart == 0 && (**te).selEnd == (**te).teLength);
+    f.controller.editControls_[2].usedThisFrame = false;
+    LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD));
+    ToolboxWindow *window = f.controller.window_;
+    f.controller.window_ = 0;
+    LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD));
+    f.controller.window_ = window;
+  }
+  void tabFallback()
+  {
+    TabFixture f;
+    f.controller.retireEditTextControl(f.context(f.first), NATIVE_HINT_EAGER_RELEASE);
+    f.hit(f.first);
+    f.click();
+    f.tab(TAB_FORWARD, f.second);
+    f.expect(&f.second);
+    f.click();
+    f.tab(TAB_BACKWARD, f.third);
+    f.controller.editControls_[0].usedThisFrame = false;
+    f.controller.editControls_[1].usedThisFrame = false;
+    f.click();
+    LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD));
+  }
+  void tabDecoder()
+  {
+    for (unsigned i = 0; i < 256; ++i)
+      for (unsigned shift = 0; shift < 2; ++shift)
+      {
+        ToolboxTabDirection direction = TAB_BACKWARD;
+        const bool decoded = QueryToolboxTabKey(static_cast<unsigned char>(i), shift != 0, direction);
+        LOKA_VERIFY(decoded == (i == 9));
+        LOKA_VERIFY(direction == (i == 9 && !shift ? TAB_FORWARD : TAB_BACKWARD));
+      }
+  }
   void postedNative()
   {
     Fixture f;
@@ -213,7 +367,7 @@ namespace
   }
   void postedEditor()
   {
-    Fixture f;
+    TabFixture f;
     ObservableList<String> lines;
     Reported<LineCursor> cursor;
     StateBatchBase::CreateImmediateState(&f, cursor, LineCursor::None());
@@ -232,10 +386,17 @@ namespace
     ToolboxTextEditorContext *context = static_cast<ToolboxTextEditorContext *>(
         handler->ensureContext(&editor, &f.controller, layout));
     LOKA_VERIFY(context);
+    layout.y = 40;
     context->layout(&f.controller, layout);
     context->render(&f.controller);
     TEHandle te = loka::testing::ToolboxTextEditorAccess::te(*context);
     LOKA_VERIFY(te);
+    std::size_t editorIndex = 0;
+    LOKA_VERIFY(f.controller.editControls_.find(context, editorIndex));
+    LOKA_VERIFY(f.controller.editControls_[editorIndex].rect.top > f.controller.editControls_[1].rect.top);
+    LOKA_VERIFY(f.controller.editControls_[editorIndex].rect.top < f.controller.editControls_[0].rect.top);
+    f.controller.activateEditControl(1);
+    f.tab(TAB_FORWARD, f.third); // The editor between the fields is not a target.
     TESetSelect(8, 10, te);
     TEScroll(0, -16, te);
     const Rect dest = (**te).destRect;
@@ -255,9 +416,15 @@ namespace
     LOKA_VERIFY(EqualRect(&dest, &(**te).destRect));
     LOKA_VERIFY(cursor.state()->get() == before);
     LOKA_VERIFY(lines.revision().get().content == revision.content);
-    Point click = {5, 85};
+    Point click = {45, 85};
     LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, click));
     LOKA_VERIFY((**te).selStart == (**te).selEnd);
+    LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD));
+    LOKA_VERIFY(!ToolboxInputDoor::tabKey(f.controller, TAB_BACKWARD));
+    const long length = (**te).teLength;
+    LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, 0x09));
+    LOKA_VERIFY((**te).teLength == length + 1);
+    LOKA_VERIFY((**te).text.find('\t') != std::string::npos);
     LifecycleFactTestAccess::MarkSubtreeRetired(&editor);
     context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
     editor.setContext(0);
@@ -543,6 +710,7 @@ namespace
     LOKA_VERIFY(f.text.get().equals(String::Literal("caf\xC3\xA9\xC3\xA9")));
     LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, 8));
     LOKA_VERIFY(f.text.get().equals(String::Literal("caf\xC3\xA9")));
+    // Tab here describes the no-candidate fallback: focused EditText consumes it.
     const int controls[] = {13, 3, 9, 27, 0x10, 0};
     const int sets = toolbox_host::sets;
     for (unsigned i = 0; i < sizeof(controls) / sizeof(controls[0]); ++i)
@@ -791,11 +959,49 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
+  if (argc == 2)
+  {
+    if (std::strcmp(argv[1], "tab-geometry") == 0)
+    {
+      tabGeometry();
+      return 0;
+    }
+    if (std::strcmp(argv[1], "tab-landing") == 0)
+    {
+      tabLanding();
+      return 0;
+    }
+    if (std::strcmp(argv[1], "tab-eligibility") == 0)
+    {
+      tabEligibility();
+      return 0;
+    }
+    if (std::strcmp(argv[1], "tab-fallback") == 0)
+    {
+      tabFallback();
+      return 0;
+    }
+    if (std::strcmp(argv[1], "tab-decoder") == 0)
+    {
+      tabDecoder();
+      return 0;
+    }
+    if (std::strcmp(argv[1], "tab-editor") == 0)
+    {
+      postedEditor();
+      return 0;
+    }
+  }
   if (argc == 2 && std::strcmp(argv[1], "shared-text-key") == 0)
   {
     sharedTextKey();
     return 0;
   }
+  tabGeometry();
+  tabLanding();
+  tabEligibility();
+  tabFallback();
+  tabDecoder();
   ordinaryRoundTrip();
   ordinaryRefusal();
   ordinaryNoPublication();

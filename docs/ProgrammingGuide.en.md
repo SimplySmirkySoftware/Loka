@@ -1090,8 +1090,7 @@ The design goal is that memory and lifecycle are visible from the DSL structure.
 origin into it. `x` and `y` are the **content** point shown at the seat's
 top-left corner, not the seat rect. After the first layout, `width` and
 `height` report the visible content size (seat minus scroll bars), in the same
-content units; insets do not shrink it. The Null rail reports it; Toolbox,
-Win32 and macOS do not report it yet and carry the stored size through.
+content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails report it.
 Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
@@ -1647,7 +1646,10 @@ are outside the contract and get no repair, leaving selection highlight,
 TEActivate/TEDeactivate paint, and TrackControl hilite on screen until an unrelated
 repaint presents the unit area. On macOS, units are ordered relative to their own
 ZStack only; later siblings or another ZStack's units in the same parent may sit above them, with
-geometry keeping their seats apart. On macOS, Tab order is AppKit's default key-view loop and does not follow
+geometry keeping their seats apart. On Toolbox, Tab and Shift-Tab move between the visible EditText fields from
+top to bottom and left to right, wrap at the ends, and select the text of the field they land on; a TextEditor
+is not part of that loop (see [Toolbox Tab traversal](FocusDesign.md#toolbox-tab-traversal-1461)).
+On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
 `ZStack().expBlurUnit()` is experimental: the first unit (second child) shows

@@ -11,6 +11,21 @@ class MacScenePlatformController;
 class MacScrollViewContext : public MacRetirableContext
 {
 public:
+  /** Borrows the clip view and restores its notification setting at scope exit. */
+  class BoundsNotificationMute
+  {
+  public:
+    explicit BoundsNotificationMute(MacScrollViewContext &context);
+    ~BoundsNotificationMute();
+
+  private:
+    void *const clipView_;
+    const bool postsBounds_;
+
+    BoundsNotificationMute(const BoundsNotificationMute &);
+    BoundsNotificationMute &operator=(const BoundsNotificationMute &);
+  };
+
   MacScrollViewContext(MacScenePlatformController *controller,
                        void *parentView,
                        int x,

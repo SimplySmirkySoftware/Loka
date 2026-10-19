@@ -489,6 +489,9 @@ void ToolboxApp::run()
         ToolboxScrollKey scrollKey;
         if (!handled && QueryToolboxScrollKey(keyCode, scrollKey))
           handled = active && active->handleScrollKey(scrollKey);
+        ToolboxTabDirection tabDirection;
+        if (!handled && QueryToolboxTabKey(byte, (event.modifiers & shiftKey) != 0, tabDirection))
+          handled = active && active->handleTabKey(tabDirection);
         if (!handled)
           handled = active && active->handleKeyDown(key);
         if (!handled)

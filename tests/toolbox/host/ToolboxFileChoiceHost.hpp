@@ -6,6 +6,7 @@
 #include "app/scene/projection/PlatformController.hpp"
 #include "Quickdraw.h"
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxTabKey.hpp"
 #include "ToolboxPendingDialogs.hpp"
 #include "app/core/DialogResultTransport.hpp"
 struct Point { short v, h; };
@@ -31,6 +32,10 @@ public:
   void renderDirty(const Rect &) { this->render(); }
   bool handleMouseDown(const Point &) { return false; }
   bool handleKeyDown(char) { return false; }
+  bool handleTabKey(ToolboxTabDirection)
+  {
+    return false;
+  }
   bool handleScrollKey(ToolboxScrollKey)
   {
     return false;
