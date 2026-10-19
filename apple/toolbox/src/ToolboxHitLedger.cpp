@@ -13,7 +13,7 @@ void ToolboxScenePlatformController::recordButtonHit(const Rect &rect,
                                                      ToolboxButtonContext *context)
 {
   Rect clipped;
-  if (!emitter || !this->intersectWithProjectionClip(rect, clipped))
+  if (!this->intersectWithProjectionClip(rect, clipped))
   {
     return;
   }

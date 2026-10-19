@@ -416,8 +416,10 @@ press without action, tracking, focus change, or fall-through. An opaque
 ZStack unit's empty area and disabled/inactive pressable controls also stop it
 and preserve focus. Disabled native buttons previously fell through and could
 clear focus; shielding them is an intentional change. Ownerless rows and rows
-without an action (buttons without emitters, cells without onClick, and popups
-without items) are transparent. Native visibility uses `contrlVis`, never
+without an action (cells without onClick and popups without items) are
+transparent. A Button without onClick is not: native and drawn alike, it is a
+pressable row that tracks, emits nothing, and stops the press like any button
+(owner ruling after #1496). Native visibility uses `contrlVis`, never
 `usedThisFrame`.
 
 Native dispatch leaves focus alone; EDIT_CONTROL activates its native edit;

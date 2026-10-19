@@ -72,7 +72,11 @@ namespace press_door
     }
     ButtonNode *button(EmitterState &action, bool small = false, State<bool> *enabled = 0)
     {
-      ButtonNode *node = new ButtonNode(ButtonProps().onClick(&action).enabled(enabled));
+      return this->place(ButtonProps().onClick(&action).enabled(enabled), small);
+    }
+    ButtonNode *place(const ButtonProps &props, bool small = false)
+    {
+      ButtonNode *node = new ButtonNode(props);
       const Rect rect = {10, 10, static_cast<short>(small ? 30 : 80), 110};
       node->setContext(new PlacedButton(node, &this->controller, rect));
       this->stack.addChild(node);
@@ -236,6 +240,21 @@ namespace press_door
     LOKA_VERIFY(!f.controller.fallbackFocusContext());
     std::puts("[pin] N9 empty space cuts native and fallback focus passed");
   }
+  void silentNative()
+  {
+    Fixture f;
+    f.button(f.groundAction);
+    f.place(ButtonProps());
+    f.render();
+    f.focus();
+    const unsigned tracks = toolbox_host::tracks;
+    f.press();
+    // A Button without onClick is still a button: it tracks, emits nothing,
+    // shields the ground and leaves focus alone like any native press.
+    LOKA_VERIFY(f.groundCalls == 0 && toolbox_host::tracks == tracks + 1);
+    f.expectFocus(f.field.getContext());
+    std::puts("[pin] N10 native button without onClick tracks, shields ground and keeps focus passed");
+  }
   void run(const char *name)
   {
     const bool all = std::strcmp(name, "PressDoor") == 0;
@@ -253,5 +272,7 @@ namespace press_door
       erasedNative();
     if (all || std::strcmp(name, "PressDoor-N9") == 0)
       emptyFocus();
+    if (all || std::strcmp(name, "PressDoor-N10") == 0)
+      silentNative();
   }
 } // namespace press_door

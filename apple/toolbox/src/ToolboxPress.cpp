@@ -46,7 +46,7 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::NATIVE_BUTTON:
   {
     const ButtonControlBinding &binding = this->buttonControls_[row.index];
-    if (!binding.control || !(**binding.control).contrlVis || !binding.emitter || !PtInRect(point, &binding.rect))
+    if (!binding.control || !(**binding.control).contrlVis || !PtInRect(point, &binding.rect))
       return false;
     value.context = binding.context;
     value.control = binding.control;
@@ -121,7 +121,7 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::BUTTON_HIT:
   {
     const ButtonHit &hit = this->hitLedger_.buttonHits_[row.index];
-    if (!hit.context || !PtInRect(point, &hit.rect) || !PtInRect(point, &hit.context->rect_) || !hit.context->emitter_)
+    if (!hit.context || !PtInRect(point, &hit.rect) || !PtInRect(point, &hit.context->rect_))
       return false;
     value.context = hit.context;
     value.enabled = !hit.context->enabled_ || hit.context->enabled_->get();
@@ -194,7 +194,8 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
     this->beginBatchUpdate();
     const ControlPartCode tracked = TrackControl(control, point, 0);
     this->invalidateUnitOverlap(rect);
-    if (tracked)
+    // A Button without onClick tracks like any button and emits nothing.
+    if (tracked && emitter)
       emitter->emit();
     this->endBatchUpdate();
     return false;
