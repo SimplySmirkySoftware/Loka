@@ -1223,9 +1223,9 @@ bool MacScenePlatformController::applyNativeFocus(loka::app::scene::NodeContext 
   NSWindow *const window = [(NSView *)this->rootView_ window];
   if (!window || ![window isKeyWindow])
     return false;
-  loka::app::scene::Node *owner = ctx.owner();
-  if (!owner || owner->getContext() != &ctx || owner->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+  if (!loka::app::scene::IsAttachedCurrentContext(&ctx))
     return false;
+  loka::app::scene::Node *owner = ctx.owner();
   NSView *view = nil;
   loka::app::scene::NodeContext *marked = 0;
   // Deliberate rail parallel: the same node-kind resolution as Win32 focus.

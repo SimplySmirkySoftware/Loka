@@ -1874,8 +1874,7 @@ bool Win32ScenePlatformController::applyNativeFocus(loka::app::scene::NodeContex
 {
   if (!this->rootHwnd_ || GetActiveWindow() != this->rootHwnd_)
     return false;
-  loka::app::scene::Node *owner = ctx.owner();
-  if (!owner || owner->getContext() != &ctx || owner->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+  if (!loka::app::scene::IsAttachedCurrentContext(&ctx))
     return false;
   const HWND hwnd = Win32FocusParticipant::target(&ctx);
   if (!hwnd || !IsChild(this->rootHwnd_, hwnd) || Win32FocusParticipant::read(hwnd) != &ctx)
