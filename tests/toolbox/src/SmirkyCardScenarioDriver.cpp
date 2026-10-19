@@ -46,7 +46,7 @@ void SmirkyCardScenarioAppConfig::compose(AppComposition &composition)
 {
   composition << WindowDef(WindowProps()
                                .frame(60, 60, 420, 340)
-                               .title("LaptopTracker")
+                               .title("SmirkyTracker")
                                .visible(true)
                                .idlePolicy(loka::app::IdlePolicy::everyTick())
                                .onIdle(&SmirkyCardScenarioAppConfig::OnWindowIdle, this)

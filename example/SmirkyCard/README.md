@@ -480,7 +480,7 @@ through the same runner and audit writer. Runner names must keep the Classic
 target name within HFS's 31-character limit; `smirkycard_add_scenario_runner`
 refuses a longer one at configure time.
 
-## LaptopTracker.JS card
+## SmirkyTracker card (LAPTOP.JS)
 
 [LAPTOP.JS](LAPTOP.JS) shows 13 Macs, from Macintosh Plus to MacBook Neo,
 with a tall list, a horizontal carousel and a detail page. The card loads its
