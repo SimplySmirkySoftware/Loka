@@ -89,19 +89,28 @@ public:
       only for this owner's snapshot; READY never reads the live backdrop. */
   bool paint(GrafPtr window, const ToolboxUnitLedger::UnitSeat &row, const ToolboxErasedPass &pass)
   {
-    if (!this->matches(row) || !ToolboxStaticBlurPixels::eligible(window, row.rect))
+    if (!this->matches(row))
       return false;
-    if ((this->phase_ == NEEDED || this->phase_ == REQUESTED) && pass.admitsCapture(row.rect))
-      this->phase_ = this->pixels_.capture(window, row.rect) ? READY : PLAIN;
+    const bool pending = this->phase_ == NEEDED || this->phase_ == REQUESTED;
+    if (!ToolboxStaticBlurPixels::eligible(window, row.rect))
+    {
+      // No replay can capture on this screen: end the lifetime plain instead
+      // of asking for one every flush. READY keeps its picture for later.
+      if (pending)
+        this->phase_ = PLAIN;
+      return false;
+    }
+    if (pending)
+      this->phase_ = pass.admitsCapture(row.rect) ? (this->pixels_.capture(window, row.rect) ? READY : PLAIN) : NEEDED;
     return this->phase_ == READY && this->pixels_.paint(window, row.rect);
   }
   /** Once after each flush, after consumed rectangles have been cleared.
-      An unfulfilled REQUESTED was swallowed: NEEDED reissues once, not in the
-      render walk or scheduler drain. No rows are walked. */
+      Only a lifetime that a walk painted without an admitted capture is
+      NEEDED (a swallowed request repaints it so), so a flush that never
+      reached the unit asks nothing. Not from the render walk or scheduler
+      drain. No rows are walked. */
   const Rect *completedFlush()
   {
-    if (this->phase_ == REQUESTED)
-      this->phase_ = NEEDED;
     if (!this->stack_ || this->phase_ != NEEDED)
       return 0;
     this->phase_ = REQUESTED;

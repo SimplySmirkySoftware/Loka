@@ -223,6 +223,28 @@ namespace
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
   }
+  void staticIneligible()
+  {
+    StaticFixture f;
+    toolbox_host::staticEligible = false;
+    f.window.draw();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
+    const int before = toolbox_host::invalidations;
+    f.window.flushInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == before);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    // A request no walk has answered yet is not repeated by later flushes.
+    StaticFixture g;
+    toolbox_host::staticEligible = true;
+    g.window.draw();
+    g.window.flushInvalidate();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(g.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
+    const int issued = toolbox_host::invalidations;
+    g.controller.completedInvalidateFlush();
+    g.controller.completedInvalidateFlush();
+    LOKA_VERIFY(toolbox_host::invalidations == issued);
+  }
   void staticFailure()
   {
     StaticFixture f;
@@ -896,6 +918,7 @@ int main(int argc, char **argv)
                          "StaticAdmission",
                          "StaticSwallowed",
                          "StaticFailure",
+                         "StaticIneligible",
                          "StaticMissingRow",
                          "StaticChangedRect",
                          "StaticChangedGround",
@@ -932,6 +955,8 @@ int main(int argc, char **argv)
     staticSwallowed();
   else if (std::strcmp(argv[1], "StaticFailure") == 0)
     staticFailure();
+  else if (std::strcmp(argv[1], "StaticIneligible") == 0)
+    staticIneligible();
   else if (std::strncmp(argv[1], "Static", 6) == 0)
     staticReconcile(argv[1]);
   else if (std::strcmp(argv[1], "FrostErasedPassAdmission") == 0)
