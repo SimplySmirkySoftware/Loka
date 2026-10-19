@@ -233,8 +233,10 @@ short ToolboxPopupMenuContext::layout(loka::app::scene::IPlatformController *con
 
 #include "ToolboxPopupMenuInput.cpp"
 
-void ToolboxPopupMenuContext::render(loka::app::scene::IPlatformController *)
+void ToolboxPopupMenuContext::render(loka::app::scene::IPlatformController *controller)
 {
+  if (controller)
+    static_cast<ToolboxScenePlatformController *>(controller)->reachPopupHit(this);
   draw();
 }
 

@@ -44,6 +44,7 @@ class ToolboxTextContext;
 class ToolboxTextFontDescriptor;
 #include "Quickdraw.h"
 #include "Controls.h"
+#include "ToolboxPressLedger.hpp"
 #include "ToolboxScrollBarLedger.hpp"
 #include "ToolboxControlIdAllocator.hpp"
 #include "app/RectSurface.hpp"
@@ -196,7 +197,11 @@ public:
   {
     LOKA_VERIFY(false);
   }
-  const Rect &chromeRect() const { static const Rect rect = {0, 0, 0, 0}; return rect; }
+  const Rect &chromeRect() const
+  {
+    static const Rect rect = {-30000, -30000, 30000, 30000};
+    return rect;
+  }
 };
 #else
 #include "context/ToolboxEditTextContext.hpp"
@@ -299,6 +304,28 @@ public:
   void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
   void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
   void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
+  /** Synthetic render for legacy fixtures that install rows directly.
+      Ground hits precede the native/edit faces those fixtures place above them.
+      New ordering pins use the production render walk instead. */
+  void publishFixturePressOrder()
+  {
+    this->pressLedger_.begin();
+    for (std::size_t i = 0; i < this->hitLedger_.buttonHits_.size(); ++i)
+      this->pressLedger_.append(PressRow::BUTTON_HIT, i);
+    for (std::size_t i = 0; i < this->hitLedger_.cellHits_.size(); ++i)
+      this->pressLedger_.append(PressRow::CELL_HIT, i);
+    for (std::size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
+      this->pressLedger_.append(PressRow::POPUP_HIT, i);
+    for (std::size_t i = 0; i < this->hitLedger_.editHits_.size(); ++i)
+      this->pressLedger_.append(PressRow::EDIT_HIT, i);
+    for (std::size_t i = 0; i < this->editControls_.size(); ++i)
+      this->pressLedger_.append(PressRow::EDIT_CONTROL, i);
+    for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+      this->pressLedger_.append(PressRow::NATIVE_BAR, i);
+    for (std::size_t i = 0; i < this->buttonControls_.size(); ++i)
+      this->pressLedger_.append(PressRow::NATIVE_BUTTON, i);
+    this->pressLedger_.commit();
+  }
   loka::app::scene::FocusLink fallbackFocus_;
   ToolboxEditTextContext *fallbackFocusContext() const;
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
@@ -358,7 +385,6 @@ public:
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
   short allocateControlId() { return this->controlIds_.allocate(); }
   void destroyScrollBarControl(short, loka::app::scene::NativeLifetimeHint);
-  bool handleControlClick(const Point &);
   bool presentEditorScrollBar(short, const ToolboxEditorScrollBarPresentation &);
   void revokeEditorScrollBar(short);
   bool ensureEditorScrollBar(short,
@@ -504,7 +530,11 @@ public:
     return true;
   }
 #endif
+#ifdef LOKA_HOST_CONTROL_ORDER
+  void destroyButtonControl(short, loka::app::scene::NativeLifetimeHint);
+#else
   void destroyButtonControl(short, loka::app::scene::NativeLifetimeHint) {}
+#endif
   void recordButtonHit(const Rect &, loka::core::EmitterState *, loka::core::State<bool> *,
       loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *) {}
@@ -535,7 +565,10 @@ public:
     return false;
   }
   void activateEditControl(std::size_t index);
-  bool handleEditClick(const Point &point);
+  void reachNativeButton(short id);
+  void reachNativeBar(short id);
+  void reachEditControl(loka::app::scene::NodeContext *context);
+  void reachPopupHit(ToolboxPopupMenuContext *context);
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   void flushTE();
@@ -592,17 +625,13 @@ public:
     return &cursor;
   }
   bool intersectWithProjectionClip(const Rect &rect, Rect &out) const;
-  void retireNodeContext(loka::app::scene::NodeContext *context, loka::app::scene::NativeLifetimeHint hint)
-  {
-    // Mirrors production: detach strips the context's edit binding first.
-    this->retireEditTextControl(context, hint);
-    retired.push_back(context);
-  }
+  void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   loka::app::scene::Node *rootNode_;
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxPressLedger pressLedger_;
   ToolboxErasedPass erasedPass_;
   /** Host observes admission only; native pixels are pinned by FrostStandalone. */
   struct FrostCache

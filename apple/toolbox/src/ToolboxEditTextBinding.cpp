@@ -131,6 +131,7 @@ void ToolboxScenePlatformController::retireEditTextControlAt(
   EditTextControlBinding &binding = editControls_[index];
   loka::core::State<loka::core::String> *retiredText = binding.text;
   this->retireEditTextBinding(binding, lifetimeHint);
+  this->pressLedger_.forget(PressRow::EDIT_CONTROL, index);
   editControls_.erase(index);
   if (retiredText && !this->hasLiveBinding(retiredText))
   {

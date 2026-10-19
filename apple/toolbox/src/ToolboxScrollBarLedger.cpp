@@ -220,6 +220,7 @@ void ToolboxScenePlatformController::destroyScrollBarControl(short resourceId,
     binding.valueSeat = loka::app::scene::WriteSeat<int>();
     binding.onChange = 0;
     binding.enabled = 0;
+    this->pressLedger_.forget(PressRow::NATIVE_BAR, i);
     scrollBarLedger_.scrollBarControls_.erase(scrollBarLedger_.scrollBarControls_.begin() + i);
     controlIds_.release(resourceId);
     // The scroll bar is not hit-list based, so the enabled unbind that

@@ -53,6 +53,7 @@ public:
   bool handleMouseDown(const Point &point, ToolboxScenePlatformController *controller);
 
 private:
+  friend class ToolboxScenePlatformController;
   /** Capture local data and report whether existing controller rows need refresh. */
   bool captureProps();
   loka::app::CellNode *node_;

@@ -160,6 +160,8 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
     ToolboxScenePlatformController::ButtonControlBinding *binding = 0;
     if (controller->ensureButtonControl(resourceId_, rect_, label_, emitter_, enabled_, lifetimeHint(), this, binding))
     {
+      if (binding)
+        controller->reachNativeButton(resourceId_);
       if (paints && binding)
         this->repaint(binding->control, binding->label);
       if (paints && completes)

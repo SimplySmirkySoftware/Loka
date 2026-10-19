@@ -57,6 +57,7 @@ namespace
         StateTrackerGuard guard(&this->tracker);
         this->request.set(LineCursor(this->lines.at(1).id, 2));
       }
+      NotifySubtreeNodeAttached(&this->node);
       LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
       LayoutState state;
       state.x = 10;
@@ -516,6 +517,7 @@ static void parkedEditorPress()
       hit.boundary = 0;
       f.controller.installHit(hit);
       const unsigned tracks = toolbox_host::tracks;
+      f.controller.publishFixturePressOrder();
       ToolboxInputDoor::mouseDown(f.controller, point);
       LOKA_VERIFY(beneathCalls == (phase == 2 ? 1u : 0u));
       beneathAction.unbind(&countParkedEditorBeneath, &beneathCalls);
@@ -834,7 +836,8 @@ int main(int argc, char **argv)
     // frame and the text rect focuses the editor instead of blurring it.
     Point padding = {21, 11};
     LOKA_VERIFY(!PtInRect(padding, &expected) && PtInRect(padding, &frame));
-    LOKA_VERIFY(f.controller.handleEditClick(padding));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, padding));
     NodeContext *focusedEditor = 0;
     LOKA_VERIFY(f.controller.readNativeFocus(focusedEditor) && focusedEditor == f.context);
     LayoutState state;
@@ -871,7 +874,8 @@ int main(int argc, char **argv)
     // After relayout the refreshed binding still hits on its padding.
     f.controller.activateEditControl(f.controller.editControls_.size());
     Point movedPadding = {41, 11};
-    LOKA_VERIFY(!PtInRect(movedPadding, &expected) && f.controller.handleEditClick(movedPadding));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!PtInRect(movedPadding, &expected) && ToolboxInputDoor::mouseDown(f.controller, movedPadding));
     LOKA_VERIFY(f.controller.readNativeFocus(focusedEditor) && focusedEditor == f.context);
     // Clip includes frame pixels on two edges; only the text intersection is visible.
     SetRect(&f.controller.projectionClip, 10, 40, 100, 80);
@@ -1489,17 +1493,20 @@ int main(int argc, char **argv)
     Fixture f;
     Point inside = {24, 14}, outside = {0, 0};
     LOKA_VERIFY(!(**f.te()).active);
-    LOKA_VERIFY(f.controller.handleEditClick(inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, inside));
     NodeContext *focused = 0;
     LOKA_VERIFY(f.controller.readNativeFocus(focused) && focused == f.context);
     LOKA_VERIFY((**f.te()).active);
     ToolboxInputDoor::idleTextEdits(f.controller);
     LOKA_VERIFY((**f.te()).idleCalls == 1);
-    LOKA_VERIFY(!f.controller.handleEditClick(outside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, outside));
     LOKA_VERIFY(!f.controller.editControls_.focused() && !(**f.te()).active);
     ToolboxInputDoor::idleTextEdits(f.controller);
     LOKA_VERIFY((**f.te()).idleCalls == 1);
-    LOKA_VERIFY(f.controller.handleEditClick(inside));
+    f.controller.publishFixturePressOrder();
+    LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, inside));
     LOKA_VERIFY((**f.te()).active);
     ToolboxInputDoor::idleTextEdits(f.controller);
     LOKA_VERIFY((**f.te()).idleCalls == 2);

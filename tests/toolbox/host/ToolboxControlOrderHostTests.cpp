@@ -275,10 +275,13 @@ namespace
   }
 } // namespace
 #include "ToolboxParkedPressHost.hpp"
+#include "ToolboxPressDoorHost.hpp"
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strcmp(argv[1], "ParkedNativeButton") == 0)
+  if (std::strncmp(argv[1], "PressDoor", 9) == 0)
+    press_door::run(argv[1]);
+  else if (std::strcmp(argv[1], "ParkedNativeButton") == 0)
   {
     parked_press::pin(parked_press::NATIVE_BUTTON);
     for (int kind = parked_press::NATIVE_BUTTON; kind <= parked_press::VIEWPORT_HORIZONTAL; ++kind)
