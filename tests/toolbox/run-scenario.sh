@@ -159,9 +159,12 @@ case "$EXAMPLE" in
     TARGET="LokaSmirkyCardTest68K_APPL"
     # SmirkyCard is opt-in, so the vehicle exists only in a build configured with it.
     CONFIGURE_FLAGS=" -DLOKA_BUILD_SMIRKYCARD=ON"
-    # Seven dev-disk items: application, five PICTs, LokaTest.cfg.
-    # The delegator measures this per-disk Finder Tab count on the rig.
-    FINDER_TAB_COUNT=7
+    # 41 dev-disk items: application, 39 PICTs, LokaTest.cfg. Tab walks the
+    # window alphabetically from the first item, so the count is the
+    # application's alphabetical position minus one: the three IBOOKG3*
+    # pictures sort before LokaSmirkyCardTest68K (measured on the rig,
+    # 2026-10-19; it was 7 = a full cycle when the application sorted first).
+    FINDER_TAB_COUNT=3
     ;;
   smirkbench)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTestsToolbox68K.bin"
