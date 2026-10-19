@@ -48,6 +48,8 @@ the way #496 was characterized, rather than assuming the determinism carries.
   scheduled task with an Interactive logon principal for the autologon user,
   have the script write its own output file, and poll that file over ssh. An
   ssh-run scenario dies at the capture stage reporting zero windows found.
+  Such tasks run under the desktop lock (see "Several sessions share one
+  guest").
 - **Everything the rail touches lives on the guest's own virtual disk** — a
   normal clone on the guest, its build tree, its goldens, and its rig
   descriptor (`~/.config/loka/rigs/win32/` in the guest, untracked like every
@@ -84,21 +86,24 @@ executed the other branch's binary and reported every new test as
   - The rig descriptor and the goldens stay in the main clone because the
     checkpoint freezes them together.
   - Outside the lock, never check out or build anything in the main clone.
-- **Interactive tasks run one at a time, under the desktop lock.** The guest
-  has one interactive desktop and no user input, so a new window from any
-  process can take the foreground from another session's run. A focus pin
-  whose window loses the foreground mid-run fails or prints a skip: before
-  #1497, a helper that took the foreground once during
-  `testWin32FocusCompletion` failed it in 10 runs out of 10 (#1378).
-  - Take `<setup-folder>\desktop.lock` over ssh before `schtasks /Run`, and
-    release it after the task's result file appears. Starting the task opens
-    its console window, which was the foreground in every task observed for
-    #1378, so a lock taken inside the task is already too late.
+- **Interactive tasks run one at a time across the guest, under the desktop
+  lock.** The guest has one interactive desktop and no user input, so a new
+  window from any process can take the foreground from another session's
+  run. A focus pin whose window loses the foreground mid-run fails or prints
+  a skip. In #1378, a helper injected to take the foreground once during
+  `testWin32FocusCompletion` failed it in 10 runs out of 10 before #1497.
+  - Take `<setup-folder>\desktop.lock` over ssh before `schtasks /Run`, not
+    inside the task: starting a task opens its console window, which was the
+    foreground in all three #1378 foreground-poller logs.
+  - Release it after the task's result file appears. If no result file
+    appears, end the task (`schtasks /End`) before releasing. A lock left by
+    a session that has ended is cleared by the human, not by another session.
   - This covers every interactive task: unit runs, scenario cells, golden
-    bake/verify, standalone apps, and builds started as a task. A build run
-    directly over ssh opens no window on the desktop and needs no lock.
-  - Golden work holds both locks: the golden lock for the main clone, and the
-    desktop lock for each task it starts.
+    bake/verify, standalone apps, and builds started as a task (their console
+    window alone can take the foreground from another session's run). A build
+    run directly over ssh is not in the interactive session and needs no lock.
+  - Golden work takes the golden lock first, then the desktop lock for each
+    task it starts. Desktop-only work never takes the golden lock.
 - **Take either lock atomically and release only your own.** A
   check-then-write lock lets two sessions both see no lock.
   - Take it by creating a directory without `-Force`: `New-Item -ItemType
