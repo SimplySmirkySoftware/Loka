@@ -1,3 +1,9 @@
+    # 41 dev-disk items: application, 39 PICTs, LokaTest.cfg. The Finder's
+    # Tab cursor starts on the application and walks the window, so a full
+    # cycle (one Tab per item) lands on it again: 3 Tabs selected MACPLUSM.PICT
+    # and 7 selected MB2006MS.PICT (rig, 2026-10-19), as 7 did on the
+    # seven-item disk before the artwork.
+    FINDER_TAB_COUNT=41
 #!/usr/bin/env bash
 
 set -euo pipefail

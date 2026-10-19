@@ -498,9 +498,9 @@ selection and carousel wrapping. `LokaSmirkyCardTests --laptop-scenario` uses a
 320x200 full-picture dimensions.
 
 For Classic, build `LokaLaptopStandaloneFlow68K_APPL`. The runner takes file
-arguments, so expand the manifest in Bash. `LOKA_TAB_COUNT` is the
-application's alphabetical position on the staged disk minus one (the three
-`IBOOKG3*` pictures sort before it):
+arguments, so expand the manifest in Bash. `LOKA_TAB_COUNT` is the number of
+items on the staged disk (the application and 39 pictures): the Finder's Tab
+cursor starts on the application and a full cycle lands on it again.
 
 ```sh
 pictures=()
@@ -508,7 +508,7 @@ while read -r stem; do
   case "$stem" in ''|\#*) continue ;; esac
   pictures+=("example/SmirkyCard/assets/$stem.PICT")
 done < example/SmirkyCard/disk-pictures.txt
-LOKA_TAB_COUNT=3 \
+LOKA_TAB_COUNT=40 \
   tests/toolbox/run-standalone.sh \
   build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin \
   "${pictures[@]}" --expect example/SmirkyCard/tests/LAPTOP.audit
