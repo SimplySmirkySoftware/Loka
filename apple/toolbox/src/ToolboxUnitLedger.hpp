@@ -18,7 +18,10 @@ public:
   {
     loka::app::ZStackNode *stack;
     unsigned index;
+    /** The unit's visible part: unit cut by the projection clip. */
     Rect rect;
+    /** The projected unit before that cut; its bottom row may be hidden. */
+    Rect unit;
   };
   typedef std::vector<UnitSeat>::size_type Mark;
   void clear()

@@ -1,6 +1,7 @@
 #include "ToolboxHost.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
+#include "ToolboxDirtyReplay.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -96,6 +97,42 @@ namespace
       composition.declare(ZStack() << Box().size(100, 70) << (Show(*this->visible.state()) << Box().size(100, 40)));
     }
   };
+  void erasedFrostAdmission()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ZStackProps props;
+    props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    ZStackNode stack(props);
+    stack.addChild(new Probe("ground", 70));
+    stack.addChild(new Probe("first", 30));
+    stack.addChild(new Probe("later", 20));
+    controller.rootNode_ = &stack;
+    ToolboxInputDoor::render(controller);
+    LOKA_VERIFY(controller.frostCache_.paints == 0);
+    {
+      ToolboxErasedPass::Guard erased(controller.erasedPass());
+      ToolboxInputDoor::render(controller);
+      LOKA_VERIFY(controller.frostCache_.paints == 1);
+    }
+    LOKA_VERIFY(!controller.erasedPass().isOpen());
+    ToolboxInputDoor::render(controller);
+    LOKA_VERIFY(controller.frostCache_.paints == 1);
+    const Rect dirty = {20, 10, 25, 20};
+    ToolboxRenderDirtyInCompositionOrder(controller, dirty);
+    LOKA_VERIFY(controller.frostCache_.paints == 2);
+    LOKA_VERIFY(!controller.erasedPass().isOpen());
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    ToolboxRenderDirtyInCompositionOrder(controller, dirty);
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(controller.frostCache_.paints == 2);
+    LOKA_VERIFY(!controller.erasedPass().isOpen());
+    stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
+    ToolboxRenderDirtyInCompositionOrder(controller, dirty);
+    LOKA_VERIFY(controller.frostCache_.paints == 2);
+    controller.rootNode_ = 0;
+  }
   void rebuilt()
   {
     ToolboxWindow window;
@@ -244,6 +281,9 @@ namespace
     LOKA_VERIFY(row.top == clip.top && row.bottom == 51);
     LOKA_VERIFY(row.left >= clip.left && row.right <= clip.right);
     LOKA_VERIFY(row.bottom != 60); // An unprojected seat would end here.
+    // The row also keeps the projected unit before the cut: scrolled 9 up.
+    const Rect unit = unitRow(controller, stack, 1)->unit;
+    LOKA_VERIFY(unit.bottom == row.bottom && unit.top == row.top - 9);
     Probe *refused = new Probe("refused-after-unit", 40);
     refused->refuse = true;
     stack->addChild(refused);
@@ -687,7 +727,8 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"HeightOnlyBoxUnit",
+  const char *names[] = {"FrostErasedPassAdmission",
+                         "HeightOnlyBoxUnit",
                          "WidthOnlyBoxDispatch",
                          "TextDirtyClipStaysBelowUnit",
                          "IdleRepairOnlyToggledOverlaps",
@@ -710,7 +751,9 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
     return 1;
   }
-  if (std::strcmp(argv[1], "HeightOnlyBoxUnit") == 0)
+  if (std::strcmp(argv[1], "FrostErasedPassAdmission") == 0)
+    erasedFrostAdmission();
+  else if (std::strcmp(argv[1], "HeightOnlyBoxUnit") == 0)
   {
     heightOnlyUnit(false);
     heightOnlyUnit(true);
@@ -737,7 +780,9 @@ int main(int argc, char **argv)
   {
     run(argv[1]);
     if (std::strcmp(argv[1], "LaterChildGetsUnitRow") == 0)
+    {
       clippedUnitExtent();
+    }
     if (std::strcmp(argv[1], "RefusedChildHasNoRowAndNoRender") == 0)
     {
       refusedControlCleanup();

@@ -48,7 +48,7 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
         // Unlike Win32's retained rectangle, a refused Toolbox unit disappears
         // for this pass. No row means no render (and no control re-registration).
         // Layout appends once per visible unit; vector OOM follows the hit ledgers.
-        const ToolboxUnitLedger::UnitSeat row = {stack, index, clipped};
+        const ToolboxUnitLedger::UnitSeat row = {stack, index, clipped, rect};
         this->unitLedger_.push(row);
       }
       // Clipping removes pixels, not a successfully measured child's extent.
@@ -89,7 +89,11 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
     if (!guard.isActive())
       continue;
-    loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
+    // Non-erasing walks (including region refusal and newly scrolled seats)
+    // keep plain ground until a later erased repaint of this area.
+    if (index != 1 || stack->props.unitGround != loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR || !this->erasedPass_.isOpen()
+        || !this->frostCache_.paint(this->window_->window(), row.rect, row.unit))
+      loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
     ToolboxPaintClip clip(row.rect, ToolboxPaintClip::INTERSECT);
     if (clip.isActive())
       RenderNode(child, this);

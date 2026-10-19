@@ -604,6 +604,7 @@ void ToolboxWindow::draw()
   EraseRect(&window_->portRect);
   if (scenePlatformController_)
   {
+    ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass());
     ToolboxInputDoor::render(*scenePlatformController_);
   }
   this->drawGrowBox();

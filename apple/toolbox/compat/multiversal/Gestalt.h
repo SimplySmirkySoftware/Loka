@@ -10,4 +10,13 @@ enum
   gestaltNativeCPUfamily = 'cpuf'
 };
 
+// Multiversal names only gestalt68881 among the gestaltFPUType answers;
+// match the Universal Interfaces names and values.
+enum
+{
+  gestaltNoFPU = 0,
+  gestalt68882 = 2,
+  gestalt68040FPU = 3
+};
+
 #endif

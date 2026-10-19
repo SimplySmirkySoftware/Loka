@@ -1660,7 +1660,19 @@ does not promote a later one. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
 material on 10.10–10.13 and HUD material from 10.14. Before 10.10, the first
 unit shows a static frosted ground: a light sheen and a hairline, with nothing
-beneath showing through. The other rails keep the window ground.
+beneath showing through. Toolbox shows milk frost: the content beneath,
+lightened, with a grey bottom hairline (no blur yet). It needs 32-bit QuickDraw,
+an FPU, and a unit entirely on one screen of 256 colours or more; otherwise it
+keeps the window ground. On 16/32-bit screens it still computes in 256 colours,
+so it bands. Non-main screens are unverified. The other rails keep the window ground.
+
+Toolbox frost appears only on a repaint whose clip was entirely erased first.
+A non-erasing repaint (for example, a unit scrolled into damage where its previous
+layout had no unit, or a repaint after region allocation failed) shows plain
+window ground there until the next repaint of that area. If the screen palette
+changes, existing frost keeps its old screen indices until the unit repaints.
+Popup direct repaints erase white; Card shadows and Control Manager hide/move
+erases remain limitations. EditText paints its own white field interior.
 
 On macOS before 10.10, the experimental user default `LokaExpLiveBlur` (or the
 launch argument `-LokaExpLiveBlur YES`) turns on live CPU blur instead. This

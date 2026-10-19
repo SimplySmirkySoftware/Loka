@@ -1,3 +1,4 @@
+#include "ToolboxPaintGround.hpp"
 #include "app/layout/ControlWidth.hpp"
 #include "ToolboxPropsRefresh.hpp"
 #include "context/ToolboxEditTextContext.hpp"
@@ -123,6 +124,8 @@ void ToolboxEditTextContext::repaint(const ToolboxEditPresentation &presentation
   if (!te || !*te || !this->text_)
     return;
   const Rect view = (**te).viewRect;
+  // Own the entire field, including the one pixel between frame and text.
+  loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, this->rect_);
   TEUpdate(&view, te);
   FrameRect(&this->rect_);
   if (completes && presentation.installed.holds(this->text_->get()))
@@ -145,6 +148,7 @@ void ToolboxEditTextContext::draw(ToolboxScenePlatformController *controller)
   if (!clip.isActive() || clip.touches(this->paintRect_))
   {
     this->presented_.invalidate();
+    loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, this->rect_);
     FrameRect(&this->rect_);
     if (this->text_)
       DrawStringAt(this->textX_, this->textY_, this->text_->get());

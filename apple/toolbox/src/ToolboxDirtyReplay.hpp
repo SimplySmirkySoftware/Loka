@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_DIRTY_REPLAY_HPP
 #include "app/scene/Node.hpp"
 #include "ToolboxInputDoor.hpp"
+#include "ToolboxErasedPass.hpp"
 #include <Quickdraw.h>
 
 /** Shared clipped replay ritual. Erase precedes composition, so transparent
@@ -24,9 +25,15 @@ template <class Controller> void ToolboxRenderDirtyInCompositionOrder(Controller
   {
     GetClip(oldClip);
     ClipRect(&rect);
+    EraseRect(&rect);
+    ToolboxErasedPass::Guard erased(controller.erasedPass());
+    ToolboxInputDoor::render(controller);
   }
-  EraseRect(&rect);
-  ToolboxInputDoor::render(controller);
+  else
+  {
+    EraseRect(&rect);
+    ToolboxInputDoor::render(controller);
+  }
   if (oldClip != 0)
   {
     SetClip(oldClip);
