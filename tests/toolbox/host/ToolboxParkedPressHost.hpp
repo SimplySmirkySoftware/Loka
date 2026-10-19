@@ -328,6 +328,16 @@ namespace parked_press
     LOKA_VERIFY(f.actions == 1 && f.beneathActions == 0);
     std::puts("[pin] N8 hit retirement shifts later index passed");
   }
+  /** A drawn Button without onClick is a button too: the press stops on it. */
+  void silentHit()
+  {
+    Fixture f;
+    f.install(BUTTON_HIT);
+    static_cast<ToolboxButtonContext *>(f.target->getContext())->emitter_ = 0;
+    LOKA_VERIFY(ToolboxInputDoor::mouseDown(f.controller, f.point));
+    LOKA_VERIFY(f.actions == 0 && f.beneathActions == 0);
+    std::puts("[pin] N10 drawn button without onClick shields the button beneath passed");
+  }
 #endif
 
   void pin(Kind kind)
