@@ -365,6 +365,13 @@ in the implementation evidence; no 68030 timing is inferred from host results.
 
 ### Toolbox write door (PR b)
 
+Toolbox uses `IsAttachedCurrentContext` from `Node.hpp` for both focus
+application and Tab candidates: the owner must still project through that
+context and be ATTACHED. Retired context rows are erased synchronously; this
+predicate is queried only for rows the rail still holds, never deleted contexts.
+Its O(1) check runs once per focus application and once per Tab candidate,
+unchanged from the previous inline checks.
+
 Toolbox resolves the context in its own native edit ledger before changing
 focus. The window must be frontmost, the context current and attached, and the
 projected row used, nonempty and backed by a TE. EditText and TextEditor share
@@ -391,6 +398,30 @@ controller's unit ledger. Each overlapping unit appends a window damage rect
 Host pins cover activation, refusal, key delivery, selection/scroll preservation
 and port restoration; Classic runtime verification belongs to the MAME rig.
 
+### Toolbox presses on parked rows (#1471)
+
+A Toolbox press does nothing when it lands on an on-screen row whose owner is
+parked: no action, tracking, focus change or fall-through to content beneath.
+Native rows count only while their control is visible (including disabled
+controls); retained hit and edit rows count until their sweep. TextEditor
+withdraws its edit row and hides/revokes its bar when the parked fact is
+delivered, so subsequent presses there are empty space and may clear focus or
+fall through; before delivery both rows refuse the press. There is no
+window-wide pending-redraw gate: a press is never dropped because damage is
+queued.
+
+`handleMouseDown` asks `pressLandsOnParkedRow` first, once per content
+mouse-down: one walk of this controller's seven row vectors (normally tens of
+rows), plus a scan of `viewportScrollBars_` for each rect-matching native bar
+(HxV), with no allocation and no foreign rows. A live part drawn over a
+still-visible parked row loses the press until sweep. Typing into a parked
+focused EditText remains unchecked and is a follow-up. The single press door and
+ZStack 2b hit shield remain one deferred concept.
+
+Post-paint admission can apply props/text before the next draw, as can
+TextEditor idle destRect/scroll changes; an area erased by a closing modal waits
+for an update event. Render early returns can retain rows without pixels, a
+pre-existing limit that the window-wide gate never covered.
 
 ### Win32 write door (PR c)
 

@@ -128,6 +128,7 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(
       HideControl(control);
     }
     ScrollBarControlBinding entry;
+    entry.ownerContext = 0;
     entry.resourceId = resourceId;
     entry.control = control;
     entry.value = 0;
@@ -165,9 +166,10 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(
 }
 
 bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
-                                                             const Rect &rect,
-                                                             const loka::app::ScrollBarProps &props,
-                                                             loka::app::scene::NativeLifetimeHint lifetimeHint)
+                                                            const Rect &rect,
+                                                            const loka::app::ScrollBarProps &props,
+                                                            loka::app::scene::NodeContext *ownerContext,
+                                                            loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
   ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   ScrollBarControlBinding *binding = 0;
@@ -181,6 +183,7 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
   {
     return true;
   }
+  binding->ownerContext = ownerContext;
   binding->value = props.value_.state();
   binding->valueSeat = props.value_;
   binding->onChange = props.onChange_;

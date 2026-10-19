@@ -735,3 +735,5 @@ namespace
 #endif
 #include "ToolboxScrollViewRender.cpp"
 #endif
+
+#include "ToolboxPendingDialogs.cpp"

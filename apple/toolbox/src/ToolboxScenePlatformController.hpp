@@ -145,11 +145,12 @@ public:
   /** Creates or refreshes the scrollBarProc control for one ScrollBar node.
       The declared range and the bound value are pushed on every projection,
       which is how a recomposed range reaches the CDEF. */
-  bool ensureScrollBarControl(short resourceId,
-                              const Rect &rect,
-                              const loka::app::ScrollBarProps &props,
-                              loka::app::scene::NativeLifetimeHint lifetimeHint =
-                                  loka::app::scene::NATIVE_HINT_DEFAULT);
+  bool
+  ensureScrollBarControl(short resourceId,
+                         const Rect &rect,
+                         const loka::app::ScrollBarProps &props,
+                         loka::app::scene::NodeContext *ownerContext,
+                         loka::app::scene::NativeLifetimeHint lifetimeHint = loka::app::scene::NATIVE_HINT_DEFAULT);
   void destroyScrollBarControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
   bool presentEditorScrollBar(short, const ToolboxEditorScrollBarPresentation &);
   void revokeEditorScrollBar(short);

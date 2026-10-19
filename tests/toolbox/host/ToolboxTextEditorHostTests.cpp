@@ -471,8 +471,82 @@ namespace
 #include "ToolboxEditorScrollBarPins.hpp"
 #include "ToolboxScrollKeyPins.hpp"
 
+static void countParkedEditorBeneath(void *data)
+{
+  ++*static_cast<unsigned *>(data);
+}
+static void parkedEditorPress()
+{
+  for (int bar = 0; bar != 2; ++bar)
+    for (int phase = 0; phase != 3; ++phase)
+    {
+      Fixture f(30);
+      NotifySubtreeNodeAttached(&f.node);
+      LifecycleFactTestAccess::DeliverFacts(&f.node);
+      MutableState<String> text(String("other"));
+      EditTextNode other((EditTextProps()));
+      NotifySubtreeNodeAttached(&other);
+      ToolboxEditTextContext *context = new ToolboxEditTextContext(&other);
+      other.setContext(context);
+      const Rect field = {150, 0, 170, 100};
+      LOKA_VERIFY(f.controller.ensureEditTextControl(context, field, &text, NATIVE_HINT_DEFAULT).te);
+      LOKA_VERIFY(f.controller.applyNativeFocus(*context));
+      const Rect rect = bar ? f.controller.scrollControl(0).rect : f.context->geometry().text;
+      Point point = {static_cast<short>(rect.top + 2), static_cast<short>(rect.left + 2)};
+      if (phase)
+      {
+        NotifySubtreeNodeDetached(&f.node);
+        if (phase == 2)
+          LifecycleFactTestAccess::DeliverFacts(&f.node);
+      }
+      unsigned beneathCalls = 0;
+      EmitterState beneathAction;
+      beneathAction.bind(&countParkedEditorBeneath, &beneathCalls, false);
+      ButtonNode beneath((ButtonProps()));
+      NotifySubtreeNodeAttached(&beneath);
+      ToolboxButtonContext *beneathContext = new ToolboxButtonContext();
+      beneath.setContext(beneathContext);
+      beneathContext->rect_ = rect;
+      beneathContext->emitter_ = &beneathAction;
+      ToolboxHitLedger::ButtonHit hit;
+      hit.rect = rect;
+      hit.context = beneathContext;
+      hit.emitter = &beneathAction;
+      hit.enabled = 0;
+      hit.boundary = 0;
+      f.controller.installHit(hit);
+      const unsigned tracks = toolbox_host::tracks;
+      ToolboxInputDoor::mouseDown(f.controller, point);
+      LOKA_VERIFY(beneathCalls == (phase == 2 ? 1u : 0u));
+      beneathAction.unbind(&countParkedEditorBeneath, &beneathCalls);
+      NodeContext *actual = 0;
+      LOKA_VERIFY(f.controller.readNativeFocus(actual));
+      if (phase == 1)
+      {
+        LOKA_VERIFY(actual == context);
+        LOKA_VERIFY(toolbox_host::tracks == tracks);
+      }
+      else if (phase == 2)
+      {
+        LOKA_VERIFY(actual == 0);
+        LOKA_VERIFY(!f.controller.scrollControl(0).editor.editor());
+        LOKA_VERIFY(!f.controller.scrollControl(0).control->visible);
+      }
+      else if (bar)
+        LOKA_VERIFY(toolbox_host::tracks == tracks + 1);
+      else
+        LOKA_VERIFY(actual == f.context);
+      f.controller.retireEditTextControl(context, NATIVE_HINT_EAGER_RELEASE);
+      std::printf("[pin] parked TextEditor bar=%d phase=%d passed\n", bar, phase);
+    }
+}
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "parked-press") == 0)
+  {
+    parkedEditorPress();
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "render-bar") == 0)
   {
     Fixture fixture(30);
