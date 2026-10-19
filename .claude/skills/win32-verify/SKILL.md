@@ -84,11 +84,26 @@ executed the other branch's binary and reported every new test as
   - The rig descriptor and the goldens stay in the main clone because the
     checkpoint freezes them together.
   - Outside the lock, never check out or build anything in the main clone.
-- **Take the golden lock atomically and release only your own.** A
+- **Interactive tasks run one at a time, under the desktop lock.** The guest
+  has one interactive desktop and no user input, so a new window from any
+  process can take the foreground from another session's run. A focus pin
+  whose window loses the foreground mid-run fails or prints a skip: before
+  #1497, a helper that took the foreground once during
+  `testWin32FocusCompletion` failed it in 10 runs out of 10 (#1378).
+  - Take `<setup-folder>\desktop.lock` over ssh before `schtasks /Run`, and
+    release it after the task's result file appears. Starting the task opens
+    its console window, which was the foreground in every task observed for
+    #1378, so a lock taken inside the task is already too late.
+  - This covers every interactive task: unit runs, scenario cells, golden
+    bake/verify, standalone apps, and builds started as a task. A build run
+    directly over ssh opens no window on the desktop and needs no lock.
+  - Golden work holds both locks: the golden lock for the main clone, and the
+    desktop lock for each task it starts.
+- **Take either lock atomically and release only your own.** A
   check-then-write lock lets two sessions both see no lock.
   - Take it by creating a directory without `-Force`: `New-Item -ItemType
-    Directory <setup-folder>\golden.lock -ErrorAction Stop` fails when the
-    directory already exists.
+    Directory <setup-folder>\golden.lock -ErrorAction Stop` (or
+    `desktop.lock`) fails when the directory already exists.
   - Then write `owner.txt` inside it with the session and the purpose.
   - When the work ends, remove the directory only if `owner.txt` still names
     your session.
