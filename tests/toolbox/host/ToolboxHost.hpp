@@ -1,6 +1,7 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxUnitLedger.hpp"
+#include "ToolboxErasedPass.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
 #include "ToolboxActivationPhase.hpp"
@@ -602,6 +603,25 @@ public:
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxErasedPass erasedPass_;
+  /** Host observes admission only; native pixels are pinned by FrostStandalone. */
+  struct FrostCache
+  {
+    unsigned paints;
+    FrostCache()
+        : paints(0)
+    {
+    }
+    bool paint(ToolboxWindow::WindowPort *, const Rect &)
+    {
+      ++paints;
+      return false;
+    }
+  } frostCache_;
+  ToolboxErasedPass &erasedPass()
+  {
+    return this->erasedPass_;
+  }
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;

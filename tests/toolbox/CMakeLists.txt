@@ -243,6 +243,23 @@ loka_add_toolbox_test_application(
 set_property(TARGET ${LOKA_TEXT_EDITOR_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
 set_property(TARGET ${LOKA_TEXT_EDITOR_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
 
+set(LOKA_FROST_STANDALONE_DEPTH 8 CACHE STRING "Frost standalone screen depth")
+set(LOKA_FROST_TARGET "LokaFrost${LOKA_CLASSIC_TARGET_SUFFIX}")
+loka_add_toolbox_test_application(
+  ${LOKA_FROST_TARGET}
+  LokaAppleToolboxCore
+  src/FrostStandaloneMain.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/PaintDamageSize.r
+)
+target_include_directories(${LOKA_FROST_TARGET} PRIVATE
+  ${CMAKE_SOURCE_DIR}/tests/standalone
+  ${CMAKE_SOURCE_DIR}/tests/scenarios
+)
+target_compile_definitions(${LOKA_FROST_TARGET} PRIVATE
+  LOKA_FROST_STANDALONE_DEPTH=${LOKA_FROST_STANDALONE_DEPTH})
+set_property(TARGET ${LOKA_FROST_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
+set_property(TARGET ${LOKA_FROST_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+
 set(LOKA_PAINT_DAMAGE_TARGET "LokaPaintDamage${LOKA_CLASSIC_TARGET_SUFFIX}")
 loka_add_toolbox_test_application(
   ${LOKA_PAINT_DAMAGE_TARGET}

@@ -1,6 +1,8 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #include "ToolboxUnitLedger.hpp"
+#include "ToolboxErasedPass.hpp"
+#include "ToolboxFrostCache.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
 #include "app/layout/NaturalWidthSource.hpp"
@@ -57,6 +59,10 @@ private:
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
+  ToolboxErasedPass &erasedPass()
+  {
+    return this->erasedPass_;
+  }
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Push-button measurement shared by allocation and standalone layout.
       The bool form refuses an unmeasurable label; the short form keeps the
@@ -312,6 +318,8 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxFrostCache frostCache_;
+  ToolboxErasedPass erasedPass_;
 
 public:
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;

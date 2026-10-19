@@ -89,7 +89,11 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
     if (!guard.isActive())
       continue;
-    loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
+    // Non-erasing walks (including region refusal and newly scrolled seats)
+    // keep plain ground until a later erased repaint of this area.
+    if (index != 1 || stack->props.unitGround != loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR || !this->erasedPass_.isOpen()
+        || !this->frostCache_.paint(this->window_->window(), row.rect))
+      loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, row.rect);
     ToolboxPaintClip clip(row.rect, ToolboxPaintClip::INTERSECT);
     if (clip.isActive())
       RenderNode(child, this);
