@@ -85,8 +85,17 @@ namespace
     return loka::app::CardStyle(requested.extent(), loka::app::CARD_SHADOW_STENCIL);
   }
 
-  /** Once per nonempty band paint; walks only this band's intersecting tiles
-      and constant-density edge rows. All storage dies with the call. */
+  /** QuickDraw's radius-6 frame quadrant, measured from FrameRoundRect(r, 12, 12)
+      on maciix. The PaintDamage matrix keeps this equal to its FrameRoundRect oracle. */
+  const unsigned char kQuickDrawRadius6FrameQuadrant[6] = {0x0c, 0x30, 0x40, 0x40, 0x80, 0x80};
+  typedef char QuickDrawFrameRequiresRadius6[loka::app::CardStyle::kCornerRadius == 6 ? 1 : -1];
+  // A corner row's border bits are gathered in one 32-bit word before the OR.
+  typedef char CardBorderRowFitsOneLong[loka::app::detail::kCardShadowMaximumTileWidth <= 32 ? 1 : -1];
+
+  /** Once per nonempty band render; walks only this band's nine cells. Corner
+      tiles are at most 30x30, with one border computation per row. Edges read
+      one profile per cell and issue one PaintRect per run; no FrameRoundRect.
+      All storage dies with the call. */
   void PaintCardStencil(const loka::app::CardStyle &requested,
                         const loka::core::Frame &body,
                         const Rect &band,
@@ -94,7 +103,8 @@ namespace
   {
     using namespace loka::app;
     const CardStyle style = ToolboxStencilStyle(requested);
-    if (style.extent() == CARD_SHADOW_NONE)
+    assert(body.width >= 12 && body.height >= 12);
+    if (body.width < 12 || body.height < 12)
       return;
     const CardShadowGridLines grid = CardShadowGrid(style, body);
     enum
@@ -156,6 +166,34 @@ namespace
                   row[x / 8] |= 0x80 >> (x & 7);
                   hasInk = true;
                 }
+              const int ly = y0 + y - body.y;
+              if (ly < 0 || ly >= body.height)
+                continue;
+              const int dy = ly < body.height - 1 - ly ? ly : body.height - 1 - ly;
+              const unsigned char quadrant = dy < 6 ? kQuickDrawRadius6FrameQuadrant[dy] : 0x80;
+              unsigned long border = 0;
+              for (int dx = 0; dx < (dy < 6 ? 6 : 1); ++dx)
+                if (quadrant & (0x80 >> dx))
+                  for (int side = 0; side < 2; ++side)
+                  {
+                    const int lx = side == 0 ? dx : body.width - 1 - dx;
+                    const int column = body.x + lx - x0;
+                    if (column >= 0 && column < width)
+                      border |= 0x80000000UL >> column;
+                  }
+              if (dy == 0)
+              {
+                const int first = body.x + 6 > x0 ? body.x + 6 - x0 : 0;
+                const int end = body.x + body.width - 6 < x1 ? body.x + body.width - 6 - x0 : width;
+                if (first < end)
+                  border |= (0xffffffffUL >> first) & (0xffffffffUL << (32 - end));
+              }
+              if (border)
+              {
+                for (int byte = 0; byte < rowBytes; ++byte)
+                  row[byte] |= static_cast<unsigned char>(border >> (24 - 8 * byte));
+                hasInk = true;
+              }
             }
           }
           if (!hasInk)
@@ -172,21 +210,42 @@ namespace
         else
         {
           const int count = v == 1 ? x1 - x0 : y1 - y0;
+          enum
+          {
+            profileCapacity = detail::kCardShadowMaximumTileWidth > detail::kCardShadowMaximumTileHeight
+                                  ? detail::kCardShadowMaximumTileWidth
+                                  : detail::kCardShadowMaximumTileHeight
+          };
+          assert(count <= profileCapacity && "CardShadowGrid exceeds edge profile capacity");
+          if (count > profileCapacity)
+            continue;
+          unsigned char values[profileCapacity];
+          if (v == 1)
+            CardShadowDensityRun(style, body, x0, y0, count, values);
+          else
+            for (int i = 0; i < count; ++i)
+              values[i] = CardShadowDensity(style, body, x0, y0 + i);
+          // Arc zones are contained by the corner cuts; an edge holds only a straight line.
+          const int borderIndex = v == 1 ? (h == 0 ? body.x : body.x + body.width - 1) - x0
+                                         : (v == 0 ? body.y : body.y + body.height - 1) - y0;
           for (int i = 0; i < count; ++i)
           {
-            const unsigned char density = CardShadowDensity(style, body, x0 + (v == 1 ? i : 0), y0 + (v == 1 ? 0 : i));
-            if (!density)
+            const bool border = i == borderIndex;
+            const unsigned char density = values[i];
+            if (!border && !density)
               continue;
             // PenPat copies the pattern with long moves; keep it word-aligned (#1398).
             loka::toolbox::ToolboxAlignedPattern pattern;
             unsigned char *bytes = reinterpret_cast<unsigned char *>(&pattern.pattern);
             {
               PROFILE_SECTION("card.pattern-prepare");
-              CardShadowStencilPattern(density, bytes);
+              if (border)
+                std::memset(bytes, 0xff, 8);
+              else
+                CardShadowStencilPattern(density, bytes);
             }
             int end = i + 1;
-            while (end < count
-                   && CardShadowDensity(style, body, x0 + (v == 1 ? end : 0), y0 + (v == 1 ? 0 : end)) == density)
+            while (!border && end < count && end != borderIndex && values[end] == density)
               ++end;
             Rect run = dest;
             if (v == 1)
@@ -241,12 +300,7 @@ void ToolboxCardBandContext::render(loka::app::scene::IPlatformController *)
                                                                                   this->rect_.right - this->rect_.left,
                                                                                   this->rect_.bottom - this->rect_.top),
                                                                 this->node_->props);
-  Rect body;
-  SetRect(&body, recovered.x, recovered.y, recovered.x + recovered.width, recovered.y + recovered.height);
-  const short oval = 2 * this->node_->props.style.kCornerRadius;
   PaintCardStencil(this->node_->props.style, recovered, this->paintRect_, clip);
-  PenNormal();
-  FrameRoundRect(&body, oval, oval);
 }
 
 bool RegisterToolboxCardBandNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)
