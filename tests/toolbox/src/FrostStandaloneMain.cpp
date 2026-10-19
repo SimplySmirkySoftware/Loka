@@ -2,7 +2,7 @@
 #include <cstring>
 #include <Gestalt.h>
 #include <Palettes.h>
-#include <Timer.h>
+#include "ToolboxProbeTiming.hpp"
 #include "StandaloneFlowRunner.hpp"
 #include "ObservedMainDefinition.hpp"
 #include "ToolboxWindow.hpp"
@@ -50,6 +50,7 @@ namespace
 
   unsigned long Now()
   {
+    using namespace loka_toolbox_probe;
     UnsignedWide now;
     Microseconds(&now);
     return now.lo;
@@ -127,7 +128,7 @@ namespace
         c.blue = milk(c.blue);
         table[i] = static_cast<unsigned char>(Color2Index(&c));
       }
-      const RGBColor grey = {0xBBBB, 0xBBBB, 0xBBBB};
+      RGBColor grey = {0xBBBB, 0xBBBB, 0xBBBB};
       const unsigned char line = static_cast<unsigned char>(Color2Index(&grey));
       for (int y = 0; y < UnitHeight; ++y)
         for (int x = 0; x < Width; ++x)

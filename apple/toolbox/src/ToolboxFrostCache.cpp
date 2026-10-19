@@ -103,8 +103,9 @@ namespace
   }
   void CopyColors()
   {
-    const RGBColor black = {0, 0, 0};
-    const RGBColor white = {65535, 65535, 65535};
+    // Multiversal declares these colour traps with non-const RGBColor*.
+    RGBColor black = {0, 0, 0};
+    RGBColor white = {65535, 65535, 65535};
     RGBForeColor(&black);
     RGBBackColor(&white);
   }
@@ -161,10 +162,10 @@ bool ToolboxFrostCache::prepare(WindowPtr window, short width, short height)
         for (short i = 0; i < 256; ++i)
         {
           const RGBColor color = (**table).ctTable[i].rgb;
-          const RGBColor milk = {Milk(color.red), Milk(color.green), Milk(color.blue)};
+          RGBColor milk = {Milk(color.red), Milk(color.green), Milk(color.blue)};
           this->milkIndex_[i] = static_cast<unsigned char>(Color2Index(&milk));
         }
-        const RGBColor grey = {0xBBBB, 0xBBBB, 0xBBBB};
+        RGBColor grey = {0xBBBB, 0xBBBB, 0xBBBB};
         this->hairline_ = static_cast<unsigned char>(Color2Index(&grey));
         ready = QDError() == noErr;
       }
