@@ -12,6 +12,7 @@ void testWin32NativeWindowDestructionReleasesMenuWithoutStateNotification();
 void testWin32DisplayScaleProjectsLogicalEdges();
 void testWin32DisplayScaleSystemMetricFollowsDpi();
 void testWin32DpiChangeAcceptsSuggestedWindowRect();
+void testWin32MainDisplayDepthAnswersFromTheScreen();
 void testWin32WindowFrameIsClampedToWorkArea();
 
 void testWin32WindowEditedMarkPrefixesTheNativeTitle();

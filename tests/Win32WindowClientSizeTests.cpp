@@ -754,6 +754,33 @@ void testWin32WmCloseDestroysUnkeyedWindowAsToday()
   LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 1);
 }
 
+void testWin32MainDisplayDepthAnswersFromTheScreen()
+{
+  printf("\n==== [testWin32MainDisplayDepthAnswersFromTheScreen] start ====\n");
+  // The rail answers from the screen device context: presence and value from
+  // one call, through the base pointer the SmirkyCard host holds.
+  Win32PlatformContext context;
+  const PlatformContext *base = &context;
+  int depth = -1;
+  LOKA_VERIFY(base->queryMainDisplayDepth(depth));
+  LOKA_VERIFY(depth > 0);
+  HDC screen = GetDC(0);
+  LOKA_VERIFY(screen);
+  const int expected = GetDeviceCaps(screen, BITSPIXEL) * GetDeviceCaps(screen, PLANES);
+  ReleaseDC(0, screen);
+  LOKA_VERIFY(depth == expected);
+  // A window on the primary monitor reports what the screen does: the two
+  // doors share one extraction (Win32DisplayDepth.hpp).
+  WindowProps props;
+  props.frame(40, 40, 240, 140).visible(false);
+  Win32Window window(&context, props);
+  setWindowVisibility(window, true);
+  int windowDepth = -1;
+  LOKA_VERIFY(window.queryDisplayDepth(windowDepth));
+  LOKA_VERIFY(windowDepth == depth);
+  printf("==== [testWin32MainDisplayDepthAnswersFromTheScreen] PASSED ====\n");
+}
+
 void testWin32DisplayScaleSystemMetricFollowsDpi()
 {
   printf("\n==== [testWin32DisplayScaleSystemMetricFollowsDpi] start ====\n");
