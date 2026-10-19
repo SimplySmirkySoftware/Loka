@@ -1,7 +1,7 @@
-# SmirkyCard LaptopTracker scenarios
+# SmirkyCard SmirkyTracker scenarios
 
 Status: Null audit expectations; maciix runtime verification and golden approval pending.
-Owns: LaptopTracker scenario selection and Toolbox capture handoff.
+Owns: SmirkyTracker scenario selection and Toolbox capture handoff.
 Does not own: Production card behavior or the standalone full browse sequence.
 Code truth: `tests/toolbox/src/SmirkyCardScenarioDriver.cpp` (built by `tests/toolbox/smirkycard/CMakeLists.txt`),
 `example/SmirkyCard/LAPTOP.FLOW.JS`, and `tests/toolbox/run-scenario.sh`.
@@ -23,7 +23,7 @@ The vehicle reads `LokaTest.cfg`, prefixes the baked companion with `LAPTOP_CELL
 and writes the JS runner's audit under the selected cell name. After native
 presentation settles it publishes the capture rectangle and completion marker,
 then lingers for the configured duration. The production frame and title remain
-420×340 at (60, 60), LaptopTracker. The 39 PICTs (13 machines × color, 320×200
+420×340 at (60, 60), SmirkyTracker. The 39 PICTs (13 machines × color, 320×200
 one-bit and 160×100 one-bit) come from `disk-pictures.txt` and live in `Pictures/`; the dev disk then
 holds three top-level items (application, LokaTest.cfg, Pictures), so the
 runner Tabs a full cycle (3) to the application and

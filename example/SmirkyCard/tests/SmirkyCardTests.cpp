@@ -4344,7 +4344,7 @@ namespace
   void checkLaptopLowerings()
   {
     checkNaturalRowLowering();
-    std::fputs("[pin] LaptopTracker ScrollView, Card, ImageView options and depth\n", stderr);
+    std::fputs("[pin] SmirkyTracker ScrollView, Card, ImageView options and depth\n", stderr);
     NullPlatformContext context;
     NullScenePlatformController platform;
     smirkycard::ScriptRuntime runtime;

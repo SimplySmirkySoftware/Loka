@@ -1,4 +1,4 @@
-// LAPTOP.JS - LaptopTracker: an illustrated guide to Apple's Macs.
+// LAPTOP.JS - SmirkyTracker: an illustrated guide to Apple's Macs.
 // Different eras. Different CPUs. Same declarative app.
 //
 // One card owns everything: pictures loaded by name at construction,
@@ -106,7 +106,7 @@ card('first', class {
         this.narrow.set(narrow);
         this.wideList.set(!narrow);
       }));
-    this.toolbarTitle = c.state('LaptopTracker');
+    this.toolbarTitle = c.state('SmirkyTracker');
     this.presentationLabel = c.state('Wide');
     // Seats materialize after the constructor, so the first machine's values
     // are initial values here; select() writes the same seats later.
@@ -142,7 +142,7 @@ card('first', class {
   }
 
   back() {
-    this.toolbarTitle.set('LaptopTracker');
+    this.toolbarTitle.set('SmirkyTracker');
     this.detail.set(false);
     this.showBrowse();
   }
@@ -172,7 +172,7 @@ card('first', class {
 
   toolbar() {
     // Two buttons share the left half so the title keeps its half on a
-    // 420 px Classic window (three equal cells clipped "LaptopTracker").
+    // 420 px Classic window (three equal cells clipped "SmirkyTracker").
     return Row(
       Row(
         Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),

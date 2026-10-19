@@ -34,7 +34,7 @@ scenario('first', function (c) {
     }).named('status')
     .step(function () {
       // Tall list is the default; the carousel branch is not materialized yet.
-      expect('Laptop.Title', 'LaptopTracker');
+      expect('Laptop.Title', 'SmirkyTracker');
       expect('Laptop.Presentation', 'Wide');
       expect(listId + 'macplus', 'Macintosh Plus (1986)');
       expect(listId + 'neo', 'MacBook Neo (2026)');
@@ -80,7 +80,7 @@ scenario('first', function (c) {
       c.test.click('Laptop.Back');
     }).named('detail-shows-pb180c')
     .step(function () {
-      expect('Laptop.Title', 'LaptopTracker');
+      expect('Laptop.Title', 'SmirkyTracker');
       expect('Laptop.Presentation', 'Wide');
       expect(listId + 'pb180c', 'PowerBook 180c (1993)');
       c.test.click('Laptop.Presentation');
