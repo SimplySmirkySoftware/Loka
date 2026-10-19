@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "core/resource/BlobRange.hpp"
 #include "Win32Window.hpp"
+#include "Win32DisplayDepth.hpp"
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileHandle.hpp"
 #include "app/core/Window.hpp"
@@ -36,6 +37,19 @@ loka::app::scene::NodeContext *Win32PlatformContext::createNodeContext(loka::app
     context->setOwner(node);
   }
   return context;
+}
+
+bool Win32PlatformContext::queryMainDisplayDepth(int &out) const
+{
+  // The screen device context is the primary display; a window asks its own
+  // context instead (Win32Window::queryDisplayDepth), same extraction.
+  HDC dc = GetDC(0);
+  const bool answered = loka::win32::queryDeviceContextDepth(dc, out);
+  if (dc)
+  {
+    ReleaseDC(0, dc);
+  }
+  return answered;
 }
 
 bool Win32PlatformContext::openFile(const loka::file::File &item, loka::platform::file::FileHandle &out) const
