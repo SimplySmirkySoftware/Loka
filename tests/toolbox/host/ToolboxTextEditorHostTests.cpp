@@ -540,8 +540,47 @@ static void parkedEditorPress()
       std::printf("[pin] parked TextEditor bar=%d phase=%d passed\n", bar, phase);
     }
 }
+/** Before the parked fact is delivered the editor keeps its row and native focus;
+    neither a text key nor a view key may reach it. After delivery the row is gone. */
+static void parkedEditorKeys()
+{
+  for (int phase = 0; phase != 3; ++phase)
+  {
+    Fixture f(20);
+    NotifySubtreeNodeAttached(&f.node);
+    LifecycleFactTestAccess::DeliverFacts(&f.node);
+    LOKA_VERIFY(f.controller.applyNativeFocus(*f.context));
+    const TEHandle te = f.te();
+    const short length = (**te).teLength;
+    const Rect dest = (**te).destRect;
+    if (phase)
+    {
+      NotifySubtreeNodeDetached(&f.node);
+      if (phase == 2)
+        LifecycleFactTestAccess::DeliverFacts(&f.node);
+    }
+    const bool typed = ToolboxInputDoor::keyDown(f.controller, 'x');
+    const bool scrolled = ToolboxInputDoor::scrollKey(f.controller, SCROLL_END);
+    NodeContext *actual = 0;
+    LOKA_VERIFY(f.controller.readNativeFocus(actual));
+    if (phase == 2)
+      LOKA_VERIFY(actual == 0 && !typed && !scrolled);
+    else
+    {
+      LOKA_VERIFY(actual == f.context && typed && scrolled);
+      LOKA_VERIFY((**te).teLength == length + (phase ? 0 : 1));
+      LOKA_VERIFY(phase ? EqualRect(&dest, &(**te).destRect) : dest.top != (**te).destRect.top);
+    }
+    std::printf("[pin] parked TextEditor keys phase=%d passed\n", phase);
+  }
+}
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "parked-keys") == 0)
+  {
+    parkedEditorKeys();
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "parked-press") == 0)
   {
     parkedEditorPress();

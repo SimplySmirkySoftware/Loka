@@ -174,6 +174,9 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
 bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
 {
   EditTextControlBinding *focusedEdit = this->editControls_.focused();
+  // A parked owner keeps its focused row until the sweep; its keys do nothing.
+  if (focusedEdit && ParkedContext(focusedEdit->ownerContext))
+    return true;
   if (focusedEdit && focusedEdit->te && focusedEdit->editor)
   {
     focusedEdit->editor->scrollKey(key);
@@ -185,6 +188,9 @@ bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
 bool ToolboxScenePlatformController::handleKeyDown(char key)
 {
   EditTextControlBinding *focusedEdit = this->editControls_.focused();
+  // Same refusal as handleScrollKey; presses use pressLandsOnParkedRow.
+  if (focusedEdit && ParkedContext(focusedEdit->ownerContext))
+    return true;
   if (focusedEdit && focusedEdit->te)
   {
     if (focusedEdit->editor)

@@ -637,6 +637,8 @@ int main(int argc, char **argv)
 {
   if (argc == 1 || std::strcmp(argv[1], "parked-dialog") == 0)
     parked_dialog::pin();
+  if (argc == 1 || std::strcmp(argv[1], "parked-typing") == 0)
+    parked_press::typing();
   if (argc == 1 || std::strcmp(argv[1], "parked") == 0)
   {
     if (argc == 3)

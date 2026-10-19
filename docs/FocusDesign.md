@@ -414,9 +414,18 @@ queued.
 mouse-down: one walk of this controller's seven row vectors (normally tens of
 rows), plus a scan of `viewportScrollBars_` for each rect-matching native bar
 (HxV), with no allocation and no foreign rows. A live part drawn over a
-still-visible parked row loses the press until sweep. Typing into a parked
-focused EditText remains unchecked and is a follow-up. The single press door and
+still-visible parked row loses the press until sweep. The single press door and
 ZStack 2b hit shield remain one deferred concept.
+
+Keys follow the same rule. A focused edit row keeps native focus until its
+sweep (TextEditor: until the parked fact is delivered and the row withdraws),
+so `handleKeyDown` and `handleScrollKey` first ask the same predicate of the
+focused row's owner; a parked owner consumes the key and nothing changes. The
+cost is one predicate per entry reached, at most two per key event. A fallback
+field needs no check: leaving ATTACHED cuts its focus source, so its keys
+decline and go on as if nothing were focused. Idle still runs on the parked
+focused row until it goes: an EditText caret keeps blinking on its
+still-visible pixels, and a TextEditor's idle tick runs until delivery.
 
 Post-paint admission can apply props/text before the next draw, as can
 TextEditor idle destRect/scroll changes; an area erased by a closing modal waits

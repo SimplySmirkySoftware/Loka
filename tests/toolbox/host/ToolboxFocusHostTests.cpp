@@ -610,6 +610,26 @@ namespace
     LOKA_VERIFY(f.text.get().equals(String::Literal("ax")));
     LOKA_VERIFY(f.replacement.get().equals(String::Literal("b")));
   }
+  /** Leaving ATTACHED cuts a fallback field's focus source, so its keys decline
+      from the fact write on, as with no focus; the native-row refusal is not needed. */
+  void parkedFallback()
+  {
+    for (int delivered = 0; delivered != 2; ++delivered)
+    {
+      Fixture f;
+      f.hit(f.first);
+      f.click();
+      f.expect(&f.first);
+      NotifySubtreeNodeDetached(&f.first);
+      if (delivered)
+        LifecycleFactTestAccess::DeliverFacts(&f.first);
+      LOKA_VERIFY(f.first.lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
+      // The key goes first, so a missing cut fails on the key, not on the focus read.
+      LOKA_VERIFY(!ToolboxInputDoor::keyDown(f.controller, 'x'));
+      LOKA_VERIFY(f.text.get().equals(String::Literal("a")));
+      f.expect(0);
+    }
+  }
   void fallback()
   {
     Fixture f;
@@ -1016,6 +1036,7 @@ int main(int argc, char **argv)
   postedFallback();
   postedRefusal();
   sharedTextKey();
+  parkedFallback();
   nativeFocus();
   fallback();
   nativeWins();

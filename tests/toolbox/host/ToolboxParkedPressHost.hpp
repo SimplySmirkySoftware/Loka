@@ -314,6 +314,27 @@ namespace parked_press
       std::printf("[pin] parked row kind=%d phase=%d passed\n", kind, phase);
     }
   }
+  /** A parked focused EditText keeps native focus until its row's sweep; a key there does nothing. */
+  void typing()
+  {
+    for (int phase = 0; phase != 3; ++phase)
+    {
+      Fixture f;
+      const TEHandle te = f.controller.editControls_[0].te;
+      const short length = (**te).teLength;
+      if (phase)
+      {
+        NotifySubtreeNodeDetached(&f.focused);
+        if (phase == 2)
+          LifecycleFactTestAccess::DeliverFacts(&f.focused);
+        LOKA_VERIFY(f.focused.lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
+      }
+      LOKA_VERIFY(ToolboxInputDoor::keyDown(f.controller, 'x'));
+      f.expectFocus(f.focused.getContext());
+      LOKA_VERIFY((**te).teLength == length + (phase ? 0 : 1));
+      std::printf("[pin] parked typing phase=%d passed\n", phase);
+    }
+  }
 #ifdef LOKA_HOST_CONTROL_ORDER
   void disabledNative(Kind kind)
   {
