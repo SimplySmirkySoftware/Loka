@@ -416,7 +416,11 @@ void testWin32FocusCompletion()
     KillTimer(0, timer);
     completionProbe = 0;
     f.window.setApp(0);
-    if (!f.facts.focus.state()->get().is(3) && GetActiveWindow() != f.window.hwnd())
+    // Skip only when another thread holds the foreground; a window that lost
+    // activation while this thread kept the foreground stays a red.
+    const HWND foreground = GetForegroundWindow();
+    if (!f.facts.focus.state()->get().is(3) && GetActiveWindow() != f.window.hwnd() && foreground
+        && GetWindowThreadProcessId(foreground, 0) != GetCurrentThreadId())
     {
       skipWithCondition("testWin32FocusCompletion",
                         "the test window lost activation to another thread during the message loop",
