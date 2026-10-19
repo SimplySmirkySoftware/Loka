@@ -39,6 +39,8 @@ EOF
 cat > "$SANDBOX/bin/hls" <<'EOF'
 #!/usr/bin/env bash
 printf 'hls <%s>\n' "$@" >> "$MAME_BOOT_DISK_TEST_LOG"
+# Listing the Loka folder names Pictures only after a marker says a previous population made it.
+case "$*" in *-1a*) [ -e "$MAME_BOOT_DISK_TEST_PICTURES_EXIST" ] && printf 'Pictures\n' ;; esac
 exit 0
 EOF
 
@@ -122,6 +124,7 @@ cp "$REPO_DIR/example/SmirkyCard/disk-pictures.txt" "$ALL_PROJECT/example/Smirky
 cp -R "$REPO_DIR/example/SmirkyCard/assets" "$ALL_PROJECT/example/SmirkyCard/"
 run_all() {
 MAME_BOOT_DISK_TEST_LOG="$SANDBOX/all-apps.log" \
+MAME_BOOT_DISK_TEST_PICTURES_EXIST="${MAME_BOOT_DISK_TEST_PICTURES_EXIST:-}" \
 MAME_ENV_FILE="$SANDBOX/missing.env" \
 MAME_MACHINE="macplus" \
 MAME_HDA="$SANDBOX/boot-template.hd" \
@@ -146,6 +149,13 @@ while read -r stem; do
   grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/assets/$stem.PICT> <:Loka:Pictures:>" "$SANDBOX/all-apps.log" >/dev/null || fail "missing picture $stem"
 done < "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"
 [ "$(grep -c '^hmkdir <:Loka:Pictures>$' "$SANDBOX/all-apps.log")" -eq 1 ] || fail "Pictures must be created once"
+# Repopulating the same boot disk finds the folder and does not create it again.
+touch "$SANDBOX/pictures-exist"
+: > "$SANDBOX/all-apps.log"
+MAME_BOOT_DISK_TEST_PICTURES_EXIST="$SANDBOX/pictures-exist" run_all
+[ "$(grep -c '^hmkdir <:Loka:Pictures>$' "$SANDBOX/all-apps.log")" -eq 0 ] || fail "an existing Pictures folder must be reused"
+grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/assets/MACPLUS.PICT> <:Loka:Pictures:>" "$SANDBOX/all-apps.log" >/dev/null || fail "pictures must still land in the existing folder"
+rm -f "$SANDBOX/pictures-exist"
 # Adding a fourth card needs only a manifest edit; absent entries remain optional.
 printf '\r\n  # extra cards\r\n\r\n  ABSENT.JS  \r\n  FOURTH.JS  ' >> "$ALL_PROJECT/example/SmirkyCard/disk-scripts.txt"
 touch "$ALL_PROJECT/example/SmirkyCard/FOURTH.JS"

@@ -43,7 +43,12 @@ hfs_copy_data() {
     case "$path" in
       */example/SmirkyCard/assets/*.PICT|example/SmirkyCard/assets/*.PICT)
         if [ -z "$pictures" ]; then
-          HOME="$hfs_home" "$(find_retro68_tool hmkdir)" "${directory}Pictures"
+          # A boot disk is repopulated in place, so the folder may already exist.
+          # hls exits 0 for a missing name and hcopy into a missing folder quietly
+          # writes a file of that name, so the listing is the only honest check.
+          if ! HOME="$hfs_home" "$(find_retro68_tool hls)" -1a "$directory" 2>/dev/null | grep -qx 'Pictures'; then
+            HOME="$hfs_home" "$(find_retro68_tool hmkdir)" "${directory}Pictures"
+          fi
           pictures="${directory}Pictures:"
         fi
         destination="$pictures"

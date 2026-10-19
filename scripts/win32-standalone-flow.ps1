@@ -347,7 +347,10 @@ if ($IsReleasePackage) {
     $simpleText = Join-Path $buildRoot "example/SimpleText/LokaSimpleTextWin32.exe"
     $smirkyCardRoot = Join-Path $buildRoot "example/SmirkyCard"
     $smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"
-    $smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt") + @(Get-SmirkyCardFiles "disk-pictures.txt" ".PNG" | ForEach-Object { "Pictures/$_" })
+    # Get-SmirkyCardFiles returns one array object; bind it before piping so
+    # the pipeline unrolls the names instead of handing the array to ForEach-Object.
+    $smirkyCardPictures = Get-SmirkyCardFiles "disk-pictures.txt" ".PNG"
+    $smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt") + @($smirkyCardPictures | ForEach-Object { "Pictures/$_" })
     foreach ($entry in $catalog) {
         $loopTarget = $entry.Target.Replace("StandaloneFlow", "StandaloneLoop")
         $loopExecutable = Get-ApplicationExecutable $loopExecutableRoot $entry.Key $loopTarget

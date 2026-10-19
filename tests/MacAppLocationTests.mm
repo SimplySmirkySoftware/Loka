@@ -103,6 +103,7 @@ void testMacApplicationItemNamesResourceDirectory()
   const loka::file::File nested = loka::file::File::Application()
                                   << loka::file::File("Pictures") << loka::file::File("X");
   LOKA_VERIFY(loka::platform::file::ResolveApplicationItem(nested, handle));
+  displayUtf8.clear(); // CollectUtf8 appends
   LOKA_VERIFY(loka::platform::CollectUtf8(handle.displayPath, displayUtf8));
   NSString *nestedPath = [NSString stringWithUTF8String:displayUtf8.c_str()];
   LOKA_VERIFY([[nestedPath stringByStandardizingPath]
