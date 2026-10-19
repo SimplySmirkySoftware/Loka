@@ -197,7 +197,7 @@ namespace
           phase_(0),
           pass_(0),
           fail_(0),
-          originalDepth_((**(**GetMainDevice()).gdPMap).pixelSize),
+          originalDepth_(0),
           depthReady_(false),
           eligible_(false)
     {
@@ -205,17 +205,9 @@ namespace
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
         this->log_ = loka::platform::file::OpenWriteTruncate(this->file_);
       if (!this->log_)
-      {
         ++this->fail_;
-        return;
-      }
-      this->depthReady_ = HasDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1)
-                          && SetDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1) == noErr;
-      std::fprintf(this->log_,
-                   "depth requested=%d original=%d accepted=%d\r",
-                   LOKA_FROST_STANDALONE_DEPTH,
-                   this->originalDepth_,
-                   this->depthReady_);
+      // QuickDraw is initialized by App::run, after this constructor: every
+      // device, depth and GWorld call waits for the first idle.
     }
     ~FrostConfig()
     {
@@ -263,7 +255,6 @@ namespace
     short originalDepth_;
     bool depthReady_, eligible_;
     loka::platform::file::FileHandle file_;
-    Capture partial_;
 
     void record(const char *name, bool ok)
     {
@@ -286,7 +277,18 @@ namespace
     void step(ToolboxWindow *window)
     {
       if (this->phase_++ == 0)
+      {
+        this->originalDepth_ = (**(**GetMainDevice()).gdPMap).pixelSize;
+        this->depthReady_ = HasDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1)
+                            && SetDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1) == noErr;
+        std::fprintf(this->log_,
+                     "depth requested=%d original=%d accepted=%d\r",
+                     LOKA_FROST_STANDALONE_DEPTH,
+                     this->originalDepth_,
+                     this->depthReady_);
+        loka::platform::file::FlushWrite(this->log_, this->file_);
         return;
+      }
       SetPort(window->window());
       ClipRect(&Whole);
       ToolboxScenePlatformController *controller = window->scenePlatformController();
@@ -364,10 +366,11 @@ namespace
       // A separate idle lets normal pending damage present before capture.
       if (this->phase_ == 3)
       {
-        const bool ok = this->partial_.read(window->window());
+        Capture partial;
+        const bool ok = partial.read(window->window());
         window->draw();
         Capture full;
-        this->record("partial-equals-full", ok && full.read(window->window()) && this->partial_.equals(full, Whole));
+        this->record("partial-equals-full", ok && full.read(window->window()) && partial.equals(full, Whole));
         this->finish();
       }
     }
