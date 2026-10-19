@@ -113,10 +113,12 @@ void testMacMainDisplayDepthAnswersFromTheMainScreen()
     LOKA_VERIFY(base->queryMainDisplayDepth(depth));
     LOKA_VERIFY(depth > 0);
     LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([primary depth]));
-    if ([NSScreen mainScreen] == primary || !([NSScreen mainScreen]))
-      printf("[skip] mainScreen-differs-from-primary branch: one screen or the key window is on the primary (depth %d)\n", depth);
+    // The two can only be told apart when the key window sits on another
+    // screen; this rig has one, so say so instead of passing silently.
+    if ([NSScreen mainScreen] == primary)
+      printf("[skip] mainScreen-differs-from-primary branch: the key window is on the primary (depth %d)\n", depth);
     else
-      LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([primary depth]) && depth != -1);
+      printf("mainScreen is another display; the answer followed the primary (depth %d)\n", depth);
   }
   printf("==== [testMacMainDisplayDepthAnswersFromTheMainScreen] PASSED ====\n");
 }
