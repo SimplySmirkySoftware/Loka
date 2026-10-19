@@ -1,6 +1,9 @@
 #include "MacDisplayAppearanceTests.hpp"
 #include "support/TestVerify.hpp"
 #include "MacDisplayAppearance.hpp"
+#include "MacPlatformContext.hpp"
+#include "app/PlatformContext.hpp"
+#include <AppKit/AppKit.h>
 #include <Foundation/Foundation.h>
 #include <assert.h>
 
@@ -86,4 +89,29 @@ void testMacDisplayAppearanceUsesNativeBestMatch()
   LOKA_VERIFY(!loka::macos::TryReadDisplayAppearance((void *)unknownAppearance, value));
   assert(value == Window::DISPLAY_APPEARANCE_DARK);
   [unknownAppearance release];
+}
+
+void testMacMainDisplayDepthAnswersFromTheMainScreen()
+{
+  printf("\n==== [testMacMainDisplayDepthAnswersFromTheMainScreen] start ====\n");
+  // The rail answers from the main screen: presence and value from one call,
+  // through the base pointer the SmirkyCard host holds.
+  MacPlatformContext context;
+  const PlatformContext *base = &context;
+  int depth = -1;
+  NSScreen *main = [NSScreen mainScreen];
+  if (!main)
+  {
+    LOKA_VERIFY(!base->queryMainDisplayDepth(depth));
+    LOKA_VERIFY(depth == -1);
+    printf("[skip] no main screen in this session; the decline branch is the one pinned\n");
+  }
+  else
+  {
+    LOKA_VERIFY(base->queryMainDisplayDepth(depth));
+    LOKA_VERIFY(depth > 0);
+    LOKA_VERIFY(depth == (int)NSBitsPerPixelFromDepth([main depth]));
+    printf("[skip] no-main-screen decline branch: this session has a main screen (depth %d)\n", depth);
+  }
+  printf("==== [testMacMainDisplayDepthAnswersFromTheMainScreen] PASSED ====\n");
 }

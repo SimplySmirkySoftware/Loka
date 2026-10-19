@@ -4,6 +4,7 @@
 #include "core/resource/BlobRange.hpp"
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
+#include "MacScreenDepth.hpp"
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileHandle.hpp"
 #include "app/core/AppConfigurable.hpp"
@@ -34,6 +35,13 @@ loka::app::scene::NodeContext *MacPlatformContext::createNodeContext(loka::app::
     context->setOwner(node);
   }
   return context;
+}
+
+bool MacPlatformContext::queryMainDisplayDepth(int &out) const
+{
+  // The main screen is where a new window appears; a window asks the screen
+  // it overlaps most instead (MacWindow::queryDisplayDepth), same extraction.
+  return loka::macos::queryScreenDepth([NSScreen mainScreen], out);
 }
 
 bool MacPlatformContext::openFile(const loka::file::File &item, loka::platform::file::FileHandle &out) const

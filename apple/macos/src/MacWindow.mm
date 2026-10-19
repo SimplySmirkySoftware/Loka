@@ -1,4 +1,5 @@
 #include "MacWindow.hpp"
+#include "MacScreenDepth.hpp"
 #include "MacInputDoor.hpp"
 #include "MacApp.hpp"
 #include "MacDisplayAppearance.hpp"
@@ -525,18 +526,7 @@ bool MacWindow::queryDisplayDepth(int &out) const
   // The window reports the screen it overlaps most, which is the same rule the
   // other backends follow. A window that is offscreen has no screen at all, so
   // there is nothing to report rather than something to guess.
-  NSScreen *screen = [window screen];
-  if (!screen)
-  {
-    return false;
-  }
-  const NSInteger bitsPerPixel = NSBitsPerPixelFromDepth([screen depth]);
-  if (bitsPerPixel <= 0)
-  {
-    return false;
-  }
-  out = (int)bitsPerPixel;
-  return true;
+  return loka::macos::queryScreenDepth([window screen], out);
 }
 
 bool MacWindow::queryDisplayAppearance(DisplayAppearance &out) const
