@@ -166,6 +166,9 @@ case "$EXAMPLE" in
     # full cycle lands on the application again, as 7 did on the seven-item
     # disk before the artwork.
     FINDER_TAB_COUNT=41
+    # The carousel cell lays out 13 cards and settled after 33.5 emulated
+    # seconds on the rig (2026-10-19), past the default 30.
+    FINDER_SETTLE_TIMEOUT=120
     ;;
   smirkbench)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTestsToolbox68K.bin"
