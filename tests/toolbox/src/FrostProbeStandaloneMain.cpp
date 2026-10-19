@@ -193,16 +193,6 @@ namespace
                 b + (((255 - b) * kMilk) >> 8));
   }
 
-  void MilkRows(const Surface &s, short rows)
-  {
-    for (short y = 0; y < rows; ++y)
-    {
-      unsigned long *row = s.base + y * s.stride;
-      for (short x = 0; x < s.width; ++x)
-        row[x] = Milk(row[x]);
-    }
-  }
-
   // The cut-down variant: average 4x4 blocks, blur the small image with
   // radius 1, then stretch it back bilinearly over the band rows only.
   void ShrinkBlur(const Surface &s, short bandRows)
@@ -641,12 +631,7 @@ namespace
       const Rect from = {band.top, band.left, static_cast<short>(band.top + kFastRows), band.right};
       CopyIn(gIndexWorld, from);
       const unsigned long t1 = NowUs();
-      const Bytes bytes = BytesOf(gIndexWorld);
-      if (gLog)
-        std::fprintf(gLog, "index in x=302 y=4: %02X x=342: %02X x=200: %02X\r",
-                     bytes.base[4 * bytes.stride + 302], bytes.base[4 * bytes.stride + 342],
-                     bytes.base[4 * bytes.stride + 200]);
-      IndexShrink(bytes);
+      IndexShrink(BytesOf(gIndexWorld));
       const unsigned long t2 = NowUs();
       CopyOut(gIndexWorld, band);
       const unsigned long t3 = NowUs();
@@ -713,6 +698,9 @@ namespace
 
   unsigned long gCost[kPanels];
   unsigned long gContent[kPanels];
+  // Stage times of the winning (minimum) repetition.
+  unsigned long gIdxBest[3];
+  unsigned long gFastBest[3];
 
   void DrawColorWindow(WindowPtr window, bool timed)
   {
@@ -725,6 +713,7 @@ namespace
       if (timed)
       {
         unsigned long best = 0xFFFFFFFFUL;
+        unsigned long content = 0xFFFFFFFFUL;
         for (short rep = 0; rep < 3; ++rep)
         {
           const unsigned long c0 = NowUs();
@@ -732,11 +721,27 @@ namespace
           const unsigned long c1 = NowUs();
           Effect(kPanelVariant[k], band);
           const unsigned long c2 = NowUs();
+          if (c1 - c0 < content)
+            content = c1 - c0;
           if (c2 - c1 < best)
+          {
             best = c2 - c1;
-          gContent[k] = c1 - c0;
+            if (kPanelVariant[k] == SHRINK)
+            {
+              gIdxBest[0] = gIdxIn;
+              gIdxBest[1] = gIdxMid;
+              gIdxBest[2] = gIdxOut;
+            }
+            else if (kPanelVariant[k] == BLUR)
+            {
+              gFastBest[0] = gFastIn;
+              gFastBest[1] = gFastMid;
+              gFastBest[2] = gFastOut;
+            }
+          }
         }
         gCost[k] = best;
+        gContent[k] = content;
       }
       else
       {
@@ -759,30 +764,71 @@ namespace
     DrawControls(window);
   }
 
-  unsigned long gBasicPixelBefore = 0;
-  unsigned long gBasicPixelAfter = 0;
+
+  // Samples taken from the basic window's own red and blue patches, through
+  // three sources with the destination GWorld current every time: the
+  // window's portBits, qd.screenBits, and the main device's PixMap (control).
+  unsigned long gBasicSample[3][2];
+
+  void CaptureBasic(const BitMap *source, const Rect &from, short which)
+  {
+    CGrafPtr savedPort;
+    GDHandle savedDevice;
+    GetGWorld(&savedPort, &savedDevice);
+    SetGWorld(gBasicWorld, 0);
+    const Rect to = (**GetGWorldPixMap(gBasicWorld)).bounds;
+    EraseRect(&to);
+    CopyBits(source, &reinterpret_cast<GrafPtr>(gBasicWorld)->portBits, &from, &to, srcCopy, 0);
+    SetGWorld(savedPort, savedDevice);
+    const Surface surface = SurfaceOf(gBasicWorld);
+    gBasicSample[which][0] = surface.base[20 * surface.stride + 30];
+    gBasicSample[which][1] = surface.base[20 * surface.stride + 80];
+  }
 
   void DrawBasicWindow(WindowPtr window)
   {
     SetPort(window);
-    DrawDocument(0, false);
-    const Rect band = {0, 0, kBandHeight, 160};
-    const Rect from = {0, 0, static_cast<short>(kBandHeight + kPad), 160};
-    PixMapHandle pixels = GetGWorldPixMap(gBasicWorld);
-    const Rect to = (**pixels).bounds;
-    // The window's portBits is a BitMap here, not a PixMap.
-    CopyBits(&window->portBits, reinterpret_cast<const BitMap *>(*pixels), &from, &to, srcCopy, 0);
-    const Surface surface = SurfaceOf(gBasicWorld);
-    gBasicPixelBefore = surface.base[20 * surface.stride + 100]; // A red stripe under the band.
-    BoxBlur(surface, 3);
-    MilkRows(surface, kBandHeight);
-    gBasicPixelAfter = surface.base[20 * surface.stride + 100];
-    const Rect out = {0, 0, kBandHeight, 160};
-    CopyBits(reinterpret_cast<const BitMap *>(*pixels), &window->portBits, &out, &band, srcCopy, 0);
+    EraseRect(&window->portRect);
+    const Rect red = {10, 10, 30, 50};
+    const Rect blue = {10, 60, 30, 100};
+    ForeColor(redColor);
+    PaintRect(&red);
+    ForeColor(blueColor);
+    PaintRect(&blue);
     ForeColor(blackColor);
-    TextFace(bold);
-    Label(8, 20, "basic port");
-    TextFace(normal);
+    const Rect local = {0, 0, static_cast<short>(kBandHeight + kPad), 160};
+    Rect global = local;
+    OffsetRect(&global, static_cast<short>(-window->portBits.bounds.left),
+               static_cast<short>(-window->portBits.bounds.top));
+    CaptureBasic(&window->portBits, local, 0);
+    CaptureBasic(&qd.screenBits, global, 2);
+    PixMapHandle screen = (**GetMainDevice()).gdPMap;
+    const SInt8 state = HGetState(reinterpret_cast<Handle>(screen));
+    HLock(reinterpret_cast<Handle>(screen));
+    CaptureBasic(reinterpret_cast<const BitMap *>(*screen), global, 1);
+    HSetState(reinterpret_cast<Handle>(screen), state);
+    // Show what the portBits capture saw, below the patches.
+    CaptureBasic(&window->portBits, local, 0);
+    const Rect from = {0, 0, kBandHeight, 160};
+    const Rect shown = {40, 0, static_cast<short>(40 + kBandHeight), 160};
+    CopyBits(reinterpret_cast<const BitMap *>(*GetGWorldPixMap(gBasicWorld)), &window->portBits, &from, &shown,
+             srcCopy, 0);
+    TextFont(3);
+    TextSize(9);
+    Label(110, 24, "basic port");
+  }
+
+  void LogScreen(const char *when)
+  {
+    PixMapHandle screen = (**GetMainDevice()).gdPMap;
+    std::fprintf(gLog,
+                 "%s: screenBits base=%08lX rowBytes=0x%04X bounds=%d,%d,%d,%d device base=%08lX rowBytes=0x%04X "
+                 "depth=%d\r",
+                 when, reinterpret_cast<unsigned long>(qd.screenBits.baseAddr),
+                 static_cast<unsigned short>(qd.screenBits.rowBytes), qd.screenBits.bounds.top,
+                 qd.screenBits.bounds.left, qd.screenBits.bounds.bottom, qd.screenBits.bounds.right,
+                 reinterpret_cast<unsigned long>((**screen).baseAddr), static_cast<unsigned short>((**screen).rowBytes),
+                 (**screen).pixelSize);
   }
 
   int RunProbe()
@@ -805,11 +851,13 @@ namespace
     }
     GDHandle device = GetMainDevice();
     std::fprintf(gLog, "depth_before=%d\r", (**(**device).gdPMap).pixelSize);
+    LogScreen("at_launch");
     if (HasDepth(device, 8, 1 << gdDevType, 1 << gdDevType))
       std::fprintf(gLog, "set_depth=8 err=%d\r", SetDepth(device, 8, 1 << gdDevType, 1 << gdDevType));
     else
       std::fprintf(gLog, "set_depth=8 unsupported\r");
     std::fprintf(gLog, "depth_now=%d\r", (**(**GetMainDevice()).gdPMap).pixelSize);
+    LogScreen("after_switch");
 
     const Rect bounds = {0, 0, static_cast<short>(kBandHeight + kPad), kWidth};
     const unsigned long a0 = NowUs();
@@ -865,13 +913,14 @@ namespace
     DrawBasicWindow(basicWindow);
     for (short k = 0; k < kPanels; ++k)
       std::fprintf(gLog, "%s effect_us=%lu document_us=%lu\r", kNames[k], gCost[k], gContent[k]);
-    std::fprintf(gLog, "index stages: copy_in_us=%lu compute_us=%lu copy_out_us=%lu\r", gIdxIn, gIdxMid, gIdxOut);
+    std::fprintf(gLog, "index stages: copy_in_us=%lu compute_us=%lu copy_out_us=%lu\r", gIdxBest[0], gIdxBest[1],
+                 gIdxBest[2]);
     {
       // The QD blend variant, timed once off-panel for comparison.
       SetPort(colorWindow);
       const Rect band = {0, 0, kBandHeight, kWidth};
       unsigned long best = 0xFFFFFFFFUL;
-      for (short rep = 0; rep < 2; ++rep)
+      for (short rep = 0; rep < 3; ++rep)
       {
         DrawDocument(0, true);
         const unsigned long t0 = NowUs();
@@ -883,9 +932,16 @@ namespace
       std::fprintf(gLog, "M milky 62%% (QD blend) effect_us=%lu\r", best);
       InvalRect(&band);
     }
-    std::fprintf(gLog, "fast stages: copy_in_us=%lu compute_us=%lu copy_out_us=%lu\r", gFastIn, gFastMid, gFastOut);
-    std::fprintf(gLog, "basic_port rowBytes=0x%04X pixel_before=%08lX after=%08lX\r",
-                 static_cast<unsigned short>(basicWindow->portBits.rowBytes), gBasicPixelBefore, gBasicPixelAfter);
+    std::fprintf(gLog, "fast stages: copy_in_us=%lu compute_us=%lu copy_out_us=%lu\r", gFastBest[0], gFastBest[1],
+                 gFastBest[2]);
+    std::fprintf(gLog, "basic_port portBits base=%08lX rowBytes=0x%04X bounds=%d,%d\r",
+                 reinterpret_cast<unsigned long>(basicWindow->portBits.baseAddr),
+                 static_cast<unsigned short>(basicWindow->portBits.rowBytes), basicWindow->portBits.bounds.top,
+                 basicWindow->portBits.bounds.left);
+    static const char *const kSources[] = {"portBits", "device PixMap", "screenBits"};
+    for (short i = 0; i < 3; ++i)
+      std::fprintf(gLog, "basic from %s: red=%08lX blue=%08lX\r", kSources[i], gBasicSample[i][0],
+                   gBasicSample[i][1]);
     std::fprintf(gLog, "done\r");
     int result = std::ferror(gLog) ? 1 : 0;
     if (!loka::platform::file::FlushWrite(gLog, file))
