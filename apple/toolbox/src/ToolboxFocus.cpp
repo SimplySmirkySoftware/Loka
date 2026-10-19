@@ -9,6 +9,11 @@
 
 namespace
 {
+  bool ParkedContext(const loka::app::scene::NodeContext *context)
+  {
+    return context && context->owner() && !loka::app::scene::IsAttachedCurrentContext(context);
+  }
+
   template <class Row> bool AcceptsNativeFocus(const Row &row)
   {
     return row.usedThisFrame && row.te && !EmptyRect(&row.rect);
@@ -86,7 +91,7 @@ bool ToolboxScenePlatformController::applyNativeFocus(loka::app::scene::NodeCont
   if (!this->window_ || !this->window_->window() || FrontWindow() != this->window_->window())
     return false;
   loka::app::scene::Node *owner = ctx.owner();
-  if (!owner || owner->getContext() != &ctx || owner->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+  if (!loka::app::scene::IsAttachedCurrentContext(&ctx))
     return false;
   std::size_t index = 0;
   if (this->editControls_.find(&ctx, index))
@@ -135,9 +140,7 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
     const EditTextControlBinding &row = this->editControls_[i];
     if (!AcceptsNativeFocus(row) || row.editor != 0)
       continue;
-    loka::app::scene::Node *owner = row.ownerContext ? row.ownerContext->owner() : 0;
-    if (!owner || owner->getContext() != row.ownerContext
-        || owner->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+    if (!loka::app::scene::IsAttachedCurrentContext(row.ownerContext))
       continue;
     Rect visible;
     if (!SectRect(&row.rect, &portRect, &visible))
@@ -290,8 +293,83 @@ bool ToolboxScenePlatformController::handleTextKey(char key)
   return true;
 }
 
+/** One content press scans this controller's seven row vectors, without allocation.
+    Each rect-matching native bar also scans the controller's viewport bindings. */
+bool ToolboxScenePlatformController::pressLandsOnParkedRow(const Point &point) const
+{
+  for (std::size_t i = 0; i < this->buttonControls_.size(); ++i)
+  {
+    const ButtonControlBinding &row = this->buttonControls_[i];
+    if (row.control && (**row.control).contrlVis && PtInRect(point, &row.rect) && ParkedContext(row.context))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
+  {
+    const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+    if (!row.control || !(**row.control).contrlVis || !PtInRect(point, &row.rect))
+      continue;
+    if (row.editor.editor())
+    {
+      if (ParkedContext(row.editor.editor()))
+        return true;
+      continue;
+    }
+    const loka::app::ScrollViewNode *scrollView = 0;
+    for (std::size_t j = 0; j < this->scrollBarLedger_.viewportScrollBars_.size(); ++j)
+    {
+      const ViewportScrollBarBinding &viewport = this->scrollBarLedger_.viewportScrollBars_[j];
+      if (viewport.barId[loka::app::SCROLL_BAR_VERTICAL] == row.resourceId
+          || viewport.barId[loka::app::SCROLL_BAR_HORIZONTAL] == row.resourceId)
+      {
+        scrollView = viewport.scrollView;
+        break;
+      }
+    }
+    if (scrollView)
+    {
+      if (scrollView->lifecycleFact() != loka::app::scene::NODE_FACT_ATTACHED)
+        return true;
+    }
+    else if (ParkedContext(row.ownerContext))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->editControls_.size(); ++i)
+  {
+    const EditTextControlBinding &row = this->editControls_[i];
+    if (PtInRect(point, &row.rect) && ParkedContext(row.ownerContext))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->hitLedger_.editHits_.size(); ++i)
+  {
+    const EditHit &row = this->hitLedger_.editHits_[i];
+    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->hitLedger_.popupHits_.size(); ++i)
+  {
+    const PopupHit &row = this->hitLedger_.popupHits_[i];
+    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->hitLedger_.cellHits_.size(); ++i)
+  {
+    const CellHit &row = this->hitLedger_.cellHits_[i];
+    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
+      return true;
+  }
+  for (std::size_t i = 0; i < this->hitLedger_.buttonHits_.size(); ++i)
+  {
+    const ButtonHit &row = this->hitLedger_.buttonHits_[i];
+    if (PtInRect(point, &row.rect) && ParkedContext(row.context))
+      return true;
+  }
+  return false;
+}
+
 bool ToolboxScenePlatformController::handleMouseDown(const Point &point)
 {
+  if (this->pressLandsOnParkedRow(point))
+    return false;
   if (this->handleControlClick(point))
   {
     return false;

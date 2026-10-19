@@ -45,6 +45,7 @@ namespace
           controller.allocateControlId(),
           barRect,
           ScrollBarProps().value(seat).range(0, 100).lineStep(2).pageStep(15).onChange(&change),
+          0,
           NATIVE_HINT_DEFAULT));
     }
     ~Fixture()
@@ -90,6 +91,7 @@ namespace
     LOKA_VERIFY(f.controller.ensureScrollBarControl(f.controller.scrollControl(0).resourceId,
                                                     barRect,
                                                     ScrollBarProps().value(f.seat).range(10, 10),
+                                                    0,
                                                     NATIVE_HINT_DEFAULT));
     LOKA_VERIFY(!f.controller.scrollControl(0).active && c->hilite == 255);
     const unsigned before = toolbox_host::tracks;
@@ -98,6 +100,7 @@ namespace
     LOKA_VERIFY(f.controller.ensureScrollBarControl(f.controller.scrollControl(0).resourceId,
                                                     barRect,
                                                     ScrollBarProps().value(f.seat).range(0, 100),
+                                                    0,
                                                     NATIVE_HINT_DEFAULT));
     HideControl(c);
     LOKA_VERIFY(FindControl(center, f.window.window(), &found) == 0 && !found);
@@ -155,7 +158,7 @@ namespace
     f.controller.flushControls();
     LOKA_VERIFY(f.controller.retiredScrollBarControls_.empty());
     LOKA_VERIFY(f.controller.ensureScrollBarControl(
-        reused, barRect, ScrollBarProps().value(f.seat).range(0, 200), NATIVE_HINT_DEFAULT));
+        reused, barRect, ScrollBarProps().value(f.seat).range(0, 200), 0, NATIVE_HINT_DEFAULT));
     LOKA_VERIFY(f.control() == original && f.control()->maximum == 200 && f.control()->visible);
     f.controller.destroyScrollBarControl(reused, NATIVE_HINT_EAGER_RELEASE);
     f.controller.flushControls();

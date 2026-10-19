@@ -28,12 +28,13 @@ namespace loka
 class ToolboxScrollBarLedger
 {
 public:
-  /** One live scrollBarProc control. The props are copied out by value
-      rather than kept as a node pointer: the binding outlives nothing, but
-      a value copy removes the question entirely, the way PopupHit does. */
+  /** One live scrollBarProc control. Props are copied for dispatch; the DSL
+      owner is borrowed until synchronous row erasure on context retirement. */
   struct ScrollBarControlBinding
   {
     ToolboxEditorScrollBarAssociation editor;
+    /** DSL bars only; editor and viewport bars use their existing associations. */
+    loka::app::scene::NodeContext *ownerContext;
     short resourceId;
     ControlRef control;
     loka::core::State<int> *value;

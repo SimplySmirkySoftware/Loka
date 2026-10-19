@@ -825,7 +825,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlOrderTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlOrderTests)
   set_target_properties(LokaToolboxControlOrderTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
+  foreach(_order_case ParkedNativeButton RetainedPropsReconcileDoesNotPaint ButtonDrawnAtCompositionPosition ButtonRefusedLabelDrawsInstalledControl ViewportBarsDrawnByRenderScrollView CompositionReplayDrawsControlsInWalk ScrollBarDrawnAtRender)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
   endforeach()
 
@@ -862,6 +862,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxPartialPaint_${_partial_paint_case} COMMAND LokaToolboxPartialPaintTests ${_partial_paint_case})
   endforeach()
 
+  add_test(NAME testToolboxParkedEditorPress COMMAND LokaToolboxTextEditorTests parked-press)
   add_test(NAME testToolboxEditorBarDrawnAtRender COMMAND LokaToolboxTextEditorTests render-bar)
 
   foreach(_editor_request_case input-door request report project input clear epilogue refuse clamp
