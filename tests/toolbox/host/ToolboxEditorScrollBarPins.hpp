@@ -374,7 +374,7 @@ namespace
     LOKA_VERIFY(noTE.te() && noTE.controller.scrollControl(0).editor.editor() == noTE.context);
     const short appId = noTE.controller.allocateControlId();
     const Rect appRect = {0, 0, 80, 16};
-    LOKA_VERIFY(noTE.controller.ensureScrollBarControl(appId, appRect, ScrollBarProps(), NATIVE_HINT_DEFAULT));
+    LOKA_VERIFY(noTE.controller.ensureScrollBarControl(appId, appRect, ScrollBarProps(), 0, NATIVE_HINT_DEFAULT));
     LOKA_VERIFY(!noTE.controller.scrollControl(1).editor.editor());
     noTE.controller.destroyScrollBarControl(appId, NATIVE_HINT_DEFAULT);
   }

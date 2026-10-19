@@ -363,7 +363,7 @@ touch "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTests
 run_case smirkbench startup 4 unset
 run_case smirkbench surface-ticks 4 unset
 run_case smirkbench add-face 4 unset
-# SmirkyCard launch-only pin: the baked card still needs all five picture data forks.
+# SmirkyCard launch-only pin: the baked card still needs every manifest picture data fork.
 printf '%s\n' 'smirkycard startup' >>"$SANDBOX/repo/tests/scenarios/scenarios.txt"
 mkdir -p "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard" \
   "$SANDBOX/repo/example/SmirkyCard/assets" "$SANDBOX/repo/tests/scenarios/expected/smirkycard"
@@ -374,7 +374,7 @@ cp "$REPO_DIR/tests/scenarios/expected/smirkycard/startup.audit" \
   "$SANDBOX/repo/tests/scenarios/expected/smirkycard/startup.audit"
 cp "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/classic-build-provenance.txt" \
   "$SANDBOX/repo/build/retro68/68k/Release/tests/toolbox/smirkycard/classic-build-provenance.txt"
-run_case smirkycard startup 7 unset
+run_case smirkycard startup 3 120
 for stem in $(sed '/^#/d; /^$/d' "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"); do
   grep -Fxq -- "$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/dev-disk-arguments" \
     || fail "SmirkyCard did not stage $stem"

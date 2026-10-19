@@ -59,22 +59,26 @@ void testApplicationFileCompositionKeepsExplicitBase()
   assert(childWins.relativePath().equals(loka::core::String::Literal("manual.pdf")));
 }
 
-void testApplicationRelativePredicateEnforcesSingleSegment()
+void testApplicationRelativePredicateEnforcesTwoComponents()
 {
   using loka::platform::file::ApplicationRelativeIsOpenable;
 
-  assert(ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("ASSETS.LRP")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application()));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("a/b")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("a:b")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("sub\\a.bin")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("..\\..\\secret")));
-  assert(!ApplicationRelativeIsOpenable(
-      loka::file::File::Application()
-      << loka::file::File(loka::core::String::Utf8("a\0b", 3))));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File(".")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("..")));
-  assert(!ApplicationRelativeIsOpenable(loka::file::File("ASSETS.LRP")));
+  LOKA_VERIFY(ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("ASSETS.LRP")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application()));
+  LOKA_VERIFY(ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("A")));
+  LOKA_VERIFY(
+      ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("A") << loka::file::File("B")));
+  const char *refused[] = {"A/B/C", "../B", "A/..", "A/", "/A", "A//B", "./B", "A/."};
+  for (std::size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File(refused[i])));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("a:b")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("sub\\a.bin")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("..\\..\\secret")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application()
+                                             << loka::file::File(loka::core::String::Utf8("a\0b", 3))));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File(".")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File::Application() << loka::file::File("..")));
+  LOKA_VERIFY(!ApplicationRelativeIsOpenable(loka::file::File("ASSETS.LRP")));
 
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(LOKA_RETRO68)
   loka::platform::file::FileHandle handle;
@@ -106,10 +110,13 @@ void testNullApplicationFileUsesOnlyInjectedDirectory()
   NullPlatformContext context;
   context.setApplicationDirectory(loka::core::String::Literal(directory));
   LOKA_VERIFY(!context.openFile(loka::file::File::Application(), handle));
-  LOKA_VERIFY(!context.openFile(loka::file::File::Application() << loka::file::File("a/b"), handle));
+  LOKA_VERIFY(!context.openFile(loka::file::File::Application() << loka::file::File("a/b/c"), handle));
   LOKA_VERIFY(!context.openFile(loka::file::File::Application() << loka::file::File(".."), handle));
+  LOKA_VERIFY(context.openFile(loka::file::File::Application() << loka::file::File("Pictures") << loka::file::File("X"),
+                               handle));
+  LOKA_VERIFY(handle.displayPath.equals(loka::core::String::Literal("_loka_application_fixture/Pictures/X")));
   LOKA_VERIFY(context.openFile(item, handle));
-  assert(handle.displayPath.equals(loka::core::String::Literal(injectedPath)));
+  LOKA_VERIFY(handle.displayPath.equals(loka::core::String::Literal(injectedPath)));
 
   std::FILE *opened = loka::platform::file::OpenRead(handle.displayPath);
   assert(opened);

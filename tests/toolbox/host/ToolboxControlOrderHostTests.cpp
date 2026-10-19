@@ -274,10 +274,21 @@ namespace
     controller.clearControls();
   }
 } // namespace
+#include "ToolboxParkedPressHost.hpp"
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strcmp(argv[1], "ViewportBarsDrawnByRenderScrollView") == 0)
+  if (std::strcmp(argv[1], "ParkedNativeButton") == 0)
+  {
+    parked_press::pin(parked_press::NATIVE_BUTTON);
+    for (int kind = parked_press::NATIVE_BUTTON; kind <= parked_press::VIEWPORT_HORIZONTAL; ++kind)
+    {
+      parked_press::disabledNative(static_cast<parked_press::Kind>(kind));
+      parked_press::nativeVisibility(static_cast<parked_press::Kind>(kind), false);
+      parked_press::nativeVisibility(static_cast<parked_press::Kind>(kind), true);
+    }
+  }
+  else if (std::strcmp(argv[1], "ViewportBarsDrawnByRenderScrollView") == 0)
     viewport();
   else if (std::strcmp(argv[1], "ScrollBarDrawnAtRender") == 0)
     scrollBar();

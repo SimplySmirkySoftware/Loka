@@ -378,11 +378,10 @@ void ToolboxApp::run()
           }
           if (clicked)
           {
-            if (!clicked->hasPendingInvalidate())
-            {
-              clicked->handleMouseDown(event.where);
-              this->cursorOwner_.reconcile();
-            }
+            // Queued damage never drops a press; the controller refuses presses
+            // on parked rows itself (pressLandsOnParkedRow, #1471).
+            clicked->handleMouseDown(event.where);
+            this->cursorOwner_.reconcile();
           }
         }
       }

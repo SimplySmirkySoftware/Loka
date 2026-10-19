@@ -114,15 +114,8 @@ public:
 };
 namespace toolbox_host { extern GrafPtr frontWindow; extern int textHits; }
 inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
-#define LOKA_TOOLBOX_PENDING_DIALOGS_HPP
-#include "app/OpenFileDialog.hpp"
+#include "ToolboxPendingDialogs.hpp"
 #include "ToolboxDialogPresenter.hpp"
-class ToolboxPendingDialogs
-{
-public:
-  ToolboxDialogPresenter *take() { return 0; }
-  bool empty() const { return true; }
-};
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
 {
@@ -167,7 +160,10 @@ public:
   }
   void requestInvalidate() { ++toolbox_host::invalidations; }
   void requestInvalidateWithReason(const char *) { ++toolbox_host::invalidations; }
-  ToolboxScenePlatformController *scenePlatformController() { return 0; }
+  ToolboxScenePlatformController *scenePlatformController()
+  {
+    return this->scenePlatformController_;
+  }
   void flushInvalidate() { if (this->onFlush) this->onFlush(this->flushData); }
   loka::core::StateTracker *getTracker() { return &this->tracker_; }
   void requestInvalidateRect(const Rect &rect)
@@ -295,6 +291,10 @@ public:
   typedef ToolboxHitLedger::CellHit CellHit;
   typedef ToolboxHitLedger::PopupHit PopupHit;
   ToolboxHitLedger hitLedger_;
+  const std::vector<ButtonHit> &buttonHits() const
+  {
+    return this->hitLedger_.buttonHits_;
+  }
   void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
   void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
   void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
@@ -373,8 +373,11 @@ public:
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
   bool ensureScrollBarBinding(
       short, const Rect &, int, int, int, int, loka::app::scene::NativeLifetimeHint, ScrollBarControlBinding *&);
-  bool
-  ensureScrollBarControl(short, const Rect &, const loka::app::ScrollBarProps &, loka::app::scene::NativeLifetimeHint);
+  bool ensureScrollBarControl(short,
+                              const Rect &,
+                              const loka::app::ScrollBarProps &,
+                              loka::app::scene::NodeContext *,
+                              loka::app::scene::NativeLifetimeHint);
   void bindEnabledState(loka::core::State<bool> *) {}
   void unbindEnabledState(loka::core::State<bool> *) {}
   bool hasLiveBinding(loka::core::State<bool> *) const;

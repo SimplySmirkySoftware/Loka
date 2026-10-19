@@ -9,6 +9,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "ToolboxActivationPhase.hpp"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include "ToolboxPresentHost.hpp"
 namespace
@@ -349,7 +350,8 @@ namespace
       case SCROLL_INPUT:
       {
         observe<NativeNodeContext>(node);
-        LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, node->asScrollBarNode()->props, NATIVE_HINT_DEFAULT));
+        LOKA_VERIFY(controller.ensureScrollBarControl(
+            1, rect, node->asScrollBarNode()->props, node->getContext(), NATIVE_HINT_DEFAULT));
         controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 42);
         const unsigned tracks = toolbox_host::tracks;
         facts.bind();
@@ -510,7 +512,7 @@ namespace
     {
       const ScrollBarProps &props = node->asScrollBarNode()->props;
       LOKA_VERIFY(props.value_.usesTracker(owner->tracker()));
-      LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, props, NATIVE_HINT_DEFAULT));
+      LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, props, 0, NATIVE_HINT_DEFAULT));
       controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 3);
     }
     if (clocked)
@@ -629,8 +631,20 @@ namespace
     LOKA_VERIFY(facts.destroyed > facts.returned);
   }
 }
+#include "ToolboxParkedPressHost.hpp"
+#include "ToolboxParkedDialogHost.hpp"
 int main(int argc, char **argv)
 {
+  if (argc == 1 || std::strcmp(argv[1], "parked-dialog") == 0)
+    parked_dialog::pin();
+  if (argc == 1 || std::strcmp(argv[1], "parked") == 0)
+  {
+    if (argc == 3)
+      parked_press::pin(static_cast<parked_press::Kind>(std::atoi(argv[2])));
+    else
+      for (int kind = parked_press::DSL_BAR; kind != parked_press::KIND_COUNT; ++kind)
+        parked_press::pin(static_cast<parked_press::Kind>(kind));
+  }
   if (argc == 1 || std::strcmp(argv[1], "turn") == 0)
   {
     presentSettlesBeforeApply(ACTIVATION_FOREGROUND);

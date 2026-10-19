@@ -1831,6 +1831,15 @@ namespace loka
         loka::dsl::CompositionList<Node> children_;
       };
 
+      /** The owner still projects through this context and is ATTACHED; a parked
+          owner answers false. Rails erase retired context rows synchronously.
+          Callers ask only about rows they still hold, never deleted contexts. */
+      inline bool IsAttachedCurrentContext(const NodeContext *context)
+      {
+        return context && context->owner() && context->owner()->getContext() == context
+               && context->owner()->lifecycleFact() == NODE_FACT_ATTACHED;
+      }
+
       inline void NodeContext::initializeDeliveredFact(Node *ownerNode)
       {
         if (!ownerNode)
