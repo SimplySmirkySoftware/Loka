@@ -344,6 +344,18 @@ void GradientPins()
     }
   }
 }
+/** Independent measured QuickDraw frame oracle; constant work per sampled pixel. */
+bool CardBorderInk(const loka::core::Frame &body, int x, int y)
+{
+  const int lx = x - body.x, ly = y - body.y;
+  if (lx < 0 || ly < 0 || lx >= body.width || ly >= body.height)
+    return false;
+  const int dx = lx < body.width - 1 - lx ? lx : body.width - 1 - lx;
+  const int dy = ly < body.height - 1 - ly ? ly : body.height - 1 - ly;
+  const char *const quadrant[] = {"....##", "..##..", ".#....", ".#....", "#.....", "#....."};
+  return dx < 6 && dy < 6 ? quadrant[dy][dx] == '#' : dx == 0 || dy == 0;
+}
+
 /** Observe transfer payloads, not a fake QuickDraw rasterizer. */
 void CardStencilPins()
 {
@@ -354,84 +366,95 @@ void CardStencilPins()
     for (int residue = 0; residue < 8; ++residue)
       for (int ink = CARD_SHADOW_STENCIL; ink <= CARD_SHADOW_ALPHA; ++ink)
         for (int role = 0; role < CARD_BAND_COUNT; ++role)
-        {
-          CardBandNode node(
-              CardBandProps(static_cast<CardBandRole>(role),
-                            CardStyle(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink))));
-          ToolboxCardBandContext context(&node, &controller);
-          LayoutState seat = Seat(17 + residue, 21 + (residue * 3) % 8, 77 + residue);
-          seat.height = 79 + (residue * 5) % 8;
-          const CardStyle style = node.props.style;
-          const loka::core::Frame band(seat.x, seat.y, seat.width, seat.height);
-          const loka::core::Frame body = CardBodyInBand(band, node.props);
-          // Odd viewport edges exercise phase independently of the full band.
-          SetRect(
-              &controller.projectionClip, band.x + 3, band.y + 5, band.x + band.width - 1, band.y + band.height - 2);
-          context.layout(&controller, seat);
-          toolbox_host::cardOperations.clear();
-          toolbox_host::stencilTransfers.clear();
-          toolbox_host::stencilRuns.clear();
-          toolbox_host::roundFrames.clear();
-          context.render(&controller);
-          LOKA_VERIFY(node.props.style == style);
-          LOKA_VERIFY(!toolbox_host::cardOperations.empty() && toolbox_host::cardOperations.back() == 'B');
-          LOKA_VERIFY(toolbox_host::roundFrames.size() == 1);
-          if (extent == CARD_SHADOW_NONE)
-            LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty());
-          // Empty tiles need no native transfer. Required ink is pinned by the
-          // complete expected-black coverage check below.
-          for (std::size_t t = 0; t < toolbox_host::stencilTransfers.size(); ++t)
+          for (int clipped = 0; clipped < 2; ++clipped)
           {
-            const toolbox_host::StencilTransfer &transfer = toolbox_host::stencilTransfers[t];
-            LOKA_VERIFY(transfer.mode == srcOr && transfer.rowBytes == 4);
-            bool hasInk = false;
-            for (std::size_t byte = 0; byte < transfer.bytes.size(); ++byte)
-              hasInk = hasInk || transfer.bytes[byte] != 0;
-            LOKA_VERIFY(hasInk);
-            const int width = transfer.rect.right - transfer.rect.left;
-            const int height = transfer.rect.bottom - transfer.rect.top;
-            LOKA_VERIFY(width <= 30 && height <= 30 && transfer.bytes.size() <= 120);
-            for (int y = 0; y < height; ++y)
-              for (int x = 0; x < transfer.rowBytes * 8; ++x)
-              {
-                const bool bit = (transfer.bytes[y * transfer.rowBytes + x / 8] & (0x80 >> (x & 7))) != 0;
-                const int wx = transfer.rect.left + x, wy = transfer.rect.top + y;
-                const bool expected = x < width && CardShadowStencilInk(CardShadowDensity(style, body, wx, wy), wx, wy);
-                LOKA_VERIFY(bit == expected);
-              }
-          }
-          for (std::size_t t = 0; t < toolbox_host::stencilRuns.size(); ++t)
-          {
-            const toolbox_host::Fill &run = toolbox_host::stencilRuns[t];
-            LOKA_VERIFY(run.ink == patOr);
-            for (int y = run.rect.top; y < run.rect.bottom; ++y)
-              for (int x = run.rect.left; x < run.rect.right; ++x)
-              {
-                const bool bit = (run.pattern.pat[y & 7] & (0x80 >> (x & 7))) != 0;
-                LOKA_VERIFY(bit == CardShadowStencilInk(CardShadowDensity(style, body, x, y), x, y));
-              }
-          }
-          // Every expected black sample must be covered exactly once by the
-          // transfer rectangles. This checks partition coverage, not QuickDraw.
-          for (int y = controller.projectionClip.top; y < controller.projectionClip.bottom; ++y)
-            for (int x = controller.projectionClip.left; x < controller.projectionClip.right; ++x)
+            CardBandNode node(
+                CardBandProps(static_cast<CardBandRole>(role),
+                              CardStyle(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink))));
+            ToolboxCardBandContext context(&node, &controller);
+            LayoutState seat = Seat(17 + residue, 21 + (residue * 3) % 8, 77 + residue);
+            seat.height = 79 + (residue * 5) % 8;
+            const CardStyle style = node.props.style;
+            const loka::core::Frame band(seat.x, seat.y, seat.width, seat.height);
+            const loka::core::Frame body = CardBodyInBand(band, node.props);
+            // Odd viewport edges exercise phase independently of the full band.
+            SetRect(&controller.projectionClip,
+                    band.x + (clipped ? 3 : 0),
+                    band.y + (clipped ? 5 : 0),
+                    band.x + band.width - (clipped ? 1 : 0),
+                    band.y + band.height - (clipped ? 2 : 0));
+            context.layout(&controller, seat);
+            toolbox_host::stencilTransfers.clear();
+            toolbox_host::stencilRuns.clear();
+            toolbox_host::roundFrames.clear();
+            context.render(&controller);
+            LOKA_VERIFY(node.props.style == style);
+            LOKA_VERIFY(toolbox_host::roundFrames.empty());
+            // Empty tiles need no native transfer. Required ink is pinned by the
+            // complete expected-black coverage check below.
+            for (std::size_t t = 0; t < toolbox_host::stencilTransfers.size(); ++t)
             {
-              if (!CardShadowStencilInk(CardShadowDensity(style, body, x, y), x, y))
-                continue;
-              unsigned covers = 0;
-              for (std::size_t t = 0; t < toolbox_host::stencilTransfers.size(); ++t)
-              {
-                const Rect &r = toolbox_host::stencilTransfers[t].rect;
-                covers += x >= r.left && x < r.right && y >= r.top && y < r.bottom;
-              }
-              for (std::size_t t = 0; t < toolbox_host::stencilRuns.size(); ++t)
-              {
-                const Rect &r = toolbox_host::stencilRuns[t].rect;
-                covers += x >= r.left && x < r.right && y >= r.top && y < r.bottom;
-              }
-              LOKA_VERIFY(covers == 1);
+              const toolbox_host::StencilTransfer &transfer = toolbox_host::stencilTransfers[t];
+              LOKA_VERIFY(transfer.mode == srcOr && transfer.rowBytes == 4);
+              bool hasInk = false;
+              for (std::size_t byte = 0; byte < transfer.bytes.size(); ++byte)
+                hasInk = hasInk || transfer.bytes[byte] != 0;
+              LOKA_VERIFY(hasInk);
+              const int width = transfer.rect.right - transfer.rect.left;
+              const int height = transfer.rect.bottom - transfer.rect.top;
+              LOKA_VERIFY(width <= 30 && height <= 30 && transfer.bytes.size() <= 120);
+              for (int y = 0; y < height; ++y)
+                for (int x = 0; x < transfer.rowBytes * 8; ++x)
+                {
+                  const bool bit = (transfer.bytes[y * transfer.rowBytes + x / 8] & (0x80 >> (x & 7))) != 0;
+                  const int wx = transfer.rect.left + x, wy = transfer.rect.top + y;
+                  const bool expected = x < width
+                                        && (CardShadowStencilInk(CardShadowDensity(style, body, wx, wy), wx, wy)
+                                            || CardBorderInk(body, wx, wy));
+                  LOKA_VERIFY(bit == expected);
+                }
             }
-        }
+            for (std::size_t t = 0; t < toolbox_host::stencilRuns.size(); ++t)
+            {
+              const toolbox_host::Fill &run = toolbox_host::stencilRuns[t];
+              LOKA_VERIFY(run.ink == patOr);
+              bool fullInk = true;
+              for (int row = 0; row < 8; ++row)
+                fullInk = fullInk && run.pattern.pat[row] == 0xff;
+              for (int y = run.rect.top; y < run.rect.bottom; ++y)
+                for (int x = run.rect.left; x < run.rect.right; ++x)
+                {
+                  const bool bit = (run.pattern.pat[y & 7] & (0x80 >> (x & 7))) != 0;
+                  if (fullInk)
+                    LOKA_VERIFY(bit && CardBorderInk(body, x, y));
+                  else
+                  {
+                    LOKA_VERIFY(!CardBorderInk(body, x, y));
+                    LOKA_VERIFY(bit == CardShadowStencilInk(CardShadowDensity(style, body, x, y), x, y));
+                  }
+                }
+            }
+            // Every expected black sample must be covered exactly once by the
+            // transfer rectangles. This checks partition coverage, not QuickDraw.
+            for (int y = controller.projectionClip.top; y < controller.projectionClip.bottom; ++y)
+              for (int x = controller.projectionClip.left; x < controller.projectionClip.right; ++x)
+              {
+                if (!CardShadowStencilInk(CardShadowDensity(style, body, x, y), x, y) && !CardBorderInk(body, x, y))
+                  continue;
+                unsigned covers = 0;
+                for (std::size_t t = 0; t < toolbox_host::stencilTransfers.size(); ++t)
+                {
+                  const Rect &r = toolbox_host::stencilTransfers[t].rect;
+                  covers += x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+                }
+                for (std::size_t t = 0; t < toolbox_host::stencilRuns.size(); ++t)
+                {
+                  const Rect &r = toolbox_host::stencilRuns[t].rect;
+                  covers += x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+                }
+                LOKA_VERIFY(covers == 1);
+              }
+          }
 }
 
 void CardPins()
@@ -492,7 +515,14 @@ void CardPins()
     context->render(&controller);
     LOKA_VERIFY(toolbox_host::regions - regions == 2);
     LOKA_VERIFY(toolbox_host::shadowPaints == paints);
-    LOKA_VERIFY(toolbox_host::roundFrames.size() == 1 && EqualRect(&toolbox_host::roundFrames[0], &bodies[role]));
+    const loka::core::Frame recovered = CardBodyInBand(loka::core::Frame(bands[role].left,
+                                                                         bands[role].top,
+                                                                         bands[role].right - bands[role].left,
+                                                                         bands[role].bottom - bands[role].top),
+                                                       node.props);
+    LOKA_VERIFY(recovered.x == bodies[role].left && recovered.y == bodies[role].top
+                && recovered.width == bodies[role].right - bodies[role].left
+                && recovered.height == bodies[role].bottom - bodies[role].top);
     LOKA_VERIFY(toolbox_host::erases == erases && toolbox_host::backgroundColors.empty());
     LOKA_VERIFY(window.port.fgColor == greenColor && toolbox_host::pen.mode == saved.mode);
     LOKA_VERIFY(toolbox_host::pen.width == saved.width && toolbox_host::pen.height == saved.height);
@@ -506,14 +536,15 @@ void CardPins()
     toolbox_host::stencilRuns.clear();
     toolbox_host::failRegions = 2;
     context->render(&controller);
-    LOKA_VERIFY(toolbox_host::roundFrames.empty() && toolbox_host::shadowPaints == paints);
+    LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty()
+                && toolbox_host::shadowPaints == paints);
     toolbox_host::failRegions = 0;
     for (int allocation = 1; allocation <= 2; ++allocation)
     {
       toolbox_host::refuseRegionAttempt = toolbox_host::regions + allocation;
       context->render(&controller);
-      LOKA_VERIFY(toolbox_host::roundFrames.empty() && toolbox_host::shadowPaints == paints);
-      LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty());
+      LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty()
+                  && toolbox_host::shadowPaints == paints);
       const Rect refusedClip = toolbox_host::currentClip();
       LOKA_VERIFY(EqualRect(&savedClip, &refusedClip));
       LOKA_VERIFY(window.port.fgColor == greenColor && toolbox_host::pen.mode == saved.mode);
@@ -549,9 +580,10 @@ void CardPins()
     LifecycleFactTestAccess::DeliverFacts(&node);
     LOKA_VERIFY(!controller.compositionReplay.required());
     LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
-    toolbox_host::roundFrames.clear();
+    toolbox_host::stencilTransfers.clear();
+    toolbox_host::stencilRuns.clear();
     context->render(&controller);
-    LOKA_VERIFY(toolbox_host::roundFrames.empty());
+    LOKA_VERIFY(toolbox_host::stencilTransfers.empty() && toolbox_host::stencilRuns.empty());
     if (!terminal)
     {
       NotifySubtreeNodeAttached(&node);

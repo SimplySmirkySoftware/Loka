@@ -184,6 +184,10 @@ callers and native QuickDraw overhead, rather than inferring headroom from
 the application's SIZE resource.
 
 Host transfer pins observe bytes, padding, transparent modes, partition
-coverage, call order, props, and allocation-refusal restoration. The host
-fake does not rasterize QuickDraw; pixel and scroll acceptance remains the
-maciix run.
+coverage, props, and allocation-refusal restoration. Since #1447 the painter
+draws the border itself, from QuickDraw's radius-6 frame quadrant measured on
+maciix, and no longer calls `FrameRoundRect`; the host pins compare it with an
+independent copy of that measurement. The host fake does not rasterize
+QuickDraw. Pixel and scroll acceptance remains the maciix run, where the
+whole-card oracle still calls `FrameRoundRect` and so is what holds the
+painter's border equal to QuickDraw's.
