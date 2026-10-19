@@ -1,9 +1,3 @@
-    # 41 dev-disk items: application, 39 PICTs, LokaTest.cfg. The Finder's
-    # Tab cursor starts on the application and walks the window, so a full
-    # cycle (one Tab per item) lands on it again: 3 Tabs selected MACPLUSM.PICT
-    # and 7 selected MB2006MS.PICT (rig, 2026-10-19), as 7 did on the
-    # seven-item disk before the artwork.
-    FINDER_TAB_COUNT=41
 #!/usr/bin/env bash
 
 set -euo pipefail
@@ -165,12 +159,13 @@ case "$EXAMPLE" in
     TARGET="LokaSmirkyCardTest68K_APPL"
     # SmirkyCard is opt-in, so the vehicle exists only in a build configured with it.
     CONFIGURE_FLAGS=" -DLOKA_BUILD_SMIRKYCARD=ON"
-    # 41 dev-disk items: application, 39 PICTs, LokaTest.cfg. Tab walks the
-    # window alphabetically from the first item, so the count is the
-    # application's alphabetical position minus one: the three IBOOKG3*
-    # pictures sort before LokaSmirkyCardTest68K (measured on the rig,
-    # 2026-10-19; it was 7 = a full cycle when the application sorted first).
-    FINDER_TAB_COUNT=3
+    # 41 dev-disk items: application, 39 PICTs, LokaTest.cfg. The Finder's
+    # Tab cursor starts on the application (the first file staged) and k Tabs
+    # select the k-th item after it, wrapping over the whole window: 3 Tabs
+    # selected MACPLUSM.PICT and 38 IBOOKG3.PICT (rig, 2026-10-19), so one
+    # full cycle lands on the application again, as 7 did on the seven-item
+    # disk before the artwork.
+    FINDER_TAB_COUNT=41
     ;;
   smirkbench)
     APPL="$PROJECT_DIR/build/retro68/68k/Release/tests/toolbox/LokaSmirkBenchTestsToolbox68K.bin"
