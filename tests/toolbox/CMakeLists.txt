@@ -132,6 +132,23 @@ target_compile_definitions(${LOKA_WINDOW_CLAMP_TARGET} PRIVATE TEST_BUILD LOKA_D
 set_property(TARGET ${LOKA_WINDOW_CLAMP_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
 set_property(TARGET ${LOKA_WINDOW_CLAMP_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
 
+# PROBE (not for merge): mouse gate versus caret-blink overlap damage.
+set(LOKA_CLICK_GATE_PROBE_TARGET "LokaClickGateProbe${LOKA_CLASSIC_TARGET_SUFFIX}")
+loka_add_toolbox_test_application(
+  ${LOKA_CLICK_GATE_PROBE_TARGET}
+  LokaAppleToolboxTestCore
+  src/ClickGateProbeStandaloneMain.cpp
+  ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/WindowClampSize.r
+)
+target_include_directories(${LOKA_CLICK_GATE_PROBE_TARGET} PRIVATE
+  ${CMAKE_SOURCE_DIR}/tests/standalone
+  ${CMAKE_SOURCE_DIR}/tests/scenarios
+)
+target_compile_definitions(${LOKA_CLICK_GATE_PROBE_TARGET} PRIVATE TEST_BUILD LOKA_DIAG=1)
+set_property(TARGET ${LOKA_CLICK_GATE_PROBE_TARGET} PROPERTY EXCLUDE_FROM_ALL TRUE)
+set_property(TARGET ${LOKA_CLICK_GATE_PROBE_TARGET}_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)
+
 # One finite native activation pin; same shape and SIZE as the clamp pin.
 set(LOKA_WINDOW_ACTIVATION_TARGET "LokaWindowActivation${LOKA_CLASSIC_TARGET_SUFFIX}")
 loka_add_toolbox_test_application(
