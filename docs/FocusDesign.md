@@ -406,7 +406,9 @@ Native rows count only while their control is visible (including disabled
 controls); retained hit and edit rows count until their sweep. TextEditor
 withdraws its edit row and hides/revokes its bar when the parked fact is
 delivered, so subsequent presses there are empty space and may clear focus or
-fall through; before delivery both rows refuse the press.
+fall through; before delivery both rows refuse the press. There is no
+window-wide pending-redraw gate: a press is never dropped because damage is
+queued.
 
 `handleMouseDown` asks `pressLandsOnParkedRow` first, once per content
 mouse-down: one walk of this controller's seven row vectors (normally tens of
@@ -415,6 +417,11 @@ rows), plus a scan of `viewportScrollBars_` for each rect-matching native bar
 still-visible parked row loses the press until sweep. Typing into a parked
 focused EditText remains unchecked and is a follow-up. The single press door and
 ZStack 2b hit shield remain one deferred concept.
+
+Post-paint admission can apply props/text before the next draw, as can
+TextEditor idle destRect/scroll changes; an area erased by a closing modal waits
+for an update event. Render early returns can retain rows without pixels, a
+pre-existing limit that the window-wide gate never covered.
 
 ### Win32 write door (PR c)
 
