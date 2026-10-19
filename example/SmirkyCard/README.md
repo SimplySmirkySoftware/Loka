@@ -165,8 +165,8 @@ without dots, separators or NUL. The host appends `.PICT` on Classic and `.PNG`
 on Win32/macOS; JS never supplies the suffix. Invalid names, missing files,
 read/decode refusals and a missing platform throw a `TypeError` naming the stem
 and reason; an uncaught error fails the constructor, without declaring the seat.
-[disk-pictures.txt](disk-pictures.txt) lists the stems staged beside the app
-(in macOS bundle Resources); both binary twins live under `assets/`.
+[disk-pictures.txt](disk-pictures.txt) lists the stems staged in `Pictures/` beside the app
+(in `Contents/Resources/Pictures/` on macOS); both binary twins live under `assets/`.
 
 
 `c.machine.cpuClass` is `'68k' | 'ppc60x' | 'g3+'`, or `null` when the
@@ -512,8 +512,9 @@ selection and carousel wrapping. `LokaSmirkyCardTests --laptop-scenario` uses a
 320x200 full-picture dimensions.
 
 For Classic, build `LokaLaptopStandaloneFlow68K_APPL`. The runner takes file
-arguments, so expand the manifest in Bash. `LOKA_TAB_COUNT` is the number of
-items on the staged disk (the application and 39 pictures): the Finder's Tab
+arguments, so expand the manifest in Bash. The dev-disk writer stages these
+canonical asset paths into `Pictures/`. `LOKA_TAB_COUNT` is the number of
+top-level items on the staged disk (the application and `Pictures`): the Finder's Tab
 cursor starts on the application and a full cycle lands on it again.
 
 ```sh
@@ -522,7 +523,7 @@ while read -r stem; do
   case "$stem" in ''|\#*) continue ;; esac
   pictures+=("example/SmirkyCard/assets/$stem.PICT")
 done < example/SmirkyCard/disk-pictures.txt
-LOKA_TAB_COUNT=40 \
+LOKA_TAB_COUNT=2 \
   tests/toolbox/run-standalone.sh \
   build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin \
   "${pictures[@]}" --expect example/SmirkyCard/tests/LAPTOP.audit

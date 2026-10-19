@@ -101,5 +101,15 @@ void testWin32ApplicationItemNamesExecutableDirectory()
     assert(actual[i] == expected[i]);
   }
 
+  const loka::file::File nested = loka::file::File::Application()
+                                  << loka::file::File("Pictures") << loka::file::File("X");
+  LOKA_VERIFY(loka::platform::file::ResolveApplicationItem(nested, handle));
+  LOKA_VERIFY(loka::win32::MaterializeWideString(handle.displayPath, resolvedPath));
+  LOKA_VERIFY(resolvedPath == executableDirectory + L"\\Pictures/X");
+  const char *refused[] = {"A/B/C", "../B", "A/..", "A/", "/A", "A//B", ".", "A/."};
+  for (std::size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    LOKA_VERIFY(!loka::platform::file::ApplicationRelativeIsOpenable(loka::file::File::Application()
+                                                                     << loka::file::File(refused[i])));
+
   LOKA_VERIFY(DeleteFileW(fixturePath.c_str()));
 }

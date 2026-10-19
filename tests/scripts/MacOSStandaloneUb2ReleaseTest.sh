@@ -34,7 +34,7 @@ smirkycard_scripts() {
   # Deliberate twin of the script grammar above.
   while IFS=$' \t\r' read -r script || [ -n "${script}" ]; do
     case "${script}" in ''|\#*) continue ;; esac
-    printf '%s\n' "${script}.PNG"
+    printf '%s\n' "Pictures/${script}.PNG"
   done < "${FAKE_REPO}/example/SmirkyCard/disk-pictures.txt"
 }
 
@@ -73,7 +73,7 @@ stage_fake_build() {
     chmod +x "${output_path}"
     if [[ "${output_shape}" == "bundle" ]]; then
       bundle_root="${output_path%%/Contents/MacOS/*}"
-      mkdir -p "${bundle_root}/Contents/Resources"
+      mkdir -p "${bundle_root}/Contents/Resources/Pictures"
       printf '%s\n' "metadata-${target_name}" >"${bundle_root}/Contents/Info.plist"
       if [[ "${target_name}" == "LokaScrapbookStandaloneLoopMacOS" ]]; then
         printf '%s\n' "${marker}-assets" \

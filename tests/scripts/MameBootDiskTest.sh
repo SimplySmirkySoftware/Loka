@@ -100,6 +100,7 @@ mkdir -p "$ALL_PROJECT/scripts" "$ALL_PROJECT/example/ScrapbookUI" "$ALL_PROJECT
 cp "$SUBJECT" "$ALL_PROJECT/scripts/mame-boot-disk.sh"
 cp "$REPO_DIR/scripts/mame-boot-copy.sh" "$ALL_PROJECT/scripts/mame-boot-copy.sh"
 cp "$REPO_DIR/scripts/retro68-env.sh" "$ALL_PROJECT/scripts/retro68-env.sh"
+cp "$REPO_DIR/scripts/hfs-disk.sh" "$ALL_PROJECT/scripts/hfs-disk.sh"
 cp "$REPO_DIR/scripts/env-file.sh" "$ALL_PROJECT/scripts/env-file.sh"
 for app in \
   HelloWorld/LokaHello68K.bin \
@@ -142,8 +143,9 @@ done
 
 while read -r stem; do
   case "$stem" in ''|\#*) continue ;; esac
-  grep -F "$ALL_PROJECT/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/all-apps.log" >/dev/null || fail "missing picture $stem"
+  grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/assets/$stem.PICT> <:Loka:Pictures:>" "$SANDBOX/all-apps.log" >/dev/null || fail "missing picture $stem"
 done < "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"
+[ "$(grep -c '^hmkdir <:Loka:Pictures>$' "$SANDBOX/all-apps.log")" -eq 1 ] || fail "Pictures must be created once"
 # Adding a fourth card needs only a manifest edit; absent entries remain optional.
 printf '\r\n  # extra cards\r\n\r\n  ABSENT.JS  \r\n  FOURTH.JS  ' >> "$ALL_PROJECT/example/SmirkyCard/disk-scripts.txt"
 touch "$ALL_PROJECT/example/SmirkyCard/FOURTH.JS"

@@ -150,8 +150,20 @@ try {
         & $hcopy -m $path ":"
         if ($LASTEXITCODE) { throw "hcopy failed with exit code $LASTEXITCODE" }
     }
+    # Parallel with hfs_copy_data in hfs-disk.sh; other plain data stay flat.
+    $picturesDirectory = $null
     foreach ($path in $resolvedPlainData) {
-        & $hcopy -r $path ":"
+        $dataDestination = ":"
+        if ($path.Replace('\', '/') -match '(^|/)example/SmirkyCard/assets/[^/]+\.PICT$') {
+            if (-not $picturesDirectory) {
+                $picturesDirectory = ":" + "Pictures:"
+                $pictureMkdir = Find-Retro68Tool "hmkdir"
+                & $pictureMkdir $picturesDirectory.TrimEnd(':')
+                if ($LASTEXITCODE) { throw "hmkdir failed with exit code $LASTEXITCODE" }
+            }
+            $dataDestination = $picturesDirectory
+        }
+        & $hcopy -r $path $dataDestination
         if ($LASTEXITCODE) { throw "hcopy failed with exit code $LASTEXITCODE" }
     }
     & $humount

@@ -547,13 +547,15 @@ namespace smirkycard
       if (!platform)
         return JS_ThrowTypeError(ctx, "c.state.image: %s: missing PlatformContext", stem.c_str());
       const loka::file::File file = loka::file::File::Application()
+                                    << loka::file::File("Pictures")
                                     << loka::file::File(ScriptRuntime::PictureFileName(stem));
       loka::core::resource::Blob blob;
       const loka::platform::file::ReadResult read = loka::app::ReadFileImageBlob(platform, file, blob);
       if (read != loka::platform::file::READ_OK)
-        return JS_ThrowTypeError(ctx, "c.state.image: %s: %s", stem.c_str(), loka::app::FileImageReadResultName(read));
+        return JS_ThrowTypeError(
+            ctx, "c.state.image: Pictures/%s: %s", stem.c_str(), loka::app::FileImageReadResultName(read));
       if (!loka::app::DecodeFileImageBlob(platform, blob, image))
-        return JS_ThrowTypeError(ctx, "c.state.image: %s: image decode failure", stem.c_str());
+        return JS_ThrowTypeError(ctx, "c.state.image: Pictures/%s: image decode failure", stem.c_str());
     }
     JsSeatRecord *record = this->seats_.add(JsSeatRecord::Initial(ctx, kind));
     if (!record)

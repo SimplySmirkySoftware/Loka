@@ -36,6 +36,12 @@ cat > "$SANDBOX/bin/humount" <<'EOF'
 printf 'humount\n' >> "$MAME_DEV_DISK_TEST_LOG"
 EOF
 
+cat > "$SANDBOX/bin/hmkdir" <<'EOF'
+#!/usr/bin/env bash
+printf 'hmkdir <%s>\n' "$@" >> "$MAME_DEV_DISK_TEST_LOG"
+EOF
+chmod +x "$SANDBOX/bin/hmkdir"
+
 chmod +x "$SANDBOX/bin/hformat" "$SANDBOX/bin/hcopy" "$SANDBOX/bin/humount"
 
 fail() {
@@ -116,8 +122,9 @@ for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS; do
 done
 while read -r stem; do
   case "$stem" in ''|\#*) continue ;; esac
-  grep -F "$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT" "$SANDBOX/all.log" >/dev/null || fail "missing picture $stem"
+  grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/assets/$stem.PICT> <:Pictures:>" "$SANDBOX/all.log" >/dev/null || fail "missing picture $stem"
 done < "$REPO_DIR/example/SmirkyCard/disk-pictures.txt"
+[ "$(grep -c '^hmkdir <:Pictures>$' "$SANDBOX/all.log")" -eq 1 ] || fail "Pictures must be created once"
 # A manifest-only addition must retain the original calls and append one script.
 # Exercise CRLF, whitespace, comments, and an unterminated final line as well.
 printf '\r\n  # extra card\r\n\r\n  FOURTH.JS  ' >> "$SANDBOX/repo/example/SmirkyCard/disk-scripts.txt"

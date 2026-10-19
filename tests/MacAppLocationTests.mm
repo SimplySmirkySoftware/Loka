@@ -100,6 +100,18 @@ void testMacApplicationItemNamesResourceDirectory()
   LOKA_VERIFY(std::fclose(opened) == 0);
   assert(std::memcmp(actual, expected, sizeof(actual)) == 0);
 
+  const loka::file::File nested = loka::file::File::Application()
+                                  << loka::file::File("Pictures") << loka::file::File("X");
+  LOKA_VERIFY(loka::platform::file::ResolveApplicationItem(nested, handle));
+  LOKA_VERIFY(loka::platform::CollectUtf8(handle.displayPath, displayUtf8));
+  NSString *nestedPath = [NSString stringWithUTF8String:displayUtf8.c_str()];
+  LOKA_VERIFY([[nestedPath stringByStandardizingPath]
+      isEqualToString:[[resourcePath stringByAppendingPathComponent:@"Pictures/X"] stringByStandardizingPath]]);
+  const char *refused[] = {"A/B/C", "../B", "A/..", "A/", "/A", "A//B", ".", "A/."};
+  for (std::size_t i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    LOKA_VERIFY(!loka::platform::file::ApplicationRelativeIsOpenable(loka::file::File::Application()
+                                                                     << loka::file::File(refused[i])));
+
   LOKA_VERIFY([[NSFileManager defaultManager] removeItemAtPath:fixturePath error:nil]);
   [pool drain];
 }

@@ -14,10 +14,11 @@ namespace loka
     namespace file
     {
       /**
-       * Reports whether an application-relative item names exactly one file.
+       * Reports whether an application-relative item names a file at most one folder deep.
        *
        * Every platform shares this predicate so an application-relative File
-       * has one portable meaning. Multi-segment paths remain future work.
+       * has one portable meaning: one or two plain names, joined by the
+       * rail separator. Foreign separators, traversal and empty names refuse.
        */
       inline bool ApplicationRelativeIsOpenable(const loka::file::File &item)
       {
@@ -31,9 +32,27 @@ namespace loka
         {
           return false;
         }
-        return !relative.empty() && relative.find('/') == std::string::npos && relative.find('\\') == std::string::npos
-               && relative.find(':') == std::string::npos && relative.find('\0') == std::string::npos && relative != "."
-               && relative != "..";
+        // Keep the composition separator parallel with File::separatorLiteral.
+#if defined(LOKA_RETRO68)
+        const char separator = ':';
+#else
+        const char separator = '/';
+#endif
+        std::size_t start = 0;
+        unsigned int components = 0;
+        for (std::size_t i = 0; i <= relative.size(); ++i)
+        {
+          if (i == relative.size() || relative[i] == separator)
+          {
+            const std::string name = relative.substr(start, i - start);
+            if (++components > 2 || name.empty() || name == "." || name == "..")
+              return false;
+            start = i + 1;
+          }
+          else if (relative[i] == '/' || relative[i] == '\\' || relative[i] == ':' || relative[i] == '\0')
+            return false;
+        }
+        return true;
       }
 
       /**

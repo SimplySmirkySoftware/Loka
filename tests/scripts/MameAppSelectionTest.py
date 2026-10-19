@@ -69,7 +69,7 @@ class SelectionTest(unittest.TestCase):
                 calls = Path(env["CALL_LOG"]).read_text()
                 with self.subTest(cpu=cpu, manifest="fourth card"):
                     self.assertIn(" ".join(str(cards / name) for name in
-                                           ("MAIN.JS", "MINES.JS", "VIEWER.JS", "FOURTH.JS")) + " ", calls)
+                                           ("MAIN.JS", "MINES.JS", "VIEWER.JS", "LAPTOP.JS", "FOURTH.JS")) + " ", calls)
                 manifest.write_bytes(original_manifest)
                 for key, flag in (("All", "--all"), ("AllStandaloneLoops", "--all-loops"),
                                   ("AllStandaloneFlows", "--all-flows")):
@@ -90,6 +90,25 @@ class SelectionTest(unittest.TestCase):
                                          "--build-and-prepare", "AllStandaloneLoops"], env=env)
                 self.assertNotEqual(failed.returncode, 0)
                 self.assertNotIn("mame-dev-disk.sh|", Path(env["CALL_LOG"]).read_text())
+
+    def test_selected_picture_paths_reach_shared_folder_writer(self):
+        # The app selector, scenario and standalone runner forward canonical
+        # source paths to the same writer; unrelated PICT files stay flat.
+        result = subprocess.run(["bash", "-euc", r'''
+. "$1/scripts/hfs-disk.sh"
+find_retro68_tool() { printf '%s\n' echo; }
+HCOPY=echo
+hfs_copy_data "$2" : "$1/example/SmirkyCard/assets/A.PICT" \
+  "$1/example/SmirkyCard/assets/B.PICT" "$2/Sun.pict" "$1/example/SmirkyCard/MAIN.JS"
+''', "folder-pin", str(ROOT), "/tmp"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), [
+            ":Pictures",
+            f"-r {ROOT}/example/SmirkyCard/assets/A.PICT :Pictures:",
+            f"-r {ROOT}/example/SmirkyCard/assets/B.PICT :Pictures:",
+            "-r /tmp/Sun.pict :",
+            f"-r {ROOT}/example/SmirkyCard/MAIN.JS :",
+        ])
 
     def test_invalid_selection_and_task_wiring(self):
         result = subprocess.run(["bash", str(ROOT / "scripts/mame-dev-disk-app.sh"),

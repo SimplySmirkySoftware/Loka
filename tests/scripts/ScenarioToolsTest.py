@@ -800,6 +800,9 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
                      "win32-standalone-x86-release"):
             self.assertEqual(
                 by_name[name]["cacheVariables"].get("LOKA_BUILD_SMIRKYCARD"), "ON", name)
+        cmake = pathlib.Path(PROJECT_DIR, "example/SmirkyCard/CMakeLists.txt").read_text()
+        self.assertIn('configure_file("assets/${stem}.PNG" "Pictures/${stem}.PNG" COPYONLY)', cmake)
+        self.assertIn('MACOSX_PACKAGE_LOCATION Resources/Pictures', cmake)
         # The XP release inherits the x86 one, so it stages SmirkyCard too.
         self.assertIn("win32-standalone-x86-release",
                       by_name["win32-standalone-x86-xp-release"]["inherits"])
@@ -811,10 +814,10 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
         for fragment in (
             '$smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"',
             '$smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt")',
-            '(Get-SmirkyCardFiles "disk-pictures.txt" ".PNG")',
+            'Get-SmirkyCardFiles "disk-pictures.txt" ".PNG" | ForEach-Object { "Pictures/$_" }',
             'throw "SmirkyCard card script not found: $smirkyCardScript"',
             'Assert-ExecutableArchitecture $smirkyCard $Architecture',
-            'New-Item -ItemType Directory -Path (Join-Path $Destination "smirkycard")',
+            'New-Item -ItemType Directory -Force -Path (Join-Path $Destination "smirkycard/Pictures")',
             'Assert-FileCopy $smirkyCard `\n'
             '            (Join-Path $Destination "smirkycard/LokaSmirkyCardWin32.exe")',
             'SmirkyCard (experimental) loads MAIN.JS beside it',

@@ -32,6 +32,27 @@ find_retro68_tool() {
 }
 
 
+# SmirkyCard's manifest readers pass canonical asset paths, including the
+# scenario and standalone runners. Other data files retain their flat layout.
+# Keep this source-path rule parallel with the PowerShell disk writers.
+hfs_copy_data() {
+  local hfs_home="$1" directory="$2" path destination pictures=""
+  shift 2
+  for path in "$@"; do
+    destination="$directory"
+    case "$path" in
+      */example/SmirkyCard/assets/*.PICT|example/SmirkyCard/assets/*.PICT)
+        if [ -z "$pictures" ]; then
+          HOME="$hfs_home" "$(find_retro68_tool hmkdir)" "${directory}Pictures"
+          pictures="${directory}Pictures:"
+        fi
+        destination="$pictures"
+        ;;
+    esac
+    HOME="$hfs_home" "$HCOPY" -r "$path" "$destination"
+  done
+}
+
 # Caller owns the image and private hfsutils HOME, and handles failure cleanup.
 # Arguments: home label image partition binary-count binaries... plain-files...
 hfs_populate() {
@@ -44,8 +65,6 @@ hfs_populate() {
     shift
     count=$((count - 1))
   done
-  for path in "$@"; do
-    HOME="$hfs_home" "$HCOPY" -r "$path" :
-  done
+  hfs_copy_data "$hfs_home" : "$@"
   HOME="$hfs_home" "$HUMOUNT"
 }

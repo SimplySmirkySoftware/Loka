@@ -98,7 +98,7 @@ if(WIN32)
     configure_file("${script}" "${script}" COPYONLY)
   endforeach()
   foreach(stem IN LISTS SMIRKYCARD_DISK_PICTURES)
-    configure_file("assets/${stem}.PNG" "${stem}.PNG" COPYONLY)
+    configure_file("assets/${stem}.PNG" "Pictures/${stem}.PNG" COPYONLY)
   endforeach()
 elseif(LOKA_MACOS AND LOKA_ENABLE_APPLE)
   enable_language(OBJCXX)
@@ -111,14 +111,19 @@ elseif(LOKA_MACOS AND LOKA_ENABLE_APPLE)
     configure_file("${script}" "${resource}" COPYONLY)
     list(APPEND SMIRKYCARD_MACOS_RESOURCES "${resource}")
   endforeach()
+  set(SMIRKYCARD_MACOS_PICTURES)
   foreach(stem IN LISTS SMIRKYCARD_DISK_PICTURES)
     set(resource "${SMIRKYCARD_MACOS_RESOURCE_DIR}/${stem}.PNG")
     configure_file("assets/${stem}.PNG" "${resource}" COPYONLY)
+    list(APPEND SMIRKYCARD_MACOS_PICTURES "${resource}")
     list(APPEND SMIRKYCARD_MACOS_RESOURCES "${resource}")
   endforeach()
   set_source_files_properties(${SMIRKYCARD_MACOS_RESOURCES} PROPERTIES
     GENERATED TRUE
     MACOSX_PACKAGE_LOCATION Resources
+  )
+  set_source_files_properties(${SMIRKYCARD_MACOS_PICTURES} PROPERTIES
+    MACOSX_PACKAGE_LOCATION Resources/Pictures
   )
   add_executable(LokaSmirkyCardMacOS MACOSX_BUNDLE src/MacOSMain.mm
     ${SMIRKYCARD_MACOS_RESOURCES})

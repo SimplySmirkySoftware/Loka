@@ -35,7 +35,7 @@ if [ "$2" = :LOG.TXT ]; then
   cp "$SANDBOX/actual" "$3"
 fi
 SH
-for tool in hformat hmount humount; do
+for tool in hformat hmount humount hmkdir; do
   cat >"$SANDBOX/tools/$tool" <<'SH'
 #!/usr/bin/env bash
 printf '%s|%s|%s\n' "${0##*/}" "$HOME" "$*" >>"$SANDBOX/mounts"
@@ -99,6 +99,12 @@ for mode in native wsl; do
   [ ! -e "$WORK/stale" ] || fail 'work directory not wiped'
   [ "$(head -1 "$SANDBOX/env")" = 2 ] || fail 'stated Tab count not forwarded'
   grep -Fq "|-r|$SANDBOX/inputs/Sun pict|:" "$SANDBOX/copies" || fail 'plain file not staged intact'
+  mkdir -p "$SANDBOX/repo/example/SmirkyCard/assets"
+  picture="$SANDBOX/repo/example/SmirkyCard/assets/PB180C.PICT"
+  printf 'picture' >"$picture"
+  LOKA_TAB_COUNT=2 run 0 "$APP" "$picture" --expect "$SANDBOX/expected.audit"
+  grep -Fq "|-r|$picture|:Pictures:" "$SANDBOX/copies" || fail 'standalone picture folder missing'
+  grep -Fq "hmkdir|$WORK/hfs-ctl/hfsutils|:Pictures" "$SANDBOX/mounts" || fail 'Pictures not created'
   LOKA_TAB_COUNT=4 LOKA_RUN_WAIT=17 LOKA_LAUNCH_WAIT=12 run 0 "$APP"
   [ "$(head -1 "$SANDBOX/env")" = 4 ] || fail 'Tab override ignored'
   grep -Fxq 17 "$SANDBOX/env" || fail 'run wait override ignored'
