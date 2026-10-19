@@ -128,7 +128,7 @@ loka_populate_standalone_release_stage() {
     return 1
   fi
   local pictures=""
-  pictures="$(loka_smirkycard_manifest disk-pictures.txt .PNG)" || return 1
+  pictures="$(loka_smirkycard_manifest disk-pictures.txt .PNG | sed 's|^|Pictures/|')" || return 1
   scripts="${scripts}${pictures:+$'\n'}${pictures}"
   # One trimmed manifest line is one filename: no word splitting or globbing.
   while IFS= read -r script; do

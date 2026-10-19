@@ -3624,7 +3624,8 @@ namespace
     {
       ++this->opens;
       LOKA_VERIFY(file.base() == loka::file::File::BASE_APPLICATION);
-      out.displayPath = loka::core::String::Literal("_named_pictures/") + file.relativePath();
+      LOKA_VERIFY(file.relativePath().equals(loka::core::String::Literal("Pictures/") + file.name()));
+      out.displayPath = loka::core::String::Literal("_named_pictures/") + file.name();
       return true;
     }
     virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,
@@ -4559,7 +4560,7 @@ namespace
       const bool mono = Depth == 1;
       const int index = this->opens % (mono ? 26 : 13);
       const std::string expected =
-          std::string(laptopStems[index % 13]) + (mono ? (index < 13 ? "M" : "MS") : "") + ".PNG";
+          std::string("Pictures/") + laptopStems[index % 13] + (mono ? (index < 13 ? "M" : "MS") : "") + ".PNG";
       LOKA_VERIFY(file.relativePath().compare(loka::core::String::Utf8(expected.data(), expected.size())) == 0);
       return NamedPicturePlatform::openFile(file, out);
     }

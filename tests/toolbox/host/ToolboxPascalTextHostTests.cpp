@@ -285,6 +285,18 @@ namespace
     LOKA_VERIFY(out[0] == 31);
     LOKA_VERIFY(!loka::toolbox::CopyStringToHfsName(String(std::string(32, 'a')), out));
     LOKA_VERIFY(out[0] == 0);
+    LOKA_VERIFY(loka::toolbox::CopyApplicationRelativeToHfsPath(String("Pictures:X.PICT"), out));
+    LOKA_VERIFY(out[0] == 16 && std::memcmp(out + 1, ":Pictures:X.PICT", 16) == 0);
+    LOKA_VERIFY(loka::toolbox::CopyApplicationRelativeToHfsPath(String("X"), out));
+    LOKA_VERIFY(out[0] == 2 && out[1] == ':' && out[2] == 'X');
+    LOKA_VERIFY(loka::toolbox::CopyApplicationRelativeToHfsPath(
+        String(std::string(31, 'a') + ":" + std::string(30, 'b')), out));
+    LOKA_VERIFY(out[0] == 63);
+    LOKA_VERIFY(!loka::toolbox::CopyApplicationRelativeToHfsPath(
+        String(std::string(31, 'a') + ":" + std::string(31, 'b')), out));
+    LOKA_VERIFY(out[0] == 0);
+    LOKA_VERIFY(!loka::toolbox::CopyApplicationRelativeToHfsPath(String("Pictures:\xE6\xBC\xA2"), out));
+    LOKA_VERIFY(out[0] == 0);
     std::string repeated;
     for (unsigned i = 0; i < 31; ++i) repeated += "\xC3\xA9";
     LOKA_VERIFY(loka::toolbox::CopyStringToHfsName(String(repeated), out));

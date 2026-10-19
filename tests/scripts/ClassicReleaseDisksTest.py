@@ -90,12 +90,12 @@ class ClassicReleaseDisksTest(unittest.TestCase):
                 self.assertIn(name, mounted)
                 try:
                     listing = subprocess.check_output([TOOLS["hls"], "-1a", ":"], env=env, text=True)
-                    self.assertEqual(sorted(listing.splitlines()), sorted((name, *(Path(f).name for f in files))))
+                    self.assertEqual(sorted(listing.splitlines()), sorted({name, *("Pictures" if f.startswith("assets/") else Path(f).name for f in files)}))
                     subprocess.run([TOOLS["hcopy"], "-m", ":" + name, str(Path(home) / "app.bin")], env=env, check=True)
                     self.assertEqual(disks.macbinary(Path(home) / "app.bin"), disks.macbinary(binary))
                     for filename in files:
                         local = Path(home) / (Path(filename).name + ".bin")
-                        subprocess.run([TOOLS["hcopy"], "-m", ":" + Path(filename).name, str(local)], env=env, check=True)
+                        subprocess.run([TOOLS["hcopy"], "-m", (":Pictures:" if filename.startswith("assets/") else ":") + Path(filename).name, str(local)], env=env, check=True)
                         data = disks.macbinary(local)
                         self.assertEqual(data[2], (self.root / "example" / example / filename).read_bytes())
                         self.assertEqual(data[3], b"")

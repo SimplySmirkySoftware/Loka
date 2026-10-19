@@ -80,7 +80,7 @@ switch ($Key) {
                 if (!$script -or $script.StartsWith("#")) { continue }
                 "example/SmirkyCard/$script"
             }
-            # Same grammar as the adjacent script manifest; pictures are data forks.
+            # The disk writer stages these canonical asset paths in Pictures/.
             foreach ($line in Get-Content -LiteralPath (Join-Path $workspace "example/SmirkyCard/disk-pictures.txt")) {
                 $script = $line.Trim()
                 if (!$script -or $script.StartsWith("#")) { continue }

@@ -24,8 +24,9 @@ and writes the JS runner's audit under the selected cell name. After native
 presentation settles it publishes the capture rectangle and completion marker,
 then lingers for the configured duration. The production frame and title remain
 420×340 at (60, 60), LaptopTracker. The 39 PICTs (13 machines × color, 320×200
-one-bit and 160×100 one-bit) come from `disk-pictures.txt`; the dev disk then
-holds 41 items, so the runner Tabs a full cycle (41) to the application and
+one-bit and 160×100 one-bit) come from `disk-pictures.txt` and live in `Pictures/`; the dev disk then
+holds three top-level items (application, LokaTest.cfg, Pictures), so the
+runner Tabs a full cycle (3) to the application and
 gives these cells a 120 s settle window (the carousel settles at about 34 s).
 
 Without `LAPTOP_CELL`, the same companion runs the complete standalone browse

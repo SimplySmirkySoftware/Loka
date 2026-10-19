@@ -9,6 +9,34 @@ namespace loka
 {
   namespace toolbox
   {
+    bool CopyApplicationRelativeToHfsPath(const loka::core::String &value, Str63 out)
+    {
+      out[0] = 0;
+      std::string relative;
+      if (!loka::platform::CollectUtf8(value, relative))
+        return false;
+      std::size_t start = 0;
+      do
+      {
+        const std::size_t separator = relative.find(':', start);
+        const std::size_t end = separator == std::string::npos ? relative.size() : separator;
+        Str63 component;
+        if (!CopyStringToHfsName(loka::core::String::Utf8(relative.data() + start, end - start), component)
+            || out[0] + 1u + component[0] > 63u)
+        {
+          out[0] = 0;
+          return false;
+        }
+        out[++out[0]] = ':';
+        for (unsigned int i = 1; i <= component[0]; ++i)
+          out[++out[0]] = component[i];
+        if (separator == std::string::npos)
+          return true;
+        start = separator + 1;
+      } while (start <= relative.size());
+      return false;
+    }
+
     bool CopyStringToHfsName(const loka::core::String &value, Str63 out)
     {
       out[0] = 0;

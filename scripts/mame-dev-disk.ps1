@@ -150,8 +150,26 @@ try {
         & $hcopy -m $path ":"
         if ($LASTEXITCODE) { throw "hcopy failed with exit code $LASTEXITCODE" }
     }
+    # Parallel with hfs_copy_data in hfs-disk.sh; other plain data stay flat.
+    $picturesDirectory = $null
     foreach ($path in $resolvedPlainData) {
-        & $hcopy -r $path ":"
+        $dataDestination = ":"
+        if ($path.Replace('\', '/') -match '(^|/)example/SmirkyCard/assets/[^/]+\.PICT$') {
+            if (-not $picturesDirectory) {
+                $picturesDirectory = ":" + "Pictures:"
+                # A boot disk is repopulated in place, so the folder may already exist.
+                # hls exits 0 for a missing name, so list the parent instead.
+                $pictureLs = Find-Retro68Tool "hls"
+                $parentListing = @(& $pictureLs -1a $picturesDirectory.Substring(0, $picturesDirectory.Length - "Pictures:".Length) 2>$null)
+                if ($parentListing -notcontains "Pictures") {
+                    $pictureMkdir = Find-Retro68Tool "hmkdir"
+                    & $pictureMkdir $picturesDirectory.TrimEnd(':')
+                    if ($LASTEXITCODE) { throw "hmkdir failed with exit code $LASTEXITCODE" }
+                }
+            }
+            $dataDestination = $picturesDirectory
+        }
+        & $hcopy -r $path $dataDestination
         if ($LASTEXITCODE) { throw "hcopy failed with exit code $LASTEXITCODE" }
     }
     & $humount

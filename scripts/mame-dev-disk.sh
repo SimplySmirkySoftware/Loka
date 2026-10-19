@@ -72,7 +72,7 @@ elif [ "$1" = "--all" ]; then
     case "$script" in ''|\#*) continue ;; esac
     set -- "$@" "$PROJECT_DIR/example/SmirkyCard/$script"
   done < "$PROJECT_DIR/example/SmirkyCard/disk-scripts.txt"
-  # Same grammar as the adjacent script manifest; pictures are data forks.
+  # hfs_copy_data stages these canonical asset paths in Pictures/.
   while IFS=$' \t\r' read -r script || [ -n "$script" ]; do
     case "$script" in ''|\#*) continue ;; esac
     set -- "$@" "$PROJECT_DIR/example/SmirkyCard/assets/$script.PICT"
