@@ -5,6 +5,7 @@
 void ToolboxScenePlatformController::render()
 {
   PROFILE_FUNC();
+  this->pressLedger_.begin();
   ++debugStats_.renderCalls;
   ++debugStats_.totalRenderCalls;
   if (!window_ || !window_->window() || !rootNode_)
@@ -19,9 +20,6 @@ void ToolboxScenePlatformController::render()
     controlIds_.raiseBaseAbove(MaxExplicitControlId(rootNode_));
   }
   {
-    this->unitLedger_.clear();
-    hitLedger_.buttonHits_.clear();
-    hitLedger_.cellHits_.clear();
     for (size_t i = 0; i < buttonControls_.size(); ++i)
     {
       buttonControls_[i].usedThisFrame = false;
@@ -34,13 +32,10 @@ void ToolboxScenePlatformController::render()
     {
       scrollBarLedger_.viewportScrollBars_[i].usedThisFrame = false;
     }
-    hitLedger_.editHits_.clear();
     for (size_t i = 0; i < editControls_.size(); ++i)
     {
       editControls_[i].usedThisFrame = false;
     }
-    hitLedger_.textHits_.clear();
-    hitLedger_.popupHits_.clear();
     clearEnabledBindings();
     pendingTextStates_.clear();
     pendingDirtyRects_.clear();
@@ -75,6 +70,12 @@ void ToolboxScenePlatformController::render()
   {
     return;
   }
+  this->unitLedger_.clear();
+  hitLedger_.buttonHits_.clear();
+  hitLedger_.cellHits_.clear();
+  hitLedger_.editHits_.clear();
+  hitLedger_.textHits_.clear();
+  hitLedger_.popupHits_.clear();
   PROFILE_SECTION("layout");
   LayoutNode(rootNode_, state, this, 0);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
@@ -113,5 +114,6 @@ void ToolboxScenePlatformController::render()
       ++i;
     }
   }
+  this->pressLedger_.commit();
 }
 

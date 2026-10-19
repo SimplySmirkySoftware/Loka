@@ -326,6 +326,7 @@ namespace
       {
         ToolboxEditTextContext *context = observe<ToolboxEditTextContext>(node);
         LOKA_VERIFY(controller.ensureEditTextControl(context, rect, facts.textFact.state(), NATIVE_HINT_DEFAULT).te);
+        controller.publishFixturePressOrder();
         LOKA_VERIFY(ToolboxInputDoor::mouseDown(controller, point));
         facts.bind();
         LOKA_VERIFY(ToolboxInputDoor::keyDown(controller, 'x'));
@@ -343,6 +344,7 @@ namespace
         hit.rect = rect; hit.context = context; hit.enabled = 0;
         controller.installHit(hit);
         facts.bind();
+        controller.publishFixturePressOrder();
         ToolboxInputDoor::mouseDown(controller, point);
         LOKA_VERIFY(facts.selection.get() == 1 && facts.emits == 1);
         break;
@@ -355,6 +357,7 @@ namespace
         controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 42);
         const unsigned tracks = toolbox_host::tracks;
         facts.bind();
+        controller.publishFixturePressOrder();
         ToolboxInputDoor::mouseDown(controller, point);
         LOKA_VERIFY(toolbox_host::tracks == tracks + 1 && facts.offset.get() == 42 && facts.emits == 1);
         break;
@@ -367,6 +370,7 @@ namespace
         hit.rect = rect; hit.context = context; hit.emitter = &facts.change; hit.enabled = 0; hit.boundary = 0;
         controller.installHit(hit);
         facts.bind();
+        controller.publishFixturePressOrder();
         ToolboxInputDoor::mouseDown(controller, point);
         break;
       }
@@ -378,6 +382,7 @@ namespace
         hit.rect = rect; hit.context = context; hit.emitter = &facts.change; hit.boundary = 0; hit.text = 0;
         controller.installHit(hit);
         facts.bind();
+        controller.publishFixturePressOrder();
         ToolboxInputDoor::mouseDown(controller, point);
         break;
       }
@@ -512,13 +517,15 @@ namespace
     {
       const ScrollBarProps &props = node->asScrollBarNode()->props;
       LOKA_VERIFY(props.value_.usesTracker(owner->tracker()));
-      LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, props, 0, NATIVE_HINT_DEFAULT));
+      node->setContext(new NativeNodeContext());
+      LOKA_VERIFY(controller.ensureScrollBarControl(1, rect, props, node->getContext(), NATIVE_HINT_DEFAULT));
       controller.scrollControl(0).control->tracking = toolbox_host::TrackScript(129, 129, 3);
     }
     if (clocked)
     {
       Operation turn;
       const unsigned admissions = logical.admissions;
+      controller.publishFixturePressOrder();
       ToolboxInputDoor::mouseDown(controller, point);
       // PR C1/C2 (#1057): Seat/guard source is immediate, owner-derived values
       // move from before present to present's settle. The no-clock twin stays.
@@ -529,7 +536,10 @@ namespace
       LOKA_VERIFY(!Operation::hasActive());
     }
     else
+    {
+      controller.publishFixturePressOrder();
       ToolboxInputDoor::mouseDown(controller, point);
+    }
     // No-clock #366 control; clock variant has now completed present.
     std::printf("[pin] %s owner tracker (%s): source=%d derived=%d\n",
         kind == POPUP_INPUT ? "popup" : (kind == BUTTON_INPUT ? "guarded-button" : "scroll"), clocked ? "clock" : "legacy", owner->value.get(), owner->doubled.get());
@@ -635,6 +645,12 @@ namespace
 #include "ToolboxParkedDialogHost.hpp"
 int main(int argc, char **argv)
 {
+  if (argc == 1 || std::strcmp(argv[1], "press-door") == 0)
+  {
+    parked_press::barParts();
+    parked_press::erasedHit();
+    std::puts("[skip] native ordering/unit pins run in LokaToolboxControlOrderTests PressDoor");
+  }
   if (argc == 1 || std::strcmp(argv[1], "parked-dialog") == 0)
     parked_dialog::pin();
   if (argc == 1 || std::strcmp(argv[1], "parked-typing") == 0)

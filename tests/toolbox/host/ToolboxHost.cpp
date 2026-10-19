@@ -513,6 +513,12 @@ namespace
   {
     if (!node)
       return 0;
+#ifdef LOKA_HOST_CONTROL_ORDER
+    if (node->asZStackNode())
+      return controller->layoutZStack(node->asZStackNode(), state, 0);
+    if (node->getContext())
+      return node->getContext()->layout(controller, state);
+#endif
     loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode();
     if (surface)
       controller->rectSurfaceExtentLedger_.record(surface, loka::core::Frame(0, 0, state.width, state.height));
@@ -527,6 +533,11 @@ namespace
 #ifdef LOKA_HOST_CONTROL_ORDER
     if (!node)
       return;
+    if (node->asZStackNode())
+    {
+      controller->renderZStack(node->asZStackNode());
+      return;
+    }
     if (node->getContext())
       node->getContext()->render(controller);
     if (node->asRectSurfaceNode())
@@ -737,3 +748,10 @@ namespace
 #endif
 
 #include "ToolboxPendingDialogs.cpp"
+
+void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
+                                                       loka::app::scene::NativeLifetimeHint lifetimeHint)
+{
+#include "ToolboxRetireContextRows.inc"
+  this->retired.push_back(context);
+}

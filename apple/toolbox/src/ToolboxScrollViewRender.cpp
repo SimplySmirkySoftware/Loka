@@ -35,6 +35,8 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
       RenderChildren(scrollView, this);
     }
   }
+  this->reachNativeBar(binding->barId[loka::app::SCROLL_BAR_VERTICAL]);
   this->drawScrollBarControl(binding->barId[loka::app::SCROLL_BAR_VERTICAL]);
+  this->reachNativeBar(binding->barId[loka::app::SCROLL_BAR_HORIZONTAL]);
   this->drawScrollBarControl(binding->barId[loka::app::SCROLL_BAR_HORIZONTAL]);
 }

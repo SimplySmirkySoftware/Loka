@@ -72,36 +72,6 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
   SetPort(previousPort);
 }
 
-/** Click owns hit testing and caret work; requests share only activation. */
-bool ToolboxScenePlatformController::handleEditClick(const Point &point)
-{
-  // FindControl declines inactive and invisible controls. Only their placed,
-  // projection-clipped rows consume a press after projection scopes have ended.
-  for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
-  {
-    const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
-    if (row.usedThisFrame && row.editor.editor() && PtInRect(point, &row.rect))
-      return true;
-  }
-  for (size_t i = 0; i < this->editControls_.size(); ++i)
-  {
-    EditTextControlBinding &binding = this->editControls_[i];
-    if (binding.te && PtInRect(point, &binding.rect))
-    {
-      this->activateEditControl(i);
-      if (binding.editor) binding.editor->click(point);
-      else
-      {
-        TEClick(point, false, binding.te);
-        this->invalidateUnitOverlap(binding.rect);
-      }
-      return true;
-    }
-  }
-  this->activateEditControl(this->editControls_.size());
-  return false;
-}
-
 void ToolboxScenePlatformController::idleTextEdits()
 {
   for (size_t i = 0; i < editControls_.size(); ++i)

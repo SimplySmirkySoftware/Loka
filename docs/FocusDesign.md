@@ -398,24 +398,52 @@ controller's unit ledger. Each overlapping unit appends a window damage rect
 Host pins cover activation, refusal, key delivery, selection/scroll preservation
 and port restoration; Classic runtime verification belongs to the MAME rig.
 
-### Toolbox presses on parked rows (#1471)
+### Toolbox press door (#1493)
 
-A Toolbox press does nothing when it lands on an on-screen row whose owner is
-parked: no action, tracking, focus change or fall-through to content beneath.
-Native rows count only while their control is visible (including disabled
-controls); retained hit and edit rows count until their sweep. TextEditor
-withdraws its edit row and hides/revokes its bar when the parked fact is
-delivered, so subsequent presses there are empty space and may clear focus or
-fall through; before delivery both rows refuse the press. There is no
-window-wide pending-redraw gate: a press is never dropped because damage is
-queued.
+`ToolboxInputDoor::mouseDown` selects one pressable row in reverse render-reach
+order from the controller-owned `ToolboxPressLedger`. Later rows are on top;
+a live button above a still-visible parked row receives the press. Ledger rows
+contain only kind and index into the existing native, hit, or unit registry.
+Render appends into STAGING and swaps it into LIVE only on completion. Both
+refusal checks precede ephemeral hit/unit clearing, so a refused render keeps
+LIVE and its indexed rows. Individual erases forget the row and shift later
+indices of the same kind in both lists; bulk teardown clears both lists.
 
-`handleMouseDown` asks `pressLandsOnParkedRow` first, once per content
-mouse-down: one walk of this controller's seven row vectors (normally tens of
-rows), plus a scan of `viewportScrollBars_` for each rect-matching native bar
-(HxV), with no allocation and no foreign rows. A live part drawn over a
-still-visible parked row loses the press until sweep. The single press door and
-ZStack 2b hit shield remain one deferred concept.
+Selection resolves the owner and native part once into an event-local
+`ResolvedPress`. The owner question uses `IsAttachedCurrentContext`; viewport
+bars use their resolved ScrollView's lifecycle fact. A parked row stops the
+press without action, tracking, focus change, or fall-through. An opaque
+ZStack unit's empty area and disabled/inactive pressable controls also stop it
+and preserve focus. Disabled native buttons previously fell through and could
+clear focus; shielding them is an intentional change. Ownerless rows and rows
+without an action (buttons without emitters, cells without onClick, and popups
+without items) are transparent. Native visibility uses `contrlVis`, never
+`usedThisFrame`.
+
+Native dispatch leaves focus alone; EDIT_CONTROL activates its native edit;
+EDIT_HIT connects fallback focus after native deactivation. Popup, cell, drawn
+button, and empty-space dispatch first clear native and fallback focus.
+Native dispatch returns false, edit dispatch returns true, and hit dispatch
+returns its context handler's result; the result is not a universal handled bit.
+
+Cost: one push per reached row (normally tens) plus one swap per render.
+Render-reach helpers resolve IDs/contexts through the controller's existing
+registries; those bounded searches do not run on press. Each press walks LIVE
+backward to the first pressable row, resolves viewport bars through the existing
+barId H x V search once per eligible candidate, asks one owner question, and
+dispatches once. Selection allocates nothing and walks no foreign rows. Erase
+performs one forget over LIVE/STAGING (tens), shifting that kind's later indices.
+Existing dispatch may enqueue damage or perform an allocating app action.
+
+TextEditor withdraws its edit row and hides/revokes its bar when the parked
+fact is delivered; subsequent presses there see empty space or an underlying
+row. Before delivery those rows refuse the press. A retired unit keeps shielding
+until the next render, matching its remaining pixels; its stack identity is
+never dereferenced for input. Native painting outside the render walk
+(HideControl, HiliteControl, TrackControl, and kind-ordered control redraw) can
+differ from ledger order. There is no window-wide pending-redraw gate.
+Hover (`isPointInEdit`) and wheel routing are separate follow-ups; Win32 and
+macOS already use native targeting and need no equivalent change here.
 
 Keys follow the same rule. A focused edit row keeps native focus until its
 sweep (TextEditor: until the parked fact is delivered and the row withdraws),

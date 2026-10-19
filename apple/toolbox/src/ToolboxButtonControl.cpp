@@ -83,3 +83,36 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   ShowControl(binding->control);
   return submitted;
 }
+
+void ToolboxScenePlatformController::destroyButtonControl(short resourceId,
+                                                          loka::app::scene::NativeLifetimeHint lifetimeHint)
+{
+  for (size_t i = 0; i < buttonControls_.size(); ++i)
+  {
+    ButtonControlBinding &binding = buttonControls_[i];
+    if (binding.resourceId != resourceId)
+    {
+      continue;
+    }
+    if (binding.context)
+      binding.context->forgetPresentedControl();
+    ControlRef control = binding.control;
+    binding.control = 0;
+    binding.emitter = 0;
+    loka::core::State<bool> *retiredEnabled = binding.enabled;
+    binding.enabled = 0;
+    this->pressLedger_.forget(PressRow::NATIVE_BUTTON, i);
+    buttonControls_.erase(buttonControls_.begin() + i);
+    if (retiredEnabled && !this->hasLiveBinding(retiredEnabled))
+      this->unbindEnabledState(retiredEnabled);
+    controlIds_.release(resourceId);
+    if (control)
+    {
+      // Context destruction can run inside an update pass; disposal waits for
+      // the platform safe point like every other retired native handle.
+      HideControl(control);
+      queueRetiredControl(control, lifetimeHint);
+    }
+    return;
+  }
+}
