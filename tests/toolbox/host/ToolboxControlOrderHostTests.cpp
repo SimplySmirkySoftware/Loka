@@ -23,6 +23,7 @@ namespace
     }
   };
   class OrderNode;
+  EmitterState &firstAction();
   typedef BoundaryPropsFor<OrderNode> OrderProps;
   class OrderNode : public StdCompositionBoundaryNodeBase<OrderProps>
   {
@@ -34,9 +35,30 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      composition.declare(Column() << Button("First").TEST_ID("button") << RectSurface().size(100, 20));
+      composition.declare(Column() << Button("First").onClick(&firstAction()).TEST_ID("button")
+                                   << RectSurface().size(100, 20));
     }
   };
+  unsigned &firstPresses()
+  {
+    static unsigned presses = 0;
+    return presses;
+  }
+  void countFirstPress(void *)
+  {
+    ++firstPresses();
+  }
+  EmitterState &firstAction()
+  {
+    static EmitterState action;
+    static bool bound = false;
+    if (!bound)
+    {
+      action.bind(&countFirstPress, 0, false);
+      bound = true;
+    }
+    return action;
+  }
   void verifyOneDraw(ControlRef control)
   {
     unsigned painted = 0;
@@ -128,7 +150,7 @@ namespace
       if (refusedLabel)
       {
         const String refused = String::FromPlatform(Managed<loka::platform::String>::Wrap(new RefusingUtf8()));
-        LOKA_VERIFY(Button(ButtonProps().text(refused)).applyPropsToNode(node));
+        LOKA_VERIFY(Button(ButtonProps().text(refused).onClick(&firstAction())).applyPropsToNode(node));
       }
       const bool retainedProps = std::strcmp(mode, "RetainedPropsReconcileDoesNotPaint") == 0;
       if (retainedProps)
@@ -161,6 +183,13 @@ namespace
         const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
         LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
         LOKA_VERIFY(control->visible && controller.buttonControls_[0].label == "First");
+        // The retained control is still on screen, so the press door still reaches it.
+        const Rect rect = controller.buttonControls_[0].rect;
+        const Point inside = {static_cast<short>((rect.top + rect.bottom) / 2),
+                              static_cast<short>((rect.left + rect.right) / 2)};
+        const unsigned before = firstPresses();
+        LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, inside));
+        LOKA_VERIFY(firstPresses() == before + 1);
       }
     }
     // Strip borrowed contexts while their nodes are still alive.
