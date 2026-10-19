@@ -170,6 +170,7 @@ namespace
               if (ly < 0 || ly >= body.height)
                 continue;
               const int dy = ly < body.height - 1 - ly ? ly : body.height - 1 - ly;
+              assert(dy >= 0 && "rows outside the body never index the quadrant");
               const unsigned char quadrant = dy < 6 ? kQuickDrawRadius6FrameQuadrant[dy] : 0x80;
               unsigned long border = 0;
               for (int dx = 0; dx < (dy < 6 ? 6 : 1); ++dx)

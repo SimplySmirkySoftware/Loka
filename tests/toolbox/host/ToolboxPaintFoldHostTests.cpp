@@ -384,7 +384,6 @@ void CardStencilPins()
                     band.x + band.width - (clipped ? 1 : 0),
                     band.y + band.height - (clipped ? 2 : 0));
             context.layout(&controller, seat);
-            toolbox_host::cardOperations.clear();
             toolbox_host::stencilTransfers.clear();
             toolbox_host::stencilRuns.clear();
             toolbox_host::roundFrames.clear();
