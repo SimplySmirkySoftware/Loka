@@ -814,7 +814,8 @@ class StandaloneDebugEntryPointTest(unittest.TestCase):
         for fragment in (
             '$smirkyCard = Join-Path $smirkyCardRoot "LokaSmirkyCardWin32.exe"',
             '$smirkyCardScripts = (Get-SmirkyCardFiles "disk-scripts.txt")',
-            'Get-SmirkyCardFiles "disk-pictures.txt" ".PNG" | ForEach-Object { "Pictures/$_" }',
+            '$smirkyCardPictures = Get-SmirkyCardFiles "disk-pictures.txt" ".PNG"',
+            '@($smirkyCardPictures | ForEach-Object { "Pictures/$_" })',
             'throw "SmirkyCard card script not found: $smirkyCardScript"',
             'Assert-ExecutableArchitecture $smirkyCard $Architecture',
             'New-Item -ItemType Directory -Force -Path (Join-Path $Destination "smirkycard/Pictures")',
