@@ -1436,10 +1436,21 @@ void testMacZStackPhotoOrientation()
       @selector(drawRect:), reinterpret_cast<IMP>(&drawSplitSurface), NSClassFromString(@"LokaRectSurfaceView"));
   if (!showPhoto(f))
     return;
-  // Match the ground height so the photo spans both halves; clip at a nonzero
-  // local origin as well, discriminating bounds-centered reflection.
+  // Orientation: the unit covers the ground exactly, so the photo's first rows
+  // are the ground's red top and its last rows the blue bottom.
   NSView *ground = [[f.host.root subviews] objectAtIndex:0];
   [unit setFrame:[ground frame]];
+  fullPhotoDraw(f);
+  NSBitmapImageRep *photo = loka::testing::macStackPhoto(unit);
+  LOKA_VERIFY(photo);
+  NSColor *top = [photo colorAtX:[photo pixelsWide] / 2 y:12];
+  NSColor *bottom = [photo colorAtX:[photo pixelsWide] / 2 y:[photo pixelsHigh] - 13];
+  LOKA_VERIFY([top redComponent] > [top blueComponent] + 0.5);
+  LOKA_VERIFY([bottom blueComponent] > [bottom redComponent] + 0.5);
+  // Placement: clip the unit at a nonzero local origin. The replay must put
+  // each photo row back at the visible rectangle it was taken from, which a
+  // bounds-centred reflection would shift; compare replay against the photo
+  // rather than against an assumed ground layout.
   NSClipView *clip = [[NSClipView alloc] initWithFrame:NSInsetRect([unit frame], 0, 20)];
   [clip setDrawsBackground:NO];
   [f.host.root addSubview:clip];
@@ -1450,18 +1461,24 @@ void testMacZStackPhotoOrientation()
   [unit release];
   [clip scrollToPoint:NSMakePoint(0, 20)];
   fullPhotoDraw(f);
-  NSBitmapImageRep *photo = loka::testing::macStackPhoto(unit);
+  photo = loka::testing::macStackPhoto(unit);
   LOKA_VERIFY(photo);
-  NSColor *top = [photo colorAtX:[photo pixelsWide] / 2 y:12];
-  NSColor *bottom = [photo colorAtX:[photo pixelsWide] / 2 y:[photo pixelsHigh] - 13];
-  LOKA_VERIFY([top redComponent] > [top blueComponent] + 0.5);
-  LOKA_VERIFY([bottom blueComponent] > [bottom redComponent] + 0.5);
-  NSBitmapImageRep *replay = captureUnit(unit);
   const NSRect visible = loka::testing::macStackPhotoRect(unit);
   LOKA_VERIFY(NSMinY(visible) > 0);
-  top = pixel(replay, unit, NSMidX(visible), NSMinY(visible) + 12);
-  bottom = pixel(replay, unit, NSMidX(visible), NSMaxY(visible) - 13);
-  LOKA_VERIFY([top redComponent] > [top blueComponent] + 0.15);
-  LOKA_VERIFY([bottom blueComponent] > [bottom redComponent] + 0.15);
+  NSBitmapImageRep *replay = captureUnit(unit);
+  const double scale = [photo pixelsHigh] / NSHeight(visible);
+  int compared = 0;
+  for (int row = 12; row + 12 < [photo pixelsHigh]; row += [photo pixelsHigh] / 6)
+  {
+    NSColor *expected = [photo colorAtX:[photo pixelsWide] / 2 y:row];
+    const double lean = [expected redComponent] - [expected blueComponent];
+    if (lean > -0.5 && lean < 0.5)
+      continue; // a blurred transition row does not discriminate
+    NSColor *actual = pixel(replay, unit, NSMidX(visible), NSMinY(visible) + row / scale);
+    const double actualLean = [actual redComponent] - [actual blueComponent];
+    LOKA_VERIFY((lean > 0) == (actualLean > 0.15) || (lean < 0) == (actualLean < -0.15));
+    ++compared;
+  }
+  LOKA_VERIFY(compared >= 2);
   [clip release];
 }
