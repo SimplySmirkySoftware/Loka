@@ -89,6 +89,8 @@ card('first', class {
     const mono = c.machine.displayDepth !== null && c.machine.displayDepth < 8;
     this.pics = MACHINES.map(m => c.state.image(mono ? m.art + 'M' : m.art));
     this.thumbs = mono ? MACHINES.map(m => c.state.image(m.art + 'MS')) : this.pics;
+    // The smirking compact Mac for About: 160x100 mono or 320x200 colour.
+    this.logo = c.state.image(mono ? 'ICONMS' : 'ICON');
     // Named seats so a scenario can ask c.test.imageFacts('pb180c').
     MACHINES.forEach((m, i) => { this[m.id] = this.pics[i]; });
     // Page and presentation, as the three things that can be on screen.
@@ -174,12 +176,13 @@ card('first', class {
   toolbar() {
     // Three short buttons share the left half; the title keeps its half
     // of the 420 px Classic window. Main replaces the longer ./MAIN.JS label.
-    return Row(Row(Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
-                   Show(this.browse,
-                        Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
-                   Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
-                   Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
-               Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
+    return Row(
+      Row(
+        Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
+        Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
+        Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
+        Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
+      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
   }
 
   carousel() {
@@ -220,27 +223,31 @@ card('first', class {
       ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))));
   }
 
-  about()
-  {
-    return VStack(Box(Text(''), {height : 90}),
-                  Row(Box(Text(''), {width : 40}),
-                      Box(Card(VStack(Text('SmirkyTracker', TITLE).TEST_ID('Laptop.About.Name'),
-                                      Text('(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)', undefined, {
-                                        wrap : 'word'
-                                      }).TEST_ID('Laptop.About.Credit'),
-                                      Button('OK!', () => this.aboutShown.set(false)).TEST_ID('Laptop.About.OK'))),
-                          {width : 310}))
-                      .naturalWidth());
+  about() {
+    // A Card roughly centred on the 420x340 Classic window, over the
+    // static-blur backdrop that fills the ZStack.
+    return VStack(
+      Box(Text(''), {height: 60}),
+      Row(
+        Box(Text(''), {width: 40}),
+        Box(Card(VStack(
+          ImageView(this.logo, {width: 160, height: 100, fit: 'contain'}).TEST_ID('Laptop.About.Logo'),
+          Text('SmirkyTracker', TITLE).TEST_ID('Laptop.About.Name'),
+          Text('(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)', undefined, {wrap: 'word'})
+            .TEST_ID('Laptop.About.Credit'),
+          Button('OK!', () => this.aboutShown.set(false)).TEST_ID('Laptop.About.OK'))),
+          {width: 310})).naturalWidth());
   }
 
-  compose()
-  {
-    return ZStack(VStack(this.toolbar(),
-                         Show(this.carouselShown, this.carousel()),
-                         Show(this.listShown, this.list()),
-                         Show(this.detail, this.detailPage()),
-                         Text(this.c.error).TEST_ID('SmirkyCard.Status')),
-                  Show(this.aboutShown, this.about()))
-        .expStaticBlurUnit();
+  compose() {
+    return ZStack(
+      VStack(
+        this.toolbar(),
+        Show(this.carouselShown, this.carousel()),
+        Show(this.listShown, this.list()),
+        Show(this.detail, this.detailPage()),
+        Text(this.c.error).TEST_ID('SmirkyCard.Status')),
+      Show(this.aboutShown, this.about())).expStaticBlurUnit();
   }
+
 });

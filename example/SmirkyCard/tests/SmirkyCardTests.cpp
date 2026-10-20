@@ -4580,9 +4580,12 @@ namespace
     virtual bool openFile(const loka::file::File &file, loka::platform::file::FileHandle &out) const
     {
       const bool mono = Depth == 1;
-      const int index = this->opens % (mono ? 26 : 13);
-      const std::string expected =
-          std::string("Pictures/") + laptopStems[index % 13] + (mono ? (index < 13 ? "M" : "MS") : "") + ".PNG";
+      // Machine pictures first, then the About logo (ICON / ICONMS).
+      const int machines = mono ? 26 : 13;
+      const int index = this->opens % (machines + 1);
+      const std::string expected = index == machines ? std::string("Pictures/") + (mono ? "ICONMS" : "ICON") + ".PNG"
+                                                     : std::string("Pictures/") + laptopStems[index % 13]
+                                                           + (mono ? (index < 13 ? "M" : "MS") : "") + ".PNG";
       LOKA_VERIFY(file.relativePath().compare(loka::core::String::Utf8(expected.data(), expected.size())) == 0);
       return NamedPicturePlatform::openFile(file, out);
     }
@@ -4606,7 +4609,7 @@ namespace
     CardRunnerHarness h(source.c_str(), "scenario('first',c=>c.run(Flow().step(()=>{})));", 7, true, &context);
     h.mount();
     expectJs(h.runtime, "laptop.c.error.get()", "");
-    LOKA_VERIFY(context.decodes == (mono ? 26 : 13));
+    LOKA_VERIFY(context.decodes == (mono ? 26 : 13) + 1); // plus the About logo
     expectJs(h.runtime, "laptop.thumbs === laptop.pics", mono ? "false" : "true");
     expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
     expectJs(h.runtime, "laptop.pics.length===13 && laptop.thumbs.length===13", "true");
@@ -4634,6 +4637,9 @@ namespace
     for (unsigned i = 0; i < 13; ++i)
       for (unsigned j = 0; j < 3; ++j)
         writeMain((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str(), "img");
+    // The About logo: colour and mono-thumbnail variants are staged.
+    writeMain("_named_pictures/ICON.PNG", "img");
+    writeMain("_named_pictures/ICONMS.PNG", "img");
     {
       std::fputs("[pin] laptop picture choice: null color, 1-bit full + thumbnails, 8-bit color\n", stderr);
       LaptopPicturePlatform<0> unknown;
@@ -4739,6 +4745,8 @@ namespace
       for (unsigned j = 0; j < 3; ++j)
         LOKA_VERIFY(std::remove((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str())
                     == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/ICON.PNG") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/ICONMS.PNG") == 0);
     removeDirectory("_named_pictures");
   }
 

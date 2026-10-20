@@ -491,7 +491,8 @@ selects `NAMEM` (320x200 mono) for details and `NAMEMS` (160x100 mono) for
 list/carousel thumbnails; otherwise `NAME` (320x200 color) serves both.
 Named seats always refer to full pictures. Card sizes remain 150x94, 110x70
 and 320x200 respectively. [disk-pictures.txt](disk-pictures.txt) stages all 39
-machine stems; ICON variants are generated but not staged.
+machine stems plus `ICON` (320x200 colour) and `ICONMS` (160x100 mono), the
+smirking compact Mac shown on the About card; `ICONM` is generated but not staged.
 
 The list follows its viewport: positive width below 320 selects one column.
 Seven wide row Shows and seven narrow Shows containing paired VStacks give
