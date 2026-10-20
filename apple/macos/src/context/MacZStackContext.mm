@@ -5,7 +5,6 @@
 #include <new>
 #include <climits>
 #include <cstdlib>
-#include <cstring>
 #include <cmath>
 #include "app/style/StackBlur.hpp"
 
@@ -15,6 +14,7 @@ namespace loka
   namespace testing
   {
     bool declineMacStackUnitView();
+    bool declineMacPhotoCapture();
   }
 } // namespace loka
 #endif
@@ -53,6 +53,11 @@ namespace loka
 - (void)setState:(NSInteger)state;
 - (void)setWantsLayer:(BOOL)value;
 - (CALayer *)layer;
+- (NSRect)convertRectToBacking:(NSRect)rect;
+- (void)viewDidChangeBackingProperties;
+@end
+
+@interface NSWindow (LokaStackBacking)
 - (NSRect)convertRectToBacking:(NSRect)rect;
 @end
 
@@ -103,122 +108,203 @@ namespace
     NSRectFillUsingOperation(bounds, LOKA_MAC_COMPOSITING_SOURCE_OVER);
   }
 
-  /** One prefix walk of the parent's native z order per CPU draw. Each visible
-      intersecting lower sibling renders into the expanded bitmap, including
-      units of a ZStack nested in the ground. A lower live unit re-renders its
-      own lower siblings through its drawRect:, one level per nesting depth.
-      Although each ZStack has at most one blurred unit, overlapping nested
-      units repeat these prefix walks and can multiply work exponentially with
-      depth. The unit and higher siblings never participate in their own underlay. */
-  bool RenderUnderlay(NSView *unit, NSGraphicsContext *context, NSRect bounds)
+  /** One observed visible domain. Pixel dimensions/origin are integral;
+      local points preserve fractional mapping. The window is identity only. */
+  struct MacPhotoGeometry
   {
-    loka::macos::MacPaintGround(loka::app::SURFACE_GROUND_WINDOW,
-                                NSMakeRect(0, 0, bounds.size.width, bounds.size.height));
-    NSView *parent = [unit superview];
-    NSArray *siblings = [parent subviews];
-    for (unsigned int i = 0; i < [siblings count]; ++i)
+    NSRect local;
+    int width, height;
+    long windowX, windowY;
+    NSWindow *window;
+    bool operator==(const MacPhotoGeometry &other) const
     {
-      NSView *sibling = [siblings objectAtIndex:i];
-      if (sibling == unit)
-        break;
-      if ([sibling isHidden])
-        continue;
-      const NSRect clip = NSIntersectionRect([sibling bounds], [sibling convertRect:bounds fromView:unit]);
-      if (NSIsEmptyRect(clip))
-        continue;
-      const NSRect frame = [unit convertRect:[sibling frame] fromView:parent];
-      [NSGraphicsContext saveGraphicsState];
-      // An external context applies the view's bounds transform, not its
-      // frame/ancestor transforms. Supply an unflipped frame here; AppKit
-      // handles the sibling's own flipped/unflipped bounds and descendants.
-      NSAffineTransform *placement = [NSAffineTransform transform];
-      if (!placement)
-      {
-        [NSGraphicsContext restoreGraphicsState];
-        return false;
-      }
-      [placement translateXBy:NSMinX(frame) - NSMinX(bounds) yBy:NSMaxY(bounds) - NSMaxY(frame)];
-      [placement concat];
-      [sibling displayRectIgnoringOpacity:clip inContext:context];
-      [NSGraphicsContext restoreGraphicsState];
+      return NSEqualRects(this->local, other.local) && this->width == other.width && this->height == other.height
+             && this->windowX == other.windowX && this->windowY == other.windowY && this->window == other.window;
     }
-    return true;
+  };
+
+  /** Layout and screen draws query once; AppKit owns ancestor conversion. */
+  MacPhotoGeometry PhotoGeometry(NSView *view)
+  {
+    MacPhotoGeometry geometry = {};
+    geometry.local = [view visibleRect];
+    geometry.window = [view window];
+    NSRect pixels = geometry.local;
+    if ([view respondsToSelector:@selector(convertRectToBacking:)])
+      pixels = [view convertRectToBacking:pixels];
+    pixels = NSIntegralRect(pixels);
+    NSRect windowRect = [view convertRect:geometry.local toView:nil];
+    if ([geometry.window respondsToSelector:@selector(convertRectToBacking:)])
+      windowRect = [geometry.window convertRectToBacking:windowRect];
+    windowRect = NSIntegralRect(windowRect);
+    // Reject out-of-range/NaN dimensions before any integer conversion. A
+    // nonempty unsupported extent reaches capture and fails dimension validation.
+    if (pixels.size.width > 0 && static_cast<double>(pixels.size.width) <= INT_MAX / 4 && pixels.size.height > 0
+        && static_cast<double>(pixels.size.height) <= INT_MAX)
+    {
+      geometry.width = static_cast<int>(pixels.size.width);
+      geometry.height = static_cast<int>(pixels.size.height);
+    }
+    if (static_cast<double>(windowRect.origin.x) >= INT_MIN && static_cast<double>(windowRect.origin.x) <= INT_MAX
+        && static_cast<double>(windowRect.origin.y) >= INT_MIN && static_cast<double>(windowRect.origin.y) <= INT_MAX)
+    {
+      geometry.windowX = static_cast<long>(windowRect.origin.x);
+      geometry.windowY = static_cast<long>(windowRect.origin.y);
+    }
+    return geometry;
   }
 
-  /** Owns every temporary for one expanded draw; blur uses the fixed radius
-      of eight pixels. Source pixels are rendered afresh, never read from the
-      partially refreshed window backing store. */
-  bool DrawCPUBlur(NSView *unit)
+  /** Every draw walks only its own AppKit dirty rectangles, without rounding. */
+  bool CoversPhoto(NSView *view, NSRect local)
   {
-    const NSRect bounds = [unit bounds];
-    NSRect backing = bounds;
-    if ([unit respondsToSelector:@selector(convertRectToBacking:)])
-      backing = [unit convertRectToBacking:bounds];
-    if (!(bounds.size.width > 0 && bounds.size.height > 0))
-      return false;
-    const double scaleX = backing.size.width / bounds.size.width;
-    const double scaleY = backing.size.height / bounds.size.height;
-    if (!(scaleX > 0 && scaleY > 0) || ![unit superview])
-      return false;
-    const NSRect expanded = NSIntersectionRect(NSInsetRect(bounds, -8.0 / scaleX, -8.0 / scaleY),
-                                               [unit convertRect:[[unit superview] bounds] fromView:[unit superview]]);
-    NSRect pixels = NSMakeRect(0, 0, expanded.size.width * scaleX, expanded.size.height * scaleY);
-    const double pixelWidth = std::ceil(static_cast<double>(pixels.size.width));
-    const double pixelHeight = std::ceil(static_cast<double>(pixels.size.height));
-    if (!(bounds.size.width > 0 && bounds.size.height > 0 && pixelWidth > 0 && pixelWidth <= INT_MAX / 4
-          && pixelHeight > 0 && pixelHeight <= INT_MAX - 64))
-      return false;
-    const int width = static_cast<int>(pixelWidth);
-    const int height = static_cast<int>(pixelHeight);
-    const size_t bytes = loka::app::StackBlurScratchBytes(width, height);
-    if (!bytes)
-      return false;
-    NSBitmapImageRep *rgba = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
-                                                                     pixelsWide:width
-                                                                     pixelsHigh:height
-                                                                  bitsPerSample:8
-                                                                samplesPerPixel:4
-                                                                       hasAlpha:YES
-                                                                       isPlanar:NO
-                                                                 colorSpaceName:NSDeviceRGBColorSpace
-                                                                    bytesPerRow:width * 4
-                                                                   bitsPerPixel:32];
-    NSGraphicsContext *context = rgba ? [NSGraphicsContext graphicsContextWithBitmapImageRep:rgba] : nil;
-    unsigned char *scratch = static_cast<unsigned char *>(std::malloc(bytes));
-    NSAffineTransform *scale = [NSAffineTransform transform];
-    NSAffineTransform *flip = [NSAffineTransform transform];
-    bool drawn = false;
-    const long rowBytes = [rgba bytesPerRow];
-    if (context && scratch && scale && flip && [rgba bitmapData] && rowBytes >= width * 4
-        && static_cast<size_t>(rowBytes) <= static_cast<size_t>(-1) / static_cast<size_t>(height))
-    {
-      std::memset([rgba bitmapData], 0, static_cast<size_t>(rowBytes) * height);
-      [NSGraphicsContext saveGraphicsState];
-      [NSGraphicsContext setCurrentContext:context];
-      [scale scaleXBy:width / expanded.size.width yBy:height / expanded.size.height];
-      [scale concat];
-      NSRectClip(NSMakeRect(0, 0, expanded.size.width, expanded.size.height));
-      const bool rendered = RenderUnderlay(unit, context, expanded);
-      [NSGraphicsContext restoreGraphicsState];
-      const bool blurred =
-          rendered
-          && loka::app::StackBlur([rgba bitmapData], width, height, static_cast<size_t>(rowBytes), 8, scratch, bytes);
-      if (blurred)
-      {
-        // Bitmap reps draw unflipped; restore the flipped unit's orientation.
-        [NSGraphicsContext saveGraphicsState];
-        NSRectClip(bounds); // Crop the expanded margin in unit coordinates.
-        [flip translateXBy:0 yBy:NSMinY(expanded) + NSMaxY(expanded)];
-        [flip scaleXBy:1 yBy:-1];
-        [flip concat];
-        drawn = [rgba drawInRect:expanded] != NO;
-        [NSGraphicsContext restoreGraphicsState];
-      }
-    }
-    std::free(scratch);
-    [rgba release];
-    return drawn;
+    const NSRect *rects = NULL;
+    NSInteger count = 0;
+    [view getRectsBeingDrawn:&rects count:&count];
+    for (NSInteger i = 0; rects && i < count; ++i)
+      if (NSContainsRect(rects[i], local))
+        return true;
+    return false;
   }
+
+  /** Zero-initialized view-owned storage, explicitly reset before ObjC dealloc.
+      No C++ constructor/destructor runtime support is required. READY is derived. */
+  class MacPhotoLifetime
+  {
+  public:
+    bool reconcile(bool attached, const MacPhotoGeometry &geometry)
+    {
+      if (attached && (NSIsEmptyRect(geometry.local) || this->geometry_ == geometry))
+        return false;
+      this->resetLifetime();
+      this->geometry_ = geometry;
+      return true;
+    }
+    void resetLifetime()
+    {
+      [this->photo_ release];
+      this->photo_ = nil;
+      this->phase_ = EMPTY;
+      const MacPhotoGeometry empty = {};
+      this->geometry_ = empty;
+    }
+    void installCapture(NSBitmapImageRep *rep)
+    {
+      [rep retain];
+      [this->photo_ release];
+      this->photo_ = rep;
+      this->phase_ = rep ? EMPTY : DISABLED;
+    }
+    bool admitsCapture(bool policyAllowsWhenReady) const
+    {
+      return this->phase_ != DISABLED && (policyAllowsWhenReady || !this->photo_);
+    }
+    NSBitmapImageRep *photo() const
+    {
+      return this->photo_;
+    }
+    const MacPhotoGeometry &geometry() const
+    {
+      return this->geometry_;
+    }
+
+  private:
+    NSBitmapImageRep *photo_;
+    enum Phase
+    {
+      EMPTY,
+      DISABLED
+    } phase_;
+    MacPhotoGeometry geometry_;
+  };
+
+  /** One capture opportunity, O(pixel count), walking only the captured pixels.
+      Returns a +1 premultiplied RGBA8 bitmap in its natural unflipped order. */
+  NSBitmapImageRep *CapturePhoto(const MacPhotoGeometry &geometry)
+  {
+#ifdef TEST_BUILD
+    if (loka::testing::declineMacPhotoCapture())
+      return nil;
+#endif
+    NSBitmapImageRep *source = [[NSBitmapImageRep alloc] initWithFocusedViewRect:geometry.local];
+    if (!source)
+      return nil;
+    const long bpp = [source bitsPerPixel];
+    const long spp = [source samplesPerPixel];
+    const long alpha = [source hasAlpha];
+    const long planar = [source isPlanar];
+    const long row = [source bytesPerRow];
+    const long pixelWidth = [source pixelsWide];
+    const long pixelHeight = [source pixelsHigh];
+    const NSUInteger format = [source bitmapFormat]; // Available since Tiger.
+    NSString *space = [source colorSpaceName];
+    const bool rgb = [space isEqualToString:NSDeviceRGBColorSpace] || [space isEqualToString:NSCalibratedRGBColorSpace];
+    const bool rgb24 = bpp == 24 && spp == 3 && !alpha;
+    const bool rgba32 = bpp == 32 && spp == 4 && alpha;
+    // Only the nonpremultiplied-alpha bit is convertible; reject alpha-first,
+    // floating-point and non-native byte-order encodings rather than guessing.
+    if (!rgb || planar || [source bitsPerSample] != 8 || (!rgb24 && !rgba32)
+        || (format & ~static_cast<NSUInteger>(NSAlphaNonpremultipliedBitmapFormat)) || pixelWidth != geometry.width
+        || pixelHeight != geometry.height || pixelWidth <= 0 || pixelWidth > INT_MAX / 4 || pixelHeight <= 0
+        || pixelHeight > INT_MAX || row < pixelWidth * spp || ![source bitmapData]
+        || static_cast<size_t>(row) > static_cast<size_t>(-1) / static_cast<size_t>(pixelHeight))
+    {
+      [source release];
+      return nil;
+    }
+    const int width = static_cast<int>(pixelWidth), height = static_cast<int>(pixelHeight);
+    const size_t scratchBytes = loka::app::StackBlurScratchBytes(width, height);
+    if (!scratchBytes)
+    {
+      [source release];
+      return nil;
+    }
+    NSBitmapImageRep *photo = source;
+    if (!rgba32 || row != width * 4 || format != 0)
+    {
+      photo = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                      pixelsWide:width
+                                                      pixelsHigh:height
+                                                   bitsPerSample:8
+                                                 samplesPerPixel:4
+                                                        hasAlpha:YES
+                                                        isPlanar:NO
+                                                  colorSpaceName:space
+                                                     bytesPerRow:width * 4
+                                                    bitsPerPixel:32];
+      if (!photo || ![photo bitmapData] || [photo bytesPerRow] != width * 4)
+      {
+        [photo release];
+        [source release];
+        return nil;
+      }
+      for (int y = 0; y < height; ++y)
+      {
+        const unsigned char *src = [source bitmapData] + static_cast<size_t>(y) * row;
+        unsigned char *dst = [photo bitmapData] + static_cast<size_t>(y) * width * 4;
+        for (int x = 0; x < width; ++x, src += spp, dst += 4)
+        {
+          const unsigned alpha = rgba32 ? src[3] : 255;
+          for (int c = 0; c < 3; ++c)
+            dst[c] = format & NSAlphaNonpremultipliedBitmapFormat
+                         ? static_cast<unsigned char>((src[c] * alpha + 127) / 255)
+                         : src[c];
+          dst[3] = static_cast<unsigned char>(alpha);
+        }
+      }
+      [source release];
+    }
+    unsigned char *scratch = static_cast<unsigned char *>(std::malloc(scratchBytes));
+    const bool ok =
+        scratch && loka::app::StackBlur([photo bitmapData], width, height, width * 4, 8, scratch, scratchBytes);
+    std::free(scratch);
+    if (!ok)
+    {
+      [photo release];
+      return nil;
+    }
+    return photo;
+  }
+
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -237,46 +323,160 @@ namespace
 }
 @end
 
-/** Opaque legacy ground; drawing reads no content beneath the unit. */
-@interface LokaStackFrostedUnitView : LokaStackUnitView
-@end
-@implementation LokaStackFrostedUnitView
-- (void)drawRect:(NSRect)rect
+/** Owns one photo and its appearance lifetime; never requests a redraw. */
+@interface LokaStackPhotoUnitView : LokaStackUnitView
 {
-  (void)rect;
-  PaintStaticFrost([self bounds]);
+  MacPhotoLifetime photo_;
 }
+- (MacPhotoLifetime &)lokaPhotoLifetime;
+- (BOOL)lokaCapturesWhenReady;
+- (void)lokaReconcileAttached:(BOOL)attached;
+- (void)lokaReplayPhoto;
 @end
-
-/** Experimental CPU projection; AppKit clips each draw to its dirty region. */
-@interface LokaStackCPUUnitView : LokaStackFrostedUnitView
-@end
-@implementation LokaStackCPUUnitView
+@implementation LokaStackPhotoUnitView
+- (MacPhotoLifetime &)lokaPhotoLifetime
+{
+  return photo_;
+}
+- (BOOL)isOpaque
+{
+  return NO;
+}
+- (BOOL)lokaCapturesWhenReady
+{
+  return NO;
+}
+/** Owner placement/lifecycle calls once per unit; no foreign row walk. */
+- (void)lokaReconcileAttached:(BOOL)attached
+{
+  [self lokaPhotoLifetime].reconcile(attached != NO, PhotoGeometry(self));
+}
+- (void)viewDidMoveToWindow
+{
+  if ([LokaStackUnitView instancesRespondToSelector:@selector(viewDidMoveToWindow)])
+    [super viewDidMoveToWindow];
+  [self lokaPhotoLifetime].resetLifetime();
+}
+- (void)viewDidChangeBackingProperties
+{
+  if ([LokaStackUnitView instancesRespondToSelector:@selector(viewDidChangeBackingProperties)])
+    [super viewDidChangeBackingProperties];
+  [self lokaPhotoLifetime].resetLifetime();
+}
+- (void)dealloc
+{
+  [self lokaPhotoLifetime].resetLifetime();
+  [super dealloc];
+}
+/** Draw-local replay uses only the stored photo and its matching destination. */
+- (void)lokaReplayPhoto
+{
+  const MacPhotoLifetime &lifetime = [self lokaPhotoLifetime];
+  if (!lifetime.photo())
+  {
+    PaintStaticFrost([self bounds]);
+    return;
+  }
+  const NSRect local = lifetime.geometry().local;
+  [NSGraphicsContext saveGraphicsState];
+  NSAffineTransform *flip = [NSAffineTransform transform];
+  BOOL replay = NO;
+  if (flip)
+  {
+    [flip translateXBy:0 yBy:NSMinY(local) + NSMaxY(local)];
+    [flip scaleXBy:1 yBy:-1];
+    [flip concat];
+    replay = [lifetime.photo() drawInRect:local];
+  }
+  [NSGraphicsContext restoreGraphicsState];
+  if (replay)
+    PaintBlurTint(local);
+  else
+    PaintStaticFrost(local);
+}
+/** AppKit calls per delivered draw: own dirty rects, then at most one capture. */
 - (void)drawRect:(NSRect)rect
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  const bool layered = [self respondsToSelector:@selector(layer)] && [self layer] != nil;
-  const bool blurred = !layered && MenuBarTransparency() && DrawCPUBlur(self);
-  if (blurred)
-    PaintBlurTint([self bounds]);
-  else
-    [super drawRect:rect];
+  const bool screen = [[NSGraphicsContext currentContext] isDrawingToScreen] != NO;
+  const bool attached = [self window] != nil;
+  if (!(screen && attached))
+  {
+    [self lokaReplayPhoto];
+    [pool release];
+    return;
+  }
+  const MacPhotoGeometry geometry = PhotoGeometry(self);
+  if (NSIsEmptyRect(geometry.local))
+  {
+    PaintStaticFrost(rect);
+    [pool release];
+    return;
+  }
+  MacPhotoLifetime &lifetime = [self lokaPhotoLifetime];
+  lifetime.reconcile(true, geometry);
+  const bool layer = [self respondsToSelector:@selector(layer)] && [self layer] != nil;
+  if (CoversPhoto(self, geometry.local) && !layer && MenuBarTransparency()
+      && lifetime.admitsCapture([self lokaCapturesWhenReady] != NO))
+  {
+    NSBitmapImageRep *photo = CapturePhoto(geometry);
+    lifetime.installCapture(photo);
+    [photo release];
+  }
+  [self lokaReplayPhoto];
   [pool release];
 }
 @end
+
+/** Retakes the photo at each admitted full draw. */
+@interface LokaStackBandUnitView : LokaStackPhotoUnitView
+@end
+@implementation LokaStackBandUnitView
+- (BOOL)lokaCapturesWhenReady
+{
+  return YES;
+}
+@end
+
+/** Keeps the first photo until observed geometry or appearance changes. */
+@interface LokaStackStaticUnitView : LokaStackPhotoUnitView
+@end
+@implementation LokaStackStaticUnitView
+@end
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    NSBitmapImageRep *macStackPhoto(NSView *view)
+    {
+      return [(LokaStackPhotoUnitView *)view lokaPhotoLifetime].photo();
+    }
+    bool macStackPhotoDisabled(NSView *view)
+    {
+      return ![(LokaStackPhotoUnitView *)view lokaPhotoLifetime].admitsCapture(true);
+    }
+    NSRect macStackPhotoRect(NSView *view)
+    {
+      return [(LokaStackPhotoUnitView *)view lokaPhotoLifetime].geometry().local;
+    }
+  } // namespace testing
+} // namespace loka
+#endif
 
 namespace
 {
   /** Unit admission calls once per missing view; constant work, no row walk.
       Returns a retained view, whose subviews own the native effect. */
-  NSView *CreateBlurUnit(NSView *parent, NSRect frame)
+  NSView *CreateBlurUnit(NSView *parent, NSRect frame, loka::app::ZStackUnitGround ground)
   {
     Class effectClass = NSClassFromString(@"NSVisualEffectView");
     if (!effectClass)
     {
-      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"LokaExpLiveBlur"])
-        return [[LokaStackCPUUnitView alloc] initWithFrame:frame];
-      return [[LokaStackFrostedUnitView alloc] initWithFrame:frame];
+      if (ground == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR)
+        return [[LokaStackStaticUnitView alloc] initWithFrame:frame];
+      return [[LokaStackBandUnitView alloc] initWithFrame:frame];
     }
     NSView *view = [[LokaStackEffectUnitView alloc] initWithFrame:frame];
     if (!view)
@@ -329,7 +529,7 @@ bool MacZStackContext::Unit::ensure(
   NSView *view =
       (ground == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR || ground == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR)
               && this->index_ == 1
-          ? CreateBlurUnit((NSView *)parent, seat.r)
+          ? CreateBlurUnit((NSView *)parent, seat.r, ground)
           : [[LokaStackUnitView alloc] initWithFrame:seat.r];
   if (!view)
     return false;
@@ -343,7 +543,10 @@ bool MacZStackContext::Unit::ensure(
 
 void MacZStackContext::Unit::place(const loka::macos::MacRect &seat)
 {
-  loka::macos::SetMacFrame((NSView *)this->view_, seat);
+  NSView *view = (NSView *)this->view_;
+  loka::macos::SetMacFrame(view, seat);
+  if ([view isKindOfClass:[LokaStackPhotoUnitView class]])
+    [(LokaStackPhotoUnitView *)view lokaReconcileAttached:YES];
 }
 
 MacZStackContext::MacZStackContext(MacScenePlatformController *controller, loka::app::ZStackUnitGround ground)
@@ -442,6 +645,8 @@ void MacZStackContext::onFactChanged(loka::app::scene::NodeLifecycleFact, loka::
   {
     NSView *view = (NSView *)unit->view_;
     [view setHidden:next != loka::app::scene::NODE_FACT_ATTACHED];
+    if ([view isKindOfClass:[LokaStackPhotoUnitView class]])
+      [(LokaStackPhotoUnitView *)view lokaReconcileAttached:next == loka::app::scene::NODE_FACT_ATTACHED];
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
       [view removeFromSuperview];

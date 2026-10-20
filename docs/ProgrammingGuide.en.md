@@ -1681,8 +1681,9 @@ child) shows a blur of the wrapped ground as it was when the unit appeared.
 On every rail its band fills the ground child's laid-out height, or its own
 height when taller; its child keeps its natural size at the band's top-left.
 A zero-height unit stays collapsed, so a hidden `Show` leaves no backdrop.
-On Toolbox that picture stays frozen while the unit is shown; macOS uses the
-live blur effect, and Win32 uses window ground. Later units use window ground.
+On Toolbox that picture stays frozen while the unit is shown; macOS 10.10 and
+newer uses the live blur effect, and Win32 uses window ground. Earlier macOS
+versions keep a photo as described below. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;
 other static-blur units use window ground. On 68K Macs the picture is a mosaic
 of 8-pixel squares; native PowerPC applications show a smooth blur.
@@ -1713,9 +1714,9 @@ the window ground. Eligibility follows composition
 index for the ZStack identity: hiding the first unit or giving it zero height
 does not promote a later one. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
-material on 10.10–10.13 and HUD material from 10.14. Before 10.10, the first
-unit shows a static frosted ground: a light sheen and a hairline, with nothing
-beneath showing through. Toolbox shows milk frost: the content beneath,
+material on 10.10–10.13 and HUD material from 10.14. Before 10.10, both
+experimental blur units show a blurred photo of the content beneath, as
+described below. Toolbox shows milk frost: the content beneath,
 lightened, with a grey bottom hairline (no blur yet). It needs 32-bit QuickDraw,
 an FPU, and a unit entirely on one screen of 256 colours or more; otherwise it
 keeps the window ground. On 16/32-bit screens it still computes in 256 colours,
@@ -1729,15 +1730,29 @@ changes, existing frost keeps its old screen indices until the unit repaints.
 Popup direct repaints erase white; Card shadows and Control Manager hide/move
 erases remain limitations. EditText paints its own white field interior.
 
-On macOS before 10.10, the experimental user default `LokaExpLiveBlur` (or the
-launch argument `-LokaExpLiveBlur YES`) turns on live CPU blur instead. This
-choice is made when the unit is created. It reflects the content beneath as
-AppKit last redrew the unit. A change beneath that AppKit redraws only partly,
-such as a caret blinking or a small control change, can leave the blur around
-it stale until the next full redraw of the unit, such as a scroll. Layer-backed
-views fall back to the static frosted ground. A blurred ZStack nested in the
-ground of another blurred ZStack is rendered again for each level above it, so
-the live blur's cost grows quickly with such nesting.
+On macOS 10.4–10.9, a photo is taken only during an on-screen redraw in
+which one drawing rectangle covers the unit's whole visible area. The band
+retakes its photo at each such redraw; the static unit keeps its first photo
+until it is hidden and shown again, or a changed visible rectangle or position
+is observed during placement or drawing. Ancestor clipping and scrolling can
+change which part of the unit is visible. Before a photo exists, the unit shows
+a frosted ground: a light sheen and a hairline. Neither unit requests a redraw
+to obtain a photo. macOS 10.7 and 10.8 are unverified and use this same path.
+
+| Change or drawing condition | What appears on macOS 10.4–10.9 |
+|---|---|
+| Caret blink or content change that does not redraw the unit | The old photo stays. |
+| Partial exposure or several drawing rectangles, none covering the whole visible area | The old photo is replayed; no new photo is taken. |
+| Resize or movement observed during placement or drawing | The old photo is dropped. Frost appears until a qualifying full redraw. |
+| Ancestor clipping or scrolling changes the observed visible rectangle | The old photo is dropped; a full redraw of the new visible area can take a new photo, including for the static unit. An empty visible area does not change the saved photo. |
+| Capture failure | Frost remains until an observed geometry change or a new appearance permits another attempt. |
+| Transparency is disabled or the unit has its own layer | No new photo is taken; an existing photo is still replayed. |
+| Offscreen drawing, such as caching or printing | An existing photo is replayed at its saved position, otherwise frost; the saved photo's lifetime is unchanged. |
+
+An ancestor hiding and restoring the unit without an intervening placement or
+draw is not an observed geometry change. A qualifying redraw is not guaranteed,
+even after a resize ends. If replay itself fails, that draw shows frost and
+keeps the photo for a later attempt.
 
 The macOS unit ground is chosen when the ZStack is first projected, including
 when no upper unit exists yet. Retained props changes keep that choice for

@@ -29,6 +29,12 @@ namespace loka
   namespace testing
   {
     void failMacStackUnitViews(unsigned count);
+#ifdef TEST_BUILD
+    void failMacPhotoCaptures(unsigned count);
+    NSBitmapImageRep *macStackPhoto(NSView *view);
+    bool macStackPhotoDisabled(NSView *view);
+    NSRect macStackPhotoRect(NSView *view);
+#endif
   }
 } // namespace loka
 
@@ -853,6 +859,7 @@ void testMacZStackGroundSuffixPreservesOrder()
 - (NSInteger)blendingMode;
 - (NSInteger)material;
 - (NSInteger)state;
+- (void)viewDidChangeBackingProperties;
 @end
 
 void testMacZStackBlurNativeEffect()
@@ -966,19 +973,6 @@ void testMacZStackBlurGroundIsCreationTimeConstant()
 
 namespace
 {
-  /** Every exit removes the experimental setting, including fixture skips. */
-  struct LiveBlurDefaultScope
-  {
-    LiveBlurDefaultScope()
-    {
-      [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
-    }
-    ~LiveBlurDefaultScope()
-    {
-      [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
-    }
-  };
-
   NSBitmapImageRep *captureUnit(NSView *unit)
   {
     NSBitmapImageRep *bitmap = [unit bitmapImageRepForCachingDisplayInRect:[unit bounds]];
@@ -987,118 +981,476 @@ namespace
     return bitmap;
   }
 
-  double brightness(NSColor *color)
+  unsigned long photoFingerprint(NSView *unit)
   {
-    return ([color redComponent] + [color greenComponent] + [color blueComponent]) / 3.0;
+    NSBitmapImageRep *photo = loka::testing::macStackPhoto(unit);
+    LOKA_VERIFY(photo && [photo bitmapData]);
+    LOKA_VERIFY([photo bytesPerRow] == 4 * [photo pixelsWide]);
+    unsigned long hash = 5381;
+    const size_t size = static_cast<size_t>([photo bytesPerRow]) * [photo pixelsHigh];
+    for (size_t i = 0; i < size; ++i)
+      hash = (hash * 33) ^ [photo bitmapData][i];
+    return hash;
   }
 
-  // RectSurface has no color prop. Limit this saturated underlay to its native
-  // draw method with the existing scoped replacement; production APIs stay intact.
   void drawRedSurface(id view, SEL, NSRect)
   {
     [[NSColor colorWithDeviceRed:1 green:0 blue:0 alpha:1] setFill];
     NSRectFill([view bounds]);
   }
-} // namespace
+  void drawBlueSurface(id view, SEL, NSRect)
+  {
+    [[NSColor colorWithDeviceRed:0 green:0 blue:1 alpha:1] setFill];
+    NSRectFill([view bounds]);
+  }
+  void drawSplitSurface(id view, SEL, NSRect)
+  {
+    const NSRect bounds = [view bounds];
+    [[NSColor redColor] setFill];
+    NSRectFill(bounds);
+    [[NSColor blueColor] setFill];
+    NSRectFill(NSMakeRect(NSMinX(bounds), NSMidY(bounds), NSWidth(bounds), NSHeight(bounds) / 2));
+  }
 
-void testMacZStackBlurWithoutEffectUsesFrostedGround()
-{
-  LiveBlurDefaultScope setting;
-  if (NSClassFromString(@"NSVisualEffectView"))
+  /** Synthetic dirty lists exercise the real draw entry in an on-screen pass.
+      The normal full-list case is also tested without this replacement. */
+  void partialPhotoRects(id view, SEL, const NSRect **rects, NSInteger *count)
   {
-    std::printf("[skip] ZStack frosted fallback: requires a host without NSVisualEffectView\n");
-    return;
+    static NSRect part;
+    part = NSInsetRect([view visibleRect], 2, 2);
+    *rects = &part;
+    *count = 1;
   }
-  Fixture f;
-  ZStackNode *stack = stackWithGround(f);
-  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
-  stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
-  stack->addChild(new BoxNode(BoxProps().setSize(200, 60)));
-  f.layout();
-  NSView *unit = unitUnder(f.host.root);
-  LOKA_VERIFY(unit && [unit class] == NSClassFromString(@"LokaStackFrostedUnitView"));
-  LOKA_VERIFY([unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
-  LOKA_VERIFY([[unit subviews] count] == 0);
-  NSArray *views = [f.host.root subviews];
-  LOKA_VERIFY([views count] == 3);
-  LOKA_VERIFY([[views objectAtIndex:2] class] == NSClassFromString(@"LokaStackUnitView"));
-}
+  void splitPhotoRects(id view, SEL, const NSRect **rects, NSInteger *count)
+  {
+    static NSRect parts[2];
+    const NSRect visible = [view visibleRect];
+    parts[0] = NSMakeRect(NSMinX(visible), NSMinY(visible), NSWidth(visible) / 2, NSHeight(visible));
+    parts[1] = NSMakeRect(NSMidX(visible), NSMinY(visible), NSWidth(visible) / 2, NSHeight(visible));
+    *rects = parts;
+    *count = 2;
+  }
+  NSRect emptyPhotoRect(id, SEL)
+  {
+    return NSZeroRect;
+  }
+  NSRect changedPhotoRect(id view, SEL)
+  {
+    return NSInsetRect([view bounds], 3, 4);
+  }
+  BOOL refusePhotoReplay(id, SEL, NSRect)
+  {
+    return NO;
+  }
+  id ownPhotoLayer(id, SEL);
+  NSDictionary *noTransparency(id, SEL, NSString *)
+  {
+    return [NSDictionary dictionaryWithObject:[NSNumber numberWithBool:NO] forKey:@"AppleEnableMenuBarTransparency"];
+  }
 
-void testMacZStackFrostedFirstUnit()
-{
-  LiveBlurDefaultScope setting;
-  if (NSClassFromString(@"NSVisualEffectView"))
+  /** Observes requests made inside draw, even if AppKit later consumes them. */
+  class PhotoDrawProbe
   {
-    std::printf("[skip] ZStack frosted pixels: requires a host without NSVisualEffectView\n");
-    return;
-  }
-  Fixture f;
-  ZStackNode *stack = stackWithGround(f);
-  stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
-  stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
-  stack->addChild(new BoxNode(BoxProps().setSize(200, 60)));
-  f.layout();
-  NSView *unit = unitUnder(f.host.root);
-  LOKA_VERIFY(unit && [unit isOpaque] && [unit isFlipped]);
-  LOKA_VERIFY([unit class] != NSClassFromString(@"LokaStackUnitView"));
-  NSArray *views = [f.host.root subviews];
-  LOKA_VERIFY([views count] == 3);
-  LOKA_VERIFY([[views objectAtIndex:2] class] == NSClassFromString(@"LokaStackUnitView"));
-  if (!f.host.show())
-    return;
-  NSBitmapImageRep *bitmap = captureUnit(unit);
-  const CGFloat bottom = [unit bounds].size.height - 1;
-  LOKA_VERIFY(brightness(pixel(bitmap, unit, 100, 0)) > brightness(pixel(bitmap, unit, 100, 40)) + 0.01);
-  LOKA_VERIFY(brightness(pixel(bitmap, unit, 100, bottom)) < brightness(pixel(bitmap, unit, 100, bottom - 1)) - 0.05);
-}
+  public:
+    PhotoDrawProbe()
+        : originalDraw_(method_getImplementation(class_getInstanceMethod(photoClass(), @selector(drawRect:)))),
+          originalDamage_(method_getImplementation(class_getInstanceMethod(photoClass(), @selector(setNeedsDisplay:)))),
+          originalRectDamage_(
+              method_getImplementation(class_getInstanceMethod(photoClass(), @selector(setNeedsDisplayInRect:)))),
+          depth_(0),
+          draws_(0),
+          requests_(0),
+          draw_(@selector(drawRect:), reinterpret_cast<IMP>(&Draw), photoClass()),
+          damage_(@selector(setNeedsDisplay:), reinterpret_cast<IMP>(&Damage), photoClass()),
+          rectDamage_(@selector(setNeedsDisplayInRect:), reinterpret_cast<IMP>(&RectDamage), photoClass())
+    {
+      LOKA_VERIFY(!active_);
+      active_ = this;
+    }
+    ~PhotoDrawProbe()
+    {
+      active_ = 0;
+    }
+    unsigned draws() const
+    {
+      return this->draws_;
+    }
+    unsigned requests() const
+    {
+      return this->requests_;
+    }
+    static bool drawing()
+    {
+      return active_ && active_->depth_ != 0;
+    }
+    static Class photoClass()
+    {
+      return NSClassFromString(@"LokaStackPhotoUnitView");
+    }
 
-void testMacZStackLiveBlurSwitch()
-{
-  LiveBlurDefaultScope setting;
-  if (NSClassFromString(@"NSVisualEffectView"))
+  private:
+    static void Draw(id view, SEL selector, NSRect rect)
+    {
+      PhotoDrawProbe &p = *active_;
+      ++p.depth_;
+      ++p.draws_;
+      reinterpret_cast<void (*)(id, SEL, NSRect)>(p.originalDraw_)(view, selector, rect);
+      --p.depth_;
+    }
+    static void Damage(id view, SEL selector, BOOL value)
+    {
+      PhotoDrawProbe &p = *active_;
+      if (p.depth_ && value)
+        ++p.requests_;
+      reinterpret_cast<void (*)(id, SEL, BOOL)>(p.originalDamage_)(view, selector, value);
+    }
+    static void RectDamage(id view, SEL selector, NSRect rect)
+    {
+      PhotoDrawProbe &p = *active_;
+      if (p.depth_)
+        ++p.requests_;
+      reinterpret_cast<void (*)(id, SEL, NSRect)>(p.originalRectDamage_)(view, selector, rect);
+    }
+    IMP originalDraw_, originalDamage_, originalRectDamage_;
+    unsigned depth_, draws_, requests_;
+    MacNativeRefusal draw_, damage_, rectDamage_;
+    static PhotoDrawProbe *active_;
+    PhotoDrawProbe(const PhotoDrawProbe &);
+    PhotoDrawProbe &operator=(const PhotoDrawProbe &);
+  };
+  PhotoDrawProbe *PhotoDrawProbe::active_ = 0;
+  id ownPhotoLayer(id, SEL)
   {
-    std::printf("[skip] ZStack live blur switch: requires a host without NSVisualEffectView\n");
-    return;
+    // Present capability loss only at the production draw gate, without
+    // asking AppKit to replace this fixture's backing or display path.
+    return PhotoDrawProbe::drawing() ? [[[NSClassFromString(@"CALayer") alloc] init] autorelease] : nil;
   }
-  NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
-  id transparency = [global objectForKey:@"AppleEnableMenuBarTransparency"];
-  if (transparency && [transparency respondsToSelector:@selector(boolValue)] && ![transparency boolValue])
+
+  bool legacyPhotosAvailable()
   {
-    std::printf("[skip] ZStack live blur switch: menu bar transparency is disabled\n");
-    return;
+    if (NSClassFromString(@"NSVisualEffectView"))
+    {
+      std::printf("[skip] ZStack legacy photos: NSVisualEffectView factory branch; run on Mavericks\n");
+      return false;
+    }
+    if (![NSScreen mainScreen] || loka::testing::MacConsoleScreenIsLocked())
+    {
+      std::printf("[skip] ZStack legacy photos: no unlocked GUI screen\n");
+      return false;
+    }
+    NSDictionary *global = [[NSUserDefaults standardUserDefaults] persistentDomainForName:NSGlobalDomain];
+    id transparency = [global objectForKey:@"AppleEnableMenuBarTransparency"];
+    if (transparency && [transparency respondsToSelector:@selector(boolValue)] && ![transparency boolValue])
+    {
+      std::printf("[skip] ZStack legacy photos: transparency disabled; enable for positive capture control\n");
+      return false;
+    }
+    return true;
   }
-  for (unsigned int live = 0; live < 2; ++live)
+
+  NSView *preparePhoto(Fixture &f, ZStackUnitGround ground)
   {
-    if (live)
-      [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"LokaExpLiveBlur"];
-    Fixture f;
-    ZStackNode *stack = new ZStackNode((ZStackProps()));
-    f.tree = stack;
-    stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
-    stack->addChild(new RectSurfaceNode(RectSurfaceProps()));
+    ZStackNode *stack = stackWithGround(f);
+    stack->props.unitGround = ground;
     stack->addChild(new BoxNode(BoxProps().setSize(200, 80)));
+    stack->addChild(new BoxNode(BoxProps().setSize(200, 60)));
     f.layout();
     NSView *unit = unitUnder(f.host.root);
-    LOKA_VERIFY(unit && [unit isOpaque] && [unit isFlipped]);
-    LOKA_VERIFY([unit class] == NSClassFromString(live ? @"LokaStackCPUUnitView" : @"LokaStackFrostedUnitView"));
+    LOKA_VERIFY(unit && ![unit isOpaque] && [unit isFlipped] && ![unit acceptsFirstResponder]);
+    LOKA_VERIFY([unit class]
+                == NSClassFromString(ground == ZSTACK_UNIT_GROUND_EXP_BLUR ? @"LokaStackBandUnitView"
+                                                                           : @"LokaStackStaticUnitView"));
+    LOKA_VERIFY([[[f.host.root subviews] objectAtIndex:2] class] == NSClassFromString(@"LokaStackUnitView"));
+    return unit;
+  }
+  bool showPhoto(Fixture &f)
+  {
+    if (!f.host.show())
+      return false;
+    if (![f.host.window isVisible] || ![f.host.window screen])
+    {
+      std::printf("[skip] ZStack legacy photos: ordered window is not on screen\n");
+      return false;
+    }
+    return true;
+  }
+  void fullPhotoDraw(Fixture &f)
+  {
+    [f.host.root setNeedsDisplay:YES];
+    [f.host.window display];
+  }
+  void verifyEmptyPhoto(NSView *unit)
+  {
+    LOKA_VERIFY(!loka::testing::macStackPhoto(unit));
+    LOKA_VERIFY(!loka::testing::macStackPhotoDisabled(unit));
+  }
+} // namespace
+
+void testMacZStackPhotoCapturePolicy()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  for (unsigned policy = 0; policy < 2; ++policy)
+  {
+    Fixture f;
+    NSView *unit = preparePhoto(f, policy ? ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR : ZSTACK_UNIT_GROUND_EXP_BLUR);
     MacNativeRefusal red(
         @selector(drawRect:), reinterpret_cast<IMP>(&drawRedSurface), NSClassFromString(@"LokaRectSurfaceView"));
-    if (!f.host.show())
+    if (!showPhoto(f))
       return;
-    // Changing the default after admission cannot change the chosen unit view.
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"LokaExpLiveBlur"];
-    NSBitmapImageRep *bitmap = captureUnit(unit);
-    NSColor *color = pixel(bitmap, unit, 100, 40);
-    LOKA_VERIFY(color != nil);
-    if (live)
+    PhotoDrawProbe probe;
+    fullPhotoDraw(f);
+    const unsigned long first = photoFingerprint(unit);
+    LOKA_VERIFY(probe.draws() > 0 && probe.requests() == 0);
+    // Full native dirty list is the positive control. Ground changes below
+    // now must not enter a partial or fragmented capture.
+    MacNativeRefusal blue(
+        @selector(drawRect:), reinterpret_cast<IMP>(&drawBlueSurface), NSClassFromString(@"LokaRectSurfaceView"));
     {
-      LOKA_VERIFY([color redComponent] > [color greenComponent] + 0.15);
-      LOKA_VERIFY([color redComponent] > [color blueComponent] + 0.15);
+      MacNativeRefusal partial(@selector(getRectsBeingDrawn:count:),
+                               reinterpret_cast<IMP>(&partialPhotoRects),
+                               PhotoDrawProbe::photoClass());
+      fullPhotoDraw(f);
+      LOKA_VERIFY(photoFingerprint(unit) == first);
     }
+    {
+      MacNativeRefusal split(
+          @selector(getRectsBeingDrawn:count:), reinterpret_cast<IMP>(&splitPhotoRects), PhotoDrawProbe::photoClass());
+      fullPhotoDraw(f);
+      LOKA_VERIFY(photoFingerprint(unit) == first);
+    }
+    fullPhotoDraw(f);
+    if (policy)
+      LOKA_VERIFY(photoFingerprint(unit) == first);
     else
-    {
-      LOKA_VERIFY(std::fabs([color redComponent] - [color greenComponent]) < 0.04);
-      LOKA_VERIFY(std::fabs([color redComponent] - [color blueComponent]) < 0.04);
-    }
+      LOKA_VERIFY(photoFingerprint(unit) != first);
+    LOKA_VERIFY(probe.requests() == 0);
   }
+}
+
+void testMacZStackPhotoLifetime()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  for (unsigned policy = 0; policy < 2; ++policy)
+  {
+    Fixture f;
+    NSView *unit = preparePhoto(f, policy ? ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR : ZSTACK_UNIT_GROUND_EXP_BLUR);
+    if (!showPhoto(f))
+      return;
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    MacZStackContext *context = static_cast<MacZStackContext *>(f.tree->getContext());
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+    verifyEmptyPhoto(unit);
+    context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+    verifyEmptyPhoto(unit);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    MacZStackContext::Unit *seat = *context->unitsBegin();
+    const unsigned long beforeEmpty = photoFingerprint(unit);
+    seat->place(f.controller.projection().projectFrame(Frame(10, 10, 180, 0)));
+    LOKA_VERIFY(photoFingerprint(unit) == beforeEmpty);
+    seat->place(f.controller.projection().projectFrame(Frame(10, 10, 180, 90)));
+    verifyEmptyPhoto(unit);
+    // A failed attempt consumes the hook once and disables both policies.
+    loka::testing::failMacPhotoCaptures(1);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(!loka::testing::macStackPhoto(unit) && loka::testing::macStackPhotoDisabled(unit));
+    fullPhotoDraw(f);
+    LOKA_VERIFY(!loka::testing::macStackPhoto(unit) && loka::testing::macStackPhotoDisabled(unit));
+    seat->place(f.controller.projection().projectFrame(Frame(10, 10, 180, 0)));
+    LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+    seat->place(f.controller.projection().projectFrame(Frame(10, 10, 180, 100)));
+    verifyEmptyPhoto(unit);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    // Real ancestor scrolling: same window viewport, different local slice.
+    NSClipView *clip = [[NSClipView alloc] initWithFrame:[unit frame]];
+    [clip setDrawsBackground:NO];
+    [f.host.root addSubview:clip];
+    [unit retain];
+    [unit removeFromSuperview];
+    [unit setFrame:NSMakeRect(0, 0, 180, 1000)];
+    [clip setDocumentView:unit];
+    [unit release];
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    const NSRect before = loka::testing::macStackPhotoRect(unit);
+    [clip scrollToPoint:NSMakePoint(0, 20)];
+    {
+      MacNativeRefusal partial(@selector(getRectsBeingDrawn:count:),
+                               reinterpret_cast<IMP>(&partialPhotoRects),
+                               PhotoDrawProbe::photoClass());
+      fullPhotoDraw(f);
+      verifyEmptyPhoto(unit);
+      LOKA_VERIFY(!NSEqualRects(before, loka::testing::macStackPhotoRect(unit)));
+    }
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+    context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+    loka::testing::failMacPhotoCaptures(1);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+    [clip scrollToPoint:NSMakePoint(0, 40)];
+    {
+      MacNativeRefusal partial(@selector(getRectsBeingDrawn:count:),
+                               reinterpret_cast<IMP>(&partialPhotoRects),
+                               PhotoDrawProbe::photoClass());
+      fullPhotoDraw(f);
+      verifyEmptyPhoto(unit);
+    }
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    [unit viewDidChangeBackingProperties];
+    verifyEmptyPhoto(unit);
+    loka::testing::failMacPhotoCaptures(1);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+    // A second window is a separate lifetime, even with matching local bounds.
+    Host other;
+    if (other.show())
+    {
+      [unit retain];
+      [clip setDocumentView:nil];
+      [other.root addSubview:unit];
+      verifyEmptyPhoto(unit);
+      [unit removeFromSuperview];
+      [clip setDocumentView:unit];
+      [unit release];
+      fullPhotoDraw(f);
+      LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+    }
+    loka::testing::failMacPhotoCaptures(0);
+    [clip release];
+  }
+}
+
+void testMacZStackPhotoReplayAndRefusal()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  Fixture f;
+  PhotoDrawProbe probe;
+  NSView *unit = preparePhoto(f, ZSTACK_UNIT_GROUND_EXP_BLUR);
+  // Offscreen with no photo cannot capture or enter DISABLED, even with a
+  // pending failure. The next on-screen capture must consume that failure.
+  loka::testing::failMacPhotoCaptures(1);
+  captureUnit(unit);
+  verifyEmptyPhoto(unit);
+  if (!showPhoto(f))
+  {
+    loka::testing::failMacPhotoCaptures(0);
+    return;
+  }
+  fullPhotoDraw(f);
+  LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+  {
+    MacNativeRefusal changed(
+        @selector(visibleRect), reinterpret_cast<IMP>(&changedPhotoRect), PhotoDrawProbe::photoClass());
+    captureUnit(unit);
+    LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+  }
+  fullPhotoDraw(f);
+  LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+  MacZStackContext *context = static_cast<MacZStackContext *>(f.tree->getContext());
+  context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+  context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+  NSBitmapImageRep *frost = captureUnit(unit);
+  MacNativeRefusal red(
+      @selector(drawRect:), reinterpret_cast<IMP>(&drawRedSurface), NSClassFromString(@"LokaRectSurfaceView"));
+  fullPhotoDraw(f);
+  const unsigned long first = photoFingerprint(unit);
+  const NSRect geometry = loka::testing::macStackPhotoRect(unit);
+  {
+    MacNativeRefusal changed(
+        @selector(visibleRect), reinterpret_cast<IMP>(&changedPhotoRect), PhotoDrawProbe::photoClass());
+    captureUnit(unit);
+    LOKA_VERIFY(photoFingerprint(unit) == first);
+    LOKA_VERIFY(NSEqualRects(loka::testing::macStackPhotoRect(unit), geometry));
+  }
+  {
+    MacNativeRefusal empty(
+        @selector(visibleRect), reinterpret_cast<IMP>(&emptyPhotoRect), PhotoDrawProbe::photoClass());
+    fullPhotoDraw(f);
+    LOKA_VERIFY(photoFingerprint(unit) == first);
+    LOKA_VERIFY(NSEqualRects(loka::testing::macStackPhotoRect(unit), geometry));
+  }
+  NSBitmapImageRep *replayed = captureUnit(unit);
+  NSColor *redPixel = pixel(replayed, unit, 100, 40);
+  LOKA_VERIFY([redPixel redComponent] > [redPixel blueComponent] + 0.15);
+  {
+    MacNativeRefusal fail(@selector(drawInRect:), reinterpret_cast<IMP>(&refusePhotoReplay), [NSBitmapImageRep class]);
+    NSBitmapImageRep *fallback = captureUnit(unit);
+    LOKA_VERIFY(sameColor(pixel(fallback, unit, 100, 40), pixel(frost, unit, 100, 40)));
+    LOKA_VERIFY(photoFingerprint(unit) == first);
+  }
+  MacNativeRefusal blue(
+      @selector(drawRect:), reinterpret_cast<IMP>(&drawBlueSurface), NSClassFromString(@"LokaRectSurfaceView"));
+  {
+    MacNativeRefusal transparency(
+        @selector(persistentDomainForName:), reinterpret_cast<IMP>(&noTransparency), [NSUserDefaults class]);
+    fullPhotoDraw(f);
+    LOKA_VERIFY(photoFingerprint(unit) == first);
+    LOKA_VERIFY(sameColor(pixel(captureUnit(unit), unit, 100, 40), redPixel));
+  }
+  if ([unit respondsToSelector:@selector(layer)])
+  {
+    // Replace only the layer query: AppKit's actual layer allocation would
+    // itself change backing and reset the photo before exercising refusal.
+    MacNativeRefusal layer(@selector(layer), reinterpret_cast<IMP>(&ownPhotoLayer), PhotoDrawProbe::photoClass());
+    captureUnit(unit);
+    // Invoke the ordinary display while the own-layer gate refuses capture.
+    const unsigned draws = probe.draws();
+    fullPhotoDraw(f);
+    LOKA_VERIFY(probe.draws() > draws);
+    LOKA_VERIFY(photoFingerprint(unit) == first);
+    LOKA_VERIFY(sameColor(pixel(captureUnit(unit), unit, 100, 40), redPixel));
+  }
+  else
+    std::printf("[skip] ZStack own layer refusal: layer selector unavailable on Tiger\n");
+  fullPhotoDraw(f);
+  LOKA_VERIFY(photoFingerprint(unit) != first);
+}
+
+void testMacZStackPhotoOrientation()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  Fixture f;
+  PhotoDrawProbe probe;
+  NSView *unit = preparePhoto(f, ZSTACK_UNIT_GROUND_EXP_BLUR);
+  MacNativeRefusal split(
+      @selector(drawRect:), reinterpret_cast<IMP>(&drawSplitSurface), NSClassFromString(@"LokaRectSurfaceView"));
+  if (!showPhoto(f))
+    return;
+  // Match the ground height so the photo spans both halves; clip at a nonzero
+  // local origin as well, discriminating bounds-centered reflection.
+  NSView *ground = [[f.host.root subviews] objectAtIndex:0];
+  [unit setFrame:[ground frame]];
+  NSClipView *clip = [[NSClipView alloc] initWithFrame:NSInsetRect([unit frame], 0, 20)];
+  [clip setDrawsBackground:NO];
+  [f.host.root addSubview:clip];
+  [unit retain];
+  [unit removeFromSuperview];
+  [unit setFrame:NSMakeRect(0, 0, NSWidth([ground frame]), NSHeight([ground frame]))];
+  [clip setDocumentView:unit];
+  [unit release];
+  [clip scrollToPoint:NSMakePoint(0, 20)];
+  fullPhotoDraw(f);
+  NSBitmapImageRep *photo = loka::testing::macStackPhoto(unit);
+  LOKA_VERIFY(photo);
+  NSColor *top = [photo colorAtX:[photo pixelsWide] / 2 y:12];
+  NSColor *bottom = [photo colorAtX:[photo pixelsWide] / 2 y:[photo pixelsHigh] - 13];
+  LOKA_VERIFY([top redComponent] > [top blueComponent] + 0.5);
+  LOKA_VERIFY([bottom blueComponent] > [bottom redComponent] + 0.5);
+  NSBitmapImageRep *replay = captureUnit(unit);
+  const NSRect visible = loka::testing::macStackPhotoRect(unit);
+  LOKA_VERIFY(NSMinY(visible) > 0);
+  top = pixel(replay, unit, NSMidX(visible), NSMinY(visible) + 12);
+  bottom = pixel(replay, unit, NSMidX(visible), NSMaxY(visible) - 13);
+  LOKA_VERIFY([top redComponent] > [top blueComponent] + 0.15);
+  LOKA_VERIFY([bottom blueComponent] > [bottom redComponent] + 0.15);
+  [clip release];
 }
