@@ -401,11 +401,20 @@ namespace
   // A screen draw is one whose current context is the window's own: on 10.9
   // cacheDisplayInRect: still reports isDrawingToScreen, but draws through a
   // bitmap context, so only the port comparison tells the two apart.
+  // graphicsContext and graphicsPort are deprecated from 10.14, where this
+  // view never exists (NSVisualEffectView serves 10.10 and later).
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
   NSGraphicsContext *current = [NSGraphicsContext currentContext];
   NSGraphicsContext *windowContext = [[self window] graphicsContext];
   const bool attached = [self window] != nil;
   const bool screen = attached && [current isDrawingToScreen] != NO && windowContext != nil &&
                       [current graphicsPort] == [windowContext graphicsPort];
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
   if (!(screen && attached))
   {
     [self lokaReplayPhoto];
