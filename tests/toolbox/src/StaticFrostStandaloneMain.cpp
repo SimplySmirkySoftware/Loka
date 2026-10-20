@@ -358,8 +358,9 @@ namespace
         this->waits_ = 0;
         ToolboxStaticBlurInspection::timing(controller, this->log_);
         Capture picture;
-        std::fprintf(
-            this->log_, "static-picture fnv=%08lx\r", picture.read(window->window()) ? picture.fingerprint(Unit) : 0UL);
+        std::fprintf(this->log_,
+                     "static-picture fnv=%08lx\r",
+                     picture.read(window->window()) ? picture.fingerprint(Whole) : 0UL);
         if (this->phase_ == 7)
         {
           this->record("static-reconcile", this->captures_ == 2);
