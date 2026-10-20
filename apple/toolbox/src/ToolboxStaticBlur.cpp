@@ -1,4 +1,5 @@
 #include "ToolboxStaticBlur.hpp"
+#include "ToolboxBlurKernel.hpp"
 #include "ToolboxFrostCache.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "ToolboxPaintGround.hpp"
@@ -124,44 +125,39 @@ namespace
     RGBForeColor(&black);
     RGBBackColor(&white);
   }
-  unsigned char Milk(unsigned value, unsigned resolution)
+  /** Copies movable QuickDraw sources before the allocating kernel runs. */
+  class CaptureTables
   {
-    return static_cast<unsigned char>((value + (((255 - value) * 160) >> 8)) >> (8 - resolution));
-  }
-  /** In-place separable [1 2 1], retaining original neighbors, edge repeat. */
-  void FilterLine(unsigned char *first, int count, long step)
-  {
-    unsigned previous = *first;
-    for (int i = 0; i < count; ++i)
+  public:
+    CaptureTables()
+        : palette(new(std::nothrow) unsigned char[768]),
+          inverse(0)
     {
-      const unsigned current = *first;
-      const unsigned next = i + 1 < count ? first[step] : current;
-      *first = static_cast<unsigned char>((previous + 2 * current + next) / 4);
-      previous = current;
-      first += step;
     }
-  }
+    ~CaptureTables()
+    {
+      delete[] this->palette;
+      delete[] this->inverse;
+    }
+    unsigned char *const palette;
+    unsigned char *inverse;
+
+  private:
+    CaptureTables(const CaptureTables &);
+    CaptureTables &operator=(const CaptureTables &);
+  };
 } // namespace
 
-/** Single candidate resource owner. Reduced storage is interleaved RGB bytes,
-    exactly ceil(w/8)*ceil(h/8)*3, filtered in place. */
+/** Single candidate resource owner; only the completed GWorld survives. */
 struct ToolboxStaticBlurPixels::Image
 {
   GWorldPtr world;
-  unsigned char *reduced;
-  unsigned char *inverse;
-  short resolution;
   Image()
-      : world(0),
-        reduced(0),
-        inverse(0),
-        resolution(0)
+      : world(0)
   {
   }
   ~Image()
   {
-    delete[] this->reduced;
-    delete[] this->inverse;
     if (this->world)
       DisposeGWorld(this->world);
   }
@@ -200,77 +196,53 @@ struct ToolboxStaticBlurPixels::Image
 
     timings[0] = Now() - start;
     start = Now();
-    const int columns = (width + 7) / 8, rows = (height + 7) / 8;
-    this->reduced = new (std::nothrow) unsigned char[static_cast<long>(columns) * rows * 3];
-    if (!this->reduced)
+    CaptureTables tables;
+    if (!tables.palette)
       return false;
     CTabHandle table = (**locked.get()).pmTable;
     if (!table || (**table).ctSize != 255)
       return false;
-    unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(locked.get()));
-    if (!base)
-      return false;
-    const long stride = (**locked.get()).rowBytes & 0x3FFF;
-    for (int by = 0; by < rows; ++by)
-      for (int bx = 0; bx < columns; ++bx)
-      {
-        unsigned long sum[3] = {0, 0, 0};
-        const int bw = width - bx * 8 < 8 ? width - bx * 8 : 8;
-        const int bh = height - by * 8 < 8 ? height - by * 8 : 8;
-        for (int y = 0; y < bh; ++y)
-          for (int x = 0; x < bw; ++x)
-          {
-            const RGBColor color = (**table).ctTable[base[(by * 8 + y) * stride + bx * 8 + x]].rgb;
-            sum[0] += color.red >> 8;
-            sum[1] += color.green >> 8;
-            sum[2] += color.blue >> 8;
-          }
-        for (int c = 0; c < 3; ++c)
-          this->reduced[(static_cast<long>(by) * columns + bx) * 3 + c] =
-              static_cast<unsigned char>(sum[c] / (bw * bh));
-      }
-    timings[1] = Now() - start;
-    start = Now();
-    for (int c = 0; c < 3; ++c)
+    for (int i = 0; i < 256; ++i)
     {
-      for (int y = 0; y < rows; ++y)
-        FilterLine(this->reduced + static_cast<long>(y) * columns * 3 + c, columns, 3);
-      for (int x = 0; x < columns; ++x)
-        FilterLine(this->reduced + x * 3 + c, rows, static_cast<long>(columns) * 3);
+      const RGBColor color = (**table).ctTable[i].rgb;
+      tables.palette[3 * i] = static_cast<unsigned char>(color.red >> 8);
+      tables.palette[3 * i + 1] = static_cast<unsigned char>(color.green >> 8);
+      tables.palette[3 * i + 2] = static_cast<unsigned char>(color.blue >> 8);
     }
-    timings[2] = Now() - start;
-    start = Now();
     RGBColor probe = {65535, 0, 0};
     Color2Index(&probe); // Bring QuickDraw's movable inverse table up to date.
     GDHandle device = GetGWorldDevice(this->world);
     if (!device || !(**device).gdITable || QDError() != noErr)
       return false;
     ITabHandle inverseTable = (**device).gdITable;
-    this->resolution = (**inverseTable).iTabRes;
-    if (this->resolution < 3 || this->resolution > 5)
+    const short resolution = (**inverseTable).iTabRes;
+    if (resolution < 3 || resolution > 5)
       return false;
-    const long size = 1L << (3 * this->resolution);
-    this->inverse = new (std::nothrow) unsigned char[size];
-    if (!this->inverse)
+    const long size = 1L << (3 * resolution);
+    tables.inverse = new (std::nothrow) unsigned char[size];
+    if (!tables.inverse)
       return false;
-    // Allocation may move the handle; dereference it only after allocation.
-    BlockMoveData((**inverseTable).iTTable, this->inverse, size);
-    for (int y = 0; y < height; ++y)
-      for (int x = 0; x < width; ++x)
-      {
-        const unsigned char *rgb = this->reduced + (static_cast<long>(y / 8) * columns + x / 8) * 3;
-        const unsigned index = (static_cast<unsigned>(Milk(rgb[0], this->resolution)) << (2 * this->resolution))
-                               | (static_cast<unsigned>(Milk(rgb[1], this->resolution)) << this->resolution)
-                               | Milk(rgb[2], this->resolution);
-        base[y * stride + x] = this->inverse[index];
-      }
-    timings[3] = Now() - start;
-    // Only snapshot pixels survive capture; workspace and the private table
-    // have no future reader. The candidate remains the single cleanup owner.
-    delete[] this->reduced;
-    this->reduced = 0;
-    delete[] this->inverse;
-    this->inverse = 0;
+    // Dereference after allocation: unlocked handles may move. Both relocatable
+    // tables are copied before the kernel allocates; pixels remain locked.
+    BlockMoveData((**inverseTable).iTTable, tables.inverse, size);
+    timings[1] = Now() - start;
+    start = Now();
+    loka::platform::CpuClass cpu;
+    if (!loka::platform::queryCpuClass(cpu))
+      cpu = loka::platform::CPU_CLASS_68K;
+    unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(locked.get()));
+    const long stride = (**locked.get()).rowBytes & 0x3FFF;
+    if (!loka::toolbox::ToolboxBlurKernel(base,
+                                          width,
+                                          height,
+                                          stride,
+                                          tables.palette,
+                                          8,
+                                          loka::toolbox::ToolboxBlurEnlargementFor(cpu),
+                                          tables.inverse,
+                                          resolution))
+      return false;
+    timings[2] = Now() - start;
     return true;
   }
 
@@ -282,7 +254,7 @@ private:
 ToolboxStaticBlurPixels::ToolboxStaticBlurPixels()
     : image_(0)
 {
-  for (int i = 0; i < 5; ++i)
+  for (int i = 0; i < 4; ++i)
     this->timings_[i] = 0;
 }
 ToolboxStaticBlurPixels::~ToolboxStaticBlurPixels()
@@ -348,6 +320,6 @@ bool ToolboxStaticBlurPixels::paint(GrafPtr window, const Rect &rect)
   // decision depends on the dirty rectangle, so partial and full paints agree.
   CopyBits(reinterpret_cast<BitMap *>(*locked.get()), &window->portBits, &bounds, &rect, srcCopy, 0);
   const bool ok = QDError() == noErr;
-  this->timings_[4] = Now() - start;
+  this->timings_[3] = Now() - start;
   return ok;
 }

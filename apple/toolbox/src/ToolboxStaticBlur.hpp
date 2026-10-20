@@ -4,7 +4,7 @@
 #include "ToolboxErasedPass.hpp"
 
 /** Native pixels have no callbacks or deferred residents. Candidate construction
-    commits only complete pixels; the image owns its world and temporary bytes. */
+    commits only complete pixels; the image owns its world. */
 class ToolboxStaticBlurPixels
 {
 public:
@@ -26,7 +26,7 @@ private:
   struct Image;
   Image *image_;
   /** Last capture stages and copy-back, in Microseconds; private diagnostics. */
-  unsigned long timings_[5];
+  unsigned long timings_[4];
   ToolboxStaticBlurPixels(const ToolboxStaticBlurPixels &);
   ToolboxStaticBlurPixels &operator=(const ToolboxStaticBlurPixels &);
 };
