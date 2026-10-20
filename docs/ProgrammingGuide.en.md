@@ -1640,7 +1640,10 @@ the ZStack. A ScrollView or a nested ZStack inside a unit lays out nothing today
 
 Win32, macOS, and Toolbox use opaque units by default. Toolbox has the 2b hit shield:
 a press on a unit's empty area stops there and leaves focus unchanged; controls
-inside it and later units take precedence in render order. A unit's own live control must lie
+inside it and later units take precedence in render order. On Win32 and macOS, a
+mouse wheel that starts over a unit does not scroll a ScrollView beneath it; a
+ScrollView around the whole ZStack still scrolls (see
+[ScrollView design](ScrollViewDesign.md#wheel-targeting-and-the-unit-shield-1500)). A unit's own live control must lie
 entirely inside it (a partly contained own editor is unspecified), partial overlaps
 are repaired on the overlap, and fully covered ground or earlier-unit controls
 are outside the contract and get no repair, leaving selection highlight,

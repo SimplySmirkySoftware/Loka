@@ -310,6 +310,105 @@ void testMacZStackUnitHitTestShadowsGround()
   LOKA_VERIFY(hitBelongsTo(f.host.root, button, point));
 }
 
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+namespace
+{
+  NSEvent *lineWheel(bool horizontal)
+  {
+    CGEventRef cg = horizontal ? CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2, 0, -3)
+                               : CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 1, -3);
+    NSEvent *event = [NSEvent eventWithCGEvent:cg];
+    CFRelease(cg);
+    return event;
+  }
+  void scrollToMiddle(NSScrollView *scroll, NSView *root)
+  {
+    [[scroll contentView] scrollToPoint:NSMakePoint(100, 100)];
+    [scroll reflectScrolledClipView:[scroll contentView]];
+    settle(root);
+  }
+  CGFloat along(NSScrollView *scroll, bool horizontal)
+  {
+    const NSPoint origin = [[scroll contentView] bounds].origin;
+    return horizontal ? origin.x : origin.y;
+  }
+} // namespace
+#endif
+
+/** A unit's view is the ground ScrollView's sibling, so a wheel that the unit's view
+    receives climbs the unit's superviews and never reaches the ground; a ZStack inside a
+    ScrollView passes it up to that ScrollView. Both axes (#1500). The wheel goes to the
+    view a hit test selects, as AppKit does for a non-momentum event; AppKit's own target
+    selection belongs to the OS and is not pinned. */
+void testMacZStackUnitWheelLeavesGroundScrollView()
+{
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1050
+  for (int inside = 0; inside != 2; ++inside)
+  {
+    loka::core::MutableState<Frame> storage(Frame(0, 0, 0, 0));
+    NodeState<Frame> origin(&storage, 0);
+    Fixture f;
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(origin));
+    ZStackNode *stack = new ZStackNode((ZStackProps()));
+    if (inside)
+    {
+      stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(600, 600)));
+      stack->addChild(new BoxNode(BoxProps().setSize(300, 40)));
+      scroll->addChild(stack);
+      f.tree = scroll;
+    }
+    else
+    {
+      scroll->addChild(new RectSurfaceNode(RectSurfaceProps().size(600, 600)));
+      stack->addChild(scroll);
+      stack->addChild(new BoxNode(BoxProps().setSize(300, 40)));
+      f.tree = stack;
+    }
+    f.layout(300, 140);
+    if (!f.host.show())
+      return;
+    f.layout(300, 140);
+    NSView *root = f.host.root;
+    settle(root);
+    NSScrollView *native = scrollUnder(root);
+    NSView *unit = inside ? unitUnder([native documentView]) : unitUnder(root);
+    LOKA_VERIFY(native && unit);
+    LOKA_VERIFY(inside ? [unit isDescendantOf:[native documentView]]
+                       : [unit superview] == root && [native superview] == root);
+    const NSRect bounds = [unit bounds];
+    const NSPoint point = [unit convertPoint:NSMakePoint(NSMidX(bounds), NSMidY(bounds)) toView:root];
+    NSView *hit = nil;
+    NSArray *children = [root subviews];
+    for (NSUInteger i = [children count]; i > 0 && !hit; --i)
+      hit = [[children objectAtIndex:i - 1] hitTest:point];
+    LOKA_VERIFY(hit && (hit == unit || [hit isDescendantOf:unit]));
+    for (int horizontal = 0; horizontal != 2; ++horizontal)
+    {
+      // Positive control: the synthesized wheel must move the ScrollView it is sent to.
+      scrollToMiddle(native, root);
+      const CGFloat start = along(native, horizontal);
+      [native scrollWheel:lineWheel(horizontal)];
+      settle(root);
+      if (along(native, horizontal) == start)
+      {
+        std::printf("[skip] testMacZStackUnitWheelLeavesGroundScrollView: a synthesized wheel does not scroll "
+                    "an NSScrollView here, so the %s %s half did not run\n",
+                    inside ? "inside" : "sibling",
+                    horizontal ? "horizontal" : "vertical");
+        continue;
+      }
+      scrollToMiddle(native, root);
+      [hit scrollWheel:lineWheel(horizontal)];
+      settle(root);
+      LOKA_VERIFY(inside ? along(native, horizontal) != start : along(native, horizontal) == start);
+    }
+  }
+#else
+  std::printf(
+      "[skip] testMacZStackUnitWheelLeavesGroundScrollView: CGEventCreateScrollWheelEvent needs the 10.5 SDK\n");
+#endif
+}
+
 void testMacZStackSiblingAfterZStackDoesNotReorderUnits()
 {
   loka::core::MutableState<loka::core::String> storage(loka::core::String("selection"));
