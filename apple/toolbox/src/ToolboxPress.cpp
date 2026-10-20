@@ -24,9 +24,9 @@ struct ResolvedPress
   }
 };
 
-/** One backward walk per press over this controller's render order. */
+/** One backward walk per press or hover sample over this controller's render order. */
 bool ToolboxPressLedger::topmostAt(const Point &point,
-                                   ToolboxScenePlatformController &controller,
+                                   const ToolboxScenePlatformController &controller,
                                    ResolvedPress &out) const
 {
   for (std::size_t i = this->live_.size(); i; --i)
@@ -154,6 +154,16 @@ PressOwnerFact ToolboxScenePlatformController::pressOwnerFact(const ResolvedPres
   if (!press.enabled || (press.control && !press.part))
     return PRESS_OWNER_SHIELD;
   return PRESS_OWNER_ATTACHED;
+}
+
+bool ToolboxScenePlatformController::isPointInEdit(const Point &point) const
+{
+  ResolvedPress press;
+  if (!this->pressLedger_.topmostAt(point, *this, press))
+    return false;
+  const PressOwnerFact owner = this->pressOwnerFact(press);
+  return owner == PRESS_OWNER_ATTACHED
+         && (press.row.kind == PressRow::EDIT_CONTROL || press.row.kind == PressRow::EDIT_HIT);
 }
 
 bool ToolboxScenePlatformController::pressOnEmptySpace()
