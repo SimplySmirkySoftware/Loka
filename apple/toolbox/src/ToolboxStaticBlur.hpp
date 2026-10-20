@@ -11,6 +11,12 @@ public:
   ToolboxStaticBlurPixels();
   ~ToolboxStaticBlurPixels();
   static bool eligible(GrafPtr window, const Rect &rect);
+  /** Allocation-free coverage of the visibility region narrowed by BeginUpdate. */
+  static bool updateCovers(GrafPtr window, const Rect &rect);
+  bool hasPixels() const
+  {
+    return this->image_ != 0;
+  }
   bool capture(GrafPtr window, const Rect &rect);
   bool paint(GrafPtr window, const Rect &rect);
   void clear();
@@ -32,22 +38,21 @@ class ToolboxStaticBlur
 public:
   enum Phase
   {
-    NEEDED,
-    REQUESTED,
+    EMPTY,
     READY,
-    PLAIN
+    DISABLED
   };
   ToolboxStaticBlur()
       : stack_(0),
         rect_(),
-        phase_(NEEDED)
+        capture_(CAPTURE_ALLOWED)
   {
   }
   void clear()
   {
     this->pixels_.clear();
     this->stack_ = 0;
-    this->phase_ = NEEDED;
+    this->capture_ = CAPTURE_ALLOWED;
   }
   /** Once after layout; O(1), with a row selected by the ledger owner. */
   void reconcile(const ToolboxUnitLedger::UnitSeat *row)
@@ -91,30 +96,15 @@ public:
   {
     if (!this->matches(row))
       return false;
-    const bool pending = this->phase_ == NEEDED || this->phase_ == REQUESTED;
     if (!ToolboxStaticBlurPixels::eligible(window, row.rect))
-    {
-      // No replay can capture on this screen: end the lifetime plain instead
-      // of asking for one every flush. READY keeps its picture for later.
-      if (pending)
-        this->phase_ = PLAIN;
       return false;
+    if (this->capture_ != CAPTURE_DISABLED && !this->pixels_.hasPixels()
+        && pass.admitsCapture(row.rect, ToolboxStaticBlurPixels::updateCovers(window, row.rect)))
+    {
+      if (!this->pixels_.capture(window, row.rect))
+        this->capture_ = CAPTURE_DISABLED;
     }
-    if (pending)
-      this->phase_ = pass.admitsCapture(row.rect) ? (this->pixels_.capture(window, row.rect) ? READY : PLAIN) : NEEDED;
-    return this->phase_ == READY && this->pixels_.paint(window, row.rect);
-  }
-  /** Once after each flush, after consumed rectangles have been cleared.
-      Only a lifetime that a walk painted without an admitted capture is
-      NEEDED (a swallowed request repaints it so), so a flush that never
-      reached the unit asks nothing. Not from the render walk or scheduler
-      drain. No rows are walked. */
-  const Rect *completedFlush()
-  {
-    if (!this->stack_ || this->phase_ != NEEDED)
-      return 0;
-    this->phase_ = REQUESTED;
-    return &this->rect_;
+    return this->pixels_.hasPixels() && this->pixels_.paint(window, row.rect);
   }
 
 private:
@@ -125,7 +115,16 @@ private:
   }
   loka::app::ZStackNode *stack_;
   Rect rect_;
-  Phase phase_;
+  enum CaptureDisposition
+  {
+    CAPTURE_ALLOWED,
+    CAPTURE_DISABLED
+  };
+  Phase phase() const
+  {
+    return this->pixels_.hasPixels() ? READY : (this->capture_ == CAPTURE_DISABLED ? DISABLED : EMPTY);
+  }
+  CaptureDisposition capture_;
   ToolboxStaticBlurPixels pixels_;
   ToolboxStaticBlur(const ToolboxStaticBlur &);
   ToolboxStaticBlur &operator=(const ToolboxStaticBlur &);

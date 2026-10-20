@@ -140,11 +140,3 @@ void ToolboxScenePlatformController::invalidateUnitOverlap(const Rect &rect)
     this->window_->requestInvalidateRect(overlap);
   }
 }
-
-/** Window flush completion, once even for an empty flush; O(1), no row walk. */
-void ToolboxScenePlatformController::completedInvalidateFlush()
-{
-  const Rect *request = this->staticBlur_.completedFlush();
-  if (request && this->window_)
-    this->window_->requestInvalidateRect(*request);
-}
