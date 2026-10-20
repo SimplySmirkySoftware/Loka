@@ -67,6 +67,17 @@ namespace frost_standalone
       unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(this->pixels_));
       return base[y * ((**this->pixels_).rowBytes & 0x3FFF) + x];
     }
+    unsigned long fingerprint(const Rect &area) const
+    {
+      if (!this->valid() || area.left < 0 || area.top < 0 || area.right > Width || area.bottom > Height
+          || area.left >= area.right || area.top >= area.bottom)
+        return 0;
+      unsigned long hash = 2166136261UL;
+      for (int y = area.top; y < area.bottom; ++y)
+        for (int x = area.left; x < area.right; ++x)
+          hash = ((hash ^ this->at(x, y)) * 16777619UL) & 0xFFFFFFFFUL;
+      return hash;
+    }
     bool equals(const Capture &other, const Rect &area) const
     {
       if (!this->valid() || !other.valid())
