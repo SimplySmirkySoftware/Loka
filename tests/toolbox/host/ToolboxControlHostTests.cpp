@@ -158,8 +158,11 @@ namespace
     Fixture f;
     const short id = f.controller.scrollControl(0).resourceId;
     ControlRef original = f.control();
+    original->calls.clear();
     f.controller.destroyScrollBarControl(id, NATIVE_HINT_DEFAULT);
     LOKA_VERIFY(!original->visible && f.controller.scrollControls().empty());
+    // Retirement hides under an empty clip (no erase through a covering unit).
+    LOKA_VERIFY(original->calls.size() == 1 && original->calls[0].operation == "hide" && !original->calls[0].painted);
     LOKA_VERIFY(f.controller.retiredScrollBarControls_.size() == 1);
     LOKA_VERIFY(f.controller.retiredScrollBarControls_[0].handle == original);
     LOKA_VERIFY(f.window.port.native.controls.size() == 1);

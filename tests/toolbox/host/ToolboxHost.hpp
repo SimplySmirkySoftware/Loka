@@ -710,6 +710,7 @@ public:
   } debugStats_;
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
+  void hideRetiredControl(ControlRef control);
   void drawScrollBarControl(short);
   void drawControl(ControlRef);
   typedef ToolboxHitLedger::TextHit TextHit;

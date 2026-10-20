@@ -110,7 +110,7 @@ void ToolboxScenePlatformController::destroyButtonControl(short resourceId,
     {
       // Context destruction can run inside an update pass; disposal waits for
       // the platform safe point like every other retired native handle.
-      HideControl(control);
+      this->hideRetiredControl(control);
       queueRetiredControl(control, lifetimeHint);
     }
     return;

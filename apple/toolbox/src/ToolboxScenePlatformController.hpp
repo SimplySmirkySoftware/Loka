@@ -139,6 +139,8 @@ public:
                                  loka::core::EmitterState *onChange,
                                  int newIndex);
   void drawControlsInRect(const Rect &rect);
+  /** Hides a retiring native control under an empty clip; see ToolboxButtonControl.cpp. */
+  void hideRetiredControl(ControlRef control);
   void drawScrollBarControl(short id);
   void drawControl(ControlRef control);
   bool ensureButtonControl(short resourceId,
