@@ -142,10 +142,229 @@ namespace
     seed = (seed * 1664525UL + 1013904223UL) & 0xFFFFFFFFUL;
     return static_cast<unsigned char>(seed >> 24);
   }
+  struct FillSpec
+  {
+    unsigned resolution, low, high, firstCentre, lastCentre, step, count;
+  };
+  const FillSpec fillSpecs[] = {{3, 4, 7, 0x9000, 0xF000, 0x2000, 64},
+                                {4, 9, 15, 0x9800, 0xF800, 0x1000, 343},
+                                {5, 19, 31, 0x9C00, 0xFC00, 0x0800, 2197}};
+  class RecordingQuery : public ToolboxBlurColourQuery
+  {
+  public:
+    RecordingQuery(const FillSpec &spec, unsigned fail, unsigned pass)
+        : spec_(spec),
+          fail_(fail),
+          pass_(pass),
+          calls_(0)
+    {
+    }
+    virtual bool indexFor(unsigned short red, unsigned short green, unsigned short blue, unsigned char &index)
+    {
+      const unsigned n = this->spec_.high - this->spec_.low + 1;
+      const unsigned ordinal = this->calls_++;
+      LOKA_VERIFY(ordinal < this->spec_.count);
+      LOKA_VERIFY(red == this->spec_.firstCentre + ordinal / (n * n) * this->spec_.step);
+      LOKA_VERIFY(green == this->spec_.firstCentre + (ordinal / n) % n * this->spec_.step);
+      LOKA_VERIFY(blue == this->spec_.firstCentre + ordinal % n * this->spec_.step);
+      if (ordinal + 1 == this->spec_.count)
+        LOKA_VERIFY(red == this->spec_.lastCentre && green == red && blue == red);
+      // Two ordinal digits discriminate destination-channel wiring. The third
+      // pass exercises both endpoint answers even at resolution 3.
+      index = static_cast<unsigned char>(this->pass_ == 0   ? ordinal % 256
+                                         : this->pass_ == 1 ? ordinal / 256
+                                         : ordinal % 2      ? 255
+                                                            : 0);
+      return ordinal != this->fail_;
+    }
+    unsigned calls() const
+    {
+      return this->calls_;
+    }
+
+  private:
+    const FillSpec &spec_;
+    const unsigned fail_, pass_;
+    unsigned calls_;
+  };
+  void FillPins()
+  {
+    unsigned char answer = 17;
+    LOKA_VERIFY(!ToolboxBlurAcceptColorIndex(-1, answer) && answer == 17);
+    LOKA_VERIFY(ToolboxBlurAcceptColorIndex(0, answer) && answer == 0);
+    LOKA_VERIFY(ToolboxBlurAcceptColorIndex(255, answer) && answer == 255);
+    LOKA_VERIFY(!ToolboxBlurAcceptColorIndex(256, answer) && answer == 255);
+    for (unsigned s = 0; s < 3; ++s)
+    {
+      const FillSpec &spec = fillSpecs[s];
+      const unsigned side = 1U << spec.resolution;
+      const long size = side * side * side;
+      std::vector<unsigned char> table(size, 0xA7), previous;
+      for (unsigned pass = 0; pass < 3; ++pass)
+      {
+        RecordingQuery query(spec, spec.count, pass);
+        LOKA_VERIFY(ToolboxBlurFillInverse(&table[0], size, spec.resolution, query));
+        LOKA_VERIFY(query.calls() == spec.count);
+        unsigned ordinal = 0;
+        for (unsigned r = 0; r < side; ++r)
+          for (unsigned g = 0; g < side; ++g)
+            for (unsigned b = 0; b < side; ++b)
+            {
+              const bool reachable = r >= spec.low && g >= spec.low && b >= spec.low;
+              unsigned char expected = 0;
+              if (reachable)
+              {
+                expected = static_cast<unsigned char>(pass == 0     ? ordinal % 256
+                                                      : pass == 1   ? ordinal / 256
+                                                      : ordinal % 2 ? 255
+                                                                    : 0);
+                ++ordinal;
+              }
+              LOKA_VERIFY(table[(r * side + g) * side + b] == expected);
+            }
+        if (pass)
+          LOKA_VERIFY(table != previous);
+        previous = table;
+      }
+      const unsigned failures[] = {0, spec.count / 2, spec.count - 1};
+      for (unsigned f = 0; f < 3; ++f)
+      {
+        RecordingQuery query(spec, failures[f], 0);
+        LOKA_VERIFY(!ToolboxBlurFillInverse(&table[0], size, spec.resolution, query));
+        LOKA_VERIFY(query.calls() == failures[f] + 1);
+      }
+      for (unsigned bad = 0; bad < 7; ++bad)
+      {
+        RecordingQuery query(spec, spec.count, 0);
+        std::fill(table.begin(), table.end(), 0xA7);
+        const std::vector<unsigned char> saved(table);
+        const unsigned r = bad == 0 ? 2 : bad == 1 ? 6 : bad == 2 ? UINT_MAX : spec.resolution;
+        const long length = bad == 3 ? size - 1 : bad == 4 ? size + 1 : bad == 5 ? -1 : size;
+        LOKA_VERIFY(!ToolboxBlurFillInverse(bad == 6 ? 0 : &table[0], length, r, query));
+        LOKA_VERIFY(table == saved && query.calls() == 0);
+      }
+    }
+  }
+  unsigned ReachabilityPins()
+  {
+    unsigned cases = 0;
+    for (unsigned s = 0; s < 3; ++s)
+    {
+      const FillSpec &spec = fillSpecs[s];
+      const unsigned side = 1U << spec.resolution;
+      unsigned char representatives[32] = {0};
+      for (unsigned bucket = spec.low; bucket <= spec.high; ++bucket)
+      {
+        unsigned v = 0;
+        while (v < 256 && (v + (255 - v) * 160 / 256) / (256 / side) != bucket)
+          ++v;
+        LOKA_VERIFY(v < 256);
+        representatives[bucket] = static_cast<unsigned char>(v);
+      }
+      for (unsigned pass = 0; pass < 2; ++pass)
+      {
+        // Two base-255 digits uniquely identify the key; 255 is never an answer.
+        std::vector<unsigned char> inverse(side * side * side, 255);
+        for (unsigned r = spec.low; r <= spec.high; ++r)
+          for (unsigned g = spec.low; g <= spec.high; ++g)
+            for (unsigned b = spec.low; b <= spec.high; ++b)
+            {
+              const unsigned key = (r * side + g) * side + b;
+              inverse[key] = static_cast<unsigned char>(pass ? key / 255 : key % 255);
+            }
+        for (int mode = 0; mode < 2; ++mode)
+          for (int cell = 4; cell <= 8; cell += 4)
+          {
+            const int shapes[][2] = {
+                {1, 1}, {1, 2 * cell + 1}, {2 * cell + 1, 1}, {cell, cell}, {2 * cell + 1, cell + 1}};
+            for (unsigned shape = 0; shape < 5; ++shape)
+            {
+              const int w = shapes[shape][0], h = shapes[shape][1], stride = w + 3;
+              for (unsigned r = spec.low; r <= spec.high; ++r)
+                for (unsigned g = spec.low; g <= spec.high; ++g)
+                  for (unsigned b = spec.low; b <= spec.high; ++b)
+                  {
+                    unsigned char palette[768] = {0};
+                    palette[0] = representatives[r];
+                    palette[1] = representatives[g];
+                    palette[2] = representatives[b];
+                    std::vector<unsigned char> pixels(stride * h, 0xA7);
+                    for (int y = 0; y < h; ++y)
+                      std::fill(pixels.begin() + y * stride, pixels.begin() + y * stride + w, 0);
+                    LOKA_VERIFY(ToolboxBlurKernel(&pixels[0],
+                                                  w,
+                                                  h,
+                                                  stride,
+                                                  palette,
+                                                  cell,
+                                                  static_cast<ToolboxBlurEnlargement>(mode),
+                                                  &inverse[0],
+                                                  spec.resolution));
+                    const unsigned char expected = inverse[(r * side + g) * side + b];
+                    for (int y = 0; y < h; ++y)
+                      for (int x = 0; x < stride; ++x)
+                        LOKA_VERIFY(pixels[y * stride + x] == (x < w ? expected : 0xA7));
+                    ++cases;
+                  }
+              // All eight constant RGB corners (including black/white), then
+              // alternating extreme blocks and a spatial mix of all corners.
+              for (unsigned pattern = 0; pattern < 10; ++pattern)
+              {
+                unsigned char palette[768] = {0};
+                for (unsigned corner = 0; corner < 8; ++corner)
+                  for (unsigned channel = 0; channel < 3; ++channel)
+                    palette[3 * corner + channel] = (corner & (1U << channel)) ? 255 : 0;
+                std::vector<unsigned char> pixels(stride * h, 0xA7);
+                for (int y = 0; y < h; ++y)
+                  for (int x = 0; x < w; ++x)
+                    pixels[y * stride + x] = static_cast<unsigned char>(pattern < 8    ? pattern
+                                                                        : pattern == 8 ? ((x / cell + y / cell) % 2) * 7
+                                                                                       : (x + 3 * y) % 8);
+                std::vector<unsigned char> expected(pixels);
+                // The existing smooth oracle supports both cell sizes. For
+                // mosaic use a scaled copy of each pixel so Legacy's c=8 agrees.
+                if (mode == TOOLBOX_BLUR_SMOOTH)
+                  Smooth(&expected[0], w, h, stride, palette, cell, &inverse[0], spec.resolution);
+                else
+                {
+                  const int scale = 8 / cell, sw = w * scale, sh = h * scale;
+                  std::vector<unsigned char> expanded(sw * sh);
+                  for (int y = 0; y < sh; ++y)
+                    for (int x = 0; x < sw; ++x)
+                      expanded[y * sw + x] = pixels[(y / scale) * stride + x / scale];
+                  Legacy(&expanded[0], sw, sh, sw, palette, &inverse[0], spec.resolution);
+                  for (int y = 0; y < h; ++y)
+                    for (int x = 0; x < w; ++x)
+                      expected[y * stride + x] = expanded[(y * scale) * sw + x * scale];
+                }
+                LOKA_VERIFY(ToolboxBlurKernel(&pixels[0],
+                                              w,
+                                              h,
+                                              stride,
+                                              palette,
+                                              cell,
+                                              static_cast<ToolboxBlurEnlargement>(mode),
+                                              &inverse[0],
+                                              spec.resolution));
+                LOKA_VERIFY(pixels == expected);
+                for (int y = 0; y < h; ++y)
+                  for (int x = 0; x < w; ++x)
+                    LOKA_VERIFY(pixels[y * stride + x] != 255);
+                ++cases;
+              }
+            }
+          }
+      }
+    }
+    return cases;
+  }
 } // namespace
 
 int main()
 {
+  FillPins();
+  const unsigned reachableCases = ReachabilityPins();
+  std::printf("Reachability: %u deterministic cases passed\n", reachableCases);
   unsigned long seed = 0x18B40UL;
   unsigned char palette[768], inverse[32768];
   for (int i = 0; i < 32768; ++i)
