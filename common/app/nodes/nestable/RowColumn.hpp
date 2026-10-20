@@ -36,6 +36,13 @@ namespace loka
       ROW_UNDECLARED_WIDTH_NATURAL
     };
 
+    /** How a Column seats children that declare no height. Rows ignore this policy. */
+    enum ColumnUndeclaredHeight
+    {
+      COLUMN_UNDECLARED_HEIGHT_REMAINING = 0,
+      COLUMN_UNDECLARED_HEIGHT_NATURAL
+    };
+
     struct StackTypeTag
     {
     };
@@ -49,6 +56,7 @@ namespace loka
       layout::LayoutGap gap_;
       StackAxis axis_;
       RowUndeclaredWidth rowUndeclaredWidth_;
+      ColumnUndeclaredHeight columnUndeclaredHeight_;
       /** Borrowed live axis; null selects the constant value. */
       loka::core::State<StackAxis> *axisState_;
       bool hasVerticalAlignment_;
@@ -58,6 +66,7 @@ namespace loka
       StackProps()
           : axis_(STACK_AXIS_ROW),
             rowUndeclaredWidth_(ROW_UNDECLARED_WIDTH_SHARED),
+            columnUndeclaredHeight_(COLUMN_UNDECLARED_HEIGHT_REMAINING),
             axisState_(0),
             hasVerticalAlignment_(false),
             verticalAlignment_(VERTICAL_ALIGNMENT_TOP),
@@ -68,6 +77,7 @@ namespace loka
       explicit StackProps(StackAxis axis)
           : axis_(axis),
             rowUndeclaredWidth_(ROW_UNDECLARED_WIDTH_SHARED),
+            columnUndeclaredHeight_(COLUMN_UNDECLARED_HEIGHT_REMAINING),
             axisState_(0),
             hasVerticalAlignment_(false),
             verticalAlignment_(VERTICAL_ALIGNMENT_TOP),
@@ -78,6 +88,7 @@ namespace loka
       explicit StackProps(loka::core::State<StackAxis> *axisState)
           : axis_(STACK_AXIS_ROW),
             rowUndeclaredWidth_(ROW_UNDECLARED_WIDTH_SHARED),
+            columnUndeclaredHeight_(COLUMN_UNDECLARED_HEIGHT_REMAINING),
             axisState_(axisState),
             hasVerticalAlignment_(false),
             verticalAlignment_(VERTICAL_ALIGNMENT_TOP),
@@ -125,6 +136,8 @@ namespace loka
           return this->axis_ < other.axis_;
         if (this->rowUndeclaredWidth_ != other.rowUndeclaredWidth_)
           return this->rowUndeclaredWidth_ < other.rowUndeclaredWidth_;
+        if (this->columnUndeclaredHeight_ != other.columnUndeclaredHeight_)
+          return this->columnUndeclaredHeight_ < other.columnUndeclaredHeight_;
         if (this->hasVerticalAlignment_ != other.hasVerticalAlignment_)
           return this->hasVerticalAlignment_ < other.hasVerticalAlignment_;
         if (this->verticalAlignment_ != other.verticalAlignment_)
@@ -257,6 +270,13 @@ namespace loka
       ColumnDefinition(const ColumnDefinition &other)
           : BaseType(other)
       {
+      }
+      /** Seats undeclared-height children at their natural height; the Column then reports
+       * a natural height to an enclosing vertical ScrollView. */
+      ColumnDefinition &naturalHeight()
+      {
+        this->props.columnUndeclaredHeight_ = COLUMN_UNDECLARED_HEIGHT_NATURAL;
+        return *this;
       }
       ColumnDefinition &gap(int value)
       {

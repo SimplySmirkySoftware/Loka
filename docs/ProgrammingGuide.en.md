@@ -1112,6 +1112,13 @@ directly in the column are laid out at the offered width and never scroll
 sideways.
 When the width cannot be known, the view does not scroll sideways at all.
 
+A vertical ScrollView offers its content the viewport height. By default, a
+Column passes each child the remaining height when it was offered one. Opt in
+with `VStack().naturalHeight()` to offer children height 0 and stack their own
+heights plus gaps. Children without a height of their own are 0 or their rail
+default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
+80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
+
 The vertical bar is always present; the horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
@@ -1549,6 +1556,15 @@ Reset the live width with a typed null (`width(static_cast<State<int>*>(0))`);
 width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
+
+### Row And Column Natural Size
+
+- `Row().naturalWidth()` seats undeclared-width children at their natural width
+  instead of sharing the offered width.
+- `VStack().naturalHeight()` offers children height 0 instead of the remaining
+  height, so the Column reports their summed heights plus gaps.
+
+These opt-ins belong to the fixed-axis definitions, not the live-axis `Stack`.
 
 ### Spacing: Gaps, Padding, And The Window Margin
 

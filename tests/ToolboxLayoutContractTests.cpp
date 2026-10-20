@@ -434,3 +434,37 @@ void testToolboxAlignedRowExtentIsLargerOfMeasurementAndChild()
   LOKA_VERIFY(traversal.lastState_.height == state.lineHeight);
   LOKA_VERIFY(state.y == 220);
 }
+
+void testToolboxColumnNaturalHeightOffersAndExtent()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  PlatformLayoutHandlerRegistry registry;
+  LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(registry));
+  for (int natural = 0; natural < 2; ++natural)
+  {
+    VStack definition;
+    if (natural)
+      definition.naturalHeight();
+    StackNode column(definition.props);
+    column.addChild(new ToolboxLayoutProbeNode());
+    ToolboxLayoutContractTraversal traversal(23, 7);
+    LayoutState state = FixedBoxInputState();
+    state.height = 100;
+    short width = 0;
+    LOKA_VERIFY(ApplyToolboxPlatformLayoutHandler(registry, column, state, traversal, width));
+    LOKA_VERIFY(traversal.lastState_.height == (natural ? 0 : 100));
+    LOKA_VERIFY(state.y == 27 && width == 23);
+  }
+  StackNode column(VStack().naturalHeight().props);
+  BoxNode *box = new BoxNode(Box().height(30).props);
+  box->addChild(new ToolboxLayoutProbeNode());
+  column.addChild(box);
+  ToolboxNestedBoxTraversal traversal;
+  LayoutState state = FixedBoxInputState();
+  state.height = 100;
+  short width = 0;
+  LOKA_VERIFY(ApplyToolboxPlatformLayoutHandler(registry, column, state, traversal, width));
+  LOKA_VERIFY(traversal.lastState_.height == 30);
+  LOKA_VERIFY(state.y == 50);
+}

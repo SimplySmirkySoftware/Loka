@@ -221,7 +221,10 @@ int ComputeToolboxColumnLayout(loka::app::StackNode *column,
       currentY = static_cast<short>(childY);
       loka::app::scene::LayoutState childState = state;
       childState.y = currentY;
-      if (state.height > 0)
+      // Keep the height policy paired with common ColumnLayout.hpp.
+      if (column->props.columnUndeclaredHeight_ == loka::app::COLUMN_UNDECLARED_HEIGHT_NATURAL)
+        childState.height = 0;
+      else if (state.height > 0)
       {
         childState.height =
             static_cast<short>(loka::app::layout::remainingChildHeightForColumn(state.height, state.y, currentY));

@@ -73,7 +73,8 @@ Each inset is a logical-unit value checked on construction; the completed value
 lives in the props. For laid-out content height H, the scrollable extent is
 `H + top + bottom`, and content is placed `top` below the extent's start.
 Children are offered the full seat height: insets do not shrink their offer or
-change their content coordinates.
+change their content coordinates. A Column passes remaining height by default;
+`VStack().naturalHeight()` instead offers its children height 0 so they stack at their own heights.
 
 The viewport fact keeps its content-coordinate meaning. While the top gap is
 visible, its Y origin may be negative down to `-top`. The rail remains its only
