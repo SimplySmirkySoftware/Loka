@@ -182,7 +182,12 @@ public:
   void requestInvalidateRectImpl(const Rect &);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
-  void draw();
+  enum FullDrawOrigin
+  {
+    FULL_DRAW_FOR_UPDATE,
+    FULL_DRAW_FOR_FLUSH
+  };
+  void draw(FullDrawOrigin origin);
   void drawDirty(const Rect &);
 #else
   void requestInvalidate() { ++toolbox_host::invalidations; }

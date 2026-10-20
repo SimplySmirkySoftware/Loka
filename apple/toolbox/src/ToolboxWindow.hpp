@@ -66,7 +66,12 @@ public:
   /** Borrow the app that owns this native window. */
   ToolboxApp *toolboxApp() const;
   void invalidateWindow();
-  void draw();
+  enum FullDrawOrigin
+  {
+    FULL_DRAW_FOR_UPDATE,
+    FULL_DRAW_FOR_FLUSH
+  };
+  void draw(FullDrawOrigin origin);
   /** Preserves the native content position after a menu-bar rebuild without
       reapplying the application's declared frame intent. */
   void preserveNativeContentPositionAfterMenuBarChange();

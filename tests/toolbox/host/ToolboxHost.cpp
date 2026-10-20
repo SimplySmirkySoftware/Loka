@@ -814,12 +814,22 @@ void ToolboxWindow::requestInvalidateRect(const Rect &rect)
   toolbox_host::invalidatedRects.push_back(rect);
   this->requestInvalidateRectImpl(rect);
 }
-void ToolboxWindow::draw()
+void ToolboxWindow::draw(FullDrawOrigin origin)
 {
   if (!this->scenePlatformController_)
     return;
-  ToolboxErasedPass::Guard erased(
-      this->scenePlatformController_->erasedPass(), ToolboxErasedPass::FULL_DRAW, this->port.portRect);
+  // Deliberate production/host twin: ToolboxWindow.cpp and ToolboxHost.cpp.
+  ToolboxErasedPass::Origin erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
+  switch (origin)
+  {
+  case FULL_DRAW_FOR_UPDATE:
+    erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
+    break;
+  case FULL_DRAW_FOR_FLUSH:
+    erasedOrigin = ToolboxErasedPass::FLUSH_DRAW;
+    break;
+  }
+  ToolboxErasedPass::Guard erased(this->scenePlatformController_->erasedPass(), erasedOrigin, this->port.portRect);
   ToolboxInputDoor::render(*this->scenePlatformController_);
 }
 void ToolboxWindow::drawDirty(const Rect &rect)

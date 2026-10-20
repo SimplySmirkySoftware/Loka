@@ -82,7 +82,7 @@ namespace
     {
       const short offset = this->props.model_->get().rectCount;
       for (short y = 0; y < Height; y += 10)
-        for (short x = 0; x < Width; x += 10)
+        for (short x = 0; x < Width - 20; x += 10)
         {
           const Rect tile = {y, x, static_cast<short>(y + 10), static_cast<short>(x + 10)};
           RGBColor color = {static_cast<unsigned short>((x * 257 + offset * 19000) & 65535),
@@ -221,6 +221,48 @@ namespace
     {
       static_cast<StaticConfig *>(data)->step(window->asToolboxWindow());
     }
+    /** Geometry changes start real snapshot lifetimes without inspection writes.
+        The unpainted right strip of GroundNode also discriminates missing erase. */
+    void checkDrawCoverage(ToolboxWindow *window, ToolboxScenePlatformController &controller)
+    {
+      const Rect narrow = {5, 5, 15, 25};
+      const Rect comparison = {0, 0, UnitHeight, Width - 1};
+      SizeWindow(window->window(), Width - 1, Height, false);
+      ValidRect(&Whole);
+      InvalRect(&narrow);
+      BeginUpdate(window->window());
+      window->draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+      EndUpdate(window->window());
+      this->record("static-update-never-captures",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::NEEDED);
+      window->requestInvalidate();
+      window->flushInvalidate();
+      this->record("static-update-followup-ready",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
+      Capture clean, dirty;
+      const bool captured = clean.read(window->window());
+      // Visit the original geometry so returning to the smaller one is fresh.
+      SizeWindow(window->window(), Width, Height, false);
+      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      SizeWindow(window->window(), Width - 1, Height, false);
+      ClipRect(&Whole);
+      ForeColor(blackColor);
+      PaintRect(&Whole);
+      ClipRect(&narrow);
+      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      RgnHandle restored = NewRgn();
+      if (restored)
+        GetClip(restored);
+      this->record("static-flush-restores-clip",
+                   restored && (**restored).rgnSize == sizeof(Region) && EqualRect(&(**restored).rgnBBox, &narrow));
+      if (restored)
+        DisposeRgn(restored);
+      this->record("static-flush-owns-clip",
+                   captured && dirty.read(window->window()) && dirty.equals(clean, comparison)
+                       && ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
+      ClipRect(&Whole);
+      SizeWindow(window->window(), Width, Height, false);
+    }
     void step(ToolboxWindow *window)
     {
       if (!this->log_)
@@ -252,9 +294,15 @@ namespace
         this->node_->show(true);
         if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
           turn->settle();
+        // Apply the revealed branch before measuring its first native paint.
+        window->flushSceneInvalidation();
         const unsigned long drawStart = Now();
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         std::fprintf(this->log_, "static-us first-full-open=%lu\r", Now() - drawStart);
+        this->record("static-flush-first-capture",
+                     LOKA_FROST_STANDALONE_DEPTH == 1
+                         ? ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::PLAIN
+                         : ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
         ++this->phase_;
         return;
       }
@@ -263,7 +311,7 @@ namespace
         if (LOKA_FROST_STANDALONE_DEPTH == 1)
         {
           Capture actual, white;
-          window->draw();
+          window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
           const bool ok = actual.read(window->window());
           loka::toolbox::ToolboxPaintGround(SURFACE_GROUND_WINDOW, Unit);
           this->record("static-white-at-1bit", ok && white.read(window->window()) && actual.equals(white, Unit));
@@ -285,11 +333,12 @@ namespace
         {
           this->record("static-reconcile", this->captures_ == 2);
           this->record("static-recaptured-after-reopen", true);
+          this->checkDrawCoverage(window, controller);
           this->finish();
           return;
         }
         this->record("static-capture-ready", true);
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         std::fprintf(this->log_, "static-us open-to-ready=%lu\r", Now() - this->opened_);
         this->before_ = new Capture;
         this->record("static-readback", this->before_->read(window->window()));
@@ -311,7 +360,7 @@ namespace
       {
         Capture partial, full;
         const bool ok = partial.read(window->window());
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         this->record("static-partial-equals-full", ok && full.read(window->window()) && partial.equals(full, Whole));
         this->node_->show(false);
         ++this->phase_;

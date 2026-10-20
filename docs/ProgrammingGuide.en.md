@@ -1663,8 +1663,9 @@ live blur effect, and Win32 uses window ground. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;
 other static-blur units use window ground.
 
-On Toolbox the first paint may show window ground until a complete composition
-replay captures the unit. Capture requires 32-bit QuickDraw, an FPU, and a unit
+On Toolbox a unit appearing through Loka's own redraw is captured in that
+redraw. A unit first appearing during an OS update (for example a resize) shows
+window ground until a replay captures it. Capture requires 32-bit QuickDraw, an FPU, and a unit
 contained within one screen of at least 8-bit depth. A unit off one screen
 paints window ground. Pixels hidden by other windows at capture stay white for
 that snapshot. Geometry changes cause another capture and blur. A ZStack
