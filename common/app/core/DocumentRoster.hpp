@@ -90,6 +90,14 @@ namespace loka
       {
         return this->documents_.remove(id);
       }
+      /** Pure query over this owner's rows; no copies, allocation or notification. */
+      bool anyOf(bool (*predicate)(const T &)) const
+      {
+        for (unsigned short i = 0; i < this->documents_.size(); ++i)
+          if (predicate(this->documents_.at(i).value))
+            return true;
+        return false;
+      }
       const T *find(loka::core::ItemId id) const
       {
         const int index = this->documents_.find(id);

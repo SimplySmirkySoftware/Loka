@@ -2,6 +2,7 @@
 #include "support/NativeCloseTestConfig.hpp"
 #include "testing/app/AppTestAccess.hpp"
 #include "Win32WindowClientSizeTests.hpp"
+#include "../win32/src/context/Win32SessionQuitWake.hpp"
 #include "support/TestVerify.hpp"
 #include <cassert>
 #include <cstdio>
@@ -734,6 +735,121 @@ void testWin32WmCloseAsksKeyedWindowWithoutDestroying()
   LOKA_VERIFY(IsWindow(hwnd));
   LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == pending);
   LOKA_VERIFY(config.roster.closeAsked().get().id == key);
+}
+
+namespace
+{
+  struct SessionQuitWin32Fixture
+  {
+    NativeCloseTestContext<Win32Window> context;
+    NativeCloseTestConfig config;
+    loka::core::ItemId key;
+    CloseAskedWin32App app;
+    explicit SessionQuitWin32Fixture(bool edited)
+        : config(this->context, true),
+          key(this->config.roster.open(loka::app::DocumentFacts(loka::core::String("Doc"), edited))),
+          app(this->config)
+    {
+      LOKA_VERIFY(!this->key.isNone());
+      this->app.App::run();
+      RunWindowAdmissionOperation(this->app);
+      LOKA_VERIFY(this->hwnd() && IsWindow(this->hwnd()));
+    }
+    HWND hwnd()
+    {
+      return this->app.firstWindow()->hwnd();
+    }
+    void tail()
+    {
+      RunWindowAdmissionOperation(this->app);
+    }
+  };
+} // namespace
+
+void testWin32QueryEndSessionRefusesWhileDocumentEdited()
+{
+  SessionQuitWin32Fixture h(true);
+  LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, static_cast<LPARAM>(ENDSESSION_LOGOFF)) == 0);
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  LOKA_VERIFY(IsWindow(h.hwnd()));
+  MSG message;
+  const UINT wake = loka::win32::SessionQuitWakeMessage();
+  LOKA_VERIFY(PeekMessageW(&message, h.hwnd(), wake, wake, PM_NOREMOVE));
+  LOKA_VERIFY(message.wParam == 0 && message.lParam == 0);
+  // Dispatching the wake itself must not publish an ask, even in a modal pump.
+  LOKA_VERIFY(PeekMessageW(&message, h.hwnd(), wake, wake, PM_REMOVE));
+  DispatchMessageW(&message);
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk(h.key, 1));
+}
+
+void testWin32QueryEndSessionAllowsCleanDocuments()
+{
+  SessionQuitWin32Fixture h(false);
+  LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, static_cast<LPARAM>(ENDSESSION_LOGOFF)) != 0);
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+}
+
+void testWin32QueryEndSessionCriticalAllowsWithoutAsking()
+{
+  SessionQuitWin32Fixture h(true);
+  LOKA_VERIFY(
+      SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, static_cast<LPARAM>(ENDSESSION_CRITICAL | ENDSESSION_LOGOFF)) != 0);
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, ENDSESSION_CRITICAL | ENDSESSION_CLOSEAPP) != 0);
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+}
+
+void testWin32QueryEndSessionCloseAppRefusesWithoutAsking()
+{
+  SessionQuitWin32Fixture h(true);
+  const LPARAM flags[] = {ENDSESSION_CLOSEAPP, static_cast<LPARAM>(ENDSESSION_CLOSEAPP | ENDSESSION_LOGOFF)};
+  for (unsigned i = 0; i != 2; ++i)
+  {
+    LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, flags[i]) == 0);
+    h.tail();
+    LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  }
+  // CLOSEAPP also preserves a reservation that already exists.
+  h.app.requestQuitAtCompletion();
+  LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, ENDSESSION_CLOSEAPP) == 0);
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk(h.key, 1));
+  h.app.requestQuit();
+  const loka::app::CloseAsk ask = h.config.roster.closeAsked().get();
+  for (unsigned i = 0; i != 2; ++i)
+  {
+    LOKA_VERIFY(SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, flags[i]) == 0);
+    h.tail();
+    LOKA_VERIFY(h.config.roster.closeAsked().get() == ask);
+  }
+  // A later reservation joins only if CLOSEAPP left ASKING alive.
+  h.app.requestQuitAtCompletion();
+  h.tail();
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == ask);
+}
+
+void testWin32EndSessionFalseDoesNotStopQuit()
+{
+  for (int asking = 0; asking != 2; ++asking)
+  {
+    SessionQuitWin32Fixture h(true);
+    if (asking)
+      h.app.requestQuit();
+    else
+      h.app.requestQuitAtCompletion();
+    SendMessageW(h.hwnd(), WM_ENDSESSION, FALSE, static_cast<LPARAM>(ENDSESSION_LOGOFF));
+    h.tail();
+    LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk(h.key, 1));
+    h.app.requestQuitAtCompletion();
+    h.tail();
+    LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk(h.key, 1));
+  }
 }
 
 void testWin32WmCloseDestroysUnkeyedWindowAsToday()

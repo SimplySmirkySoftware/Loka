@@ -20,4 +20,10 @@ void testWin32WindowEditedMarkPrefixesTheNativeTitle();
 void testWin32WmCloseAsksKeyedWindowWithoutDestroying();
 void testWin32WmCloseDestroysUnkeyedWindowAsToday();
 
+void testWin32QueryEndSessionRefusesWhileDocumentEdited();
+void testWin32QueryEndSessionAllowsCleanDocuments();
+void testWin32QueryEndSessionCriticalAllowsWithoutAsking();
+void testWin32QueryEndSessionCloseAppRefusesWithoutAsking();
+void testWin32EndSessionFalseDoesNotStopQuit();
+
 #endif // LOKA_WIN32_WINDOW_CLIENT_SIZE_TESTS_HPP

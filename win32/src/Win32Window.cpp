@@ -3,6 +3,7 @@
 #include "Win32Window.hpp"
 #include "Win32DisplayDepth.hpp"
 #include "Win32App.hpp"
+#include "context/Win32SessionQuitWake.hpp"
 #include <windows.h>
 #include <string>
 #include "app/core/Window.hpp"
@@ -383,6 +384,8 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     {
       return 0;
     }
+    if (msg == loka::win32::SessionQuitWakeMessage())
+      return 0;
     switch (msg)
     {
     case WM_MOUSEWHEEL:
@@ -472,6 +475,16 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       EndPaint(hwnd, &ps);
       break;
     }
+    case WM_QUERYENDSESSION:
+      // Answer from the fact now; the Quit waits for App admission (any pump can deliver this).
+      if ((lParam & ENDSESSION_CRITICAL) || !self->app_ || !self->app_->hasEditedDocuments())
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
+      if (!(lParam & ENDSESSION_CLOSEAPP))
+      {
+        self->app_->requestQuitAtCompletion();
+        PostMessageW(hwnd, loka::win32::SessionQuitWakeMessage(), 0, 0);
+      }
+      return FALSE;
     case WM_CLOSE:
       // Same request/terminal split as NullWindow::simulateCloseAsked.
       if (self->app_ && self->app_->closeAsked(static_cast<Window *>(self)))

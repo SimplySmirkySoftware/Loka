@@ -24,6 +24,7 @@ namespace loka
       /** Copies by value: any edit can shift the entry in EntryBuffer storage.
           Returns false when the id is no longer in the roster. */
       virtual bool copyFacts(loka::core::ItemId id, DocumentFacts &out) const = 0;
+      virtual bool anyDocumentEdited() const = 0;
       virtual unsigned short snapshotDesired() = 0;
       virtual loka::core::ItemId desiredAt(unsigned short index) const = 0;
 
@@ -75,6 +76,10 @@ namespace loka
         out = *entry;
         return true;
       }
+      virtual bool anyDocumentEdited() const
+      {
+        return static_cast<const DocumentRoster<T, N> &>(this->roster()).anyOf(&DocumentWindowSeat::isEdited);
+      }
       virtual unsigned short snapshotDesired()
       {
         const unsigned short count = this->roster().count();
@@ -85,6 +90,10 @@ namespace loka
       virtual loka::core::ItemId desiredAt(unsigned short index) const { return this->desired_[index]; }
 
     private:
+      static bool isEdited(const T &entry)
+      {
+        return static_cast<const DocumentFacts &>(entry).edited;
+      }
       Factory const factory_;
       void *const userData_;
       loka::core::ItemId desired_[N];

@@ -7,6 +7,7 @@
 #include "platform/null/NullPlatformContext.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
 #include "support/TestVerify.hpp"
+#include "support/NativeCloseTestConfig.hpp"
 #include "testing/app/WindowTestAccess.hpp"
 #include "support/NullWindowTestAccess.hpp"
 #include <cstdio>
@@ -1455,4 +1456,142 @@ void testQuitAllAcceptedWithoutStaticWindowQuitsOnce()
   LOKA_VERIFY(config.roster.count() == 0 && app.quitRequested());
   LOKA_VERIFY(app.group().getComponents().size() == 0);
   LOKA_VERIFY(app.quitCalls() == 1);
+}
+
+void testHasEditedDocumentsReadsRosterFacts()
+{
+  TrackingContext context;
+  StaticWindowConfig plain(context);
+  TestApp noSeat(plain);
+  noSeat.run();
+  LOKA_VERIFY(!noSeat.hasEditedDocuments());
+  Config config(context, true);
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(!app.hasEditedDocuments());
+  const ItemId later = config.roster.open(Document(1));
+  LOKA_VERIFY(!app.hasEditedDocuments());
+  Document edited(1);
+  edited.edited = true;
+  LOKA_VERIFY(config.roster.update(later, edited) == EDIT_OK);
+  LOKA_VERIFY(app.hasEditedDocuments());
+}
+
+void testQuitAtCompletionWaitsForAdmissionTail()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  const ItemId id = config.roster.open(DocumentFacts(String("edited"), true));
+  TestApp app(config);
+  app.run();
+  app.requestQuitAtCompletion();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk::none());
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get().id == id);
+  LOKA_VERIFY(config.roster.closeAsked().get().seq == 1);
+}
+
+void testQuitAtCompletionJoinsLiveAttempt()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  const ItemId id = config.roster.open(DocumentFacts(String("edited"), true));
+  TestApp app(config);
+  app.run();
+  app.requestQuit();
+  const CloseAsk ask = config.roster.closeAsked().get();
+  app.requestQuitAtCompletion();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == ask);
+  LOKA_VERIFY(!app.quitRequested());
+  // A surviving attempt still absorbs a later reservation without another ask.
+  app.requestQuitAtCompletion();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == ask);
+  LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(app.quitCalls() == 1);
+}
+
+void testQuitAtCompletionTwiceAsksOnce()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  const ItemId id = config.roster.open(DocumentFacts());
+  TestApp app(config);
+  app.run();
+  app.requestQuitAtCompletion();
+  app.requestQuitAtCompletion();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk::none());
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk(id, 1));
+}
+
+void testMenuQuitWhileRequestedReplacesReservation()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  const ItemId id = config.roster.open(DocumentFacts());
+  TestApp app(config);
+  app.run();
+  app.requestQuitAtCompletion();
+  app.requestQuit();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk(id, 1));
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk(id, 1));
+  LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(app.quitCalls() == 1);
+}
+
+void testQuitAtCompletionAfterLastDocumentClosedQuitsOnce()
+{
+  for (int withStatic = 0; withStatic != 2; ++withStatic)
+  {
+    TrackingContext context;
+    Config config(context, withStatic != 0);
+    const ItemId id = withStatic ? config.initial : config.roster.open(Document(0));
+    TestApp app(config);
+    app.run();
+    app.requestQuitAtCompletion();
+    LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
+    app.tail();
+    app.tail();
+    LOKA_VERIFY(app.quitCalls() == 1);
+    LOKA_VERIFY(app.group().getComponents().size() == static_cast<size_t>(withStatic));
+  }
+}
+
+void testQuitAtCompletionShowsInPendingAdmission()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  config.roster.open(DocumentFacts());
+  TestApp app(config);
+  app.run();
+  app.tail();
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+  // Model a query after the tail's last advance, before the rail's sleep check.
+  app.requestQuitAtCompletion();
+  LOKA_VERIFY(app.hasPendingWindowAdmission());
+  app.tail();
+  LOKA_VERIFY(!config.roster.closeAsked().get().id.isNone());
+  LOKA_VERIFY(!app.hasPendingWindowAdmission());
+}
+
+void testQuitAtCompletionDeclineBeforeDeliveryDoesNotCancel()
+{
+  TrackingContext context;
+  NativeCloseTestConfig config(context, true);
+  const ItemId id = config.roster.open(DocumentFacts());
+  TestApp app(config);
+  app.run();
+  LOKA_VERIFY(app.closeAsked(app.window(id)));
+  const CloseAsk before = config.roster.closeAsked().get();
+  app.requestQuitAtCompletion();
+  config.roster.declineClose(before);
+  app.tail();
+  LOKA_VERIFY(config.roster.closeAsked().get() == CloseAsk(id, before.seq + 1));
+  LOKA_VERIFY(!app.quitRequested());
 }

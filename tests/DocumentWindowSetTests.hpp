@@ -60,4 +60,13 @@ void testQuitDeclinedThenClosedByHandBeforeTailEndsAttempt();
 void testQuitAllAcceptedExitsWithStaticWindow();
 void testQuitAllAcceptedWithoutStaticWindowQuitsOnce();
 
+void testHasEditedDocumentsReadsRosterFacts();
+void testQuitAtCompletionWaitsForAdmissionTail();
+void testQuitAtCompletionJoinsLiveAttempt();
+void testQuitAtCompletionTwiceAsksOnce();
+void testMenuQuitWhileRequestedReplacesReservation();
+void testQuitAtCompletionAfterLastDocumentClosedQuitsOnce();
+void testQuitAtCompletionShowsInPendingAdmission();
+void testQuitAtCompletionDeclineBeforeDeliveryDoesNotCancel();
+
 #endif
