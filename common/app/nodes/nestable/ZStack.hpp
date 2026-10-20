@@ -20,7 +20,8 @@ namespace loka
       /** The first unit (second child) shows a blur of what lies beneath it
           where the rail supports it; later units and other rails keep the
           window ground. */
-      ZSTACK_UNIT_GROUND_EXP_BLUR
+      ZSTACK_UNIT_GROUND_EXP_BLUR,
+      ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR
     };
 
     struct ZStackProps : public scene::NodePropsBase<ZStackProps>
@@ -85,6 +86,14 @@ namespace loka
       ZStackDefinition &expBlurUnit()
       {
         this->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+        return *this;
+      }
+      /** Experimental: the first unit shows a blur of the content beneath as
+          it was when the unit appeared. On Toolbox it stays frozen while the
+          unit is shown; other rails may show a live effect or window ground. */
+      ZStackDefinition &expStaticBlurUnit()
+      {
+        this->props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
         return *this;
       }
       ZStackDefinition(const ZStackDefinition &other)

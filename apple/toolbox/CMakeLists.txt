@@ -10,6 +10,7 @@ add_library(LokaAppleToolbox INTERFACE)
 
 set(LOKA_TOOLBOX_SOURCES
   src/ToolboxFrostCache.cpp
+  src/ToolboxStaticBlur.cpp
   src/ToolboxCpuClass.cpp
   src/ToolboxBootstrap.cpp
   src/ToolboxOperatorNew.cpp
