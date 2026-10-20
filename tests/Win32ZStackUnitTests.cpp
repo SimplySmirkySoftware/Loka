@@ -542,10 +542,14 @@ void testWin32ZStackUnitWheelLeavesGroundScrollView()
   LOKA_VERIFY(groundHit == viewport || IsChild(viewport, groundHit));
   for (int horizontal = 0; horizontal != 2; ++horizontal)
   {
-    if (horizontal && chars == 0)
+    // A zero setting scrolls nothing, so neither the shield nor its control would discriminate.
+    const char *axis = horizontal ? "horizontal" : "vertical";
+    if ((horizontal ? chars : lines) == 0)
     {
-      std::printf("[skip] testWin32ZStackUnitWheelLeavesGroundScrollView: system horizontal wheel scrolling is "
-                  "disabled, so the horizontal half did not run\n");
+      std::printf("[skip] testWin32ZStackUnitWheelLeavesGroundScrollView: system %s wheel scrolling is disabled, "
+                  "so the %s half did not run\n",
+                  axis,
+                  axis);
       continue;
     }
     // WM_MOUSEHWHEEL: positive delta moves right, unlike WM_MOUSEWHEEL.

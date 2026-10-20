@@ -464,8 +464,9 @@ until the next render, matching its remaining pixels; its stack identity is
 never dereferenced for input. Native painting outside the render walk
 (HideControl, HiliteControl, TrackControl, and kind-ordered control redraw) can
 differ from ledger order. There is no window-wide pending-redraw gate.
-Wheel routing remains a separate follow-up; Win32 and macOS already use
-native targeting and need no equivalent change here.
+Wheel routing is not part of this door: Toolbox has no wheel source, and Win32
+and macOS leave the wheel's target to the OS (see
+[ScrollView design](ScrollViewDesign.md#wheel-targeting-and-the-unit-shield-1500)).
 
 Keys follow the same rule. A focused edit row keeps native focus until its
 sweep (TextEditor: until the parked fact is delivered and the row withdraws),

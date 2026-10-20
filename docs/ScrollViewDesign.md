@@ -221,15 +221,19 @@ decides.
   pointer, from which it climbs the responder chain. Scroll keys follow focus
   instead (on Toolbox, only the focused TextEditor: #1416, #1492).
 - **A unit shields what lies beneath it.** A ZStack unit's window or view is a
-  sibling of the ground under the same parent. A wheel that starts over a unit
-  therefore never reaches a ScrollView beneath it, while a ZStack inside a
-  ScrollView passes the wheel up to that ScrollView.
+  sibling of the ground under the same parent. A wheel that the OS delivers by
+  the pointer and that starts over a unit therefore never reaches a ScrollView
+  beneath it, while a ZStack inside a ScrollView passes the wheel up to that
+  ScrollView.
   `testWin32ZStackUnitWheelLeavesGroundScrollView` and
   `testMacZStackUnitWheelLeavesGroundScrollView` pin both axes.
 - **Everything else stays the OS's and is not pinned:**
   - a control that takes the wheel itself: a Win32 PopupMenu's combobox changes
     its item, while macOS `NSPopUpButton` passes the wheel on;
-  - a Win32 wheel delivered to a focused native edit;
+  - a Win32 wheel delivered to a focused native control. A focused Button or
+    EditText inside the ground ScrollView passes the wheel to the viewport by
+    default propagation, so the ground scrolls even with the pointer over a
+    unit;
   - macOS momentum;
   - an inner ScrollView reaching its end. A Win32 Loka viewport consumes the
     wheel there without passing it outward, and nested scrolling is a later

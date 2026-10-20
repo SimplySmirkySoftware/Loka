@@ -1642,7 +1642,8 @@ Win32, macOS, and Toolbox use opaque units by default. Toolbox has the 2b hit sh
 a press on a unit's empty area stops there and leaves focus unchanged; controls
 inside it and later units take precedence in render order. On Win32 and macOS, a
 mouse wheel that starts over a unit does not scroll a ScrollView beneath it; a
-ScrollView around the whole ZStack still scrolls (see
+ScrollView around the whole ZStack still scrolls. On Win32, a wheel that Windows
+delivers to a focused control inside the ScrollView beneath still scrolls it (see
 [ScrollView design](ScrollViewDesign.md#wheel-targeting-and-the-unit-shield-1500)). A unit's own live control must lie
 entirely inside it (a partly contained own editor is unspecified), partial overlaps
 are repaired on the overlap, and fully covered ground or earlier-unit controls
