@@ -127,7 +127,7 @@ void SetControlTitle(ControlRef, const unsigned char *);
 inline void LineTo(short, short) {}
 #endif
 /** Native call ledger: Pascal payloads are copied at the OS boundary. */
-struct HostMenu { std::vector<std::string> items; };
+struct HostMenu { std::vector<std::string> items; short id; };
 typedef HostMenu *MenuHandle;
 namespace toolbox_host
 {
@@ -135,8 +135,13 @@ namespace toolbox_host
 }
 inline std::string HostPascalBytes(const unsigned char *text)
 { return std::string(reinterpret_cast<const char *>(text + 1), text[0]); }
-inline MenuHandle NewMenu(short, const unsigned char *title)
-{ toolbox_host::menuTitles.push_back(HostPascalBytes(title)); return new HostMenu; }
+inline MenuHandle NewMenu(short id, const unsigned char *title)
+{
+  toolbox_host::menuTitles.push_back(HostPascalBytes(title));
+  MenuHandle menu = new HostMenu;
+  menu->id = id;
+  return menu;
+}
 inline void AppendMenu(MenuHandle menu, const unsigned char *text)
 {
   const std::string bytes = HostPascalBytes(text);
