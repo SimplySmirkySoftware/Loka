@@ -1,0 +1,5 @@
+#ifndef LOKA_TESTS_COLUMN_NATURAL_HEIGHT_TESTS_HPP
+#define LOKA_TESTS_COLUMN_NATURAL_HEIGHT_TESTS_HPP
+void testColumnNaturalHeightOffersAndExtent();
+void testColumnNaturalHeightPropsAndRetention();
+#endif

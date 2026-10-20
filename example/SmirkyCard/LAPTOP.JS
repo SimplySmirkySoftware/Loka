@@ -211,7 +211,7 @@ card('first', class {
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
       rows.push(Show(this.narrow, VStack(...cards)));
     }
-    return ScrollView(VStack(...rows), {viewport: this.viewport});
+    return ScrollView(VStack(...rows).naturalHeight(), {viewport : this.viewport});
   }
 
   detailPage() {

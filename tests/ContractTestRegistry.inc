@@ -1431,3 +1431,7 @@ LOKA_TEST(testBoxHeightExceedsGridAndCanvasCells)
 
 LOKA_TEST(testHeightOnlyBoxPreflightUsesOwnHeight)
 LOKA_TEST(testToolboxAlignedRowExtentIsLargerOfMeasurementAndChild)
+
+LOKA_TEST(testColumnNaturalHeightOffersAndExtent)
+LOKA_TEST(testColumnNaturalHeightPropsAndRetention)
+LOKA_TEST(testToolboxColumnNaturalHeightOffersAndExtent)
