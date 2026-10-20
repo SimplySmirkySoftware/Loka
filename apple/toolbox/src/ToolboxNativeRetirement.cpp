@@ -1,5 +1,7 @@
 /** Shared deferred native queue, pool intake, bulk control teardown and the
     live-binding checks retirement asks, included by the controller and host fixture. */
+#include "ToolboxPaintSuppressScope.hpp"
+#include "ToolboxPortScope.hpp"
 template <typename HandleT>
 void ToolboxScenePlatformController::queueRetiredNativeHandle(std::vector<RetiredNativeEntry<HandleT> > &retired,
                                                               HandleT handle,
@@ -83,6 +85,24 @@ void ToolboxScenePlatformController::flushRetiredEntriesInto(
   retired.clear();
 }
 
+/** Retirement hides a native control without painting: the Control Manager
+    erases a hidden control's rect with the window ground, which would punch
+    through a ZStack unit drawn over a retiring ground row (#1493 known limit).
+    The empty clip keeps the pixels; HideControl still queues the native update
+    damage, so the next update presents the area in composition order. The
+    post-render sweep hides under the same scope. */
+void ToolboxScenePlatformController::hideRetiredControl(ControlRef control)
+{
+  if (!this->window_ || !this->window_->window())
+  {
+    HideControl(control);
+    return;
+  }
+  ToolboxPortScope port(this->window_->window());
+  ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
+  HideControl(control);
+}
+
 void ToolboxScenePlatformController::clearControls()
 {
   this->pressLedger_.clear();
@@ -92,7 +112,7 @@ void ToolboxScenePlatformController::clearControls()
       buttonControls_[i].context->forgetPresentedControl();
     if (buttonControls_[i].control)
     {
-      HideControl(buttonControls_[i].control);
+      this->hideRetiredControl(buttonControls_[i].control);
       queueRetiredControl(buttonControls_[i].control, buttonControls_[i].lifetimeHint);
       buttonControls_[i].control = 0;
     }
@@ -194,7 +214,7 @@ void ToolboxScenePlatformController::retireScrollBarBinding(ScrollBarControlBind
   row.editor.revoke();
   if (row.control)
   {
-    HideControl(row.control);
+    this->hideRetiredControl(row.control);
     this->queueRetiredScrollBarControl(row.control, hint);
     row.control = 0;
   }

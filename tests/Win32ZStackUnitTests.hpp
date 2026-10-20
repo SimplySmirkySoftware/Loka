@@ -10,6 +10,7 @@ void testWin32ZStackUnitInsideViewportPropagatesRefusal();
 void testWin32ZStackUnitCreationRefusalLaysOutNothing();
 void testWin32ScrollViewRefusedInsideUnit();
 void testWin32ZStackUnitForwardsWheelToViewport();
+void testWin32ZStackUnitWheelLeavesGroundScrollView();
 
 void testWin32ZStackNestedInUnitLaysOutNothing();
 void testWin32ScrollViewHandlerChildRefusalBlocksCommit();
