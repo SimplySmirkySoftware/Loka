@@ -461,9 +461,17 @@ TextEditor withdraws its edit row and hides/revokes its bar when the parked
 fact is delivered; subsequent presses there see empty space or an underlying
 row. Before delivery those rows refuse the press. A retired unit keeps shielding
 until the next render, matching its remaining pixels; its stack identity is
-never dereferenced for input. Native painting outside the render walk
-(HideControl, HiliteControl, TrackControl, and kind-ordered control redraw) can
-differ from ledger order. There is no window-wide pending-redraw gate.
+never dereferenced for input. Pixels painted outside the render walk follow
+the ledger only where a door routes them: kind-ordered control redraw runs only
+for damage disjoint from every unit (damage touching a unit replays in
+composition order), enabled changes and the post-render sweep hide or hilite
+under an empty clip, and retirement hides a native control through
+`hideRetiredControl` under the same empty clip so the Control Manager's
+hidden-control erase cannot punch through a unit above a retiring ground row
+(the native update damage still queues and replays in order). What remains
+outside the ledger is TrackControl feedback on a partially covered row and
+TextEdit painting (caret, keys, scroll) on a covered focused field (#1498).
+There is no window-wide pending-redraw gate.
 Wheel routing is not part of this door: Toolbox has no wheel source, and Win32
 and macOS leave the wheel's target to the OS (see
 [ScrollView design](ScrollViewDesign.md#wheel-targeting-and-the-unit-shield-1500)).
