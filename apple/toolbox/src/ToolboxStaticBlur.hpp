@@ -11,8 +11,6 @@ public:
   ToolboxStaticBlurPixels();
   ~ToolboxStaticBlurPixels();
   static bool eligible(GrafPtr window, const Rect &rect);
-  /** Allocation-free coverage of the visibility region narrowed by BeginUpdate. */
-  static bool updateCovers(GrafPtr window, const Rect &rect);
   bool hasPixels() const
   {
     return this->image_ != 0;
@@ -98,8 +96,7 @@ public:
       return false;
     if (!ToolboxStaticBlurPixels::eligible(window, row.rect))
       return false;
-    if (this->capture_ != CAPTURE_DISABLED && !this->pixels_.hasPixels()
-        && pass.admitsCapture(row.rect, ToolboxStaticBlurPixels::updateCovers(window, row.rect)))
+    if (this->capture_ != CAPTURE_DISABLED && !this->pixels_.hasPixels() && pass.admitsCapture(row.rect))
     {
       if (!this->pixels_.capture(window, row.rect))
         this->capture_ = CAPTURE_DISABLED;

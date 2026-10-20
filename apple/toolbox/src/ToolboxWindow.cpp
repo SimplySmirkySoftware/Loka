@@ -1,3 +1,4 @@
+#include "ToolboxUpdateEvidence.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -486,7 +487,26 @@ void ToolboxWindow::invalidateWindow()
   teardownScene();
 }
 
-void ToolboxWindow::draw(FullDrawOrigin origin)
+void ToolboxWindow::drawForUpdate()
+{
+  if (!this->window_)
+    return;
+  if (this->scenePlatformController_)
+    assert(!this->scenePlatformController_->erasedPass().isOpen());
+  const Rect evidence =
+      ToolboxUpdateEvidence(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds);
+  BeginUpdate(this->window_);
+  this->drawWhole(evidence);
+  EndUpdate(this->window_);
+}
+
+void ToolboxWindow::drawForFlush()
+{
+  if (this->window_)
+    this->drawWhole(this->window_->portRect);
+}
+
+void ToolboxWindow::drawWhole(const Rect &evidence)
 {
   if (!window_)
     return;
@@ -499,17 +519,6 @@ void ToolboxWindow::draw(FullDrawOrigin origin)
   GetPort(&oldPort);
   SetPort(window_);
 
-  // Deliberate production/host twin: ToolboxWindow.cpp and ToolboxHost.cpp.
-  ToolboxErasedPass::Origin erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
-  switch (origin)
-  {
-  case FULL_DRAW_FOR_UPDATE:
-    erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
-    break;
-  case FULL_DRAW_FOR_FLUSH:
-    erasedOrigin = ToolboxErasedPass::FLUSH_DRAW;
-    break;
-  }
   // This draw repaints the whole window, so an OS update already pending
   // would repaint it again (#1104). Validate before the walk, never after it:
   // whatever the OS invalidates during the walk (a modal closing inside it)
@@ -520,9 +529,10 @@ void ToolboxWindow::draw(FullDrawOrigin origin)
     EraseRect(&window_->portRect);
     if (scenePlatformController_)
     {
-      const Rect empty = {0, 0, 0, 0};
-      ToolboxErasedPass::Guard erased(
-          scenePlatformController_->erasedPass(), erasedOrigin, clip.isActive() ? window_->portRect : empty);
+      Rect captureEvidence = {0, 0, 0, 0};
+      if (clip.isActive())
+        captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
+      ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
       ToolboxInputDoor::render(*scenePlatformController_);
     }
     this->drawGrowBox();

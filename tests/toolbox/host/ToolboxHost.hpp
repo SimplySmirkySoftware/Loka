@@ -122,7 +122,7 @@ inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
 namespace toolbox_host
 {
   extern unsigned staticCaptures, staticCopies, staticReleases;
-  extern bool staticEligible, staticCaptureSucceeds, staticUpdateCovers, staticCopySucceeds;
+  extern bool staticEligible, staticCaptureSucceeds, staticCopySucceeds;
 } // namespace toolbox_host
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
@@ -130,7 +130,11 @@ class ToolboxWindow : public Window
   loka::core::PushStateTracker tracker_;
   loka::core::MutableState<bool> visible_;
 public:
-  struct WindowPort : GrafPort { Rect portRect; } port;
+  struct WindowPort : GrafPort
+  {
+    Rect portRect;
+    RgnHandle updateRgn;
+  } port;
   ToolboxWindowContext context_;
   void (*onFlush)(void *);
   void *flushData;
@@ -152,6 +156,8 @@ public:
 #endif
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
+    port.updateRgn = 0;
+    port.portBits.bounds = Rect();
     port.txFont = 3;
     port.txSize = 12;
     port.txFace = 0;
@@ -182,12 +188,14 @@ public:
   void requestInvalidateRectImpl(const Rect &);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
-  enum FullDrawOrigin
-  {
-    FULL_DRAW_FOR_UPDATE,
-    FULL_DRAW_FOR_FLUSH
-  };
-  void draw(FullDrawOrigin origin);
+  /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
+  void drawForUpdate();
+  void drawForFlush();
+
+private:
+  void drawWhole(const Rect &evidence);
+
+public:
   void drawDirty(const Rect &);
 #else
   void requestInvalidate() { ++toolbox_host::invalidations; }

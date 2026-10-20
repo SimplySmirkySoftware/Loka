@@ -286,10 +286,6 @@ bool ToolboxStaticBlurPixels::eligible(GrafPtr window, const Rect &rect)
   return rect.left < rect.right && rect.top < rect.bottom && global.left >= screen.left && global.top >= screen.top
          && global.right <= screen.right && global.bottom <= screen.bottom;
 }
-bool ToolboxStaticBlurPixels::updateCovers(GrafPtr window, const Rect &rect)
-{
-  return window && ToolboxPaintClipCovers(window->visRgn, rect);
-}
 bool ToolboxStaticBlurPixels::capture(GrafPtr window, const Rect &rect)
 {
   this->clear();

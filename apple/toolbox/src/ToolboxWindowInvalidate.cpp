@@ -76,7 +76,7 @@ void ToolboxWindow::flushInvalidate()
     // Projected contexts are materialized during the tree walk and request a
     // structure present themselves. This draw already includes them, so
     // consume that request only after the walk completes.
-    this->draw(FULL_DRAW_FOR_FLUSH);
+    this->drawForFlush();
     needsInvalidate_ = false;
     pendingInvalidateRects_.clear();
     return;
