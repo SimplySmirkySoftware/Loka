@@ -507,10 +507,11 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
       maxHeight = static_cast<short>(childResultY - state.y);
     }
   }
-  if (row->props.hasVerticalAlignment_)
+  // An aligned row's extent is the larger of its measurement and its tallest child.
+  // Deliberate extent twin of computeRowLayoutResultY in common/app/layout/RowLayout.hpp.
+  if (row->props.hasVerticalAlignment_ && rowHeight > maxHeight)
   {
-    // An aligned row's extent is the painted box it measured.
-    maxHeight = rowHeight;
+    maxHeight = static_cast<short>(rowHeight);
   }
   const int resultY = state.y + maxHeight;
   if (traversal->refuseLayoutResultY(resultY))

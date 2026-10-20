@@ -82,6 +82,11 @@ namespace loka
 
         int currentX = state.x;
         int maxY = state.y;
+        // Deliberate extent twin of ComputeToolboxRowLayout in ToolboxPlatformLayoutHandlers.cpp.
+        if (row->props.hasVerticalAlignment_)
+        {
+          maxY = state.y + rowHeight;
+        }
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(row->childrenHead(), childCount);
         for (loka::app::scene::Node *child = it.next(); child; child = it.next())
         {
@@ -119,7 +124,12 @@ namespace loka
                 offset = remain;
               }
             }
-            childState.y = layoutCoordinate<LayoutStateT>(state.y + offset);
+            // Deliberate twin of ComputeToolboxRowLayout: refuse the painted box before narrowing.
+            const int childY = state.y + offset;
+            if (acceptCoordinate
+                && (!acceptCoordinate(context, childY) || !acceptCoordinate(context, childY + childHeight)))
+              return maxY;
+            childState.y = layoutCoordinate<LayoutStateT>(childY);
             childState.height = layoutCoordinate<LayoutStateT>(childHeight);
           }
           const int childY = layoutChild(context, child, childState);

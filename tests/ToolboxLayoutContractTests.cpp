@@ -387,7 +387,7 @@ void testToolboxCenteredControlOnlyRowPaintedBounds()
   LOKA_VERIFY(state.y == 34);
 }
 
-void testToolboxAlignedRowCharacterizationExcludesBoxHeight()
+void testToolboxAlignedRowExtentIsLargerOfMeasurementAndChild()
 {
   const loka::app::VerticalAlignment alignments[] = {
       loka::app::VERTICAL_ALIGNMENT_TOP, loka::app::VERTICAL_ALIGNMENT_CENTER, loka::app::VERTICAL_ALIGNMENT_BOTTOM};
@@ -410,10 +410,8 @@ void testToolboxAlignedRowCharacterizationExcludesBoxHeight()
       short width = 0;
       const bool usedHandler = ApplyToolboxPlatformLayoutHandler(registry, row, state, traversal, width);
       LOKA_VERIFY(usedHandler);
-      // Preserve Toolbox's existing aligned-row measurement: unlike shared Row,
-      // it replaces the child's result Y (220) with the measured row end (30).
       LOKA_VERIFY(width == (fixedWidth ? 300 : 80));
-      LOKA_VERIFY(state.y == 30);
+      LOKA_VERIFY(state.y == 220);
       LOKA_VERIFY(traversal.callCount_ == 1);
       LOKA_VERIFY(traversal.lastState_.x == 15);
       LOKA_VERIFY(traversal.lastState_.y == 25);
@@ -421,4 +419,18 @@ void testToolboxAlignedRowCharacterizationExcludesBoxHeight()
       LOKA_VERIFY(traversal.lastState_.height == 190);
     }
   }
+  // A child whose laid-out extent exceeds its measurement pins the other half.
+  loka::app::StackNode taller(
+      loka::app::StackProps(loka::app::STACK_AXIS_ROW).alignVertical(loka::app::VERTICAL_ALIGNMENT_TOP));
+  taller.addChild(new ToolboxLayoutProbeNode());
+  loka::app::scene::PlatformLayoutHandlerRegistry registry;
+  RegisterToolboxPlatformLayoutHandlers(registry);
+  ToolboxLayoutContractTraversal traversal(23, 200);
+  loka::app::scene::LayoutState state = FixedBoxInputState();
+  short width = 0;
+  const bool usedHandler = ApplyToolboxPlatformLayoutHandler(registry, taller, state, traversal, width);
+  LOKA_VERIFY(usedHandler);
+  LOKA_VERIFY(traversal.callCount_ == 1);
+  LOKA_VERIFY(traversal.lastState_.height == state.lineHeight);
+  LOKA_VERIFY(state.y == 220);
 }

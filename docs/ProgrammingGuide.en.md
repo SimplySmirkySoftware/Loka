@@ -1535,6 +1535,9 @@ any parent. It does not change the width of an enclosing Grid cell, ZStack unit,
 or viewport; a Box wider than its parent overflows.
 `Box().height(40)` independently fixes the content height offer to 40 minus
 padding and the result Y to its origin plus 40, without clipping content.
+Inside `Row().alignVertical(...)`, a Box's fixed height joins the row's
+alignment measurement, and the row ends at the larger of that measurement and
+its lowest child on every rail.
 `height(int)` preserves both the constant width and any borrowed live width.
 A positive stored height stays fixed even when a live width becomes zero or
 negative. Without a positive height, height stays content-driven.

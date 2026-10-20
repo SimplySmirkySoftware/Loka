@@ -218,6 +218,14 @@ namespace loka
           }
           return fallbackHeight;
         }
+        if (loka::app::BoxNode *box = child->asBoxNode())
+        {
+          if (box->props.height > 0)
+          {
+            return box->props.height;
+          }
+          return fallbackHeight;
+        }
         return fallbackHeight;
       }
     } // namespace layout
