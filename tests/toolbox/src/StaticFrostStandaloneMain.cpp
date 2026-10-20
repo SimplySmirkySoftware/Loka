@@ -145,6 +145,7 @@ namespace
           originalDepth_(0),
           depthReady_(false),
           before_(0),
+          ground_(0),
           captures_(0),
           opened_(0)
     {
@@ -157,6 +158,7 @@ namespace
     ~StaticConfig()
     {
       delete this->before_;
+      delete this->ground_;
       if (this->depthReady_)
         SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
       if (this->log_)
@@ -191,6 +193,7 @@ namespace
     short originalDepth_;
     bool depthReady_;
     Capture *before_;
+    Capture *ground_; // The ground before the unit opens, for the change check.
     unsigned captures_;
     unsigned long opened_;
     loka::platform::file::FileHandle file_;
@@ -206,6 +209,8 @@ namespace
     {
       delete this->before_;
       this->before_ = 0;
+      delete this->ground_;
+      this->ground_ = 0;
       if (this->depthReady_)
       {
         if (SetDepth(GetMainDevice(), this->originalDepth_, 1, 1) != noErr)
@@ -248,6 +253,9 @@ namespace
       ToolboxScenePlatformController &controller = *window->scenePlatformController();
       if (this->phase_ == 1)
       {
+        window->draw();
+        this->ground_ = new Capture;
+        this->record("static-ground-readback", this->ground_->read(window->window()));
         this->opened_ = Now();
         this->node_->show(true);
         if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
@@ -301,7 +309,14 @@ namespace
       {
         Capture after;
         const bool ok = after.read(window->window());
-        this->record("static-frozen", ok && after.equals(*this->before_, Unit) && !after.equals(*this->before_, Whole));
+        // The band fills the ground (#1508), so the changed ground is hidden
+        // everywhere while the unit is shown; phase 5 proves the change.
+        const bool unitEqual = ok && after.equals(*this->before_, Unit);
+        std::fprintf(this->log_,
+                     "static-frozen unit-equal=%d whole-equal=%d\r",
+                     unitEqual,
+                     ok && after.equals(*this->before_, Whole));
+        this->record("static-frozen", unitEqual);
         const Rect dirty = {20, 100, 55, Width};
         window->requestInvalidateRect(dirty);
         ++this->phase_;
@@ -320,6 +335,10 @@ namespace
       if (this->phase_ == 5)
       {
         this->record("static-released", !ToolboxStaticBlurInspection::present(controller));
+        Capture beneath;
+        window->draw();
+        this->record("static-ground-changed-beneath",
+                     beneath.read(window->window()) && !beneath.equals(*this->ground_, Unit));
         this->node_->show(true);
         if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
           turn->settle();
