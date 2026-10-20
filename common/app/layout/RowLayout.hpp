@@ -124,7 +124,12 @@ namespace loka
                 offset = remain;
               }
             }
-            childState.y = layoutCoordinate<LayoutStateT>(state.y + offset);
+            // Deliberate twin of ComputeToolboxRowLayout: refuse the painted box before narrowing.
+            const int childY = state.y + offset;
+            if (acceptCoordinate
+                && (!acceptCoordinate(context, childY) || !acceptCoordinate(context, childY + childHeight)))
+              return maxY;
+            childState.y = layoutCoordinate<LayoutStateT>(childY);
             childState.height = layoutCoordinate<LayoutStateT>(childHeight);
           }
           const int childY = layoutChild(context, child, childState);

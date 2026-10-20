@@ -23,6 +23,7 @@ void testBoxHeightOnlyColumnAndScrollExtent();
 void testBoxHeightStaysFixedWhenLiveWidthCrossesZero();
 void testSharedAlignedRowExtentIsLargerOfMeasurementAndChild();
 void testSharedAlignedRowBottomAlignmentMeasuresBoxHeight();
+void testSharedAlignedRowRefusesOverflowingChildBox();
 void testBoxHeightExceedsGridAndCanvasCells();
 
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP

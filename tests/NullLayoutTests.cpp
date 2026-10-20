@@ -544,6 +544,24 @@ void testSharedAlignedRowBottomAlignmentMeasuresBoxHeight()
   LOKA_VERIFY(resultY == 220);
 }
 
+void testSharedAlignedRowRefusesOverflowingChildBox()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  // Narrowing refusal is a scroll-scope rule on this rail, so the row sits in
+  // a ScrollView. The sibling comes first so nothing but its own painted box
+  // can refuse it: bottom-aligned under a SHRT_MAX measurement it would land
+  // at a wrapped Y, and the row refuses that box before narrowing.
+  ScrollViewNode scroll((ScrollViewProps()));
+  StackNode *row = new StackNode(Row().alignVertical(VERTICAL_ALIGNMENT_BOTTOM).props);
+  FixedLayoutProbeNode *sibling = new FixedLayoutProbeNode(7);
+  row->addChild(sibling);
+  row->addChild(new BoxNode(Box().height(SHRT_MAX).props));
+  scroll.addChild(row);
+  platform.projectLayoutForTesting(&scroll, makeState(10, 20, 80, 40));
+  LOKA_VERIFY(!sibling->wasLaidOut());
+}
+
 void testBoxHeightExceedsGridAndCanvasCells()
 {
   using namespace loka::app;
