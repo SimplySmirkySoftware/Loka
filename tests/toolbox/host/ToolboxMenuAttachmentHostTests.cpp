@@ -579,6 +579,49 @@ void testToolboxQuitDefaultsToCommandQ()
   LOKA_VERIFY(toolbox_host::itemCmdCalls[1].cmd == 'X');
   LOKA_VERIFY(toolbox_host::itemCmdCalls[2].cmd == 'Q');
 }
+void testToolboxSubmenuIdDiffersFromItsParent()
+{
+  ToolboxApp app;
+  MenuBarDefinition menu;
+  menu << (Menu("File") << (MenuItem("More") << MenuItem("Child")) << MenuItem("Close"))
+       << (Menu("Edit") << MenuItem("Copy"));
+  clearCalls();
+  LOKA_VERIFY(app.menuAttachment().project(sources(&menu, 0)));
+  // The submenu, its parent and the next menu each carry their own ID:
+  // MenuSelect and the command table both key on it.
+  LOKA_VERIFY(toolbox_host::installedMenus.size() == 3);
+  for (std::size_t i = 0; i < toolbox_host::installedMenus.size(); ++i)
+    for (std::size_t j = i + 1; j < toolbox_host::installedMenus.size(); ++j)
+      LOKA_VERIFY(toolbox_host::installedMenus[i]->id != toolbox_host::installedMenus[j]->id);
+}
+void testToolboxParentItemDoesNotDispatchItsSubmenuItem()
+{
+  struct Count
+  {
+    static void run(void *data)
+    {
+      ++*static_cast<int *>(data);
+    }
+  };
+  int second = 0, close = 0;
+  EmitterState secondEmitter, closeEmitter;
+  secondEmitter.deferBind(&Count::run, &second);
+  closeEmitter.deferBind(&Count::run, &close);
+  {
+    ToolboxApp app;
+    MenuBarDefinition menu;
+    menu << (Menu("File") << (MenuItem("More") << MenuItem("First") << MenuItem("Second").onClick(&secondEmitter))
+                          << MenuItem("Close").onClick(&closeEmitter));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&menu, 0)));
+    // File is menu 128 (no AppMenu): its item 2 is Close, while the submenu's
+    // item 2 is Second. Choosing Close must not run Second.
+    LOKA_VERIFY(app.menuAttachment().dispatch(128, 2));
+    LOKA_VERIFY(close == 1);
+    LOKA_VERIFY(second == 0);
+  }
+  secondEmitter.deferUnbind(&Count::run, &second);
+  closeEmitter.deferUnbind(&Count::run, &close);
+}
 void testToolboxHierarchicalOpenerKeepsMarkerOverShortcut()
 {
   ToolboxApp app;
@@ -755,6 +798,8 @@ int main(int argc, char **argv)
     PIN(testToolboxMenuProjectionDefersBackgroundDraws),
     PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
     PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
+    PIN(testToolboxSubmenuIdDiffersFromItsParent),
+    PIN(testToolboxParentItemDoesNotDispatchItsSubmenuItem),
     PIN(testToolboxQuitDefaultsToCommandQ),
     PIN(testToolboxMenuShortcutProjectsItemCmd),
     PIN(testToolboxMenuAttachmentProjectsOncePerIdentity),
