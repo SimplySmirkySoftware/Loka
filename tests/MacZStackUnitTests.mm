@@ -1223,7 +1223,17 @@ void testMacZStackPhotoCapturePolicy()
     if (policy)
       LOKA_VERIFY(photoFingerprint(unit) == first);
     else
+    {
       LOKA_VERIFY(photoFingerprint(unit) != first);
+      // Failed retake must discard an existing photo, not just disable an
+      // initially empty unit. The same key must then refuse another attempt.
+      loka::testing::failMacPhotoCaptures(1);
+      fullPhotoDraw(f);
+      LOKA_VERIFY(!loka::testing::macStackPhoto(unit) && loka::testing::macStackPhotoDisabled(unit));
+      fullPhotoDraw(f);
+      LOKA_VERIFY(!loka::testing::macStackPhoto(unit) && loka::testing::macStackPhotoDisabled(unit));
+      loka::testing::failMacPhotoCaptures(0);
+    }
     LOKA_VERIFY(probe.requests() == 0);
   }
 }
