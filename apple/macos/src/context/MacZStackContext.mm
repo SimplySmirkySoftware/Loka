@@ -398,8 +398,14 @@ namespace
 - (void)drawRect:(NSRect)rect
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-  const bool screen = [[NSGraphicsContext currentContext] isDrawingToScreen] != NO;
+  // A screen draw is one whose current context is the window's own: on 10.9
+  // cacheDisplayInRect: still reports isDrawingToScreen, but draws through a
+  // bitmap context, so only the port comparison tells the two apart.
+  NSGraphicsContext *current = [NSGraphicsContext currentContext];
+  NSGraphicsContext *windowContext = [[self window] graphicsContext];
   const bool attached = [self window] != nil;
+  const bool screen = attached && [current isDrawingToScreen] != NO && windowContext != nil
+                      && [current graphicsPort] == [windowContext graphicsPort];
   if (!(screen && attached))
   {
     [self lokaReplayPhoto];
