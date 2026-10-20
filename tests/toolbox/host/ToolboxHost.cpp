@@ -752,7 +752,7 @@ namespace
 namespace toolbox_host
 {
   unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
-  bool staticEligible = true, staticCaptureSucceeds = true;
+  bool staticEligible = true, staticCaptureSucceeds = true, staticUpdateCovers = true, staticCopySucceeds = true;
 } // namespace toolbox_host
 struct ToolboxStaticBlurPixels::Image
 {
@@ -776,6 +776,10 @@ bool ToolboxStaticBlurPixels::eligible(GrafPtr, const Rect &)
 {
   return toolbox_host::staticEligible;
 }
+bool ToolboxStaticBlurPixels::updateCovers(GrafPtr, const Rect &)
+{
+  return toolbox_host::staticUpdateCovers;
+}
 bool ToolboxStaticBlurPixels::capture(GrafPtr, const Rect &)
 {
   ++toolbox_host::staticCaptures;
@@ -788,7 +792,7 @@ bool ToolboxStaticBlurPixels::capture(GrafPtr, const Rect &)
 bool ToolboxStaticBlurPixels::paint(GrafPtr, const Rect &)
 {
   ++toolbox_host::staticCopies;
-  return this->image_ != 0;
+  return this->image_ != 0 && toolbox_host::staticCopySucceeds;
 }
 #ifdef LOKA_HOST_ZSTACK_UNITS
 #define requestInvalidate requestInvalidateImpl

@@ -122,7 +122,7 @@ inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
 namespace toolbox_host
 {
   extern unsigned staticCaptures, staticCopies, staticReleases;
-  extern bool staticEligible, staticCaptureSucceeds;
+  extern bool staticEligible, staticCaptureSucceeds, staticUpdateCovers, staticCopySucceeds;
 } // namespace toolbox_host
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
@@ -688,7 +688,6 @@ public:
   void noteWindowRectRequest() {}
   void noteWindowFlushFull() {}
   void noteWindowFlushDirty() {}
-  void completedInvalidateFlush();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
