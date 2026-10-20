@@ -1658,7 +1658,10 @@ On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
 `ZStack().expStaticBlurUnit()` is experimental. Its first unit (second
-child) shows a blur of the content beneath as it was when the unit appeared.
+child) shows a blur of the wrapped ground as it was when the unit appeared.
+On every rail its band fills the ground child's laid-out height, or its own
+height when taller; its child keeps its natural size at the band's top-left.
+A zero-height unit stays collapsed, so a hidden `Show` leaves no backdrop.
 On Toolbox that picture stays frozen while the unit is shown; macOS uses the
 live blur effect, and Win32 uses window ground. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;

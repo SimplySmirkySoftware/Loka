@@ -10,6 +10,17 @@ namespace loka
   {
     namespace layout
     {
+      /** Band extent only: children retain their natural layout. A collapsed
+          Show has no band. Shared by Null/Win32/macOS and the traversal twin
+          apple/toolbox/src/ToolboxZStack.cpp. O(1) per upper child. */
+      inline int zStackUnitBottom(ZStackUnitGround ground, unsigned index, int top, int childBottom, int groundBottom)
+      {
+        return ground == ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR && index == 1 && childBottom > top
+                       && childBottom < groundBottom
+                   ? groundBottom
+                   : childBottom;
+      }
+
       // Deliberate platform-seam twins: Win32ScenePlatformController and
       // MacScenePlatformController own this
       // seat/max-bottom loop to insert opaque native units for upper children.

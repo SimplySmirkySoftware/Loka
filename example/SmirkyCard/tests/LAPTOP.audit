@@ -20,21 +20,27 @@ log text=picture.MBP2023%20320x200
 log text=picture.NEO%20320x200
 step id=5 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=pictures-loaded
 step id=6 due_tick=0 tick=3 status=succeeded error_kind=0 error_code=0 name=
-step id=7 due_tick=4 tick=4 status=succeeded error_kind=0 error_code=0 name=open-detail
+step id=7 due_tick=4 tick=4 status=succeeded error_kind=0 error_code=0 name=open-about
 step id=8 due_tick=0 tick=4 status=succeeded error_kind=0 error_code=0 name=
-step id=9 due_tick=5 tick=5 status=succeeded error_kind=0 error_code=0 name=detail-shows-pb180c
+step id=9 due_tick=5 tick=5 status=succeeded error_kind=0 error_code=0 name=about-content-and-close
 step id=10 due_tick=0 tick=5 status=succeeded error_kind=0 error_code=0 name=
-step id=11 due_tick=6 tick=6 status=succeeded error_kind=0 error_code=0 name=back-to-list
+step id=11 due_tick=6 tick=6 status=succeeded error_kind=0 error_code=0 name=about-gone
 step id=12 due_tick=0 tick=6 status=succeeded error_kind=0 error_code=0 name=
-step id=13 due_tick=7 tick=7 status=succeeded error_kind=0 error_code=0 name=carousel-keeps-selection-and-wraps
+step id=13 due_tick=7 tick=7 status=succeeded error_kind=0 error_code=0 name=open-detail
 step id=14 due_tick=0 tick=7 status=succeeded error_kind=0 error_code=0 name=
-step id=15 due_tick=8 tick=8 status=succeeded error_kind=0 error_code=0 name=open-from-carousel
+step id=15 due_tick=8 tick=8 status=succeeded error_kind=0 error_code=0 name=detail-shows-pb180c
 step id=16 due_tick=0 tick=8 status=succeeded error_kind=0 error_code=0 name=
-step id=17 due_tick=9 tick=9 status=succeeded error_kind=0 error_code=0 name=detail-shows-neo
+step id=17 due_tick=9 tick=9 status=succeeded error_kind=0 error_code=0 name=back-to-list
 step id=18 due_tick=0 tick=9 status=succeeded error_kind=0 error_code=0 name=
-step id=19 due_tick=10 tick=10 status=succeeded error_kind=0 error_code=0 name=back-to-carousel
+step id=19 due_tick=10 tick=10 status=succeeded error_kind=0 error_code=0 name=carousel-keeps-selection-and-wraps
 step id=20 due_tick=0 tick=10 status=succeeded error_kind=0 error_code=0 name=
-log text=browse%2C%20detail%2C%20back%20and%20both%20presentations%20settled
-step id=21 due_tick=11 tick=11 status=succeeded error_kind=0 error_code=0 name=second-machine
+step id=21 due_tick=11 tick=11 status=succeeded error_kind=0 error_code=0 name=open-from-carousel
 step id=22 due_tick=0 tick=11 status=succeeded error_kind=0 error_code=0 name=
+step id=23 due_tick=12 tick=12 status=succeeded error_kind=0 error_code=0 name=detail-shows-neo
+step id=24 due_tick=0 tick=12 status=succeeded error_kind=0 error_code=0 name=
+step id=25 due_tick=13 tick=13 status=succeeded error_kind=0 error_code=0 name=back-to-carousel
+step id=26 due_tick=0 tick=13 status=succeeded error_kind=0 error_code=0 name=
+log text=browse%2C%20detail%2C%20back%20and%20both%20presentations%20settled
+step id=27 due_tick=14 tick=14 status=succeeded error_kind=0 error_code=0 name=second-machine
+step id=28 due_tick=0 tick=14 status=succeeded error_kind=0 error_code=0 name=
 terminal status=succeeded

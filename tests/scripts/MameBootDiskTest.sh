@@ -161,7 +161,7 @@ printf '\r\n  # extra cards\r\n\r\n  ABSENT.JS  \r\n  FOURTH.JS  ' >> "$ALL_PROJ
 touch "$ALL_PROJECT/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all-apps.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 44 ] || fail "extended manifest must copy 44 existing assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all-apps.log")" -eq 46 ] || fail "extended manifest must copy 46 existing assets"
 for script in MAIN.JS MINES.JS VIEWER.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$ALL_PROJECT/example/SmirkyCard/$script> <:Loka:>" "$SANDBOX/all-apps.log" >/dev/null ||
     fail "extended manifest omitted $script"

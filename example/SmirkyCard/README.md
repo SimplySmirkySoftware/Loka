@@ -204,7 +204,9 @@ Follow the [guide's placement rule](../../docs/ProgrammingGuide.en.md#stacking-z
 place units only over non-reactive regions such as a ScrollView inset gap;
 a transparent later child is unsupported. A ScrollView or nested ZStack inside
 a unit lays out nothing today. Toolbox lays out children flat until it adopts
-units. The experimental blur option is not exposed in JavaScript.
+units. `ZStack(...).expStaticBlurUnit()` selects the experimental static-blur
+first unit; it fills the ground extent without stretching its child. The method
+refuses non-ZStack trees. The live `expBlurUnit()` option is not exposed in JavaScript.
 
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
@@ -232,7 +234,7 @@ argument yet. The default CardStyle is the machine's standard look: a DROP shado
 on 68k, a WIDE shadow on PowerPC 601-604, and a WIDE shadow with ALPHA ink on G3
 or faster where the rail can draw it (#1425). Until each rail answers its CPU
 class, every target still draws DROP. Both refuse missing, extra, array, or non-tree children with
-TypeError and each counts one level toward the depth-eight tree limit.
+TypeError and each counts one level toward the depth-nine tree limit.
 
 `Box(child, {width: 300})` offers its child a width of 300 and
 `Box(child, {height: 24})` makes the Box 24 tall, each axis on its own, under any
@@ -268,7 +270,7 @@ the existing refusal card with a message naming that budget and the Reload
 button. Records are allocated only for seats declared and clickables lowered;
 there is no eight-slot allocation or dispatch table. The refusal UI's Reload
 button is a separate host control. The existing 16-children-per-stack and
-depth-eight tree limits still apply. Grid capacity does not raise the seat or
+depth-nine tree limits still apply. Grid capacity does not raise the seat or
 clickable budgets (a 256-cell Grid can use Text, but cannot contain 256 Cells).
 
 The card owns stable seat handles and JS handler records. Each clickable is a
@@ -489,11 +491,12 @@ selects `NAMEM` (320x200 mono) for details and `NAMEMS` (160x100 mono) for
 list/carousel thumbnails; otherwise `NAME` (320x200 color) serves both.
 Named seats always refer to full pictures. Card sizes remain 150x94, 110x70
 and 320x200 respectively. [disk-pictures.txt](disk-pictures.txt) stages all 39
-machine stems; ICON variants are generated but not staged.
+machine stems plus `ICON` (320x200 colour) and `ICONMS` (160x100 mono), the
+smirking compact Mac shown on the About card; `ICONM` is generated but not staged.
 
 The list follows its viewport: positive width below 320 selects one column.
 Seven wide row Shows and seven narrow Shows containing paired VStacks give
-14 children, with both arms' leaves at depth 8 (inclusive). Carousel and detail
+14 children, with both arms' leaves at depth 9 (inclusive). Carousel and detail
 rows each contain 13 children, below the 16-child wall. Tall/Wide still selects
 list/carousel independently of viewport width.
 
