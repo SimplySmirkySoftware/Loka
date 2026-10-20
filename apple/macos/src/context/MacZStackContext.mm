@@ -404,8 +404,8 @@ namespace
   NSGraphicsContext *current = [NSGraphicsContext currentContext];
   NSGraphicsContext *windowContext = [[self window] graphicsContext];
   const bool attached = [self window] != nil;
-  const bool screen = attached && [current isDrawingToScreen] != NO && windowContext != nil
-                      && [current graphicsPort] == [windowContext graphicsPort];
+  const bool screen = attached && [current isDrawingToScreen] != NO && windowContext != nil &&
+                      [current graphicsPort] == [windowContext graphicsPort];
   if (!(screen && attached))
   {
     [self lokaReplayPhoto];
