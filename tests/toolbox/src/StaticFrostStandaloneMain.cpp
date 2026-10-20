@@ -37,7 +37,7 @@ class ToolboxStaticBlurInspection
 public:
   static ToolboxStaticBlur::Phase phase(const ToolboxScenePlatformController &controller)
   {
-    return controller.staticBlur_.phase_;
+    return controller.staticBlur_.phase();
   }
   static bool present(const ToolboxScenePlatformController &controller)
   {
@@ -232,20 +232,46 @@ namespace
     {
       const Rect narrow = {5, 5, 15, 25};
       const Rect comparison = {0, 0, UnitHeight, Width - 1};
+      const Rect picture = {0, 0, Height, Width - 1};
       SizeWindow(window->window(), Width - 1, Height, false);
+      // Reconcile the new key without erase evidence; the entire unit is ground.
+      ToolboxInputDoor::render(controller);
+      this->record("static-partial-update-starts-empty",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY);
       ValidRect(&Whole);
       InvalRect(&narrow);
       BeginUpdate(window->window());
       window->draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
       EndUpdate(window->window());
-      this->record("static-update-never-captures",
-                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::NEEDED);
+      this->record("static-partial-update-empty",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY
+                       && !window->hasPendingInvalidate());
+      Capture partial, plain;
+      const bool partialRead = partial.read(window->window());
+      loka::toolbox::ToolboxPaintGround(SURFACE_GROUND_WINDOW, picture);
+      this->record("static-partial-update-ground",
+                   partialRead && plain.read(window->window()) && partial.equals(plain, picture));
       window->requestInvalidate();
       window->flushInvalidate();
-      this->record("static-update-followup-ready",
+      this->record("static-external-flush-ready",
                    ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
       Capture clean, dirty;
       const bool captured = clean.read(window->window());
+      // Change the key twice: the full OS update must capture its new lifetime.
+      SizeWindow(window->window(), Width, Height, false);
+      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      SizeWindow(window->window(), Width - 1, Height, false);
+      ToolboxInputDoor::render(controller);
+      this->record("static-full-update-starts-empty",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY);
+      InvalRect(&window->window()->portRect);
+      BeginUpdate(window->window());
+      window->draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+      const bool readyInUpdate = ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY;
+      EndUpdate(window->window());
+      this->record("static-full-update-ready", readyInUpdate && !window->hasPendingInvalidate());
+      this->record("static-full-update-equals-flush",
+                   captured && dirty.read(window->window()) && dirty.equals(clean, picture));
       // Visit the original geometry so returning to the smaller one is fresh.
       SizeWindow(window->window(), Width, Height, false);
       window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
@@ -309,7 +335,7 @@ namespace
         std::fprintf(this->log_, "static-us first-full-open=%lu\r", Now() - drawStart);
         this->record("static-flush-first-capture",
                      LOKA_FROST_STANDALONE_DEPTH == 1
-                         ? ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::PLAIN
+                         ? ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY
                          : ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
         ++this->phase_;
         return;
@@ -391,9 +417,7 @@ namespace
         this->node_->show(true);
         if (loka::core::Operation *turn = loka::core::testing::OperationTestAccess::active())
           turn->settle();
-        // Show reveals its branch on the next tick, so this idle cannot force
-        // the request/swallow sequence natively; the host pins own that phase
-        // machine. Natively, reopening must reach READY again with a new capture.
+        // Reopening must reach READY again at a subsequent full redraw.
         this->phase_ = 7;
       }
     }

@@ -402,6 +402,10 @@ namespace smirkycard
   {
     return withTreePolicy(ctx, thisValue, argc, "Row", "naturalWidth", "rowWidth");
   }
+  JSValue ScriptRuntime::naturalHeight(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    return withTreePolicy(ctx, thisValue, argc, "VStack", "naturalHeight", "columnHeight");
+  }
   JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
   {
     return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit");

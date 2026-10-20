@@ -4189,6 +4189,51 @@ namespace
     LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
   }
 
+  void checkNaturalColumnLowering()
+  {
+    std::fputs("[pin] natural-height VStack modifier and lowering\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>({compose(){return VStack(Box(Text('a'),{height:20}))"
+                                    ".naturalHeight().TEST_ID('NaturalColumn')}}));",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    expectJs(runtime,
+             "(()=>{const original=VStack(Text('a'));const tree=original.naturalHeight();"
+             "return Object.isFrozen(original)&&Object.isFrozen(tree)&&tree!==original&&"
+             "original.columnHeight===undefined&&tree.columnHeight===1&&tree.naturalHeight()===tree&&"
+             "tree.TEST_ID('x').columnHeight===1&&VStack(Text('a')).TEST_ID('y').naturalHeight().testId==='y'})()",
+             "true");
+    expectJs(runtime,
+             "(()=>{try{Row(Text('a')).naturalHeight();return false}catch(e){return e instanceof TypeError}})()",
+             "true");
+    expectJs(runtime,
+             "(()=>{try{VStack(Text('a')).naturalWidth();return false}catch(e){return e instanceof TypeError}})()",
+             "true");
+    expectJs(runtime,
+             "(()=>{try{VStack(Text('a')).naturalHeight(1);return false}catch(e){return e instanceof TypeError}})()",
+             "true");
+    loka::app::scene::Node *node = windowNode(window, "NaturalColumn");
+    LOKA_VERIFY(node && node->asStackNode());
+    LOKA_VERIFY(node->asStackNode()->props.columnUndeclaredHeight_ == loka::app::COLUMN_UNDECLARED_HEIGHT_NATURAL);
+    // A Null filling surface discriminates the height offered by the lowered policy.
+    node->asStackNode()->addChild(loka::app::RectSurface().create());
+    loka::app::scene::LayoutState bounds;
+    bounds.x = 0;
+    bounds.y = 0;
+    bounds.width = 200;
+    bounds.height = 100;
+    bounds.spacing = 4;
+    bounds.lineHeight = 12;
+    LOKA_VERIFY(platform.projectLayoutForTesting(node, bounds) == 32);
+  }
+
   void checkZStackLowering()
   {
     smirkycard::ScriptRuntime methodRuntime;
@@ -4399,6 +4444,7 @@ namespace
   void checkLaptopLowerings()
   {
     checkNaturalRowLowering();
+    checkNaturalColumnLowering();
     std::fputs("[pin] SmirkyTracker ScrollView, Card, ImageView options and depth\n", stderr);
     NullPlatformContext context;
     NullScenePlatformController platform;

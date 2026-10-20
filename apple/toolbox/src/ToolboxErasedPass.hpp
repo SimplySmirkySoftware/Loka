@@ -31,10 +31,11 @@ public:
   {
     return this->descriptor_ != 0;
   }
-  bool admitsCapture(const Rect &rect) const
+  bool admitsCapture(const Rect &rect, bool updateCovers) const
   {
     return this->descriptor_
-           && (this->descriptor_->origin == FLUSH_DRAW || this->descriptor_->origin == COMPOSITION_REPLAY)
+           && (this->descriptor_->origin == FLUSH_DRAW || this->descriptor_->origin == COMPOSITION_REPLAY
+               || (this->descriptor_->origin == UPDATE_DRAW && updateCovers))
            && this->descriptor_->rect.left <= rect.left && this->descriptor_->rect.top <= rect.top
            && this->descriptor_->rect.right >= rect.right && this->descriptor_->rect.bottom >= rect.bottom;
   }

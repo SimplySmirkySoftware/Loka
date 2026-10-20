@@ -1,3 +1,4 @@
+#include "ColumnNaturalHeightTests.hpp"
 #include "StackBlurTests.hpp"
 #include "ContainerGapTests.hpp"
 #include "DocumentWindowSetTests.hpp"

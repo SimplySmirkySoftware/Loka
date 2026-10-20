@@ -61,7 +61,6 @@ private:
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
-  void completedInvalidateFlush();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;

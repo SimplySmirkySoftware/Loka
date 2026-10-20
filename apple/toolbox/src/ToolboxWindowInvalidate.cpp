@@ -57,35 +57,12 @@ void ToolboxWindow::requestInvalidateRect(const Rect &rect)
   pendingInvalidateRects_.push_back(rect);
 }
 
-namespace
-{
-  /** All flush exits share the same post-consumption request door. */
-  class StaticBlurFlushCompletion
-  {
-  public:
-    explicit StaticBlurFlushCompletion(ToolboxScenePlatformController *controller)
-        : controller_(controller)
-    {
-    }
-    ~StaticBlurFlushCompletion()
-    {
-      if (this->controller_)
-        this->controller_->completedInvalidateFlush();
-    }
-
-  private:
-    ToolboxScenePlatformController *controller_;
-    StaticBlurFlushCompletion(const StaticBlurFlushCompletion &);
-    StaticBlurFlushCompletion &operator=(const StaticBlurFlushCompletion &);
-  };
-} // namespace
 void ToolboxWindow::flushInvalidate()
 {
   if (!window_)
   {
     return;
   }
-  StaticBlurFlushCompletion completion(this->scenePlatformController_);
   if (!needsInvalidate_ && pendingInvalidateRects_.empty())
   {
     return;

@@ -1112,6 +1112,13 @@ directly in the column are laid out at the offered width and never scroll
 sideways.
 When the width cannot be known, the view does not scroll sideways at all.
 
+A vertical ScrollView offers its content the viewport height. By default, a
+Column passes each child the remaining height when it was offered one. Opt in
+with `VStack().naturalHeight()` to offer children height 0 and stack their own
+heights plus gaps. Children without a height of their own are 0 or their rail
+default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
+80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
+
 The vertical bar is always present; the horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
@@ -1550,6 +1557,15 @@ width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 
+### Row And Column Natural Size
+
+- `Row().naturalWidth()` seats undeclared-width children at their natural width
+  instead of sharing the offered width.
+- `VStack().naturalHeight()` offers children height 0 instead of the remaining
+  height, so the Column reports their summed heights plus gaps.
+
+These opt-ins belong to the fixed-axis definitions, not the live-axis `Stack`.
+
 ### Spacing: Gaps, Padding, And The Window Margin
 
 Use `gap(...)` on `VStack`, `HStack`, `Stack`, or `Box` for the space between
@@ -1670,21 +1686,25 @@ live blur effect, and Win32 uses window ground. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;
 other static-blur units use window ground.
 
-On Toolbox, a unit that appears through Loka's own redraw is captured in that
-redraw. A unit that first appears during an OS update, for example while the
-window is resized, shows window ground until Loka redraws it once more.
+On Toolbox, StaticBlur may be placed over content that changes. It captures
+when it appears: the first time a full redraw of its area is possible at that
+position and size, including an OS update after a resize redraws the whole
+window. Before that first capture it shows window ground. The picture does not
+follow later changes beneath it. To refresh it, hide and show it again; capture
+is still not guaranteed, for example when another window covers part of it.
 Capture requires 32-bit QuickDraw, an FPU, and a unit contained within one
 screen of at least 8-bit depth. A unit off one screen
 paints window ground. Pixels hidden by other windows at capture stay white for
-that snapshot. Geometry changes cause another capture and blur. A ZStack
-rebuilt at the same address with the same rectangle in one pass keeps the old
-picture. Allocation or capture failure leaves window ground for that lifetime.
+that snapshot. Position or size changes allow a new capture at the next full
+redraw of that area. A ZStack rebuilt at the same address with the same
+rectangle in one pass keeps the old picture. Allocation or capture failure
+leaves window ground for that lifetime.
 
 On Toolbox, a press on the unit stops there (the 2b shield), but a field or
 control the unit covers still takes keys and Tab, its caret still blinks, and
-its direct repaints can draw over the unit (#1498). Do not place a static-blur
-unit over editable text or over content that changes while it is shown.
-Static blur does not provide modal input behavior.
+its direct repaints can draw over the unit (#1498), so avoid placing a
+static-blur unit over editable text. Static blur does not provide modal input
+behavior.
 
 `ZStack().expBlurUnit()` is experimental: the first unit (second child) shows
 a blur of the content beneath it where the rail supports it. Later units keep

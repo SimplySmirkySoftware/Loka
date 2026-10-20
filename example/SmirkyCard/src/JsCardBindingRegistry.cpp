@@ -129,6 +129,8 @@ namespace smirkycard
       JS_SetPropertyStr(ctx, node, "TEST_ID", JS_NewCFunction(ctx, &ScriptRuntime::testId, "TEST_ID", 1));
       JS_SetPropertyStr(
           ctx, node, "naturalWidth", JS_NewCFunction(ctx, &ScriptRuntime::naturalWidth, "naturalWidth", 0));
+      JS_SetPropertyStr(
+          ctx, node, "naturalHeight", JS_NewCFunction(ctx, &ScriptRuntime::naturalHeight, "naturalHeight", 0));
       JS_SetPropertyStr(ctx,
                         node,
                         "expStaticBlurUnit",
@@ -287,6 +289,8 @@ namespace smirkycard
         case STACK_COLUMN:
         {
           loka::app::VStack *column = new (std::nothrow) loka::app::VStack();
+          if (column && ownTreePolicy(ctx, tree, "columnHeight"))
+            column->naturalHeight();
           stack = column;
           nest = column;
           break;
