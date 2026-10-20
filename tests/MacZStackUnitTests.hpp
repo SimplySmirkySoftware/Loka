@@ -3,6 +3,7 @@
 void testMacZStackLaterChildGetsUnitView();
 void testMacZStackUnitsStackInCompositionOrder();
 void testMacZStackUnitHitTestShadowsGround();
+void testMacZStackUnitWheelLeavesGroundScrollView();
 void testMacZStackSiblingAfterZStackDoesNotReorderUnits();
 void testMacZStackGroundCreatedViewGoesBelowUnits();
 void testMacZStackUnitCreationRefusalLaysOutNothing();

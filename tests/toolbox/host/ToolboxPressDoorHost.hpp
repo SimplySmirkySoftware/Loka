@@ -21,6 +21,22 @@ namespace press_door
       return this->placement_.right - this->placement_.left;
     }
   };
+  class PlacedEdit : public ToolboxEditTextContext
+  {
+  public:
+    PlacedEdit(EditTextNode *node, ToolboxScenePlatformController *controller, State<String> *text)
+        : ToolboxEditTextContext(node, controller)
+    {
+      this->updateData(text);
+    }
+    virtual short layout(IPlatformController *, LayoutState &state)
+    {
+      const Rect rect = {10, 10, 80, 110};
+      this->updateRect(rect, rect, 14, 24);
+      state.y = rect.bottom;
+      return rect.right - rect.left;
+    }
+  };
   class EmptyUnit : public NativeNodeContext
   {
   public:
@@ -79,6 +95,14 @@ namespace press_door
       ButtonNode *node = new ButtonNode(props);
       const Rect rect = {10, 10, static_cast<short>(small ? 30 : 80), 110};
       node->setContext(new PlacedButton(node, &this->controller, rect));
+      this->stack.addChild(node);
+      NotifySubtreeNodeAttached(node);
+      return node;
+    }
+    EditTextNode *edit()
+    {
+      EditTextNode *node = new EditTextNode(EditTextProps());
+      node->setContext(new PlacedEdit(node, &this->controller, &this->text));
       this->stack.addChild(node);
       NotifySubtreeNodeAttached(node);
       return node;
@@ -255,9 +279,43 @@ namespace press_door
     f.expectFocus(f.field.getContext());
     std::puts("[pin] N10 native button without onClick tracks, shields ground and keeps focus passed");
   }
+  /** H1: later empty unit; H2: edit reached inside its unit; H3: parked edit;
+      H4: live edit above parked; H5: empty space; H6: later live button. */
+  void hover(unsigned pin)
+  {
+    Fixture f;
+    EditTextNode *ground = f.edit();
+    if (pin == 1)
+      f.empty();
+    if (pin == 4)
+      f.edit();
+    if (pin == 6)
+      f.button(f.upperAction);
+    f.render();
+    if (pin == 3 || pin == 4)
+      NotifySubtreeNodeDetached(ground);
+    const Point point = {static_cast<short>(pin == 5 ? 250 : 60), 20};
+    const bool expected = pin == 2 || pin == 4;
+    const bool actual = f.controller.isPointInEdit(point);
+    if (actual != expected)
+      std::fprintf(stderr,
+                   "[pin] H%u expected %s, got %s FAILED\n",
+                   pin,
+                   expected ? "I-beam" : "arrow",
+                   actual ? "I-beam" : "arrow");
+    LOKA_VERIFY(actual == expected);
+    std::printf("[pin] H%u %s passed\n", pin, expected ? "I-beam" : "arrow");
+  }
   void run(const char *name)
   {
     const bool all = std::strcmp(name, "PressDoor") == 0;
+    for (unsigned pin = 1; pin <= 6; ++pin)
+    {
+      char selected[32];
+      std::sprintf(selected, "PressDoor-H%u", pin);
+      if (all || std::strcmp(name, selected) == 0)
+        hover(pin);
+    }
     if (all || std::strcmp(name, "PressDoor-N1") == 0)
       nativeAboveParked();
     if (all || std::strcmp(name, "PressDoor-N2") == 0)

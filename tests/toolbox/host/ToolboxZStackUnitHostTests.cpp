@@ -954,6 +954,51 @@ namespace
       LOKA_VERIFY(state.y == (i == 0 ? 90 : 140));
     }
   }
+  /** A ground button retiring beneath a later unit hides without painting:
+      the Control Manager's hidden-control erase would otherwise punch through
+      the unit. The native update damage still queues, so composition replay
+      presents the area in order. */
+  void retiredGroundHideSuppressed()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ZStackNode stack((ZStackProps()));
+    stack.addChild(new Probe("ground", 70));
+    PlacedButton *button = new PlacedButton();
+    button->setContext(new ToolboxButtonContext(button, &controller));
+    stack.addChild(button);
+    stack.addChild(new Probe("later-unit", 40));
+    controller.rootNode_ = &stack;
+    ToolboxInputDoor::render(controller);
+    LOKA_VERIFY(controller.buttonControls_.size() == 1);
+    ControlRef control = controller.buttonControls_[0].control;
+    const short id = controller.buttonControls_[0].resourceId;
+    const Rect rect = control->rect;
+    LOKA_VERIFY(control->visible);
+    control->calls.clear();
+    window.port.native.update.clear();
+    // Retire from an unrelated current port, as a detach pass may run.
+    ToolboxWindow other;
+    HostPortScope otherPort(other.window());
+    controller.destroyButtonControl(id, NATIVE_HINT_DEFAULT);
+    LOKA_VERIFY(controller.buttonControls_.empty() && !control->visible);
+    bool hidden = false;
+    for (size_t i = 0; i < control->calls.size(); ++i)
+      if (control->calls[i].operation == "hide")
+      {
+        hidden = true;
+        LOKA_VERIFY(!control->calls[i].painted);
+        LOKA_VERIFY(control->calls[i].currentPort == window.window());
+      }
+    LOKA_VERIFY(hidden);
+    LOKA_VERIFY(window.port.native.update.size() == 1 && EqualRect(&window.port.native.update[0], &rect));
+    GrafPtr current;
+    GetPort(&current);
+    LOKA_VERIFY(current == other.window());
+    controller.clearControls();
+    std::puts("[pin] retired ground button hides under an empty clip beneath a later unit");
+  }
   void run(const char *mode)
   {
     ToolboxWindow window;
@@ -1064,7 +1109,8 @@ int main(int argc, char **argv)
                          "RefusedChildHasNoRowAndNoRender",
                          "NestedZStackInUnitLaysOutNothing",
                          "ScrollViewRefusedInsideUnit",
-                         "DirtyTouchingUnitTakesCompositionReplay"};
+                         "DirtyTouchingUnitTakesCompositionReplay",
+                         "RetiredGroundHideSuppressed"};
   bool known = false;
   if (argc == 2)
     for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
@@ -1117,6 +1163,8 @@ int main(int argc, char **argv)
     inheritedButton();
   else if (std::strcmp(argv[1], "UnitInsideViewportRowIsProjected") == 0)
     viewportRow();
+  else if (std::strcmp(argv[1], "RetiredGroundHideSuppressed") == 0)
+    retiredGroundHideSuppressed();
   else
   {
     run(argv[1]);
