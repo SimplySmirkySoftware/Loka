@@ -74,7 +74,7 @@ namespace
         base[y * stride + x] = inverse[index];
       }
   }
-  // Independent oracle from frozen v0.4 section 3.6: direct cell sums,
+  // Independent oracle written from the specification: direct cell sums,
   // out-of-place filtering, then four milked grid samples for each output pixel.
   void Smooth(unsigned char *base,
               int w,
