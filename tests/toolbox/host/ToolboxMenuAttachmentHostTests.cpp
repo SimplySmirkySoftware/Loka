@@ -19,6 +19,7 @@ namespace toolbox_host
   void (*afterMenuSet)() = 0;
   unsigned beeps = 0;
   unsigned menuDraws = 0, menuClears = 0, menuDisposes = 0, menuValueWrites = 0;
+  int menuColorEntries = 0;
 }
 long GetScriptManagerVariable(short) { return smRoman; }
 using namespace loka::app;
@@ -544,6 +545,21 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
 }
+void testToolboxMenuProjectionKeepsMenuColors()
+{
+  // InitMenus loaded 'mctb' 0 into the color table; ClearMenuBar deletes its
+  // entries. A projection must keep the table it found (bot P2 on #1526).
+  ToolboxApp app;
+  MenuBarDefinition first = bar(), second = bar("Save");
+  toolbox_host::menuColorEntries = 3;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&second, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  toolbox_host::menuColorEntries = 0;
+}
 void testToolboxMenuShortcutProjectsItemCmd()
 {
   ToolboxApp app;
@@ -800,6 +816,7 @@ int main(int argc, char **argv)
     PIN(testToolboxAboutTitleFollowsStateAcrossRebuild),
     PIN(testToolboxMenuDoorFiltersRowsAndForwardsScene),
     PIN(testToolboxMenuProjectionDefersBackgroundDraws),
+    PIN(testToolboxMenuProjectionKeepsMenuColors),
     PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
     PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
     PIN(testToolboxSubmenuIdDiffersFromItsParent),

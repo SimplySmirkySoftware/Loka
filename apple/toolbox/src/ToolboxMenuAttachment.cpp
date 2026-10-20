@@ -182,7 +182,16 @@ void ToolboxMenuAttachment::disposeHierarchicalMenus()
 
 void ToolboxMenuAttachment::resetMenuState()
 {
+  // ClearMenuBar also deletes every entry of the menu color table, which
+  // InitMenus filled from 'mctb' 0 at startup. Keep the table across the
+  // clear; without a copy (no memory) the colors fall back to the defaults.
+  MCTableHandle colors = GetMCInfo();
   ClearMenuBar();
+  if (colors)
+  {
+    SetMCInfo(colors);
+    DisposeMCInfo(colors);
+  }
   this->disconnect();
   disposeHierarchicalMenus();
   disposeMenuEntries();
