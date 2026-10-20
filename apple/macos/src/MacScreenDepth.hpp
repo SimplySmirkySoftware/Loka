@@ -3,6 +3,8 @@
 
 #import <AppKit/AppKit.h>
 
+#include "MacObjCCompat.hpp" // NSInteger on the 10.4u SDK
+
 namespace loka
 {
   namespace macos
