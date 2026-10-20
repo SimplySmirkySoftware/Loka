@@ -65,7 +65,10 @@ namespace loka
             currentY = childY;
             LayoutStateT childState = state;
             childState.y = layoutCoordinate<LayoutStateT>(currentY);
-            if (state.height > 0)
+            // Keep the height policy paired with ComputeToolboxColumnLayout.
+            if (column->props.columnUndeclaredHeight_ == COLUMN_UNDECLARED_HEIGHT_NATURAL)
+              childState.height = 0;
+            else if (state.height > 0)
             {
               childState.height = layoutCoordinate<LayoutStateT>(
                   loka::app::layout::remainingChildHeightForColumn(state.height, state.y, currentY));

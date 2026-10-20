@@ -249,6 +249,7 @@ C++ `Box()`, the Box still takes its own seat in a Row and has no natural width.
 A fixed Box wider than its parent overflows rather than shrinking. There are no
 min/max keys yet.
 
+Use `ScrollView(VStack(...).naturalHeight())` for a Column that should stack children at their own heights.
 Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
 The modifier seats undeclared-width children at their natural width; a shared-width
 Row (the default) splits the viewport instead. Like `TEST_ID`, it returns a frozen

@@ -18,4 +18,6 @@ void testToolboxCenteredControlOnlyRowPaintedBounds();
 
 void testToolboxAlignedRowExtentIsLargerOfMeasurementAndChild();
 
+void testToolboxColumnNaturalHeightOffersAndExtent();
+
 #endif // LOKA_TESTS_TOOLBOX_LAYOUT_CONTRACT_TESTS_HPP
