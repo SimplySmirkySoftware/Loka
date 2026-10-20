@@ -342,3 +342,155 @@ void testMenuProjectionRecordIdentityAndRelease()
   record.commit(absent);
   LOKA_VERIFY(!record.unchanged(absent));
 }
+
+void testMergeAppMenuSingleContainerShapes()
+{
+  for (int shape = 0; shape < 3; ++shape)
+  {
+    MenuDefinition app = AppMenu();
+    if (shape != 1)
+      app << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP);
+    if (shape == 0)
+      app << MenuSeparator();
+    if (shape != 2)
+      app << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP);
+    MenuBarDefinition base, scene, expected;
+    base << app << Menu("File");
+    scene << Menu("View");
+    expected << app << Menu("File") << Menu("View");
+    OwnedDef<MenuBarDefinition> normalized(MergeMenuBars(&base, 0));
+    OwnedDef<MenuBarDefinition> overlayOnly(MergeMenuBars(0, &base));
+    OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &scene));
+    LOKA_VERIFY(normalized.isSet() && loka::app::testing::EqualsStructure(*normalized, base));
+    LOKA_VERIFY(overlayOnly.isSet() && loka::app::testing::EqualsStructure(*overlayOnly, base));
+    LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  }
+}
+
+void testMergeAppMenuContainersAndIdempotence()
+{
+  MenuBarDefinition base, expected;
+  base << Menu("File")
+       << (AppMenu().text("First") << MenuItem("Quit1").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator()
+                                   << MenuItem("Prefs"))
+       << Menu("Help")
+       << (AppMenu().text("Last") << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
+                                  << MenuItem("Quit2").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator()
+                                  << MenuItem("Custom"));
+  expected << Menu("File")
+           << (AppMenu().text("First") << MenuItem("Quit2").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator()
+                                       << MenuItem("Prefs") << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
+                                       << MenuSeparator() << MenuItem("Custom"))
+           << Menu("Help");
+  OwnedDef<MenuBarDefinition> once(MergeMenuBars(&base, 0));
+  LOKA_VERIFY(once.isSet() && loka::app::testing::EqualsStructure(*once, expected));
+  OwnedDef<MenuBarDefinition> twice(MergeMenuBars(once.get(), 0));
+  LOKA_VERIFY(twice.isSet() && loka::app::testing::EqualsStructure(*twice, *once));
+  OwnedDef<MenuBarDefinition> overlayOnly(MergeMenuBars(0, &base));
+  LOKA_VERIFY(overlayOnly.isSet() && loka::app::testing::EqualsStructure(*overlayOnly, expected));
+}
+
+void testMergeAppMenuKeepsComplementaryActions()
+{
+  for (int reverse = 0; reverse < 2; ++reverse)
+  {
+    MenuItemDefinition first("First"), second("Second");
+    first.actionType(reverse ? MENU_ACTION_ABOUT_APP : MENU_ACTION_QUIT_APP);
+    second.actionType(reverse ? MENU_ACTION_QUIT_APP : MENU_ACTION_ABOUT_APP);
+    MenuBarDefinition base, overlay, expected;
+    base << (AppMenu() << first);
+    overlay << (AppMenu() << second);
+    expected << (AppMenu() << first << second);
+    OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+    LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  }
+}
+
+void testMergeAppMenuLastWholePayload()
+{
+  MutableState<String> title(String::Literal("Live"));
+  MutableState<bool> visible(false), enabled(false), checked(true);
+  EmitterState click;
+  MenuItemDefinition winner = MenuItem("Winner")
+                                  .text(&title)
+                                  .enabled(&enabled)
+                                  .shortcut('W')
+                                  .onClick(&click)
+                                  .actionType(MENU_ACTION_QUIT_APP)
+                                  .attr(MenuItemAttr().visible(&visible).checked(&checked));
+  MenuBarDefinition base, overlay, expected;
+  base << (AppMenu() << MenuItem("Quit1").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator() << MenuItem("Prefs"));
+  overlay << (AppMenu() << winner);
+  expected << (AppMenu() << winner << MenuSeparator() << MenuItem("Prefs"));
+  OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+  LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  const MenuItemDefinition *item = merged->menuAt(0)->itemsHead();
+  LOKA_VERIFY(item->titleState == &title && item->enabledState == &enabled);
+  LOKA_VERIFY(item->attr_.visibleState_ == &visible && item->attr_.checkedState_ == &checked);
+  LOKA_VERIFY(item->onClickState == &click && item->shortcutKey == 'W');
+  winner.actionType(MENU_ACTION_ABOUT_APP).enabled(false);
+  winner.attr_.visible(false).checked(true);
+  MenuBarDefinition duplicate, aboutExpected;
+  duplicate << (AppMenu() << MenuItem("Old").actionType(MENU_ACTION_ABOUT_APP) << MenuItem("Middle") << winner);
+  aboutExpected << (AppMenu() << winner << MenuItem("Middle"));
+  OwnedDef<MenuBarDefinition> about(MergeMenuBars(&duplicate, 0));
+  LOKA_VERIFY(about.isSet() && loka::app::testing::EqualsStructure(*about, aboutExpected));
+}
+
+void testMergeAppMenuOverlayPlacementAndEmpty()
+{
+  for (int first = 0; first < 2; ++first)
+  {
+    MenuBarDefinition base, overlay, expected;
+    base << Menu("File") << Menu("Help");
+    if (first)
+      overlay << AppMenu();
+    overlay << Menu("View");
+    if (!first)
+      overlay << AppMenu();
+    overlay << (Menu("File") << MenuItem("Replacement"));
+    expected << (Menu("File") << MenuItem("Replacement")) << Menu("Help");
+    if (first)
+      expected << AppMenu();
+    expected << Menu("View");
+    if (!first)
+      expected << AppMenu();
+    OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+    LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  }
+  MenuBarDefinition base, overlay, expected;
+  base << Menu("File") << AppMenu().text("Empty") << Menu("Help");
+  overlay << (AppMenu().text("Later") << MenuItem("Other"));
+  expected << Menu("File") << (AppMenu().text("Empty") << MenuItem("Other")) << Menu("Help");
+  OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+  LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+}
+
+void testMergeAppMenuOrdinarySeparation()
+{
+  MenuBarDefinition base, overlay, expected;
+  base << AppMenu() << (Menu("App") << MenuItem("Old")) << (Menu("App") << MenuItem("Duplicate"));
+  overlay << (Menu("App") << MenuItem("New")) << (AppMenu() << MenuItem("Custom"));
+  expected << (AppMenu() << MenuItem("Custom")) << (Menu("App") << MenuItem("New"))
+           << (Menu("App") << MenuItem("Duplicate"));
+  OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+  LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+}
+
+void testMergeAppMenuChildActionsAreOtherItems()
+{
+  MenuItemDefinition about = MenuItem("About parent").actionType(MENU_ACTION_ABOUT_APP);
+  about << MenuItem("Child");
+  MenuItemDefinition quit = MenuItem("Quit parent").actionType(MENU_ACTION_QUIT_APP);
+  quit << MenuItem("Child");
+  MenuBarDefinition base, overlay, expected;
+  base << (AppMenu() << about << quit << MenuItem("Leaf").actionType(MENU_ACTION_ABOUT_APP));
+  overlay << (AppMenu() << about << quit << MenuItem("Other"));
+  expected << (AppMenu() << about << quit << MenuItem("Leaf").actionType(MENU_ACTION_ABOUT_APP) << about << quit
+                         << MenuItem("Other"));
+  OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, &overlay));
+  LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  OwnedDef<MenuBarDefinition> repeated(MergeMenuBars(merged.get(), &overlay));
+  expected.menuAt(0)->operator<<(about) << quit << MenuItem("Other");
+  LOKA_VERIFY(repeated.isSet() && loka::app::testing::EqualsStructure(*repeated, expected));
+}

@@ -12,9 +12,16 @@ namespace loka
     struct MenuBarDefinition;
     class MenuComposition;
 
-    /** Clone base and replace equal-title menus in place with overlay menus;
-        append overlay-only menus in order. Null means both absent or clone
-        refusal; callers distinguish by input presence and keep installed truth.
+    /** Build a new bar from base and overlay. An overlay ordinary menu replaces
+        the first base ordinary menu with an equal title in place, otherwise it
+        is appended in order. App containers (isAppMenu, title not consulted)
+        fold into one, at the first container's slot and with its title, even
+        when only one source is given; an empty container still claims the
+        slot. Childless About and Quit items keep the slot of their first
+        occurrence and the complete payload of their last; every other item,
+        separators and parents included, keeps encounter order. Null means
+        both absent or clone refusal; callers distinguish by input presence
+        and keep installed truth.
         The caller owns the result; borrowed item endpoints retain their owner. */
     MenuBarDefinition *MergeMenuBars(const MenuBarDefinition *base, const MenuBarDefinition *overlay);
 

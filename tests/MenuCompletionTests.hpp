@@ -11,4 +11,11 @@ void testBootstrapProjectsOnce();
 void testDefaultBarComposedOnceAtBootstrap();
 void testDefaultBarBootstrapCloneRefusalLeavesNoDefault();
 void testMenuProjectionRecordIdentityAndRelease();
+void testMergeAppMenuSingleContainerShapes();
+void testMergeAppMenuContainersAndIdempotence();
+void testMergeAppMenuKeepsComplementaryActions();
+void testMergeAppMenuLastWholePayload();
+void testMergeAppMenuOverlayPlacementAndEmpty();
+void testMergeAppMenuOrdinarySeparation();
+void testMergeAppMenuChildActionsAreOtherItems();
 #endif
