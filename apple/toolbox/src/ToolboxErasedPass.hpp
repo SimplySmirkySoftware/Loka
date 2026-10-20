@@ -9,7 +9,8 @@ class ToolboxErasedPass
 public:
   enum Origin
   {
-    FULL_DRAW,
+    UPDATE_DRAW,
+    FLUSH_DRAW,
     COMPOSITION_REPLAY
   };
   struct Descriptor
@@ -32,7 +33,8 @@ public:
   }
   bool admitsCapture(const Rect &rect) const
   {
-    return this->descriptor_ && this->descriptor_->origin == COMPOSITION_REPLAY
+    return this->descriptor_
+           && (this->descriptor_->origin == FLUSH_DRAW || this->descriptor_->origin == COMPOSITION_REPLAY)
            && this->descriptor_->rect.left <= rect.left && this->descriptor_->rect.top <= rect.top
            && this->descriptor_->rect.right >= rect.right && this->descriptor_->rect.bottom >= rect.bottom;
   }
