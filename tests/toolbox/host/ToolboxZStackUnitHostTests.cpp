@@ -17,6 +17,18 @@
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::core;
+class ToolboxStaticBlurInspection
+{
+public:
+  static ToolboxStaticBlur::Phase phase(const ToolboxStaticBlur &owner)
+  {
+    return owner.phase_;
+  }
+  static bool hasPixels(const ToolboxStaticBlur &owner)
+  {
+    return owner.pixels_.image_ != 0;
+  }
+};
 namespace
 {
   /** Pins record operations and bounding-box clips, never pixel/region verdicts. */
@@ -97,6 +109,181 @@ namespace
       composition.declare(ZStack() << Box().size(100, 70) << (Show(*this->visible.state()) << Box().size(100, 40)));
     }
   };
+  /** Native storage is doubled, but phase/layout/erase/flush routing is production. */
+  class StaticFixture
+  {
+  public:
+    ToolboxWindow window;
+    HostPortScope port;
+    ToolboxScenePlatformController controller;
+    ZStackNode stack;
+    Probe *unit;
+    StaticFixture()
+        : port(window.window()),
+          controller(&window),
+          stack(ZStackProps()),
+          unit(new Probe("unit", 30))
+    {
+      this->stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
+      this->stack.addChild(new Probe("ground", 70));
+      this->stack.addChild(this->unit);
+      this->controller.rootNode_ = &this->stack;
+      this->window.scenePlatformController_ = &this->controller;
+      toolbox_host::staticCaptures = toolbox_host::staticCopies = toolbox_host::staticReleases = 0;
+      toolbox_host::staticEligible = toolbox_host::staticCaptureSucceeds = true;
+    }
+    ~StaticFixture()
+    {
+      this->controller.rootNode_ = 0;
+      this->window.scenePlatformController_ = 0;
+    }
+    Rect rect()
+    {
+      const ToolboxUnitLedger::UnitSeat *row = unitRow(this->controller, &this->stack, 1);
+      LOKA_VERIFY(row != 0);
+      return row->rect;
+    }
+    void ready()
+    {
+      this->window.draw();
+      this->window.flushInvalidate();
+      this->window.flushInvalidate();
+      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(this->controller.staticBlur_) == ToolboxStaticBlur::READY);
+    }
+  };
+  void staticAdmission()
+  {
+    StaticFixture f;
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::NEEDED);
+    Rect small = f.rect();
+    --small.right;
+    ToolboxRenderDirtyInCompositionOrder(f.controller, small);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
+    const unsigned before = toolbox_host::invalidations;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == before + 1);
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
+    equal(f.window.pendingInvalidateRects_[0], f.rect());
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    toolbox_host::staticEligible = false;
+    const unsigned copies = toolbox_host::staticCopies;
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticCopies == copies);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    toolbox_host::staticEligible = true;
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
+  }
+  void staticFirstUnit()
+  {
+    StaticFixture f;
+    f.window.draw();
+    ZStackNode other(f.stack.props);
+    const Rect rect = f.rect();
+    const ToolboxUnitLedger::UnitSeat first = {&f.stack, 1, rect, rect};
+    const ToolboxUnitLedger::UnitSeat second = {&other, 1, rect, rect};
+    ToolboxUnitLedger ledger;
+    ledger.push(first);
+    ledger.push(second);
+    f.controller.staticBlur_.reconcile(ledger.firstStaticBlur());
+    ToolboxErasedPass::Guard pass(f.controller.erasedPass(), ToolboxErasedPass::COMPOSITION_REPLAY, rect);
+    const bool laterPainted = f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass());
+    LOKA_VERIFY(!laterPainted);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    const bool firstPainted = f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass());
+    LOKA_VERIFY(firstPainted);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+  }
+  void staticSwallowed()
+  {
+    StaticFixture f;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
+    f.window.requestInvalidate(); // Swallow the request before its next flush.
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
+    const unsigned before = toolbox_host::invalidations;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == before + 1);
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+  }
+  void staticIneligible()
+  {
+    StaticFixture f;
+    toolbox_host::staticEligible = false;
+    f.window.draw();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
+    const unsigned before = toolbox_host::invalidations;
+    f.window.flushInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == before);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    // A request no walk has answered yet is not repeated by later flushes.
+    StaticFixture g;
+    toolbox_host::staticEligible = true;
+    g.window.draw();
+    g.window.flushInvalidate();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(g.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
+    const unsigned issued = toolbox_host::invalidations;
+    g.controller.completedInvalidateFlush();
+    g.controller.completedInvalidateFlush();
+    LOKA_VERIFY(toolbox_host::invalidations == issued);
+  }
+  void staticFailure()
+  {
+    StaticFixture f;
+    toolbox_host::staticCaptureSucceeds = false;
+    f.window.draw();
+    f.window.flushInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    toolbox_host::staticCaptureSucceeds = true;
+    ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+  }
+  void staticReconcile(const char *reason)
+  {
+    StaticFixture f;
+    f.ready();
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticReleases == 0);
+    if (std::strcmp(reason, "StaticMissingRow") == 0)
+      f.unit->height = 0;
+    if (std::strcmp(reason, "StaticChangedRect") == 0)
+      ++f.unit->height;
+    if (std::strcmp(reason, "StaticChangedGround") == 0)
+      f.stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
+    if (std::strcmp(reason, "StaticAbortedLayout") == 0)
+      f.controller.rootNode_ = 0;
+    f.window.draw();
+    LOKA_VERIFY(toolbox_host::staticReleases == 1);
+    LOKA_VERIFY(!ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_));
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::NEEDED);
+    f.unit->height = 30;
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
+    f.controller.rootNode_ = &f.stack;
+    f.ready();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 2);
+  }
   void erasedFrostAdmission()
   {
     ToolboxWindow window;
@@ -112,7 +299,7 @@ namespace
     ToolboxInputDoor::render(controller);
     LOKA_VERIFY(controller.frostCache_.paints == 0);
     {
-      ToolboxErasedPass::Guard erased(controller.erasedPass());
+      ToolboxErasedPass::Guard erased(controller.erasedPass(), ToolboxErasedPass::FULL_DRAW, window.window()->portRect);
       ToolboxInputDoor::render(controller);
       LOKA_VERIFY(controller.frostCache_.paints == 1);
     }
@@ -727,7 +914,16 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"FrostErasedPassAdmission",
+  const char *names[] = {"StaticFirstUnit",
+                         "StaticAdmission",
+                         "StaticSwallowed",
+                         "StaticFailure",
+                         "StaticIneligible",
+                         "StaticMissingRow",
+                         "StaticChangedRect",
+                         "StaticChangedGround",
+                         "StaticAbortedLayout",
+                         "FrostErasedPassAdmission",
                          "HeightOnlyBoxUnit",
                          "WidthOnlyBoxDispatch",
                          "TextDirtyClipStaysBelowUnit",
@@ -751,7 +947,19 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
     return 1;
   }
-  if (std::strcmp(argv[1], "FrostErasedPassAdmission") == 0)
+  if (std::strcmp(argv[1], "StaticFirstUnit") == 0)
+    staticFirstUnit();
+  else if (std::strcmp(argv[1], "StaticAdmission") == 0)
+    staticAdmission();
+  else if (std::strcmp(argv[1], "StaticSwallowed") == 0)
+    staticSwallowed();
+  else if (std::strcmp(argv[1], "StaticFailure") == 0)
+    staticFailure();
+  else if (std::strcmp(argv[1], "StaticIneligible") == 0)
+    staticIneligible();
+  else if (std::strncmp(argv[1], "Static", 6) == 0)
+    staticReconcile(argv[1]);
+  else if (std::strcmp(argv[1], "FrostErasedPassAdmission") == 0)
     erasedFrostAdmission();
   else if (std::strcmp(argv[1], "HeightOnlyBoxUnit") == 0)
   {
