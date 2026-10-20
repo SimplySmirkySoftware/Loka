@@ -3441,6 +3441,17 @@ namespace
         "f=c.flow(Flow().watch(s,v=>{n++;return v}).step(v=>{s.set(v+1);return v}).onSuccess(v=>log.push(v)))",
         "s.set(2);[n,s.get(),log.join(',')].join(':')",
         "1:3:2");
+    // An unchanged write still committed the seat and re-ran its watches and
+    // Show seats; LAPTOP.JS's viewport Flow drew the list twice that way.
+    checkProductionFlowCase("same-value integer seat write is silent",
+                            "f=c.flow(Flow().watch(s,v=>{n++;return v}))",
+                            "s.set(0);s.set(5);s.set(5);[n,s.get()].join(':')",
+                            "1:5");
+    checkProductionFlowCase("same-value boolean and string seat writes are silent",
+                            "globalThis.b=c.state(false);globalThis.t=c.state('a');"
+                            "f=c.flow(Flow().watch(b,v=>{n++;return v}));g=c.flow(Flow().watch(t,v=>{n+=10;return v}))",
+                            "b.set(false);t.set('a');b.set(true);t.set('z');b.set(true);t.set('z');n",
+                            "11");
     checkProductionFlowCase(
         "watch throws and failure runs once",
         "f=c.flow(Flow().watch(s,v=>{throw 'adapter'}).step(v=>log.push('bad')).onFailure(e=>{n++;result=f.run(8)}))",

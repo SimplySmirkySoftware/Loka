@@ -769,14 +769,20 @@ namespace smirkycard
         record->image.set(image, true);
         return JS_UNDEFINED;
       }
+      // Same-value writes are silent. An unchanged write would still commit the
+      // seat (State::set marks it), so Show seats and watches over it would
+      // re-run a layout for nothing; a Flow that republishes a derived fact
+      // (LAPTOP.JS's narrow/wide pair) drew SmirkyTracker's list twice.
       if (record->kind == JsSeatRecord::STRING && JS_IsString(value))
       {
         size_t n = 0;
         const char *s = JS_ToCStringLen(ctx, &n, value);
         if (!s)
           return JS_EXCEPTION;
-        record->string.writeSeat().set(loka::core::String::Utf8(s, n), true);
+        const loka::core::String next = loka::core::String::Utf8(s, n);
         JS_FreeCString(ctx, s);
+        if (!loka::core::stateValuesEqual(record->string.get(), next))
+          record->string.writeSeat().set(next);
         return JS_UNDEFINED;
       }
       if (record->kind == JsSeatRecord::INTEGER && JS_IsNumber(value))
@@ -787,12 +793,15 @@ namespace smirkycard
           error_.set(loka::core::String::Literal("state(number) requires an integer"));
           return JS_UNDEFINED;
         }
-        record->integer.writeSeat().set(static_cast<int>(v), true);
+        if (record->integer.get() != static_cast<int>(v))
+          record->integer.writeSeat().set(static_cast<int>(v));
         return JS_UNDEFINED;
       }
       if (record->kind == JsSeatRecord::BOOLEAN && JS_IsBool(value))
       {
-        record->boolean.writeSeat().set(JS_ToBool(ctx, value) != 0, true);
+        const bool next = JS_ToBool(ctx, value) != 0;
+        if (record->boolean.get() != next)
+          record->boolean.writeSeat().set(next);
         return JS_UNDEFINED;
       }
       fail("state seat type mismatch.");
