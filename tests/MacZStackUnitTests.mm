@@ -1476,7 +1476,7 @@ void testMacZStackPhotoOrientation()
       continue; // a blurred transition row does not discriminate
     NSColor *actual = pixel(replay, unit, NSMidX(visible), NSMinY(visible) + row / scale);
     const double actualLean = [actual redComponent] - [actual blueComponent];
-    LOKA_VERIFY((lean > 0) == (actualLean > 0.15) || (lean < 0) == (actualLean < -0.15));
+    LOKA_VERIFY(lean > 0 ? actualLean > 0.15 : actualLean < -0.15);
     ++compared;
   }
   LOKA_VERIFY(compared >= 2);
