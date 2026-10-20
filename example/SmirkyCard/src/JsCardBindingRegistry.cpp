@@ -135,6 +135,26 @@ namespace smirkycard
                         JS_NewCFunction(ctx, &ScriptRuntime::expStaticBlurUnit, "expStaticBlurUnit", 0));
       return node;
     }
+    /** Reads a tree policy from the tree's own data property, the one its modifier
+        wrote (`naturalWidth()` writes "rowWidth", `expStaticBlurUnit()` writes
+        "staticBlurUnit"), so a value placed on Object.prototype is not a claim. */
+    bool ownTreePolicy(JSContext *ctx, JSValueConst tree, const char *name)
+    {
+      JSAtom key = JS_NewAtom(ctx, name);
+      if (key == JS_ATOM_NULL)
+        return false;
+      JSPropertyDescriptor property;
+      const int found = JS_GetOwnProperty(ctx, &property, tree, key);
+      JS_FreeAtom(ctx, key);
+      if (found <= 0)
+        return false;
+      JS_FreeValue(ctx, property.getter);
+      JS_FreeValue(ctx, property.setter);
+      int32_t policy = 0;
+      const bool claimed = JS_IsNumber(property.value) && JS_ToInt32(ctx, &policy, property.value) == 0 && policy == 1;
+      JS_FreeValue(ctx, property.value);
+      return claimed;
+    }
     JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
     {
       JSValue children = JS_NewArray(ctx);
@@ -258,11 +278,8 @@ namespace smirkycard
         case STACK_ROW:
         {
           loka::app::Row *row = new (std::nothrow) loka::app::Row();
-          JSValue policy = JS_GetPropertyStr(ctx, tree, "rowWidth");
-          int32_t widthPolicy = 0;
-          if (row && JS_IsNumber(policy) && JS_ToInt32(ctx, &widthPolicy, policy) == 0 && widthPolicy == 1)
+          if (row && ownTreePolicy(ctx, tree, "rowWidth"))
             row->naturalWidth();
-          JS_FreeValue(ctx, policy);
           stack = row;
           nest = row;
           break;
@@ -277,11 +294,8 @@ namespace smirkycard
         case STACK_DEPTH:
         {
           loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
-          JSValue policy = JS_GetPropertyStr(ctx, tree, "staticBlurUnit");
-          int32_t groundPolicy = 0;
-          if (depthStack && JS_IsNumber(policy) && JS_ToInt32(ctx, &groundPolicy, policy) == 0 && groundPolicy == 1)
+          if (depthStack && ownTreePolicy(ctx, tree, "staticBlurUnit"))
             depthStack->expStaticBlurUnit();
-          JS_FreeValue(ctx, policy);
           stack = depthStack;
           nest = depthStack;
           break;

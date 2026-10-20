@@ -4231,6 +4231,28 @@ namespace
         LOKA_VERIFY(unit->asTextNode()->props.text_->get().compare(loka::core::String::Literal("u")) == 0);
       }
     }
+    // A policy placed on Object.prototype is not the tree's own claim: lowering
+    // reads only the property the modifier wrote, for both tree policies.
+    smirkycard::ScriptRuntime inherited;
+    loka::core::String error;
+    LOKA_VERIFY(inherited.loadBuiltin("Object.prototype.staticBlurUnit=1;Object.prototype.rowWidth=1;"
+                                      "card('first',class{compose(){return VStack("
+                                      "ZStack(Text('g'),Text('u')).TEST_ID('Depth'),"
+                                      "Row(Text('a')).TEST_ID('Shared'))}});",
+                                      error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, inherited));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *stack = windowNode(window, "Depth");
+    loka::app::scene::Node *row = windowNode(window, "Shared");
+    LOKA_VERIFY(stack && stack->kind() == loka::app::scene::NODE_KIND_ZSTACK);
+    LOKA_VERIFY(stack->asZStackNode()->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_WINDOW);
+    LOKA_VERIFY(row && row->asStackNode());
+    LOKA_VERIFY(row->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_SHARED);
   }
   void checkBoxLowering()
   {
