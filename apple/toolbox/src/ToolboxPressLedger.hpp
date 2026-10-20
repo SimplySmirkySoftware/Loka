@@ -59,7 +59,7 @@ public:
     forgetIn(this->live_, kind, index);
     forgetIn(this->staging_, kind, index);
   }
-  bool topmostAt(const Point &, ToolboxScenePlatformController &, ResolvedPress &) const;
+  bool topmostAt(const Point &, const ToolboxScenePlatformController &, ResolvedPress &) const;
 
 private:
   static void forgetIn(std::vector<PressRow> &rows, PressRow::Kind kind, std::size_t index)

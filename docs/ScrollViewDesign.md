@@ -210,6 +210,37 @@ keeps the value the preceding layout clamped:
   them on every exit, so AppKit's post-at-restore echo sees the completed fact
   after success and still reports the native origin after refusal.
 
+### Wheel targeting and the unit shield (#1500)
+
+Loka leaves the wheel's target to the OS and binds only what its own structure
+decides.
+
+- **The OS picks the first target.** On Win32, a wheel that reaches the root is
+  forwarded to the nearest ScrollView ancestor of the window under the pointer
+  (`forwardMouseWheel`). AppKit sends a non-momentum wheel to the view under the
+  pointer, from which it climbs the responder chain. Scroll keys follow focus
+  instead (on Toolbox, only the focused TextEditor: #1416, #1492).
+- **A unit shields what lies beneath it.** A ZStack unit's window or view is a
+  sibling of the ground under the same parent. A wheel that the OS delivers by
+  the pointer and that starts over a unit therefore never reaches a ScrollView
+  beneath it, while a ZStack inside a ScrollView passes the wheel up to that
+  ScrollView.
+  `testWin32ZStackUnitWheelLeavesGroundScrollView` and
+  `testMacZStackUnitWheelLeavesGroundScrollView` pin both axes.
+- **Everything else stays the OS's and is not pinned:**
+  - a control that takes the wheel itself: a Win32 PopupMenu's combobox changes
+    its item, while macOS `NSPopUpButton` passes the wheel on;
+  - a Win32 wheel delivered to a focused native control. A focused Button or
+    EditText inside the ground ScrollView passes the wheel to the viewport by
+    default propagation, so the ground scrolls even with the pointer over a
+    unit;
+  - macOS momentum;
+  - an inner ScrollView reaching its end. A Win32 Loka viewport consumes the
+    wheel there without passing it outward, and nested scrolling is a later
+    design topic.
+- **Toolbox has no wheel source today.** When one arrives, its first target
+  follows the same rule.
+
 ## Known debts
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already

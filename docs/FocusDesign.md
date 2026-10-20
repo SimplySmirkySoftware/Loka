@@ -422,6 +422,12 @@ pressable row that tracks, emits nothing, and stops the press like any button
 (owner ruling after #1496). Native visibility uses `contrlVis`, never
 `usedThisFrame`.
 
+Hover asks the same door: `isPointInEdit` shows the I-beam only when the
+topmost pressable row is an edit row (native edit or drawn edit hit) whose
+owner is ATTACHED. An edit covered by a later unit or later pressable row no
+longer shows the I-beam; neither does a parked edit. TextEditor withdraws its
+row on parked delivery, so the latter mostly concerns EditText before its sweep.
+
 Native dispatch leaves focus alone; EDIT_CONTROL activates its native edit;
 EDIT_HIT connects fallback focus after native deactivation. Popup, cell, drawn
 button, and empty-space dispatch first clear native and fallback focus.
@@ -436,6 +442,20 @@ barId H x V search once per eligible candidate, asks one owner question, and
 dispatches once. Selection allocates nothing and walks no foreign rows. Erase
 performs one forget over LIVE/STAGING (tens), shifting that kind's later indices.
 Existing dispatch may enqueue damage or perform an allocating app action.
+Hover follows `ToolboxApp::run` → `sampleHover(false)` →
+`ToolboxWindow::updateCursor` → `isPointInEdit` on every foreground event-loop
+iteration. `WaitNextEvent` requests a one-tick sleep: roughly 60 idle samples
+per second even with the pointer at rest, plus event-driven iterations (not a
+measured rate or a hard frequency cap). Each query walks only this controller's
+LIVE rows (normally tens) backward, stops at the first row `resolvePress`
+accepts, and asks one owner question, without allocation. The old query walked
+`editControls_` then `editHits_`, also stopping on a match; the ledger walk is
+of similar expected scale but includes other pressable rows and units.
+When the selected row is a visible native Control Manager control,
+`resolvePress` additionally calls `TestControl` once per sample. This cost
+occurs only while the pointer is over such a control, including when it rests
+there; native TextEdit rows have no Control Manager handle. Viewport bars
+retain the association search described above.
 
 TextEditor withdraws its edit row and hides/revokes its bar when the parked
 fact is delivered; subsequent presses there see empty space or an underlying
@@ -452,8 +472,9 @@ hidden-control erase cannot punch through a unit above a retiring ground row
 outside the ledger is TrackControl feedback on a partially covered row and
 TextEdit painting (caret, keys, scroll) on a covered focused field (#1498).
 There is no window-wide pending-redraw gate.
-Hover (`isPointInEdit`) and wheel routing are separate follow-ups; Win32 and
-macOS already use native targeting and need no equivalent change here.
+Wheel routing is not part of this door: Toolbox has no wheel source, and Win32
+and macOS leave the wheel's target to the OS (see
+[ScrollView design](ScrollViewDesign.md#wheel-targeting-and-the-unit-shield-1500)).
 
 Keys follow the same rule. A focused edit row keeps native focus until its
 sweep (TextEditor: until the parked fact is delivered and the row withdraws),
