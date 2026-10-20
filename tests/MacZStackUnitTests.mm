@@ -1344,16 +1344,17 @@ void testMacZStackPhotoReplayAndRefusal()
   Fixture f;
   PhotoDrawProbe probe;
   NSView *unit = preparePhoto(f, ZSTACK_UNIT_GROUND_EXP_BLUR);
-  // Offscreen with no photo cannot capture or enter DISABLED, even with a
-  // pending failure. The next on-screen capture must consume that failure.
+  if (!showPhoto(f))
+    return;
+  // Settle first: ordering the window front delivers its own display and, on
+  // some hosts, a backing-properties notification that resets the lifetime.
+  fullPhotoDraw(f);
+  LOKA_VERIFY(loka::testing::macStackPhoto(unit));
+  // An offscreen draw with a pending failure neither captures nor enters
+  // DISABLED: the photo stays. The next on-screen full draw consumes it.
   loka::testing::failMacPhotoCaptures(1);
   captureUnit(unit);
-  verifyEmptyPhoto(unit);
-  if (!showPhoto(f))
-  {
-    loka::testing::failMacPhotoCaptures(0);
-    return;
-  }
+  LOKA_VERIFY(loka::testing::macStackPhoto(unit) && !loka::testing::macStackPhotoDisabled(unit));
   fullPhotoDraw(f);
   LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
   {
