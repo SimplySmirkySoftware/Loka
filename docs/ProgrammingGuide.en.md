@@ -1689,17 +1689,18 @@ of 8-pixel squares; native PowerPC applications show a smooth blur.
 
 On Toolbox, StaticBlur may be placed over content that changes. It captures
 when it appears: the first time a full redraw of its area is possible at that
-position and size, including an OS update after a resize redraws the whole
-window. Before that first capture it shows window ground. The picture does not
-follow later changes beneath it. To refresh it, hide and show it again; capture
-is still not guaranteed, for example when another window covers part of it.
+position and size. An OS update that redraws the unit's whole area, for example
+after the window is resized, is also a capture opportunity, not a promise.
+Before that first capture it shows window ground. The picture does not follow
+later changes beneath it. To refresh it, hide and show it again; capture is
+still not guaranteed, for example when another window covers part of it.
 Capture requires 32-bit QuickDraw, an FPU, and a unit contained within one
-screen of at least 8-bit depth. A unit off one screen
-paints window ground. Pixels hidden by other windows at capture stay white for
-that snapshot. Position or size changes allow a new capture at the next full
-redraw of that area. A ZStack rebuilt at the same address with the same
-rectangle in one pass keeps the old picture. Allocation or capture failure
-leaves window ground for that lifetime.
+screen of at least 8-bit depth. A unit off one screen paints window ground.
+Pixels not visible at capture are captured white, including those hidden by
+other windows or by window parts such as the size box. Position or size changes
+allow a new capture at the next full redraw of that area. A ZStack rebuilt at
+the same address with the same rectangle in one pass keeps the old picture.
+Allocation or capture failure leaves window ground for that lifetime.
 
 On Toolbox, a press on the unit stops there (the 2b shield), but a field or
 control the unit covers still takes keys and Tab, its caret still blinks, and

@@ -5,6 +5,8 @@ namespace toolbox_host
 {
   extern unsigned menuDraws, menuClears, menuDisposes, menuValueWrites;
   extern unsigned menuInitializations;
+  // Entries in the fake menu color information table; ClearMenuBar deletes them.
+  extern int menuColorEntries;
   extern std::vector<MenuHandle> installedMenus;
   /** Immutable call facts captured at the fake Toolbox boundary. */
   struct ItemCmdCall
@@ -21,7 +23,11 @@ inline void DeleteMenuItem(MenuHandle menu, short item) { menu->items.erase(menu
 inline void EnableItem(MenuHandle, short) { ++toolbox_host::menuValueWrites; }
 inline void DisableItem(MenuHandle, short) { ++toolbox_host::menuValueWrites; }
 inline void CheckItem(MenuHandle, short, bool) { ++toolbox_host::menuValueWrites; }
-inline void ClearMenuBar() { ++toolbox_host::menuClears; toolbox_host::installedMenus.clear(); }
+inline void ClearMenuBar() { ++toolbox_host::menuClears; toolbox_host::installedMenus.clear(); toolbox_host::menuColorEntries = 0; }
+typedef int *MCTableHandle;
+inline MCTableHandle GetMCInfo() { return new int(toolbox_host::menuColorEntries); }
+inline void SetMCInfo(MCTableHandle table) { toolbox_host::menuColorEntries = *table; }
+inline void DisposeMCInfo(MCTableHandle table) { delete table; }
 void InitMenus();
 inline void DrawMenuBar() { ++toolbox_host::menuDraws; }
 inline void AppendResMenu(MenuHandle, unsigned long) {}

@@ -19,6 +19,7 @@ namespace toolbox_host
   void (*afterMenuSet)() = 0;
   unsigned beeps = 0;
   unsigned menuDraws = 0, menuClears = 0, menuDisposes = 0, menuValueWrites = 0;
+  int menuColorEntries = 0;
 }
 long GetScriptManagerVariable(short) { return smRoman; }
 using namespace loka::app;
@@ -504,7 +505,7 @@ void testToolboxMenuBridgeReleaseThenAbsentClearsNative()
   f.app.menuAttachment().project(sources(0, 0));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
   LOKA_VERIFY(toolbox_host::menuClears == 1 && toolbox_host::menuDraws == 1);
-  LOKA_VERIFY(toolbox_host::menuInitializations == 1);
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   clearCalls();
   f.app.menuAttachment().project(sources(0, 0));
   noCalls();
@@ -517,6 +518,9 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuTitles.size() == 2);
+  // InitMenus draws an empty menu bar itself, past the App's draw gate, so a
+  // projection must not call it: the only screen write is the deferred draw.
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
@@ -533,12 +537,28 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
+}
+void testToolboxMenuProjectionKeepsMenuColors()
+{
+  // InitMenus loaded 'mctb' 0 into the color table; ClearMenuBar deletes its
+  // entries. A projection must keep the table it found (bot P2 on #1526).
+  ToolboxApp app;
+  MenuBarDefinition first = bar(), second = bar("Save");
+  toolbox_host::menuColorEntries = 3;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&second, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  toolbox_host::menuColorEntries = 0;
 }
 void testToolboxMenuShortcutProjectsItemCmd()
 {
@@ -796,6 +816,7 @@ int main(int argc, char **argv)
     PIN(testToolboxAboutTitleFollowsStateAcrossRebuild),
     PIN(testToolboxMenuDoorFiltersRowsAndForwardsScene),
     PIN(testToolboxMenuProjectionDefersBackgroundDraws),
+    PIN(testToolboxMenuProjectionKeepsMenuColors),
     PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
     PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
     PIN(testToolboxSubmenuIdDiffersFromItsParent),

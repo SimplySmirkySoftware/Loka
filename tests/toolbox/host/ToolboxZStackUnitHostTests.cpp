@@ -1,3 +1,4 @@
+#include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -10,6 +11,10 @@
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstring>
 #include <cstdio>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include "support/TextEditorStateOwner.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "toolbox/ToolboxTextEditorAccess.hpp"
@@ -131,12 +136,20 @@ namespace
       this->window.scenePlatformController_ = &this->controller;
       toolbox_host::staticCaptures = toolbox_host::staticCopies = toolbox_host::staticReleases = 0;
       toolbox_host::staticEligible = toolbox_host::staticCaptureSucceeds = true;
-      toolbox_host::staticUpdateCovers = toolbox_host::staticCopySucceeds = true;
+      toolbox_host::staticCopySucceeds = true;
     }
     ~StaticFixture()
     {
       this->controller.rootNode_ = 0;
       this->window.scenePlatformController_ = 0;
+    }
+    void update(bool covered = true)
+    {
+      Region region = {sizeof(Region), this->window.port.portRect};
+      Region *pointer = &region;
+      this->window.port.updateRgn = covered ? &pointer : 0;
+      this->window.drawForUpdate();
+      this->window.port.updateRgn = 0;
     }
     Rect rect()
     {
@@ -155,9 +168,8 @@ namespace
   void staticNoRequests()
   {
     StaticFixture f;
-    toolbox_host::staticUpdateCovers = false;
     const unsigned before = toolbox_host::invalidations;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     LOKA_VERIFY(toolbox_host::invalidations == before);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     for (unsigned i = 0; i < 3; ++i)
@@ -202,8 +214,7 @@ namespace
   {
     flushFirstCapture();
     StaticFixture f;
-    toolbox_host::staticUpdateCovers = false;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
     Rect small = f.rect();
@@ -220,18 +231,19 @@ namespace
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     toolbox_host::staticEligible = false;
     const unsigned copies = toolbox_host::staticCopies;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     LOKA_VERIFY(toolbox_host::staticCopies == copies);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
     toolbox_host::staticEligible = true;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
+    LOKA_VERIFY(toolbox_host::invalidations == before);
   }
   void flushFirstCapture()
   {
@@ -248,8 +260,6 @@ namespace
   /** EMPTY admission matrix, followed by READY on every later opportunity. */
   void staticOpportunities()
   {
-    const ToolboxErasedPass::Origin origins[] = {
-        ToolboxErasedPass::FLUSH_DRAW, ToolboxErasedPass::COMPOSITION_REPLAY, ToolboxErasedPass::UPDATE_DRAW};
     for (unsigned o = 0; o < 3; ++o)
       for (unsigned open = 0; open < 2; ++open)
         for (unsigned contains = 0; contains < 3; ++contains)
@@ -263,13 +273,15 @@ namespace
               --area.right;
             if (contains == 2)
               area = Rect();
-            toolbox_host::staticUpdateCovers = covers != 0;
+            if (o == 2 && !covers)
+              area = Rect();
+            const unsigned before = toolbox_host::invalidations;
             const ToolboxUnitLedger::UnitSeat row = {&f.stack, 1, rect, rect};
             ToolboxErasedPass pass;
             bool painted;
             if (open)
             {
-              ToolboxErasedPass::Guard guard(pass, origins[o], area);
+              ToolboxErasedPass::Guard guard(pass, area);
               painted = f.controller.staticBlur_.paint(f.window.window(), row, pass);
             }
             else
@@ -279,36 +291,118 @@ namespace
             LOKA_VERIFY(toolbox_host::staticCaptures == (admitted ? 1u : 0u));
             LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_)
                         == (admitted ? ToolboxStaticBlur::READY : ToolboxStaticBlur::EMPTY));
-            toolbox_host::staticUpdateCovers = true;
             for (unsigned later = 0; later < 3; ++later)
             {
-              ToolboxErasedPass::Guard guard(pass, origins[later], rect);
+              ToolboxErasedPass::Guard guard(pass, rect);
               const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass);
               LOKA_VERIFY(copied);
               LOKA_VERIFY(toolbox_host::staticCaptures == 1);
             }
             LOKA_VERIFY(!f.window.hasPendingInvalidate());
+            LOKA_VERIFY(toolbox_host::invalidations == before);
           }
   }
   void erasedAdmissionMatrix()
   {
     ToolboxErasedPass pass;
+    ToolboxWindow unrelated;
+    HostPortScope unrelatedPort(unrelated.window());
+    SetRect(&unrelated.port.portBits.bounds, 1000, 2000, 3000, 4000);
     const Rect unit = {10, 10, 30, 30};
-    const Rect areas[] = {{0, 0, 40, 40}, {10, 10, 20, 20}, {0, 0, 0, 0}};
-    const ToolboxErasedPass::Origin origins[] = {
-        ToolboxErasedPass::UPDATE_DRAW, ToolboxErasedPass::FLUSH_DRAW, ToolboxErasedPass::COMPOSITION_REPLAY};
-    for (unsigned a = 0; a < 3; ++a)
-      for (unsigned covers = 0; covers < 2; ++covers)
+    const Rect empty = {0, 0, 0, 0};
+    const Rect areas[] = {{0, 0, 40, 40}, {10, 10, 20, 20}, {0, 0, 0, 0}, {50, 50, 60, 60}};
+    for (unsigned a = 0; a < 4; ++a)
+      for (unsigned e = 0; e < 4; ++e)
       {
-        LOKA_VERIFY(!pass.admitsCapture(unit, covers != 0));
+        LOKA_VERIFY(!pass.admitsCapture(unit));
         for (unsigned o = 0; o < 3; ++o)
         {
-          ToolboxErasedPass::Guard guard(pass, origins[o], areas[a]);
+          const Rect evidence = o == 0 ? ToolboxCaptureEvidence(areas[a], areas[e]) : areas[a];
+          ToolboxErasedPass::Guard guard(pass, evidence);
           LOKA_VERIFY(pass.isOpen());
-          LOKA_VERIFY(pass.admitsCapture(unit, covers != 0) == (a == 0 && (o != 0 || covers)));
+          LOKA_VERIFY(!pass.admitsCapture(empty));
+          LOKA_VERIFY(pass.admitsCapture(unit) == (a == 0 && (o != 0 || e == 0)));
         }
         LOKA_VERIFY(!pass.isOpen());
       }
+    equal(ToolboxCaptureEvidence(areas[0], areas[3]), empty);
+    for (short offset = -50; offset <= 50; offset += 100)
+    {
+      const Rect bounds = {offset, offset, 200, 200};
+      Region region = {sizeof(Region), unit};
+      Region *pointer = &region;
+      Rect expected = unit;
+      OffsetRect(&expected, offset, offset);
+      equal(ToolboxUpdateEvidence(&pointer, bounds), expected);
+      region.rgnSize += 2;
+      equal(ToolboxUpdateEvidence(&pointer, bounds), empty);
+      pointer = 0;
+      equal(ToolboxUpdateEvidence(&pointer, bounds), empty);
+      equal(ToolboxUpdateEvidence(0, bounds), empty);
+    }
+    for (unsigned e = 0; e < 4; ++e)
+      for (unsigned route = 0; route < 3; ++route)
+      {
+        StaticFixture f;
+        ToolboxInputDoor::render(f.controller);
+        Region region = {sizeof(Region), f.rect()};
+        if (e == 1)
+          --region.rgnBBox.right;
+        if (e == 2)
+          region.rgnBBox = empty;
+        if (e == 3)
+          region.rgnSize += 2;
+        Region *pointer = &region;
+        f.window.port.updateRgn = &pointer;
+        const unsigned before = toolbox_host::invalidations;
+        if (route == 0)
+          f.window.drawForUpdate();
+        if (route == 1)
+          f.window.drawForFlush();
+        if (route == 2)
+          ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
+        LOKA_VERIFY(toolbox_host::staticCaptures == ((route != 0 || e == 0) ? 1u : 0u));
+        LOKA_VERIFY(toolbox_host::invalidations == before);
+        LOKA_VERIFY(!f.window.hasPendingInvalidate());
+        if (route == 0)
+          equal(region.rgnBBox, empty); // BeginUpdate consumed the source.
+      }
+    {
+      ToolboxWindow window;
+      Region region = {sizeof(Region), window.port.portRect};
+      Region *pointer = &region;
+      window.port.updateRgn = &pointer;
+      const unsigned before = toolbox_host::invalidations;
+      window.drawForUpdate(); // A controller is not required to consume an OS update.
+      equal(region.rgnBBox, empty);
+      LOKA_VERIFY(toolbox_host::invalidations == before);
+    }
+#if !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (!child)
+    {
+      StaticFixture nested;
+      ToolboxErasedPass::Guard guard(nested.controller.erasedPass(), empty);
+      nested.window.drawForUpdate();
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+    std::printf("[skip] nested-update assertion requires a debug build without ASan.\n");
+#endif
+    StaticFixture f;
+    Region region = {sizeof(Region), f.window.port.portRect};
+    Region *pointer = &region;
+    f.window.port.updateRgn = &pointer;
+    const unsigned before = toolbox_host::invalidations;
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    f.window.drawForUpdate();
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(toolbox_host::invalidations == before);
   }
   void staticCopyFailure()
   {
@@ -317,7 +411,7 @@ namespace
     toolbox_host::staticCopySucceeds = false;
     toolbox_host::erasedRects.clear();
     const unsigned copies = toolbox_host::staticCopies;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update();
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
     LOKA_VERIFY(!toolbox_host::erasedRects.empty());
     equal(toolbox_host::erasedRects.back(), f.rect());
@@ -325,7 +419,7 @@ namespace
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
     toolbox_host::staticCopySucceeds = true;
     toolbox_host::erasedRects.clear();
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update();
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 2);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1 && toolbox_host::staticReleases == 0);
     LOKA_VERIFY(toolbox_host::erasedRects.empty());
@@ -373,8 +467,7 @@ namespace
   {
     staticBandGeometry();
     StaticFixture f;
-    toolbox_host::staticUpdateCovers = false;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update(false);
     ZStackNode other(f.stack.props);
     const Rect rect = f.rect();
     const ToolboxUnitLedger::UnitSeat first = {&f.stack, 1, rect, rect};
@@ -383,7 +476,7 @@ namespace
     ledger.push(first);
     ledger.push(second);
     f.controller.staticBlur_.reconcile(ledger.firstStaticBlur());
-    ToolboxErasedPass::Guard pass(f.controller.erasedPass(), ToolboxErasedPass::COMPOSITION_REPLAY, rect);
+    ToolboxErasedPass::Guard pass(f.controller.erasedPass(), rect);
     const bool laterPainted = f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass());
     LOKA_VERIFY(!laterPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
@@ -409,8 +502,8 @@ namespace
   {
     StaticFixture f;
     toolbox_host::staticEligible = false;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    f.update();
+    f.window.drawForFlush();
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
     const unsigned before = toolbox_host::invalidations;
     toolbox_host::staticEligible = true;
@@ -419,7 +512,7 @@ namespace
     LOKA_VERIFY(toolbox_host::invalidations == before);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
   }
@@ -433,8 +526,12 @@ namespace
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::DISABLED);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     toolbox_host::staticCaptureSucceeds = true;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    const unsigned before = toolbox_host::invalidations;
+    f.update(false);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::DISABLED);
+    LOKA_VERIFY(toolbox_host::invalidations == before);
+    f.update();
+    f.window.drawForFlush();
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
@@ -444,14 +541,14 @@ namespace
   {
     StaticFixture f;
     f.ready();
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update();
     LOKA_VERIFY(toolbox_host::staticReleases == 0);
     if (std::strcmp(reason, "StaticMissingRow") == 0)
       f.unit->height = 0;
     if (std::strcmp(reason, "StaticChangedRect") == 0)
     {
       ++f.unit->height;
-      f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+      f.update();
       // A short child's growth leaves the ground-filled band unchanged.
       LOKA_VERIFY(toolbox_host::staticReleases == 0);
       f.unit->height = 71; // Now the band itself grows beyond the 70-high ground.
@@ -460,21 +557,21 @@ namespace
       f.stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
     if (std::strcmp(reason, "StaticAbortedLayout") == 0)
       f.controller.rootNode_ = 0;
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.update();
     LOKA_VERIFY(toolbox_host::staticReleases == 1);
     const bool changedRect = std::strcmp(reason, "StaticChangedRect") == 0;
     LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_) == changedRect);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_)
                 == (changedRect ? ToolboxStaticBlur::READY : ToolboxStaticBlur::EMPTY));
     LOKA_VERIFY(toolbox_host::staticCaptures == (changedRect ? 2u : 1u));
-    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    f.window.drawForFlush();
     LOKA_VERIFY(toolbox_host::staticCaptures == (changedRect ? 2u : 1u));
     LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_) == changedRect);
     if (changedRect)
     {
       LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
       f.unit->height = 72;
-      f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      f.window.drawForFlush();
       LOKA_VERIFY(toolbox_host::staticReleases == 2);
       LOKA_VERIFY(toolbox_host::staticCaptures == 3);
       LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
@@ -501,9 +598,10 @@ namespace
     ToolboxInputDoor::render(controller);
     LOKA_VERIFY(controller.frostCache_.paints == 0);
     {
-      ToolboxErasedPass::Guard erased(
-          controller.erasedPass(), ToolboxErasedPass::UPDATE_DRAW, window.window()->portRect);
-      ToolboxInputDoor::render(controller);
+      window.scenePlatformController_ = &controller;
+      const unsigned before = toolbox_host::invalidations;
+      window.drawForUpdate(); // Empty evidence must still paint frost L.
+      LOKA_VERIFY(toolbox_host::invalidations == before);
       LOKA_VERIFY(controller.frostCache_.paints == 1);
     }
     LOKA_VERIFY(!controller.erasedPass().isOpen());
@@ -523,8 +621,7 @@ namespace
     LOKA_VERIFY(controller.frostCache_.paints == 2);
     stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
     {
-      ToolboxErasedPass::Guard erased(
-          controller.erasedPass(), ToolboxErasedPass::FLUSH_DRAW, window.window()->portRect);
+      ToolboxErasedPass::Guard erased(controller.erasedPass(), window.window()->portRect);
       ToolboxInputDoor::render(controller);
       LOKA_VERIFY(controller.frostCache_.paints == 3);
     }
