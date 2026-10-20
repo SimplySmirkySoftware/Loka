@@ -115,7 +115,7 @@ run_all() {
 run_all
 [ "$(grep -c '^hformat ' "$SANDBOX/all.log")" -eq 1 ] || fail "All reformatted more than once"
 [ "$(grep -c '^hcopy <-m>' "$SANDBOX/all.log")" -eq 10 ] || fail "All must copy ten apps"
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 44 ] || fail "All must copy all 44 assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 46 ] || fail "All must copy all 46 assets"
 for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "All omitted SmirkyCard $script"
@@ -131,7 +131,7 @@ printf '\r\n  # extra card\r\n\r\n  FOURTH.JS  ' >> "$SANDBOX/repo/example/Smirk
 touch "$SANDBOX/repo/example/SmirkyCard/FOURTH.JS"
 : > "$SANDBOX/all.log"
 run_all
-[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 45 ] || fail "manifest addition did not copy 45 assets"
+[ "$(grep -c '^hcopy <-r>' "$SANDBOX/all.log")" -eq 47 ] || fail "manifest addition did not copy 47 assets"
 for script in MAIN.JS MINES.JS VIEWER.JS LAPTOP.JS FOURTH.JS; do
   grep -Fx "hcopy <-r> <$SANDBOX/repo/example/SmirkyCard/$script> <:>" "$SANDBOX/all.log" >/dev/null ||
     fail "extended manifest omitted $script"

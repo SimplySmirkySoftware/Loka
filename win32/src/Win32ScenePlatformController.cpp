@@ -1639,8 +1639,10 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
           if (this->refuseNarrowingInScrollScope(childY))
             continue; // Preserve the previous unit rectangle on channel refusal.
         }
+        const int bandBottom =
+            loka::app::layout::zStackUnitBottom(stack->props.unitGround, index, state.y, childY, maxY);
         unit->place(this->displayScale_.projectFrame(
-            loka::core::Frame(projected.x, projected.y, state.width, childY - state.y)));
+            loka::core::Frame(projected.x, projected.y, state.width, bandBottom - state.y)));
       }
       if (childY > maxY)
         maxY = childY;

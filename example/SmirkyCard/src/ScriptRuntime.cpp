@@ -368,7 +368,8 @@ namespace smirkycard
     }
     return copy;
   }
-  JSValue ScriptRuntime::naturalWidth(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  JSValue ScriptRuntime::withTreePolicy(
+      JSContext *ctx, JSValueConst thisValue, int argc, const char *nodeName, const char *method, const char *property)
   {
     ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
     JSValue kind = JS_GetPropertyStr(ctx, thisValue, "kind");
@@ -378,24 +379,32 @@ namespace smirkycard
     if (converted < 0)
       return JS_EXCEPTION;
     IJsNodeLowering *lowering = runtime ? runtime->registry_.lookup(number) : 0;
-    if (!lowering || std::strcmp(lowering->name, "Row"))
-      return JS_ThrowTypeError(ctx, "naturalWidth() applies to Row");
+    if (!lowering || std::strcmp(lowering->name, nodeName))
+      return JS_ThrowTypeError(ctx, "%s() applies to %s", method, nodeName);
     if (argc != 0)
-      return JS_ThrowTypeError(ctx, "naturalWidth() takes no arguments");
-    JSValue policy = JS_GetPropertyStr(ctx, thisValue, "rowWidth");
-    const bool natural = JS_IsNumber(policy) && JS_ToInt32(ctx, &number, policy) == 0 && number == 1;
+      return JS_ThrowTypeError(ctx, "%s() takes no arguments", method);
+    JSValue policy = JS_GetPropertyStr(ctx, thisValue, property);
+    const bool selected = JS_IsNumber(policy) && JS_ToInt32(ctx, &number, policy) == 0 && number == 1;
     JS_FreeValue(ctx, policy);
-    if (natural)
+    if (selected)
       return JS_DupValue(ctx, thisValue);
     JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
       return copy;
-    if (JS_SetPropertyStr(ctx, copy, "rowWidth", JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
+    if (JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
     {
       JS_FreeValue(ctx, copy);
       return JS_EXCEPTION;
     }
     return copy;
+  }
+  JSValue ScriptRuntime::naturalWidth(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    return withTreePolicy(ctx, thisValue, argc, "Row", "naturalWidth", "rowWidth");
+  }
+  JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit");
   }
   JSValue ScriptRuntime::enabled(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *argv)
   {

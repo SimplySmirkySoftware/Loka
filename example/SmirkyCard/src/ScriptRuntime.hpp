@@ -154,6 +154,7 @@ namespace smirkycard
     evalMain(JsEngine &engine, const char *source, std::size_t length, const char *name, loka::core::String &error);
     /* Helper callback is public only so the local tree factory can install it. */
     static JSValue naturalWidth(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
+    static JSValue expStaticBlurUnit(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     static JSValue testId(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     static JSValue enabled(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
 
@@ -256,6 +257,8 @@ namespace smirkycard
     /** Raw entry: callers gate before formatting a possible exception. */
     JSValue rawCall(JsEngine &engine, JSValueConst fn, int argc, JSValueConst *argv);
     bool captureException(JsEngine &engine, loka::core::String &error);
+    static JSValue withTreePolicy(
+        JSContext *ctx, JSValueConst tree, int argc, const char *nodeName, const char *method, const char *property);
     static JSValue card(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     /** MISSING: the file cannot be opened. FAILED: it opened, but its size or
         content was refused (unreadable, over 64 KiB). */

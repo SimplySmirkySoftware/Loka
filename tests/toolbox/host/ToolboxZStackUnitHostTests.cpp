@@ -145,16 +145,17 @@ namespace
     }
     void ready()
     {
-      this->window.draw();
-      this->window.flushInvalidate();
+      this->window.requestInvalidate();
       this->window.flushInvalidate();
       LOKA_VERIFY(ToolboxStaticBlurInspection::phase(this->controller.staticBlur_) == ToolboxStaticBlur::READY);
     }
   };
+  void flushFirstCapture();
   void staticAdmission()
   {
+    flushFirstCapture();
     StaticFixture f;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::NEEDED);
     Rect small = f.rect();
@@ -172,23 +173,107 @@ namespace
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     toolbox_host::staticEligible = false;
     const unsigned copies = toolbox_host::staticCopies;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticCopies == copies);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
     toolbox_host::staticEligible = true;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
+  }
+  void flushFirstCapture()
+  {
+    StaticFixture f;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    LOKA_VERIFY(f.unit->renders == 1);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1 && f.unit->renders == 1);
+  }
+  void updateNeverCaptures()
+  {
+    StaticFixture f;
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::NEEDED);
+    f.controller.completedInvalidateFlush();
+    LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
+    equal(f.window.pendingInvalidateRects_[0], f.rect());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+  }
+  void erasedAdmissionMatrix()
+  {
+    ToolboxErasedPass pass;
+    const Rect unit = {10, 10, 30, 30};
+    const Rect areas[] = {{0, 0, 40, 40}, {10, 10, 20, 20}};
+    const ToolboxErasedPass::Origin origins[] = {
+        ToolboxErasedPass::UPDATE_DRAW, ToolboxErasedPass::FLUSH_DRAW, ToolboxErasedPass::COMPOSITION_REPLAY};
+    for (unsigned a = 0; a < 2; ++a)
+    {
+      LOKA_VERIFY(!pass.admitsCapture(areas[a]));
+      for (unsigned o = 0; o < 3; ++o)
+      {
+        ToolboxErasedPass::Guard guard(pass, origins[o], areas[a]);
+        LOKA_VERIFY(pass.isOpen());
+        LOKA_VERIFY(pass.admitsCapture(unit) == (a == 0 && o != 0));
+      }
+      LOKA_VERIFY(!pass.isOpen());
+    }
+  }
+  void staticBandGeometry()
+  {
+    const ZStackUnitGround grounds[] = {
+        ZSTACK_UNIT_GROUND_WINDOW, ZSTACK_UNIT_GROUND_EXP_BLUR, ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR};
+    const short heights[] = {0, 30, 90};
+    for (unsigned g = 0; g < 3; ++g)
+      for (unsigned h = 0; h < 3; ++h)
+      {
+        ToolboxWindow window;
+        HostPortScope port(window.window());
+        ToolboxScenePlatformController controller(&window);
+        ZStackProps props;
+        props.unitGround = grounds[g];
+        ZStackNode stack(props);
+        Probe *unit = new Probe("unit", heights[h]);
+        stack.addChild(new Probe("ground", 70));
+        stack.addChild(unit);
+        stack.addChild(new Probe("later", 10));
+        LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+        LayoutState state = seat();
+        LayoutNode(&stack, state, &controller, 0);
+        LOKA_VERIFY(state.y == (heights[h] > 70 ? 110 : 90));
+        ToolboxUnitLedger::Mark cursor = 0;
+        const ToolboxUnitLedger::UnitSeat *row = controller.unitLedger_.find(&stack, 1, cursor);
+        if (!heights[h])
+          LOKA_VERIFY(!row);
+        else
+        {
+          const short height = g == 2 && heights[h] < 70 ? 70 : heights[h];
+          const Rect expected = {20, 10, static_cast<short>(20 + height), 110};
+          LOKA_VERIFY(row);
+          equal(row->unit, expected);
+          equal(row->rect, expected);
+          LOKA_VERIFY(unit->height == heights[h] && unit->layouts == 1);
+        }
+        row = controller.unitLedger_.find(&stack, 2, cursor);
+        LOKA_VERIFY(row && row->unit.bottom == 30);
+      }
   }
   void staticFirstUnit()
   {
+    staticBandGeometry();
     StaticFixture f;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     ZStackNode other(f.stack.props);
     const Rect rect = f.rect();
     const ToolboxUnitLedger::UnitSeat first = {&f.stack, 1, rect, rect};
@@ -208,7 +293,7 @@ namespace
   void staticSwallowed()
   {
     StaticFixture f;
-    f.window.requestInvalidate();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     f.window.flushInvalidate();
     LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
@@ -216,10 +301,8 @@ namespace
     LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
     const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
-    LOKA_VERIFY(toolbox_host::invalidations == before + 1);
-    LOKA_VERIFY(f.window.pendingInvalidateRects_.size() == 1);
-    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
-    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == before);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
   }
@@ -227,34 +310,47 @@ namespace
   {
     StaticFixture f;
     toolbox_host::staticEligible = false;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
     const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
     // A request no walk has answered yet is not repeated by later flushes.
     StaticFixture g;
     toolbox_host::staticEligible = true;
-    g.window.draw();
+    g.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     g.window.flushInvalidate();
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(g.controller.staticBlur_) == ToolboxStaticBlur::REQUESTED);
     const unsigned issued = toolbox_host::invalidations;
     g.controller.completedInvalidateFlush();
     g.controller.completedInvalidateFlush();
     LOKA_VERIFY(toolbox_host::invalidations == issued);
+    StaticFixture h;
+    toolbox_host::staticEligible = false;
+    h.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    h.controller.completedInvalidateFlush();
+    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(h.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
+    LOKA_VERIFY(toolbox_host::staticCaptures == 0);
+    LOKA_VERIFY(!h.window.hasPendingInvalidate());
   }
   void staticFailure()
   {
     StaticFixture f;
     toolbox_host::staticCaptureSucceeds = false;
-    f.window.draw();
+    f.window.requestInvalidate();
     f.window.flushInvalidate();
-    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::PLAIN);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     toolbox_host::staticCaptureSucceeds = true;
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
@@ -264,20 +360,40 @@ namespace
   {
     StaticFixture f;
     f.ready();
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticReleases == 0);
     if (std::strcmp(reason, "StaticMissingRow") == 0)
       f.unit->height = 0;
     if (std::strcmp(reason, "StaticChangedRect") == 0)
+    {
       ++f.unit->height;
+      f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+      // A short child's growth leaves the ground-filled band unchanged.
+      LOKA_VERIFY(toolbox_host::staticReleases == 0);
+      f.unit->height = 71; // Now the band itself grows beyond the 70-high ground.
+    }
     if (std::strcmp(reason, "StaticChangedGround") == 0)
       f.stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
     if (std::strcmp(reason, "StaticAbortedLayout") == 0)
       f.controller.rootNode_ = 0;
-    f.window.draw();
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
     LOKA_VERIFY(toolbox_host::staticReleases == 1);
     LOKA_VERIFY(!ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_));
     LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::NEEDED);
+    f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+    const bool changedRect = std::strcmp(reason, "StaticChangedRect") == 0;
+    LOKA_VERIFY(toolbox_host::staticCaptures == (changedRect ? 2u : 1u));
+    LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_) == changedRect);
+    if (changedRect)
+    {
+      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+      f.unit->height = 72;
+      f.window.draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      LOKA_VERIFY(toolbox_host::staticReleases == 2);
+      LOKA_VERIFY(toolbox_host::staticCaptures == 3);
+      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+      return;
+    }
     f.unit->height = 30;
     f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
     f.controller.rootNode_ = &f.stack;
@@ -299,7 +415,8 @@ namespace
     ToolboxInputDoor::render(controller);
     LOKA_VERIFY(controller.frostCache_.paints == 0);
     {
-      ToolboxErasedPass::Guard erased(controller.erasedPass(), ToolboxErasedPass::FULL_DRAW, window.window()->portRect);
+      ToolboxErasedPass::Guard erased(
+          controller.erasedPass(), ToolboxErasedPass::UPDATE_DRAW, window.window()->portRect);
       ToolboxInputDoor::render(controller);
       LOKA_VERIFY(controller.frostCache_.paints == 1);
     }
@@ -318,6 +435,13 @@ namespace
     stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
     ToolboxRenderDirtyInCompositionOrder(controller, dirty);
     LOKA_VERIFY(controller.frostCache_.paints == 2);
+    stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    {
+      ToolboxErasedPass::Guard erased(
+          controller.erasedPass(), ToolboxErasedPass::FLUSH_DRAW, window.window()->portRect);
+      ToolboxInputDoor::render(controller);
+      LOKA_VERIFY(controller.frostCache_.paints == 3);
+    }
     controller.rootNode_ = 0;
   }
   void rebuilt()
@@ -960,6 +1084,9 @@ namespace
 int main(int argc, char **argv)
 {
   const char *names[] = {"StaticFirstUnit",
+                         "FlushFirstCapture",
+                         "UpdateNeverCaptures",
+                         "ErasedAdmissionMatrix",
                          "StaticAdmission",
                          "StaticSwallowed",
                          "StaticFailure",
@@ -995,6 +1122,12 @@ int main(int argc, char **argv)
   }
   if (std::strcmp(argv[1], "StaticFirstUnit") == 0)
     staticFirstUnit();
+  else if (std::strcmp(argv[1], "FlushFirstCapture") == 0)
+    flushFirstCapture();
+  else if (std::strcmp(argv[1], "UpdateNeverCaptures") == 0)
+    updateNeverCaptures();
+  else if (std::strcmp(argv[1], "ErasedAdmissionMatrix") == 0)
+    erasedAdmissionMatrix();
   else if (std::strcmp(argv[1], "StaticAdmission") == 0)
     staticAdmission();
   else if (std::strcmp(argv[1], "StaticSwallowed") == 0)

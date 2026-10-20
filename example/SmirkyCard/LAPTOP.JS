@@ -84,14 +84,17 @@ const LABEL = {size: 10};
 card('first', class {
   constructor(c) {
     this.c = c;
+    this.aboutShown = c.state(false);
     this.index = 0;
     const mono = c.machine.displayDepth !== null && c.machine.displayDepth < 8;
     this.pics = MACHINES.map(m => c.state.image(mono ? m.art + 'M' : m.art));
     this.thumbs = mono ? MACHINES.map(m => c.state.image(m.art + 'MS')) : this.pics;
+    // The smirking compact Mac for About: 160x100 mono or 320x200 colour.
+    this.logo = c.state.image(mono ? 'ICONMS' : 'ICON');
     // Named seats so a scenario can ask c.test.imageFacts('pb180c').
     MACHINES.forEach((m, i) => { this[m.id] = this.pics[i]; });
     // Page and presentation, as the three things that can be on screen.
-    // Depth 8 is the JS tree limit, so the page is not a wrapper seat: each
+    // Depth 9 is the JS tree limit, so the page is not a wrapper seat: each
     // pane has its own Show seat and the handlers keep them consistent.
     this.wide = false;
     this.browse = c.state(true);
@@ -171,13 +174,14 @@ card('first', class {
   }
 
   toolbar() {
-    // Two buttons share the left half so the title keeps its half on a
-    // 420 px Classic window (three equal cells clipped "SmirkyTracker").
+    // Three short buttons share the left half; the title keeps its half
+    // of the 420 px Classic window. Main replaces the longer ./MAIN.JS label.
     return Row(
       Row(
         Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
         Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
-        Button('./MAIN.JS', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain')),
+        Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
+        Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
       Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
   }
 
@@ -201,7 +205,7 @@ card('first', class {
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id));
       rows.push(Show(this.wideList, Row(...cards)));
     }
-    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 8.
+    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 9.
     for (let i = 0; i < COUNT; i += 2) {
       const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
@@ -219,12 +223,31 @@ card('first', class {
       ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))));
   }
 
-  compose() {
+  about() {
+    // A Card roughly centred on the 420x340 Classic window, over the
+    // static-blur backdrop that fills the ZStack.
     return VStack(
-      this.toolbar(),
-      Show(this.carouselShown, this.carousel()),
-      Show(this.listShown, this.list()),
-      Show(this.detail, this.detailPage()),
-      Text(this.c.error).TEST_ID('SmirkyCard.Status'));
+      Box(Text(''), {height: 60}),
+      Row(
+        Box(Text(''), {width: 40}),
+        Box(Card(VStack(
+          ImageView(this.logo, {width: 160, height: 100, fit: 'contain'}).TEST_ID('Laptop.About.Logo'),
+          Text('SmirkyTracker', TITLE).TEST_ID('Laptop.About.Name'),
+          Text('(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)', undefined, {wrap: 'word'})
+            .TEST_ID('Laptop.About.Credit'),
+          Button('OK!', () => this.aboutShown.set(false)).TEST_ID('Laptop.About.OK'))),
+          {width: 310})).naturalWidth());
   }
+
+  compose() {
+    return ZStack(
+      VStack(
+        this.toolbar(),
+        Show(this.carouselShown, this.carousel()),
+        Show(this.listShown, this.list()),
+        Show(this.detail, this.detailPage()),
+        Text(this.c.error).TEST_ID('SmirkyCard.Status')),
+      Show(this.aboutShown, this.about())).expStaticBlurUnit();
+  }
+
 });

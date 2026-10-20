@@ -1,3 +1,4 @@
+#include "context/ToolboxPaintSupport.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "platform/ToolboxPascalText.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -485,7 +486,7 @@ void ToolboxWindow::invalidateWindow()
   teardownScene();
 }
 
-void ToolboxWindow::draw()
+void ToolboxWindow::draw(FullDrawOrigin origin)
 {
   if (!window_)
     return;
@@ -498,19 +499,34 @@ void ToolboxWindow::draw()
   GetPort(&oldPort);
   SetPort(window_);
 
+  // Deliberate production/host twin: ToolboxWindow.cpp and ToolboxHost.cpp.
+  ToolboxErasedPass::Origin erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
+  switch (origin)
+  {
+  case FULL_DRAW_FOR_UPDATE:
+    erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
+    break;
+  case FULL_DRAW_FOR_FLUSH:
+    erasedOrigin = ToolboxErasedPass::FLUSH_DRAW;
+    break;
+  }
   // This draw repaints the whole window, so an OS update already pending
   // would repaint it again (#1104). Validate before the walk, never after it:
   // whatever the OS invalidates during the walk (a modal closing inside it)
   // stays pending.
   ValidRect(&window_->portRect);
-  EraseRect(&window_->portRect);
-  if (scenePlatformController_)
   {
-    ToolboxErasedPass::Guard erased(
-        scenePlatformController_->erasedPass(), ToolboxErasedPass::FULL_DRAW, window_->portRect);
-    ToolboxInputDoor::render(*scenePlatformController_);
+    ToolboxPaintClip clip(window_->portRect, ToolboxPaintClip::REPLACE);
+    EraseRect(&window_->portRect);
+    if (scenePlatformController_)
+    {
+      const Rect empty = {0, 0, 0, 0};
+      ToolboxErasedPass::Guard erased(
+          scenePlatformController_->erasedPass(), erasedOrigin, clip.isActive() ? window_->portRect : empty);
+      ToolboxInputDoor::render(*scenePlatformController_);
+    }
+    this->drawGrowBox();
   }
-  this->drawGrowBox();
 
   SetPort(oldPort);
 }

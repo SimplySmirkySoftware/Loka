@@ -71,47 +71,81 @@ scenario('first', function (c) {
     return;
   }
   if (cell !== undefined) throw Error('Unknown LAPTOP_CELL: ' + cell);
-  c.run(flow
-    // A Show branch materializes when the step settles, so every click that
-    // reveals a pane is followed by its expectations in the next step.
-    .step(openDetail).named('open-detail')
-    .step(function () {
-      detailShowsPb180c();
-      c.test.click('Laptop.Back');
-    }).named('detail-shows-pb180c')
-    .step(function () {
-      expect('Laptop.Title', 'SmirkyTracker');
-      expect('Laptop.Presentation', 'Wide');
-      expect(listId + 'pb180c', 'PowerBook 180c (1993)');
-      c.test.click('Laptop.Presentation');
-    }).named('back-to-list')
-    .step(function () {
-      expect('Laptop.Presentation', 'Tall');
-      expect('Laptop.Heading', 'PowerBook 180c');
-      expect('Laptop.Counter', '2 of 13  -  1993');
-      c.test.click('Laptop.Next');
-      expect('Laptop.Heading', 'PowerBook 550c');
-      c.test.click('Laptop.Prev');
-      c.test.click('Laptop.Prev');
-      expect('Laptop.Heading', 'Macintosh Plus');
-      c.test.click('Laptop.Prev');
-      expect('Laptop.Heading', 'MacBook Neo');
-      expect('Laptop.Counter', '13 of 13  -  2026');
-    }).named('carousel-keeps-selection-and-wraps')
-    .step(function () {
-      c.test.click('Laptop.Wide.neo');
-    }).named('open-from-carousel')
-    .step(function () {
-      expect('Laptop.Detail.cpu', 'CPU: Apple A18 Pro, 6-core CPU / 5-core GPU');
-      c.test.click('Laptop.Back');
-    }).named('detail-shows-neo')
-    .step(function () {
-      expect('Laptop.Heading', 'MacBook Neo');
-      c.test.click('Laptop.Presentation');
-    }).named('back-to-carousel')
-    .step(function () {
-      expect('Laptop.Presentation', 'Wide');
-      expect(listId + 'neo', 'MacBook Neo (2026)');
-      c.test.log('browse, detail, back and both presentations settled');
-    }).named('second-machine'));
+  c.run(flow.step(function() {
+              c.test.click('Laptop.About');
+            })
+            .named('open-about')
+            .step(function() {
+              expect('Laptop.About.Name', 'SmirkyTracker');
+              expect('Laptop.About.Credit', '(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)');
+              expect('Laptop.About.OK', 'OK!');
+              c.test.click('Laptop.About.OK');
+            })
+            .named('about-content-and-close')
+            .step(function() {
+              ['Laptop.About.Name', 'Laptop.About.Credit', 'Laptop.About.OK'].forEach(id => {
+                try
+                {
+                  c.test.text(id);
+                }
+                catch (e)
+                {
+                  if (e instanceof TypeError && e.message === "test id '" + id + "' is missing or duplicated")
+                    return;
+                  throw e;
+                }
+                throw Error(id + ' is still present');
+              });
+            })
+            .named('about-gone')
+            // A Show branch materializes when the step settles, so every click that
+            // reveals a pane is followed by its expectations in the next step.
+            .step(openDetail)
+            .named('open-detail')
+            .step(function() {
+              detailShowsPb180c();
+              c.test.click('Laptop.Back');
+            })
+            .named('detail-shows-pb180c')
+            .step(function() {
+              expect('Laptop.Title', 'SmirkyTracker');
+              expect('Laptop.Presentation', 'Wide');
+              expect(listId + 'pb180c', 'PowerBook 180c (1993)');
+              c.test.click('Laptop.Presentation');
+            })
+            .named('back-to-list')
+            .step(function() {
+              expect('Laptop.Presentation', 'Tall');
+              expect('Laptop.Heading', 'PowerBook 180c');
+              expect('Laptop.Counter', '2 of 13  -  1993');
+              c.test.click('Laptop.Next');
+              expect('Laptop.Heading', 'PowerBook 550c');
+              c.test.click('Laptop.Prev');
+              c.test.click('Laptop.Prev');
+              expect('Laptop.Heading', 'Macintosh Plus');
+              c.test.click('Laptop.Prev');
+              expect('Laptop.Heading', 'MacBook Neo');
+              expect('Laptop.Counter', '13 of 13  -  2026');
+            })
+            .named('carousel-keeps-selection-and-wraps')
+            .step(function() {
+              c.test.click('Laptop.Wide.neo');
+            })
+            .named('open-from-carousel')
+            .step(function() {
+              expect('Laptop.Detail.cpu', 'CPU: Apple A18 Pro, 6-core CPU / 5-core GPU');
+              c.test.click('Laptop.Back');
+            })
+            .named('detail-shows-neo')
+            .step(function() {
+              expect('Laptop.Heading', 'MacBook Neo');
+              c.test.click('Laptop.Presentation');
+            })
+            .named('back-to-carousel')
+            .step(function() {
+              expect('Laptop.Presentation', 'Wide');
+              expect(listId + 'neo', 'MacBook Neo (2026)');
+              c.test.log('browse, detail, back and both presentations settled');
+            })
+            .named('second-machine'));
 });

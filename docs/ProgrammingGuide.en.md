@@ -1661,15 +1661,20 @@ On macOS, Tab order is AppKit's default key-view loop and does not follow
 stacking order.
 
 `ZStack().expStaticBlurUnit()` is experimental. Its first unit (second
-child) shows a blur of the content beneath as it was when the unit appeared.
+child) shows a blur of the wrapped ground as it was when the unit appeared.
+On every rail its band fills the ground child's laid-out height, or its own
+height when taller; its child keeps its natural size at the band's top-left.
+A zero-height unit stays collapsed, so a hidden `Show` leaves no backdrop.
 On Toolbox that picture stays frozen while the unit is shown; macOS uses the
 live blur effect, and Win32 uses window ground. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;
 other static-blur units use window ground.
 
-On Toolbox the first paint may show window ground until a complete composition
-replay captures the unit. Capture requires 32-bit QuickDraw, an FPU, and a unit
-contained within one screen of at least 8-bit depth. A unit off one screen
+On Toolbox, a unit that appears through Loka's own redraw is captured in that
+redraw. A unit that first appears during an OS update, for example while the
+window is resized, shows window ground until Loka redraws it once more.
+Capture requires 32-bit QuickDraw, an FPU, and a unit contained within one
+screen of at least 8-bit depth. A unit off one screen
 paints window ground. Pixels hidden by other windows at capture stay white for
 that snapshot. Geometry changes cause another capture and blur. A ZStack
 rebuilt at the same address with the same rectangle in one pass keeps the old

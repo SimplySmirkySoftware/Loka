@@ -1,9 +1,11 @@
 #include "app/nodes/nestable/ZStack.hpp"
+#include "app/layout/ZStackLayout.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 
 /** Shared by the rail and host. Deliberate Win32/macOS twin: full seats,
-    maximum child bottom, and no ZStack or viewport inside a unit. */
+    maximum child bottom, and no ZStack or viewport inside a unit. Band extent
+    uses common/app/layout/ZStackLayout.hpp, like the native-frame twins. */
 short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
                                                    loka::app::scene::LayoutState &state,
                                                    loka::app::scene::BoundaryNode *boundary)
@@ -38,7 +40,9 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
       if (!this->projectLayoutState(projected))
         continue;
       const int right = static_cast<int>(projected.x) + state.width;
-      const int bottom = static_cast<int>(projected.y) + childState.y - state.y;
+      const int bandBottom =
+          loka::app::layout::zStackUnitBottom(stack->props.unitGround, index, state.y, childState.y, maxY);
+      const int bottom = static_cast<int>(projected.y) + bandBottom - state.y;
       if (this->refuseNarrowingInScrollScope(right) || this->refuseNarrowingInScrollScope(bottom))
         continue;
       Rect rect = {projected.y, projected.x, static_cast<short>(bottom), static_cast<short>(right)};

@@ -207,7 +207,7 @@ namespace
           return;
         }
         Capture actual, reference;
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         const bool captured = actual.read(window->window());
         if (LOKA_FROST_STANDALONE_DEPTH == 1)
         {
@@ -247,13 +247,13 @@ namespace
         }
         else
           std::fprintf(this->log_, "[skip] milk-sample hairline tiny-units growth-refusal: hardware gate\r");
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         // Public non-erasing render door: no test hook or fact guard.
         ToolboxInputDoor::render(*controller);
         bool ok = actual.read(window->window());
         loka::toolbox::ToolboxPaintGround(SURFACE_GROUND_WINDOW, Unit);
         this->record("non-erased-pass-white", ok && reference.read(window->window()) && actual.equals(reference, Unit));
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         const Rect dirty = {20, 100, 55, Width};
         window->requestInvalidateRect(dirty);
         return;
@@ -263,7 +263,7 @@ namespace
       {
         Capture partial;
         const bool ok = partial.read(window->window());
-        window->draw();
+        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
         Capture full;
         this->record("partial-equals-full", ok && full.read(window->window()) && partial.equals(full, Whole));
         this->finish();
@@ -283,7 +283,7 @@ namespace
       for (short width = 1; width <= 3; ++width)
         for (short height = 1; height <= 3; ++height)
         {
-          window->draw();
+          window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
           const Rect rect = {60, 60, static_cast<short>(60 + height), static_cast<short>(60 + width)};
           bool ok = before.read(window->window());
           const unsigned long start = Now();
