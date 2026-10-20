@@ -1685,8 +1685,7 @@ On Toolbox that picture stays frozen while the unit is shown; macOS uses the
 live blur effect, and Win32 uses window ground. Later units use window ground.
 Toolbox keeps at most one snapshot per window, for its first static-blur unit;
 other static-blur units use window ground. On 68K Macs the picture is a mosaic
-of 8-pixel squares; native PowerPC applications show a smooth blur. A 68K
-application on a PowerPC Mac keeps the mosaic.
+of 8-pixel squares; native PowerPC applications show a smooth blur.
 
 On Toolbox, StaticBlur may be placed over content that changes. It captures
 when it appears: the first time a full redraw of its area is possible at that
