@@ -46,13 +46,7 @@ public:
   static void timing(const ToolboxScenePlatformController &controller, FILE *log)
   {
     const unsigned long *t = controller.staticBlur_.pixels_.timings_;
-    std::fprintf(log,
-                 "static-us capture=%lu reduce=%lu blur=%lu enlarge-milk-map=%lu copy-back=%lu\r",
-                 t[0],
-                 t[1],
-                 t[2],
-                 t[3],
-                 t[4]);
+    std::fprintf(log, "static-us capture=%lu prepare=%lu kernel=%lu copy-back=%lu\r", t[0], t[1], t[2], t[3]);
   }
 };
 namespace
@@ -363,6 +357,10 @@ namespace
         ++this->captures_; // Count observed READY lifetimes through read-only inspection.
         this->waits_ = 0;
         ToolboxStaticBlurInspection::timing(controller, this->log_);
+        Capture picture;
+        std::fprintf(this->log_,
+                     "static-picture fnv=%08lx\r",
+                     picture.read(window->window()) ? picture.fingerprint(Whole) : 0UL);
         if (this->phase_ == 7)
         {
           this->record("static-reconcile", this->captures_ == 2);
