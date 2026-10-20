@@ -360,6 +360,7 @@ public:
   ToolboxEditTextContext *fallbackFocusContext() const;
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
+  bool isPointInEdit(const Point &point) const;
 #include "ToolboxInputBodies.hpp"
 public:
 #include "ToolboxScrollViewProjection.hpp"
@@ -710,6 +711,7 @@ public:
   } debugStats_;
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
+  void hideRetiredControl(ControlRef control);
   void drawScrollBarControl(short);
   void drawControl(ControlRef);
   typedef ToolboxHitLedger::TextHit TextHit;

@@ -1,6 +1,7 @@
 #include "Win32ZStackUnitTests.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
+#include <cstdio>
 #include <cwchar>
 #include <windows.h>
 #include "Win32Window.hpp"
@@ -483,6 +484,86 @@ void testWin32ZStackUnitForwardsWheelToViewport()
                         : lines > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
                                                                   : lines * 16;
   LOKA_VERIFY(origin.get().y == (distance > static_cast<UINT>(maximum) ? maximum : static_cast<int>(distance)));
+}
+
+namespace
+{
+  // The rail's line step is 16 px per wheel line or character (handleMouseWheel).
+  int expectedWheelDistance(UINT setting, HWND viewport, int bar)
+  {
+    SCROLLINFO info;
+    ZeroMemory(&info, sizeof(info));
+    info.cbSize = sizeof(info);
+    info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    LOKA_VERIFY(GetScrollInfo(viewport, bar, &info));
+    const int maximum = info.nMax - static_cast<int>(info.nPage) + 1;
+    const UINT distance = setting == WHEEL_PAGESCROLL                 ? info.nPage
+                          : setting > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
+                                                                      : setting * 16;
+    return distance > static_cast<UINT>(maximum) ? maximum : static_cast<int>(distance);
+  }
+} // namespace
+
+/** The unit's window is the ground ScrollView's sibling under the root, so a wheel that
+    starts over the unit never reaches the ground: not through the root's pointer
+    forwarding and not through the hit window's default propagation. Both axes (#1500). */
+void testWin32ZStackUnitWheelLeavesGroundScrollView()
+{
+  UINT lines = 3;
+  LOKA_VERIFY(SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0));
+  UINT chars = 3;
+  if (!SystemParametersInfoW(0x006C, 0, &chars, 0)) // SPI_GETWHEELSCROLLCHARS
+    chars = 3;
+  loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 0, 0, 0));
+  NodeState<loka::core::Frame> origin(&storage, 0);
+  Fixture f;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(origin));
+  scroll->addChild(new RectSurfaceNode(RectSurfaceProps().size(600, 600)));
+  stack->addChild(scroll);
+  stack->addChild(new BoxNode(BoxProps().setSize(300, 40)));
+  f.tree = stack;
+  f.layout(300, 140);
+  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(viewport && unit && GetParent(viewport) == f.root() && GetParent(unit) == f.root());
+  ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+  LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+  flushPaint(f);
+  POINT overUnit = {5, 5};
+  LOKA_VERIFY(ClientToScreen(unit, &overUnit));
+  HWND hit = WindowFromPoint(overUnit);
+  LOKA_VERIFY(hit == unit || IsChild(unit, hit));
+  RECT client;
+  LOKA_VERIFY(GetClientRect(viewport, &client));
+  POINT overGround = {5, client.bottom - 5}; // Below the unit's band.
+  LOKA_VERIFY(ClientToScreen(viewport, &overGround));
+  HWND groundHit = WindowFromPoint(overGround);
+  LOKA_VERIFY(groundHit == viewport || IsChild(viewport, groundHit));
+  for (int horizontal = 0; horizontal != 2; ++horizontal)
+  {
+    // A zero setting scrolls nothing, so neither the shield nor its control would discriminate.
+    const char *axis = horizontal ? "horizontal" : "vertical";
+    if ((horizontal ? chars : lines) == 0)
+    {
+      std::printf("[skip] testWin32ZStackUnitWheelLeavesGroundScrollView: system %s wheel scrolling is disabled, "
+                  "so the %s half did not run\n",
+                  axis,
+                  axis);
+      continue;
+    }
+    // WM_MOUSEHWHEEL: positive delta moves right, unlike WM_MOUSEWHEEL.
+    const UINT message = horizontal ? 0x020E : WM_MOUSEWHEEL;
+    const WPARAM step = MAKEWPARAM(0, horizontal ? WHEEL_DELTA : -WHEEL_DELTA);
+    const loka::core::Frame before = origin.get();
+    SendMessageW(hit, message, step, MAKELPARAM(overUnit.x, overUnit.y));
+    SendMessageW(f.root(), message, step, MAKELPARAM(overUnit.x, overUnit.y));
+    LOKA_VERIFY(origin.get().x == before.x && origin.get().y == before.y);
+    const int expected = expectedWheelDistance(horizontal ? chars : lines, viewport, horizontal ? SB_HORZ : SB_VERT);
+    SendMessageW(f.root(), message, step, MAKELPARAM(overGround.x, overGround.y));
+    LOKA_VERIFY(horizontal ? origin.get().x == before.x + expected && origin.get().y == before.y
+                           : origin.get().y == before.y + expected && origin.get().x == before.x);
+  }
 }
 
 void testWin32ZStackNestedInUnitLaysOutNothing()
