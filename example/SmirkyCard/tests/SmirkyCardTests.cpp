@@ -4693,6 +4693,12 @@ namespace
     expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
     expectJs(h.runtime, "laptop.pics.length===13 && laptop.thumbs.length===13", "true");
     expectJs(h.runtime, "laptop.list().child.children.length", "14");
+    // The seventh wide row holds the odd thirteenth machine and an empty Box
+    // partner, so the card keeps the width of every other card.
+    expectJs(h.runtime,
+             "(r=>r.children.length===2 && r.children[0].child.children.length===2"
+             " && r.children[1].child.text==='')(laptop.list().child.children[6].child)",
+             "true");
     expectJs(h.runtime, "laptop.compose().staticBlurUnit===1 && laptop.aboutShown.get()===false", "true");
     expectJs(h.runtime,
              "laptop.toolbar().children.length===2 && laptop.toolbar().children[0].children.length===4"
