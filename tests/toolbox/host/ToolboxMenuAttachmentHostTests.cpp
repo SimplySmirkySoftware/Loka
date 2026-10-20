@@ -504,7 +504,7 @@ void testToolboxMenuBridgeReleaseThenAbsentClearsNative()
   f.app.menuAttachment().project(sources(0, 0));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
   LOKA_VERIFY(toolbox_host::menuClears == 1 && toolbox_host::menuDraws == 1);
-  LOKA_VERIFY(toolbox_host::menuInitializations == 1);
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   clearCalls();
   f.app.menuAttachment().project(sources(0, 0));
   noCalls();
@@ -517,6 +517,9 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuTitles.size() == 2);
+  // InitMenus draws an empty menu bar itself, past the App's draw gate, so a
+  // projection must not call it: the only screen write is the deferred draw.
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
@@ -533,6 +536,7 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());

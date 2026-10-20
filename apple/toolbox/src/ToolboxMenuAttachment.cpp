@@ -303,7 +303,6 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
     if (this->menuEntries_.empty())
       return false;
     this->resetMenuState();
-    InitMenus();
     this->app_.requestMenuBarDraw();
     return true;
   }
@@ -317,8 +316,10 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
 
   const loka::app::MenuBarDefinition *menuBar = merged.get();
   const size_t menuCount = menuBar->menusCount();
+  // ClearMenuBar (in resetMenuState) starts the list afresh. InitMenus runs
+  // once, in ToolboxApp::run: it allocates a new menu list and draws an empty
+  // menu bar itself, past the App's draw gate (requestMenuBarDraw).
   this->resetMenuState();
-  InitMenus();
 
   bool hasAppMenu = false;
   loka::dsl::CompositionCursor<loka::app::MenuDefinition> appMenuScan(menuBar->menusHead(), menuCount);
