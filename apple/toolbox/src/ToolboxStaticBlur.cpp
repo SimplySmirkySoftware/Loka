@@ -125,7 +125,17 @@ namespace
     RGBForeColor(&black);
     RGBBackColor(&white);
   }
-  /** Copies movable QuickDraw sources before the allocating kernel runs. */
+  /** Queries the current capture GWorld; retains no movable QuickDraw pointers. */
+  class CaptureColourQuery : public loka::toolbox::ToolboxBlurColourQuery
+  {
+  public:
+    virtual bool indexFor(unsigned short red, unsigned short green, unsigned short blue, unsigned char &index)
+    {
+      RGBColor color = {red, green, blue};
+      return loka::toolbox::ToolboxBlurAcceptColorIndex(Color2Index(&color), index);
+    }
+  };
+  /** Owns centre answers and the CLUT copied before the kernel allocates. */
   class CaptureTables
   {
   public:
@@ -211,8 +221,10 @@ struct ToolboxStaticBlurPixels::Image
     }
     RGBColor probe = {65535, 0, 0};
     Color2Index(&probe); // Bring QuickDraw's movable inverse table up to date.
+    if (QDError() != noErr)
+      return false;
     GDHandle device = GetGWorldDevice(this->world);
-    if (!device || !(**device).gdITable || QDError() != noErr)
+    if (!device || !*device || !(**device).gdITable || !*(**device).gdITable)
       return false;
     ITabHandle inverseTable = (**device).gdITable;
     const short resolution = (**inverseTable).iTabRes;
@@ -222,9 +234,13 @@ struct ToolboxStaticBlurPixels::Image
     tables.inverse = new (std::nothrow) unsigned char[size];
     if (!tables.inverse)
       return false;
-    // Dereference after allocation: unlocked handles may move. Both relocatable
-    // tables are copied before the kernel allocates; pixels remain locked.
-    BlockMoveData((**inverseTable).iTTable, tables.inverse, size);
+    // Each reachable slot is QuickDraw's answer for that centre colour during
+    // this capture's preparation. It does not change while the kernel runs.
+    CaptureColourQuery query;
+    const bool filled = loka::toolbox::ToolboxBlurFillInverse(tables.inverse, size, resolution, query);
+    const QDErr fillError = QDError();
+    if (!filled || fillError != noErr)
+      return false;
     timings[1] = Now() - start;
     start = Now();
     loka::platform::CpuClass cpu;
@@ -285,10 +301,6 @@ bool ToolboxStaticBlurPixels::eligible(GrafPtr window, const Rect &rect)
   const Rect screen = (**device).gdRect;
   return rect.left < rect.right && rect.top < rect.bottom && global.left >= screen.left && global.top >= screen.top
          && global.right <= screen.right && global.bottom <= screen.bottom;
-}
-bool ToolboxStaticBlurPixels::updateCovers(GrafPtr window, const Rect &rect)
-{
-  return window && ToolboxPaintClipCovers(window->visRgn, rect);
 }
 bool ToolboxStaticBlurPixels::capture(GrafPtr window, const Rect &rect)
 {
