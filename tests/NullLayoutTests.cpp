@@ -7,6 +7,7 @@
 #include <cassert>
 
 #include "app/layout/FallbackControlMetrics.hpp"
+#include "app/layout/ZStackLayout.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/Grid.hpp"
@@ -236,12 +237,14 @@ void testNullLayoutGridReturnedHeight()
 
 void testNullLayoutZStackProducesFixedChildGeometry()
 {
-  for (int mark = 0; mark != 2; ++mark)
+  for (int mark = 0; mark != 3; ++mark)
   {
     NullScenePlatformController platform;
     loka::app::ZStack definition;
-    if (mark)
+    if (mark == 1)
       definition.expBlurUnit();
+    if (mark == 2)
+      definition.expStaticBlurUnit();
     loka::app::ZStackNode stack(definition.props);
     FixedLayoutProbeNode *back = new FixedLayoutProbeNode(7);
     FixedLayoutProbeNode *front = new FixedLayoutProbeNode(13);
@@ -254,6 +257,20 @@ void testNullLayoutZStackProducesFixedChildGeometry()
     assertGeometry(front, 10, 20, 80, 40);
     (void)resultY;
     LOKA_VERIFY(resultY == 33);
+    // Rail frame/ledger placement uses this same band fact after child layout.
+    const loka::app::ZStackUnitGround ground = definition.props.unitGround;
+    LOKA_VERIFY(loka::app::layout::zStackUnitBottom(ground, 1, 20, 27, 90) == (mark == 2 ? 90 : 27));
+    LOKA_VERIFY(loka::app::layout::zStackUnitBottom(ground, 1, 20, 100, 90) == 100);
+    LOKA_VERIFY(loka::app::layout::zStackUnitBottom(ground, 2, 20, 27, 90) == 27);
+    LOKA_VERIFY(loka::app::layout::zStackUnitBottom(ground, 1, 20, 20, 90) == 20);
+    NullScenePlatformController tallPlatform;
+    loka::app::ZStackNode tallStack(definition.props);
+    FixedLayoutProbeNode *tall = new FixedLayoutProbeNode(70);
+    FixedLayoutProbeNode *shortChild = new FixedLayoutProbeNode(7);
+    tallStack.addChild(tall);
+    tallStack.addChild(shortChild);
+    LOKA_VERIFY(tallPlatform.projectLayoutForTesting(&tallStack, makeState(10, 20, 80, 100)) == 90);
+    assertGeometry(shortChild, 10, 20, 80, 100);
   }
 }
 

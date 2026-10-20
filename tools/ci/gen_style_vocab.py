@@ -190,6 +190,8 @@ def generate_typescript(vocab):
         " * JS globals (signatures only; node globals are not declared in this file):",
         " * Text(value: string | Seat, style?: TextStyle, block?: BlockStyle)",
         " * Markup(markup: string, style?: TextStyle, block?: BlockStyle)",
+        " * ZStack(...children).expStaticBlurUnit(): immutable ZStack tree; refuses other node kinds.",
+        " * Static blur fills the ground extent without stretching its child. Tree depth is at most 9.",
         " */",
         "",
     ]

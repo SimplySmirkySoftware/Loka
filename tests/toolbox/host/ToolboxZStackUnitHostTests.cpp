@@ -185,8 +185,48 @@ namespace
     f.window.draw();
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
   }
+  void staticBandGeometry()
+  {
+    const ZStackUnitGround grounds[] = {
+        ZSTACK_UNIT_GROUND_WINDOW, ZSTACK_UNIT_GROUND_EXP_BLUR, ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR};
+    const short heights[] = {0, 30, 90};
+    for (unsigned g = 0; g < 3; ++g)
+      for (unsigned h = 0; h < 3; ++h)
+      {
+        ToolboxWindow window;
+        HostPortScope port(window.window());
+        ToolboxScenePlatformController controller(&window);
+        ZStackProps props;
+        props.unitGround = grounds[g];
+        ZStackNode stack(props);
+        Probe *unit = new Probe("unit", heights[h]);
+        stack.addChild(new Probe("ground", 70));
+        stack.addChild(unit);
+        stack.addChild(new Probe("later", 10));
+        LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+        LayoutState state = seat();
+        LayoutNode(&stack, state, &controller, 0);
+        LOKA_VERIFY(state.y == (heights[h] > 70 ? 110 : 90));
+        ToolboxUnitLedger::Mark cursor = 0;
+        const ToolboxUnitLedger::UnitSeat *row = controller.unitLedger_.find(&stack, 1, cursor);
+        if (!heights[h])
+          LOKA_VERIFY(!row);
+        else
+        {
+          const short height = g == 2 && heights[h] < 70 ? 70 : heights[h];
+          const Rect expected = {20, 10, static_cast<short>(20 + height), 110};
+          LOKA_VERIFY(row);
+          equal(row->unit, expected);
+          equal(row->rect, expected);
+          LOKA_VERIFY(unit->height == heights[h] && unit->layouts == 1);
+        }
+        row = controller.unitLedger_.find(&stack, 2, cursor);
+        LOKA_VERIFY(row && row->unit.bottom == 30);
+      }
+  }
   void staticFirstUnit()
   {
+    staticBandGeometry();
     StaticFixture f;
     f.window.draw();
     ZStackNode other(f.stack.props);
@@ -269,7 +309,13 @@ namespace
     if (std::strcmp(reason, "StaticMissingRow") == 0)
       f.unit->height = 0;
     if (std::strcmp(reason, "StaticChangedRect") == 0)
+    {
       ++f.unit->height;
+      f.window.draw();
+      // A short child's growth leaves the ground-filled band unchanged.
+      LOKA_VERIFY(toolbox_host::staticReleases == 0);
+      f.unit->height = 71; // Now the band itself grows beyond the 70-high ground.
+    }
     if (std::strcmp(reason, "StaticChangedGround") == 0)
       f.stack.props.unitGround = ZSTACK_UNIT_GROUND_WINDOW;
     if (std::strcmp(reason, "StaticAbortedLayout") == 0)

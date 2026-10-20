@@ -18,6 +18,7 @@
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/ZStack.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 #include "core/Operation.hpp"
 #include "app/OpenFileDialog.hpp"
@@ -1136,39 +1137,6 @@ namespace
     for (loka::app::scene::Node *child = mapped->childrenHead(); child; child = child->nextInComposition)
       ++count;
     LOKA_VERIFY(count == 3);
-  }
-  void checkZStackLowering()
-  {
-    const char *children[] = {"Text('g'),Text('u')", "[Text('g'),Text('u')]", "Text('g')"};
-    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); ++i)
-    {
-      smirkycard::ScriptRuntime runtime;
-      loka::core::String error;
-      const std::string script =
-          std::string("card('first',class{compose(){return ZStack(") + children[i] + ").TEST_ID('Depth')}});";
-      LOKA_VERIFY(runtime.loadBuiltin(script.c_str(), error));
-      NullPlatformContext context;
-      NullScenePlatformController platform;
-      WindowProps props;
-      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
-      NullWindow window(&context, props, &platform);
-      WindowAdmissionTestApp admission(window);
-      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
-      loka::app::scene::Node *stack = find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Depth");
-      LOKA_VERIFY(stack && stack->kind() == loka::app::scene::NODE_KIND_ZSTACK);
-      LOKA_VERIFY(stack->asNestable());
-      loka::app::scene::Node *ground = stack->asNestable()->childrenHead();
-      LOKA_VERIFY(ground && ground->asTextNode());
-      LOKA_VERIFY(ground->asTextNode()->props.text_->get().compare(loka::core::String::Literal("g")) == 0);
-      loka::app::scene::Node *unit = ground->nextInComposition;
-      if (i == 2)
-        LOKA_VERIFY(!unit);
-      else
-      {
-        LOKA_VERIFY(unit && unit->asTextNode() && !unit->nextInComposition);
-        LOKA_VERIFY(unit->asTextNode()->props.text_->get().compare(loka::core::String::Literal("u")) == 0);
-      }
-    }
   }
   void checkTreePropertyCopy()
   {
@@ -4210,6 +4178,60 @@ namespace
     LOKA_VERIFY(!loka::app::layout::queryContentOverflowWidth(scroll, spacing, &source, width));
   }
 
+  void checkZStackLowering()
+  {
+    smirkycard::ScriptRuntime methodRuntime;
+    expectJs(
+        methodRuntime,
+        "(()=>{const original=ZStack(Text('g'));const tree=original.expStaticBlurUnit();"
+        "return Object.isFrozen(tree)&&tree!==original&&original.staticBlurUnit===undefined&&"
+        "tree.staticBlurUnit===1&&tree.expStaticBlurUnit()===tree&&"
+        "tree.TEST_ID('x').staticBlurUnit===1&&ZStack(Text('g')).TEST_ID('y').expStaticBlurUnit().testId==='y'})()",
+        "true");
+    const char *refused[] = {"Row(Text('x'))", "VStack(Text('x'))", "Text('x')", "Box(Text('x'))"};
+    for (unsigned i = 0; i < sizeof(refused) / sizeof(refused[0]); ++i)
+    {
+      const std::string check = std::string("(()=>{try{") + refused[i]
+                                + ".expStaticBlurUnit();return false}catch(e){return e instanceof TypeError&&"
+                                  "e.message==='expStaticBlurUnit() applies to ZStack'}})()";
+      expectJs(methodRuntime, check.c_str(), "true");
+    }
+    expectJs(
+        methodRuntime,
+        "(()=>{try{ZStack(Text('g')).expStaticBlurUnit(1);return false}catch(e){return e instanceof TypeError}})()",
+        "true");
+    const char *children[] = {"Text('g'),Text('u')", "[Text('g'),Text('u')]", "Text('g')"};
+    for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); ++i)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      const std::string script = std::string("card('first',class{compose(){return ZStack(") + children[i]
+                                 + ").expStaticBlurUnit().TEST_ID('Depth')}});";
+      LOKA_VERIFY(runtime.loadBuiltin(script.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      loka::app::scene::Node *stack = find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Depth");
+      LOKA_VERIFY(stack && stack->kind() == loka::app::scene::NODE_KIND_ZSTACK);
+      LOKA_VERIFY(stack->asZStackNode()->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR);
+      LOKA_VERIFY(stack->asNestable());
+      loka::app::scene::Node *ground = stack->asNestable()->childrenHead();
+      LOKA_VERIFY(ground && ground->asTextNode());
+      LOKA_VERIFY(ground->asTextNode()->props.text_->get().compare(loka::core::String::Literal("g")) == 0);
+      loka::app::scene::Node *unit = ground->nextInComposition;
+      if (i == 2)
+        LOKA_VERIFY(!unit);
+      else
+      {
+        LOKA_VERIFY(unit && unit->asTextNode() && !unit->nextInComposition);
+        LOKA_VERIFY(unit->asTextNode()->props.text_->get().compare(loka::core::String::Literal("u")) == 0);
+      }
+    }
+  }
   void checkBoxLowering()
   {
     std::fputs("[pin] Box independent dimensions, validation and depth\n", stderr);
@@ -4314,7 +4336,7 @@ namespace
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
-    for (int depth = 0; depth < 8; ++depth)
+    for (int depth = 0; depth < 9; ++depth)
       tree = "Box(" + tree + ")";
     smirkycard::ScriptRuntime deepRuntime;
     const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
@@ -4325,7 +4347,7 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
     LOKA_VERIFY(windowNode(deepWindow, "DeepBox"));
     const std::string refused = "card('first',c=>({compose(){return Box(" + tree + ")}}));";
-    checkComposeRefusal(refused.c_str(), "exceeds depth 8");
+    checkComposeRefusal(refused.c_str(), "exceeds depth 9");
     // A width on Object.prototype is not a claim: lowering reads the tree's own properties only.
     smirkycard::ScriptRuntime poisonRuntime;
     LOKA_VERIFY(poisonRuntime.loadBuiltin("Object.prototype.width=300;"
@@ -4515,8 +4537,8 @@ namespace
     for (unsigned i = 0; i < 2; ++i)
     {
       std::string tree = "Text('deep').TEST_ID('Deep')";
-      for (int depth = 0; depth < 8; ++depth)
-        tree = std::string(depth == 7 ? wrappers[i] : "Card") + "(" + tree + ")";
+      for (int depth = 0; depth < 9; ++depth)
+        tree = std::string(depth == 8 ? wrappers[i] : "Card") + "(" + tree + ")";
       smirkycard::ScriptRuntime deepRuntime;
       const std::string source = "card('first',c=>({compose(){return " + tree + "}}));";
       LOKA_VERIFY(deepRuntime.loadBuiltin(source.c_str(), error));
@@ -4526,7 +4548,7 @@ namespace
       loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
       LOKA_VERIFY(windowNode(deepWindow, "Deep"));
       const std::string refused = "card('first',c=>({compose(){return Card(" + tree + ")}}));";
-      checkComposeRefusal(refused.c_str(), "exceeds depth 8");
+      checkComposeRefusal(refused.c_str(), "exceeds depth 9");
     }
   }
 
@@ -4589,11 +4611,16 @@ namespace
     expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
     expectJs(h.runtime, "laptop.pics.length===13 && laptop.thumbs.length===13", "true");
     expectJs(h.runtime, "laptop.list().child.children.length", "14");
+    expectJs(h.runtime, "laptop.compose().staticBlurUnit===1 && laptop.aboutShown.get()===false", "true");
+    expectJs(h.runtime,
+             "laptop.toolbar().children.length===2 && laptop.toolbar().children[0].children.length===4"
+             " && laptop.toolbar().children[1].testId==='Laptop.Title'",
+             "true");
     expectJs(h.runtime,
              "(()=>{const depths=[];function walk(t,d){"
              "if(t.testId && /Laptop\\.(Open|Narrow)\\./.test(t.testId))depths.push(d);"
              "if(t.child)walk(t.child,d+1);if(t.children)t.children.forEach(c=>walk(c,d+1));}"
-             "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===8)})()",
+             "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===9)})()",
              "true");
     // Inspect the actual ImageView inputs, not merely the existence of thumbs.
     expectJs(h.runtime, "laptop.machineCard(0,150,94,'x','x').child.children[0].seat===laptop.thumbs[0]", "true");
@@ -4644,6 +4671,9 @@ namespace
         continue;
       }
       LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+      LOKA_VERIFY(!windowNode(*h.window, "Laptop.About.Name"));
+      LOKA_VERIFY(!windowNode(*h.window, "Laptop.About.Credit"));
+      LOKA_VERIFY(!windowNode(*h.window, "Laptop.About.OK"));
       if (cell == 2)
       {
         LOKA_VERIFY(windowNode(*h.window, "Laptop.Wide.macplus"));
@@ -4928,6 +4958,7 @@ int main(int argc, char **argv)
     checkLaptopLowerings();
     checkBoxLowering();
     checkMinimumLowerings();
+    checkZStackLowering();
     checkLoweringRefusals();
     return 0;
   }

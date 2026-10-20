@@ -90,7 +90,9 @@ namespace loka
       }
       /** Experimental: the first unit shows a blur of the content beneath as
           it was when the unit appeared. On Toolbox it stays frozen while the
-          unit is shown; other rails may show a live effect or window ground. */
+          unit is shown; other rails may show a live effect or window ground.
+          Its band fills the ground child's extent without stretching its own
+          child. A zero-height unit stays collapsed (including a hidden Show). */
       ZStackDefinition &expStaticBlurUnit()
       {
         this->props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;

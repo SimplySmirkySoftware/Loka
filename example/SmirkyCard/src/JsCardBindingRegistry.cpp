@@ -129,6 +129,10 @@ namespace smirkycard
       JS_SetPropertyStr(ctx, node, "TEST_ID", JS_NewCFunction(ctx, &ScriptRuntime::testId, "TEST_ID", 1));
       JS_SetPropertyStr(
           ctx, node, "naturalWidth", JS_NewCFunction(ctx, &ScriptRuntime::naturalWidth, "naturalWidth", 0));
+      JS_SetPropertyStr(ctx,
+                        node,
+                        "expStaticBlurUnit",
+                        JS_NewCFunction(ctx, &ScriptRuntime::expStaticBlurUnit, "expStaticBlurUnit", 0));
       return node;
     }
     JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
@@ -273,6 +277,11 @@ namespace smirkycard
         case STACK_DEPTH:
         {
           loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
+          JSValue policy = JS_GetPropertyStr(ctx, tree, "staticBlurUnit");
+          int32_t groundPolicy = 0;
+          if (depthStack && JS_IsNumber(policy) && JS_ToInt32(ctx, &groundPolicy, policy) == 0 && groundPolicy == 1)
+            depthStack->expStaticBlurUnit();
+          JS_FreeValue(ctx, policy);
           stack = depthStack;
           nest = depthStack;
           break;
