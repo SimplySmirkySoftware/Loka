@@ -8,6 +8,7 @@
 
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/controls/Button.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -53,6 +54,31 @@ namespace
   private:
     short fixedHeight_;
     bool wasLaidOut_;
+    loka::app::scene::LayoutState geometry_;
+  };
+
+  /** Captures the Row offer before a native Button context consumes its own height. */
+  class RowButtonSeatProbe : public loka::app::ButtonNode
+  {
+  public:
+    RowButtonSeatProbe()
+        : loka::app::ButtonNode(loka::app::ButtonProps()),
+          geometry_()
+    {
+    }
+
+    virtual short layoutProjected(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
+    {
+      this->geometry_ = state;
+      return static_cast<short>(state.y + state.height);
+    }
+
+    const loka::app::scene::LayoutState &geometry() const
+    {
+      return this->geometry_;
+    }
+
+  private:
     loka::app::scene::LayoutState geometry_;
   };
 
@@ -463,7 +489,7 @@ void testBoxHeightStaysFixedWhenLiveWidthCrossesZero()
   }
 }
 
-void testSharedAlignedRowCharacterizationIncludesBoxHeight()
+void testSharedAlignedRowExtentIsLargerOfMeasurementAndChild()
 {
   using namespace loka::app;
   const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
@@ -481,12 +507,41 @@ void testSharedAlignedRowCharacterizationIncludesBoxHeight()
       box->addChild(content);
       row.addChild(box);
       const int resultY = platform.projectLayoutForTesting(&row, makeState(10, 20, 80, 40));
-      // Existing rail difference: Toolbox returns its alignment measurement (30),
-      // while the shared Row includes the Box result even when both axes are fixed.
       assertGeometry(content, 15, 25, fixedWidth ? 290 : 70, 190);
       LOKA_VERIFY(resultY == 220);
     }
   }
+  NullScenePlatformController platform;
+  StackNode shorter(Row().alignVertical(VERTICAL_ALIGNMENT_TOP).props);
+  FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
+  shorter.addChild(child);
+  const scene::LayoutState state = makeState(10, 20, 80, 40);
+  const int resultY = platform.projectLayoutForTesting(&shorter, state);
+  const int measurement = child->geometry().height;
+  LOKA_VERIFY(measurement > 7);
+  LOKA_VERIFY(resultY == state.y + measurement);
+}
+
+void testSharedAlignedRowBottomAlignmentMeasuresBoxHeight()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  StackNode baseline(Row().alignVertical(VERTICAL_ALIGNMENT_BOTTOM).props);
+  RowButtonSeatProbe *baselineButton = new RowButtonSeatProbe();
+  baseline.addChild(baselineButton);
+  const scene::LayoutState state = makeState(10, 20, 80, 40);
+  platform.projectLayoutForTesting(&baseline, state);
+  const int buttonHeight = baselineButton->geometry().height;
+  LOKA_VERIFY(buttonHeight > 0 && buttonHeight < 200);
+
+  StackNode row(Row().alignVertical(VERTICAL_ALIGNMENT_BOTTOM).props);
+  row.addChild(new BoxNode(Box().height(200).props));
+  RowButtonSeatProbe *button = new RowButtonSeatProbe();
+  row.addChild(button);
+  const int resultY = platform.projectLayoutForTesting(&row, state);
+  LOKA_VERIFY(button->geometry().height == buttonHeight);
+  LOKA_VERIFY(button->geometry().y == state.y + 200 - buttonHeight);
+  LOKA_VERIFY(resultY == 220);
 }
 
 void testBoxHeightExceedsGridAndCanvasCells()

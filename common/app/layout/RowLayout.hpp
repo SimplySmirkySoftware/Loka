@@ -82,6 +82,11 @@ namespace loka
 
         int currentX = state.x;
         int maxY = state.y;
+        // Deliberate extent twin of ComputeToolboxRowLayout in ToolboxPlatformLayoutHandlers.cpp.
+        if (row->props.hasVerticalAlignment_)
+        {
+          maxY = state.y + rowHeight;
+        }
         loka::dsl::CompositionCursor<loka::app::scene::Node> it(row->childrenHead(), childCount);
         for (loka::app::scene::Node *child = it.next(); child; child = it.next())
         {

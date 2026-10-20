@@ -16,6 +16,6 @@ void testToolboxUnalignedRowChildHeightSeats();
 
 void testToolboxCenteredControlOnlyRowPaintedBounds();
 
-void testToolboxAlignedRowCharacterizationExcludesBoxHeight();
+void testToolboxAlignedRowExtentIsLargerOfMeasurementAndChild();
 
 #endif // LOKA_TESTS_TOOLBOX_LAYOUT_CONTRACT_TESTS_HPP
