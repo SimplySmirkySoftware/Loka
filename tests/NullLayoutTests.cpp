@@ -104,7 +104,7 @@ namespace
   {
     (void)probe;
     assert(probe);
-    assert(probe->wasLaidOut());
+    LOKA_VERIFY(probe->wasLaidOut());
     (void)x;
     assert(probe->geometry().x == x); // loka-assert-ok: geometry() only returns the stored observation.
     (void)y;
