@@ -1346,4 +1346,62 @@ void testSimpleTextConfirmUsesTitleAtMount()
   h.stays(second);
 }
 
+void testSessionQuitAsksEditedDocumentAndCancelEnds()
+{
+  CloseHarness h;
+  h.app.requestQuitAtCompletion();
+  LOKA_VERIFY(h.config.documents().closeAsked().get() == CloseAsk::none());
+  h.app.tail();
+  h.app.tail();
+  const CloseAsk ask = h.config.documents().closeAsked().get();
+  LOKA_VERIFY(ask.id == h.id);
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+  h.confirm(ConfirmResult::Cancel());
+  h.stays(ask);
+  LOKA_VERIFY(h.app.quitCalls() == 0);
+  h.app.requestQuitAtCompletion();
+  h.app.tail();
+  h.app.tail();
+  LOKA_VERIFY(h.config.documents().closeAsked().get() == CloseAsk(h.id, ask.seq + 1));
+  LOKA_VERIFY(SimpleTextTestAccess::operation(h.app.main(0)) == simpletext::CONFIRM_CLOSE);
+  h.confirm(ConfirmResult::Cancel());
+  // Prove the second canceled attempt ended, even after its row disappears.
+  const ItemId other = h.config.documents().open(simpletext::Document());
+  LOKA_VERIFY(h.config.documents().close(h.id) == EDIT_OK);
+  h.app.tail();
+  LOKA_VERIFY(h.config.documents().find(other));
+  LOKA_VERIFY(h.app.quitCalls() == 0);
+}
+
+void testSessionQuitClosesCleanFirstThenAsksEdited()
+{
+  NullPlatformContext context;
+  SimpleTextAppConfig config(&context);
+  SimpleTextApp app(config);
+  app.run();
+  const ItemId first = config.documents().idAt(0);
+  const ItemId second = config.documents().open(simpletext::Document());
+  app.tail();
+  ObservableList<String> &lines = SimpleTextTestAccess::lines(app.main(1));
+  LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
+  app.tail();
+  LOKA_VERIFY(!config.documents().find(first)->edited && config.documents().find(second)->edited);
+  app.requestQuitAtCompletion();
+  LOKA_VERIFY(config.documents().closeAsked().get() == CloseAsk::none());
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(!config.documents().find(first));
+  LOKA_VERIFY(config.documents().closeAsked().get().id == second);
+  LOKA_VERIFY(SimpleTextTestAccess::operation(app.main(1)) == simpletext::CONFIRM_CLOSE);
+  scene::Node *node = find(&app.main(1), "SimpleText.ConfirmClose");
+  LOKA_VERIFY(node && node->asConfirmDialogNode());
+  {
+    StateTrackerGuard guard(app.main(1).tracker());
+    node->asConfirmDialogNode()->props.result_.set(ConfirmResult::Discard(), true);
+  }
+  app.tail();
+  app.tail();
+  LOKA_VERIFY(config.documents().count() == 0 && app.quitCalls() == 1);
+}
+
 #endif

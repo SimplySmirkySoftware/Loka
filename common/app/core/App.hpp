@@ -49,6 +49,13 @@ public:
   virtual void quit() = 0;
   /** Ask each document in roster order; any decline published after the ask ends this attempt. */
   void requestQuit();
+  /** Reads roster document facts only; static window contents are not covered. */
+  bool hasEditedDocuments() const;
+  /** Reserve Quit for the next eligible App admission tail: completion is not
+      the native query's return, Operation::close, or process termination.
+      Coalesces with REQUESTED/ASKING and covers roster documents only.
+      A reservation still pending when the loop exits is abandoned. */
+  void requestQuitAtCompletion();
   /** True transfers the close decision to the keyed document's node. */
   bool closeAsked(Window *window);
   /** Detaches a Window immediately and queues its silent reclaim for the App clock boundary. */
@@ -150,14 +157,32 @@ private:
   /** One outstanding quit request, with explicit absence and no parallel flags. */
   struct QuitAttempt
   {
+    enum Phase
+    {
+      NONE,
+      REQUESTED,
+      ASKING
+    };
+    Phase phase;
     loka::core::ItemId id;
     unsigned long seq;
-    QuitAttempt() : id(loka::core::ItemId::none()), seq(0) {}
-    explicit QuitAttempt(const loka::app::CloseAsk &ask) : id(ask.id), seq(ask.seq) {}
+    explicit QuitAttempt(Phase value = NONE)
+        : phase(value),
+          id(loka::core::ItemId::none()),
+          seq(0)
+    {
+    }
+    explicit QuitAttempt(const loka::app::CloseAsk &ask)
+        : phase(ASKING),
+          id(ask.id),
+          seq(ask.seq)
+    {
+    }
     static QuitAttempt none() { return QuitAttempt(); }
   };
   QuitAttempt quitAttempt_;
   void advanceQuitAttempt();
+  bool alreadyQuitAfterLastWindow() const;
 
   /** Borrowed rows remain owned by the App group or close queue. */
   struct AdmittedWindow
