@@ -11,6 +11,20 @@ namespace
 {
   const unsigned char kSeparator[] = {1, '-'};
   const unsigned char kPlaceholder[] = {1, ' '};
+
+  // ClearMenuBar also deletes every entry of the menu color table, which
+  // InitMenus filled from 'mctb' 0 at startup. Keep the table across the
+  // clear; without a copy (no memory) the colors fall back to the defaults.
+  void ClearMenuBarKeepingColors()
+  {
+    MCTableHandle colors = GetMCInfo();
+    ClearMenuBar();
+    if (colors)
+    {
+      SetMCInfo(colors);
+      DisposeMCInfo(colors);
+    }
+  }
 }
 
 ToolboxMenuAttachment::ToolboxMenuAttachment(ToolboxApp &app)
@@ -191,7 +205,7 @@ void ToolboxMenuAttachment::ToolboxMenuGraph::recordInsertion(MenuHandle menu, s
 
 void ToolboxMenuAttachment::ToolboxMenuGraph::install() const
 {
-  ClearMenuBar();
+  ClearMenuBarKeepingColors();
   for (size_t i = 0; i < this->insertions_.size(); ++i)
     InsertMenu(this->insertions_[i].menu, this->insertions_[i].mode);
 }
@@ -321,7 +335,7 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
     this->record_.clear();
     if (this->graph_.empty())
       return false;
-    ClearMenuBar();
+    ClearMenuBarKeepingColors();
     {
       ToolboxMenuGraph old;
       this->graph_.swap(old);
