@@ -394,7 +394,9 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
     {
       ToolboxEncodePascal(loka::core::String::Literal("Menu"), title);
     }
-    short menuId = nextMenuId_;
+    // Take this menu's ID before its submenus take theirs (they draw from the
+    // same counter), so a submenu never shares its parent's ID.
+    const short menuId = nextMenuId_++;
     MenuHandle menu = NewMenu(menuId, title);
     BuildMenuItems(&this->app_, menu, menuDef->itemsHead(), menuId, nextMenuId_, commands_, bindings_, hierarchicalMenus_);
     if (CountMenuItems(menu) == 0)
@@ -404,7 +406,6 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
     }
     InsertMenu(menu, 0);
     menuEntries_[menuIndex] = menu;
-    ++nextMenuId_;
   }
   this->record_.commit(sources);
   this->app_.requestMenuBarDraw();
