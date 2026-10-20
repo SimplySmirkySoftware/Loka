@@ -62,6 +62,16 @@ void SmirkyCardStandaloneFlowAppConfig::OnWindowIdle(Window *window, double elap
   SmirkyCardStandaloneFlowAppConfig *self = static_cast<SmirkyCardStandaloneFlowAppConfig *>(userData);
   if (!self->audit_.finished() && window && window->scene())
   {
+    // A scenario tick begins only on a settled idle, as the scenario cells'
+    // drivers do: the Settle adapter that follows every JS step is the one
+    // predicate (pending invalidation or native sync). Advancing on an
+    // unsettled idle put that step's settle on the next tick, so the first
+    // idle of a card that loads pictures recorded tick 2 where the Linux
+    // harness and the cells record tick 1 (#1484).
+    loka::app::scene::Scene *scene = window->scene();
+    loka::dsl::FlowError error;
+    if (loka::dsl::testing::Settle().run(scene, scene, error) != loka::dsl::FLOW_STEP_SUCCEEDED)
+      return;
     self->clock_.advanceTo(self->clock_.currentTick() + 1);
     static_cast<smirkycard::CardScene *>(window->scene())->tickScenario();
   }
