@@ -1,3 +1,4 @@
+#include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxHost.hpp"
 #include "Script.h"
 #include "Sound.h"
@@ -752,7 +753,7 @@ namespace
 namespace toolbox_host
 {
   unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
-  bool staticEligible = true, staticCaptureSucceeds = true, staticUpdateCovers = true, staticCopySucceeds = true;
+  bool staticEligible = true, staticCaptureSucceeds = true, staticCopySucceeds = true;
 } // namespace toolbox_host
 struct ToolboxStaticBlurPixels::Image
 {
@@ -775,10 +776,6 @@ void ToolboxStaticBlurPixels::clear()
 bool ToolboxStaticBlurPixels::eligible(GrafPtr, const Rect &)
 {
   return toolbox_host::staticEligible;
-}
-bool ToolboxStaticBlurPixels::updateCovers(GrafPtr, const Rect &)
-{
-  return toolbox_host::staticUpdateCovers;
 }
 bool ToolboxStaticBlurPixels::capture(GrafPtr, const Rect &)
 {
@@ -818,23 +815,37 @@ void ToolboxWindow::requestInvalidateRect(const Rect &rect)
   toolbox_host::invalidatedRects.push_back(rect);
   this->requestInvalidateRectImpl(rect);
 }
-void ToolboxWindow::draw(FullDrawOrigin origin)
+// Deliberate production/host twin: the OS consumes evidence at BeginUpdate.
+static void BeginUpdate(ToolboxWindow::WindowPort *window)
+{
+  if (window->updateRgn && *window->updateRgn)
+    (**window->updateRgn).rgnBBox = Rect();
+}
+static void EndUpdate(ToolboxWindow::WindowPort *) {}
+void ToolboxWindow::drawForUpdate()
+{
+  if (this->scenePlatformController_)
+    assert(!this->scenePlatformController_->erasedPass().isOpen());
+  const Rect evidence = ToolboxUpdateEvidence(this->port.updateRgn, this->port.portBits.bounds);
+  BeginUpdate(&this->port);
+  this->drawWhole(evidence);
+  EndUpdate(&this->port);
+}
+void ToolboxWindow::drawForFlush()
+{
+  this->drawWhole(this->port.portRect);
+}
+void ToolboxWindow::drawWhole(const Rect &evidence)
 {
   if (!this->scenePlatformController_)
     return;
-  // Deliberate production/host twin: ToolboxWindow.cpp and ToolboxHost.cpp.
-  ToolboxErasedPass::Origin erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
-  switch (origin)
-  {
-  case FULL_DRAW_FOR_UPDATE:
-    erasedOrigin = ToolboxErasedPass::UPDATE_DRAW;
-    break;
-  case FULL_DRAW_FOR_FLUSH:
-    erasedOrigin = ToolboxErasedPass::FLUSH_DRAW;
-    break;
-  }
-  ToolboxErasedPass::Guard erased(this->scenePlatformController_->erasedPass(), erasedOrigin, this->port.portRect);
+  RgnHandle clip = NewRgn();
+  const Rect empty = {0, 0, 0, 0};
+  const Rect captureEvidence = ToolboxCaptureEvidence(clip ? this->port.portRect : empty, evidence);
+  ToolboxErasedPass::Guard erased(this->scenePlatformController_->erasedPass(), captureEvidence);
   ToolboxInputDoor::render(*this->scenePlatformController_);
+  if (clip)
+    DisposeRgn(clip);
 }
 void ToolboxWindow::drawDirty(const Rect &rect)
 {

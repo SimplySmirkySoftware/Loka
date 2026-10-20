@@ -632,3 +632,14 @@ loka_compile_pin(show-derived
   REFUSES pins/refuses_show_derived.cpp
   ACCEPTS pins/accepts_show_derived.cpp
 )
+
+# The host twin exposes the same update/flush boundary without a Classic SDK.
+loka_compile_pin(toolbox-update-entry
+  REFUSES pins/refuses_toolbox_update_entry.cpp
+  ACCEPTS pins/accepts_toolbox_update_entry.cpp
+)
+foreach(kind IN ITEMS refuses accepts)
+  target_include_directories(compilePin_toolbox-update-entry_${kind} PRIVATE
+    ${PROJECT_SOURCE_DIR}/tests/toolbox/host ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/apple/toolbox/src)
+  target_compile_definitions(compilePin_toolbox-update-entry_${kind} PRIVATE LOKA_HOST_ZSTACK_UNITS=1)
+endforeach()

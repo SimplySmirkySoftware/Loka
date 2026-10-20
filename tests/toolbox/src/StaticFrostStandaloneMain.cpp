@@ -11,6 +11,7 @@
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxPaintGround.hpp"
+#include "ToolboxUpdateEvidence.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -42,6 +43,14 @@ public:
   static bool present(const ToolboxScenePlatformController &controller)
   {
     return controller.staticBlur_.stack_ != 0;
+  }
+  static Rect rect(const ToolboxScenePlatformController &controller)
+  {
+    return controller.staticBlur_.rect_;
+  }
+  static ToolboxSceneDebugStats drawNotes(const ToolboxScenePlatformController &controller)
+  {
+    return controller.debugStats_;
   }
   static void timing(const ToolboxScenePlatformController &controller, FILE *log)
   {
@@ -191,6 +200,7 @@ namespace
     unsigned captures_;
     unsigned long opened_;
     loka::platform::file::FileHandle file_;
+    ToolboxSceneDebugStats updateStart_;
     void record(const char *name, bool ok)
     {
       if (ok)
@@ -234,9 +244,7 @@ namespace
                    ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY);
       ValidRect(&Whole);
       InvalRect(&narrow);
-      BeginUpdate(window->window());
-      window->draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
-      EndUpdate(window->window());
+      window->drawForUpdate();
       this->record("static-partial-update-empty",
                    ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY
                        && !window->hasPendingInvalidate());
@@ -253,28 +261,26 @@ namespace
       const bool captured = clean.read(window->window());
       // Change the key twice: the full OS update must capture its new lifetime.
       SizeWindow(window->window(), Width, Height, false);
-      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      window->drawForFlush();
       SizeWindow(window->window(), Width - 1, Height, false);
       ToolboxInputDoor::render(controller);
       this->record("static-full-update-starts-empty",
                    ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY);
       InvalRect(&window->window()->portRect);
-      BeginUpdate(window->window());
-      window->draw(ToolboxWindow::FULL_DRAW_FOR_UPDATE);
+      window->drawForUpdate();
       const bool readyInUpdate = ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY;
-      EndUpdate(window->window());
       this->record("static-full-update-ready", readyInUpdate && !window->hasPendingInvalidate());
       this->record("static-full-update-equals-flush",
                    captured && dirty.read(window->window()) && dirty.equals(clean, picture));
       // Visit the original geometry so returning to the smaller one is fresh.
       SizeWindow(window->window(), Width, Height, false);
-      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      window->drawForFlush();
       SizeWindow(window->window(), Width - 1, Height, false);
       ClipRect(&Whole);
       ForeColor(blackColor);
       PaintRect(&Whole);
       ClipRect(&narrow);
-      window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+      window->drawForFlush();
       RgnHandle restored = NewRgn();
       if (restored)
         GetClip(restored);
@@ -287,6 +293,53 @@ namespace
                        && ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY);
       ClipRect(&Whole);
       SizeWindow(window->window(), Width, Height, false);
+    }
+    void startAppUpdate(ToolboxWindow *window, ToolboxScenePlatformController &controller, bool grow)
+    {
+      SizeWindow(window->window(), grow ? Width + 16 : Width, grow ? Height + 12 : Height, true);
+      // Establish EMPTY without an erased pass, then let only the app event draw.
+      ToolboxInputDoor::render(controller);
+      this->record(grow ? "static-app-update-grow-starts-empty" : "static-app-update-shrink-starts-empty",
+                   ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::EMPTY
+                       && !window->hasPendingInvalidate());
+      InvalRect(&window->window()->portRect);
+      this->updateStart_ = ToolboxStaticBlurInspection::drawNotes(controller);
+      this->waits_ = 0;
+      const RgnHandle update = reinterpret_cast<WindowPeek>(window->window())->updateRgn;
+      const RgnHandle visible = window->window()->visRgn;
+      const Rect bounds = window->window()->portBits.bounds;
+      const Rect evidence = ToolboxUpdateEvidence(update, bounds);
+      const Rect unit = ToolboxStaticBlurInspection::rect(controller);
+      const Rect empty = {0, 0, 0, 0};
+      const Rect u = update && *update ? (**update).rgnBBox : empty;
+      const Rect v = visible && *visible ? (**visible).rgnBBox : empty;
+      std::fprintf(this->log_,
+                   "static-app-update-%s update=%d [%d,%d,%d,%d] vis=%d [%d,%d,%d,%d] "
+                   "portBits=[%d,%d,%d,%d] evidence=[%d,%d,%d,%d] unit=[%d,%d,%d,%d]\r",
+                   grow ? "grow" : "shrink",
+                   update && *update ? (**update).rgnSize : 0,
+                   u.left,
+                   u.top,
+                   u.right,
+                   u.bottom,
+                   visible && *visible ? (**visible).rgnSize : 0,
+                   v.left,
+                   v.top,
+                   v.right,
+                   v.bottom,
+                   bounds.left,
+                   bounds.top,
+                   bounds.right,
+                   bounds.bottom,
+                   evidence.left,
+                   evidence.top,
+                   evidence.right,
+                   evidence.bottom,
+                   unit.left,
+                   unit.top,
+                   unit.right,
+                   unit.bottom);
+      std::fflush(this->log_);
     }
     void step(ToolboxWindow *window)
     {
@@ -313,9 +366,33 @@ namespace
       SetPort(window->window());
       ClipRect(&Whole);
       ToolboxScenePlatformController &controller = *window->scenePlatformController();
+      if (this->phase_ == 8 || this->phase_ == 9)
+      {
+        const ToolboxSceneDebugStats now = ToolboxStaticBlurInspection::drawNotes(controller);
+        if (now.windowUpdateEvtDrawCount == this->updateStart_.windowUpdateEvtDrawCount && ++this->waits_ < 120)
+          return;
+        const bool onlyUpdate = now.windowUpdateEvtDrawCount == this->updateStart_.windowUpdateEvtDrawCount + 1
+                                && now.totalDrawCalls == this->updateStart_.totalDrawCalls + 1
+                                && now.totalRenderCalls == this->updateStart_.totalRenderCalls + 1
+                                && now.totalDrawDirtyCalls == this->updateStart_.totalDrawDirtyCalls
+                                && now.totalRenderDirtyCalls == this->updateStart_.totalRenderDirtyCalls
+                                && now.windowFlushFullCount == this->updateStart_.windowFlushFullCount
+                                && now.windowFlushDirtyCount == this->updateStart_.windowFlushDirtyCount;
+        this->record(this->phase_ == 8 ? "static-app-update-grow" : "static-app-update-shrink",
+                     onlyUpdate && ToolboxStaticBlurInspection::phase(controller) == ToolboxStaticBlur::READY
+                         && !window->hasPendingInvalidate());
+        if (this->phase_ == 8)
+        {
+          this->phase_ = 9;
+          this->startAppUpdate(window, controller, false);
+        }
+        else
+          this->finish();
+        return;
+      }
       if (this->phase_ == 1)
       {
-        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        window->drawForFlush();
         this->ground_ = new Capture;
         this->record("static-ground-readback", this->ground_->read(window->window()));
         this->opened_ = Now();
@@ -325,7 +402,7 @@ namespace
         // Apply the revealed branch before measuring its first native paint.
         window->flushSceneInvalidation();
         const unsigned long drawStart = Now();
-        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        window->drawForFlush();
         std::fprintf(this->log_, "static-us first-full-open=%lu\r", Now() - drawStart);
         this->record("static-flush-first-capture",
                      LOKA_FROST_STANDALONE_DEPTH == 1
@@ -339,7 +416,7 @@ namespace
         if (LOKA_FROST_STANDALONE_DEPTH == 1)
         {
           Capture actual, white;
-          window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+          window->drawForFlush();
           const bool ok = actual.read(window->window());
           loka::toolbox::ToolboxPaintGround(SURFACE_GROUND_WINDOW, Unit);
           this->record("static-white-at-1bit", ok && white.read(window->window()) && actual.equals(white, Unit));
@@ -366,11 +443,12 @@ namespace
           this->record("static-reconcile", this->captures_ == 2);
           this->record("static-recaptured-after-reopen", true);
           this->checkDrawCoverage(window, controller);
-          this->finish();
+          this->phase_ = 8;
+          this->startAppUpdate(window, controller, true);
           return;
         }
         this->record("static-capture-ready", true);
-        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        window->drawForFlush();
         std::fprintf(this->log_, "static-us open-to-ready=%lu\r", Now() - this->opened_);
         this->before_ = new Capture;
         this->record("static-readback", this->before_->read(window->window()));
@@ -399,7 +477,7 @@ namespace
       {
         Capture partial, full;
         const bool ok = partial.read(window->window());
-        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        window->drawForFlush();
         this->record("static-partial-equals-full", ok && full.read(window->window()) && partial.equals(full, Whole));
         this->node_->show(false);
         ++this->phase_;
@@ -409,7 +487,7 @@ namespace
       {
         this->record("static-released", !ToolboxStaticBlurInspection::present(controller));
         Capture beneath;
-        window->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        window->drawForFlush();
         this->record("static-ground-changed-beneath",
                      beneath.read(window->window()) && !beneath.equals(*this->ground_, Unit));
         this->node_->show(true);

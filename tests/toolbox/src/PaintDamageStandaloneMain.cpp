@@ -1801,7 +1801,7 @@ namespace
       if (self->phase_ == (button ? UNIT_REPLAY : UNIT_SURFACE_REPLAY))
       {
         const unsigned before = controller->debugStatsForTesting().totalControlDrawCount;
-        native->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        native->drawForFlush();
         const unsigned controls = controller->debugStatsForTesting().totalControlDrawCount - before;
         const bool unitGround = !GetPixel(kRootX + 8, kRootY + 8);
         const bool outsideInk = GetPixel(kRootX + 8, kRootY + 50) != 0;
@@ -3059,7 +3059,7 @@ namespace
                         origin.x == 3 && origin.y == 5 && visibleWide && self->cardReplay_.scrollRowChanged(),
                         CARD_SCROLLED);
         // Synchronous production full draw keeps the capture within this arm.
-        native->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+        native->drawForFlush();
         self->recordArm(
             "card-scroll-incremental-equals-full", captureCorrect && incremental.differences() == 0, COMPLETE);
         std::FILE *timing = std::fopen("CARDTIME.TXT", "a");
@@ -3866,7 +3866,7 @@ namespace
           // real full-window entry, including anything after its render walk.
           const int beforeDraws = controller->debugStatsForTesting().totalDrawCalls;
           const int beforeControls = controller->debugStatsForTesting().totalControlDrawCount;
-          native->draw(ToolboxWindow::FULL_DRAW_FOR_FLUSH);
+          native->drawForFlush();
           const int draws = controller->debugStatsForTesting().totalDrawCalls - beforeDraws;
           const int controls = controller->debugStatsForTesting().totalControlDrawCount - beforeControls;
           std::fprintf(self->log_, "button-full-window draws=%d control_draws=%d\r", draws, controls);
