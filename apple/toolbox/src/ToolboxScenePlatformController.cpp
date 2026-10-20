@@ -1278,27 +1278,6 @@ bool ToolboxScenePlatformController::queryEditTextValueForTesting(
 
 #include "ToolboxControlPresentation.cpp"
 
-bool ToolboxScenePlatformController::isPointInEdit(const Point &point) const
-{
-  for (size_t i = 0; i < editControls_.size(); ++i)
-  {
-    const EditTextControlBinding &binding = editControls_[i];
-    if (binding.te && PtInRect(point, &binding.rect))
-    {
-      return true;
-    }
-  }
-  for (size_t i = 0; i < hitLedger_.editHits_.size(); ++i)
-  {
-    const EditHit &hit = hitLedger_.editHits_[i];
-    if (hit.text && PtInRect(point, &hit.rect))
-    {
-      return true;
-    }
-  }
-  return false;
-}
-
 bool ToolboxScenePlatformController::intersectWithProjectionClip(
     const Rect &rect,
     Rect &clipped) const
