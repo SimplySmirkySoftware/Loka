@@ -36,5 +36,8 @@ void testSimpleTextConfirmDeclinesCapturedAsk();
 void testSimpleTextConfirmIgnoresResultsOutsideOperation();
 void testSimpleTextConfirmUsesTitleAtMount();
 
+void testSessionQuitAsksEditedDocumentAndCancelEnds();
+void testSessionQuitClosesCleanFirstThenAsksEdited();
+
 #endif
 #endif

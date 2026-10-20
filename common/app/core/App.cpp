@@ -285,6 +285,8 @@ bool App::windowlessAfterLaunch() const
 
 bool App::hasPendingWindowAdmission() const
 {
+  if (this->quitAttempt_.phase == QuitAttempt::REQUESTED)
+    return true;
   if (!this->pendingWindowClosures_.empty())
     return true;
   if (this->windowSeat_ && !this->windowSeat_->key().matches())
@@ -486,6 +488,22 @@ bool App::closeAsked(Window *window)
   return true;
 }
 
+bool App::hasEditedDocuments() const
+{
+  return this->windowSeat_ && this->windowSeat_->anyDocumentEdited();
+}
+
+void App::requestQuitAtCompletion()
+{
+  if (this->quitAttempt_.phase == QuitAttempt::NONE)
+    this->quitAttempt_ = QuitAttempt(QuitAttempt::REQUESTED);
+}
+
+bool App::alreadyQuitAfterLastWindow() const
+{
+  return this->quitWhenLastWindowClosed_ && this->group_ && this->group_->getComponents().size() == 0;
+}
+
 void App::requestQuit()
 {
   if (!this->windowSeat_ || this->windowSeat_->roster().count() == 0)
@@ -503,7 +521,15 @@ void App::requestQuit()
     The roster only appends and removes: its asked first row cannot move. */
 void App::advanceQuitAttempt()
 {
-  if (this->quitAttempt_.id.isNone())
+  if (this->quitAttempt_.phase == QuitAttempt::REQUESTED)
+  {
+    if ((!this->windowSeat_ || this->windowSeat_->roster().count() == 0) && this->alreadyQuitAfterLastWindow())
+      this->quitAttempt_ = QuitAttempt::none();
+    else
+      this->requestQuit();
+    return;
+  }
+  if (this->quitAttempt_.phase == QuitAttempt::NONE)
     return;
   loka::app::DocumentRosterBase &roster = this->windowSeat_->roster();
   // Any decline published at or after this attempt's ask ends it, whichever
@@ -524,7 +550,7 @@ void App::advanceQuitAttempt()
     return;
   // The last accepted document may have emptied the group, in which case the
   // close tail above already quit once; a second requestQuit would quit twice.
-  if (roster.count() == 0 && this->quitWhenLastWindowClosed_ && group_ && group_->getComponents().size() == 0)
+  if (roster.count() == 0 && this->alreadyQuitAfterLastWindow())
   {
     this->quitAttempt_ = QuitAttempt::none();
     return;

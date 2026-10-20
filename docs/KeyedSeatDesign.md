@@ -139,8 +139,6 @@ for the same document are distinct. Null routes native asks in d0; d1 routes the
 (Win32 `WM_CLOSE`, macOS `windowShouldClose:`, Toolbox after `TrackGoAway`)
 through the same `App::closeAsked` door, and the three menu Quit commands call
 `App::requestQuit`; terminal removal and factory refusal never ask. SimpleText declines edited or
-for the same document are distinct. Only Null routes native asks in d0;
-terminal removal and factory refusal never ask. SimpleText declines edited or
 busy documents in d0; a clean document's menu Close uses the same node policy.
 
 `requestQuit` asks the first roster document, then advances at the admission
@@ -150,6 +148,19 @@ and removes, the asked first row's disappearance is answered by count and first
 identity, without a row walk. The two boxes and their writer walls live in
 [DocumentRoster.hpp](../common/app/core/DocumentRoster.hpp); the serial attempt
 lives in [App.cpp](../common/app/core/App.cpp).
+
+Win32 answers `WM_QUERYENDSESSION` FALSE only while a roster document reports
+edited; CRITICAL answers TRUE without asking, while Restart Manager's CLOSEAPP
+answers FALSE for edited documents without reserving a Quit. An ordinary refusal
+reserves Quit in App, coalescing with a pending or active attempt; delivery waits
+for the next eligible App admission tail, including until a modal loop returns.
+The query writes no State and runs no application callback. A pointer-free wake
+and the pre-sleep pending check keep the reservation serviceable; loop exit
+abandons an undelivered reservation. Vista+ owns the full-screen "preventing
+sign-out" screen; XP cancels logoff without UI. Completing Quit does not promise
+that logoff resumes. Loka does not call `ShutdownBlockReasonCreate`, static
+windows' contents are not covered, and `WM_ENDSESSION(FALSE)` does not stop a
+started Quit.
 
 **Window-less launch.** Every static `WindowDef` can be refused, a roster whose
 attach was refused can seed nothing, or every launch document create can be
