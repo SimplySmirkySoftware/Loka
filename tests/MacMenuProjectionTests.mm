@@ -597,7 +597,7 @@ namespace
 void testMacMenuAppFirstAndSections()
 {
   CocoaHost host;
-  for (int variant = 0; variant < 5; ++variant)
+  for (int variant = 0; variant < 6; ++variant)
   {
     TestApp app;
     MenuDefinition application = AppMenu();
@@ -617,6 +617,10 @@ void testMacMenuAppFirstAndSections()
       application = AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuSeparator()
                               << MenuItem("Prefs") << MenuSeparator()
                               << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP);
+    // No declared separators: the section separators are the rail's own.
+    if (variant == 5)
+      application = AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuItem("Prefs")
+                              << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP);
     MenuBarDefinition offered;
     offered << (Menu("File") << MenuItem("Open")) << (Menu("View") << MenuItem("Zoom")) << application;
     LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
@@ -632,8 +636,8 @@ void testMacMenuAppFirstAndSections()
     const char *hidden[] = {"Prefs", 0, "Quit"};
     const char *pair[] = {"About", 0, "Quit"};
     verifyMenuRows(menu,
-                   variant == 0 || variant == 4 ? all : (variant == 1 ? hidden : pair),
-                   variant == 0 || variant == 4 ? 5 : 3);
+                   variant == 0 || variant >= 4 ? all : (variant == 1 ? hidden : pair),
+                   variant == 0 || variant >= 4 ? 5 : 3);
   }
 }
 
