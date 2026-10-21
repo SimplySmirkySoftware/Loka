@@ -1736,12 +1736,20 @@ void testMacZStackGroundSubscriptionRetiresEitherSide()
     NSView *unit = [unitUnder(f.host.root) retain];
     NSScrollView *scroll = [scrollUnder(f.host.root) retain];
     NSClipView *clip = [[scroll contentView] retain];
-    // Retire and reclaim just the chosen projection while the other survives.
+    // Retire and reclaim just the chosen projection while the other survives:
+    // the terminal fact goes through the context's own door (as the unit
+    // retirement pin does), then the node releases the retired context.
     // Native views are retained to exercise late notifications after reclaim.
     if (groundFirst)
+    {
+      static_cast<MacScrollViewContext *>(node->getContext())->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
       node->setContext(0);
+    }
     else
+    {
+      static_cast<MacZStackContext *>(f.tree->getContext())->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
       f.tree->setContext(0);
+    }
     f.controller.drainNativeRetirements();
     {
       OverlapDamageProbe damage(unit);

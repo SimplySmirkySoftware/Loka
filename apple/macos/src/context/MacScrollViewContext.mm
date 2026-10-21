@@ -113,6 +113,10 @@ MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controlle
 MacScrollViewContext::~MacScrollViewContext()
 {
   assert(!this->scrollView_ && "terminal fact delivery must queue the native ScrollView before context reclaim");
+  // The terminal fact already detached; reclaim without it must still leave
+  // the ZStack's subscription pointing at nothing.
+  if (this->groundMove_)
+    this->groundMove_->detach();
 }
 
 void MacScrollViewContext::readLifecycleFactOnAttach()
