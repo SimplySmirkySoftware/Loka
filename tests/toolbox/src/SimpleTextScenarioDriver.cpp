@@ -11,6 +11,7 @@
 #include "ToolboxWindow.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "app/core/App.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "platform/StringUTF8.hpp"
 #include "testing/scene/ScenarioAudit.hpp"
@@ -160,6 +161,7 @@ namespace loka
               terminal_(&this->audit_),
               borrowedApp_(0),
               borrowedMain_(0),
+              documentWindow_(0),
               tick_(0),
               lingerRemaining_(settings.hasLingerSeconds ? settings.lingerSeconds : 0.0),
               facts_(MakeRecord(settings.scenario.c_str(), 0, dsl::SnapStatusOk()))
@@ -171,19 +173,56 @@ namespace loka
         }
         virtual void compose(AppComposition &composition)
         {
+          if (this->scenario_ == "close-dirty")
+          {
+            composition << WindowDef(this->driverWindowProps().scene(app::Box()));
+            composition << app::DocumentWindows(this->documents(), &SimpleTextScenarioAppConfig::DocumentWindow, this);
+            return;
+          }
           scenario_tests::ObservedMainDefinition<simpletext::MainProps, simpletext::MainNode> mainDefinition(
               SimpleTextTestAccess::props(*this), &this->borrowedMain_);
-          composition << WindowDef(WindowProps()
-                                       .frame(16, 41, 480, 320)
-                                       .contentMargin(0)
-                                       .scene(mainDefinition)
-                                       .title("LokaSimpleText")
-                                       .visible(true)
-                                       .idlePolicy(app::IdlePolicy::everyTick())
-                                       .onIdle(&SimpleTextScenarioAppConfig::OnIdle, this));
+          composition << WindowDef(this->driverWindowProps().scene(mainDefinition));
         }
 
       private:
+        WindowProps driverWindowProps()
+        {
+          return WindowProps()
+              .frame(16, 41, 480, 320)
+              .contentMargin(0)
+              .title("LokaSimpleText")
+              .visible(true)
+              .idlePolicy(app::IdlePolicy::everyTick())
+              .onIdle(&SimpleTextScenarioAppConfig::OnIdle, this);
+        }
+        static WindowProps DocumentWindow(core::ItemId id, const simpletext::Document &, void *userData)
+        {
+          // Mirror SimpleTextAppConfig::documentWindow; only observation is vehicle-owned.
+          SimpleTextScenarioAppConfig *config = static_cast<SimpleTextScenarioAppConfig *>(userData);
+          const int offset = 24 * ((id.seq - 1) % simpletext::kMaxDocuments);
+          scenario_tests::ObservedMainDefinition<simpletext::MainProps, simpletext::MainNode> mainDefinition(
+              simpletext::MainProps()
+                  .platformContext(config->getPlatformContext())
+                  .documents(&config->documents())
+                  .document(id),
+              &config->borrowedMain_);
+          return WindowProps()
+              .frame(16 + offset, 16 + offset, 480, 320)
+              .contentMargin(0)
+              .visible(true)
+              .scene(mainDefinition)
+              .idlePolicy(app::IdlePolicy::everyTick())
+              .onIdle(&SimpleTextScenarioAppConfig::ObserveDocumentWindow, config);
+        }
+        // App dispatches idle to the active window only, so both windows drive
+        // the same tick: the document window while it is in front, the driver
+        // window once the document has closed.
+        static void ObserveDocumentWindow(Window *window, double elapsedSeconds, void *userData)
+        {
+          SimpleTextScenarioAppConfig *config = static_cast<SimpleTextScenarioAppConfig *>(userData);
+          config->documentWindow_ = window;
+          config->tick(window, elapsedSeconds);
+        }
         static void OnIdle(Window *window, double elapsedSeconds, void *userData)
         {
           static_cast<SimpleTextScenarioAppConfig *>(userData)->tick(window, elapsedSeconds);
@@ -279,7 +318,9 @@ namespace loka
           this->facts_.set("status", succeeded ? dsl::SnapStatusOk() : dsl::SnapStatusError());
           this->facts_.set("rail", "toolbox");
           this->facts_.set("checkpoint", "final");
-          if (this->borrowedMain_)
+          if (this->scenario_ == "close-dirty")
+            this->facts_.setInt("roster.count", this->documents().count());
+          else if (this->borrowedMain_)
             SimpleTextTestAccess::capture(*this, *this->borrowedMain_, this->facts_);
           if (window)
             scenario_tests::SetContentBounds(this->facts_, ContentLocalBounds(QueryCaptureContentBounds(window)));
@@ -296,7 +337,7 @@ namespace loka
               this->borrowedApp_->quit();
             return;
           }
-          if (!window || !window->scene() || !this->borrowedMain_)
+          if (!window || !window->scene() || (this->scenario_ != "close-dirty" && !this->borrowedMain_))
           {
             this->finish(window, false);
             return;
@@ -318,6 +359,11 @@ namespace loka
           if (this->tick_ >= 60)
           {
             this->finish(window, false);
+            return;
+          }
+          if (this->scenario_ == "close-dirty")
+          {
+            this->closeDirtyTick(window);
             return;
           }
           bool ok = true;
@@ -381,11 +427,81 @@ namespace loka
             this->finish(window, false);
         }
 
+        void closeDirtyTick(Window *window)
+        {
+          if (this->tick_ >= 7)
+          {
+            const bool closed = this->documents().count() == 0;
+            this->borrowedMain_ = 0;
+            this->documentWindow_ = 0;
+            if (this->tick_ == 7)
+            {
+              if (!closed || !this->inspectSaved("saved.close", 1) || !this->recordStep("verify-closed"))
+                this->finish(window, false);
+            }
+            else
+              this->finish(window, closed);
+            return;
+          }
+          // The roster is the lifetime wall; observed pointers do not retain residents.
+          if (this->documents().count() != 1)
+          {
+            this->finish(window, false);
+            return;
+          }
+          if (!this->borrowedMain_)
+          {
+            this->finish(window, false);
+            return;
+          }
+          bool ok = true;
+          const char *step = "open-readme";
+          if (this->tick_ == 2)
+            ok = this->choose("ReadMe", simpletext::OPEN, 6);
+          else if (this->tick_ == 3)
+          {
+            step = "save-create";
+            ok = this->choose("Saved", simpletext::SAVE, 6);
+            ok = this->inspectSaved("saved.1", 6) && ok;
+            const simpletext::Document *entry = this->documents().find(this->documents().idAt(0));
+            ok = entry && !entry->edited && ok;
+          }
+          else if (this->tick_ == 4)
+          {
+            step = "shorten";
+            ok = SimpleTextTestAccess::shorten(*this->borrowedMain_)
+                 && SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 1, "Saved");
+            const simpletext::Document *entry = this->documents().find(this->documents().idAt(0));
+            ok = entry && entry->edited && ok;
+          }
+          else
+          {
+            step = this->tick_ == 5 ? "ask-close-cancel" : "ask-close-save";
+            if (this->tick_ == 6)
+            {
+              const app::CloseAsk ask = this->documents().closeAsked().get();
+              const app::CloseAnswer answer = this->documents().closeAnswer().get();
+              const simpletext::Document *entry = this->documents().find(this->documents().idAt(0));
+              ok = entry && entry->edited && ask.id == this->documents().idAt(0) && ask.seq != 0 && answer.id == ask.id
+                   && answer.seq == ask.seq && SimpleTextTestAccess::matches(*this, *this->borrowedMain_, 1, "Saved");
+              this->facts_.set("close.kept", ok ? "yes" : "no");
+              if (ok)
+                ok = this->recordStep("verify-kept");
+            }
+            ok = ok && this->documentWindow_ && this->borrowedApp_
+                 && this->borrowedApp_->closeAsked(this->documentWindow_);
+            this->facts_.set(this->tick_ == 5 ? "close.ask.cancel" : "close.ask.save", ok ? "yes" : "no");
+          }
+          if (!ok || !this->recordStep(step))
+            this->finish(window, false);
+        }
+
         const std::string scenario_;
         dsl::testing::ScenarioAuditFile audit_;
         dsl::testing::scenario_audit_detail::TerminalEmitter terminal_;
         App *borrowedApp_;
         simpletext::MainNode *borrowedMain_;
+        Window *documentWindow_;
         long tick_;
         double lingerRemaining_;
         dsl::SnapRecord facts_;
@@ -398,7 +514,7 @@ namespace loka
       dsl::SnapTestConfig::Settings settings;
       if (!dsl::SnapTestConfig::load("LokaTest.cfg", settings) || !settings.hasScenario
           || (settings.scenario != "startup" && settings.scenario != "open-readme"
-              && settings.scenario != "save-roundtrip"))
+              && settings.scenario != "save-roundtrip" && settings.scenario != "close-dirty"))
       {
         (void)WriteScenarioErrorAudit("startup", MakeRecord("startup", 0, dsl::SnapStatusError()));
         return 0;
