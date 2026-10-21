@@ -18,15 +18,50 @@
 }
 @end
 
+/** Committed vertical scroller clearance in native points. A POD keeps
+    Objective-C 1 allocation's zero initialization sufficient. */
+struct MacScrollerClearance
+{
+  CGFloat top;
+  CGFloat bottom;
+
+  bool operator==(const MacScrollerClearance &other) const
+  {
+    return this->top == other.top && this->bottom == other.bottom;
+  }
+};
+
 @interface LokaScrollView : NSScrollView
 {
   MacScrollViewContext *context_;
+  MacScrollerClearance scrollerClearance_;
 }
 - (void)setContext:(MacScrollViewContext *)value;
+- (void)setScrollerClearance:(MacScrollerClearance)value;
 - (void)clipViewBoundsChanged:(NSNotification *)notification;
 @end
 
 @implementation LokaScrollView
+- (void)setScrollerClearance:(MacScrollerClearance)value
+{
+  if (!(scrollerClearance_ == value))
+  {
+    scrollerClearance_ = value;
+    [self tile];
+  }
+}
+
+- (void)tile
+{
+  [super tile];
+  if (scrollerClearance_.top == 0 && scrollerClearance_.bottom == 0)
+    return;
+
+  NSScroller *scroller = [self verticalScroller];
+  if (scroller)
+    loka::macos::InsetMacScrollerFrame(scroller, [self isFlipped], scrollerClearance_.top, scrollerClearance_.bottom);
+}
+
 - (void)setContext:(MacScrollViewContext *)value
 {
   context_ = value;
@@ -225,8 +260,13 @@ void MacScrollViewContext::relayout(int x, int y, int width, int height)
   // after layout still lets AppKit report its native origin.
 }
 
-int MacScrollViewContext::commitScrollMetrics(
-    int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar)
+int MacScrollViewContext::commitScrollMetrics(int contentWidth,
+                                              int contentHeight,
+                                              int viewportHeight,
+                                              int clampedX,
+                                              int requestedY,
+                                              bool horizontalBar,
+                                              const loka::app::ScrollViewContentInsets &contentInsets)
 {
   if (contentHeight < 0)
   {
@@ -252,6 +292,9 @@ int MacScrollViewContext::commitScrollMetrics(
   const NSPoint previousOrigin = [[scrollView contentView] bounds].origin;
   [scrollView setHasHorizontalScroller:horizontalBar];
   const loka::macos::MacProjection &projection = this->controller()->projection();
+  const MacScrollerClearance clearance = {projection.projectLength(0, contentInsets.top()).pt,
+                                          projection.projectLength(0, contentInsets.bottom()).pt};
+  [(LokaScrollView *)scrollView setScrollerClearance:clearance];
   const CGFloat width = projection.projectLength(0, contentWidth).pt;
   const CGFloat clipWidth = [scrollView contentSize].width;
   loka::macos::SetMacDocumentSize(

@@ -299,7 +299,9 @@ void ToolboxScenePlatformController::reachNativeBar(short id)
   for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
     if (this->scrollBarLedger_.scrollBarControls_[i].resourceId == id)
     {
-      this->pressLedger_.append(PressRow::NATIVE_BAR, i);
+      const ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
+      if (row.control && (**row.control).contrlVis)
+        this->pressLedger_.append(PressRow::NATIVE_BAR, i);
       return;
     }
 }

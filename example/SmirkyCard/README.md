@@ -203,10 +203,10 @@ are full-width opaque units above it and earlier units in composition order.
 Follow the [guide's placement rule](../../docs/ProgrammingGuide.en.md#stacking-zstack):
 place units only over non-reactive regions such as a ScrollView inset gap;
 a transparent later child is unsupported. A ScrollView or nested ZStack inside
-a unit lays out nothing today. Toolbox lays out children flat until it adopts
-units. `ZStack(...).expStaticBlurUnit()` selects the experimental static-blur
-first unit; it fills the ground extent without stretching its child. The method
-refuses non-ZStack trees. The live `expBlurUnit()` option is not exposed in JavaScript.
+a unit lays out nothing today. `ZStack(...).expStaticBlurUnit()` selects the experimental static-blur
+first unit; it fills the ground extent without stretching its child. The live `ZStack(...).expBlurUnit()` selects a live blurred first-unit band.
+Both methods refuse non-ZStack trees and preserve other modifiers. They select
+one ground policy: the later call wins when chained.
 
 `ScrollView(child)` wraps exactly one tree in a native ScrollView with a private,
 card-owned viewport state starting at origin (0, 0). Each view scrolls independently;
@@ -225,8 +225,8 @@ are the content origin (y can be negative with a top inset) and width/height
 are the visible content size. The rail is the only writer: `seat.set(...)`
 throws `TypeError("viewport is a rail-written fact")`. This is the only JavaScript
 seat-write path; Flow has no seat-write description step.
-No scroll bar moves; an overlay
-in the gap is a later page of the same rally. `LAPTOP.JS` does not use insets yet.
+Toolbox and macOS keep the vertical scroll bar out of the inset rows; on Win32
+a band over the top inset still covers the top of the bar (#1547).
 A ScrollView cannot contain another ScrollView.
 `Card(child)` places exactly
 one tree in the native Card body using the default CardStyle; it has no style
@@ -234,7 +234,7 @@ argument yet. The default CardStyle is the machine's standard look: a DROP shado
 on 68k, a WIDE shadow on PowerPC 601-604, and a WIDE shadow with ALPHA ink on G3
 or faster where the rail can draw it (#1425). Until each rail answers its CPU
 class, every target still draws DROP. Both refuse missing, extra, array, or non-tree children with
-TypeError and each counts one level toward the depth-nine tree limit.
+TypeError and each counts one level toward the depth-ten tree limit.
 
 `Box(child, {width: 300})` offers its child a width of 300 and
 `Box(child, {height: 24})` makes the Box 24 tall, each axis on its own, under any
@@ -271,7 +271,7 @@ the existing refusal card with a message naming that budget and the Reload
 button. Records are allocated only for seats declared and clickables lowered;
 there is no eight-slot allocation or dispatch table. The refusal UI's Reload
 button is a separate host control. The existing 16-children-per-stack and
-depth-nine tree limits still apply. Grid capacity does not raise the seat or
+depth-ten tree limits still apply. Grid capacity does not raise the seat or
 clickable budgets (a 256-cell Grid can use Text, but cannot contain 256 Cells).
 
 The card owns stable seat handles and JS handler records. Each clickable is a
@@ -497,9 +497,17 @@ smirking compact Mac shown on the About card; `ICONM` is generated but not stage
 
 The list follows its viewport: positive width below 320 selects one column.
 Seven wide row Shows and seven narrow Shows containing paired VStacks give
-14 children, with both arms' leaves at depth 9 (inclusive). Carousel and detail
+14 children, with both arms' leaves at depth 10 (inclusive). Carousel and detail
 rows each contain 13 children, below the 16-child wall. Tall/Wide still selects
 list/carousel independently of viewport width.
+
+Each page owns a `ZStack(ground, toolbar()).expBlurUnit()` with a 30-unit-high
+Box toolbar. List and detail use a direct ScrollView ground with top inset 30,
+so the band covers only the inset while the list scrolls under it. Carousel reserves the same
+height with an empty Box. Only the selected page's Show materializes its band
+and toolbar IDs. The outer ZStack remains static blur: opening About covers
+the window while the selected page's live band remains beneath it. Tree depth
+is counted from zero; depth 10 is admitted and depth 11 is refused.
 
 The original hand-drawn artwork is by the repository owner, licensed under the
 same license as the repository. Regenerate all 84 PNG/PICT outputs (including

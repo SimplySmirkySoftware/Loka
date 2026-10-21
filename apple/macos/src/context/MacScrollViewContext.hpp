@@ -46,8 +46,13 @@ public:
 
   /** Commits both native axes after successful traversal, returning clamped Y.
       The caller publishes the completed origin after this commit. */
-  int commitScrollMetrics(
-      int contentWidth, int contentHeight, int viewportHeight, int clampedX, int requestedY, bool horizontalBar);
+  int commitScrollMetrics(int contentWidth,
+                          int contentHeight,
+                          int viewportHeight,
+                          int clampedX,
+                          int requestedY,
+                          bool horizontalBar,
+                          const loka::app::ScrollViewContentInsets &contentInsets);
   int clampOffset(int value, int maximum) const;
   /** The horizontal range a content width would give this viewport: the
       projected content width minus the native clip width, converted once,

@@ -1373,7 +1373,7 @@ namespace
         LOKA_VERIFY(nativeScroll != nil);
         MacScrollViewContext *context = static_cast<MacScrollViewContext *>(scroll.getContext());
         LOKA_VERIFY(context != 0);
-        context->commitScrollMetrics(160, 400, 130, 0, 0, false);
+        context->commitScrollMetrics(160, 400, 130, 0, 0, false, loka::app::ScrollViewContentInsets());
         [host release];
         host = [[nativeScroll documentView] retain];
       }
