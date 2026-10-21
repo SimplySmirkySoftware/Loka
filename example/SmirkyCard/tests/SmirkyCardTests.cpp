@@ -4316,7 +4316,10 @@ namespace
         "Object.prototype.staticBlurUnit=1;Object.prototype.blurUnit=1;Object.prototype.rowWidth=1;"
         "card('first',class{compose(){return VStack("
         "ZStack(Text('g'),Text('u')).TEST_ID('Depth'),"
-        "Row(Text('a')).TEST_ID('Shared'))}});",
+        "Row(Text('a')).TEST_ID('Shared'),"
+        "ZStack(Text('g'),Text('u')).expBlurUnit().TEST_ID('Live'),"
+        "ZStack(Text('g'),Text('u')).expStaticBlurUnit().TEST_ID('Frozen'),"
+        "Row(Text('a')).naturalWidth().TEST_ID('Natural'))}});",
         error));
     NullPlatformContext context;
     NullScenePlatformController platform;
@@ -4331,6 +4334,14 @@ namespace
     LOKA_VERIFY(stack->asZStackNode()->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_WINDOW);
     LOKA_VERIFY(row && row->asStackNode());
     LOKA_VERIFY(row->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_SHARED);
+    // An inherited claim must not let a modifier return the unclaimed tree.
+    loka::app::scene::Node *live = windowNode(window, "Live");
+    loka::app::scene::Node *frozen = windowNode(window, "Frozen");
+    loka::app::scene::Node *natural = windowNode(window, "Natural");
+    LOKA_VERIFY(live && live->asZStackNode()->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR);
+    LOKA_VERIFY(frozen && frozen->asZStackNode()->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR);
+    LOKA_VERIFY(natural
+                && natural->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_NATURAL);
   }
   void checkBoxLowering()
   {

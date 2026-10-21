@@ -388,10 +388,9 @@ namespace smirkycard
       return JS_ThrowTypeError(ctx, "%s() applies to %s", method, nodeName);
     if (argc != 0)
       return JS_ThrowTypeError(ctx, "%s() takes no arguments", method);
-    JSValue policy = JS_GetPropertyStr(ctx, thisValue, property);
-    const bool selected = JS_IsNumber(policy) && JS_ToInt32(ctx, &number, policy) == 0 && number == 1;
-    JS_FreeValue(ctx, policy);
-    if (selected)
+    // Only the tree's own claim counts, as in lowering: an inherited one would
+    // return the unclaimed tree.
+    if (ownTreePolicy(ctx, thisValue, property))
       return JS_DupValue(ctx, thisValue);
     JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
