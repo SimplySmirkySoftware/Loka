@@ -368,8 +368,13 @@ namespace smirkycard
     }
     return copy;
   }
-  JSValue ScriptRuntime::withTreePolicy(
-      JSContext *ctx, JSValueConst thisValue, int argc, const char *nodeName, const char *method, const char *property)
+  JSValue ScriptRuntime::withTreePolicy(JSContext *ctx,
+                                        JSValueConst thisValue,
+                                        int argc,
+                                        const char *nodeName,
+                                        const char *method,
+                                        const char *property,
+                                        const char *replacedProperty)
   {
     ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
     JSValue kind = JS_GetPropertyStr(ctx, thisValue, "kind");
@@ -383,15 +388,15 @@ namespace smirkycard
       return JS_ThrowTypeError(ctx, "%s() applies to %s", method, nodeName);
     if (argc != 0)
       return JS_ThrowTypeError(ctx, "%s() takes no arguments", method);
-    JSValue policy = JS_GetPropertyStr(ctx, thisValue, property);
-    const bool selected = JS_IsNumber(policy) && JS_ToInt32(ctx, &number, policy) == 0 && number == 1;
-    JS_FreeValue(ctx, policy);
-    if (selected)
+    // Only the tree's own claim counts, as in lowering: an inherited one would
+    // return the unclaimed tree.
+    if (ownTreePolicy(ctx, thisValue, property))
       return JS_DupValue(ctx, thisValue);
     JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
       return copy;
-    if (JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
+    if ((replacedProperty && JS_SetPropertyStr(ctx, copy, replacedProperty, JS_NewInt32(ctx, 0)) < 0)
+        || JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
     {
       JS_FreeValue(ctx, copy);
       return JS_EXCEPTION;
@@ -406,9 +411,13 @@ namespace smirkycard
   {
     return withTreePolicy(ctx, thisValue, argc, "VStack", "naturalHeight", "columnHeight");
   }
+  JSValue ScriptRuntime::expBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expBlurUnit", "blurUnit", "staticBlurUnit");
+  }
   JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit");
+    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit", "blurUnit");
   }
   JSValue ScriptRuntime::enabled(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *argv)
   {

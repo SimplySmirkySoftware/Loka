@@ -43,6 +43,27 @@ namespace smirkycard
     JsOwnProperties(const JsOwnProperties &);
     JsOwnProperties &operator=(const JsOwnProperties &);
   };
+
+  /** Reads a tree policy from the tree's own data property, the one its modifier
+      wrote (`naturalWidth()` writes "rowWidth", `expStaticBlurUnit()` writes
+      "staticBlurUnit"), so a value placed on Object.prototype is not a claim. */
+  inline bool ownTreePolicy(JSContext *ctx, JSValueConst tree, const char *name)
+  {
+    JSAtom key = JS_NewAtom(ctx, name);
+    if (key == JS_ATOM_NULL)
+      return false;
+    JSPropertyDescriptor property;
+    const int found = JS_GetOwnProperty(ctx, &property, tree, key);
+    JS_FreeAtom(ctx, key);
+    if (found <= 0)
+      return false;
+    JS_FreeValue(ctx, property.getter);
+    JS_FreeValue(ctx, property.setter);
+    int32_t policy = 0;
+    const bool claimed = JS_IsNumber(property.value) && JS_ToInt32(ctx, &policy, property.value) == 0 && policy == 1;
+    JS_FreeValue(ctx, property.value);
+    return claimed;
+  }
 } // namespace smirkycard
 
 #endif

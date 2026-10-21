@@ -64,18 +64,18 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
   if (this->window_)
     this->window_->querySizeBoxRect(sizeBox);
   ScrollBarControlBinding *native = 0;
-  if (!this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_VERTICAL],
-                                    ToolboxScrollViewVerticalBarRect(viewportRect, horizontalBar, sizeBox, edges),
-                                    0,
-                                    metrics.maximum,
-                                    1,
-                                    viewportHeight > 1 ? viewportHeight - 1 : 1,
-                                    scrollView->nativeLifetimeHint(),
-                                    native))
-  {
-    return metrics.clampedOffset;
-  }
-  ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
+  if (this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_VERTICAL],
+                                   ToolboxScrollViewVerticalBarRect(
+                                       viewportRect, horizontalBar, sizeBox, edges, scrollView->props.contentInsets_),
+                                   0,
+                                   metrics.maximum,
+                                   1,
+                                   viewportHeight > 1 ? viewportHeight - 1 : 1,
+                                   scrollView->nativeLifetimeHint(),
+                                   native))
+    ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
+  // A refused or empty vertical binding must not skip horizontal handling.
+  const bool verticalPresent = native != 0;
   if (horizontalBar)
   {
     const int childWidth = ToolboxScrollViewChildWidth(viewportRect, edges);
@@ -89,7 +89,7 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
                                      native))
       ApplyViewportScrollBarValue(native, horizontal, this->paintSuppressClipRgn_);
   }
-  else
+  if (!verticalPresent || !horizontalBar)
   {
     // A departing bar is hidden here, before the children paint into its
     // row. The post-render sweep would HideControl after them, and the
@@ -99,10 +99,11 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
     for (std::size_t i = 0; i < this->scrollBarLedger_.scrollBarControls_.size(); ++i)
     {
       ScrollBarControlBinding &row = this->scrollBarLedger_.scrollBarControls_[i];
-      if (row.resourceId == binding->barId[loka::app::SCROLL_BAR_HORIZONTAL] && row.control)
+      if (row.control
+          && ((!verticalPresent && row.resourceId == binding->barId[loka::app::SCROLL_BAR_VERTICAL])
+              || (!horizontalBar && row.resourceId == binding->barId[loka::app::SCROLL_BAR_HORIZONTAL])))
       {
         HideControl(row.control);
-        break;
       }
     }
   }

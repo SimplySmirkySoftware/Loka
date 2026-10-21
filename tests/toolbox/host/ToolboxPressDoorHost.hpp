@@ -60,8 +60,9 @@ namespace press_door
     {
       ++*static_cast<unsigned *>(p);
     }
-    Fixture()
-        : port(window.window()),
+    explicit Fixture(const WindowProps &props = WindowProps())
+        : window(props),
+          port(window.window()),
           controller(&window),
           stack(ZStackProps()),
           field(EditTextProps()),
@@ -306,9 +307,67 @@ namespace press_door
     LOKA_VERIFY(actual == expected);
     std::printf("[pin] H%u %s passed\n", pin, expected ? "I-beam" : "arrow");
   }
+  /** Fixed geometry adapter; native admission, render and press are production. */
+  class InsetScrollProjection : public NativeNodeContext
+  {
+  public:
+    explicit InsetScrollProjection(ScrollViewNode *node)
+        : node_(node)
+    {
+    }
+    virtual short layout(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      const Rect seat = {0, 0, 260, 360};
+      controller->ensureViewportScrollBarControl(seat, this->node_, 500, 260, 0, ToolboxScrollViewMetrics(0, 0), false);
+      controller->viewportScroll().contentRect = ToolboxScrollViewContentRect(seat, false);
+      state.y = 260;
+      return 360;
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      static_cast<ToolboxScenePlatformController *>(platform)->renderScrollView(this->node_);
+    }
+
+  private:
+    ScrollViewNode *const node_;
+  };
+  void insetBarBoundary()
+  {
+    Fixture f(WindowProps().contentMargin(0));
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(80, 0)));
+    scroll->setContext(new InsetScrollProjection(scroll));
+    f.stack.addChild(scroll);
+    NotifySubtreeNodeAttached(scroll);
+    f.empty();
+    f.render();
+    ControlRef vertical = f.controller.scrollControl(0).control;
+    LOKA_VERIFY(vertical->rect.top == 80);
+    const Point band = {79, 350}, boundary = {80, 350};
+    const unsigned tracks = toolbox_host::tracks;
+    f.focus();
+    ToolboxInputDoor::mouseDown(f.controller, band);
+    LOKA_VERIFY(toolbox_host::tracks == tracks);
+    f.expectFocus(f.field.getContext());
+    ToolboxInputDoor::mouseDown(f.controller, boundary);
+    LOKA_VERIFY(toolbox_host::tracks == tracks + 1);
+    scroll->props.contentInsets(ScrollViewContentInsets::of(260, 0));
+    scroll->requeueLayoutInputs(NODE_DIRTY_LAYOUT);
+    f.render();
+    LOKA_VERIFY(!vertical->visible);
+    // A deliberately revealed fake distinguishes no ledger entry from hidden input.
+    vertical->visible = true;
+    const Point empty = {100, 350};
+    ToolboxInputDoor::mouseDown(f.controller, empty);
+    LOKA_VERIFY(toolbox_host::tracks == tracks + 1);
+    vertical->visible = false;
+    std::puts("[pin] inset band boundary exclusively admits vertical bar passed");
+  }
   void run(const char *name)
   {
     const bool all = std::strcmp(name, "PressDoor") == 0;
+    if (all)
+      insetBarBoundary();
     for (unsigned pin = 1; pin <= 6; ++pin)
     {
       char selected[32];

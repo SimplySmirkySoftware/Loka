@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_SCROLL_VIEW_DECISIONS_HPP
 
 #include "app/nodes/controls/ScrollBar.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 
 /** Host-compilable value used at the Toolbox ScrollView decision seam. */
 struct ToolboxScrollViewRect
@@ -123,10 +124,12 @@ template <typename RectT> inline int ToolboxScrollViewChildWidth(const RectT &se
 }
 
 template <typename RectT>
-inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat,
-                                              bool horizontalBar,
-                                              const RectT &sizeBox,
-                                              const ToolboxScrollViewEdges &edges)
+inline RectT ToolboxScrollViewVerticalBarRect(
+    const RectT &seat,
+    bool horizontalBar,
+    const RectT &sizeBox,
+    const ToolboxScrollViewEdges &edges,
+    const loka::app::ScrollViewContentInsets &insets = loka::app::ScrollViewContentInsets())
 {
   const RectT frame = ToolboxScrollViewFrameRect(seat, horizontalBar, edges);
   RectT bar = ToolboxScrollViewContentRect(frame, horizontalBar);
@@ -139,6 +142,17 @@ inline RectT ToolboxScrollViewVerticalBarRect(const RectT &seat,
   ++reach.bottom;
   if (ToolboxScrollViewReachesSizeBox(reach, sizeBox))
     bar.bottom = sizeBox.top + 1 > bar.top ? sizeBox.top + 1 : bar.top;
+  // Layout-erasure invariant: only layout changes this rect. Boundary layout
+  // invalidates the whole window, so the next draw erases both old and new
+  // tracks. Scrolling never moves the bar; no separate damage path is needed.
+  const int trackTop = bar.top;
+  const int trackBottom = bar.bottom;
+  int top = insets.top() > 0 ? seat.top + insets.top() : trackTop;
+  int bottom = insets.bottom() > 0 ? seat.bottom - insets.bottom() : trackBottom;
+  top = top < trackTop ? trackTop : top > trackBottom ? trackBottom : top;
+  bottom = bottom < trackTop ? trackTop : bottom > trackBottom ? trackBottom : bottom;
+  ToolboxScrollViewStoreEdge(bar.top, top);
+  ToolboxScrollViewStoreEdge(bar.bottom, bottom > top ? bottom : top);
   return bar;
 }
 

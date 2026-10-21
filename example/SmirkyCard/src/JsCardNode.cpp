@@ -27,6 +27,8 @@
 
 namespace smirkycard
 {
+  const int kMaximumTreeDepth = 10;
+
   namespace
   {
     const char *cpuClassName(loka::platform::CpuClass cpuClass)
@@ -1103,10 +1105,9 @@ namespace smirkycard
   loka::app::scene::NodeDefinitionBase *JsCardNode::lower(JSContext *ctx, JSValueConst tree, int depth)
   {
     using namespace loka::app;
-    const int kMaximumTreeDepth = 9;
     if (depth > kMaximumTreeDepth || !JS_IsObject(tree) || JS_IsArray(tree))
     {
-      fail(depth > kMaximumTreeDepth ? "JavaScript tree exceeds depth 9." : "JavaScript tree has an invalid node.");
+      fail(depth > kMaximumTreeDepth ? "JavaScript tree exceeds depth 10." : "JavaScript tree has an invalid node.");
       return 0;
     }
     JSValue kindValue = JS_GetPropertyStr(ctx, tree, "kind");
