@@ -25,13 +25,15 @@ namespace
   {
     NSAutoreleasePool *pool;
     NSWindow *window;
-    Host() : pool([[NSAutoreleasePool alloc] init]), window(nil)
+    Host()
+        : pool([[NSAutoreleasePool alloc] init]),
+          window(nil)
     {
       [NSApplication sharedApplication];
       this->window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, 640, 480)
-                                               styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
-                                                 backing:NSBackingStoreBuffered
-                                                   defer:NO];
+                                                 styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
       LOKA_VERIFY(this->window != nil);
       [this->window setReleasedWhenClosed:NO];
     }
@@ -61,7 +63,8 @@ namespace
     if ([root isKindOfClass:type])
     {
       std::printf("quiescent relayout: %s needsDisplay=%d\n",
-                  [NSStringFromClass([root class]) UTF8String], static_cast<int>([root needsDisplay]));
+                  [NSStringFromClass([root class]) UTF8String],
+                  static_cast<int>([root needsDisplay]));
       LOKA_VERIFY(![root needsDisplay]);
       ++count;
     }
@@ -82,11 +85,10 @@ namespace
     loka::core::MutableState<int> spacerWidth(20);
     MacScenePlatformController controller([host.window contentView], RailMetrics());
     NodeDefinitionBase *definition =
-        (ScrollView() << (Column()
-          << (Card() << Text("Quiescent card") << ImageView().size(32, 32))
-          << Cell(CellProps().text("Quiescent cell"))
-          << (RibbonControl() << (RibbonGroup("Quiescent group") << RibbonItem("Item")))
-          << (Row() << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))))
+        (ScrollView() << (Column() << (Card() << Text("Quiescent card") << ImageView().size(32, 32))
+                                   << Cell(CellProps().text("Quiescent cell"))
+                                   << (RibbonControl() << (RibbonGroup("Quiescent group") << RibbonItem("Item")))
+                                   << (Row() << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))))
             .clone();
     LOKA_VERIFY(definition);
     {
@@ -102,8 +104,12 @@ namespace
       NSView *document = [scroll documentView];
       // Each class pins the matching context's relayout, including all card
       // bands and ribbon edges; absence must fail rather than pass vacuously.
-      NSString *classes[] = {@"LokaCardBandView", @"NSTextField", @"LokaImageView",
-                            @"LokaCellView", @"LokaRectSurfaceView", @"LokaRibbonGroupEdgeView"};
+      NSString *classes[] = {@"LokaCardBandView",
+                             @"NSTextField",
+                             @"LokaImageView",
+                             @"LokaCellView",
+                             @"LokaRectSurfaceView",
+                             @"LokaRibbonGroupEdgeView"};
       for (unsigned i = 0; i < sizeof(classes) / sizeof(classes[0]); ++i)
         LOKA_VERIFY(verifyCleanViews(document, NSClassFromString(classes[i])) > 0);
       NSView *surface = findView(document, NSClassFromString(@"LokaRectSurfaceView"));
@@ -131,7 +137,7 @@ namespace
     }
     controller.drainNativeRetirements();
   }
-}
+} // namespace
 
 void testMacQuiescentRelayoutDoesNotInvalidate()
 {

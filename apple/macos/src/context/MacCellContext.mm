@@ -241,8 +241,8 @@ void MacCellContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  if (loka::macos::ApplyMacFrame(
-          view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+  if (loka::macos::ApplyMacFrame(view,
+                                 this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
     [view setNeedsDisplay:YES];
 }
 

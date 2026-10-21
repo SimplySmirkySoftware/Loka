@@ -394,8 +394,8 @@ void MacTextContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  if (loka::macos::ApplyMacFrame(
-          label, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+  if (loka::macos::ApplyMacFrame(label,
+                                 this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
     [label setNeedsDisplay:YES];
 }
 

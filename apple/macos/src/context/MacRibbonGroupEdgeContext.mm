@@ -147,8 +147,8 @@ void MacRibbonGroupEdgeContext::relayout(int x, int y, int width, int height)
   NSView *view = (NSView *)this->view_;
   if (!view)
     return;
-  if (loka::macos::ApplyMacFrame(
-          view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+  if (loka::macos::ApplyMacFrame(view,
+                                 this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
     [view setNeedsDisplay:YES];
 }
 
