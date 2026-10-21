@@ -1104,6 +1104,9 @@ namespace
     NSView *document = [[[[native documentView] class] alloc] initWithFrame:[[native documentView] frame]];
     [baseline setDocumentView:document];
     [document release];
+    // A sibling in the same window shares its backing scale, so both views
+    // align their frames to the same pixel grid.
+    [[native superview] addSubview:baseline];
     [baseline tile];
     NSRect expected = [[baseline verticalScroller] frame];
     expected.origin.y += [native isFlipped] ? top : bottom;
@@ -1117,6 +1120,7 @@ namespace
     LOKA_VERIFY(NSEqualRects([[native contentView] frame], [[baseline contentView] frame]));
     if ([native hasHorizontalScroller])
       LOKA_VERIFY(NSEqualRects([[native horizontalScroller] frame], [[baseline horizontalScroller] frame]));
+    [baseline removeFromSuperview];
     [baseline release];
   }
 
