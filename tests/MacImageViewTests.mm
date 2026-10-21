@@ -2,6 +2,7 @@
 #include "MacObjCCompat.hpp"
 #include "support/TestVerify.hpp"
 #include <cstring>
+#include <objc/runtime.h>
 #include <cstdlib>
 
 @interface NSObject (LokaImageViewTestMessages)
@@ -49,8 +50,11 @@ namespace
 
   NSImage *drawnImage(NSView *view)
   {
-    // KVC inspects the existing private slot without a production test getter.
-    return [view valueForKey:@"image"];
+    // Read the view's private slot through the runtime (KVC does not map
+    // "image" to the trailing-underscore ivar) instead of adding a getter.
+    Ivar ivar = class_getInstanceVariable([view class], "image_");
+    LOKA_VERIFY(ivar != 0);
+    return (NSImage *)object_getIvar(view, ivar);
   }
 } // namespace
 
