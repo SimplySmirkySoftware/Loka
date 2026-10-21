@@ -135,6 +135,7 @@ namespace smirkycard
                         node,
                         "expStaticBlurUnit",
                         JS_NewCFunction(ctx, &ScriptRuntime::expStaticBlurUnit, "expStaticBlurUnit", 0));
+      JS_SetPropertyStr(ctx, node, "expBlurUnit", JS_NewCFunction(ctx, &ScriptRuntime::expBlurUnit, "expBlurUnit", 0));
       return node;
     }
     /** Reads a tree policy from the tree's own data property, the one its modifier
@@ -300,6 +301,8 @@ namespace smirkycard
           loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
           if (depthStack && ownTreePolicy(ctx, tree, "staticBlurUnit"))
             depthStack->expStaticBlurUnit();
+          else if (depthStack && ownTreePolicy(ctx, tree, "blurUnit"))
+            depthStack->expBlurUnit();
           stack = depthStack;
           nest = depthStack;
           break;
@@ -626,7 +629,7 @@ namespace smirkycard
         so the script sees a refusal instead of a silently empty region. */
     bool containsKind(JSContext *ctx, JSValueConst tree, int kind, int depth)
     {
-      if (depth > 8 || !JS_IsObject(tree) || JS_IsArray(tree))
+      if (depth > kMaximumTreeDepth || !JS_IsObject(tree) || JS_IsArray(tree))
         return false;
       JSValue own = JS_GetPropertyStr(ctx, tree, "kind");
       int32_t value = 0;

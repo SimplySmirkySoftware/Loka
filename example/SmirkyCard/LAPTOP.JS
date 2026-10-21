@@ -5,6 +5,8 @@
 // the selected index, the browse/detail page and the wide/tall presentation.
 // Nothing reloads when a page or presentation switches.
 
+const BAR = 30;
+
 const MACHINES = [
   {id: 'macplus', art: 'MACPLUS', short: 'Mac Plus', name: 'Macintosh Plus', year: '1986',
    cpu: 'Motorola 68000, 8 MHz', ram: '1 MB (up to 4 MB)',
@@ -176,17 +178,18 @@ card('first', class {
   toolbar() {
     // Three short buttons share the left half; the title keeps its half
     // of the 420 px Classic window. Main replaces the longer ./MAIN.JS label.
-    return Row(
+    return Box(Row(
       Row(
         Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
         Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
         Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
         Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
-      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'));
+      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title')), {height: BAR});
   }
 
   carousel() {
-    return VStack(
+    return ZStack(VStack(
+      Box(Text(''), {height: BAR}),
       Text(this.heading, TITLE, {align: 'center'}).TEST_ID('Laptop.Heading'),
       Text(this.counter, LABEL, {align: 'center'}).TEST_ID('Laptop.Counter'),
       // Arrows move the selection; the viewer scrolls the cards independently.
@@ -194,7 +197,7 @@ card('first', class {
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
         Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
       ScrollView(Row(...MACHINES.map((m, i) =>
-        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id))).naturalWidth()));
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id))).naturalWidth())), this.toolbar()).expBlurUnit();
   }
 
   list() {
@@ -208,22 +211,25 @@ card('first', class {
                                : Box(Text('')));
       rows.push(Show(this.wideList, Row(...cards)));
     }
-    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 9.
+    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 10.
     for (let i = 0; i < COUNT; i += 2) {
       const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
       if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
       rows.push(Show(this.narrow, VStack(...cards)));
     }
-    return ScrollView(VStack(...rows).naturalHeight(), {viewport : this.viewport});
+    return ZStack(
+      ScrollView(VStack(...rows).naturalHeight(), {viewport: this.viewport, insets: {top: BAR}}),
+      this.toolbar()).expBlurUnit();
   }
 
   detailPage() {
-    return ScrollView(VStack(
+    return ZStack(ScrollView(VStack(
       Row(...MACHINES.map((_, i) => Show(this.detailShown[i], ImageView(this.pics[i], {width: 320, height: 200, fit: 'contain'})))),
       Text(this.dName, TITLE).TEST_ID('Laptop.Detail.Name'),
       Text(this.dYear, LABEL).TEST_ID('Laptop.Detail.Year'),
       Text(this.dBlurb, undefined, {wrap: 'word'}).TEST_ID('Laptop.Detail.Blurb'),
-      ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))));
+      ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))), {insets: {top: BAR}}),
+      this.toolbar()).expBlurUnit();
   }
 
   about() {
@@ -245,7 +251,6 @@ card('first', class {
   compose() {
     return ZStack(
       VStack(
-        this.toolbar(),
         Show(this.carouselShown, this.carousel()),
         Show(this.listShown, this.list()),
         Show(this.detail, this.detailPage()),

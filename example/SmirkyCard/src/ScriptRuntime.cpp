@@ -368,8 +368,13 @@ namespace smirkycard
     }
     return copy;
   }
-  JSValue ScriptRuntime::withTreePolicy(
-      JSContext *ctx, JSValueConst thisValue, int argc, const char *nodeName, const char *method, const char *property)
+  JSValue ScriptRuntime::withTreePolicy(JSContext *ctx,
+                                        JSValueConst thisValue,
+                                        int argc,
+                                        const char *nodeName,
+                                        const char *method,
+                                        const char *property,
+                                        const char *replacedProperty)
   {
     ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
     JSValue kind = JS_GetPropertyStr(ctx, thisValue, "kind");
@@ -391,7 +396,8 @@ namespace smirkycard
     JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
       return copy;
-    if (JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
+    if ((replacedProperty && JS_SetPropertyStr(ctx, copy, replacedProperty, JS_NewInt32(ctx, 0)) < 0)
+        || JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
     {
       JS_FreeValue(ctx, copy);
       return JS_EXCEPTION;
@@ -406,9 +412,13 @@ namespace smirkycard
   {
     return withTreePolicy(ctx, thisValue, argc, "VStack", "naturalHeight", "columnHeight");
   }
+  JSValue ScriptRuntime::expBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  {
+    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expBlurUnit", "blurUnit", "staticBlurUnit");
+  }
   JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit");
+    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit", "blurUnit");
   }
   JSValue ScriptRuntime::enabled(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *argv)
   {
