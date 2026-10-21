@@ -427,7 +427,7 @@ void testMacInputDoorScrollLifetime()
     NSScrollView *field = (NSScrollView *)fixture.observe<MacScrollViewContext>(
         findField(fixture.root(), SCROLL_INPUT)->asScrollViewNode());
     static_cast<MacScrollViewContext *>(findField(fixture.root(), SCROLL_INPUT)->getContext())
-        ->commitScrollMetrics(0, 2000, 80, 0, 0, false);
+        ->commitScrollMetrics(0, 2000, 80, 0, 0, false, loka::app::ScrollViewContentInsets());
     fixture.facts.bind();
     [[field contentView] setBoundsOrigin:NSMakePoint(0, 100)];
     LOKA_VERIFY(fixture.facts.offset.get().y > 0);
