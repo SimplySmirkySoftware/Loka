@@ -1004,7 +1004,11 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
         NSView *previousLast = [[[parent subviews] lastObject] retain];
         childY = layoutContainerChild(this, child, state);
         if (ctx)
+        {
+          loka::app::ScrollViewNode *ground = child->asScrollViewNode();
+          ctx->followGround(ground ? static_cast<MacScrollViewContext *>(ground->getContext()) : 0);
           ctx->lowerNewGroundViews(parent, previousLast);
+        }
         [previousLast release];
         if (this->refuseNarrowingInScrollScope(childY))
           break;

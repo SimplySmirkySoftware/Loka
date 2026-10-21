@@ -28,4 +28,9 @@ void testMacZStackPhotoLifetime();
 void testMacZStackPhotoReplayAndRefusal();
 void testMacZStackPhotoOrientation();
 
+void testMacZStackPhotoFollowsNativeAndAppScroll();
+void testMacZStackPhotoDamageIsOnlyGroundOverlap();
+void testMacZStackUnrelatedScrollDoesNotDamagePhoto();
+void testMacZStackGroundSubscriptionRetiresEitherSide();
+
 #endif
