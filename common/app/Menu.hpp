@@ -722,6 +722,41 @@ namespace loka
       return MenuItemDefinition(title);
     }
 
+    /**
+     * Request About in a fresh app container with an empty, childless item.
+     * Rails place it and supply "About" on Classic and macOS; Win32 does not
+     * show About yet. A declared non-empty title or title State value wins.
+     */
+    inline MenuDefinition AboutMenu()
+    {
+      return AppMenu() << MenuItem("").actionType(MENU_ACTION_ABOUT_APP);
+    }
+
+    /**
+     * Request Quit in a fresh app container with an empty, childless item.
+     * Rails place it and supply "Quit" on Classic and macOS, "Exit" on Win32.
+     * A declared non-empty title or title State value wins.
+     */
+    inline MenuDefinition QuitMenu()
+    {
+      return AppMenu() << MenuItem("").actionType(MENU_ACTION_QUIT_APP);
+    }
+
+    /**
+     * Request the current standard bundle: About then Quit in one fresh app
+     * container, with empty, childless items. Rails place the items and section
+     * separators and supply About / Quit on Classic and macOS, Exit on Win32;
+     * Win32 does not show About yet. A declared non-empty title or title State
+     * value wins. This bundle may grow: each addition changes adopting
+     * applications' menus and requires its own compatibility decision.
+     * Use AboutMenu() / QuitMenu() to request only one of these actions.
+     */
+    inline MenuDefinition StandardMenuPresets()
+    {
+      return AppMenu() << MenuItem("").actionType(MENU_ACTION_ABOUT_APP)
+                       << MenuItem("").actionType(MENU_ACTION_QUIT_APP);
+    }
+
     inline MenuItemDefinition MenuSeparator()
     {
       return MenuItemDefinition().separator();

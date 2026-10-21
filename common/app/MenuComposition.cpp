@@ -49,30 +49,91 @@ namespace loka
       return *this;
     }
 
+    namespace
+    {
+      // Consume completed clones; the candidate owns every retained item.
+      bool FoldAppItems(MenuDefinition &app, loka::dsl::CompositionList<MenuItemDefinition> &items)
+      {
+        while (items.head())
+        {
+          loka::core::OwnedDef<MenuItemDefinition> item(items.head());
+          items.remove(item.get());
+          MenuItemDefinition *match = 0;
+          if (!item->hasChildren() && !item->isSeparator
+              && (item->action == MENU_ACTION_ABOUT_APP || item->action == MENU_ACTION_QUIT_APP))
+          {
+            match = app.itemsHead();
+            while (match && (match->hasChildren() || match->isSeparator || match->action != item->action))
+              match = match->nextInComposition;
+          }
+          if (match)
+          {
+            if (!app.items_.replace(match, item.get()))
+              return false;
+            item.take();
+            delete match;
+          }
+          else
+            app.items_.appendOwned(item.take());
+        }
+        return true;
+      }
+    } // namespace
+
     MenuBarDefinition *MergeMenuBars(const MenuBarDefinition *base, const MenuBarDefinition *overlay)
     {
-      if (!base)
-        return overlay ? overlay->clone() : 0;
-      loka::core::OwnedDef<MenuBarDefinition> merged(base->clone());
-      if (!merged.isSet() || !overlay)
-        return merged.take();
-      for (const MenuDefinition *menu = overlay->menusHead(); menu; menu = menu->nextInComposition)
+      if (!base && !overlay)
+        return 0;
+      loka::core::OwnedDef<MenuBarDefinition> merged((base ? base : overlay)->clone());
+      if (!merged.isSet())
+        return 0;
+      loka::dsl::CompositionList<MenuDefinition> initial;
+      merged->menus_.detachTo(initial);
+      MenuDefinition *app = 0;
+      const MenuDefinition *nextOverlay = base && overlay ? overlay->menusHead() : 0;
+      while (initial.head() || nextOverlay)
       {
-        loka::core::OwnedDef<MenuDefinition> replacement(menu->clone());
-        if (!replacement.isSet())
-          return 0;
-        MenuDefinition *match = merged->menusHead();
-        while (match && !match->title.equals(menu->title))
-          match = match->nextInComposition;
-        if (match)
+        const bool fromInitial = initial.head() != 0;
+        loka::core::OwnedDef<MenuDefinition> menu;
+        if (fromInitial)
         {
-          if (!merged->menus_.replace(match, replacement.get()))
-            return 0;
-          replacement.take();
-          delete match;
+          menu.reset(initial.head());
+          initial.remove(menu.get());
         }
         else
-          merged->menus_.appendOwned(replacement.take());
+        {
+          menu.reset(nextOverlay->clone());
+          if (!menu.isSet())
+            return 0;
+          nextOverlay = nextOverlay->nextInComposition;
+        }
+        if (menu->isAppMenu)
+        {
+          loka::dsl::CompositionList<MenuItemDefinition> items;
+          menu->items_.detachTo(items);
+          if (!app)
+          {
+            app = menu.get();
+            merged->menus_.appendOwned(menu.take());
+          }
+          if (!FoldAppItems(*app, items))
+            return 0;
+        }
+        else
+        {
+          MenuDefinition *match = fromInitial ? 0 : merged->menusHead();
+          while (match && (match->isAppMenu || !match->title.equals(menu->title)))
+            match = match->nextInComposition;
+          if (match)
+          {
+            if (!merged->menus_.replace(match, menu.get()))
+              return 0;
+            menu.take();
+            delete match;
+          }
+          else
+            merged->menus_.appendOwned(menu.take());
+        }
       }
       return merged.take();
     }

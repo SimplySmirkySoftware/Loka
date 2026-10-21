@@ -202,3 +202,37 @@ void testMenuSelfAssignmentDoesNotClone()
   LOKA_VERIFY(!refusedItem.isSet() && !refusedMenu.isSet());
   LOKA_VERIFY(loka::app::testing::EqualsStructure(bar, before));
 }
+
+void testMergeAppMenuRefusalIsAtomic()
+{
+  MenuBarDefinition base, overlay;
+  base << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP));
+  overlay << (AppMenu() << MenuItem("Winner").actionType(MENU_ACTION_QUIT_APP) << MenuItem("Other")
+                        << (MenuItem("Parent") << MenuItem("Child")));
+  const MenuBarDefinition beforeBase(base), beforeOverlay(overlay);
+  // Clone order: base Quit, winning Quit, kept other, parent, child.
+  for (int item = 0; item < 5; ++item)
+  {
+    loka::app::testing::failMenuItemDefinitionClones(1, item);
+    OwnedDef<MenuBarDefinition> refused(MergeMenuBars(&base, &overlay));
+    loka::app::testing::failMenuItemDefinitionClones(0);
+    LOKA_VERIFY(!refused.isSet());
+    LOKA_VERIFY(loka::app::testing::EqualsStructure(base, beforeBase));
+    LOKA_VERIFY(loka::app::testing::EqualsStructure(overlay, beforeOverlay));
+    OwnedDef<MenuBarDefinition> retry(MergeMenuBars(&base, &overlay));
+    LOKA_VERIFY(retry.isSet() && retry->menuAt(0)->itemsCount() == 3);
+  }
+  // An empty base makes the overlay container the next menu clone.
+  MenuBarDefinition empty;
+  for (int source = 0; source < 2; ++source)
+  {
+    loka::app::testing::failMenuDefinitionClones(1);
+    OwnedDef<MenuBarDefinition> refused(MergeMenuBars(source ? &empty : &base, &overlay));
+    loka::app::testing::failMenuDefinitionClones(0);
+    LOKA_VERIFY(!refused.isSet());
+    LOKA_VERIFY(loka::app::testing::EqualsStructure(base, beforeBase));
+    LOKA_VERIFY(loka::app::testing::EqualsStructure(overlay, beforeOverlay));
+    OwnedDef<MenuBarDefinition> retry(MergeMenuBars(source ? &empty : &base, &overlay));
+    LOKA_VERIFY(retry.isSet() && retry->menuAt(0)->itemsCount() == 3);
+  }
+}

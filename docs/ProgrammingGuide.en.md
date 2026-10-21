@@ -666,6 +666,17 @@ remains unchanged; the App default menu bar is composed once at bootstrap and
 has no clock of its own, and a Scene's menu bar follows the Scene's clock.
 Cleanup writes do not reopen a closing clock.
 
+**Menus: About and Quit**
+
+Declare `StandardMenuPresets()` in the App's default menu bar to request About
+and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
+at the top of the Apple menu and Quit at the end of File, creating File when
+absent. Windows shows File > Exit and does not show About yet. macOS places
+both in the application menu, About first and Quit last. A declared non-empty
+title, including one supplied through title State, wins over the platform's
+default word. Ordinary-menu Quit items are not needed and are hidden when the
+application Quit is shown.
+
 In ordinary code, prefer RAII guard helpers instead of manually opening and
 closing transactions.
 

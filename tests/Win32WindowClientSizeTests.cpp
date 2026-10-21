@@ -934,3 +934,33 @@ void testWin32DisplayScaleSystemMetricFollowsDpi()
   }
   printf("==== [testWin32DisplayScaleSystemMetricFollowsDpi] PASSED ====\n");
 }
+
+void testWin32AppQuitMenuRowPreservesClientSize()
+{
+  using namespace loka::app;
+  MenuBarDefinition about, quit;
+  about << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP));
+  quit << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP));
+  WindowProps props;
+  props.frame(40, 40, 257, 163).visible(false);
+  NullPlatformContext context;
+  Win32Window window(&context, props);
+  setWindowVisibility(window, true);
+  const MenuSources absentRow = {&about, 0, 0};
+  const MenuSources presentRow = {&quit, 0, 0};
+  LOKA_VERIFY(window.menuAttachment().project(absentRow) == Win32MenuAttachment::PROJECT_APPLIED);
+  const HMENU noRow = GetMenu(window.hwnd());
+  LOKA_VERIFY(!noRow);
+  assertLogicalClientSize(window.hwnd(), 257, 163);
+  const RECT before = readWindowRect(window.hwnd());
+  LOKA_VERIFY(window.menuAttachment().project(presentRow) == Win32MenuAttachment::PROJECT_APPLIED);
+  const HMENU row = GetMenu(window.hwnd());
+  LOKA_VERIFY(row);
+  assertLogicalClientSize(window.hwnd(), 257, 163);
+  LOKA_VERIFY(window.menuAttachment().project(absentRow) == Win32MenuAttachment::PROJECT_APPLIED);
+  const HMENU rowGone = GetMenu(window.hwnd());
+  LOKA_VERIFY(!rowGone);
+  assertLogicalClientSize(window.hwnd(), 257, 163);
+  LOKA_VERIFY(sameRect(before, readWindowRect(window.hwnd())));
+  setWindowVisibility(window, false);
+}

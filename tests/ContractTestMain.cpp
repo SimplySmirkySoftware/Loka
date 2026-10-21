@@ -27,6 +27,7 @@
 #include "FocusPostTests.hpp"
 #ifdef __APPLE__
 #include "MacImageBlobTests.hpp"
+#include "MacImageViewTests.hpp"
 #include "MacTextEditorTests.hpp"
 #include "MacInputDoorTests.hpp"
 #include "MacFocusTests.hpp"

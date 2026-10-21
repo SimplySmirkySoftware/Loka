@@ -43,6 +43,7 @@ private:
     loka::core::State<loka::core::String> *titleState;
     loka::core::State<bool> *enabledState;
     bool invertEnabled;
+    const unsigned char *emptyTitle;
     loka::core::State<bool> *checkedState;
   };
   /** Owns each native handle once; insertion rows only borrow those handles.
@@ -82,12 +83,20 @@ private:
   static void ApplyMenuItemStates(ToolboxApp *app, MenuHandle menu, short itemIndex,
                                  const loka::app::MenuItemDefinition *item,
                                  std::vector<MenuBinding *> &bindings);
+  static void ApplyMenuLeaf(ToolboxApp *app,
+                            MenuHandle menu,
+                            short menuId,
+                            short itemIndex,
+                            const loka::app::MenuItemDefinition *item,
+                            ToolboxMenuGraph &graph);
   static bool BuildMenuItems(ToolboxApp *app,
                              MenuHandle menu,
                              const loka::app::MenuItemDefinition *items,
                              short menuId,
                              short &nextMenuId,
-                             ToolboxMenuGraph &graph);
+                             ToolboxMenuGraph &graph,
+                             bool suppressQuit,
+                             const loka::app::MenuItemDefinition *tail = 0);
   bool build(const loka::app::MenuBarDefinition &menuBar, ToolboxMenuGraph &graph);
 
   ToolboxApp &app_;
