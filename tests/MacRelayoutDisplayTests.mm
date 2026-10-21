@@ -186,8 +186,13 @@ namespace
         NSView *sample = findView(document, draws.viewClass(kind));
         const NSRect f = sample ? [sample frame] : NSZeroRect;
         std::printf("relayout display: %s draws after first display=%u frame=(%g,%g %gx%g) hidden=%d\n",
-                    [NSStringFromClass(draws.viewClass(kind)) UTF8String], draws.count(kind), f.origin.x, f.origin.y,
-                    f.size.width, f.size.height, sample ? static_cast<int>([sample isHidden]) : -1);
+                    [NSStringFromClass(draws.viewClass(kind)) UTF8String],
+                    draws.count(kind),
+                    f.origin.x,
+                    f.origin.y,
+                    f.size.width,
+                    f.size.height,
+                    sample ? static_cast<int>([sample isHidden]) : -1);
       }
       for (int i = 0; i < DrawCounts::VIEW_COUNT; ++i)
       {
