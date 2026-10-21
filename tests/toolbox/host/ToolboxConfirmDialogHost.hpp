@@ -47,7 +47,8 @@ DialogPtr NewDialog(void *, const Rect *bounds, const unsigned char *title, Bool
   LOKA_VERIFY(bounds->left == 80 && bounds->right == 432 && bounds->top == 80 && bounds->bottom == 220);
   const unsigned char *p = reinterpret_cast<const unsigned char *>(*items);
   const unsigned char *end = p + confirmItemsSize;
-  LOKA_VERIFY(DialogWord(p) == 3); p += 2;
+  LOKA_VERIFY(DialogWord(p) == 4);
+  p += 2;
   const char *labels[] = {"Save", "Cancel", "Don't Save"};
   const short lefts[] = {264, 176, 20};
   for (unsigned i = 0; i < 3; ++i)
@@ -61,9 +62,15 @@ DialogPtr NewDialog(void *, const Rect *bounds, const unsigned char *title, Bool
   }
   LOKA_VERIFY(p + 14 <= end && p + 14 + p[13] <= end);
   LOKA_VERIFY(p[12] == statText + itemDisable);
+  LOKA_VERIFY(DialogWord(p + 4) == 20 && DialogWord(p + 6) == 64);
   confirmText.assign(reinterpret_cast<const char *>(p + 14), p[13]);
   LOKA_VERIFY(confirmText == "Save Caf\x8e?" || confirmText == "Newest");
   p += 14 + ((p[13] + 1) & ~1);
+  // The caution icon (System ICON 2) at the OOM alert's icon position.
+  LOKA_VERIFY(p + 16 <= end && p[12] == iconItem + itemDisable && p[13] == 2 && DialogWord(p + 14) == 2);
+  LOKA_VERIFY(DialogWord(p + 4) == 20 && DialogWord(p + 6) == 20 && DialogWord(p + 8) == 52
+              && DialogWord(p + 10) == 52);
+  p += 16;
   LOKA_VERIFY(p == end);
   if (refuseConfirmDialogs) { --refuseConfirmDialogs; return 0; }
   confirmItems = items;
@@ -98,11 +105,11 @@ void ModalDialog(ModalFilterUPP filter, short *item)
   LOKA_VERIFY(confirmWritesDuringModal && *confirmWritesDuringModal == confirmExpectedWrites);
   EventRecord event = {updateEvt, reinterpret_cast<unsigned long>(&confirmPort), 0};
   LOKA_VERIFY(!filter(&confirmPort, &event, item));
-  const unsigned char keys[] = {13, 3, 27, '.', '.', 'x'};
-  const unsigned short modifiers[] = {0, 0, 0, cmdKey, 0, 0};
-  const short expected[] = {1, 1, 2, 2, 0, 0};
+  const unsigned char keys[] = {13, 3, 27, '.', '.', 'x', 'd', 'D', 'd'};
+  const unsigned short modifiers[] = {0, 0, 0, cmdKey, 0, 0, cmdKey, cmdKey, 0};
+  const short expected[] = {1, 1, 2, 2, 0, 0, 3, 3, 0};
   for (unsigned kind = 0; kind != 2; ++kind)
-    for (unsigned i = 0; i != 6; ++i)
+    for (unsigned i = 0; i != 9; ++i)
     {
       event.what = kind ? autoKey : keyDown;
       event.message = keys[i]; event.modifiers = modifiers[i]; *item = 0;
