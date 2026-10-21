@@ -84,7 +84,7 @@ void testMacImageViewConvertsBitmapToDeviceRGB()
   LOKA_VERIFY(drawn != nil && drawn != input);
   LOKA_VERIFY(NSEqualSizes([drawn size], [input size]));
   LOKA_VERIFY([[drawn representations] count] == 1);
-  NSBitmapImageRep *converted = [[drawn representations] objectAtIndex:0];
+  NSBitmapImageRep *converted = (NSBitmapImageRep *)[[drawn representations] objectAtIndex:0];
   LOKA_VERIFY([converted isKindOfClass:[NSBitmapImageRep class]]);
   LOKA_VERIFY([[converted colorSpaceName] isEqualToString:NSDeviceRGBColorSpace]);
   LOKA_VERIFY([converted pixelsWide] == 4 && [converted pixelsHigh] == 4);
