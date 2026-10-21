@@ -159,7 +159,7 @@ void MacApp::attachQuitEventRouter()
 
 bool MacApp::holdQuitEvent()
 {
-  if (this->quitEventReply_.isHeld() || !this->flushTimer_)
+  if (!this->flushTimer_)
     return false;
   return this->quitEventReply_.hold();
 }

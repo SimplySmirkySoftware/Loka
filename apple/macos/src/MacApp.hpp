@@ -21,7 +21,7 @@ public:
   void dispatchNativeMenuCommand(int commandId);
   void flushInvalidationsTick();
 
-  /** Native quit handler entry; refuses without an available completion clock. */
+  /** Native quit handler entry; refuses without an available completion clock or while one event is held. */
   bool holdQuitEvent();
 
   MacMenuAttachment &menuAttachment() { return this->menuAttachment_; }
