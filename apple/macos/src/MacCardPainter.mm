@@ -225,6 +225,15 @@ namespace
     }
   };
 
+  /** Power-of-two denominators make lu*num/den exact in double for the logical
+      coordinates in use. Other denominators can round translated edges
+      differently (13/6), so they must use the sampler. Negative half ties still
+      need the sign guard. */
+  bool HasExactCornerPhaseScale(const loka::app::Ratio &ratio)
+  {
+    return ratio.den == 1 || ratio.den == 2 || ratio.den == 4 || ratio.den == 8;
+  }
+
   /** Bounded process owner: different rail ratios must never share a phase
       table. PaintTableInk selects once per paint, scanning at most eight banks;
       allocation refusal or a full bank set retains the sampler. */
@@ -239,7 +248,7 @@ namespace
 
     CornerDensityCache *forRatio(const loka::app::Ratio &ratio)
     {
-      if (ratio.den > 8)
+      if (!HasExactCornerPhaseScale(ratio))
         return 0;
       for (unsigned i = 0; i < sizeof(this->banks) / sizeof(this->banks[0]); ++i)
       {

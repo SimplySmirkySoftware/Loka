@@ -507,6 +507,30 @@ namespace
 
 namespace
 {
+  void VerifyDyadicProjectionPeriods()
+  {
+    const int denominators[] = {4, 8};
+    for (unsigned d = 0; d < sizeof(denominators) / sizeof(denominators[0]); ++d)
+    {
+      const int den = denominators[d];
+      const int numerators[] = {den, den + 1, den + 3, 2 * den};
+      for (unsigned n = 0; n < sizeof(numerators) / sizeof(numerators[0]); ++n)
+      {
+        const int num = numerators[n];
+        const MacProjection projection(0, RailMetrics(Ratio(), Ratio(num, den)));
+        for (int lu = -64; lu <= 64; ++lu)
+        {
+          const CGFloat period = projection.projectEdge(lu + den).pt - projection.projectEdge(lu).pt;
+          // Ties-away-from-zero adds one when a negative half tie crosses zero.
+          if (lu < 0 && lu + den > 0 && (-lu * num) % den == den / 2)
+            LOKA_VERIFY(period == num + 1);
+          else
+            LOKA_VERIFY(period == num);
+        }
+      }
+    }
+  }
+
   void VerifyDirectBoundaries()
   {
     const Ratio ratios[] = {Ratio(), Ratio(5, 4), Ratio(6, 5)};
@@ -540,7 +564,7 @@ namespace
   void VerifyCornerTiles()
   {
     // Populate the live rail first, so a unit-only cache cannot satisfy this pin.
-    const Ratio ratios[] = {Ratio(5, 4), Ratio(6, 5), Ratio(), Ratio(3, 2), Ratio(10, 9)};
+    const Ratio ratios[] = {Ratio(5, 4), Ratio(6, 5), Ratio(), Ratio(3, 2), Ratio(10, 9), Ratio(13, 6)};
     for (unsigned metric = 0; metric < sizeof(ratios) / sizeof(ratios[0]); ++metric)
     {
       const Ratio &ratio = ratios[metric];
@@ -558,8 +582,16 @@ namespace
                       NSAutoreleasePool *iteration = [[NSAutoreleasePool alloc] init];
                       const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
                       Frame bands[4];
-                      CardBands(
-                          Frame((negative ? -24 : 24) + phaseX, (negative ? -24 : 24) + phaseY, 73, 61), style, bands);
+                      // At 13/6, put the positive corner minimum at 6: the WIDE
+                      // span reaches 27, whose rounded offset differs from phase 0.
+                      const int bodyX = ratio == Ratio(13, 6) ? 6 + style.geometry().allowance[0] : 24;
+                      const int bodyY = ratio == Ratio(13, 6) ? 6 + style.geometry().allowance[1] : 24;
+                      CardBands(Frame((negative ? -24 : bodyX) + phaseX,
+                                      (negative ? -24 : bodyY) + phaseY,
+                                      73,
+                                      61),
+                                style,
+                                bands);
                       for (int role = 0; role < CARD_BAND_COUNT; ++role)
                       {
                         const Frame &band = bands[role];
@@ -585,9 +617,9 @@ namespace
                                            CardBandProps(static_cast<CardBandRole>(role), style),
                                            projection,
                                            NSMakePoint(3 + projected.origin.x, 5 + projected.origin.y));
-                          if (ratio.den <= 8 && !negative && !reference)
+                          if ((ratio.den == 1 || ratio.den == 2 || ratio.den == 4) && !negative && !reference)
                             LOKA_VERIFY(loka::testing::readMacCardCornerTileHits() > hits);
-                          if (reference || ratio.den > 8)
+                          if (reference || ratio.den == 5 || ratio.den == 6 || ratio.den == 9)
                             LOKA_VERIFY(loka::testing::readMacCardCornerTileHits() == hits);
                           loka::testing::failMacCardCornerTiles(0);
                           target.end();
@@ -604,6 +636,7 @@ void testMacCardPainterPixels()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
+  VerifyDyadicProjectionPeriods();
   VerifyDirectBoundaries();
   VerifyCornerTiles();
   for (int metric = 0; metric < 2; ++metric)
