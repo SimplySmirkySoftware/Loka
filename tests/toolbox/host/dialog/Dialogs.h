@@ -14,6 +14,10 @@ typedef Boolean (*ModalFilterUPP)(DialogPtr, EventRecord *, short *);
 #define pascal
 enum { ctrlItem = 4, btnCtrl = 0, statText = 8, itemDisable = 128,
        dBoxProc = 1, keyDown = 3, autoKey = 5, updateEvt = 6, charCodeMask = 255, cmdKey = 256 };
+enum
+{
+  iconItem = 32
+};
 Handle NewHandle(long);
 void DisposeHandle(Handle);
 DialogPtr NewDialog(void *, const Rect *, const unsigned char *, Boolean, short, WindowPtr, Boolean, long, Handle);
