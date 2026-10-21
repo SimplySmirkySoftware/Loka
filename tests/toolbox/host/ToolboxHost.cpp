@@ -632,18 +632,6 @@ namespace
   bool recordingCardRegion = false;
   Rect recordedCardRect = {0, 0, 0, 0};
 } // namespace
-namespace
-{
-  RGBColor hostForeground = {0, 0, 0};
-}
-void GetForeColor(RGBColor *out)
-{
-  *out = hostForeground;
-}
-void RGBForeColor(const RGBColor *value)
-{
-  hostForeground = *value;
-}
 void GetPenState(PenState *out)
 {
   *out = toolbox_host::pen;
@@ -717,8 +705,6 @@ void CopyBits(const BitMap *source, const BitMap *, const Rect *, const Rect *de
 #ifndef LOKA_HOST_RECT_SURFACE
 void PaintRect(const Rect *rect)
 {
-  if (hostForeground.red == 0xBBBB && hostForeground.green == 0xBBBB && hostForeground.blue == 0xBBBB)
-    ++toolbox_host::bandHairlines;
   toolbox_host::cardOperations.push_back('R');
   toolbox_host::Fill run = {*rect, toolbox_host::pen.pattern, toolbox_host::pen.mode};
   toolbox_host::stencilRuns.push_back(run);

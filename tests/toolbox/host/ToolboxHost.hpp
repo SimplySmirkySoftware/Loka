@@ -1,6 +1,7 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxUnitLedger.hpp"
+#include "ToolboxUnitHairline.hpp"
 #include "ToolboxErasedPass.hpp"
 #include "ToolboxBlurSnapshot.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
@@ -693,6 +694,12 @@ public:
     {
       ++paints;
       return false;
+    }
+    bool paintHairline(ToolboxWindow::WindowPort *, const Rect &rect, const Rect &unit)
+    {
+      ++toolbox_host::bandHairlines;
+      Rect line;
+      return ToolboxUnitHairlineRect(rect, unit, line);
     }
   } frostCache_;
   void noteWindowFullRequest(const char *) {}

@@ -1,7 +1,6 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/layout/ZStackLayout.hpp"
 #include "ToolboxPaintGround.hpp"
-#include "ToolboxUnitHairline.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 
 /** Shared by the rail and host. Deliberate Win32/macOS twin: full seats,
@@ -110,7 +109,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
         {
         case BLUR_PICTURE:
           painted = true;
-          ToolboxPaintUnitHairline(row.rect, row.unit);
+          this->frostCache_.paintHairline(this->window_->window(), row.rect, row.unit);
           break;
         case BLUR_ABSENT:
           painted = this->erasedPass_.isOpen() && this->frostCache_.paint(this->window_->window(), row.rect, row.unit);

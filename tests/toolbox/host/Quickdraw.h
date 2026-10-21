@@ -30,12 +30,6 @@ struct Region
   Rect rgnBBox;
 };
 typedef Region **RgnHandle;
-struct RGBColor
-{
-  unsigned short red, green, blue;
-};
-void GetForeColor(RGBColor *);
-void RGBForeColor(const RGBColor *);
 struct PenState
 {
   short mode, width, height;

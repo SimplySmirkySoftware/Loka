@@ -220,7 +220,7 @@ bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect, const Rect &un
   if (QDError() != noErr)
     return false;
   // A viewport may cut the unit: its last visible row is not its bottom.
-  // Scratch adapter; the matching window picture adapter is in ToolboxUnitHairline.hpp.
+  // Single scratch hairline adapter for milk and paintHairline picture edges.
   Rect hairlineRect;
   const int hairline = ToolboxUnitHairlineRect(rect, unit, hairlineRect) ? hairlineRect.top - rect.top : -1;
   unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(pixels.get()));
@@ -234,4 +234,12 @@ bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect, const Rect &un
   // on-screen indices unchanged until the next repaint of that unit.
   CopyBits(reinterpret_cast<BitMap *>(*pixels.get()), &window->portBits, &work, &rect, srcCopy, 0);
   return QDError() == noErr;
+}
+
+bool ToolboxFrostCache::paintHairline(WindowPtr window, const Rect &rect, const Rect &unit)
+{
+  Rect line;
+  if (!ToolboxUnitHairlineRect(rect, unit, line))
+    return false;
+  return this->paint(window, line, unit);
 }
