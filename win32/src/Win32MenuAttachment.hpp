@@ -54,6 +54,7 @@ private:
   {
     explicit MenuBinding(const std::wstring &suffix) : shortcutSuffix(suffix) {}
     const std::wstring shortcutSuffix;
+    const wchar_t *emptyTitle;
     loka::core::State<loka::core::String> *titleState;
     HMENU menu;
     // Win32 addresses a menu item either by command id or by position: a
@@ -76,10 +77,18 @@ private:
                           UINT byFlags,
                           const loka::app::MenuItemDefinition *itemDef,
                           HWND hwnd, const std::wstring &shortcutSuffix);
-  bool buildMenuItem(HMENU menu, const loka::app::MenuItemDefinition *itemDef,
-                     HWND hwnd, std::vector<ACCEL> &accelerators);
-  bool buildMenuItems(HMENU menu, const loka::app::MenuItemDefinition *itemsHead,
-                      HWND hwnd, std::vector<ACCEL> &accelerators);
+  bool buildMenuItem(HMENU menu,
+                     const loka::app::MenuItemDefinition *itemDef,
+                     HWND hwnd,
+                     std::vector<ACCEL> &accelerators,
+                     bool suppressQuit,
+                     bool &pendingSeparator);
+  bool buildMenuItems(HMENU menu,
+                      const loka::app::MenuItemDefinition *itemsHead,
+                      HWND hwnd,
+                      std::vector<ACCEL> &accelerators,
+                      bool suppressQuit,
+                      const loka::app::MenuItemDefinition *tail = 0);
 
   Win32Window &window_;
   HMENU menu_;
