@@ -45,6 +45,18 @@ namespace loka
     {
       [documentView scrollPoint:NSMakePoint(x.pt, y.pt)];
     }
+
+    /** Shortens a scroller's frame, fresh from AppKit tiling, by native clearance
+        at its top and bottom edges in the scroll view's flippedness; clamps at zero. */
+    inline void InsetMacScrollerFrame(NSView *scroller, bool flipped, CGFloat top, CGFloat bottom)
+    {
+      NSRect frame = [scroller frame];
+      frame.origin.y += flipped ? top : bottom;
+      frame.size.height -= top + bottom;
+      if (frame.size.height < 0)
+        frame.size.height = 0;
+      [scroller setFrame:frame];
+    }
   }
 }
 #endif

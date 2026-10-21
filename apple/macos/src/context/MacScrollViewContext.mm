@@ -57,14 +57,8 @@ struct MacScrollerClearance
     return;
 
   NSScroller *scroller = [self verticalScroller];
-  if (!scroller)
-    return;
-  NSRect frame = [scroller frame];
-  frame.origin.y += [self isFlipped] ? scrollerClearance_.top : scrollerClearance_.bottom;
-  frame.size.height -= scrollerClearance_.top + scrollerClearance_.bottom;
-  if (frame.size.height < 0)
-    frame.size.height = 0;
-  [scroller setFrame:frame];
+  if (scroller)
+    loka::macos::InsetMacScrollerFrame(scroller, [self isFlipped], scrollerClearance_.top, scrollerClearance_.bottom);
 }
 
 - (void)setContext:(MacScrollViewContext *)value
