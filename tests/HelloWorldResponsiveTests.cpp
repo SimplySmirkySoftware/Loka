@@ -451,11 +451,11 @@ void testHelloWorldShuffleRotatesSlotTitles()
   loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
   const MenuBarDefinition *bar = scene.menuBar();
   LOKA_VERIFY(bar != 0);
-  LOKA_VERIFY(bar->menusCount() == 5);
-  const char *menuTitles[] = {"", "View", "File", "Special", "Random"};
-  for (int i = 1; i < 5; ++i)
+  LOKA_VERIFY(bar->menusCount() == 4);
+  const char *menuTitles[] = {"", "View", "Special", "Random"};
+  for (int i = 1; i < 4; ++i)
     LOKA_VERIFY(bar->menuAt(i)->title.equals(String::Literal(menuTitles[i])));
-  const MenuDefinition *random = bar->menuAt(4);
+  const MenuDefinition *random = bar->menuAt(3);
   LOKA_VERIFY(random->itemsCount() == 8);
   const MenuItemDefinition *shuffle = random->itemsHead();
   LOKA_VERIFY(shuffle->title.equals(String::Literal("Shuffle")) && shuffle->onClickState);

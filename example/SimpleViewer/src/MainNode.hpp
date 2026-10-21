@@ -156,23 +156,18 @@ namespace simpleviewer
     {
       using namespace loka::app;
       this->props.assertInitialized();
-      c.menuBar(MenuBarDefinition()
-                << (AppMenu()
-                    << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
-                    << MenuSeparator()
-                    << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
-                << (Menu("File")
-                    << MenuItem("Open...").onClick(this->props.openDialogEvent()))
-                << (Menu("View")
-                    << MenuItem("Fit to Window")
-                           .attr(MenuItemAttr().checked(this->fitChecked_.state()))
-                           .onClick(&this->fitToWindowEvent_)
-                    << MenuItem("Actual Size")
-                           .attr(MenuItemAttr().checked(this->actualChecked_.state()))
-                           .onClick(&this->actualEvent_)
-                    << MenuItem("Actual Size (Scroll)")
-                           .attr(MenuItemAttr().checked(this->actualScrollChecked_.state()))
-                           .onClick(&this->actualScrollEvent_)));
+      c.menuBar(MenuBarDefinition() << StandardMenuPresets()
+                                    << (Menu("File") << MenuItem("Open...").onClick(this->props.openDialogEvent()))
+                                    << (Menu("View")
+                                        << MenuItem("Fit to Window")
+                                               .attr(MenuItemAttr().checked(this->fitChecked_.state()))
+                                               .onClick(&this->fitToWindowEvent_)
+                                        << MenuItem("Actual Size")
+                                               .attr(MenuItemAttr().checked(this->actualChecked_.state()))
+                                               .onClick(&this->actualEvent_)
+                                        << MenuItem("Actual Size (Scroll)")
+                                               .attr(MenuItemAttr().checked(this->actualScrollChecked_.state()))
+                                               .onClick(&this->actualScrollEvent_)));
 
       MatchDefinition<NavMode> nav = Match(*this->navMode_.state());
       nav.arm(NAV_WIDE, this->navPane(false))
