@@ -102,8 +102,15 @@ origin zero; with insets it requests extent `top`, hiding the top gap.
 Rails keep their nonnegative extent-offset math, maximum
 `max(0, extent - viewport)`, and existing clamps. Null has no bar or maximum
 clamp; its heightless result includes both insets, with short-range refusal
-checked after their addition. No scroll bar moves in this PR: track lowering
-and the native-bar column are page 2 questions of the ScrollView insets rally.
+checked after their addition.
+
+macOS keeps the vertical scroller clear of the inset rows: after AppKit tiles,
+it shortens the fresh vertical scroller frame by the projected top and bottom
+insets, clamping the height at zero. Zero insets preserve AppKit's frame.
+The committed clearance changes only after successful layout; every commit
+projects it again. The horizontal scroller, clip frame and document placement
+are unaffected by this clearance. Win32 bar clearance remains planned in #1547.
+
 Toolbox, Win32 and macOS adopt the doors the same way, each in its own PR:
 Null, Toolbox and Win32 subtract `contentTranslation()` from content
 coordinates, while macOS places the document at a constant top inset because
@@ -157,7 +164,7 @@ content fits keeps the pixels it had before #580.
 |---|---|---|---|
 | Toolbox | Always present (inactive when there is no range), 16 px column | Only while `maximumX > 0` and the seat has a height; bottom 16 px row ending 16 px before the right edge; the 16×16 corner is window ground | Content rect, hit rect and the vertical range lose the bottom 16 px ([ToolboxScrollViewDecisions.hpp](../apple/toolbox/src/ToolboxScrollViewDecisions.hpp)) |
 | Win32 | Always present (`SIF_DISABLENOSCROLL`), so the client width never moves between passes | `SetScrollInfo(SB_HORZ)` without `SIF_DISABLENOSCROLL`: Windows shows it only while the range exists | The children, the clip and the vertical page get `clientHeightBelowHorizontalBar(seat)`: the bar at the viewport's DPI leaves the seat's projected native height and the remainder converts once |
-| macOS | Always present | `setHasHorizontalScroller:` from the same decision | Legacy scrollers take `clientHeightBelowHorizontalScroller(seat)`; overlay scrollers take nothing |
+| macOS | Present, shortened by the projected content insets (possibly zero height) | `setHasHorizontalScroller:` from the same decision | Legacy scrollers take `clientHeightBelowHorizontalScroller(seat)`; overlay scrollers take nothing |
 
 On Toolbox, a ScrollView touching an answered window port shares its bars' borders
 with the frame: the right edge adds one pixel to child/content width, and the

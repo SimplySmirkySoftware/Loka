@@ -304,17 +304,17 @@ void testMacScrollViewOffsetIsRelayoutInput()
     offset.state().set(loka::core::Frame(0, 7, 0, 0));
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 7);
-    assert(NSEqualRects([[buttons objectAtIndex:0] frame], buttonAtZero)
-           && "AppKit scrolls the document; child content coordinates stay fixed");
+    LOKA_VERIFY(NSEqualRects([[buttons objectAtIndex:0] frame], buttonAtZero)
+                && "AppKit scrolls the document; child content coordinates stay fixed");
     const NSRect settledScrollFrame = [nativeScrollView frame];
     const NSRect settledDocumentFrame = [documentView frame];
     const NSRect settledButtonFrame = [[buttons objectAtIndex:0] frame];
 
     controller.relayout(300, 140);
     assert(clipOffset(nativeScrollView) == 7);
-    assert(NSEqualRects([nativeScrollView frame], settledScrollFrame));
-    assert(NSEqualRects([documentView frame], settledDocumentFrame));
-    assert(NSEqualRects([[buttons objectAtIndex:0] frame], settledButtonFrame));
+    LOKA_VERIFY(NSEqualRects([nativeScrollView frame], settledScrollFrame));
+    LOKA_VERIFY(NSEqualRects([documentView frame], settledDocumentFrame));
+    LOKA_VERIFY(NSEqualRects([[buttons objectAtIndex:0] frame], settledButtonFrame));
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
@@ -1061,8 +1061,191 @@ void testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth()
   std::printf("==== [testMacScrollViewRefusedWidenedLayoutKeepsDocumentWidth] PASSED ====\n");
 }
 
+// Simulate a backing-scale transition while the controller and props stay fixed.
+@interface LokaScrollerScaleTestWindow : NSWindow
+{
+  CGFloat testScale_;
+}
+- (void)setTestScale:(CGFloat)value;
+@end
+
+@implementation LokaScrollerScaleTestWindow
+- (void)setTestScale:(CGFloat)value
+{
+  testScale_ = value;
+}
+- (CGFloat)backingScaleFactor
+{
+  return testScale_ > 0 ? testScale_ : 1;
+}
+@end
+
+namespace
+{
+  // Use the inherited selector through its actual ABI on old and new SDKs.
+  void setTestScrollerStyle(NSScrollView *view, NSInteger style)
+  {
+    typedef void (*Setter)(id, SEL, NSInteger);
+    const SEL selector = NSSelectorFromString(@"setScrollerStyle:");
+    Setter setter = reinterpret_cast<Setter>([view methodForSelector:selector]);
+    setter(view, selector, style);
+  }
+
+  void checkScrollerClearance(NSScrollView *native, CGFloat top, CGFloat bottom)
+  {
+    // Plain AppKit is the zero-inset baseline, independent of the override.
+    NSScrollView *baseline = [[NSScrollView alloc] initWithFrame:[native frame]];
+    [baseline setBorderType:[native borderType]];
+    [baseline setHasVerticalScroller:YES];
+    [baseline setHasHorizontalScroller:[native hasHorizontalScroller]];
+    [baseline setAutohidesScrollers:NO];
+    if ([native respondsToSelector:NSSelectorFromString(@"setScrollerStyle:")])
+      setTestScrollerStyle(baseline, [native scrollerStyle]);
+    NSView *document = [[[[native documentView] class] alloc] initWithFrame:[[native documentView] frame]];
+    [baseline setDocumentView:document];
+    [document release];
+    [baseline tile];
+    NSRect expected = [[baseline verticalScroller] frame];
+    expected.origin.y += [native isFlipped] ? top : bottom;
+    expected.size.height -= top + bottom;
+    if (expected.size.height < 0)
+      expected.size.height = 0;
+    LOKA_VERIFY([native isFlipped] == [baseline isFlipped]);
+    LOKA_VERIFY([[native verticalScroller] superview] == native);
+    const NSRect actual = [[native verticalScroller] frame];
+    LOKA_VERIFY(NSEqualRects(actual, expected));
+    LOKA_VERIFY(NSEqualRects([[native contentView] frame], [[baseline contentView] frame]));
+    if ([native hasHorizontalScroller])
+      LOKA_VERIFY(NSEqualRects([[native horizontalScroller] frame], [[baseline horizontalScroller] frame]));
+    [baseline release];
+  }
+
+  void checkScrollerClearanceTransitions(int top, int bottom)
+  {
+    using namespace loka::app;
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    LokaScrollerScaleTestWindow *window =
+        [[LokaScrollerScaleTestWindow alloc] initWithContentRect:NSMakeRect(0, 0, 440, 300)
+                                                       styleMask:0
+                                                         backing:NSBackingStoreBuffered
+                                                           defer:NO];
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 440, 300)];
+    [window setContentView:root];
+    {
+      MacScenePlatformController controller(root, RailMetrics(Ratio(), Ratio(5, 4)));
+      ViewportFact fact(ScrollViewProps::topOrigin().y);
+      ScrollViewNode scroll((ScrollViewProps(fact.state())));
+      ImageViewNode *child = new ImageViewNode(ImageViewProps().size(40, 400));
+      scroll.addChild(child);
+      establishLayout(controller, &scroll, 300, 180);
+      NSScrollView *native = scrollViewUnderRoot(root);
+      LOKA_VERIFY(native != nil);
+      checkScrollerClearance(native, 0, 0);
+      [native tile];
+      [native tile];
+      checkScrollerClearance(native, 0, 0);
+      const bool styles = [native respondsToSelector:NSSelectorFromString(@"setScrollerStyle:")];
+      if (!styles)
+        std::printf("[skip] scroller style switching needs 10.7\n");
+      // Both capability branches run the geometry pins. The supported branch
+      // explicitly exercises legacy -> overlay -> legacy, including restoration.
+      NSRect legacyFrame = NSZeroRect;
+      for (int stylePass = 0; stylePass < (styles ? 3 : 1); ++stylePass)
+      {
+        if (styles)
+        {
+          setTestScrollerStyle(native, stylePass == 1 ? 1 : 0);
+          if (stylePass > 0)
+          {
+            checkScrollerClearance(native,
+                                   controller.projection().projectLength(0, top).pt,
+                                   controller.projection().projectLength(0, bottom).pt);
+            [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+            checkScrollerClearance(native,
+                                   controller.projection().projectLength(0, top).pt,
+                                   controller.projection().projectLength(0, bottom).pt);
+          }
+        }
+        scroll.props.contentInsets(ScrollViewContentInsets::of(top, bottom));
+        child->props.size(40, 400);
+        controller.relayout(300, 180);
+        const CGFloat projectedTop = controller.projection().projectLength(0, top).pt;
+        const CGFloat projectedBottom = controller.projection().projectLength(0, bottom).pt;
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        const NSRect frame = [[native verticalScroller] frame];
+        if (stylePass == 0)
+          legacyFrame = frame;
+        if (stylePass == 2)
+          LOKA_VERIFY(NSEqualRects(frame, legacyFrame));
+        const NSRect documentBefore = [[native documentView] frame];
+        NSArray *children = [[native documentView] subviews];
+        LOKA_VERIFY([children count] == 1);
+        const NSRect childBefore = [[children objectAtIndex:0] frame];
+        LOKA_VERIFY(childBefore.origin.y == projectedTop);
+        [native tile];
+        [native tile];
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        LOKA_VERIFY(NSEqualRects([[native documentView] frame], documentBefore));
+        LOKA_VERIFY(NSEqualRects([[children objectAtIndex:0] frame], childBefore));
+        [[native contentView] scrollToPoint:NSMakePoint(0, 30)];
+        [native reflectScrolledClipView:[native contentView]];
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        child->props.size(40, 500);
+        controller.relayout(300, 180);
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        [window setContentSize:NSMakeSize(500, 340)];
+        controller.relayout(340, 200);
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        child->props.size(600, 500);
+        controller.relayout(340, 200);
+        LOKA_VERIFY([native hasHorizontalScroller]);
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        [native tile];
+        [native tile];
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+        child->props.size(40, 500);
+        controller.relayout(340, 200);
+        LOKA_VERIFY(![native hasHorizontalScroller]);
+        checkScrollerClearance(native, projectedTop, projectedBottom);
+      }
+      scroll.props.contentInsets(ScrollViewContentInsets::of(0, 0));
+      controller.relayout(340, 200);
+      checkScrollerClearance(native, 0, 0);
+      scroll.props.contentInsets(ScrollViewContentInsets::of(top, bottom));
+      controller.relayout(300, 180);
+      const CGFloat oldTop = controller.projection().projectLength(0, top).pt;
+      const CGFloat oldBottom = controller.projection().projectLength(0, bottom).pt;
+      [window setTestScale:1.25];
+      controller.relayout(300, 180);
+      const CGFloat newTop = controller.projection().projectLength(0, top).pt;
+      const CGFloat newBottom = controller.projection().projectLength(0, bottom).pt;
+      LOKA_VERIFY(newTop != oldTop || newBottom != oldBottom);
+      checkScrollerClearance(native, newTop, newBottom);
+      scroll.props.contentInsets(ScrollViewContentInsets::of(200, 100));
+      controller.relayout(300, 180);
+      checkScrollerClearance(
+          native, controller.projection().projectLength(0, 200).pt, controller.projection().projectLength(0, 100).pt);
+      LOKA_VERIFY([[native verticalScroller] frame].size.height == 0);
+      scroll.props.contentInsets(ScrollViewContentInsets::of(0, 0));
+      controller.relayout(300, 180);
+      checkScrollerClearance(native, 0, 0);
+      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [root release];
+    [window release];
+    [pool drain];
+  }
+} // namespace
+
 void testMacScrollViewInsetsPlaceContentBelowTheTopInset()
 {
+  checkScrollerClearanceTransitions(11, 0);
+  checkScrollerClearanceTransitions(0, 7);
+  checkScrollerClearanceTransitions(11, 7);
   std::printf("\n==== [testMacScrollViewInsetsPlaceContentBelowTheTopInset] start ====\n");
   using namespace loka::app;
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -1172,12 +1355,13 @@ void testMacScrollViewInsetsRefuseAnExtentAboveShort()
   {
     MacScenePlatformController controller((void *)root, RailMetrics());
     ViewportFact fact(0);
-    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    ScrollViewNode scroll(ScrollViewProps(fact.state()).contentInsets(ScrollViewContentInsets::of(11, 7)));
     // A non-native box isolates extent refusal from projected leaf short overflow.
     scroll.addChild(new BoxNode(BoxProps().setSize(40, 7)));
     establishLayout(controller, &scroll, 300, 140);
     NSScrollView *native = scrollViewUnderRoot(root);
     LOKA_VERIFY(native != nil);
+    checkScrollerClearance(native, 11, 7);
     const NSRect before = [[native documentView] frame];
     const loka::core::Frame factBefore = fact.state().get();
     fact.resetChangeCount();
@@ -1185,6 +1369,9 @@ void testMacScrollViewInsetsRefuseAnExtentAboveShort()
     controller.relayout(300, 140);
     const bool documentUnchanged = NSEqualRects([[native documentView] frame], before);
     LOKA_VERIFY(documentUnchanged);
+    checkScrollerClearance(native, 11, 7);
+    [native tile];
+    checkScrollerClearance(native, 11, 7);
     const loka::core::Frame factAfter = fact.state().get();
     const int changes = fact.changeCount();
     LOKA_VERIFY(factAfter == factBefore && changes == 0);
