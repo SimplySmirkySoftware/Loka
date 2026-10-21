@@ -100,6 +100,7 @@
 #include "DerivedNodeStateTests.hpp"
 #ifdef __APPLE__
 #include "MacWindowAdmissionTests.hpp"
+#include "MacQuitEventTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
 #include "MacWindowResizeTests.hpp"
 #endif

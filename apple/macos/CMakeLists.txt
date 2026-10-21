@@ -49,6 +49,7 @@ file(GLOB_RECURSE LOKA_MACOS_CORE_HEADERS CONFIGURE_DEPENDS
 set(LOKA_MACOS_CORE_SOURCES
   src/MacBootstrap.mm
   src/MacApp.mm
+  src/MacQuitEvent.mm
   src/MacMenuAttachment.mm
   src/MacBuiltInSupport.mm
   src/MacGround.mm
@@ -139,6 +140,8 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/MacBitmapCapture.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacPlatformContext.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacApp.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/MacQuitEvent.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacQuitEventTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowAdmissionTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowFrameClampTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacWindowResizeTests.mm

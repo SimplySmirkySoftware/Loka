@@ -103,6 +103,7 @@
 #include "MacNodeHandlerEnsureTests.hpp"
 #include "MacScrollViewTests.hpp"
 #include "MacWindowAdmissionTests.hpp"
+#include "MacQuitEventTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
 #include "MacWindowResizeTests.hpp"
 #include "MacOpenFileDialogTests.hpp"

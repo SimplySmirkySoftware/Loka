@@ -162,6 +162,20 @@ that logoff resumes. Loka does not call `ShutdownBlockReasonCreate`, static
 windows' contents are not covered, and `WM_ENDSESSION(FALSE)` does not stop a
 started Quit.
 
+macOS answers the quit Apple Event itself (Dock Quit, logout, and `osascript … quit`).
+[MacApp.mm](../apple/macos/src/MacApp.mm) reserves Loka's usual Quit and
+[MacQuitEventReply](../apple/macos/src/MacQuitEvent.hpp) holds one reply, answered
+once: success in `quit()`, or `userCanceledErr` when the attempt ends without
+quitting or the App goes away. Teardown follows menu Quit. A second event while
+one is held, or an event that cannot be held, is refused immediately; other
+`terminate:` paths cancel and reserve Quit. An unedited but busy document (for
+example during Save As) declines. Code after `[NSApp run]` now runs, and a
+standalone host running several Apps sees the event end only the current pass.
+Inside a modal loop, the reserved Quit can be declined by the busy document
+before the modal returns: earlier than Win32, with the same meaning. Loka does
+not bind how long the OS waits, its cancellation UI, or whether it waits for
+teardown to finish.
+
 On Classic, Shut Down reaches a Loka application as its menu Quit. The
 examples' Classic SIZE resources declare them not high-level-event aware, and
 for such applications the Process Manager brings the application forward and
