@@ -1652,10 +1652,13 @@ void testMacZStackPhotoFollowsNativeAndAppScroll()
     LOKA_VERIFY(photoFingerprint(unit) != before);
     LOKA_VERIFY(probe.draws() == 2 && probe.requests() == 0);
   }
+  // AppKit may echo the muted move as one deferred bounds notification once
+  // the mute lifts; let it land, then pin that an idle relayout adds nothing.
   settlePhotoWindow(f);
+  const unsigned afterAppMove = probe.draws();
   f.layout();
   settlePhotoWindow(f);
-  LOKA_VERIFY(probe.draws() == 2);
+  LOKA_VERIFY(probe.draws() == afterAppMove && probe.requests() == 0);
 
   // A resize settles first; subsequent steps still draw once, even on refusal.
   [f.host.window setContentSize:NSMakeSize(320, 200)];
