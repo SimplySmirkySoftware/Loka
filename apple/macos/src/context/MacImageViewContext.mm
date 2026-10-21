@@ -28,20 +28,14 @@ namespace
     {
       return nil;
     }
+    // Only a single-bitmap image converts: a multi-representation image keeps
+    // AppKit's per-resolution selection, and vector-backed images keep their rep.
     NSArray *reps = [image representations];
-    NSBitmapImageRep *source = nil;
-    for (NSUInteger i = 0; i < [reps count]; ++i)
+    if ([reps count] != 1 || ![[reps objectAtIndex:0] isKindOfClass:[NSBitmapImageRep class]])
     {
-      NSImageRep *rep = [reps objectAtIndex:i];
-      if (![rep isKindOfClass:[NSBitmapImageRep class]])
-      {
-        return nil;
-      }
-      if (!source)
-      {
-        source = (NSBitmapImageRep *)rep;
-      }
+      return nil;
     }
+    NSBitmapImageRep *source = (NSBitmapImageRep *)[reps objectAtIndex:0];
     const NSSize size = [image size];
     const NSInteger width = [source pixelsWide];
     const NSInteger height = [source pixelsHigh];
