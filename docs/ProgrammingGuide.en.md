@@ -1769,6 +1769,14 @@ change which part of the unit is visible. Before a photo exists, the unit shows
 a frosted ground: a light sheen and a hairline. Neither unit requests a redraw
 to obtain a photo. macOS 10.7 and 10.8 are unverified and use this same path.
 
+When the ZStack's first child is a ScrollView, the band's photo follows each
+scroll step of the content beneath it, as long as the ScrollView covers the
+whole visible band; a ground that covers only part of the band leaves the
+photo at its last whole-band capture. Other changes beneath the band—an image
+loading, text changing, a control redrawing, or a partial exposure—still wait
+for the next redraw that covers the whole visible band. The static unit keeps
+its first photo under the lifetime rules above.
+
 | Change or drawing condition | What appears on macOS 10.4–10.9 |
 |---|---|
 | Caret blink or content change that does not redraw the unit | The old photo stays. |

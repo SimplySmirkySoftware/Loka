@@ -5,6 +5,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 
 class MacScenePlatformController;
+class MacGroundMoveSubscription;
 
 /** Owns the NSScrollView that clips a ScrollView subtree and whose flipped
     document view is the native projection parent for that subtree. */
@@ -55,6 +56,7 @@ public:
 
 private:
   friend class MacInputDoor;
+  friend class MacGroundMoveSubscription;
   /** Bounds-notification body; the rail door owns its complete borrow. */
   void publishClipViewBoundsOrigin();
   void handleScrollerStyleChange();
@@ -62,6 +64,7 @@ private:
   void applyDetachedPresentation();
   int maximumOffset(bool horizontal) const;
 
+  MacGroundMoveSubscription *groundMove_;
   loka::app::ScrollViewNode *node_;
   void *scrollView_;
 };
