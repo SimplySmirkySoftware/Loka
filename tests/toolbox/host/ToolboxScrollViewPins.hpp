@@ -386,13 +386,13 @@ namespace
       LOKA_VERIFY(f.step(ScrollViewProps::topOrigin().y, 100, viewportHeight, seatTop) == 1);
       LOKA_VERIFY(f.rect(0).top == seatTop + 12);
       LOKA_VERIFY(f.rect(0).bottom - f.rect(0).top == childHeight);
-      LOKA_VERIFY(f.controller.scrollMaximum() == childHeight + 15 - viewportHeight);
+      LOKA_VERIFY(f.controller.scrollControls().empty());
       LOKA_VERIFY(f.fact.get().y == -12);
       LOKA_VERIFY(f.controller.scrollSpans() && f.controller.scrollSpans()->valid());
       LOKA_VERIFY(f.controller.scrollSpans()->placedViewport().y == -12);
       LOKA_VERIFY(f.step(6, 100, viewportHeight, seatTop) == 1);
       LOKA_VERIFY(f.rect(0).top == seatTop - 6);
-      LOKA_VERIFY(f.controller.scrollMaximum() == childHeight + 15 - viewportHeight);
+      LOKA_VERIFY(f.controller.scrollControls().empty());
       LOKA_VERIFY(f.fact.get().y == 6);
       LOKA_VERIFY(f.controller.scrollSpans()->placedViewport().y == 6);
     }
@@ -494,8 +494,67 @@ namespace
     }
   }
 
+  void ScrollViewInsetBarPins()
+  {
+    Pin("ToolboxScrollViewInsetBarInitialEmptyAndHorizontal");
+    {
+      ScrollFixture f;
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(34, 0));
+      f.step(0);
+      LOKA_VERIFY(f.controller.scrollControls().size() == 1);
+      LOKA_VERIFY(f.controller.scrollControl(0).resourceId
+                  == f.controller.viewportScroll().barId[SCROLL_BAR_HORIZONTAL]);
+      LOKA_VERIFY(f.controller.scrollControl(0).control->visible);
+      const Rect content = {0, 0, 18, 84};
+      const Rect horizontal = {18, -1, 34, 84};
+      LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, content));
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(0).rect, horizontal));
+    }
+    Pin("ToolboxScrollViewBottomInsetKeepsHorizontalAndContentRect");
+    {
+      ScrollFixture f;
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      f.step(0);
+      const Rect content = f.controller.viewportScroll().contentRect;
+      const Rect horizontal = f.controller.scrollControl(1).rect;
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(0, 10));
+      f.step(0);
+      LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, content));
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(1).rect, horizontal));
+      LOKA_VERIFY(f.controller.scrollControl(0).rect.bottom == 18);
+      LOKA_VERIFY(f.controller.scrollControl(0).pageStep == 17 && f.controller.scrollControl(0).lineStep == 1);
+    }
+    Pin("ToolboxScrollViewRefusedVerticalStillHandlesHorizontal");
+    {
+      ScrollFixture f;
+      f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+      toolbox_host::refuseControls = 1;
+      f.step(0);
+      LOKA_VERIFY(toolbox_host::refuseControls == 0);
+      LOKA_VERIFY(f.controller.scrollControls().size() == 1);
+      LOKA_VERIFY(f.controller.scrollControl(0).resourceId
+                  == f.controller.viewportScroll().barId[SCROLL_BAR_HORIZONTAL]);
+      LOKA_VERIFY(f.controller.scrollControl(0).control->visible);
+    }
+    Pin("ToolboxScrollViewInsetBarVisibleEmptyVisible");
+    {
+      ScrollFixture f;
+      f.step(0);
+      ControlRef vertical = f.controller.scrollControl(0).control;
+      LOKA_VERIFY(vertical->visible);
+      f.scroll.props.contentInsets(ScrollViewContentInsets::of(34, 0));
+      f.step(0);
+      LOKA_VERIFY(!vertical->visible);
+      f.scroll.props.contentInsets(ScrollViewContentInsets());
+      f.step(0);
+      LOKA_VERIFY(vertical->visible);
+    }
+  }
+
   void ScrollViewPins()
   {
+    ScrollViewInsetBarPins();
     ScrollViewViewportSizePins();
     ScrollViewInsetPins();
     ScrollViewInsetExtentPins();

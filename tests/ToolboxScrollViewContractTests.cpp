@@ -290,3 +290,42 @@ void testToolboxScrollViewSizeBoxSharedLines()
   verifyScrollRect(ToolboxScrollViewHorizontalBarRect(seat, ToolboxScrollViewRect(-10, 90, 120, 110), none),
                    ToolboxScrollViewRect(0, 84, 0, 100));
 }
+
+void testToolboxScrollViewInsetBarClearance()
+{
+  using loka::app::ScrollViewContentInsets;
+  const ToolboxScrollViewRect seat(0, 0, 360, 260), none;
+  const ToolboxScrollViewEdges edges(true, true, true, true);
+  const ToolboxScrollViewRect old = ToolboxScrollViewVerticalBarRect(seat, false, none, edges);
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, false, none, edges, ScrollViewContentInsets()), old);
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, false, none, edges, ScrollViewContentInsets::of(30, 0)),
+                   ToolboxScrollViewRect(345, 30, 361, 261));
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, false, none, edges, ScrollViewContentInsets::of(0, 10)),
+                   ToolboxScrollViewRect(345, -1, 361, 250));
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, false, none, edges, ScrollViewContentInsets::of(30, 10)),
+                   ToolboxScrollViewRect(345, 30, 361, 250));
+  const ToolboxScrollViewRect box(345, 245, 360, 260);
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, false, box, edges, ScrollViewContentInsets::of(30, 10)),
+                   ToolboxScrollViewRect(345, 30, 361, 246));
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(seat, true, none, edges, ScrollViewContentInsets::of(30, 10)),
+                   ToolboxScrollViewRect(345, 30, 361, 245));
+  const ToolboxScrollViewRect offset(10, 20, 110, 120);
+  const ToolboxScrollViewEdges interior(false, false, false, false);
+  verifyScrollRect(ToolboxScrollViewVerticalBarRect(offset, false, none, interior, ScrollViewContentInsets::of(7, 9)),
+                   ToolboxScrollViewRect(94, 27, 110, 111));
+  for (int top = 50; top <= 150; top += 50)
+  {
+    const ToolboxScrollViewRect empty =
+        ToolboxScrollViewVerticalBarRect(offset, false, none, interior, ScrollViewContentInsets::of(top, 50));
+    LOKA_VERIFY(empty.top == empty.bottom && empty.top >= offset.top && empty.bottom <= offset.bottom);
+  }
+  const ShortRect high = {10, SHRT_MAX - 100, 110, SHRT_MAX};
+  const ShortRect low = {10, SHRT_MIN, 110, SHRT_MIN + 100};
+  const ShortRect noBox = {0, 0, 0, 0};
+  const ShortRect highBar =
+      ToolboxScrollViewVerticalBarRect(high, false, noBox, interior, ScrollViewContentInsets::of(SHRT_MAX, 0));
+  const ShortRect lowBar =
+      ToolboxScrollViewVerticalBarRect(low, false, noBox, interior, ScrollViewContentInsets::of(0, SHRT_MAX));
+  LOKA_VERIFY(highBar.top == SHRT_MAX && highBar.bottom == SHRT_MAX);
+  LOKA_VERIFY(lowBar.top == SHRT_MIN && lowBar.bottom == SHRT_MIN);
+}
