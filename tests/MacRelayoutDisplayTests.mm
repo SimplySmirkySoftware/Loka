@@ -31,7 +31,7 @@ namespace
           window(nil)
     {
       [NSApplication sharedApplication];
-      this->window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, 640, 480)
+      this->window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, 640, 900)
                                                  styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
                                                    backing:NSBackingStoreBuffered
                                                      defer:NO];
@@ -171,9 +171,9 @@ namespace
       Scene scene(definition);
       LOKA_VERIFY(scene.mount(&controller));
       loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
-      controller.relayout(640, 480);
+      controller.relayout(640, 900);
       [host.window makeKeyAndOrderFront:nil];
-      controller.relayout(640, 480);
+      controller.relayout(640, 900);
       [host.window display];
       NSScrollView *scroll = (NSScrollView *)findView([host.window contentView], [NSScrollView class]);
       LOKA_VERIFY(scroll);
@@ -202,7 +202,7 @@ namespace
         spacerWidth.set(40);
         scene.flushInvalidation();
       }
-      controller.relayout(640, 480);
+      controller.relayout(640, 900);
       [host.window displayIfNeeded];
       if (move)
       {
