@@ -12,6 +12,44 @@ namespace
   const unsigned char kSeparator[] = {1, '-'};
   const unsigned char kPlaceholder[] = {1, ' '};
 
+  // Deliberate platform-seam twin of the title fallback tables in
+  // MacMenuAttachment.mm and Win32MenuAttachment.cpp: Classic uses About / Quit.
+  const unsigned char *EmptyMenuTitle(loka::app::MenuActionType action)
+  {
+    static const unsigned char about[] = {5, 'A', 'b', 'o', 'u', 't'};
+    static const unsigned char quit[] = {4, 'Q', 'u', 'i', 't'};
+    switch (action)
+    {
+    case loka::app::MENU_ACTION_ABOUT_APP:
+      return about;
+    case loka::app::MENU_ACTION_QUIT_APP:
+      return quit;
+    case loka::app::MENU_ACTION_NONE:
+    case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
+      return 0;
+    }
+    return 0;
+  }
+
+  void SetMenuTitle(MenuHandle menu, short item, const loka::core::String &value, const unsigned char *emptyTitle)
+  {
+    Str255 title;
+    const bool encoded = ToolboxEncodePascal(value, title);
+    SetMenuItemText(menu, item, encoded && title[0] == 0 && emptyTitle ? emptyTitle : title);
+  }
+
+  // Each candidate item write, including insertion before DAs or an opener,
+  // must grow the native menu by exactly one. No installation occurs here.
+  bool AddMenuItem(MenuHandle menu, const unsigned char *text, short after = -1)
+  {
+    const short before = CountMenuItems(menu);
+    if (after < 0)
+      AppendMenu(menu, text);
+    else
+      InsertMenuItem(menu, text, after);
+    return CountMenuItems(menu) == before + 1;
+  }
+
   // ClearMenuBar also deletes every entry of the menu color table, which
   // InitMenus filled from 'mctb' 0 at startup. Keep the table across the
   // clear; without a copy (no memory) the colors fall back to the defaults.
@@ -55,9 +93,7 @@ void ToolboxMenuAttachment::MenuTitleChangedThunk(void *userData)
   ToolboxMenuAttachment::MenuBinding *binding = static_cast<ToolboxMenuAttachment::MenuBinding *>(userData);
   if (!binding || !binding->menu || !binding->titleState)
     return;
-  Str255 title;
-  ToolboxEncodePascal(binding->titleState->get(), title);
-  SetMenuItemText(binding->menu, binding->itemIndex, title);
+  SetMenuTitle(binding->menu, binding->itemIndex, binding->titleState->get(), binding->emptyTitle);
   binding->app->requestMenuBarDraw();
 }
 
@@ -99,9 +135,8 @@ void ToolboxMenuAttachment::ApplyMenuItemStates(ToolboxApp *app,
                                 const loka::app::MenuItemDefinition *itemDef,
                                 std::vector<ToolboxMenuAttachment::MenuBinding *> &bindings)
 {
-  Str255 title;
-  ToolboxEncodePascal(itemDef->titleState ? itemDef->titleState->get() : itemDef->title, title);
-  SetMenuItemText(menu, itemIndex, title);
+  const unsigned char *emptyTitle = EmptyMenuTitle(itemDef->action);
+  SetMenuTitle(menu, itemIndex, itemDef->titleState ? itemDef->titleState->get() : itemDef->title, emptyTitle);
 
   // Openers previously bypassed bool bindings; retain that policy while binding titles.
   if (!itemDef->hasChildren() && !itemDef->isEnabledInitial())
@@ -123,6 +158,7 @@ void ToolboxMenuAttachment::ApplyMenuItemStates(ToolboxApp *app,
   binding->menu = menu;
   binding->itemIndex = itemIndex;
   binding->titleState = itemDef->titleState;
+  binding->emptyTitle = emptyTitle;
   binding->enabledState = enabledState;
   binding->invertEnabled = itemDef->enabledBindingInvert();
   binding->checkedState = checkedState;
@@ -244,60 +280,78 @@ static char MenuShortcutForAction(const loka::app::MenuItemDefinition *itemDef)
   return 0;
 }
 
+void ToolboxMenuAttachment::ApplyMenuLeaf(ToolboxApp *app,
+                                          MenuHandle menu,
+                                          short menuId,
+                                          short itemIndex,
+                                          const loka::app::MenuItemDefinition *itemDef,
+                                          ToolboxMenuGraph &graph)
+{
+  const char key = MenuShortcutForAction(itemDef);
+  if (key)
+    SetItemCmd(menu, itemIndex, key);
+  const MenuCommand command = {menuId, itemIndex, itemDef->action, itemDef->onClickState};
+  graph.commands.push_back(command);
+  ApplyMenuItemStates(app, menu, itemIndex, itemDef, graph.bindings);
+}
+
 bool ToolboxMenuAttachment::BuildMenuItems(ToolboxApp *app,
                                            MenuHandle menu,
                                            const loka::app::MenuItemDefinition *itemsHead,
                                            short menuId,
                                            short &nextMenuId,
-                                           ToolboxMenuGraph &graph)
+                                           ToolboxMenuGraph &graph,
+                                           bool suppressQuit,
+                                           const loka::app::MenuItemDefinition *tail)
 {
-  const loka::app::MenuItemDefinition *itemDef = itemsHead;
-  while (itemDef)
+  bool pendingSeparator = false;
+  for (const loka::app::MenuItemDefinition *itemDef = itemsHead; itemDef; itemDef = itemDef->nextInComposition)
   {
     if (!itemDef->isVisibleInitial())
-    {
-      itemDef = itemDef->nextInComposition;
       continue;
-    }
     if (itemDef->isSeparator)
     {
-      const short before = CountMenuItems(menu);
-      AppendMenu(menu, kSeparator);
-      if (CountMenuItems(menu) != before + 1)
-        return false;
-      itemDef = itemDef->nextInComposition;
+      pendingSeparator = CountMenuItems(menu) != 0;
       continue;
     }
-    if (itemDef->action == loka::app::MENU_ACTION_SHOW_COLOR_PICKER)
-    {
-      itemDef = itemDef->nextInComposition;
+    if (itemDef->action == loka::app::MENU_ACTION_SHOW_COLOR_PICKER
+        || (suppressQuit && !itemDef->hasChildren() && itemDef->action == loka::app::MENU_ACTION_QUIT_APP))
       continue;
-    }
-    const short before = CountMenuItems(menu);
-    AppendMenu(menu, kPlaceholder);
-    if (CountMenuItems(menu) != before + 1)
+
+    // Reserve the item before descending, as before. A separator waits until
+    // the submenu survives filtering, then is inserted before this reservation.
+    if (!AddMenuItem(menu, kPlaceholder))
       return false;
     short itemIndex = CountMenuItems(menu);
+    short subMenuId = 0;
     if (itemDef->hasChildren())
     {
       Str255 title;
       ToolboxEncodePascal(itemDef->title, title);
       if (nextMenuId > 235)
         return false;
-      short subMenuId = nextMenuId++;
+      subMenuId = nextMenuId++;
       MenuHandle subMenu = graph.create(subMenuId, title);
       if (!subMenu)
         return false;
-      if (!BuildMenuItems(app, subMenu, itemDef->childrenHead(), subMenuId, nextMenuId, graph))
+      if (!BuildMenuItems(app, subMenu, itemDef->childrenHead(), subMenuId, nextMenuId, graph, suppressQuit))
         return false;
       if (CountMenuItems(subMenu) == 0)
       {
         graph.prune(subMenu);
         DeleteMenuItem(menu, itemIndex);
-        itemDef = itemDef->nextInComposition;
         continue;
       }
       graph.recordInsertion(subMenu, kInsertHierarchicalMenu);
+    }
+    if (pendingSeparator)
+    {
+      if (!AddMenuItem(menu, kSeparator, itemIndex - 1))
+        return false;
+      ++itemIndex;
+    }
+    if (itemDef->hasChildren())
+    {
       // A declared shortcut is ignored: Classic uses the cmd field as the submenu marker.
       SetItemCmd(menu, itemIndex, hMenuCmd);
 #if defined(TARGET_API_MAC_CARBON) && TARGET_API_MAC_CARBON
@@ -310,20 +364,20 @@ bool ToolboxMenuAttachment::BuildMenuItems(ToolboxApp *app,
       SetItemMark(menu, itemIndex, static_cast<CharParameter>(subMenuId & 0xFF));
 #endif
       ApplyMenuItemStates(app, menu, itemIndex, itemDef, graph.bindings);
-      itemDef = itemDef->nextInComposition;
-      continue;
     }
-    const char key = MenuShortcutForAction(itemDef);
-    if (key)
-      SetItemCmd(menu, itemIndex, key);
-    ToolboxMenuAttachment::MenuCommand command;
-    command.menuId = menuId;
-    command.itemIndex = itemIndex;
-    command.action = itemDef->action;
-    command.emitter = itemDef->onClickState;
-    graph.commands.push_back(command);
-    ApplyMenuItemStates(app, menu, itemIndex, itemDef, graph.bindings);
-    itemDef = itemDef->nextInComposition;
+    else
+    {
+      ApplyMenuLeaf(app, menu, menuId, itemIndex, itemDef, graph);
+    }
+    pendingSeparator = false;
+  }
+  if (tail)
+  {
+    if (CountMenuItems(menu) && !AddMenuItem(menu, kSeparator))
+      return false;
+    if (!AddMenuItem(menu, kPlaceholder))
+      return false;
+    ApplyMenuLeaf(app, menu, menuId, CountMenuItems(menu), tail, graph);
   }
   return true;
 }
@@ -370,67 +424,54 @@ bool ToolboxMenuAttachment::project(const loka::app::MenuSources &sources)
 bool ToolboxMenuAttachment::build(const loka::app::MenuBarDefinition &menuBar, ToolboxMenuGraph &graph)
 {
   const size_t menuCount = menuBar.menusCount();
-  short nextMenuId = 128;
-  bool hasAppMenu = false;
-  loka::dsl::CompositionCursor<loka::app::MenuDefinition> appMenuScan(menuBar.menusHead(), menuCount);
-  for (loka::app::MenuDefinition *menuDef = appMenuScan.next(); menuDef; menuDef = appMenuScan.next())
+  const loka::app::MenuItemDefinition *about = 0;
+  const loka::app::MenuItemDefinition *quit = 0;
+  const loka::app::MenuDefinition *file = 0;
+  loka::dsl::CompositionCursor<loka::app::MenuDefinition> scan(menuBar.menusHead(), menuCount);
+  for (loka::app::MenuDefinition *menuDef = scan.next(); menuDef; menuDef = scan.next())
   {
-    if (menuDef->isAppMenu)
+    if (!menuDef->isAppMenu)
     {
-      hasAppMenu = true;
-      break;
+      if (!file && menuDef->title.equals(loka::core::String::Literal("File")))
+        file = menuDef;
+      continue;
+    }
+    for (const loka::app::MenuItemDefinition *item = menuDef->itemsHead(); item; item = item->nextInComposition)
+    {
+      if (item->hasChildren() || item->isSeparator)
+        continue;
+      if (!about && item->action == loka::app::MENU_ACTION_ABOUT_APP && item->isVisibleInitial())
+        about = item;
+      if (!quit && item->action == loka::app::MENU_ACTION_QUIT_APP && item->isVisibleInitial())
+        quit = item;
     }
   }
 
-  if (hasAppMenu)
+  const unsigned char appleTitle[] = {1, 0x14};
+  MenuHandle apple = graph.create(128, appleTitle);
+  if (!apple)
+    return false;
+  // Leave desk-accessory rows exactly as the system supplies them, including their separator.
+  AppendResMenu(apple, 'DRVR');
+  if (about)
   {
-    Str255 title;
-    title[0] = 1;
-    title[1] = 0x14;
-    MenuHandle menu = graph.create(128, title);
+    // Baseline includes the DA entries; insert About above them.
+    if (!AddMenuItem(apple, kPlaceholder, 0))
+      return false;
+    ApplyMenuLeaf(&this->app_, apple, 128, 1, about, graph);
+  }
+  graph.recordInsertion(apple, 0);
+  short nextMenuId = 129;
+  if (quit && !file)
+  {
+    const unsigned char fileTitle[] = {4, 'F', 'i', 'l', 'e'};
+    const short menuId = nextMenuId++;
+    MenuHandle menu = graph.create(menuId, fileTitle);
     if (!menu)
       return false;
-    std::vector<const loka::app::MenuItemDefinition *> aboutItems;
-    loka::dsl::CompositionCursor<loka::app::MenuDefinition> appMenuIt(menuBar.menusHead(), menuCount);
-    for (loka::app::MenuDefinition *menuDef = appMenuIt.next(); menuDef; menuDef = appMenuIt.next())
-    {
-      if (!menuDef->isAppMenu)
-        continue;
-      const loka::app::MenuItemDefinition *itemDef = menuDef->itemsHead();
-      while (itemDef)
-      {
-        if (itemDef->action == loka::app::MENU_ACTION_ABOUT_APP)
-        {
-          if (itemDef->isVisibleInitial())
-          {
-            aboutItems.push_back(itemDef);
-          }
-        }
-        itemDef = itemDef->nextInComposition;
-      }
-    }
-    if (!aboutItems.empty())
-    {
-      AppendResMenu(menu, 'DRVR');
-      const short before = CountMenuItems(menu);
-      const loka::app::MenuItemDefinition *itemDef = aboutItems[0];
-      InsertMenuItem(menu, kPlaceholder, 0);
-      if (CountMenuItems(menu) != before + 1)
-        return false;
-      short aboutIndex = 1;
-      // Separator not needed; desk accessories already have one.
-      ToolboxMenuAttachment::MenuCommand command;
-      command.menuId = 128;
-      command.itemIndex = aboutIndex;
-      command.action = itemDef->action;
-      command.emitter = itemDef->onClickState;
-      graph.commands.push_back(command);
-      ApplyMenuItemStates(&this->app_, menu, aboutIndex, itemDef, graph.bindings);
-      graph.recordInsertion(menu, 0);
-    }
-    else
-      graph.prune(menu);
-    nextMenuId = 129;
+    if (!BuildMenuItems(&this->app_, menu, 0, menuId, nextMenuId, graph, true, quit))
+      return false;
+    graph.recordInsertion(menu, 0);
   }
 
   loka::dsl::CompositionCursor<loka::app::MenuDefinition> it(menuBar.menusHead(), menuCount);
@@ -452,7 +493,8 @@ bool ToolboxMenuAttachment::build(const loka::app::MenuBarDefinition &menuBar, T
     MenuHandle menu = graph.create(menuId, title);
     if (!menu)
       return false;
-    if (!BuildMenuItems(&this->app_, menu, menuDef->itemsHead(), menuId, nextMenuId, graph))
+    if (!BuildMenuItems(
+            &this->app_, menu, menuDef->itemsHead(), menuId, nextMenuId, graph, quit != 0, menuDef == file ? quit : 0))
       return false;
     if (CountMenuItems(menu) == 0)
     {

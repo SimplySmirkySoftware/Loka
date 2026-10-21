@@ -18,4 +18,9 @@ void testMacMenuTitleFollowsState();
 void testMacMenuSubmenuTitleFollowsState();
 void testMacMenuTitleStateUnbindsOnRelease();
 
+void testMacMenuAppFirstAndSections();
+void testMacMenuQuitSuppressionAndSeparators();
+void testMacMenuAppMiddlePreservesPayloads();
+void testMacMenuEmptyActionTitleFollowsState();
+void testMacMenuVisibilityReadOnceAndConstantFallback();
 #endif // LOKA_TESTS_MAC_MENU_PROJECTION_TESTS_HPP
