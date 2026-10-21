@@ -31,8 +31,7 @@ public:
   virtual void composeDefaultMenu(loka::app::MenuComposition &c)
   {
     using namespace loka::app;
-    c.declare(AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuSeparator()
-                        << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP));
+    c.declare(StandardMenuPresets());
   }
 
   void handleWindowIdle(Window *window, double elapsedSeconds)

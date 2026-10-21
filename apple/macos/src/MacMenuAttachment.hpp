@@ -36,6 +36,7 @@ private:
   struct MenuBinding
   {
     void *menuItem;
+    const char *emptyTitle;
     loka::core::State<loka::core::String> *titleState;
     loka::core::State<bool> *enabledState;
     bool invertEnabled;
@@ -44,8 +45,11 @@ private:
   static void MenuTitleChangedThunk(void *userData);
   static void MenuEnabledChangedThunk(void *userData);
   static void MenuCheckedChangedThunk(void *userData);
-  std::size_t BuildMenuItem(void *menu, const loka::app::MenuItemDefinition *item, bool allowQuit);
-  std::size_t BuildMenuItems(void *menu, const loka::app::MenuItemDefinition *items, bool allowQuit);
+  std::size_t
+  BuildMenuItem(void *menu, const loka::app::MenuItemDefinition *item, bool suppressQuit, bool &pendingSeparator);
+  void BuildMenuRow(void *menu, const loka::app::MenuItemDefinition *item, bool suppressQuit, bool &pendingSeparator);
+  std::size_t BuildMenuItems(void *menu, const loka::app::MenuItemDefinition *items, bool suppressQuit);
+  std::size_t BuildAppMenu(void *menu, const loka::app::MenuItemDefinition *items, bool &quitPlaced);
   void clearMenuBindings();
   void reset();
 

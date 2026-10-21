@@ -309,18 +309,13 @@ namespace simpletext
       using namespace loka::core;
       const State<bool> &errorVisible = *this->errorVisible_.state();
       c.menuBar(MenuBarDefinition()
-                << (AppMenu()
-                    << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
-                    << MenuSeparator()
-                    << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
+                << StandardMenuPresets()
                 << (Menu("File")
                     << MenuItem("New").onClick(this->commands_.slot<simpletext::NEW_DOCUMENT>())
                     << MenuItem("Open...").shortcut('o').onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                     << MenuItem("Close").shortcut('w').onClick(this->commands_.slot<simpletext::CLOSE_DOCUMENT>())
                     << MenuItem("Save").shortcut('s').onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
-                    << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())
-                    << MenuSeparator()
-                    << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP)));
+                    << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())));
       // One seat on the operation: at most one dialog exists, and none while idle.
       const PolicyScopeDefinition saveDialog = PolicyScopeDefinition().destroyOnDetach()
           << SaveFileDialog(String::Literal("untitled.txt"))

@@ -22,4 +22,9 @@ void testWin32MenuAcceleratorPrecedesDialogAndDispatch();
 void testWin32MenuTitleFollowsState();
 void testWin32MenuPopupTitleFollowsState();
 void testWin32MenuTitleStateUnbindsOnRelease();
+void testWin32AppQuitPlacement();
+void testWin32AppQuitSuppressesOrdinaryLeaves();
+void testWin32AppQuitTitleFallbackAndPayload();
+void testWin32InvisibleAppQuitKeepsOrdinaryQuit();
+void testWin32AppQuitRefusalPreservesProjection();
 #endif

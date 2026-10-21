@@ -24,12 +24,7 @@ namespace tutorial
   inline void DeclareTutorialMenu(loka::app::MenuComposition &composition)
   {
     using namespace loka::app;
-    composition.declare(AppMenu()                                 //
-                        << MenuItem("About")                      //
-                               .actionType(MENU_ACTION_ABOUT_APP) //
-                        << MenuSeparator()                        //
-                        << MenuItem("Quit")                       //
-                               .actionType(MENU_ACTION_QUIT_APP));
+    composition.declare(StandardMenuPresets());
   }
 } // namespace tutorial
 

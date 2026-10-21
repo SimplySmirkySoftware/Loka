@@ -21,13 +21,37 @@ namespace
     return (key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9') ? key : 0;
   }
 
+  // Deliberate platform-seam twin of ToolboxMenuAttachment.cpp and
+  // MacMenuAttachment.mm: Win32 calls an empty-title Quit "Exit".
+  const wchar_t *MenuEmptyTitle(loka::app::MenuActionType action)
+  {
+    if (action == loka::app::MENU_ACTION_QUIT_APP)
+      return L"Exit";
+    if (action == loka::app::MENU_ACTION_ABOUT_APP)
+      return L"About";
+    return L"";
+  }
+
+  bool AppendPendingSeparator(HMENU menu, bool &pending)
+  {
+    if (pending && GetMenuItemCount(menu) > 0 && !AppendMenuW(menu, MF_SEPARATOR, 0, NULL))
+      return false;
+    pending = false;
+    return true;
+  }
+
   // False when the title cannot be materialized: the caller keeps what it has
   // (a build refuses, an update leaves the installed label) rather than
   // committing an empty or suffix-only label (bot P2 on #1129).
-  bool MenuItemLabel(const loka::core::String &title, const std::wstring &shortcutSuffix, std::wstring &label)
+  bool MenuItemLabel(const loka::core::String &title,
+                     const std::wstring &shortcutSuffix,
+                     const wchar_t *emptyTitle,
+                     std::wstring &label)
   {
     if (!loka::win32::MaterializeWideString(title, label))
       return false;
+    if (label.empty())
+      label = emptyTitle;
     label += shortcutSuffix;
     return true;
   }
@@ -149,7 +173,7 @@ void Win32MenuAttachment::MenuTitleChangedThunk(void *userData)
   if (!binding || !binding->titleState || !binding->menu)
     return;
   std::wstring label;
-  if (!MenuItemLabel(binding->titleState->get(), binding->shortcutSuffix, label))
+  if (!MenuItemLabel(binding->titleState->get(), binding->shortcutSuffix, binding->emptyTitle, label))
     return;
   MENUITEMINFOW info = {};
   info.cbSize = sizeof(info);
@@ -218,24 +242,13 @@ void Win32MenuAttachment::clearMenuBindings()
   nextCommandId_ = 1000;
 }
 
-bool Win32MenuAttachment::buildMenuItem(HMENU menu, const loka::app::MenuItemDefinition *itemDef,
-                                        HWND hwnd, std::vector<ACCEL> &accelerators)
+bool Win32MenuAttachment::buildMenuItem(HMENU menu,
+                                        const loka::app::MenuItemDefinition *itemDef,
+                                        HWND hwnd,
+                                        std::vector<ACCEL> &accelerators,
+                                        bool suppressQuit,
+                                        bool &pendingSeparator)
 {
-  if (!itemDef)
-    return true;
-  if (!itemDef->isVisibleInitial())
-  {
-    return true;
-  }
-  if (itemDef->isSeparator)
-  {
-    return AppendMenuW(menu, MF_SEPARATOR, 0, NULL) != FALSE;
-  }
-  if (itemDef->action == loka::app::MENU_ACTION_SHOW_COLOR_PICKER)
-  {
-    return true;
-  }
-
   const WORD key = itemDef->hasChildren() ? 0 : MenuShortcutForAction(itemDef);
   std::wstring shortcutSuffix;
   if (key)
@@ -244,7 +257,10 @@ bool Win32MenuAttachment::buildMenuItem(HMENU menu, const loka::app::MenuItemDef
     shortcutSuffix += static_cast<wchar_t>(key);
   }
   std::wstring titleWide;
-  if (!MenuItemLabel(itemDef->titleState ? itemDef->titleState->get() : itemDef->title, shortcutSuffix, titleWide))
+  if (!MenuItemLabel(itemDef->titleState ? itemDef->titleState->get() : itemDef->title,
+                     shortcutSuffix,
+                     MenuEmptyTitle(itemDef->action),
+                     titleWide))
     return false;
   UINT flags = MF_STRING;
   if (!itemDef->isEnabledInitial())
@@ -261,7 +277,7 @@ bool Win32MenuAttachment::buildMenuItem(HMENU menu, const loka::app::MenuItemDef
     HMENU subMenu = CreatePopupMenu();
     if (!subMenu)
       return false;
-    if (!this->buildMenuItems(subMenu, itemDef->childrenHead(), hwnd, accelerators))
+    if (!this->buildMenuItems(subMenu, itemDef->childrenHead(), hwnd, accelerators, suppressQuit))
     {
       DestroyMenu(subMenu);
       return false;
@@ -270,6 +286,11 @@ bool Win32MenuAttachment::buildMenuItem(HMENU menu, const loka::app::MenuItemDef
     {
       DestroyMenu(subMenu);
       return true;
+    }
+    if (!AppendPendingSeparator(menu, pendingSeparator))
+    {
+      DestroyMenu(subMenu);
+      return false;
     }
     // A popup title has no command id; its live state is addressed by the
     // position it is appended at.
@@ -282,6 +303,9 @@ bool Win32MenuAttachment::buildMenuItem(HMENU menu, const loka::app::MenuItemDef
     bindMenuItemStates(menu, static_cast<UINT>(popupPosition), MF_BYPOSITION, itemDef, hwnd, shortcutSuffix);
     return true;
   }
+
+  if (!AppendPendingSeparator(menu, pendingSeparator))
+    return false;
 
   // ACCEL.cmd and WM_COMMAND both carry a 16-bit command id.
   if (this->nextCommandId_ > 0xffff)
@@ -316,6 +340,7 @@ void Win32MenuAttachment::bindMenuItemStates(HMENU menu,
     return;
   }
   Win32MenuAttachment::MenuBinding *binding = new Win32MenuAttachment::MenuBinding(shortcutSuffix);
+  binding->emptyTitle = MenuEmptyTitle(itemDef->action);
   binding->titleState = itemDef->titleState;
   binding->menu = menu;
   binding->item = item;
@@ -339,15 +364,35 @@ void Win32MenuAttachment::bindMenuItemStates(HMENU menu,
   bindings_.push_back(binding);
 }
 
-bool Win32MenuAttachment::buildMenuItems(HMENU menu, const loka::app::MenuItemDefinition *itemsHead,
-                                         HWND hwnd, std::vector<ACCEL> &accelerators)
+bool Win32MenuAttachment::buildMenuItems(HMENU menu,
+                                         const loka::app::MenuItemDefinition *itemsHead,
+                                         HWND hwnd,
+                                         std::vector<ACCEL> &accelerators,
+                                         bool suppressQuit,
+                                         const loka::app::MenuItemDefinition *tail)
 {
-  const loka::app::MenuItemDefinition *itemDef = itemsHead;
-  while (itemDef)
+  bool pendingSeparator = false;
+  for (const loka::app::MenuItemDefinition *item = itemsHead; item; item = item->nextInComposition)
   {
-    if (!this->buildMenuItem(menu, itemDef, hwnd, accelerators))
+    if (!item->isVisibleInitial())
+      continue;
+    if (item->isSeparator)
+    {
+      pendingSeparator = true;
+      continue;
+    }
+    if (item->action == loka::app::MENU_ACTION_SHOW_COLOR_PICKER
+        || (suppressQuit && !item->hasChildren() && item->action == loka::app::MENU_ACTION_QUIT_APP))
+      continue;
+    if (!this->buildMenuItem(menu, item, hwnd, accelerators, suppressQuit, pendingSeparator))
       return false;
-    itemDef = itemDef->nextInComposition;
+  }
+  if (tail)
+  {
+    // The pre-scan already read visibility. Carry the selected leaf intact.
+    pendingSeparator = true;
+    if (!this->buildMenuItem(menu, tail, hwnd, accelerators, suppressQuit, pendingSeparator))
+      return false;
   }
   return true;
 }
@@ -377,6 +422,25 @@ Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app:
     return PROJECT_REFUSED;
   const loka::app::MenuBarDefinition *bar = merged.get();
 
+  const loka::app::MenuItemDefinition *quit = 0;
+  const loka::app::MenuDefinition *file = 0;
+  loka::dsl::CompositionCursor<loka::app::MenuDefinition> scan(bar->menusHead(), bar->menusCount());
+  for (loka::app::MenuDefinition *menu = scan.next(); menu; menu = scan.next())
+  {
+    if (!menu->isAppMenu)
+    {
+      if (!file && menu->title.equals(loka::core::String::Literal("File")))
+        file = menu;
+      continue;
+    }
+    for (const loka::app::MenuItemDefinition *item = menu->itemsHead(); item; item = item->nextInComposition)
+    {
+      if (!quit && !item->isSeparator && !item->hasChildren() && item->action == loka::app::MENU_ACTION_QUIT_APP
+          && item->isVisibleInitial())
+        quit = item;
+    }
+  }
+
   // The same owner shape holds the candidate until the native swap succeeds.
   // Its destructor disposes either a refused candidate or the replaced handle.
   Win32MenuAttachment next(this->window_);
@@ -385,6 +449,18 @@ Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app:
     return PROJECT_REFUSED;
   HWND hwnd = this->window_.hwnd();
   std::vector<ACCEL> accelerators;
+  if (quit && !file)
+  {
+    HMENU subMenu = CreatePopupMenu();
+    if (!subMenu)
+      return PROJECT_REFUSED;
+    if (!next.buildMenuItems(subMenu, 0, hwnd, accelerators, true, quit)
+        || !AppendMenuW(next.menu_, MF_STRING | MF_POPUP, reinterpret_cast<UINT_PTR>(subMenu), L"File"))
+    {
+      DestroyMenu(subMenu);
+      return PROJECT_REFUSED;
+    }
+  }
   loka::dsl::CompositionCursor<loka::app::MenuDefinition> it(bar->menusHead(), bar->menusCount());
   for (loka::app::MenuDefinition *menuDef = it.next(); menuDef; menuDef = it.next())
   {
@@ -397,7 +473,7 @@ Win32MenuAttachment::ProjectResult Win32MenuAttachment::project(const loka::app:
     HMENU subMenu = CreatePopupMenu();
     if (!subMenu)
       return PROJECT_REFUSED;
-    if (!next.buildMenuItems(subMenu, menuDef->itemsHead(), hwnd, accelerators))
+    if (!next.buildMenuItems(subMenu, menuDef->itemsHead(), hwnd, accelerators, quit != 0, menuDef == file ? quit : 0))
     {
       DestroyMenu(subMenu);
       return PROJECT_REFUSED;
