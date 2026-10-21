@@ -278,8 +278,7 @@ void testMacNodeHandlerEnsureContract()
     LOKA_VERIFY(button.getContext() == ctx && "re-ensure must reuse the existing context, not recreate it");
     LOKA_VERIFY(countChildViews(root) == childrenBeforeEnsure + 1 &&
                 "re-ensure must not materialize another native view");
-    LOKA_VERIFY(frameEquals(buttonView, 10, 20, 100, 30) &&
-                "preparation must preserve the retained frame");
+    LOKA_VERIFY(frameEquals(buttonView, 10, 20, 100, 30) && "preparation must preserve the retained frame");
     button.layoutProjected(&controller, state);
     LOKA_VERIFY(frameEquals(buttonView, 40, 50, 120, controller.rowLayoutMetrics().buttonHeight));
 
