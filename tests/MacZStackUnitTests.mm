@@ -1639,13 +1639,20 @@ void testMacZStackPhotoFollowsNativeAndAppScroll()
   before = photoFingerprint(unit);
   // requestedOrigin currently consumes viewport; scrollTo is stored-only.
   // Use the same app input door as testMacScrollViewOffsetIsRelayoutInput.
+  // The mute is held across layout and the settle so that no bounds
+  // notification (not even AppKit's deferred echo) can deliver the move:
+  // only the commit door can make the photo follow this step.
   origin.set(Frame(0, 60, 0, 0));
   LOKA_VERIFY(node->requestedOrigin().y == 60);
-  f.layout();
+  {
+    MacScrollViewContext::BoundsNotificationMute mute(*static_cast<MacScrollViewContext *>(node->getContext()));
+    f.layout();
+    settlePhotoWindow(f);
+    LOKA_VERIFY([[scroll contentView] bounds].origin.y == 60);
+    LOKA_VERIFY(photoFingerprint(unit) != before);
+    LOKA_VERIFY(probe.draws() == 2 && probe.requests() == 0);
+  }
   settlePhotoWindow(f);
-  LOKA_VERIFY([[scroll contentView] bounds].origin.y == 60);
-  LOKA_VERIFY(photoFingerprint(unit) != before);
-  LOKA_VERIFY(probe.draws() == 2 && probe.requests() == 0);
   f.layout();
   settlePhotoWindow(f);
   LOKA_VERIFY(probe.draws() == 2);
