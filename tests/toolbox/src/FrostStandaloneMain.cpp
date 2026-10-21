@@ -11,6 +11,7 @@
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxPaintGround.hpp"
+#include "ToolboxAlignedPattern.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -552,8 +553,10 @@ namespace
       ClipRect(&clip);
       PenState oldPen, beforePen, afterPen;
       GetPenState(&oldPen);
-      Pattern pattern = {{0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA}};
-      PenPat(&pattern);
+      loka::toolbox::ToolboxAlignedPattern pattern;
+      for (int i = 0; i < 8; ++i)
+        pattern.pattern.pat[i] = static_cast<unsigned char>(i & 1 ? 0xAA : 0x55);
+      PenPat(&pattern.pattern);
       PenMode(patOr);
       PenSize(3, 2);
       GetPenState(&beforePen);
