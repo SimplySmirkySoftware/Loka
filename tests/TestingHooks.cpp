@@ -24,6 +24,7 @@ namespace loka
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
       unsigned macCardCornerTileFailures = 0;
+      unsigned macCardCornerTileHits = 0;
     }
     void failMacStackUnitViews(unsigned count)
     {
@@ -57,6 +58,14 @@ namespace loka
         return false;
       --macCardBitmapFailures;
       return true;
+    }
+    void recordMacCardCornerTileHit()
+    {
+      ++macCardCornerTileHits;
+    }
+    unsigned readMacCardCornerTileHits()
+    {
+      return macCardCornerTileHits;
     }
     void failMacCardCornerTiles(unsigned count)
     {

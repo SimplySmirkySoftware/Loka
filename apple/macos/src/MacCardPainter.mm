@@ -11,6 +11,7 @@ namespace loka
     bool declineMacCardBitmap();
     bool declineMacCardPath();
     bool declineMacCardCornerTile();
+    void recordMacCardCornerTileHit();
   } // namespace testing
 } // namespace loka
 #endif
@@ -160,50 +161,109 @@ namespace
         style, body, LayoutSample(local.x + origin.x, projection), LayoutSample(local.y + origin.y, projection));
   }
 
-  /** Process-global immutable density storage, allocated once per successful
-      (extent, backing scale, corner) lookup. Intentionally leaked at exit like
-      other global immutable resources; only the main-thread painter accesses it. */
+  /** Immutable density storage for one rail ratio. Published allocations
+      live until process exit, on the main thread only. */
   struct CornerDensityCache
   {
-    const unsigned char *tiles[loka::app::CARD_SHADOW_EXTENT_COUNT][2][4];
+    struct Entry
+    {
+      const unsigned char *bytes;
+      int w, h;
+    };
+    Entry tiles[loka::app::CARD_SHADOW_EXTENT_COUNT][2][4][8][8];
 
-    /** PaintTableInk calls per corner cell per paint (four per band).
-        Hits walk no rows; first use computes only this tile's own pixels. */
-    const unsigned char *tile(loka::app::CardShadowExtent extent, int scale, int corner, int &w, int &h)
+    /** One lookup per corner per paint. Hits walk no rows; first use walks
+        only the entry's own pixels. Refusal leaves the slot unchanged. */
+    const unsigned char *tile(loka::app::CardShadowExtent extent,
+                              int scale,
+                              int corner,
+                              int phaseX,
+                              int phaseY,
+                              const loka::macos::MacProjection &projection,
+                              int &w,
+                              int &h)
     {
       using namespace loka::app;
-      const CardStyle style(extent);
-      const detail::CardShadowTable &g = style.geometry();
-      const int horizontal = (corner & 1) ? 2 : 0;
-      const int vertical = (corner & 2) ? 3 : 1;
-      w = (g.allowance[horizontal] + g.cut[horizontal]) * scale;
-      h = (g.allowance[vertical] + g.cut[vertical]) * scale;
 #ifdef TEST_BUILD
       if (loka::testing::declineMacCardCornerTile())
         return 0;
 #endif
-      const unsigned char *&entry = this->tiles[extent][scale - 1][corner];
-      if (!entry)
+      Entry &entry = this->tiles[extent][scale - 1][corner][phaseX][phaseY];
+      if (!entry.bytes)
       {
+        const CardStyle style(extent);
+        const detail::CardShadowTable &g = style.geometry();
+        const int horizontal = (corner & 1) ? 2 : 0;
+        const int vertical = (corner & 2) ? 3 : 1;
+        const int width = g.allowance[horizontal] + g.cut[horizontal];
+        const int height = g.allowance[vertical] + g.cut[vertical];
+        w = static_cast<int>(projection.projectLength(phaseX, phaseX + width).pt * scale);
+        h = static_cast<int>(projection.projectLength(phaseY, phaseY + height).pt * scale);
+        if (w <= 0 || h <= 0 || w > INT_MAX / h)
+          return 0;
         unsigned char *bytes = static_cast<unsigned char *>(std::malloc(static_cast<size_t>(w) * h));
         if (!bytes)
           return 0;
-        const loka::core::Frame body(0, 0, g.cut[0] + g.cut[2], g.cut[1] + g.cut[3]);
-        const int x = horizontal ? body.width - g.cut[2] : -g.allowance[0];
-        const int y = vertical == 3 ? body.height - g.cut[3] : -g.allowance[1];
-        const loka::macos::MacProjection projection;
+        const loka::core::Frame body(phaseX + (horizontal ? -g.cut[0] : g.allowance[0]),
+                                     phaseY + (vertical == 3 ? -g.cut[1] : g.allowance[1]),
+                                     g.cut[0] + g.cut[2],
+                                     g.cut[1] + g.cut[3]);
+        const int x = static_cast<int>(projection.projectEdge(phaseX).pt * scale);
+        const int y = static_cast<int>(projection.projectEdge(phaseY).pt * scale);
         const CGAffineTransform inverse = CGAffineTransformMakeScale(1.0 / scale, 1.0 / scale);
         for (int row = 0; row < h; ++row)
           for (int column = 0; column < w; ++column)
-            bytes[row * w + column] = DensityAtBackingPixel(
-                style, body, projection, NSZeroPoint, inverse, x * scale + column, y * scale + row);
-        entry = bytes;
+            bytes[row * w + column] =
+                DensityAtBackingPixel(style, body, projection, NSZeroPoint, inverse, x + column, y + row);
+        entry.w = w;
+        entry.h = h;
+        entry.bytes = bytes;
       }
-      return entry;
+      w = entry.w;
+      h = entry.h;
+      return entry.bytes;
     }
   };
 
-  CornerDensityCache cornerDensities = {};
+  /** Bounded process owner: different rail ratios must never share a phase
+      table. PaintTableInk selects once per paint, scanning at most eight banks;
+      allocation refusal or a full bank set retains the sampler. */
+  struct CornerDensityBanks
+  {
+    struct Bank
+    {
+      loka::app::Ratio ratio;
+      CornerDensityCache *cache;
+    };
+    Bank banks[8];
+
+    CornerDensityCache *forRatio(const loka::app::Ratio &ratio)
+    {
+      if (ratio.den > 8)
+        return 0;
+      for (unsigned i = 0; i < sizeof(this->banks) / sizeof(this->banks[0]); ++i)
+      {
+        Bank &bank = this->banks[i];
+        if (bank.cache)
+        {
+          if (bank.ratio == ratio)
+            return bank.cache;
+        }
+        else
+        {
+          CornerDensityCache *cache = static_cast<CornerDensityCache *>(std::calloc(1, sizeof(CornerDensityCache)));
+          if (!cache)
+            return 0;
+          bank.ratio = ratio;
+          bank.cache = cache;
+          return cache;
+        }
+      }
+      return 0;
+    }
+  };
+
+  CornerDensityBanks cornerDensities = {};
 
   /** PaintTableInk calls once per corner or profile step intersecting its clip.
       Negative density reads the tile (or samples on refusal); a constant uses one ALPHA pixel
@@ -280,6 +340,20 @@ namespace
     return true;
   }
 
+  /** Same lower-bound predicate as SampleBoundary; one candidate check and
+      one predecessor check certify the direct result, including float ties. */
+  bool BeforeBoundary(int pixel,
+                      int edge,
+                      const CGAffineTransform &inverse,
+                      bool horizontal,
+                      CGFloat origin,
+                      const loka::macos::MacProjection &projection)
+  {
+    const CGPoint local = CGPointApplyAffineTransform(CGPointMake(pixel + 0.5, pixel + 0.5), inverse);
+    const int sample = LayoutSample((horizontal ? local.x : local.y) + origin, projection);
+    return (horizontal ? inverse.a : inverse.d) > 0 ? sample < edge : sample >= edge;
+  }
+
   /** Lower bound of the exact pixel-center LayoutSample predicate used above.
       PaintTableInk calls four times per cell/run, O(log clipped device span),
       with no table walk. Reversed axes use the complementary half-open test. */
@@ -294,14 +368,40 @@ namespace
     while (first < last)
     {
       const int middle = first + (last - first) / 2;
-      const CGPoint local = CGPointApplyAffineTransform(CGPointMake(middle + 0.5, middle + 0.5), inverse);
-      const int sample = LayoutSample((horizontal ? local.x : local.y) + origin, projection);
-      if ((horizontal ? inverse.a : inverse.d) > 0 ? sample < edge : sample >= edge)
+      if (BeforeBoundary(middle, edge, inverse, horizontal, origin, projection))
         first = middle + 1;
       else
         last = middle;
     }
     return first;
+  }
+
+  /** PaintTableInk calls four times per cell/run. Eligible axes take O(1),
+      with no row walk; uncertified candidates retain the clipped-span search. */
+  int EdgeBoundary(int first,
+                   int last,
+                   int edge,
+                   const CGAffineTransform &transform,
+                   const CGAffineTransform &inverse,
+                   bool horizontal,
+                   CGFloat origin,
+                   const loka::macos::MacProjection &projection)
+  {
+    const double scale = std::fabs(transform.a);
+    if (transform.b == 0 && transform.c == 0 && (scale == 1 || scale == 2) && std::fabs(transform.d) == scale)
+    {
+      const double axis = horizontal ? transform.a : transform.d;
+      const double translation = horizontal ? transform.tx : transform.ty;
+      const double boundary =
+          axis * (static_cast<double>(projection.projectEdge(edge).pt) - origin) + translation - 0.5;
+      // Positive axes seek >= edge; reversed axes seek < edge (strict).
+      const double rounded = axis > 0 ? std::ceil(boundary) : std::floor(boundary) + 1;
+      const int candidate = rounded <= first ? first : rounded >= last ? last : static_cast<int>(rounded);
+      if ((candidate == last || !BeforeBoundary(candidate, edge, inverse, horizontal, origin, projection))
+          && (candidate == first || BeforeBoundary(candidate - 1, edge, inverse, horizontal, origin, projection)))
+        return candidate;
+    }
+    return SampleBoundary(first, last, edge, inverse, horizontal, origin, projection);
   }
 
   /** Once per band/whole paint: four cached corners and four constant profiles.
@@ -337,6 +437,11 @@ namespace
     if (width <= 0 || height <= 0 || width > INT_MAX / 4 / height)
       return;
     const CGAffineTransform inverse = CGAffineTransformInvert(transform);
+    const double scale = std::fabs(transform.a);
+    CornerDensityCache *cache =
+        transform.b == 0 && transform.c == 0 && (scale == 1 || scale == 2) && std::fabs(transform.d) == scale
+            ? cornerDensities.forRatio(projection.railMetrics().spaceScale)
+            : 0;
     const CGPoint anchor = CGPointApplyAffineTransform(CGPointMake(-phase.x, -phase.y), transform);
     const int originX = static_cast<int>(std::floor(anchor.x + 0.5));
     const int originY = static_cast<int>(std::floor(anchor.y + 0.5));
@@ -377,41 +482,56 @@ namespace
             const int endX = !corner && row == 1 ? x + 1 : grid.x[column + 1];
             const int endY = !corner && column == 1 ? y + 1 : grid.y[row + 1];
             const int runLeft =
-                SampleBoundary(left, right, transform.a > 0 ? x : endX, inverse, true, origin.x, projection);
+                EdgeBoundary(left, right, transform.a > 0 ? x : endX, transform, inverse, true, origin.x, projection);
             const int runRight =
-                SampleBoundary(left, right, transform.a > 0 ? endX : x, inverse, true, origin.x, projection);
+                EdgeBoundary(left, right, transform.a > 0 ? endX : x, transform, inverse, true, origin.x, projection);
             const int runTop =
-                SampleBoundary(top, bottom, transform.d > 0 ? y : endY, inverse, false, origin.y, projection);
+                EdgeBoundary(top, bottom, transform.d > 0 ? y : endY, transform, inverse, false, origin.y, projection);
             const int runBottom =
-                SampleBoundary(top, bottom, transform.d > 0 ? endY : y, inverse, false, origin.y, projection);
+                EdgeBoundary(top, bottom, transform.d > 0 ? endY : y, transform, inverse, false, origin.y, projection);
             if (runLeft >= runRight || runTop >= runBottom)
               continue;
             const int density = corner ? -1 : CardShadowDensity(style, body, x, y);
             const unsigned char *tile = 0;
             int tileStride = 0;
-            const CGFloat scale = std::fabs(transform.a);
-            // Space-scale rounding is position-dependent and is not in the
-            // cache key; retain the sampler for every non-unit space scale.
-            if (corner && (scale == 1 || scale == 2) && std::fabs(transform.d) == scale
-                && projection.railMetrics().spaceScale.isUnit())
+            const Ratio &ratio = projection.railMetrics().spaceScale;
+            if (corner && cache)
             {
               int w = 0, h = 0;
-              const unsigned char *bytes = cornerDensities.tile(
-                  style.extent(), static_cast<int>(scale), (row == 2 ? 2 : 0) + (column == 2 ? 1 : 0), w, h);
               const detail::CardShadowTable &g = style.geometry();
               const int baseX = column == 0 ? body.x - g.allowance[0] : body.x + body.width - g.cut[2];
               const int baseY = row == 0 ? body.y - g.allowance[1] : body.y + body.height - g.cut[3];
+              const int phaseX = ((baseX % ratio.den) + ratio.den) % ratio.den;
+              const int phaseY = ((baseY % ratio.den) + ratio.den) % ratio.den;
+              // Ties-away-from-zero is not periodic across zero for half ties.
+              const bool negativeTies = (baseX < 0 || baseY < 0) && ratio.den % 2 == 0 && ratio.num % ratio.den != 0;
+              const unsigned char *bytes = negativeTies ? 0
+                                                        : cache->tile(style.extent(),
+                                                                      static_cast<int>(scale),
+                                                                      (row == 2 ? 2 : 0) + (column == 2 ? 1 : 0),
+                                                                      phaseX,
+                                                                      phaseY,
+                                                                      projection,
+                                                                      w,
+                                                                      h);
               const CGPoint first = CGPointApplyAffineTransform(CGPointMake(runLeft + 0.5, runTop + 0.5), inverse);
-              // TL/TR/BL/BR tiles all start at their logical minimum x/y.
+              // TL/TR/BL/BR pixel (0,0) is projectEdge(baseX/baseY)*scale
+              // relative to the paint origin. Canonical minima retain each
+              // lu phase modulo den; dimensions use that phase's edge span.
               // runLeft/runTop selects (tx,ty) below, including clipped or
               // overlapping cells. Positive axes advance from that pixel;
               // reversed axes retreat (unclipped: w-1 and/or h-1).
-              const int tx = static_cast<int>(std::floor((first.x + origin.x - baseX) * scale));
-              const int ty = static_cast<int>(std::floor((first.y + origin.y - baseY) * scale));
+              const int tx =
+                  static_cast<int>(std::floor((first.x + origin.x - projection.projectEdge(baseX).pt) * scale));
+              const int ty =
+                  static_cast<int>(std::floor((first.y + origin.y - projection.projectEdge(baseY).pt) * scale));
               const int lastX = tx + (transform.a > 0 ? 1 : -1) * (runRight - runLeft - 1);
               const int lastY = ty + (transform.d > 0 ? 1 : -1) * (runBottom - runTop - 1);
               if (bytes && tx >= 0 && tx < w && ty >= 0 && ty < h && lastX >= 0 && lastX < w && lastY >= 0 && lastY < h)
               {
+#ifdef TEST_BUILD
+                loka::testing::recordMacCardCornerTileHit();
+#endif
                 tile = bytes + ty * w + tx;
                 tileStride = transform.d > 0 ? w : -w;
               }
@@ -469,6 +589,29 @@ namespace
     CGContextRestoreGState(graphics);
   }
 } // namespace
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    bool macCardBoundaryMatchesSearch(int first,
+                                      int last,
+                                      int edge,
+                                      CGFloat axis,
+                                      CGFloat translation,
+                                      CGFloat origin,
+                                      const macos::MacProjection &projection,
+                                      bool horizontal)
+    {
+      const CGAffineTransform transform = CGAffineTransformMake(axis, 0, 0, axis, translation, translation);
+      const CGAffineTransform inverse = CGAffineTransformInvert(transform);
+      return EdgeBoundary(first, last, edge, transform, inverse, horizontal, origin, projection)
+             == SampleBoundary(first, last, edge, inverse, horizontal, origin, projection);
+    }
+  } // namespace testing
+} // namespace loka
+#endif
 
 void loka::macos::PaintCardInk(CGContextRef graphics,
                                const core::Frame &body,

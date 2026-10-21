@@ -12,6 +12,15 @@ namespace loka
     void failMacCardBitmaps(unsigned count);
     void failMacCardPaths(unsigned count);
     void failMacCardCornerTiles(unsigned count);
+    unsigned readMacCardCornerTileHits();
+    bool macCardBoundaryMatchesSearch(int first,
+                                      int last,
+                                      int edge,
+                                      CGFloat axis,
+                                      CGFloat translation,
+                                      CGFloat origin,
+                                      const macos::MacProjection &projection,
+                                      bool horizontal);
   } // namespace testing
 } // namespace loka
 #include "MacScenePlatformController.hpp"
@@ -498,47 +507,96 @@ namespace
 
 namespace
 {
+  void VerifyDirectBoundaries()
+  {
+    const Ratio ratios[] = {Ratio(), Ratio(5, 4), Ratio(6, 5)};
+    const CGFloat translations[] = {0, 0.25, 0.5, 0.75, 3.3};
+    const CGFloat axes[] = {1, -1, 2, -2};
+    for (unsigned metric = 0; metric < sizeof(ratios) / sizeof(ratios[0]); ++metric)
+    {
+      const MacProjection projection(0, RailMetrics(Ratio(), ratios[metric]));
+      for (unsigned t = 0; t < sizeof(translations) / sizeof(translations[0]); ++t)
+        for (unsigned a = 0; a < sizeof(axes) / sizeof(axes[0]); ++a)
+          for (int edge = -50; edge <= 50; ++edge)
+            for (int lu = -50; lu <= 50; ++lu)
+              for (int horizontal = 0; horizontal < 2; ++horizontal)
+              {
+                LOKA_VERIFY(loka::testing::macCardBoundaryMatchesSearch(-80,
+                                                                        80,
+                                                                        edge,
+                                                                        axes[a],
+                                                                        translations[t],
+                                                                        projection.projectEdge(lu).pt,
+                                                                        projection,
+                                                                        horizontal != 0));
+                LOKA_VERIFY(loka::testing::macCardBoundaryMatchesSearch(
+                    lu, lu + 1, edge, axes[a], translations[t], 0, projection, horizontal != 0));
+              }
+    }
+  }
+
   /** Public band entry, identical rasterization on both sides: no AA tolerance.
       Warm/cold cache, ink/extent changes, clipped cells and both axis signs. */
   void VerifyCornerTiles()
   {
-    const MacProjection projection;
-    for (int backing = 1; backing <= 2; ++backing)
-      for (int extent = CARD_SHADOW_DROP; extent < CARD_SHADOW_EXTENT_COUNT; ++extent)
-        for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
-          for (int orientation = 0; orientation < 4; ++orientation)
-            for (int clipped = 0; clipped < 2; ++clipped)
-            {
-              const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
-              Frame bands[4];
-              CardBands(Frame(-7, 13, 73, 61), style, bands);
-              for (int role = 0; role < CARD_BAND_COUNT; ++role)
-              {
-                const Frame &band = bands[role];
-                CardBitmap actual(band.width, band.height, backing), expected(band.width, band.height, backing);
-                for (int reference = 0; reference < 2; ++reference)
-                {
-                  CardBitmap &target = reference ? expected : actual;
-                  CGContextRef graphics = target.begin((orientation & 2) != 0);
-                  if (orientation & 1)
-                  {
-                    CGContextTranslateCTM(graphics, band.width, 0);
-                    CGContextScaleCTM(graphics, -1, 1);
-                  }
-                  if (clipped)
-                    CGContextClipToRect(graphics, CGRectMake(1, 1, band.width - 2, band.height - 2));
-                  loka::testing::failMacCardCornerTiles(reference ? 4 : 0);
-                  PaintCardBandInk(graphics,
-                                   band,
-                                   CardBandProps(static_cast<CardBandRole>(role), style),
-                                   projection,
-                                   NSMakePoint(3 + band.x, 5 + band.y));
-                  loka::testing::failMacCardCornerTiles(0);
-                  target.end();
-                }
-                EqualBitmaps(actual, expected);
-              }
-            }
+    // Populate the live rail first, so a unit-only cache cannot satisfy this pin.
+    const Ratio ratios[] = {Ratio(5, 4), Ratio(6, 5), Ratio(), Ratio(3, 2), Ratio(10, 9)};
+    for (unsigned metric = 0; metric < sizeof(ratios) / sizeof(ratios[0]); ++metric)
+    {
+      const Ratio &ratio = ratios[metric];
+      const MacProjection projection(0, RailMetrics(Ratio(), ratio));
+      const int phases = ratio.den <= 5 ? ratio.den : 1;
+      for (int phaseX = 0; phaseX < phases; ++phaseX)
+        for (int phaseY = 0; phaseY < phases; ++phaseY)
+          for (int negative = 0; negative < 2; ++negative)
+            for (int backing = 1; backing <= 2; ++backing)
+              for (int extent = CARD_SHADOW_DROP; extent < CARD_SHADOW_EXTENT_COUNT; ++extent)
+                for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
+                  for (int orientation = 0; orientation < 4; ++orientation)
+                    for (int clipped = 0; clipped < 2; ++clipped)
+                    {
+                      NSAutoreleasePool *iteration = [[NSAutoreleasePool alloc] init];
+                      const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
+                      Frame bands[4];
+                      CardBands(
+                          Frame((negative ? -24 : 24) + phaseX, (negative ? -24 : 24) + phaseY, 73, 61), style, bands);
+                      for (int role = 0; role < CARD_BAND_COUNT; ++role)
+                      {
+                        const Frame &band = bands[role];
+                        const NSRect projected = projection.projectFrame(band).r;
+                        const int width = static_cast<int>(projected.size.width);
+                        const int height = static_cast<int>(projected.size.height);
+                        CardBitmap actual(width, height, backing), expected(width, height, backing);
+                        for (int reference = 0; reference < 2; ++reference)
+                        {
+                          CardBitmap &target = reference ? expected : actual;
+                          CGContextRef graphics = target.begin((orientation & 2) != 0);
+                          if (orientation & 1)
+                          {
+                            CGContextTranslateCTM(graphics, width, 0);
+                            CGContextScaleCTM(graphics, -1, 1);
+                          }
+                          if (clipped)
+                            CGContextClipToRect(graphics, CGRectMake(1, 1, width - 2, height - 2));
+                          loka::testing::failMacCardCornerTiles(reference ? 4 : 0);
+                          const unsigned hits = loka::testing::readMacCardCornerTileHits();
+                          PaintCardBandInk(graphics,
+                                           band,
+                                           CardBandProps(static_cast<CardBandRole>(role), style),
+                                           projection,
+                                           NSMakePoint(3 + projected.origin.x, 5 + projected.origin.y));
+                          if (ratio.den <= 8 && !negative && !reference)
+                            LOKA_VERIFY(loka::testing::readMacCardCornerTileHits() > hits);
+                          if (reference || ratio.den > 8)
+                            LOKA_VERIFY(loka::testing::readMacCardCornerTileHits() == hits);
+                          loka::testing::failMacCardCornerTiles(0);
+                          target.end();
+                        }
+                        EqualBitmaps(actual, expected);
+                      }
+                      [iteration release];
+                    }
+    }
   }
 } // namespace
 
@@ -546,6 +604,7 @@ void testMacCardPainterPixels()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
+  VerifyDirectBoundaries();
   VerifyCornerTiles();
   for (int metric = 0; metric < 2; ++metric)
     for (int backing = 1; backing <= 2; ++backing)
