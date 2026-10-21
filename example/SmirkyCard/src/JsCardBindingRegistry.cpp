@@ -135,27 +135,8 @@ namespace smirkycard
                         node,
                         "expStaticBlurUnit",
                         JS_NewCFunction(ctx, &ScriptRuntime::expStaticBlurUnit, "expStaticBlurUnit", 0));
+      JS_SetPropertyStr(ctx, node, "expBlurUnit", JS_NewCFunction(ctx, &ScriptRuntime::expBlurUnit, "expBlurUnit", 0));
       return node;
-    }
-    /** Reads a tree policy from the tree's own data property, the one its modifier
-        wrote (`naturalWidth()` writes "rowWidth", `expStaticBlurUnit()` writes
-        "staticBlurUnit"), so a value placed on Object.prototype is not a claim. */
-    bool ownTreePolicy(JSContext *ctx, JSValueConst tree, const char *name)
-    {
-      JSAtom key = JS_NewAtom(ctx, name);
-      if (key == JS_ATOM_NULL)
-        return false;
-      JSPropertyDescriptor property;
-      const int found = JS_GetOwnProperty(ctx, &property, tree, key);
-      JS_FreeAtom(ctx, key);
-      if (found <= 0)
-        return false;
-      JS_FreeValue(ctx, property.getter);
-      JS_FreeValue(ctx, property.setter);
-      int32_t policy = 0;
-      const bool claimed = JS_IsNumber(property.value) && JS_ToInt32(ctx, &policy, property.value) == 0 && policy == 1;
-      JS_FreeValue(ctx, property.value);
-      return claimed;
     }
     JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
     {
@@ -300,6 +281,8 @@ namespace smirkycard
           loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
           if (depthStack && ownTreePolicy(ctx, tree, "staticBlurUnit"))
             depthStack->expStaticBlurUnit();
+          else if (depthStack && ownTreePolicy(ctx, tree, "blurUnit"))
+            depthStack->expBlurUnit();
           stack = depthStack;
           nest = depthStack;
           break;
@@ -626,7 +609,7 @@ namespace smirkycard
         so the script sees a refusal instead of a silently empty region. */
     bool containsKind(JSContext *ctx, JSValueConst tree, int kind, int depth)
     {
-      if (depth > 8 || !JS_IsObject(tree) || JS_IsArray(tree))
+      if (depth > kMaximumTreeDepth || !JS_IsObject(tree) || JS_IsArray(tree))
         return false;
       JSValue own = JS_GetPropertyStr(ctx, tree, "kind");
       int32_t value = 0;

@@ -13,6 +13,9 @@
 
 namespace smirkycard
 {
+  /** Inclusive tree depth shared by lowering and nested ScrollView validation. */
+  extern const int kMaximumTreeDepth;
+
   class JsCardNode;
   class CardScene : public loka::app::scene::Scene
   {
