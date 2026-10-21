@@ -23,10 +23,16 @@ namespace
 {
   NSBitmapImageRep *bitmap(NSString *space)
   {
-    NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc]
-        initWithBitmapDataPlanes:NULL pixelsWide:4 pixelsHigh:4
-        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
-        colorSpaceName:space bytesPerRow:16 bitsPerPixel:32] autorelease];
+    NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                     pixelsWide:4
+                                                                     pixelsHigh:4
+                                                                  bitsPerSample:8
+                                                                samplesPerPixel:4
+                                                                       hasAlpha:YES
+                                                                       isPlanar:NO
+                                                                 colorSpaceName:space
+                                                                    bytesPerRow:16
+                                                                   bitsPerPixel:32] autorelease];
     LOKA_VERIFY(rep != nil && [rep bitmapData] != NULL);
     std::memset([rep bitmapData], 0, 64);
     return rep;
@@ -46,7 +52,7 @@ namespace
     // KVC inspects the existing private slot without a production test getter.
     return [view valueForKey:@"image"];
   }
-}
+} // namespace
 
 void testMacImageViewConvertsBitmapToDeviceRGB()
 {
@@ -91,8 +97,7 @@ void testMacImageViewConvertsBitmapToDeviceRGB()
   [NSGraphicsContext restoreGraphicsState];
   LOKA_VERIFY([NSGraphicsContext currentContext] == previous);
   for (int i = 0; i < 64; ++i)
-    LOKA_VERIFY(std::abs(static_cast<int>([output bitmapData][i])
-                        - static_cast<int>([source bitmapData][i])) <= 2);
+    LOKA_VERIFY(std::abs(static_cast<int>([output bitmapData][i]) - static_cast<int>([source bitmapData][i])) <= 2);
   [pool drain];
 }
 
@@ -101,8 +106,8 @@ void testMacImageViewPreservesNonBitmapImage()
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
   LokaImageViewCustomRepDelegate *delegate = [[[LokaImageViewCustomRepDelegate alloc] init] autorelease];
-  NSCustomImageRep *custom = [[[NSCustomImageRep alloc]
-      initWithDrawSelector:@selector(drawImage:) delegate:delegate] autorelease];
+  NSCustomImageRep *custom = [[[NSCustomImageRep alloc] initWithDrawSelector:@selector(drawImage:)
+                                                                    delegate:delegate] autorelease];
   LOKA_VERIFY(custom != nil);
   [custom setSize:NSMakeSize(2, 2)];
   NSImage *input = [[[NSImage alloc] initWithSize:NSMakeSize(2, 2)] autorelease];

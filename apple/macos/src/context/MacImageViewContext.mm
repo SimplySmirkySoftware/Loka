@@ -46,8 +46,8 @@ namespace
     const NSInteger width = [source pixelsWide];
     const NSInteger height = [source pixelsHigh];
     // Tiger's bitmap initializer takes int dimensions and row bytes.
-    if (!source || !(size.width > 0) || !(size.height > 0)
-        || width <= 0 || height <= 0 || width > INT_MAX / 4 || height > INT_MAX)
+    if (!source || !(size.width > 0) || !(size.height > 0) || width <= 0 || height <= 0 || width > INT_MAX / 4
+        || height > INT_MAX)
     {
       return nil;
     }
@@ -56,10 +56,16 @@ namespace
     {
       return nil;
     }
-    NSBitmapImageRep *device = [[NSBitmapImageRep alloc]
-        initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
-        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
-        colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+    NSBitmapImageRep *device = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                                       pixelsWide:width
+                                                                       pixelsHigh:height
+                                                                    bitsPerSample:8
+                                                                  samplesPerPixel:4
+                                                                         hasAlpha:YES
+                                                                         isPlanar:NO
+                                                                   colorSpaceName:NSDeviceRGBColorSpace
+                                                                      bytesPerRow:width * 4
+                                                                     bitsPerPixel:32];
     if (!device || ![device bitmapData])
     {
       [device release];
@@ -76,8 +82,10 @@ namespace
     [NSGraphicsContext saveGraphicsState];
     [NSGraphicsContext setCurrentContext:context];
     [context setImageInterpolation:NSImageInterpolationHigh];
-    [image drawInRect:NSMakeRect(0, 0, width, height) fromRect:NSZeroRect
-           operation:LOKA_MAC_COMPOSITING_SOURCE_OVER fraction:1.0];
+    [image drawInRect:NSMakeRect(0, 0, width, height)
+             fromRect:NSZeroRect
+            operation:LOKA_MAC_COMPOSITING_SOURCE_OVER
+             fraction:1.0];
     [NSGraphicsContext restoreGraphicsState];
 
     NSImage *converted = [[NSImage alloc] initWithSize:size];
