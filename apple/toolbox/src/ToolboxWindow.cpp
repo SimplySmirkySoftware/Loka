@@ -437,7 +437,8 @@ void ToolboxWindow::drawDirty(const Rect &rect)
   GrafPtr oldPort;
   GetPort(&oldPort);
   SetPort(window_);
-  Rect clip = rect;
+  const Rect extent = scenePlatformController_->dirtyExtent(rect);
+  Rect clip = extent;
   const Rect corner = ToolboxWindowSizeBoxRect(window_->portRect);
   Rect growIntersection;
   const bool drawsGrowBox = SectRect(&clip, &corner, &growIntersection) != 0;
@@ -446,7 +447,7 @@ void ToolboxWindow::drawDirty(const Rect &rect)
   {
     GetClip(oldClip);
     ClipRect(&clip);
-    ToolboxInputDoor::renderDirty(*scenePlatformController_, rect);
+    ToolboxInputDoor::renderDirty(*scenePlatformController_, extent);
     if (drawsGrowBox)
     {
       SetClip(oldClip);
@@ -458,7 +459,7 @@ void ToolboxWindow::drawDirty(const Rect &rect)
   }
   else
   {
-    ToolboxInputDoor::renderDirty(*scenePlatformController_, rect);
+    ToolboxInputDoor::renderDirty(*scenePlatformController_, extent);
   }
   SetPort(oldPort);
 }

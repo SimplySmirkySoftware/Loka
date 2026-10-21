@@ -1,4 +1,5 @@
 #include "ToolboxFrostCache.hpp"
+#include "ToolboxUnitHairline.hpp"
 #include "ToolboxPaintGround.hpp"
 #include <Gestalt.h>
 
@@ -165,7 +166,7 @@ bool ToolboxFrostCache::prepare(WindowPtr window, short width, short height)
           RGBColor milk = {Milk(color.red), Milk(color.green), Milk(color.blue)};
           this->milkIndex_[i] = static_cast<unsigned char>(Color2Index(&milk));
         }
-        RGBColor grey = {0xBBBB, 0xBBBB, 0xBBBB};
+        RGBColor grey = {TOOLBOX_UNIT_HAIRLINE_GREY, TOOLBOX_UNIT_HAIRLINE_GREY, TOOLBOX_UNIT_HAIRLINE_GREY};
         this->hairline_ = static_cast<unsigned char>(Color2Index(&grey));
         ready = QDError() == noErr;
       }
@@ -219,7 +220,9 @@ bool ToolboxFrostCache::paint(WindowPtr window, const Rect &rect, const Rect &un
   if (QDError() != noErr)
     return false;
   // A viewport may cut the unit: its last visible row is not its bottom.
-  const int hairline = unit.bottom == rect.bottom ? height - 1 : -1;
+  // Scratch adapter; the matching window picture adapter is in ToolboxUnitHairline.hpp.
+  Rect hairlineRect;
+  const int hairline = ToolboxUnitHairlineRect(rect, unit, hairlineRect) ? hairlineRect.top - rect.top : -1;
   unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(pixels.get()));
   const long stride = (**pixels.get()).rowBytes & 0x3FFF;
   for (int y = 0; y < height; ++y)

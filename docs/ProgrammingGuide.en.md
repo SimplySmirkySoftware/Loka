@@ -1717,19 +1717,37 @@ does not promote a later one. macOS uses a bottom `NSVisualEffectView` on
 10.10 and newer (within-window blending, following window activity): titlebar
 material on 10.10–10.13 and HUD material from 10.14. Before 10.10, both
 experimental blur units show a blurred photo of the content beneath, as
-described below. Toolbox shows milk frost: the content beneath,
-lightened, with a grey bottom hairline (no blur yet). It needs 32-bit QuickDraw,
-an FPU, and a unit entirely on one screen of 256 colours or more; otherwise it
-keeps the window ground. On 16/32-bit screens it still computes in 256 colours,
-so it bands. Non-main screens are unverified. The other rails keep the window ground.
+described below. Toolbox shows a blur of the content beneath for the window's
+first blurred unit: the first blurred ZStack's first unit in layout order. On
+68K Macs it is a mosaic of 4-pixel squares; native PowerPC applications show a
+smooth blur. Other blurred ZStacks' first units show milk frost; later units in
+any ZStack keep window ground. Both the picture and milk frost have a grey
+bottom hairline when the unit's bottom edge is visible. It needs 32-bit
+QuickDraw, an FPU, and a unit entirely on one screen of 256 colours or more;
+otherwise it keeps window ground. On 16/32-bit screens it still computes in 256
+colours, so it bands. Non-main screens are unverified. The other rails keep the
+window ground.
 
-Toolbox frost appears only on a repaint whose clip was entirely erased first.
-A non-erasing repaint (for example, a unit scrolled into damage where its previous
-layout had no unit, or a repaint after region allocation failed) shows plain
-window ground there until the next repaint of that area. If the screen palette
-changes, existing frost keeps its old screen indices until the unit repaints.
-Popup direct repaints erase white; Card shadows and Control Manager hide/move
-erases remain limitations. EditText paints its own white field interior.
+On Toolbox, for that unit, a redraw covering its whole visible area is an
+opportunity to capture the content beneath it again: Loka's full redraws,
+redraws of damage that touches the unit (Loka widens such damage to the whole
+unit), and OS updates that redraw the whole unit. Capture can be unavailable or
+fail. After a failed capture, that position and size shows milk frost on
+redraws that erase it first, or window ground otherwise, until its position or
+size changes.
+
+On Toolbox, an older picture can remain when an update does not redraw the
+whole unit, when a clip allocation fails, or when layout moves the unit during
+a redraw. Pixels hidden by other windows at capture are white until the next
+capture. A covered control can still draw directly over the unit, including its
+caret and selection (#1498). The visible result may be an older picture, no
+picture yet because capture has not been possible, or capture off for this
+position and size after a failed capture. Without a picture, an erasing redraw
+shows milk frost and other redraws show window ground. No future capture is
+promised. If the screen palette changes, existing frost keeps its old screen
+indices until the unit repaints. Popup direct repaints erase white; Card
+shadows and Control Manager hide/move erases remain limitations. EditText
+paints its own white field interior.
 
 On macOS 10.4–10.9, a photo is taken only during an on-screen redraw in
 which one drawing rectangle covers the unit's whole visible area. The band

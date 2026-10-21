@@ -1,4 +1,5 @@
 #include "ToolboxUpdateEvidence.hpp"
+#include "ToolboxUnitHairline.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -22,14 +23,14 @@
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::core;
-class ToolboxStaticBlurInspection
+class ToolboxBlurSnapshotInspection
 {
 public:
-  static ToolboxStaticBlur::Phase phase(const ToolboxStaticBlur &owner)
+  template <ToolboxBlurKind K> static typename ToolboxBlurSnapshot<K>::Phase phase(const ToolboxBlurSnapshot<K> &owner)
   {
     return owner.phase();
   }
-  static bool hasPixels(const ToolboxStaticBlur &owner)
+  template <ToolboxBlurKind K> static bool hasPixels(const ToolboxBlurSnapshot<K> &owner)
   {
     return owner.pixels_.image_ != 0;
   }
@@ -135,6 +136,8 @@ namespace
       this->controller.rootNode_ = &this->stack;
       this->window.scenePlatformController_ = &this->controller;
       toolbox_host::staticCaptures = toolbox_host::staticCopies = toolbox_host::staticReleases = 0;
+      toolbox_host::bandCaptures = toolbox_host::bandCopies = toolbox_host::bandReleases = toolbox_host::bandHairlines =
+          0;
       toolbox_host::staticEligible = toolbox_host::staticCaptureSucceeds = true;
       toolbox_host::staticCopySucceeds = true;
     }
@@ -161,7 +164,8 @@ namespace
     {
       this->window.requestInvalidate();
       this->window.flushInvalidate();
-      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(this->controller.staticBlur_) == ToolboxStaticBlur::READY);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(this->controller.staticBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     }
   };
   void flushFirstCapture();
@@ -205,7 +209,8 @@ namespace
       LOKA_VERIFY(toolbox_host::invalidations == before);
       LOKA_VERIFY(!f.window.hasPendingInvalidate());
       LOKA_VERIFY(toolbox_host::staticCaptures == 0);
-      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
     }
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
@@ -216,7 +221,8 @@ namespace
     StaticFixture f;
     f.update(false);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
     Rect small = f.rect();
     --small.right;
     ToolboxRenderDirtyInCompositionOrder(f.controller, small);
@@ -226,10 +232,12 @@ namespace
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
     ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     f.update(false);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
@@ -239,7 +247,8 @@ namespace
     const unsigned copies = toolbox_host::staticCopies;
     f.update(false);
     LOKA_VERIFY(toolbox_host::staticCopies == copies);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     toolbox_host::staticEligible = true;
     f.update(false);
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
@@ -252,7 +261,8 @@ namespace
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     LOKA_VERIFY(f.unit->renders == 1);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1 && f.unit->renders == 1);
@@ -282,19 +292,20 @@ namespace
             if (open)
             {
               ToolboxErasedPass::Guard guard(pass, area);
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass);
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
             }
             else
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass);
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
             const bool admitted = open && contains == 1 && (o != 2 || covers);
             LOKA_VERIFY(painted == admitted);
             LOKA_VERIFY(toolbox_host::staticCaptures == (admitted ? 1u : 0u));
-            LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_)
-                        == (admitted ? ToolboxStaticBlur::READY : ToolboxStaticBlur::EMPTY));
+            LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                        == (admitted ? ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY
+                                     : ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY));
             for (unsigned later = 0; later < 3; ++later)
             {
               ToolboxErasedPass::Guard guard(pass, rect);
-              const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass);
+              const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
               LOKA_VERIFY(copied);
               LOKA_VERIFY(toolbox_host::staticCaptures == 1);
             }
@@ -415,8 +426,9 @@ namespace
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 1);
     LOKA_VERIFY(!toolbox_host::erasedRects.empty());
     equal(toolbox_host::erasedRects.back(), f.rect());
-    LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_));
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::hasPixels(f.controller.staticBlur_));
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     toolbox_host::staticCopySucceeds = true;
     toolbox_host::erasedRects.clear();
     f.update();
@@ -475,12 +487,14 @@ namespace
     ToolboxUnitLedger ledger;
     ledger.push(first);
     ledger.push(second);
-    f.controller.staticBlur_.reconcile(ledger.firstStaticBlur());
+    f.controller.staticBlur_.reconcile(ledger.firstBlurUnits());
     ToolboxErasedPass::Guard pass(f.controller.erasedPass(), rect);
-    const bool laterPainted = f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass());
+    const bool laterPainted =
+        f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass()) == BLUR_PICTURE;
     LOKA_VERIFY(!laterPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
-    const bool firstPainted = f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass());
+    const bool firstPainted =
+        f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass()) == BLUR_PICTURE;
     LOKA_VERIFY(firstPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
   }
@@ -496,7 +510,8 @@ namespace
     LOKA_VERIFY(toolbox_host::invalidations == before);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
   }
   void staticIneligible()
   {
@@ -504,7 +519,8 @@ namespace
     toolbox_host::staticEligible = false;
     f.update();
     f.window.drawForFlush();
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::EMPTY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
     const unsigned before = toolbox_host::invalidations;
     toolbox_host::staticEligible = true;
     f.window.flushInvalidate();
@@ -514,7 +530,8 @@ namespace
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     f.update();
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
   }
   void staticFailure()
   {
@@ -523,12 +540,14 @@ namespace
     f.window.requestInvalidate();
     f.window.flushInvalidate();
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::DISABLED);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::DISABLED);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
     toolbox_host::staticCaptureSucceeds = true;
     const unsigned before = toolbox_host::invalidations;
     f.update(false);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::DISABLED);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::DISABLED);
     LOKA_VERIFY(toolbox_host::invalidations == before);
     f.update();
     f.window.drawForFlush();
@@ -560,21 +579,24 @@ namespace
     f.update();
     LOKA_VERIFY(toolbox_host::staticReleases == 1);
     const bool changedRect = std::strcmp(reason, "StaticChangedRect") == 0;
-    LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_) == changedRect);
-    LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_)
-                == (changedRect ? ToolboxStaticBlur::READY : ToolboxStaticBlur::EMPTY));
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::hasPixels(f.controller.staticBlur_) == changedRect);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == (changedRect ? ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY
+                                : ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY));
     LOKA_VERIFY(toolbox_host::staticCaptures == (changedRect ? 2u : 1u));
     f.window.drawForFlush();
     LOKA_VERIFY(toolbox_host::staticCaptures == (changedRect ? 2u : 1u));
-    LOKA_VERIFY(ToolboxStaticBlurInspection::hasPixels(f.controller.staticBlur_) == changedRect);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::hasPixels(f.controller.staticBlur_) == changedRect);
     if (changedRect)
     {
-      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
       f.unit->height = 72;
       f.window.drawForFlush();
       LOKA_VERIFY(toolbox_host::staticReleases == 2);
       LOKA_VERIFY(toolbox_host::staticCaptures == 3);
-      LOKA_VERIFY(ToolboxStaticBlurInspection::phase(f.controller.staticBlur_) == ToolboxStaticBlur::READY);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
       return;
     }
     f.unit->height = 30;
@@ -582,6 +604,271 @@ namespace
     f.controller.rootNode_ = &f.stack;
     f.ready();
     LOKA_VERIFY(toolbox_host::staticCaptures == 2);
+  }
+  void bandGeometry()
+  {
+    const Rect key = {10, 10, 30, 30};
+    const Rect cases[] = {{0, 0, 0, 0},
+                          {10, 0, 30, 10},
+                          {10, 30, 30, 40},
+                          {0, 10, 10, 30},
+                          {30, 10, 40, 30},
+                          {40, 40, 50, 50},
+                          {0, 0, 40, 40},
+                          {15, 15, 20, 20},
+                          {15, 5, 20, 20},
+                          {5, 15, 20, 20},
+                          {15, 20, 20, 35},
+                          {20, 15, 35, 20},
+                          {-32768, -32768, 20, 20},
+                          {20, 20, 32767, 32767}};
+    const Rect expected[] = {{0, 0, 0, 0},
+                             {10, 0, 30, 10},
+                             {10, 30, 30, 40},
+                             {0, 10, 10, 30},
+                             {30, 10, 40, 30},
+                             {40, 40, 50, 50},
+                             {0, 0, 40, 40},
+                             {10, 10, 30, 30},
+                             {10, 5, 30, 30},
+                             {5, 10, 30, 30},
+                             {10, 10, 30, 35},
+                             {10, 10, 35, 30},
+                             {-32768, -32768, 30, 30},
+                             {10, 10, 32767, 32767}};
+    const Rect empty = {15, 15, 15, 20};
+    for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+    {
+      equal(ToolboxBlurDirtyExtent(cases[i], key), expected[i]);
+      equal(ToolboxBlurDirtyExtent(cases[i], empty), cases[i]);
+    }
+    const Rect stale = {0, 0, 30, 200}, dirty = {10, 90, 20, 100}, widened = {0, 0, 30, 200};
+    equal(ToolboxBlurDirtyExtent(dirty, stale), widened);
+    const Rect visible[] = {key, {10, 10, 29, 30}, {20, 15, 30, 25}, {29, 10, 30, 30}, empty};
+    const bool draws[] = {true, false, true, true, false};
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      Rect line;
+      const bool drawn = ToolboxUnitHairlineRect(visible[i], key, line);
+      LOKA_VERIFY(drawn == draws[i]);
+      if (drawn)
+      {
+        const Rect expectedLine = {29, visible[i].left, 30, visible[i].right};
+        equal(line, expectedLine);
+      }
+    }
+  }
+  void bandLifetime()
+  {
+    StaticFixture f;
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 0 && f.controller.frostCache_.paints == 0);
+    f.update(false);
+    LOKA_VERIFY(f.controller.frostCache_.paints == 1 && toolbox_host::bandCaptures == 0);
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 1 && toolbox_host::bandHairlines == 1);
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 2);
+    f.update();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 3);
+    const Rect row = f.rect();
+    Rect partial = row;
+    --partial.bottom;
+    ToolboxRenderDirtyInCompositionOrder(f.controller, partial);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 3 && toolbox_host::bandCopies == 4);
+    Region update = {sizeof(Region), partial};
+    Region *pointer = &update;
+    f.window.port.updateRgn = &pointer;
+    f.window.drawForUpdate();
+    f.window.port.updateRgn = 0;
+    f.update(false);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 3 && toolbox_host::bandCopies == 6);
+    ToolboxRenderDirtyInCompositionOrder(f.controller, row);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 4);
+    const unsigned requests = toolbox_host::invalidations;
+    for (unsigned i = 0; i < 5; ++i)
+      ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 4 && toolbox_host::bandCopies == 12);
+    LOKA_VERIFY(toolbox_host::invalidations == requests);
+    const unsigned lines = toolbox_host::bandHairlines;
+    const unsigned milk = f.controller.frostCache_.paints;
+    toolbox_host::staticCopySucceeds = false;
+    f.update(false);
+    LOKA_VERIFY(f.controller.frostCache_.paints == milk && toolbox_host::bandHairlines == lines);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::hasPixels(f.controller.bandBlur_));
+    toolbox_host::staticCopySucceeds = true;
+    toolbox_host::staticEligible = false;
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 4 && toolbox_host::bandHairlines == lines);
+    LOKA_VERIFY(f.controller.frostCache_.paints == milk);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.bandBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::READY);
+    toolbox_host::staticEligible = true;
+    toolbox_host::staticCaptureSucceeds = false;
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 5 && f.controller.frostCache_.paints == milk + 1);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.bandBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::DISABLED);
+    toolbox_host::staticCaptureSucceeds = true;
+    f.window.drawForFlush();
+    f.update();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 5 && f.controller.frostCache_.paints == milk + 3);
+    ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(f.controller.frostCache_.paints == milk + 3);
+    f.unit->height = 31;
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 6);
+    f.controller.destroy();
+    Rect absent;
+    LOKA_VERIFY(!f.controller.bandBlur_.queryKeyRect(absent));
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.bandBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::EMPTY);
+    equal(f.controller.dirtyExtent(partial), partial);
+    f.controller.rootNode_ = &f.stack;
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 7);
+  }
+  void bandDelivery()
+  {
+    StaticFixture f;
+    const Rect dirty = {5, 5, 10, 10};
+    equal(f.controller.dirtyExtent(dirty), dirty);
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    f.window.drawForFlush();
+    const Rect band = f.rect();
+    Rect partial = band;
+    --partial.right;
+    --partial.bottom;
+    f.window.requestInvalidateRect(partial);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 2);
+    equal(f.controller.dirtyExtent(partial), band);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+  }
+  /** Host controller has no prepareProjectedLayout door; retain the real
+      editor context but project its layout explicitly, as editorIdleRepair does. */
+  class ReplayEditor : public TextEditorNode
+  {
+  public:
+    explicit ReplayEditor(const TextEditorProps &props)
+        : TextEditorNode(props)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      if (!controller->projectLayoutState(state))
+        return 0;
+      return this->Node::layout(platform, state);
+    }
+  };
+  void bandRepairSettles()
+  {
+    loka::app::testing::TextEditorStateOwner owner;
+    ObservableList<String> lines;
+    LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
+    LOKA_VERIFY(lines.insert(0, String("a partly covered editor")) == EDIT_OK);
+    StaticFixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    ZStackNode stack((ZStackProps()));
+    stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    TextEditorNode *editor = new ReplayEditor(TextEditorProps(lines, owner.cursor));
+    stack.addChild(editor);
+    stack.addChild(new Probe("band", 30));
+    f.controller.rootNode_ = &stack;
+    IPlatformNodeHandler *handler = f.controller.nodeHandlerRegistry_.find(editor);
+    LOKA_VERIFY(handler);
+    NodeContext *context = handler->ensureContext(editor, &f.controller, seat());
+    LOKA_VERIFY(context);
+    f.window.drawForFlush();
+    LOKA_VERIFY(f.controller.editControls_.size() == 1);
+    const Rect band = unitRow(f.controller, &stack, 1)->rect;
+    const Rect editorRect = f.controller.editControls_[0].rect;
+    LOKA_VERIFY(editorRect.bottom > band.bottom && editorRect.top < band.bottom);
+    Rect dirty = band;
+    --dirty.right;
+    --dirty.bottom;
+    const unsigned captures = toolbox_host::bandCaptures;
+    f.window.requestInvalidateRect(dirty);
+    for (unsigned i = 0; i < 4 && f.window.hasPendingInvalidate(); ++i)
+      f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::bandCaptures > captures);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    const unsigned settled = toolbox_host::invalidations;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(toolbox_host::invalidations == settled);
+    // Retained node owns the context; detach through its regular fact door.
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    f.controller.rootNode_ = 0;
+    f.controller.flushTE();
+  }
+  void bandSecondUnit()
+  {
+    StaticFixture f;
+    StackNode root((StackProps(STACK_AXIS_COLUMN)));
+    ZStackNode *first = new ZStackNode(ZStackProps());
+    ZStackNode *second = new ZStackNode(ZStackProps());
+    first->props.unitGround = second->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    first->addChild(new Probe("ground", 70));
+    first->addChild(new Probe("unit", 30));
+    second->addChild(new Probe("ground2", 70));
+    second->addChild(new Probe("unit2", 30));
+    root.addChild(first);
+    root.addChild(second);
+    f.controller.rootNode_ = &root;
+    f.window.drawForFlush();
+    LOKA_VERIFY(toolbox_host::bandCaptures == 1 && f.controller.frostCache_.paints == 1);
+    LOKA_VERIFY(toolbox_host::bandHairlines == 1);
+    f.controller.rootNode_ = 0;
+  }
+  void bandSelection()
+  {
+    StaticFixture f;
+    ZStackNode band((ZStackProps())), later((ZStackProps()));
+    band.props.unitGround = later.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    const Rect frozenRect = {80, 80, 100, 100}, bandRect = {10, 10, 30, 30}, laterRect = {40, 40, 60, 60};
+    ToolboxUnitLedger ledger;
+    ToolboxUnitLedger::UnitSeat frozen = {&f.stack, 1, frozenRect, frozenRect};
+    ToolboxUnitLedger::UnitSeat first = {&band, 1, bandRect, bandRect};
+    ToolboxUnitLedger::UnitSeat last = {&later, 1, laterRect, laterRect};
+    ledger.push(frozen);
+    ledger.push(first);
+    ledger.push(last);
+    const ToolboxUnitLedger::FirstBlurUnits selection = ledger.firstBlurUnits();
+    f.controller.staticBlur_.reconcile(selection);
+    f.controller.bandBlur_.reconcile(selection);
+    Rect actual;
+    LOKA_VERIFY(f.controller.staticBlur_.queryKeyRect(actual));
+    equal(actual, frozenRect);
+    LOKA_VERIFY(f.controller.bandBlur_.queryKeyRect(actual));
+    equal(actual, bandRect);
+    const Rect dirty = {15, 15, 20, 20};
+    equal(f.controller.dirtyExtent(dirty), bandRect);
+    equal(f.controller.dirtyExtent(frozenRect), frozenRect);
+    {
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), f.window.port.portRect);
+      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass());
+      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass());
+      const ToolboxBlurPaint c = f.controller.bandBlur_.paint(f.window.window(), last, f.controller.erasedPass());
+      LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE && c == BLUR_ABSENT);
+    }
+    const unsigned requests = toolbox_host::invalidations;
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass());
+      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass());
+      LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE);
+    }
+    LOKA_VERIFY(toolbox_host::invalidations == requests);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 1 && toolbox_host::staticCaptures == 1);
+    f.controller.destroy();
+    LOKA_VERIFY(!f.controller.staticBlur_.queryKeyRect(actual) && !f.controller.bandBlur_.queryKeyRect(actual));
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.bandBlur_)
+                == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::EMPTY);
+    equal(f.controller.dirtyExtent(dirty), dirty);
   }
   void erasedFrostAdmission()
   {
@@ -623,7 +910,9 @@ namespace
     {
       ToolboxErasedPass::Guard erased(controller.erasedPass(), window.window()->portRect);
       ToolboxInputDoor::render(controller);
-      LOKA_VERIFY(controller.frostCache_.paints == 3);
+      LOKA_VERIFY(controller.frostCache_.paints == 2);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(controller.bandBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::READY);
     }
     controller.rootNode_ = 0;
   }
@@ -1266,7 +1555,11 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"StaticFirstUnit",
+  const char *names[] = {"BandGeometry",
+                         "BandLifetime",
+                         "BandDelivery",
+                         "BandSelection",
+                         "StaticFirstUnit",
                          "StaticNoRequests",
                          "StaticCopyFailure",
                          "StaticRefusedReplay",
@@ -1330,8 +1623,22 @@ int main(int argc, char **argv)
     staticIneligible();
   else if (std::strncmp(argv[1], "Static", 6) == 0)
     staticReconcile(argv[1]);
+  else if (std::strcmp(argv[1], "BandGeometry") == 0)
+    bandGeometry();
+  else if (std::strcmp(argv[1], "BandLifetime") == 0)
+    bandLifetime();
+  else if (std::strcmp(argv[1], "BandDelivery") == 0)
+  {
+    bandDelivery();
+    bandRepairSettles();
+  }
+  else if (std::strcmp(argv[1], "BandSelection") == 0)
+    bandSelection();
   else if (std::strcmp(argv[1], "FrostErasedPassAdmission") == 0)
+  {
     erasedFrostAdmission();
+    bandSecondUnit();
+  }
   else if (std::strcmp(argv[1], "HeightOnlyBoxUnit") == 0)
   {
     heightOnlyUnit(false);

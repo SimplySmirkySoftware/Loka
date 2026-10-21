@@ -5,7 +5,8 @@
 void ToolboxScenePlatformController::render()
 {
   PROFILE_FUNC();
-  ToolboxStaticBlur::LayoutScope snapshotLayout(this->staticBlur_);
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
   this->pressLedger_.begin();
   ++debugStats_.renderCalls;
   ++debugStats_.totalRenderCalls;
@@ -81,7 +82,9 @@ void ToolboxScenePlatformController::render()
   LayoutNode(rootNode_, state, this, 0);
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
-  snapshotLayout.commit(this->unitLedger_.firstStaticBlur());
+  const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
+  snapshotLayout.commit(selection);
+  bandLayout.commit(selection);
   this->rectSurfaceExtentLedger_.flush();
   RenderNode(rootNode_, this);
   debugStats_.refreshHitCounts(static_cast<int>(hitLedger_.buttonHits_.size()),
