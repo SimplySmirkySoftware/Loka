@@ -18,6 +18,8 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Show.hpp"
+#include "app/nodes/nestable/Keyed.hpp"
+#include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/RectSurface.hpp"
@@ -139,9 +141,43 @@ namespace
     {
       this->state(this->backdrop_, 0);
       this->state(this->visible_, false);
+      this->state(this->insetMode_, -1);
+      this->state(this->viewport_, loka::core::Frame());
     }
     virtual void composeNode(NodeComposition &c)
     {
+      typedef reservation::SeatNodes<reservation::Nodes<
+          StackNode,
+          1,
+          reservation::Nodes<
+              ZStackNode,
+              2,
+              reservation::Nodes<
+                  GroundNode,
+                  2,
+                  reservation::Nodes<
+                      BoxNode,
+                      2,
+                      reservation::Nodes<
+                          ScrollViewNode,
+                          1,
+                          reservation::Nodes<TextNode, 12, reservation::Nodes<FragmentNode, 4> > > > > > > >
+          Arms;
+      c.declare(Keyed(*this->insetMode_.state(), this, &FrostNode::declareArm, Arms()));
+    }
+    void declareArm(NodeComposition &c)
+    {
+      if (this->insetMode_.get() >= 0)
+      {
+        c.declare(ZStack().expBlurUnit() << (ScrollView(this->viewport_).contentInsets(this->insetMode_.get(), 0)
+                                             << (VStack().naturalHeight().gap(0)
+                                                 << Text("First striped row") << Text("Second row") << Text("Third row")
+                                                 << Text("Fourth row") << Text("Fifth row") << Text("Sixth row")
+                                                 << Text("Seventh row") << Text("Eighth row") << Text("Ninth row")
+                                                 << Text("Tenth row") << Text("Eleventh row") << Text("Twelfth row")))
+                                         << Box().size(Width, UnitHeight));
+        return;
+      }
       c.declare(Column().gap(0) << (ZStack().expBlurUnit()
                                     << Ground(GroundProps(this->backdrop_.state(), FirstGround))
                                     << (Show(*this->visible_.state()) << Box().size(Width, UnitHeight)))
@@ -151,9 +187,19 @@ namespace
     }
     ZStackNode *stack()
     {
-      loka::dsl::CompositionCursor<Node> children(this->childrenHead(), this->childrenCount());
-      loka::app::StackNode *column = static_cast<loka::app::StackNode *>(children.next());
-      return column->childrenHead()->asZStackNode();
+      return firstStack(this);
+    }
+    void insetMode(int top)
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->insetMode_.set(top);
+    }
+    void scrollForProbe()
+    {
+      // Fixture-only input, matching PaintDamage's controlled scroll probe.
+      loka::core::StateTrackerGuard guard(this->tracker());
+      const loka::core::Frame current = this->viewport_.get();
+      this->viewport_.set(loka::core::Frame(current.x, current.y + 17, current.width, current.height));
     }
     void show()
     {
@@ -167,8 +213,23 @@ namespace
     }
 
   private:
+    static ZStackNode *firstStack(Node *node)
+    {
+      if (node->asZStackNode())
+        return node->asZStackNode();
+      if (node->asNestable())
+        for (Node *child = node->asNestable()->childrenHead(); child; child = child->nextInComposition)
+        {
+          ZStackNode *found = firstStack(child);
+          if (found)
+            return found;
+        }
+      return 0;
+    }
     NodeState<int> backdrop_;
     NodeState<bool> visible_;
+    NodeState<int> insetMode_;
+    NodeState<loka::core::Frame> viewport_;
   };
 
   /** Owns readbacks and the temporary covering window for the native sequence. */
@@ -511,8 +572,57 @@ namespace
         this->record("band-exposed-white-stale",
                      now.windowUpdateEvtDrawCount > this->observation_.draws.windowUpdateEvtDrawCount && ok
                          && white.read(window->window()) && exposed.equals(white, hidden));
+        SizeWindow(window->window(), Width, Height, true);
+        this->node_->insetMode(0);
+        return;
+      }
+      if (this->phase_ == 7)
+      {
+        window->drawForFlush();
+        this->node_->insetMode(UnitHeight);
+        return;
+      }
+      if (this->phase_ == 8)
+      {
+        ControlHandle bar = 0;
+        const Point firstRow = {UnitHeight, Width - 8};
+        const short part = FindControl(firstRow, window->window(), &bar);
+        this->record("inset-bar-below-band", part != 0 && bar && (**bar).contrlRect.top == UnitHeight);
+        this->insetReplay(window, "inset-zero-to-top-equals-full");
+        this->observation_.before->read(window->window());
+        this->node_->scrollForProbe();
+        return;
+      }
+      if (this->phase_ == 9)
+      {
+        Capture scrolled;
+        this->record("inset-scroll-retakes-band",
+                     scrolled.read(window->window()) && !scrolled.equals(*this->observation_.before, Unit));
+        this->insetReplay(window, "inset-scroll-incremental-equals-full");
+        this->node_->insetMode(0);
+        return;
+      }
+      if (this->phase_ == 10)
+      {
+        this->insetReplay(window, "inset-top-to-zero-equals-full");
         this->finish();
       }
+    }
+    void insetReplay(ToolboxWindow *window, const char *name)
+    {
+      Capture incremental, full;
+      const bool captured = incremental.read(window->window());
+      window->drawForFlush();
+      const bool read = full.read(window->window());
+      const Rect column = {0, Width - 15, UnitHeight, Width};
+      this->record(name, captured && read && incremental.equals(full, Whole));
+      this->record("inset-vacated-column-equals-full", captured && read && incremental.equals(full, column));
+      std::fprintf(this->log_,
+                   "inset-fnv incremental=%08lx full=%08lx column=%08lx/%08lx\r",
+                   incremental.fingerprint(Whole),
+                   full.fingerprint(Whole),
+                   incremental.fingerprint(column),
+                   full.fingerprint(column));
     }
     void backdrop(ToolboxWindow *window)
     {

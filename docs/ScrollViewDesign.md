@@ -102,8 +102,13 @@ origin zero; with insets it requests extent `top`, hiding the top gap.
 Rails keep their nonnegative extent-offset math, maximum
 `max(0, extent - viewport)`, and existing clamps. Null has no bar or maximum
 clamp; its heightless result includes both insets, with short-range refusal
-checked after their addition. No scroll bar moves in this PR: track lowering
-and the native-bar column are page 2 questions of the ScrollView insets rally.
+checked after their addition. On Toolbox, insets also keep the vertical bar out
+of the seat's top and bottom inset rows. The existing track (including frame
+contacts, the horizontal bar and the size box) is resolved first; clearance
+cuts it without extending it past native chrome. A zero side preserves that
+track edge, including frame-line sharing. macOS clearance is planned for the
+next PR; Win32 does not yet shorten its vertical bar (#1547). The horizontal
+bar, content rect, clip and page/line steps are unchanged.
 Toolbox, Win32 and macOS adopt the doors the same way, each in its own PR:
 Null, Toolbox and Win32 subtract `contentTranslation()` from content
 coordinates, while macOS places the document at a constant top inset because
@@ -148,14 +153,15 @@ on rails that honour them (see Content insets above).
 
 ## Bars
 
-The vertical bar is always present (inactive when there is no range), which
+The vertical bar is always present (inactive when there is no range), except
+when clearance leaves no track; Toolbox then hides it. The reserved column
 keeps the width offered to the children stable between passes. The horizontal
 bar exists only while the horizontal range exists, so every ScrollView whose
 content fits keeps the pixels it had before #580.
 
 | Rail | Vertical bar | Horizontal bar | What the bar's presence changes |
 |---|---|---|---|
-| Toolbox | Always present (inactive when there is no range), 16 px column | Only while `maximumX > 0` and the seat has a height; bottom 16 px row ending 16 px before the right edge; the 16×16 corner is window ground | Content rect, hit rect and the vertical range lose the bottom 16 px ([ToolboxScrollViewDecisions.hpp](../apple/toolbox/src/ToolboxScrollViewDecisions.hpp)) |
+| Toolbox | Present unless clearance leaves no track (inactive when there is no range), 16 px column | Only while `maximumX > 0` and the seat has a height; bottom 16 px row ending 16 px before the right edge; the 16×16 corner is window ground | Content rect, hit rect and the vertical range lose the bottom 16 px ([ToolboxScrollViewDecisions.hpp](../apple/toolbox/src/ToolboxScrollViewDecisions.hpp)) |
 | Win32 | Always present (`SIF_DISABLENOSCROLL`), so the client width never moves between passes | `SetScrollInfo(SB_HORZ)` without `SIF_DISABLENOSCROLL`: Windows shows it only while the range exists | The children, the clip and the vertical page get `clientHeightBelowHorizontalBar(seat)`: the bar at the viewport's DPI leaves the seat's projected native height and the remainder converts once |
 | macOS | Always present | `setHasHorizontalScroller:` from the same decision | Legacy scrollers take `clientHeightBelowHorizontalScroller(seat)`; overlay scrollers take nothing |
 
