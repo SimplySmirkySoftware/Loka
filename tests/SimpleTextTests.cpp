@@ -79,9 +79,9 @@ namespace
     LOKA_VERIFY(loka::platform::CollectUtf8(value, out));
     return out;
   }
-  // About, separator, Quit: the Null attachment numbers items across menus,
+  // About, Quit: the Null attachment numbers items across menus,
   // so File's commands follow these.
-  const unsigned kAppMenuItems = 3;
+  const unsigned kAppMenuItems = 2;
 
   const MenuItemDefinition *itemAt(const MenuDefinition &menu, unsigned index)
   {
@@ -710,27 +710,24 @@ void testSimpleTextMenuAndDialogProps()
   Harness h;
   const MenuBarDefinition *bar = h.scene->menuBar();
   LOKA_VERIFY(bar && bar->menusCount() == 2);
-  // The app menu comes first: Classic shows the Apple menu only for a declared
-  // app menu, and macOS takes the first menu as the application menu.
+  // The preset declares About and Quit; native placement belongs to each rail.
   const MenuDefinition *app = bar->menuAt(0);
   LOKA_VERIFY(app && app->isAppMenu && app->itemsCount() == kAppMenuItems);
   LOKA_VERIFY(itemAt(*app, 0)->action == MENU_ACTION_ABOUT_APP);
-  LOKA_VERIFY(itemAt(*app, 1)->isSeparator);
-  LOKA_VERIFY(itemAt(*app, 2)->action == MENU_ACTION_QUIT_APP);
+  LOKA_VERIFY(itemAt(*app, 1)->action == MENU_ACTION_QUIT_APP);
   const MenuDefinition *file = bar->menuAt(1);
-  LOKA_VERIFY(file && !file->isAppMenu && file->itemsCount() == 7);
+  LOKA_VERIFY(file && !file->isAppMenu && file->itemsCount() == 5);
   LOKA_VERIFY(file->title.equals(String("File")));
-  const char *titles[] = {"New", "Open...", "Close", "Save", "Save As...", "", "Quit"};
-  for (int i = 0; i < 7; ++i)
+  const char *titles[] = {"New", "Open...", "Close", "Save", "Save As..."};
+  for (int i = 0; i < 5; ++i)
   {
     const MenuItemDefinition *item = itemAt(*file, i);
     LOKA_VERIFY(item && item->title.equals(String(titles[i])));
     LOKA_VERIFY(item->titleState == 0);
-    LOKA_VERIFY(item->isSeparator == (i == 5));
+    LOKA_VERIFY(!item->isSeparator);
     LOKA_VERIFY(item->hasShortcut == (i == 1 || i == 2 || i == 3));
   }
   LOKA_VERIFY(itemAt(*file, 1)->shortcutKey == 'o' && itemAt(*file, 3)->shortcutKey == 's');
-  LOKA_VERIFY(itemAt(*file, 6)->action == MENU_ACTION_QUIT_APP);
   LOKA_VERIFY(itemAt(*file, 0)->onClickState
               == SimpleTextTestAccess::commands(h.main()).slot<simpletext::NEW_DOCUMENT>());
   LOKA_VERIFY(itemAt(*file, 1)->onClickState

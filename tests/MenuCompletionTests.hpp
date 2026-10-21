@@ -11,6 +11,8 @@ void testBootstrapProjectsOnce();
 void testDefaultBarComposedOnceAtBootstrap();
 void testDefaultBarBootstrapCloneRefusalLeavesNoDefault();
 void testMenuProjectionRecordIdentityAndRelease();
+void testMenuPresetStructures();
+void testMenuPresetsMergeSceneAndNull();
 void testMergeAppMenuSingleContainerShapes();
 void testMergeAppMenuContainersAndIdempotence();
 void testMergeAppMenuKeepsComplementaryActions();
