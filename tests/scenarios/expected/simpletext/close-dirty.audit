@@ -1,0 +1,39 @@
+loka_scenario_audit version=1 scenario=close-dirty
+step id=2 due_tick=2 tick=2 status=succeeded error_kind=0 error_code=0 name=open-readme
+step id=3 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=save-create
+step id=4 due_tick=4 tick=4 status=succeeded error_kind=0 error_code=0 name=shorten
+step id=5 due_tick=5 tick=5 status=succeeded error_kind=0 error_code=0 name=ask-close-cancel
+step id=6 due_tick=6 tick=6 status=succeeded error_kind=0 error_code=0 name=verify-kept
+step id=6 due_tick=6 tick=6 status=succeeded error_kind=0 error_code=0 name=ask-close-save
+step id=7 due_tick=7 tick=7 status=succeeded error_kind=0 error_code=0 name=verify-closed
+checkpoint	final
+close.ask.cancel	yes
+close.ask.save	yes
+close.kept	yes
+crop_bottom	320
+crop_left	0
+crop_right	480
+crop_top	0
+format_version	1
+node	SimpleText.Editor
+rail	toolbox
+roster.count	0
+saved.1.bytes	123
+saved.1.cr	5
+saved.1.creator	1953790068
+saved.1.lf	0
+saved.1.match	yes
+saved.1.type	1413830740
+saved.close.bytes	25
+saved.close.cr	0
+saved.close.creator	1953790068
+saved.close.lf	0
+saved.close.match	yes
+saved.close.type	1413830740
+scenario_version	1
+schema_version	1
+status	ok
+step	close-dirty
+test	SimpleText
+tick	8
+terminal status=succeeded
