@@ -1,5 +1,8 @@
 #include "MacImageViewContext.hpp"
 #include <cassert>
+#include <climits>
+#include <cstring>
+#include <limits>
 #include "../MacScenePlatformController.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../platform/MacNativeGeometry.hpp"
@@ -18,6 +21,72 @@
 
 namespace
 {
+  /** Returns an owned device-RGB image, or nil to preserve the source. */
+  NSImage *CreateDeviceRGBImage(NSImage *image)
+  {
+    if (!image)
+    {
+      return nil;
+    }
+    NSArray *reps = [image representations];
+    NSBitmapImageRep *source = nil;
+    for (NSUInteger i = 0; i < [reps count]; ++i)
+    {
+      NSImageRep *rep = [reps objectAtIndex:i];
+      if (![rep isKindOfClass:[NSBitmapImageRep class]])
+      {
+        return nil;
+      }
+      if (!source)
+      {
+        source = (NSBitmapImageRep *)rep;
+      }
+    }
+    const NSSize size = [image size];
+    const NSInteger width = [source pixelsWide];
+    const NSInteger height = [source pixelsHigh];
+    // Tiger's bitmap initializer takes int dimensions and row bytes.
+    if (!source || !(size.width > 0) || !(size.height > 0)
+        || width <= 0 || height <= 0 || width > INT_MAX / 4 || height > INT_MAX)
+    {
+      return nil;
+    }
+    const size_t rowBytes = static_cast<size_t>(width) * 4;
+    if (static_cast<size_t>(height) > std::numeric_limits<size_t>::max() / rowBytes)
+    {
+      return nil;
+    }
+    NSBitmapImageRep *device = [[NSBitmapImageRep alloc]
+        initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+        bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+        colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+    if (!device || ![device bitmapData])
+    {
+      [device release];
+      return nil;
+    }
+    NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:device];
+    if (!context)
+    {
+      [device release];
+      return nil;
+    }
+    // Source-over must start on transparent pixels for images with alpha.
+    std::memset([device bitmapData], 0, rowBytes * static_cast<size_t>(height));
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext:context];
+    [context setImageInterpolation:NSImageInterpolationHigh];
+    [image drawInRect:NSMakeRect(0, 0, width, height) fromRect:NSZeroRect
+           operation:LOKA_MAC_COMPOSITING_SOURCE_OVER fraction:1.0];
+    [NSGraphicsContext restoreGraphicsState];
+
+    NSImage *converted = [[NSImage alloc] initWithSize:size];
+    [device setSize:size];
+    [converted addRepresentation:device];
+    [device release];
+    return converted;
+  }
+
   int ResolveImageLayoutWidth(const loka::app::ImageViewNode *node, int fallbackWidth,
                               const loka::macos::MacProjection &projection)
   {
@@ -159,11 +228,18 @@ namespace
   {
     return;
   }
+  // The slot remembers only the drawn image. Repeating the original input
+  // after conversion converts again; no separate source identity is cached.
+  NSImage *replacement = CreateDeviceRGBImage(image);
+  if (!replacement)
+  {
+    replacement = [image retain];
+  }
   if (image_)
   {
     [image_ release];
   }
-  image_ = [image retain];
+  image_ = replacement;
   [self setNeedsDisplay:YES];
 }
 

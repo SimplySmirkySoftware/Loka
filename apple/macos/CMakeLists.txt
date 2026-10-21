@@ -126,6 +126,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacDisplayAppearanceTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacAppLocationTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacImageBlobTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacImageViewTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacMenuProjectionTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNativeResourceRetirementTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNodeHandlerEnsureTests.mm
