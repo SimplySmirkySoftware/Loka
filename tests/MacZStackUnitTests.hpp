@@ -23,8 +23,9 @@ void testMacZStackGroundSuffixPreservesOrder();
 void testMacZStackBlurNativeEffect();
 void testMacZStackBlurFirstUnitOnly();
 void testMacZStackBlurGroundIsCreationTimeConstant();
-void testMacZStackBlurWithoutEffectUsesFrostedGround();
-void testMacZStackFrostedFirstUnit();
-void testMacZStackLiveBlurSwitch();
+void testMacZStackPhotoCapturePolicy();
+void testMacZStackPhotoLifetime();
+void testMacZStackPhotoReplayAndRefusal();
+void testMacZStackPhotoOrientation();
 
 #endif

@@ -20,6 +20,7 @@ namespace loka
     namespace
     {
       unsigned macStackUnitViewFailures = 0;
+      unsigned macPhotoCaptureFailures = 0;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
     }
@@ -32,6 +33,17 @@ namespace loka
       if (!macStackUnitViewFailures)
         return false;
       --macStackUnitViewFailures;
+      return true;
+    }
+    void failMacPhotoCaptures(unsigned count)
+    {
+      macPhotoCaptureFailures = count;
+    }
+    bool declineMacPhotoCapture()
+    {
+      if (!macPhotoCaptureFailures)
+        return false;
+      --macPhotoCaptureFailures;
       return true;
     }
     void failMacCardBitmaps(unsigned count)
