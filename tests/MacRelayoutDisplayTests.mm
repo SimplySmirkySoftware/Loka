@@ -181,6 +181,12 @@ namespace
       for (int i = 0; i < DrawCounts::VIEW_COUNT; ++i)
       {
         const DrawCounts::ViewKind kind = static_cast<DrawCounts::ViewKind>(i);
+        std::printf("relayout display: %s draws after first display=%u\n",
+                    [NSStringFromClass(draws.viewClass(kind)) UTF8String], draws.count(kind));
+      }
+      for (int i = 0; i < DrawCounts::VIEW_COUNT; ++i)
+      {
+        const DrawCounts::ViewKind kind = static_cast<DrawCounts::ViewKind>(i);
         LOKA_VERIFY(findView(document, draws.viewClass(kind)));
         LOKA_VERIFY(draws.count(kind) > 0);
       }
