@@ -574,3 +574,221 @@ void testMacMenuTitleStateUnbindsOnRelease()
   LOKA_VERIFY([[item title] isEqualToString:@"Beta"]);
   [item release];
 }
+
+namespace
+{
+  void verifyMenuRows(NSMenu *menu, const char *const *titles, NSInteger count)
+  {
+    LOKA_VERIFY(menu && [menu numberOfItems] == count);
+    for (NSInteger i = 0; i < count; ++i)
+    {
+      NSMenuItem *item = [menu itemAtIndex:i];
+      if (!titles[i])
+        LOKA_VERIFY([item isSeparatorItem]);
+      else
+      {
+        LOKA_VERIFY(![item isSeparatorItem]);
+        LOKA_VERIFY([[item title] isEqualToString:[NSString stringWithUTF8String:titles[i]]]);
+      }
+    }
+  }
+} // namespace
+
+void testMacMenuAppFirstAndSections()
+{
+  CocoaHost host;
+  for (int variant = 0; variant < 6; ++variant)
+  {
+    TestApp app;
+    MenuDefinition application = AppMenu();
+    application << MenuSeparator() << MenuSeparator();
+    // Deliberately declare Quit first and About last: roles determine sections.
+    application << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator();
+    if (variant != 2)
+      application << MenuItem("Prefs") << MenuSeparator() << MenuSeparator();
+    application << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP).attr(MenuItemAttr().visible(variant != 1))
+                << MenuSeparator();
+    if (variant == 3)
+    {
+      application = AppMenu();
+      application << MenuSeparator() << MenuItem("Hidden").attr(MenuItemAttr().visible(false));
+    }
+    if (variant == 4)
+      application = AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuSeparator()
+                              << MenuItem("Prefs") << MenuSeparator()
+                              << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP);
+    // No declared separators: the section separators are the rail's own.
+    if (variant == 5)
+      application = AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuItem("Prefs")
+                              << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP);
+    MenuBarDefinition offered;
+    offered << (Menu("File") << MenuItem("Open")) << (Menu("View") << MenuItem("Zoom")) << application;
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+    NSMenu *main = [NSApp mainMenu];
+    LOKA_VERIFY([main numberOfItems] == (variant == 3 ? 2 : 3));
+    NSInteger fileIndex = variant == 3 ? 0 : 1;
+    LOKA_VERIFY([[[main itemAtIndex:fileIndex] title] isEqualToString:@"File"]);
+    LOKA_VERIFY([[[main itemAtIndex:fileIndex + 1] title] isEqualToString:@"View"]);
+    if (variant == 3)
+      continue;
+    NSMenu *menu = [[main itemAtIndex:0] submenu];
+    const char *all[] = {"About", 0, "Prefs", 0, "Quit"};
+    const char *hidden[] = {"Prefs", 0, "Quit"};
+    const char *pair[] = {"About", 0, "Quit"};
+    verifyMenuRows(menu,
+                   variant == 0 || variant >= 4 ? all : (variant == 1 ? hidden : pair),
+                   variant == 0 || variant >= 4 ? 5 : 3);
+  }
+}
+
+void testMacMenuQuitSuppressionAndSeparators()
+{
+  CocoaHost host;
+  // Visible (including disabled) app Quit suppresses leaves; absent/invisible
+  // app Quit and absent app container preserve ordinary Quit commands.
+  for (int variant = 0; variant < 5; ++variant)
+  {
+    TestApp app;
+    MenuBarDefinition offered;
+    MenuDefinition application = AppMenu();
+    application << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP);
+    if (variant != 1)
+      application << MenuItem("Quit")
+                         .actionType(MENU_ACTION_QUIT_APP)
+                         .enabled(variant != 3)
+                         .attr(MenuItemAttr().visible(variant != 2));
+    if (variant != 4)
+      offered << application;
+    offered << (Menu("File") << MenuSeparator() << MenuItem("Open") << MenuSeparator()
+                             << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator());
+    offered << (Menu("Nested") << MenuSeparator()
+                               << (MenuItem("Quit parent").actionType(MENU_ACTION_QUIT_APP)
+                                   << MenuSeparator() << MenuItem("Keep") << MenuSeparator()
+                                   << MenuItem("Nested Quit").actionType(MENU_ACTION_QUIT_APP) << MenuSeparator())
+                               << MenuSeparator() << MenuSeparator()
+                               << (MenuItem("Empty") << MenuItem("Hidden").attr(MenuItemAttr().visible(false)))
+                               << MenuSeparator() << MenuItem("Last") << MenuSeparator());
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+    NSMenu *main = [NSApp mainMenu];
+    const bool suppressed = variant == 0 || variant == 3;
+    const NSInteger fileIndex = variant == 4 ? 0 : 1;
+    LOKA_VERIFY([main numberOfItems] == fileIndex + 2);
+    const char *openOnly[] = {"Open"};
+    const char *withQuit[] = {"Open", 0, "Quit"};
+    verifyMenuRows([[main itemAtIndex:fileIndex] submenu], suppressed ? openOnly : withQuit, suppressed ? 1 : 3);
+    NSMenu *nested = [[main itemAtIndex:fileIndex + 1] submenu];
+    const char *parents[] = {"Quit parent", 0, "Last"};
+    verifyMenuRows(nested, parents, 3);
+    const char *keepOnly[] = {"Keep"};
+    const char *keepQuit[] = {"Keep", 0, "Nested Quit"};
+    verifyMenuRows([[nested itemAtIndex:0] submenu], suppressed ? keepOnly : keepQuit, suppressed ? 1 : 3);
+    LOKA_VERIFY([[nested itemAtIndex:0] tag] == 0);
+    if (variant == 3)
+      LOKA_VERIFY(![[[[main itemAtIndex:0] submenu] itemAtIndex:2] isEnabled]);
+  }
+}
+
+void testMacMenuAppMiddlePreservesPayloads()
+{
+  CocoaHost host;
+  TestApp app;
+  MenuBarDefinition offered;
+  offered << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP).shortcut('x') << MenuItem("Prefs")
+                        << MenuSeparator() << MenuSeparator()
+                        << MenuItem("Colors").actionType(MENU_ACTION_SHOW_COLOR_PICKER)
+                        << (MenuItem("About parent").actionType(MENU_ACTION_ABOUT_APP) << MenuItem("Child"))
+                        << (MenuItem("Quit parent").actionType(MENU_ACTION_QUIT_APP)
+                            << MenuItem("Child Quit").actionType(MENU_ACTION_QUIT_APP))
+                        << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP).shortcut('a'));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  const char *rows[] = {"About", 0, "Prefs", 0, "Colors", "About parent", "Quit parent", 0, "Quit"};
+  verifyMenuRows(menu, rows, 9);
+  LOKA_VERIFY([[[menu itemAtIndex:0] keyEquivalent] isEqualToString:@"a"]);
+  LOKA_VERIFY([[[menu itemAtIndex:8] keyEquivalent] isEqualToString:@"x"]);
+  const char *child[] = {"Child"};
+  const char *childQuit[] = {"Child Quit"};
+  verifyMenuRows([[menu itemAtIndex:5] submenu], child, 1);
+  verifyMenuRows([[menu itemAtIndex:6] submenu], childQuit, 1);
+}
+
+void testMacMenuEmptyActionTitleFollowsState()
+{
+  CocoaHost host;
+  const MenuActionType actions[] = {MENU_ACTION_NONE, MENU_ACTION_ABOUT_APP, MENU_ACTION_QUIT_APP};
+  const char *words[] = {"Menu Item", "About", "Quit"};
+  for (int i = 0; i < 3; ++i)
+  {
+    MutableState<String> title(String::Literal(""));
+    MutableState<bool> enabled(false), checked(true);
+    PushStateTracker tracker;
+    tracker.addState(&title);
+    tracker.addState(&enabled);
+    tracker.addState(&checked);
+    TestApp app;
+    MenuBarDefinition offered;
+    offered << (AppMenu() << MenuItem("Ignored constant")
+                                 .text(&title)
+                                 .actionType(actions[i])
+                                 .enabled(&enabled)
+                                 .attr(MenuItemAttr().checked(&checked)));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+    NSMenuItem *item = commandItem();
+    const NSInteger tag = [item tag];
+    LOKA_VERIFY(tag != 0 && [item target] != nil && [item action] != NULL);
+    NSString *key = i == 2 ? @"q" : @"";
+    LOKA_VERIFY([[item title] isEqualToString:[NSString stringWithUTF8String:words[i]]]);
+    LOKA_VERIFY([[item keyEquivalent] isEqualToString:key]);
+    LOKA_VERIFY(![item isEnabled] && [item state] != 0);
+    {
+      StateTrackerGuard guard(&tracker);
+      title.set(String::Literal("Mine"));
+      enabled.set(true);
+      checked.set(false);
+    }
+    LOKA_VERIFY(commandItem() == item && [item tag] == tag);
+    LOKA_VERIFY([[item title] isEqualToString:@"Mine"]);
+    LOKA_VERIFY([item isEnabled] && [item state] == 0);
+    {
+      StateTrackerGuard guard(&tracker);
+      title.set(String::Literal(""));
+    }
+    LOKA_VERIFY(commandItem() == item && [item tag] == tag);
+    LOKA_VERIFY([[item title] isEqualToString:[NSString stringWithUTF8String:words[i]]]);
+    LOKA_VERIFY([[item keyEquivalent] isEqualToString:key]);
+  }
+}
+
+namespace
+{
+  class MenuVisibilityRead : public State<bool>
+  {
+  public:
+    explicit MenuVisibilityRead(bool visible)
+        : State<bool>(visible),
+          reads(0)
+    {
+    }
+    virtual bool get() const
+    {
+      ++this->reads;
+      return State<bool>::get();
+    }
+    mutable int reads;
+  };
+} // namespace
+
+void testMacMenuVisibilityReadOnceAndConstantFallback()
+{
+  CocoaHost host;
+  MenuVisibilityRead about(true), quit(true), hidden(false);
+  TestApp app;
+  MenuBarDefinition offered;
+  offered << (AppMenu() << MenuItem("").actionType(MENU_ACTION_QUIT_APP).attr(MenuItemAttr().visible(&quit))
+                        << MenuItem("Hidden").attr(MenuItemAttr().visible(&hidden))
+                        << MenuItem("").actionType(MENU_ACTION_ABOUT_APP).attr(MenuItemAttr().visible(&about)));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  LOKA_VERIFY(about.reads == 1 && quit.reads == 1 && hidden.reads == 1);
+  const char *rows[] = {"About", 0, "Quit"};
+  verifyMenuRows([[[NSApp mainMenu] itemAtIndex:0] submenu], rows, 3);
+}

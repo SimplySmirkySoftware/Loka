@@ -273,18 +273,11 @@ namespace helloworld
     for (int i = 0; i < 6; ++i)
       randomMenu << MenuItem(String::Literal("Random ") + String::FromInt(i + 1))
                         .text(this->randomTitles_[i].state());
-    c.menuBar(MenuBarDefinition()
-              << (AppMenu()
-                  << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP)
-                  << MenuSeparator()
-                  << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
-              << (Menu("View")
-                  << MenuItem("Color Picker").actionType(MENU_ACTION_SHOW_COLOR_PICKER))
-              << (Menu("File") << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
-              << (Menu("Special")
-                  << (MenuItem("Item") << MenuItem("Sub Item"))
-                  << MenuItem("Item 2"))
-              << randomMenu);
+    c.menuBar(
+        MenuBarDefinition() << StandardMenuPresets()
+                            << (Menu("View") << MenuItem("Color Picker").actionType(MENU_ACTION_SHOW_COLOR_PICKER))
+                            << (Menu("Special") << (MenuItem("Item") << MenuItem("Sub Item")) << MenuItem("Item 2"))
+                            << randomMenu);
     // The window's margin is 0 so the ScrollView reaches its edges; the panels
     // keep the rail's standard margin inside it, from the edges and from the
     // bar (#950 page 4).

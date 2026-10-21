@@ -41,9 +41,14 @@ namespace
     return [NSString stringWithUTF8String:fallback];
   }
 
-  static NSString *MenuItemTitleFromString(const loka::core::String &title)
+  // Deliberate platform-seam twin of Classic (#1535) and Win32 (#1536).
+  static const char *MenuEmptyTitle(loka::app::MenuActionType action)
   {
-    return MenuTitleFromString(title, "Menu Item");
+    if (action == loka::app::MENU_ACTION_ABOUT_APP)
+      return "About";
+    if (action == loka::app::MENU_ACTION_QUIT_APP)
+      return "Quit";
+    return "Menu Item";
   }
 
   // AppKit can retain an item after its graph leaves the main menu. Unlike
@@ -111,7 +116,7 @@ void MacMenuAttachment::MenuTitleChangedThunk(void *userData)
   if (!binding || !binding->menuItem || !binding->titleState)
     return;
   NSMenuItem *item = (NSMenuItem *)binding->menuItem;
-  NSString *title = MenuItemTitleFromString(binding->titleState->get());
+  NSString *title = MenuTitleFromString(binding->titleState->get(), binding->emptyTitle);
   [item setTitle:title];
   [[item submenu] setTitle:title];
 }
@@ -185,29 +190,20 @@ static NSString *MenuShortcutForAction(const loka::app::MenuItemDefinition *item
 }
 
 std::size_t MacMenuAttachment::BuildMenuItem(void *nativeMenu,
-    const loka::app::MenuItemDefinition *itemDef, bool allowQuit)
+                                             const loka::app::MenuItemDefinition *itemDef,
+                                             bool suppressQuit,
+                                             bool &pendingSeparator)
 {
   NSMenu *menu = (NSMenu *)nativeMenu;
-  if (!itemDef)
-    return 0;
-  if (!itemDef->isVisibleInitial())
-    return 0;
-  if (!allowQuit && itemDef->action == loka::app::MENU_ACTION_QUIT_APP)
-    return 0;
-  if (itemDef->isSeparator)
-  {
-    [menu addItem:[NSMenuItem separatorItem]];
-    return 1;
-  }
-
-  NSString *title = MenuItemTitleFromString(itemDef->titleState ? itemDef->titleState->get() : itemDef->title);
+  NSString *title = MenuTitleFromString(itemDef->titleState ? itemDef->titleState->get() : itemDef->title,
+                                        MenuEmptyTitle(itemDef->action));
   NSString *shortcut = MenuShortcutForAction(itemDef);
   NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:shortcut];
 
   if (itemDef->hasChildren())
   {
     NSMenu *subMenu = [[NSMenu alloc] initWithTitle:title];
-    if (this->BuildMenuItems(subMenu, itemDef->childrenHead(), allowQuit) == 0)
+    if (this->BuildMenuItems(subMenu, itemDef->childrenHead(), suppressQuit) == 0)
     {
       [subMenu release];
       [menuItem release];
@@ -245,6 +241,7 @@ std::size_t MacMenuAttachment::BuildMenuItem(void *nativeMenu,
     }
     MacMenuAttachment::MenuBinding *binding = new MacMenuAttachment::MenuBinding();
     binding->menuItem = (void *)menuItem;
+    binding->emptyTitle = MenuEmptyTitle(itemDef->action);
     binding->titleState = itemDef->titleState;
     binding->enabledState = enabledBindingState;
     binding->invertEnabled = itemDef->enabledBindingInvert();
@@ -264,23 +261,79 @@ std::size_t MacMenuAttachment::BuildMenuItem(void *nativeMenu,
     this->bindings_.push_back(binding);
   }
 
+  if (pendingSeparator && [menu numberOfItems] > 0)
+    [menu addItem:[NSMenuItem separatorItem]];
+  pendingSeparator = false;
   [menu addItem:menuItem];
   [menuItem release];
   return 1;
 }
 
-std::size_t MacMenuAttachment::BuildMenuItems(void *nativeMenu,
-    const loka::app::MenuItemDefinition *itemsHead, bool allowQuit)
+// Both menu builders call this once per unselected row. Filtering and pending
+// separators share one door; Color Picker uses the existing item payload path.
+void MacMenuAttachment::BuildMenuRow(void *nativeMenu,
+                                     const loka::app::MenuItemDefinition *item,
+                                     bool suppressQuit,
+                                     bool &pendingSeparator)
+{
+  if (!item->isVisibleInitial())
+    return;
+  if (item->isSeparator)
+  {
+    pendingSeparator = true;
+    return;
+  }
+  if (suppressQuit && !item->hasChildren() && item->action == loka::app::MENU_ACTION_QUIT_APP)
+    return;
+  this->BuildMenuItem(nativeMenu, item, suppressQuit, pendingSeparator);
+}
+
+// Called once per ordinary menu or submenu during a changed projection. Walks
+// only that menu's rows; recursive calls own their pending separator.
+std::size_t
+MacMenuAttachment::BuildMenuItems(void *nativeMenu, const loka::app::MenuItemDefinition *itemsHead, bool suppressQuit)
+{
+  bool pendingSeparator = false;
+  for (const loka::app::MenuItemDefinition *item = itemsHead; item; item = item->nextInComposition)
+    this->BuildMenuRow(nativeMenu, item, suppressQuit, pendingSeparator);
+  return static_cast<std::size_t>([(NSMenu *)nativeMenu numberOfItems]);
+}
+
+// Called once for the merged app container per changed projection. Selection
+// and middle construction each walk its rows; selected leaves bypass the row
+// helper so their visibility is read only during selection.
+std::size_t
+MacMenuAttachment::BuildAppMenu(void *nativeMenu, const loka::app::MenuItemDefinition *itemsHead, bool &quitPlaced)
 {
   NSMenu *menu = (NSMenu *)nativeMenu;
-  std::size_t added = 0;
-  const loka::app::MenuItemDefinition *itemDef = itemsHead;
-  while (itemDef)
+  const loka::app::MenuItemDefinition *about = 0;
+  const loka::app::MenuItemDefinition *quit = 0;
+  for (const loka::app::MenuItemDefinition *item = itemsHead; item; item = item->nextInComposition)
   {
-    added += this->BuildMenuItem(menu, itemDef, allowQuit);
-    itemDef = itemDef->nextInComposition;
+    if (item->isSeparator || item->hasChildren())
+      continue;
+    if (!about && item->action == loka::app::MENU_ACTION_ABOUT_APP && item->isVisibleInitial())
+      about = item;
+    if (!quit && item->action == loka::app::MENU_ACTION_QUIT_APP && item->isVisibleInitial())
+      quit = item;
   }
-  return added;
+
+  bool pendingSeparator = false;
+  if (about)
+    this->BuildMenuItem(menu, about, false, pendingSeparator);
+
+  pendingSeparator = [menu numberOfItems] > 0;
+  for (const loka::app::MenuItemDefinition *item = itemsHead; item; item = item->nextInComposition)
+  {
+    if (item != about && item != quit)
+      this->BuildMenuRow(menu, item, false, pendingSeparator);
+  }
+
+  pendingSeparator = [menu numberOfItems] > 0;
+  if (quit)
+    this->BuildMenuItem(menu, quit, false, pendingSeparator);
+  quitPlaced = quit != 0;
+  return static_cast<std::size_t>([menu numberOfItems]);
 }
 
 bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
@@ -302,44 +355,33 @@ bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
     return false;
   const loka::app::MenuBarDefinition *menuBar = merged.get();
   this->reset();
-  bool hasAppMenu = false;
-  loka::dsl::CompositionCursor<loka::app::MenuDefinition> appMenuScan(menuBar->menusHead(), menuBar->menusCount());
-  for (loka::app::MenuDefinition *menuDef = appMenuScan.next(); menuDef; menuDef = appMenuScan.next())
-  {
-    if (menuDef->isAppMenu)
-    {
-      hasAppMenu = true;
-      break;
-    }
-  }
-
   NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@""];
-  loka::dsl::CompositionCursor<loka::app::MenuDefinition> it(menuBar->menusHead(), menuBar->menusCount());
-  for (loka::app::MenuDefinition *menuDef = it.next(); menuDef; menuDef = it.next())
+  bool quitPlaced = false;
+  // Two bounded passes over the merged bar put the app container first without
+  // changing the declaration order of ordinary menus or retaining definitions.
+  for (int pass = 0; pass < 2; ++pass)
   {
-    const char *fallback = menuDef->isAppMenu ? "Loka" : "Menu";
-    NSString *menuTitle = MenuTitleFromString(menuDef->title, fallback);
-    NSMenu *subMenu = [[NSMenu alloc] initWithTitle:menuTitle];
-    bool allowQuit = !menuDef->isAppMenu;
-    if (menuDef->isAppMenu)
+    loka::dsl::CompositionCursor<loka::app::MenuDefinition> it(menuBar->menusHead(), menuBar->menusCount());
+    for (loka::app::MenuDefinition *menuDef = it.next(); menuDef; menuDef = it.next())
     {
-      allowQuit = true;
-    }
-    else if (hasAppMenu)
-    {
-      allowQuit = false;
-    }
-    if (this->BuildMenuItems(subMenu, menuDef->itemsHead(), allowQuit) == 0)
-    {
+      if (menuDef->isAppMenu != (pass == 0))
+        continue;
+      const char *fallback = menuDef->isAppMenu ? "Loka" : "Menu";
+      NSString *menuTitle = MenuTitleFromString(menuDef->title, fallback);
+      NSMenu *subMenu = [[NSMenu alloc] initWithTitle:menuTitle];
+      const std::size_t added = menuDef->isAppMenu ? this->BuildAppMenu(subMenu, menuDef->itemsHead(), quitPlaced)
+                                                   : this->BuildMenuItems(subMenu, menuDef->itemsHead(), quitPlaced);
+      if (added == 0)
+      {
+        [subMenu release];
+        continue;
+      }
+      NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:menuTitle action:nil keyEquivalent:@""];
+      [menuItem setSubmenu:subMenu];
+      [mainMenu addItem:menuItem];
+      [menuItem release];
       [subMenu release];
-      continue;
     }
-
-    NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:menuTitle action:nil keyEquivalent:@""];
-    [menuItem setSubmenu:subMenu];
-    [mainMenu addItem:menuItem];
-    [menuItem release];
-    [subMenu release];
   }
   this->menu_ = (void *)mainMenu;
   [NSApp setMainMenu:mainMenu];

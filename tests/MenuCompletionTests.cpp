@@ -494,3 +494,55 @@ void testMergeAppMenuChildActionsAreOtherItems()
   expected.menuAt(0)->operator<<(about) << quit << MenuItem("Other");
   LOKA_VERIFY(repeated.isSet() && loka::app::testing::EqualsStructure(*repeated, expected));
 }
+
+void testMenuPresetStructures()
+{
+  const MenuDefinition presets[] = {AboutMenu(), QuitMenu(), StandardMenuPresets()};
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    MenuBarDefinition bar;
+    bar << presets[i];
+    LOKA_VERIFY(bar.menusCount() == 1);
+    const MenuDefinition *menu = bar.menuAt(0);
+    LOKA_VERIFY(menu && menu->isAppMenu && menu->itemsCount() == (i == 2 ? 2u : 1u));
+    const MenuItemDefinition *item = menu->itemsHead();
+    LOKA_VERIFY(item->action == (i == 1 ? MENU_ACTION_QUIT_APP : MENU_ACTION_ABOUT_APP));
+    if (i == 2)
+      LOKA_VERIFY(item->nextInComposition->action == MENU_ACTION_QUIT_APP);
+    for (; item; item = item->nextInComposition)
+    {
+      LOKA_VERIFY(item->title.equals(String::Literal("")));
+      LOKA_VERIFY(item->titleState == 0 && !item->isSeparator && !item->hasChildren());
+    }
+  }
+  MenuDefinition first = StandardMenuPresets();
+  MenuDefinition second = StandardMenuPresets();
+  first.itemsHead()->text("Changed");
+  LOKA_VERIFY(second.itemsHead()->title.equals(String::Literal("")));
+}
+
+void testMenuPresetsMergeSceneAndNull()
+{
+  MenuBarDefinition base;
+  base << StandardMenuPresets();
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    MenuBarDefinition scene, expected;
+    if (i == 0)
+    {
+      MenuDefinition about = AboutMenu();
+      about.itemsHead()->text("Scene About");
+      scene << about;
+      expected << (AppMenu() << MenuItem("Scene About").actionType(MENU_ACTION_ABOUT_APP)
+                             << MenuItem("").actionType(MENU_ACTION_QUIT_APP));
+    }
+    else
+    {
+      if (i == 1)
+        scene << QuitMenu();
+      expected << StandardMenuPresets();
+    }
+    OwnedDef<MenuBarDefinition> merged(MergeMenuBars(&base, i == 2 ? 0 : &scene));
+    LOKA_VERIFY(merged.isSet() && loka::app::testing::EqualsStructure(*merged, expected));
+  }
+}

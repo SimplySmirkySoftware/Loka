@@ -106,8 +106,8 @@ namespace
     LOKA_VERIFY(exampleMenu && standaloneMenu && !exampleMenu->empty());
     LOKA_VERIFY(loka::testing::MenuPresentationsEqual(*exampleMenu, *standaloneMenu));
     // Startup seeds must reach both Scene owners, not only their configs.
-    exampleMenu->menuAt(4)->itemsHead()->onClickState->emit();
-    standaloneMenu->menuAt(4)->itemsHead()->onClickState->emit();
+    exampleMenu->menuAt(3)->itemsHead()->onClickState->emit();
+    standaloneMenu->menuAt(3)->itemsHead()->onClickState->emit();
     LOKA_VERIFY(loka::testing::MenuPresentationsEqual(*exampleMenu, *standaloneMenu));
     delete exampleWindow;
     delete standaloneWindow;
