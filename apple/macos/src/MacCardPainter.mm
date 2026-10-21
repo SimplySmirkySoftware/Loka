@@ -10,7 +10,8 @@ namespace loka
   {
     bool declineMacCardBitmap();
     bool declineMacCardPath();
-  }
+    bool declineMacCardCornerTile();
+  } // namespace testing
 } // namespace loka
 #endif
 
@@ -159,8 +160,53 @@ namespace
         style, body, LayoutSample(local.x + origin.x, projection), LayoutSample(local.y + origin.y, projection));
   }
 
+  /** Process-global immutable density storage, allocated once per successful
+      (extent, backing scale, corner) lookup. Intentionally leaked at exit like
+      other global immutable resources; only the main-thread painter accesses it. */
+  struct CornerDensityCache
+  {
+    const unsigned char *tiles[loka::app::CARD_SHADOW_EXTENT_COUNT][2][4];
+
+    /** PaintTableInk calls per corner cell per paint (four per band).
+        Hits walk no rows; first use computes only this tile's own pixels. */
+    const unsigned char *tile(loka::app::CardShadowExtent extent, int scale, int corner, int &w, int &h)
+    {
+      using namespace loka::app;
+      const CardStyle style(extent);
+      const detail::CardShadowTable &g = style.geometry();
+      const int horizontal = (corner & 1) ? 2 : 0;
+      const int vertical = (corner & 2) ? 3 : 1;
+      w = (g.allowance[horizontal] + g.cut[horizontal]) * scale;
+      h = (g.allowance[vertical] + g.cut[vertical]) * scale;
+#ifdef TEST_BUILD
+      if (loka::testing::declineMacCardCornerTile())
+        return 0;
+#endif
+      const unsigned char *&entry = this->tiles[extent][scale - 1][corner];
+      if (!entry)
+      {
+        unsigned char *bytes = static_cast<unsigned char *>(std::malloc(static_cast<size_t>(w) * h));
+        if (!bytes)
+          return 0;
+        const loka::core::Frame body(0, 0, g.cut[0] + g.cut[2], g.cut[1] + g.cut[3]);
+        const int x = horizontal ? body.width - g.cut[2] : -g.allowance[0];
+        const int y = vertical == 3 ? body.height - g.cut[3] : -g.allowance[1];
+        const loka::macos::MacProjection projection;
+        const CGAffineTransform inverse = CGAffineTransformMakeScale(1.0 / scale, 1.0 / scale);
+        for (int row = 0; row < h; ++row)
+          for (int column = 0; column < w; ++column)
+            bytes[row * w + column] = DensityAtBackingPixel(
+                style, body, projection, NSZeroPoint, inverse, x * scale + column, y * scale + row);
+        entry = bytes;
+      }
+      return entry;
+    }
+  };
+
+  CornerDensityCache cornerDensities = {};
+
   /** PaintTableInk calls once per corner or profile step intersecting its clip.
-      Negative density samples the rectangle; a constant uses one ALPHA pixel
+      Negative density reads the tile (or samples on refusal); a constant uses one ALPHA pixel
       or walks only this run's integer STENCIL pixels, without inverse sampling. */
   bool PaintTableRect(CGContextRef graphics,
                       const loka::core::Frame &body,
@@ -175,7 +221,9 @@ namespace
                       int top,
                       int right,
                       int bottom,
-                      int density)
+                      int density,
+                      const unsigned char *tile = 0,
+                      int tileStride = 0)
   {
     using namespace loka::app;
     const int width = right - left, height = bottom - top;
@@ -194,7 +242,8 @@ namespace
           {
             // Image row zero is its top, while device space grows upward.
             image.bytes()[((bottom - y - 1) * width + x - left) * 4 + 3] =
-                DensityAtBackingPixel(style, body, projection, origin, inverse, x, y);
+                tile ? tile[(y - top) * tileStride + (transform.a > 0 ? x - left : left - x)]
+                     : DensityAtBackingPixel(style, body, projection, origin, inverse, x, y);
           }
       CGImageRef sealed = image.seal();
       if (!sealed)
@@ -209,9 +258,10 @@ namespace
       for (int y = top; y < bottom; ++y)
         for (int x = left; x < right; ++x)
         {
-          const unsigned char sample = density < 0
-                                           ? DensityAtBackingPixel(style, body, projection, origin, inverse, x, y)
-                                           : static_cast<unsigned char>(density);
+          const unsigned char sample =
+              density < 0 ? (tile ? tile[(y - top) * tileStride + (transform.a > 0 ? x - left : left - x)]
+                                  : DensityAtBackingPixel(style, body, projection, origin, inverse, x, y))
+                          : static_cast<unsigned char>(density);
           const int column = transform.a > 0 ? x - originX : originX - x - 1;
           const int row = transform.d > 0 ? y - originY : originY - y - 1;
           if (CardShadowStencilInk(sample, column, row))
@@ -254,7 +304,7 @@ namespace
     return first;
   }
 
-  /** Once per band/whole paint: four sampled corners and four constant profiles.
+  /** Once per band/whole paint: four cached corners and four constant profiles.
       Grid middle cells may be empty. All work belongs to this paint's clip;
       non-axis-aligned CTMs retain the original per-pixel transfer. */
   void PaintTableInk(CGContextRef graphics,
@@ -337,6 +387,35 @@ namespace
             if (runLeft >= runRight || runTop >= runBottom)
               continue;
             const int density = corner ? -1 : CardShadowDensity(style, body, x, y);
+            const unsigned char *tile = 0;
+            int tileStride = 0;
+            const CGFloat scale = std::fabs(transform.a);
+            // Space-scale rounding is position-dependent and is not in the
+            // cache key; retain the sampler for every non-unit space scale.
+            if (corner && (scale == 1 || scale == 2) && std::fabs(transform.d) == scale
+                && projection.railMetrics().spaceScale.isUnit())
+            {
+              int w = 0, h = 0;
+              const unsigned char *bytes = cornerDensities.tile(
+                  style.extent(), static_cast<int>(scale), (row == 2 ? 2 : 0) + (column == 2 ? 1 : 0), w, h);
+              const detail::CardShadowTable &g = style.geometry();
+              const int baseX = column == 0 ? body.x - g.allowance[0] : body.x + body.width - g.cut[2];
+              const int baseY = row == 0 ? body.y - g.allowance[1] : body.y + body.height - g.cut[3];
+              const CGPoint first = CGPointApplyAffineTransform(CGPointMake(runLeft + 0.5, runTop + 0.5), inverse);
+              // TL/TR/BL/BR tiles all start at their logical minimum x/y.
+              // runLeft/runTop selects (tx,ty) below, including clipped or
+              // overlapping cells. Positive axes advance from that pixel;
+              // reversed axes retreat (unclipped: w-1 and/or h-1).
+              const int tx = static_cast<int>(std::floor((first.x + origin.x - baseX) * scale));
+              const int ty = static_cast<int>(std::floor((first.y + origin.y - baseY) * scale));
+              const int lastX = tx + (transform.a > 0 ? 1 : -1) * (runRight - runLeft - 1);
+              const int lastY = ty + (transform.d > 0 ? 1 : -1) * (runBottom - runTop - 1);
+              if (bytes && tx >= 0 && tx < w && ty >= 0 && ty < h && lastX >= 0 && lastX < w && lastY >= 0 && lastY < h)
+              {
+                tile = bytes + ty * w + tx;
+                tileStride = transform.d > 0 ? w : -w;
+              }
+            }
             if (!PaintTableRect(graphics,
                                 body,
                                 style,
@@ -350,7 +429,9 @@ namespace
                                 runTop,
                                 runRight,
                                 runBottom,
-                                density))
+                                density,
+                                tile,
+                                tileStride))
             {
               CGContextRestoreGState(graphics);
               return;

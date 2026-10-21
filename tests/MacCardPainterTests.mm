@@ -11,7 +11,8 @@ namespace loka
   {
     void failMacCardBitmaps(unsigned count);
     void failMacCardPaths(unsigned count);
-  }
+    void failMacCardCornerTiles(unsigned count);
+  } // namespace testing
 } // namespace loka
 #include "MacScenePlatformController.hpp"
 #include "testing/MacScenePlatformTestAccess.hpp"
@@ -495,10 +496,57 @@ namespace
   }
 } // namespace
 
+namespace
+{
+  /** Public band entry, identical rasterization on both sides: no AA tolerance.
+      Warm/cold cache, ink/extent changes, clipped cells and both axis signs. */
+  void VerifyCornerTiles()
+  {
+    const MacProjection projection;
+    for (int backing = 1; backing <= 2; ++backing)
+      for (int extent = CARD_SHADOW_DROP; extent < CARD_SHADOW_EXTENT_COUNT; ++extent)
+        for (int ink = CARD_SHADOW_STENCIL; ink < CARD_SHADOW_INK_COUNT; ++ink)
+          for (int orientation = 0; orientation < 4; ++orientation)
+            for (int clipped = 0; clipped < 2; ++clipped)
+            {
+              const CardStyle style(static_cast<CardShadowExtent>(extent), static_cast<CardShadowInk>(ink));
+              Frame bands[4];
+              CardBands(Frame(-7, 13, 73, 61), style, bands);
+              for (int role = 0; role < CARD_BAND_COUNT; ++role)
+              {
+                const Frame &band = bands[role];
+                CardBitmap actual(band.width, band.height, backing), expected(band.width, band.height, backing);
+                for (int reference = 0; reference < 2; ++reference)
+                {
+                  CardBitmap &target = reference ? expected : actual;
+                  CGContextRef graphics = target.begin((orientation & 2) != 0);
+                  if (orientation & 1)
+                  {
+                    CGContextTranslateCTM(graphics, band.width, 0);
+                    CGContextScaleCTM(graphics, -1, 1);
+                  }
+                  if (clipped)
+                    CGContextClipToRect(graphics, CGRectMake(1, 1, band.width - 2, band.height - 2));
+                  loka::testing::failMacCardCornerTiles(reference ? 4 : 0);
+                  PaintCardBandInk(graphics,
+                                   band,
+                                   CardBandProps(static_cast<CardBandRole>(role), style),
+                                   projection,
+                                   NSMakePoint(3 + band.x, 5 + band.y));
+                  loka::testing::failMacCardCornerTiles(0);
+                  target.end();
+                }
+                EqualBitmaps(actual, expected);
+              }
+            }
+  }
+} // namespace
+
 void testMacCardPainterPixels()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
+  VerifyCornerTiles();
   for (int metric = 0; metric < 2; ++metric)
     for (int backing = 1; backing <= 2; ++backing)
       for (int residue = 0; residue < 8; ++residue)
