@@ -1133,7 +1133,7 @@ namespace
         [[LokaScrollerScaleTestWindow alloc] initWithContentRect:NSMakeRect(0, 0, 440, 300)
                                                        styleMask:0
                                                          backing:NSBackingStoreBuffered
-                                                           defer:NO];
+                                                           defer:YES];
     NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 440, 300)];
     [window setContentView:root];
     {
