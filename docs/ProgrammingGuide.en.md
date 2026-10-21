@@ -1770,7 +1770,9 @@ a frosted ground: a light sheen and a hairline. Neither unit requests a redraw
 to obtain a photo. macOS 10.7 and 10.8 are unverified and use this same path.
 
 When the ZStack's first child is a ScrollView, the band's photo follows each
-scroll step of the content beneath it. Other changes beneath the band—an image
+scroll step of the content beneath it, as long as the ScrollView covers the
+whole visible band; a ground that covers only part of the band leaves the
+photo at its last whole-band capture. Other changes beneath the band—an image
 loading, text changing, a control redrawing, or a partial exposure—still wait
 for the next redraw that covers the whole visible band. The static unit keeps
 its first photo under the lifetime rules above.
