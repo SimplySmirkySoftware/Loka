@@ -2,6 +2,7 @@
 #define LOKA_MAC_ZSTACK_CONTEXT_HPP
 
 #include "MacRetirableContext.hpp"
+#include "MacGroundMoveSubscription.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
 #include "../platform/MacProjection.hpp"
 
@@ -67,11 +68,15 @@ public:
       snapshot refuses repair, since its new suffix cannot be identified. One
       parent-subview scan locates the snapshot; the fixed suffix bounds moves. */
   void lowerNewGroundViews(void *parent, void *previousLast);
+  /** Layout selects the direct ground once per pass; O(1), no row walk. */
+  void followGround(MacScrollViewContext *ground);
   /** One own-unit walk per lifecycle fact; terminal removal precedes the
       controller's safe-point release, on every terminal path. */
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 private:
+  friend class MacGroundMoveSubscription;
+  MacGroundMoveSubscription groundMove_;
   const loka::app::ZStackUnitGround ground_;
   Unit *units_;
   MacZStackContext(const MacZStackContext &);
