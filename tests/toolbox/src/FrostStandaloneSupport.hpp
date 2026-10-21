@@ -25,11 +25,11 @@ namespace frost_standalone
   class Capture
   {
   public:
-    Capture()
+    explicit Capture(short depth = 8)
         : world_(0),
           pixels_(0)
     {
-      if (NewGWorld(&this->world_, 8, &Whole, 0, 0, 0) == noErr && this->world_)
+      if (NewGWorld(&this->world_, depth, &Whole, 0, 0, 0) == noErr && this->world_)
       {
         this->pixels_ = GetGWorldPixMap(this->world_);
         if (!LockPixels(this->pixels_))
@@ -67,6 +67,16 @@ namespace frost_standalone
       unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(this->pixels_));
       return base[y * ((**this->pixels_).rowBytes & 0x3FFF) + x];
     }
+    unsigned long pixel(int x, int y) const
+    {
+      const int bytes = (**this->pixels_).pixelSize / 8;
+      const unsigned char *base = reinterpret_cast<unsigned char *>(GetPixBaseAddr(this->pixels_));
+      base += y * ((**this->pixels_).rowBytes & 0x3FFF) + x * bytes;
+      unsigned long value = 0;
+      for (int i = 0; i < bytes; ++i)
+        value = (value << 8) | base[i];
+      return value;
+    }
     unsigned long fingerprint(const Rect &area) const
     {
       if (!this->valid() || area.left < 0 || area.top < 0 || area.right > Width || area.bottom > Height
@@ -84,7 +94,7 @@ namespace frost_standalone
         return false;
       for (int y = area.top; y < area.bottom; ++y)
         for (int x = area.left; x < area.right; ++x)
-          if (this->at(x, y) != other.at(x, y))
+          if (this->pixel(x, y) != other.pixel(x, y))
             return false;
       return true;
     }

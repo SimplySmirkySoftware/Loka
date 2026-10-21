@@ -5,6 +5,9 @@
 // shipping partition it used to borrow (memFullErr, "type 25", before the
 // first arm ran). This is a pin vehicle, not an example: it gets its own
 // budget so adding an arm never measures the ceiling instead of the arm.
+// At 768K the heap had 1,864 bytes free before the ZStack unit arms (main
+// 28a95d85), and the band blur change (a second snapshot per controller) ran
+// into the out-of-memory alert there; the Frost standalone shares this budget.
 #include "Processes.r"
 
 resource 'SIZE' (-1) {
@@ -39,7 +42,7 @@ resource 'SIZE' (-1) {
 	1024 * 1024,
 	1024 * 1024
 #else
-	768 * 1024,	/* preferred */
-	640 * 1024	/* minimum */
+	1024 * 1024,	/* preferred */
+	896 * 1024	/* minimum */
 #endif
 };

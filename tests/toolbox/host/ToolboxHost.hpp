@@ -1,8 +1,10 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxUnitLedger.hpp"
+#include "ToolboxUnitHairline.hpp"
 #include "ToolboxErasedPass.hpp"
-#include "ToolboxStaticBlur.hpp"
+#include "ToolboxBlurSnapshot.hpp"
+#include "ToolboxBlurDirtyExtent.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
 #include "ToolboxActivationPhase.hpp"
@@ -122,6 +124,7 @@ inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
 namespace toolbox_host
 {
   extern unsigned staticCaptures, staticCopies, staticReleases;
+  extern unsigned bandCaptures, bandCopies, bandReleases, bandHairlines;
   extern bool staticEligible, staticCaptureSucceeds, staticCopySucceeds;
 } // namespace toolbox_host
 class ToolboxScenePlatformController;
@@ -675,7 +678,8 @@ public:
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
-  ToolboxStaticBlur staticBlur_;
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   ToolboxPressLedger pressLedger_;
   ToolboxErasedPass erasedPass_;
   /** Host observes admission only; native pixels are pinned by FrostStandalone. */
@@ -691,11 +695,23 @@ public:
       ++paints;
       return false;
     }
+    bool paintHairline(ToolboxWindow::WindowPort *, const Rect &rect, const Rect &unit)
+    {
+      ++toolbox_host::bandHairlines;
+      Rect line;
+      return ToolboxUnitHairlineRect(rect, unit, line);
+    }
   } frostCache_;
   void noteWindowFullRequest(const char *) {}
   void noteWindowRectRequest() {}
   void noteWindowFlushFull() {}
   void noteWindowFlushDirty() {}
+  /** Dirty delivery queries the previous layout key once; O(1), no rows. */
+  Rect dirtyExtent(const Rect &rect) const
+  {
+    Rect key;
+    return this->bandBlur_.queryKeyRect(key) ? ToolboxBlurDirtyExtent(rect, key) : rect;
+  }
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
@@ -737,7 +753,12 @@ public:
   {
     return false;
   }
-  virtual void destroy() {}
+  virtual void destroy()
+  {
+    this->staticBlur_.clear();
+    this->bandBlur_.clear();
+    this->rootNode_ = 0;
+  }
 };
 #define LOKA_HOST_OTHER_HANDLER(Name)                                                                                  \
   inline bool RegisterToolbox##Name##NodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &)                      \

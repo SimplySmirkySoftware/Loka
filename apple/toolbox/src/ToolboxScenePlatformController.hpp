@@ -3,7 +3,8 @@
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
-#include "ToolboxStaticBlur.hpp"
+#include "ToolboxBlurSnapshot.hpp"
+#include "ToolboxBlurDirtyExtent.hpp"
 #include "ToolboxFrostCache.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
@@ -61,6 +62,12 @@ private:
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
+  /** Dirty delivery queries the previous layout key once; O(1), no rows. */
+  Rect dirtyExtent(const Rect &rect) const
+  {
+    Rect key;
+    return this->bandBlur_.queryKeyRect(key) ? ToolboxBlurDirtyExtent(rect, key) : rect;
+  }
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
@@ -325,10 +332,11 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
-  friend class ToolboxStaticBlurInspection;
+  friend class ToolboxBlurSnapshotInspection;
   ToolboxPressLedger pressLedger_;
   ToolboxFrostCache frostCache_;
-  ToolboxStaticBlur staticBlur_;
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
+  ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   ToolboxErasedPass erasedPass_;
 
 public:
