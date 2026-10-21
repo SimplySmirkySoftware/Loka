@@ -66,12 +66,14 @@ public:
   /** Borrow the app that owns this native window. */
   ToolboxApp *toolboxApp() const;
   void invalidateWindow();
-  enum FullDrawOrigin
-  {
-    FULL_DRAW_FOR_UPDATE,
-    FULL_DRAW_FOR_FLUSH
-  };
-  void draw(FullDrawOrigin origin);
+  /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
+  void drawForUpdate();
+  void drawForFlush();
+
+private:
+  void drawWhole(const Rect &evidence);
+
+public:
   /** Preserves the native content position after a menu-bar rebuild without
       reapplying the application's declared frame intent. */
   void preserveNativeContentPositionAfterMenuBarChange();

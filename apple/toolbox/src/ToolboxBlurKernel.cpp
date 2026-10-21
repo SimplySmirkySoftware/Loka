@@ -70,6 +70,38 @@ namespace loka
 {
   namespace toolbox
   {
+    bool ToolboxBlurAcceptColorIndex(long answer, unsigned char &index)
+    {
+      if (answer < 0 || answer > 255)
+        return false;
+      index = static_cast<unsigned char>(answer);
+      return true;
+    }
+
+    bool ToolboxBlurFillInverse(unsigned char *table, long size, unsigned resolution, ToolboxBlurColourQuery &query)
+    {
+      if (!table || resolution < 3 || resolution > 5 || size != (1L << (3 * resolution)))
+        return false;
+      for (long i = 0; i < size; ++i)
+        table[i] = 0;
+      // Milk maps every channel into Milk(0)..Milk(255); interpolation stays inside.
+      const unsigned first = Milk(0, resolution), last = Milk(255, resolution);
+      const unsigned shift = 16 - resolution, half = 1U << (15 - resolution);
+      for (unsigned red = first; red <= last; ++red)
+        for (unsigned green = first; green <= last; ++green)
+          for (unsigned blue = first; blue <= last; ++blue)
+          {
+            unsigned char index;
+            if (!query.indexFor(static_cast<unsigned short>((red << shift) + half),
+                                static_cast<unsigned short>((green << shift) + half),
+                                static_cast<unsigned short>((blue << shift) + half),
+                                index))
+              return false;
+            table[(red << (2 * resolution)) | (green << resolution) | blue] = index;
+          }
+      return true;
+    }
+
     ToolboxBlurEnlargement ToolboxBlurEnlargementFor(platform::CpuClass cpu)
     {
       switch (cpu)
