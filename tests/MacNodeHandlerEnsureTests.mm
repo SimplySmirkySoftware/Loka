@@ -234,8 +234,9 @@ namespace
 } // namespace
 
 // macOS twin of testWin32NodeHandlerEnsureContract. Besides pinning context
-// publication, reuse, relayout, and typed refusal through the native controller
-// seam, the final leg discriminates PR #254's modal re-entrancy hazard: the
+// publication, reuse, placement, and typed refusal through the native controller
+// seam. Unlike Win32, preparation preserves retained geometry. The final leg
+// discriminates PR #254's modal re-entrancy hazard: the
 // handler must return the Node's context after afterAttach, not its stale local.
 void testMacNodeHandlerEnsureContract()
 {
@@ -267,8 +268,8 @@ void testMacNodeHandlerEnsureContract()
     NSView *buttonView = [[root subviews] objectAtIndex:childrenBeforeEnsure];
     LOKA_VERIFY(frameEquals(buttonView, 10, 20, 100, 30));
 
-    // Second ensure with new geometry: same context, same view population,
-    // view moved by the relayout path -- not recreated.
+    // Preparation must not place a retained view at provisional geometry.
+    // Placement follows only after the node resolves its dimensions.
     state.x = 40;
     state.y = 50;
     state.width = 120;
@@ -277,8 +278,9 @@ void testMacNodeHandlerEnsureContract()
     LOKA_VERIFY(button.getContext() == ctx && "re-ensure must reuse the existing context, not recreate it");
     LOKA_VERIFY(countChildViews(root) == childrenBeforeEnsure + 1 &&
                 "re-ensure must not materialize another native view");
-    LOKA_VERIFY(frameEquals(buttonView, 40, 50, 120, 40) &&
-                "re-ensure must route through relayout so the view follows the requested geometry");
+    LOKA_VERIFY(frameEquals(buttonView, 10, 20, 100, 30) && "preparation must preserve the retained frame");
+    button.layoutProjected(&controller, state);
+    LOKA_VERIFY(frameEquals(buttonView, 40, 50, 120, controller.rowLayoutMetrics().buttonHeight));
 
     // -- Text: same contract on a second native node kind --
     loka::app::TextProps textProps;
@@ -1530,6 +1532,8 @@ void testMacRibbonGroupEdgeEnsureAndRetirement()
       LOKA_VERIFY(edge.getContext() == context);
       LOKA_VERIFY([[root subviews] count] == 1);
       LOKA_VERIFY([[root subviews] objectAtIndex:0] == view);
+      LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(7, 9, 0, 0)));
+      LOKA_VERIFY(edge.layoutProjected(&controller, state) == 28);
       LOKA_VERIFY(NSEqualRects([view frame], NSMakeRect(7, 9, 1, 19)));
       state.x = 11;
       state.y = 13;

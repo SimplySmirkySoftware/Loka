@@ -32,11 +32,6 @@ namespace
       return new MacPopupMenuContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, popup);
     }
-
-    static void refresh(MacPopupMenuContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacPopupMenuNodeHandler gMacPopupMenuNodeHandler;
