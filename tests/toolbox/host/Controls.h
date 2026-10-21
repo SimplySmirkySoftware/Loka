@@ -135,17 +135,37 @@ namespace toolbox_host
 }
 inline std::string HostPascalBytes(const unsigned char *text)
 { return std::string(reinterpret_cast<const char *>(text + 1), text[0]); }
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+namespace toolbox_host
+{
+  bool refuseMenuCreation();
+  bool refuseMenuAppend(const unsigned char *text);
+  bool refuseMenuInsert();
+  void allocatedMenu(MenuHandle menu);
+  void disposedMenu(MenuHandle menu);
+  void insertedMenu(MenuHandle menu, short mode);
+}
+#endif
 inline MenuHandle NewMenu(short id, const unsigned char *title)
 {
   toolbox_host::menuTitles.push_back(HostPascalBytes(title));
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+  if (toolbox_host::refuseMenuCreation()) return 0;
+#endif
   MenuHandle menu = new HostMenu;
   menu->id = id;
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+  toolbox_host::allocatedMenu(menu);
+#endif
   return menu;
 }
 inline void AppendMenu(MenuHandle menu, const unsigned char *text)
 {
   const std::string bytes = HostPascalBytes(text);
   toolbox_host::menuAppends.push_back(bytes);
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+  if (toolbox_host::refuseMenuAppend(text)) return;
+#endif
   // Classic AppendMenu treats semicolons and Return as item separators.
   std::size_t start = 0;
   for (std::size_t i = 0; i <= bytes.size(); ++i)
@@ -155,6 +175,9 @@ inline void AppendMenu(MenuHandle menu, const unsigned char *text)
 inline void InsertMenuItem(MenuHandle menu, const unsigned char *text, short after)
 {
   toolbox_host::menuInserts.push_back(HostPascalBytes(text));
+#ifdef LOKA_HOST_MENU_ATTACHMENT
+  if (toolbox_host::refuseMenuInsert()) return;
+#endif
   menu->items.insert(menu->items.begin() + after, HostPascalBytes(text));
 }
 #ifdef LOKA_HOST_MENU_ATTACHMENT
@@ -171,7 +194,7 @@ inline void SetMenuItemText(MenuHandle menu, short item, const unsigned char *te
 }
 #ifdef LOKA_HOST_MENU_ATTACHMENT
 namespace toolbox_host { extern std::vector<MenuHandle> installedMenus; extern unsigned menuDisposes; }
-inline void InsertMenu(MenuHandle menu, short) { toolbox_host::installedMenus.push_back(menu); }
+inline void InsertMenu(MenuHandle menu, short mode) { toolbox_host::insertedMenu(menu, mode); }
 #else
 inline void InsertMenu(MenuHandle, short) {}
 #endif
@@ -181,7 +204,7 @@ inline void DeleteMenu(short) {}
 inline void DisposeMenu(MenuHandle menu)
 {
 #ifdef LOKA_HOST_MENU_ATTACHMENT
-  ++toolbox_host::menuDisposes;
+  toolbox_host::disposedMenu(menu);
 #endif
   toolbox_host::disposedMenuItems = menu->items; delete menu;
 }

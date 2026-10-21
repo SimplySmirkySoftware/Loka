@@ -19,6 +19,7 @@ namespace toolbox_host
   void (*afterMenuSet)() = 0;
   unsigned beeps = 0;
   unsigned menuDraws = 0, menuClears = 0, menuDisposes = 0, menuValueWrites = 0;
+  int menuColorEntries = 0;
 }
 long GetScriptManagerVariable(short) { return smRoman; }
 using namespace loka::app;
@@ -34,6 +35,8 @@ namespace
   void clearCalls()
   {
     toolbox_host::itemCmdCalls.clear();
+    toolbox_host::itemMarkCalls.clear();
+    toolbox_host::menuInsertions.clear();
     toolbox_host::beeps = 0;
     toolbox_host::menuInitializations = 0;
     toolbox_host::menuTitles.clear();
@@ -504,7 +507,7 @@ void testToolboxMenuBridgeReleaseThenAbsentClearsNative()
   f.app.menuAttachment().project(sources(0, 0));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
   LOKA_VERIFY(toolbox_host::menuClears == 1 && toolbox_host::menuDraws == 1);
-  LOKA_VERIFY(toolbox_host::menuInitializations == 1);
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   clearCalls();
   f.app.menuAttachment().project(sources(0, 0));
   noCalls();
@@ -517,6 +520,9 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuTitles.size() == 2);
+  // InitMenus draws an empty menu bar itself, past the App's draw gate, so a
+  // projection must not call it: the only screen write is the deferred draw.
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
@@ -533,12 +539,28 @@ void testToolboxMenuProjectionDefersBackgroundDraws()
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
   LOKA_VERIFY(toolbox_host::installedMenus.empty());
+  LOKA_VERIFY(toolbox_host::menuInitializations == 0);
   LOKA_VERIFY(toolbox_host::menuDraws == 0 && app.drawOwed());
   app.phase(ACTIVATION_FOREGROUND);
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
   clearCalls();
   LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
   LOKA_VERIFY(toolbox_host::menuDraws == 1 && !app.drawOwed());
+}
+void testToolboxMenuProjectionKeepsMenuColors()
+{
+  // InitMenus loaded 'mctb' 0 into the color table; ClearMenuBar deletes its
+  // entries. A projection must keep the table it found (bot P2 on #1526).
+  ToolboxApp app;
+  MenuBarDefinition first = bar(), second = bar("Save");
+  toolbox_host::menuColorEntries = 3;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&first, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&second, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  LOKA_VERIFY(app.menuAttachment().project(sources(0, 0)));
+  LOKA_VERIFY(toolbox_host::menuColorEntries == 3);
+  toolbox_host::menuColorEntries = 0;
 }
 void testToolboxMenuShortcutProjectsItemCmd()
 {
@@ -782,11 +804,230 @@ void testToolboxSubmenuTitleFollowsState()
   setTitle(tracker, title, "Released");
   noCalls();
 }
+namespace
+{
+  void disposedSince(size_t first)
+  {
+    for (size_t i = first; i < toolbox_host::menuAllocations.size(); ++i)
+      LOKA_VERIFY(toolbox_host::menuAllocations[i].disposals == 1);
+  }
+  void failedCandidate(bool shared)
+  {
+    MutableState<String> oldTitle(String::Literal("Old")), newTitle(String::Literal("New"));
+    PushStateTracker tracker;
+    tracker.addState(&oldTitle);
+    tracker.addState(&newTitle);
+    ToolboxApp app;
+    struct Count
+    {
+      static void run(void *data)
+      {
+        ++*static_cast<unsigned *>(data);
+      }
+    };
+    unsigned clicks = 0;
+    EmitterState emitter;
+    emitter.deferBind(&Count::run, &clicks);
+    MenuBarDefinition a, b = titleBar(shared ? &oldTitle : &newTitle);
+    a << (Menu("File") << MenuItem("Old").text(&oldTitle).onClick(&emitter));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&a, 0)));
+    MenuHandle old = toolbox_host::installedMenus[0];
+    size_t first = toolbox_host::menuAllocations.size();
+    clearCalls();
+    toolbox_host::testing::failMenuCreationCall(2);
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&b, 0)));
+    LOKA_VERIFY(toolbox_host::menuClears == 0 && toolbox_host::menuInsertions.empty());
+    LOKA_VERIFY(toolbox_host::installedMenus[0] == old);
+    disposedSince(first);
+    LOKA_VERIFY(app.menuAttachment().dispatch(128, 1));
+    LOKA_VERIFY(clicks == 1);
+    clearCalls();
+    setTitle(tracker, newTitle, "Candidate gone");
+    noCalls();
+    setTitle(tracker, oldTitle, "Still live");
+    LOKA_VERIFY(toolbox_host::menuSets.size() == 1 && old->items[0] == "Still live");
+    clearCalls();
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&a, 0)));
+    noCalls();
+    LOKA_VERIFY(app.menuAttachment().project(sources(&b, 0)));
+    clearCalls();
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&b, 0)));
+    noCalls();
+    emitter.deferUnbind(&Count::run, &clicks);
+  }
+  void refusedItem(unsigned kind)
+  {
+    ToolboxApp app;
+    MenuBarDefinition a = bar(), b;
+    if (kind == 0)
+      b << (Menu("File") << MenuSeparator());
+    if (kind == 1)
+      b << (Menu("File") << MenuItem("Leaf"));
+    if (kind == 2)
+      b << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP));
+    if (kind == 3)
+      b << (Menu("File") << (MenuItem("More") << MenuItem("Child")));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&a, 0)));
+    clearCalls();
+    size_t first = toolbox_host::menuAllocations.size();
+    if (kind == 0)
+      toolbox_host::testing::failSeparatorAppends(1);
+    if (kind == 1 || kind == 3)
+      toolbox_host::testing::failPlaceholderAppends(1);
+    if (kind == 2)
+      toolbox_host::testing::failItemInserts(1);
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&b, 0)));
+    LOKA_VERIFY(toolbox_host::menuClears == 0 && toolbox_host::menuInsertions.empty());
+    if (kind == 3)
+      LOKA_VERIFY(toolbox_host::menuTitles.size() == 1);
+    disposedSince(first);
+    clearCalls();
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&a, 0)));
+    noCalls();
+    LOKA_VERIFY(app.menuAttachment().project(sources(&b, 0)));
+  }
+} // namespace
+void testToolboxCandidateFailurePreservesInstalled()
+{
+  failedCandidate(false);
+}
+void testToolboxCandidateUnbindKeepsSharedState()
+{
+  failedCandidate(true);
+}
+void testToolboxSeparatorRefusal()
+{
+  refusedItem(0);
+}
+void testToolboxPlaceholderRefusal()
+{
+  refusedItem(1);
+}
+void testToolboxAboutRefusal()
+{
+  refusedItem(2);
+}
+void testToolboxOpenerRefusal()
+{
+  refusedItem(3);
+}
+void testToolboxMenuCreationRefusals()
+{
+  ToolboxApp app;
+  MenuBarDefinition apple, nested;
+  apple << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP));
+  nested << (Menu("File") << (MenuItem("More") << (MenuItem("Deeper") << MenuItem("Child"))));
+  clearCalls();
+  toolbox_host::testing::failMenuCreations(2);
+  LOKA_VERIFY(!app.menuAttachment().project(sources(&apple, 0)));
+  LOKA_VERIFY(!app.menuAttachment().project(sources(&apple, 0)));
+  LOKA_VERIFY(toolbox_host::menuClears == 0);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&apple, 0)));
+  for (unsigned call = 1; call <= 3; ++call)
+  {
+    clearCalls();
+    size_t first = toolbox_host::menuAllocations.size();
+    toolbox_host::testing::failMenuCreationCall(call);
+    LOKA_VERIFY(!app.menuAttachment().project(sources(&nested, 0)));
+    LOKA_VERIFY(toolbox_host::menuClears == 0 && toolbox_host::menuInsertions.empty());
+    disposedSince(first);
+  }
+  LOKA_VERIFY(app.menuAttachment().project(sources(&nested, 0)));
+}
+void testToolboxGraphPrunesExactlyOnce()
+{
+  size_t first = toolbox_host::menuAllocations.size();
+  {
+    ToolboxApp app;
+    MenuBarDefinition empty;
+    empty << AppMenu() << Menu("Empty")
+          << (Menu("Nested") << (MenuItem("More")
+                                 << (MenuItem("Deeper") << MenuItem("Hidden").attr(MenuItemAttr().visible(false)))));
+    clearCalls();
+    LOKA_VERIFY(app.menuAttachment().project(sources(&empty, 0)));
+    LOKA_VERIFY(toolbox_host::installedMenus.empty());
+    LOKA_VERIFY(toolbox_host::menuAllocations.size() == first + 5);
+    disposedSince(first);
+    MenuBarDefinition two;
+    two << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP))
+        << (AppMenu() << MenuItem("Other About").actionType(MENU_ACTION_ABOUT_APP));
+    LOKA_VERIFY(app.menuAttachment().project(sources(&two, 0)));
+    LOKA_VERIFY(toolbox_host::installedMenus.size() == 1);
+    LOKA_VERIFY(toolbox_host::menuAllocations.size() == first + 6);
+  }
+  disposedSince(first);
+}
+void testToolboxEmptyAbsenceClearsRecord()
+{
+  ToolboxApp app;
+  MenuBarDefinition empty;
+  empty << Menu("Empty");
+  LOKA_VERIFY(app.menuAttachment().project(sources(&empty, 0)));
+  clearCalls();
+  LOKA_VERIFY(!app.menuAttachment().project(sources(0, 0)));
+  LOKA_VERIFY(!app.menuAttachment().project(sources(0, 0)));
+  noCalls();
+  LOKA_VERIFY(app.menuAttachment().project(sources(&empty, 0)));
+  LOKA_VERIFY(toolbox_host::menuTitles.size() == 1);
+}
+void testToolboxSubmenuLimitAndInsertionOrder()
+{
+  MutableState<String> title(String::Literal("Bound"));
+  PushStateTracker tracker;
+  tracker.addState(&title);
+  ToolboxApp app;
+  MenuBarDefinition limit, overflow;
+  // Apple takes 128; 105 ordinary menus take 129..233; parent 234, child 235.
+  limit << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP));
+  overflow << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP));
+  for (unsigned i = 0; i < 105; ++i)
+  {
+    limit << (Menu("Filler") << MenuItem("Leaf").text(&title));
+    overflow << (Menu("Filler") << MenuItem("Leaf").text(&title));
+  }
+  limit << (Menu("Parent") << (MenuItem("More") << MenuItem("Child")));
+  overflow << (Menu("Parent") << (MenuItem("More") << (MenuItem("Too deep") << MenuItem("Child"))));
+  clearCalls();
+  LOKA_VERIFY(app.menuAttachment().project(sources(&limit, 0)));
+  LOKA_VERIFY(toolbox_host::menuInsertions.size() == 108);
+  for (size_t i = 0; i < 106; ++i)
+  {
+    LOKA_VERIFY(toolbox_host::menuInsertions[i].handle->id == 128 + static_cast<short>(i));
+    LOKA_VERIFY(toolbox_host::menuInsertions[i].mode == 0);
+  }
+  LOKA_VERIFY(toolbox_host::menuInsertions[106].handle->id == 235);
+  LOKA_VERIFY(toolbox_host::menuInsertions[106].mode == kInsertHierarchicalMenu);
+  LOKA_VERIFY(toolbox_host::menuInsertions[107].handle->id == 234);
+  LOKA_VERIFY(toolbox_host::menuInsertions[107].mode == 0);
+  LOKA_VERIFY(toolbox_host::itemMarkCalls.size() == 1);
+  LOKA_VERIFY(toolbox_host::itemMarkCalls[0].menu == toolbox_host::installedMenus[107]);
+  LOKA_VERIFY(toolbox_host::itemMarkCalls[0].item == 1 && toolbox_host::itemMarkCalls[0].cmd == 235);
+  size_t first = toolbox_host::menuAllocations.size();
+  clearCalls();
+  LOKA_VERIFY(!app.menuAttachment().project(sources(&overflow, 0)));
+  LOKA_VERIFY(toolbox_host::menuClears == 0 && toolbox_host::menuInsertions.empty());
+  LOKA_VERIFY(toolbox_host::menuTitles.size() == 108); // Never construct ID 236.
+  disposedSince(first);
+  clearCalls();
+  setTitle(tracker, title, "Still bound");
+  LOKA_VERIFY(toolbox_host::menuSets.size() == 105);
+}
+
 int main(int argc, char **argv)
 {
   struct Test { const char *name; void (*run)(); };
 #define PIN(name) {#name, &name}
   const Test tests[] = {
+    PIN(testToolboxCandidateFailurePreservesInstalled),
+    PIN(testToolboxCandidateUnbindKeepsSharedState),
+    PIN(testToolboxSeparatorRefusal),
+    PIN(testToolboxPlaceholderRefusal),
+    PIN(testToolboxAboutRefusal),
+    PIN(testToolboxOpenerRefusal),
+    PIN(testToolboxMenuCreationRefusals),
+    PIN(testToolboxGraphPrunesExactlyOnce),
+    PIN(testToolboxEmptyAbsenceClearsRecord),
+    PIN(testToolboxSubmenuLimitAndInsertionOrder),
     PIN(testToolboxMenuBridgeRefusalPreservesNativeAndRetries),
     PIN(testToolboxMenuBridgeReleaseThenAbsentClearsNative),
     PIN(testToolboxMenuTitleFollowsState),
@@ -796,6 +1037,7 @@ int main(int argc, char **argv)
     PIN(testToolboxAboutTitleFollowsStateAcrossRebuild),
     PIN(testToolboxMenuDoorFiltersRowsAndForwardsScene),
     PIN(testToolboxMenuProjectionDefersBackgroundDraws),
+    PIN(testToolboxMenuProjectionKeepsMenuColors),
     PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
     PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
     PIN(testToolboxSubmenuIdDiffersFromItsParent),

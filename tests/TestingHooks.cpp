@@ -72,7 +72,89 @@ namespace loka
 } // namespace loka
 
 #ifdef LOKA_HOST_MENU_ATTACHMENT
-namespace toolbox_host { unsigned menuInitializations = 0; }
+#include "toolbox/host/Menus.h"
+#include "support/TestVerify.hpp"
+namespace toolbox_host
+{
+  unsigned menuInitializations = 0;
+  std::vector<MenuAllocation> menuAllocations;
+  std::vector<MenuInsertion> menuInsertions;
+  std::vector<ItemCmdCall> itemMarkCalls;
+  namespace
+  {
+    unsigned creationFailures = 0, creationCall = 0;
+    unsigned separatorFailures = 0, placeholderFailures = 0, insertFailures = 0;
+    bool consume(unsigned &count)
+    {
+      if (!count)
+        return false;
+      --count;
+      return true;
+    }
+  } // namespace
+  namespace testing
+  {
+    void failMenuCreations(unsigned count)
+    {
+      creationFailures = count;
+    }
+    void failMenuCreationCall(unsigned call)
+    {
+      creationCall = call;
+    }
+    void failSeparatorAppends(unsigned count)
+    {
+      separatorFailures = count;
+    }
+    void failPlaceholderAppends(unsigned count)
+    {
+      placeholderFailures = count;
+    }
+    void failItemInserts(unsigned count)
+    {
+      insertFailures = count;
+    }
+  } // namespace testing
+  bool refuseMenuCreation()
+  {
+    const bool nth = creationCall && --creationCall == 0;
+    return consume(creationFailures) || nth;
+  }
+  bool refuseMenuAppend(const unsigned char *text)
+  {
+    return consume(text[0] == 1 && text[1] == '-' ? separatorFailures : placeholderFailures);
+  }
+  bool refuseMenuInsert()
+  {
+    return consume(insertFailures);
+  }
+  void allocatedMenu(MenuHandle menu)
+  {
+    const MenuAllocation entry = {menu, 0};
+    menuAllocations.push_back(entry);
+  }
+  void disposedMenu(MenuHandle menu)
+  {
+    for (size_t i = 0; i < installedMenus.size(); ++i)
+      LOKA_VERIFY(installedMenus[i] != menu);
+    // Search newest first: allocator addresses may be reused after disposal.
+    for (size_t i = menuAllocations.size(); i > 0; --i)
+      if (menuAllocations[i - 1].handle == menu)
+      {
+        LOKA_VERIFY(menuAllocations[i - 1].disposals == 0);
+        ++menuAllocations[i - 1].disposals;
+        ++menuDisposes;
+        return;
+      }
+    LOKA_VERIFY(false);
+  }
+  void insertedMenu(MenuHandle menu, short mode)
+  {
+    const MenuInsertion entry = {menu, mode};
+    menuInsertions.push_back(entry);
+    installedMenus.push_back(menu);
+  }
+} // namespace toolbox_host
 void InitMenus() { ++toolbox_host::menuInitializations; }
 #endif
 

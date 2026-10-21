@@ -19,7 +19,7 @@ public:
   /** Called per admission offer, active window only. Unchanged input costs
       three pointer comparisons, no allocations or row walks. Changed input
       merges once and fully rebuilds the merged bar's rows. Returns true when
-      native menus were projected; merge refusal preserves native and record. */
+      native menus were projected; build or merge refusal preserves native and record. */
   bool project(const loka::app::MenuSources &sources);
   void disconnect();
   void releaseFrom(const loka::app::scene::Scene *scene);
@@ -45,28 +45,53 @@ private:
     bool invertEnabled;
     loka::core::State<bool> *checkedState;
   };
+  /** Owns each native handle once; insertion rows only borrow those handles.
+      Build-local until install, then attachment-owned. Never clears the bar. */
+  class ToolboxMenuGraph
+  {
+  public:
+    ToolboxMenuGraph() {}
+    ~ToolboxMenuGraph();
+    MenuHandle create(short id, const unsigned char *title);
+    void prune(MenuHandle menu);
+    void recordInsertion(MenuHandle menu, short mode);
+    void install() const;
+    bool empty() const
+    {
+      return this->insertions_.empty();
+    }
+    void disconnect();
+    void swap(ToolboxMenuGraph &other);
+    std::vector<MenuCommand> commands;
+    std::vector<MenuBinding *> bindings;
+
+  private:
+    ToolboxMenuGraph(const ToolboxMenuGraph &);
+    ToolboxMenuGraph &operator=(const ToolboxMenuGraph &);
+    struct Insertion
+    {
+      MenuHandle menu;
+      short mode;
+    };
+    std::vector<MenuHandle> owned_;
+    std::vector<Insertion> insertions_;
+  };
   static void MenuTitleChangedThunk(void *userData);
   static void MenuEnabledChangedThunk(void *userData);
   static void MenuCheckedChangedThunk(void *userData);
   static void ApplyMenuItemStates(ToolboxApp *app, MenuHandle menu, short itemIndex,
                                  const loka::app::MenuItemDefinition *item,
                                  std::vector<MenuBinding *> &bindings);
-  static void BuildMenuItems(ToolboxApp *app, MenuHandle menu,
-                            const loka::app::MenuItemDefinition *items, short menuId,
-                            short &nextMenuId, std::vector<MenuCommand> &commands,
-                            std::vector<MenuBinding *> &bindings,
-                            std::vector<MenuHandle> &hierarchicalMenus);
-  void clearMenuBindings();
-  void resetMenuState();
-  void disposeMenuEntries();
-  void disposeHierarchicalMenus();
+  static bool BuildMenuItems(ToolboxApp *app,
+                             MenuHandle menu,
+                             const loka::app::MenuItemDefinition *items,
+                             short menuId,
+                             short &nextMenuId,
+                             ToolboxMenuGraph &graph);
+  bool build(const loka::app::MenuBarDefinition &menuBar, ToolboxMenuGraph &graph);
 
   ToolboxApp &app_;
-  short nextMenuId_;
-  std::vector<MenuCommand> commands_;
-  std::vector<MenuBinding *> bindings_;
-  std::vector<MenuHandle> menuEntries_;
-  std::vector<MenuHandle> hierarchicalMenus_;
+  ToolboxMenuGraph graph_;
   loka::app::MenuProjectionRecord record_;
 };
 #endif

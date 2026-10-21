@@ -7,19 +7,11 @@
 class ToolboxErasedPass
 {
 public:
-  enum Origin
-  {
-    UPDATE_DRAW,
-    FLUSH_DRAW,
-    COMPOSITION_REPLAY
-  };
   struct Descriptor
   {
-    const Origin origin;
     const Rect rect;
-    Descriptor(Origin source, const Rect &area)
-        : origin(source),
-          rect(area)
+    explicit Descriptor(const Rect &area)
+        : rect(area)
     {
     }
   };
@@ -31,11 +23,9 @@ public:
   {
     return this->descriptor_ != 0;
   }
-  bool admitsCapture(const Rect &rect, bool updateCovers) const
+  bool admitsCapture(const Rect &rect) const
   {
-    return this->descriptor_
-           && (this->descriptor_->origin == FLUSH_DRAW || this->descriptor_->origin == COMPOSITION_REPLAY
-               || (this->descriptor_->origin == UPDATE_DRAW && updateCovers))
+    return this->descriptor_ && rect.left < rect.right && rect.top < rect.bottom
            && this->descriptor_->rect.left <= rect.left && this->descriptor_->rect.top <= rect.top
            && this->descriptor_->rect.right >= rect.right && this->descriptor_->rect.bottom >= rect.bottom;
   }
@@ -43,8 +33,8 @@ public:
   class Guard
   {
   public:
-    Guard(ToolboxErasedPass &pass, Origin origin, const Rect &rect)
-        : descriptor_(origin, rect),
+    Guard(ToolboxErasedPass &pass, const Rect &rect)
+        : descriptor_(rect),
           owned_(pass.isOpen() ? 0 : &pass)
     {
       assert(!pass.isOpen());
