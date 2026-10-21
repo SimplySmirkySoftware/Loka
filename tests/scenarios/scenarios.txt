@@ -27,6 +27,7 @@ smirkbench text-editor-plain
 simpletext startup
 simpletext open-readme
 simpletext save-roundtrip
+simpletext close-dirty
 simpleviewer open-wide-scroll
 smirkycard startup
 smirkycard laptop-carousel

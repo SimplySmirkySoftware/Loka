@@ -134,6 +134,98 @@ if STANDALONE then
     return
 end
 
+-- Two real close confirms: Cancel must keep the row, Save must close it.
+-- WindowList (0x9D6) is a per-process low-memory global, and while the modal
+-- loop yields the Process Manager can have another process's list switched in
+-- (CurApName is not switched at the same moment, so it cannot vouch for the
+-- list). A reading counts only when its chain holds one of this application's
+-- own windows, learned from the first confirm's chain: no other process shows
+-- a dialog in front here. A key that reaches a confirm before its modal loop
+-- runs can be lost (the next dialog is built at the freed one's address and
+-- briefly carries another kind), so each answer waits 0.3 s and is repeated,
+-- at most three times, until no dialog is left in the app's list. A repeated
+-- key means the same thing, and a confirm that never appears is never answered.
+if os.getenv("LOKA_SCENARIO_CELL") == "simpletext/close-dirty" then
+    local mem = manager.machine.devices[":maincpu"].spaces["program"]
+    local own = nil
+    local function chain()
+        local windows = {}
+        local window = mem:read_u32(0x9D6) & 0xFFFFFF
+        for _ = 1, 16 do
+            if window == 0 then break end
+            windows[#windows + 1] = {window, mem:read_u16(window + 0x6C)}
+            window = mem:read_u32(window + 0x90) & 0xFFFFFF
+        end
+        return windows
+    end
+    local function ours(windows)
+        for _, entry in ipairs(windows) do
+            if own[entry[1]] then return true end
+        end
+        return false
+    end
+    -- nil when another process's list is switched in.
+    local function frontIsDialog()
+        local windows = chain()
+        if not ours(windows) then return nil end
+        return windows[1][2] == 2
+    end
+    local function anyDialog()
+        local windows = chain()
+        if not ours(windows) then return nil end
+        for _, entry in ipairs(windows) do
+            if entry[2] == 2 then return true end
+        end
+        return false
+    end
+    local function await(predicate, wanted, step, limit)
+        for _ = 1, limit do
+            if predicate() == wanted then return true end
+            emu.wait(step)
+        end
+        return false
+    end
+    local function learnOwnWindows()
+        for _ = 1, 3000 do
+            local windows = chain()
+            if #windows > 1 and windows[1][2] == 2 then
+                own = {}
+                for i = 2, #windows do own[windows[i][1]] = true end
+                return true
+            end
+            emu.wait(0.01)
+        end
+        return false
+    end
+    -- Hold the key while polling finely: the next confirm follows within a
+    -- fraction of a second, and a coarse poll would take it for the same one.
+    local function answer(label, keyName)
+        if not await(frontIsDialog, true, 0.01, 3000) then
+            say("close-dirty timeout waiting for the %s confirm", label)
+            return false
+        end
+        emu.wait(0.3)
+        local key = keyByName(keyName)
+        for attempt = 1, 3 do
+            key:set_value(1)
+            local gone = await(anyDialog, false, 0.01, 100)
+            key:clear_value()
+            if gone then
+                say("close-dirty answered the %s confirm with %s (attempt %d)", label, keyName, attempt)
+                return true
+            end
+            emu.wait(0.3)
+        end
+        say("close-dirty the %s confirm did not leave after %s", label, keyName)
+        return false
+    end
+    if not learnOwnWindows() then
+        say("close-dirty timeout waiting for the Cancel confirm")
+    elseif answer("Cancel", "Esc") then
+        answer("Save", "Return")
+    end
+end
+
 -- Native gestures for the editor bar cells (#1414, #1416), with coordinates
 -- read from the live native bar, not a guessed screen position. The record
 -- offsets are pinned at compile time in each cell's scenario header.
