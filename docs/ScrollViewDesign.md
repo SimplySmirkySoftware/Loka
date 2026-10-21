@@ -104,18 +104,18 @@ Rails keep their nonnegative extent-offset math, maximum
 clamp; its heightless result includes both insets, with short-range refusal
 checked after their addition.
 
-Insets also keep the vertical bar out of the seat's top and bottom inset rows;
-each rail does it with its own native mechanism. Toolbox resolves the existing
-track first (including frame contacts, the horizontal bar and the size box),
-then cuts it without extending it past native chrome. A zero side preserves
-that track edge, including frame-line sharing. macOS shortens the vertical
-scroller frame AppKit has just tiled by the projected top and bottom insets,
-clamping the height at zero; zero insets preserve AppKit's frame. The committed
-clearance changes only after successful layout, and every commit projects it
-again. Win32 does not yet shorten its vertical bar (#1547). On Toolbox the
-clearance leaves the horizontal bar, content rect, clip and page/line steps
-unchanged; on macOS it leaves the horizontal scroller, clip frame and document
-placement unchanged.
+On Toolbox and macOS, insets also keep the vertical bar out of the seat's top
+and bottom inset rows; the two rails use their own native mechanisms. Toolbox
+resolves the existing track first (including frame contacts, the horizontal bar
+and the size box), then cuts it without extending it past native chrome. A zero
+side preserves that track edge, including frame-line sharing. macOS shortens
+the vertical scroller frame AppKit has just tiled by the projected top and
+bottom insets, clamping the height at zero; zero insets preserve AppKit's
+frame. The committed clearance changes only after successful layout, and every
+commit projects it again. Win32 does not yet shorten its vertical bar (#1547).
+On Toolbox the clearance leaves the horizontal bar, content rect, clip and
+page/line steps unchanged; on macOS it leaves the horizontal scroller, clip
+frame and document placement unchanged.
 
 Toolbox, Win32 and macOS adopt the doors the same way, each in its own PR:
 Null, Toolbox and Win32 subtract `contentTranslation()` from content

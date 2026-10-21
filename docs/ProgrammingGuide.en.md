@@ -1133,8 +1133,9 @@ heights plus gaps. Children without a height of their own are 0 or their rail
 default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
 80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
 
-The vertical bar is present unless inset clearance leaves no track (hidden on
-Toolbox); the horizontal bar appears only while there
+The vertical bar is normally present. When inset clearance leaves no track,
+Toolbox hides its bar and macOS keeps its scroller at zero height; Win32 does
+not yet apply the clearance (#1547). The horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
 (`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
