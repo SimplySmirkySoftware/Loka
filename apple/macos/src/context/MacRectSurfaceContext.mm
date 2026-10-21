@@ -129,6 +129,12 @@ void MacRectSurfaceContext::applyDetachedPresentation()
   }
 }
 
+short MacRectSurfaceContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
+{
+  this->relayout(state.x, state.y, state.width, state.height);
+  return static_cast<short>(state.y + state.height);
+}
+
 void MacRectSurfaceContext::relayout(int x, int y, int width, int height)
 {
   LokaRectSurfaceView *view = (LokaRectSurfaceView *)view_;
