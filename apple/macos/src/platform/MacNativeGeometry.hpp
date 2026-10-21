@@ -13,6 +13,15 @@ namespace loka
       [view setFrame:frame.r];
     }
 
+    /** Apply a projected frame only when native geometry changes; report whether it changed. */
+    inline bool ApplyMacFrame(NSView *view, const MacRect &frame)
+    {
+      if (NSEqualRects([view frame], frame.r))
+        return false;
+      SetMacFrame(view, frame);
+      return true;
+    }
+
     /** Width is projected; AppKit's unbounded measurement height stays native. */
     inline NSRect MacMeasurementBounds(const MacLength &width)
     {

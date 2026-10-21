@@ -126,6 +126,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacDisplayAppearanceTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacAppLocationTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacImageBlobTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacImageViewTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacMenuProjectionTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNativeResourceRetirementTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacNodeHandlerEnsureTests.mm
@@ -146,6 +147,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${CMAKE_CURRENT_LIST_DIR}/src/MacWindow.mm
     ${PROJECT_SOURCE_DIR}/apple/common/cocoa/src/AppleString.mm
     ${PROJECT_SOURCE_DIR}/tests/MacCardPainterTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacRelayoutDisplayTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacGroundTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextColorTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacGround.mm

@@ -162,6 +162,20 @@ that logoff resumes. Loka does not call `ShutdownBlockReasonCreate`, static
 windows' contents are not covered, and `WM_ENDSESSION(FALSE)` does not stop a
 started Quit.
 
+On Classic, Shut Down reaches a Loka application as its menu Quit. The
+examples' Classic SIZE resources declare them not high-level-event aware, and
+for such applications the Process Manager brings the application forward and
+sends a mouse-down in the menu bar for which `MenuSelect` returns File > Quit
+(Inside Macintosh: Processes). The Toolbox rail places Quit as
+the last item of File (#1519) and the command calls `App::requestQuit`, the
+same path as Command-Q, so an edited document asks. Observed once each on MAME
+maciix (KanjiTalk 7.1, 68K) at `ce134b61` with SimpleText instrumented to log
+each event (#1307): Cancel kept the document open and the machine stayed up
+for the 10 seconds watched, with the Finder usable afterwards; Don't Save let
+the shutdown reach the "safe to turn off" screen. Not run: Restart, Save, an
+unedited document, several documents, PPC or later Mac OS, real hardware, and
+an application whose File or Quit title differs from those words.
+
 **Window-less launch.** Every static `WindowDef` can be refused, a roster whose
 attach was refused can seed nothing, or every launch document create can be
 refused. After static hooks and launch admission, `App::run` checks the group

@@ -25,6 +25,11 @@ public:
       the whole projected unit: the hairline is drawn only when the unit's own
       bottom row is visible. False asks the caller to paint window ground. */
   bool paint(WindowPtr window, const Rect &rect, const Rect &unit);
+  /** One row through the same scratch adapter as milk frost: the basic window
+      port cannot hold RGB grey (see NewWindow in ToolboxWindow.cpp).
+      Called once per band picture paint; two 1-row CopyBits under the caller's
+      clip, O(width) over this owner's scratch pixels. */
+  bool paintHairline(WindowPtr window, const Rect &rect, const Rect &unit);
 
 private:
   friend class ToolboxFrostCacheInspection;

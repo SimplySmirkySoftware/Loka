@@ -1,4 +1,4 @@
-#include "ToolboxStaticBlur.hpp"
+#include "ToolboxBlurSnapshot.hpp"
 #include "ToolboxBlurKernel.hpp"
 #include "ToolboxFrostCache.hpp"
 #include "context/ToolboxPaintSupport.hpp"
@@ -159,7 +159,7 @@ namespace
 } // namespace
 
 /** Single candidate resource owner; only the completed GWorld survives. */
-struct ToolboxStaticBlurPixels::Image
+struct ToolboxBlurPixels::Image
 {
   GWorldPtr world;
   Image()
@@ -171,7 +171,7 @@ struct ToolboxStaticBlurPixels::Image
     if (this->world)
       DisposeGWorld(this->world);
   }
-  bool build(GrafPtr window, const Rect &rect, unsigned long *timings)
+  bool build(GrafPtr window, const Rect &rect, int cell, unsigned long *timings)
   {
     // This scope ends before Image is disposed, on success and on all failures.
     unsigned long start = Now();
@@ -253,7 +253,7 @@ struct ToolboxStaticBlurPixels::Image
                                           height,
                                           stride,
                                           tables.palette,
-                                          8,
+                                          cell,
                                           loka::toolbox::ToolboxBlurEnlargementFor(cpu),
                                           tables.inverse,
                                           resolution))
@@ -267,23 +267,23 @@ private:
   Image &operator=(const Image &);
 };
 
-ToolboxStaticBlurPixels::ToolboxStaticBlurPixels()
+ToolboxBlurPixels::ToolboxBlurPixels()
     : image_(0)
 {
   for (int i = 0; i < 4; ++i)
     this->timings_[i] = 0;
 }
-ToolboxStaticBlurPixels::~ToolboxStaticBlurPixels()
+ToolboxBlurPixels::~ToolboxBlurPixels()
 {
   this->clear();
 }
-void ToolboxStaticBlurPixels::clear()
+void ToolboxBlurPixels::clear()
 {
   delete this->image_;
   this->image_ = 0;
 }
 
-bool ToolboxStaticBlurPixels::eligible(GrafPtr window, const Rect &rect)
+bool ToolboxBlurPixels::eligible(GrafPtr window, const Rect &rect)
 {
   long version;
   ToolboxFpuType fpu = TOOLBOX_FPU_NONE;
@@ -302,13 +302,13 @@ bool ToolboxStaticBlurPixels::eligible(GrafPtr window, const Rect &rect)
   return rect.left < rect.right && rect.top < rect.bottom && global.left >= screen.left && global.top >= screen.top
          && global.right <= screen.right && global.bottom <= screen.bottom;
 }
-bool ToolboxStaticBlurPixels::capture(GrafPtr window, const Rect &rect)
+bool ToolboxBlurPixels::capture(GrafPtr window, const Rect &rect, int cell)
 {
   this->clear();
   Image *candidate = new (std::nothrow) Image;
   if (!candidate)
     return false;
-  if (!candidate->build(window, rect, this->timings_))
+  if (!candidate->build(window, rect, cell, this->timings_))
   {
     delete candidate;
     return false;
@@ -316,7 +316,7 @@ bool ToolboxStaticBlurPixels::capture(GrafPtr window, const Rect &rect)
   this->image_ = candidate;
   return true;
 }
-bool ToolboxStaticBlurPixels::paint(GrafPtr window, const Rect &rect)
+bool ToolboxBlurPixels::paint(GrafPtr window, const Rect &rect)
 {
   if (!this->image_)
     return false;

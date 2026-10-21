@@ -35,11 +35,6 @@ namespace
       return new MacButtonContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, button);
     }
-
-    static void refresh(MacButtonContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacButtonNodeHandler gMacButtonNodeHandler;

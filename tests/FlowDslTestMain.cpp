@@ -7,6 +7,7 @@
 #include "MacNativeResourceRetirementTests.hpp"
 #include "MacGroundTests.hpp"
 #include "MacCardPainterTests.hpp"
+#include "MacRelayoutDisplayTests.hpp"
 #include "MacZStackUnitTests.hpp"
 #include "MacTextColorTests.hpp"
 #endif
@@ -26,6 +27,7 @@
 #include "FocusPostTests.hpp"
 #ifdef __APPLE__
 #include "MacImageBlobTests.hpp"
+#include "MacImageViewTests.hpp"
 #include "MacTextEditorTests.hpp"
 #include "MacInputDoorTests.hpp"
 #include "MacFocusTests.hpp"

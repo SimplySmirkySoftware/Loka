@@ -36,6 +36,12 @@ namespace
         *item = 2;
         return true;
       }
+      // Command-D is Classic's key for Don't Save.
+      if ((key == 'd' || key == 'D') && (event->modifiers & cmdKey))
+      {
+        *item = 3;
+        return true;
+      }
     }
     return false;
   }
@@ -47,9 +53,9 @@ namespace
     Str255 message;
     if (!ToolboxEncodePascal(options.message(), message))
       return ConfirmResult::Error(memFullErr);
-    unsigned char bytes[2 + (14 + 4) + (14 + 6) + (14 + 10) + (14 + 256)];
+    unsigned char bytes[2 + (14 + 4) + (14 + 6) + (14 + 10) + (14 + 256) + (14 + 2)];
     unsigned char *out = bytes;
-    loka::toolbox::PutDialogWord(out, 3); // count minus one
+    loka::toolbox::PutDialogWord(out, 4); // count minus one
     loka::toolbox::PutDialogItem(out, kSaveBounds, ctrlItem + btnCtrl,
         reinterpret_cast<const unsigned char *>("Save"), 4);
     const Rect cancelBounds = {100, 176, 120, 244};
@@ -58,8 +64,13 @@ namespace
     const Rect discardBounds = {100, 20, 120, 112};
     loka::toolbox::PutDialogItem(out, discardBounds, ctrlItem + btnCtrl,
         reinterpret_cast<const unsigned char *>("Don't Save"), 10);
-    const Rect textBounds = {20, 20, 80, 332};
+    // Icon and text sit where the OOM alert puts them (ToolboxOutOfMemory.cpp);
+    // appending the icon keeps the button item numbers.
+    const Rect textBounds = {20, 64, 80, 332};
     loka::toolbox::PutDialogItem(out, textBounds, statText + itemDisable, message + 1, message[0]);
+    const Rect iconBounds = {20, 20, 52, 52};
+    const unsigned char cautionIcon[] = {0, 2}; // System ICON resource 2
+    loka::toolbox::PutDialogItem(out, iconBounds, iconItem + itemDisable, cautionIcon, 2);
     Handle items = NewHandle(out - bytes);
     if (!items)
       return ConfirmResult::Error(memFullErr);

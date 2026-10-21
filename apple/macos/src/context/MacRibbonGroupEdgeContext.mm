@@ -27,10 +27,6 @@ namespace
       return new MacRibbonGroupEdgeContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, node);
     }
-    static void refresh(MacRibbonGroupEdgeContext *context, const loka::app::scene::LayoutState &state)
-    {
-      context->relayout(state.x, state.y, state.width, state.height);
-    }
   };
   MacRibbonGroupEdgeNodeHandler gMacRibbonGroupEdgeNodeHandler;
 } // namespace
@@ -147,8 +143,9 @@ void MacRibbonGroupEdgeContext::relayout(int x, int y, int width, int height)
   NSView *view = (NSView *)this->view_;
   if (!view)
     return;
-  loka::macos::SetMacFrame(view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [view setNeedsDisplay:YES];
+  if (loka::macos::ApplyMacFrame(view,
+                                 this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+    [view setNeedsDisplay:YES];
 }
 
 void RegisterMacRibbonGroupEdgeNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)

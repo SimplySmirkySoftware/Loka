@@ -52,14 +52,27 @@ public:
     }
     return 0;
   }
-  /** Once per completed layout: O(rows) over this ledger's own rows. */
-  const UnitSeat *firstStaticBlur() const
+  /** Completed selection, borrowed only until the next layout. */
+  struct FirstBlurUnits
   {
+    const UnitSeat *staticBlur;
+    const UnitSeat *band;
+  };
+  /** Once per completed layout: one O(rows) scan of this ledger's own rows. */
+  FirstBlurUnits firstBlurUnits() const
+  {
+    FirstBlurUnits result = {0, 0};
     for (Mark i = 0; i < this->rows_.size(); ++i)
-      if (this->rows_[i].index == 1
-          && this->rows_[i].stack->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR)
-        return &this->rows_[i];
-    return 0;
+    {
+      const UnitSeat &row = this->rows_[i];
+      if (row.index != 1)
+        continue;
+      if (!result.staticBlur && row.stack->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR)
+        result.staticBlur = &row;
+      if (!result.band && row.stack->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR)
+        result.band = &row;
+    }
+    return result;
   }
   const UnitSeat &at(Mark index) const
   {

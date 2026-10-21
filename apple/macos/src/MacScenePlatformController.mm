@@ -356,6 +356,10 @@ bool MacScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *
     assert(false && "no node handler registered for this node type -- register the handler or an explicit RefusedNodeHandler");
     return false;
   }
+  // Preparation creates missing contexts, but retained view handlers leave
+  // geometry to context::layout after measurement. Their inherited refresh
+  // is a no-op; dialog handlers retain their presentation-only refresh hooks.
+  // Win32/Toolbox deliberately retain their own refresh policies.
   loka::app::scene::NodeContext *context = handler->ensureContext(node, this, handlerState);
   if (!context)
   {

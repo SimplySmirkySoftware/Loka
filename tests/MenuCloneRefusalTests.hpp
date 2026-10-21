@@ -13,4 +13,5 @@ void testMenuCopyConstructorRefusalLeavesEmpty();
 void testMenuListCopyCommitsOnlyCompletedChain();
 void testMenuSelfAssignmentDoesNotClone();
 
+void testMergeAppMenuRefusalIsAtomic();
 #endif
