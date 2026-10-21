@@ -3,6 +3,8 @@
 #include "MacSceneLayout.hpp"
 #include "MacGround.hpp"
 #include "context/MacZStackContext.hpp"
+#include "context/MacScrollViewContext.hpp"
+#include "MacInputDoor.hpp"
 #include "support/MacWindowCapture.hpp"
 #include "support/MacWindowSession.hpp"
 #include "support/MacRetirementProbe.hpp"
@@ -37,6 +39,12 @@ namespace loka
 #endif
   }
 } // namespace loka
+
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1070
+@interface NSScrollView (LokaOverlapScrollerStyle)
+- (void)setScrollerStyle:(NSInteger)style;
+@end
+#endif
 
 @interface LokaStackTestRoot : NSView
 @end
@@ -1481,4 +1489,287 @@ void testMacZStackPhotoOrientation()
   }
   LOKA_VERIFY(compared >= 2);
   [clip release];
+}
+
+namespace
+{
+  /** Records the actual damage message, forwarding unchanged to AppKit.
+      Scoped around delivery only, so prior native scrolling damage is excluded. */
+  class OverlapDamageProbe
+  {
+  public:
+    explicit OverlapDamageProbe(NSView *unit)
+        : unit_(unit),
+          original_(method_getImplementation(
+              class_getInstanceMethod(PhotoDrawProbe::photoClass(), @selector(setNeedsDisplayInRect:)))),
+          rect_(NSZeroRect),
+          calls_(0),
+          hook_(@selector(setNeedsDisplayInRect:), reinterpret_cast<IMP>(&Damage), PhotoDrawProbe::photoClass())
+    {
+      LOKA_VERIFY(!active_);
+      active_ = this;
+    }
+    ~OverlapDamageProbe()
+    {
+      active_ = 0;
+    }
+    unsigned calls() const
+    {
+      return this->calls_;
+    }
+    NSRect rect() const
+    {
+      return this->rect_;
+    }
+
+  private:
+    static void Damage(id view, SEL selector, NSRect rect)
+    {
+      OverlapDamageProbe &p = *active_;
+      if (view == p.unit_)
+      {
+        p.rect_ = p.calls_ ? NSUnionRect(p.rect_, rect) : rect;
+        ++p.calls_;
+      }
+      reinterpret_cast<void (*)(id, SEL, NSRect)>(p.original_)(view, selector, rect);
+    }
+    NSView *const unit_;
+    const IMP original_;
+    NSRect rect_;
+    unsigned calls_;
+    MacNativeRefusal hook_;
+    static OverlapDamageProbe *active_;
+    OverlapDamageProbe(const OverlapDamageProbe &);
+    OverlapDamageProbe &operator=(const OverlapDamageProbe &);
+  };
+  OverlapDamageProbe *OverlapDamageProbe::active_ = 0;
+
+  /** Different content at each origin without changing any view's dirty state. */
+  void drawScrollBands(id view, SEL, NSRect)
+  {
+    const NSRect bounds = [view bounds];
+    for (int y = 0; y < NSHeight(bounds); y += 20)
+    {
+      [[NSColor colorWithDeviceRed:(y % 100) / 100.0 green:(y % 140) / 140.0 blue:(y % 180) / 180.0 alpha:1] setFill];
+      NSRectFill(NSMakeRect(0, y, NSWidth(bounds), 20));
+    }
+  }
+
+  ScrollViewNode *prepareScrollingPhoto(Fixture &f,
+                                        NodeState<Frame> origin,
+                                        ZStackUnitGround policy = ZSTACK_UNIT_GROUND_EXP_BLUR,
+                                        bool direct = true)
+  {
+    ZStackProps props;
+    props.unitGround = policy;
+    ZStackNode *stack = new ZStackNode(props);
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(origin));
+    scroll->addChild(new RectSurfaceNode(RectSurfaceProps().size(100, 800)));
+    if (direct)
+    {
+      stack->addChild(scroll);
+      f.tree = stack;
+    }
+    else
+    {
+      // Separate siblings: a non-scroll ground and a ScrollView outside ZStack.
+      StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+      stack->addChild(new BoxNode(BoxProps().setSize(100, 80)));
+      column->addChild(stack);
+      column->addChild(scroll);
+      f.tree = column;
+    }
+    stack->addChild(new BoxNode(BoxProps().setSize(100, 40)));
+    f.layout();
+    NSScrollView *native = scrollUnder(f.host.root);
+    LOKA_VERIFY(native);
+    if ([native respondsToSelector:@selector(setScrollerStyle:)])
+    {
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= 1070
+      [native setScrollerStyle:NSScrollerStyleLegacy];
+#else
+      [native setScrollerStyle:0]; // NSScrollerStyleLegacy, unavailable in old SDKs.
+#endif
+    }
+    f.layout();
+    return scroll;
+  }
+
+  void movePhotoGround(NSScrollView *scroll, CGFloat y)
+  {
+    [[scroll contentView] scrollToPoint:NSMakePoint(0, y)];
+    [scroll reflectScrolledClipView:[scroll contentView]];
+    LOKA_VERIFY([[scroll contentView] bounds].origin.y == y);
+  }
+
+  void settlePhotoWindow(Fixture &f)
+  {
+    [f.host.window displayIfNeeded];
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [f.host.window flushWindow];
+#pragma clang diagnostic pop
+  }
+} // namespace
+
+void testMacZStackPhotoFollowsNativeAndAppScroll()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  loka::core::MutableState<Frame> storage(Frame(0, 0, 0, 0));
+  NodeState<Frame> origin(&storage, 0);
+  Fixture f;
+  ScrollViewNode *node = prepareScrollingPhoto(f, origin);
+  NSView *unit = unitUnder(f.host.root);
+  NSScrollView *scroll = scrollUnder(f.host.root);
+  MacNativeRefusal stripes(
+      @selector(drawRect:), reinterpret_cast<IMP>(&drawScrollBands), NSClassFromString(@"LokaRectSurfaceView"));
+  if (!showPhoto(f))
+    return;
+  settlePhotoWindow(f);
+  LOKA_VERIFY(NSWidth([[scroll contentView] bounds]) < NSWidth([unit bounds]));
+  unsigned long before = photoFingerprint(unit);
+  PhotoDrawProbe probe;
+  movePhotoGround(scroll, 20);
+  settlePhotoWindow(f);
+  LOKA_VERIFY(photoFingerprint(unit) != before);
+  LOKA_VERIFY(probe.draws() == 1 && probe.requests() == 0);
+
+  before = photoFingerprint(unit);
+  // requestedOrigin currently consumes viewport; scrollTo is stored-only.
+  // Use the same app input door as testMacScrollViewOffsetIsRelayoutInput.
+  // The mute is held across layout and the settle so that no bounds
+  // notification (not even AppKit's deferred echo) can deliver the move:
+  // only the commit door can make the photo follow this step.
+  origin.set(Frame(0, 60, 0, 0));
+  LOKA_VERIFY(node->requestedOrigin().y == 60);
+  {
+    MacScrollViewContext::BoundsNotificationMute mute(*static_cast<MacScrollViewContext *>(node->getContext()));
+    f.layout();
+    settlePhotoWindow(f);
+    LOKA_VERIFY([[scroll contentView] bounds].origin.y == 60);
+    LOKA_VERIFY(photoFingerprint(unit) != before);
+    LOKA_VERIFY(probe.draws() == 2 && probe.requests() == 0);
+  }
+  // AppKit may echo the muted move as one deferred bounds notification once
+  // the mute lifts; let it land, then pin that an idle relayout adds nothing.
+  settlePhotoWindow(f);
+  const unsigned afterAppMove = probe.draws();
+  f.layout();
+  settlePhotoWindow(f);
+  LOKA_VERIFY(probe.draws() == afterAppMove && probe.requests() == 0);
+
+  // A resize settles first; subsequent steps still draw once, even on refusal.
+  [f.host.window setContentSize:NSMakeSize(320, 200)];
+  f.layout(320, 200);
+  settlePhotoWindow(f);
+  const unsigned resized = probe.draws();
+  movePhotoGround(scroll, 80);
+  settlePhotoWindow(f);
+  LOKA_VERIFY(probe.draws() == resized + 1);
+  loka::testing::failMacPhotoCaptures(1);
+  movePhotoGround(scroll, 100);
+  settlePhotoWindow(f);
+  loka::testing::failMacPhotoCaptures(0);
+  LOKA_VERIFY(loka::testing::macStackPhotoDisabled(unit));
+  LOKA_VERIFY(probe.draws() == resized + 2 && probe.requests() == 0);
+  movePhotoGround(scroll, 120);
+  settlePhotoWindow(f);
+  LOKA_VERIFY(probe.draws() == resized + 3 && probe.requests() == 0);
+}
+
+void testMacZStackPhotoDamageIsOnlyGroundOverlap()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  for (unsigned policy = 0; policy != 2; ++policy)
+  {
+    loka::core::MutableState<Frame> storage(Frame(0, 0, 0, 0));
+    Fixture f;
+    ScrollViewNode *node = prepareScrollingPhoto(
+        f, NodeState<Frame>(&storage, 0), policy ? ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR : ZSTACK_UNIT_GROUND_EXP_BLUR);
+    NSView *unit = unitUnder(f.host.root);
+    NSScrollView *scroll = scrollUnder(f.host.root);
+    if (!showPhoto(f))
+      return;
+    // Make the unit taller than the ScrollView: a full-unit mutation differs.
+    NSRect frame = [scroll frame];
+    frame.size.height = 20;
+    [scroll setFrame:frame];
+    settlePhotoWindow(f);
+    LOKA_VERIFY(NSHeight([unit frame]) > NSHeight([scroll frame]));
+    MacScrollViewContext *context = static_cast<MacScrollViewContext *>(node->getContext());
+    {
+      MacScrollViewContext::BoundsNotificationMute mute(*context);
+      movePhotoGround(scroll, 20);
+    }
+    // Isolate the notification's delivery from AppKit's earlier clip damage.
+    OverlapDamageProbe damage(unit);
+    MacInputDoor::scrollBoundsChange(*context);
+    const NSRect expected = [unit convertRect:NSIntersectionRect([unit frame], [scroll frame]) fromView:f.host.root];
+    LOKA_VERIFY(!NSIsEmptyRect(expected) && !NSEqualRects(expected, [unit bounds]));
+    LOKA_VERIFY(damage.calls() == (policy ? 0u : 1u));
+    if (!policy)
+      LOKA_VERIFY(NSEqualRects(damage.rect(), expected));
+  }
+}
+
+void testMacZStackUnrelatedScrollDoesNotDamagePhoto()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  loka::core::MutableState<Frame> storage(Frame(0, 0, 0, 0));
+  Fixture f;
+  prepareScrollingPhoto(f, NodeState<Frame>(&storage, 0), ZSTACK_UNIT_GROUND_EXP_BLUR, false);
+  NSView *unit = unitUnder(f.host.root);
+  NSScrollView *scroll = scrollUnder(f.host.root);
+  if (!showPhoto(f))
+    return;
+  settlePhotoWindow(f);
+  PhotoDrawProbe draws;
+  OverlapDamageProbe damage(unit);
+  movePhotoGround(scroll, 20);
+  settlePhotoWindow(f);
+  LOKA_VERIFY(damage.calls() == 0 && draws.draws() == 0);
+}
+
+void testMacZStackGroundSubscriptionRetiresEitherSide()
+{
+  if (!legacyPhotosAvailable())
+    return;
+  for (unsigned groundFirst = 0; groundFirst != 2; ++groundFirst)
+  {
+    loka::core::MutableState<Frame> storage(Frame(0, 0, 0, 0));
+    Fixture f;
+    ScrollViewNode *node = prepareScrollingPhoto(f, NodeState<Frame>(&storage, 0));
+    NSView *unit = [unitUnder(f.host.root) retain];
+    NSScrollView *scroll = [scrollUnder(f.host.root) retain];
+    NSClipView *clip = [[scroll contentView] retain];
+    // Retire and reclaim just the chosen projection while the other survives:
+    // the terminal fact goes through the context's own door (as the unit
+    // retirement pin does), then the node releases the retired context.
+    // Native views are retained to exercise late notifications after reclaim.
+    if (groundFirst)
+    {
+      static_cast<MacScrollViewContext *>(node->getContext())->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+      node->setContext(0);
+    }
+    else
+    {
+      static_cast<MacZStackContext *>(f.tree->getContext())->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+      f.tree->setContext(0);
+    }
+    f.controller.drainNativeRetirements();
+    {
+      OverlapDamageProbe damage(unit);
+      PhotoDrawProbe draws;
+      movePhotoGround(scroll, 20);
+      [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:clip];
+      LOKA_VERIFY(damage.calls() == 0 && draws.draws() == 0);
+    }
+    [clip release];
+    [scroll release];
+    [unit release];
+  }
 }

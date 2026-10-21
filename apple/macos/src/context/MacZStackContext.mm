@@ -1,4 +1,5 @@
 #include "MacZStackContext.hpp"
+#include "MacScrollViewContext.hpp"
 #include "../MacGround.hpp"
 #include "../platform/MacNativeGeometry.hpp"
 #include <cassert>
@@ -566,6 +567,7 @@ void MacZStackContext::Unit::place(const loka::macos::MacRect &seat)
 
 MacZStackContext::MacZStackContext(MacScenePlatformController *controller, loka::app::ZStackUnitGround ground)
     : MacRetirableContext(controller),
+      groundMove_(*this),
       ground_(ground),
       units_(0)
 {
@@ -588,6 +590,7 @@ void MacZStackContext::onPropsApplied()
 
 MacZStackContext::~MacZStackContext()
 {
+  this->groundMove_.detach();
   while (this->units_)
   {
     Unit *unit = this->units_;
@@ -656,6 +659,8 @@ void MacZStackContext::lowerNewGroundViews(void *parent, void *previousLast)
 
 void MacZStackContext::onFactChanged(loka::app::scene::NodeLifecycleFact, loka::app::scene::NodeLifecycleFact next)
 {
+  if (next == loka::app::scene::NODE_FACT_RETIRED)
+    this->groundMove_.detach();
   for (Unit *unit = this->units_; unit; unit = unit->next)
   {
     NSView *view = (NSView *)unit->view_;
@@ -668,4 +673,55 @@ void MacZStackContext::onFactChanged(loka::app::scene::NodeLifecycleFact, loka::
       this->retireNativeObject(unit->view_);
     }
   }
+}
+
+MacGroundMoveSubscription::MacGroundMoveSubscription(MacZStackContext &owner)
+    : owner_(owner),
+      ground_(0)
+{
+}
+
+MacGroundMoveSubscription::~MacGroundMoveSubscription()
+{
+  this->detach();
+}
+
+void MacGroundMoveSubscription::attach(MacScrollViewContext &ground)
+{
+  if (this->ground_ == &ground)
+    return;
+  this->detach();
+  this->ground_ = &ground;
+  ground.groundMove_ = this;
+}
+
+void MacGroundMoveSubscription::detach()
+{
+  if (!this->ground_)
+    return;
+  this->ground_->groundMove_ = 0;
+  this->ground_ = 0;
+}
+
+void MacGroundMoveSubscription::receive(void *scrollView)
+{
+  NSView *scroll = (NSView *)scrollView;
+  NSView *parent = [scroll superview];
+  for (const MacZStackContext::Unit *unit = this->owner_.units_; unit; unit = unit->following())
+  {
+    NSView *view = (NSView *)unit->view();
+    if (![view isKindOfClass:[LokaStackBandUnitView class]] || !parent || [view superview] != parent)
+      continue;
+    const NSRect overlap = NSIntersectionRect([view frame], [scroll frame]);
+    if (!NSIsEmptyRect(overlap))
+      [view setNeedsDisplayInRect:[view convertRect:overlap fromView:parent]];
+  }
+}
+
+void MacZStackContext::followGround(MacScrollViewContext *ground)
+{
+  if (ground)
+    this->groundMove_.attach(*ground);
+  else
+    this->groundMove_.detach();
 }

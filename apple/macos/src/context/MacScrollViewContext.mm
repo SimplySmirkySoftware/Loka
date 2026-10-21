@@ -1,4 +1,5 @@
 #include "MacScrollViewContext.hpp"
+#include "MacGroundMoveSubscription.hpp"
 #include "../MacInputDoor.hpp"
 #include "../MacObjCCompat.hpp"
 #include "../platform/MacNativeGeometry.hpp"
@@ -93,6 +94,7 @@ MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controlle
                                            int height,
                                            loka::app::ScrollViewNode *node)
     : MacRetirableContext(controller),
+      groundMove_(0),
       node_(node),
       scrollView_(0)
 {
@@ -146,6 +148,10 @@ MacScrollViewContext::MacScrollViewContext(MacScenePlatformController *controlle
 MacScrollViewContext::~MacScrollViewContext()
 {
   assert(!this->scrollView_ && "terminal fact delivery must queue the native ScrollView before context reclaim");
+  // The terminal fact already detached; reclaim without it must still leave
+  // the ZStack's subscription pointing at nothing.
+  if (this->groundMove_)
+    this->groundMove_->detach();
 }
 
 void MacScrollViewContext::readLifecycleFactOnAttach()
@@ -169,6 +175,8 @@ void MacScrollViewContext::onFactChanged(loka::app::scene::NodeLifecycleFact pre
     this->applyDetachedPresentation();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
+      if (this->groundMove_)
+        this->groundMove_->detach();
       LokaScrollView *scrollView = (LokaScrollView *)this->scrollView_;
       NSClipView *clipView = [scrollView contentView];
       [[NSNotificationCenter defaultCenter] removeObserver:scrollView
@@ -281,6 +289,7 @@ int MacScrollViewContext::commitScrollMetrics(int contentWidth,
   {
     return clamped;
   }
+  const NSPoint previousOrigin = [[scrollView contentView] bounds].origin;
   [scrollView setHasHorizontalScroller:horizontalBar];
   const loka::macos::MacProjection &projection = this->controller()->projection();
   const MacScrollerClearance clearance = {projection.projectLength(0, contentInsets.top()).pt,
@@ -292,6 +301,8 @@ int MacScrollViewContext::commitScrollMetrics(int contentWidth,
       scrollView, width > clipWidth ? width : clipWidth, projection.projectLength(0, contentHeight));
   loka::macos::ScrollMacDocument(
       documentView, projection.scrollOffsetToNative(clampedX), projection.scrollOffsetToNative(clamped));
+  if (this->groundMove_ && !NSEqualPoints(previousOrigin, [[scrollView contentView] bounds].origin))
+    this->groundMove_->receive(scrollView);
   return clamped;
 }
 
@@ -313,6 +324,8 @@ void MacScrollViewContext::publishClipViewBoundsOrigin()
   // are same-value no-ops inside publishOrigin, the echo-loop breaker.
   if (this->node_)
     this->node_->publishOrigin(x, y);
+  if (this->groundMove_)
+    this->groundMove_->receive(scrollView);
 }
 
 int MacScrollViewContext::horizontalRange(int contentWidthLu) const
