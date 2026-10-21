@@ -132,11 +132,6 @@ namespace
       return new MacTextContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, text);
     }
-
-    static void refresh(MacTextContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacTextNodeHandler gMacTextNodeHandler;
@@ -394,9 +389,9 @@ void MacTextContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  loka::macos::SetMacFrame(label,
-      this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [label setNeedsDisplay:YES];
+  if (loka::macos::ApplyMacFrame(label,
+                                 this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+    [label setNeedsDisplay:YES];
 }
 
 void MacTextContext::bindText()

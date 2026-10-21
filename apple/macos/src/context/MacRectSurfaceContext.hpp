@@ -31,6 +31,8 @@ public:
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous,
                              loka::app::scene::NodeLifecycleFact next);
 
+  /** Placement after measurement; preparation no longer moves the view. */
+  virtual short layout(loka::app::scene::IPlatformController *controller, loka::app::scene::LayoutState &state);
   void relayout(int x, int y, int width, int height);
   void draw(void *viewBounds);
   /** False when the native view could not be created: the context then

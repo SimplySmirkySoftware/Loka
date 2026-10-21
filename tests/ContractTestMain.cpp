@@ -7,6 +7,7 @@
 #include "MacNativeResourceRetirementTests.hpp"
 #include "MacGroundTests.hpp"
 #include "MacCardPainterTests.hpp"
+#include "MacRelayoutDisplayTests.hpp"
 #include "MacZStackUnitTests.hpp"
 #include "MacTextColorTests.hpp"
 #endif

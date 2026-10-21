@@ -34,11 +34,6 @@ namespace
       return new MacEditTextContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, edit);
     }
-
-    static void refresh(MacEditTextContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacEditTextNodeHandler gMacEditTextNodeHandler;

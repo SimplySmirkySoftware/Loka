@@ -210,5 +210,7 @@ LOKA_TEST(testMacZStackPhotoLifetime)
 LOKA_TEST(testMacZStackPhotoReplayAndRefusal)
 LOKA_TEST(testMacZStackPhotoOrientation)
 
+LOKA_TEST(testMacQuiescentRelayoutDoesNotInvalidate)
+LOKA_TEST(testMacChangedFrameStillInvalidates)
 LOKA_TEST(testMacImageViewConvertsBitmapToDeviceRGB)
 LOKA_TEST(testMacImageViewPreservesNonBitmapImage)
