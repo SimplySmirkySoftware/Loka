@@ -753,43 +753,57 @@ namespace
 namespace toolbox_host
 {
   unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
+  unsigned bandCaptures = 0, bandCopies = 0, bandReleases = 0, bandHairlines = 0;
   bool staticEligible = true, staticCaptureSucceeds = true, staticCopySucceeds = true;
 } // namespace toolbox_host
-struct ToolboxStaticBlurPixels::Image
+struct ToolboxBlurPixels::Image
 {
+  explicit Image(int value)
+      : cell_(value)
+  {
+  }
+  ~Image()
+  {
+    ++(this->cell_ == 8 ? toolbox_host::staticReleases : toolbox_host::bandReleases);
+  }
+  bool paint()
+  {
+    ++(this->cell_ == 8 ? toolbox_host::staticCopies : toolbox_host::bandCopies);
+    return toolbox_host::staticCopySucceeds;
+  }
+
+private:
+  const int cell_;
 };
-ToolboxStaticBlurPixels::ToolboxStaticBlurPixels()
+ToolboxBlurPixels::ToolboxBlurPixels()
     : image_(0)
 {
 }
-ToolboxStaticBlurPixels::~ToolboxStaticBlurPixels()
+ToolboxBlurPixels::~ToolboxBlurPixels()
 {
   this->clear();
 }
-void ToolboxStaticBlurPixels::clear()
+void ToolboxBlurPixels::clear()
 {
-  if (this->image_)
-    ++toolbox_host::staticReleases;
   delete this->image_;
   this->image_ = 0;
 }
-bool ToolboxStaticBlurPixels::eligible(GrafPtr, const Rect &)
+bool ToolboxBlurPixels::eligible(GrafPtr, const Rect &)
 {
   return toolbox_host::staticEligible;
 }
-bool ToolboxStaticBlurPixels::capture(GrafPtr, const Rect &)
+bool ToolboxBlurPixels::capture(GrafPtr, const Rect &, int cell)
 {
-  ++toolbox_host::staticCaptures;
+  ++(cell == 8 ? toolbox_host::staticCaptures : toolbox_host::bandCaptures);
   this->clear();
   if (!toolbox_host::staticCaptureSucceeds)
     return false;
-  this->image_ = new Image;
+  this->image_ = new Image(cell);
   return true;
 }
-bool ToolboxStaticBlurPixels::paint(GrafPtr, const Rect &)
+bool ToolboxBlurPixels::paint(GrafPtr, const Rect &)
 {
-  ++toolbox_host::staticCopies;
-  return this->image_ != 0 && toolbox_host::staticCopySucceeds;
+  return this->image_ && this->image_->paint();
 }
 #ifdef LOKA_HOST_ZSTACK_UNITS
 #define requestInvalidate requestInvalidateImpl
@@ -850,7 +864,8 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
 void ToolboxWindow::drawDirty(const Rect &rect)
 {
   if (this->scenePlatformController_)
-    ToolboxRenderDirtyInCompositionOrder(*this->scenePlatformController_, rect);
+    ToolboxRenderDirtyInCompositionOrder(*this->scenePlatformController_,
+                                         this->scenePlatformController_->dirtyExtent(rect));
 }
 #endif
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,

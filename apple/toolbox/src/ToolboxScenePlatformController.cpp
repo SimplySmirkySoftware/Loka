@@ -619,6 +619,8 @@ void ToolboxScenePlatformController::destroy()
   clearControls();
   flushRetiredNativeHandles();
   drainNativeHandleBuckets();
+  this->staticBlur_.clear();
+  this->bandBlur_.clear();
 }
 
 

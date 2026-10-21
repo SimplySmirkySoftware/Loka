@@ -103,10 +103,24 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
       case loka::app::ZSTACK_UNIT_GROUND_WINDOW:
         break;
       case loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR:
-        painted = this->erasedPass_.isOpen() && this->frostCache_.paint(this->window_->window(), row.rect, row.unit);
+      {
+        const ToolboxBlurPaint result = this->bandBlur_.paint(this->window_->window(), row, this->erasedPass_);
+        switch (result)
+        {
+        case BLUR_PICTURE:
+          painted = true;
+          this->frostCache_.paintHairline(this->window_->window(), row.rect, row.unit);
+          break;
+        case BLUR_ABSENT:
+          painted = this->erasedPass_.isOpen() && this->frostCache_.paint(this->window_->window(), row.rect, row.unit);
+          break;
+        case BLUR_GROUND:
+          break;
+        }
         break;
+      }
       case loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR:
-        painted = this->staticBlur_.paint(this->window_->window(), row, this->erasedPass_);
+        painted = this->staticBlur_.paint(this->window_->window(), row, this->erasedPass_) == BLUR_PICTURE;
         break;
       }
     }
