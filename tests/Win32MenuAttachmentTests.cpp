@@ -848,3 +848,170 @@ void testWin32MenuTitleStateUnbindsOnRelease()
   LOKA_VERIFY(GetMenuStringW(child, 0, label, 128, MF_BYPOSITION) > 0);
   LOKA_VERIFY(std::wcscmp(label, L"Beta\tCtrl+S") == 0);
 }
+
+namespace
+{
+  void verifyMenuLabel(HMENU menu, UINT position, const wchar_t *expected)
+  {
+    wchar_t label[128];
+    LOKA_VERIFY(GetMenuStringW(menu, position, label, 128, MF_BYPOSITION) > 0);
+    LOKA_VERIFY(std::wcscmp(label, expected) == 0);
+  }
+} // namespace
+
+void testWin32AppQuitPlacement()
+{
+  ShortcutFixture f;
+  MenuBarDefinition only;
+  only << (AppMenu() << MenuItem("About").actionType(MENU_ACTION_ABOUT_APP) << MenuSeparator()
+                     << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&only, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  HMENU menu = GetMenu(f.window.hwnd());
+  LOKA_VERIFY(GetMenuItemCount(menu) == 1);
+  verifyMenuLabel(menu, 0, L"File");
+  LOKA_VERIFY(GetMenuItemCount(GetSubMenu(menu, 0)) == 1);
+  verifyLabel(f.window, L"Quit");
+  ControlKey control;
+  LOKA_VERIFY(!f.translate('Q'));
+  LOKA_VERIFY(f.window.menuAttachment().dispatch(firstCommand(f.window)));
+  LOKA_VERIFY(f.app.quits == 1);
+
+  MenuBarDefinition view;
+  view << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP)) << (Menu("View") << MenuItem("Zoom"));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&view, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  menu = GetMenu(f.window.hwnd());
+  LOKA_VERIFY(GetMenuItemCount(menu) == 2);
+  verifyMenuLabel(menu, 0, L"File");
+  verifyMenuLabel(menu, 1, L"View");
+}
+
+void testWin32AppQuitSuppressesOrdinaryLeaves()
+{
+  MenuTitleState suppressed("Ordinary"), parent("Parent");
+  ShortcutFixture f;
+  MenuBarDefinition offered;
+  offered << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
+          << (Menu("File") << MenuItem("Open") << MenuSeparator()
+                           << MenuItem("Ordinary").text(&suppressed).shortcut('Q').actionType(MENU_ACTION_QUIT_APP));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&offered, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  HMENU file = GetSubMenu(GetMenu(f.window.hwnd()), 0);
+  LOKA_VERIFY(GetMenuItemCount(file) == 3);
+  verifyMenuLabel(file, 0, L"Open");
+  LOKA_VERIFY(GetMenuState(file, 1, MF_BYPOSITION) & MF_SEPARATOR);
+  verifyMenuLabel(file, 2, L"Quit");
+  LOKA_VERIFY(suppressed.subscriptions() == 0);
+  LOKA_VERIFY(!f.window.menuAttachment().dispatch(1002));
+  ControlKey control;
+  LOKA_VERIFY(!f.translate('Q'));
+
+  MenuBarDefinition nested;
+  nested << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP))
+         << (Menu("File") << MenuSeparator() << MenuSeparator() << MenuItem("Open") << MenuSeparator()
+                          << (MenuItem("Empty") << MenuItem("Drop").actionType(MENU_ACTION_QUIT_APP))
+                          << MenuItem("Color").actionType(MENU_ACTION_SHOW_COLOR_PICKER) << MenuSeparator()
+                          << (MenuItem("Parent").text(&parent).actionType(MENU_ACTION_QUIT_APP)
+                              << MenuSeparator()
+                              << MenuItem("Drop").text(&suppressed).shortcut('Q').actionType(MENU_ACTION_QUIT_APP)
+                              << MenuSeparator() << MenuItem("Child") << MenuSeparator())
+                          << MenuSeparator() << MenuSeparator());
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&nested, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  file = GetSubMenu(GetMenu(f.window.hwnd()), 0);
+  LOKA_VERIFY(GetMenuItemCount(file) == 5);
+  verifyMenuLabel(file, 0, L"Open");
+  LOKA_VERIFY(GetMenuState(file, 1, MF_BYPOSITION) & MF_SEPARATOR);
+  LOKA_VERIFY(GetMenuState(file, 3, MF_BYPOSITION) & MF_SEPARATOR);
+  verifyMenuLabel(file, 4, L"Quit");
+  HMENU child = GetSubMenu(file, 2);
+  LOKA_VERIFY(child && GetMenuItemCount(child) == 1);
+  verifyMenuLabel(child, 0, L"Child");
+  parent.set(String::Literal("Renamed"));
+  verifyMenuLabel(file, 2, L"Renamed");
+  LOKA_VERIFY(GetSubMenu(file, 2) == child);
+  LOKA_VERIFY(suppressed.subscriptions() == 0);
+  LOKA_VERIFY(!f.translate('Q'));
+  LOKA_VERIFY(!f.window.menuAttachment().dispatch(1003));
+}
+
+void testWin32AppQuitTitleFallbackAndPayload()
+{
+  MenuTitleState title("");
+  MutableState<bool> enabled(false), checked(true);
+  ShortcutFixture f;
+  MenuBarDefinition offered;
+  offered << (AppMenu() << MenuItem("Ignored")
+                               .text(&title)
+                               .shortcut('L')
+                               .enabled(&enabled)
+                               .attr(MenuItemAttr().checked(&checked))
+                               .actionType(MENU_ACTION_QUIT_APP));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&offered, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  verifyLabel(f.window, L"Exit\tCtrl+L");
+  const UINT id = firstCommand(f.window);
+  HMENU file = GetSubMenu(GetMenu(f.window.hwnd()), 0);
+  LOKA_VERIFY(GetMenuState(file, id, MF_BYCOMMAND) & MF_GRAYED);
+  LOKA_VERIFY(GetMenuState(file, id, MF_BYCOMMAND) & MF_CHECKED);
+  enabled.set(true);
+  checked.set(false);
+  LOKA_VERIFY(!(GetMenuState(file, id, MF_BYCOMMAND) & (MF_GRAYED | MF_CHECKED)));
+  ControlKey control;
+  LOKA_VERIFY(f.translate('L'));
+  title.set(String::Literal("Leave"));
+  verifyLabel(f.window, L"Leave\tCtrl+L");
+  LOKA_VERIFY(f.translate('L'));
+  title.set(String::Literal(""));
+  verifyLabel(f.window, L"Exit\tCtrl+L");
+  LOKA_VERIFY(firstCommand(f.window) == id);
+  LOKA_VERIFY(f.translate('L'));
+  LOKA_VERIFY(f.app.quits == 3);
+
+  MenuBarDefinition about;
+  about << (Menu("Help") << MenuItem("Ignored").text(&title).actionType(MENU_ACTION_ABOUT_APP));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&about, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  verifyLabel(f.window, L"About");
+  title.set(String::Literal("Details"));
+  verifyLabel(f.window, L"Details");
+  title.set(String::Literal(""));
+  verifyLabel(f.window, L"About");
+}
+
+void testWin32InvisibleAppQuitKeepsOrdinaryQuit()
+{
+  ShortcutFixture f;
+  MenuBarDefinition offered;
+  offered << (AppMenu() << MenuItem("App Quit").attr(MenuItemAttr().visible(false)).actionType(MENU_ACTION_QUIT_APP))
+          << (Menu("File") << MenuItem("Ordinary Quit").shortcut('Q').actionType(MENU_ACTION_QUIT_APP));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&offered, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  verifyLabel(f.window, L"Ordinary Quit\tCtrl+Q");
+  LOKA_VERIFY(GetMenuItemCount(GetSubMenu(GetMenu(f.window.hwnd()), 0)) == 1);
+  ControlKey control;
+  LOKA_VERIFY(f.translate('Q'));
+  LOKA_VERIFY(f.app.quits == 1);
+}
+
+void testWin32AppQuitRefusalPreservesProjection()
+{
+  MenuTitleState title("Save");
+  ShortcutFixture f;
+  MenuBarDefinition first;
+  first << (Menu("File") << MenuItem("Save").text(&title).shortcut('S').onClick(&f.emitter));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&first, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  HMENU installed = GetMenu(f.window.hwnd());
+  MenuBarDefinition next;
+  next << (AppMenu() << MenuItem("Quit").actionType(MENU_ACTION_QUIT_APP));
+  // There is no native CreatePopupMenu/AppendMenuW injection seam. Exercise
+  // the existing merge-refusal seam without introducing a production test API.
+  loka::app::testing::failMenuBarDefinitionClones(1);
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&next, 0)) == Win32MenuAttachment::PROJECT_REFUSED);
+  loka::app::testing::allowMenuBarDefinitionClones();
+  LOKA_VERIFY(GetMenu(f.window.hwnd()) == installed && IsMenu(installed));
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&first, 0)) == Win32MenuAttachment::PROJECT_UNCHANGED);
+  title.set(String::Literal("Retained"));
+  verifyLabel(f.window, L"Retained\tCtrl+S");
+  LOKA_VERIFY(title.subscriptions() == 1);
+  ControlKey control;
+  LOKA_VERIFY(f.translate('S') && f.calls == 1);
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&next, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  LOKA_VERIFY(title.subscriptions() == 0);
+  LOKA_VERIFY(!f.translate('S'));
+  verifyLabel(f.window, L"Quit");
+}

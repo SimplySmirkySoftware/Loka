@@ -26,4 +26,5 @@ void testWin32QueryEndSessionCriticalAllowsWithoutAsking();
 void testWin32QueryEndSessionCloseAppRefusesWithoutAsking();
 void testWin32EndSessionFalseDoesNotStopQuit();
 
+void testWin32AppQuitMenuRowPreservesClientSize();
 #endif // LOKA_WIN32_WINDOW_CLIENT_SIZE_TESTS_HPP
