@@ -40,11 +40,6 @@ namespace
       return new MacCellContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, cell);
     }
-
-    static void refresh(MacCellContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacCellNodeHandler gMacCellNodeHandler;

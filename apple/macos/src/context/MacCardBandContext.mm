@@ -26,10 +26,6 @@ namespace
       return new MacCardBandContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, node);
     }
-    static void refresh(MacCardBandContext *context, const loka::app::scene::LayoutState &state)
-    {
-      context->relayout(state.x, state.y, state.width, state.height);
-    }
   };
   MacCardBandNodeHandler gMacCardBandNodeHandler;
 } // namespace

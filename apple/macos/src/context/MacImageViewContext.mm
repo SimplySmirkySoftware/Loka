@@ -121,11 +121,6 @@ namespace
       return new MacImageViewContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, image);
     }
-
-    static void refresh(MacImageViewContext *ctx, const loka::app::scene::LayoutState &state)
-    {
-      ctx->relayout(state.x, state.y, state.width, state.height);
-    }
   };
 
   MacImageViewNodeHandler gMacImageViewNodeHandler;

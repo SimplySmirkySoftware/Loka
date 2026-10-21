@@ -27,10 +27,6 @@ namespace
       return new MacRibbonGroupEdgeContext(
           mac, mac->projectionParentView(), state.x, state.y, state.width, state.height, node);
     }
-    static void refresh(MacRibbonGroupEdgeContext *context, const loka::app::scene::LayoutState &state)
-    {
-      context->relayout(state.x, state.y, state.width, state.height);
-    }
   };
   MacRibbonGroupEdgeNodeHandler gMacRibbonGroupEdgeNodeHandler;
 } // namespace

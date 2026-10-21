@@ -14,6 +14,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include <cstdio>
+#include <objc/runtime.h>
 
 namespace
 {
@@ -57,30 +58,95 @@ namespace
     return nil;
   }
 
-  /** Collects the views of one class that are clean after a display; a view
-      AppKit left dirty (the fixture's bottom card band stays dirty after
-      -[NSWindow display] on 10.9) is reported and excluded, so the pin
-      compares each view with its own earlier state instead of an absolute. */
-  unsigned collectCleanViews(NSView *root, Class type, NSMutableArray *clean)
+  /** Install each draw hook once; forward to AppKit and restore at process exit. */
+  class DrawCounts
   {
-    unsigned count = 0;
-    if ([root isKindOfClass:type])
+  public:
+    enum ViewKind
     {
-      const NSRect f = [root frame];
-      std::printf("quiescent relayout: %s needsDisplay=%d frame=(%g,%g %gx%g)\n",
-                  [NSStringFromClass([root class]) UTF8String], static_cast<int>([root needsDisplay]), f.origin.x,
-                  f.origin.y, f.size.width, f.size.height);
-      if (![root needsDisplay])
+      CARD,
+      TEXT,
+      IMAGE,
+      CELL,
+      SURFACE,
+      EDGE,
+      VIEW_COUNT
+    };
+
+    static DrawCounts &instance()
+    {
+      static DrawCounts counts;
+      return counts;
+    }
+    void reset()
+    {
+      for (int i = 0; i < VIEW_COUNT; ++i)
+        this->entries_[i].count = 0;
+    }
+    unsigned count(ViewKind kind) const
+    {
+      return this->entries_[kind].count;
+    }
+    Class viewClass(ViewKind kind) const
+    {
+      return this->entries_[kind].type;
+    }
+
+  private:
+    struct Entry
+    {
+      Class type;
+      Method method;
+      IMP original;
+      unsigned count;
+    };
+    Entry entries_[VIEW_COUNT];
+
+    template <int Kind> static void draw(id view, SEL selector, NSRect rect)
+    {
+      Entry &entry = instance().entries_[Kind];
+      ++entry.count;
+      typedef void (*DrawFn)(id, SEL, NSRect);
+      reinterpret_cast<DrawFn>(entry.original)(view, selector, rect);
+    }
+    DrawCounts()
+    {
+      NSString *names[] = {@"LokaCardBandView",
+                           @"NSTextField",
+                           @"LokaImageView",
+                           @"LokaCellView",
+                           @"LokaRectSurfaceView",
+                           @"LokaRibbonGroupEdgeView"};
+      const IMP replacements[] = {reinterpret_cast<IMP>(&draw<CARD>),
+                                  reinterpret_cast<IMP>(&draw<TEXT>),
+                                  reinterpret_cast<IMP>(&draw<IMAGE>),
+                                  reinterpret_cast<IMP>(&draw<CELL>),
+                                  reinterpret_cast<IMP>(&draw<SURFACE>),
+                                  reinterpret_cast<IMP>(&draw<EDGE>)};
+      for (int i = 0; i < VIEW_COUNT; ++i)
       {
-        [clean addObject:root];
-        ++count;
+        Entry &entry = this->entries_[i];
+        entry.type = NSClassFromString(names[i]);
+        LOKA_VERIFY(entry.type != Nil);
+        Method inherited = class_getInstanceMethod(entry.type, @selector(drawRect:));
+        LOKA_VERIFY(inherited);
+        // Materialize inherited methods on the target class before replacing,
+        // so a hook never accidentally changes NSView's implementation.
+        class_addMethod(
+            entry.type, @selector(drawRect:), method_getImplementation(inherited), method_getTypeEncoding(inherited));
+        entry.method = class_getInstanceMethod(entry.type, @selector(drawRect:));
+        entry.original = method_setImplementation(entry.method, replacements[i]);
+        entry.count = 0;
       }
     }
-    NSArray *children = [root subviews];
-    for (NSUInteger i = 0; i < [children count]; ++i)
-      count += collectCleanViews([children objectAtIndex:i], type, clean);
-    return count;
-  }
+    ~DrawCounts()
+    {
+      for (int i = 0; i < VIEW_COUNT; ++i)
+        method_setImplementation(this->entries_[i].method, this->entries_[i].original);
+    }
+    DrawCounts(const DrawCounts &);
+    DrawCounts &operator=(const DrawCounts &);
+  };
 
   void verifyRelayout(bool move)
   {
@@ -90,6 +156,8 @@ namespace
       std::printf("[skip] relayout display pins: console screen is locked\n");
       return;
     }
+    DrawCounts &draws = DrawCounts::instance();
+    draws.reset();
     loka::core::MutableState<int> spacerWidth(20);
     MacScenePlatformController controller([host.window contentView], RailMetrics());
     NodeDefinitionBase *definition =
@@ -110,17 +178,13 @@ namespace
       NSScrollView *scroll = (NSScrollView *)findView([host.window contentView], [NSScrollView class]);
       LOKA_VERIFY(scroll);
       NSView *document = [scroll documentView];
-      // Each class pins the matching context's relayout, including all card
-      // bands and ribbon edges; absence must fail rather than pass vacuously.
-      NSString *classes[] = {@"LokaCardBandView",
-                             @"NSTextField",
-                             @"LokaImageView",
-                             @"LokaCellView",
-                             @"LokaRectSurfaceView",
-                             @"LokaRibbonGroupEdgeView"};
-      NSMutableArray *clean = [NSMutableArray array];
-      for (unsigned i = 0; i < sizeof(classes) / sizeof(classes[0]); ++i)
-        LOKA_VERIFY(collectCleanViews(document, NSClassFromString(classes[i]), clean) > 0);
+      for (int i = 0; i < DrawCounts::VIEW_COUNT; ++i)
+      {
+        const DrawCounts::ViewKind kind = static_cast<DrawCounts::ViewKind>(i);
+        LOKA_VERIFY(findView(document, draws.viewClass(kind)));
+        LOKA_VERIFY(draws.count(kind) > 0);
+      }
+      draws.reset();
       NSView *surface = findView(document, NSClassFromString(@"LokaRectSurfaceView"));
       LOKA_VERIFY(surface);
       const NSRect before = [surface frame];
@@ -130,22 +194,22 @@ namespace
         scene.flushInvalidation();
       }
       controller.relayout(640, 480);
-      // Observe before any display/event pumping can consume the invalidation.
+      [host.window displayIfNeeded];
       if (move)
       {
         LOKA_VERIFY(!NSEqualPoints(before.origin, [surface frame].origin));
         LOKA_VERIFY(NSEqualSizes(before.size, [surface frame].size));
-        LOKA_VERIFY([surface needsDisplay]);
+        LOKA_VERIFY(draws.count(DrawCounts::SURFACE) >= 1);
       }
       else
       {
-        // A quiescent pass must not dirty any view that the display left clean.
-        for (NSUInteger i = 0; i < [clean count]; ++i)
+        for (int i = 0; i < DrawCounts::VIEW_COUNT; ++i)
         {
-          NSView *view = [clean objectAtIndex:i];
-          std::printf("quiescent relayout: %s still clean=%d\n", [NSStringFromClass([view class]) UTF8String],
-                      static_cast<int>(![view needsDisplay]));
-          LOKA_VERIFY(![view needsDisplay]);
+          const DrawCounts::ViewKind kind = static_cast<DrawCounts::ViewKind>(i);
+          std::printf("quiescent relayout: %s drawRect calls=%u\n",
+                      [NSStringFromClass(draws.viewClass(kind)) UTF8String],
+                      draws.count(kind));
+          LOKA_VERIFY(draws.count(kind) == 0);
         }
       }
       loka::dsl::testing::SceneTestAccess::unmount(scene);
