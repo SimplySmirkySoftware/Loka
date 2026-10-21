@@ -1,0 +1,5 @@
+#ifndef LOKA_TESTS_MAC_RELAYOUT_DISPLAY_TESTS_HPP
+#define LOKA_TESTS_MAC_RELAYOUT_DISPLAY_TESTS_HPP
+void testMacQuiescentRelayoutDoesNotInvalidate();
+void testMacChangedFrameStillInvalidates();
+#endif

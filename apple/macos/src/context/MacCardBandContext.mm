@@ -127,8 +127,9 @@ void MacCardBandContext::relayout(int x, int y, int width, int height)
   if (!view)
     return;
   this->band_ = loka::core::Frame(x, y, width, height);
-  loka::macos::SetMacFrame(view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [view setNeedsDisplay:YES];
+  if (loka::macos::ApplyMacFrame(
+          view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+    [view setNeedsDisplay:YES];
 }
 
 void RegisterMacCardBandNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry)

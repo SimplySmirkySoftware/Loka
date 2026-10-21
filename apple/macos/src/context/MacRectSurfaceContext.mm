@@ -136,9 +136,9 @@ void MacRectSurfaceContext::relayout(int x, int y, int width, int height)
   {
     return;
   }
-  loka::macos::SetMacFrame(view,
-      this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height)));
-  [view setNeedsDisplay:YES];
+  if (loka::macos::ApplyMacFrame(
+          view, this->controller()->projection().projectFrame(loka::core::Frame(x, y, width, height))))
+    [view setNeedsDisplay:YES];
 }
 
 void MacRectSurfaceContext::ModelChangedThunk(void *userData)
