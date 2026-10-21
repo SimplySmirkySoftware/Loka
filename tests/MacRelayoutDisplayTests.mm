@@ -161,10 +161,12 @@ namespace
     loka::core::MutableState<int> spacerWidth(20);
     MacScenePlatformController controller([host.window contentView], RailMetrics());
     NodeDefinitionBase *definition =
+        // The Cell fills the remaining height, so it comes last to keep every
+        // sampled view inside the window for the first display.
         (ScrollView() << (Column() << (Card() << Text("Quiescent card") << ImageView().size(32, 32))
-                                   << Cell(CellProps().text("Quiescent cell"))
+                                   << (Row() << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))
                                    << (RibbonControl() << (RibbonGroup("Quiescent group") << RibbonItem("Item")))
-                                   << (Row() << Box().width(&spacerWidth).height(30) << RectSurface().size(40, 30))))
+                                   << Cell(CellProps().text("Quiescent cell"))))
             .clone();
     LOKA_VERIFY(definition);
     {
