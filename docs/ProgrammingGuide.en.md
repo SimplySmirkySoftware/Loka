@@ -1102,9 +1102,9 @@ origin into it. `x` and `y` are the **content** point shown at the seat's
 top-left corner, not the seat rect. After the first layout, `width` and
 `height` report the visible content size (seat minus scroll bars), in the same
 content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails report it.
-`contentInsets(top, bottom)` also keeps the Toolbox vertical bar clear of those
-rows at the viewport edges; macOS support is planned, and Win32 does not yet
-shorten its bar (#1547).
+`contentInsets(top, bottom)` also keeps the vertical bar clear of those rows at
+the viewport edges on Toolbox and macOS; it does not move the horizontal bar or
+shrink the clip. Win32 does not yet shorten its bar (#1547).
 Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
@@ -1133,8 +1133,9 @@ heights plus gaps. Children without a height of their own are 0 or their rail
 default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
 80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
 
-The vertical bar is present unless inset clearance leaves no track (hidden on
-Toolbox); the horizontal bar appears only while there
+The vertical bar is normally present. When inset clearance leaves no track,
+Toolbox hides its bar and macOS keeps its scroller at zero height; Win32 does
+not yet apply the clearance (#1547). The horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
 (`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
