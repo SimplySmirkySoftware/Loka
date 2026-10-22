@@ -17,6 +17,7 @@
 #include "CardShadowTableTests.hpp"
 #include "CommandSetTests.hpp"
 #include "SimpleTextTests.hpp"
+#include "MarkdownEditorTests.hpp"
 #include "MenuCompletionTests.hpp"
 #include "SceneMenuBarTests.hpp"
 #include "support/SeatBuildRequestAccess.hpp"

@@ -21,7 +21,8 @@
       "name": "Run (macOS SimpleViewer)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SimpleViewer/LokaSimpleViewerMacOS.app/Contents/MacOS/LokaSimpleViewerMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SimpleViewer"
     },
@@ -29,7 +30,8 @@
       "name": "Run (macOS CardShowcase)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/CardShowcase/LokaCardShowcaseMacOS.app/Contents/MacOS/LokaCardShowcaseMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS CardShowcase"
     },
@@ -37,15 +39,26 @@
       "name": "Run (macOS SimpleText)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SimpleText/LokaSimpleTextMacOS.app/Contents/MacOS/LokaSimpleTextMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SimpleText"
+    },
+    {
+      "name": "Run (macOS MarkdownEditor)",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/MarkdownEditor/LokaMarkdownEditorMacOS.app/Contents/MacOS/LokaMarkdownEditorMacOS",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build: macOS MarkdownEditor"
     },
     {
       "name": "Run (macOS ScrapbookUI)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/ScrapbookUI/ScrapbookUIMacOS.app/Contents/MacOS/ScrapbookUIMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS ScrapbookUI"
     },
@@ -85,7 +98,8 @@
       "name": "Run (macOS SmirkyCard)",
       "type": "lldb-dap",
       "request": "launch",
-      "program": "${workspaceFolder}/build/macos/Debug/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS",
+      "program":
+          "${workspaceFolder}/build/macos/Debug/example/SmirkyCard/LokaSmirkyCardMacOS.app/Contents/MacOS/LokaSmirkyCardMacOS",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "Build: macOS SmirkyCard"
     },
@@ -124,6 +138,15 @@
       "cwd": "${workspaceFolder}",
       "stopAtEntry": false,
       "preLaunchTask": "Build: Win32 SimpleText"
+    },
+    {
+      "name": "Run (Windows MarkdownEditor)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/win32/Debug/example/MarkdownEditor/LokaMarkdownEditorWin32.exe",
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "preLaunchTask": "Build: Win32 MarkdownEditor"
     },
     {
       "name": "Run (Windows ScrapbookUI)",

@@ -101,6 +101,24 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Build: macOS MarkdownEditor",
+      "hide": true,
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "--preset",
+        "macos-debug",
+        "--target",
+        "LokaMarkdownEditorMacOS"
+      ],
+      "dependsOn": [
+        "Configure: macOS Native"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Build: macOS ScrapbookUI",
       "hide": true,
       "type": "shell",
@@ -277,7 +295,8 @@
     },
     {
       "label": "Standalone: macOS Build / Stage / Verify / Release",
-      "detail": "Build/Stage/Verify finite Flows; Release packages five autonomous Loops plus SimpleViewer and their assets.",
+      "detail":
+          "Build/Stage/Verify finite Flows; Release packages five autonomous Loops plus SimpleViewer and their assets.",
       "type": "shell",
       "command": "bash",
       "args": [
@@ -291,16 +310,23 @@
       "label": "Build: macOS target",
       "type": "shell",
       "command": "${workspaceFolder}/scripts/vscode-build-target.sh",
-      "args": ["macos", "${input:lokaMacosBuild}"],
+      "args": [
+        "macos",
+        "${input:lokaMacosBuild}"
+      ],
       "group": "build",
       "problemMatcher": "$gcc"
     },
     {
       "label": "Build: macOS loop target",
-      "detail": "Build only: Standalone Loops use Release; Scenario Loops use Debug. All builds both configurations; no release package is staged.",
+      "detail":
+          "Build only: Standalone Loops use Release; Scenario Loops use Debug. All builds both configurations; no release package is staged.",
       "type": "shell",
       "command": "${workspaceFolder}/scripts/vscode-build-target.sh",
-      "args": ["macos", "${input:lokaScenarioLoop}"],
+      "args": [
+        "macos",
+        "${input:lokaScenarioLoop}"
+      ],
       "group": "build",
       "problemMatcher": "$gcc"
     },
@@ -370,6 +396,21 @@
         "win32-debug",
         "--target",
         "LokaSimpleTextWin32"
+      ],
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Build: Win32 MarkdownEditor",
+      "hide": true,
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "--preset",
+        "win32-debug",
+        "--target",
+        "LokaMarkdownEditorWin32"
       ],
       "group": "build",
       "problemMatcher": "$msCompile"
@@ -527,7 +568,8 @@
     },
     {
       "label": "Standalone: Win32 Build / Stage / Verify / Release",
-      "detail": "Build/Stage/Verify finite Flows; Release packages five autonomous Loops plus SimpleViewer and their assets.",
+      "detail":
+          "Build/Stage/Verify finite Flows; Release packages five autonomous Loops plus SimpleViewer and their assets.",
       "type": "shell",
       "command": "powershell.exe",
       "args": [
@@ -620,7 +662,8 @@
         "retro68-68k-release",
         "-DLOKA_BUILD_SMIRKYCARD=ON"
       ],
-      "detail": "In WSL, add -DFETCHCONTENT_SOURCE_DIR_SMIRKYCARD_QUICKJS=<path> when FetchContent cannot download QuickJS.",
+      "detail":
+          "In WSL, add -DFETCHCONTENT_SOURCE_DIR_SMIRKYCARD_QUICKJS=<path> when FetchContent cannot download QuickJS.",
       "group": "build",
       "problemMatcher": "$gcc"
     },
@@ -857,6 +900,24 @@
       "problemMatcher": "$gcc"
     },
     {
+      "label": "Build: Retro68 68K MarkdownEditor",
+      "hide": true,
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/retro68-cmake.sh",
+      "args": [
+        "--build",
+        "--preset",
+        "retro68-68k-release",
+        "--target",
+        "LokaMarkdownEditor68K_APPL"
+      ],
+      "dependsOn": [
+        "Configure: Retro68 68K"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
       "label": "Build: Retro68 68K FloppyBird",
       "hide": true,
       "type": "shell",
@@ -1085,7 +1146,8 @@
     },
     {
       "label": "Standalone: Toolbox 68K Build / Stage / Release",
-      "detail": "Build/Stage the finite Scrapbook Flow; Release packages five autonomous Loops plus SimpleViewer and their assets.",
+      "detail":
+          "Build/Stage the finite Scrapbook Flow; Release packages five autonomous Loops plus SimpleViewer and their assets.",
       "type": "shell",
       "command": "bash",
       "args": [
@@ -1097,7 +1159,8 @@
     },
     {
       "label": "Standalone: Toolbox PPC Build / Stage / Release",
-      "detail": "Build/Stage the finite Scrapbook Flow; Release packages five autonomous Loops plus SimpleViewer and their assets.",
+      "detail":
+          "Build/Stage the finite Scrapbook Flow; Release packages five autonomous Loops plus SimpleViewer and their assets.",
       "type": "shell",
       "command": "bash",
       "args": [
@@ -1138,7 +1201,8 @@
     },
     {
       "label": "Build: Retro68 loop target",
-      "detail": "Release configuration: builds selected Flows/Loops. ScrapbookStandaloneFlow also stages its presentation; use Standalone Release for the full release package.",
+      "detail":
+          "Release configuration: builds selected Flows/Loops. ScrapbookStandaloneFlow also stages its presentation; use Standalone Release for the full release package.",
       "type": "shell",
       "options": {
         "env": {
@@ -1146,7 +1210,10 @@
         }
       },
       "command": "${workspaceFolder}/scripts/mame-dev-disk-app.sh",
-      "args": ["--build", "${input:lokaRetro68LoopBuild}"],
+      "args": [
+        "--build",
+        "${input:lokaRetro68LoopBuild}"
+      ],
       "windows": {
         "command": "powershell.exe",
         "args": [
@@ -1353,35 +1420,103 @@
       "type": "pickString",
       "description": "Select the macOS target to build",
       "default": "All",
-      "options": ["All", "HelloWorld", "MineSweeper", "SimpleViewer", "CardShowcase", "SimpleText", "ScrapbookUI", "FloppyBird", "SmirkBench", "LazyList", "Tutorial", "SmirkyCard", "Tests"]
+      "options": [
+        "All",
+        "HelloWorld",
+        "MineSweeper",
+        "SimpleViewer",
+        "CardShowcase",
+        "SimpleText",
+        "ScrapbookUI",
+        "FloppyBird",
+        "SmirkBench",
+        "LazyList",
+        "Tutorial",
+        "SmirkyCard",
+        "Tests"
+      ]
     },
     {
       "id": "lokaWin32Build",
       "type": "pickString",
       "description": "Select the Win32 target to build",
       "default": "All",
-      "options": ["All", "HelloWorld", "MineSweeper", "SimpleViewer", "SimpleText", "ScrapbookUI", "FloppyBird", "SmirkBench", "LazyList", "Tutorial", "SmirkyCard", "Tests"]
+      "options": [
+        "All",
+        "HelloWorld",
+        "MineSweeper",
+        "SimpleViewer",
+        "SimpleText",
+        "ScrapbookUI",
+        "FloppyBird",
+        "SmirkBench",
+        "LazyList",
+        "Tutorial",
+        "SmirkyCard",
+        "Tests"
+      ]
     },
     {
       "id": "lokaScenarioLoop",
       "type": "pickString",
       "description": "Select the standalone or scenario loop to build",
       "default": "AllLoops",
-      "options": [{"label": "All", "value": "AllLoops"}, "ScrapbookStandaloneLoop", "HelloWorldStandaloneLoop", "TutorialStandaloneLoop", "MineSweeperStandaloneLoop", "FloppyBirdStandaloneLoop", "HelloWorldScenarioLoop", "MineSweeperScenarioLoop"]
+      "options": [
+        {
+          "label": "All",
+          "value": "AllLoops"
+        },
+        "ScrapbookStandaloneLoop",
+        "HelloWorldStandaloneLoop",
+        "TutorialStandaloneLoop",
+        "MineSweeperStandaloneLoop",
+        "FloppyBirdStandaloneLoop",
+        "HelloWorldScenarioLoop",
+        "MineSweeperScenarioLoop"
+      ]
     },
     {
       "id": "lokaRetro68LoopBuild",
       "type": "pickString",
       "description": "Select the Retro68 standalone flow or loop to build",
       "default": "AllLoops",
-      "options": [{"label": "All", "value": "AllLoops"}, "ScrapbookStandaloneLoop", "HelloWorldStandaloneLoop", "TutorialStandaloneLoop", "MineSweeperStandaloneLoop", "FloppyBirdStandaloneLoop", "ScrapbookStandaloneFlow", "HelloWorldStandaloneFlow", "TutorialStandaloneFlow", "MineSweeperStandaloneFlow", "FloppyBirdStandaloneFlow", "HelloWorldScenarioLoop", "MineSweeperScenarioLoop"]
+      "options": [
+        {
+          "label": "All",
+          "value": "AllLoops"
+        },
+        "ScrapbookStandaloneLoop",
+        "HelloWorldStandaloneLoop",
+        "TutorialStandaloneLoop",
+        "MineSweeperStandaloneLoop",
+        "FloppyBirdStandaloneLoop",
+        "ScrapbookStandaloneFlow",
+        "HelloWorldStandaloneFlow",
+        "TutorialStandaloneFlow",
+        "MineSweeperStandaloneFlow",
+        "FloppyBirdStandaloneFlow",
+        "HelloWorldScenarioLoop",
+        "MineSweeperScenarioLoop"
+      ]
     },
     {
       "id": "lokaRetro68Build",
       "type": "pickString",
       "description": "Select the Retro68 68K target to build",
       "default": "All",
-      "options": ["All", "HelloWorld", "SmirkyCard", "MineSweeper", "SimpleViewer", "SimpleText", "FloppyBird", "SmirkBench", "LazyList", "Tutorial", "ScrapbookUI"]
+      "options": [
+        "All",
+        "HelloWorld",
+        "SmirkyCard",
+        "MineSweeper",
+        "SimpleViewer",
+        "SimpleText",
+        "FloppyBird",
+        "SmirkBench",
+        "LazyList",
+        "Tutorial",
+        "ScrapbookUI"
+      ]
     },
     {
       "id": "lokaScsiApp",
@@ -1408,8 +1543,14 @@
       "description": "Select the Retro68 standalone or scenario loop to build and copy to the SCSI development disk",
       "default": "HelloWorldScenarioLoop",
       "options": [
-        {"label": "All Loops", "value": "AllStandaloneLoops"},
-        {"label": "All Flows", "value": "AllStandaloneFlows"},
+        {
+          "label": "All Loops",
+          "value": "AllStandaloneLoops"
+        },
+        {
+          "label": "All Flows",
+          "value": "AllStandaloneFlows"
+        },
         "ScrapbookStandaloneLoop",
         "HelloWorldStandaloneLoop",
         "TutorialStandaloneLoop",

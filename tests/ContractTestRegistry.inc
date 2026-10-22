@@ -1277,6 +1277,8 @@ LOKA_TEST(testSimpleTextRepeatedOpenAndCaretReplacement)
 LOKA_TEST(testSimpleTextMenuAndDialogProps)
 LOKA_TEST(testSimpleTextRibbonFiresTheMenuEmitters)
 LOKA_TEST(testSimpleTextMenuDisconnectsOnUnmount)
+LOKA_TEST(testMarkdownEditorPreviewAndLiveEdit)
+LOKA_TEST(testMarkdownEditorKindsCapacityAndFallback)
 #endif
 
 LOKA_TEST(testSimpleViewerSceneDeclaresViewMenuWithCheckedBindings)
