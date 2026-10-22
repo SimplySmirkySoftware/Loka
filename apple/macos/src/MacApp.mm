@@ -8,6 +8,52 @@
 #include <mach/mach_time.h>
 #include "app/core/AppComponent.hpp"
 
+/** Process-lifetime registration; the attached App is only borrowed. */
+@interface LokaQuitEventRouter : NSObject
+{
+  MacApp *owner_;
+}
+@property(nonatomic, assign) MacApp *owner;
+@end
+
+@implementation LokaQuitEventRouter
+@synthesize owner = owner_;
+- (void)applicationWillFinishLaunching:(NSNotification *)notification
+{
+  (void)notification;
+  [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                     andSelector:@selector(handleQuitEvent:withReplyEvent:)
+                                                   forEventClass:kCoreEventClass
+                                                      andEventID:kAEQuitApplication];
+}
+
+- (void)handleQuitEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply
+{
+  (void)event;
+  if (!self.owner || !self.owner->holdQuitEvent())
+  {
+    [reply setParamDescriptor:[NSAppleEventDescriptor descriptorWithInt32:userCanceledErr] forKeyword:keyErrorNumber];
+    return;
+  }
+  self.owner->requestQuitAtCompletion();
+}
+
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
+{
+  (void)sender;
+  if (self.owner)
+    self.owner->requestQuitAtCompletion();
+  return NSTerminateCancel;
+}
+@end
+
+namespace
+{
+  // Removing an Apple Event handler does not restore AppKit's handler.
+  // Keep both registration and delegate alive across sequential Apps.
+  LokaQuitEventRouter *quitEventRouter = nil;
+} // namespace
+
 @interface LokaFlushTarget : NSObject
 {
   MacApp *owner_;
@@ -58,6 +104,9 @@ MacApp::MacApp(AppConfigurable *config)
 
 MacApp::~MacApp()
 {
+  if ([quitEventRouter owner] == this)
+    [quitEventRouter setOwner:0];
+  this->quitEventReply_.decline();
   this->retireComponents();
   this->stopInvalidationFlushTimer();
 }
@@ -79,6 +128,7 @@ void MacApp::run()
 #endif
 
   [NSApplication sharedApplication];
+  this->attachQuitEventRouter();
   if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
   {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -99,8 +149,24 @@ void MacApp::run()
   stopInvalidationFlushTimer();
 }
 
+void MacApp::attachQuitEventRouter()
+{
+  if (!quitEventRouter)
+    quitEventRouter = [[LokaQuitEventRouter alloc] init];
+  [NSApp setDelegate:(id)quitEventRouter];
+  [quitEventRouter setOwner:this];
+}
+
+bool MacApp::holdQuitEvent()
+{
+  if (!this->flushTimer_)
+    return false;
+  return this->quitEventReply_.hold();
+}
+
 void MacApp::quit()
 {
+  this->quitEventReply_.accept();
   stopInvalidationFlushTimer();
   // Avoid terminate: here. On Leopard/PPC and earlier AppKit shutdown paths,
   // terminate: may synchronously drain autorelease pools inside AppKit while
@@ -161,6 +227,8 @@ void MacApp::flushInvalidationsTick()
     NSAutoreleasePool *retirementPool = [[NSAutoreleasePool alloc] init];
     this->reclaimWindows();
     [retirementPool drain];
+    if (this->quitEventReply_.isHeld() && !this->hasQuitAttempt())
+      this->quitEventReply_.decline();
   }
 #ifdef LOKA_LIFECYCLE_AUDIT
   // A runModal timer joins the outer apply turn; only an outermost timer returns idle.

@@ -147,6 +147,13 @@ protected:
       the drain wait for the next flush. */
   void flushPendingWindowClosures();
 
+  /** Read-only attempt outcome door for rails holding a native reply.
+      The App keeps no origin for the attempt. */
+  bool hasQuitAttempt() const
+  {
+    return this->quitAttempt_.phase == QuitAttempt::REQUESTED || this->quitAttempt_.phase == QuitAttempt::ASKING;
+  }
+
 private:
   enum AdoptionPhase { ADOPT_AT_LAUNCH, ADOPT_RUNNING };
   /** Returns how many window creates this walk attempted; 0 when it did not

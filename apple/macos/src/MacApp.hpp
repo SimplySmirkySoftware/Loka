@@ -3,10 +3,12 @@
 
 #include "app/core/App.hpp"
 #include "MacMenuAttachment.hpp"
+#include "MacQuitEvent.hpp"
 #include <mach/mach_time.h>
 #include <vector>
 
 class MacWindow;
+class MacQuitEventTestAccess;
 
 class MacApp : public App
 {
@@ -19,6 +21,9 @@ public:
   void dispatchNativeMenuCommand(int commandId);
   void flushInvalidationsTick();
 
+  /** Native quit handler entry; refuses without an available completion clock or while one event is held. */
+  bool holdQuitEvent();
+
   MacMenuAttachment &menuAttachment() { return this->menuAttachment_; }
 
 protected:
@@ -26,6 +31,9 @@ protected:
   virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
 
 private:
+  friend class MacQuitEventTestAccess;
+  void attachQuitEventRouter();
+  MacQuitEventReply quitEventReply_;
   void startInvalidationFlushTimer();
   void stopInvalidationFlushTimer();
   MacMenuAttachment menuAttachment_;
