@@ -282,6 +282,7 @@ builds linked against the 10.14 SDK or later.
   - In practice, older Xcode versions may fail to resolve sources if the repository root folder name changes or if the project is reopened from a different absolute path after generation.
   - Treat generated `build/macos-xcodeproj/...` projects as machine-local artifacts; regenerate them on the target machine/path instead of copying them as reusable nightly-build artifacts.
   - Legacy `MAC_OS_10_4*` flags are intentionally not used here.
+  - SmirkyCard is opt-in: set `LOKA_BUILD_SMIRKYCARD=1` to include its targets (QuickJS is fetched at configure time, or taken from `LOKA_QUICKJS_SOURCE_DIR`; the same switch serves `build.sh` and the UB1 generators).
 
 - `scripts/macos/gen-xcodeproj-leopard-ub1.sh`
   - Experimental Leopard/Snow Leopard Universal Binary 1 Xcode project generation path.
@@ -293,6 +294,7 @@ builds linked against the 10.14 SDK or later.
   - Use an explicit CMake architecture list only when needed, for example `ARCHS="i386;x86_64;ppc;ppc64"` on generator environments that still accept PPC architecture names.
   - Set `XCODE_ARCHS='$(ARCHS_STANDARD_32_64_BIT)'` only when overriding the default Xcode-native architecture preset; `ONLY_ACTIVE_ARCH=NO` is set by default.
   - Set `XCODE_VALID_ARCHS="i386 x86_64 ppc ppc64"` if the destination Xcode needs an explicit valid-architecture list.
+  - `LOKA_BUILD_SMIRKYCARD=1` adds the SmirkyCard targets and pins QuickJS to C99 (`SMIRKYCARD_C_HAS_ALIGNAS=OFF`), because the generating clang would otherwise choose C11, which the gcc 4.x inside Xcode 3 cannot compile.
   - Set `OSX_SYSROOT=macosx10.6`, `OSX_SYSROOT=macosx10.5`, or an SDK path when you need to force a specific SDK.
   - Disables Loka's explicit `-fno-objc-arc` example-target flags so the generated project is easier to open in older Xcode versions.
   - Suppresses generated `libarclite_macosx.a` link entries that are not available in Xcode 3.2.6.

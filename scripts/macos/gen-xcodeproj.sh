@@ -69,6 +69,10 @@ fi
 
 CMAKE_ARGS+=("-DCMAKE_OSX_SYSROOT=${OSX_SYSROOT}")
 
+loka_append_smirkycard_cmake_args
+if [[ "${LOKA_BUILD_SMIRKYCARD:-0}" == "1" ]]; then
+  echo "[gen-xcodeproj] LOKA_BUILD_SMIRKYCARD=1 (SmirkyCard targets included)"
+fi
 echo "[gen-xcodeproj] running: cmake ${CMAKE_ARGS[*]}"
 cmake "${CMAKE_ARGS[@]}"
 

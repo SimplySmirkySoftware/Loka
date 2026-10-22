@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/macos/lib-common.sh"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 DEPLOYMENT_TARGET="${DEPLOYMENT_TARGET:-10.6}"
 GENERATOR="${GENERATOR:-}"
@@ -70,14 +71,9 @@ fi
 if [[ "${TARGET_SET:-}" == "standalone-release" ]]; then
   CMAKE_ARGS+=("-DLOKA_ENABLE_STANDALONE_TARGETS=ON")
   # The release ships SmirkyCard beside the loops (experimental).
-  CMAKE_ARGS+=("-DLOKA_BUILD_SMIRKYCARD=ON")
+  LOKA_BUILD_SMIRKYCARD=1
 fi
-
-# A host that cannot download QuickJS (an old TLS stack) points this at an
-# unpacked copy of the pinned archive named in example/SmirkyCard/cmake/QuickJS.cmake.
-if [[ -n "${LOKA_QUICKJS_SOURCE_DIR:-}" ]]; then
-  CMAKE_ARGS+=("-DFETCHCONTENT_SOURCE_DIR_SMIRKYCARD_QUICKJS=${LOKA_QUICKJS_SOURCE_DIR}")
-fi
+loka_append_smirkycard_cmake_args
 
 cmake "${CMAKE_ARGS[@]}"
 
