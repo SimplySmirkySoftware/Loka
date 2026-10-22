@@ -115,12 +115,12 @@ namespace
       unsigned count;
     };
     Entry entries_[VIEW_COUNT];
+    typedef void (*DrawFn)(id, SEL, NSRect);
 
     template <int Kind> static void draw(id view, SEL selector, NSRect rect)
     {
       Entry &entry = instance().entries_[Kind];
       ++entry.count;
-      typedef void (*DrawFn)(id, SEL, NSRect);
       reinterpret_cast<DrawFn>(entry.original)(view, selector, rect);
     }
     DrawCounts()
@@ -131,12 +131,9 @@ namespace
                            @"LokaCellView",
                            @"LokaRectSurfaceView",
                            @"LokaRibbonGroupEdgeView"};
-      const IMP replacements[] = {reinterpret_cast<IMP>(&draw<CARD>),
-                                  reinterpret_cast<IMP>(&draw<TEXT>),
-                                  reinterpret_cast<IMP>(&draw<IMAGE>),
-                                  reinterpret_cast<IMP>(&draw<CELL>),
-                                  reinterpret_cast<IMP>(&draw<SURFACE>),
-                                  reinterpret_cast<IMP>(&draw<EDGE>)};
+      // The DrawFn element type selects each specialization; GCC 4.2 cannot
+      // resolve &draw<Kind> as the operand of reinterpret_cast<IMP>.
+      const DrawFn replacements[] = {&draw<CARD>, &draw<TEXT>, &draw<IMAGE>, &draw<CELL>, &draw<SURFACE>, &draw<EDGE>};
       for (int i = 0; i < VIEW_COUNT; ++i)
       {
         Entry &entry = this->entries_[i];
@@ -149,7 +146,7 @@ namespace
         class_addMethod(
             entry.type, @selector(drawRect:), method_getImplementation(inherited), method_getTypeEncoding(inherited));
         entry.method = class_getInstanceMethod(entry.type, @selector(drawRect:));
-        entry.original = method_setImplementation(entry.method, replacements[i]);
+        entry.original = method_setImplementation(entry.method, reinterpret_cast<IMP>(replacements[i]));
         entry.count = 0;
       }
     }
