@@ -196,6 +196,12 @@ namespace
       controller.relayout(640, 900);
       [host.window display];
       settleWindow(host.window);
+      // A process's preferred scroller style can resolve on its first run-loop
+      // turn (OS X 10.9 legacy scrollers, when this pin runs alone): the scroll
+      // view retiles narrower and the rail requests a relayout. Answer it as
+      // the application's event loop does, so the baseline starts settled.
+      MacScenePlatformController::flushPendingRelayouts();
+      settleWindow(host.window);
       NSScrollView *scroll = (NSScrollView *)findView([host.window contentView], [NSScrollView class]);
       LOKA_VERIFY(scroll);
       NSView *document = [scroll documentView];
@@ -231,6 +237,7 @@ namespace
                       [NSStringFromClass(draws.viewClass(kind)) UTF8String]);
       }
       LOKA_VERIFY(observedCount > 0);
+      LOKA_VERIFY(!controller.hasPendingRelayout());
       draws.reset();
       NSView *surface = findView(document, NSClassFromString(@"LokaRectSurfaceView"));
       LOKA_VERIFY(surface);
