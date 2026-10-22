@@ -6,6 +6,9 @@
 // Nothing reloads when a page or presentation switches.
 
 const BAR = 30;
+// The band reaches the window edges; its buttons sit this far in. Four keeps
+// the tallest native button (Win32, about 26) inside the band's 30.
+const BAR_INSET = 4;
 
 const MACHINES = [
   {id: 'macplus', art: 'MACPLUS', short: 'Mac Plus', name: 'Macintosh Plus', year: '1986',
@@ -184,7 +187,7 @@ card('first', class {
         Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
         Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
         Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
-      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title')), {height: BAR});
+      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title')), {height: BAR, padding: BAR_INSET});
   }
 
   carousel() {

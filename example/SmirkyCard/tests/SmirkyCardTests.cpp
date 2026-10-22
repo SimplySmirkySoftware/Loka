@@ -4800,7 +4800,8 @@ namespace
           LOKA_VERIFY(spacer && spacer->asBoxNode() && spacer->asBoxNode()->props.height == 30);
         }
         loka::app::scene::Node *bar = page->nextInComposition;
-        LOKA_VERIFY(bar && bar->asBoxNode() && bar->asBoxNode()->props.height == 30);
+        LOKA_VERIFY(bar && bar->asBoxNode() && bar->asBoxNode()->props.height == 30
+                    && bar->asBoxNode()->props.padding == loka::app::layout::LayoutGap::of(4));
         LOKA_VERIFY(!bar->nextInComposition);
       }
     }
