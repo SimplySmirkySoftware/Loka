@@ -240,6 +240,21 @@ namespace
     return 0;
   }
 
+  loka::app::scene::Node *outermostBox(loka::app::scene::Node *node)
+  {
+    if (!node || node->asBoxNode())
+      return node;
+    loka::app::scene::INestable *nestable = node->asNestable();
+    for (loka::app::scene::Node *child = nestable ? nestable->childrenHead() : 0; child;
+         child = child->nextInComposition)
+    {
+      loka::app::scene::Node *result = outermostBox(child);
+      if (result)
+        return result;
+    }
+    return 0;
+  }
+
   void checkEvaluation(smirkycard::ScriptRuntime &runtime)
   {
     char error[256];
@@ -1315,6 +1330,10 @@ namespace
     loka::app::scene::Node *reload =
         find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "SmirkyCard.Reload");
     LOKA_VERIFY(reload && reload->asButtonNode() && reload->asButtonNode()->props.getOnClick());
+    // The card window has no outer margin, so the host's refusal tree pads itself.
+    loka::app::scene::Node *inset = outermostBox(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()));
+    LOKA_VERIFY(inset && inset->asBoxNode()->props.padding == loka::app::StandardWindowMargin()
+                && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
   }
 
   void checkGridShape(int rows, int cols, bool clickable)

@@ -8,6 +8,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "JsOwnProperties.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/Text.hpp"
@@ -1061,8 +1062,10 @@ namespace smirkycard
   void JsCardNode::declareRefusal(loka::app::scene::NodeComposition &c)
   {
     using namespace loka::app;
-    c.declare(VStack() << Text(error_.state()).TEST_ID("SmirkyCard.Status")
-                       << Button("Reload MAIN.JS", &reloadEmitter_).TEST_ID("SmirkyCard.Reload"));
+    // The card window has no outer margin and a refused card cannot pad itself.
+    c.declare(Box().padding(StandardWindowMargin())
+              << (VStack() << Text(error_.state()).TEST_ID("SmirkyCard.Status")
+                           << Button("Reload MAIN.JS", &reloadEmitter_).TEST_ID("SmirkyCard.Reload")));
   }
   void JsCardNode::fail(const loka::core::String &message)
   {
