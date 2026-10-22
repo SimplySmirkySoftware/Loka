@@ -62,7 +62,7 @@ card('first', class {
   }
 
   compose() {
-    return VStack(
+    return Box(VStack(
       Text(this.status).TEST_ID('Mines.Status'),
       Text(this.c.error).TEST_ID('SmirkyCard.Status'),
       Row(Button(this.mode, () => this.mode.set(this.mode.get() === 'Flag mode: off'
@@ -70,6 +70,6 @@ card('first', class {
         Button('New Game', () => this.c.go('first')).TEST_ID('Mines.NewGame'),
         Button('./MAIN.JS', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain')),
       Grid(8, 8, this.cells.map((seat, i) => Cell(seat, () => this.click(i)).TEST_ID('Mines.Cell.' + i))).TEST_ID('Mines.Board')
-    ).TEST_ID('Mines.Content');
+    ).TEST_ID('Mines.Content'), {padding: 'standard'});
   }
 });

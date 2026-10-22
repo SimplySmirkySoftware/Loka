@@ -240,8 +240,10 @@ TypeError and each counts one level toward the depth-ten tree limit.
 `Box(child, {height: 24})` makes the Box 24 tall, each axis on its own, under any
 parent that lays it out, like C++ [`Box().width(n)` / `Box().height(n)`](../../docs/ProgrammingGuide.en.md#box-width-and-height).
 A fixed height is offered to the child but does not clip it; a Text keeps its own
-measured height. The optional plain object accepts only `width` and `height`,
-each an integer in 1..4096. Unknown keys, symbol keys, non-plain options, invalid
+measured height. The optional plain object accepts only `width`, `height` and `padding`.
+Width and height are integers in 1..4096. Padding accepts an integer in 0..4096
+(like C++ `Box().padding(n)`) or `'standard'` (like C++
+`Box().padding(StandardWindowMargin())`). Absent padding makes no padding claim. Unknown keys, symbol keys, non-plain options, invalid
 values, and missing, extra, array or non-tree children throw TypeError at build
 time. Validated values are copied into the frozen tree, and lowering reads only
 the tree's own properties. `Box(child)` and `Box(child, {})` carry no claim; like

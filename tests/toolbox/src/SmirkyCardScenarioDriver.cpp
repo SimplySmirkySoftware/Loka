@@ -1,3 +1,4 @@
+#include "CardWindowProps.hpp"
 #include "SmirkyCardScenarioDriver.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxWindow.hpp"
@@ -44,8 +45,7 @@ void SmirkyCardScenarioAppConfig::setApp(App *app)
 
 void SmirkyCardScenarioAppConfig::compose(AppComposition &composition)
 {
-  composition << WindowDef(WindowProps()
-                               .frame(60, 60, 420, 340)
+  composition << WindowDef(smirkycard::CardWindowProps()
                                .title("SmirkyTracker")
                                .visible(true)
                                .idlePolicy(loka::app::IdlePolicy::everyTick())

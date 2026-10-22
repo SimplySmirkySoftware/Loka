@@ -1,3 +1,4 @@
+#include "CardWindowProps.hpp"
 #include "StandaloneFlowAppConfig.hpp"
 
 #include "StandaloneScenarioSupport.hpp"
@@ -47,8 +48,7 @@ void SmirkyCardStandaloneFlowAppConfig::setApp(App *app)
 
 void SmirkyCardStandaloneFlowAppConfig::compose(AppComposition &composition)
 {
-  composition << WindowDef(WindowProps()
-                               .frame(60, 60, 420, 340)
+  composition << WindowDef(smirkycard::CardWindowProps()
                                .title(SMIRKYCARD_SCENARIO_APP_NAME)
                                .visible(true)
                                .idlePolicy(loka::app::IdlePolicy::interval(0.1))
