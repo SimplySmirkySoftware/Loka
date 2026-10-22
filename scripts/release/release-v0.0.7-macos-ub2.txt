@@ -1,0 +1,7 @@
+# v0.0.7 macOS UB2 standalone release allowlist: five autonomous presentation
+# loops, the interactive SimpleViewer and SimpleText (#1254) and SmirkyCard
+# (experimental, card scripts in its Resources; #1261), arm64 +
+# x86_64, staged by scripts/macos-standalone-release-ub2.sh at the tag with the
+# x86_64 slice from macOS 10.13 and the arm64 slice from 11.0 (#1255), zipped
+# by ditto so the .app bundles enter the archive as one file.
+build	build/release/Loka-macos-standalone-UB2.zip	macOS/Loka-macos-standalone-UB2.zip
