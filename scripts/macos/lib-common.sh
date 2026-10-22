@@ -421,3 +421,26 @@ loka_merge_requested_or_known_targets_multi_arch() {
       "${build_root}" "${build_cfg}" "${archs_csv}" "${target_name}"
   done
 }
+
+# SmirkyCard is opt-in (CMake option LOKA_BUILD_SMIRKYCARD, default OFF). The
+# standalone release turns it on in build.sh; a developer turns it on for a
+# generated Xcode project with LOKA_BUILD_SMIRKYCARD=1. Both paths append the
+# same CMake arguments here so the two cannot drift. QuickJS is fetched at
+# configure time; a host whose TLS stack cannot reach the pinned archive sets
+# LOKA_QUICKJS_SOURCE_DIR to an unpacked copy (see scripts/macos/README.md).
+# Pass "legacy-c" when the project will be built by gcc 4.x (Xcode 3): the
+# generating host's clang answers the _Alignas probe with C11, which gcc 4.x
+# cannot compile, so the C99 dialect is pinned in the cache instead.
+loka_append_smirkycard_cmake_args() {
+  local dialect="${1:-}"
+  if [[ "${LOKA_BUILD_SMIRKYCARD:-0}" != "1" ]]; then
+    return 0
+  fi
+  CMAKE_ARGS+=("-DLOKA_BUILD_SMIRKYCARD=ON")
+  if [[ -n "${LOKA_QUICKJS_SOURCE_DIR:-}" ]]; then
+    CMAKE_ARGS+=("-DFETCHCONTENT_SOURCE_DIR_SMIRKYCARD_QUICKJS=${LOKA_QUICKJS_SOURCE_DIR}")
+  fi
+  if [[ "${dialect}" == "legacy-c" ]]; then
+    CMAKE_ARGS+=("-DSMIRKYCARD_C_HAS_ALIGNAS=OFF")
+  fi
+}
