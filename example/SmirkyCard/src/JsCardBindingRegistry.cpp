@@ -830,14 +830,27 @@ namespace smirkycard
         return card;
       }
     };
-    bool boxExtentNumber(JSContext *ctx, JSValueConst value, int &out)
+    bool boxExtentNumber(JSContext *ctx, JSValueConst value, int &out, int minimum = 1)
     {
       double number = 0;
-      if (!JS_IsNumber(value) || JS_ToFloat64(ctx, &number, value) || !(number >= 1 && number <= 4096)
+      if (!JS_IsNumber(value) || JS_ToFloat64(ctx, &number, value) || !(number >= minimum && number <= 4096)
           || number != static_cast<int>(number))
         return false;
       out = static_cast<int>(number);
       return true;
+    }
+    bool boxPaddingValue(JSContext *ctx, JSValueConst value, int &out)
+    {
+      if (!JS_IsString(value))
+        return boxExtentNumber(ctx, value, out, 0);
+      size_t length = 0;
+      const char *text = JS_ToCStringLen(ctx, &length, value);
+      const bool standard = text && length == 8 && !memcmp(text, "standard", 8);
+      if (text)
+        JS_FreeCString(ctx, text);
+      if (standard)
+        out = -2; // Local decoded standard form; -1 remains the absent claim.
+      return standard;
     }
     bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree)
     {
@@ -854,25 +867,34 @@ namespace smirkycard
         JS_FreeValue(ctx, key);
         const bool isWidth = name && length == 5 && !memcmp(name, "width", 5);
         const bool isHeight = name && length == 6 && !memcmp(name, "height", 6);
+        const bool isPadding = name && length == 7 && !memcmp(name, "padding", 7);
         if (name)
           JS_FreeCString(ctx, name);
-        if (!isWidth && !isHeight)
+        if (!isWidth && !isHeight && !isPadding)
         {
-          JS_ThrowTypeError(ctx, "Box options accept only width and height");
+          JS_ThrowTypeError(ctx, "Box options accept only width, height and padding");
           return false;
         }
         JSValue value = JS_GetProperty(ctx, options, names.atom(i));
         if (JS_IsException(value))
           return false;
         int number = 0;
-        const bool valid = boxExtentNumber(ctx, value, number);
+        const bool valid = isPadding ? boxPaddingValue(ctx, value, number) : boxExtentNumber(ctx, value, number);
         JS_FreeValue(ctx, value);
         if (!valid)
         {
-          JS_ThrowTypeError(ctx, "Box width and height must be integers in 1..4096");
+          JS_ThrowTypeError(ctx,
+                            isPadding ? "Box padding must be standard or an integer in 0..4096"
+                                      : "Box width and height must be integers in 1..4096");
           return false;
         }
-        if (JS_SetPropertyStr(ctx, tree, isWidth ? "width" : "height", JS_NewInt32(ctx, number)) < 0)
+        if (JS_SetPropertyStr(ctx,
+                              tree,
+                              isPadding ? "padding"
+                              : isWidth ? "width"
+                                        : "height",
+                              isPadding && number == -2 ? JS_NewString(ctx, "standard") : JS_NewInt32(ctx, number))
+            < 0)
           return false;
       }
       return true;
@@ -891,7 +913,8 @@ namespace smirkycard
         return found == 0;
       JS_FreeValue(ctx, property.getter);
       JS_FreeValue(ctx, property.setter);
-      const bool valid = boxExtentNumber(ctx, property.value, out);
+      const bool valid = !std::strcmp(name, "padding") ? boxPaddingValue(ctx, property.value, out)
+                                                       : boxExtentNumber(ctx, property.value, out);
       JS_FreeValue(ctx, property.value);
       return valid;
     }
@@ -932,14 +955,19 @@ namespace smirkycard
           node.fail("JavaScript Box allocation refused.");
           return 0;
         }
-        int width = 0, height = 0;
-        const bool valid = readBoxExtent(ctx, tree, "width", width) && readBoxExtent(ctx, tree, "height", height);
+        int width = 0, height = 0, padding = -1;
+        const bool valid = readBoxExtent(ctx, tree, "width", width) && readBoxExtent(ctx, tree, "height", height)
+                           && readBoxExtent(ctx, tree, "padding", padding);
         if (!valid)
         {
           delete box;
-          node.fail("JavaScript Box has an invalid width or height.");
+          node.fail("JavaScript Box has an invalid width, height or padding.");
           return 0;
         }
+        if (padding == -2)
+          box->padding(loka::app::StandardWindowMargin());
+        else if (padding >= 0)
+          box->padding(padding);
         if (width)
           box->width(width);
         if (height)

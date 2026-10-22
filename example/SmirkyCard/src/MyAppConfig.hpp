@@ -2,6 +2,7 @@
 #define SMIRKYCARD_APP_CONFIG_HPP
 
 #include "CardNodes.hpp"
+#include "CardWindowProps.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/core/WindowDefinition.hpp"
@@ -20,8 +21,7 @@ public:
 
   virtual void compose(AppComposition &composition)
   {
-    composition << WindowDef(WindowProps()
-                                 .frame(60, 60, 420, 340)
+    composition << WindowDef(smirkycard::CardWindowProps()
                                  .title("SmirkyCard")
                                  .visible(true)
                                  .scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, this->runtime_)));

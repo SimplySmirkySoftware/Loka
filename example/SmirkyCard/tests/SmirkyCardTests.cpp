@@ -20,6 +20,7 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
 #include "platform/null/context/NullTextContext.hpp"
+#include "platform/null/context/NullAttributedTextContext.hpp"
 #include "core/Operation.hpp"
 #include "app/OpenFileDialog.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -3159,6 +3160,7 @@ namespace
     StandaloneCardTestApp app(&config);
     config.setApp(&app);
     app.run();
+    LOKA_VERIFY(resolveWindowContentMargin(app.window(), loka::app::layout::RailSpacing(12, 4, 9)) == 0);
     app.setActiveWindow(app.window());
     loka::dsl::testing::SceneTestAccess::updateAttached(*app.window()->scene(), true);
     loka::app::testing::AppTestAccess::flushWindowInvalidations(app);
@@ -4343,6 +4345,146 @@ namespace
     LOKA_VERIFY(natural
                 && natural->asStackNode()->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_NATURAL);
   }
+  void checkCardTreeDepths()
+  {
+    const char *files[] = {"MAIN.JS", "MAIN.JS", "MINES.JS", "VIEWER.JS"};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      std::string source = readCardSource(files[i]);
+      const std::string marker = "this.c = c;";
+      std::string::size_type at = source.find(marker);
+      LOKA_VERIFY(at != std::string::npos);
+      while (at != std::string::npos)
+      {
+        source.replace(at, marker.size(), "globalThis.cardUnderTest=this;this.c=c;");
+        at = source.find(marker, at + 1);
+      }
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props = smirkycard::CardWindowProps();
+      props.scene(smirkycard::CreateCard(i == 1 ? SMIRKY_CARD_SECOND : SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      expectJs(runtime, "cardUnderTest.c.error.get()", "");
+      loka::core::String result;
+      LOKA_VERIFY(runtime.evaluateToString(
+          loka::core::String::Literal(
+              "globalThis.treeDepth=t=>Math.max(0,...(t.child?[treeDepth(t.child)+1]:[]),"
+              "...(t.children?t.children.map(c=>treeDepth(c)+1):[]));treeDepth(cardUnderTest.compose())"),
+          result,
+          error));
+      const loka::core::StringBuffer bytes = result.bufferWithEncoding(loka::core::StringEncodingUtf8);
+      std::fprintf(stderr,
+                   "[depth] %s/%s %.*s\n",
+                   files[i],
+                   i == 1 ? "second" : "first",
+                   static_cast<int>(bytes.length()),
+                   static_cast<const char *>(bytes.data()));
+      expectJs(runtime, "treeDepth(cardUnderTest.compose())<=10", "true");
+    }
+  }
+
+  void checkCardMarginPlacement()
+  {
+    const char *files[] = {"MAIN.JS", "MINES.JS"};
+    const char *ids[] = {"SmirkyCard.Title", "Mines.Status"};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      LOKA_VERIFY(runtime.loadBuiltin(readCardSource(files[i]).c_str(), error));
+      WindowProps props = smirkycard::CardWindowProps();
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      // Null has no native client rectangle; offer the window's client area
+      // through its existing layout fixture, resolving the outer margin first.
+      const int margin = resolveWindowContentMargin(&window, loka::app::layout::RailSpacing(12, 4, 9));
+      loka::app::scene::LayoutState bounds;
+      bounds.x = bounds.y = margin;
+      bounds.width = 420 - 2 * margin;
+      bounds.height = 340 - 2 * margin;
+      platform.projectLayoutForTesting(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), bounds);
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node && node->getContext());
+      if (i == 0)
+        LOKA_VERIFY(static_cast<NullAttributedTextContext *>(node->getContext())
+                        ->commitPresented(loka::app::AttributedString(), platform.paintScope()));
+      else
+        LOKA_VERIFY(static_cast<NullTextContext *>(node->getContext())
+                        ->commitPresented(loka::core::String::Literal("different"), platform.paintScope()));
+      const loka::app::scene::PaintQuery query = {platform.paintScope(), loka::app::scene::PLACEMENT_ELIGIBLE};
+      const loka::app::scene::PaintAnswer placed =
+          static_cast<loka::app::scene::NativeNodeContext *>(node->getContext())->queryPaintDamage(query);
+      LOKA_VERIFY(placed.kind == loka::app::scene::PAINT_ANSWER_EXACT);
+      LOKA_VERIFY(placed.damage.x == 9 && placed.damage.y == 9 && placed.damage.width == 402);
+      std::fprintf(stderr,
+                   "[margin probe] %s x=%d y=%d width=%d\n",
+                   files[i],
+                   placed.damage.x,
+                   placed.damage.y,
+                   placed.damage.width);
+    }
+  }
+
+  void checkBoxPadding()
+  {
+    std::fputs("[pin] Box padding forms, frozen copy and own data properties\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("Object.prototype.padding=99;card('first',c=>({compose(){return VStack("
+                                    "Box(Text('s'),{padding:'standard'}).TEST_ID('Standard'),"
+                                    "Box(Text('z'),{padding:0}).TEST_ID('Zero'),"
+                                    "Box(Text('n'),{padding:12}).TEST_ID('Number'),"
+                                    "Box(Text('m'),{padding:4096}).TEST_ID('Maximum'),"
+                                    "Box(Text('i'),{}).TEST_ID('Inherited'))}}));",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    typedef loka::app::layout::LayoutGap Gap;
+    const char *ids[] = {"Standard", "Zero", "Number", "Maximum", "Inherited"};
+    const Gap expected[] = {Gap::standardWindowMargin(), Gap::of(0), Gap::of(12), Gap::of(4096), Gap::unspecified()};
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node && node->asBoxNode());
+      LOKA_VERIFY(node->asBoxNode()->props.padding == expected[i]);
+    }
+    expectJs(runtime,
+             "(()=>{const o={padding:'standard'},t=Box(Text('s'),o);o.padding=0;"
+             "const n={padding:12},u=Box(Text('n'),n);n.padding=0;"
+             "return Object.isFrozen(t)&&Object.isFrozen(u)&&t.padding==='standard'&&u.padding===12&&"
+             "!Object.hasOwn(Box(Text('i'),{}),'padding')})()",
+             "true");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
+                        "'padding',{get(){throw new Error('must not run')},enumerable:true})}}));",
+                        "JavaScript Box has an invalid width, height or padding.");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{padding:'big'})}}));",
+                        "JavaScript Box has an invalid width, height or padding.");
+  }
+
+  void checkCardWindowMargin()
+  {
+    NullPlatformContext context;
+    SmirkyCardAppConfig config(&context);
+    StandaloneCardTestApp app(&config);
+    app.run();
+    LOKA_VERIFY(app.window());
+    LOKA_VERIFY(resolveWindowContentMargin(app.window(), loka::app::layout::RailSpacing(12, 4, 9)) == 0);
+  }
+
   void checkBoxLowering()
   {
     std::fputs("[pin] Box independent dimensions, validation and depth\n", stderr);
@@ -4414,7 +4556,11 @@ namespace
                                "Box(Text('a'),{height:NaN})",
                                "Box(Text('a'),{height:Infinity})",
                                "Box(Text('a'),{width:'12'})",
-                               "Box(Text('a'),{padding:4})",
+                               "Box(Text('a'),{padding:-1})",
+                               "Box(Text('a'),{padding:4097})",
+                               "Box(Text('a'),{padding:1.5})",
+                               "Box(Text('a'),{padding:'big'})",
+                               "Box(Text('a'),{padding:null})",
                                "Box(Text('a'),{minWidth:10})",
                                "Box(Text('a'),{[Symbol('w')]:1})",
                                "Box(Text('a'),Object.create({width:10}))",
@@ -4437,13 +4583,13 @@ namespace
     {
       const std::string script =
           std::string("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),") + invalid[i] + ")}}));";
-      checkComposeRefusal(script.c_str(), "JavaScript Box has an invalid width or height.");
+      checkComposeRefusal(script.c_str(), "JavaScript Box has an invalid width, height or padding.");
     }
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{child:42})}}));",
                         "JavaScript Box has an invalid child.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
                         "'width',{get(){return 10},enumerable:true})}}));",
-                        "JavaScript Box has an invalid width or height.");
+                        "JavaScript Box has an invalid width, height or padding.");
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
@@ -4689,8 +4835,11 @@ namespace
           LOKA_VERIFY(page->asScrollViewNode()->props.contentInsets_ == loka::app::ScrollViewContentInsets::of(30, 0));
         else
         {
-          LOKA_VERIFY(page->asStackNode());
-          loka::app::scene::Node *spacer = page->asNestable()->childrenHead();
+          LOKA_VERIFY(page->asBoxNode());
+          LOKA_VERIFY(page->asBoxNode()->props.padding == loka::app::StandardWindowMargin());
+          loka::app::scene::Node *content = page->asNestable()->childrenHead();
+          LOKA_VERIFY(content && content->asStackNode());
+          loka::app::scene::Node *spacer = content->asNestable()->childrenHead();
           LOKA_VERIFY(spacer && spacer->asBoxNode() && spacer->asBoxNode()->props.height == 30);
         }
         loka::app::scene::Node *bar = page->nextInComposition;
@@ -4767,6 +4916,12 @@ namespace
     CardRunnerHarness h(source.c_str(), "scenario('first',c=>c.run(Flow().step(()=>{})));", 7, true, &context);
     h.mount();
     expectJs(h.runtime, "laptop.c.error.get()", "");
+    expectJs(h.runtime,
+             "globalThis.treeDepth=t=>Math.max(0,...(t.child?[treeDepth(t.child)+1]:[]),"
+             "...(t.children?t.children.map(c=>treeDepth(c)+1):[]));"
+             "[laptop.carousel(),laptop.list(),laptop.detailPage(),laptop.about(),laptop.compose()]"
+             ".map(treeDepth).join(',')",
+             "7,7,6,6,10");
     LOKA_VERIFY(context.decodes == (mono ? 26 : 13) + 1); // plus the About logo
     expectJs(h.runtime, "laptop.thumbs === laptop.pics", mono ? "false" : "true");
     expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
@@ -5139,6 +5294,10 @@ int main(int argc, char **argv)
     checkViewportSeat();
     checkScrollViewportPersistence();
     checkLaptopLowerings();
+    checkCardTreeDepths();
+    checkBoxPadding();
+    checkCardWindowMargin();
+    checkCardMarginPlacement();
     checkBoxLowering();
     checkMinimumLowerings();
     checkZStackLowering();
@@ -5276,6 +5435,10 @@ int main(int argc, char **argv)
   checkViewportSeat();
   checkScrollViewportPersistence();
   checkLaptopLowerings();
+  checkCardTreeDepths();
+  checkBoxPadding();
+  checkCardWindowMargin();
+  checkCardMarginPlacement();
   checkBoxLowering();
   checkMinimumLowerings();
   checkLoweringRefusals();
