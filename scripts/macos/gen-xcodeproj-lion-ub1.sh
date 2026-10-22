@@ -60,6 +60,8 @@ if [[ -n "${CXX:-}" ]]; then
   CMAKE_ARGS+=("-DCMAKE_CXX_COMPILER=${CXX}")
 fi
 
+loka_append_smirkycard_cmake_args legacy-c
+
 echo "[gen-xcodeproj-lion-ub1] ROOT_DIR=${ROOT_DIR}"
 echo "[gen-xcodeproj-lion-ub1] BUILD_DIR=${BUILD_DIR}"
 echo "[gen-xcodeproj-lion-ub1] SDK=${OSX_SYSROOT}"
@@ -69,6 +71,9 @@ if [[ -n "${XCODE_ARCHS}" ]]; then
 fi
 if [[ -n "${XCODE_VALID_ARCHS}" ]]; then
   echo "[gen-xcodeproj-lion-ub1] XCODE_VALID_ARCHS=${XCODE_VALID_ARCHS}"
+fi
+if [[ "${LOKA_BUILD_SMIRKYCARD:-0}" == "1" ]]; then
+  echo "[gen-xcodeproj-lion-ub1] LOKA_BUILD_SMIRKYCARD=1 (SmirkyCard targets included)"
 fi
 echo "[gen-xcodeproj-lion-ub1] running: cmake ${CMAKE_ARGS[*]}"
 cmake "${CMAKE_ARGS[@]}"
