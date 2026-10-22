@@ -839,17 +839,23 @@ namespace smirkycard
       out = static_cast<int>(number);
       return true;
     }
-    bool boxPaddingValue(JSContext *ctx, JSValueConst value, int &out)
+    bool boxPaddingValue(JSContext *ctx, JSValueConst value, loka::app::layout::LayoutGap &out)
     {
       if (!JS_IsString(value))
-        return boxExtentNumber(ctx, value, out, 0);
+      {
+        int number = 0;
+        if (!boxExtentNumber(ctx, value, number, 0))
+          return false;
+        out = loka::app::layout::LayoutGap::of(number);
+        return true;
+      }
       size_t length = 0;
       const char *text = JS_ToCStringLen(ctx, &length, value);
       const bool standard = text && length == 8 && !memcmp(text, "standard", 8);
       if (text)
         JS_FreeCString(ctx, text);
       if (standard)
-        out = -2; // Local decoded standard form; -1 remains the absent claim.
+        out = loka::app::layout::LayoutGap::standardWindowMargin();
       return standard;
     }
     bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree)
@@ -879,43 +885,61 @@ namespace smirkycard
         if (JS_IsException(value))
           return false;
         int number = 0;
-        const bool valid = isPadding ? boxPaddingValue(ctx, value, number) : boxExtentNumber(ctx, value, number);
-        JS_FreeValue(ctx, value);
+        loka::app::layout::LayoutGap padding;
+        const bool valid = isPadding ? boxPaddingValue(ctx, value, padding) : boxExtentNumber(ctx, value, number);
         if (!valid)
         {
+          JS_FreeValue(ctx, value);
           JS_ThrowTypeError(ctx,
                             isPadding ? "Box padding must be standard or an integer in 0..4096"
                                       : "Box width and height must be integers in 1..4096");
           return false;
         }
-        if (JS_SetPropertyStr(ctx,
-                              tree,
-                              isPadding ? "padding"
-                              : isWidth ? "width"
-                                        : "height",
-                              isPadding && number == -2 ? JS_NewString(ctx, "standard") : JS_NewInt32(ctx, number))
-            < 0)
+        if (JS_SetPropertyStr(ctx, tree, isPadding ? "padding" : isWidth ? "width" : "height", value) < 0)
           return false;
       }
       return true;
     }
-    /** Reads an own data property only, so a width placed on Object.prototype is
-        not a claim. Absent means no claim; an accessor or an invalid value refuses. */
-    bool readBoxExtent(JSContext *ctx, JSValueConst tree, const char *name, int &out)
+    /** Returns presence (1), absence (0), or refusal (-1). Only an own data
+        property transfers its value to the caller; inherited claims are absent. */
+    int readBoxDataProperty(JSContext *ctx, JSValueConst tree, const char *name, JSValue &out)
     {
       JSAtom key = JS_NewAtom(ctx, name);
       if (key == JS_ATOM_NULL)
-        return false;
+        return -1;
       JSPropertyDescriptor property;
       const int found = JS_GetOwnProperty(ctx, &property, tree, key);
       JS_FreeAtom(ctx, key);
       if (found <= 0)
-        return found == 0;
+        return found;
       JS_FreeValue(ctx, property.getter);
       JS_FreeValue(ctx, property.setter);
-      const bool valid = !std::strcmp(name, "padding") ? boxPaddingValue(ctx, property.value, out)
-                                                       : boxExtentNumber(ctx, property.value, out);
-      JS_FreeValue(ctx, property.value);
+      if (property.flags & JS_PROP_GETSET)
+      {
+        JS_FreeValue(ctx, property.value);
+        return -1;
+      }
+      out = property.value;
+      return 1;
+    }
+    bool readBoxExtent(JSContext *ctx, JSValueConst tree, const char *name, int &out)
+    {
+      JSValue value;
+      const int found = readBoxDataProperty(ctx, tree, name, value);
+      if (found <= 0)
+        return found == 0;
+      const bool valid = boxExtentNumber(ctx, value, out);
+      JS_FreeValue(ctx, value);
+      return valid;
+    }
+    bool readBoxPadding(JSContext *ctx, JSValueConst tree, loka::app::layout::LayoutGap &out)
+    {
+      JSValue value;
+      const int found = readBoxDataProperty(ctx, tree, "padding", value);
+      if (found <= 0)
+        return found == 0;
+      const bool valid = boxPaddingValue(ctx, value, out);
+      JS_FreeValue(ctx, value);
       return valid;
     }
     class BoxLowering : public IJsNodeLowering
@@ -955,19 +979,17 @@ namespace smirkycard
           node.fail("JavaScript Box allocation refused.");
           return 0;
         }
-        int width = 0, height = 0, padding = -1;
+        int width = 0, height = 0;
+        loka::app::layout::LayoutGap padding;
         const bool valid = readBoxExtent(ctx, tree, "width", width) && readBoxExtent(ctx, tree, "height", height)
-                           && readBoxExtent(ctx, tree, "padding", padding);
+                           && readBoxPadding(ctx, tree, padding);
         if (!valid)
         {
           delete box;
           node.fail("JavaScript Box has an invalid width, height or padding.");
           return 0;
         }
-        if (padding == -2)
-          box->padding(loka::app::StandardWindowMargin());
-        else if (padding >= 0)
-          box->padding(padding);
+        box->padding(padding);
         if (width)
           box->width(width);
         if (height)

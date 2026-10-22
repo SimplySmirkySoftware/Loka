@@ -188,18 +188,16 @@ card('first', class {
   }
 
   carousel() {
-    return ZStack(Box(VStack(Box(Text(''), {height : BAR}),
-                             Text(this.heading, TITLE, {align : 'center'}).TEST_ID('Laptop.Heading'),
-                             Text(this.counter, LABEL, {align : 'center'}).TEST_ID('Laptop.Counter'),
-                             // Arrows move the selection; the viewer scrolls the cards independently.
-                             Row(Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
-                                 Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
-                             ScrollView(Row(...MACHINES.map(
-                                                (m, i) => this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id)))
-                                            .naturalWidth())),
-                      {padding : 'standard'}),
-                  this.toolbar())
-        .expBlurUnit();
+    return ZStack(Box(VStack(
+      Box(Text(''), {height: BAR}),
+      Text(this.heading, TITLE, {align: 'center'}).TEST_ID('Laptop.Heading'),
+      Text(this.counter, LABEL, {align: 'center'}).TEST_ID('Laptop.Counter'),
+      // Arrows move the selection; the viewer scrolls the cards independently.
+      Row(
+        Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
+        Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
+      ScrollView(Row(...MACHINES.map((m, i) =>
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id))).naturalWidth())), {padding: 'standard'}), this.toolbar()).expBlurUnit();
   }
 
   list() {
@@ -225,36 +223,29 @@ card('first', class {
   }
 
   detailPage() {
-    return ZStack(ScrollView(Box(VStack(Row(...MACHINES.map(
-                                            (_, i) => Show(this.detailShown[i],
-                                                           ImageView(this.pics[i],
-                                                                     {width : 320, height : 200, fit : 'contain'})))),
-                                        Text(this.dName, TITLE).TEST_ID('Laptop.Detail.Name'),
-                                        Text(this.dYear, LABEL).TEST_ID('Laptop.Detail.Year'),
-                                        Text(this.dBlurb, undefined, {wrap : 'word'}).TEST_ID('Laptop.Detail.Blurb'),
-                                        ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))),
-                                 {padding : 'standard'}),
-                             {insets : {top : BAR}}),
-                  this.toolbar())
-        .expBlurUnit();
+    return ZStack(ScrollView(Box(VStack(
+      Row(...MACHINES.map((_, i) => Show(this.detailShown[i], ImageView(this.pics[i], {width: 320, height: 200, fit: 'contain'})))),
+      Text(this.dName, TITLE).TEST_ID('Laptop.Detail.Name'),
+      Text(this.dYear, LABEL).TEST_ID('Laptop.Detail.Year'),
+      Text(this.dBlurb, undefined, {wrap: 'word'}).TEST_ID('Laptop.Detail.Blurb'),
+      ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))), {padding: 'standard'}), {insets: {top: BAR}}),
+      this.toolbar()).expBlurUnit();
   }
 
   about() {
     // A Card roughly centred on the 420x340 Classic window, over the
     // static-blur backdrop that fills the ZStack.
-    return Box(
-        VStack(
-            Box(Text(''), {height : 60}),
-            Row(Box(Text(''), {width : 40}),
-                Box(Card(VStack(
-                        ImageView(this.logo, {width : 160, height : 100, fit : 'contain'}).TEST_ID('Laptop.About.Logo'),
-                        Text('SmirkyTracker', TITLE).TEST_ID('Laptop.About.Name'),
-                        Text('(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)', undefined, {wrap : 'word'})
-                            .TEST_ID('Laptop.About.Credit'),
-                        Button('OK!', () => this.aboutShown.set(false)).TEST_ID('Laptop.About.OK'))),
-                    {width : 310}))
-                .naturalWidth()),
-        {padding : 'standard'});
+    return Box(VStack(
+      Box(Text(''), {height: 60}),
+      Row(
+        Box(Text(''), {width: 40}),
+        Box(Card(VStack(
+          ImageView(this.logo, {width: 160, height: 100, fit: 'contain'}).TEST_ID('Laptop.About.Logo'),
+          Text('SmirkyTracker', TITLE).TEST_ID('Laptop.About.Name'),
+          Text('(c) cubenoy22 w/ Cafe Loka Crew (Codex & Claude Code)', undefined, {wrap: 'word'})
+            .TEST_ID('Laptop.About.Credit'),
+          Button('OK!', () => this.aboutShown.set(false)).TEST_ID('Laptop.About.OK'))),
+          {width: 310})).naturalWidth()), {padding: 'standard'});
   }
 
   compose() {
