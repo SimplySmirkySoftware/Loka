@@ -22,8 +22,10 @@ namespace loka
 #ifdef TEST_BUILD
       namespace testing
       {
-        void failNextConversionWrite();
-      }
+        /** Fail-count hook (tests/TestingHooks.cpp): the next `count` primitive writes refuse. */
+        void failConversionWrites(unsigned count);
+        bool refuseConversionWrite();
+      } // namespace testing
 #endif
     } // namespace detail
 

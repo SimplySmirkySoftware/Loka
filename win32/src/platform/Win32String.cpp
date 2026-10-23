@@ -14,22 +14,10 @@ namespace loka
     namespace detail
     {
 #ifdef TEST_BUILD
-      namespace
-      {
-        bool failWrite = false;
-        bool refuseWrite()
-        {
-          const bool refuse = failWrite;
-          failWrite = false;
-          return refuse;
-        }
-      } // namespace
       namespace testing
       {
-        void failNextConversionWrite()
-        {
-          failWrite = true;
-        }
+        // Defined in tests/TestingHooks.cpp with the other fail-count hooks.
+        bool refuseConversionWrite();
       } // namespace testing
 #endif
       bool AppendUtf8ToWide(const char *bytes, std::size_t length, std::wstring &out, unsigned long flags)
@@ -47,7 +35,7 @@ namespace loka
         out.resize(start + static_cast<std::size_t>(required));
         int written = MultiByteToWideChar(CP_UTF8, flags, bytes, static_cast<int>(length), &out[start], required);
 #ifdef TEST_BUILD
-        if (refuseWrite())
+        if (testing::refuseConversionWrite())
           written = 0;
 #endif
         if (written != required)
@@ -74,7 +62,7 @@ namespace loka
         int written =
             WideCharToMultiByte(CP_UTF8, 0, chars, static_cast<int>(length), &out[start], required, NULL, NULL);
 #ifdef TEST_BUILD
-        if (refuseWrite())
+        if (testing::refuseConversionWrite())
           written = 0;
 #endif
         if (written != required)

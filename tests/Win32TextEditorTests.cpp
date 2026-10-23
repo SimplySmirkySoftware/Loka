@@ -342,8 +342,8 @@ namespace
   {
   public:
     RetirementOrderEditor(Fixture &fixture, const LayoutState &bounds)
-        : Win32TextEditorContext(&fixture.controller, fixture.host, bounds,
-                                 fixture.node, EditorAccess::key(*fixture.context))
+        : Win32TextEditorContext(
+              &fixture.controller, fixture.host, bounds, fixture.node, EditorAccess::key(*fixture.context))
     {
     }
 
@@ -404,7 +404,10 @@ namespace
   {
   public:
     RequestOnReport(Fixture &fixture, LineCursor next, LineCursor last = LineCursor::None())
-        : fixture_(fixture), next_(next), last_(last), reports_()
+        : fixture_(fixture),
+          next_(next),
+          last_(last),
+          reports_()
     {
       this->fixture_.cursor.state()->bind(&changed, this, false);
     }
@@ -442,7 +445,8 @@ namespace
   {
   public:
     explicit RequestOnEveryReport(Fixture &fixture)
-        : fixture_(fixture), reports_()
+        : fixture_(fixture),
+          reports_()
     {
       this->fixture_.cursor.state()->bind(&changed, this, false);
     }
@@ -477,7 +481,8 @@ namespace
   {
   public:
     explicit RequestBetweenChanges(Fixture &fixture)
-        : fixture_(fixture), publications_()
+        : fixture_(fixture),
+          publications_()
     {
       const_cast<State<ListRevision> &>(this->fixture_.lines.revision()).bind(&changed, this, false);
     }
@@ -667,8 +672,8 @@ namespace
     typedef loka::app::testing::SettleTrace<LineCursor> Trace;
     {
       Fixture fixture(1);
-      const String text = String::FromPlatform(Managed<loka::platform::String>::Wrap(
-          new loka::app::testing::TextEditorReportRefusal(fixture.request)));
+      const String text = String::FromPlatform(
+          Managed<loka::platform::String>::Wrap(new loka::app::testing::TextEditorReportRefusal(fixture.request)));
       LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, text) == EDIT_OK);
       fixture.context->onPropsApplied();
       const LineCursor before = fixture.cursor.state()->get();
@@ -915,8 +920,13 @@ namespace
       const LRESULT first = SendMessageW(window, EM_GETFIRSTVISIBLELINE, 0, 0);
       std::fprintf(stderr,
                    "commands: repair=%d first=%ld target=%u visible=%u rect=%ld..%ld height=%ld lines=%u\n",
-                   repair, static_cast<long>(first), static_cast<unsigned>(target), visible,
-                   static_cast<long>(rect.top), static_cast<long>(rect.bottom), static_cast<long>(height),
+                   repair,
+                   static_cast<long>(first),
+                   static_cast<unsigned>(target),
+                   visible,
+                   static_cast<long>(rect.top),
+                   static_cast<long>(rect.bottom),
+                   static_cast<long>(height),
                    static_cast<unsigned>(fixture.lines.size()));
       LOKA_VERIFY(first > 0 && first <= target && target < first + static_cast<LRESULT>(visible));
       fixture.matches();
@@ -947,7 +957,8 @@ namespace
       RECT took = {0};
       SendMessageW(window, EM_GETRECT, 0, reinterpret_cast<LPARAM>(&took));
       if (took.bottom - took.top >= height)
-        std::fprintf(stderr, "[skip] EDIT kept a %ld px formatting frame; the decline branch is not pinned here\n",
+        std::fprintf(stderr,
+                     "[skip] EDIT kept a %ld px formatting frame; the decline branch is not pinned here\n",
                      static_cast<long>(took.bottom - took.top));
       else
       {
@@ -1066,7 +1077,8 @@ namespace
         fixture.request.set(next);
       }
       LOKA_VERIFY(SetWindowTextW(fixture.context->hwnd(), L"abxcd\r\nabcd\r\nabcd"));
-      SendMessageW(fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
+      SendMessageW(
+          fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
       LOKA_VERIFY(fixture.lines.at(0).value.equals(String("abxcd")));
       LOKA_VERIFY(fixture.request.get().isNone() && fixture.cursor.state()->get() == next);
       expectSelection(fixture, 8);
@@ -1173,7 +1185,11 @@ namespace
   // EDIT replaces a selection as two EN_CHANGE notifications (delete, then
   // insert), so a keystroke, Return, or paste over a selection commits twice;
   // each commit is one validated batch and the intermediate document is real.
-  void verifyReplacement(Fixture &fixture, const Observer &observer, const char *text, unsigned short row, int column,
+  void verifyReplacement(Fixture &fixture,
+                         const Observer &observer,
+                         const char *text,
+                         unsigned short row,
+                         int column,
                          unsigned publications)
   {
     std::string actual;
@@ -1814,9 +1830,9 @@ void testWin32TextEditorUtf8BoundaryHelpers()
   LOKA_VERIFY(loka::win32::detail::AppendWideToUtf8(L"a\0b", 3, logical) && logical == std::string("prefixa\0b", 9));
   const std::wstring savedWide = wide;
   const std::string savedLogical = logical;
-  loka::win32::detail::testing::failNextConversionWrite();
+  loka::win32::detail::testing::failConversionWrites(1);
   LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide("tail", 4, wide, 0) && wide == savedWide);
-  loka::win32::detail::testing::failNextConversionWrite();
+  loka::win32::detail::testing::failConversionWrites(1);
   LOKA_VERIFY(!loka::win32::detail::AppendWideToUtf8(L"tail", 4, logical) && logical == savedLogical);
   LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide("\200", 1, wide, MB_ERR_INVALID_CHARS) && wide == savedWide);
 }
@@ -2090,7 +2106,7 @@ namespace
   void refuseProjectionConversion(void *)
   {
     // The model has already published; the next conversion belongs to capture's materialization.
-    loka::win32::detail::testing::failNextConversionWrite();
+    loka::win32::detail::testing::failConversionWrites(1);
   }
 } // namespace
 void testWin32TextEditorEvidenceCaptureFailure()
