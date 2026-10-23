@@ -44,6 +44,7 @@ void OpenRgn();
 void CloseRgn(RgnHandle);
 void FrameRoundRect(const Rect *, short, short);
 void OffsetRect(Rect *, short, short);
+void ValidRect(const Rect *);
 void DiffRgn(RgnHandle, RgnHandle, RgnHandle);
 void PaintRgn(RgnHandle);
 typedef char *Ptr;

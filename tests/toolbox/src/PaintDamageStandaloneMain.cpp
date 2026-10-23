@@ -398,6 +398,7 @@ namespace
         : StdCompositionBoundaryNodeBase<ButtonExactProps>(props)
     {
       this->state(this->enabled_, true);
+      this->state(this->offset_, 1);
       this->state(this->title_, loka::core::String::Literal("MMMMIIII"));
       RectSurfaceModel model;
       model.rectCount = 1;
@@ -406,11 +407,16 @@ namespace
     }
     virtual void composeNode(NodeComposition &composition)
     {
-      composition.declare(Column()
-                          << loka::app::Button(this->title_.state()).enabled(this->enabled_.state()).controlTag(911).TEST_ID("ButtonExact.Button")
-                          << Text("Sibling ink").TEST_ID("ButtonExact.Text")
-                          << RectSurface(this->model_.state()).size(150, 40)
-                              .TEST_ID("ButtonExact.Surface"));
+      composition.declare(
+          Row().gap(0)
+          << Box().width(this->offset_.state()).height(1)
+          << (Box().width(180) << (Column()
+                                   << loka::app::Button(this->title_.state())
+                                          .enabled(this->enabled_.state())
+                                          .controlTag(911)
+                                          .TEST_ID("ButtonExact.Button")
+                                   << Text("Sibling ink").TEST_ID("ButtonExact.Text")
+                                   << RectSurface(this->model_.state()).size(150, 40).TEST_ID("ButtonExact.Surface"))));
     }
     void advance(bool label)
     {
@@ -420,12 +426,18 @@ namespace
       else
         this->enabled_.set(false);
     }
+    void moveButton()
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->offset_.set(12);
+    }
     void widenTitle()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
       this->title_.set(loka::core::String::Literal("MMMMMMMM"));
     }
   private:
+    NodeState<int> offset_;
     NodeState<bool> enabled_;
     NodeState<loka::core::String> title_;
     NodeState<RectSurfaceModel> model_;
@@ -3951,6 +3963,20 @@ namespace
         // #1015: a container-sized Button keeps its rectangle when the title
         // widens and answers exact; only a text-sized one refuses (host pins).
         self->recordArm("button-label-wider-exact", widerTitle.kind == PAINT_ANSWER_EXACT, COMPLETE);
+        // #1574: retain a visible control, move it by layout, and inspect the
+        // OS region synchronously before an update event can consume it.
+        ControlHandle control =
+            reinterpret_cast<ControlHandle>(reinterpret_cast<WindowPeek>(native->window())->controlList);
+        const Rect beforeMove = (**control).contrlRect;
+        const bool visible = (**control).contrlVis != 0;
+        node->moveButton();
+        native->drawForFlush();
+        const Rect afterMove = (**control).contrlRect;
+        const bool moved = afterMove.left != beforeMove.left || afterMove.top != beforeMove.top;
+        const bool updateEmpty = EmptyRgn(reinterpret_cast<WindowPeek>(native->window())->updateRgn) != 0;
+        std::fprintf(
+            self->log_, "button-own-move-full-draw visible=%d moved=%d update_empty=%d\r", visible, moved, updateEmpty);
+        self->recordArm("button-own-move-full-draw", visible && moved && updateEmpty, COMPLETE);
         controller->destroyButtonControl(911, NATIVE_HINT_DEFAULT);
         self->recordArm("button-native-retired-refuses",
                         context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED, COMPLETE);
