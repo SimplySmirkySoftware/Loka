@@ -7,6 +7,7 @@
 #include "context/ToolboxPaintSupport.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <Memory.h>
+#include <Sound.h>
 #include <algorithm>
 #include <cstring>
 #include "ToolboxPortScope.hpp"
@@ -23,6 +24,17 @@ ToolboxTextEditorRects ToolboxTextEditorContext::geometry() const
 
 namespace
 {
+  /** TextEdit remains ASCII-only even when the common document alphabet opens. */
+  bool ToolboxTextEditorAdmitsBytes(const char *bytes, std::size_t length)
+  {
+    if (!bytes)
+      return length == 0;
+    for (std::size_t i = 0; i < length; ++i)
+      if (!bytes[i] || static_cast<unsigned char>(bytes[i]) > 127)
+        return false;
+    return true;
+  }
+
   class Handler : public scene::RetainedNodeHandler<Handler, TextEditorNode, ToolboxTextEditorContext>
   {
   public:
@@ -160,6 +172,8 @@ scene::FollowUp ToolboxTextEditorContext::project()
   this->phase_ = PROJECT;
   std::size_t length = 0;
   this->status_ = this->node_->seam(this->key_).project(this->restore_, ToolboxTextCapacity().bytes, length);
+  if (this->status_ == EDITOR_OK && !ToolboxTextEditorAdmitsBytes(this->restore_, length))
+    this->status_ = EDITOR_NON_ASCII;
   if (this->status_ == EDITOR_OK)
   {
     const Rect dest = (**this->te_).destRect;
@@ -855,11 +869,17 @@ EditorResult ToolboxTextEditorContext::paste(const char *bytes, std::size_t leng
   EditorResult result = this->beginInput();
   if (result != EDITOR_OK)
     return result;
+  bool alphabetRefused = false;
   // Refuse before TE's signed-short storage can overflow.
   if (length > this->node_->props.buffer_->capacity().bytes)
     result = EDITOR_CAPACITY;
   else if (this->hasStaleCaret())
     result = EDITOR_STALE_ID;
+  else if (bytes && !ToolboxTextEditorAdmitsBytes(bytes, length))
+  {
+    result = EDITOR_NON_ASCII;
+    alphabetRefused = true;
+  }
   else
   {
     const short start = (**this->te_).selStart, end = (**this->te_).selEnd;
@@ -870,6 +890,8 @@ EditorResult ToolboxTextEditorContext::paste(const char *bytes, std::size_t leng
   if (!op.hasSameContext())
     return result;
   result = this->finishInput(result, CARET_CHANGE, op);
+  if (alphabetRefused && result == EDITOR_NON_ASCII && op.hasSameContext())
+    SysBeep(1);
   return result;
 }
 void ToolboxTextEditorContext::updateRect(const Rect &rect)
