@@ -560,7 +560,16 @@ bool MacZStackContext::Unit::ensure(
 void MacZStackContext::Unit::place(const loka::macos::MacRect &seat)
 {
   NSView *view = (NSView *)this->view_;
-  loka::macos::SetMacFrame(view, seat);
+  // setFrame: marks nothing for display by contract (Tiger's AppKit 824 draws
+  // neither rectangle; #1564). The unit asks for its new rectangle itself, and
+  // the parent for the one it leaves, so a unit that grows from its collapsed
+  // zero height is drawn and one that collapses again uncovers the ground.
+  const NSRect previous = [view frame];
+  if (loka::macos::ApplyMacFrame(view, seat))
+  {
+    [view setNeedsDisplay:YES];
+    [[view superview] setNeedsDisplayInRect:previous];
+  }
   if ([view isKindOfClass:[LokaStackPhotoUnitView class]])
     [(LokaStackPhotoUnitView *)view lokaReconcileAttached:YES];
 }

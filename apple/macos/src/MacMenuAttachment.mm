@@ -104,7 +104,13 @@ void MacMenuAttachment::reset()
   if (!this->menu_)
     return;
   if ([NSApp mainMenu] == (NSMenu *)this->menu_)
+  {
+    // The apple menu registration (#1565) retains a submenu of this bar
+    // independently of mainMenu; drop it with the bar it came from.
+    if ([NSApp respondsToSelector:@selector(setAppleMenu:)])
+      [NSApp performSelector:@selector(setAppleMenu:) withObject:nil];
     [NSApp setMainMenu:nil];
+  }
   [(id)this->menu_ release];
   this->menu_ = 0;
 }
@@ -356,6 +362,7 @@ bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
   const loka::app::MenuBarDefinition *menuBar = merged.get();
   this->reset();
   NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@""];
+  NSMenu *appMenu = nil;
   bool quitPlaced = false;
   // Two bounded passes over the merged bar put the app container first without
   // changing the declaration order of ordinary menus or retaining definitions.
@@ -379,12 +386,23 @@ bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
       NSMenuItem *menuItem = [[NSMenuItem alloc] initWithTitle:menuTitle action:nil keyEquivalent:@""];
       [menuItem setSubmenu:subMenu];
       [mainMenu addItem:menuItem];
+      if (menuDef->isAppMenu)
+        appMenu = subMenu;
       [menuItem release];
       [subMenu release];
     }
   }
   this->menu_ = (void *)mainMenu;
   [NSApp setMainMenu:mainMenu];
+  // A main menu built in code names its application menu explicitly. Legacy
+  // AppKit (observed on 10.4.11) otherwise synthesizes its own (process name,
+  // Quit) and shows the first menu beside it under its own title (#1565);
+  // Tahoe takes the first submenu either way. setAppleMenu: is unpublished, so it is sent by
+  // selector and skipped where the running AppKit lacks it.
+  // The registration is replaced on every projection, nil when the merged bar
+  // has no app container, so AppKit never keeps an earlier bar's submenu.
+  if ([NSApp respondsToSelector:@selector(setAppleMenu:)])
+    [NSApp performSelector:@selector(setAppleMenu:) withObject:appMenu];
   this->record_.commit(sources);
   return true;
 }
