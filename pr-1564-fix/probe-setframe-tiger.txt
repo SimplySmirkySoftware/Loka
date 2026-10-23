@@ -1,0 +1,9 @@
+MacBook 2006, Mac OS X 10.4.11, AppKit 824.48, gcc 4.0.1 (probe-setframe-tiger.m)
+orderFront (child height 0)              parent=1 child=0 grand=0
+setFrame 0 -> 160                        parent=0 child=0 grand=0
+setFrame 160 -> 0                        parent=0 child=0 grand=0
+control: grow + child setNeedsDisplay    parent=1 child=1 grand=1
+control: shrink + parent old rect        parent=1 child=0 grand=0
+setFrame 0 -> 100 (grand clipped)        parent=0 child=0 grand=0
+setFrame move x 20 -> 40                 parent=0 child=0 grand=0
+(addSubview / setHidden:YES / setHidden:NO / removeFromSuperview each drew the expected view: probe 1, not shown)
