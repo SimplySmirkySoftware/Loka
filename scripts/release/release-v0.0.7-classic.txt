@@ -9,7 +9,8 @@
 # SmirkyCard stays experimental. It ships for 68K and PPC (owner decision 8,
 # 2026-10-12) beside the card scripts in example/SmirkyCard/disk-scripts.txt
 # (MAIN.JS links to MINES.JS, VIEWER.JS and, new in v0.0.7, LAPTOP.JS; the
-# SmirkyTracker pictures travel inside the .dsk); each disk carries the same scripts
+# SmirkyTracker pictures travel inside the .dsk and, since RC3, also loose in
+# Pictures/ beside the .bin for a copy that skips the disk image); each disk carries the same scripts
 # (#1260). The PPC disk is a 2 MiB image, not a floppy. The PPC configure needs
 # -DLOKA_BUILD_SMIRKYCARD=ON like the 68K one.
 git	example/ScrapbookUI/ASSETS.LRP	ScrapbookUI/ASSETS.LRP
@@ -49,3 +50,44 @@ git	example/SmirkyCard/MAIN.JS	experimental/SmirkyCard/MAIN.JS
 git	example/SmirkyCard/MINES.JS	experimental/SmirkyCard/MINES.JS
 git	example/SmirkyCard/VIEWER.JS	experimental/SmirkyCard/VIEWER.JS
 git	example/SmirkyCard/LAPTOP.JS	experimental/SmirkyCard/LAPTOP.JS
+git	example/SmirkyCard/assets/MACPLUS.PICT	experimental/SmirkyCard/Pictures/MACPLUS.PICT
+git	example/SmirkyCard/assets/MACPLUSM.PICT	experimental/SmirkyCard/Pictures/MACPLUSM.PICT
+git	example/SmirkyCard/assets/MACPLUSMS.PICT	experimental/SmirkyCard/Pictures/MACPLUSMS.PICT
+git	example/SmirkyCard/assets/PB180C.PICT	experimental/SmirkyCard/Pictures/PB180C.PICT
+git	example/SmirkyCard/assets/PB180CM.PICT	experimental/SmirkyCard/Pictures/PB180CM.PICT
+git	example/SmirkyCard/assets/PB180CMS.PICT	experimental/SmirkyCard/Pictures/PB180CMS.PICT
+git	example/SmirkyCard/assets/PB550C.PICT	experimental/SmirkyCard/Pictures/PB550C.PICT
+git	example/SmirkyCard/assets/PB550CM.PICT	experimental/SmirkyCard/Pictures/PB550CM.PICT
+git	example/SmirkyCard/assets/PB550CMS.PICT	experimental/SmirkyCard/Pictures/PB550CMS.PICT
+git	example/SmirkyCard/assets/PDQ.PICT	experimental/SmirkyCard/Pictures/PDQ.PICT
+git	example/SmirkyCard/assets/PDQM.PICT	experimental/SmirkyCard/Pictures/PDQM.PICT
+git	example/SmirkyCard/assets/PDQMS.PICT	experimental/SmirkyCard/Pictures/PDQMS.PICT
+git	example/SmirkyCard/assets/PISMO.PICT	experimental/SmirkyCard/Pictures/PISMO.PICT
+git	example/SmirkyCard/assets/PISMOM.PICT	experimental/SmirkyCard/Pictures/PISMOM.PICT
+git	example/SmirkyCard/assets/PISMOMS.PICT	experimental/SmirkyCard/Pictures/PISMOMS.PICT
+git	example/SmirkyCard/assets/TIBOOK.PICT	experimental/SmirkyCard/Pictures/TIBOOK.PICT
+git	example/SmirkyCard/assets/TIBOOKM.PICT	experimental/SmirkyCard/Pictures/TIBOOKM.PICT
+git	example/SmirkyCard/assets/TIBOOKMS.PICT	experimental/SmirkyCard/Pictures/TIBOOKMS.PICT
+git	example/SmirkyCard/assets/IBOOKG3.PICT	experimental/SmirkyCard/Pictures/IBOOKG3.PICT
+git	example/SmirkyCard/assets/IBOOKG3M.PICT	experimental/SmirkyCard/Pictures/IBOOKG3M.PICT
+git	example/SmirkyCard/assets/IBOOKG3MS.PICT	experimental/SmirkyCard/Pictures/IBOOKG3MS.PICT
+git	example/SmirkyCard/assets/MB2006.PICT	experimental/SmirkyCard/Pictures/MB2006.PICT
+git	example/SmirkyCard/assets/MB2006M.PICT	experimental/SmirkyCard/Pictures/MB2006M.PICT
+git	example/SmirkyCard/assets/MB2006MS.PICT	experimental/SmirkyCard/Pictures/MB2006MS.PICT
+git	example/SmirkyCard/assets/MBP2011.PICT	experimental/SmirkyCard/Pictures/MBP2011.PICT
+git	example/SmirkyCard/assets/MBP2011M.PICT	experimental/SmirkyCard/Pictures/MBP2011M.PICT
+git	example/SmirkyCard/assets/MBP2011MS.PICT	experimental/SmirkyCard/Pictures/MBP2011MS.PICT
+git	example/SmirkyCard/assets/MBP2015.PICT	experimental/SmirkyCard/Pictures/MBP2015.PICT
+git	example/SmirkyCard/assets/MBP2015M.PICT	experimental/SmirkyCard/Pictures/MBP2015M.PICT
+git	example/SmirkyCard/assets/MBP2015MS.PICT	experimental/SmirkyCard/Pictures/MBP2015MS.PICT
+git	example/SmirkyCard/assets/MBP2019.PICT	experimental/SmirkyCard/Pictures/MBP2019.PICT
+git	example/SmirkyCard/assets/MBP2019M.PICT	experimental/SmirkyCard/Pictures/MBP2019M.PICT
+git	example/SmirkyCard/assets/MBP2019MS.PICT	experimental/SmirkyCard/Pictures/MBP2019MS.PICT
+git	example/SmirkyCard/assets/MBP2023.PICT	experimental/SmirkyCard/Pictures/MBP2023.PICT
+git	example/SmirkyCard/assets/MBP2023M.PICT	experimental/SmirkyCard/Pictures/MBP2023M.PICT
+git	example/SmirkyCard/assets/MBP2023MS.PICT	experimental/SmirkyCard/Pictures/MBP2023MS.PICT
+git	example/SmirkyCard/assets/NEO.PICT	experimental/SmirkyCard/Pictures/NEO.PICT
+git	example/SmirkyCard/assets/NEOM.PICT	experimental/SmirkyCard/Pictures/NEOM.PICT
+git	example/SmirkyCard/assets/NEOMS.PICT	experimental/SmirkyCard/Pictures/NEOMS.PICT
+git	example/SmirkyCard/assets/ICON.PICT	experimental/SmirkyCard/Pictures/ICON.PICT
+git	example/SmirkyCard/assets/ICONMS.PICT	experimental/SmirkyCard/Pictures/ICONMS.PICT
