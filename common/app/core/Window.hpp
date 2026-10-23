@@ -840,6 +840,13 @@ public:
     onIdleFn_(this, elapsedSeconds, onIdleUserData_);
     return true;
   }
+  /** True means a native editor accepted the action, including refusal/no-op.
+      False means no target; menu dispatch may then invoke its copied binding. */
+  virtual bool handleEditCommand(loka::app::EditVerb)
+  {
+    return false;
+  }
+
   bool handleKeyPress(char key)
   {
     if (!onKeyPressFn_)
