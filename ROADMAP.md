@@ -16,7 +16,7 @@ Versioning follows a pragmatic pre-1.0 scheme:
 The version in the top-level CMake `project(Loka VERSION ... LANGUAGES CXX)`
 call is the canonical source version, and it names the release **under
 development**: the source tree on `main` always carries the next version
-(currently `0.0.7`), so a build from source never claims to be a published
+(currently `0.0.8`), so a build from source never claims to be a published
 artifact it has drifted from. Cutting a release means bringing the
 documentation and release metadata into agreement with that version and
 freezing it with the annotated tag; immediately after tagging, the source
@@ -30,7 +30,45 @@ created with `git tag -a`, with the release notes recorded in the tag message.
 
 ---
 
-## v0.0.6 (current)
+## v0.0.7 (current)
+
+Look-and-feel milestone — 222 commits since 0.0.6. See the
+[release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.7).
+
+Delivered:
+
+* **Cards, shadows and rounded corners**: `Card` with `CardStyle` (shadow extent
+  times ink), drawn natively on Toolbox, Win32 and macOS; the standard look
+  follows the CPU class
+* **ZStack units and blur**: every ZStack child after the first is an opaque
+  unit; `expBlurUnit()` blurs the content beneath it (NSVisualEffectView on
+  10.10+, a static and a band blur on Toolbox, a photo blur on macOS 10.4-10.9)
+* **ScrollView**: horizontal scrolling on every rail, content insets, a published
+  viewport fact, `VStack().naturalHeight()` for stacked lists
+* **Quit, close and dialogs**: native close as a request the node answers,
+  `ConfirmDialog` on every rail, SimpleText asks before closing an edited
+  document, Classic Shut Down, Win32 `WM_QUERYENDSESSION`, the macOS quit
+  Apple Event
+* **Menus, layout and spacing**: About and Quit presets from the app container,
+  containers own the gap between seats and the window its margin,
+  `Box().width(n)` / `height(n)`, natural-width measurement, native button height
+* **TextEditor and Toolbox input**: vertical scroll bar and paging on Toolbox,
+  one render-order press ledger, no more presses or keys on covered rows
+* **SmirkyTracker (SmirkyCard)**: a card of 13 Macs with the owner's artwork,
+  machine facts and picture seats in JavaScript, an About window over a blur
+* **Owner hardware runs**: the release candidate was runtime-verified on a
+  PowerBook 180c (KanjiTalk 7.1, Classic 68K), a MacBook (2006) on Tiger
+  (UB1 i386) and a VAIO P (Windows XP x86); the archive smoke ran all eight
+  applications on Windows 8.1, Windows 11, Catalina, Mavericks and Leopard PPC
+
+Verification evidence and known issues are recorded on release PR #1571.
+Known ships-with defects: #1460, #1498, #1372, #1354, #1513, #1560, #1566,
+#1570, #1563, #1527 and, carried from 0.0.6, #496, #501, #800, #802; the
+scroll-redraw work (#1043, #1513, #1570) is the first 0.0.8 item.
+
+---
+
+## v0.0.6
 
 Text milestone — 311 commits since 0.0.5. See the
 [release notes](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.6).

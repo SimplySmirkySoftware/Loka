@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(Loka VERSION 0.0.7 LANGUAGES CXX)
+project(Loka VERSION 0.0.8 LANGUAGES CXX)
 
 option(LOKA_ENABLE_APPLE "Enable Apple platform targets" ON)
 option(LOKA_BUILD_SMIRKYCARD "Build the optional QuickJS Scene-switching experiment" OFF)

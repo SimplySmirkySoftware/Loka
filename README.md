@@ -13,14 +13,15 @@
 
 > [!IMPORTANT]
 > The current release is
-> [v0.0.6](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.6), a text
-> release with TextEditor on every rail, styled and attributed text,
-> Scene-owned menus and commands, one window per document, and text color.
-> SimpleText, a one-document-per-window plain-text editor, joins the examples.
-> Release payloads: Classic 68K + PPC with `.dsk` images beside every
-> MacBinary, Windows x64 and x86 for XP for the first time, macOS UB2
-> (arm64 + x86_64) and UB1 (Tiger ppc + i386). Every archive carries the same
-> eight applications, including SmirkyCard (experimental). This
+> [v0.0.7](https://github.com/SimplySmirkySoftware/Loka/releases/tag/v0.0.7), a
+> look-and-feel release: cards with shadows and rounded corners, ZStack units
+> with blur (a live photo band on Classic and on macOS 10.4-10.9), a ScrollView
+> that scrolls sideways and carries content insets, a real quit and close story
+> on every rail, and SmirkyTracker, a SmirkyCard (experimental) showcase of 13
+> Macs that exercises all of it. Release payloads: Classic 68K + PPC with `.dsk`
+> images beside every MacBinary, Windows x64 and x86 for XP, macOS UB2
+> (arm64 + x86_64) and UB1 (Tiger ppc + i386), the same eight applications in
+> every archive. This
 > framework is still in the proof-of-concept stage: the core is already usable, but broader component
 > coverage, platform support, and some refactoring work are still in progress.
 > Please also see [ROADMAP.md](ROADMAP.md).
@@ -104,7 +105,7 @@ Status terms:
 | Modern Windows / Win32 | `active` | Native Win32 projection path. The 0.0.6 candidate's x86 XP archive was runtime-verified on Windows XP on a Sony VAIO P (real hardware, 2026-10-12; [#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)); from the 0.0.7 candidate's XP archive, SmirkyCard (SmirkyTracker) was run on the same machine on 2026-10-23, and the full eight-application archive smoke ran on a Windows 8.1 VM ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
 | macOS / Cocoa | `active` | Native macOS projection path. Mac OS X 10.4 Tiger or newer and PowerPC G3 or newer are supported targets. The 0.0.6 candidate's UB1 archive was runtime-verified on Tiger on a PowerBook G3 “Pismo” (real hardware, 2026-10-12; [#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)). From the 0.0.7 candidate's UB1 archive (i386 slice), SmirkyCard (SmirkyTracker) was run on Tiger 10.4.11 on a MacBook (2006) on 2026-10-23, and the 10.4–10.9 content blur is runtime-verified on that Tiger machine and on Mavericks 10.9.5 (real hardware; [#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571), [#1549](https://github.com/SimplySmirkySoftware/Loka/pull/1549)); the full eight-application archive smoke ran on Mavericks and Leopard PPC VMs. See the [scoped macOS evidence](docs/environments.md#verification-status-by-target), including the 10.13 Japanese-input crash. |
 | Classic Mac OS / Toolbox | `active` | Built through Retro68 for System 7 or later on 68k and PowerPC-style Classic targets.<br>Practical mainstream target: 68030-class systems and later (and PPC601 / 603e-class PowerPC Macs). Low-end 68k (68000 / 68020) stays an important constraint and validation path.<br>The 0.0.1-generation examples are all runtime-verified on a 68030 PowerBook 180c (33 MHz, 4 MB RAM) with no 68k-specific optimization pass. The 0.0.5 generation (all examples plus SmirkyCard) was runtime-verified on a PowerBook 180c (68030 / 33 MHz, 8 MB) on 2026-09-16. (The record — candidate, configuration, rig, result, limits — is in the 0.0.5 release notes and its release PR.) The 0.0.6 candidate's Classic sets were runtime-verified on a PowerBook 550c (68040, Mac OS 7.6.1 Japanese), a PowerBook 1400c (PowerPC 603e, Mac OS 8.6) and a PowerBook G3 PDQ (Mac OS 8.6), all real hardware, on 2026-10-12 ([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)). From the 0.0.7 candidate's Classic 68K set, SmirkyCard (SmirkyTracker) was runtime-verified on the PowerBook 180c (68030 / 33 MHz, KanjiTalk 7.1) on 2026-10-23; the 38 MAME scenario cells are the machine verdict for the rest ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). LazyList, the windowed-list measurement bench, still feels slow on the 68030 180c; treat it as a benchmark, comfortable from PowerPC-class machines. |
-| Linux / WSL | `headless` | Used today for core and Flow DSL tests. Full native UI projection is planned, not part of `0.0.7`. |
+| Linux / WSL | `headless` | Used today for core and Flow DSL tests. Full native UI projection is planned, not part of `0.0.8`. |
 | iOS / iPadOS, Linux desktop UI, Windows Mobile-class systems, game-oriented backends | `planned` | Future ports should reuse the same Node / Boundary / State / Flow model rather than adding platform-specific application models. |
 
 For exact build and workflow details, see [docs/environments.md](docs/environments.md). Classic Mac OS and Retro68-specific notes are in [docs/retro68.md](docs/retro68.md).
