@@ -18,7 +18,31 @@ namespace text_alphabet_cases
                                {"\303", 1, EDITOR_NON_ASCII, EDITOR_NON_ASCII},
                                {"\0", 1, EDITOR_NON_ASCII, EDITOR_NON_ASCII},
                                {"plain ASCII", 11, EDITOR_OK, EDITOR_OK},
-                               {"\364\220\200\200", 4, EDITOR_NON_ASCII, EDITOR_NON_ASCII}};
+                               {"\364\220\200\200", 4, EDITOR_NON_ASCII, EDITOR_NON_ASCII},
+                               {"a\302\205b", 4, EDITOR_NON_ASCII, EDITOR_OK},
+                               {"a\342\200\250b", 5, EDITOR_NON_ASCII, EDITOR_OK},
+                               {"a\342\200\251b", 5, EDITOR_NON_ASCII, EDITOR_OK},
+                               {"\346\227\245\346\234\254", 6, EDITOR_NON_ASCII, EDITOR_OK}};
+  struct MacCaretCase
+  {
+    const char *before;
+    const char *after;
+    bool storage;
+    unsigned inputUnits, outputUnits, byteColumn;
+  };
+  static const MacCaretCase macCarets[] = {
+      {"\360\220\200\200", "\360\220\220\200", true, 0, 2, 4},
+      {"\360\220\200\200", "\360\220\220\200", false, 1, 1, 0},
+      {"x\360\220\200\200", "x\360\220\220\200", true, 1, 3, 5},
+      {"x\360\220\200\200", "x", true, 1, 1, 1},
+      {"\346\227\245", "\346\227\245\346\234\254", true, 1, 2, 6}};
+  static const char *const macOpenPins[] = {
+      "Japanese row insertion/deletion and caret round trip",
+      "U+10000 to U+10400 storage caret byte 4 / unit 2; observed interior byte 0",
+      "request boundary clamp and storage BEFORE hint",
+      "multibyte run styling and reload round trip",
+      "lone surrogate paste restores committed text",
+      "NEL/U+2028/U+2029 logical row content and partial/full fragment visibility"};
   // The opening PR changes this one test-only selection.
   static EditorResult Case::*const expected = &Case::closed;
   struct Boundary
