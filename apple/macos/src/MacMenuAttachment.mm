@@ -104,7 +104,13 @@ void MacMenuAttachment::reset()
   if (!this->menu_)
     return;
   if ([NSApp mainMenu] == (NSMenu *)this->menu_)
+  {
+    // The apple menu registration (#1565) retains a submenu of this bar
+    // independently of mainMenu; drop it with the bar it came from.
+    if ([NSApp respondsToSelector:@selector(setAppleMenu:)])
+      [NSApp performSelector:@selector(setAppleMenu:) withObject:nil];
     [NSApp setMainMenu:nil];
+  }
   [(id)this->menu_ release];
   this->menu_ = 0;
 }
@@ -393,7 +399,9 @@ bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
   // Quit) and shows the first menu beside it under its own title (#1565);
   // Tahoe takes the first submenu either way. setAppleMenu: is unpublished, so it is sent by
   // selector and skipped where the running AppKit lacks it.
-  if (appMenu && [NSApp respondsToSelector:@selector(setAppleMenu:)])
+  // The registration is replaced on every projection, nil when the merged bar
+  // has no app container, so AppKit never keeps an earlier bar's submenu.
+  if ([NSApp respondsToSelector:@selector(setAppleMenu:)])
     [NSApp performSelector:@selector(setAppleMenu:) withObject:appMenu];
   this->record_.commit(sources);
   return true;
