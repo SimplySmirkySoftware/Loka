@@ -11,6 +11,22 @@ namespace loka
 {
   namespace win32
   {
+    namespace detail
+    {
+      /** Append explicit bytes/units (no implicit terminator). Empty succeeds unchanged;
+          null with nonzero length and lengths >= INT_MAX refuse. API failure preserves
+          the destination prefix and size. Allocation follows std::string's existing
+          no-exceptions policy. UTF-16 validation belongs to the caller on XP. */
+      bool AppendUtf8ToWide(const char *bytes, std::size_t length, std::wstring &out, unsigned long flags);
+      bool AppendWideToUtf8(const wchar_t *chars, std::size_t length, std::string &out);
+#ifdef TEST_BUILD
+      namespace testing
+      {
+        void failNextConversionWrite();
+      }
+#endif
+    } // namespace detail
+
     // Win32-specific string implementation that stores UTF-16 data.
     class Win32String : public loka::platform::String
     {
