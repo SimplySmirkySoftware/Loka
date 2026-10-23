@@ -1453,3 +1453,8 @@ LOKA_TEST(testTextCapacityNarrowingAndIdBudget)
 LOKA_TEST(testTextCapacityLatePayloadRefusal)
 LOKA_TEST(testTextCapacitySizeArithmetic)
 LOKA_TEST(testTextCapacityQuiescentReclaim)
+
+LOKA_TEST(testTextUtf8Scanner)
+LOKA_TEST(testTextUtf8Columns)
+LOKA_TEST(testTextAlphabetAdapters)
+LOKA_TEST(testTextAlphabetFileAdapter)

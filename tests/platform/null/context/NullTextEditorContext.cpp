@@ -3,6 +3,7 @@
 #include "platform/null/NullScenePlatformController.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <algorithm>
+#include "app/nodes/controls/TextDocumentLine.hpp"
 using namespace loka::app;
 namespace
 {
@@ -80,7 +81,9 @@ void NullTextEditorContext::project(LineCursor fallback)
       start = this->buffer_.find('\r', start) + 1;
     const std::size_t end = this->buffer_.find('\r', start);
     const std::size_t length = (end == std::string::npos ? this->buffer_.size() : end) - start;
-    this->caret_.column = std::max(0, std::min(this->caret_.column, static_cast<int>(length)));
+    const int column = std::max(0, std::min(this->caret_.column, static_cast<int>(length)));
+    this->caret_.column = static_cast<LineCursor::Column>(
+        Utf8RetreatToBoundary(this->buffer_.data() + start, length, static_cast<std::size_t>(column)));
   }
 }
 void NullTextEditorContext::restoreCommittedProjection(LineCursor snapshot)
@@ -180,14 +183,16 @@ public:
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
     const int row = node.props.buffer_->lines().find(pending.line);
-    std::size_t length = 0;
     if (row < 0)
       return scene::RequestApplication<LineCursor>(pending, EDITOR_STALE_ID);
-    if (!node.props.buffer_->lines()
-             .at(static_cast<unsigned short>(row))
-             .value.requiredUnits(loka::core::StringEncodingUtf8, length))
-      return scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE);
-    const LineCursor applied(pending.line, std::max(0, std::min(pending.column, static_cast<int>(length))));
+    const text_document_detail::LineBytes bytes(node.props.buffer_->lines().at(static_cast<unsigned short>(row)).value,
+                                                node.props.buffer_->capacity());
+    if (bytes.result() != EDITOR_OK)
+      return scene::RequestApplication<LineCursor>(pending, bytes.result());
+    const int column = std::max(0, std::min(pending.column, static_cast<int>(bytes.size())));
+    const LineCursor applied(pending.line,
+                             static_cast<LineCursor::Column>(
+                                 Utf8RetreatToBoundary(bytes.data(), bytes.size(), static_cast<std::size_t>(column))));
     context(base).caret_ = applied;
     return scene::RequestApplication<LineCursor>(applied, EDITOR_OK);
   }

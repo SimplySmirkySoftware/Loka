@@ -306,7 +306,11 @@ rail, want)`. Successful attachment fixes capacity until owner reclaim; a
 second attachment preserves the first. `buffer.lines()` exposes editing and
 observation through `TextLines`, with no attach/detach or raw-list conversion.
 The editor and file doors borrow the buffer. Byte capacities and columns are
-UTF-8 byte counts; the current editor still accepts only ASCII content.
+UTF-8 byte counts; columns must lie on code point boundaries. Rows contain the
+editor alphabet, currently ASCII, without CR, LF, or NUL. The Classic TextEdit
+rail will keep refusing non-ASCII. `EDITOR_NON_ASCII` means the editor alphabet
+refused the bytes: this covers malformed sequences and forbidden NUL (which
+is itself valid UTF-8), as well as non-ASCII under today's policy.
 
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of

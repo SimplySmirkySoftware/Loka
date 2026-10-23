@@ -1,3 +1,5 @@
+#include "support/TextAlphabetCases.hpp"
+#include "TextUtf8Tests.hpp"
 #include "app/nodes/controls/TextDocumentLine.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "support/TextBufferFixture.hpp"
@@ -3352,4 +3354,121 @@ void testTextCapacityQuiescentReclaim()
 #else
   std::puts("[skip] TextBuffer reclaim death pins require Linux lifecycle audit without ASan");
 #endif
+}
+
+void testTextUtf8Scanner()
+{
+  using namespace text_alphabet_cases;
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+  {
+    std::size_t count = 99;
+    const bool valid = cases[i].open == EDITOR_OK || i == 6;
+    LOKA_VERIFY(Utf8Scan(cases[i].bytes, cases[i].length, count) == valid);
+    LOKA_VERIFY(count == (valid ? (i == 7 ? 11u : 1u) : 0u));
+    const std::string prefixed = std::string("A\303\251") + std::string(cases[i].bytes, cases[i].length);
+    LOKA_VERIFY(Utf8Scan(prefixed.data(), prefixed.size(), count) == valid);
+    LOKA_VERIFY(count == (valid ? (i == 7 ? 13u : 3u) : 2u));
+  }
+  std::size_t count = 99;
+  LOKA_VERIFY(Utf8Scan(0, 0, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan(0, 1, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan("\342x\200", 3, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan("\360\237\230", 3, count) && count == 0);
+  const char *invalid[] = {"\340\200\200",
+                           "\360\200\200\200",
+                           "\377",
+                           "\342\202",
+                           "\302x",
+                           "\342\202x",
+                           "\360x\200\200",
+                           "\360\220x\200",
+                           "\360\220\200x"};
+  const std::size_t lengths[] = {3, 4, 1, 2, 2, 3, 4, 4, 4};
+  for (unsigned i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
+    LOKA_VERIFY(!Utf8Scan(invalid[i], lengths[i], count) && count == 0);
+  LOKA_VERIFY(
+      Utf8Scan("\177\302\200\337\277\340\240\200\355\237\277\356\200\200\357\277\277\360\220\200\200\364\217\277\277",
+               25,
+               count));
+  LOKA_VERIFY(count == 9);
+}
+void testTextUtf8Columns()
+{
+  using namespace text_alphabet_cases;
+  using namespace loka::app::text_document_detail;
+  for (unsigned i = 0; i < sizeof(boundaries) / sizeof(boundaries[0]); ++i)
+  {
+    const text_alphabet_cases::Boundary &b = boundaries[i];
+    const Case &c = cases[b.caseIndex];
+    const String value(std::string(c.bytes, c.length));
+    const LineBytes row(value, TextCapacity::of(256, 8192));
+    LOKA_VERIFY(Utf8ColumnOnBoundary(c.bytes, c.length, b.column) == b.boundary);
+    LOKA_VERIFY(Utf8RetreatToBoundary(c.bytes, c.length, b.column) == b.retreat);
+    // The byte view remains available even while alphabet admission is closed.
+    LOKA_VERIFY(ValidateRowColumn(row, static_cast<LineCursor::Column>(b.column))
+                == (b.boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+    LOKA_VERIFY(ValidateRowColumn(row, -1) == EDITOR_INVALID_CURSOR);
+    LOKA_VERIFY(ValidateRowColumn(row, static_cast<LineCursor::Column>(c.length + 1)) == EDITOR_INVALID_CURSOR);
+    if (b.boundary)
+      LOKA_VERIFY(CodePointIndex(row, static_cast<LineCursor::Column>(b.column))
+                  == (b.caseIndex == 7 ? b.column : (b.column ? 1u : 0u)));
+  }
+  // pageTarget copies min(source byte column, destination size), then retreats.
+  LOKA_VERIFY(Utf8RetreatToBoundary("a\360\237\230\200z", 6, 3) == 1);
+  LOKA_VERIFY(!Utf8ColumnOnBoundary("a", 1, 2));
+  LOKA_VERIFY(RowAdmits("", 0) && PayloadAdmits(0, 0));
+  LOKA_VERIFY(!RowAdmits(0, 1) && !PayloadAdmits(0, 1));
+  LOKA_VERIFY(!RowAdmits("a\r\nb", 4) && PayloadAdmits("a\r\nb", 4));
+}
+namespace
+{
+  /** Preserve raw fixture bytes even on rails whose String constructor normalizes invalid UTF-8. */
+  class AlphabetBytes : public loka::platform::String
+  {
+  public:
+    explicit AlphabetBytes(const text_alphabet_cases::Case &value)
+        : bytes_(value.bytes, value.length)
+    {
+    }
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    {
+      out.bytes = this->bytes_.data();
+      out.length = this->bytes_.size();
+      return true;
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append(this->bytes_);
+      return true;
+    }
+
+  private:
+    const std::string bytes_;
+  };
+} // namespace
+
+void testTextAlphabetAdapters()
+{
+  using namespace text_alphabet_cases;
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+  {
+    const Case &c = cases[i];
+    Fixture f;
+    const Snapshot snapshot(f);
+    const LineCursor at(f.lines.at(0).id, 0);
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).applyReplace(at, at, c.bytes, c.length)
+                == c.*expected);
+    if (c.*expected != EDITOR_OK)
+      snapshot.unchanged(f);
+    Fixture projected(1);
+    const String raw = String::FromPlatform(Managed<loka::platform::String>::Wrap(new AlphabetBytes(c)));
+    LOKA_VERIFY(projected.lines.update(projected.lines.at(0).id, raw) == EDIT_OK);
+    projected.context->onPropsApplied();
+    std::string output;
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(projected.node).project(output) == c.*expected);
+    LOKA_VERIFY(Input::status(*projected.context) == c.*expected);
+    if (expected == &Case::closed && c.closed != c.open)
+      std::puts("[deferred] open-phase coverage: Unicode document/Null cursor, request and pageTarget (PR 4)");
+  }
+  std::puts("[skip] native UTF-8 rails: staged in PR 1b / pages 2 and 3; ASCII policy remains closed");
 }
