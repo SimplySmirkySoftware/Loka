@@ -146,7 +146,8 @@ namespace
     // The host has synthetic update rectangles, not a real Control Manager.
     // Seed the move's damage to pin admission and preservation of foreign damage.
     const Rect foreign = {200, 200, 210, 210};
-    const Rect covered = {0, 0, 150, 100};
+    // The discharged box also covers the old size at the new origin (40 + 120).
+    const Rect covered = {0, 0, 170, 100};
     f.window.port.native.update.clear();
     f.window.port.native.update.push_back(barRect);
     f.window.port.native.update.push_back(moved);
@@ -161,6 +162,23 @@ namespace
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), covered);
       f.controller.validateOwnControlMove(barRect, moved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 1);
+      LOKA_VERIFY(EqualRect(&f.window.port.native.update[0], &foreign));
+    }
+    {
+      // A move that also shrinks: MoveControl first puts the old size at the
+      // new origin, so damage past the final rectangle must be discharged too.
+      const Rect tall = {0, 0, 100, 16};
+      const Rect shortMoved = {200, 0, 250, 16};
+      const Rect intermediate = {250, 0, 300, 16};
+      const Rect wide = {0, 0, 320, 100};
+      f.window.port.native.update.clear();
+      f.window.port.native.update.push_back(tall);
+      f.window.port.native.update.push_back(shortMoved);
+      f.window.port.native.update.push_back(intermediate);
+      f.window.port.native.update.push_back(foreign);
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), wide);
+      f.controller.validateOwnControlMove(tall, shortMoved);
       LOKA_VERIFY(f.window.port.native.update.size() == 1);
       LOKA_VERIFY(EqualRect(&f.window.port.native.update[0], &foreign));
     }

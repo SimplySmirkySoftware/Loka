@@ -83,10 +83,19 @@ namespace
 
 void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, const Rect &after)
 {
-  const Rect area = {before.top < after.top ? before.top : after.top,
-                     before.left < after.left ? before.left : after.left,
-                     before.bottom > after.bottom ? before.bottom : after.bottom,
-                     before.right > after.right ? before.right : after.right};
+  // MoveControl first places the OLD size at the new origin, then SizeControl
+  // shrinks or grows it; the Control Manager invalidates that intermediate
+  // rectangle too, so the discharged area is the box over all three.
+  const short midBottom = static_cast<short>(after.top + (before.bottom - before.top));
+  const short midRight = static_cast<short>(after.left + (before.right - before.left));
+  Rect area = {before.top < after.top ? before.top : after.top,
+               before.left < after.left ? before.left : after.left,
+               before.bottom > after.bottom ? before.bottom : after.bottom,
+               before.right > after.right ? before.right : after.right};
+  if (midBottom > area.bottom)
+    area.bottom = midBottom;
+  if (midRight > area.right)
+    area.right = midRight;
   // drawWhole keeps the window port current throughout the erased pass.
   // Only our move's area is discharged; never validate the whole port here.
   if (this->erasedPass().admitsCapture(area))
