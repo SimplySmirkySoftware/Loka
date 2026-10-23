@@ -202,7 +202,7 @@ namespace
     ZeroMemory(&info, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    LOKA_VERIFY(GetScrollInfo(viewport, SB_VERT, &info));
+    LOKA_VERIFY(GetScrollInfo(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL), SB_CTL, &info));
     return info;
   }
 } // namespace
@@ -495,7 +495,9 @@ namespace
     ZeroMemory(&info, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    LOKA_VERIFY(GetScrollInfo(viewport, bar, &info));
+    LOKA_VERIFY(GetScrollInfo(bar == SB_VERT ? FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL) : viewport,
+                              bar == SB_VERT ? SB_CTL : bar,
+                              &info));
     const int maximum = info.nMax - static_cast<int>(info.nPage) + 1;
     const UINT distance = setting == WHEEL_PAGESCROLL                 ? info.nPage
                           : setting > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
@@ -526,7 +528,7 @@ void testWin32ZStackUnitWheelLeavesGroundScrollView()
   f.layout(300, 140);
   HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
-  LOKA_VERIFY(viewport && unit && GetParent(viewport) == f.root() && GetParent(unit) == f.root());
+  LOKA_VERIFY(viewport && unit && GetParent(GetParent(viewport)) == f.root() && GetParent(unit) == f.root());
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
   LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
   flushPaint(f);
@@ -749,4 +751,58 @@ void testWin32ZStackRetirementHidesBeforeDrain()
   LOKA_VERIFY(!IsWindowVisible(hwnd));
   f.controller.drainNativeRetirements();
   LOKA_VERIFY(!IsWindow(hwnd));
+}
+
+void testWin32ScrollViewInsetBandAndCornerPaint()
+{
+  Fixture f;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(40, 30)));
+  RectSurfaceNode *surface = new RectSurfaceNode(RectSurfaceProps().size(600, 600));
+  scroll->addChild(surface);
+  stack->addChild(scroll);
+  stack->addChild(new BoxNode(BoxProps().setSize(300, 40)));
+  f.tree = stack;
+  f.layout(300, 140);
+  HWND frame = FindWindowExW(f.root(), NULL, L"LOKA_SCROLL_FRAME", NULL);
+  HWND viewport = FindWindowExW(frame, NULL, L"LOKA_SCROLL_VIEW", NULL);
+  HWND bar = FindWindowExW(frame, NULL, L"SCROLLBAR", NULL);
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(frame && viewport && bar && unit);
+  ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+  LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+  flushPaint(f);
+  RECT frameClient;
+  LOKA_VERIFY(GetClientRect(frame, &frameClient));
+  POINT exposed = {frameClient.right - GetSystemMetrics(SM_CXVSCROLL) / 2, 41};
+  POINT covered = {exposed.x, 20};
+  LOKA_VERIFY(ClientToScreen(frame, &exposed));
+  LOKA_VERIFY(ClientToScreen(frame, &covered));
+  LOKA_VERIFY(WindowFromPoint(exposed) == bar);
+  LOKA_VERIFY(WindowFromPoint(covered) == unit);
+  const RECT barBefore = rectInParent(bar);
+  const RECT seat = rectInParent(frame);
+  const int cornerX = seat.right - 2;
+  const int cornerY = seat.bottom - 2;
+  LOKA_VERIFY(GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL);
+  LOKA_VERIFY(capturedPixel(f, cornerX, cornerY) == GetSysColor(COLOR_BTNFACE));
+  // Frame-only painting must exclude the document child's existing pixels.
+  HWND content = childOfClass(viewport, L"LOKA_RECT_SURFACE");
+  LOKA_VERIFY(content);
+  completePaint(f.root());
+  const COLORREF childBefore = capturedPixel(f, seat.left + 10, seat.top + 70);
+  LOKA_VERIFY(childBefore == GetSysColor(COLOR_WINDOW));
+  LOKA_VERIFY(InvalidateRect(frame, NULL, FALSE));
+  LOKA_VERIFY(UpdateWindow(frame));
+  LOKA_VERIFY(!GetUpdateRect(content, NULL, FALSE));
+  LOKA_VERIFY(capturedPixel(f, seat.left + 10, seat.top + 70) == childBefore);
+  surface->props.size(100, 600);
+  f.controller.relayout(300, 140);
+  flushPaint(f);
+  const RECT barAfter = rectInParent(bar);
+  LOKA_VERIFY(EqualRect(&barBefore, &barAfter));
+  LOKA_VERIFY(!(GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL));
+  // Window ground currently resolves to BTNFACE too: the no-horizontal-bar
+  // pixel pins the ground, but cannot distinguish omission of the corner fill.
+  LOKA_VERIFY(capturedPixel(f, cornerX, cornerY) == GetSysColor(COLOR_BTNFACE));
 }

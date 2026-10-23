@@ -48,6 +48,23 @@ HWND Win32OwnedChildWindow::createNativeChildWindow(DWORD exStyle,
   return this->hwnd_;
 }
 
+HWND Win32OwnedChildWindow::createSubordinateChildWindow(DWORD exStyle,
+                                                         LPCWSTR className,
+                                                         LPCWSTR windowName,
+                                                         DWORD style,
+                                                         const loka::win32::NativeRect &geometry,
+                                                         HWND parent,
+                                                         HMENU menu,
+                                                         HINSTANCE instance,
+                                                         void *createParameter)
+{
+  assert(parent == this->hwnd_ && "subordinate children belong to the owned window");
+  return this->controller_ && this->hwnd_ && parent == this->hwnd_
+             ? this->controller_->createNativeChildWindow(
+                   exStyle, className, windowName, style, geometry, parent, menu, instance, createParameter)
+             : 0;
+}
+
 void Win32OwnedChildWindow::retireWindow()
 {
   if (!this->hwnd_)

@@ -182,7 +182,8 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
   pumpMessages();
   UpdateWindow(rootHwnd);
 
-  HWND viewport = FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_VIEW", NULL);
+  HWND viewport =
+      FindWindowExW(FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_FRAME", NULL), NULL, L"LOKA_SCROLL_VIEW", NULL);
   LOKA_VERIFY(viewport != NULL);
   // #1199: the viewport paints beneath transparent children; native parentage
   // still clips projected children to the viewport's client area.
@@ -948,7 +949,7 @@ void testWin32ScrollViewAttributedTextShrinkRestoresGround()
   ScrollViewNode node((ScrollViewProps()));
   Win32ScrollViewContext viewport(&controller, host.window.hwnd(), 10, 10, 280, 120, &node);
   LOKA_VERIFY(viewport.isValid());
-  exerciseAttributedTextShrink(controller, viewport.hwnd());
+  exerciseAttributedTextShrink(controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL));
   viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
 }
@@ -962,7 +963,7 @@ void testWin32ScrollViewImageRemovalRestoresGround()
   ScrollViewNode node((ScrollViewProps()));
   Win32ScrollViewContext viewport(&controller, host.window.hwnd(), 10, 10, 280, 120, &node);
   LOKA_VERIFY(viewport.isValid());
-  exerciseImageTransparency(controller, viewport.hwnd(), true);
+  exerciseImageTransparency(controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), true);
   viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
 }
@@ -1029,17 +1030,20 @@ void testWin32WindowAndViewportGroundRoles()
   TextNode rootText((TextProps("root")));
   TextNode viewportText((TextProps("viewport")));
   Win32TextContext first(&controller, root, 0, 150, 80, 24, &rootText);
-  Win32TextContext second(&controller, viewport.hwnd(), 0, 0, 80, 24, &viewportText);
+  Win32TextContext second(
+      &controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), 0, 0, 80, 24, &viewportText);
   HWND firstHwnd = FindWindowExW(root, NULL, L"STATIC", L"root");
-  HWND secondHwnd = FindWindowExW(viewport.hwnd(), NULL, L"STATIC", L"viewport");
+  HWND secondHwnd =
+      FindWindowExW(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), NULL, L"STATIC", L"viewport");
   LOKA_VERIFY(firstHwnd != NULL && secondHwnd != NULL);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   flushTransparentPaint(controller, root);
   noteEqualSystemColors(COLOR_BTNFACE, COLOR_WINDOW, "root/viewport ground");
   LOKA_VERIFY(windowPixel(root, 220, 100) == GetSysColor(COLOR_BTNFACE));
-  LOKA_VERIFY(windowPixel(viewport.hwnd(), 120, 60) == GetSysColor(COLOR_BTNFACE));
+  LOKA_VERIFY(windowPixel(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), 120, 60)
+              == GetSysColor(COLOR_BTNFACE));
   verifyStaticColors(root, firstHwnd);
-  verifyStaticColors(viewport.hwnd(), secondHwnd);
+  verifyStaticColors(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), secondHwnd);
   first.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   second.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
@@ -1278,7 +1282,7 @@ void testWin32StaticTextInks()
   ScrollViewNode scrollNode((ScrollViewProps()));
   Win32ScrollViewContext viewport(&controller, root, 10, 70, 180, 120, &scrollNode);
   LOKA_VERIFY(viewport.isValid());
-  exerciseStaticInk(controller, root, viewport.hwnd());
+  exerciseStaticInk(controller, root, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL));
   viewport.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
   controller.drainNativeRetirements();
 }
@@ -1455,7 +1459,8 @@ static void checkCardChildOnlyAndViewportPhase()
   Win32ScrollViewContext viewport(&controller, root, 13, 11, 180, 100, &scrollNode);
   LOKA_VERIFY(viewport.isValid());
   CardBandNode band(CardBandProps(CARD_BAND_BOTTOM, CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_ALPHA)));
-  Win32CardBandContext context(&controller, viewport.hwnd(), 20, 30, 100, 19, &band);
+  Win32CardBandContext context(
+      &controller, FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), 20, 30, 100, 19, &band);
   ShowWindow(root, SW_SHOWNOACTIVATE);
   context.onPropsApplied();
   flushTransparentPaint(controller, root);
@@ -1650,13 +1655,17 @@ static void checkCardScrollInput()
   settle(scene);
   ShowWindow(rootHwnd, SW_SHOWNOACTIVATE);
   flushTransparentPaint(controller, rootHwnd);
-  HWND viewport = FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_VIEW", NULL);
+  HWND viewport =
+      FindWindowExW(FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_FRAME", NULL), NULL, L"LOKA_SCROLL_VIEW", NULL);
   LOKA_VERIFY(viewport != NULL);
   HWND band = FindWindowExW(viewport, NULL, L"LOKA_CARD_BAND", NULL);
   LOKA_VERIFY(band != NULL);
   RECT before;
   LOKA_VERIFY(GetWindowRect(band, &before));
-  SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBPOSITION, 5), 0);
+  SendMessageW(GetParent(viewport),
+               WM_VSCROLL,
+               MAKEWPARAM(SB_THUMBPOSITION, 5),
+               reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
   LOKA_VERIFY(viewportState.get().y == 5);
   controller.relayout(200, 140);
   settle(scene);

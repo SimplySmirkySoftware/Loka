@@ -453,9 +453,55 @@ void testWin32InputDoorHorizontalScrollLifetime()
     static_cast<Win32ScrollViewContext *>(findField(fixture.root(), WHEEL_INPUT)->getContext())
         ->setScrollMetrics(SB_HORZ, 2000, 240, 0);
     fixture.facts.bind();
-    SendMessageW(field, WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
+    SendMessageW(FindWindowExW(field, NULL, L"LOKA_SCROLL_VIEW", NULL), WM_HSCROLL, MAKEWPARAM(SB_LINERIGHT, 0), 0);
     LOKA_VERIFY(fixture.facts.offset.get().x == 16 && fixture.facts.offset.get().y == 0);
     LOKA_VERIFY(fixture.facts.writes == 1);
     fixture.returned();
   }
+}
+
+void testWin32InputDoorVerticalScrollLifetime()
+{
+  for (int child = 0; child != 2; ++child)
+  {
+    InputFixture fixture(WHEEL_INPUT, child != 0);
+    HWND frame = fixture.observe<Win32ScrollViewContext>(findField(fixture.root(), WHEEL_INPUT)->asScrollViewNode());
+    HWND bar = FindWindowExW(frame, NULL, L"SCROLLBAR", NULL);
+    LOKA_VERIFY(bar);
+    static_cast<Win32ScrollViewContext *>(findField(fixture.root(), WHEEL_INPUT)->getContext())
+        ->setScrollMetrics(SB_VERT, 2000, 80, 0);
+    fixture.facts.bind();
+    SendMessageW(frame, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), reinterpret_cast<LPARAM>(bar));
+    LOKA_VERIFY(fixture.facts.offset.get().y == 16 && fixture.facts.writes == 1);
+    fixture.returned();
+  }
+}
+
+void testWin32InputDoorCloseDuringVerticalScroll()
+{
+  InputFacts facts(WHEEL_INPUT, false);
+  NullPlatformContext platform;
+  ClosingInputWindow *window = new ClosingInputWindow(&platform, facts);
+  WindowAdmissionTestApp app(*window);
+  app.flush();
+  facts.app = &app;
+  facts.closeOnExtent = window;
+  facts.controller = static_cast<Win32ScenePlatformController *>(
+      loka::dsl::testing::SceneTestAccess::platformController(*window->scene()));
+  LOKA_VERIFY(facts.controller);
+  Node *root = loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene());
+  Win32ScrollViewContext *context = static_cast<Win32ScrollViewContext *>(findField(root, WHEEL_INPUT)->getContext());
+  LOKA_VERIFY(context);
+  context->setScrollMetrics(SB_VERT, 2000, 80, 0);
+  HWND frame = context->hwnd();
+  HWND bar = FindWindowExW(frame, NULL, L"SCROLLBAR", NULL);
+  LOKA_VERIFY(bar);
+  facts.bind();
+  SendMessageW(frame, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), reinterpret_cast<LPARAM>(bar));
+  facts.returned = ++facts.sequence;
+  LOKA_VERIFY(facts.writes == 1 && facts.offset.get().y == 16 && facts.destroyed == 0);
+  LOKA_VERIFY(!facts.controller->borrowPhase().open());
+  facts.unbind();
+  app.flush();
+  LOKA_VERIFY(facts.destroyed > facts.returned);
 }

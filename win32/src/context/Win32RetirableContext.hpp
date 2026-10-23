@@ -60,6 +60,16 @@ protected:
                                HMENU menu,
                                HINSTANCE instance,
                                void *createParameter);
+  /** A child of the owned window, destroyed with it; never retired separately. */
+  HWND createSubordinateChildWindow(DWORD exStyle,
+                                    LPCWSTR className,
+                                    LPCWSTR windowName,
+                                    DWORD style,
+                                    const loka::win32::NativeRect &geometry,
+                                    HWND parent,
+                                    HMENU menu,
+                                    HINSTANCE instance,
+                                    void *createParameter);
 
   Win32ScenePlatformController *controller() const
   {
