@@ -1,6 +1,7 @@
 #include "platform/ToolboxPascalText.hpp"
 #include "ToolboxApp.hpp"
 #include "ToolboxOutOfMemory.hpp"
+#include "ToolboxUnicodeStartup.hpp"
 #include "ToolboxWindow.hpp"
 #include "ToolboxScenePlatformController.hpp"
 
@@ -215,6 +216,9 @@ void ToolboxApp::run()
   InitMenus();
   TEInit();
   InitDialogs(0);
+#if LOKA_TOOLBOX_UNICODE
+  loka::toolbox::RequireUnicodeSystem();
+#endif
   loka::toolbox::ArmOutOfMemoryReserve();
   InitCursor();
   this->cursorOwner_.initialize();

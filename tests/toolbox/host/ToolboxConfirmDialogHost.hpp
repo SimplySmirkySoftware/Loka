@@ -2,6 +2,10 @@
 #define LOKA_TOOLBOX_CONFIRM_DIALOG_HOST_HPP
 #include <Dialogs.h>
 #include <cstdlib>
+namespace toolbox_host
+{
+  unsigned beeps = 0;
+}
 
 static unsigned confirmNewCalls, confirmModalCalls, confirmDisposals, confirmLiveHandles;
 static unsigned refuseConfirmDialogs, refuseConfirmItems, refuseConfirmFilters;
