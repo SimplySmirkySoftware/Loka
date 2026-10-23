@@ -1,5 +1,6 @@
 #include "MacPlatformContext.hpp"
 #include "support/TextBufferFixture.hpp"
+#include "support/TextAlphabetCases.hpp"
 #include "MacInputDoor.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/TextEditorStateOwner.hpp"
@@ -26,6 +27,13 @@ namespace loka
     class MacTextEditorAccess
     {
     public:
+      static loka::app::EditorResult
+      observe(MacTextEditorContext &context,
+              std::size_t &offset,
+              MacTextEditorContext::TextObservation origin = MacTextEditorContext::VIEW_CHANGE)
+      {
+        return context.applyNativeChange(origin, offset);
+      }
       static unsigned restores(const MacTextEditorContext &context)
       {
         return context.restores_;
@@ -1874,4 +1882,158 @@ void testMacTextEditorDetachHidesAndRetireRemoves()
     [turn drain];
   }
   LOKA_VERIFY(released == 1);
+}
+
+void testMacTextEditorUtf8Boundary()
+{
+  for (std::size_t i = 0; i < sizeof(text_alphabet_cases::cases) / sizeof(text_alphabet_cases::cases[0]); ++i)
+  {
+    const text_alphabet_cases::Case &entry = text_alphabet_cases::cases[i];
+    NSString *text = [[[NSString alloc] initWithBytes:entry.bytes length:entry.length
+                                             encoding:NSUTF8StringEncoding] autorelease];
+    if (!text)
+      continue; // Malformed UTF-8 has no native snapshot; lone UTF-16 is pinned by the helpers.
+    Fixture f(1);
+    const Snapshot snapshot(f);
+    f.edit(text, [text length]);
+    if (entry.*text_alphabet_cases::expected != EDITOR_OK)
+    {
+      snapshot.unchanged(f);
+      LOKA_VERIFY(![f.view isEditable]);
+      f.restored(1);
+      snapshot.unchanged(f);
+    }
+    else
+      LOKA_VERIFY(bytes(f.lines.at(0).value) == std::string(entry.bytes, entry.length));
+  }
+  {
+    Fixture f(1);
+    std::size_t offset = 2;
+    loka::core::testing::failLokaAllocRaw("unused", "unused", 0);
+    const EditorResult result = Access::observe(*f.context, offset);
+    const int attempts = loka::core::testing::lokaAllocRawAttempts();
+    loka::core::testing::allowLokaAllocRaw();
+    LOKA_VERIFY(result == EDITOR_OK && attempts == 0);
+    const ItemId old = f.lines.at(0).id;
+    LOKA_VERIFY(f.lines.replaceWithOne(String("abcd")) == EDIT_OK);
+    LOKA_VERIFY(f.lines.at(0).id != old);
+    LOKA_VERIFY(Access::observe(*f.context, offset) == EDITOR_STALE_ID);
+  }
+  loka::core::testing::failLokaAllocRaw("MacTextEditor", "NativeTextBytes", 0);
+  {
+    Fixture f(1);
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("changed")) == EDIT_OK);
+    loka::core::testing::failLokaAllocRaw("MacTextEditor", "NativeTextBytes", 1);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == 1);
+    LOKA_VERIFY(![f.view isEditable]);
+    f.restored(1);
+    LOKA_VERIFY([[f.view string] isEqualToString:@"changed"]);
+  }
+  LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == 0);
+  loka::core::testing::allowLokaAllocRaw();
+  if (text_alphabet_cases::expected == &text_alphabet_cases::Case::closed)
+    for (std::size_t i = 0; i < sizeof(text_alphabet_cases::macOpenPins) / sizeof(text_alphabet_cases::macOpenPins[0]);
+         ++i)
+      std::printf("[deferred] macOS open-phase: %s (PR 4)\n", text_alphabet_cases::macOpenPins[i]);
+}
+
+namespace
+{
+  /** Fault source: comparison stays stable; the second collection corrupts the run.
+      This deliberately violates String's stable-content contract to probe the
+      native decode/range walls after an earlier run has already been styled. */
+  class FaultRunString : public loka::platform::String
+  {
+  public:
+    explicit FaultRunString(bool excess)
+        : excess_(excess),
+          collections_(0)
+    {
+    }
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    {
+      out.bytes = "cd";
+      out.length = 2;
+      return true;
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      ++this->collections_;
+      out += this->collections_ == 1 ? "cd" : this->excess_ ? "cdef" : "\200";
+      return true;
+    }
+    unsigned collections() const
+    {
+      return this->collections_;
+    }
+
+  private:
+    const bool excess_;
+    mutable unsigned collections_;
+  };
+  class FaultRunHighlighter : public LineHighlighter
+  {
+  public:
+    explicit FaultRunHighlighter(const String &tail)
+        : tail_(tail)
+    {
+    }
+    virtual bool highlight(const String &, AttributedString::Builder &out) const
+    {
+      return out.append(String("ab"), Bold + FontSize<18>()) && out.append(this->tail_, Italic);
+    }
+
+  private:
+    const String tail_;
+  };
+} // namespace
+
+void testMacTextEditorUtf8StyleFallback()
+{
+  for (int excess = 0; excess < 2; ++excess)
+  {
+    FaultRunString *fault = new FaultRunString(excess != 0);
+    const String tail(Managed<loka::platform::String>::Wrap(fault));
+    FaultRunHighlighter policy(tail);
+    Fixture f(1);
+    f.node.props.highlighter(policy);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(fault->collections() == 2);
+    f.verifyPlainAttributes();
+    LOKA_VERIFY([[f.view string] isEqualToString:@"abcd"]);
+  }
+}
+
+void testMacTextEditorUtf8OpenCarets()
+{
+  if (text_alphabet_cases::expected == &text_alphabet_cases::Case::closed)
+  {
+    std::puts("[deferred] macOS storage/view UTF-8 caret case table (PR 4)");
+    return;
+  }
+  for (std::size_t i = 0; i < sizeof(text_alphabet_cases::macCarets) / sizeof(text_alphabet_cases::macCarets[0]); ++i)
+  {
+    const text_alphabet_cases::MacCaretCase &entry = text_alphabet_cases::macCarets[i];
+    Fixture f(1);
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String(entry.before)) == EDIT_OK);
+    f.context->onPropsApplied();
+    id viewDelegate = [f.view delegate], storageDelegate = [[f.view textStorage] delegate];
+    [f.view setDelegate:nil];
+    [[f.view textStorage] setDelegate:nil];
+    const std::string after(entry.after);
+    NSString *text = [[[NSString alloc] initWithBytes:after.data() length:after.size()
+                                             encoding:NSUTF8StringEncoding] autorelease];
+    [f.view setString:text];
+    std::size_t offset = entry.inputUnits;
+    LOKA_VERIFY(Access::observe(*f.context,
+                                offset,
+                                entry.storage ? MacTextEditorContext::STORAGE_EDIT : MacTextEditorContext::VIEW_CHANGE)
+                == EDITOR_OK);
+    LOKA_VERIFY(offset == entry.outputUnits);
+    LOKA_VERIFY(f.cursor.state()->get() == LineCursor(f.lines.at(0).id, entry.byteColumn));
+    LOKA_VERIFY(bytes(f.lines.at(0).value) == after);
+    [[f.view textStorage] setDelegate:storageDelegate];
+    [f.view setDelegate:viewDelegate];
+  }
 }
