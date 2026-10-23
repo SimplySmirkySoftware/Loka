@@ -133,7 +133,9 @@ namespace simpletext
     loka::core::ItemId document_;
   };
 
-  class ConfirmCloseTypeTag {};
+  class ConfirmCloseTypeTag
+  {
+  };
   class ConfirmCloseNode;
 
   /** Borrows the document identity and forwards the owner's rail result channel. */
@@ -143,9 +145,11 @@ namespace simpletext
     typedef ConfirmCloseNode NodeType;
     MainProps document;
     loka::app::scene::NodeState<loka::app::ConfirmResult> result;
-    ConfirmCloseProps(const MainProps &owner,
-                      const loka::app::scene::NodeState<loka::app::ConfirmResult> &channel)
-        : document(owner), result(channel) {}
+    ConfirmCloseProps(const MainProps &owner, const loka::app::scene::NodeState<loka::app::ConfirmResult> &channel)
+        : document(owner),
+          result(channel)
+    {
+    }
     bool operator<(const loka::app::scene::PropsBase &rhs) const
     {
       if (rhs.propsTypeId() != this->propsTypeId())
@@ -164,7 +168,9 @@ namespace simpletext
   {
   public:
     explicit ConfirmCloseNode(const ConfirmCloseProps &props)
-        : loka::app::scene::ComponentNodeWithProps<ConfirmCloseProps>(props) {}
+        : loka::app::scene::ComponentNodeWithProps<ConfirmCloseProps>(props)
+    {
+    }
 
   protected:
     virtual void composeChildren(loka::app::scene::NodeComposition &c)
@@ -208,7 +214,8 @@ namespace simpletext
       {
         using namespace loka::core;
         if (this->position_ < this->lines_.size())
-          out = ListOp<String>(REMOVE, this->lines_.at(this->lines_.size() - 1 - this->position_).id);
+          out = ListOp<String>(
+              REMOVE, this->lines_.at(static_cast<unsigned short>(this->lines_.size() - 1 - this->position_)).id);
         else if (this->position_ == this->lines_.size())
           out = ListOp<String>(INSERT, ItemId::none(), 0, String());
         else
@@ -304,7 +311,9 @@ namespace simpletext
       // opened and asked to close in one turn, a Quit that reached a row whose
       // window was not admitted yet) is answered at attach, not lost.
       t.watch(const_cast<loka::core::State<loka::app::CloseAsk> &>(this->props.documents()->closeAsked()),
-              this, &MainNode::onCloseAsked, true);
+              this,
+              &MainNode::onCloseAsked,
+              true);
       t.watch(const_cast<loka::core::State<loka::core::ListRevision> &>(this->buffer_.lines().revision()),
               this,
               static_cast<void (MainNode::*)()>(&MainNode::publishFacts));
@@ -325,20 +334,21 @@ namespace simpletext
                     << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())));
       // One seat on the operation: at most one dialog exists, and none while idle.
       const PolicyScopeDefinition saveDialog = PolicyScopeDefinition().destroyOnDetach()
-          << SaveFileDialog(String::Literal("untitled.txt"))
-                 .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
-                 .result(this->saveResult_)
-                 .testId("SimpleText.Save");
+                                               << SaveFileDialog(String::Literal("untitled.txt"))
+                                                      .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
+                                                      .result(this->saveResult_)
+                                                      .testId("SimpleText.Save");
       MatchDefinition<Operation> dialog = Match(*this->operation_.state());
       dialog
-          .arm(OPEN, PolicyScopeDefinition().destroyOnDetach()
-                         << OpenFileDialog()
-                                .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
-                                .result(this->openResult_)
-                                .testId("SimpleText.Open"))
+          .arm(OPEN,
+               PolicyScopeDefinition().destroyOnDetach() << OpenFileDialog()
+                                                                .filterPolicy(FILE_DIALOG_FILTER_ALL_FILES_TEXT)
+                                                                .result(this->openResult_)
+                                                                .testId("SimpleText.Open"))
           .arm(SAVE, saveDialog)
-          .arm(CONFIRM_CLOSE, PolicyScopeDefinition().destroyOnDetach()
-                                  << scene::Component(ConfirmCloseProps(this->props, this->confirmResult_)))
+          .arm(CONFIRM_CLOSE,
+               PolicyScopeDefinition().destroyOnDetach()
+                   << scene::Component(ConfirmCloseProps(this->props, this->confirmResult_)))
           .arm(SAVE_FOR_CLOSE, saveDialog)
           .otherwise(Fragment());
       // The band and File menu fire the same emitters. The window has no
@@ -506,8 +516,7 @@ namespace simpletext
     }
     void completeChooser(Operation expected, const Choice &result)
     {
-      if (this->operation_.get() != expected
-          || (result.kind == Choice::RESULT_NONE && expected != SAVE_FOR_CLOSE))
+      if (this->operation_.get() != expected || (result.kind == Choice::RESULT_NONE && expected != SAVE_FOR_CLOSE))
         return;
       this->operation_.set(NONE);
       switch (result.kind)
