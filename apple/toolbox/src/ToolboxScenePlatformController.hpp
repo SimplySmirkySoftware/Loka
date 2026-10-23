@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"

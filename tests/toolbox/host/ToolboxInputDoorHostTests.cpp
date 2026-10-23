@@ -592,6 +592,63 @@ namespace
       fixture.returned();
     }
   }
+  /** Observe the real render body at its full-draw seam and paint continuation. */
+  class FullDrawPhaseProbe : public ToolboxFullDrawPresenter, public NodeContext
+  {
+  public:
+    InputFacts &facts;
+    unsigned erases, paints;
+    explicit FullDrawPhaseProbe(InputFacts &value)
+        : facts(value),
+          erases(0),
+          paints(0)
+    {
+    }
+    virtual void eraseBeforePaint()
+    {
+      LOKA_VERIFY(this->facts.writes == 1 && this->facts.secondWrites == 1);
+      LOKA_VERIFY(this->facts.controller->borrowPhase().open());
+      LOKA_VERIFY(this->facts.controller->erasedPass().isOpen());
+      LOKA_VERIFY(this->paints == 0);
+      ++this->erases;
+    }
+    virtual void render(IPlatformController *)
+    {
+      LOKA_VERIFY(this->erases == 1);
+      ++this->paints;
+    }
+  };
+
+  void fullDrawOrdering()
+  {
+    InputFixture fixture(EXTENT_INPUT, false);
+    fixture.facts.bind();
+    FullDrawPhaseProbe probe(fixture.facts);
+    fixture.controller.renderContext = &probe;
+    {
+      ToolboxErasedPass::Guard erased(fixture.controller.erasedPass(), fixture.native.port.portRect);
+      ToolboxInputDoor::render(fixture.controller, &probe);
+    }
+    LOKA_VERIFY(probe.erases == 1 && probe.paints == 1);
+    LOKA_VERIFY(!fixture.controller.borrowPhase().open());
+    fixture.controller.renderContext = 0;
+    fixture.facts.unbind();
+
+    // Admission refusal still clears the full port, as the old pre-walk erase did.
+    const int before = toolbox_host::erases;
+    ToolboxPortErasePresenter presenter(fixture.native.port.portRect);
+    fixture.controller.rootNode_ = 0;
+    ToolboxInputDoor::render(fixture.controller, &presenter);
+    LOKA_VERIFY(toolbox_host::erases == before + 1);
+    fixture.controller.rootNode_ = fixture.root();
+    const Rect saved = fixture.native.port.portRect;
+    fixture.native.port.portRect.left = SHRT_MIN;
+    fixture.native.port.portRect.right = SHRT_MAX;
+    ToolboxInputDoor::render(fixture.controller, &presenter);
+    LOKA_VERIFY(toolbox_host::erases == before + 2);
+    fixture.native.port.portRect = saved;
+  }
+
   void extentOrdering()
   {
     for (int cancel = 0; cancel != 2; ++cancel)
@@ -682,7 +739,11 @@ int main(int argc, char **argv)
       lifetime(static_cast<InputKind>(i), argc == 3);
       std::printf("[pin] %s same/parent lifetime passed\n", names[i]);
     }
-  if (argc == 1 || std::strcmp(argv[1], "extent") == 0) extentOrdering();
+  if (argc == 1 || std::strcmp(argv[1], "extent") == 0)
+  {
+    extentOrdering();
+    fullDrawOrdering();
+  }
   if (argc == 1 || std::strcmp(argv[1], "close") == 0)
   {
     closeDuringRender(ACTIVATION_FOREGROUND);
