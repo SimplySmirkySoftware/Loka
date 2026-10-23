@@ -594,7 +594,10 @@ namespace
 } // namespace
 #include "ToolboxDirtyPresentation.cpp"
 #else
-void ToolboxScenePlatformController::renderDirty(const Rect &) { this->render(); }
+void ToolboxScenePlatformController::renderDirty(const Rect &)
+{
+  this->render(0);
+}
 #endif
 
 short ToolboxScenePlatformController::measureTextWidth(const loka::core::String &value) const
@@ -857,7 +860,8 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
   const Rect empty = {0, 0, 0, 0};
   const Rect captureEvidence = ToolboxCaptureEvidence(clip ? this->port.portRect : empty, evidence);
   ToolboxErasedPass::Guard erased(this->scenePlatformController_->erasedPass(), captureEvidence);
-  ToolboxInputDoor::render(*this->scenePlatformController_);
+  ToolboxPortErasePresenter presenter(this->port.portRect);
+  ToolboxInputDoor::render(*this->scenePlatformController_, &presenter);
   if (clip)
     DisposeRgn(clip);
 }

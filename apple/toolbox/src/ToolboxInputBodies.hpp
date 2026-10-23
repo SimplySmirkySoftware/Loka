@@ -3,7 +3,7 @@
     supported invocation surface, parallel to the Win32 and macOS doors. */
 private:
   friend class ToolboxInputDoor;
-  void render();
+  void render(ToolboxFullDrawPresenter *presenter = 0);
   void renderDirty(const Rect &rect);
   friend class ToolboxPressLedger;
   bool resolvePress(const PressRow &, const Point &, ResolvedPress &) const;
