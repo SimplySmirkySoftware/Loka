@@ -1998,7 +1998,7 @@ void testWin32TextEditorUtf8ClosedPolicy()
     LOKA_VERIFY(columns.cursor.state()->get() == LineCursor(columns.lines.at(0).id, expected[i]));
     expectSelection(columns, static_cast<DWORD>(expected[i]));
   }
-  std::printf("[skip] Japanese IME composition traces: fixture gap, tracked in <ISSUE>\n");
+  std::printf("[skip] Japanese IME composition traces: fixture gap, tracked in #1587\n");
 }
 
 namespace
