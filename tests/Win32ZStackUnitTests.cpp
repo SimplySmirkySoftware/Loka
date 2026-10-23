@@ -85,6 +85,11 @@ namespace
   {
     return FindWindowExW(parent, NULL, name, NULL);
   }
+  // A ScrollView projects a frame whose child is the content viewport (#1547).
+  HWND viewportUnder(HWND parent)
+  {
+    return childOfClass(childOfClass(parent, L"LOKA_SCROLL_FRAME"), L"LOKA_SCROLL_VIEW");
+  }
   RECT rectInParent(HWND child)
   {
     RECT rect;
@@ -387,7 +392,7 @@ void testWin32ZStackUnitInsideViewportPropagatesRefusal()
   unitChild->addChild(following);
   stack->addChild(unitChild);
   f.layout(300, 140); // Exposes the clamp, published through the fact channel.
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   LOKA_VERIFY(viewport);
   const SCROLLINFO before = metrics(viewport);
   const int clamped = origin.get().y;
@@ -444,8 +449,8 @@ void testWin32ScrollViewRefusedInsideUnit()
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
   LOKA_VERIFY(unit);
   LOKA_VERIFY(!scroll->getContext());
-  LOKA_VERIFY(!childOfClass(unit, L"LOKA_SCROLL_VIEW"));
-  LOKA_VERIFY(!childOfClass(f.root(), L"LOKA_SCROLL_VIEW"));
+  LOKA_VERIFY(!childOfClass(unit, L"LOKA_SCROLL_FRAME"));
+  LOKA_VERIFY(!childOfClass(f.root(), L"LOKA_SCROLL_FRAME"));
   LOKA_VERIFY(!GetWindow(unit, GW_CHILD));
 }
 
@@ -461,7 +466,7 @@ void testWin32ZStackUnitForwardsWheelToViewport()
   stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(200, 600)));
   stack->addChild(buttonColumn("B"));
   f.layout(300, 140);
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   HWND unit = childOfClass(viewport, L"LOKA_STACK_UNIT");
   LOKA_VERIFY(unit);
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
@@ -526,7 +531,7 @@ void testWin32ZStackUnitWheelLeavesGroundScrollView()
   stack->addChild(new BoxNode(BoxProps().setSize(300, 40)));
   f.tree = stack;
   f.layout(300, 140);
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
   LOKA_VERIFY(viewport && unit && GetParent(GetParent(viewport)) == f.root() && GetParent(unit) == f.root());
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
@@ -604,7 +609,7 @@ void testWin32ScrollViewHandlerChildRefusalBlocksCommit()
   const int clamped = origin.get().y;
   LOKA_VERIFY(clamped > 0 && clamped < 1000);
   f.layout(300, 140); // Next pass consumes that origin before the refusal.
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   const SCROLLINFO before = metrics(viewport);
   box->props.setSize(180, static_cast<short>(SHRT_MAX - Win32SceneLayout::kRootInset - Win32SceneLayout::kGap + 1));
   f.layout(300, 140);
@@ -627,7 +632,7 @@ void testWin32ZStackGroundRefusalStopsUpperChildren()
   StackNode *buttons = buttonColumn("Must not materialize");
   stack->addChild(buttons);
   f.layout(300, 140);
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   LOKA_VERIFY(viewport);
   LOKA_VERIFY(childOfClass(viewport, L"LOKA_RECT_SURFACE"));
   LOKA_VERIFY(!childOfClass(viewport, L"LOKA_STACK_UNIT"));
@@ -647,7 +652,7 @@ void testWin32ZStackFirstPassRefusalKeepsUnitEmpty()
   column->addChild(new TextNode(TextProps("Must not materialize")));
   stack->addChild(column);
   f.layout(300, 140);
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   HWND unit = childOfClass(viewport, L"LOKA_STACK_UNIT");
   LOKA_VERIFY(unit);
   const RECT rect = rectInParent(unit);
@@ -677,7 +682,7 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick()
   f.layout();
   HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
   HWND button = native(column->childrenHead());
-  HWND viewport = childOfClass(f.root(), L"LOKA_SCROLL_VIEW");
+  HWND viewport = viewportUnder(f.root());
   HWND ground = viewport ? childOfClass(viewport, L"LOKA_RECT_SURFACE") : NULL;
   LOKA_VERIFY(unit && ground && GetParent(button) == unit);
   const RECT rect = rectInParent(unit);
