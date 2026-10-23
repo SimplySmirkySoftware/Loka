@@ -115,14 +115,16 @@ This is the environment where binaries are actually built.
   `scripts/macos-standalone-release-ub1.sh leopard` for a
   `ppc;i386;x86_64` set. These use the existing split-build and `lipo` merge
   paths and publish under `build/release/macos-<profile>-ub1` only after every
-  application contains every expected slice. The 0.0.6 release candidate's
-  Tiger set (`ppc;i386`) is build-verified on Mavericks with Xcode 3.2.6,
-  GCC 4.0 and the 10.4u SDK
+  application contains every expected slice. The 0.0.6 and 0.0.7 release
+  candidates' Tiger sets (`ppc;i386`) are build-verified on Mavericks with
+  Xcode 3.2.6, GCC 4.0 and the 10.4u SDK
   ([#1253](https://github.com/SimplySmirkySoftware/Loka/pull/1253),
-  [#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262)).
+  [#1262](https://github.com/SimplySmirkySoftware/Loka/pull/1262),
+  [#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)).
   This includes SimpleViewer's bundle packaging.
-  The earlier Leopard set evidence predates that packaging change.
-  Its updated packaging still needs build verification on that route.
+  The Leopard set (`ppc7400;i386;x86_64`) is build-verified on the same host
+  at the 0.0.7 candidate, including its GCC 4.2 slice
+  ([#1556](https://github.com/SimplySmirkySoftware/Loka/pull/1556), [#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)); it is not shipped.
   GCC 4.2 records the Leopard PPC slice as `ppc7400`.
   On Big Sur or newer with an Apple Silicon-capable Xcode, run
   `scripts/macos-standalone-release-ub2.sh` for the corresponding
@@ -290,12 +292,18 @@ This is the environment where binaries are actually built.
   The same archive ran on a Windows 8.1 VM: runtime-verified for the five
   loops; the three interactive apps startup only
   ([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
+  The 0.0.7 candidate's x86 XP archive is build-verified the same way.
+  On 2026-10-23 the owner ran SmirkyCard (SmirkyTracker) from it on the
+  VAIO P, and the archive smoke on the Windows 8.1 VM ran all eight
+  applications: the five loops completed their tours (14/9/9/13/11 steps,
+  0 failed) and the three interactive apps stayed up ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)).
   The x64 archive is build-verified with VS 2022-class MSVC 14.44 and
   subsystem 6.00 ([#1251](https://github.com/SimplySmirkySoftware/Loka/pull/1251),
   [#1252](https://github.com/SimplySmirkySoftware/Loka/pull/1252)).
   It ran on a Windows 11 VM on 2026-10-12: runtime-verified for the five
   loops; the three interactive apps startup only
-  ([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
+  ([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)); the 0.0.7 candidate's x64 archive ran there the same
+  way on 2026-10-23 ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)).
   See the [archive results below](#verification-status-by-target).
 
   To verify application-sidecar isolation in an interactive Windows session,
@@ -385,6 +393,9 @@ The 0.0.6 release-candidate results below are dated 2026-10-12.
 Their source is [release PR #1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259).
 The candidate is main `39de508f`; release branch `release/0.0.6` at
 `9699c15c` adds only archive allowlists.
+The 0.0.7 release-candidate results are dated 2026-10-23; their source is
+[release PR #1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571). The candidate is main `f693e4a7`;
+release branch `release/0.0.7` at `a4177305` adds only archive allowlists.
 An archive run starts from an expanded release rehearsal zip.
 For archive smoke, the five loops are runtime-verified: FloppyBird,
 HelloWorld, MineSweeper, ScrapbookUI and Tutorial completed their tours
@@ -396,29 +407,29 @@ The owner exercised SimpleText, SimpleViewer and SmirkyCard by hand.
 
 | Target | Status |
 | --- | --- |
-| Classic Mac OS, 68030 | Runtime-verified, under emulation and on hardware. The primary leg, and the only one that can be debugged at source level. |
+| Classic Mac OS, 68030 | Runtime-verified, under emulation and on hardware. The primary leg, and the only one that can be debugged at source level. On 2026-10-23 the owner ran the 0.0.7 candidate's Classic 68K set on a PowerBook 180c (33 MHz, KanjiTalk 7.1, real hardware): OK, SmirkyCard (SmirkyTracker) exercised by hand ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
 | Classic Mac OS, 68020 | Emulation only. No hardware, so timing observations are not measurements. |
 | Classic Mac OS, 68040 | Runtime-verified: the owner ran the 0.0.6 candidate's Classic 68K set on a PowerBook 550c (full 68040, Mac OS 7.6.1 Japanese, real hardware). Result: OK. The interactive apps were exercised by hand. |
 | Classic Mac OS, PowerPC | Runtime-verified: the owner ran the 0.0.6 candidate's Classic PPC set on a PowerBook 1400c (PowerPC 603e, Mac OS 8.6) and a PowerBook G3 "PDQ" (Mac OS 8.6), both real hardware. Result: OK, and loops placed in separate folders kept presenting while in the background ([#1239](https://github.com/SimplySmirkySoftware/Loka/pull/1239)). The interactive apps were exercised by hand. |
-| Mac OS X, Tiger 10.4 | Runtime-verified for generated Universal Binary 1 samples. The owner ran the 0.0.6 candidate's UB1 archive (ppc slice) on a PowerBook G3 “Pismo” (Mac OS X 10.4.11, real hardware) on 2026-10-12. Result: OK. The interactive apps were exercised by hand. |
-| Mac OS X, Leopard 10.5 | Build-verified through Xcode 3.x, with native debugging verified on that host. The 0.0.6 candidate's UB1 archive (ppc slice) ran on 10.5.8 on an emulated PowerPC G4 (QEMU): runtime-verified for the five loops; the three interactive apps startup only. |
+| Mac OS X, Tiger 10.4 | Runtime-verified for generated Universal Binary 1 samples. The owner ran the 0.0.6 candidate's UB1 archive (ppc slice) on a PowerBook G3 “Pismo” (Mac OS X 10.4.11, real hardware) on 2026-10-12. Result: OK. The interactive apps were exercised by hand. On 2026-10-23 the owner ran the 0.0.7 candidate's UB1 archive (i386 slice) on a MacBook (2006, Mac OS X 10.4.11, real hardware): OK, SmirkyCard exercised by hand; the 10.4–10.9 content blur ([#1549](https://github.com/SimplySmirkySoftware/Loka/pull/1549)) and the About redraw fix ([#1569](https://github.com/SimplySmirkySoftware/Loka/pull/1569)) were verified on that machine ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
+| Mac OS X, Leopard 10.5 | Build-verified through Xcode 3.x, with native debugging verified on that host. The 0.0.6 candidate's UB1 archive (ppc slice) ran on 10.5.8 on an emulated PowerPC G4 (QEMU): runtime-verified for the five loops; the three interactive apps startup only. The 0.0.7 candidate's UB1 archive ran there the same way on 2026-10-23 ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
 | Mac OS X, Snow Leopard 10.6 | Build-verified, including UB1 (`ppc/i386` and `ppc7400/i386/x86_64`). The bridge host for legacy builds. |
-| Mac OS X, Mavericks 10.9.5 | The 0.0.6 candidate's UB1 archive (i386 slice) ran in an Intel VM: runtime-verified for the five loops; the three interactive apps startup only. |
+| Mac OS X, Mavericks 10.9.5 | The 0.0.6 candidate's UB1 archive (i386 slice) ran in an Intel VM: runtime-verified for the five loops; the three interactive apps startup only. The 0.0.7 candidate's UB1 archive ran there the same way on 2026-10-23, and the 10.4–10.9 content blur is runtime-verified on 10.9.5 hardware ([#1549](https://github.com/SimplySmirkySoftware/Loka/pull/1549), [#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
 | Mac OS X on PowerPC hardware | Runtime-verified on an iBook, from bridge output that was also four-architecture `lipo`-verified. The 0.0.6 Tiger hardware run is recorded above. |
 | macOS, High Sierra 10.13 | Scoped observations only: UB2 SimpleText launches and edits on the owner's Intel Mac. Japanese input through an input method crashes it ([#1264](https://github.com/SimplySmirkySoftware/Loka/issues/1264)). UB1 FloppyBird's loop runs its tour. |
 | macOS, Mojave 10.14 | Runtime-verified in dark appearance: the seven UB2 applications other than SmirkyCard on the owner's Intel Mac. |
-| macOS, Catalina 10.15.7 | The 0.0.6 candidate's UB2 archive (x86_64 slice) ran in an Intel VM: runtime-verified for the five loops; the three interactive apps startup only. |
-| Modern macOS | Runtime-verified: the full Loka macOS golden matrix on macOS 26.7.1 (Intel). The owner ran the 0.0.6 candidate's UB2 archive (arm64 slice) on macOS 27.0.1 on a MacBook Neo (real hardware). Result: OK. The interactive apps were exercised by hand. |
-| Windows, current | Runtime-verified on Windows 11 for ARM64 with ACP=932. The 0.0.6 candidate's x64 archive ran on a Windows 11 VM: runtime-verified for the five loops; the three interactive apps startup only. |
-| Windows 8.1 | The 0.0.6 candidate's x86 XP archive ran in a VM: runtime-verified for the five loops; the three interactive apps startup only. |
-| Windows XP class | Runtime-verified on 2026-10-12: the owner ran the 0.0.6 release candidate's x86 XP archive on a Sony VAIO P (real hardware, rehearsal 3). All applications OK. The interactive apps were exercised by hand. |
+| macOS, Catalina 10.15.7 | The 0.0.6 candidate's UB2 archive (x86_64 slice) ran in an Intel VM: runtime-verified for the five loops; the three interactive apps startup only. The 0.0.7 candidate's UB2 archive ran there the same way on 2026-10-23 ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
+| Modern macOS | Runtime-verified: the full Loka macOS golden matrix on macOS 26.7.1 (Intel), 18/18 cells and 16/16 tests at the 0.0.7 candidate ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). The owner ran the 0.0.6 candidate's UB2 archive (arm64 slice) on macOS 27.0.1 on a MacBook Neo (real hardware). Result: OK. The interactive apps were exercised by hand. |
+| Windows, current | Runtime-verified on Windows 11 for ARM64 with ACP=932. The 0.0.6 candidate's x64 archive ran on a Windows 11 VM: runtime-verified for the five loops; the three interactive apps startup only. The 0.0.7 candidate's x64 archive ran there the same way on 2026-10-23 ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
+| Windows 8.1 | The 0.0.6 candidate's x86 XP archive ran in a VM: runtime-verified for the five loops; the three interactive apps startup only. The 0.0.7 candidate's x86 XP archive ran there the same way on 2026-10-23 ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
+| Windows XP class | Runtime-verified on 2026-10-12: the owner ran the 0.0.6 release candidate's x86 XP archive on a Sony VAIO P (real hardware, rehearsal 3). All applications OK. The interactive apps were exercised by hand. On 2026-10-23 the owner ran the 0.0.7 candidate's x86 XP archive on the same machine: SmirkyCard (SmirkyTracker) exercised by hand, OK ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)). |
 | Linux / WSL | Runtime-verified for the headless test suites. |
 
 Hardware coverage is uneven. The 0.0.6 candidate adds a 68040
 PowerBook 550c run to the earlier 68030 hardware evidence.
 These owner observations do not establish performance measurements.
-The MAME scenario rail passed 29/29 cells at the candidate
-([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)).
+The MAME scenario rail passed 29/29 cells at the 0.0.6 candidate
+([#1259](https://github.com/SimplySmirkySoftware/Loka/pull/1259)) and 38/38 at the 0.0.7 candidate ([#1571](https://github.com/SimplySmirkySoftware/Loka/pull/1571)).
 
 Classic PowerPC now has hardware runtime evidence from the PowerBook 1400c.
 The automated runtime scenarios remain 68K only.
