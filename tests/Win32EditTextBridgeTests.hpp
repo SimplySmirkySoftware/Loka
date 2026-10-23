@@ -12,4 +12,10 @@ void testWin32TextEditorLayoutDpiAndRetirement();
 
 void testWin32TextEditorQueuedRequests();
 
+void testWin32TextEditorUtf8BoundaryHelpers();
+void testWin32TextEditorHintEvidence();
+void testWin32TextEditorUtf8ClosedPolicy();
+void testWin32TextEditorEvidenceLifetime();
+void testWin32TextEditorDeferredUtf8Cases();
+void testWin32TextEditorEvidenceCaptureFailure();
 #endif // LOKA_WIN32_EDIT_TEXT_BRIDGE_TESTS_HPP
