@@ -143,6 +143,27 @@ namespace
       LOKA_VERIFY(c->calls[i].operation == operations[i]);
       LOKA_VERIFY(c->calls[i].currentPort == f.window.window() && c->calls[i].painted);
     }
+    // The host has synthetic update rectangles, not a real Control Manager.
+    // Seed the move's damage to pin admission and preservation of foreign damage.
+    const Rect foreign = {200, 200, 210, 210};
+    const Rect covered = {0, 0, 150, 100};
+    f.window.port.native.update.clear();
+    f.window.port.native.update.push_back(barRect);
+    f.window.port.native.update.push_back(moved);
+    f.window.port.native.update.push_back(foreign);
+    f.controller.validateOwnControlMove(barRect, moved);
+    LOKA_VERIFY(f.window.port.native.update.size() == 3);
+    {
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), moved);
+      f.controller.validateOwnControlMove(barRect, moved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 3);
+    }
+    {
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), covered);
+      f.controller.validateOwnControlMove(barRect, moved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 1);
+      LOKA_VERIFY(EqualRect(&f.window.port.native.update[0], &foreign));
+    }
     c->tracking = toolbox_host::TrackScript(129, 129, 40);
     c->tracking.callbacks.assign(3, 23);
     const std::size_t before = c->calls.size();

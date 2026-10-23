@@ -72,8 +72,10 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   binding->lifetimeHint = lifetimeHint;
   bindEnabledState(enabled);
   binding->usedThisFrame = true;
-  if (created || binding->rect.left != controlRect.left || binding->rect.top != controlRect.top
-      || binding->rect.right != controlRect.right || binding->rect.bottom != controlRect.bottom)
+  const Rect before = binding->rect;
+  const bool moved = created || before.left != controlRect.left || before.top != controlRect.top
+                     || before.right != controlRect.right || before.bottom != controlRect.bottom;
+  if (moved)
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
@@ -81,6 +83,9 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   }
   const bool submitted = ReconcileToolboxButtonControl(binding->control, label, binding->enabled, binding->label);
   ShowControl(binding->control);
+  // Reconciliation can invalidate the moved control again; discharge last.
+  if (moved)
+    this->validateOwnControlMove(before, controlRect);
   return submitted;
 }
 
