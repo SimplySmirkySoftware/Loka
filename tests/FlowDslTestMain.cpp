@@ -1,3 +1,4 @@
+#include "TextUtf8Tests.hpp"
 #include "ColumnNaturalHeightTests.hpp"
 #include "StackBlurTests.hpp"
 #include "ContainerGapTests.hpp"

@@ -1,4 +1,5 @@
 #include "core/StringBuffer.hpp"
+#include "core/Utf8Decode.hpp"
 
 #include <cstring>
 
@@ -10,64 +11,6 @@ namespace loka
   {
     namespace
     {
-      bool decodeUtf8Codepoint(const std::string &utf8, std::size_t &index, unsigned int &codepoint)
-      {
-        if (index >= utf8.size())
-          return false;
-        unsigned char lead = static_cast<unsigned char>(utf8[index]);
-        if (lead < 0x80)
-        {
-          codepoint = lead;
-          ++index;
-          return true;
-        }
-        if ((lead & 0xE0) == 0xC0)
-        {
-          if (index + 1 >= utf8.size())
-            return false;
-          unsigned char c1 = static_cast<unsigned char>(utf8[index + 1]);
-          if ((c1 & 0xC0) != 0x80)
-            return false;
-          codepoint = ((lead & 0x1F) << 6) | (c1 & 0x3F);
-          if (codepoint < 0x80)
-            return false;
-          index += 2;
-          return true;
-        }
-        if ((lead & 0xF0) == 0xE0)
-        {
-          if (index + 2 >= utf8.size())
-            return false;
-          unsigned char c1 = static_cast<unsigned char>(utf8[index + 1]);
-          unsigned char c2 = static_cast<unsigned char>(utf8[index + 2]);
-          if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80)
-            return false;
-          codepoint = ((lead & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
-          if (codepoint < 0x800)
-            return false;
-          if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
-            return false;
-          index += 3;
-          return true;
-        }
-        if ((lead & 0xF8) == 0xF0)
-        {
-          if (index + 3 >= utf8.size())
-            return false;
-          unsigned char c1 = static_cast<unsigned char>(utf8[index + 1]);
-          unsigned char c2 = static_cast<unsigned char>(utf8[index + 2]);
-          unsigned char c3 = static_cast<unsigned char>(utf8[index + 3]);
-          if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80 || (c3 & 0xC0) != 0x80)
-            return false;
-          codepoint = ((lead & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
-          if (codepoint < 0x10000 || codepoint > 0x10FFFF)
-            return false;
-          index += 4;
-          return true;
-        }
-        return false;
-      }
-
       bool countUtf8Units(const std::string &utf8, StringEncoding encoding, std::size_t &units)
       {
         units = 0;
@@ -80,7 +23,7 @@ namespace loka
         while (index < utf8.size())
         {
           unsigned int codepoint = 0;
-          if (!decodeUtf8Codepoint(utf8, index, codepoint))
+          if (!detail::DecodeUtf8Codepoint(utf8.data(), utf8.size(), index, codepoint))
             return false;
           if (encoding == StringEncodingUtf16)
           {
@@ -99,7 +42,7 @@ namespace loka
         while (index < utf8.size())
         {
           unsigned int codepoint = 0;
-          if (!decodeUtf8Codepoint(utf8, index, codepoint))
+          if (!detail::DecodeUtf8Codepoint(utf8.data(), utf8.size(), index, codepoint))
             return false;
           if (codepoint <= 0xFFFF)
           {
@@ -120,7 +63,7 @@ namespace loka
         while (index < utf8.size())
         {
           unsigned int codepoint = 0;
-          if (!decodeUtf8Codepoint(utf8, index, codepoint))
+          if (!detail::DecodeUtf8Codepoint(utf8.data(), utf8.size(), index, codepoint))
             return false;
           out[outIndex++] = static_cast<StringBuffer::Utf32Unit>(codepoint);
         }

@@ -188,8 +188,7 @@ namespace loka
                            this->props_.buffer_->capacity());
       if (line.result() != EDITOR_OK)
         return line.result();
-      return cursor.column >= 0 && static_cast<std::size_t>(cursor.column) <= line.size() ? EDITOR_OK
-                                                                                          : EDITOR_INVALID_CURSOR;
+      return text_document_detail::ValidateRowColumn(line, cursor.column);
     }
     EditorResult TextEditorDocument::commit(core::ListOpCursor<core::String> &ops, RowCursor after)
     {
@@ -248,13 +247,13 @@ namespace loka
         return EDITOR_CAPACITY;
       if (!bytes && length)
         return EDITOR_NON_ASCII;
+      if (!text_document_detail::PayloadAdmits(bytes, length))
+        return EDITOR_NON_ASCII;
       std::size_t breaks = 0;
       std::size_t normalized = 0, lastColumn = 0;
       for (std::size_t i = 0; i < length; ++i)
       {
         const unsigned char c = static_cast<unsigned char>(bytes[i]);
-        if (!c || c > 127)
-          return EDITOR_NON_ASCII;
         ++normalized;
         if (c == '\r' || c == '\n')
         {
@@ -351,7 +350,7 @@ namespace loka
                             this->props_.buffer_->capacity());
         if (row.result() != EDITOR_OK)
           return row.result();
-        if (caret.column < 0 || static_cast<std::size_t>(caret.column) > row.size())
+        if (text_document_detail::ValidateRowColumn(row, caret.column) != EDITOR_OK)
           return EDITOR_INVALID_CURSOR;
       }
       ReplaceOpCursor ops(lines, first, last, payloads, static_cast<unsigned short>(breaks));
@@ -390,7 +389,9 @@ namespace loka
                                                          : (static_cast<std::size_t>(caret.column) > line.size()
                                                                 ? static_cast<LineCursor::Column>(line.size())
                                                                 : caret.column);
-      out = LineCursor(lines.at(static_cast<unsigned short>(target)).id, column);
+      out = LineCursor(lines.at(static_cast<unsigned short>(target)).id,
+                       static_cast<LineCursor::Column>(
+                           Utf8RetreatToBoundary(line.data(), line.size(), static_cast<std::size_t>(column))));
       return EDITOR_OK;
     }
     EditorResult TextEditorDocument::moveCaret(LineCursor after)

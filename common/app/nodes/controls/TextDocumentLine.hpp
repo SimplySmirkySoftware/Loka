@@ -3,6 +3,8 @@
 
 #include "app/nodes/controls/TextEditor.hpp"
 #include "platform/String.hpp"
+#include "app/text/Utf8Scan.hpp"
+#include <climits>
 #include "core/StringAccess.hpp"
 
 namespace loka
@@ -24,18 +26,36 @@ namespace loka
       {
         return length <= capacity.bytes || length - capacity.bytes <= capacity.bytes;
       }
-      /** The editor alphabet is all nonzero ASCII except row separators. */
+      /** The one editor alphabet policy: pointer-valid, nonzero ASCII for now. */
+      inline bool EditorAlphabetAdmits(const char *bytes, std::size_t length)
+      {
+        if (!bytes && length)
+          return false;
+        for (std::size_t i = 0; i < length; ++i)
+          if (!bytes[i] || static_cast<unsigned char>(bytes[i]) > 127)
+            return false;
+        return true;
+      }
+      /** Raw rows admit the editor alphabet without CR or LF. */
+      inline bool RowAdmits(const char *bytes, std::size_t length)
+      {
+        if (!EditorAlphabetAdmits(bytes, length))
+          return false;
+        for (std::size_t i = 0; i < length; ++i)
+          if (bytes[i] == '\r' || bytes[i] == '\n')
+            return false;
+        return true;
+      }
+      /** Raw payloads allow separators; replacement, not admission, normalizes them. */
+      inline bool PayloadAdmits(const char *bytes, std::size_t length)
+      {
+        return EditorAlphabetAdmits(bytes, length);
+      }
       inline EditorResult ValidateRow(const char *bytes, std::size_t length, const TextCapacity &capacity)
       {
         if (length > capacity.bytes)
           return EDITOR_CAPACITY;
-        for (std::size_t i = 0; i < length; ++i)
-        {
-          const unsigned char c = static_cast<unsigned char>(bytes[i]);
-          if (!c || c > 127 || c == '\r' || c == '\n')
-            return EDITOR_NON_ASCII;
-        }
-        return EDITOR_OK;
+        return RowAdmits(bytes, length) ? EDITOR_OK : EDITOR_NON_ASCII;
       }
       /** Borrow the rail's UTF-8 bytes when available. Other rails retain the
           existing StringBuffer conversion/refusal contract, as AttributedString
@@ -90,6 +110,24 @@ namespace loka
         platform::Utf8View view_;
         EditorResult result_;
       };
+      /** Requires a well-formed UTF-8 row; alphabet admission belongs to the caller. */
+      inline EditorResult ValidateRowColumn(const LineBytes &row, LineCursor::Column column)
+      {
+        if (column < 0 || (row.size() <= INT_MAX && column > static_cast<LineCursor::Column>(row.size())))
+          return EDITOR_INVALID_CURSOR;
+        return Utf8ColumnOnBoundary(row.data(), row.size(), static_cast<std::size_t>(column)) ? EDITOR_OK
+                                                                                              : EDITOR_INVALID_CURSOR;
+      }
+      /** Status-line scalar index. Requires a validated row and boundary column. O(column). */
+      inline std::size_t CodePointIndex(const LineBytes &row, LineCursor::Column column)
+      {
+        assert(ValidateRowColumn(row, column) == EDITOR_OK);
+        std::size_t count = 0;
+        const bool valid = Utf8Scan(row.data(), static_cast<std::size_t>(column), count);
+        assert(valid);
+        (void)valid;
+        return count;
+      }
       /** Shared editor/file measurement, excluding attachment and cursor ownership. */
       inline EditorResult Measure(const TextLines &lines, std::size_t &bytes)
       {

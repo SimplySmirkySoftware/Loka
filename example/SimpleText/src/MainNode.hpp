@@ -550,7 +550,7 @@ namespace simpletext
         if (result == TEXT_DOCUMENT_TOO_LARGE)
           return loka::core::String::Literal("Cannot open the file: it is too long for the editor.");
         if (result == TEXT_DOCUMENT_NON_ASCII)
-          return loka::core::String::Literal("Cannot open the file: it is not plain ASCII text.");
+          return loka::core::String::Literal("Cannot open the file: it is refused by the editor alphabet.");
         return loka::core::String::Literal("Cannot open the file.");
       case SAVE_DOCUMENT:
         // The prepare door refuses a non-TEXT file before anything is written.
