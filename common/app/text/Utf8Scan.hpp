@@ -36,6 +36,17 @@ namespace loka
         --column;
       return column;
     }
+    /** A signed column request clamped into the row: below zero becomes 0, beyond the row
+        becomes its length, and an interior byte retreats to the code point boundary.
+        Requires well-formed UTF-8. Both native rails report the result as the applied column. */
+    inline std::size_t Utf8ClampColumnToBoundary(const char *bytes, std::size_t length, long column)
+    {
+      if (column < 0)
+        return 0;
+      const std::size_t clamped =
+          static_cast<unsigned long>(column) > length ? length : static_cast<std::size_t>(column);
+      return Utf8RetreatToBoundary(bytes, length, clamped);
+    }
   } // namespace app
 } // namespace loka
 #endif
