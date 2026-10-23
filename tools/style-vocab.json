@@ -19,6 +19,10 @@
     "MAGENTA": 9,
     "YELLOW": 10
   },
+  "family": {
+    "SYSTEM": 1,
+    "MONOSPACE": 2
+  },
   "wrap": {
     "NONE": 0,
     "WORD": 1,
@@ -35,7 +39,7 @@
     "RIGHT": 2
   },
   "fields": {
-    "TextStyle": ["fontSize", "weight", "italic", "color"],
+    "TextStyle": ["fontSize", "weight", "italic", "color", "family"],
     "BlockStyle": ["wrap", "truncation", "align"]
   }
 }
