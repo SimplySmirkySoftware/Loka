@@ -1,0 +1,64 @@
+# v0.0.7 Windows x86 XP-profile standalone release allowlist (owner
+# decision 4, 2026-10-11): the same applications as the x64 archive,
+# SmirkyCard included (#1262 makes it build with v141; new in v0.0.7 its
+# LAPTOP.JS and the 41 Pictures/*.PNG from example/SmirkyCard/disk-pictures.txt),
+# built with Visual Studio 2017's v141 toolset and the xp profile (#1251),
+# subsystem 5.01 and static CRT, by scripts/release/win32-remote-stage.sh
+# (x86, xp). Windows XP is a build target; runtime on XP is claimed only where
+# the release PR records a pass (VAIO P).
+build	build/release/win32-x86-xp/README.txt	Windows-x86-XP/README.txt
+build	build/release/win32-x86-xp/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe	Windows-x86-XP/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/helloworld/LokaHelloWorldStandaloneLoopWin32.exe	Windows-x86-XP/helloworld/LokaHelloWorldStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe	Windows-x86-XP/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	Windows-x86-XP/scrapbook/LokaScrapbookStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x86-XP/tutorial/LokaTutorialStandaloneLoopWin32.exe
+build	build/release/win32-x86-xp/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x86-XP/simpleviewer/LokaSimpleViewerWin32.exe
+build	build/release/win32-x86-xp/simpletext/LokaSimpleTextWin32.exe	Windows-x86-XP/simpletext/LokaSimpleTextWin32.exe
+git	example/ScrapbookUI/assets/ASSETS-modern.LRP	Windows-x86-XP/scrapbook/ASSETS.LRP
+build	build/release/win32-x86-xp/smirkycard/LokaSmirkyCardWin32.exe	Windows-x86-XP/smirkycard/LokaSmirkyCardWin32.exe
+git	example/SmirkyCard/MAIN.JS	Windows-x86-XP/smirkycard/MAIN.JS
+git	example/SmirkyCard/MINES.JS	Windows-x86-XP/smirkycard/MINES.JS
+git	example/SmirkyCard/VIEWER.JS	Windows-x86-XP/smirkycard/VIEWER.JS
+git	example/SmirkyCard/LAPTOP.JS	Windows-x86-XP/smirkycard/LAPTOP.JS
+git	example/SmirkyCard/assets/MACPLUS.PNG	Windows-x86-XP/smirkycard/Pictures/MACPLUS.PNG
+git	example/SmirkyCard/assets/MACPLUSM.PNG	Windows-x86-XP/smirkycard/Pictures/MACPLUSM.PNG
+git	example/SmirkyCard/assets/MACPLUSMS.PNG	Windows-x86-XP/smirkycard/Pictures/MACPLUSMS.PNG
+git	example/SmirkyCard/assets/PB180C.PNG	Windows-x86-XP/smirkycard/Pictures/PB180C.PNG
+git	example/SmirkyCard/assets/PB180CM.PNG	Windows-x86-XP/smirkycard/Pictures/PB180CM.PNG
+git	example/SmirkyCard/assets/PB180CMS.PNG	Windows-x86-XP/smirkycard/Pictures/PB180CMS.PNG
+git	example/SmirkyCard/assets/PB550C.PNG	Windows-x86-XP/smirkycard/Pictures/PB550C.PNG
+git	example/SmirkyCard/assets/PB550CM.PNG	Windows-x86-XP/smirkycard/Pictures/PB550CM.PNG
+git	example/SmirkyCard/assets/PB550CMS.PNG	Windows-x86-XP/smirkycard/Pictures/PB550CMS.PNG
+git	example/SmirkyCard/assets/PDQ.PNG	Windows-x86-XP/smirkycard/Pictures/PDQ.PNG
+git	example/SmirkyCard/assets/PDQM.PNG	Windows-x86-XP/smirkycard/Pictures/PDQM.PNG
+git	example/SmirkyCard/assets/PDQMS.PNG	Windows-x86-XP/smirkycard/Pictures/PDQMS.PNG
+git	example/SmirkyCard/assets/PISMO.PNG	Windows-x86-XP/smirkycard/Pictures/PISMO.PNG
+git	example/SmirkyCard/assets/PISMOM.PNG	Windows-x86-XP/smirkycard/Pictures/PISMOM.PNG
+git	example/SmirkyCard/assets/PISMOMS.PNG	Windows-x86-XP/smirkycard/Pictures/PISMOMS.PNG
+git	example/SmirkyCard/assets/TIBOOK.PNG	Windows-x86-XP/smirkycard/Pictures/TIBOOK.PNG
+git	example/SmirkyCard/assets/TIBOOKM.PNG	Windows-x86-XP/smirkycard/Pictures/TIBOOKM.PNG
+git	example/SmirkyCard/assets/TIBOOKMS.PNG	Windows-x86-XP/smirkycard/Pictures/TIBOOKMS.PNG
+git	example/SmirkyCard/assets/IBOOKG3.PNG	Windows-x86-XP/smirkycard/Pictures/IBOOKG3.PNG
+git	example/SmirkyCard/assets/IBOOKG3M.PNG	Windows-x86-XP/smirkycard/Pictures/IBOOKG3M.PNG
+git	example/SmirkyCard/assets/IBOOKG3MS.PNG	Windows-x86-XP/smirkycard/Pictures/IBOOKG3MS.PNG
+git	example/SmirkyCard/assets/MB2006.PNG	Windows-x86-XP/smirkycard/Pictures/MB2006.PNG
+git	example/SmirkyCard/assets/MB2006M.PNG	Windows-x86-XP/smirkycard/Pictures/MB2006M.PNG
+git	example/SmirkyCard/assets/MB2006MS.PNG	Windows-x86-XP/smirkycard/Pictures/MB2006MS.PNG
+git	example/SmirkyCard/assets/MBP2011.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2011.PNG
+git	example/SmirkyCard/assets/MBP2011M.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2011M.PNG
+git	example/SmirkyCard/assets/MBP2011MS.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2011MS.PNG
+git	example/SmirkyCard/assets/MBP2015.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2015.PNG
+git	example/SmirkyCard/assets/MBP2015M.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2015M.PNG
+git	example/SmirkyCard/assets/MBP2015MS.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2015MS.PNG
+git	example/SmirkyCard/assets/MBP2019.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2019.PNG
+git	example/SmirkyCard/assets/MBP2019M.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2019M.PNG
+git	example/SmirkyCard/assets/MBP2019MS.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2019MS.PNG
+git	example/SmirkyCard/assets/MBP2023.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2023.PNG
+git	example/SmirkyCard/assets/MBP2023M.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2023M.PNG
+git	example/SmirkyCard/assets/MBP2023MS.PNG	Windows-x86-XP/smirkycard/Pictures/MBP2023MS.PNG
+git	example/SmirkyCard/assets/NEO.PNG	Windows-x86-XP/smirkycard/Pictures/NEO.PNG
+git	example/SmirkyCard/assets/NEOM.PNG	Windows-x86-XP/smirkycard/Pictures/NEOM.PNG
+git	example/SmirkyCard/assets/NEOMS.PNG	Windows-x86-XP/smirkycard/Pictures/NEOMS.PNG
+git	example/SmirkyCard/assets/ICON.PNG	Windows-x86-XP/smirkycard/Pictures/ICON.PNG
+git	example/SmirkyCard/assets/ICONMS.PNG	Windows-x86-XP/smirkycard/Pictures/ICONMS.PNG
+build	build/release/win32-x86-xp.toolchain.txt	Windows-x86-XP/TOOLCHAIN.txt

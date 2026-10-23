@@ -1,0 +1,69 @@
+# v0.0.7 Windows x64 standalone release allowlist (owner decision 4,
+# 2026-10-11; first Windows archive): five autonomous presentation loops plus
+# the interactive SimpleViewer and SimpleText, plus SmirkyCard (experimental,
+# with the card scripts from example/SmirkyCard/disk-scripts.txt beside it
+# and, new in v0.0.7, LAPTOP.JS plus the 41 Pictures/*.PNG from
+# example/SmirkyCard/disk-pictures.txt that SmirkyTracker loads at run time;
+# owner decision 8), built Release on a Windows
+# builder by scripts/release/win32-remote-stage.sh (x64, modern profile,
+# subsystem 6.00) and brought back only after an exact path, size and SHA-256
+# match (#1252). Scrapbook's ASSETS.LRP is the tracked modern (PNG) package
+# assets/ASSETS-modern.LRP, the one the Windows stage installs; the Classic
+# example/ScrapbookUI/ASSETS.LRP holds PICT pages that WIC cannot decode.
+# TOOLCHAIN.txt records the builder's compiler/SDK, CMake, OS and PowerShell.
+build	build/release/win32-x64/README.txt	Windows-x64/README.txt
+build	build/release/win32-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe	Windows-x64/floppybird/LokaFloppyBirdStandaloneLoopWin32.exe
+build	build/release/win32-x64/helloworld/LokaHelloWorldStandaloneLoopWin32.exe	Windows-x64/helloworld/LokaHelloWorldStandaloneLoopWin32.exe
+build	build/release/win32-x64/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe	Windows-x64/minesweeper/LokaMineSweeperStandaloneLoopWin32.exe
+build	build/release/win32-x64/scrapbook/LokaScrapbookStandaloneLoopWin32.exe	Windows-x64/scrapbook/LokaScrapbookStandaloneLoopWin32.exe
+build	build/release/win32-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe	Windows-x64/tutorial/LokaTutorialStandaloneLoopWin32.exe
+build	build/release/win32-x64/simpleviewer/LokaSimpleViewerWin32.exe	Windows-x64/simpleviewer/LokaSimpleViewerWin32.exe
+build	build/release/win32-x64/simpletext/LokaSimpleTextWin32.exe	Windows-x64/simpletext/LokaSimpleTextWin32.exe
+git	example/ScrapbookUI/assets/ASSETS-modern.LRP	Windows-x64/scrapbook/ASSETS.LRP
+build	build/release/win32-x64/smirkycard/LokaSmirkyCardWin32.exe	Windows-x64/smirkycard/LokaSmirkyCardWin32.exe
+git	example/SmirkyCard/MAIN.JS	Windows-x64/smirkycard/MAIN.JS
+git	example/SmirkyCard/MINES.JS	Windows-x64/smirkycard/MINES.JS
+git	example/SmirkyCard/VIEWER.JS	Windows-x64/smirkycard/VIEWER.JS
+git	example/SmirkyCard/LAPTOP.JS	Windows-x64/smirkycard/LAPTOP.JS
+git	example/SmirkyCard/assets/MACPLUS.PNG	Windows-x64/smirkycard/Pictures/MACPLUS.PNG
+git	example/SmirkyCard/assets/MACPLUSM.PNG	Windows-x64/smirkycard/Pictures/MACPLUSM.PNG
+git	example/SmirkyCard/assets/MACPLUSMS.PNG	Windows-x64/smirkycard/Pictures/MACPLUSMS.PNG
+git	example/SmirkyCard/assets/PB180C.PNG	Windows-x64/smirkycard/Pictures/PB180C.PNG
+git	example/SmirkyCard/assets/PB180CM.PNG	Windows-x64/smirkycard/Pictures/PB180CM.PNG
+git	example/SmirkyCard/assets/PB180CMS.PNG	Windows-x64/smirkycard/Pictures/PB180CMS.PNG
+git	example/SmirkyCard/assets/PB550C.PNG	Windows-x64/smirkycard/Pictures/PB550C.PNG
+git	example/SmirkyCard/assets/PB550CM.PNG	Windows-x64/smirkycard/Pictures/PB550CM.PNG
+git	example/SmirkyCard/assets/PB550CMS.PNG	Windows-x64/smirkycard/Pictures/PB550CMS.PNG
+git	example/SmirkyCard/assets/PDQ.PNG	Windows-x64/smirkycard/Pictures/PDQ.PNG
+git	example/SmirkyCard/assets/PDQM.PNG	Windows-x64/smirkycard/Pictures/PDQM.PNG
+git	example/SmirkyCard/assets/PDQMS.PNG	Windows-x64/smirkycard/Pictures/PDQMS.PNG
+git	example/SmirkyCard/assets/PISMO.PNG	Windows-x64/smirkycard/Pictures/PISMO.PNG
+git	example/SmirkyCard/assets/PISMOM.PNG	Windows-x64/smirkycard/Pictures/PISMOM.PNG
+git	example/SmirkyCard/assets/PISMOMS.PNG	Windows-x64/smirkycard/Pictures/PISMOMS.PNG
+git	example/SmirkyCard/assets/TIBOOK.PNG	Windows-x64/smirkycard/Pictures/TIBOOK.PNG
+git	example/SmirkyCard/assets/TIBOOKM.PNG	Windows-x64/smirkycard/Pictures/TIBOOKM.PNG
+git	example/SmirkyCard/assets/TIBOOKMS.PNG	Windows-x64/smirkycard/Pictures/TIBOOKMS.PNG
+git	example/SmirkyCard/assets/IBOOKG3.PNG	Windows-x64/smirkycard/Pictures/IBOOKG3.PNG
+git	example/SmirkyCard/assets/IBOOKG3M.PNG	Windows-x64/smirkycard/Pictures/IBOOKG3M.PNG
+git	example/SmirkyCard/assets/IBOOKG3MS.PNG	Windows-x64/smirkycard/Pictures/IBOOKG3MS.PNG
+git	example/SmirkyCard/assets/MB2006.PNG	Windows-x64/smirkycard/Pictures/MB2006.PNG
+git	example/SmirkyCard/assets/MB2006M.PNG	Windows-x64/smirkycard/Pictures/MB2006M.PNG
+git	example/SmirkyCard/assets/MB2006MS.PNG	Windows-x64/smirkycard/Pictures/MB2006MS.PNG
+git	example/SmirkyCard/assets/MBP2011.PNG	Windows-x64/smirkycard/Pictures/MBP2011.PNG
+git	example/SmirkyCard/assets/MBP2011M.PNG	Windows-x64/smirkycard/Pictures/MBP2011M.PNG
+git	example/SmirkyCard/assets/MBP2011MS.PNG	Windows-x64/smirkycard/Pictures/MBP2011MS.PNG
+git	example/SmirkyCard/assets/MBP2015.PNG	Windows-x64/smirkycard/Pictures/MBP2015.PNG
+git	example/SmirkyCard/assets/MBP2015M.PNG	Windows-x64/smirkycard/Pictures/MBP2015M.PNG
+git	example/SmirkyCard/assets/MBP2015MS.PNG	Windows-x64/smirkycard/Pictures/MBP2015MS.PNG
+git	example/SmirkyCard/assets/MBP2019.PNG	Windows-x64/smirkycard/Pictures/MBP2019.PNG
+git	example/SmirkyCard/assets/MBP2019M.PNG	Windows-x64/smirkycard/Pictures/MBP2019M.PNG
+git	example/SmirkyCard/assets/MBP2019MS.PNG	Windows-x64/smirkycard/Pictures/MBP2019MS.PNG
+git	example/SmirkyCard/assets/MBP2023.PNG	Windows-x64/smirkycard/Pictures/MBP2023.PNG
+git	example/SmirkyCard/assets/MBP2023M.PNG	Windows-x64/smirkycard/Pictures/MBP2023M.PNG
+git	example/SmirkyCard/assets/MBP2023MS.PNG	Windows-x64/smirkycard/Pictures/MBP2023MS.PNG
+git	example/SmirkyCard/assets/NEO.PNG	Windows-x64/smirkycard/Pictures/NEO.PNG
+git	example/SmirkyCard/assets/NEOM.PNG	Windows-x64/smirkycard/Pictures/NEOM.PNG
+git	example/SmirkyCard/assets/NEOMS.PNG	Windows-x64/smirkycard/Pictures/NEOMS.PNG
+git	example/SmirkyCard/assets/ICON.PNG	Windows-x64/smirkycard/Pictures/ICON.PNG
+git	example/SmirkyCard/assets/ICONMS.PNG	Windows-x64/smirkycard/Pictures/ICONMS.PNG
+build	build/release/win32-x64.toolchain.txt	Windows-x64/TOOLCHAIN.txt
