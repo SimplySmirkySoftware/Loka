@@ -74,10 +74,11 @@ namespace loka
           if (!this->index_)
             out = core::ListOp<core::String>(core::UPDATE, this->lines_.at(this->first_).id, 0, this->payloads_[0]);
           else if (this->index_ <= removed)
-            out = core::ListOp<core::String>(core::REMOVE, this->lines_.at(this->first_ + this->index_).id);
+            out = core::ListOp<core::String>(
+                core::REMOVE, this->lines_.at(static_cast<unsigned short>(this->first_ + this->index_)).id);
           else
           {
-            const unsigned short inserted = this->index_ - removed;
+            const unsigned short inserted = static_cast<unsigned short>(this->index_ - removed);
             out = core::ListOp<core::String>(
                 core::INSERT, core::ItemId(), this->first_ + inserted, this->payloads_[inserted]);
           }
@@ -344,7 +345,8 @@ namespace loka
         if (caret.row >= finalCount)
           return EDITOR_INVALID_CURSOR;
         const bool inReplacement = caret.row >= first && caret.row <= first + breaks;
-        const unsigned short oldRow = caret.row < first ? caret.row : caret.row + (last - first) - breaks;
+        const unsigned short oldRow =
+            caret.row < first ? caret.row : static_cast<unsigned short>(caret.row + (last - first) - breaks);
         const LineBytes row(inReplacement ? payloads[caret.row - first] : lines.at(oldRow).value,
                             this->props_.buffer_->capacity());
         if (row.result() != EDITOR_OK)

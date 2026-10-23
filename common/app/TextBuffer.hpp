@@ -28,7 +28,7 @@ namespace loka
       {
         if (this->rows_)
           return false;
-        if (!capacity || capacity > static_cast<std::size_t>(-1) / sizeof(core::String))
+        if (!capacity)
           return false;
         this->rows_ = static_cast<core::String *>(
             core::LokaAllocRaw(sizeof(core::String) * capacity, core::LokaAllocationSite("TextBuffer", "handles")));
