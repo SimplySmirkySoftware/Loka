@@ -25,4 +25,11 @@ void testWin32ScrollViewHorizontalMessagePublishesOffsetFact();
 
 void testWin32ScrollViewHorizontalWheelStepsOffset();
 
+void testWin32ScrollViewInsetBarGeometry();
+void testWin32ScrollViewInsetBarRefusalAndDpi();
+void testWin32ScrollViewSubordinateRetirement();
+void testWin32ScrollViewFrameTabAndArrowFocus();
+
+void testWin32ScrollViewInsetBarTinyAndFractionalSeat();
+
 #endif // LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP
