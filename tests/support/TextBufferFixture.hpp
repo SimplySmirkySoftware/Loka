@@ -147,8 +147,9 @@ namespace loka
           virtual bool next(core::ListOp<core::String> &out)
           {
             if (this->position_ < this->lines_.size())
-              out = core::ListOp<core::String>(core::REMOVE,
-                                               this->lines_.at(this->lines_.size() - 1 - this->position_).id);
+              out = core::ListOp<core::String>(
+                  core::REMOVE,
+                  this->lines_.at(static_cast<unsigned short>(this->lines_.size() - 1 - this->position_)).id);
             else if (this->position_ == this->lines_.size())
               out = core::ListOp<core::String>(core::INSERT, core::ItemId(), 0, this->row_);
             else
