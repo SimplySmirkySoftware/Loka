@@ -1,0 +1,23 @@
+10.15.7
+x86_64
+LokaFloppyBirdStandaloneLoopMacOS alive ok=14 other=0
+LokaHelloWorldStandaloneLoopMacOS alive ok=9 other=0
+LokaMineSweeperStandaloneLoopMacOS alive ok=9 other=0
+LokaScrapbookStandaloneLoopMacOS alive ok=13 other=0
+LokaSimpleTextMacOS alive ok=0 other=0
+LokaSimpleViewerMacOS alive ok=0 other=0
+LokaSmirkyCardMacOS alive ok=0 other=0
+LokaTutorialStandaloneLoopMacOS alive ok=11 other=0
+finished
+PASS LokaFloppyBirdStandaloneLoopMacOS loop succeeded=14/14 other=0
+PASS LokaHelloWorldStandaloneLoopMacOS loop succeeded=9/9 other=0
+PASS LokaMineSweeperStandaloneLoopMacOS loop succeeded=9/9 other=0
+PASS LokaScrapbookStandaloneLoopMacOS loop succeeded=13/13 other=0
+PASS LokaSimpleTextMacOS interactive alive=True other=0
+PASS LokaSimpleViewerMacOS interactive alive=True other=0
+PASS LokaSmirkyCardMacOS interactive alive=True other=0
+PASS LokaTutorialStandaloneLoopMacOS loop succeeded=11/11 other=0
+PASS applications launched: 8
+PASS macsmoke finished marker
+SMOKE PASS
+ub2 exit=0

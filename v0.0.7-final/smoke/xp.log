@@ -1,0 +1,28 @@
+os=Microsoft Windows NT 6.3.9600.0
+assets=3436
+file smirkycard/LAPTOP.JS present=True
+file scrapbook/ASSETS.LRP present=True
+pictures=41
+LokaFloppyBirdStandaloneLoopWin32.exe alive=True log=True succeeded=14 other=0 last=[terminal status=succeeded]
+LokaHelloWorldStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaMineSweeperStandaloneLoopWin32.exe alive=True log=True succeeded=9 other=0 last=[terminal status=succeeded]
+LokaScrapbookStandaloneLoopWin32.exe alive=True log=True succeeded=13 other=0 last=[terminal status=succeeded]
+LokaSimpleTextWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSimpleViewerWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaSmirkyCardWin32.exe alive=True log=False succeeded=0 other=0 last=[]
+LokaTutorialStandaloneLoopWin32.exe alive=True log=True succeeded=11 other=0 last=[terminal status=succeeded]
+PASS LokaFloppyBirdStandaloneLoopWin32.exe loop succeeded=14/14 other=0
+PASS LokaHelloWorldStandaloneLoopWin32.exe loop succeeded=9/9 other=0
+PASS LokaMineSweeperStandaloneLoopWin32.exe loop succeeded=9/9 other=0
+PASS LokaScrapbookStandaloneLoopWin32.exe loop succeeded=13/13 other=0
+PASS LokaSimpleTextWin32.exe interactive alive=True other=0
+PASS LokaSimpleViewerWin32.exe interactive alive=True other=0
+PASS LokaSmirkyCardWin32.exe interactive alive=True other=0
+PASS LokaTutorialStandaloneLoopWin32.exe loop succeeded=11/11 other=0
+PASS applications launched: 8
+PASS scrapbook ASSETS.LRP size 3436 (expected 3436)
+PASS archive carries smirkycard/LAPTOP.JS
+PASS archive carries scrapbook/ASSETS.LRP
+PASS pictures 41 (expected 41)
+SMOKE PASS
+xp exit=0
