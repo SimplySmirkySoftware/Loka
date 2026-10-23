@@ -15,6 +15,7 @@ void testMacZStackRootUnitChildRefusalKeepsPreviousRectangle();
 void testMacZStackUnitInsideViewportPropagatesRefusal();
 void testMacZStackGroundRefusalStopsUpperChildren();
 void testMacZStackFirstPassRefusalKeepsUnitEmpty();
+void testMacZStackUnitFrameChangeMarksDisplay();
 void testMacZStackUnitPaintsOpaqueGround();
 void testMacZStackUnitOverScrollViewSurvivesGroundRedraw();
 void testMacZStackRetirementDetachesUnitBeforeDrain();

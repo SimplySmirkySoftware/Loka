@@ -773,6 +773,123 @@ namespace
   }
 } // namespace
 
+namespace
+{
+  /** Scoped test-only draw counter on one view class (and its subclasses that
+      inherit drawRect:); the original implementation still runs. needsDisplay
+      is not observable on layer-backed AppKit (Tahoe answers NO after
+      setNeedsDisplay:YES), so delivered draws are the only cross-version witness. */
+  class DrawCountProbe
+  {
+  public:
+    explicit DrawCountProbe(Class type)
+        : type_(type),
+          original_(method_getImplementation(class_getInstanceMethod(type, @selector(drawRect:)))),
+          draws_(0),
+          replacement_(@selector(drawRect:), reinterpret_cast<IMP>(&DrawCountProbe::Draw), type)
+    {
+      for (unsigned i = 0; i < kSlots; ++i)
+        if (!slots_[i])
+        {
+          slots_[i] = this;
+          return;
+        }
+      LOKA_VERIFY(false && "DrawCountProbe slots exhausted");
+    }
+    ~DrawCountProbe()
+    {
+      for (unsigned i = 0; i < kSlots; ++i)
+        if (slots_[i] == this)
+          slots_[i] = 0;
+    }
+    unsigned take()
+    {
+      const unsigned draws = this->draws_;
+      this->draws_ = 0;
+      return draws;
+    }
+
+  private:
+    static void Draw(id self, SEL selector, NSRect rect)
+    {
+      typedef void (*DrawFn)(id, SEL, NSRect);
+      for (unsigned i = 0; i < kSlots; ++i)
+      {
+        DrawCountProbe *probe = slots_[i];
+        if (!probe || ![self isKindOfClass:probe->type_])
+          continue;
+        ++probe->draws_;
+        reinterpret_cast<DrawFn>(probe->original_)(self, selector, rect);
+        return;
+      }
+      LOKA_VERIFY(false && "DrawCountProbe received a draw for an unprobed class");
+    }
+    enum
+    {
+      kSlots = 2
+    };
+    const Class type_;
+    const IMP original_;
+    unsigned draws_;
+    MacNativeRefusal replacement_;
+    static DrawCountProbe *slots_[kSlots];
+    DrawCountProbe(const DrawCountProbe &);
+    DrawCountProbe &operator=(const DrawCountProbe &);
+  };
+  DrawCountProbe *DrawCountProbe::slots_[DrawCountProbe::kSlots] = {0, 0};
+} // namespace
+
+void testMacZStackUnitFrameChangeMarksDisplay()
+{
+  // #1564: setFrame: marks nothing for display by contract. Tiger's AppKit
+  // draws neither rectangle, so a unit growing from its collapsed zero height
+  // (an About Show arm appearing) stayed invisible and one collapsing again
+  // left its pixels over the ground. The rail marks both rectangles itself:
+  // the grown unit draws, and the ground under the left rectangle draws.
+  // Layer-backed AppKit (Tahoe) draws a resized layer on its own and composites
+  // the ground's layer back when the unit shrinks, so neither half discriminates
+  // there; a layerless window (10.9 and earlier) needs both marks.
+  Fixture f;
+  if (!f.host.show())
+    return;
+  ZStackNode *stack = stackWithGround(f);
+  BoxNode *upper = new BoxNode(BoxProps().setSize(180, 0));
+  stack->addChild(upper);
+  f.layout(300, 200);
+  NSView *unit = unitUnder(f.host.root);
+  NSView *ground = childOfClass(f.host.root, NSClassFromString(@"LokaRectSurfaceView"));
+  LOKA_VERIFY(unit && ground && [unit frame].size.height == 0);
+  settle(f.host.root);
+  DrawCountProbe unitDraws(NSClassFromString(@"LokaStackUnitView"));
+  DrawCountProbe groundDraws(NSClassFromString(@"LokaRectSurfaceView"));
+  settle(f.host.root);
+  LOKA_VERIFY(unitDraws.take() == 0 && groundDraws.take() == 0);
+  upper->props.setSize(180, 80);
+  f.layout(300, 200);
+  LOKA_VERIFY([unit frame].size.height > 0);
+  settle(f.host.root);
+  const unsigned grown = unitDraws.take();
+  const bool layered = [f.host.root respondsToSelector:@selector(layer)] && [f.host.root layer] != nil;
+  std::printf("ZStack unit grow: unit draws=%u ground draws=%u (AppKit %g, root layer=%d)\n",
+              grown,
+              groundDraws.take(),
+              NSAppKitVersionNumber,
+              layered);
+  LOKA_VERIFY(grown >= 1);
+  upper->props.setSize(180, 0);
+  f.layout(300, 200);
+  LOKA_VERIFY([unit frame].size.height == 0);
+  settle(f.host.root);
+  const unsigned uncovered = groundDraws.take();
+  std::printf("ZStack unit collapse: ground draws=%u unit draws=%u\n", uncovered, unitDraws.take());
+  // A layer-backed ground keeps its own pixels and composites after the unit's
+  // layer shrinks: nothing asks it to draw, and nothing needs to.
+  if (layered)
+    std::printf("[skip] ZStack unit collapse: layer-backed root, the ground's layer needs no redraw\n");
+  else
+    LOKA_VERIFY(uncovered >= 1);
+}
+
 void testMacZStackUnitPaintsOpaqueGround()
 {
   verifyComposite(false, false);
