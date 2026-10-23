@@ -6,6 +6,11 @@
 class MacPlatformContext : public PlatformContext
 {
 public:
+  virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
+  {
+    out = loka::app::TextCapacity::of(256, 8192);
+    return true;
+  }
   MacPlatformContext();
   virtual ~MacPlatformContext();
 

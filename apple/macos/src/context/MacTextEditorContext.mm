@@ -19,15 +19,16 @@ namespace
   /** Logical lines, including a final empty line. Native wrapping is irrelevant. */
   struct NativeLines
   {
-    NSRange ranges[TextEditorProps::kMaxLines];
+    // Fixed storage until the native-capacity PR; matches MacPlatformContext query.
+    NSRange ranges[256];
     unsigned short count;
     EditorResult result;
-    explicit NativeLines(NSString *text)
+    NativeLines(NSString *text, const TextCapacity &capacity)
         : count(0),
           result(EDITOR_OK)
     {
       const NSUInteger length = [text length];
-      if (length > TextEditorProps::kMaxBytes)
+      if (length > capacity.bytes)
       {
         this->result = EDITOR_CAPACITY;
         return;
@@ -44,7 +45,7 @@ namespace
       NSUInteger offset = 0;
       do
       {
-        if (this->count == TextEditorProps::kMaxLines)
+        if (this->count == capacity.lines)
         {
           this->result = EDITOR_CAPACITY;
           return;
@@ -277,7 +278,7 @@ struct MacTextEditorContext::Projection
   Phase phase;
   NSString *committed;
   std::string scratch;
-  ItemId ids[TextEditorProps::kMaxLines];
+  ItemId ids[256];
   NSRange selection;
   Styles *styles;
   Projection()
@@ -286,7 +287,7 @@ struct MacTextEditorContext::Projection
         selection(NSMakeRange(0, 0)),
         styles(0)
   {
-    this->scratch.reserve(TextEditorProps::kMaxBytes);
+    this->scratch.reserve(8192);
   }
   ~Projection()
   {
@@ -306,7 +307,7 @@ struct MacTextEditorContext::Projection
     [this->committed release];
     this->committed = nil;
     this->clearStyles();
-    for (unsigned short i = 0; i < TextEditorProps::kMaxLines; ++i)
+    for (unsigned short i = 0; i < 256; ++i)
       this->ids[i] = ItemId::none();
   }
   /** Validate the snapshot before consuming native text or deferred styling. */
@@ -320,7 +321,7 @@ struct MacTextEditorContext::Projection
     for (NSUInteger i = 0; i < this->scratch.size(); ++i)
       if ([this->committed characterAtIndex:i] != (this->scratch[i] == '\r' ? '\n' : this->scratch[i]))
         return EDITOR_STALE_ID;
-    const ObservableList<String> &committedLines = *node.props.lines_;
+    const TextLines &committedLines = node.props.buffer_->lines();
     for (unsigned short i = 0; i < committedLines.size(); ++i)
       if (this->ids[i] != committedLines.at(i).id)
         return EDITOR_STALE_ID;
@@ -328,7 +329,7 @@ struct MacTextEditorContext::Projection
   }
   void style(NSTextView *view, loka::app::TextEditorNode &node, MacScenePlatformController &controller, bool force)
   {
-    NativeLines lines([view string]);
+    NativeLines lines([view string], node.props.buffer_->capacity());
     if (lines.result != EDITOR_OK)
       return;
     Styles *old = this->styles;
@@ -336,9 +337,9 @@ struct MacTextEditorContext::Projection
     Styles **tail = &this->styles;
     NSTextStorage *storage = [view textStorage];
     [storage beginEditing];
-    for (unsigned short i = 0; i < node.props.lines_->size(); ++i)
+    for (unsigned short i = 0; i < node.props.buffer_->lines().size(); ++i)
     {
-      const ObservableList<String>::Entry &entry = node.props.lines_->at(i);
+      const TextLines::Entry &entry = node.props.buffer_->lines().at(i);
       Styles **slot = &old;
       while (*slot && (*slot)->id != entry.id)
         slot = &(*slot)->next;
@@ -494,7 +495,7 @@ public:
     if (this->completion_ != Projection::IDLE || !c.scroll_)
       return EDITOR_UNAVAILABLE;
     StateTracker *owner = 0;
-    if (!this->binding_.lines_ || this->binding_.lines_->queryMutationTracker(owner) != EDIT_OK)
+    if (!this->binding_.buffer_ || this->binding_.buffer_->lines().queryMutationTracker(owner) != EDIT_OK)
       return EDITOR_UNAVAILABLE;
     return request.usesTracker(owner) ? EDITOR_OK : EDITOR_OWNER_MISMATCH;
   }
@@ -504,7 +505,7 @@ public:
     const EditorResult ready = node.seam(context(base).key_).availability();
     if (ready != EDITOR_OK)
       return ready;
-    return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
+    return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
   virtual loka::app::scene::RequestApplication<LineCursor> apply(loka::app::scene::Node &base,
                                                                  const LineCursor &pending)
@@ -554,8 +555,8 @@ public:
       return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_OWNER_MISMATCH, follow);
     if (p.phase != Projection::INPUT)
       return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE, follow);
-    const NativeLines native(p.committed);
-    const int index = this->binding_.lines_->find(pending.line);
+    const NativeLines native(p.committed, this->binding_.buffer_->capacity());
+    const int index = this->binding_.buffer_->lines().find(pending.line);
     if (native.result != EDITOR_OK || index < 0 || index >= native.count)
       return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_STALE_ID, follow);
     const NSRange row = native.ranges[index];
@@ -679,7 +680,7 @@ private:
   bool currentBinding(loka::app::scene::Node &base) const
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    return node.lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED && node.props.lines_ == this->binding_.lines_
+    return node.lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED && node.props.buffer_ == this->binding_.buffer_
            && node.props.cursorState() == this->binding_.cursorState();
   }
   static MacTextEditorContext &context(loka::app::scene::Node &node)
@@ -705,7 +706,7 @@ bool MacTextEditorContext::queryVisibleLines(unsigned &lines) const
     return false;
   // Force layout, including the extra fragment for a final empty logical line.
   (void)[layout glyphRangeForTextContainer:container];
-  const NativeLines native([view string]);
+  const NativeLines native([view string], this->node_->props.buffer_->capacity());
   if (native.result != EDITOR_OK)
     return false;
   const NSRect visible = [scroll documentVisibleRect];
@@ -1060,8 +1061,8 @@ loka::app::scene::FollowUp MacTextEditorContext::syncFromNode(RailOperation &op,
     [p.committed release];
     p.committed = desired;
   }
-  const ObservableList<String> &lines = *this->node_->props.lines_;
-  for (unsigned short i = 0; i < TextEditorProps::kMaxLines; ++i)
+  const TextLines &lines = this->node_->props.buffer_->lines();
+  for (unsigned short i = 0; i < 256; ++i)
     p.ids[i] = i < lines.size() ? lines.at(i).id : ItemId::none();
   if (nativeCommit)
   {
@@ -1093,9 +1094,9 @@ void MacTextEditorContext::restoreSelectionFromFact(RailOperation &op)
   Projection &p = *this->projection_;
   const Projection::Phase completion = p.phase;
   NSTextView *view = (NSTextView *)[(NSScrollView *)this->scroll_ documentView];
-  const NativeLines native(p.committed);
+  const NativeLines native(p.committed, this->node_->props.buffer_->capacity());
   const LineCursor cursor = this->node_->props.cursorState()->get();
-  const int index = this->node_->props.lines_->find(cursor.line);
+  const int index = this->node_->props.buffer_->lines().find(cursor.line);
   NSRange selection = p.selection;
   if (index >= 0)
   {
@@ -1143,7 +1144,7 @@ void MacTextEditorContext::handleSelectionDidChange()
   // over committed text is a caret-only event.
   if (![[view string] isEqualToString:p.committed])
     return;
-  const NativeLines lines(p.committed);
+  const NativeLines lines(p.committed, this->node_->props.buffer_->capacity());
   const NSRange selection = [view selectedRange];
   const unsigned short index = lines.lineAt(selection.location);
   const LineCursor cursor(p.ids[index], static_cast<int>(selection.location - lines.ranges[index].location));
@@ -1172,7 +1173,8 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
   const EditorResult available = p.validateDocument(*this->node_, this->key_);
   if (available != EDITOR_OK)
     return available;
-  const NativeLines before(p.committed), after(text);
+  const NativeLines before(p.committed, this->node_->props.buffer_->capacity()),
+      after(text, this->node_->props.buffer_->capacity());
   if (after.result != EDITOR_OK)
     return after.result;
   // validateDocument left the committed CR-separated snapshot in scratch.

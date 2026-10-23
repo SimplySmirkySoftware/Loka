@@ -1,7 +1,7 @@
 #ifndef LOKA_APP_TEXT_DOCUMENT_FILE_HPP
 #define LOKA_APP_TEXT_DOCUMENT_FILE_HPP
 
-#include "core/ObservableList.hpp"
+#include "app/TextBuffer.hpp"
 #include "core/String.hpp"
 #include "core/io/File.hpp"
 
@@ -43,22 +43,20 @@ namespace loka
     const char kTextDocumentNewline[] = "\n";
 #endif
 
-    /** Read at most 8447 raw bytes, split CR/LF/CRLF, and replace through one
+    /** Read within the admitted capacity plus CRLF expansion, split CR/LF/CRLF, and replace through one
         list apply. All refusals preserve rows, IDs and revision. An empty file
         becomes one empty row; trailing separators remain trailing empty rows.
         Located/refused Files never retry their display name as a path.
-        String/vector construction retains the platform allocation contract. */
-    TextDocumentResult
-    ReadTextDocument(PlatformContext *context, const loka::file::File &file, core::ObservableList<core::String> &lines);
+        Completed row handles are sealed before allocation-free list replay. */
+    TextDocumentResult ReadTextDocument(PlatformContext *context, const loka::file::File &file, TextBuffer &buffer);
 
     /** Validate and stage the complete editor document before filesystem work,
         then prepare and destructively truncate/write/flush/close. The caller
         retains the list unchanged. Zero rows serialize like one empty row.
         Reports the first observable seam/stdio failure; Retro68 CRT errors
         discarded inside that runtime cannot be recovered here. */
-    TextDocumentResult WriteTextDocument(PlatformContext *context,
-                                         const loka::file::File &file,
-                                         const core::ObservableList<core::String> &lines);
+    TextDocumentResult
+    WriteTextDocument(PlatformContext *context, const loka::file::File &file, const TextBuffer &buffer);
   } // namespace app
 } // namespace loka
 #endif

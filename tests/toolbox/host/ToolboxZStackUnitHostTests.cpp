@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxHost.hpp"
@@ -766,7 +767,7 @@ namespace
   void bandRepairSettles()
   {
     loka::app::testing::TextEditorStateOwner owner;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
     LOKA_VERIFY(lines.insert(0, String("a partly covered editor")) == EDIT_OK);
     StaticFixture f;
@@ -1123,7 +1124,7 @@ namespace
   void editorIdleRepair()
   {
     loka::app::testing::TextEditorStateOwner owner;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
     LOKA_VERIFY(lines.insert(0, String("abcd")) == EDIT_OK);
     ToolboxWindow window;

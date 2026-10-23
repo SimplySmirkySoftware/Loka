@@ -1,3 +1,5 @@
+#include "MacPlatformContext.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "MacInputDoor.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/TextEditorStateOwner.hpp"
@@ -156,7 +158,7 @@ namespace
   struct Fixture : loka::app::testing::TextEditorStateOwner
   {
     NativeHost host;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     MacScenePlatformController controller;
     TextEditorNode node;
     MacTextEditorContext *context;
@@ -171,7 +173,7 @@ namespace
           scroll(nil),
           view(nil)
     {
-      LOKA_VERIFY(this->lines.attach(&this->tracker, 258) == ATTACH_OK);
+      LOKA_VERIFY(this->lines.attach(&this->tracker, 256) == ATTACH_OK);
       for (unsigned short i = 0; i < count; ++i)
         LOKA_VERIFY(this->lines.insert(i, String(text)) == EDIT_OK);
       // The initial caret is a fact the seam publishes, not an app request:
@@ -1514,15 +1516,17 @@ void testMacTextEditorMultilinePasteRefusal()
 
 void testMacTextEditorRefusals()
 {
+  MacPlatformContext rail;
+  TextCapacity maximum;
+  LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
   for (int failure = 0; failure < 5; ++failure)
   {
     Fixture f(failure == 0 ? 256 : 3);
     Observer observer(f);
     if (failure == 1)
     {
-      LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-      LOKA_VERIFY(f.lines.attach(&f.tracker, 258) == ATTACH_OK);
-      LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+      LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
       observer.calls = 0;
     }
     const Snapshot snapshot(f);
@@ -1802,7 +1806,7 @@ void testMacTextEditorDetachHidesAndRetireRemoves()
     return;
   }
   loka::app::testing::TextEditorStateOwner owner;
-  ObservableList<String> lines;
+  loka::testing::TextBufferFixture lines;
   LOKA_VERIFY(lines.attach(&owner.tracker, 4) == ATTACH_OK);
   LOKA_VERIFY(lines.insert(0, String("abcd")) == EDIT_OK);
   NSView *parent = [host.window contentView];

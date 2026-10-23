@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "Win32FocusTests.hpp"
 #include "Win32App.hpp"
 #include "Win32Window.hpp"
@@ -34,7 +35,7 @@ namespace
     Focus<unsigned short> focus;
     NodeState<String> text;
     Reported<LineCursor> cursor;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Facts()
     {
       StateBatchBase::CreateImmediateState(this, this->cursor, LineCursor::None());
@@ -444,7 +445,7 @@ namespace
     NodeState<bool> shown;
     Reported<LineCursor> cursor;
     RequestWithReply<LineCursor> request;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
 
     explicit CompletionTailRoot(const BoundaryPropsFor<CompletionTailRoot> &p)
         : BoundaryNodeFor<CompletionTailRoot>(p)
