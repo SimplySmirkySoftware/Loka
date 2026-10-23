@@ -56,10 +56,11 @@ Delivered:
   one render-order press ledger, no more presses or keys on covered rows
 * **SmirkyTracker (SmirkyCard)**: a card of 13 Macs with the owner's artwork,
   machine facts and picture seats in JavaScript, an About window over a blur
-* **Owner hardware runs**: the release candidate was runtime-verified on a
-  PowerBook 180c (KanjiTalk 7.1, Classic 68K), a MacBook (2006) on Tiger
-  (UB1 i386) and a VAIO P (Windows XP x86); the archive smoke ran all eight
-  applications on Windows 8.1, Windows 11, Catalina, Mavericks and Leopard PPC
+* **Owner hardware runs**: SmirkyCard (SmirkyTracker) from the candidate's
+  archives was run on a PowerBook 180c (KanjiTalk 7.1, Classic 68K), a MacBook
+  (2006) on Tiger (UB1 i386) and a VAIO P (Windows XP x86); the archive smoke
+  ran all eight applications on Windows 8.1 and 11 VMs, Catalina, Mavericks
+  and Leopard PPC, and the Classic verdict is the 38-cell MAME bundle
 
 Verification evidence and known issues are recorded on release PR #1571.
 Known ships-with defects: #1460, #1498, #1372, #1354, #1513, #1560, #1566,
