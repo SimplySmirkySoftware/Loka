@@ -350,7 +350,7 @@ namespace
     LOKA_VERIFY(toolbox_host::paintOperations[replayErase + 2] == "bar");
     LOKA_VERIFY(f.controller.debugStats_.totalRenderCalls == renders + (composition ? 1 : 0));
     toolbox_host::failSets = 1;
-    LOKA_VERIFY(f.context->paste("", TextEditorProps::kMaxBytes + 1) == EDITOR_CAPACITY);
+    LOKA_VERIFY(f.context->paste("", 8192 + 1) == EDITOR_CAPACITY);
     f.context->render(&f.controller);
     LOKA_VERIFY(!bar->visible && f.controller.scrollControl(0).usedThisFrame);
     f.window.idleControls(ACTIVATION_FOREGROUND);

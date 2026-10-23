@@ -83,10 +83,15 @@ public:
   static bool shorten(simpletext::MainNode &node)
   {
     loka::core::StateTrackerGuard guard(node.tracker());
-    while (node.lines_.size() > 1)
-      if (node.lines_.remove(node.lines_.at(node.lines_.size() - 1).id) != loka::core::EDIT_OK)
+    while (node.buffer_.lines().size() > 1)
+    {
+      const loka::core::ListOp<loka::core::String> op(loka::core::REMOVE,
+                                                      node.buffer_.lines().at(node.buffer_.lines().size() - 1).id);
+      loka::core::ArrayListOpCursor<loka::core::String> cursor(&op, 1);
+      if (node.buffer_.lines().apply(cursor) != loka::core::EDIT_OK)
         return false;
-    return node.lines_.size() == 1;
+    }
+    return node.buffer_.lines().size() == 1;
   }
 
   static void save(simpletext::MainNode &node)
@@ -101,13 +106,14 @@ public:
                       const char *current,
                       const char *error = "")
   {
-    if (Utf8(node.error_.get()) != error || node.operation_.get() != simpletext::NONE || node.lines_.size() != rows)
+    if (Utf8(node.error_.get()) != error || node.operation_.get() != simpletext::NONE
+        || node.buffer_.lines().size() != rows)
       return false;
     const loka::app::FileChooserResult file = currentFile(config, node);
     if (current ? Utf8(file.item.toString()) != current : file.kind != loka::app::FileChooserResult::RESULT_NONE)
       return false;
     for (unsigned i = 0; i < rows; ++i)
-      if (Utf8(node.lines_.at(i).value) != (current ? kRows[i] : ""))
+      if (Utf8(node.buffer_.lines().at(i).value) != (current ? kRows[i] : ""))
         return false;
     return true;
   }
@@ -115,7 +121,7 @@ public:
   static void
   capture(const SimpleTextAppConfig &config, const simpletext::MainNode &node, loka::dsl::SnapRecord &record)
   {
-    record.setInt("document.rows", node.lines_.size());
+    record.setInt("document.rows", node.buffer_.lines().size());
     record.set("document.current",
                currentFile(config, node).kind == loka::app::FileChooserResult::RESULT_FILE
                    ? Utf8(currentFile(config, node).item.toString()).c_str()
@@ -123,12 +129,12 @@ public:
     record.set("document.error", node.error_.get().empty() ? "none" : Utf8(node.error_.get()).c_str());
     record.set("document.caret_row", "none");
     record.set("document.caret_request", node.caret_.get().line == loka::core::ItemId::none() ? "none" : "pending");
-    for (unsigned i = 0; i < node.lines_.size(); ++i)
+    for (unsigned i = 0; i < node.buffer_.lines().size(); ++i)
     {
       char key[40];
       std::sprintf(key, "document.row.%u", i);
-      record.set(key, Utf8(node.lines_.at(i).value).c_str());
-      if (node.cursor_.state()->get().line == node.lines_.at(i).id)
+      record.set(key, Utf8(node.buffer_.lines().at(i).value).c_str());
+      if (node.cursor_.state()->get().line == node.buffer_.lines().at(i).id)
         record.setInt("document.caret_row", i);
     }
   }

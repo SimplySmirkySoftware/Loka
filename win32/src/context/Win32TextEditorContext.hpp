@@ -72,7 +72,7 @@ private:
       text. Native delivery success is recorded separately in status/delivery. */
   struct Projection
   {
-    const loka::core::ObservableList<loka::core::String> *owner;
+    const loka::app::TextBuffer *owner;
     loka::core::ListRevision revision;
     std::string text;
     std::wstring wide;

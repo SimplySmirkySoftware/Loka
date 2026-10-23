@@ -2,6 +2,7 @@
 #define LOKA_PLATFORMCONTEXT_HPP
 
 #include <cstddef>
+#include "app/TextCapacity.hpp"
 #include "app/NativeResourceRetirement.hpp"
 
 #if defined(_WIN32) || defined(WIN32)
@@ -57,6 +58,12 @@ namespace loka
 class PlatformContext
 {
 public:
+  /** Maximum uniform editor capacity; declining leaves out untouched. */
+  virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
+  {
+    (void)out;
+    return false;
+  }
   PlatformContext() {}
   virtual ~PlatformContext() {}
 

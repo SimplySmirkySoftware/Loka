@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "support/BlobAllocationProbe.hpp"
 #include "TextDocumentFileTests.hpp"
 #include "support/TestVerify.hpp"
@@ -89,7 +90,7 @@ namespace
   };
   struct Document : loka::app::testing::TextEditorStateOwner
   {
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     TextEditorNode editor;
     explicit Document(unsigned short capacity = 256)
         : lines(),
@@ -106,7 +107,7 @@ namespace
       return loka::app::testing::TextEditorAccess::document(this->editor).availability();
     }
   };
-  std::string row(const ObservableList<String> &lines, unsigned short index)
+  std::string row(const loka::testing::TextBufferFixture &lines, unsigned short index)
   {
     std::string result;
     LOKA_VERIFY(loka::platform::CollectUtf8(lines.at(index).value, result));
@@ -117,7 +118,7 @@ namespace
     std::vector<ItemId> ids;
     std::vector<std::string> rows;
     ListRevision revision;
-    explicit Snapshot(const ObservableList<String> &lines)
+    explicit Snapshot(const loka::testing::TextBufferFixture &lines)
         : ids(),
           rows(),
           revision(lines.revision().get())
@@ -128,7 +129,7 @@ namespace
         this->rows.push_back(row(lines, i));
       }
     }
-    void unchanged(const ObservableList<String> &lines) const
+    void unchanged(const loka::testing::TextBufferFixture &lines) const
     {
       LOKA_VERIFY(lines.size() == this->rows.size());
       LOKA_VERIFY(!(lines.revision().get() != this->revision));
@@ -204,7 +205,8 @@ void testTextDocumentLimits()
   LOKA_VERIFY(read(source, document, rows(256, "\n")) == TEXT_DOCUMENT_OK);
   LOKA_VERIFY(document.lines.size() == 256);
   Snapshot full(document.lines);
-  LOKA_VERIFY(read(source, document, rows(257, "\n")) == TEXT_DOCUMENT_TOO_LARGE);
+  // The former global row limit is now this buffer's admitted line capacity.
+  LOKA_VERIFY(read(source, document, rows(257, "\n")) == TEXT_DOCUMENT_CAPACITY);
   full.unchanged(document.lines);
   LOKA_VERIFY(read(source, document, std::string(8192, 'a')) == TEXT_DOCUMENT_OK);
   LOKA_VERIFY(row(document.lines, 0).size() == 8192);
@@ -267,7 +269,7 @@ void testTextDocumentCommitRefusals()
   Snapshot exhausted(small.lines);
   LOKA_VERIFY(read(source, small, "new") == TEXT_DOCUMENT_ID_EXHAUSTED);
   exhausted.unchanged(small.lines);
-  ObservableList<String> unattached;
+  loka::testing::TextBufferFixture unattached;
   const Snapshot detached(unattached);
   LOKA_VERIFY(ReadTextDocument(&source.context, source.file, unattached) == TEXT_DOCUMENT_UNATTACHED);
   detached.unchanged(unattached);
@@ -361,7 +363,7 @@ void testTextDocumentEditorParity()
                         {std::string(8192, 'x'), 1, true},
                         {std::string(8193, 'x'), 1, false},
                         {"", 256, true},
-                        {"", 257, false},
+                        {std::string(32, 'x'), 257, false},
                         {std::string(4096, 'x'), 2, false}};
   TempFile target;
   for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
@@ -474,7 +476,7 @@ void testTextDocumentWriteFailures()
   }
   LOKA_VERIFY(S_ISCHR(status.st_mode));
   Document maximum;
-  maximum.append(std::string(TextEditorProps::kMaxBytes, 'x'));
+  maximum.append(std::string(8192, 'x'));
   const Snapshot maxOriginal(maximum.lines);
   NullPlatformContext deviceContext;
   deviceContext.setApplicationDirectory(String("/dev"));

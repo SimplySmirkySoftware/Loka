@@ -82,7 +82,7 @@ namespace loka
             else if (current == this->snapshot_.document + "x")
             {
               ok = ok && (**te).selStart == 4 && (**te).selEnd == 4
-                   && logical.props.lines_->revision().get() != this->snapshot_.revision
+                   && logical.props.buffer_->lines().revision().get() != this->snapshot_.revision
                    && !(logical.props.cursorState()->get() == this->snapshot_.caret);
               out = SmirkBenchEditorRecord("text-editor-japanese", ROMAN, ok);
               out.set("document", current.c_str());
@@ -131,14 +131,14 @@ namespace loka
             : start((**te).selStart),
               end((**te).selEnd),
               caret(node.props.cursorState()->get()),
-              revision(node.props.lines_->revision().get()),
+              revision(node.props.buffer_->lines().revision().get()),
               document()
         {
           (void)app::testing::TextEditorAccess::document(node).project(this->document);
         }
         bool matches(app::TextEditorNode &node, TEHandle te, const std::string &current) const
         {
-          return current == this->document && !(node.props.lines_->revision().get() != this->revision)
+          return current == this->document && !(node.props.buffer_->lines().revision().get() != this->revision)
                  && node.props.cursorState()->get() == this->caret && (**te).selStart == this->start
                  && (**te).selEnd == this->end;
         }

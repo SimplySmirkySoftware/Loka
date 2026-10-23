@@ -1,3 +1,5 @@
+#include "ToolboxTextCapacity.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "ToolboxGround.hpp"
 #include "ToolboxEditKey.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -31,13 +33,16 @@ namespace
     Request<LineCursor> otherRequest;
     RequestQueue<LineCursor, 4> queue;
     RequestQueue<EditorCommand, 4> commands;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     ToolboxWindow window;
     ToolboxScenePlatformController controller;
     TextEditorNode node;
     ToolboxTextEditorContext *context;
-    Fixture(unsigned short count = 3, const std::string &text = "abcd", unsigned short capacity = 256,
-            bool preContextRequest = false)
+    Fixture(unsigned short count = 3,
+            const std::string &text = "abcd",
+            unsigned short capacity = 256,
+            bool preContextRequest = false,
+            std::size_t byteCapacity = 8192)
         : tracker(*HeadlessStateOwner::tracker()->asPushTracker()),
           controller(&window),
           node(TextEditorProps(lines, cursor)),
@@ -49,7 +54,7 @@ namespace
       StateBatchBase::CreateImmediateState(this, this->queue, LineCursor::None());
       StateBatchBase::CreateImmediateState(this, this->commands, EditorCommand::None());
       this->node.props = TextEditorProps(lines, cursor).moveCaretTo(request).command(commands);
-      LOKA_VERIFY(lines.attach(&tracker, capacity) == ATTACH_OK);
+      LOKA_VERIFY(lines.attach(&tracker, capacity, byteCapacity) == ATTACH_OK);
       for (unsigned short i = 0; i < count; ++i)
         LOKA_VERIFY(lines.insert(i, String(text)) == EDIT_OK);
       if (preContextRequest)
@@ -578,6 +583,7 @@ static void parkedEditorKeys()
 }
 int main(int argc, char **argv)
 {
+  LOKA_VERIFY(ToolboxTextCapacity().lines == 256 && ToolboxTextCapacity().bytes == 8192);
   if (argc == 2 && std::strcmp(argv[1], "parked-keys") == 0)
   {
     parkedEditorKeys();
@@ -1650,9 +1656,7 @@ int main(int argc, char **argv)
     Fixture f(kind == 0 ? 256 : 3);
     if (kind == 1)
     {
-      LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-      LOKA_VERIFY(f.lines.attach(&f.tracker, 256) == ATTACH_OK);
-      LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+      LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     }
     Observer o(f);
     Snapshot before(f);
@@ -1670,9 +1674,7 @@ int main(int argc, char **argv)
   pin("capacity/stale ID/scratch refusal: unchanged facts, native restored once, next key succeeds");
   {
     Fixture f;
-    LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-    LOKA_VERIFY(f.lines.attach(&f.tracker, 256) == ATTACH_OK);
-    LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+    LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     Snapshot before(f);
     LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_STALE_ID);
     before.unchanged(f);
@@ -1811,15 +1813,15 @@ int main(int argc, char **argv)
   }
   {
     Fixture f;
-    ObservableList<String> other;
+    loka::testing::TextBufferFixture other;
     LOKA_VERIFY(other.attach(&f.tracker, 256) == ATTACH_OK);
     for (unsigned short i = 0; i < 3; ++i)
       LOKA_VERIFY(other.insert(i, String("WXYZ")) == EDIT_OK);
     LOKA_VERIFY(!(other.revision().get() != f.lines.revision().get()));
-    f.node.props.lines_ = &other;
+    f.node.props.buffer_ = &other;
     f.context->onPropsApplied();
     LOKA_VERIFY(f.native() == "WXYZ\rWXYZ\rWXYZ");
-    f.node.props.lines_ = &f.lines;
+    f.node.props.buffer_ = &f.lines;
     f.context->onPropsApplied();
     Observer observer(f);
     observer.external = true;
@@ -1828,6 +1830,20 @@ int main(int argc, char **argv)
     LOKA_VERIFY(f.context->key('y') == EDITOR_OK);
     LOKA_VERIFY(f.native() == "abxycd\rowner\rabcd");
     pin("equal-revision props rebinding and owner settlement writes reconcile");
+  }
+  {
+    Fixture f(1, "a", 4, false, 4);
+    loka::testing::TextBufferFixture larger;
+    LOKA_VERIFY(larger.attach(&f.tracker, 4) == ATTACH_OK);
+    const std::string text(1024, 'b');
+    LOKA_VERIFY(larger.insert(0, String(text)) == EDIT_OK);
+    f.node.props.buffer_ = &larger;
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.native() == text);
+    f.node.props.buffer_ = &f.lines;
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.native() == "a");
+    pin("buffer replacement keeps the fixed TE restore storage large enough");
   }
   {
     Fixture f;

@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "platform/null/NullWindow.hpp"
@@ -2449,7 +2450,7 @@ namespace
   {
     loka::app::scene::Request<loka::app::LineCursor> request;
     loka::app::Focus<unsigned> focus;
-    loka::core::ObservableList<loka::core::String> lines;
+    loka::testing::TextBufferFixture lines;
     loka::app::scene::Reported<loka::app::LineCursor> cursor;
     std::vector<bool> detaches;
     std::vector<bool> requestCommits;

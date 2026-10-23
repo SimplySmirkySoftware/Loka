@@ -173,7 +173,7 @@ namespace loka
             : start((**te).selStart),
               end((**te).selEnd),
               caret(node.props.cursorState()->get()),
-              revision(node.props.lines_->revision().get()),
+              revision(node.props.buffer_->lines().revision().get()),
               document()
         {
           (void)app::testing::TextEditorAccess::document(node).project(this->document);
@@ -182,7 +182,7 @@ namespace loka
         {
           std::string current;
           return app::testing::TextEditorAccess::document(node).project(current) == app::EDITOR_OK
-                 && current == this->document && !(node.props.lines_->revision().get() != this->revision)
+                 && current == this->document && !(node.props.buffer_->lines().revision().get() != this->revision)
                  && node.props.cursorState()->get() == this->caret && (**te).selStart == this->start
                  && (**te).selEnd == this->end;
         }
