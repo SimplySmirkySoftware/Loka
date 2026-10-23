@@ -792,3 +792,37 @@ void testMacMenuVisibilityReadOnceAndConstantFallback()
   const char *rows[] = {"About", 0, "Quit"};
   verifyMenuRows([[[NSApp mainMenu] itemAtIndex:0] submenu], rows, 3);
 }
+
+static void countEditMenuBinding(void *data)
+{
+  ++*static_cast<unsigned *>(data);
+}
+void testMacEditMenuDefaultsAndFallback()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  MenuDefinition edit = EditMenu();
+  for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+    if (!item->isSeparator)
+      item->onClick(&binding);
+  MenuBarDefinition offered;
+  offered << edit;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, 0)));
+  NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  LOKA_VERIFY([menu numberOfItems] == 6 && [[menu itemAtIndex:1] isSeparatorItem]);
+  NSString *titles[] = {@"Undo", @"Cut", @"Copy", @"Paste", @"Select All"};
+  NSString *keys[] = {@"z", @"x", @"c", @"v", @"a"};
+  for (unsigned i = 0; i < 5; ++i)
+  {
+    NSMenuItem *item = [menu itemAtIndex:i == 0 ? 0 : i + 1];
+    LOKA_VERIFY([[item title] isEqualToString:titles[i]]);
+    LOKA_VERIFY([[item keyEquivalent] isEqualToString:keys[i]]);
+    LOKA_VERIFY(app.menuAttachment().dispatch(static_cast<int>([item tag])));
+    LOKA_VERIFY(calls == i + 1);
+  }
+  app.menuAttachment().disconnect();
+  binding.unbind(&countEditMenuBinding, &calls);
+}

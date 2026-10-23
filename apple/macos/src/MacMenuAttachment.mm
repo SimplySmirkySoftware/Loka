@@ -1,3 +1,4 @@
+#include "app/EditMenuDispatch.hpp"
 #include "MacMenuAttachment.hpp"
 #include "app/MenuComposition.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -44,6 +45,16 @@ namespace
   // Deliberate platform-seam twin of Classic (#1535) and Win32 (#1536).
   static const char *MenuEmptyTitle(loka::app::MenuActionType action)
   {
+    if (action == loka::app::MENU_ACTION_EDIT_UNDO)
+      return "Undo";
+    if (action == loka::app::MENU_ACTION_EDIT_CUT)
+      return "Cut";
+    if (action == loka::app::MENU_ACTION_EDIT_COPY)
+      return "Copy";
+    if (action == loka::app::MENU_ACTION_EDIT_PASTE)
+      return "Paste";
+    if (action == loka::app::MENU_ACTION_EDIT_SELECT_ALL)
+      return "Select All";
     if (action == loka::app::MENU_ACTION_ABOUT_APP)
       return "About";
     if (action == loka::app::MENU_ACTION_QUIT_APP)
@@ -185,10 +196,21 @@ static NSString *MenuShortcutForAction(const loka::app::MenuItemDefinition *item
   }
   switch (itemDef->action)
   {
+  case loka::app::MENU_ACTION_EDIT_UNDO:
+    return @"z";
+  case loka::app::MENU_ACTION_EDIT_CUT:
+    return @"x";
+  case loka::app::MENU_ACTION_EDIT_COPY:
+    return @"c";
+  case loka::app::MENU_ACTION_EDIT_PASTE:
+    return @"v";
+  case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+    return @"a";
   case loka::app::MENU_ACTION_QUIT_APP:
     return @"q";
   case loka::app::MENU_ACTION_ABOUT_APP:
   case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
+  case loka::app::MENU_ACTION_COUNT:
   case loka::app::MENU_ACTION_NONE:
     return @"";
   }
@@ -426,6 +448,18 @@ bool MacMenuAttachment::dispatch(int commandId)
     case loka::app::MENU_ACTION_QUIT_APP:
       this->app_.requestQuit();
       return true;
+    case loka::app::MENU_ACTION_EDIT_UNDO:
+    case loka::app::MENU_ACTION_EDIT_CUT:
+    case loka::app::MENU_ACTION_EDIT_COPY:
+    case loka::app::MENU_ACTION_EDIT_PASTE:
+    case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+    {
+      loka::app::EditVerb verb;
+      if (loka::app::menuEditVerb(command.action, verb))
+        loka::app::dispatchEditMenuCommand(this->app_.activeWindow(), verb, command.emitter);
+      return true;
+    }
+    case loka::app::MENU_ACTION_COUNT:
     case loka::app::MENU_ACTION_NONE:
       break;
     }

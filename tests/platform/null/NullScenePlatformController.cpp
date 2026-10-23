@@ -1173,3 +1173,16 @@ void NullScenePlatformController::requestRelayout()
 {
   this->requestSceneRelayout(this->rootNode_);
 }
+
+bool NullScenePlatformController::handleEditCommand(loka::app::EditVerb verb)
+{
+  loka::app::scene::NodeContext *context = 0;
+  if (!this->readNativeFocus(context) || !context || !context->owner())
+    return false;
+  loka::app::scene::IPlatformNodeHandler *handler = this->nodeHandlers_.find(context->owner());
+  if (IsNullEditTextNodeHandler(handler))
+    return static_cast<NullEditTextContext *>(context)->editCommands.record(verb);
+  if (IsNullTextEditorNodeHandler(handler))
+    return static_cast<NullTextEditorContext *>(context)->editCommands.record(verb);
+  return false;
+}
