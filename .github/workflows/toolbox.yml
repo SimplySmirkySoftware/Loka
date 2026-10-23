@@ -243,3 +243,30 @@ jobs:
                 ClassicQuickjsHeadersTest
               python3 tests/scripts/ClassicQuickjsStackTest.py --build-dir "$build_dir"
             '
+
+      - name: Check Toolbox Unicode flavor contracts
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.run == 'true' }}
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env INTERFACES=multiversal \
+            --env RETRO68_BUILD_DIR=/Retro68-build \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$RETRO68_IMAGE" \
+            /bin/bash -ceu '
+              python3 tests/toolbox/cmake-pins/check_core_variants.py
+              python3 -m unittest discover -s tools/ci -p test_toolbox_unicode_checks.py
+              build_dir=build/retro68/ppc/Release
+              python3 tools/ci/check_pef_imports.py \
+                "$build_dir/tests/toolbox/unicode-import/LokaToolboxUnicodeImportProbe.pef" \
+                InterfaceLib Textension TextEncodingConverter UnicodeConverter
+              python3 tools/ci/check_pef_imports.py \
+                "$build_dir/example/SimpleText/LokaSimpleTextPPC.pef" InterfaceLib
+              python3 tools/ci/check_pef_imports.py \
+                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.pef" InterfaceLib
+              python3 tools/ci/check_toolbox_startup_wiring.py \
+                --nm /Retro68-build/toolchain/bin/powerpc-apple-macos-nm \
+                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.xcoff" \
+                "$build_dir/example/SimpleText/LokaSimpleTextPPC.xcoff"
+            '

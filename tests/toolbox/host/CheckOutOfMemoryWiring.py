@@ -10,7 +10,7 @@ import sys
 root = Path(sys.argv[1])
 app = (root / "apple/toolbox/src/ToolboxApp.cpp").read_text()
 checks = [
-    re.search(r"InitDialogs\(0\);\s*loka::toolbox::ArmOutOfMemoryReserve\(\);", app),
+    re.search(r"InitDialogs\(0\);\s*#if LOKA_TOOLBOX_UNICODE\s*loka::toolbox::RequireUnicodeSystem\(\);\s*#endif\s*loka::toolbox::ArmOutOfMemoryReserve\(\);", app),
     re.search(r"bool ToolboxApp::windowAdopted\(Window \*window\)\s*\{[\s\S]*?"
               r"toolboxWindow->setApp\(this\);\s*toolboxWindow->open\(\);\s*"
               r"toolboxWindow->ensureSceneMounted\(\);\s*"
