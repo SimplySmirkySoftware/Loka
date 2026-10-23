@@ -578,7 +578,8 @@ namespace
     }
     void unchanged(const Fixture &fixture) const
     {
-      LOKA_VERIFY(!(revision != fixture.lines.revision().get()) && cursor == fixture.cursor.state()->get());
+      LOKA_VERIFY(!(revision != fixture.lines.revision().get()));
+      LOKA_VERIFY(cursor == fixture.cursor.state()->get());
       std::string actual;
       LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(*fixture.node).project(actual) == EDITOR_OK
                   && text == actual);
