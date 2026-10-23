@@ -2021,6 +2021,10 @@ namespace
   void detachBeforeNotification(Fixture &fixture)
   {
     NotifySubtreeNodeDetached(fixture.node);
+    // Notify only changes logical facts; this bare-node fixture drives the same
+    // delivery walk a mounted Scene performs at apply, so the context sees the
+    // detach (status unavailable, evidence cleared) before the notification.
+    LifecycleFactTestAccess::DeliverFacts(fixture.node);
   }
 } // namespace
 
@@ -2072,16 +2076,6 @@ void testWin32TextEditorEvidenceLifetime()
     EvidenceTrace trace(fixture, L"a\r\n\r\na", 3, false, false);
     trace.beforeNotify = &detachBeforeNotification;
     SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
-    {
-      std::string now;
-      loka::app::testing::TextEditorAccess::document(*fixture.node).project(now);
-      std::printf("[probe detach] rows before=%u after=%u text-before='%s' text-after='%s' status=%d\n",
-                  static_cast<unsigned>(before.ids.size()),
-                  static_cast<unsigned>(fixture.lines.size()),
-                  before.text.c_str(),
-                  now.c_str(),
-                  static_cast<int>(EditorAccess::status(*fixture.context)));
-    }
     before.unchanged(fixture);
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_UNAVAILABLE);
   }
