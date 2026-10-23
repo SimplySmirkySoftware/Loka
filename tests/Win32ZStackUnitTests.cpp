@@ -798,6 +798,9 @@ void testWin32ScrollViewInsetBandAndCornerPaint()
   const COLORREF childBefore = capturedPixel(f, seat.left + 10, seat.top + 70);
   LOKA_VERIFY(childBefore == GetSysColor(COLOR_WINDOW));
   LOKA_VERIFY(InvalidateRect(frame, NULL, FALSE));
+  // WS_CLIPCHILDREN keeps a frame invalidation out of its children: without it
+  // Windows invalidates the viewport too, and the final pixels hide the extra pass.
+  LOKA_VERIFY(!GetUpdateRect(viewport, NULL, FALSE));
   LOKA_VERIFY(UpdateWindow(frame));
   LOKA_VERIFY(!GetUpdateRect(content, NULL, FALSE));
   LOKA_VERIFY(capturedPixel(f, seat.left + 10, seat.top + 70) == childBefore);
