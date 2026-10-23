@@ -1,0 +1,6 @@
+# v0.0.7 macOS UB1 (Tiger profile) standalone release allowlist: the same seven
+# applications plus SmirkyCard (#1261, built with GCC 4.0 by #1262) as ppc;i386
+# universal binaries built with Xcode 3.2.6 / GCC 4.0
+# against the 10.4u SDK (restored for 0.0.6 by #1253 and #1249), staged by
+# scripts/macos-standalone-release-ub1.sh tiger and zipped by ditto.
+build	build/release/Loka-macos-standalone-UB1-tiger.zip	macOS/Loka-macos-standalone-UB1-tiger.zip
