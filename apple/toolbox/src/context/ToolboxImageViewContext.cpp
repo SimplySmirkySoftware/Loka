@@ -227,6 +227,15 @@ namespace
     out.bottom = static_cast<short>(out.top + dstH);
     return out;
   }
+  /** True when any pixel of a picture drawn into `destination` can reach the
+      port through the enclosing viewport. Outside one, every pixel can. The
+      frame line and the placeholder text are not asked: they are cheap and
+      may extend past the frame. */
+  bool PictureReachesPort(const ToolboxScenePlatformController *controller, const Rect &destination)
+  {
+    Rect reached;
+    return !controller || controller->intersectWithProjectionClip(destination, reached);
+  }
 } // namespace
 
 ToolboxImageViewContext::ToolboxImageViewContext(loka::app::ImageViewNode *node,
@@ -357,12 +366,15 @@ void ToolboxImageViewContext::draw()
     {
       // A cover image may be inside a unit, viewport, or dirty replay.
       // Preserve every outer clip and refuse instead of drawing unbounded.
+      Rect framed;
       ToolboxPaintClip clip(rect_, ToolboxPaintClip::INTERSECT);
-      if (clip.isActive())
+      if (clip.isActive() && SectRect(&dstRect, &rect_, &framed) && PictureReachesPort(this->controller(), framed))
         DrawPicture(picture, &dstRect);
     }
-    else
+    else if (PictureReachesPort(this->controller(), dstRect))
     {
+      // Outside the viewport DrawPicture would parse the whole picture for
+      // pixels the clip discards (#1043 B4-1); skip it instead.
       DrawPicture(picture, &dstRect);
     }
     return;
@@ -373,6 +385,11 @@ void ToolboxImageViewContext::draw()
     const loka::toolbox::ToolboxPictBytesPayload *payload =
         static_cast<const loka::toolbox::ToolboxPictBytesPayload *>(native->payload);
     Rect dstRect = ComputeImageDrawRect(rect_, fitMode, image.width(), image.height());
+    if (!PictureReachesPort(this->controller(), dstRect))
+    {
+      // Same skip as above: the streamed picture draws exactly dstRect.
+      return;
+    }
     if (DrawPictBytes(payload, dstRect))
     {
       return;
