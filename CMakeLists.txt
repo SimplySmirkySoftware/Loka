@@ -472,6 +472,18 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaUpstreamGaugePins PRIVATE LokaCommonTesting)
   add_test(NAME LokaUpstreamGaugePins COMMAND LokaUpstreamGaugePins)
 
+  add_executable(LokaToolboxUnicodeStartupTests
+    tests/toolbox/host/ToolboxUnicodeStartupHostTests.cpp
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp)
+  target_include_directories(LokaToolboxUnicodeStartupTests PRIVATE
+    tests/toolbox/host/startup tests/toolbox/host/oom apple/toolbox/src tests)
+  target_compile_definitions(LokaToolboxUnicodeStartupTests PRIVATE LOKA_TOOLBOX_UNICODE=1)
+  target_compile_options(LokaToolboxUnicodeStartupTests PRIVATE -fno-exceptions -fno-rtti)
+  loka_enable_warnings(LokaToolboxUnicodeStartupTests)
+  set_target_properties(LokaToolboxUnicodeStartupTests PROPERTIES
+    CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxUnicodeStartupTests COMMAND LokaToolboxUnicodeStartupTests)
+
   add_executable(LokaToolboxOutOfMemoryTests
     tests/toolbox/host/ToolboxOutOfMemoryHostTests.cpp
     apple/toolbox/src/ToolboxOutOfMemory.cpp

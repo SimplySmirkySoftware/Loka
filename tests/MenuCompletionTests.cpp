@@ -515,6 +515,22 @@ void testMenuPresetStructures()
       LOKA_VERIFY(item->titleState == 0 && !item->isSeparator && !item->hasChildren());
     }
   }
+  MenuDefinition edit = EditMenu();
+  LOKA_VERIFY(!edit.isAppMenu && edit.title.equals(String::Literal("Edit")));
+  LOKA_VERIFY(edit.itemsCount() == 6);
+  const MenuActionType actions[] = {MENU_ACTION_EDIT_UNDO,
+                                    MENU_ACTION_NONE,
+                                    MENU_ACTION_EDIT_CUT,
+                                    MENU_ACTION_EDIT_COPY,
+                                    MENU_ACTION_EDIT_PASTE,
+                                    MENU_ACTION_EDIT_SELECT_ALL};
+  unsigned index = 0;
+  for (const MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition, ++index)
+  {
+    LOKA_VERIFY(item->action == actions[index] && item->isSeparator == (index == 1));
+    LOKA_VERIFY(item->title.equals(String::Literal("")) && !item->hasShortcut);
+    LOKA_VERIFY(!item->hasChildren() && !item->onClickState && !item->titleState);
+  }
   MenuDefinition first = StandardMenuPresets();
   MenuDefinition second = StandardMenuPresets();
   first.itemsHead()->text("Changed");

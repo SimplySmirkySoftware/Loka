@@ -2820,7 +2820,9 @@ void testWin32GapDoorScrollViewContent()
     controller.onChange(&column, scene::NODE_DIRTY_NONE, false);
     controller.relayout(640, 400);
     LOKA_VERIFY(scroll->getContext() != 0);
-    HWND parent = static_cast<Win32RetirableContext *>(scroll->getContext())->hwnd();
+    HWND frame = static_cast<Win32RetirableContext *>(scroll->getContext())->hwnd();
+    HWND parent = FindWindowExW(frame, NULL, L"LOKA_SCROLL_VIEW", NULL);
+    LOKA_VERIFY(parent);
     verifyGapDoorInterval(controller, parent, first, second, 6);
     verifyGapDoorInterval(controller, parent, second, third, 6);
     verifyGapDoorInterval(controller, parent, third, fourth, 6);

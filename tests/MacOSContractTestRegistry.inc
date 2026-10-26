@@ -232,6 +232,7 @@ LOKA_TEST(testMacQuitEventSequentialAppsAttach)
 LOKA_TEST(testMacQuitEventTerminateFallbackCancelsAndReserves)
 LOKA_TEST(testMacQuitEventQuitTwiceRepliesOnce)
 
+LOKA_TEST(testMacEditMenuDefaultsAndFallback)
 LOKA_TEST(testMacTextEditorConversionHelpers)
 LOKA_TEST(testMacTextEditorUtf8Boundary)
 LOKA_TEST(testMacTextEditorUtf8StyleFallback)

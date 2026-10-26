@@ -8,8 +8,8 @@
 
 class Win32ScenePlatformController;
 
-/** Owns the child HWND that is both a ScrollView's native viewport and the
-    structural clipping parent for the projected subtree. */
+/** Owns a frame whose subordinate viewport clips content and whose sibling
+    vertical scrollbar leaves the committed content inset rows clear. */
 class Win32ScrollViewContext : public Win32RetirableContext
 {
 public:
@@ -27,6 +27,13 @@ public:
 
   bool isValid() const;
   void relayout(int x, int y, int width, int height);
+  /** Native projection parent; private children are valid only while the frame lives. */
+  HWND viewportHwnd() const
+  {
+    return this->hwnd() ? this->viewport_ : 0;
+  }
+  /** Successful layout commits logical clearance, projected anew on every placement. */
+  void commitVerticalBarInsets(const loka::app::ScrollViewContentInsets &insets, const loka::core::Frame &seatLu);
 
   /** Publishes native range/page/position state and returns the clamped
       logical offset represented by that state. */
@@ -52,10 +59,22 @@ private:
   void setVisualPosition(int bar, int value);
   void publishOffset(int bar, int value);
 
+  HWND barHwnd() const
+  {
+    return this->hwnd() ? this->bar_ : 0;
+  }
+  HWND nativeBar(int &axis) const;
+  void placeVerticalBar(const loka::core::Frame &seatLu);
+  static Win32ScrollViewContext *FromFrame(HWND hwnd);
+  static Win32ScrollViewContext *FromViewport(HWND hwnd);
+  static LRESULT CALLBACK FrameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
   loka::app::ScrollViewNode *node_;
+  HWND viewport_;
+  HWND bar_;
+  loka::app::ScrollViewContentInsets committedInsets_;
 };
 
 #endif // LOKA_WIN32_SCROLL_VIEW_CONTEXT_HPP

@@ -681,6 +681,13 @@ Cleanup writes do not reopen a closing clock.
 
 **Menus: About and Quit**
 
+Place `EditMenu()` explicitly in a Scene menu bar for Undo, Cut, Copy, Paste,
+and Select All. It is an ordinary Edit menu and is not part of
+`StandardMenuPresets()`. Standard Edit actions offer to the focused native
+editor first; without a target, an optional app binding runs once. Native
+refusal or no-op does not run that binding. Native editing support is deferred;
+the current native rails take the no-target path.
+
 Declare `StandardMenuPresets()` in the App's default menu bar to request About
 and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
 at the top of the Apple menu and Quit at the end of File, creating File when
@@ -1116,8 +1123,8 @@ top-left corner, not the seat rect. After the first layout, `width` and
 `height` report the visible content size (seat minus scroll bars), in the same
 content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails report it.
 `contentInsets(top, bottom)` also keeps the vertical bar clear of those rows at
-the viewport edges on Toolbox and macOS; it does not move the horizontal bar or
-shrink the clip. Win32 does not yet shorten its bar (#1547).
+the viewport edges on Toolbox, Win32 and macOS; it does not move the horizontal bar or
+shrink the clip.
 Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
@@ -1147,8 +1154,7 @@ default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
 80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
 
 The vertical bar is normally present. When inset clearance leaves no track,
-Toolbox hides its bar and macOS keeps its scroller at zero height; Win32 does
-not yet apply the clearance (#1547). The horizontal bar appears only while there
+Toolbox and Win32 hide their bars and macOS keeps its scroller at zero height. The horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
 (`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
@@ -1338,7 +1344,13 @@ styles set the same field, the right-hand value wins.
 ```cpp
 Text("Title") + Bold + FontSize<24>()
 Text("Note") + Italic + Caption
+Text("let x = 1;") + Monospace
 ```
+
+`Monospace` asks for a fixed-pitch family and is independent of the size, so
+`Monospace + FontSize<12>()` keeps both. The rails that honor it are listed in
+the platform support notes; a rail without a fixed-pitch face draws the text in
+its default family.
 
 The supported compile-time sizes are 9, 10, 12, 14, 18, and 24 logical units
 (one unit is one pixel on a classic Mac screen; other platforms scale up).

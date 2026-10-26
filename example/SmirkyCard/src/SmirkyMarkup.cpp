@@ -13,6 +13,7 @@ namespace smirkycard
     {
       BOLD,
       ITALIC,
+      CODE,
       SIZE
     };
 
@@ -132,6 +133,11 @@ namespace smirkycard
         {
           kind = ITALIC;
           overlay = Italic;
+        }
+        else if (tagEquals(tag, count, "code"))
+        {
+          kind = CODE;
+          overlay = Monospace;
         }
         else if (closing && tagEquals(tag, count, "size"))
         {

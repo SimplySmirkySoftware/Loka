@@ -1,3 +1,4 @@
+#include "EditMenuTests.hpp"
 #include "TextUtf8Tests.hpp"
 #include "ColumnNaturalHeightTests.hpp"
 #include "StackBlurTests.hpp"
@@ -167,6 +168,7 @@
 #include "ToolboxScrollViewContractTests.hpp"
 #include "NullTextLayoutTests.hpp"
 #include "StyleTests.hpp"
+#include "TextFamilyTests.hpp"
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.
 #include "AttributedStringTests.hpp"
