@@ -2033,7 +2033,13 @@ void testMacTextEditorUtf8OpenCarets()
     LOKA_VERIFY(f.cursor.state()->get() == LineCursor(f.lines.at(entry.caretRow).id, entry.caretByte));
     if (entry.open == EDITOR_OK)
     {
-      LOKA_VERIFY([f.view isEditable] && Access::restores(*f.context) == 0);
+      // A CRLF pair arrives as two native units; the rail commits the CR-split rows and re-projects
+      // the view's LF rendering through one deferred restore. Any other accepted input needs none.
+      if ([text rangeOfString:@"\r\n"].location != NSNotFound)
+        f.restored(1);
+      else
+        LOKA_VERIFY(Access::restores(*f.context) == 0);
+      LOKA_VERIFY([f.view isEditable]);
       [f.view setSelectedRange:NSMakeRange(0, [[f.view string] length])];
       [f.view deleteBackward:nil];
       LOKA_VERIFY(f.lines.size() == 1 && bytes(f.lines.at(0).value).empty());
