@@ -3,6 +3,7 @@
 
 void testTutorialIncrementSummaryToggleDrivesUiCommands();
 void testTutorialListCapacityAndVisibility();
+void testTutorialScrollListCapacityAndVisibility();
 void testTutorialIncrementSummaryToggleHoldsFinalSceneAndMatchesAudit();
 void testTutorialStandaloneMenuUsesExampleDeclaration();
 void testTutorialStandaloneFlowWritesExpectedAudit();
