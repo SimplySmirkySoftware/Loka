@@ -76,6 +76,10 @@ public:
     LOKA_VERIFY(false);
     return 0;
   }
+  void renderClipBox(loka::app::scene::Node *)
+  {
+    LOKA_VERIFY(false);
+  }
   void renderZStack(loka::app::ZStackNode *)
   {
     LOKA_VERIFY(false);

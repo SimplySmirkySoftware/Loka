@@ -489,6 +489,7 @@ bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::No
 #include "ToolboxScrollViewLayout.cpp"
 
 #include "ToolboxScrollViewRender.cpp"
+#include "ToolboxClipBoxRender.cpp"
 
 short ToolboxScenePlatformController::allocateControlId()
 {

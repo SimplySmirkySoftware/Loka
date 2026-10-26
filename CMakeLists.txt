@@ -868,6 +868,23 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 
+  # Clip paint pins use production dispatch, render, hit recorders and QuickDraw host calls.
+  get_target_property(_clip_paint_sources LokaToolboxZStackUnitTests SOURCES)
+  list(REMOVE_ITEM _clip_paint_sources tests/toolbox/host/ToolboxZStackUnitHostTests.cpp)
+  add_executable(LokaToolboxClipPaintTests tests/toolbox/host/ToolboxClipPaintHostTests.cpp
+    apple/toolbox/src/ToolboxHitLedger.cpp ${_clip_paint_sources})
+  target_include_directories(LokaToolboxClipPaintTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxClipPaintTests PRIVATE LOKA_HOST_CONTROL_WIDTH=1 LOKA_HOST_CELL_PAINT=1
+    LOKA_HOST_CONTROL_ORDER=1 LOKA_HOST_GAP_DISPATCH=1 LOKA_HOST_EDITOR_SCROLL=1 LOKA_HOST_CLIP_PAINT=1
+    LOKA_HOST_CLIP_ALLOCATIONS=1)
+  target_compile_options(LokaToolboxClipPaintTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxClipPaintTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxClipPaintTests)
+  set_target_properties(LokaToolboxClipPaintTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_clip_case box card unflagged nested overflow dirty scrolled viewport unit ribbon hits region push none-context none-placement)
+    add_test(NAME testToolboxClipPaint_${_clip_case} COMMAND LokaToolboxClipPaintTests ${_clip_case})
+  endforeach()
+
   add_executable(LokaToolboxPartialPaintTests tests/toolbox/host/ToolboxPartialPaintHostTests.cpp
     apple/toolbox/src/context/ToolboxCellContext.cpp
     apple/toolbox/src/context/ToolboxButtonContext.cpp
