@@ -543,3 +543,27 @@ namespace loka
   } // namespace testing
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textPayloadsUntilRefusal = 0;
+      }
+      void failTextPayloadAllocation(unsigned count)
+      {
+        textPayloadsUntilRefusal = count;
+      }
+      bool refuseTextPayloadAllocation()
+      {
+        return textPayloadsUntilRefusal && --textPayloadsUntilRefusal == 0;
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif

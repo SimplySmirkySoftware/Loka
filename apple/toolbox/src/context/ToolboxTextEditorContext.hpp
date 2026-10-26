@@ -93,7 +93,7 @@ private:
   char *restore_;
   Rect rect_;
   Rect paintRect_;
-  const loka::core::ObservableList<loka::core::String> *source_;
+  const loka::app::TextBuffer *source_;
   loka::core::ListRevision revision_;
   Phase phase_;
   loka::app::EditorResult status_;

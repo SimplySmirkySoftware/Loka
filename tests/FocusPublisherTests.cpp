@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "FocusPublisherTests.hpp"
 #include "FocusPostTests.hpp"
 #include "app/FocusParticipant.hpp"
@@ -402,7 +403,7 @@ void testFocusQuery()
 void testFocusTextEditor()
 {
   Fixture f;
-  ObservableList<String> lines;
+  loka::testing::TextBufferFixture lines;
   LOKA_VERIFY(lines.attach(f.facts.tracker()->asPushTracker(), 4) == ATTACH_OK);
   LOKA_VERIFY(lines.insert(0, String("focus")) == EDIT_OK);
   TextEditorNode editor(TextEditorProps(lines, f.facts.cursor).focusedAs(f.facts.second, FOCUS_HEIGHT));

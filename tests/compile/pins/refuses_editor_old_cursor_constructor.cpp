@@ -6,5 +6,5 @@ void probe(loka::app::scene::Reported<loka::app::LineCursor> &reported,
   (void)reported;
   (void)props;
   (void)request;
-  loka::app::TextEditorProps old(*props.lines_, request);
+  loka::app::TextEditorProps old(*props.buffer_, request);
 }

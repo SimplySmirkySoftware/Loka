@@ -10,6 +10,11 @@ class AppConfigurable;
 class Win32PlatformContext : public PlatformContext
 {
 public:
+  virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
+  {
+    out = loka::app::TextCapacity::of(256, 8192);
+    return true;
+  }
   Win32PlatformContext();
   ~Win32PlatformContext();
   virtual App *createApp(AppConfigurable *config, NativeModuleHandle hInstance, int nCmdShow) const;

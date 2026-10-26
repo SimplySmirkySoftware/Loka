@@ -2,11 +2,17 @@
 #define LOKA_TESTS_PLATFORM_NULL_PLATFORM_CONTEXT_HPP
 
 #include "app/PlatformContext.hpp"
+#include <climits>
 #include "core/String.hpp"
 
 class NullPlatformContext : public PlatformContext
 {
 public:
+  virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
+  {
+    out = loka::app::TextCapacity::of(65535, INT_MAX);
+    return true;
+  }
   NullPlatformContext();
   virtual ~NullPlatformContext();
 

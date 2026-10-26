@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "MacFocusTests.hpp"
 #include "support/MacWindowSession.hpp"
 #include "MacApp.hpp"
@@ -35,7 +36,7 @@ namespace
     Focus<unsigned int> focus;
     Reported<LineCursor> cursor;
     NodeState<String> firstText, secondText;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Facts()
     {
       StateBatchBase::CreateImmediateState(this, this->cursor, LineCursor::None());

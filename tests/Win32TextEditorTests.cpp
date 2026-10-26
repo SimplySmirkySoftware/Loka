@@ -1,3 +1,5 @@
+#include "Win32PlatformContext.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/TextEditorStateOwner.hpp"
@@ -244,7 +246,7 @@ namespace
   {
     HWND host;
     Win32ScenePlatformController controller;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     TextEditorNode *node;
     Win32TextEditorContext *context;
     Fixture(unsigned short count = 3, const std::string &text = "abcd", unsigned short capacity = 256)
@@ -1324,6 +1326,10 @@ void testWin32TextEditorQueuedRequests()
 
 void testWin32TextEditorConversion()
 {
+  Win32PlatformContext rail;
+  TextCapacity maximum;
+  LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
   std::wstring wide;
   std::string logical;
   LOKA_VERIFY(loka::win32::TextEditorToWide("first\r\rlast\r", wide));
@@ -1553,9 +1559,7 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
   }
   {
     Fixture fixture;
-    LOKA_VERIFY(fixture.lines.detach() == EDIT_OK);
-    LOKA_VERIFY(fixture.lines.attach(&fixture.tracker, 256) == ATTACH_OK);
-    LOKA_VERIFY(fixture.lines.insert(0, String("fresh")) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     Observer observer(fixture);
     const Snapshot before(fixture);
     fixture.type(L'x');
@@ -1619,15 +1623,15 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
     LOKA_VERIFY(!SendMessageW(fixture.context->hwnd(), EM_CANUNDO, 0, 0));
   }
   {
-    Fixture fixture(257, "a", 257);
+    Fixture fixture(1, std::string(8193, 'a'));
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_CAPACITY && fixture.native().empty());
     LOKA_VERIFY(GetWindowLongPtrW(fixture.context->hwnd(), GWL_STYLE) & ES_READONLY);
-    LOKA_VERIFY(fixture.lines.remove(fixture.lines.at(256).id) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, String("a")) == EDIT_OK);
     fixture.context->onPropsApplied();
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
     fixture.type(L'x');
     fixture.matches();
-    LOKA_VERIFY(fixture.lines.insert(256, String("a")) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, String(std::string(8193, 'a'))) == EDIT_OK);
     fixture.context->onPropsApplied();
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_CAPACITY && fixture.native().empty());
   }

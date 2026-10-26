@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "support/Win32ImportRefusal.hpp"
 #include "app/nodes/controls/EditText.hpp"
@@ -326,7 +327,7 @@ void testWin32NodeHandlerEnsureContract()
 
     // -- TextEditor: a retained Unicode multiline native control --
     loka::app::testing::TextEditorStateOwner editorState;
-    loka::core::ObservableList<loka::core::String> editorLines;
+    loka::testing::TextBufferFixture editorLines;
     LOKA_VERIFY(editorLines.attach(&editorState.tracker, 256) == loka::core::ATTACH_OK);
     LOKA_VERIFY(editorLines.insert(0, loka::core::String("line")) == loka::core::EDIT_OK);
     loka::app::TextEditorNode editor((loka::app::TextEditorProps(editorLines, editorState.cursor)));
@@ -2339,7 +2340,7 @@ namespace
       AdmissionState<int> selection(0);
       AdmissionState<resource::Image> image((resource::Image()));
       loka::app::testing::TextEditorStateOwner editorState;
-      ObservableList<String> lines;
+      loka::testing::TextBufferFixture lines;
       LOKA_VERIFY(lines.attach(&editorState.tracker, 256) == ATTACH_OK);
       LOKA_VERIFY(lines.insert(0, String::Literal("line")) == EDIT_OK);
       Node *node = 0;
