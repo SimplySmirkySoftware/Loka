@@ -400,6 +400,38 @@ namespace
         }
   }
 
+  void clipCardUnconstrainedPin()
+  {
+    for (int handler = 0; handler != 2; ++handler)
+      for (int nested = 0; nested != 2; ++nested)
+        for (short offer = -1; offer <= 0; ++offer)
+        {
+          Fixture f(WindowProps(), handler != 0);
+          LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+          ProjectionParentScopeStack &scopes = f.controller.projectionParentScopes_;
+          if (nested)
+          {
+            const ProjectionParentScope parent(0, 0, 0, loka::core::Frame(10, 20, 100, 100));
+            LOKA_VERIFY(scopes.pushClip(parent));
+          }
+          CardNode card(Card().clipChildren().props);
+          PlacementLeaf *leaf = new PlacementLeaf(80, 20);
+          card.addChild(leaf);
+          LayoutState state = f.seat();
+          state.x = 10;
+          state.y = 20;
+          state.width = offer;
+          LOKA_VERIFY(LayoutNode(&card, state, &f.controller, 0) == offer);
+          LOKA_VERIFY(leaf->calls == 1);
+          LOKA_VERIFY(leaf->paintRect_.left < leaf->paintRect_.right && leaf->paintRect_.top < leaf->paintRect_.bottom);
+          LOKA_VERIFY(leaf->clip.x + leaf->clip.width == (nested ? 110 : SHRT_MAX));
+          Rect rect;
+          LOKA_VERIFY(card.getContext() && !placementOf(card, rect));
+          if (nested)
+            LOKA_VERIFY(scopes.pop());
+        }
+  }
+
   void clipResultPin()
   {
     Fixture f;
@@ -1220,6 +1252,8 @@ int main(int argc, char **argv)
     clipPlacementPin();
   else if (!std::strcmp(mode, "clip-width"))
     clipWidthPin();
+  else if (!std::strcmp(mode, "clip-card-unconstrained"))
+    clipCardUnconstrainedPin();
   else if (!std::strcmp(mode, "clip-result"))
     clipResultPin();
   else if (!std::strcmp(mode, "clip-latest"))

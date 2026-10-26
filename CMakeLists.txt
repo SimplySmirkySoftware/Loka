@@ -659,7 +659,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxGapTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxGapTests)
   set_target_properties(LokaToolboxGapTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result)
+  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained)
     add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
   endforeach()
 
