@@ -76,7 +76,14 @@ namespace
   const char kMovedButtonTitle[] = "MMMMMMMM";
   int gButtonTitleDraws = 0;
 
-  pascal void CountButtonTitle(short count, const void *text, Point numer, Point denom)
+  // Multiversal declares the QuickDraw text bottleneck buffer as Ptr, Universal
+  // Interfaces as const void *; the callback must match the UPP exactly.
+#if defined(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES)
+  typedef Ptr QDTextBuffer;
+#else
+  typedef const void *QDTextBuffer;
+#endif
+  pascal void CountButtonTitle(short count, QDTextBuffer text, Point numer, Point denom)
   {
     if (count == sizeof(kMovedButtonTitle) - 1
         && (std::memcmp(text, kMovedButtonTitle, sizeof(kMovedButtonTitle) - 1) == 0
