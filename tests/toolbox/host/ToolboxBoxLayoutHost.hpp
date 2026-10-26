@@ -14,9 +14,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
-#ifdef LOKA_HOST_RECT_SURFACE
 #include "Quickdraw.h"
-#endif
 
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController
 {
@@ -52,10 +50,27 @@ public:
   void requestStructurePresent() {}
   // RectSurface owns no controller-ledger handles; Node deletes its context.
   void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint) {}
-  bool intersectWithProjectionClip(const Rect &rect, Rect &out) const { out = rect; return !EmptyRect(&out); }
+
 #else
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { LOKA_VERIFY(false); }
 #endif
+  bool intersectWithProjectionClip(const Rect &rect, Rect &out) const
+  {
+    out = rect;
+    if (this->projectionParentScopes_.activeDepth())
+    {
+      const loka::core::Frame &clip = this->projectionParentScopes_.current().clipRect;
+      const Rect bounds = {static_cast<short>(clip.y),
+                           static_cast<short>(clip.x),
+                           static_cast<short>(clip.y + clip.height),
+                           static_cast<short>(clip.x + clip.width)};
+      out.left = rect.left > bounds.left ? rect.left : bounds.left;
+      out.top = rect.top > bounds.top ? rect.top : bounds.top;
+      out.right = rect.right < bounds.right ? rect.right : bounds.right;
+      out.bottom = rect.bottom < bounds.bottom ? rect.bottom : bounds.bottom;
+    }
+    return out.left < out.right && out.top < out.bottom;
+  }
   short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *)
   {
     LOKA_VERIFY(false);

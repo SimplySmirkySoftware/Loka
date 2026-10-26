@@ -119,8 +119,13 @@ short ToolboxScenePlatformController::layoutScrollView(
 
   const Rect contentRect =
       ToolboxScrollViewContentRect(ToolboxScrollViewFrameRect(viewportRect, horizontalBar, edges), horizontalBar);
-  const loka::core::Frame viewportClip(
-      contentRect.left, contentRect.top, contentRect.right - contentRect.left, contentRect.bottom - contentRect.top);
+  Rect clippedViewport = contentRect;
+  if (this->projectionParentScopes_.currentIsClip())
+    this->intersectWithProjectionClip(contentRect, clippedViewport);
+  const loka::core::Frame viewportClip(clippedViewport.left,
+                                       clippedViewport.top,
+                                       clippedViewport.right - clippedViewport.left,
+                                       clippedViewport.bottom - clippedViewport.top);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();

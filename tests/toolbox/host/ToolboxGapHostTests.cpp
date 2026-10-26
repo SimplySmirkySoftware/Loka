@@ -1,4 +1,6 @@
 #include "context/ToolboxClipBoxContext.hpp"
+#include "context/ToolboxCardBandContext.hpp"
+#include "context/ToolboxPaintSupport.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "ToolboxPaintDrawerType.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
@@ -12,6 +14,7 @@
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
+#include "app/layout/BoxLayout.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -196,7 +199,7 @@ namespace
       {
         ToolboxClipBoxContext *context = static_cast<ToolboxClipBoxContext *>(box->getContext());
         Rect rect = {1, 2, 3, 4};
-        LOKA_VERIFY(!context->placement().query(rect));
+        LOKA_VERIFY(context->placement().query(rect));
         ToolboxSceneDebugStats stats;
         ToolboxPaintAnswerSource source(stats);
         PaintQuery query;
@@ -317,6 +320,448 @@ namespace
     LOKA_VERIFY(out.top == 4 && out.left == 5 && out.bottom == 4 && out.right == 5);
     context.setPlacement(ToolboxClipPlacement());
     LOKA_VERIFY(!context.placement().query(out));
+  }
+
+  class PlacementLeaf : public TextNode
+  {
+  public:
+    const short natural;
+    const short height;
+    unsigned calls;
+    unsigned depth;
+    loka::core::Frame clip;
+    Rect paintRect_;
+    PlacementLeaf(short width = 80, short h = 20)
+        : TextNode(Text("placement").props),
+          natural(width),
+          height(h),
+          calls(0),
+          depth(0),
+          paintRect_()
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController &controller = *static_cast<ToolboxScenePlatformController *>(platform);
+      ++this->calls;
+      this->depth = controller.projectionParentScopes_.activeDepth();
+      this->clip = controller.projectionParentScopes_.current().clipRect;
+      LayoutState projected;
+      // A non-native child can still complete when the clip box cannot project.
+      if (controller.projectionParentScopes_.current().project(state, projected))
+        state = projected;
+      else
+        state.x = state.y = 0;
+      const Rect rect = {
+          state.y, state.x, static_cast<short>(state.y + this->height), static_cast<short>(state.x + this->natural)};
+      controller.intersectWithProjectionClip(rect, this->paintRect_);
+      state.y = static_cast<short>(state.y + this->height);
+      return this->natural;
+    }
+  };
+
+  bool placementOf(Node &node, Rect &rect)
+  {
+    return node.getContext() && static_cast<ToolboxClipBoxContext *>(node.getContext())->placement().query(rect);
+  }
+
+  void clipWidthPin()
+  {
+    for (int handler = 0; handler != 2; ++handler)
+      for (int flagged = 0; flagged != 2; ++flagged)
+        for (int offer = -1; offer != 3; ++offer)
+        {
+          Fixture f(WindowProps(), handler != 0);
+          LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+          BoxNode box(flagged ? Box().clipChildren().props : Box().props);
+          PlacementLeaf *leaf = new PlacementLeaf();
+          box.addChild(leaf);
+          LayoutState state = f.seat();
+          state.x = 10;
+          state.y = 15;
+          state.width = static_cast<short>(offer * 50);
+          const short width = LayoutNode(&box, state, &f.controller, 0);
+          const short expected = flagged && offer == 1 ? 50 : 80;
+          LOKA_VERIFY(width == expected);
+          LOKA_VERIFY(leaf->depth == (flagged ? 1u : 0u));
+          Rect rect;
+          LOKA_VERIFY(placementOf(box, rect) == (flagged != 0));
+          if (flagged)
+          {
+            LOKA_VERIFY(rect.left == 10 && rect.top == 15 && rect.right == 10 + expected && rect.bottom == 35);
+            LOKA_VERIFY(leaf->clip.x == 10 && leaf->clip.y == 15);
+            LOKA_VERIFY(leaf->clip.x + leaf->clip.width == (offer > 0 ? 10 + offer * 50 : SHRT_MAX));
+            LOKA_VERIFY(leaf->clip.y + leaf->clip.height == SHRT_MAX);
+            LOKA_VERIFY(leaf->paintRect_.right == 10 + expected && leaf->paintRect_.bottom == 35);
+          }
+          else
+            LOKA_VERIFY(!box.getContext());
+          LOKA_VERIFY(f.controller.projectionParentScopes_.activeDepth() == 0);
+        }
+  }
+
+  void clipResultPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    for (int empty = 0; empty != 2; ++empty)
+    {
+      BoxNode box(Box().clipChildren().props);
+      box.addChild(new PlacementLeaf(empty ? 80 : 0, empty ? 0 : 20));
+      f.layout(box);
+      Rect rect;
+      LOKA_VERIFY(box.getContext() && !placementOf(box, rect));
+    }
+    BoxNode edge(Box().width(100).clipChildren().props);
+    PlacementLeaf *leaf = new PlacementLeaf();
+    edge.addChild(leaf);
+    LayoutState state = f.seat();
+    state.x = SHRT_MAX - 7;
+    state.width = 50;
+    LOKA_VERIFY(LayoutNode(&edge, state, &f.controller, 0) == 50);
+    Rect rect;
+    LOKA_VERIFY(placementOf(edge, rect) && rect.right == SHRT_MAX);
+    LOKA_VERIFY(leaf->clip.x + leaf->clip.width == SHRT_MAX);
+    ProjectionParentScope frame(0, 0, 0, loka::core::Frame(0, 0, 200, 200));
+    ProjectionViewportScopeGuard guard(f.controller.projectionParentScopes_, frame);
+    LOKA_VERIFY(guard.isActive());
+    edge.props.height = SHRT_MAX;
+    state = f.seat();
+    state.y = 20;
+    LOKA_VERIFY(LayoutNode(&edge, state, &f.controller, 0) == 0);
+    LOKA_VERIFY(!placementOf(edge, rect));
+    LOKA_VERIFY(f.controller.projectionParentScopes_.current().hasShortRangeRefusal());
+  }
+
+  void clipLatestPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    BoxNode box(Box().clipChildren().props);
+    box.setPropsTypeId(BoxProps::staticTypeId());
+    box.addChild(new PlacementLeaf());
+    LayoutState state = f.seat();
+    LayoutNode(&box, state, &f.controller, 0);
+    Rect rect;
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 0 && rect.bottom == 20);
+    state = f.seat();
+    state.y = 42;
+    LayoutNode(&box, state, &f.controller, 0);
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 42 && rect.bottom == 62);
+    // LazyView's retained refresh door applies props without placing the node.
+    LOKA_VERIFY(Box().width(90).clipChildren().applyPropsToNode(&box));
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 42 && rect.right == 80);
+    NotifySubtreeNodeDetached(&box);
+    LifecycleFactTestAccess::DeliverFacts(&box);
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 42);
+    NotifySubtreeNodeAttached(&box);
+    LifecycleFactTestAccess::DeliverFacts(&box);
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 42);
+    LOKA_VERIFY(Box().applyPropsToNode(&box));
+    state = f.seat();
+    state.y = 99;
+    LayoutNode(&box, state, &f.controller, 0);
+    LOKA_VERIFY(!placementOf(box, rect));
+    LOKA_VERIFY(Box().clipChildren().applyPropsToNode(&box));
+    RenderNode(&box, &f.controller);
+    LOKA_VERIFY(!placementOf(box, rect));
+    f.controller.releaseNodeContexts(&box);
+    LOKA_VERIFY(!box.getContext());
+    f.controller.ensureClipBoxContext(&box, state);
+    LOKA_VERIFY(box.getContext() && !placementOf(box, rect));
+  }
+
+  void clipNestedPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    BoxNode parent(Box().size(50, 12).clipChildren().props);
+    BoxNode *inner = new BoxNode(Box().size(100, 30).clipChildren().props);
+    PlacementLeaf *leaf = new PlacementLeaf(100, 30);
+    inner->addChild(leaf);
+    parent.addChild(inner);
+    LayoutState state = f.seat();
+    state.x = 10;
+    state.y = 20;
+    LayoutNode(&parent, state, &f.controller, 0);
+    Rect outer, child;
+    LOKA_VERIFY(placementOf(parent, outer) && placementOf(*inner, child));
+    LOKA_VERIFY(outer.right == 60 && outer.bottom == 32 && child.right == 60 && child.bottom == 50);
+    LOKA_VERIFY(leaf->depth == 2 && leaf->paintRect_.right == 60 && leaf->paintRect_.bottom == 32);
+    BoxNode sibling(Box().clipChildren().props);
+    sibling.addChild(new PlacementLeaf(22, 7));
+    state = f.seat();
+    state.y = 70;
+    LayoutNode(&sibling, state, &f.controller, 0);
+    LOKA_VERIFY(placementOf(sibling, child) && child.top == 70 && child.bottom == 77);
+    LOKA_VERIFY(placementOf(parent, outer) && outer.top == 20);
+  }
+
+  void clipAdmissionPin(bool projectionFailure)
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    ProjectionParentScopeStack &stack = f.controller.projectionParentScopes_;
+    ProjectionParentScope frame(0, 0, projectionFailure ? -100 : 0, loka::core::Frame(0, 0, 200, 200));
+    if (projectionFailure)
+      LOKA_VERIFY(stack.pushViewport(frame));
+    const int clips = projectionFailure ? 0 : 6;
+    for (int i = 0; i != clips; ++i)
+      LOKA_VERIFY(stack.pushClip(frame));
+    BoxNode box(Box().clipChildren().props);
+    PlacementLeaf *leaf = new PlacementLeaf();
+    box.addChild(leaf);
+    // Seed an old fact so every refusal must actively replace it with none.
+    f.controller.ensureClipBoxContext(&box, f.seat());
+    const Rect old = {1, 2, 3, 4};
+    static_cast<ToolboxClipBoxContext *>(box.getContext())->setPlacement(ToolboxClipPlacement(old));
+    LayoutState state = f.seat();
+    if (projectionFailure)
+      state.y = SHRT_MIN + 10;
+    LayoutNode(&box, state, &f.controller, 0);
+    Rect rect;
+    LOKA_VERIFY(leaf->calls == 1 && leaf->depth == (projectionFailure ? 1u : 6u));
+    LOKA_VERIFY(!placementOf(box, rect));
+    LOKA_VERIFY(!stack.current().hasShortRangeRefusal());
+    for (int i = 0; i != clips + (projectionFailure ? 1 : 0); ++i)
+      LOKA_VERIFY(stack.pop());
+  }
+
+  void clipScrollPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    // A declared outer height clips the viewport without changing its offered seat.
+    BoxNode box(Box().height(30).clipChildren().props);
+    loka::core::MutableState<loka::core::Frame> fact(loka::core::Frame(0, 0, 0, 0));
+    NodeState<loka::core::Frame> viewport(&fact, 0);
+    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport));
+    PlacementLeaf *leaf = new PlacementLeaf(80, 170);
+    scroll->addChild(leaf);
+    BoxNode *inner = new BoxNode(Box().height(100).clipChildren().props);
+    inner->addChild(scroll);
+    box.addChild(inner);
+    LayoutState state = f.seat();
+    LayoutNode(&box, state, &f.controller, 0);
+    LOKA_VERIFY(leaf->calls > 0 && leaf->depth == 3);
+    LOKA_VERIFY(leaf->clip.height == 30);
+    LOKA_VERIFY(!f.controller.scrollControls().empty());
+    const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
+    LOKA_VERIFY(binding.contentRect.bottom == 100);
+    const Rect content = binding.contentRect;
+    const loka::core::Frame published = fact.get();
+    const short maximum = f.controller.scrollControls()[0].maximum;
+    box.props.childClip_ = layout::CHILD_CLIP_NONE;
+    state = f.seat();
+    LayoutNode(&box, state, &f.controller, 0);
+    const Rect after = f.controller.viewportScroll().contentRect;
+    LOKA_VERIFY(content.left == after.left && content.top == after.top && content.right == after.right
+                && content.bottom == after.bottom);
+    LOKA_VERIFY(fact.get() == published && f.controller.scrollControls()[0].maximum == maximum);
+    LOKA_VERIFY(leaf->clip.height == 100);
+    f.controller.releaseNodeContexts(&box);
+  }
+
+  void clipUnitPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    BoxNode box(Box().size(50, 10).clipChildren().props);
+    ZStackNode *stack = new ZStackNode(ZStack().props);
+    stack->addChild(new PlacementLeaf(80, 20));
+    stack->addChild(new PlacementLeaf(80, 20));
+    box.addChild(stack);
+    f.layout(box);
+    LOKA_VERIFY(f.controller.unitLedger_.mark() == 1);
+    const ToolboxUnitLedger::UnitSeat &row = f.controller.unitLedger_.at(0);
+    LOKA_VERIFY(row.rect.right == 50 && row.rect.bottom == 10 && row.unit.bottom == 20);
+  }
+
+  void clipCardScrollPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    loka::core::MutableState<loka::core::Frame> fact(loka::core::Frame(0, 9, 0, 0));
+    NodeState<loka::core::Frame> viewport(&fact, 0);
+    ScrollViewNode scroll((ScrollViewProps(viewport)));
+    CardNode *card = new CardNode(Card().clipChildren().props);
+    card->addChild(new PlacementLeaf(80, 150));
+    scroll.addChild(card);
+    LayoutState state = f.seat();
+    state.x = 10;
+    state.y = 20;
+    LayoutNode(&scroll, state, &f.controller, 0);
+    Rect rect;
+    LOKA_VERIFY(placementOf(*card, rect));
+    LOKA_VERIFY(rect.left == 10 && rect.top == 11);
+    LOKA_VERIFY(rect.right == 10 + fact.get().width);
+    LOKA_VERIFY(rect.bottom - rect.top == 150 + card->frameGeometry().insets.top + card->frameGeometry().insets.bottom);
+    LOKA_VERIFY(fact.get().y == 9);
+    f.controller.releaseNodeContexts(&scroll);
+  }
+
+  // This fixture substitutes the controller's projected preparation door.
+  // The real handler, context layout and paintRect-backed answer run below.
+  class PlacementBand : public CardBandNode
+  {
+  public:
+    PlacementBand()
+        : CardBandNode(CardBandProps(CARD_BAND_TOP))
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController &controller = *static_cast<ToolboxScenePlatformController *>(platform);
+      if (!controller.projectLayoutState(state))
+        return 0;
+      IPlatformNodeHandler *handler = controller.nodeHandlerRegistry_.find(this);
+      LOKA_VERIFY(handler && handler->ensureContext(this, platform, state));
+      return this->Node::layout(platform, state);
+    }
+  };
+
+  void clipNativePin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    BoxNode box(Box().size(50, 10).clipChildren().props);
+    BoxNode *inner = new BoxNode(Box().size(100, 30).props);
+    CardBandNode *band = new PlacementBand();
+    inner->addChild(band);
+    box.addChild(inner);
+    f.layout(box);
+    NotifySubtreeNodeAttached(&box);
+    LifecycleFactTestAccess::DeliverFacts(&box);
+    LOKA_VERIFY(band->getContext());
+    const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+    const PaintAnswer answer = static_cast<ToolboxCardBandContext *>(band->getContext())->queryPaintDamage(query);
+    LOKA_VERIFY(answer.kind == PAINT_ANSWER_EXACT);
+    LOKA_VERIFY(answer.damage.x == 0 && answer.damage.y == 0 && answer.damage.width == 50
+                && answer.damage.height == 10);
+    f.controller.releaseNodeContexts(&box);
+  }
+
+  void clipGridPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    GridNode grid(Grid().rows(2).cols(1).props);
+    BoxNode *first = new BoxNode(Box().clipChildren().props);
+    BoxNode *second = new BoxNode(Box().clipChildren().props);
+    first->addChild(new PlacementLeaf());
+    second->addChild(new PlacementLeaf());
+    grid.addChild(first);
+    grid.addChild(second);
+    f.layout(grid);
+    Rect rect;
+    LOKA_VERIFY(placementOf(*second, rect) && rect.top == 50 && rect.bottom == 70);
+    grid.props.rows = 1;
+    f.layout(grid);
+    LOKA_VERIFY(placementOf(*second, rect) && rect.top == 50 && rect.bottom == 70);
+  }
+
+  class RestartLeaf : public PlacementLeaf
+  {
+  public:
+    RestartLeaf()
+        : PlacementLeaf(80, 20)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      const short width = PlacementLeaf::layoutProjected(platform, state);
+      // Force the cached band's first attempt to disagree, then vary the retry.
+      state.y = static_cast<short>(state.y + this->calls);
+      return width;
+    }
+  };
+
+  // Band eligibility is Text-only today. This test adapter places a Box through
+  // production dispatch on each text visit, exposing the real restart sequence.
+  class BandBoxText : public TextNode
+  {
+    BoxNode &box_;
+
+  public:
+    explicit BandBoxText(BoxNode &box)
+        : TextNode(Text("band").props),
+          box_(box)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      return LayoutNode(&this->box_, state, static_cast<ToolboxScenePlatformController *>(platform), 0);
+    }
+  };
+
+  void clipRestartPin()
+  {
+    Fixture f;
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    BoxNode box(Box().clipChildren().props);
+    StackNode column(Column().gap(0).props);
+    column.setPropsTypeId(StackProps::staticTypeId());
+    RestartLeaf *leaf = new RestartLeaf();
+    box.addChild(leaf);
+    column.addChild(new BandBoxText(box));
+    loka::app::layout::StackSpans spans;
+    LayoutState state = f.seat();
+    LayoutNode(&column, state, &f.controller, 0, 0, &spans);
+    LOKA_VERIFY(spans.valid() && leaf->calls == 1);
+    const loka::app::layout::LazyWindow band = {0, 1};
+    state = f.seat();
+    state.y = 30;
+    LayoutNode(&column, state, &f.controller, 0, &band, &spans);
+    Rect rect;
+    LOKA_VERIFY(leaf->calls == 3);
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 30 && rect.bottom == 53);
+  }
+
+  class PartialBoxHandler : public IPlatformLayoutHandler
+  {
+  public:
+    virtual const void *nodeTypeKey() const
+    {
+      return NodeTypeToken<BoxNode>();
+    }
+    static bool accept(void *, int y)
+    {
+      return y < 30;
+    }
+    static int child(void *context, Node *node, const LayoutState &state)
+    {
+      IPlatformLayoutTraversal *traversal = static_cast<IPlatformLayoutTraversal *>(context);
+      traversal->layoutChild(node, state);
+      return traversal->layoutResultY();
+    }
+    virtual int layoutNode(Node *node,
+                           const LayoutState &state,
+                           IPlatformLayoutTraversal *traversal,
+                           const loka::app::layout::LazyWindow * = 0,
+                           loka::app::layout::StackSpans * = 0)
+    {
+      const int bottom = layout::computeBoxLayoutResultY(
+          node->asBoxNode(), ToolboxLayoutMetrics::spacing(), state, traversal, child, 31, accept);
+      traversal->setLayoutResultY(static_cast<short>(bottom));
+      return 80;
+    }
+  };
+
+  void clipPartialPin()
+  {
+    Fixture f(WindowProps(), false);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    LOKA_VERIFY(f.controller.gapLayoutRegistry.registerHandler(new PartialBoxHandler()));
+    BoxNode box(Box().height(100).clipChildren().props);
+    PlacementLeaf *first = new PlacementLeaf(), *second = new PlacementLeaf();
+    box.addChild(first);
+    box.addChild(second);
+    LayoutState state = f.seat();
+    state.width = 50;
+    LOKA_VERIFY(LayoutNode(&box, state, &f.controller, 0) == 50);
+    Rect rect;
+    LOKA_VERIFY(first->calls == 1 && second->calls == 0 && state.y == 20);
+    LOKA_VERIFY(placementOf(box, rect) && rect.bottom == 20 && rect.right == 50);
   }
 
   void columnPin()
@@ -773,6 +1218,32 @@ int main(int argc, char **argv)
     clipLifecyclePin();
   else if (!std::strcmp(mode, "clip-placement"))
     clipPlacementPin();
+  else if (!std::strcmp(mode, "clip-width"))
+    clipWidthPin();
+  else if (!std::strcmp(mode, "clip-result"))
+    clipResultPin();
+  else if (!std::strcmp(mode, "clip-latest"))
+    clipLatestPin();
+  else if (!std::strcmp(mode, "clip-nested"))
+    clipNestedPin();
+  else if (!std::strcmp(mode, "clip-admission"))
+    clipAdmissionPin(false);
+  else if (!std::strcmp(mode, "clip-projection"))
+    clipAdmissionPin(true);
+  else if (!std::strcmp(mode, "clip-scroll"))
+    clipScrollPin();
+  else if (!std::strcmp(mode, "clip-unit"))
+    clipUnitPin();
+  else if (!std::strcmp(mode, "clip-card-scroll"))
+    clipCardScrollPin();
+  else if (!std::strcmp(mode, "clip-native"))
+    clipNativePin();
+  else if (!std::strcmp(mode, "clip-grid"))
+    clipGridPin();
+  else if (!std::strcmp(mode, "clip-restart"))
+    clipRestartPin();
+  else if (!std::strcmp(mode, "clip-partial"))
+    clipPartialPin();
   else
     LOKA_VERIFY(false);
   std::printf("Toolbox gap %s passed\n", mode);
