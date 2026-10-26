@@ -23,9 +23,10 @@ namespace loka
     class TextEditorNode;
     /** App-owned buffer, fact, request and optional highlighter outlive the node.
         List, fact and request use the same owner tracker. One request slot has
-        one consumer; requests resolve ItemIds against its current binding. Rows contain the editor alphabet (currently
-       ASCII), with no embedded CR/LF/NUL. Columns are UTF-8 byte offsets on code point boundaries. The Classic TextEdit
-       rail keeps refusing non-ASCII; separators count toward the whole-document byte cap. */
+        one consumer; requests resolve ItemIds against its current binding. Rows contain well-formed UTF-8,
+        with no embedded CR/LF/NUL. NUL and malformed sequences are refused with EDITOR_NON_ASCII.
+        Columns are UTF-8 byte offsets on code point boundaries. The Classic TextEdit rail still refuses
+        non-ASCII with EDITOR_NON_ASCII; separators count toward the whole-document byte cap. */
     struct TextEditorProps : scene::NodePropsBase<TextEditorProps>
     {
       typedef TextEditorTypeTag TypeTag;
