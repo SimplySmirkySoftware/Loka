@@ -73,7 +73,7 @@ namespace loka
   {
     namespace testing
     {
-      void failNativeChildWindowCreations(unsigned count);
+      void failNativeChildWindowCreations(unsigned count, unsigned skip = 0);
       bool refuseNativeChildWindowCreation();
     } // namespace testing
   } // namespace win32

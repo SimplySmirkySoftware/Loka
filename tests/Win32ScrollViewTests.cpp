@@ -31,6 +31,7 @@
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "context/Win32TextContext.hpp"
+#include "context/Win32ScrollViewContext.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "app/nodes/nestable/Show.hpp"
 
@@ -180,7 +181,9 @@ namespace
     ZeroMemory(&info, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-    LOKA_VERIFY(GetScrollInfo(viewport, bar, &info));
+    LOKA_VERIFY(GetScrollInfo(bar == SB_VERT ? FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL) : viewport,
+                              bar == SB_VERT ? SB_CTL : bar,
+                              &info));
     return info;
   }
 
@@ -286,7 +289,7 @@ namespace
       const int height = 140 - 2 * Win32SceneLayout::kRootInset
                          - (horizontalOverflow ? controller.displayScale().systemMetric(SM_CYHSCROLL) : 0);
       const LONG_PTR style = GetWindowLongPtrW(viewport, GWL_STYLE);
-      LOKA_VERIFY((style & WS_VSCROLL) != 0);
+      LOKA_VERIFY((style & WS_VSCROLL) == 0);
       LOKA_VERIFY(((style & WS_HSCROLL) != 0) == horizontalOverflow);
       const SCROLLINFO vertical = scrollInfo(viewport);
       LOKA_VERIFY((maximumOffset(vertical) > 0) == verticalOverflow);
@@ -344,9 +347,9 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
 
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
-    assert(GetParent(viewport) == root);
+    assert(GetParent(GetParent(viewport)) == root);
     const LONG_PTR viewportStyle = GetWindowLongPtr(viewport, GWL_STYLE);
-    assert((viewportStyle & WS_VSCROLL) != 0);
+    assert((viewportStyle & WS_VSCROLL) == 0);
     // #1199: transparent children need the parent's ground beneath them;
     // child parentage, checked below, provides structural clipping (#544).
     LOKA_VERIFY((viewportStyle & WS_CLIPCHILDREN) == 0);
@@ -624,58 +627,90 @@ void testWin32ScrollViewMessagePublishesOffsetFact()
     LOKA_VERIFY(clicks == 1 &&
                 "a click inside the viewport must reach the Loka handler");
 
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get().y == 16 &&
-           "WM_VSCROLL must publish through the ScrollView NodeState door");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 16 && "WM_VSCROLL must publish through the ScrollView NodeState door");
     controller.relayout(300, 140);
     const RECT after = childRectInParent(buttons[0], viewport);
     assert(after.top == before.top - 16);
 
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, 10), 0);
-    assert(offset.state().get().y == 16 &&
-           "thumb tracking is visual-only until the value settles");
-    assert(scrollInfo(viewport).nPos == 10);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBPOSITION, 10), 0);
-    assert(offset.state().get().y == 10 &&
-           "thumb position must publish the settled fact");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_THUMBTRACK, 10),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 16 && "thumb tracking is visual-only until the value settles");
+    LOKA_VERIFY(scrollInfo(viewport).nPos == 10);
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_THUMBPOSITION, 10),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 10 && "thumb position must publish the settled fact");
     controller.relayout(300, 140);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, 11), 0);
-    assert(offset.state().get().y == 10);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get().y == 11 &&
-           "end scroll must publish the last visual thumb position");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_THUMBTRACK, 11),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 10);
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_ENDSCROLL, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 11 && "end scroll must publish the last visual thumb position");
     controller.relayout(300, 140);
 
     // A click on an arrow or on the track sends its step and then, on release,
     // SB_ENDSCROLL, with no layout pass in between: the step must survive it.
     offset.state().set(loka::core::Frame(0, 0, 0, 0));
     controller.relayout(300, 140);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get().y == 16 && "an arrow click's end scroll must keep its line step");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_ENDSCROLL, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 16 && "an arrow click's end scroll must keep its line step");
     const SCROLLINFO clickInfo = scrollInfo(viewport);
     const int clickMaximum = maximumOffset(clickInfo);
     const int clickPage =
         clickInfo.nPage > static_cast<UINT>(clickMaximum) ? clickMaximum : static_cast<int>(clickInfo.nPage);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_PAGEDOWN, 0), 0);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_ENDSCROLL, 0), 0);
-    assert(offset.state().get().y == (16 > clickMaximum - clickPage ? clickMaximum : 16 + clickPage)
-           && "a track click's end scroll must keep its page step");
-    assert(offset.state().get().y > 16 && "the page step must move in this fixture");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_PAGEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_ENDSCROLL, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == (16 > clickMaximum - clickPage ? clickMaximum : 16 + clickPage)
+                && "a track click's end scroll must keep its page step");
+    LOKA_VERIFY(offset.state().get().y > 16 && "the page step must move in this fixture");
     controller.relayout(300, 140);
 
     const int rangeEnd = maximumOffset(scrollInfo(viewport));
     offset.state().set(loka::core::Frame(0, rangeEnd, 0, 0));
     controller.relayout(300, 140);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get().y == rangeEnd &&
-           "line scrolling at the range end must clamp without another write");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == rangeEnd
+                && "line scrolling at the range end must clamp without another write");
     offset.state().set(loka::core::Frame(0, rangeEnd - 3, 0, 0));
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(offset.state().get().y == rangeEnd && "a partial final line must clamp to the maximum");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == rangeEnd && "a partial final line must clamp to the maximum");
     offset.state().set(loka::core::Frame(0, 3, 0, 0));
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEUP, 0), 0);
-    assert(offset.state().get().y == 0 && "a partial first line must clamp to zero");
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEUP, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(offset.state().get().y == 0 && "a partial first line must clamp to zero");
 
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
   }
@@ -773,6 +808,18 @@ void testWin32ScrollViewWheelStepsOffsetThroughLinePath()
     LOKA_VERIFY(DestroyWindow(edit));
     offsetState.set(loka::core::Frame(0, 0, 0, 0));
 
+    HWND bar = FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL);
+    LOKA_VERIFY(bar);
+    LOKA_VERIFY(SetWindowPos(root, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE));
+    POINT overBar = {3, 30};
+    LOKA_VERIFY(ClientToScreen(bar, &overBar));
+    SendMessageW(bar, WM_MOUSEWHEEL, down, MAKELPARAM(overBar.x, overBar.y));
+    LOKA_VERIFY(offsetState.get().y == expected);
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
+    SendMessageW(root, WM_MOUSEWHEEL, down, MAKELPARAM(overBar.x, overBar.y));
+    LOKA_VERIFY(offsetState.get().y == expected);
+    offsetState.set(loka::core::Frame(0, 0, 0, 0));
+
     // The real Win32Window WndProc must route by the message's screen point.
     LOKA_VERIFY(SetWindowPos(root, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE));
     LOKA_VERIFY(GetAncestor(WindowFromPoint(point), GA_ROOT) == root);
@@ -831,7 +878,7 @@ void testWin32ScrollViewResizeReclampsOffsetOnce()
         == loka::core::Frame(0, resizedMax > 0 ? resizedMax : 0, visibleWidth, 240 - 2 * Win32SceneLayout::kRootInset));
     assert(offset.changeCount() == 1 &&
            "a range-changing resize must publish one clamped fact");
-    assert(scrollInfo(viewport).nPos == (resizedMax > 0 ? resizedMax : 0));
+    LOKA_VERIFY(scrollInfo(viewport).nPos == (resizedMax > 0 ? resizedMax : 0));
     controller.relayout(300, 240);
     assert(offset.changeCount() == 1 &&
            "the settled clamp must not be published again");
@@ -905,9 +952,12 @@ void testWin32NestedScrollViewRefusesWithoutDisturbingOuterScope()
         directChildWindowsByClass(viewport, L"Button");
     assert(outerButtons.size() == 6);
     const RECT before = childRectInParent(outerButtons[0], viewport);
-    SendMessageW(viewport, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
-    assert(outerOffset.state().get().y == 21);
-    assert(innerOffset.state().get().y == 3);
+    SendMessageW(GetParent(viewport),
+                 WM_VSCROLL,
+                 MAKEWPARAM(SB_LINEDOWN, 0),
+                 reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+    LOKA_VERIFY(outerOffset.state().get().y == 21);
+    LOKA_VERIFY(innerOffset.state().get().y == 3);
     controller.relayout(300, 140);
     const RECT after = childRectInParent(outerButtons[0], viewport);
     assert(after.top == before.top - 16 &&
@@ -1269,6 +1319,258 @@ void testWin32ScrollViewRefusedLayoutKeepsHorizontalMetrics()
     const int retainedX = offset.state().get().x;
     LOKA_VERIFY(retainedX == 50);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  HWND verticalControl(HWND viewport)
+  {
+    HWND bar = FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL);
+    LOKA_VERIFY(bar);
+    return bar;
+  }
+
+  void verifyBar(HWND viewport, int top, int bottom)
+  {
+    HWND frame = GetParent(viewport);
+    HWND bar = verticalControl(viewport);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(frame, &client));
+    const RECT rect = childRectInParent(bar, frame);
+    LOKA_VERIFY(rect.left == client.right - GetSystemMetrics(SM_CXVSCROLL));
+    LOKA_VERIFY(rect.right == client.right && rect.top == top && rect.bottom == bottom);
+  }
+} // namespace
+
+void testWin32ScrollViewInsetBarGeometry()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    ScrollViewNode scroll((ScrollViewProps(offset.state())));
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(100, 400));
+    scroll.addChild(image);
+    establishLayout(controller, &scroll, 300, 140);
+    HWND frame = FindWindowExW(root, NULL, L"LOKA_SCROLL_FRAME", NULL);
+    HWND viewport = FindWindowExW(frame, NULL, L"LOKA_SCROLL_VIEW", NULL);
+    LOKA_VERIFY(frame && viewport);
+    HWND bar = verticalControl(viewport);
+    const int height = 140 - 2 * Win32SceneLayout::kRootInset;
+    verifyBar(viewport, 0, height);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(viewport, &client));
+    LOKA_VERIFY(client.right == 300 - 2 * Win32SceneLayout::kRootInset - GetSystemMetrics(SM_CXVSCROLL));
+    const int tops[] = {20, 0, 20};
+    const int bottoms[] = {0, 25, 25};
+    for (int i = 0; i != 3; ++i)
+    {
+      scroll.props.contentInsets(ScrollViewContentInsets::of(tops[i], bottoms[i]));
+      controller.relayout(300, 140);
+      verifyBar(viewport, tops[i], height - bottoms[i]);
+    }
+    scroll.props.contentInsets(ScrollViewContentInsets::of(80, 80));
+    controller.relayout(300, 140);
+    LOKA_VERIFY(!IsWindowVisible(bar));
+    scroll.props.contentInsets(ScrollViewContentInsets::of(20, 1));
+    image->props.size(400, 400);
+    controller.relayout(300, 140);
+    LOKA_VERIFY(IsWindowVisible(bar));
+    LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) != 0);
+    verifyBar(viewport, 20, height - GetSystemMetrics(SM_CYHSCROLL));
+    // A foreign control notification is not our vertical scroll input.
+    const int before = offset.state().get().y;
+    SendMessageW(frame, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), reinterpret_cast<LPARAM>(viewport));
+    LOKA_VERIFY(offset.state().get().y == before);
+    SendMessageW(frame, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), reinterpret_cast<LPARAM>(bar));
+    LOKA_VERIFY(offset.state().get().y == before + 16);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewInsetBarRefusalAndDpi()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact offset(0);
+    ScrollViewNode scroll(ScrollViewProps(offset.state()).contentInsets(ScrollViewContentInsets::of(20, 30)));
+    ImageViewNode *image = new ImageViewNode(ImageViewProps().size(100, 400));
+    scroll.addChild(image);
+    establishLayout(controller, &scroll, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    HWND frame = GetParent(viewport);
+    HWND bar = verticalControl(viewport);
+    const SCROLLINFO before = scrollInfo(viewport);
+    const RECT placement = childRectInParent(bar, frame);
+    scroll.props.contentInsets(ScrollViewContentInsets::of(SHRT_MAX, SHRT_MAX));
+    controller.relayout(300, 140);
+    const RECT refused = childRectInParent(bar, frame);
+    LOKA_VERIFY(EqualRect(&placement, &refused));
+    const SCROLLINFO after = scrollInfo(viewport);
+    LOKA_VERIFY(after.nMax == before.nMax && after.nPage == before.nPage && after.nPos == before.nPos);
+    controller.updateDisplayScale(loka::win32::Win32DisplayScale(144, RailMetrics()));
+    controller.relayout(300, 140);
+    const loka::win32::Win32DisplayScale &scale = controller.displayScale();
+    const int inset = Win32SceneLayout::kRootInset;
+    const loka::core::Frame seat(inset, inset, 300 - 2 * inset, 140 - 2 * inset);
+    const RECT native = scale.projectFrame(seat).r;
+    const RECT top = scale.projectFrame(loka::core::Frame(seat.x, seat.y, seat.width, 20)).r;
+    const RECT bottom = scale.projectFrame(loka::core::Frame(seat.x, seat.y + seat.height - 30, seat.width, 30)).r;
+    const RECT dpi = childRectInParent(bar, frame);
+    LOKA_VERIFY(dpi.top == top.bottom - top.top);
+    LOKA_VERIFY(dpi.bottom == native.bottom - native.top - (bottom.bottom - bottom.top));
+    LOKA_VERIFY(dpi.left == native.right - native.left - scale.systemMetric(SM_CXVSCROLL));
+    LOKA_VERIFY(scrollInfo(viewport).nMax == before.nMax);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+
+  // No successful pass: the initial committed clearance is empty, not props.
+  root = createHostWindow();
+  LOKA_VERIFY(root);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ScrollViewNode scroll(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(SHRT_MAX, 1)));
+    scroll.addChild(new ImageViewNode(ImageViewProps().size(100, 400)));
+    establishLayout(controller, &scroll, 300, 140);
+    HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    verifyBar(viewport, 0, 140 - 2 * Win32SceneLayout::kRootInset);
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewSubordinateRetirement()
+{
+  using namespace loka::app;
+  for (unsigned skip = 0; skip != 4; ++skip)
+  {
+    HWND root = createHostWindow();
+    LOKA_VERIFY(root);
+    {
+      Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+      ScrollViewNode scroll((ScrollViewProps()));
+      if (skip < 3)
+        loka::win32::testing::failNativeChildWindowCreations(1, skip);
+      Win32ScrollViewContext *context = new Win32ScrollViewContext(&controller, root, 0, 0, 200, 100, &scroll);
+      loka::win32::testing::failNativeChildWindowCreations(0);
+      LOKA_VERIFY(context->isValid() == (skip == 3));
+      HWND frame = FindWindowExW(root, NULL, L"LOKA_SCROLL_FRAME", NULL);
+      HWND viewport = frame ? FindWindowExW(frame, NULL, L"LOKA_SCROLL_VIEW", NULL) : NULL;
+      HWND bar = frame ? FindWindowExW(frame, NULL, L"SCROLLBAR", NULL) : NULL;
+      if (skip == 3)
+      {
+        LOKA_VERIFY(GetWindowLongPtrW(frame, GWLP_USERDATA) != 0);
+        LOKA_VERIFY(GetWindowLongPtrW(viewport, GWLP_USERDATA) == 0);
+        context->onFactChanged(scene::NODE_FACT_ATTACHED, scene::NODE_FACT_RETIRED);
+      }
+      if (frame)
+        LOKA_VERIFY(GetWindowLongPtrW(frame, GWLP_USERDATA) == 0);
+      delete context;
+      // Native children survive until the drain, but cannot recover a context.
+      const HWND survivors[] = {frame, viewport, bar};
+      for (unsigned i = 0; i != 3; ++i)
+      {
+        if (!survivors[i])
+          continue;
+        LOKA_VERIFY(IsWindow(survivors[i]));
+        SendMessageW(survivors[i], WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), reinterpret_cast<LPARAM>(bar));
+        SendMessageW(survivors[i], WM_MOUSEWHEEL, MAKEWPARAM(0, -WHEEL_DELTA), 0);
+        SendMessageW(survivors[i], WM_COMMAND, 0, 0);
+      }
+      controller.drainNativeRetirements();
+      LOKA_VERIFY(!FindWindowExW(root, NULL, L"LOKA_SCROLL_FRAME", NULL));
+    }
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+void testWin32ScrollViewFrameTabAndArrowFocus()
+{
+  using namespace loka::app;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  ShowWindow(root, SW_SHOW);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ScrollViewNode scroll((ScrollViewProps()));
+    addButtonColumn(scroll, 8);
+    establishLayout(controller, &scroll, 300, 140);
+    HWND frame = FindWindowExW(root, NULL, L"LOKA_SCROLL_FRAME", NULL);
+    HWND viewport = FindWindowExW(frame, NULL, L"LOKA_SCROLL_VIEW", NULL);
+    HWND bar = verticalControl(viewport);
+    std::vector<HWND> buttons = directChildWindowsByClass(viewport, L"Button");
+    LOKA_VERIFY(buttons.size() == 8);
+    LOKA_VERIFY(GetNextDlgTabItem(root, NULL, FALSE) == buttons.front());
+    LOKA_VERIFY(GetNextDlgTabItem(root, buttons.front(), TRUE) == buttons.back());
+    LOKA_VERIFY(GetNextDlgTabItem(root, buttons.back(), FALSE) == buttons.front());
+    SetFocus(buttons.front());
+    LOKA_VERIFY(GetFocus() == buttons.front());
+    RECT rect;
+    LOKA_VERIFY(GetClientRect(bar, &rect));
+    // Posting both messages allows the standard scrollbar's modal tracking
+    // loop to consume the release, just like the native probe.
+    LOKA_VERIFY(PostMessageW(bar, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(rect.right / 2, rect.bottom - 3)));
+    LOKA_VERIFY(PostMessageW(bar, WM_LBUTTONUP, 0, MAKELPARAM(rect.right / 2, rect.bottom - 3)));
+    MSG message;
+    while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE))
+    {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+    LOKA_VERIFY(GetFocus() == buttons.front());
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32ScrollViewInsetBarTinyAndFractionalSeat()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  HWND root = createHostWindow();
+  LOKA_VERIFY(root);
+  ShowWindow(root, SW_SHOWNOACTIVATE);
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(144, RailMetrics()));
+    ScrollViewNode node((ScrollViewProps()));
+    Win32ScrollViewContext context(&controller, root, 1, 1, 101, 101, &node);
+    LOKA_VERIFY(context.isValid());
+    HWND viewport = FindWindowExW(context.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL);
+    HWND bar = FindWindowExW(context.hwnd(), NULL, L"SCROLLBAR", NULL);
+    LOKA_VERIFY(viewport && bar);
+    context.commitVerticalBarInsets(ScrollViewContentInsets::of(1, 3), loka::core::Frame(1, 1, 101, 101));
+    // Odd absolute edges at 150% distinguish projecting two edges from a
+    // second scale multiplication or scaling the inset length in isolation.
+    context.relayout(2, 2, 101, 101);
+    const loka::win32::Win32DisplayScale &scale = controller.displayScale();
+    const RECT placed = childRectInParent(bar, context.hwnd());
+    LOKA_VERIFY(placed.top == scale.projectEdge(3) - scale.projectEdge(2));
+    LOKA_VERIFY(placed.bottom == scale.projectEdge(100) - scale.projectEdge(2));
+    context.relayout(0, 0, 1, 10);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(viewport, &client));
+    LOKA_VERIFY(client.right == 0);
+    const RECT narrow = childRectInParent(bar, context.hwnd());
+    LOKA_VERIFY(narrow.left == 0 && narrow.right == scale.projectEdge(1));
+    context.relayout(0, 0, 100, 0);
+    LOKA_VERIFY(!IsWindowVisible(bar));
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    controller.drainNativeRetirements();
   }
   LOKA_VERIFY(DestroyWindow(root));
 }

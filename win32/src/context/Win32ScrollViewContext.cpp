@@ -10,6 +10,7 @@
 
 namespace
 {
+  const wchar_t kScrollFrameClassName[] = L"LOKA_SCROLL_FRAME";
   const wchar_t kScrollViewClassName[] = L"LOKA_SCROLL_VIEW";
   // One line is 16 logical pixels, following the WPF/WinUI convention:
   // the default three system wheel lines move 48 pixels per notch. This is
@@ -33,26 +34,53 @@ Win32ScrollViewContext::Win32ScrollViewContext(Win32ScenePlatformController *con
                                                int height,
                                                loka::app::ScrollViewNode *node)
     : Win32RetirableContext(controller),
-      node_(node)
+      node_(node),
+      viewport_(0),
+      bar_(0),
+      committedInsets_()
 {
   EnsureClassRegistered();
-  // WS_EX_CONTROLPARENT: Win32App routes Tab through IsDialogMessage on the
-  // root, and the dialog manager only recurses into children of windows
-  // carrying this style (the root window sets it too, Win32Window.cpp) —
-  // without it every control inside a ScrollView is skipped by keyboard
-  // navigation.
-  // #1199: like the root, paint ground beneath transparent children. Native
-  // parentage still clips those children to this viewport's client area (#544).
-  this->createNativeChildWindow(
-      WS_EX_CONTROLPARENT,
-      kScrollViewClassName,
-      L"",
-      WS_CHILD | WS_VISIBLE | WS_VSCROLL,
-      this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)),
-      parent,
-      0,
-      GetModuleHandleW(NULL),
-      this);
+  // Both levels participate in recursive dialog navigation. Only the frame
+  // carries a context pointer; abort and terminal retirement revoke it once.
+  // The children are created empty; relayout owns their geometry.
+  const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
+  const RECT empty = {0, 0, 0, 0};
+  this->createNativeChildWindow(WS_EX_CONTROLPARENT,
+                                kScrollFrameClassName,
+                                L"",
+                                WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN,
+                                scale.projectFrame(loka::core::Frame(x, y, width, height)),
+                                parent,
+                                0,
+                                GetModuleHandleW(NULL),
+                                this);
+  if (!this->hwnd())
+    return;
+  this->viewport_ = this->createSubordinateChildWindow(WS_EX_CONTROLPARENT,
+                                                       kScrollViewClassName,
+                                                       L"",
+                                                       WS_CHILD | WS_VISIBLE,
+                                                       scale.fromDevicePixels(empty),
+                                                       this->hwnd(),
+                                                       0,
+                                                       GetModuleHandleW(NULL),
+                                                       0);
+  if (this->viewportHwnd())
+    this->bar_ = this->createSubordinateChildWindow(0,
+                                                    L"SCROLLBAR",
+                                                    L"",
+                                                    WS_CHILD | SBS_VERT,
+                                                    scale.fromDevicePixels(empty),
+                                                    this->hwnd(),
+                                                    0,
+                                                    GetModuleHandleW(NULL),
+                                                    0);
+  if (!this->viewportHwnd() || !this->barHwnd())
+  {
+    this->retireWindow();
+    return;
+  }
+  this->relayout(x, y, width, height);
 }
 
 Win32ScrollViewContext::~Win32ScrollViewContext()
@@ -60,7 +88,7 @@ Win32ScrollViewContext::~Win32ScrollViewContext()
   assert(!this->hwnd() && "terminal fact delivery must queue the ScrollView HWND before context reclaim");
 }
 
-/** The viewport has no paint-only State input: offset is LAYOUT, delivered
+/** The frame and viewport have no paint-only State input: offset is LAYOUT, delivered
     by the native layout pass. During a settled paint-only visit it owes no
     client damage; descendant HWND obligations are enumerated separately. */
 loka::app::scene::PaintAnswer Win32ScrollViewContext::queryPaintDamage(const loka::app::scene::PaintQuery &query) const
@@ -123,11 +151,69 @@ void Win32ScrollViewContext::applyDetachedPresentation()
 
 void Win32ScrollViewContext::relayout(int x, int y, int width, int height)
 {
-  if (this->hwnd())
+  if (!this->hwnd())
+    return;
+  const loka::core::Frame seat(x, y, width, height);
+  const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
+  const loka::win32::NativeRect native = scale.projectFrame(seat);
+  this->positionNativeWindow(this->hwnd(), native);
+  const int clientWidth = native.r.right - native.r.left - scale.systemMetric(SM_CXVSCROLL);
+  const RECT viewport = {0, 0, clientWidth > 0 ? clientWidth : 0, native.r.bottom - native.r.top};
+  this->positionNativeWindow(this->viewportHwnd(), scale.fromDevicePixels(viewport));
+  this->placeVerticalBar(seat);
+}
+
+void Win32ScrollViewContext::commitVerticalBarInsets(const loka::app::ScrollViewContentInsets &insets,
+                                                     const loka::core::Frame &seatLu)
+{
+  this->committedInsets_ = insets;
+  this->placeVerticalBar(seatLu);
+}
+
+void Win32ScrollViewContext::placeVerticalBar(const loka::core::Frame &seatLu)
+{
+  if (!this->barHwnd())
+    return;
+  const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
+  const RECT seat = scale.projectFrame(seatLu).r;
+  const int width = seat.right - seat.left;
+  const int height = seat.bottom - seat.top;
+  const int cx = scale.systemMetric(SM_CXVSCROLL);
+  const int column = width > cx ? width - cx : 0;
+  const bool horizontal = (GetWindowLongPtrW(this->viewportHwnd(), GWL_STYLE) & WS_HSCROLL) != 0;
+  const int availableBottom = horizontal ? height - scale.systemMetric(SM_CYHSCROLL) : height;
+  const RECT topBand =
+      scale.projectFrame(loka::core::Frame(seatLu.x, seatLu.y, seatLu.width, this->committedInsets_.top())).r;
+  const RECT bottomBand =
+      scale
+          .projectFrame(loka::core::Frame(seatLu.x,
+                                          seatLu.y + seatLu.height - this->committedInsets_.bottom(),
+                                          seatLu.width,
+                                          this->committedInsets_.bottom()))
+          .r;
+  const int top = topBand.bottom - topBand.top;
+  const int bottomEdge = height - (bottomBand.bottom - bottomBand.top);
+  const int bottom = bottomEdge < availableBottom ? bottomEdge : availableBottom;
+  if (bottom <= top || column >= width)
+    ShowWindow(this->barHwnd(), SW_HIDE);
+  else
   {
-    this->positionNativeWindow(this->hwnd(),
-                               this->controller()->displayScale().projectFrame(loka::core::Frame(x, y, width, height)));
+    const RECT bar = {column, top, width, bottom};
+    this->positionNativeWindow(this->barHwnd(), scale.fromDevicePixels(bar));
+    ShowWindow(this->barHwnd(), SW_SHOWNA);
   }
+  const RECT damage = {column, 0, width, height};
+  this->controller()->requestDirtySubtree(this->hwnd(), &damage, TRUE);
+}
+
+HWND Win32ScrollViewContext::nativeBar(int &axis) const
+{
+  if (axis == SB_VERT)
+  {
+    axis = SB_CTL;
+    return this->barHwnd();
+  }
+  return this->viewportHwnd();
 }
 
 int Win32ScrollViewContext::setScrollMetrics(int bar, int content, int viewport, int offset)
@@ -166,7 +252,8 @@ int Win32ScrollViewContext::setScrollMetrics(int bar, int content, int viewport,
   info.nMax = content > 0 ? content - 1 : 0;
   info.nPage = viewport > 0 ? static_cast<UINT>(viewport) : 0;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(clamped);
-  SetScrollInfo(this->hwnd(), bar, &info, TRUE);
+  HWND target = this->nativeBar(bar);
+  SetScrollInfo(target, bar, &info, TRUE);
   return clamped;
 }
 
@@ -233,7 +320,8 @@ bool Win32ScrollViewContext::readScrollInfo(int bar, SCROLLINFO &info) const
   ZeroMemory(&info, sizeof(info));
   info.cbSize = sizeof(info);
   info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
-  return GetScrollInfo(this->hwnd(), bar, &info) != FALSE;
+  HWND target = this->nativeBar(bar);
+  return GetScrollInfo(target, bar, &info) != FALSE;
 }
 
 int Win32ScrollViewContext::maximumOffset(const SCROLLINFO &info) const
@@ -274,7 +362,8 @@ void Win32ScrollViewContext::setVisualPosition(int bar, int value)
   info.cbSize = sizeof(info);
   info.fMask = SIF_POS;
   info.nPos = this->controller()->displayScale().scrollOffsetToNative(value);
-  SetScrollInfo(this->hwnd(), bar, &info, TRUE);
+  HWND target = this->nativeBar(bar);
+  SetScrollInfo(target, bar, &info, TRUE);
 }
 
 void Win32ScrollViewContext::publishOffset(int bar, int value)
@@ -303,9 +392,8 @@ bool Win32ScrollViewContext::forwardMouseWheel(HWND root, UINT msg, WPARAM wPara
   for (; target && target != root; target = GetParent(target))
   {
     wchar_t className[256];
-    if (GetClassNameW(target, className, sizeof(className) / sizeof(className[0])) &&
-        std::wcscmp(className, kScrollViewClassName) == 0 &&
-        GetWindowLongPtr(target, GWLP_USERDATA))
+    if (GetClassNameW(target, className, sizeof(className) / sizeof(className[0]))
+        && std::wcscmp(className, kScrollFrameClassName) == 0 && GetWindowLongPtrW(target, GWLP_USERDATA))
     {
       // One forwarding site: Win32Window's context routing calls here for
       // root-directed wheels (including default propagation from controls
@@ -334,23 +422,67 @@ void Win32ScrollViewContext::EnsureClassRegistered()
   wc.hbrBackground = NULL;
   wc.lpszClassName = kScrollViewClassName;
   RegisterClassW(&wc);
+  wc.lpfnWndProc = Win32ScrollViewContext::FrameWndProc;
+  wc.lpszClassName = kScrollFrameClassName;
+  RegisterClassW(&wc);
   registered = true;
 }
 
-// Deliberate twin of Win32ZStackContext::Unit::WndProc, with viewport input.
-LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
-                                                 UINT msg,
-                                                 WPARAM wParam,
-                                                 LPARAM lParam)
+Win32ScrollViewContext *Win32ScrollViewContext::FromFrame(HWND hwnd)
 {
-  Win32ScrollViewContext *self = static_cast<Win32ScrollViewContext *>(
-      reinterpret_cast<void *>(GetWindowLongPtr(hwnd, GWLP_USERDATA)));
+  return reinterpret_cast<Win32ScrollViewContext *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+}
+
+Win32ScrollViewContext *Win32ScrollViewContext::FromViewport(HWND hwnd)
+{
+  return FromFrame(GetParent(hwnd));
+}
+
+LRESULT CALLBACK Win32ScrollViewContext::FrameWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+  Win32ScrollViewContext *self = FromFrame(hwnd);
   if (msg == WM_NCCREATE)
   {
     CREATESTRUCTW *create = reinterpret_cast<CREATESTRUCTW *>(lParam);
     self = static_cast<Win32ScrollViewContext *>(create->lpCreateParams);
-    SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+    SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
   }
+  if (msg == WM_ERASEBKGND)
+    return 1;
+  if (msg == WM_PAINT)
+  {
+    PAINTSTRUCT paint;
+    HDC dc = BeginPaint(hwnd, &paint);
+    Win32ScenePlatformController::paintWindowGround(dc, paint.rcPaint);
+    if (self && self->viewportHwnd() && (GetWindowLongPtrW(self->viewportHwnd(), GWL_STYLE) & WS_HSCROLL))
+    {
+      RECT corner;
+      GetClientRect(hwnd, &corner);
+      const loka::win32::Win32DisplayScale &scale = self->controller()->displayScale();
+      const int cx = scale.systemMetric(SM_CXVSCROLL);
+      const int cy = scale.systemMetric(SM_CYHSCROLL);
+      corner.left = corner.right > cx ? corner.right - cx : 0;
+      corner.top = corner.bottom > cy ? corner.bottom - cy : 0;
+      FillRect(dc, &corner, GetSysColorBrush(COLOR_BTNFACE));
+    }
+    EndPaint(hwnd, &paint);
+    return 0;
+  }
+  if (msg == WM_VSCROLL && self && reinterpret_cast<HWND>(lParam) == self->barHwnd() && lParam
+      && Win32InputDoor::scroll(*self, SB_VERT, LOWORD(wParam), HIWORD(wParam)))
+    return 0;
+  if ((msg == WM_MOUSEWHEEL || msg == kMouseHorizontalWheelMessage) && self)
+  {
+    Win32InputDoor::mouseWheel(*self, msg == kMouseHorizontalWheelMessage ? SB_HORZ : SB_VERT, wParam);
+    return 0;
+  }
+  return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// Deliberate twin of Win32ZStackContext::Unit::WndProc, with viewport input.
+LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+  Win32ScrollViewContext *self = FromViewport(hwnd);
 
   if (msg == WM_CTLCOLORSTATIC)
     return reinterpret_cast<LRESULT>(
@@ -369,8 +501,8 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd,
     return 0;
   }
 
-  if ((msg == WM_VSCROLL || msg == WM_HSCROLL) && self
-      && Win32InputDoor::scroll(*self, msg == WM_HSCROLL ? SB_HORZ : SB_VERT, LOWORD(wParam), HIWORD(wParam)))
+  if (msg == WM_HSCROLL && lParam == 0 && self
+      && Win32InputDoor::scroll(*self, SB_HORZ, LOWORD(wParam), HIWORD(wParam)))
   {
     return 0;
   }
