@@ -227,6 +227,28 @@ namespace
     out.bottom = static_cast<short>(out.top + dstH);
     return out;
   }
+  int FitModeOf(const loka::app::ImageViewNode &node)
+  {
+    if (node.props.hasAttr_ && node.props.attr_.hasFitValue_)
+      return static_cast<int>(node.props.attr_.fitValue_);
+    return loka::app::IMAGE_FIT_STRETCH;
+  }
+
+  /** Every pixel this ImageView can put on the port lies inside this rectangle:
+      its frame, widened by the destination of an unscaled (`fit: none`) image,
+      which ComputeImageDrawRect lets run past the frame and nothing clips. */
+  Rect PaintBounds(const loka::app::ImageViewNode *node, const Rect &frame)
+  {
+    Rect bounds = frame;
+    if (!node || !node->props.image_ || FitModeOf(*node) != loka::app::IMAGE_FIT_NONE)
+      return bounds;
+    const loka::core::resource::Image image = node->props.image_->get();
+    if (!image.isValid())
+      return bounds;
+    const Rect destination = ComputeImageDrawRect(frame, loka::app::IMAGE_FIT_NONE, image.width(), image.height());
+    UnionRect(&bounds, &destination, &bounds);
+    return bounds;
+  }
 } // namespace
 
 ToolboxImageViewContext::ToolboxImageViewContext(loka::app::ImageViewNode *node,
@@ -329,8 +351,9 @@ void ToolboxImageViewContext::draw()
   // Outside the enclosing viewport no pixel of this image reaches the port:
   // skip the picture instead of letting DrawPicture parse it under a clip
   // that discards everything. Read at paint, where the viewport frame is final.
-  Rect paintRect = rect_;
-  if (this->controller() && !this->controller()->intersectWithProjectionClip(rect_, paintRect))
+  const Rect bounds = PaintBounds(node_, rect_);
+  Rect paintRect = bounds;
+  if (this->controller() && !this->controller()->intersectWithProjectionClip(bounds, paintRect))
     return;
   // The caller restores the pixels beneath this transparent kind.
   FrameRect(&rect_);
@@ -348,11 +371,7 @@ void ToolboxImageViewContext::draw()
     return;
   }
 
-  int fitMode = loka::app::IMAGE_FIT_STRETCH;
-  if (node_->props.hasAttr_ && node_->props.attr_.hasFitValue_)
-  {
-    fitMode = static_cast<int>(node_->props.attr_.fitValue_);
-  }
+  const int fitMode = FitModeOf(*node_);
 
   const loka::toolbox::ToolboxNativeImage *native = loka::toolbox::TryGetToolboxNativeImage(image);
   if (native && native->kind == loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_PICT && native->payload)
