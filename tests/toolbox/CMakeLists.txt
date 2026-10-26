@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.15)
 project(LokaTestsToolbox LANGUAGES CXX)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
+  add_subdirectory(unicode-import)
+endif()
+
 if(NOT COMMAND loka_enable_standalone_performance)
   include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/LokaStandalonePerformance.cmake")
 endif()

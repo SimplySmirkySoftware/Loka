@@ -668,6 +668,13 @@ Cleanup writes do not reopen a closing clock.
 
 **Menus: About and Quit**
 
+Place `EditMenu()` explicitly in a Scene menu bar for Undo, Cut, Copy, Paste,
+and Select All. It is an ordinary Edit menu and is not part of
+`StandardMenuPresets()`. Standard Edit actions offer to the focused native
+editor first; without a target, an optional app binding runs once. Native
+refusal or no-op does not run that binding. Native editing support is deferred;
+the current native rails take the no-target path.
+
 Declare `StandardMenuPresets()` in the App's default menu bar to request About
 and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
 at the top of the Apple menu and Quit at the end of File, creating File when
@@ -1324,7 +1331,13 @@ styles set the same field, the right-hand value wins.
 ```cpp
 Text("Title") + Bold + FontSize<24>()
 Text("Note") + Italic + Caption
+Text("let x = 1;") + Monospace
 ```
+
+`Monospace` asks for a fixed-pitch family and is independent of the size, so
+`Monospace + FontSize<12>()` keeps both. The rails that honor it are listed in
+the platform support notes; a rail without a fixed-pitch face draws the text in
+its default family.
 
 The supported compile-time sizes are 9, 10, 12, 14, 18, and 24 logical units
 (one unit is one pixel on a classic Mac screen; other platforms scale up).

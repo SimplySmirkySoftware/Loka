@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_MENU_HPP
 #define LOKA_APP_MENU_HPP
 
+#include "app/EditVerb.hpp"
 #include <vector>
 #include <cassert>
 #include "core/diag/LifecycleAudit.hpp"
@@ -135,8 +136,44 @@ namespace loka
       MENU_ACTION_NONE = 0,
       MENU_ACTION_ABOUT_APP,
       MENU_ACTION_QUIT_APP,
-      MENU_ACTION_SHOW_COLOR_PICKER
+      MENU_ACTION_SHOW_COLOR_PICKER,
+      MENU_ACTION_EDIT_UNDO,
+      MENU_ACTION_EDIT_CUT,
+      MENU_ACTION_EDIT_COPY,
+      MENU_ACTION_EDIT_PASTE,
+      MENU_ACTION_EDIT_SELECT_ALL,
+      MENU_ACTION_COUNT
     };
+
+    /** Single exhaustive correspondence; non-Edit actions leave out unchanged. */
+    inline bool menuEditVerb(MenuActionType action, EditVerb &out)
+    {
+      switch (action)
+      {
+      case MENU_ACTION_EDIT_UNDO:
+        out = EDIT_UNDO;
+        return true;
+      case MENU_ACTION_EDIT_CUT:
+        out = EDIT_CUT;
+        return true;
+      case MENU_ACTION_EDIT_COPY:
+        out = EDIT_COPY;
+        return true;
+      case MENU_ACTION_EDIT_PASTE:
+        out = EDIT_PASTE;
+        return true;
+      case MENU_ACTION_EDIT_SELECT_ALL:
+        out = EDIT_SELECT_ALL;
+        return true;
+      case MENU_ACTION_NONE:
+      case MENU_ACTION_ABOUT_APP:
+      case MENU_ACTION_QUIT_APP:
+      case MENU_ACTION_SHOW_COLOR_PICKER:
+      case MENU_ACTION_COUNT:
+        return false;
+      }
+      return false;
+    }
 
     struct MenuItemDefinition
     {
@@ -740,6 +777,16 @@ namespace loka
     inline MenuDefinition QuitMenu()
     {
       return AppMenu() << MenuItem("").actionType(MENU_ACTION_QUIT_APP);
+    }
+
+    /** Ordinary Edit menu; rails supply titles and default key equivalents. */
+    inline MenuDefinition EditMenu()
+    {
+      return Menu("Edit") << MenuItem("").actionType(MENU_ACTION_EDIT_UNDO) << MenuItemDefinition().separator()
+                          << MenuItem("").actionType(MENU_ACTION_EDIT_CUT)
+                          << MenuItem("").actionType(MENU_ACTION_EDIT_COPY)
+                          << MenuItem("").actionType(MENU_ACTION_EDIT_PASTE)
+                          << MenuItem("").actionType(MENU_ACTION_EDIT_SELECT_ALL);
     }
 
     /**

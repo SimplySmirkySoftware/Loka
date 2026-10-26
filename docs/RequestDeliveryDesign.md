@@ -369,9 +369,11 @@ The implementation series is [#903 (a0, runner and trace)](https://github.com/Si
 `NONE` denotes an empty slot. These verbs accumulate: two posts mean two page
 operations, so `RequestTraits<EditorCommand>::coalescable = 0` permits only
 `RequestQueue<EditorCommand, N>`, not either plain request handle or a sourceless
-binding. Undo/redo belongs to app history over app-owned lines; paste/cut/copy
-belongs to a clipboard seam; select/selectAll belongs to `Request<Selection>`;
-focus is separate page 3 work. Scroll-to-caret is idempotent and belongs to a
+binding. Standard Edit menu items first offer the action to the native editor;
+when no native target handles it, the copied app binding runs once if present.
+A native refusal or no-op counts as handled and does not fall back. App-owned
+history, clipboard seams, and selection requests are separate future work.
+Focus is separate page 3 work. Scroll-to-caret is idempotent and belongs to a
 last-wins scroll request family, not this command queue (#902 item 1).
 
 The Props door is `.command(queue)`, accepting

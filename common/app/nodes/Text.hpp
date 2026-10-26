@@ -116,9 +116,8 @@ namespace loka
           UNSET means the component's native default. */
       bool hasDeclaredLayoutStyle() const
       {
-        return this->textStyleState_ != 0 || this->textStyle_.size_.isSet() || this->textStyle_.hasWeight_
-               || this->textStyle_.hasItalic_ || this->blockStyle_.hasWrap_ || this->blockStyle_.hasTruncation_
-               || this->blockStyle_.hasAlign_;
+        return this->textStyleState_ != 0 || this->textStyle_.declaresFont() || this->blockStyle_.hasWrap_
+               || this->blockStyle_.hasTruncation_ || this->blockStyle_.hasAlign_;
       }
       TextStyle resolvedTextStyle() const
       {

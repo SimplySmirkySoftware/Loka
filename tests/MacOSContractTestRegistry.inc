@@ -231,3 +231,5 @@ LOKA_TEST(testMacQuitEventWithoutAppRefused)
 LOKA_TEST(testMacQuitEventSequentialAppsAttach)
 LOKA_TEST(testMacQuitEventTerminateFallbackCancelsAndReserves)
 LOKA_TEST(testMacQuitEventQuitTwiceRepliesOnce)
+
+LOKA_TEST(testMacEditMenuDefaultsAndFallback)

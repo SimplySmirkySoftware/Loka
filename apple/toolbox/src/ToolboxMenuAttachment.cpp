@@ -1,3 +1,4 @@
+#include "app/EditMenuDispatch.hpp"
 #include "app/MenuComposition.hpp"
 #include "ToolboxMenuAttachment.hpp"
 #include "ToolboxApp.hpp"
@@ -18,12 +19,28 @@ namespace
   {
     static const unsigned char about[] = {5, 'A', 'b', 'o', 'u', 't'};
     static const unsigned char quit[] = {4, 'Q', 'u', 'i', 't'};
+    static const unsigned char undo[] = {4, 'U', 'n', 'd', 'o'};
+    static const unsigned char cut[] = {3, 'C', 'u', 't'};
+    static const unsigned char copy[] = {4, 'C', 'o', 'p', 'y'};
+    static const unsigned char paste[] = {5, 'P', 'a', 's', 't', 'e'};
+    static const unsigned char select_all[] = {10, 'S', 'e', 'l', 'e', 'c', 't', ' ', 'A', 'l', 'l'};
     switch (action)
     {
     case loka::app::MENU_ACTION_ABOUT_APP:
       return about;
     case loka::app::MENU_ACTION_QUIT_APP:
       return quit;
+    case loka::app::MENU_ACTION_EDIT_UNDO:
+      return undo;
+    case loka::app::MENU_ACTION_EDIT_CUT:
+      return cut;
+    case loka::app::MENU_ACTION_EDIT_COPY:
+      return copy;
+    case loka::app::MENU_ACTION_EDIT_PASTE:
+      return paste;
+    case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+      return select_all;
+    case loka::app::MENU_ACTION_COUNT:
     case loka::app::MENU_ACTION_NONE:
     case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
       return 0;
@@ -270,10 +287,21 @@ static char MenuShortcutForAction(const loka::app::MenuItemDefinition *itemDef)
   }
   switch (itemDef->action)
   {
+  case loka::app::MENU_ACTION_EDIT_UNDO:
+    return 'Z';
+  case loka::app::MENU_ACTION_EDIT_CUT:
+    return 'X';
+  case loka::app::MENU_ACTION_EDIT_COPY:
+    return 'C';
+  case loka::app::MENU_ACTION_EDIT_PASTE:
+    return 'V';
+  case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+    return 'A';
   case loka::app::MENU_ACTION_QUIT_APP:
     return 'Q';
   case loka::app::MENU_ACTION_ABOUT_APP:
   case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
+  case loka::app::MENU_ACTION_COUNT:
   case loka::app::MENU_ACTION_NONE:
     return 0;
   }
@@ -526,6 +554,18 @@ bool ToolboxMenuAttachment::dispatch(short menuId, short item)
     case loka::app::MENU_ACTION_QUIT_APP:
       this->app_.requestQuit();
       return true;
+    case loka::app::MENU_ACTION_EDIT_UNDO:
+    case loka::app::MENU_ACTION_EDIT_CUT:
+    case loka::app::MENU_ACTION_EDIT_COPY:
+    case loka::app::MENU_ACTION_EDIT_PASTE:
+    case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+    {
+      loka::app::EditVerb verb;
+      if (loka::app::menuEditVerb(command.action, verb))
+        loka::app::dispatchEditMenuCommand(this->app_.activeWindow(), verb, command.emitter);
+      return true;
+    }
+    case loka::app::MENU_ACTION_COUNT:
     case loka::app::MENU_ACTION_NONE:
       break;
     }
