@@ -65,6 +65,28 @@ namespace
     return r;
   }
 } // namespace
+void ValidRect(const Rect *area)
+{
+  std::vector<Rect> remaining;
+  for (size_t i = 0; i < port->native.update.size(); ++i)
+  {
+    const Rect old = port->native.update[i];
+    const Rect cut = Intersection(old, *area);
+    if (cut.left >= cut.right || cut.top >= cut.bottom)
+    {
+      remaining.push_back(old);
+      continue;
+    }
+    const Rect pieces[] = {{old.top, old.left, cut.top, old.right},
+                           {cut.bottom, old.left, old.bottom, old.right},
+                           {cut.top, old.left, cut.bottom, cut.left},
+                           {cut.top, cut.right, cut.bottom, old.right}};
+    for (size_t j = 0; j < 4; ++j)
+      if (pieces[j].left < pieces[j].right && pieces[j].top < pieces[j].bottom)
+        remaining.push_back(pieces[j]);
+  }
+  port->native.update.swap(remaining);
+}
 namespace toolbox_host
 {
   Rect currentClip()

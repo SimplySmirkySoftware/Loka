@@ -143,6 +143,45 @@ namespace
       LOKA_VERIFY(c->calls[i].operation == operations[i]);
       LOKA_VERIFY(c->calls[i].currentPort == f.window.window() && c->calls[i].painted);
     }
+    // The host has synthetic update rectangles, not a real Control Manager.
+    // Seed the move's damage to pin admission and preservation of foreign damage.
+    const Rect foreign = {200, 200, 210, 210};
+    // The discharged box also covers the old size at the new origin (40 + 120).
+    const Rect covered = {0, 0, 170, 100};
+    f.window.port.native.update.clear();
+    f.window.port.native.update.push_back(barRect);
+    f.window.port.native.update.push_back(moved);
+    f.window.port.native.update.push_back(foreign);
+    f.controller.validateOwnControlMove(barRect, moved);
+    LOKA_VERIFY(f.window.port.native.update.size() == 3);
+    {
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), moved);
+      f.controller.validateOwnControlMove(barRect, moved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 3);
+    }
+    {
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), covered);
+      f.controller.validateOwnControlMove(barRect, moved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 1);
+      LOKA_VERIFY(EqualRect(&f.window.port.native.update[0], &foreign));
+    }
+    {
+      // A move that also shrinks: MoveControl first puts the old size at the
+      // new origin, so damage past the final rectangle must be discharged too.
+      const Rect tall = {0, 0, 100, 16};
+      const Rect shortMoved = {200, 0, 250, 16};
+      const Rect intermediate = {250, 0, 300, 16};
+      const Rect wide = {0, 0, 320, 100};
+      f.window.port.native.update.clear();
+      f.window.port.native.update.push_back(tall);
+      f.window.port.native.update.push_back(shortMoved);
+      f.window.port.native.update.push_back(intermediate);
+      f.window.port.native.update.push_back(foreign);
+      ToolboxErasedPass::Guard pass(f.controller.erasedPass(), wide);
+      f.controller.validateOwnControlMove(tall, shortMoved);
+      LOKA_VERIFY(f.window.port.native.update.size() == 1);
+      LOKA_VERIFY(EqualRect(&f.window.port.native.update[0], &foreign));
+    }
     c->tracking = toolbox_host::TrackScript(129, 129, 40);
     c->tracking.callbacks.assign(3, 23);
     const std::size_t before = c->calls.size();

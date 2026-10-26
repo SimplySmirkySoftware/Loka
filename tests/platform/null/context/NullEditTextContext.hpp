@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_PLATFORM_NULL_EDIT_TEXT_CONTEXT_HPP
 #define LOKA_TESTS_PLATFORM_NULL_EDIT_TEXT_CONTEXT_HPP
 
+#include "platform/null/NullEditCommandRecorder.hpp"
 #include "app/scene/projection/NativeNodeContext.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 
@@ -15,6 +16,7 @@ namespace loka
 class NullEditTextContext : public loka::app::scene::NativeNodeContext
 {
 public:
+  loka::testing::NullEditCommandRecorder editCommands;
   NullEditTextContext(loka::app::EditTextNode *node, NullScenePlatformController *controller);
   virtual ~NullEditTextContext();
 
@@ -33,6 +35,7 @@ private:
   NullScenePlatformController::FakeControlHandle *handle_;
 };
 
+bool IsNullEditTextNodeHandler(const loka::app::scene::IPlatformNodeHandler *handler);
 void RegisterNullEditTextNodeHandler(NullScenePlatformController &controller);
 
 #endif // LOKA_TESTS_PLATFORM_NULL_EDIT_TEXT_CONTEXT_HPP

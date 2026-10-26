@@ -2,6 +2,7 @@
 #define LOKA_APP_STYLE_STYLE_HPP
 
 #include "app/style/TextSizeValue.hpp"
+#include "app/style/TextFamilyValue.hpp"
 #include "app/style/StyleVocab.hpp"
 
 namespace loka
@@ -35,6 +36,23 @@ namespace loka
         return *this;
       }
 
+      TextStyle &family(TextFamily value)
+      {
+        this->family_ = TextFamilyValue(value);
+        return *this;
+      }
+
+      TextFamily family() const
+      {
+        return this->family_.family();
+      }
+
+      /** Whether any font axis is declared, independently of color and block style. */
+      bool declaresFont() const
+      {
+        return this->size_.isSet() || this->hasWeight_ || this->hasItalic_ || this->family_.isSet();
+      }
+
       TextStyle &italic(bool value = true)
       {
         this->italic_ = value;
@@ -59,6 +77,7 @@ namespace loka
         }
         if (right.color_ != TEXT_COLOR_UNSET)
           result.color_ = right.color_;
+        result.family_ = this->family_ + right.family_;
         return result;
       }
 
@@ -66,7 +85,7 @@ namespace loka
       {
         return this->size_ == other.size_ && this->weight_ == other.weight_ && this->italic_ == other.italic_
                && this->hasWeight_ == other.hasWeight_ && this->hasItalic_ == other.hasItalic_
-               && this->color_ == other.color_;
+               && this->color_ == other.color_ && this->family_ == other.family_;
       }
 
       bool operator!=(const TextStyle &other) const
@@ -93,7 +112,9 @@ namespace loka
           return this->hasWeight_ < other.hasWeight_;
         if (this->hasItalic_ != other.hasItalic_)
           return this->hasItalic_ < other.hasItalic_;
-        return this->color_ < other.color_;
+        if (this->color_ != other.color_)
+          return this->color_ < other.color_;
+        return this->family_ < other.family_;
       }
 
       TextSizeValue size_;
@@ -104,6 +125,7 @@ namespace loka
       bool italic_;
       bool hasWeight_;
       bool hasItalic_;
+      TextFamilyValue family_;
     };
 
     /** Paragraph-level text style. Unset fields are transparent during merge. */
@@ -235,6 +257,7 @@ namespace loka
 
     static const TextStyle Bold = TextStyle().weight(TEXT_WEIGHT_BOLD);
     static const TextStyle Italic = TextStyle().italic();
+    static const TextStyle Monospace = TextStyle().family(TEXT_FAMILY_MONOSPACE);
     static const TextStyle Body = FontSize<12>();
     static const TextStyle Caption = FontSize<9>();
     static const TextStyle Heading = FontSize<12>() + Bold;
