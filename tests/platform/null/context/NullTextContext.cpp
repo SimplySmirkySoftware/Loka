@@ -147,6 +147,7 @@ NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
 {
   const loka::app::TextStyle textStyle = props.resolvedTextStyle();
   this->color = textStyle.color_;
+  this->family = textStyle.family_;
   this->fontSize = loka::app::SyntheticTextSize(textStyle.size_);
   if (textStyle.hasWeight_)
     weight = textStyle.weight_;

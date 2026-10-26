@@ -1199,10 +1199,11 @@ namespace smirkycard
       }
       const bool size = length == 4 && !memcmp(name, "size", 4);
       const bool weight = length == 6 && !memcmp(name, "weight", 6);
+      const bool family = length == 6 && !memcmp(name, "family", 6);
       const bool color = length == 5 && !memcmp(name, "color", 5);
       const bool italic = length == 6 && !memcmp(name, "italic", 6);
       JS_FreeCString(ctx, name);
-      if (!size && !weight && !italic && !color)
+      if (!size && !weight && !italic && !color && !family)
       {
         JS_ThrowTypeError(ctx, "Unknown Text style key");
         return false;
@@ -1250,6 +1251,15 @@ namespace smirkycard
           {
             result.weight(entry->value);
             accepted = true;
+          }
+        }
+        else if (family)
+        {
+          const detail::TextFamilyName *entry = findStyleName(valueName, valueLength, detail::StyleVocabularyFamily);
+          if (entry)
+          {
+            result.family(entry->value);
+            accepted = result.family_.isSet();
           }
         }
         else if (color)
