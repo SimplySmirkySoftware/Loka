@@ -45,6 +45,18 @@ namespace loka
       {
         return c.te_;
       }
+      static bool idle(const ToolboxTextEditorContext &c)
+      {
+        return c.phase_ == ToolboxTextEditorContext::IDLE;
+      }
+      static const app::TextBuffer *source(const ToolboxTextEditorContext &c)
+      {
+        return c.source_;
+      }
+      static core::ListRevision revision(const ToolboxTextEditorContext &c)
+      {
+        return c.revision_;
+      }
       static unsigned restores(ToolboxTextEditorContext &c)
       {
         return c.restores_;
