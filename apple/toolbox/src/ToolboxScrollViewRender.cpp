@@ -12,8 +12,8 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
       break;
     }
   }
-  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_
-      || this->projectionParentScopes_.activeDepth() != 0)
+  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_ || this->projectionParentScopes_.insideViewport()
+      || this->projectionParentScopes_.insideUnit())
   {
     return;
   }

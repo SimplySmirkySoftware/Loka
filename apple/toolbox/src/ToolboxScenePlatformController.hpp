@@ -246,8 +246,6 @@ public:
   }
   void renderScrollView(loka::app::ScrollViewNode *scrollView);
 #include "ToolboxScrollViewProjection.hpp"
-  bool refuseNarrowingInScrollScope(int resultY);
-  void refuseScrollViewShortRange();
 
 #include "ToolboxInputBodies.hpp"
 

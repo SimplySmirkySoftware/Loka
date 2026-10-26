@@ -492,34 +492,6 @@ bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::No
   return true;
 }
 
-void ToolboxScenePlatformController::refuseScrollViewShortRange()
-{
-  if (this->projectionParentScopes_.activeDepth() != 0)
-  {
-    this->projectionParentScopes_.current().markShortRangeRefused();
-  }
-}
-
-bool ToolboxScenePlatformController::refuseNarrowingInScrollScope(int resultY)
-{
-  if (this->projectionParentScopes_.activeDepth() == 0)
-  {
-    return false;
-  }
-  loka::app::scene::ProjectionParentScope &scope =
-      this->projectionParentScopes_.current();
-  if (scope.hasShortRangeRefusal())
-  {
-    return true;
-  }
-  if (resultY >= SHRT_MIN && resultY <= SHRT_MAX)
-  {
-    return false;
-  }
-  scope.markShortRangeRefused();
-  return true;
-}
-
 #include "ToolboxScrollViewLayout.cpp"
 
 #include "ToolboxScrollViewRender.cpp"

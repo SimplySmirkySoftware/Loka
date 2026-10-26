@@ -55,7 +55,7 @@ short ToolboxScenePlatformController::layoutScrollView(
       spans->invalidate();
     break;
   }
-  if (this->projectionParentScopes_.activeDepth() != 0)
+  if (this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
     // V1 admits one viewport. The inner subtree materializes nothing, while
     // the outer measurement scope remains usable for following siblings.

@@ -413,21 +413,6 @@ public:
   virtual void onBoundaryApply(loka::app::scene::Node *, loka::app::scene::BoundaryNode *,
       const loka::app::scene::BoundaryLocalApplyInfo &, const loka::app::scene::PlatformApplyPlan &);
   virtual void releaseNodeContexts(loka::app::scene::Node *);
-  void refuseScrollViewShortRange()
-  {
-    if (this->projectionParentScopes_.activeDepth())
-      this->projectionParentScopes_.current().markShortRangeRefused();
-  }
-  bool refuseNarrowingInScrollScope(int y)
-  {
-    if (!this->projectionParentScopes_.activeDepth()) return false;
-    if (y < SHRT_MIN || y > SHRT_MAX)
-    {
-      this->refuseScrollViewShortRange();
-      return true;
-    }
-    return this->projectionParentScopes_.current().hasShortRangeRefusal();
-  }
   int ensureViewportScrollBarControl(
       const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
