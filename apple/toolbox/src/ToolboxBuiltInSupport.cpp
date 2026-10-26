@@ -1,3 +1,6 @@
+#include "context/ToolboxClipBoxContext.hpp"
+#include "ToolboxPaintDrawerType.hpp"
+#include "app/RectSurface.hpp"
 #include "context/ToolboxCardBandContext.hpp"
 #include "context/ToolboxRibbonGroupEdgeContext.hpp"
 #include "context/ToolboxConfirmDialogContext.hpp"
@@ -35,7 +38,8 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
 {
   assert(controller.window_ && controller.window_->context());
   const int capabilities = controller.window_->context()->capabilities();
-  bool ok = RegisterToolboxAttributedTextNodeHandler(controller.nodeHandlerRegistry_);
+  bool ok = RegisterToolboxClipBoxNodeHandlers(controller.nodeHandlerRegistry_);
+  ok = RegisterToolboxAttributedTextNodeHandler(controller.nodeHandlerRegistry_) && ok;
   ok = RegisterToolboxRibbonGroupEdgeNodeHandler(controller.nodeHandlerRegistry_) && ok;
   ok = RegisterToolboxCardBandNodeHandler(controller.nodeHandlerRegistry_) && ok;
   if ((capabilities & ToolboxWindowContext::CAP_CONTROL_MANAGER) != 0)
@@ -71,4 +75,11 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
   ok = RegisterToolboxOpenFileDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
   ok = RegisterToolboxConfirmDialogNodeHandler(controller.nodeHandlerRegistry_) && ok;
   return ok;
+}
+
+bool ToolboxScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
+{
+  if (!handler || IsToolboxPaintDrawerType(handler->nodeTypeKey()) || IsToolboxClipBoxType(handler->nodeTypeKey()))
+    return false;
+  return this->nodeHandlerRegistry_.registerHandler(handler);
 }

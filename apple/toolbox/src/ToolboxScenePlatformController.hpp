@@ -103,6 +103,8 @@ public:
     return true;
   }
   virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state);
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);

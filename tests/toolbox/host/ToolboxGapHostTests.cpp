@@ -1,3 +1,12 @@
+#include "context/ToolboxClipBoxContext.hpp"
+#include "ToolboxBuiltInSupport.hpp"
+#include "ToolboxPaintDrawerType.hpp"
+#include "app/nodes/controls/Ribbon.hpp"
+#include "app/scene/projection/CollectPaintAnswers.hpp"
+#include "debug/ToolboxSceneDebugStats.hpp"
+#include "support/LifecycleFactTestAccess.hpp"
+#include "app/scene/projection/RetainedNodeHandler.hpp"
+#include <new>
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
@@ -14,8 +23,21 @@
 #include <cstdio>
 #include <cstring>
 
+namespace loka
+{
+  namespace testing
+  {
+    void failToolboxClipBoxAllocations(unsigned count);
+    unsigned toolboxClipBoxAllocationAttempts();
+    void watchToolboxClipBoxDeletion(void *context);
+    unsigned toolboxClipBoxDeletes();
+  } // namespace testing
+} // namespace loka
+
 namespace
 {
+#include "ToolboxPaintAnswers.hpp"
+
   using namespace loka::app;
   using namespace loka::app::scene;
 
@@ -65,11 +87,11 @@ namespace
   {
     ToolboxWindow window;
     ToolboxScenePlatformController controller;
-    explicit Fixture(const WindowProps &props = WindowProps())
+    explicit Fixture(const WindowProps &props = WindowProps(), bool handlers = true)
         : window(props),
           controller(&window)
     {
-      const bool registered = RegisterToolboxPlatformLayoutHandlers(this->controller.gapLayoutRegistry);
+      const bool registered = !handlers || RegisterToolboxPlatformLayoutHandlers(this->controller.gapLayoutRegistry);
       LOKA_VERIFY(registered);
     }
     LayoutState seat(short spacing = 31) const
@@ -97,6 +119,204 @@ namespace
     fragment->addChild(a);
     fragment->addChild(b);
     return fragment;
+  }
+
+  class ClipChild : public TextNode
+  {
+  public:
+    unsigned layouts;
+    unsigned draws;
+    const Node &parent;
+    const bool expectsContext;
+    ClipChild(const Node &owner, bool expected)
+        : TextNode(Text("clip child").props),
+          layouts(0),
+          draws(0),
+          parent(owner),
+          expectsContext(expected)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *, LayoutState &state)
+    {
+      LOKA_VERIFY((this->parent.getContext() != 0) == this->expectsContext);
+      ++this->layouts;
+      state.y = static_cast<short>(state.y + 7);
+      return 23;
+    }
+    virtual void render(IPlatformController *)
+    {
+      ++this->draws;
+    }
+  };
+
+  // A legal foreign Ribbon handler makes an accidental dispatch observable:
+  // it would install a context even though built-in setup reserves only Box/Card.
+  class RibbonClipSentinel : public RetainedNodeHandler<RibbonClipSentinel, RibbonGroupNode, ToolboxClipBoxContext>
+  {
+  public:
+    static RibbonGroupNode *cast(Node *node)
+    {
+      return static_cast<RibbonGroupNode *>(node);
+    }
+    static ToolboxClipBoxContext *create(RibbonGroupNode *, IPlatformController *, const LayoutState &)
+    {
+      return new (std::nothrow) ToolboxClipBoxContext();
+    }
+  };
+
+  void clipRoutingPin(int kind, bool flagged, bool refuse)
+  {
+    for (int handler = 0; handler != 2; ++handler)
+    {
+      Fixture f(WindowProps(), handler != 0);
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+      RibbonClipSentinel ribbon;
+      LOKA_VERIFY(f.controller.registerNodeHandler(&ribbon));
+      BoxProps boxProps;
+      CardProps cardProps;
+      boxProps.childClip_ = cardProps.childClip_ = flagged ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+      NestableNode *box = kind == 0   ? static_cast<NestableNode *>(new BoxNode(boxProps))
+                          : kind == 1 ? static_cast<NestableNode *>(new CardNode(cardProps))
+                                      : static_cast<NestableNode *>(new RibbonGroupNode(RibbonGroupProps()));
+      const bool expected = flagged && kind != 2 && !refuse;
+      ClipChild *child = new ClipChild(*box, expected);
+      box->addChild(child);
+      LOKA_VERIFY((f.controller.gapLayoutRegistry.find(box) != 0) == (handler != 0));
+      loka::testing::failToolboxClipBoxAllocations(refuse ? 10 : 0);
+      LayoutState seat = f.seat();
+      const short width = LayoutNode(box, seat, &f.controller, 0);
+      LOKA_VERIFY(width == (kind == 0 ? 23 : 200));
+      LOKA_VERIFY(child->layouts == 1 && seat.y > 0);
+      LOKA_VERIFY((box->getContext() != 0) == expected);
+      LOKA_VERIFY(loka::testing::toolboxClipBoxAllocationAttempts() == (flagged && kind != 2 ? 1u : 0u));
+      RenderNode(box, &f.controller);
+      LOKA_VERIFY(child->draws == 1);
+      LOKA_VERIFY(loka::testing::toolboxClipBoxAllocationAttempts() == (flagged && kind != 2 ? 1u : 0u));
+      if (expected)
+      {
+        ToolboxClipBoxContext *context = static_cast<ToolboxClipBoxContext *>(box->getContext());
+        Rect rect = {1, 2, 3, 4};
+        LOKA_VERIFY(!context->placement().query(rect));
+        ToolboxSceneDebugStats stats;
+        ToolboxPaintAnswerSource source(stats);
+        PaintQuery query;
+        PaintAnswer answer;
+        LOKA_VERIFY(!source.queryPaintAnswer(box, context, query, answer));
+        LayoutNode(box, seat, &f.controller, 0);
+        LOKA_VERIFY(box->getContext() == context);
+        LOKA_VERIFY(loka::testing::toolboxClipBoxAllocationAttempts() == 1);
+      }
+      loka::testing::failToolboxClipBoxAllocations(0);
+      delete box;
+    }
+  }
+
+  class ClipKeyProbe : public Node
+  {
+  public:
+    explicit ClipKeyProbe(const void *key)
+        : key_(key)
+    {
+    }
+    virtual const void *nodeTypeKey() const
+    {
+      return this->key_;
+    }
+
+  private:
+    const void *key_;
+  };
+
+  void clipRegistryPin()
+  {
+    Fixture f;
+    RefusedNodeHandler box(NodeTypeToken<BoxNode>()), card(NodeTypeToken<CardNode>());
+    LOKA_VERIFY(!f.controller.registerNodeHandler(&box));
+    LOKA_VERIFY(!f.controller.registerNodeHandler(&card));
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    const void *keys[] = {NodeTypeToken<BoxNode>(),
+                          NodeTypeToken<CardNode>(),
+                          NodeTypeToken<AttributedTextNode>(),
+                          NodeTypeToken<RibbonGroupEdgeNode>(),
+                          NodeTypeToken<CardBandNode>(),
+                          NodeTypeToken<ButtonNode>(),
+                          NodeTypeToken<TextNode>(),
+                          NodeTypeToken<ImageViewNode>(),
+                          NodeTypeToken<EditTextNode>(),
+                          NodeTypeToken<TextEditorNode>(),
+                          NodeTypeToken<PopupMenuNode>(),
+                          NodeTypeToken<CellNode>(),
+                          NodeTypeToken<ScrollBarNode>(),
+                          NodeTypeToken<OpenFileDialogNode>(),
+                          NodeTypeToken<ConfirmDialogNode>()};
+    IPlatformNodeHandler *before[sizeof(keys) / sizeof(keys[0])];
+    for (unsigned i = 0; i != sizeof(keys) / sizeof(keys[0]); ++i)
+    {
+      ClipKeyProbe node(keys[i]);
+      before[i] = f.controller.nodeHandlerRegistry_.find(&node);
+      // Native neighbors omitted by this host remain absent on both setups.
+      if (i < 5)
+        LOKA_VERIFY(before[i]);
+    }
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+    LOKA_VERIFY(!f.controller.registerNodeHandler(&box));
+    LOKA_VERIFY(!f.controller.registerNodeHandler(&card));
+    LOKA_VERIFY(!IsToolboxPaintDrawerType(keys[0]) && !IsToolboxPaintDrawerType(keys[1]));
+    for (unsigned i = 0; i != sizeof(keys) / sizeof(keys[0]); ++i)
+    {
+      ClipKeyProbe node(keys[i]);
+      LOKA_VERIFY(f.controller.nodeHandlerRegistry_.find(&node) == before[i]);
+    }
+  }
+
+  void clipLifecyclePin()
+  {
+    for (int kind = 0; kind != 2; ++kind)
+    {
+      Fixture f;
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+      NestableNode *node = kind == 0 ? static_cast<NestableNode *>(new BoxNode(Box().clipChildren().props))
+                                     : static_cast<NestableNode *>(new CardNode(Card().clipChildren().props));
+      f.layout(*node);
+      NodeContext *context = node->getContext();
+      LOKA_VERIFY(context && context->owner() == node);
+      loka::testing::watchToolboxClipBoxDeletion(context);
+      NotifySubtreeNodeDetached(node);
+      LifecycleFactTestAccess::DeliverFacts(node);
+      LOKA_VERIFY(node->getContext() == context);
+      LOKA_VERIFY(context->deliveredFact() == NODE_FACT_DETACHED_RETAINED);
+      LOKA_VERIFY(loka::testing::toolboxClipBoxDeletes() == 0);
+      NotifySubtreeNodeAttached(node);
+      LifecycleFactTestAccess::DeliverFacts(node);
+      f.layout(*node);
+      LOKA_VERIFY(node->getContext() == context);
+      LifecycleFactTestAccess::MarkSubtreeRetired(node);
+      f.controller.releaseNodeContexts(node);
+      LOKA_VERIFY(!node->getContext());
+      LOKA_VERIFY(loka::testing::toolboxClipBoxDeletes() == 1);
+      LOKA_VERIFY(f.controller.retired.empty());
+      delete node;
+      LOKA_VERIFY(loka::testing::toolboxClipBoxDeletes() == 1);
+    }
+  }
+
+  void clipPlacementPin()
+  {
+    ToolboxClipPlacement none;
+    Rect out = {1, 2, 3, 4};
+    LOKA_VERIFY(!none.query(out));
+    LOKA_VERIFY(out.top == 1 && out.left == 2 && out.bottom == 3 && out.right == 4);
+    ToolboxClipBoxContext context;
+    LOKA_VERIFY(!context.placement().query(out));
+    const Rect first = {10, 20, 30, 40}, empty = {4, 5, 4, 5};
+    context.setPlacement(ToolboxClipPlacement(first));
+    LOKA_VERIFY(context.placement().query(out));
+    LOKA_VERIFY(out.top == 10 && out.left == 20 && out.bottom == 30 && out.right == 40);
+    context.setPlacement(ToolboxClipPlacement(empty));
+    LOKA_VERIFY(context.placement().query(out));
+    LOKA_VERIFY(out.top == 4 && out.left == 5 && out.bottom == 4 && out.right == 5);
+    context.setPlacement(ToolboxClipPlacement());
+    LOKA_VERIFY(!context.placement().query(out));
   }
 
   void columnPin()
@@ -531,6 +751,28 @@ int main(int argc, char **argv)
     overflowDefaultPin();
   else if (!std::strcmp(mode, "root"))
     rootPin();
+  else if (!std::strcmp(mode, "clip-box"))
+    clipRoutingPin(0, true, false);
+  else if (!std::strcmp(mode, "clip-card"))
+    clipRoutingPin(1, true, false);
+  else if (!std::strcmp(mode, "clip-unflagged"))
+  {
+    clipRoutingPin(0, false, false);
+    clipRoutingPin(1, false, false);
+  }
+  else if (!std::strcmp(mode, "clip-ribbon"))
+    clipRoutingPin(2, true, false);
+  else if (!std::strcmp(mode, "clip-refusal"))
+  {
+    clipRoutingPin(0, true, true);
+    clipRoutingPin(1, true, true);
+  }
+  else if (!std::strcmp(mode, "clip-registry"))
+    clipRegistryPin();
+  else if (!std::strcmp(mode, "clip-lifecycle"))
+    clipLifecyclePin();
+  else if (!std::strcmp(mode, "clip-placement"))
+    clipPlacementPin();
   else
     LOKA_VERIFY(false);
   std::printf("Toolbox gap %s passed\n", mode);
