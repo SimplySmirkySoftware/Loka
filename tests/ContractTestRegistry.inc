@@ -1494,3 +1494,8 @@ LOKA_TEST(testClipChildrenDetachedDelivery)
 
 LOKA_TEST(testRequestReasonsStayRequestTyped)
 LOKA_TEST(testRequestSingleHeterogeneousSeat)
+LOKA_TEST(testPendingRequestsSingleAndPair)
+LOKA_TEST(testPendingRequestsInvalidBinding)
+LOKA_TEST(testPendingRequestsCrossPostSurvives)
+LOKA_TEST(testPendingRequestsEqualCrossPostClears)
+LOKA_TEST(testPendingRequestsCopiesBindingsBeforePublication)

@@ -5,7 +5,6 @@ namespace loka
 {
   namespace app
   {
-    class TextEditorNode;
     namespace scene
     {
       template <class Request, class Fact> class SeatRunner;
@@ -308,7 +307,7 @@ namespace loka
 
       private:
         template <class Request, class Fact> friend class SeatRunner;
-        friend class app::TextEditorNode;
+        friend struct PendingRequests;
         T consume() const
         {
           const T taken = this->request_.state()->get();
@@ -336,6 +335,32 @@ namespace loka
         WriteSeat<T> request_;
         WriteSeat<Reply<T> > reply_;
         RequestQueueBase<T> *source_;
+      };
+      /** Cancels pending work only in the seats selected by the caller.
+          Copy all bindings, clear their rings, then snapshot all valid slots
+          (None for invalid bindings) before cancelling in argument order.
+          Stack copies keep callback-driven binding replacement from retargeting
+          cancellation; changed slots preserve subscriber reposts. */
+      struct PendingRequests
+      {
+        template <class A> static void cancel(const RequestBinding<A> &a)
+        {
+          const RequestBinding<A> first = a;
+          first.clearRing();
+          const A snapshot = first.isValid() ? first.state()->get() : A::None();
+          first.cancelFrom(snapshot);
+        }
+        template <class A, class B> static void cancel(const RequestBinding<A> &a, const RequestBinding<B> &b)
+        {
+          const RequestBinding<A> first = a;
+          const RequestBinding<B> second = b;
+          first.clearRing();
+          second.clearRing();
+          const A snapshotA = first.isValid() ? first.state()->get() : A::None();
+          const B snapshotB = second.isValid() ? second.state()->get() : B::None();
+          first.cancelFrom(snapshotA);
+          second.cancelFrom(snapshotB);
+        }
       };
     } // namespace scene
   } // namespace app

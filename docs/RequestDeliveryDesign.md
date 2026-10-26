@@ -321,10 +321,12 @@ last-wins binding always clears to `None`. It touches no endpoint storage after
 publication and returns the local snapshot. A synchronous subscriber's post
 therefore follows older queued work. Both settlement sites use this door:
 the ordinary take and the failed-arm refusal-only take. Cancellation uses
-`clearRing()` then `cancelFrom(snapshot)` across the selected seats, as described
+`PendingRequests::cancel` across only the selected seats, as described
 under [Command seat](#command-seat-902). A cancellation subscriber's repost
 consequently enters the emptied endpoint. The caller is
 `TextEditorNode::discardPendingRequest`, on binding change or detach.
+`PendingRequests` holds the cancellation friendship; `SeatRunner` retains
+consumption access, and nodes do not access the private binding primitives.
 Sources: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
 [#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
@@ -453,9 +455,12 @@ If the slot stays nonempty at every command admission, that delay is indefinite;
 (#902 item 6, PR a and PRs b–d).
 
 A document-list replacement or detach discards both seats; changing only one
-request binding discards that seat. `discardPendingRequest` uses two passes:
-first clear all selected rings without notification and snapshot slot values
-into locals; then cancel command before caret. `cancelFrom(snapshot)` leaves a
+request binding discards that seat. `discardPendingRequest` passes only those
+seats to `PendingRequests::cancel`, command before caret. The helper first
+copies all bindings into stack locals, clears all selected rings without
+notification, and snapshots all slots (None for invalid bindings); then it
+cancels in argument order. Binding replacement during a subscriber callback
+cannot retarget the copied bindings. `cancelFrom(snapshot)` leaves a
 changed slot untouched, preserving work posted by an earlier
 cancellation subscriber. Otherwise it advances to a new ring head with forced
 publication, or publishes `None` when empty. Cancellation therefore publishes
