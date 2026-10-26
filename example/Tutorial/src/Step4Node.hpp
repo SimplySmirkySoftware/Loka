@@ -9,12 +9,10 @@
 #include "app/nodes/nestable/For.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/Text.hpp"
-#include "app/scene/state/FlowSlot.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "core/State.hpp"
 #include "core/String.hpp"
-#include "dsl/stream/StateStream.hpp"
 
 namespace tutorial
 {
@@ -29,30 +27,20 @@ namespace tutorial
           itemSummary_(),
           showSummary_(),
           canAdd_(),
-          itemSummaryFlow_(*this),
-          canAddFlow_(*this),
           addItemEvent_(),
           toggleSummaryEvent_()
     {
       this->state(this->itemCount_, 0);
-      this->state(this->itemSummary_, loka::core::String::Literal("Items: 0"));
+      this->state(this->itemSummary_, loka::core::String());
       this->state(this->showSummary_, true);
-      this->state(this->canAdd_, true);
+      this->state(this->canAdd_, false);
     }
 
     virtual void declareBindings(loka::app::scene::BindingToken &t)
     {
       t.action(this->addItemEvent_, this, &Step4Node::addItem);
       t.action(this->toggleSummaryEvent_, this, &Step4Node::toggleSummary);
-    }
-
-    virtual void attachNode(loka::app::scene::NodeComposition &c)
-    {
-      (void)c;
-      loka::dsl::StateStream<int> itemCountStream = this->itemCount_.stream();
-      this->itemSummaryFlow_.set(itemCountStream.map(ItemSummary())).bindTo(this->itemSummary_);
-      this->canAddFlow_.set(itemCountStream.map(itemCountStream.slot.value() < loka::dsl::Const(kMaxItems)))
-          .bindTo(this->canAdd_);
+      t.watch(*this->itemCount_.state(), this, &Step4Node::projectCount, true);
     }
 
     virtual void composeNode(loka::app::scene::NodeComposition &c)
@@ -87,16 +75,13 @@ namespace tutorial
                                       loka::app::reservation::Nodes<loka::app::TextNode, kMaxItems> > > >
         ItemSeats;
 
-    /** Display text derived from the item count, including the capacity limit. */
-    struct ItemSummary
+    void projectCount()
     {
-      typedef loka::core::String Result;
-      Result operator()(int count) const
-      {
-        return loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
-               + loka::core::String::Literal(count >= kMaxItems ? " (full)" : "");
-      }
-    };
+      const int count = this->itemCount_.get();
+      this->itemSummary_.set(loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
+                             + loka::core::String::Literal(count >= kMaxItems ? " (full)" : ""));
+      this->canAdd_.set(count < kMaxItems);
+    }
 
     /** Numbered item value, completed before For consumes the array. */
     struct Item
@@ -141,8 +126,6 @@ namespace tutorial
     loka::app::scene::NodeState<loka::core::String> itemSummary_;
     loka::app::scene::NodeState<bool> showSummary_;
     loka::app::scene::NodeState<bool> canAdd_;
-    loka::app::scene::FlowSlot<loka::dsl::StateStream<loka::core::String> > itemSummaryFlow_;
-    loka::app::scene::FlowSlot<loka::dsl::StateStream<bool> > canAddFlow_;
     loka::core::EmitterState addItemEvent_;
     loka::core::EmitterState toggleSummaryEvent_;
   };

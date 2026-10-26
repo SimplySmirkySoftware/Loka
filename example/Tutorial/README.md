@@ -26,7 +26,8 @@ Each Add changes the count. `Keyed` retires the old generation first, then
 `For(...).window(0, count)` builds the numbered rows for the new generation.
 The reservation and Add guard share one capacity constant: 100. At capacity,
 Add is disabled and the summary reads `Items: 100 (full)`. Both the summary
-and enabled state derive from the count through owner-held Flow slots.
+and enabled state derive from one immediate `BindingToken` watch declared in
+`declareBindings`.
 Show/Hide hides and restores the summary and list together.
 
 This builds every row; it is not a lazy list. Rows eventually extend below the

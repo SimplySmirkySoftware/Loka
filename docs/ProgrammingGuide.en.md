@@ -932,8 +932,9 @@ an event emitter. These inputs make the direction of the update visible:
 `state -> event -> state update -> UI projection`.
 
 [`Step4Node.hpp`](../example/Tutorial/src/Step4Node.hpp) extends this counter
-into a list. Its summary and Add-enabled state derive from the count through
-`FlowSlot`-owned streams. At the declared capacity of 100, Add is disabled and
+into a list. One immediate `BindingToken` watch in `declareBindings` projects
+the count into its summary and Add-enabled state. At the declared capacity of
+100, Add is disabled and
 the summary reads `Items: 100 (full)`; the handler also refuses further adds.
 
 For a group of state writes, `StateTrackerGuard` provides a RAII transaction;

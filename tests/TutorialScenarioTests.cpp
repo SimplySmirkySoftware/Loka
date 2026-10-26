@@ -364,8 +364,9 @@ namespace
       if (value.compare(0, 5, "Item ") == 0)
       {
         ++rows;
-        char expected[32];
-        std::sprintf(expected, "Item %d", rows);
+        std::string expected;
+        LOKA_VERIFY(loka::platform::CollectUtf8(
+            loka::core::String::Literal("Item ") + loka::core::String::FromInt(rows), expected));
         LOKA_VERIFY(value == expected);
       }
     }
@@ -413,15 +414,17 @@ void testTutorialListCapacityAndVisibility()
     loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
     LOKA_VERIFY(add->props.enabled_ && add->props.enabled_->get());
     PressTutorialButton(scene, "Tutorial.Step4.AddItemButton");
-    char summary[32];
-    std::sprintf(summary, "Items: %d%s", count, count == 100 ? " (full)" : "");
-    VerifyTutorialContents(scene, count, summary);
+    std::string summary;
+    LOKA_VERIFY(loka::platform::CollectUtf8(loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
+                                                + loka::core::String::Literal(count == 100 ? " (full)" : ""),
+                                            summary));
+    VerifyTutorialContents(scene, count, summary.c_str());
     if (count == 2 || count == 100)
     {
       PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
       VerifyTutorialContents(scene, 0, 0);
       PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
-      VerifyTutorialContents(scene, count, summary);
+      VerifyTutorialContents(scene, count, summary.c_str());
     }
   }
   loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
