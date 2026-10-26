@@ -155,6 +155,7 @@ public:
     return synthetic;
   }
   virtual ~NullScenePlatformController();
+  bool handleEditCommand(loka::app::EditVerb verb);
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out)
   {
     loka::app::FocusParticipant *row =

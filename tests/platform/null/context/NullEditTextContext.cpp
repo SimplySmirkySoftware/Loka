@@ -93,3 +93,8 @@ void RegisterNullEditTextNodeHandler(NullScenePlatformController &controller)
 {
   controller.registerNodeHandler(&gNullEditTextNodeHandler);
 }
+
+bool IsNullEditTextNodeHandler(const loka::app::scene::IPlatformNodeHandler *handler)
+{
+  return handler == &gNullEditTextNodeHandler;
+}

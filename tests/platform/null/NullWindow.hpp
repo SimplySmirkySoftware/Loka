@@ -41,6 +41,14 @@ public:
     this->mountScene();
   }
 
+  virtual bool handleEditCommand(loka::app::EditVerb verb)
+  {
+    if (!this->controller_)
+      return false;
+    return loka::app::scene::detail::InputInvocation(*this->controller_)(
+        *this->controller_, &NullScenePlatformController::handleEditCommand, verb);
+  }
+
   void setApp(App *app) { this->app_ = app; }
   App *app() const { return this->app_; }
   /** Deliberate Win32/Null counterpart: WM_DESTROY requests close via the App back-pointer. */

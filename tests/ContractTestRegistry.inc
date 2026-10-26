@@ -1,3 +1,10 @@
+LOKA_TEST(testEditMenuMappingExhaustive)
+LOKA_TEST(testEditMenuFocusedEditorSkipsBinding)
+LOKA_TEST(testEditMenuNoFocusRunsBindingOnce)
+LOKA_TEST(testEditMenuNoBindingIsNoOp)
+LOKA_TEST(testEditMenuAllVerbsReachFocusedContext)
+LOKA_TEST(testEditMenuRetiredFocusFallsBack)
+LOKA_TEST(testEditMenuBindingCanDisconnectAttachment)
 LOKA_TEST(testWindowDocumentFactsProjectAtTurnClose)
 LOKA_TEST(testWindowDocumentFactsEqualApplyDoesNotProjectAgain)
 LOKA_TEST(testWindowPlainDefaultsToUneditedWithoutProjection)
@@ -1449,3 +1456,7 @@ LOKA_TEST(testMergeAppMenuOverlayPlacementAndEmpty)
 LOKA_TEST(testMergeAppMenuOrdinarySeparation)
 LOKA_TEST(testMergeAppMenuChildActionsAreOtherItems)
 LOKA_TEST(testMergeAppMenuRefusalIsAtomic)
+
+LOKA_TEST(testEditMenuFacadeCanDisconnectAttachment)
+
+LOKA_TEST(testEditMenuTextEditorRecordsVerb)
