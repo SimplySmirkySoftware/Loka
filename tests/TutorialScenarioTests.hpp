@@ -2,6 +2,7 @@
 #define LOKA_TESTS_TUTORIAL_SCENARIO_TESTS_HPP
 
 void testTutorialIncrementSummaryToggleDrivesUiCommands();
+void testTutorialListCapacityAndVisibility();
 void testTutorialIncrementSummaryToggleHoldsFinalSceneAndMatchesAudit();
 void testTutorialStandaloneMenuUsesExampleDeclaration();
 void testTutorialStandaloneFlowWritesExpectedAudit();
