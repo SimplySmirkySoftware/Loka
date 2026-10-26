@@ -850,7 +850,8 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
     const loka::app::BoxNode *box = node->asBoxNode();
     const loka::app::CardNode *card =
         node->kind() == loka::app::scene::NODE_KIND_CARD ? static_cast<loka::app::CardNode *>(node) : 0;
-    if ((box && box->props.clipChildren_) || (card && card->props.clipChildren_))
+    if ((box && box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+        || (card && card->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT))
     {
       const loka::app::scene::ProjectionParentScope &parent = this->projectionParentScopes_.current();
       loka::app::scene::LayoutState projected;

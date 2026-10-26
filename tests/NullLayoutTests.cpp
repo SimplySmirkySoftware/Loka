@@ -814,20 +814,20 @@ namespace
   {
     Definition plain;
     Definition clipped;
-    LOKA_VERIFY(!plain.props.clipChildren_);
+    LOKA_VERIFY(plain.props.childClip_ == loka::app::layout::CHILD_CLIP_NONE);
     LOKA_VERIFY(&clipped.clipChildren() == &clipped);
-    LOKA_VERIFY(clipped.props.clipChildren_);
+    LOKA_VERIFY(clipped.props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
     LOKA_VERIFY(plain.props.hash() != clipped.props.hash());
     LOKA_VERIFY(plain.props < clipped.props);
     LOKA_VERIFY(!(clipped.props < plain.props));
     Definition copied(clipped);
-    LOKA_VERIFY(copied.props.clipChildren_);
+    LOKA_VERIFY(copied.props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
     LOKA_VERIFY(copied.props.hash() == clipped.props.hash());
     LOKA_VERIFY(!(copied.props < clipped.props) && !(clipped.props < copied.props));
     loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> clone(clipped.clone());
     LOKA_VERIFY(clone.get());
     const Props &clonedProps = *static_cast<const Props *>(clone->propsBase());
-    LOKA_VERIFY(clonedProps.clipChildren_);
+    LOKA_VERIFY(clonedProps.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
     LOKA_VERIFY(clonedProps.hash() == clipped.props.hash());
     LOKA_VERIFY(!(clipped.props < *clone->propsBase()) && !(*clone->propsBase() < clipped.props));
   }
@@ -968,7 +968,7 @@ void testNullClipUnconstrainedEdges()
     ClipFrameProbe *probe =
         new ClipFrameProbe(1, false, false, loka::core::Frame(10, 20, SHRT_MAX - 10, SHRT_MAX - 20));
     box.addChild(probe);
-    LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, width, 0)) == 27);
+    LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, static_cast<short>(width), 0)) == 27);
     LOKA_VERIFY(probe->visited);
   }
 }

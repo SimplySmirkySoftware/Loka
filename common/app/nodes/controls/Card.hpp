@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_NODES_CONTROLS_CARD_HPP
 #define LOKA_APP_NODES_CONTROLS_CARD_HPP
 
+#include "app/layout/ChildClip.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/style/CardStyle.hpp"
 #include <vector>
@@ -138,15 +139,15 @@ namespace loka
       typedef CardTypeTag TypeTag;
       typedef CardNode NodeType;
       CardStyle style;
-      bool clipChildren_;
+      layout::ChildClip childClip_;
       explicit CardProps(const CardStyle &look = CardStyle())
           : style(look),
-            clipChildren_(false)
+            childClip_(layout::CHILD_CLIP_NONE)
       {
       }
       int hash() const
       {
-        return this->style.hash() + this->clipChildren_;
+        return this->style.hash() + this->childClip_;
       }
       bool operator<(const scene::PropsBase &rhs) const
       {
@@ -157,7 +158,7 @@ namespace loka
           return true;
         if (other.style < this->style)
           return false;
-        return this->clipChildren_ < other.clipChildren_;
+        return this->childClip_ < other.childClip_;
       }
     };
 
@@ -222,7 +223,7 @@ namespace loka
           Toolbox clips in a later change; macOS and Win32 do not clip yet. */
       CardDefinition &clipChildren()
       {
-        this->props.clipChildren_ = true;
+        this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
         return *this;
       }
       virtual scene::NodeDefinitionBase *clone() const

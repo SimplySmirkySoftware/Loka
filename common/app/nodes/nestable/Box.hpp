@@ -1,6 +1,7 @@
 #ifndef LOKA_APP2_NODES_NESTABLE_BOX_HPP
 #define LOKA_APP2_NODES_NESTABLE_BOX_HPP
 
+#include "app/layout/ChildClip.hpp"
 #include "app/scene/Node.hpp"
 #include "core/State.hpp"
 #include <climits>
@@ -24,20 +25,20 @@ namespace loka
       layout::LayoutGap padding;
       short width;
       short height;
-      bool clipChildren_;
+      layout::ChildClip childClip_;
       /** Borrowed live width claim; null selects the constant width. */
       loka::core::State<int> *widthState_;
       BoxProps()
           : padding(),
             width(0),
             height(0),
-            clipChildren_(false),
+            childClip_(layout::CHILD_CLIP_NONE),
             widthState_(0)
       {
       }
       int hash() const
       {
-        return this->padding.hash() + width + height + this->gap.hash() + this->clipChildren_;
+        return this->padding.hash() + width + height + this->gap.hash() + this->childClip_;
       }
       BoxProps &setGap(int value)
       {
@@ -95,7 +96,7 @@ namespace loka
           return width < other.width;
         if (height != other.height)
           return height < other.height;
-        return this->clipChildren_ < other.clipChildren_;
+        return this->childClip_ < other.childClip_;
       }
 
     private:
@@ -157,7 +158,7 @@ namespace loka
           Toolbox clips in a later change; macOS and Win32 do not clip yet. */
       BoxDefinition &clipChildren()
       {
-        this->props.clipChildren_ = true;
+        this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
         return *this;
       }
       BoxDefinition &gap(int value)
