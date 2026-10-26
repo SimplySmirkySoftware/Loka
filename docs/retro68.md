@@ -369,6 +369,21 @@ public Loka header pulled in `string.h`, then Classic string headers, then
 composition code. Prefer typed operations or small internal helpers over
 public-header includes when the only need is a tiny standard-library operation.
 
+## Unicode Flavor
+
+| Flavor | Requirement | Build evidence | Runtime verification | Editor support |
+|---|---|---|---|---|
+| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | PR 0 retains TextEdit. MLTE support is future work. |
+
+The source contracts live in `apple/toolbox/CMakeLists.txt` and
+`apple/toolbox/src/ToolboxUnicodeStartup.cpp`; host tests pin the requirement
+predicate and refusal sequence. `tests/toolbox/cmake-pins` pins core exclusivity
+and 68k selection refusal. The no-API Unicode SimpleText application and TE
+SimpleText application each import exactly `InterfaceLib`; the separate link-only
+probe imports exactly `InterfaceLib`, `Textension`, `TextEncodingConverter`, and
+`UnicodeConverter`, all strong. These are build checks, not loader or native
+startup verdicts. No release allowlist includes the Unicode acceptance target.
+
 ## Classic Toolbox Profiles
 
 Classic Mac localization should not assume that Unicode is the only normal

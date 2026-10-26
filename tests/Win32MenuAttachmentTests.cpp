@@ -1015,3 +1015,30 @@ void testWin32AppQuitRefusalPreservesProjection()
   LOKA_VERIFY(!f.translate('S'));
   verifyLabel(f.window, L"Quit");
 }
+
+void testWin32EditMenuDefaultsAndFallback()
+{
+  ShortcutFixture f;
+  MenuDefinition edit = EditMenu();
+  for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+    if (!item->isSeparator)
+      item->onClick(&f.emitter);
+  MenuBarDefinition offered;
+  offered << edit;
+  LOKA_VERIFY(f.window.menuAttachment().project(sources(&offered, 0)) == Win32MenuAttachment::PROJECT_APPLIED);
+  HMENU menu = GetSubMenu(GetMenu(f.window.hwnd()), 0);
+  LOKA_VERIFY(GetMenuItemCount(menu) == 6);
+  const wchar_t *titles[] = {L"Undo", L"Cut", L"Copy", L"Paste", L"Select All"};
+  const char keys[] = {'Z', 'X', 'C', 'V', 'A'};
+  ControlKey control;
+  for (unsigned i = 0; i < 5; ++i)
+  {
+    const int row = i == 0 ? 0 : static_cast<int>(i + 1);
+    wchar_t title[32];
+    LOKA_VERIFY(GetMenuStringW(menu, row, title, 32, MF_BYPOSITION) > 0);
+    LOKA_VERIFY(std::wcscmp(title, titles[i]) == 0);
+    LOKA_VERIFY(!f.translate(keys[i]));
+    LOKA_VERIFY(f.window.menuAttachment().dispatch(GetMenuItemID(menu, row)));
+    LOKA_VERIFY(f.calls == static_cast<int>(i + 1));
+  }
+}

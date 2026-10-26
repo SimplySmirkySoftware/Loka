@@ -1,4 +1,9 @@
 #include "StyleTests.hpp"
+#include "TextFamilyTests.hpp"
+#include "app/style/AttributedString.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include "support/PropsReconciliation.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
 
 #include <climits>
 #include "core/State.hpp"
@@ -48,6 +53,12 @@ void testTextStyleMergeAndSizeVocabulary()
     }
   }
   LOKA_VERIFY(sizeof(TextSizeValue) == 4);
+  LOKA_VERIFY(sizeof(TextFamilyValue) == 1);
+  LOKA_VERIFY(sizeof(TextStyle) == 16);
+#if __cplusplus >= 201103L
+  static_assert(sizeof(TextFamilyValue) == 1, "TextFamilyValue must remain one byte");
+  static_assert(sizeof(TextStyle) == 16, "TextStyle must remain sixteen bytes");
+#endif
   TextSizeRole role = TEXT_SIZE_ROLE_COUNT;
   LOKA_VERIFY(!sizes[0].queryRole(role) && role == TEXT_SIZE_ROLE_COUNT);
   LOKA_VERIFY(!sizes[3].queryRole(role) && role == TEXT_SIZE_ROLE_COUNT);
@@ -276,4 +287,97 @@ void testTextPropsOwnedAndBorrowedStorage()
   LOKA_VERIFY(!(original < borrowed));
   LOKA_VERIFY(!(borrowed < borrowedCopy));
   LOKA_VERIFY(!(copied < TextProps("owned")));
+}
+
+void testTextFamilyRejectsBeforeNarrowing()
+{
+  using namespace loka::app;
+  const int invalid[] = {TEXT_FAMILY_COUNT, -1, 255, 256, 257, 258, INT_MIN, INT_MAX};
+  for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+  {
+    const TextFamilyValue refused(invalid[i]);
+    LOKA_VERIFY(!refused.isSet());
+    LOKA_VERIFY(refused.family() == TEXT_FAMILY_UNSET);
+  }
+  LOKA_VERIFY(TextStyle().family(TEXT_FAMILY_COUNT).family() == TEXT_FAMILY_UNSET);
+}
+
+void testTextFamilyMergeAndComparisons()
+{
+  using namespace loka::app;
+  const TextStyle system = TextStyle().family(TEXT_FAMILY_SYSTEM);
+  LOKA_VERIFY(TEXT_FAMILY_UNSET == 0);
+  LOKA_VERIFY(!TextStyle().declaresFont());
+  LOKA_VERIFY(!Red.declaresFont());
+  LOKA_VERIFY(Monospace.declaresFont());
+  LOKA_VERIFY(system.declaresFont());
+  LOKA_VERIFY(Bold.declaresFont() && Italic.declaresFont() && Body.declaresFont());
+  LOKA_VERIFY((Text("x") + Monospace).props.hasDeclaredLayoutStyle());
+  LOKA_VERIFY((Monospace + FontSize<12>() + Bold).family() == TEXT_FAMILY_MONOSPACE);
+  LOKA_VERIFY(Monospace + FontSize<12>() == Body + Monospace);
+  int points = 0;
+  LOKA_VERIFY((Monospace + FontSize<12>()).size_.queryPoints(points) && points == 12);
+  LOKA_VERIFY(Monospace + system == system);
+  LOKA_VERIFY(system + Monospace == Monospace);
+  LOKA_VERIFY(Monospace + TextStyle() == Monospace);
+  LOKA_VERIFY(TextStyle() + Monospace == Monospace);
+  const TextStyle values[] = {TextStyle(), system, Monospace};
+  for (unsigned i = 0; i < 3; ++i)
+    for (unsigned j = 0; j < 3; ++j)
+    {
+      LOKA_VERIFY((values[i] == values[j]) == (i == j));
+      LOKA_VERIFY((values[i] < values[j]) == (i < j));
+      LOKA_VERIFY((Text("same") + values[i]).props.operator<((Text("same") + values[j]).props) == (i < j));
+      LOKA_VERIFY((Styled("same", values[i]) == Styled("same", values[j])) == (i == j));
+      LOKA_VERIFY((Styled("same", values[i]).compare(Styled("same", values[j])) < 0) == (i < j));
+    }
+  LOKA_VERIFY(Styled("ab", Monospace) == Styled("a", Monospace) + Styled("b", Monospace));
+  LOKA_VERIFY(Styled("ab", Monospace) != Styled("a", Monospace) + Styled("b", system));
+}
+
+void testRetainedTextFamilyRecording()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using loka::app::testing::NullTextStyleAccess;
+  using loka::dsl::testing::SceneTestAccess;
+  BoxDefinition box;
+  box << Text("aa").testId("family");
+  NullScenePlatformController platform;
+  Scene scene((Boundary<PropsReconciliationSupport::Tree<BoxDefinition> >(
+      PropsReconciliationSupport::Props<BoxDefinition>(&box))));
+  scene.mount(&platform);
+  SceneTestAccess::updateAttached(scene, true);
+  TextNode *node = 0;
+  loka::dsl::FlowError error;
+  loka::dsl::testing::LookupNodeById(&scene, "family", node, error);
+  LOKA_VERIFY(node != 0);
+  LayoutState state;
+  state.width = 100;
+  platform.projectLayoutForTesting(SceneTestAccess::rootBoundary(scene), state);
+  NullTextContext *context = static_cast<NullTextContext *>(node->getContext());
+  LOKA_VERIFY(context != 0);
+  const short width = context->measurement().width();
+  const short height = context->measurement().height();
+  LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_UNSET);
+  LOKA_VERIFY((Text("aa") + Monospace).applyPropsToNode(node));
+  const PaintQuery query = {platform.paintScope(), PLACEMENT_ELIGIBLE};
+  LOKA_VERIFY(context->queryPaintDamage(query).reason == PAINT_REFUSED_PLACEMENT_UNSETTLED);
+  PropsReconciliationSupport::root(scene)->markViewDirty(NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(scene.flushInvalidation());
+  LOKA_VERIFY(node->getContext() == context);
+  LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_MONOSPACE);
+  LOKA_VERIFY(context->measurement().width() == width && context->measurement().height() == height);
+  loka::core::MutableState<TextStyle> live;
+  LOKA_VERIFY((Text("aa") + &live).applyPropsToNode(node));
+  PropsReconciliationSupport::root(scene)->markViewDirty(NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(scene.flushInvalidation());
+  LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_UNSET);
+  live.set(Monospace);
+  LOKA_VERIFY(scene.flushInvalidation());
+  LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_MONOSPACE);
+  live.set(TextStyle());
+  LOKA_VERIFY(scene.flushInvalidation());
+  LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_UNSET);
+  SceneTestAccess::unmount(scene);
 }

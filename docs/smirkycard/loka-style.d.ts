@@ -3,6 +3,7 @@ export type FontSize = 9 | 10 | 12 | 14 | 18 | 24;
 export type TextSizeRole = "smallLabel";
 export type TextWeight = "normal" | "bold";
 export type TextColor = "primary" | "secondary" | "black" | "white" | "red" | "green" | "blue" | "cyan" | "magenta" | "yellow";
+export type TextFamily = "system" | "monospace";
 export type TextWrap = "none" | "word" | "char";
 export type TextTruncation = "none" | "clip" | "ellipsis";
 export type TextAlign = "left" | "center" | "right";
@@ -13,6 +14,7 @@ export interface TextStyle {
   weight?: TextWeight;
   italic?: boolean;
   color?: TextColor;
+  family?: TextFamily;
 }
 
 export interface BlockStyle {

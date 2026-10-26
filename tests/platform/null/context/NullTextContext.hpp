@@ -12,6 +12,10 @@ namespace loka
   namespace app
   {
     class TextNode;
+    namespace testing
+    {
+      struct NullTextStyleAccess;
+    }
   }
 } // namespace loka
 
@@ -32,12 +36,13 @@ struct NullTextPaintStyle
   bool operator==(const NullTextPaintStyle &other) const
   {
     return fontSize == other.fontSize && weight == other.weight && italic == other.italic && color == other.color
-           && wrap == other.wrap && truncation == other.truncation && align == other.align;
+           && family == other.family && wrap == other.wrap && truncation == other.truncation && align == other.align;
   }
   int fontSize;
   loka::app::TextWeight weight;
   loka::app::TextColor color;
   bool italic;
+  loka::app::TextFamilyValue family;
   loka::app::TextWrap wrap;
   loka::app::TextTruncation truncation;
   loka::app::TextAlign align;
@@ -74,6 +79,7 @@ public:
 
 private:
   friend struct loka::app::testing::NullTextMeasurementAccess;
+  friend struct loka::app::testing::NullTextStyleAccess;
   loka::app::scene::PaintFact<loka::core::String> presented_;
   NullPaintPlacement placement_;
   NullTextPaintStyle placedStyle_;
@@ -81,6 +87,24 @@ private:
   loka::app::TextNode *node_;
   NullTextMeasurement measurement_;
 };
+
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      /** Captured family from the last placement/presentation, not a props reread. */
+      struct NullTextStyleAccess
+      {
+        static TextFamily family(const NullTextContext &context)
+        {
+          return context.placedStyle_.family.family();
+        }
+      };
+    } // namespace testing
+  } // namespace app
+} // namespace loka
 
 void RegisterNullTextNodeHandler(NullScenePlatformController &controller);
 /** The Null presenter calls typed completion doors on these contexts, so the rail

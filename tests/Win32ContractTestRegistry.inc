@@ -239,6 +239,7 @@ LOKA_TEST(testWin32InvisibleAppQuitKeepsOrdinaryQuit)
 LOKA_TEST(testWin32AppQuitRefusalPreservesProjection)
 LOKA_TEST(testWin32AppQuitMenuRowPreservesClientSize)
 
+LOKA_TEST(testWin32EditMenuDefaultsAndFallback)
 LOKA_TEST(testWin32TextEditorUtf8BoundaryHelpers)
 LOKA_TEST(testWin32TextEditorHintEvidence)
 LOKA_TEST(testWin32TextEditorUtf8ClosedPolicy)
