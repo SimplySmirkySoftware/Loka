@@ -81,7 +81,7 @@ namespace
   }
 } // namespace
 
-void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, const Rect &after)
+Rect ToolboxScenePlatformController::admitOwnControlMove(const Rect &before, const Rect &after) const
 {
   // MoveControl first places the OLD size at the new origin, then SizeControl
   // shrinks or grows it; the Control Manager invalidates that intermediate
@@ -98,8 +98,20 @@ void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, 
     area.right = midRight;
   // drawWhole keeps the window port current throughout the erased pass.
   // Only our move's area is discharged; never validate the whole port here.
-  if (this->erasedPass().admitsCapture(area))
+  if (!this->erasedPass_.admitsCapture(area))
+    SetRect(&area, 0, 0, 0, 0);
+  return area;
+}
+
+void ToolboxScenePlatformController::validateOwnControlMove(const Rect &area)
+{
+  if (!EmptyRect(&area))
     ValidRect(&area);
+}
+
+void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, const Rect &after)
+{
+  this->validateOwnControlMove(this->admitOwnControlMove(before, after));
 }
 
 bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,

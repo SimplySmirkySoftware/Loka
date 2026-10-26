@@ -569,7 +569,8 @@ public:
                            loka::core::State<bool> *,
                            loka::app::scene::NativeLifetimeHint,
                            ToolboxButtonContext *,
-                           ButtonControlBinding *&);
+                           ButtonControlBinding *&,
+                           bool *painted = 0);
 #else
   bool ensureButtonControl(short,
                            const Rect &rect,
@@ -578,8 +579,11 @@ public:
                            loka::core::State<bool> *,
                            loka::app::scene::NativeLifetimeHint,
                            ToolboxButtonContext *,
-                           ButtonControlBinding *&binding)
+                           ButtonControlBinding *&binding,
+                           bool *painted = 0)
   {
+    if (painted)
+      *painted = false;
     binding = 0;
     toolbox_host::controlRect = rect;
     return true;
@@ -723,6 +727,9 @@ public:
   /** Move/size callers: once per changed control per render; O(1), no rows.
       Requires the window port while the erased pass is open. */
   void validateOwnControlMove(const Rect &before, const Rect &after);
+  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const Rect &admittedArea);
+  void noteControlDraw();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;

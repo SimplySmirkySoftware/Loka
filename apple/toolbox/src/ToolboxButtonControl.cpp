@@ -7,9 +7,12 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
                                                          loka::core::State<bool> *enabled,
                                                          loka::app::scene::NativeLifetimeHint lifetimeHint,
                                                          ToolboxButtonContext *context,
-                                                         ButtonControlBinding *&binding)
+                                                         ButtonControlBinding *&binding,
+                                                         bool *painted)
 {
   binding = 0;
+  if (painted)
+    *painted = false;
   if (!window_ || !window_->window() || resourceId <= 0)
   {
     return false;
@@ -19,7 +22,6 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   {
     return true;
   }
-  ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   for (size_t i = 0; i < buttonControls_.size(); ++i)
   {
     if (buttonControls_[i].resourceId == resourceId)
@@ -75,17 +77,34 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   const Rect before = binding->rect;
   const bool moved = created || before.left != controlRect.left || before.top != controlRect.top
                      || before.right != controlRect.right || before.bottom != controlRect.bottom;
+  const Rect admittedMove = moved ? this->admitOwnControlMove(before, controlRect) : Rect();
+  if (moved && !created)
+  {
+    // Moving and sizing hidden reduces the measured three CDEF draws to one.
+    ToolboxPaintSuppressScope suppress(EmptyRect(&admittedMove) ? 0 : this->paintSuppressClipRgn_);
+    HideControl(binding->control);
+  }
   if (moved)
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
     binding->rect = controlRect;
   }
-  const bool submitted = ReconcileToolboxButtonControl(binding->control, label, binding->enabled, binding->label);
+  bool submitted;
+  {
+    ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
+    submitted = ReconcileToolboxButtonControl(binding->control, label, binding->enabled, binding->label);
+  }
   ShowControl(binding->control);
+  if (moved)
+  {
+    this->noteControlDraw();
+    if (painted)
+      *painted = true;
+  }
   // Reconciliation can invalidate the moved control again; discharge last.
   if (moved)
-    this->validateOwnControlMove(before, controlRect);
+    this->validateOwnControlMove(admittedMove);
   return submitted;
 }
 

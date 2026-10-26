@@ -153,6 +153,8 @@ public:
   void hideRetiredControl(ControlRef control);
   void drawScrollBarControl(short id);
   void drawControl(ControlRef control);
+  /** Reconcile one Button; painted reports a ShowControl paint independently
+      of label submission success. The caller supplies the composition clip. */
   bool ensureButtonControl(short resourceId,
                            const Rect &rect,
                            const loka::core::String &label,
@@ -160,7 +162,8 @@ public:
                            loka::core::State<bool> *enabled,
                            loka::app::scene::NativeLifetimeHint lifetimeHint,
                            ToolboxButtonContext *context,
-                           ButtonControlBinding *&binding);
+                           ButtonControlBinding *&binding,
+                           bool *painted = 0);
   void destroyButtonControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Creates or refreshes the scrollBarProc control for one ScrollBar node.
       The declared range and the bound value are pushed on every projection,
@@ -249,6 +252,10 @@ public:
 #include "ToolboxInputBodies.hpp"
 
 private:
+  void noteControlDraw();
+  /** Capture admitted move damage once; an empty rectangle means refusal. */
+  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const Rect &admittedArea);
   void activateEditControl(std::size_t index);
   void reachNativeButton(short id);
   void reachNativeBar(short id);
