@@ -1332,7 +1332,13 @@ styles set the same field, the right-hand value wins.
 ```cpp
 Text("Title") + Bold + FontSize<24>()
 Text("Note") + Italic + Caption
+Text("let x = 1;") + Monospace
 ```
+
+`Monospace` asks for a fixed-pitch family and is independent of the size, so
+`Monospace + FontSize<12>()` keeps both. The rails that honor it are listed in
+the platform support notes; a rail without a fixed-pitch face draws the text in
+its default family.
 
 The supported compile-time sizes are 9, 10, 12, 14, 18, and 24 logical units
 (one unit is one pixel on a classic Mac screen; other platforms scale up).
