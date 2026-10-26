@@ -326,6 +326,12 @@ void ToolboxImageViewContext::updateRect(short x, short y, short width, short he
 
 void ToolboxImageViewContext::draw()
 {
+  // Outside the enclosing viewport no pixel of this image reaches the port:
+  // skip the picture instead of letting DrawPicture parse it under a clip
+  // that discards everything. Read at paint, where the viewport frame is final.
+  Rect paintRect = rect_;
+  if (this->controller() && !this->controller()->intersectWithProjectionClip(rect_, paintRect))
+    return;
   // The caller restores the pixels beneath this transparent kind.
   FrameRect(&rect_);
 
