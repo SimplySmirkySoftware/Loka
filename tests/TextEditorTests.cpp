@@ -3424,12 +3424,13 @@ void testTextUtf8Scanner()
   for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
   {
     std::size_t count = 99;
-    const bool valid = cases[i].open == EDITOR_OK || i == 6;
+    // NUL is well-formed UTF-8 (policy, not the scanner, forbids it); every other refusal is malformed.
+    const bool valid = cases[i].scalars != 0;
     LOKA_VERIFY(Utf8Scan(cases[i].bytes, cases[i].length, count) == valid);
-    LOKA_VERIFY(count == (valid ? (i == 7 ? 11u : 1u) : 0u));
+    LOKA_VERIFY(count == cases[i].scalars);
     const std::string prefixed = std::string("A\303\251") + std::string(cases[i].bytes, cases[i].length);
     LOKA_VERIFY(Utf8Scan(prefixed.data(), prefixed.size(), count) == valid);
-    LOKA_VERIFY(count == (valid ? (i == 7 ? 13u : 3u) : 2u));
+    LOKA_VERIFY(count == cases[i].scalars + 2);
   }
   std::size_t count = 99;
   LOKA_VERIFY(Utf8Scan(0, 0, count) && count == 0);

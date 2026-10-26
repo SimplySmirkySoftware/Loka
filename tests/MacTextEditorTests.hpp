@@ -21,4 +21,8 @@ void testMacTextEditorPageEmptyLine();
 void testMacTextEditorPageGeometryDeclinesWrappedLine();
 
 void testMacTextEditorDetachHidesAndRetireRemoves();
+void testMacTextEditorConversionHelpers();
+void testMacTextEditorUtf8Boundary();
+void testMacTextEditorUtf8StyleFallback();
+void testMacTextEditorUtf8OpenCarets();
 #endif
