@@ -126,3 +126,34 @@ if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC|Carbon)$")
     endif()
   endif()
 endif()
+
+# Deliberate acceptance twin of the Classic target above; keep settings aligned.
+if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
+  add_application(LokaSimpleTextUnicodePPC ${RETRO_SOURCES})
+  loka_enable_warnings(LokaSimpleTextUnicodePPC)
+
+  target_include_directories(LokaSimpleTextUnicodePPC PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common
+  )
+
+  loka_toolbox_unicode(LokaSimpleTextUnicodePPC)
+
+  target_compile_definitions(LokaSimpleTextUnicodePPC PRIVATE LOKA_RETRO68=1)
+
+  set_target_properties(LokaSimpleTextUnicodePPC PROPERTIES
+    CXX_STANDARD 98
+    CXX_STANDARD_REQUIRED YES
+  )
+
+  target_compile_options(LokaSimpleTextUnicodePPC PRIVATE
+    -Os
+    -ffunction-sections
+    -fdata-sections
+    -fno-exceptions
+    -fno-rtti
+  )
+  target_link_options(LokaSimpleTextUnicodePPC PRIVATE
+    -Wl,--gc-sections
+  )
+
+endif()

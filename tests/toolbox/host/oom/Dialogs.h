@@ -42,6 +42,6 @@ void FrameRoundRect(const Rect *, short, short);
 void DrawDialog(DialogPtr);
 void BeginUpdate(WindowPtr);
 void EndUpdate(WindowPtr);
-inline ModalFilterUPP NewModalFilterUPP(ModalFilterUPP p) { return p; }
-inline void DisposeModalFilterUPP(ModalFilterUPP) {}
+ModalFilterUPP NewModalFilterUPP(ModalFilterUPP);
+void DisposeModalFilterUPP(ModalFilterUPP);
 #endif
