@@ -227,29 +227,14 @@ namespace
     out.bottom = static_cast<short>(out.top + dstH);
     return out;
   }
-  int FitModeOf(const loka::app::ImageViewNode &node)
+  /** True when any pixel of a picture drawn into `destination` can reach the
+      port through the enclosing viewport. Outside one, every pixel can. The
+      frame line and the placeholder text are not asked: they are cheap and
+      may extend past the frame. */
+  bool PictureReachesPort(const ToolboxScenePlatformController *controller, const Rect &destination)
   {
-    if (node.props.hasAttr_ && node.props.attr_.hasFitValue_)
-      return static_cast<int>(node.props.attr_.fitValue_);
-    return loka::app::IMAGE_FIT_STRETCH;
-  }
-
-  /** Every pixel this ImageView can put on the port lies inside this rectangle:
-      its frame (the frame line and the placeholder text) united with the
-      picture's destination. The destination runs past the frame for an
-      unscaled image (`fit: none`) and for `cover`, and only the PICT-handle
-      cover branch clips it; the union covers every branch without naming them. */
-  Rect PaintBounds(const loka::app::ImageViewNode *node, const Rect &frame)
-  {
-    Rect bounds = frame;
-    if (!node || !node->props.image_)
-      return bounds;
-    const loka::core::resource::Image image = node->props.image_->get();
-    if (!image.isValid())
-      return bounds;
-    const Rect destination = ComputeImageDrawRect(frame, FitModeOf(*node), image.width(), image.height());
-    UnionRect(&bounds, &destination, &bounds);
-    return bounds;
+    Rect reached;
+    return !controller || controller->intersectWithProjectionClip(destination, reached);
   }
 } // namespace
 
@@ -350,13 +335,6 @@ void ToolboxImageViewContext::updateRect(short x, short y, short width, short he
 
 void ToolboxImageViewContext::draw()
 {
-  // Outside the enclosing viewport no pixel of this image reaches the port:
-  // skip the picture instead of letting DrawPicture parse it under a clip
-  // that discards everything. Read at paint, where the viewport frame is final.
-  const Rect bounds = PaintBounds(node_, rect_);
-  Rect paintRect = bounds;
-  if (this->controller() && !this->controller()->intersectWithProjectionClip(bounds, paintRect))
-    return;
   // The caller restores the pixels beneath this transparent kind.
   FrameRect(&rect_);
 
@@ -373,7 +351,11 @@ void ToolboxImageViewContext::draw()
     return;
   }
 
-  const int fitMode = FitModeOf(*node_);
+  int fitMode = loka::app::IMAGE_FIT_STRETCH;
+  if (node_->props.hasAttr_ && node_->props.attr_.hasFitValue_)
+  {
+    fitMode = static_cast<int>(node_->props.attr_.fitValue_);
+  }
 
   const loka::toolbox::ToolboxNativeImage *native = loka::toolbox::TryGetToolboxNativeImage(image);
   if (native && native->kind == loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_PICT && native->payload)
@@ -384,12 +366,15 @@ void ToolboxImageViewContext::draw()
     {
       // A cover image may be inside a unit, viewport, or dirty replay.
       // Preserve every outer clip and refuse instead of drawing unbounded.
+      Rect framed;
       ToolboxPaintClip clip(rect_, ToolboxPaintClip::INTERSECT);
-      if (clip.isActive())
+      if (clip.isActive() && SectRect(&dstRect, &rect_, &framed) && PictureReachesPort(this->controller(), framed))
         DrawPicture(picture, &dstRect);
     }
-    else
+    else if (PictureReachesPort(this->controller(), dstRect))
     {
+      // Outside the viewport DrawPicture would parse the whole picture for
+      // pixels the clip discards (#1043 B4-1); skip it instead.
       DrawPicture(picture, &dstRect);
     }
     return;
@@ -400,6 +385,11 @@ void ToolboxImageViewContext::draw()
     const loka::toolbox::ToolboxPictBytesPayload *payload =
         static_cast<const loka::toolbox::ToolboxPictBytesPayload *>(native->payload);
     Rect dstRect = ComputeImageDrawRect(rect_, fitMode, image.width(), image.height());
+    if (!PictureReachesPort(this->controller(), dstRect))
+    {
+      // Same skip as above: the streamed picture draws exactly dstRect.
+      return;
+    }
     if (DrawPictBytes(payload, dstRect))
     {
       return;
