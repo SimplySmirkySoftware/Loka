@@ -715,6 +715,22 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   set_target_properties(LokaToolboxMenuTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxMenuTests COMMAND LokaToolboxMenuTests)
 
+  add_executable(LokaToolboxImageViewTests
+    tests/toolbox/host/ToolboxImageViewHostTests.cpp
+    apple/toolbox/src/context/ToolboxImageViewContext.cpp
+    apple/toolbox/src/ToolboxNativeImage.cpp ${_editor_host_sources})
+  target_include_directories(LokaToolboxImageViewTests PRIVATE
+    tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxImageViewTests PRIVATE LOKA_HOST_IMAGE_VIEW)
+  target_compile_options(LokaToolboxImageViewTests PRIVATE
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxImageViewTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxImageViewTests)
+  set_target_properties(LokaToolboxImageViewTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_image_case walk dirty ambient empty clip-change scroll pict-cover bytes-cover none no-image no-state diagonal refusal)
+    add_test(NAME testToolboxImageView_${_image_case} COMMAND LokaToolboxImageViewTests ${_image_case})
+  endforeach()
+
   # Refusal paths of the Toolbox picture -> Image allocations (#1064).
   add_executable(LokaToolboxNativeImageTests
     tests/toolbox/host/ToolboxNativeImageHostTests.cpp

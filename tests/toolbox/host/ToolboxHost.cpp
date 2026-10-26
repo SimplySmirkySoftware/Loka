@@ -55,7 +55,18 @@ long GetScriptManagerVariable(short selector)
 }
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState(), 0};
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}},
+                          7,
+                          12,
+                          0,
+                          blackColor,
+                          HostPortState(),
+                          0
+#ifdef LOKA_HOST_IMAGE_VIEW
+                          ,
+                          0
+#endif
+  };
   GrafPtr port = &initialPort;
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)

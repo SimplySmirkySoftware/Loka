@@ -84,6 +84,28 @@ struct HostPortState
 private:
   HostPortState &operator=(const HostPortState &);
 };
+#ifdef LOKA_HOST_IMAGE_VIEW
+typedef void (*QDGetPicUPP)(void *, short);
+struct QDProcs
+{
+  QDGetPicUPP getPicProc;
+};
+typedef QDProcs *QDProcsPtr;
+typedef QDProcs CQDProcs;
+typedef CQDProcs *CQDProcsPtr;
+inline QDGetPicUPP NewQDGetPicUPP(QDGetPicUPP proc)
+{
+  return proc;
+}
+inline void SetStdProcs(QDProcs *procs)
+{
+  procs->getPicProc = 0;
+}
+inline void SetStdCProcs(CQDProcs *procs)
+{
+  procs->getPicProc = 0;
+}
+#endif
 struct GrafPort
 {
   BitMap portBits;
@@ -92,8 +114,14 @@ struct GrafPort
   long fgColor;
   HostPortState native;
   RgnHandle clipRgn;
+#ifdef LOKA_HOST_IMAGE_VIEW
+  QDProcsPtr grafProcs;
+#endif
 };
 typedef GrafPort *GrafPtr;
+#ifdef LOKA_HOST_IMAGE_VIEW
+typedef GrafPtr CGrafPtr;
+#endif
 struct FontInfo
 {
   short ascent, descent, widMax, leading;
@@ -159,4 +187,10 @@ struct Picture
 typedef Picture *PicPtr;
 typedef PicPtr *PicHandle;
 void KillPicture(PicHandle);
+#ifdef LOKA_HOST_IMAGE_VIEW
+void DrawPicture(PicHandle, const Rect *);
+void LineTo(short, short);
+typedef long Size;
+char **NewHandle(Size);
+#endif
 #endif
