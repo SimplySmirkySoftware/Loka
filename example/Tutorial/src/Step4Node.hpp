@@ -67,7 +67,10 @@ namespace tutorial
                 << (Show(*this->showSummary_.state()) //
                     << Text(this->itemSummary_.state()).TEST_ID("Tutorial.Step4.Summary")
                     << Keyed(*this->itemCount_.state(), this, &Step4Node::declareItems, ItemSeats()))
-                << TutorialHint("Keyed rebuilds the list with For after each Add, up to 100 items."));
+                // The hint text changes with the DoItYourself text and the golden
+                // re-bake in the last Tutorial PR, so this PR keeps the captures.
+                << TutorialHint("StdComposition can still reveal predeclared children while state changes update "
+                                "derived display text."));
     }
 
   private:
