@@ -235,17 +235,19 @@ namespace
   }
 
   /** Every pixel this ImageView can put on the port lies inside this rectangle:
-      its frame, widened by the destination of an unscaled (`fit: none`) image,
-      which ComputeImageDrawRect lets run past the frame and nothing clips. */
+      its frame (the frame line and the placeholder text) united with the
+      picture's destination. The destination runs past the frame for an
+      unscaled image (`fit: none`) and for `cover`, and only the PICT-handle
+      cover branch clips it; the union covers every branch without naming them. */
   Rect PaintBounds(const loka::app::ImageViewNode *node, const Rect &frame)
   {
     Rect bounds = frame;
-    if (!node || !node->props.image_ || FitModeOf(*node) != loka::app::IMAGE_FIT_NONE)
+    if (!node || !node->props.image_)
       return bounds;
     const loka::core::resource::Image image = node->props.image_->get();
     if (!image.isValid())
       return bounds;
-    const Rect destination = ComputeImageDrawRect(frame, loka::app::IMAGE_FIT_NONE, image.width(), image.height());
+    const Rect destination = ComputeImageDrawRect(frame, FitModeOf(*node), image.width(), image.height());
     UnionRect(&bounds, &destination, &bounds);
     return bounds;
   }
