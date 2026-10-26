@@ -1,7 +1,6 @@
 #ifndef LOKA_APP_SCENE_STATE_REQUEST_HPP
 #define LOKA_APP_SCENE_STATE_REQUEST_HPP
 #include "app/scene/state/Reported.hpp"
-#include "app/nodes/controls/TextEditorDocument.hpp"
 namespace loka
 {
   namespace app
@@ -12,17 +11,6 @@ namespace loka
       template <class Request, class Fact> class SeatRunner;
       template <typename T> class RequestBinding;
       template <typename T> struct RequestTraits;
-      template <> struct RequestTraits<LineCursor>
-      {
-        enum { coalescable = 1 };
-      };
-      template <> struct RequestTraits<EditorCommand>
-      {
-        enum
-        {
-          coalescable = 0
-        };
-      };
       /** Plain slots are only meaningful for explicitly coalescable values. */
       template <typename T> struct RequestDeclarationWall
       {
@@ -53,18 +41,18 @@ namespace loka
             : kind_(NO_REPLY),
               requested_(),
               applied_(),
-              reason_(EDITOR_OK)
+              reason_(RequestTraits<T>::accepted())
         {
         }
         static Reply Granted(const T &applied)
         {
-          return Reply(GRANTED, applied, applied, EDITOR_OK);
+          return Reply(GRANTED, applied, applied, RequestTraits<T>::accepted());
         }
         static Reply Clamped(const T &requested, const T &applied)
         {
-          return Reply(CLAMPED, requested, applied, EDITOR_OK);
+          return Reply(CLAMPED, requested, applied, RequestTraits<T>::accepted());
         }
-        static Reply Refused(const T &requested, EditorResult reason)
+        static Reply Refused(const T &requested, typename RequestTraits<T>::Reason reason)
         {
           return Reply(REFUSED, requested, T(), reason);
         }
@@ -82,7 +70,7 @@ namespace loka
           assert(this->kind_ == GRANTED || this->kind_ == CLAMPED);
           return this->applied_;
         }
-        EditorResult reason() const
+        typename RequestTraits<T>::Reason reason() const
         {
           assert(this->kind_ == REFUSED);
           return this->reason_;
@@ -94,7 +82,7 @@ namespace loka
         }
 
       private:
-        Reply(Kind kind, const T &requested, const T &applied, EditorResult reason)
+        Reply(Kind kind, const T &requested, const T &applied, typename RequestTraits<T>::Reason reason)
             : kind_(kind),
               requested_(requested),
               applied_(applied),
@@ -104,7 +92,7 @@ namespace loka
         Kind kind_;
         T requested_;
         T applied_;
-        EditorResult reason_;
+        typename RequestTraits<T>::Reason reason_;
       };
       template <typename T> class RequestWithReply;
       /** App-owned declaration handle. Borrow by reference; None means no request. */

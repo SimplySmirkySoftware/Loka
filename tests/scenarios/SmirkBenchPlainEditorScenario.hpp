@@ -1,5 +1,6 @@
 #ifndef LOKA_SMIRK_BENCH_PLAIN_EDITOR_SCENARIO_HPP
 #define LOKA_SMIRK_BENCH_PLAIN_EDITOR_SCENARIO_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "../support/TextEditorAccess.hpp"
 #include "SmirkBenchPlainEditorNode.hpp"

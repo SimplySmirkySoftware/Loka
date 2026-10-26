@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TEXT_EDITOR_STATE_OWNER_HPP
 #define LOKA_TEST_TEXT_EDITOR_STATE_OWNER_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "support/Headless.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 namespace loka

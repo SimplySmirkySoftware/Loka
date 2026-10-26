@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "Win32FocusTests.hpp"
 #include "Win32App.hpp"
 #include "Win32Window.hpp"

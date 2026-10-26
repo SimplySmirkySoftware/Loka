@@ -1,5 +1,6 @@
 #ifndef LOKA_TESTS_TEXT_EDITOR_SETTLE_AUDIT_HPP
 #define LOKA_TESTS_TEXT_EDITOR_SETTLE_AUDIT_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include <cstdio>
 #include "app/scene/state/RequestSettlement.hpp"
 #include "testing/scene/ScenarioAudit.hpp"

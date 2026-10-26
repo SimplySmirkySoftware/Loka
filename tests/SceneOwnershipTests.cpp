@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "platform/null/NullWindow.hpp"

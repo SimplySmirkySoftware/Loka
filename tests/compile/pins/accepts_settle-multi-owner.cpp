@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/scene/state/RequestSettlement.hpp"
 #include "app/style/LineCursor.hpp"
 using namespace loka::app;

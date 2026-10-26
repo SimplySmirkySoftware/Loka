@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "platform/null/NullInputDoor.hpp"
 #include "platform/null/context/NullTextEditorContext.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
@@ -178,26 +179,27 @@ public:
       return ready;
     return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const LineCursor &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const LineCursor &pending)
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
     const int row = node.props.lines_->find(pending.line);
     std::size_t length = 0;
     if (row < 0)
-      return scene::RequestApplication<LineCursor>(pending, EDITOR_STALE_ID);
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_STALE_ID);
     if (!node.props.lines_->at(static_cast<unsigned short>(row))
              .value.requiredUnits(loka::core::StringEncodingUtf8, length))
-      return scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE);
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
     const LineCursor applied(pending.line, std::max(0, std::min(pending.column, static_cast<int>(length))));
     context(base).caret_ = applied;
-    return scene::RequestApplication<LineCursor>(applied, EDITOR_OK);
+    return scene::RequestApplication<LineCursor, EditorResult>(applied, EDITOR_OK);
   }
   virtual EditorResult report(scene::Node &base, const LineCursor &applied)
   {
     return static_cast<TextEditorNode &>(base).seam(context(base).key_).moveCaret(applied);
   }
-  virtual scene::FollowUp finishTake(scene::Node &base, const scene::Reply<LineCursor> &,
-                                    const scene::RequestApplication<LineCursor> &)
+  virtual scene::FollowUp finishTake(scene::Node &base,
+                                     const scene::Reply<LineCursor> &,
+                                     const scene::RequestApplication<LineCursor, EditorResult> &)
   {
     NullTextEditorContext &c = context(base);
     c.phase_ = IDLE;
@@ -269,19 +271,19 @@ public:
     NullTextEditorContext &c = *static_cast<NullTextEditorContext *>(base.getContext());
     return static_cast<TextEditorNode &>(base).seam(c.key_).availability();
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const EditorCommand &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const EditorCommand &pending)
   {
     NullTextEditorContext &c = *static_cast<NullTextEditorContext *>(base.getContext());
     unsigned visibleLines = 0;
     LineCursor target;
     if (!c.queryVisibleLines(visibleLines))
-      return scene::RequestApplication<LineCursor>(target, EDITOR_UNAVAILABLE);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, EDITOR_UNAVAILABLE);
     const EditorResult result =
         static_cast<TextEditorNode &>(base).seam(c.key_).pageTarget(pending, visibleLines, target);
     if (result != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(target, result);
-    const scene::RequestApplication<LineCursor> applied = this->rail_.apply(base, target);
-    return scene::RequestApplication<LineCursor>(applied.value(), applied.result(), scene::REPAINT);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, result);
+    const scene::RequestApplication<LineCursor, EditorResult> applied = this->rail_.apply(base, target);
+    return scene::RequestApplication<LineCursor, EditorResult>(applied.value(), applied.result(), scene::REPAINT);
   }
   virtual EditorResult report(scene::Node &base, const LineCursor &applied)
   {
@@ -289,7 +291,7 @@ public:
   }
   virtual scene::FollowUp finishTake(scene::Node &base,
                                      const scene::Reply<EditorCommand> &reply,
-                                     const scene::RequestApplication<LineCursor> &applied)
+                                     const scene::RequestApplication<LineCursor, EditorResult> &applied)
   {
     const scene::Reply<LineCursor> caretReply = reply.kind() == scene::Reply<EditorCommand>::REFUSED
                                                     ? scene::Reply<LineCursor>::Refused(applied.value(), reply.reason())

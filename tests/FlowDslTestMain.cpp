@@ -34,6 +34,7 @@
 #include "MacFocusTests.hpp"
 #endif
 #include "TextEditorTests.hpp"
+#include "RequestReasonTests.hpp"
 #include "TextDocumentFileTests.hpp"
 #include "RailMetricsTests.hpp"
 #include "SurfaceGroundTests.hpp"

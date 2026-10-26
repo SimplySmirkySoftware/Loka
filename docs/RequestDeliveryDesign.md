@@ -52,14 +52,15 @@ fixed order. The owner supplies `finishSettle` once and, under `TEST_BUILD`,
 pointer array on its own stack and walks them; each runner holds its binding
 by value and, under `TEST_BUILD`, its trace row; `FollowUps` stays local to the
 driver. The existing
-single-seat entry and a two-seat overload share that walk; TextEditor uses the
-two-seat overload for caret then command (#902).
+single-seat entry, a single heterogeneous-seat overload, and a two-seat
+overload share that walk; TextEditor uses the two-seat overload for caret then
+command (#902).
 Sources: [#898, ruling items 1–3](https://github.com/SimplySmirkySoftware/Loka/issues/898),
 [#900](https://github.com/SimplySmirkySoftware/Loka/pull/900), and
 [#904](https://github.com/SimplySmirkySoftware/Loka/pull/904).
 The non-template `SettleOwnerBase` opens a `BorrowScope` on the rail's
 controller before native calls or callback-capable work. It borrows the node
-and stores a comparison-only context identity. Both settle overloads require
+and stores a comparison-only context identity. All settle overloads require
 that owner; `hasSameContext()` checks identity at each seat entry, after
 publications, and after `finishSettle`. This is not an ATTACHED predicate: a
 parked context can still match. A mismatch stops later seats, the epilogue and
@@ -217,7 +218,8 @@ not the completion path of a still-live take:
    that strands the phase.
 3. `validate` asks the seam whether the requested value is valid.
 4. `apply` performs the native write, clamp, or repair, returning a
-   `RequestApplication` and follow-up decision; check liveness afterward.
+   `RequestApplication<Fact, RequestTraits<Request>::Reason>` and follow-up
+   decision; check liveness afterward.
 5. `report` asks the seam to commit the applied value, then checks liveness.
    Build the reply from that seam result, not native apply success alone.
 6. `current` checks the captured binding before publishing the optional reply.
@@ -230,6 +232,12 @@ not the completion path of a still-live take:
 The owner's `finishSettle` runs once after both ordinary take opportunities
 for every seat, folding `FollowUps` from `apply` and `finishTake` into the
 completion decision.
+
+Each request type whose reply or settlement is instantiated names its reason
+through `RequestTraits<Request>::Reason`, `accepted()` and `unavailable()`.
+The fact type needs no trait. Editor request specializations live in
+`TextEditorRequests.hpp`; both keep `EditorResult` and its existing values.
+Plain requests (including Focus) require only `coalescable`, not a reason.
 
 The `formReply` overloads deduce their argument types: the same-type overload
 keeps `Granted`/`Clamped`/`Refused` selection; different request and fact types
@@ -257,8 +265,9 @@ slot alone does not justify it.
 `finishSettle` returns `FOLLOW_UP_ARMED`, `FOLLOW_UP_FAILED`, or `FOLLOW_UP_NONE`.
 A failed arm adds at most one refusal-only take per seat from that seat's last
 admission's still current, nonempty binding: `consume()` (last-wins clear or queue advance),
-check liveness/current binding, and publish `Refused(requested, EDITOR_UNAVAILABLE)`. It does not resolve, apply,
-report, or write the fact. The driver returns the arm result after this tail,
+check liveness/current binding, and publish
+`Refused(requested, RequestTraits<Request>::unavailable())`. It does not resolve,
+apply, report, or write the fact. The driver returns the arm result after this tail,
 so native admission stays closed until refusal publication finishes; retirement
 returns `FOLLOW_UP_NONE`. A binding discarded during consumption gets no reply
 ([#893](https://github.com/SimplySmirkySoftware/Loka/pull/893)).

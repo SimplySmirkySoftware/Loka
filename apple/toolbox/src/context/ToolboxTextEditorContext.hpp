@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_TOOLBOX_TEXT_EDITOR_CONTEXT_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "context/ToolboxProjectedNodeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"

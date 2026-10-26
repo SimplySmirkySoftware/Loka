@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "MacInputDoor.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/TextEditorStateOwner.hpp"

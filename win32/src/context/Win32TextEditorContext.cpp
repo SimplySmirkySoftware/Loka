@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32TextEditorContext.hpp"
 #include "Win32FocusParticipant.hpp"
@@ -229,18 +230,19 @@ public:
     Win32TextEditorContext &c = context(base);
     return c.projection_.current(*c.node_) ? scene::FOLLOW_NONE : c.replaceProjection();
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const LineCursor &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const LineCursor &pending)
   {
     Win32TextEditorContext &c = context(base);
     const scene::FollowUp follow = this->ensureProjection(base);
     if (c.phase_ != COMMIT || c.status_ != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(pending, c.status_, follow);
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, c.status_, follow);
     const int row = c.node_->props.lines_->find(pending.line);
     const int offset = static_cast<int>(SendMessageW(c.hwnd(), EM_LINEINDEX, row, 0));
     const int length = static_cast<int>(SendMessageW(c.hwnd(), EM_LINELENGTH, offset, 0));
     const int column = pending.column < 0 ? 0 : (pending.column > length ? length : pending.column);
     SendMessageW(c.hwnd(), EM_SETSEL, offset + column, offset + column);
-    return scene::RequestApplication<LineCursor>(LineCursor(pending.line, column), EDITOR_OK, scene::REPAINT);
+    return scene::RequestApplication<LineCursor, EditorResult>(
+        LineCursor(pending.line, column), EDITOR_OK, scene::REPAINT);
   }
   virtual EditorResult report(scene::Node &base, const LineCursor &applied)
   {
@@ -248,7 +250,7 @@ public:
   }
   virtual scene::FollowUp finishTake(scene::Node &base,
                                      const scene::Reply<LineCursor> &reply,
-                                     const scene::RequestApplication<LineCursor> &application)
+                                     const scene::RequestApplication<LineCursor, EditorResult> &application)
   {
     Win32TextEditorContext &c = context(base);
     scene::FollowUp follow = scene::FOLLOW_NONE;
@@ -383,19 +385,19 @@ public:
     Win32TextEditorContext &c = *static_cast<Win32TextEditorContext *>(base.getContext());
     return static_cast<TextEditorNode &>(base).seam(c.key_).availability();
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const EditorCommand &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const EditorCommand &pending)
   {
     Win32TextEditorContext &c = *static_cast<Win32TextEditorContext *>(base.getContext());
     unsigned visibleLines = 0;
     LineCursor target;
     const scene::FollowUp follow = this->rail_.ensureProjection(base);
     if (!c.queryVisibleLines(visibleLines))
-      return scene::RequestApplication<LineCursor>(target, EDITOR_UNAVAILABLE, follow);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, EDITOR_UNAVAILABLE, follow);
     const EditorResult result =
         static_cast<TextEditorNode &>(base).seam(c.key_).pageTarget(pending, visibleLines, target);
     if (result != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(target, result, follow);
-    const scene::RequestApplication<LineCursor> applied = this->rail_.apply(base, target);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, result, follow);
+    const scene::RequestApplication<LineCursor, EditorResult> applied = this->rail_.apply(base, target);
     if (applied.result() == EDITOR_OK)
     {
       // Scroll by an explicit line delta: EM_SCROLLCARET does nothing for a
@@ -416,7 +418,7 @@ public:
   }
   virtual scene::FollowUp finishTake(scene::Node &base,
                                      const scene::Reply<EditorCommand> &reply,
-                                     const scene::RequestApplication<LineCursor> &applied)
+                                     const scene::RequestApplication<LineCursor, EditorResult> &applied)
   {
     Win32TextEditorContext &c = *static_cast<Win32TextEditorContext *>(base.getContext());
     // A report subscriber can require projection repair. Preserve the page's

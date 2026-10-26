@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "ToolboxGround.hpp"
 #include "ToolboxEditKey.hpp"
 #include "ToolboxInputDoor.hpp"

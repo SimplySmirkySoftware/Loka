@@ -1460,3 +1460,6 @@ LOKA_TEST(testMergeAppMenuRefusalIsAtomic)
 LOKA_TEST(testEditMenuFacadeCanDisconnectAttachment)
 
 LOKA_TEST(testEditMenuTextEditorRecordsVerb)
+
+LOKA_TEST(testRequestReasonsStayRequestTyped)
+LOKA_TEST(testRequestSingleHeterogeneousSeat)

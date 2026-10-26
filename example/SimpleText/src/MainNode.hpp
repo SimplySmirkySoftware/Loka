@@ -1,6 +1,7 @@
 #ifndef LOKA_SIMPLE_TEXT_MAIN_NODE_HPP
 #define LOKA_SIMPLE_TEXT_MAIN_NODE_HPP
 
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/scene/BorrowedKeys.hpp"
 #include "app/scene/KeySnapshot.hpp"
 #include "app/scene/node/ComponentNode.hpp"
