@@ -23,7 +23,7 @@ namespace loka
       unsigned macPhotoCaptureFailures = 0;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
-    }
+    } // namespace
     void failMacStackUnitViews(unsigned count)
     {
       macStackUnitViewFailures = count;
@@ -155,16 +155,43 @@ namespace toolbox_host
     installedMenus.push_back(menu);
   }
 } // namespace toolbox_host
-void InitMenus() { ++toolbox_host::menuInitializations; }
+void InitMenus()
+{
+  ++toolbox_host::menuInitializations;
+}
 #endif
 
 #ifdef _WIN32
 #include "../win32/src/context/Win32EditTextBridge.hpp"
 #include "../win32/src/Win32ScenePlatformController.hpp"
+#include "../win32/src/platform/Win32String.hpp"
 namespace loka
 {
   namespace win32
   {
+    namespace detail
+    {
+      namespace testing
+      {
+        namespace
+        {
+          unsigned g_conversionWriteFailures = 0;
+        } // namespace
+
+        void failConversionWrites(unsigned count)
+        {
+          g_conversionWriteFailures = count;
+        }
+
+        bool refuseConversionWrite()
+        {
+          if (!g_conversionWriteFailures)
+            return false;
+          --g_conversionWriteFailures;
+          return true;
+        }
+      } // namespace testing
+    } // namespace detail
     namespace testing
     {
       namespace
@@ -289,7 +316,7 @@ namespace loka
         int g_menuItemDefinitionCloneFailures = 0;
         int g_menuItemDefinitionCloneSkips = 0;
         int g_menuDefinitionCloneFailures = 0;
-      }
+      } // namespace
 
       void failMenuItemDefinitionClones(int count, int successfulClonesBeforeFailure)
       {
@@ -435,57 +462,84 @@ namespace loka
 
 // Declared in tests/support/LocalRebuildRefusal.hpp.
 #ifdef TEST_BUILD
-namespace loka { namespace app { namespace testing {
-  namespace { unsigned localRebuildProbePropsFailures = 0; }
-  void failLocalRebuildProbeProps(unsigned count)
+namespace loka
+{
+  namespace app
   {
-    localRebuildProbePropsFailures = count;
-  }
-  bool consumeLocalRebuildProbePropsFailure()
-  {
-    if (!localRebuildProbePropsFailures) return false;
-    --localRebuildProbePropsFailures;
-    return true;
-  }
-} } }
+    namespace testing
+    {
+      namespace
+      {
+        unsigned localRebuildProbePropsFailures = 0;
+      }
+      void failLocalRebuildProbeProps(unsigned count)
+      {
+        localRebuildProbePropsFailures = count;
+      }
+      bool consumeLocalRebuildProbePropsFailure()
+      {
+        if (!localRebuildProbePropsFailures)
+          return false;
+        --localRebuildProbePropsFailures;
+        return true;
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
 #endif
 
 // Declared in tests/support/NullLayoutRefusal.hpp.
 #ifdef TEST_BUILD
-namespace loka { namespace testing {
-  namespace { unsigned nullProjectedLayoutRestoreFailures = 0; }
-  void failNullProjectedLayoutRestores(unsigned count)
-  { nullProjectedLayoutRestoreFailures = count; }
-  bool declineNullProjectedLayoutRestore()
+namespace loka
+{
+  namespace testing
   {
-    if (!nullProjectedLayoutRestoreFailures) return false;
-    --nullProjectedLayoutRestoreFailures;
-    return true;
-  }
-} }
+    namespace
+    {
+      unsigned nullProjectedLayoutRestoreFailures = 0;
+    }
+    void failNullProjectedLayoutRestores(unsigned count)
+    {
+      nullProjectedLayoutRestoreFailures = count;
+    }
+    bool declineNullProjectedLayoutRestore()
+    {
+      if (!nullProjectedLayoutRestoreFailures)
+        return false;
+      --nullProjectedLayoutRestoreFailures;
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
 #endif
 
 #ifdef TEST_BUILD
 #include "app/scene/Node.hpp"
-namespace loka { namespace testing {
-  namespace {
-    unsigned nullTextMeasurementFailures = 0;
-    app::scene::Node *nullTextMarkDuringRefusal = 0;
-  }
-  void failNullTextMeasurements(unsigned count, app::scene::Node *markDuringRefusal)
+namespace loka
+{
+  namespace testing
   {
-    nullTextMeasurementFailures = count;
-    nullTextMarkDuringRefusal = markDuringRefusal;
-  }
-  bool declineNullTextMeasurement()
-  {
-    if (!nullTextMeasurementFailures) return false;
-    --nullTextMeasurementFailures;
-    if (nullTextMarkDuringRefusal)
-      nullTextMarkDuringRefusal->requeueLayoutInputs(app::scene::NODE_DIRTY_INITIAL);
-    return true;
-  }
-} }
+    namespace
+    {
+      unsigned nullTextMeasurementFailures = 0;
+      app::scene::Node *nullTextMarkDuringRefusal = 0;
+    } // namespace
+    void failNullTextMeasurements(unsigned count, app::scene::Node *markDuringRefusal)
+    {
+      nullTextMeasurementFailures = count;
+      nullTextMarkDuringRefusal = markDuringRefusal;
+    }
+    bool declineNullTextMeasurement()
+    {
+      if (!nullTextMeasurementFailures)
+        return false;
+      --nullTextMeasurementFailures;
+      if (nullTextMarkDuringRefusal)
+        nullTextMarkDuringRefusal->requeueLayoutInputs(app::scene::NODE_DIRTY_INITIAL);
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
 #endif
 
 #ifdef TEST_BUILD
