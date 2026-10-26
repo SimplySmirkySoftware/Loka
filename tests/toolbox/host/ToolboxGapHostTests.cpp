@@ -400,6 +400,40 @@ namespace
         }
   }
 
+  void clipDeclaredWiderPin()
+  {
+    for (int handler = 0; handler != 2; ++handler)
+      for (int nested = 0; nested != 2; ++nested)
+      {
+        Fixture f(WindowProps(), handler != 0);
+        LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+        ProjectionParentScopeStack &scopes = f.controller.projectionParentScopes_;
+        if (nested)
+        {
+          // The parent trims the left edge but is wider than the offer, so it
+          // cannot mask a missing provisional width cap on the right.
+          const ProjectionParentScope parent(0, 0, 0, loka::core::Frame(20, 15, 70, 80));
+          LOKA_VERIFY(scopes.pushClip(parent));
+        }
+        BoxNode box(Box().width(100).clipChildren().props);
+        PlacementLeaf *leaf = new PlacementLeaf(100, 20);
+        box.addChild(leaf);
+        LayoutState state = f.seat();
+        state.x = 10;
+        state.y = 20;
+        state.width = 50;
+        LOKA_VERIFY(LayoutNode(&box, state, &f.controller, 0) == 50);
+        LOKA_VERIFY(leaf->calls == 1);
+        LOKA_VERIFY(leaf->paintRect_.left == (nested ? 20 : 10) && leaf->paintRect_.right == 60);
+        LOKA_VERIFY(leaf->paintRect_.top == 20 && leaf->paintRect_.bottom == 40);
+        Rect rect;
+        LOKA_VERIFY(placementOf(box, rect) && rect.left == 10 && rect.right - rect.left == 50);
+        if (nested)
+          LOKA_VERIFY(scopes.pop());
+        LOKA_VERIFY(scopes.activeDepth() == 0);
+      }
+  }
+
   void clipCardUnconstrainedPin()
   {
     for (int handler = 0; handler != 2; ++handler)
@@ -1252,6 +1286,8 @@ int main(int argc, char **argv)
     clipPlacementPin();
   else if (!std::strcmp(mode, "clip-width"))
     clipWidthPin();
+  else if (!std::strcmp(mode, "clip-declared-wider"))
+    clipDeclaredWiderPin();
   else if (!std::strcmp(mode, "clip-card-unconstrained"))
     clipCardUnconstrainedPin();
   else if (!std::strcmp(mode, "clip-result"))

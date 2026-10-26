@@ -170,7 +170,9 @@ namespace
     {
       ProjectionParentScopeStack &stack = controller->projectionParentScopes_;
       const loka::core::Frame &parentClip = stack.current().clipRect;
-      const int extent = node->asBoxNode() && declaredWidth > 0 ? declaredWidth : incoming.width;
+      // The provisional width obeys the same cap as the final one: never wider than a positive offer.
+      const int declaredOrOffer = node->asBoxNode() && declaredWidth > 0 ? declaredWidth : incoming.width;
+      const int extent = incoming.width > 0 && declaredOrOffer > incoming.width ? incoming.width : declaredOrOffer;
       Rect provisional = {
           projected.y,
           projected.x,
