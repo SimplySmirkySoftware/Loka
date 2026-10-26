@@ -104,15 +104,19 @@ Rails keep their nonnegative extent-offset math, maximum
 clamp; its heightless result includes both insets, with short-range refusal
 checked after their addition.
 
-On Toolbox and macOS, insets also keep the vertical bar out of the seat's top
-and bottom inset rows; the two rails use their own native mechanisms. Toolbox
+On Toolbox, Win32 and macOS, insets also keep the vertical bar out of the seat's top
+and bottom inset rows; the rails use their own native mechanisms. Toolbox
 resolves the existing track first (including frame contacts, the horizontal bar
 and the size box), then cuts it without extending it past native chrome. A zero
 side preserves that track edge, including frame-line sharing. macOS shortens
 the vertical scroller frame AppKit has just tiled by the projected top and
 bottom insets, clamping the height at zero; zero insets preserve AppKit's
 frame. The committed clearance changes only after successful layout, and every
-commit projects it again. Win32 does not yet shorten its vertical bar (#1547).
+commit projects it again. Win32 owns a frame with a clipping viewport and a
+sibling vertical scrollbar control. It intersects the full column above the
+horizontal bar with the projected inset clearance, hiding an empty track.
+Only successful layout commits logical insets; relayout projects the last
+committed insets at the current display scale, including on refusal.
 On Toolbox the clearance leaves the horizontal bar, content rect, clip and
 page/line steps unchanged; on macOS it leaves the horizontal scroller, clip
 frame and document placement unchanged.

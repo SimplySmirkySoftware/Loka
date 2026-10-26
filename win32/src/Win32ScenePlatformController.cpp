@@ -1293,20 +1293,16 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
   if (!parentScope.deriveScrolled(
-          static_cast<void *>(ctx->hwnd()),
-          state.x,
-          state.y,
-          viewportClip,
-          viewportScope))
+          static_cast<void *>(ctx->viewportHwnd()), state.x, state.y, viewportClip, viewportScope))
   {
     return LayoutNodeResult(state.width, state.y);
   }
   LayoutState childBase = state;
   {
     RECT viewportClient;
-    if (GetClientRect(ctx->hwnd(), &viewportClient))
+    if (GetClientRect(ctx->viewportHwnd(), &viewportClient))
     {
-      // The visible scrollbar occupies non-client width, so the viewport's
+      // The frame reserves the vertical bar column, so the viewport's
       // client width is smaller than the seat width; children lay out
       // against the client, or they extend underneath the scrollbar.
       childBase.width = this->displayScale_.clientCapacityToLu(viewportClient.right - viewportClient.left);
@@ -1403,6 +1399,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     // Both bars commit together with the successful layout.
     ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
+    ctx->commitVerticalBarInsets(scrollView->props.contentInsets_,
+                                 loka::core::Frame(state.x, state.y, state.width, state.height));
     const int clampedOffset = ctx->setScrollMetrics(SB_VERT, extent, viewportHeight, requestedExtent);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishViewport(clampedX, clampedOffset, childBase.width, viewportHeight);
