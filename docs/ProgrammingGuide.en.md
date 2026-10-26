@@ -1598,6 +1598,11 @@ width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 
+`Box().clipChildren()` and `Card().clipChildren()` request clipping of children
+at the container's own rect. A clip box reports no width larger than a positive
+width offer; a nonpositive offer is unconstrained and keeps its natural width.
+Toolbox clips in a later change; macOS and Win32 do not clip yet.
+
 ### Row And Column Natural Size
 
 - `Row().naturalWidth()` seats undeclared-width children at their natural width

@@ -7,6 +7,7 @@
 
 #include <cassert>
 #include <climits>
+#include <algorithm>
 #include "app/scene/projection/PaintEnumeration.hpp"
 
 #include "app/layout/PlatformBuiltinLayoutHandlers.hpp"
@@ -29,6 +30,17 @@
 namespace
 {
   const loka::app::layout::RailSpacing kNullSpacing(12, 4, 9);
+
+  /** Intersects two clips in Null projection coordinates, once per nested frame. */
+  loka::core::Frame intersectClip(const loka::core::Frame &a, const loka::core::Frame &b)
+  {
+    const int left = std::max(a.x, b.x);
+    const int top = std::max(a.y, b.y);
+    return loka::core::Frame(left,
+                             top,
+                             std::max(0, std::min(a.x + a.width, b.x + b.width) - left),
+                             std::max(0, std::min(a.y + a.height, b.y + b.height) - top));
+  }
 }
 
 /** Null measures intrinsic images 1:1 in pixels and push buttons at eight units per
@@ -835,6 +847,33 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
   if (layoutHandler)
   {
     LayoutTraversal traversal(this);
+    const loka::app::BoxNode *box = node->asBoxNode();
+    const loka::app::CardNode *card =
+        node->kind() == loka::app::scene::NODE_KIND_CARD ? static_cast<loka::app::CardNode *>(node) : 0;
+    if ((box && box->props.clipChildren_) || (card && card->props.clipChildren_))
+    {
+      const loka::app::scene::ProjectionParentScope &parent = this->projectionParentScopes_.current();
+      loka::app::scene::LayoutState projected;
+      if (parent.project(state, projected))
+      {
+        const bool atRoot = this->projectionParentScopes_.activeDepth() == 0;
+        const int width = box && box->props.effectiveWidth() > 0 ? box->props.effectiveWidth() : state.width;
+        const int height = box ? box->props.height : 0;
+        // Layout uses a provisional rect: automatic edges reach the parent's clip.
+        // Null returns only Y; there is no reported width to cap here.
+        const int right = width > 0 ? std::min<int>(SHRT_MAX, projected.x + width)
+                                    : (atRoot ? SHRT_MAX : parent.clipRect.x + parent.clipRect.width);
+        const int bottom = height > 0 ? std::min<int>(SHRT_MAX, projected.y + height)
+                                      : (atRoot ? SHRT_MAX : parent.clipRect.y + parent.clipRect.height);
+        loka::app::scene::ProjectionParentScope clipScope = parent;
+        const loka::core::Frame rect(
+            projected.x, projected.y, std::max(0, right - projected.x), std::max(0, bottom - projected.y));
+        clipScope.clipRect = atRoot ? rect : intersectClip(parent.clipRect, rect);
+        loka::app::scene::ProjectionClipScopeGuard guard(this->projectionParentScopes_, clipScope);
+        // A refused push leaves the parent frame active; children still lay out.
+        return layoutHandler->layoutNode(node, state, &traversal, range, spans);
+      }
+    }
     return layoutHandler->layoutNode(node, state, &traversal, range, spans);
   }
 
@@ -898,7 +937,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
       spans->invalidate();
     return state.y;
   }
-  if (this->projectionParentScopes_.activeDepth() != 0)
+  if (this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
     this->refuseNestedScrollView();
     if (spans)
@@ -917,9 +956,11 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
   }
 
   const loka::core::Frame translation = scrollView->contentTranslation();
-  const loka::core::Frame clip(state.x, state.y, state.width, state.height);
+  const loka::core::Frame rect(state.x, state.y, state.width, state.height);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope = this->projectionParentScopes_.current();
+  const loka::core::Frame clip =
+      this->projectionParentScopes_.activeDepth() == 0 ? rect : intersectClip(parentScope.clipRect, rect);
   if (!parentScope.deriveScrolled(parentScope.nativeParent, translation.x, translation.y, clip, childScope))
   {
     this->refuseScrollViewShortRange();
@@ -1054,7 +1095,7 @@ void NullScenePlatformController::refuseNestedScrollView()
 
 bool NullScenePlatformController::refuseNarrowingInScrollScope(int resultY)
 {
-  if (this->projectionParentScopes_.activeDepth() == 0)
+  if (!this->projectionParentScopes_.current().channel)
   {
     return false;
   }

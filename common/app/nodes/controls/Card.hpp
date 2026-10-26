@@ -138,17 +138,26 @@ namespace loka
       typedef CardTypeTag TypeTag;
       typedef CardNode NodeType;
       CardStyle style;
+      bool clipChildren_;
       explicit CardProps(const CardStyle &look = CardStyle())
-          : style(look)
+          : style(look),
+            clipChildren_(false)
       {
       }
       int hash() const
       {
-        return this->style.hash();
+        return this->style.hash() + this->clipChildren_;
       }
       bool operator<(const scene::PropsBase &rhs) const
       {
-        return rhs.propsTypeId() == this->propsTypeId() && this->style < static_cast<const CardProps &>(rhs).style;
+        if (rhs.propsTypeId() != this->propsTypeId())
+          return false;
+        const CardProps &other = static_cast<const CardProps &>(rhs);
+        if (this->style < other.style)
+          return true;
+        if (other.style < this->style)
+          return false;
+        return this->clipChildren_ < other.clipChildren_;
       }
     };
 
@@ -207,6 +216,14 @@ namespace loka
             return;
           }
         }
+      }
+      /** Clips children at this card's own rect. With a positive width offer,
+          reports no more than that width; a nonpositive offer keeps its natural width.
+          Toolbox clips in a later change; macOS and Win32 do not clip yet. */
+      CardDefinition &clipChildren()
+      {
+        this->props.clipChildren_ = true;
+        return *this;
       }
       virtual scene::NodeDefinitionBase *clone() const
       {

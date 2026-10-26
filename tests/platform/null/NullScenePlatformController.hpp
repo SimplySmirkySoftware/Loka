@@ -18,7 +18,14 @@ namespace loka { namespace app { class TextWidthSource; } }
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/scene/projection/ProjectionParentScope.hpp"
 
-namespace loka { namespace testing { class LazyViewAccess; } }
+namespace loka
+{
+  namespace testing
+  {
+    class LazyViewAccess;
+    class NullClipAccess;
+  } // namespace testing
+} // namespace loka
 
 class NullButtonContext;
 class NullEditTextContext;
@@ -282,6 +289,7 @@ public:
 private:
   NullMenuAttachment menuAttachment_;
   friend class loka::testing::LazyViewAccess;
+  friend class loka::testing::NullClipAccess;
   unsigned long leafLayoutVisits_;
   class PaintCompletionVisitor;
   class PaintInvalidationVisitor;
