@@ -1,3 +1,5 @@
+#include "support/TextAlphabetCases.hpp"
+#include "TextUtf8Tests.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "support/BlobAllocationProbe.hpp"
 #include "TextDocumentFileTests.hpp"
@@ -537,12 +539,29 @@ void testTextDocumentRawAdmission()
   before.unchanged(document.lines);
 }
 
+void testTextAlphabetFileAdapter()
+{
+  using namespace text_alphabet_cases;
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+  {
+    TempFile source;
+    Document document;
+    const Snapshot before(document.lines);
+    const TextDocumentResult expectedResult =
+        cases[i].*expected == EDITOR_OK ? TEXT_DOCUMENT_OK : TEXT_DOCUMENT_NON_ASCII;
+    LOKA_VERIFY(read(source, document, std::string(cases[i].bytes, cases[i].length)) == expectedResult);
+    if (expectedResult != TEXT_DOCUMENT_OK)
+      before.unchanged(document.lines);
+  }
+}
+
 #else
 #define LOKA_GENERIC_TEXT_SKIP(name)                                                                                   \
   void name()                                                                                                          \
   {                                                                                                                    \
     std::puts("SKIP: generic Linux text document integration");                                                        \
   }
+LOKA_GENERIC_TEXT_SKIP(testTextAlphabetFileAdapter)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentSplitMatrix)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentLimits)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentReplacement)

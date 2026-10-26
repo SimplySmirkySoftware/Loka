@@ -8,7 +8,7 @@ namespace loka
     /** Attachment-scoped line identity and column; none has no caret. */
     struct LineCursor
     {
-      /** Stage 1 ASCII code-unit index; scoped to avoid the Column layout DSL. */
+      /** UTF-8 byte offset on a code point boundary; scoped to avoid the Column layout DSL. */
       typedef int Column;
       core::ItemId line;
       Column column;
@@ -34,7 +34,7 @@ namespace loka
         return !(*this == other);
       }
     };
-    /** Post-replacement row and ASCII code-unit column; None publishes no caret. */
+    /** Post-replacement row and UTF-8 byte column on a code point boundary; None publishes no caret. */
     struct RowCursor
     {
       unsigned short row;
