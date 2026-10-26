@@ -1,3 +1,5 @@
+#include "Win32PlatformContext.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/TextEditorStateOwner.hpp"
@@ -13,6 +15,8 @@
 #include "Win32BuiltInSupport.hpp"
 #include "platform/StringUTF8.hpp"
 #include <cstdio>
+#include <climits>
+#include "support/TextAlphabetCases.hpp"
 #include <vector>
 
 namespace loka
@@ -41,6 +45,13 @@ namespace loka
       static WNDPROC nativeProcedure(const Win32TextEditorContext &context)
       {
         return context.previousProc_;
+      }
+      // Instrument native input below the existing rail entry, not a new production door.
+      static WNDPROC replaceNativeProcedure(Win32TextEditorContext &context, WNDPROC procedure)
+      {
+        WNDPROC old = context.previousProc_;
+        context.previousProc_ = procedure;
+        return old;
       }
       static bool pending(const Win32TextEditorContext &context)
       {
@@ -244,10 +255,13 @@ namespace
   {
     HWND host;
     Win32ScenePlatformController controller;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     TextEditorNode *node;
     Win32TextEditorContext *context;
-    Fixture(unsigned short count = 3, const std::string &text = "abcd", unsigned short capacity = 256)
+    Fixture(unsigned short count = 3,
+            const std::string &text = "abcd",
+            unsigned short capacity = 256,
+            std::size_t bytes = 8192)
         : host(createHost()),
           controller(host, loka::win32::Win32DisplayScale(96, RailMetrics())),
           lines(),
@@ -256,7 +270,7 @@ namespace
     {
       LOKA_VERIFY(SetPropW(host, kHostController, &controller));
       RegisterWin32BuiltInSupport(controller);
-      LOKA_VERIFY(lines.attach(&tracker, capacity) == ATTACH_OK);
+      LOKA_VERIFY(lines.attach(&tracker, capacity, bytes) == ATTACH_OK);
       for (unsigned short i = 0; i < count; ++i)
         LOKA_VERIFY(lines.insert(i, String(text)) == EDIT_OK);
       node = new TextEditorNode(TextEditorProps(lines, cursor).moveCaretTo(request));
@@ -328,8 +342,8 @@ namespace
   {
   public:
     RetirementOrderEditor(Fixture &fixture, const LayoutState &bounds)
-        : Win32TextEditorContext(&fixture.controller, fixture.host, bounds,
-                                 fixture.node, EditorAccess::key(*fixture.context))
+        : Win32TextEditorContext(
+              &fixture.controller, fixture.host, bounds, fixture.node, EditorAccess::key(*fixture.context))
     {
     }
 
@@ -390,7 +404,10 @@ namespace
   {
   public:
     RequestOnReport(Fixture &fixture, LineCursor next, LineCursor last = LineCursor::None())
-        : fixture_(fixture), next_(next), last_(last), reports_()
+        : fixture_(fixture),
+          next_(next),
+          last_(last),
+          reports_()
     {
       this->fixture_.cursor.state()->bind(&changed, this, false);
     }
@@ -428,7 +445,8 @@ namespace
   {
   public:
     explicit RequestOnEveryReport(Fixture &fixture)
-        : fixture_(fixture), reports_()
+        : fixture_(fixture),
+          reports_()
     {
       this->fixture_.cursor.state()->bind(&changed, this, false);
     }
@@ -463,7 +481,8 @@ namespace
   {
   public:
     explicit RequestBetweenChanges(Fixture &fixture)
-        : fixture_(fixture), publications_()
+        : fixture_(fixture),
+          publications_()
     {
       const_cast<State<ListRevision> &>(this->fixture_.lines.revision()).bind(&changed, this, false);
     }
@@ -559,7 +578,8 @@ namespace
     }
     void unchanged(const Fixture &fixture) const
     {
-      LOKA_VERIFY(!(revision != fixture.lines.revision().get()) && cursor == fixture.cursor.state()->get());
+      LOKA_VERIFY(!(revision != fixture.lines.revision().get()));
+      LOKA_VERIFY(cursor == fixture.cursor.state()->get());
       std::string actual;
       LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(*fixture.node).project(actual) == EDITOR_OK
                   && text == actual);
@@ -653,8 +673,8 @@ namespace
     typedef loka::app::testing::SettleTrace<LineCursor> Trace;
     {
       Fixture fixture(1);
-      const String text = String::FromPlatform(Managed<loka::platform::String>::Wrap(
-          new loka::app::testing::TextEditorReportRefusal(fixture.request)));
+      const String text = String::FromPlatform(
+          Managed<loka::platform::String>::Wrap(new loka::app::testing::TextEditorReportRefusal(fixture.request)));
       LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, text) == EDIT_OK);
       fixture.context->onPropsApplied();
       const LineCursor before = fixture.cursor.state()->get();
@@ -901,8 +921,13 @@ namespace
       const LRESULT first = SendMessageW(window, EM_GETFIRSTVISIBLELINE, 0, 0);
       std::fprintf(stderr,
                    "commands: repair=%d first=%ld target=%u visible=%u rect=%ld..%ld height=%ld lines=%u\n",
-                   repair, static_cast<long>(first), static_cast<unsigned>(target), visible,
-                   static_cast<long>(rect.top), static_cast<long>(rect.bottom), static_cast<long>(height),
+                   repair,
+                   static_cast<long>(first),
+                   static_cast<unsigned>(target),
+                   visible,
+                   static_cast<long>(rect.top),
+                   static_cast<long>(rect.bottom),
+                   static_cast<long>(height),
                    static_cast<unsigned>(fixture.lines.size()));
       LOKA_VERIFY(first > 0 && first <= target && target < first + static_cast<LRESULT>(visible));
       fixture.matches();
@@ -933,7 +958,8 @@ namespace
       RECT took = {0};
       SendMessageW(window, EM_GETRECT, 0, reinterpret_cast<LPARAM>(&took));
       if (took.bottom - took.top >= height)
-        std::fprintf(stderr, "[skip] EDIT kept a %ld px formatting frame; the decline branch is not pinned here\n",
+        std::fprintf(stderr,
+                     "[skip] EDIT kept a %ld px formatting frame; the decline branch is not pinned here\n",
                      static_cast<long>(took.bottom - took.top));
       else
       {
@@ -1052,7 +1078,8 @@ namespace
         fixture.request.set(next);
       }
       LOKA_VERIFY(SetWindowTextW(fixture.context->hwnd(), L"abxcd\r\nabcd\r\nabcd"));
-      SendMessageW(fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
+      SendMessageW(
+          fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
       LOKA_VERIFY(fixture.lines.at(0).value.equals(String("abxcd")));
       LOKA_VERIFY(fixture.request.get().isNone() && fixture.cursor.state()->get() == next);
       expectSelection(fixture, 8);
@@ -1159,7 +1186,11 @@ namespace
   // EDIT replaces a selection as two EN_CHANGE notifications (delete, then
   // insert), so a keystroke, Return, or paste over a selection commits twice;
   // each commit is one validated batch and the intermediate document is real.
-  void verifyReplacement(Fixture &fixture, const Observer &observer, const char *text, unsigned short row, int column,
+  void verifyReplacement(Fixture &fixture,
+                         const Observer &observer,
+                         const char *text,
+                         unsigned short row,
+                         int column,
                          unsigned publications)
   {
     std::string actual;
@@ -1324,6 +1355,10 @@ void testWin32TextEditorQueuedRequests()
 
 void testWin32TextEditorConversion()
 {
+  Win32PlatformContext rail;
+  TextCapacity maximum;
+  LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
   std::wstring wide;
   std::string logical;
   LOKA_VERIFY(loka::win32::TextEditorToWide("first\r\rlast\r", wide));
@@ -1333,7 +1368,7 @@ void testWin32TextEditorConversion()
   LOKA_VERIFY(loka::win32::TextEditorFromWide(L"a\rb\nc\r\nd", 8, logical) && logical == "a\rb\rc\rd");
   LOKA_VERIFY(loka::win32::TextEditorToWide(std::string(8192, 'a'), wide) && wide.size() == 8192);
   LOKA_VERIFY(loka::win32::TextEditorFromWide(wide.data(), wide.size(), logical) && logical.size() == 8192);
-  LOKA_VERIFY(!loka::win32::TextEditorFromWide(L"\xff21", 1, logical));
+  LOKA_VERIFY(loka::win32::TextEditorFromWide(L"\xff21", 1, logical) && logical == "\357\274\241");
   LOKA_VERIFY(!loka::win32::TextEditorToWide(std::string(1, static_cast<char>(0x80)), wide));
 }
 void testWin32TextEditorActionsUseLineQueries()
@@ -1553,9 +1588,7 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
   }
   {
     Fixture fixture;
-    LOKA_VERIFY(fixture.lines.detach() == EDIT_OK);
-    LOKA_VERIFY(fixture.lines.attach(&fixture.tracker, 256) == ATTACH_OK);
-    LOKA_VERIFY(fixture.lines.insert(0, String("fresh")) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     Observer observer(fixture);
     const Snapshot before(fixture);
     fixture.type(L'x');
@@ -1619,15 +1652,15 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
     LOKA_VERIFY(!SendMessageW(fixture.context->hwnd(), EM_CANUNDO, 0, 0));
   }
   {
-    Fixture fixture(257, "a", 257);
+    Fixture fixture(1, std::string(8193, 'a'));
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_CAPACITY && fixture.native().empty());
     LOKA_VERIFY(GetWindowLongPtrW(fixture.context->hwnd(), GWL_STYLE) & ES_READONLY);
-    LOKA_VERIFY(fixture.lines.remove(fixture.lines.at(256).id) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, String("a")) == EDIT_OK);
     fixture.context->onPropsApplied();
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
     fixture.type(L'x');
     fixture.matches();
-    LOKA_VERIFY(fixture.lines.insert(256, String("a")) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.update(fixture.lines.at(0).id, String(std::string(8193, 'a'))) == EDIT_OK);
     fixture.context->onPropsApplied();
     LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_CAPACITY && fixture.native().empty());
   }
@@ -1743,5 +1776,375 @@ void testWin32TextEditorLayoutDpiAndRetirement()
     LOKA_VERIFY(!Win32TextEditorContext::fromWindow(child));
     fixture.controller.drainNativeRetirements();
     LOKA_VERIFY(!IsWindow(child) && !GetWindow(fixture.host, GW_CHILD));
+  }
+}
+
+void testWin32TextEditorUtf8BoundaryHelpers()
+{
+  using namespace loka::win32;
+  const char mixed[] = "a\303\251\360\237\230\200z";
+  const LogicalRow row(mixed, sizeof(mixed) - 1);
+  LOKA_VERIFY(row.unitLength() == 5);
+  LOKA_VERIFY(row.unitsAt(0) == 0 && row.unitsAt(1) == 1 && row.unitsAt(3) == 2);
+  LOKA_VERIFY(row.unitsAt(7) == 4 && row.unitsAt(8) == 5);
+  LOKA_VERIFY(row.bytesFloor(-1) == 0 && row.bytesFloor(1) == 1);
+  LOKA_VERIFY(row.bytesFloor(2) == 3 && row.bytesFloor(3) == 3);
+  LOKA_VERIFY(row.bytesFloor(4) == 7 && row.bytesFloor(99) == 8);
+  LOKA_VERIFY(LogicalRow("\303\251", 2).unitLength() == 1);
+  LOKA_VERIFY(LogicalRow("\360\237\230\200", 4).bytesFloor(1) == 0);
+  LOKA_VERIFY(LogicalRow("", 0).bytesFloor(99) == 0);
+  std::wstring wide;
+  std::string logical;
+  const wchar_t pair[] = {0xd83d, 0xde00};
+  const wchar_t invalid[][2] = {{0xd83d, L'a'}, {0xde00, 0xd83d}, {0xd83d, 0xd83d}, {L'a', 0}};
+  for (std::size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+    LOKA_VERIFY(!TextEditorFromWide(invalid[i], 2, logical) && logical.empty());
+  LOKA_VERIFY(!TextEditorFromWide(pair, 1, logical));
+  LOKA_VERIFY(!TextEditorFromWide(pair + 1, 1, logical));
+  LOKA_VERIFY(TextEditorFromWide(pair, 2, logical) && logical == "\360\237\230\200");
+  LOKA_VERIFY(TextEditorToWide(logical, wide) && wide == std::wstring(pair, 2));
+  LOKA_VERIFY(!TextEditorToWide(std::string("a\0b", 3), wide) && wide.empty());
+  LOKA_VERIFY(!TextEditorToWide("a\nb", wide) && wide.empty());
+  LOKA_VERIFY(!TextEditorToWide("\300\200", wide));
+  LOKA_VERIFY(!TextEditorToWide("\355\240\200", wide));
+  LOKA_VERIFY(!TextEditorToWide("\364\220\200\200", wide));
+  LOKA_VERIFY(!TextEditorFromWide(0, 1, logical));
+  LOKA_VERIFY(TextEditorFromWide(0, 0, logical) && logical.empty());
+  LOKA_VERIFY(TextEditorFromWide(L"a\r\nb\nc\r", 7, logical) && logical == "a\rb\rc\r");
+
+  wide = L"prefix";
+  logical = "prefix";
+  LOKA_VERIFY(loka::win32::detail::AppendUtf8ToWide("\303\251", 2, wide, MB_ERR_INVALID_CHARS)
+              && wide == L"prefix\xe9");
+  LOKA_VERIFY(loka::win32::detail::AppendWideToUtf8(L"\xe9", 1, logical) && logical == "prefix\303\251");
+  wide = L"prefix";
+  logical = "prefix";
+  LOKA_VERIFY(loka::win32::detail::AppendUtf8ToWide(0, 0, wide, 0) && wide == L"prefix");
+  LOKA_VERIFY(loka::win32::detail::AppendWideToUtf8(0, 0, logical) && logical == "prefix");
+  LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide(0, 1, wide, 0) && wide == L"prefix");
+  LOKA_VERIFY(!loka::win32::detail::AppendWideToUtf8(0, 1, logical) && logical == "prefix");
+  LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide("x", static_cast<std::size_t>(INT_MAX), wide, 0)
+              && wide == L"prefix");
+  LOKA_VERIFY(!loka::win32::detail::AppendWideToUtf8(L"x", static_cast<std::size_t>(INT_MAX), logical)
+              && logical == "prefix");
+  LOKA_VERIFY(loka::win32::detail::AppendUtf8ToWide("a\0b", 3, wide, 0) && wide == std::wstring(L"prefixa\0b", 9));
+  LOKA_VERIFY(loka::win32::detail::AppendWideToUtf8(L"a\0b", 3, logical) && logical == std::string("prefixa\0b", 9));
+  const std::wstring savedWide = wide;
+  const std::string savedLogical = logical;
+  loka::win32::detail::testing::failConversionWrites(1);
+  LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide("tail", 4, wide, 0) && wide == savedWide);
+  loka::win32::detail::testing::failConversionWrites(1);
+  LOKA_VERIFY(!loka::win32::detail::AppendWideToUtf8(L"tail", 4, logical) && logical == savedLogical);
+  LOKA_VERIFY(!loka::win32::detail::AppendUtf8ToWide("\200", 1, wide, MB_ERR_INVALID_CHARS) && wide == savedWide);
+}
+
+namespace
+{
+  /** Controlled native notifications inside one real input entry. WM_SETTEXT itself
+      is silent for multiline EDIT; each explicit notification represents a native
+      snapshot. This is not an IME simulation. */
+  struct EvidenceTrace
+  {
+    Fixture &fixture;
+    WNDPROC native;
+    const wchar_t *after;
+    DWORD selection;
+    bool noopFirst, nested;
+    const wchar_t *first;
+    void (*beforeNotify)(Fixture &);
+    static EvidenceTrace *active;
+    EvidenceTrace(Fixture &value, const wchar_t *text, DWORD offset, bool noop, bool nest)
+        : fixture(value),
+          native(0),
+          after(text),
+          selection(offset),
+          noopFirst(noop),
+          nested(nest),
+          first(0),
+          beforeNotify(0)
+    {
+      LOKA_VERIFY(!active);
+      active = this;
+      native = EditorAccess::replaceNativeProcedure(*fixture.context, &proc);
+    }
+    ~EvidenceTrace()
+    {
+      EditorAccess::replaceNativeProcedure(*fixture.context, native);
+      active = 0;
+    }
+    void notify()
+    {
+      SendMessageW(
+          fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
+    }
+    static LRESULT CALLBACK proc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+    {
+      EvidenceTrace &trace = *active;
+      if (message != WM_CHAR)
+        return CallWindowProcW(trace.native, window, message, wParam, lParam);
+      if (trace.first)
+      {
+        LOKA_VERIFY(SetWindowTextW(window, trace.first));
+        SendMessageW(window, EM_SETSEL, trace.selection, trace.selection);
+        trace.notify();
+      }
+      if (trace.noopFirst)
+        trace.notify();
+      if (trace.nested)
+      {
+        trace.nested = false;
+        // The nested forwarding branch must not re-arm consumed evidence.
+        return SendMessageW(window, WM_CHAR, L'x', 1);
+      }
+      LOKA_VERIFY(SetWindowTextW(window, trace.after));
+      SendMessageW(window, EM_SETSEL, trace.selection, trace.selection);
+      if (trace.beforeNotify)
+        trace.beforeNotify(trace.fixture);
+      trace.notify();
+      return 0;
+    }
+  };
+  EvidenceTrace *EvidenceTrace::active = 0;
+} // namespace
+
+void testWin32TextEditorHintEvidence()
+{
+  struct Case
+  {
+    const char *before, *after;
+    const wchar_t *wide;
+    unsigned short rows;
+    DWORD offset;
+    int hintRow, first, oldCount, newCount;
+  };
+  const Case cases[] = {{"a\ra", "a\r\ra", L"a\r\n\r\na", 2, 3, 1, 0, 1, 2},
+                        {"\r\r", "\r", L"\r\n", 3, 0, 0, 1, 2, 1},
+                        {"\r\r", "\r\r\r", L"\r\n\r\n\r\n", 3, 2, 1, 2, 1, 2}};
+  for (std::size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); ++c)
+  {
+    const Case &item = cases[c];
+    const TextEditorLineDiff fallback = DiffTextEditorLines(item.before, item.after);
+    LOKA_VERIFY(fallback.first() == item.first && fallback.before() == item.oldCount
+                && fallback.after() == item.newCount);
+    const TextEditorLineDiff hinted = DiffTextEditorLines(item.before, item.after, item.hintRow, 0);
+    LOKA_VERIFY(hinted.first() == (c == 0 ? 1 : c == 1 ? 0 : 1));
+    LOKA_VERIFY(hinted.before() == item.oldCount && hinted.after() == item.newCount);
+    // Outside-input, valid pre-input, consumed by no-op, and consumed then nested.
+    for (int mode = 0; mode < 4; ++mode)
+    {
+      Fixture fixture(item.rows, c == 0 ? "a" : "");
+      const ItemId a = fixture.lines.at(0).id, b = fixture.lines.at(1).id;
+      const ItemId last = fixture.lines.at(static_cast<unsigned short>(item.rows - 1)).id;
+      const HWND window = fixture.context->hwnd();
+      SendMessageW(window, EM_SETSEL, item.offset, item.offset);
+      if (mode == 0)
+      {
+        LOKA_VERIFY(SetWindowTextW(window, item.wide));
+        SendMessageW(window, EM_SETSEL, item.offset, item.offset);
+        SendMessageW(fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(window));
+      }
+      else
+      {
+        EvidenceTrace trace(fixture, item.wide, item.offset, mode >= 2, mode == 3);
+        SendMessageW(window, WM_CHAR, L'x', 1);
+      }
+      LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
+      LOKA_VERIFY(fixture.lines.size() == item.rows - item.oldCount + item.newCount);
+      LOKA_VERIFY(fixture.lines.at(0).id == a);
+      if (c == 0)
+      {
+        const unsigned short retained = mode == 1 ? 1 : 2;
+        const unsigned short added = mode == 1 ? 2 : 1;
+        LOKA_VERIFY(fixture.lines.at(retained).id == b);
+        LOKA_VERIFY(fixture.lines.at(added).id != a && fixture.lines.at(added).id != b);
+      }
+      else if (c == 1)
+      {
+        LOKA_VERIFY(fixture.lines.at(1).id == (mode == 1 ? last : b));
+        LOKA_VERIFY(fixture.lines.find(mode == 1 ? b : last) < 0);
+      }
+      else
+      {
+        LOKA_VERIFY(fixture.lines.at(1).id == b);
+        LOKA_VERIFY(fixture.lines.at(static_cast<unsigned short>(mode == 1 ? 3 : 2)).id == last);
+        const ItemId added = fixture.lines.at(static_cast<unsigned short>(mode == 1 ? 2 : 3)).id;
+        LOKA_VERIFY(added != a && added != b && added != last);
+      }
+      fixture.matches();
+    }
+  }
+}
+
+void testWin32TextEditorUtf8ClosedPolicy()
+{
+  // Fits the native unit budget but expands beyond the exact UTF-8 capacity.
+  Fixture fixture(1, "");
+  const std::wstring bmp(3000, static_cast<wchar_t>(0xff21));
+  ChangeObservation observation(fixture.host);
+  SendMessageW(fixture.context->hwnd(), EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(bmp.c_str()));
+  LOKA_VERIFY(observation.arrivals() > 0 && observation.status() == EDITOR_NON_ASCII);
+  LOKA_VERIFY(fixture.lines.size() == 1 && fixture.lines.at(0).value.equals(String("")));
+  fixture.matches();
+  Fixture columns(1, "abcd");
+  const int requests[] = {-9, 99, 2};
+  const int expected[] = {0, 4, 2};
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    {
+      StateTrackerGuard guard(&columns.tracker);
+      columns.request.set(LineCursor(columns.lines.at(0).id, requests[i]));
+    }
+    columns.context->onPropsApplied();
+    LOKA_VERIFY(columns.cursor.state()->get() == LineCursor(columns.lines.at(0).id, expected[i]));
+    expectSelection(columns, static_cast<DWORD>(expected[i]));
+  }
+  std::printf("[skip] Japanese IME composition traces: fixture gap, tracked in #1587\n");
+}
+
+namespace
+{
+  void replaceIdsBeforeNotification(Fixture &fixture)
+  {
+    StateTrackerGuard guard(&fixture.tracker);
+    const ItemId previous = fixture.lines.at(1).id;
+    LOKA_VERIFY(fixture.lines.remove(previous) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.insert(1, String("a")) == EDIT_OK);
+    LOKA_VERIFY(fixture.lines.at(1).id != previous);
+  }
+  Fixture *replacementOwner = 0;
+  void replaceOwnerBeforeNotification(Fixture &fixture)
+  {
+    LOKA_VERIFY(replacementOwner);
+    fixture.node->props = replacementOwner->node->props;
+    fixture.context->onPropsApplied();
+  }
+  void detachBeforeNotification(Fixture &fixture)
+  {
+    NotifySubtreeNodeDetached(fixture.node);
+    // Notify only changes logical facts; this bare-node fixture drives the same
+    // delivery walk a mounted Scene performs at apply, so the context sees the
+    // detach (status unavailable, evidence cleared) before the notification.
+    LifecycleFactTestAccess::DeliverFacts(fixture.node);
+  }
+} // namespace
+
+void testWin32TextEditorEvidenceLifetime()
+{
+  // A successful first notification consumes the capture too. The second
+  // notification must not interpret the old coordinates against the new revision.
+  {
+    Fixture fixture(2, "a");
+    const ItemId b = fixture.lines.at(1).id;
+    SendMessageW(fixture.context->hwnd(), EM_SETSEL, 3, 3);
+    EvidenceTrace trace(fixture, L"a\r\n\r\nb", 3, false, false);
+    trace.first = L"a\r\nb";
+    SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
+    LOKA_VERIFY(fixture.lines.size() == 3 && fixture.lines.at(2).id == b);
+    LOKA_VERIFY(fixture.lines.at(2).value.equals(String("b")));
+    fixture.matches();
+  }
+  // Equal revisions are insufficient when the props door changes the owner.
+  {
+    Fixture replacement(2, "a");
+    Fixture fixture(2, "a");
+    LOKA_VERIFY(fixture.lines.revision().get() == replacement.lines.revision().get());
+    ChangeObservation observation(fixture.host);
+    replacementOwner = &replacement;
+    EvidenceTrace trace(fixture, L"a\r\n\r\na", 3, false, false);
+    trace.beforeNotify = &replaceOwnerBeforeNotification;
+    SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
+    replacementOwner = 0;
+    LOKA_VERIFY(observation.status() == EDITOR_STALE_ID);
+    LOKA_VERIFY(fixture.lines.size() == 2 && replacement.lines.size() == 2);
+    fixture.matches();
+  }
+  // Same text is not the same owner revision: changed IDs must be stale.
+  {
+    Fixture fixture(2, "a");
+    ChangeObservation observation(fixture.host);
+    SendMessageW(fixture.context->hwnd(), EM_SETSEL, 3, 3);
+    EvidenceTrace trace(fixture, L"a\r\n\r\na", 3, false, false);
+    trace.beforeNotify = &replaceIdsBeforeNotification;
+    SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
+    LOKA_VERIFY(observation.status() == EDITOR_STALE_ID);
+    LOKA_VERIFY(fixture.lines.size() == 2);
+    fixture.matches();
+  }
+  {
+    Fixture fixture(2, "a");
+    const Snapshot before(fixture);
+    EvidenceTrace trace(fixture, L"a\r\n\r\na", 3, false, false);
+    trace.beforeNotify = &detachBeforeNotification;
+    SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
+    before.unchanged(fixture);
+    LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_UNAVAILABLE);
+  }
+}
+
+void testWin32TextEditorDeferredUtf8Cases()
+{
+  using namespace text_alphabet_cases;
+  for (std::size_t i = 0; i < sizeof(nativeCases) / sizeof(nativeCases[0]); ++i)
+  {
+    const NativeCase &item = nativeCases[i];
+    if (expected == &Case::closed)
+    {
+      std::printf("[deferred] Win32 TextEditor UTF-8: %s\n", item.name);
+      continue;
+    }
+    Fixture fixture(1, "", 256, item.capacity);
+    ChangeObservation observation(fixture.host);
+    SendMessageW(fixture.context->hwnd(), EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(item.wide));
+    LOKA_VERIFY(observation.arrivals() > 0 && observation.status() == item.open);
+    std::string actual;
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(*fixture.node).project(actual) == EDITOR_OK);
+    LOKA_VERIFY(actual == item.logical);
+    LOKA_VERIFY(fixture.cursor.state()->get() == LineCursor(fixture.lines.at(item.caretRow).id, item.caretByte));
+    if (item.open != EDITOR_OK)
+      LOKA_VERIFY(EditorAccess::restores(*fixture.context) > 0);
+    fixture.matches();
+  }
+}
+
+namespace
+{
+  void refuseProjectionConversion(void *)
+  {
+    // The model has already published; the next conversion belongs to capture's materialization.
+    loka::win32::detail::testing::failConversionWrites(1);
+  }
+} // namespace
+void testWin32TextEditorEvidenceCaptureFailure()
+{
+  for (int retry = 0; retry < 2; ++retry)
+  {
+    Fixture fixture(2, "a");
+    const ItemId b = fixture.lines.at(1).id;
+    State<ListRevision> &revision = const_cast<State<ListRevision> &>(fixture.lines.revision());
+    revision.bind(&refuseProjectionConversion, 0, false);
+    SendMessageW(fixture.context->hwnd(), EM_SETSEL, 3, 3);
+    if (retry)
+      loka::win32::testing::failTextEditorSets(loka::win32::testing::TEXT_EDITOR_SET_REFUSED, 1);
+    {
+      EvidenceTrace trace(fixture, L"a\r\n\r\nb", 3, false, false);
+      trace.first = L"a\r\nb";
+      SendMessageW(fixture.context->hwnd(), WM_CHAR, L'x', 1);
+    }
+    revision.unbind(&refuseProjectionConversion, 0);
+    LOKA_VERIFY(fixture.lines.size() == 2 && fixture.lines.at(1).id == b);
+    LOKA_VERIFY(fixture.lines.at(1).value.equals(String("b")));
+    if (retry)
+    {
+      LOKA_VERIFY(EditorAccess::pending(*fixture.context));
+      SendMessageW(fixture.context->hwnd(), WM_TIMER, 853, 0);
+    }
+    LOKA_VERIFY(!EditorAccess::pending(*fixture.context));
+    fixture.matches();
+    // Outside-input notification after capture/restore failure has no old hint.
+    LOKA_VERIFY(SetWindowTextW(fixture.context->hwnd(), L"a\r\n\r\nb"));
+    SendMessageW(fixture.context->hwnd(), EM_SETSEL, 3, 3);
+    SendMessageW(fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
+    LOKA_VERIFY(fixture.lines.size() == 3 && fixture.lines.at(2).id == b);
+    fixture.matches();
   }
 }

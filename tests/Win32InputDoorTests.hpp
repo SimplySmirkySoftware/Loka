@@ -7,4 +7,8 @@ void testWin32InputDoorExtentOrdering();
 void testWin32InputDoorCloseDuringLayout();
 void testWin32InputDoorHorizontalScrollLifetime();
 
+void testWin32InputDoorVerticalScrollLifetime();
+
+void testWin32InputDoorCloseDuringVerticalScroll();
+
 #endif

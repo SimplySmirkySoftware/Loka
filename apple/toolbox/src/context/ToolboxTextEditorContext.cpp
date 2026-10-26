@@ -1,3 +1,4 @@
+#include "../ToolboxTextCapacity.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "ToolboxEditKey.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
@@ -6,6 +7,7 @@
 #include "context/ToolboxPaintSupport.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <Memory.h>
+#include <Sound.h>
 #include <algorithm>
 #include <cstring>
 #include "ToolboxPortScope.hpp"
@@ -22,6 +24,17 @@ ToolboxTextEditorRects ToolboxTextEditorContext::geometry() const
 
 namespace
 {
+  /** TextEdit remains ASCII-only even when the common document alphabet opens. */
+  bool ToolboxTextEditorAdmitsBytes(const char *bytes, std::size_t length)
+  {
+    if (!bytes)
+      return length == 0;
+    for (std::size_t i = 0; i < length; ++i)
+      if (!bytes[i] || static_cast<unsigned char>(bytes[i]) > 127)
+        return false;
+    return true;
+  }
+
   class Handler : public scene::RetainedNodeHandler<Handler, TextEditorNode, ToolboxTextEditorContext>
   {
   public:
@@ -71,7 +84,7 @@ ToolboxTextEditorContext::ToolboxTextEditorContext(TextEditorNode *n,
       node_(n),
       te_(0),
       restore_(static_cast<char *>(loka::core::LokaAllocRaw(
-          TextEditorProps::kMaxBytes, loka::core::LokaAllocationSite("ToolboxTextEditor", "Restore")))),
+          ToolboxTextCapacity().bytes, loka::core::LokaAllocationSite("ToolboxTextEditor", "Restore")))),
       rect_(),
       paintRect_(),
       source_(0),
@@ -115,7 +128,7 @@ short ToolboxTextEditorContext::offsetOf(LineCursor cursor) const
 {
   if (!this->node_ || !this->te_)
     return 0;
-  const int index = this->node_->props.lines_->find(cursor.line);
+  const int index = this->node_->props.buffer_->lines().find(cursor.line);
   TextLock text(this->te_);
   if (!text.bytes())
     return 0;
@@ -130,7 +143,7 @@ short ToolboxTextEditorContext::offsetOf(LineCursor cursor) const
 }
 LineCursor ToolboxTextEditorContext::cursorAt(short offset) const
 {
-  if (!this->node_ || !this->te_ || !this->node_->props.lines_->size())
+  if (!this->node_ || !this->te_ || !this->node_->props.buffer_->lines().size())
     return LineCursor::None();
   TextLock text(this->te_);
   if (!text.bytes())
@@ -144,9 +157,9 @@ LineCursor ToolboxTextEditorContext::cursorAt(short offset) const
       ++row;
       start = i + 1;
     }
-  if (row >= this->node_->props.lines_->size())
+  if (row >= this->node_->props.buffer_->lines().size())
     return LineCursor::None();
-  return LineCursor(this->node_->props.lines_->at(row).id, offset - start);
+  return LineCursor(this->node_->props.buffer_->lines().at(row).id, offset - start);
 }
 scene::FollowUp ToolboxTextEditorContext::project()
 {
@@ -158,7 +171,9 @@ scene::FollowUp ToolboxTextEditorContext::project()
   const Phase completion = this->phase_;
   this->phase_ = PROJECT;
   std::size_t length = 0;
-  this->status_ = this->node_->seam(this->key_).project(this->restore_, TextEditorProps::kMaxBytes, length);
+  this->status_ = this->node_->seam(this->key_).project(this->restore_, ToolboxTextCapacity().bytes, length);
+  if (this->status_ == EDITOR_OK && !ToolboxTextEditorAdmitsBytes(this->restore_, length))
+    this->status_ = EDITOR_NON_ASCII;
   if (this->status_ == EDITOR_OK)
   {
     const Rect dest = (**this->te_).destRect;
@@ -171,13 +186,14 @@ scene::FollowUp ToolboxTextEditorContext::project()
     else
     {
       LineCursor caret = this->node_->props.cursorState()->get();
-      if (this->node_->props.lines_->find(caret.line) < 0)
-        caret = this->node_->props.lines_->size() ? LineCursor(this->node_->props.lines_->at(0).id, caret.column)
-                                                  : LineCursor::None();
+      if (this->node_->props.buffer_->lines().find(caret.line) < 0)
+        caret = this->node_->props.buffer_->lines().size()
+                    ? LineCursor(this->node_->props.buffer_->lines().at(0).id, caret.column)
+                    : LineCursor::None();
       const short offset = this->offsetOf(caret);
       TESetSelect(offset, offset, this->te_);
-      this->source_ = this->node_->props.lines_;
-      this->revision_ = this->source_->revision().get();
+      this->source_ = this->node_->props.buffer_;
+      this->revision_ = this->source_->lines().revision().get();
     }
   }
   this->phase_ = completion;
@@ -266,7 +282,7 @@ public:
     if (c.status_ != EDITOR_OK)
       return c.status_;
     loka::core::StateTracker *owner = 0;
-    if (!this->binding_.lines_ || this->binding_.lines_->queryMutationTracker(owner) != loka::core::EDIT_OK)
+    if (!this->binding_.buffer_ || this->binding_.buffer_->lines().queryMutationTracker(owner) != loka::core::EDIT_OK)
       return EDITOR_UNAVAILABLE;
     return request.usesTracker(owner) ? EDITOR_OK : EDITOR_OWNER_MISMATCH;
   }
@@ -290,14 +306,14 @@ public:
     const EditorResult ready = node.seam(context(base).key_).availability();
     if (ready != EDITOR_OK)
       return ready;
-    return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
+    return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
   scene::FollowUp prepareApply(scene::Node &base)
   {
     ToolboxTextEditorContext &c = context(base);
     scene::FollowUp follow = scene::FOLLOW_NONE;
     // A take subscriber may edit the owner. Repair offsets under exclusion.
-    if (c.source_ != c.node_->props.lines_ || c.hasStaleCaret())
+    if (c.source_ != c.node_->props.buffer_ || c.hasStaleCaret())
     {
       c.phase_ = RECONCILE;
       follow = c.project();
@@ -329,7 +345,7 @@ public:
     scene::FollowUp follow = scene::FOLLOW_NONE;
     if (c.node_ && c.te_ && c.status_ == EDITOR_OK && c.node_->lifecycleFact() == scene::NODE_FACT_ATTACHED)
     {
-      if (c.phase_ == RECONCILE || c.source_ != c.node_->props.lines_ || c.hasStaleCaret())
+      if (c.phase_ == RECONCILE || c.source_ != c.node_->props.buffer_ || c.hasStaleCaret())
       {
         c.phase_ = RECONCILE;
         // Project also restores selection from the post-report fact.
@@ -375,7 +391,7 @@ private:
   bool currentBinding(scene::Node &base) const
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.lines_ == this->binding_.lines_
+    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.buffer_ == this->binding_.buffer_
            && node.props.cursorState() == this->binding_.cursorState();
   }
   static ToolboxTextEditorContext &context(scene::Node &node)
@@ -712,7 +728,7 @@ void ToolboxTextEditorContext::onPropsApplied()
   if (this->phase_ != IDLE)
     return;
   RailOperation op(*this);
-  if (this->node_ && this->te_ && (this->source_ != this->node_->props.lines_ || this->hasStaleCaret()))
+  if (this->node_ && this->te_ && (this->source_ != this->node_->props.buffer_ || this->hasStaleCaret()))
     op.project(*this->node_);
   this->settle(scene::SETTLE_PROPS, op);
 }
@@ -721,7 +737,7 @@ bool ToolboxTextEditorContext::hasStaleCaret() const
   // TE still shows the last projected revision. Any unprojected owner edit,
   // structural or not, makes its native offsets name the wrong rows, so the
   // whole revision is the wall, not the survival of one cached identity.
-  return this->revision_ != this->node_->props.lines_->revision().get();
+  return this->revision_ != this->node_->props.buffer_->lines().revision().get();
 }
 EditorResult ToolboxTextEditorContext::beginInput()
 {
@@ -754,10 +770,10 @@ EditorResult ToolboxTextEditorContext::finishInput(EditorResult result, Change c
     op.restore(*this->node_);
   else
   {
-    const loka::core::ListRevision after = this->node_->props.lines_->revision().get();
+    const loka::core::ListRevision after = this->node_->props.buffer_->lines().revision().get();
     // A commit publishes exactly one content revision (and one structure
     // revision for split/join). Extra owner writes are not our native edit.
-    const bool ownerChanged = this->source_ != this->node_->props.lines_
+    const bool ownerChanged = this->source_ != this->node_->props.buffer_
                               || after.content != this->revision_.content + (change == CARET_CHANGE ? 0 : 1)
                               || after.structure != this->revision_.structure + (change == STRUCTURE_CHANGE ? 1 : 0);
     if (ownerChanged || this->cursorAt((**this->te_).selStart) != this->node_->props.cursorState()->get())
@@ -853,11 +869,17 @@ EditorResult ToolboxTextEditorContext::paste(const char *bytes, std::size_t leng
   EditorResult result = this->beginInput();
   if (result != EDITOR_OK)
     return result;
+  bool alphabetRefused = false;
   // Refuse before TE's signed-short storage can overflow.
-  if (length > TextEditorProps::kMaxBytes)
+  if (length > this->node_->props.buffer_->capacity().bytes)
     result = EDITOR_CAPACITY;
   else if (this->hasStaleCaret())
     result = EDITOR_STALE_ID;
+  else if (bytes && !ToolboxTextEditorAdmitsBytes(bytes, length))
+  {
+    result = EDITOR_NON_ASCII;
+    alphabetRefused = true;
+  }
   else
   {
     const short start = (**this->te_).selStart, end = (**this->te_).selEnd;
@@ -868,6 +890,8 @@ EditorResult ToolboxTextEditorContext::paste(const char *bytes, std::size_t leng
   if (!op.hasSameContext())
     return result;
   result = this->finishInput(result, CARET_CHANGE, op);
+  if (alphabetRefused && result == EDITOR_NON_ASCII && op.hasSameContext())
+    SysBeep(1);
   return result;
 }
 void ToolboxTextEditorContext::updateRect(const Rect &rect)

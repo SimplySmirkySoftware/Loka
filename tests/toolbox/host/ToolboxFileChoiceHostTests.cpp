@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "support/BlobAllocationProbe.hpp"
 #include "ToolboxFileHost.hpp"
 #include "ToolboxPlatformContext.hpp"
@@ -622,7 +623,7 @@ static void PrepareRefusesWrite()
   LOKA_VERIFY(!file.locator().empty());
   ToolboxPlatformContext context;
   loka::core::PushStateTracker tracker;
-  loka::core::ObservableList<String> lines;
+  loka::testing::TextBufferFixture lines;
   LOKA_VERIFY(lines.attach(&tracker, 1) == loka::core::ATTACH_OK);
   LOKA_VERIFY(lines.insert(0, String::Literal("replacement text")) == loka::core::EDIT_OK);
   FailPrepare(noErr, noErr);
@@ -710,6 +711,10 @@ static void Busy()
 
 int main(int argc, char **argv)
 {
+  ToolboxPlatformContext capacityRail;
+  loka::app::TextCapacity maximum;
+  LOKA_VERIFY(capacityRail.queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
   LOKA_VERIFY(argc == 2);
   if (!std::strncmp(argv[1], "confirm-", 8) || !std::strcmp(argv[1], "mixed-fifo-order")
       || !std::strcmp(argv[1], "close-during-pending-revokes-both-payloads")) ConfirmPinTest(argv[1]);

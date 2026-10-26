@@ -5,6 +5,7 @@
 #error SmirkBench editor-line specimen is scenario-only
 #endif
 
+#include "../support/TextBufferFixture.hpp"
 #include "../../example/SmirkBench/src/MainNode.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 
@@ -92,7 +93,7 @@ namespace loka
       }
 
     private:
-      core::ObservableList<core::String> lines_;
+      loka::testing::TextBufferFixture lines_;
       app::scene::Reported<app::LineCursor> cursor_;
       app::scene::RequestQueue<app::LineCursor, 4> request_;
     };

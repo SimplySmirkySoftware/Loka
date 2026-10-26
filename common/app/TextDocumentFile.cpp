@@ -14,13 +14,19 @@ namespace loka
       class TextReadCapacity : public platform::file::ReadCapacity
       {
       public:
-        // User-provided so a const instance may be default-initialized:
-        // compilers before DR 253 (Xcode 5/6 clang) refuse it otherwise.
-        TextReadCapacity() {}
+        explicit TextReadCapacity(TextCapacity capacity)
+            : capacity_(capacity)
+        {
+        }
         virtual bool allows(std::size_t bytes) const
         {
-          return bytes <= TextEditorProps::kMaxBytes + TextEditorProps::kMaxLines - 1;
+          const std::size_t extra = this->capacity_.lines ? this->capacity_.lines - 1 : 0;
+          std::size_t allowance = 0;
+          return text_document_detail::ExpandedSize(this->capacity_.bytes, extra, allowance) && bytes <= allowance;
         }
+
+      private:
+        const TextCapacity capacity_;
       };
 
       /** Both passes borrow the same live IDs and completed payloads. Reverse
@@ -28,9 +34,7 @@ namespace loka
       class DocumentReplaceCursor : public core::ListOpCursor<core::String>
       {
       public:
-        DocumentReplaceCursor(const core::ObservableList<core::String> &lines,
-                              const core::String *rows,
-                              unsigned short count)
+        DocumentReplaceCursor(const TextLines &lines, const core::String *rows, unsigned short count)
             : lines_(lines),
               rows_(rows),
               count_(count),
@@ -48,7 +52,7 @@ namespace loka
                 core::ListOp<core::String>(core::REMOVE, this->lines_.at(static_cast<unsigned short>(this->lines_.size() - 1 - this->position_)).id);
           else
           {
-            const unsigned int row = this->position_ - this->lines_.size();
+            const std::size_t row = this->position_ - this->lines_.size();
             if (row >= this->count_)
               return false;
             out = core::ListOp<core::String>(
@@ -59,10 +63,10 @@ namespace loka
         }
 
       private:
-        const core::ObservableList<core::String> &lines_;
+        const TextLines &lines_;
         const core::String *const rows_;
         const unsigned short count_;
-        unsigned int position_;
+        std::size_t position_;
       };
 
       TextDocumentResult commitResult(core::ListEditResult result)
@@ -101,10 +105,14 @@ namespace loka
       }
     } // namespace
 
-    TextDocumentResult
-    ReadTextDocument(PlatformContext *context, const loka::file::File &file, core::ObservableList<core::String> &lines)
+    TextDocumentResult ReadTextDocument(PlatformContext *context, const loka::file::File &file, TextBuffer &buffer)
     {
       using namespace platform::file;
+      TextLines &lines = buffer.lines();
+      core::StateTracker *tracker = 0;
+      const core::ListEditResult ready = lines.queryMutationTracker(tracker);
+      if (ready != core::EDIT_OK)
+        return commitResult(ready);
       if (file.base() == loka::file::File::BASE_REFUSED)
         return TEXT_DOCUMENT_READ_FAILED;
       FileHandle handle;
@@ -115,7 +123,7 @@ namespace loka
       core::resource::Blob bytes = core::resource::Blob::Create();
       if (!bytes.isValid())
         return TEXT_DOCUMENT_ALLOCATION;
-      const TextReadCapacity capacity;
+      const TextReadCapacity capacity(buffer.capacity());
       ReadResult result;
       if (resolved)
       {
@@ -136,29 +144,35 @@ namespace loka
       if (result != READ_OK)
         return TEXT_DOCUMENT_READ_FAILED;
 
-      core::String rows[TextEditorProps::kMaxLines];
-      unsigned short count = 0;
+      PreparedTextReplacement replacement;
+      if (!replacement.reserve(buffer.capacity().lines))
+        return TEXT_DOCUMENT_ALLOCATION;
+      std::size_t count = 0;
       std::size_t start = 0, normalized = 0;
       for (std::size_t i = 0;; ++i)
       {
         if (i < bytes.size() && bytes.data()[i] != '\r' && bytes.data()[i] != '\n')
           continue;
-        if (count == TextEditorProps::kMaxLines)
-          return TEXT_DOCUMENT_TOO_LARGE;
+        if (count == buffer.capacity().lines)
+          return TEXT_DOCUMENT_CAPACITY;
         const std::size_t length = i - start;
         const char *data = length ? reinterpret_cast<const char *>(&bytes.data()[start]) : "";
-        const EditorResult valid = text_document_detail::ValidateRow(data, length);
+        const EditorResult valid = text_document_detail::ValidateRow(data, length, buffer.capacity());
         if (valid != EDITOR_OK)
           return lineResult(valid);
-        rows[count] = core::String::Utf8(data, length);
-        const text_document_detail::LineBytes row(rows[count]);
+        const core::String payload = core::String::Utf8(data, length);
+        const text_document_detail::LineBytes row(payload, buffer.capacity());
         if (row.result() != EDITOR_OK)
           return lineResult(row.result());
         // A nullable rail String allocation must not turn a nonempty row empty.
         if (row.size() != length)
           return TEXT_DOCUMENT_ALLOCATION;
-        normalized += row.size() + (count ? 1 : 0);
-        if (normalized > TextEditorProps::kMaxBytes)
+        const std::size_t separator = count ? 1 : 0;
+        if (separator > buffer.capacity().bytes - normalized
+            || row.size() > buffer.capacity().bytes - normalized - separator)
+          return TEXT_DOCUMENT_TOO_LARGE;
+        normalized += row.size() + separator;
+        if (!replacement.append(payload))
           return TEXT_DOCUMENT_TOO_LARGE;
         ++count;
         if (i == bytes.size())
@@ -167,24 +181,28 @@ namespace loka
           ++i;
         start = i + 1;
       }
-      DocumentReplaceCursor ops(lines, rows, count);
+      replacement.seal();
+      DocumentReplaceCursor ops(lines, replacement.data(), static_cast<unsigned short>(count));
       return commitResult(lines.apply(ops));
     }
 
-    TextDocumentResult WriteTextDocument(PlatformContext *context,
-                                         const loka::file::File &file,
-                                         const core::ObservableList<core::String> &lines)
+    TextDocumentResult
+    WriteTextDocument(PlatformContext *context, const loka::file::File &file, const TextBuffer &buffer)
     {
       using namespace platform::file;
+      const TextLines &lines = buffer.lines();
       std::size_t normalized = 0;
       const TextDocumentResult valid = lineResult(text_document_detail::Measure(lines, normalized));
       if (valid != TEXT_DOCUMENT_OK)
         return valid;
       std::string bytes;
-      bytes.reserve(normalized + (lines.size() ? lines.size() - 1 : 0));
+      std::size_t expanded = 0;
+      if (!text_document_detail::ExpandedSize(normalized, lines.size() ? lines.size() - 1 : 0, expanded))
+        return TEXT_DOCUMENT_TOO_LARGE;
+      bytes.reserve(expanded);
       for (unsigned short i = 0; i < lines.size(); ++i)
       {
-        const text_document_detail::LineBytes row(lines.at(i).value);
+        const text_document_detail::LineBytes row(lines.at(i).value, buffer.capacity());
         if (row.result() != EDITOR_OK)
           return lineResult(row.result());
         if (i)

@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "support/LayoutY.hpp"
 #include "SimpleTextTests.hpp"
 
@@ -32,9 +33,9 @@ class SimpleTextTestAccess
 {
 public:
   static void replayClose(simpletext::MainNode &n) { n.onCloseAsked(); }
-  static ObservableList<String> &lines(simpletext::MainNode &n)
+  static loka::app::TextLines &lines(simpletext::MainNode &n)
   {
-    return n.lines_;
+    return n.buffer_.lines();
   }
   static FileChooserResult current(const simpletext::MainNode &n)
   {
@@ -146,7 +147,7 @@ namespace
     {
       return *static_cast<simpletext::MainNode *>(loka::dsl::testing::SceneTestAccess::rootNode(*this->scene));
     }
-    ObservableList<String> &lines()
+    loka::app::TextLines &lines()
     {
       return SimpleTextTestAccess::lines(this->main());
     }
@@ -284,7 +285,7 @@ void testSimpleTextNewOpensASecondWindow()
   app.run();
   LOKA_VERIFY(app.group().getComponents().size() == 1 && config.documents().count() == 1);
   simpletext::MainNode &first = app.main(0);
-  ObservableList<String> &lines = SimpleTextTestAccess::lines(first);
+  loka::app::TextLines &lines = SimpleTextTestAccess::lines(first);
   LOKA_VERIFY(lines.size() == 1 && lines.at(0).value.empty());
   LOKA_VERIFY(static_cast<CountedMain &>(first).compositions() == 1);
   LOKA_VERIFY(utf8(config.documents().find(first.props.document())->title) == "Untitled");
@@ -307,7 +308,7 @@ void testSimpleTextNewOpensASecondWindow()
   LOKA_VERIFY(!(lines.revision().get() != revision));
   LOKA_VERIFY(lines.at(0).value.equals(String("unsaved first document")));
   LOKA_VERIFY(static_cast<CountedMain &>(first).compositions() == 1);
-  ObservableList<String> &second = SimpleTextTestAccess::lines(app.main(1));
+  loka::app::TextLines &second = SimpleTextTestAccess::lines(app.main(1));
   LOKA_VERIFY(second.size() == 1 && second.at(0).value.empty());
   LOKA_VERIFY(static_cast<CountedMain &>(app.main(1)).compositions() == 1);
   LOKA_VERIFY(app.window(1).frameState().get().x == 40 && app.window(1).frameState().get().y == 40);
@@ -444,7 +445,7 @@ void testSimpleTextLaunchWindowTakesTheSeat()
   LOKA_VERIFY(app.adoptedWindows().size() == 1);
   const ItemId key = app.group().keyOf(&app.window(0));
   LOKA_VERIFY(!key.isNone() && key == config.documents().idAt(0));
-  ObservableList<String> &lines = SimpleTextTestAccess::lines(app.main(0));
+  loka::app::TextLines &lines = SimpleTextTestAccess::lines(app.main(0));
   LOKA_VERIFY(lines.size() == 1 && lines.at(0).value.empty());
 }
 
@@ -496,7 +497,7 @@ void testSimpleTextOpenSaveAndSaveAs()
   SimpleTextApp app(config);
   app.run();
   simpletext::MainNode &main = app.main(0);
-  ObservableList<String> &lines = SimpleTextTestAccess::lines(main);
+  loka::app::TextLines &lines = SimpleTextTestAccess::lines(main);
   LOKA_VERIFY(lines.update(lines.at(0).id, String("window edit")) == EDIT_OK);
   app.tail();
   LOKA_VERIFY(app.window(0).editedState().get());
@@ -554,11 +555,11 @@ void testSimpleTextNewAndSaveWithoutDestination()
   LOKA_VERIFY(h.lines().update(h.lines().at(0).id, String("old")) == EDIT_OK);
   h.open("missing.txt");
   LOKA_VERIFY(h.hasError());
-  for (unsigned short row = 1; row < TextEditorProps::kMaxLines; ++row)
-    LOKA_VERIFY(h.lines().insert(row, String("old")) == EDIT_OK);
+  for (unsigned short row = 1; row < 256; ++row)
+    LOKA_VERIFY(loka::testing::InsertTextLine(h.lines(), row, String("old")) == EDIT_OK);
   const ItemId old = h.lines().at(0).id;
   SimpleTextTestAccess::commands(h.main()).slot<simpletext::NEW_DOCUMENT>()->emit();
-  LOKA_VERIFY(h.lines().size() == TextEditorProps::kMaxLines && h.row(0) == "old" && h.lines().at(0).id == old);
+  LOKA_VERIFY(h.lines().size() == 256 && h.row(0) == "old" && h.lines().at(0).id == old);
   h.currentIs("first.txt");
   LOKA_VERIFY(h.hasError());
   LOKA_VERIFY(h.config.documents().count() == 2);
@@ -618,10 +619,11 @@ void testSimpleTextReadAndWriteFailuresPreserveDestination()
   const ListRevision revision = h.lines().revision().get();
   h.open("bad.txt");
   LOKA_VERIFY(h.hasError() && h.row(0) == "old" && h.lines().at(0).id == id);
-  LOKA_VERIFY(utf8(SimpleTextTestAccess::error(h.main())) == "Cannot open the file: it is not plain ASCII text.");
+  LOKA_VERIFY(utf8(SimpleTextTestAccess::error(h.main()))
+              == "Cannot open the file: it is refused by the editor alphabet.");
   LOKA_VERIFY(!(h.lines().revision().get() != revision));
   h.currentIs("first.txt");
-  h.put("long.txt", std::string(9000, 'a'));
+  h.put("long.txt", std::string(h.lines().capacity().bytes + 1, 'a'));
   h.open("long.txt");
   LOKA_VERIFY(utf8(SimpleTextTestAccess::error(h.main())) == "Cannot open the file: it is too long for the editor.");
   h.open("absent.txt");
@@ -657,8 +659,8 @@ void testSimpleTextCommitExhaustionPreservesDestination()
   // Exhaust the real list identity budget; no production test hook needed.
   while (h.lines().at(0).id.seq != 65535)
   {
-    LOKA_VERIFY(h.lines().remove(h.lines().at(0).id) == EDIT_OK);
-    LOKA_VERIFY(h.lines().insert(0, String("kept")) == EDIT_OK);
+    LOKA_VERIFY(loka::testing::RemoveTextLine(h.lines(), h.lines().at(0).id) == EDIT_OK);
+    LOKA_VERIFY(loka::testing::InsertTextLine(h.lines(), 0, String("kept")) == EDIT_OK);
   }
   const ItemId id = h.lines().at(0).id;
   const ListRevision revision = h.lines().revision().get();
@@ -1078,7 +1080,7 @@ namespace
     }
     void edit()
     {
-      ObservableList<String> &lines = SimpleTextTestAccess::lines(this->app.main(0));
+      loka::app::TextLines &lines = SimpleTextTestAccess::lines(this->app.main(0));
       LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
       this->app.tail();
     }
@@ -1117,7 +1119,7 @@ namespace
       SimpleTextTestAccess::commands(this->app.main(0)).slot<simpletext::SAVE_AS_DOCUMENT>()->emit();
       this->app.tail();
       this->choose(FileChooserResult::File(this->file()));
-      ObservableList<String> &lines = SimpleTextTestAccess::lines(this->app.main(0));
+      loka::app::TextLines &lines = SimpleTextTestAccess::lines(this->app.main(0));
       LOKA_VERIFY(lines.update(lines.at(0).id, String("saved for close")) == EDIT_OK);
       this->app.tail();
     }
@@ -1379,7 +1381,7 @@ void testSessionQuitClosesCleanFirstThenAsksEdited()
   const ItemId first = config.documents().idAt(0);
   const ItemId second = config.documents().open(simpletext::Document());
   app.tail();
-  ObservableList<String> &lines = SimpleTextTestAccess::lines(app.main(1));
+  loka::app::TextLines &lines = SimpleTextTestAccess::lines(app.main(1));
   LOKA_VERIFY(lines.update(lines.at(0).id, String("edited")) == EDIT_OK);
   app.tail();
   LOKA_VERIFY(!config.documents().find(first)->edited && config.documents().find(second)->edited);

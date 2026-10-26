@@ -28,6 +28,20 @@ HWND Win32RetirableContext::createNativeChildWindow(DWORD exStyle,
   return this->window_.createNativeChildWindow(
       exStyle, className, windowName, style, geometry, parent, menu, instance, createParameter);
 }
+
+HWND Win32RetirableContext::createSubordinateChildWindow(DWORD exStyle,
+                                                         LPCWSTR className,
+                                                         LPCWSTR windowName,
+                                                         DWORD style,
+                                                         const loka::win32::NativeRect &geometry,
+                                                         HWND parent,
+                                                         HMENU menu,
+                                                         HINSTANCE instance,
+                                                         void *createParameter)
+{
+  return this->window_.createSubordinateChildWindow(
+      exStyle, className, windowName, style, geometry, parent, menu, instance, createParameter);
+}
 void Win32RetirableContext::retireWindow()
 {
   this->window_.retireWindow();

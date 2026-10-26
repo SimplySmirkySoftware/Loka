@@ -122,6 +122,7 @@ void testWin32CustomWindowClassesUseWideApiFamily()
     Win32ScrollViewContext scrollView(
         &controller, root, 90, 0, 80, 60, &scrollViewNode);
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");
+    verifyWideChildWindow(root, L"LOKA_SCROLL_FRAME");
 
     Win32ZStackContext units(&controller);
     Win32ZStackContext::Unit **cursor = units.unitsBegin();

@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_PLATFORM_CONTEXT_HPP
 
 #include "app/PlatformContext.hpp"
+#include "ToolboxTextCapacity.hpp"
 #include "core/String.hpp"
 #if defined(LOKA_RETRO68)
 #include <Files.h>
@@ -10,6 +11,11 @@
 class ToolboxPlatformContext : public PlatformContext
 {
 public:
+  virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
+  {
+    out = ToolboxTextCapacity();
+    return true;
+  }
   ToolboxPlatformContext();
   virtual ~ToolboxPlatformContext();
 
