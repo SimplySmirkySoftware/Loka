@@ -172,15 +172,22 @@ namespace loka
         TextEditorSetFailure g_textEditorSetFailure = TEXT_EDITOR_SET_REFUSED;
         unsigned g_textEditorSetFailures = 0;
         unsigned g_nativeChildWindowFailures = 0;
+        unsigned g_nativeChildWindowSkips = 0;
       } // namespace
 
-      void failNativeChildWindowCreations(unsigned count)
+      void failNativeChildWindowCreations(unsigned count, unsigned skip)
       {
         g_nativeChildWindowFailures = count;
+        g_nativeChildWindowSkips = skip;
       }
 
       bool refuseNativeChildWindowCreation()
       {
+        if (g_nativeChildWindowSkips)
+        {
+          --g_nativeChildWindowSkips;
+          return false;
+        }
         if (!g_nativeChildWindowFailures)
           return false;
         --g_nativeChildWindowFailures;

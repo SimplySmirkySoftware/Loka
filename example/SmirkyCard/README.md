@@ -225,8 +225,7 @@ are the content origin (y can be negative with a top inset) and width/height
 are the visible content size. The rail is the only writer: `seat.set(...)`
 throws `TypeError("viewport is a rail-written fact")`. This is the only JavaScript
 seat-write path; Flow has no seat-write description step.
-Toolbox and macOS keep the vertical scroll bar out of the inset rows; on Win32
-a band over the top inset still covers the top of the bar (#1547).
+Toolbox, Win32 and macOS keep the vertical scroll bar out of the inset rows.
 A ScrollView cannot contain another ScrollView.
 `Card(child)` places exactly
 one tree in the native Card body using the default CardStyle; it has no style

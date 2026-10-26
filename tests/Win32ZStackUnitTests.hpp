@@ -20,4 +20,6 @@ void testWin32ZStackUnitOverScrollViewSurvivesPaintOnlyTick();
 
 void testWin32ZStackSettledUnitsSkipOrdering();
 void testWin32ZStackRetirementHidesBeforeDrain();
+void testWin32ScrollViewInsetBandAndCornerPaint();
+
 #endif
