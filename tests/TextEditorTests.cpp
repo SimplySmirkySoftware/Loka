@@ -3478,6 +3478,12 @@ void testTextUtf8Columns()
   }
   // pageTarget copies min(source byte column, destination size), then retreats.
   LOKA_VERIFY(Utf8RetreatToBoundary("a\360\237\230\200z", 6, 3) == 1);
+  // Both native rails clamp a signed request through one helper before converting units.
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, -5) == 0);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 99) == 6);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 3) == 1);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 5) == 5);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("", 0, 7) == 0 && Utf8ClampColumnToBoundary("", 0, -1) == 0);
   LOKA_VERIFY(!Utf8ColumnOnBoundary("a", 1, 2));
   LOKA_VERIFY(RowAdmits("", 0) && PayloadAdmits(0, 0));
   LOKA_VERIFY(!RowAdmits(0, 1) && !PayloadAdmits(0, 1));

@@ -45,6 +45,22 @@ namespace text_alphabet_cases
       "NEL/U+2028/U+2029 logical row content and partial/full fragment visibility"};
   // The opening PR changes this one test-only selection.
   static EditorResult Case::*const expected = &Case::closed;
+  /** Native rail scenarios activated with the shared alphabet selection in PR 4. */
+  struct NativeCase
+  {
+    const char *name;
+    const wchar_t *wide;
+    const char *logical;
+    std::size_t capacity;
+    unsigned short caretRow;
+    int caretByte;
+    EditorResult open;
+  };
+  static const NativeCase nativeCases[] = {
+      {"Japanese rows", L"\x65e5\r\n\x672c", "\346\227\245\r\346\234\254", 8192, 1, 3, EDITOR_OK},
+      {"emoji caret", L"\xd83d\xde00", "\360\237\230\200", 8192, 0, 4, EDITOR_OK},
+      {"lone surrogate paste and restore", L"\xd83d", "", 8192, 0, 0, EDITOR_NON_ASCII},
+      {"capacity-full CRLF", L"ab\r\ncd", "ab\rcd", 5, 1, 2, EDITOR_OK}};
   struct Boundary
   {
     unsigned caseIndex;

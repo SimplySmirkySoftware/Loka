@@ -56,8 +56,44 @@ private:
     RESTORING,
     RETRY
   };
+  /** A pre-input revision fact, consumed before the first model callback.
+      Restore coordinates have a longer lifetime than this evidence. */
+  class EditEvidence
+  {
+  public:
+    EditEvidence()
+        : present_(false),
+          revision_()
+    {
+    }
+    explicit EditEvidence(const loka::core::ListRevision &revision)
+        : present_(true),
+          revision_(revision)
+    {
+    }
+    bool consumeMatching(const loka::core::ListRevision &revision)
+    {
+      const bool matches = this->present_ && this->revision_ == revision;
+      this->clear();
+      return matches;
+    }
+    void clear()
+    {
+      this->present_ = false;
+    }
+
+  private:
+    bool present_;
+    loka::core::ListRevision revision_;
+  };
+  enum CaptureIntent
+  {
+    RESTORE_COORDINATES,
+    PRE_INPUT
+  };
   struct Selection
   {
+    EditEvidence evidence;
     DWORD start, end;
     int firstVisible, horizontal;
     Selection()
@@ -84,7 +120,7 @@ private:
   LRESULT handleInputMessage(UINT message, WPARAM wParam, LPARAM lParam);
   void handleRestoreTimer();
   static LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
-  void captureSelection();
+  void captureSelection(CaptureIntent intent = RESTORE_COORDINATES);
   class RailOperation;
   class CommandOperation;
   bool queryVisibleLines(unsigned &lines) const;
@@ -98,7 +134,7 @@ private:
   void restoreSelection();
   loka::app::EditorResult commitNativeChange();
   loka::app::EditorResult applyLines(int first, int oldCount, int newCount, const std::string &logical);
-  loka::app::RowCursor nativeRowCaret() const;
+  loka::app::RowCursor nativeRowCaret(const std::string &logical) const;
   loka::app::LineCursor nativeCaret() const;
 
   const loka::app::scene::SeamKey<loka::app::TextEditorNode> key_;
