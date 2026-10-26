@@ -191,3 +191,19 @@ independent copy of that measurement. The host fake does not rasterize
 QuickDraw. Pixel and scroll acceptance remains the maciix run, where the
 whole-card oracle still calls `FrameRoundRect` and so is what holds the
 painter's border equal to QuickDraw's.
+
+## Own control move (#1574)
+
+`button-own-move-full-draw` retains the visible Button in the label window,
+changes its layout offset, calls `drawForFlush`, and immediately reads
+`WindowPeek::updateRgn` with `EmptyRgn`. Its diagnostic line records
+`visible`, `moved`, and `update_empty`; all three must be true. Without the
+own-move validation, the Control Manager leaves move/size damage pending and
+`update_empty` is false. The host fixture pins admission with synthetic update
+rectangles; it cannot establish the real Control Manager's invalidation behavior.
+
+Runtime red/green verification and the tracked-log update are pending the
+#1574 delegator's MAME run. Rebuild with the helper's validation removed for
+the red run, then restore it for green. Do not generate expected audit lines
+from the source: capture the real run. The 38-cell scenario bundle is expected
+to remain byte-identical.

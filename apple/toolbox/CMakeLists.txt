@@ -15,6 +15,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxCpuClass.cpp
   src/ToolboxBootstrap.cpp
   src/ToolboxOperatorNew.cpp
+  src/ToolboxUnicodeStartup.cpp
   src/ToolboxOutOfMemory.cpp
   src/ToolboxDialogConstruction.cpp
   src/ToolboxReserveGrowZone.cpp
@@ -79,7 +80,9 @@ set_source_files_properties(
 
 file(GLOB_RECURSE COMMON_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/common/*.cpp)
 
-function(loka_configure_toolbox_core target)
+function(loka_configure_toolbox_core target variant)
+  set_property(TARGET ${target} PROPERTY INTERFACE_LOKA_TOOLBOX_CORE_VARIANT ${variant})
+  set_property(TARGET ${target} APPEND PROPERTY COMPATIBLE_INTERFACE_STRING LOKA_TOOLBOX_CORE_VARIANT)
   loka_enable_warnings(${target})
   set_target_properties(${target} PROPERTIES
     CXX_STANDARD 98
@@ -119,7 +122,7 @@ function(loka_configure_toolbox_core target)
 endfunction()
 
 add_library(LokaAppleToolboxCore STATIC ${LOKA_TOOLBOX_SOURCES} ${COMMON_SOURCES})
-loka_configure_toolbox_core(LokaAppleToolboxCore)
+loka_configure_toolbox_core(LokaAppleToolboxCore te)
 
 if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
   # Standalone scenario applications need TEST_ID-bearing inline definitions
@@ -133,7 +136,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
     TEST_BUILD
     LOKA_DIAG=1
   )
-  loka_configure_toolbox_core(LokaAppleToolboxTestCore)
+  loka_configure_toolbox_core(LokaAppleToolboxTestCore test)
 endif()
 
 target_link_libraries(LokaAppleToolbox INTERFACE
@@ -153,3 +156,24 @@ if(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES)
     LOKA_TOOLBOX_MULTIVERSAL_INTERFACES=1
   )
 endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
+  find_library(LOKA_TOOLBOX_TEXTENSION_LIB Textension)
+  find_library(LOKA_TOOLBOX_TEC_LIB TextEncodingConverter)
+  find_library(LOKA_TOOLBOX_UNICODE_CONVERTER_LIB UnicodeConverter)
+  if(LOKA_TOOLBOX_TEXTENSION_LIB AND LOKA_TOOLBOX_TEC_LIB AND LOKA_TOOLBOX_UNICODE_CONVERTER_LIB)
+    add_library(LokaAppleToolboxUnicodeCore STATIC EXCLUDE_FROM_ALL
+      ${LOKA_TOOLBOX_SOURCES} ${COMMON_SOURCES})
+    target_compile_definitions(LokaAppleToolboxUnicodeCore PUBLIC LOKA_TOOLBOX_UNICODE=1)
+    loka_configure_toolbox_core(LokaAppleToolboxUnicodeCore unicode)
+    target_link_libraries(LokaAppleToolboxUnicodeCore PUBLIC
+      ${LOKA_TOOLBOX_TEXTENSION_LIB} ${LOKA_TOOLBOX_TEC_LIB} ${LOKA_TOOLBOX_UNICODE_CONVERTER_LIB})
+  endif()
+endif()
+
+function(loka_toolbox_unicode target)
+  if(NOT TARGET LokaAppleToolboxUnicodeCore)
+    message(FATAL_ERROR "${target}: LOKA_TOOLBOX_UNICODE needs the Retro68 PPC toolchain with the Textension / TextEncodingConverter / UnicodeConverter import libraries")
+  endif()
+  target_link_libraries(${target} PRIVATE LokaAppleToolboxUnicodeCore)
+endfunction()

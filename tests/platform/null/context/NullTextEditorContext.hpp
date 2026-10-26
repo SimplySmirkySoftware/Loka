@@ -1,5 +1,6 @@
 #ifndef LOKA_NULL_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_NULL_TEXT_EDITOR_CONTEXT_HPP
+#include "platform/null/NullEditCommandRecorder.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/scene/state/RequestSettlement.hpp"
 #include "app/scene/projection/NativeNodeContext.hpp"
@@ -21,6 +22,7 @@ namespace loka
 class NullTextEditorContext : public loka::app::scene::NativeNodeContext
 {
 public:
+  loka::testing::NullEditCommandRecorder editCommands;
   explicit NullTextEditorContext(loka::app::scene::IPlatformController &controller, loka::app::TextEditorNode *node, const loka::app::scene::SeamKey<loka::app::TextEditorNode> &key);
   void readLifecycleFactOnAttach();
   void syncFromNode();

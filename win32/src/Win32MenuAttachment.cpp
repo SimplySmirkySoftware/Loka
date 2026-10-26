@@ -1,3 +1,4 @@
+#include "app/EditMenuDispatch.hpp"
 #include "Win32MenuAttachment.hpp"
 #include "app/MenuComposition.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -25,6 +26,16 @@ namespace
   // MacMenuAttachment.mm: Win32 calls an empty-title Quit "Exit".
   const wchar_t *MenuEmptyTitle(loka::app::MenuActionType action)
   {
+    if (action == loka::app::MENU_ACTION_EDIT_UNDO)
+      return L"Undo";
+    if (action == loka::app::MENU_ACTION_EDIT_CUT)
+      return L"Cut";
+    if (action == loka::app::MENU_ACTION_EDIT_COPY)
+      return L"Copy";
+    if (action == loka::app::MENU_ACTION_EDIT_PASTE)
+      return L"Paste";
+    if (action == loka::app::MENU_ACTION_EDIT_SELECT_ALL)
+      return L"Select All";
     if (action == loka::app::MENU_ACTION_QUIT_APP)
       return L"Exit";
     if (action == loka::app::MENU_ACTION_ABOUT_APP)
@@ -152,11 +163,28 @@ bool Win32MenuAttachment::dispatch(int commandId)
     // emit() may disconnect or replace the table synchronously.
     const MenuCommand command = this->commands_[i];
     Win32App *app = this->window_.win32App();
-    if (command.action == loka::app::MENU_ACTION_QUIT_APP)
+    switch (command.action)
     {
+    case loka::app::MENU_ACTION_QUIT_APP:
       if (app)
         app->requestQuit();
       return true;
+    case loka::app::MENU_ACTION_EDIT_UNDO:
+    case loka::app::MENU_ACTION_EDIT_CUT:
+    case loka::app::MENU_ACTION_EDIT_COPY:
+    case loka::app::MENU_ACTION_EDIT_PASTE:
+    case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+    {
+      loka::app::EditVerb verb;
+      if (loka::app::menuEditVerb(command.action, verb))
+        loka::app::dispatchEditMenuCommand(&this->window_, verb, command.emitter);
+      return true;
+    }
+    case loka::app::MENU_ACTION_ABOUT_APP:
+    case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
+    case loka::app::MENU_ACTION_NONE:
+    case loka::app::MENU_ACTION_COUNT:
+      break;
     }
     if (command.emitter)
       command.emitter->emit();

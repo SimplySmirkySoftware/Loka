@@ -585,6 +585,38 @@ void testToolboxMenuShortcutProjectsItemCmd()
   LOKA_VERIFY(toolbox_host::itemCmdCalls[1].item == 4);
   LOKA_VERIFY(toolbox_host::itemCmdCalls[1].cmd == 'A');
 }
+void countEditBinding(void *data)
+{
+  ++*static_cast<unsigned *>(data);
+}
+void testToolboxEditMenuDefaultsAndFallback()
+{
+  ToolboxApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditBinding, &calls, false);
+  MenuDefinition edit = EditMenu();
+  for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+    if (!item->isSeparator)
+      item->onClick(&binding);
+  MenuBarDefinition menu;
+  menu << edit;
+  clearCalls();
+  LOKA_VERIFY(app.menuAttachment().project(sources(&menu, 0)));
+  const char *titles[] = {"Undo", "Cut", "Copy", "Paste", "Select All"};
+  const char keys[] = {'Z', 'X', 'C', 'V', 'A'};
+  LOKA_VERIFY(toolbox_host::itemCmdCalls.size() == 5);
+  LOKA_VERIFY(toolbox_host::menuSets.size() == 5);
+  for (unsigned i = 0; i < 5; ++i)
+  {
+    LOKA_VERIFY(toolbox_host::menuSets[i] == titles[i]);
+    LOKA_VERIFY(toolbox_host::itemCmdCalls[i].cmd == keys[i]);
+    const short row = static_cast<short>(i == 0 ? 1 : i + 2);
+    LOKA_VERIFY(app.menuAttachment().dispatch(129, row));
+    LOKA_VERIFY(calls == i + 1);
+  }
+  binding.unbind(&countEditBinding, &calls);
+}
 void testToolboxQuitDefaultsToCommandQ()
 {
   ToolboxApp app;
@@ -1268,62 +1300,61 @@ int main(int argc, char **argv)
   toolbox_host::resourceMenuItems.push_back("Desk accessory");
   struct Test { const char *name; void (*run)(); };
 #define PIN(name) {#name, &name}
-  const Test tests[] = {
-    PIN(testToolboxPlacedQuitKeepsLivePayload),
-    PIN(testToolboxAppParentsStayUnplaced),
-    PIN(testToolboxExactFileAndEmptyTitles),
-    PIN(testToolboxSeparatorBeforeOpenerAndTailCollapse),
+  const Test tests[] = {PIN(testToolboxPlacedQuitKeepsLivePayload),
+                        PIN(testToolboxAppParentsStayUnplaced),
+                        PIN(testToolboxExactFileAndEmptyTitles),
+                        PIN(testToolboxSeparatorBeforeOpenerAndTailCollapse),
 
-    PIN(testToolboxAppQuitCreatesFileFirst),
-    PIN(testToolboxAppQuitReplacesOrdinaryLeaves),
-    PIN(testToolboxInvisibleAppQuitKeepsOrdinary),
-    PIN(testToolboxAppTitlesFallbackAndKeys),
-    PIN(testToolboxQuitParentsAndSeparators),
-    PIN(testToolboxAppleAlwaysAndDeskAccessories),
-    PIN(testToolboxAppQuitRefusals),
+                        PIN(testToolboxAppQuitCreatesFileFirst),
+                        PIN(testToolboxAppQuitReplacesOrdinaryLeaves),
+                        PIN(testToolboxInvisibleAppQuitKeepsOrdinary),
+                        PIN(testToolboxAppTitlesFallbackAndKeys),
+                        PIN(testToolboxQuitParentsAndSeparators),
+                        PIN(testToolboxAppleAlwaysAndDeskAccessories),
+                        PIN(testToolboxAppQuitRefusals),
 
-    PIN(testToolboxCandidateFailurePreservesInstalled),
-    PIN(testToolboxCandidateUnbindKeepsSharedState),
-    PIN(testToolboxSeparatorRefusal),
-    PIN(testToolboxPlaceholderRefusal),
-    PIN(testToolboxAboutRefusal),
-    PIN(testToolboxOpenerRefusal),
-    PIN(testToolboxMenuCreationRefusals),
-    PIN(testToolboxGraphPrunesExactlyOnce),
-    PIN(testToolboxEmptyAbsenceClearsRecord),
-    PIN(testToolboxSubmenuLimitAndInsertionOrder),
-    PIN(testToolboxMenuBridgeRefusalPreservesNativeAndRetries),
-    PIN(testToolboxMenuBridgeReleaseThenAbsentClearsNative),
-    PIN(testToolboxMenuTitleFollowsState),
-    PIN(testToolboxSubmenuTitleFollowsState),
-    PIN(testToolboxMenuTitleStateUnbindsOnRelease),
-    PIN(testToolboxMenuTitleBindingFollowsNewDefinition),
-    PIN(testToolboxAboutTitleFollowsStateAcrossRebuild),
-    PIN(testToolboxMenuDoorFiltersRowsAndForwardsScene),
-    PIN(testToolboxMenuProjectionDefersBackgroundDraws),
-    PIN(testToolboxMenuProjectionKeepsMenuColors),
-    PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
-    PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
-    PIN(testToolboxSubmenuIdDiffersFromItsParent),
-    PIN(testToolboxParentItemDoesNotDispatchItsSubmenuItem),
-    PIN(testToolboxQuitDefaultsToCommandQ),
-    PIN(testToolboxMenuShortcutProjectsItemCmd),
-    PIN(testToolboxMenuAttachmentProjectsOncePerIdentity),
-    PIN(testToolboxMenuAttachmentSeesItemChange),
-    PIN(testToolboxMenuAttachmentChangedOverlayRebuildsFully),
-    PIN(testToolboxMenuAttachmentReleaseFromSourceDisconnects),
-    PIN(testToolboxSceneDetachReleasesMenu),
-    PIN(testToolboxMenuDispatchAfterDisconnectIsDropped),
-    PIN(testToolboxMenuDispatchMayDisconnectWhileRunning),
-    PIN(testToolboxMenuAttachmentMergeRefusalPreservesRecord),
-    PIN(testToolboxMenuDispatchKeepsActionAcrossReplacement),
-    PIN(testToolboxMenuAttachmentSwitchesSourceAndClearsNullBar),
-    PIN(testToolboxMenuAttachmentEmptyMenuRebuildUsesPreparedMerge),
-    PIN(testToolboxAppShutdownReleasesMenuBeforeAttachmentDestruction),
-    PIN(testToolboxAppShutdownDrainsPendingCloseBeforeAttachmentDestruction),
-    PIN(testAppRetireComponentsIsIdempotent),
-    PIN(testAppDestructorRetiresComponentsWithoutRailOwner)
-  };
+                        PIN(testToolboxCandidateFailurePreservesInstalled),
+                        PIN(testToolboxCandidateUnbindKeepsSharedState),
+                        PIN(testToolboxSeparatorRefusal),
+                        PIN(testToolboxPlaceholderRefusal),
+                        PIN(testToolboxAboutRefusal),
+                        PIN(testToolboxOpenerRefusal),
+                        PIN(testToolboxMenuCreationRefusals),
+                        PIN(testToolboxGraphPrunesExactlyOnce),
+                        PIN(testToolboxEmptyAbsenceClearsRecord),
+                        PIN(testToolboxSubmenuLimitAndInsertionOrder),
+                        PIN(testToolboxMenuBridgeRefusalPreservesNativeAndRetries),
+                        PIN(testToolboxMenuBridgeReleaseThenAbsentClearsNative),
+                        PIN(testToolboxMenuTitleFollowsState),
+                        PIN(testToolboxSubmenuTitleFollowsState),
+                        PIN(testToolboxMenuTitleStateUnbindsOnRelease),
+                        PIN(testToolboxMenuTitleBindingFollowsNewDefinition),
+                        PIN(testToolboxAboutTitleFollowsStateAcrossRebuild),
+                        PIN(testToolboxMenuDoorFiltersRowsAndForwardsScene),
+                        PIN(testToolboxMenuProjectionDefersBackgroundDraws),
+                        PIN(testToolboxMenuProjectionKeepsMenuColors),
+                        PIN(testToolboxShortcutChangeReprojectsThroughFullRebuild),
+                        PIN(testToolboxHierarchicalOpenerKeepsMarkerOverShortcut),
+                        PIN(testToolboxSubmenuIdDiffersFromItsParent),
+                        PIN(testToolboxParentItemDoesNotDispatchItsSubmenuItem),
+                        PIN(testToolboxEditMenuDefaultsAndFallback),
+                        PIN(testToolboxQuitDefaultsToCommandQ),
+                        PIN(testToolboxMenuShortcutProjectsItemCmd),
+                        PIN(testToolboxMenuAttachmentProjectsOncePerIdentity),
+                        PIN(testToolboxMenuAttachmentSeesItemChange),
+                        PIN(testToolboxMenuAttachmentChangedOverlayRebuildsFully),
+                        PIN(testToolboxMenuAttachmentReleaseFromSourceDisconnects),
+                        PIN(testToolboxSceneDetachReleasesMenu),
+                        PIN(testToolboxMenuDispatchAfterDisconnectIsDropped),
+                        PIN(testToolboxMenuDispatchMayDisconnectWhileRunning),
+                        PIN(testToolboxMenuAttachmentMergeRefusalPreservesRecord),
+                        PIN(testToolboxMenuDispatchKeepsActionAcrossReplacement),
+                        PIN(testToolboxMenuAttachmentSwitchesSourceAndClearsNullBar),
+                        PIN(testToolboxMenuAttachmentEmptyMenuRebuildUsesPreparedMerge),
+                        PIN(testToolboxAppShutdownReleasesMenuBeforeAttachmentDestruction),
+                        PIN(testToolboxAppShutdownDrainsPendingCloseBeforeAttachmentDestruction),
+                        PIN(testAppRetireComponentsIsIdempotent),
+                        PIN(testAppDestructorRetiresComponentsWithoutRailOwner)};
 #undef PIN
   for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); ++i)
     if (argc == 1 || std::strcmp(argv[1], tests[i].name) == 0)

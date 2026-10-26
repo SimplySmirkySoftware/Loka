@@ -527,15 +527,17 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
   ValidRect(&window_->portRect);
   {
     ToolboxPaintClip clip(window_->portRect, ToolboxPaintClip::REPLACE);
-    EraseRect(&window_->portRect);
+    ToolboxPortErasePresenter presenter(window_->portRect);
     if (scenePlatformController_)
     {
       Rect captureEvidence = {0, 0, 0, 0};
       if (clip.isActive())
         captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
       ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
-      ToolboxInputDoor::render(*scenePlatformController_);
+      ToolboxInputDoor::render(*scenePlatformController_, &presenter);
     }
+    else
+      presenter.eraseBeforePaint();
     this->drawGrowBox();
   }
 

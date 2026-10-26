@@ -2,7 +2,7 @@
 #include "app/layout/BoxLayout.hpp"
 #include "ToolboxPaintSuppressScope.hpp"
 /** Included by the production controller and Linux host fixture. */
-void ToolboxScenePlatformController::render()
+void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
 {
   PROFILE_FUNC();
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
@@ -12,6 +12,8 @@ void ToolboxScenePlatformController::render()
   ++debugStats_.totalRenderCalls;
   if (!window_ || !window_->window() || !rootNode_)
   {
+    if (presenter)
+      presenter->eraseBeforePaint();
     return;
   }
   {
@@ -55,7 +57,11 @@ void ToolboxScenePlatformController::render()
     // Window ports normally start at zero; refuse even a nonzero-origin port
     // whose difference exceeds the LayoutState short range before narrowing.
     if (width > SHRT_MAX || height > SHRT_MAX)
+    {
+      if (presenter)
+        presenter->eraseBeforePaint();
       return;
+    }
     state.width = static_cast<short>(width);
     state.height = static_cast<short>(height);
   }
@@ -70,6 +76,8 @@ void ToolboxScenePlatformController::render()
   if (!this->projectionParentScopes_.resetRoot(
           static_cast<void *>(window_->window()), rootClip))
   {
+    if (presenter)
+      presenter->eraseBeforePaint();
     return;
   }
   this->unitLedger_.clear();
@@ -86,6 +94,8 @@ void ToolboxScenePlatformController::render()
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
   this->rectSurfaceExtentLedger_.flush();
+  if (presenter)
+    presenter->eraseBeforePaint();
   RenderNode(rootNode_, this);
   debugStats_.refreshHitCounts(static_cast<int>(hitLedger_.buttonHits_.size()),
                                static_cast<int>(hitLedger_.cellHits_.size()),

@@ -238,3 +238,5 @@ LOKA_TEST(testWin32AppQuitTitleFallbackAndPayload)
 LOKA_TEST(testWin32InvisibleAppQuitKeepsOrdinaryQuit)
 LOKA_TEST(testWin32AppQuitRefusalPreservesProjection)
 LOKA_TEST(testWin32AppQuitMenuRowPreservesClientSize)
+
+LOKA_TEST(testWin32EditMenuDefaultsAndFallback)

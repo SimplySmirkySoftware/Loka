@@ -27,4 +27,5 @@ void testWin32AppQuitSuppressesOrdinaryLeaves();
 void testWin32AppQuitTitleFallbackAndPayload();
 void testWin32InvisibleAppQuitKeepsOrdinaryQuit();
 void testWin32AppQuitRefusalPreservesProjection();
+void testWin32EditMenuDefaultsAndFallback();
 #endif

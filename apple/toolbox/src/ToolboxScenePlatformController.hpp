@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
@@ -68,6 +69,9 @@ public:
     Rect key;
     return this->bandBlur_.queryKeyRect(key) ? ToolboxBlurDirtyExtent(rect, key) : rect;
   }
+  /** Move/size callers: once per changed control per render; O(1), no rows.
+      Requires the window port while the erased pass is open. */
+  void validateOwnControlMove(const Rect &before, const Rect &after);
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
@@ -419,15 +423,18 @@ public:
   void commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
                                     ScrollBarControlBinding &native,
                                     loka::app::ScrollBarOrientation axis);
-  bool ensureScrollBarBinding(
-      short resourceId,
-      const Rect &rect,
-      int minimum,
-      int maximum,
-      int lineStep,
-      int pageStep,
-      loka::app::scene::NativeLifetimeHint lifetimeHint,
-      ScrollBarControlBinding *&binding);
+  /** Optional move output is empty when unchanged/refused. A caller requesting it
+      validates only after its final native setter/show, while the window port is current.
+      Editor presentation is separate and conservatively leaves OS damage pending. */
+  bool ensureScrollBarBinding(short resourceId,
+                              const Rect &rect,
+                              int minimum,
+                              int maximum,
+                              int lineStep,
+                              int pageStep,
+                              loka::app::scene::NativeLifetimeHint lifetimeHint,
+                              ScrollBarControlBinding *&binding,
+                              Rect *movedFrom = 0);
   void queueRetiredTextEdit(TEHandle te, loka::app::scene::NativeLifetimeHint lifetimeHint);
   bool hasLiveBinding(ControlRef control) const;
   bool hasLiveBinding(TEHandle te) const;

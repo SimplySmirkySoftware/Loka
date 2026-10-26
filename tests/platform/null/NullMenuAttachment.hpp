@@ -5,6 +5,7 @@
 #include <vector>
 #include <utility>
 #include "app/Menu.hpp"
+#include "app/EditMenuDispatch.hpp"
 #include "core/util/OwnedDef.hpp"
 
 /** Reference projection owner: command endpoints and value subscriptions are
@@ -66,11 +67,21 @@ public:
     return true;
   }
 
-  void dispatch(unsigned id)
+  void dispatch(unsigned id, Window *window = 0)
   {
-    std::map<unsigned, loka::core::EmitterState *>::const_iterator found = this->commands_.find(id);
-    if (found != this->commands_.end())
-      found->second->emit();
+    std::map<unsigned, const loka::app::MenuItemDefinition *>::const_iterator found = this->commands_.find(id);
+    if (found == this->commands_.end())
+      return;
+    const loka::app::MenuActionType action = found->second->action;
+    loka::core::EmitterState *binding = found->second->onClickState;
+    loka::app::EditVerb verb;
+    if (loka::app::menuEditVerb(action, verb))
+    {
+      loka::app::dispatchEditMenuCommand(window, verb, binding);
+      return;
+    }
+    if (binding)
+      binding->emit();
   }
 
   void disconnect()
@@ -104,13 +115,13 @@ private:
     {
       this->subscriptions_.push_back(new Subscription(*item));
       const unsigned id = static_cast<unsigned>(this->subscriptions_.size());
-      if (item->onClickState)
-        this->commands_[id] = item->onClickState;
+      if (item->onClickState || item->action != loka::app::MENU_ACTION_NONE)
+        this->commands_[id] = item;
       this->append(item->childrenHead());
     }
   }
   loka::core::OwnedDef<loka::app::MenuBarDefinition> applied_;
-  std::map<unsigned, loka::core::EmitterState *> commands_;
+  std::map<unsigned, const loka::app::MenuItemDefinition *> commands_;
   std::vector<Subscription *> subscriptions_;
   NullMenuAttachment(const NullMenuAttachment &);
   NullMenuAttachment &operator=(const NullMenuAttachment &);

@@ -33,6 +33,14 @@ namespace loka
       TEXT_COLOR_YELLOW = 10
     };
 
+    enum TextFamily
+    {
+      TEXT_FAMILY_UNSET = 0,
+      TEXT_FAMILY_SYSTEM = 1,
+      TEXT_FAMILY_MONOSPACE = 2,
+      TEXT_FAMILY_COUNT = 3
+    };
+
     enum TextWrap
     {
       TEXT_WRAP_NONE = 0,
@@ -202,6 +210,16 @@ namespace loka
           {"cyan", TEXT_COLOR_CYAN},
           {"magenta", TEXT_COLOR_MAGENTA},
           {"yellow", TEXT_COLOR_YELLOW},
+      };
+
+      struct TextFamilyName
+      {
+        const char *name;
+        TextFamily value;
+      };
+      static const TextFamilyName StyleVocabularyFamily[] = {
+          {"system", TEXT_FAMILY_SYSTEM},
+          {"monospace", TEXT_FAMILY_MONOSPACE},
       };
 
       struct TextWrapName

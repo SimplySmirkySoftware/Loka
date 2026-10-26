@@ -81,16 +81,39 @@ namespace
   }
 } // namespace
 
-bool ToolboxScenePlatformController::ensureScrollBarBinding(
-    short resourceId,
-    const Rect &rect,
-    int minimum,
-    int maximum,
-    int lineStep,
-    int pageStep,
-    loka::app::scene::NativeLifetimeHint lifetimeHint,
-    ScrollBarControlBinding *&binding)
+void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, const Rect &after)
 {
+  // MoveControl first places the OLD size at the new origin, then SizeControl
+  // shrinks or grows it; the Control Manager invalidates that intermediate
+  // rectangle too, so the discharged area is the box over all three.
+  const short midBottom = static_cast<short>(after.top + (before.bottom - before.top));
+  const short midRight = static_cast<short>(after.left + (before.right - before.left));
+  Rect area = {before.top < after.top ? before.top : after.top,
+               before.left < after.left ? before.left : after.left,
+               before.bottom > after.bottom ? before.bottom : after.bottom,
+               before.right > after.right ? before.right : after.right};
+  if (midBottom > area.bottom)
+    area.bottom = midBottom;
+  if (midRight > area.right)
+    area.right = midRight;
+  // drawWhole keeps the window port current throughout the erased pass.
+  // Only our move's area is discharged; never validate the whole port here.
+  if (this->erasedPass().admitsCapture(area))
+    ValidRect(&area);
+}
+
+bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
+                                                            const Rect &rect,
+                                                            int minimum,
+                                                            int maximum,
+                                                            int lineStep,
+                                                            int pageStep,
+                                                            loka::app::scene::NativeLifetimeHint lifetimeHint,
+                                                            ScrollBarControlBinding *&binding,
+                                                            Rect *movedFrom)
+{
+  if (movedFrom)
+    *movedFrom = Rect();
   binding = 0;
   if (!window_ || !window_->window() || resourceId <= 0)
   {
@@ -158,6 +181,8 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
+    if (movedFrom)
+      *movedFrom = binding->rect;
     binding->rect = controlRect;
   }
   SetControlMinimum(binding->control, static_cast<short>(minimum));
@@ -173,9 +198,16 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
 {
   ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   ScrollBarControlBinding *binding = 0;
-  if (!this->ensureScrollBarBinding(
-          resourceId, rect, props.min_, props.max_,
-          props.lineStep_, props.pageStep_, lifetimeHint, binding))
+  Rect movedFrom;
+  if (!this->ensureScrollBarBinding(resourceId,
+                                    rect,
+                                    props.min_,
+                                    props.max_,
+                                    props.lineStep_,
+                                    props.pageStep_,
+                                    lifetimeHint,
+                                    binding,
+                                    &movedFrom))
   {
     return false;
   }
@@ -200,6 +232,8 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
   // reason is a disabled binding or a range with nowhere to go.
   HiliteControl(binding->control, binding->active ? 0 : 255);
   ShowControl(binding->control);
+  if (!EmptyRect(&movedFrom))
+    this->validateOwnControlMove(movedFrom, binding->rect);
   return true;
 }
 
