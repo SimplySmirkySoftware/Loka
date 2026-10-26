@@ -6,6 +6,7 @@
 #include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 
@@ -194,7 +195,7 @@ void testEditMenuFacadeCanDisconnectAttachment()
 void testEditMenuTextEditorRecordsVerb()
 {
   Fixture f;
-  ObservableList<String> lines;
+  loka::testing::TextBufferFixture lines;
   Reported<LineCursor> cursor;
   BoundaryNode *root = loka::dsl::testing::SceneTestAccess::rootBoundary(*f.window.scene());
   StateBatchBase::CreateImmediateState(root, cursor, LineCursor::None());
