@@ -23,4 +23,5 @@ void testMacMenuQuitSuppressionAndSeparators();
 void testMacMenuAppMiddlePreservesPayloads();
 void testMacMenuEmptyActionTitleFollowsState();
 void testMacMenuVisibilityReadOnceAndConstantFallback();
+void testMacEditMenuDefaultsAndFallback();
 #endif // LOKA_TESTS_MAC_MENU_PROJECTION_TESTS_HPP

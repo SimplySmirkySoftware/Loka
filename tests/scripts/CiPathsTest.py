@@ -207,7 +207,8 @@ class CiPathsTest(unittest.TestCase):
             if name == "macos":
                 self.assertIn("failure() && (" + GUARD + ")", steps[-1])
             if job == "toolbox-ppc":
-                self.assertEqual(len(steps), 4)
+                self.assertEqual(len(steps), 5)
+                self.assertIn("Check Toolbox Unicode flavor contracts", steps[-1])
                 self.assertNotIn("headroom", job_body)
                 self.assertIn("    permissions:\n      contents: read\n", job_body)
                 self.assertNotIn("pull-requests:", job_body)

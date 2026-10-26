@@ -64,6 +64,7 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
   if (this->window_)
     this->window_->querySizeBoxRect(sizeBox);
   ScrollBarControlBinding *native = 0;
+  Rect movedFrom;
   if (this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_VERTICAL],
                                    ToolboxScrollViewVerticalBarRect(
                                        viewportRect, horizontalBar, sizeBox, edges, scrollView->props.contentInsets_),
@@ -72,8 +73,13 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
                                    1,
                                    viewportHeight > 1 ? viewportHeight - 1 : 1,
                                    scrollView->nativeLifetimeHint(),
-                                   native))
+                                   native,
+                                   &movedFrom))
+  {
     ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
+    if (native && !EmptyRect(&movedFrom))
+      this->validateOwnControlMove(movedFrom, native->rect);
+  }
   // A refused or empty vertical binding must not skip horizontal handling.
   const bool verticalPresent = native != 0;
   if (horizontalBar)
@@ -86,8 +92,13 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
                                      1,
                                      childWidth > 1 ? childWidth - 1 : 1,
                                      scrollView->nativeLifetimeHint(),
-                                     native))
+                                     native,
+                                     &movedFrom))
+    {
       ApplyViewportScrollBarValue(native, horizontal, this->paintSuppressClipRgn_);
+      if (native && !EmptyRect(&movedFrom))
+        this->validateOwnControlMove(movedFrom, native->rect);
+    }
   }
   if (!verticalPresent || !horizontalBar)
   {

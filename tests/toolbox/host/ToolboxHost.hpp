@@ -446,8 +446,15 @@ public:
       loka::core::State<int> *, const loka::app::scene::WriteSeat<int> &, loka::core::EmitterState *, int);
   typedef ToolboxScrollBarLedger::ScrollBarControlBinding ScrollBarControlBinding;
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
-  bool ensureScrollBarBinding(
-      short, const Rect &, int, int, int, int, loka::app::scene::NativeLifetimeHint, ScrollBarControlBinding *&);
+  bool ensureScrollBarBinding(short,
+                              const Rect &,
+                              int,
+                              int,
+                              int,
+                              int,
+                              loka::app::scene::NativeLifetimeHint,
+                              ScrollBarControlBinding *&,
+                              Rect *movedFrom = 0);
   bool ensureScrollBarControl(short,
                               const Rect &,
                               const loka::app::ScrollBarProps &,
@@ -713,6 +720,9 @@ public:
     Rect key;
     return this->bandBlur_.queryKeyRect(key) ? ToolboxBlurDirtyExtent(rect, key) : rect;
   }
+  /** Move/size callers: once per changed control per render; O(1), no rows.
+      Requires the window port while the erased pass is open. */
+  void validateOwnControlMove(const Rect &before, const Rect &after);
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;
