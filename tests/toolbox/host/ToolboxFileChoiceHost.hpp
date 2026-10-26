@@ -3,6 +3,7 @@
 // Native neighbors only: production dialog, input door and present are tested.
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_APP_HPP
+#include "ToolboxFullDrawPresenter.hpp"
 #include "app/scene/projection/PlatformController.hpp"
 #include "Quickdraw.h"
 #include "ToolboxScrollKey.hpp"
@@ -28,8 +29,17 @@ public:
   void *renderData;
   ToolboxScenePlatformController() : transport(0), onRender(0), renderData(0) {}
   CursorOwner *cursorOwner() { return 0; }
-  void render() { if (this->onRender) this->onRender(this->renderData); }
-  void renderDirty(const Rect &) { this->render(); }
+  void render(ToolboxFullDrawPresenter *presenter)
+  {
+    if (presenter)
+      presenter->eraseBeforePaint();
+    if (this->onRender)
+      this->onRender(this->renderData);
+  }
+  void renderDirty(const Rect &)
+  {
+    this->render(0);
+  }
   bool handleMouseDown(const Point &) { return false; }
   bool handleKeyDown(char) { return false; }
   bool handleTabKey(ToolboxTabDirection)

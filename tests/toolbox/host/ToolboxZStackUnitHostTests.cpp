@@ -434,7 +434,9 @@ namespace
     f.update();
     LOKA_VERIFY(toolbox_host::staticCopies == copies + 2);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1 && toolbox_host::staticReleases == 0);
-    LOKA_VERIFY(toolbox_host::erasedRects.empty());
+    // The full draw erases the port; a successful copy adds no unit fallback erase.
+    LOKA_VERIFY(toolbox_host::erasedRects.size() == 1);
+    equal(toolbox_host::erasedRects.front(), f.window.port.portRect);
   }
   void staticBandGeometry()
   {

@@ -1,5 +1,6 @@
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxErasedPass.hpp"
