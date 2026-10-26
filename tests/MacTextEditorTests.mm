@@ -163,7 +163,7 @@ namespace
       [this->pool drain];
     }
   };
-  /** One UTF-16 unit the open alphabet still refuses: a lone high surrogate (NativeLines refuses it before encoding). */
+  /** One UTF-16 unit the open alphabet still refuses: a lone high surrogate, refused before encoding. */
   NSString *loneSurrogate()
   {
     const unichar unit = 0xD800;
