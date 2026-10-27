@@ -533,8 +533,6 @@ namespace
     LOKA_VERIFY(f.native() == "ascii\rabcd\rabcd");
     LOKA_VERIFY(!(ToolboxTextEditorAccess::revision(*f.context) != f.lines.revision().get()));
     pin("TE alphabet outbound: refusal preserves projection, unavailable request/paint, ASCII recovery");
-    if (text_alphabet_cases::cases[0].*text_alphabet_cases::expected == EDITOR_NON_ASCII)
-      std::puts("[deferred] outbound TE guard mutation: common project refuses raw Unicode first; rerun in PR 4");
   }
 
   void alphabetPaste()

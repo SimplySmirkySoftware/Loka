@@ -3536,8 +3536,44 @@ void testTextAlphabetAdapters()
     std::string output;
     LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(projected.node).project(output) == c.*expected);
     LOKA_VERIFY(Input::status(*projected.context) == c.*expected);
-    if (expected == &Case::closed && c.closed != c.open)
-      std::puts("[deferred] open-phase coverage: Unicode document/Null cursor, request and pageTarget (PR 4)");
+    if (c.*expected == EDITOR_OK)
+    {
+      LOKA_VERIFY(output == std::string(c.bytes, c.length));
+      LOKA_VERIFY(Input::buffer(*projected.context) == output);
+      TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(projected.node);
+      const ItemId id = projected.lines.at(0).id;
+      for (std::size_t column = 0; column <= c.length; ++column)
+      {
+        const bool boundary = Utf8ColumnOnBoundary(c.bytes, c.length, column);
+        const LineCursor cursor(id, static_cast<LineCursor::Column>(column));
+        LOKA_VERIFY(document.moveCaret(cursor) == (boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+        const Snapshot before(projected);
+        const LineCursor start(id, 0), end(id, static_cast<LineCursor::Column>(c.length));
+        LOKA_VERIFY(
+            document.applyReplace(start, end, c.bytes, c.length, RowCursor(0, static_cast<LineCursor::Column>(column)))
+            == (boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+        if (!boundary)
+          before.unchanged(projected);
+        {
+          StateTrackerGuard guard(&projected.tracker);
+          projected.request.set(cursor);
+        }
+        projected.context->onPropsApplied();
+        const LineCursor clamped(id, static_cast<LineCursor::Column>(Utf8RetreatToBoundary(c.bytes, c.length, column)));
+        LOKA_VERIFY(projected.cursor.state()->get() == clamped);
+        LOKA_VERIFY(Input::caret(*projected.context) == clamped);
+      }
+    }
   }
-  std::puts("[skip] native UTF-8 rails: staged in PR 1b / pages 2 and 3; ASCII policy remains closed");
+  Fixture pages(2, "abcd");
+  LOKA_VERIFY(pages.lines.update(pages.lines.at(1).id, String("a\360\237\230\200z")) == EDIT_OK);
+  pages.context->onPropsApplied();
+  TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(pages.node);
+  LOKA_VERIFY(document.moveCaret(LineCursor(pages.lines.at(0).id, 3)) == EDITOR_OK);
+  LineCursor target;
+  LOKA_VERIFY(document.pageTarget(EditorCommand(EditorCommand::PAGE_DOWN), 1, target) == EDITOR_OK);
+  LOKA_VERIFY(target == LineCursor(pages.lines.at(1).id, 1));
+#if !defined(__APPLE__) && !defined(_WIN32)
+  std::puts("[skip] native UTF-8 rails: this host has neither AppKit nor Win32; run the native test targets");
+#endif
 }
