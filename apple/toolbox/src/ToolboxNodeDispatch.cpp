@@ -170,16 +170,15 @@ namespace
     {
       ProjectionParentScopeStack &stack = controller->projectionParentScopes_;
       const loka::core::Frame &parentClip = stack.current().clipRect;
-      // The provisional width obeys the same cap as the final one: never wider than a positive offer.
-      const int declaredOrOffer = node->asBoxNode() && declaredWidth > 0 ? declaredWidth : incoming.width;
-      const int extent = incoming.width > 0 && declaredOrOffer > incoming.width ? incoming.width : declaredOrOffer;
+      int extent;
+      const bool resolvedWidth = loka::app::layout::ResolveClipBoxWidth(declaredWidth, incoming.width, extent);
       Rect provisional = {
           projected.y,
           projected.x,
           declaredHeight > 0 ? ClipFarEdge(projected.y, declaredHeight)
                              : static_cast<short>(stack.activeDepth() ? parentClip.y + parentClip.height : SHRT_MAX),
-          extent > 0 ? ClipFarEdge(projected.x, extent)
-                     : static_cast<short>(stack.activeDepth() ? parentClip.x + parentClip.width : SHRT_MAX)};
+          resolvedWidth ? ClipFarEdge(projected.x, extent)
+                        : static_cast<short>(stack.activeDepth() ? parentClip.x + parentClip.width : SHRT_MAX)};
       // ROOT has no enclosing clip. Empty intersections still admit a frame.
       Rect clipped = provisional;
       if (stack.activeDepth() != 0)

@@ -1,6 +1,9 @@
 #ifndef LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP
 #define LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP
 
+void testMacRootClipAdmitsScrollView();
+void testMacRootClipHasNoShortRangeChannel();
+void testMacViewportClipShortRangeRefusalSkipsSubtree();
 void testMacScrollViewViewportSizeNoOverflow();
 void testMacScrollViewViewportSizeVerticalOverflow();
 void testMacScrollViewViewportSizeBothOverflows();

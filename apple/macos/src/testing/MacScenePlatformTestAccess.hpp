@@ -21,6 +21,22 @@ namespace loka
           return controller.layoutNodeFromSceneState(node, state);
         }
 
+        static ::loka::app::scene::ProjectionParentScopeStack &
+        projectionScopes(::MacScenePlatformController &controller)
+        {
+          return controller.projectionParentScopes_;
+        }
+
+        static bool refuseNarrowingInScrollScope(::MacScenePlatformController &controller, int resultY)
+        {
+          return controller.refuseNarrowingInScrollScope(resultY);
+        }
+
+        static void refuseScrollViewShortRange(::MacScenePlatformController &controller)
+        {
+          controller.refuseScrollViewShortRange();
+        }
+
         static bool hasPendingRelayout(const ::MacScenePlatformController &controller)
         {
           return controller.relayoutPending_;

@@ -29,6 +29,9 @@ void testBoxHeightExceedsGridAndCanvasCells();
 
 void testClipChildrenBoxPropsIdentityAndCopy();
 void testClipChildrenCardPropsIdentityAndCopy();
+void testClipBoxWidthResolutionTable();
+void testProjectionClipAdmissionQuery();
+void testClipBoxContextDefaultDoor();
 void testNullClipBoxFrameAndUnflaggedGeometry();
 void testNullClipCardFrame();
 void testNullClipScrollAdmissionAndMeasurement();

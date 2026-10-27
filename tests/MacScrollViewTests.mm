@@ -462,7 +462,7 @@ void testMacNestedScrollViewRefusesWithoutDisturbingOuterScope()
     assert([[root subviews] count] == 1 && "a nested ScrollView must refuse before materializing NSScrollView");
     LOKA_VERIFY(inner->getContext() == 0);
     LOKA_VERIFY(innerButton && innerButton->getContext() == 0);
-    assert([buttonsInDocument(nativeScrollView) count] == 6);
+    LOKA_VERIFY([buttonsInDocument(nativeScrollView) count] == 6);
 
     NSClipView *clipView = [nativeScrollView contentView];
     [clipView setBoundsOrigin:NSMakePoint(0, 6)];
@@ -1385,4 +1385,141 @@ void testMacScrollViewInsetsRefuseAnExtentAboveShort()
   [root release];
   [pool drain];
   std::printf("==== [testMacScrollViewInsetsRefuseAnExtentAboveShort] PASSED ====\n");
+}
+
+void testMacRootClipAdmitsScrollView()
+{
+  std::printf("\n==== [testMacRootClipAdmitsScrollView] start ====\n");
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  typedef loka::dsl::testing::MacScenePlatformTestAccess Access;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ViewportFact fact(0);
+    ScrollViewNode scroll((ScrollViewProps(fact.state())));
+    addButtonColumn(scroll, 6);
+    ProjectionParentScopeStack &scopes = Access::projectionScopes(controller);
+    LOKA_VERIFY(scopes.resetRoot(root, loka::core::Frame(0, 0, 300, 140)));
+    LayoutState seat;
+    seat.x = 0;
+    seat.y = 0;
+    seat.width = 300;
+    seat.height = 140;
+    seat.spacing = MacSceneLayout::kGap;
+    {
+      // Future clip boxes borrow the enclosing translation and channel.
+      const ProjectionParentScope parent = scopes.current();
+      ProjectionClipScopeGuard clip(scopes, parent);
+      LOKA_VERIFY(clip.isActive());
+      LOKA_VERIFY(scopes.currentIsClip() && !scopes.current().channel);
+      LOKA_VERIFY(Access::layoutNode(controller, &scroll, seat) == 140);
+      NSScrollView *native = scrollViewUnderRoot(root);
+      LOKA_VERIFY(native != nil);
+      LOKA_VERIFY([native superview] == root);
+      LOKA_VERIFY([buttonsInDocument(native) count] == 6);
+      LOKA_VERIFY(scopes.currentIsClip() && scopes.activeDepth() == 1);
+      LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 0);
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacRootClipAdmitsScrollView] PASSED ====\n");
+}
+
+void testMacRootClipHasNoShortRangeChannel()
+{
+  std::printf("\n==== [testMacRootClipHasNoShortRangeChannel] start ====\n");
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  typedef loka::dsl::testing::MacScenePlatformTestAccess Access;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ProjectionParentScopeStack &scopes = Access::projectionScopes(controller);
+    LayoutState seat;
+    seat.x = 0;
+    seat.y = 7;
+    seat.width = 100;
+    seat.height = 30;
+    seat.spacing = MacSceneLayout::kGap;
+    // Exercise the same calls with ROOT and then with a root CLIP.
+    for (int withClip = 0; withClip != 2; ++withClip)
+    {
+      ImageViewNode image(ImageViewProps().size(20, 11));
+      const ProjectionParentScope parent = scopes.current();
+      if (withClip)
+        LOKA_VERIFY(scopes.pushClip(parent));
+      LOKA_VERIFY(!scopes.current().channel);
+      LOKA_VERIFY(!Access::refuseNarrowingInScrollScope(controller, SHRT_MAX + 1));
+      LOKA_VERIFY(!Access::refuseNarrowingInScrollScope(controller, SHRT_MIN - 1));
+      Access::refuseScrollViewShortRange(controller);
+      LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+      LOKA_VERIFY(Access::layoutNode(controller, &image, seat) == seat.y + 11);
+      if (withClip)
+        LOKA_VERIFY(scopes.pop());
+    }
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacRootClipHasNoShortRangeChannel] PASSED ====\n");
+}
+
+void testMacViewportClipShortRangeRefusalSkipsSubtree()
+{
+  std::printf("\n==== [testMacViewportClipShortRangeRefusalSkipsSubtree] start ====\n");
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  typedef loka::dsl::testing::MacScenePlatformTestAccess Access;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 140)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    ProjectionParentScopeStack &scopes = Access::projectionScopes(controller);
+    LayoutState seat;
+    seat.x = 0;
+    seat.y = 7;
+    seat.width = 100;
+    seat.height = 30;
+    seat.spacing = MacSceneLayout::kGap;
+    for (int withClip = 0; withClip != 2; ++withClip)
+    {
+      StackNode column((StackProps(STACK_AXIS_COLUMN)));
+      ButtonNode *button = new ButtonNode(ButtonProps());
+      column.addChild(button);
+      const ProjectionParentScope parent = scopes.current();
+      ProjectionViewportScopeGuard viewport(scopes, parent);
+      LOKA_VERIFY(viewport.isActive());
+      LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+      if (withClip)
+        LOKA_VERIFY(scopes.pushClip(scopes.current()));
+      Access::refuseScrollViewShortRange(controller);
+      LOKA_VERIFY(scopes.current().hasShortRangeRefusal());
+      LOKA_VERIFY(Access::refuseNarrowingInScrollScope(controller, seat.y));
+      LOKA_VERIFY(Access::layoutNode(controller, &column, seat) == seat.y);
+      LOKA_VERIFY(button->getContext() == 0);
+      LOKA_VERIFY([[root subviews] count] == 0);
+      if (withClip)
+        LOKA_VERIFY(scopes.pop());
+      LOKA_VERIFY(scopes.current().hasShortRangeRefusal());
+    }
+    LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacViewportClipShortRangeRefusalSkipsSubtree] PASSED ====\n");
 }
