@@ -186,7 +186,7 @@ namespace
       f.visit();
       f.result(SCROLL_UNAVAILABLE);
     }
-    else
+    else // "stale", or "no-horizontal" without the earlier wide visit.
     {
       if (!std::strcmp(kind, "stale"))
         f.visit();
@@ -499,6 +499,9 @@ int main(int argc, char **argv)
     renderBorrow();
   else if (!std::strcmp(name, "mount"))
     deferredMount();
-  else
+  else if (!std::strcmp(name, "creation") || !std::strcmp(name, "heightless") || !std::strcmp(name, "clipped")
+           || !std::strcmp(name, "stale") || !std::strcmp(name, "no-horizontal"))
     absent(name);
+  else
+    LOKA_VERIFY(false);
 }
