@@ -310,6 +310,8 @@ namespace
     LOKA_VERIFY(!none.query(out));
     LOKA_VERIFY(out.top == 1 && out.left == 2 && out.bottom == 3 && out.right == 4);
     ToolboxClipBoxContext context;
+    NodeContext &base = context;
+    LOKA_VERIFY(base.asClipBoxContext() == 0);
     LOKA_VERIFY(!context.placement().query(out));
     const Rect first = {10, 20, 30, 40}, empty = {4, 5, 4, 5};
     context.setPlacement(ToolboxClipPlacement(first));

@@ -272,10 +272,16 @@ namespace loka
           return true;
         }
 
+        /** Whether a CLIP push fits while reserving two frames for viewport/unit. */
+        bool admitsClip() const
+        {
+          return this->activeDepth_ < MAX_ACTIVE_SCOPES - 2;
+        }
+
         /** Adds a clip without changing its parent's projection or measurement. */
         bool pushClip(const ProjectionParentScope &scope)
         {
-          if (this->activeDepth_ >= MAX_ACTIVE_SCOPES - 2)
+          if (!this->admitsClip())
             return false;
           ProjectionParentScope child = scope;
           child.channel = this->current().channel;
