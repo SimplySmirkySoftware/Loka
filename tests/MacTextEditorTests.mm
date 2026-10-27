@@ -264,7 +264,7 @@ namespace
     }
     void verifyPlainAttributes()
     {
-      NSFont *font = (NSFont *)this->controller.textFont(TextStyle(), true);
+      NSFont *font = (NSFont *)this->controller.textFont(TextStyle() + Monospace);
       NSTextStorage *storage = [this->view textStorage];
       // The view font follows the first unit's storage font (see verifyFontAt).
       if ([storage length] == 0 || fontCoversUnit(font, [storage string], 0, "view font pin"))
@@ -1894,7 +1894,10 @@ namespace
     virtual bool highlight(const String &line, AttributedString::Builder &out) const
     {
       ++this->calls;
-      return !this->fail && out.append(line, Bold + Italic + FontSize<18>());
+      // Body currently declares size only; explicitly request the system family
+      // so the editor must override a conflicting family, not just UNSET.
+      return !this->fail
+             && out.append(line, Body + TextStyle().family(TEXT_FAMILY_SYSTEM) + Bold + Italic + FontSize<18>());
     }
   };
 } // namespace
@@ -1928,13 +1931,14 @@ void testMacTextEditorHighlightAndLifecycle()
   f.edit(@"abxcd\nabcd\nabcd", 3);
   LOKA_VERIFY(highlighter.calls == 4);
   NSFont *styled = [[f.view textStorage] attribute:NSFontAttributeName atIndex:0 effectiveRange:0];
-  verifyFont(styled, (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>(), true));
+  LOKA_VERIFY([styled isFixedPitch]);
+  verifyFont(styled, (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>() + Monospace));
   verifyTextColor([[f.view textStorage] attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0]);
   highlighter.fail = true;
   f.edit(@"abxycd\nabcd\nabcd", 4);
   LOKA_VERIFY(highlighter.calls == 5 && bytes(f.lines.at(0).value) == "abxycd");
   verifyFont([[f.view textStorage] attribute:NSFontAttributeName atIndex:0 effectiveRange:0],
-             (NSFont *)f.controller.textFont(TextStyle(), true));
+             (NSFont *)f.controller.textFont(TextStyle() + Monospace));
   verifyTextColor([[f.view textStorage] attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0]);
   highlighter.fail = false;
   loka::core::testing::failLokaAllocRaw("AttributedString", "Segments", 1);
@@ -1942,7 +1946,7 @@ void testMacTextEditorHighlightAndLifecycle()
   loka::core::testing::allowLokaAllocRaw();
   LOKA_VERIFY(highlighter.calls == 6 && bytes(f.lines.at(0).value) == "abxyQcd");
   verifyFont([[f.view textStorage] attribute:NSFontAttributeName atIndex:0 effectiveRange:0],
-             (NSFont *)f.controller.textFont(TextStyle(), true));
+             (NSFont *)f.controller.textFont(TextStyle() + Monospace));
   // Storage-only input queues one style pass and never styles in the delegate.
   id delegate = [f.view delegate];
   [f.view setDelegate:nil];
@@ -1961,7 +1965,7 @@ void testMacTextEditorHighlightAndLifecycle()
     [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
   LOKA_VERIFY(highlighter.calls == 7);
   verifyFont([storage attribute:NSFontAttributeName atIndex:2 effectiveRange:0],
-             (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>(), true));
+             (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>() + Monospace));
   LOKA_VERIFY(f.cursor.state()->get() == LineCursor(f.lines.at(0).id, 4));
   f.turn();
   LOKA_VERIFY(highlighter.calls == 7);
@@ -2260,7 +2264,8 @@ void testMacTextEditorUtf8OpenCarets()
     // The run spans the whole row: "z" after the pair proves the 4-byte scalar
     // counted as two units; the pair itself is pinned where the font draws it.
     for (NSUInteger unit = 0; unit < 4; ++unit)
-      verifyFontAt([f.view textStorage], unit, (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>(), true));
+      verifyFontAt(
+          [f.view textStorage], unit, (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>() + Monospace));
     // Reload the same multibyte row through the logical projection.
     LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("\346\227\245")) == EDIT_OK);
     f.context->onPropsApplied();
