@@ -1,4 +1,9 @@
 #include <climits>
+#include <cstdio>
+#include "app/nodes/nestable/Match.hpp"
+#include "app/nodes/nestable/PolicyScope.hpp"
+#include "app/nodes/nestable/Show.hpp"
+#include "support/PropsReconciliation.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "core/util/OwnedDef.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -971,4 +976,202 @@ void testNullClipUnconstrainedEdges()
     LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, static_cast<short>(width), 0)) == 27);
     LOKA_VERIFY(probe->visited);
   }
+}
+
+namespace
+{
+  // Red with the generic applier: a differing definition overwrites the birth flag.
+  // Equal flags characterize the existing copy behavior, including all other fields.
+  template <class Definition, class NodeT> void verifyRetainedClip(Definition original, Definition next, bool different)
+  {
+    using namespace loka::app;
+    for (int flagged = 0; flagged != 2; ++flagged)
+    {
+      original.props.childClip_ = flagged ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+      next.props.childClip_ = (flagged != different) ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+      NodeT node(original.props);
+      node.setPropsTypeId(original.props.propsTypeId());
+      Definition expected(next);
+      expected.props.childClip_ = original.props.childClip_;
+      LOKA_VERIFY(next.isCompatibleWithNode(&node));
+      LOKA_VERIFY(next.applyPropsToNode(&node));
+      LOKA_VERIFY(node.props.childClip_ == original.props.childClip_);
+      LOKA_VERIFY(!(node.props < expected.props) && !(expected.props < node.props));
+      loka::core::OwnedDef<scene::NodeDefinitionBase> clone(next.clone());
+      LOKA_VERIFY(clone.get());
+      for (int repeat = 0; repeat != 2; ++repeat)
+      {
+        LOKA_VERIFY(clone->isCompatibleWithNode(&node));
+        LOKA_VERIFY(clone->applyPropsToNode(&node));
+        LOKA_VERIFY(node.props.childClip_ == original.props.childClip_);
+        LOKA_VERIFY(!(node.props < expected.props) && !(expected.props < node.props));
+      }
+    }
+  }
+
+  void verifyRetainedBoxClip(bool different)
+  {
+    using namespace loka::app;
+    loka::core::MutableState<int> width(93);
+    verifyRetainedClip<Box, BoxNode>(
+        Box().width(20).height(30).padding(2).gap(3), Box().width(&width).height(60).padding(7).gap(8), different);
+    verifyRetainedClip<Box, BoxNode>(Box().width(&width), Box().width(71), different);
+  }
+
+  void verifyRetainedCardClip(bool different)
+  {
+    using namespace loka::app;
+    verifyRetainedClip<Card, CardNode>(
+        Card(CardStyle(CARD_SHADOW_NONE)), Card(CardStyle(CARD_SHADOW_WIDE, CARD_SHADOW_STENCIL)), different);
+  }
+
+  /** Uses the existing Boundary reconciliation door, as the refusal harness does. */
+  class ClipReentryHarness : public loka::app::scene::BoundaryNodeFor<ClipReentryHarness>
+  {
+  public:
+    explicit ClipReentryHarness(const loka::app::scene::BoundaryPropsFor<ClipReentryHarness> &p)
+        : loka::app::scene::BoundaryNodeFor<ClipReentryHarness>(p)
+    {
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &) {}
+    loka::app::scene::Node *materialize(loka::app::scene::ComponentContext &context,
+                                        loka::app::scene::NodeDefinitionBase &definition)
+    {
+      return this->materializeLocalRebuildNode(context, &definition);
+    }
+    bool reconcile(loka::app::scene::ComponentContext &context,
+                   loka::app::scene::Node *node,
+                   loka::app::scene::NodeDefinitionBase &definition)
+    {
+      return this->reconcileParkedBranch(context, node, &definition);
+    }
+  };
+} // namespace
+
+void testClipChildrenBoxRetainedEqual()
+{
+  verifyRetainedBoxClip(false);
+}
+
+void testClipChildrenCardRetainedEqual()
+{
+  verifyRetainedCardClip(false);
+}
+
+void testClipChildrenBoxRetainedDifferent()
+{
+#ifndef LOKA_LIFECYCLE_AUDIT
+  verifyRetainedBoxClip(true);
+#else
+  std::printf("[skip] Box differing clip flag (lifecycle audit asserts here)\n");
+#endif
+}
+
+void testClipChildrenCardRetainedDifferent()
+{
+#ifndef LOKA_LIFECYCLE_AUDIT
+  verifyRetainedCardClip(true);
+#else
+  std::printf("[skip] Card differing clip flag (lifecycle audit asserts here)\n");
+#endif
+}
+
+void testClipChildrenBoundaryRetained()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  // Root goes through reconcileParkedBranch; its child goes through ACTION_RETAIN
+  // and recursive reconciliation. Red: the generic applier changes both flags.
+  ClipReentryHarness owner((BoundaryPropsFor<ClipReentryHarness>()));
+  ComponentContext context;
+  context.setBoundary(&owner);
+  context.setStateOwner(&owner);
+  Box original = Box().width(20).clipChildren();
+  original << Box().width(30).clipChildren();
+  Node *node = owner.materialize(context, original);
+  LOKA_VERIFY(node && node->asNestable()->childrenHead());
+  Node *child = node->asNestable()->childrenHead();
+  Box next = Box().width(40);
+  Box nextChild = Box().width(50);
+#ifdef LOKA_LIFECYCLE_AUDIT
+  next.clipChildren();
+  nextChild.clipChildren();
+  std::printf("[skip] Boundary differing clip flags (lifecycle audit asserts here)\n");
+#endif
+  next << nextChild;
+  for (int repeat = 0; repeat != 2; ++repeat)
+  {
+    LOKA_VERIFY(owner.reconcile(context, node, next));
+    LOKA_VERIFY(node->asNestable()->childrenHead() == child);
+    LOKA_VERIFY(node->asBoxNode()->props.width == 40 && child->asBoxNode()->props.width == 50);
+    LOKA_VERIFY(node->asBoxNode()->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+    LOKA_VERIFY(child->asBoxNode()->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  }
+  DestroyHeapNode(node);
+}
+
+void testClipChildrenMatchBirthAndParkedReentry()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl::testing;
+  using namespace PropsReconciliationSupport;
+  // Characterization: separate arms are born with their own flags. Reentry
+  // retains the original node and reapplies the declared width with an equal flag.
+  loka::core::MutableState<int> selection(0);
+  MatchDefinition<int> declaration = Match(selection);
+  declaration.arm(0, Box().width(20).clipChildren()).otherwise(Box().width(30));
+  NullScenePlatformController platform;
+  Scene scene((Boundary<Tree<MatchDefinition<int> > >(Props<MatchDefinition<int> >(&declaration))));
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  settle(scene);
+  Node *firstBranch = root(scene)->childrenHead();
+  BoxNode *first = firstBranch->asNestable()->childrenHead()->asBoxNode();
+  LOKA_VERIFY(first && first->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  selection.set(1);
+  settle(scene);
+  BoxNode *second = root(scene)->childrenHead()->asNestable()->childrenHead()->asBoxNode();
+  LOKA_VERIFY(second && second != first && second->props.childClip_ == layout::CHILD_CLIP_NONE);
+  first->props.width = 99; // Test-only sentinel proving parked reentry applies the definition.
+  selection.set(0);
+  settle(scene);
+  LOKA_VERIFY(root(scene)->childrenHead() == firstBranch);
+  LOKA_VERIFY(first->props.width == 20 && first->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  SceneTestAccess::unmount(scene);
+}
+
+void testClipChildrenDetachedDelivery()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using namespace loka::dsl::testing;
+  using namespace PropsReconciliationSupport;
+  // Characterization of the detached delivery route with an equal birth flag.
+  // Differing flags are pinned at the same reconciliation door by BoundaryRetained.
+  loka::core::MutableState<bool> shown(true);
+  PolicyScopeDefinition scope;
+  scope.deliverWhileDetached() << Box().width(20).clipChildren();
+  ShowDefinition declaration = Show(shown);
+  declaration << scope;
+  NullScenePlatformController platform;
+  Scene scene((Boundary<Tree<ShowDefinition> >(Props<ShowDefinition>(&declaration))));
+  LOKA_VERIFY(scene.mount(&platform));
+  SceneTestAccess::updateAttached(scene, true);
+  settle(scene);
+  Node *branch = root(scene)->childrenHead();
+  BoxNode *box = branch->asNestable()->childrenHead()->asBoxNode();
+  LOKA_VERIFY(box && box->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  shown.set(false);
+  settle(scene);
+  LOKA_VERIFY(box->lifecycleFact() != NODE_FACT_ATTACHED);
+  box->props.width = 99; // Test-only sentinel: the parked definition must be delivered again.
+  root(scene)->markViewDirty(NODE_DIRTY_PROPS);
+  settle(scene);
+  LOKA_VERIFY(box->props.width == 20 && box->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  LOKA_VERIFY(box->lifecycleFact() != NODE_FACT_ATTACHED);
+  shown.set(true);
+  settle(scene);
+  LOKA_VERIFY(root(scene)->childrenHead() == branch);
+  SceneTestAccess::unmount(scene);
 }

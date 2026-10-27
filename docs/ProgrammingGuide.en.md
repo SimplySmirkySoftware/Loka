@@ -1601,7 +1601,18 @@ the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
-Toolbox clips in a later change; macOS and Win32 do not clip yet.
+Toolbox clips; macOS and Win32 do not clip yet.
+
+The clip flag is fixed when the box or card is created, on every platform.
+Applying new properties to the same box updates the other properties and keeps
+its original clip flag. To switch clipping on or off, declare separate `Match`
+or `Show` arms, or re-declare under `Keyed`, so each new box has its own flag:
+
+```cpp
+MatchDefinition<Fold> photo = Match(*this->fold_.state());
+photo.arm(FOLD_COLLAPSED, Card().clipChildren() << ImageView().image(this->photo_.state()))
+    .otherwise(Card() << ImageView().image(this->photo_.state()));
+```
 
 ### Row And Column Natural Size
 
