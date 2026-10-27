@@ -988,7 +988,7 @@ namespace
     for (int flagged = 0; flagged != 2; ++flagged)
     {
       original.props.childClip_ = flagged ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
-      next.props.childClip_ = (flagged != different) ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+      next.props.childClip_ = ((flagged != 0) != different) ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
       NodeT node(original.props);
       node.setPropsTypeId(original.props.propsTypeId());
       Definition expected(next);
