@@ -1240,7 +1240,7 @@ void testWin32EditMenuTextEditor()
   {
     const ListRevision before = f.facts.lines.revision().get();
     f.dispatch(EDIT_CUT);
-    LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("")));
+    LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.empty());
     LOKA_VERIFY(f.facts.lines.revision().get() != before);
   }
   else
@@ -1251,7 +1251,7 @@ void testWin32EditMenuTextEditor()
     LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("pasted")));
     f.dispatch(EDIT_UNDO);
     if (clipboardAvailable)
-      LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("")));
+      LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.empty());
     else
     {
       LOKA_VERIFY(f.facts.lines.size() == 2);
