@@ -1231,6 +1231,15 @@ void testMacClipBoxGroundCapturesInBothBlurPaths()
     }
     const double inside = clipRedExcess(rep, f.host.root, 110, 100);
     outside[clipped] = clipRedExcess(rep, f.host.root, 230, 100);
+    // Positive control: without a clip box the ink must show through the
+    // effect view. Some hosts draw the material opaque (a CI virtual machine).
+    if (effect && !clipped && inside <= 0.02)
+    {
+      std::printf("[skip] clip effect blur: the effect view shows no ink beneath it on this host "
+                  "(unflagged inside %.3f); the legacy path runs on Mavericks\n",
+                  inside);
+      return;
+    }
     // Samples are > 40 points from the cut, beyond the legacy blur radius.
     LOKA_VERIFY(inside > 0.02);
     if (clipped)
