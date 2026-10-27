@@ -1635,6 +1635,8 @@ the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
 Toolbox and macOS clip; Win32 does not clip yet.
+On macOS the system draws focus rings, so a focused control's ring can extend
+past a clip box's edge; a ScrollView's edge cuts it.
 
 The clip flag is fixed when the box or card is created, on every platform.
 Applying new properties to the same box updates the other properties and keeps
