@@ -37,16 +37,4 @@
   NSView *hit = [super hitTest:point];
   return hit == self ? nil : hit;
 }
-- (void)lokaPlace:(NSRect)rect
-{
-  const NSRect previous = [self frame];
-  [self setFrame:rect];
-  [self setBoundsOrigin:rect.origin];
-  // As with ZStack units (#1564), Tiger setFrame: does not invalidate paint.
-  if (!NSEqualRects(previous, rect))
-  {
-    [self setNeedsDisplay:YES];
-    [[self superview] setNeedsDisplayInRect:previous];
-  }
-}
 @end

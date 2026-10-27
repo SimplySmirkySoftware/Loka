@@ -1,5 +1,6 @@
 #include "MacClipBoxContext.hpp"
 #include "LokaClipHostView.hpp"
+#include "../platform/MacNativeGeometry.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include <cassert>
@@ -35,6 +36,22 @@ bool MacClipBoxContext::ensureHost(void *parent, const loka::macos::MacRect &sea
   [(NSView *)parent addSubview:view];
   this->readLifecycleFactOnAttach();
   return true;
+}
+// Deliberate twin of MacZStackContext::Unit::place: setFrame: marks nothing for
+// display on Tiger (#1564), so the host asks for its new rectangle and the parent
+// for the one it leaves. The bounds origin follows the frame origin so children
+// keep their parent's coordinates.
+void MacClipBoxContext::place(const loka::macos::MacRect &rect)
+{
+  NSView *view = (NSView *)this->view_;
+  const NSRect previous = [view frame];
+  const bool moved = loka::macos::ApplyMacFrame(view, rect);
+  [view setBoundsOrigin:rect.r.origin];
+  if (moved)
+  {
+    [view setNeedsDisplay:YES];
+    [[view superview] setNeedsDisplayInRect:previous];
+  }
 }
 void MacClipBoxContext::readLifecycleFactOnAttach()
 {

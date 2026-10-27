@@ -19,6 +19,8 @@ public:
   }
   /** Layout calls once per admitted visit; at most one allocation, no row walk. */
   bool ensureHost(void *parent, const loka::macos::MacRect &seat);
+  /** Layout calls once per completed visit after ensureHost; one frame write, no row walk. */
+  void place(const loka::macos::MacRect &rect);
   void *view() const
   {
     return this->view_;
