@@ -462,7 +462,7 @@ void testMacNestedScrollViewRefusesWithoutDisturbingOuterScope()
     assert([[root subviews] count] == 1 && "a nested ScrollView must refuse before materializing NSScrollView");
     LOKA_VERIFY(inner->getContext() == 0);
     LOKA_VERIFY(innerButton && innerButton->getContext() == 0);
-    assert([buttonsInDocument(nativeScrollView) count] == 6);
+    LOKA_VERIFY([buttonsInDocument(nativeScrollView) count] == 6);
 
     NSClipView *clipView = [nativeScrollView contentView];
     [clipView setBoundsOrigin:NSMakePoint(0, 6)];
