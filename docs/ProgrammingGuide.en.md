@@ -306,11 +306,11 @@ rail, want)`. Successful attachment fixes capacity until owner reclaim; a
 second attachment preserves the first. `buffer.lines()` exposes editing and
 observation through `TextLines`, with no attach/detach or raw-list conversion.
 The editor and file doors borrow the buffer. Byte capacities and columns are
-UTF-8 byte counts; columns must lie on code point boundaries. Rows contain the
-editor alphabet, currently ASCII, without CR, LF, or NUL. The Classic TextEdit
-rail will keep refusing non-ASCII. `EDITOR_NON_ASCII` means the editor alphabet
-refused the bytes: this covers malformed sequences and forbidden NUL (which
-is itself valid UTF-8), as well as non-ASCII under today's policy.
+UTF-8 byte counts; columns must lie on code point boundaries. Rows contain
+well-formed UTF-8 without CR, LF, or NUL. `EDITOR_NON_ASCII` means the editor
+alphabet refused the bytes: malformed sequences and forbidden NUL (which is
+itself valid UTF-8). The Classic TextEdit rail still refuses non-ASCII with
+the same result.
 
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of
@@ -1597,6 +1597,11 @@ Reset the live width with a typed null (`width(static_cast<State<int>*>(0))`);
 width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
+
+`Box().clipChildren()` and `Card().clipChildren()` request clipping of children
+at the container's own rect. A clip box reports no width larger than a positive
+width offer; a nonpositive offer is unconstrained and keeps its natural width.
+Toolbox clips in a later change; macOS and Win32 do not clip yet.
 
 ### Row And Column Natural Size
 

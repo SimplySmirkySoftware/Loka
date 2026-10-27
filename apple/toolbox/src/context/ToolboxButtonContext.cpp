@@ -158,15 +158,16 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
   if (controller && resourceId_ > 0)
   {
     ToolboxScenePlatformController::ButtonControlBinding *binding = 0;
-    const bool reconciled =
-        controller->ensureButtonControl(resourceId_, rect_, label_, emitter_, enabled_, lifetimeHint(), this, binding);
+    bool painted = false;
+    const bool reconciled = controller->ensureButtonControl(
+        resourceId_, rect_, label_, emitter_, enabled_, lifetimeHint(), this, binding, &painted);
     // Every installed control this render reaches stays pressable, including one
     // whose label reconciliation refused: its face is still on screen.
     if (binding)
       controller->reachNativeButton(resourceId_);
     if (reconciled)
     {
-      if (paints && binding)
+      if (paints && binding && !painted)
         this->repaint(binding->control, binding->label);
       if (paints && completes)
         this->presented_.commit(current, ToolboxPaintScope());
@@ -176,7 +177,7 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
     // installed face rather than leaving a visible control undrawn.
     if (binding)
     {
-      if (paints)
+      if (paints && !painted)
         this->repaint(binding->control, binding->label);
       return;
     }

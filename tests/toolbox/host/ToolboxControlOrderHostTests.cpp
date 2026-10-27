@@ -59,14 +59,14 @@ namespace
     }
     return action;
   }
-  void verifyOneDraw(ControlRef control)
+  void verifyOneDraw(ControlRef control, const char *operation = "draw")
   {
     unsigned painted = 0;
     for (std::size_t i = 0; i < control->calls.size(); ++i)
       if (control->calls[i].painted)
       {
         ++painted;
-        LOKA_VERIFY(control->calls[i].operation == "draw");
+        LOKA_VERIFY(control->calls[i].operation == operation);
       }
     LOKA_VERIFY(painted == 1);
   }
@@ -117,7 +117,7 @@ namespace
     ToolboxInputDoor::render(controller);
     LOKA_VERIFY(controller.buttonControls_.size() == 1);
     ControlRef control = controller.buttonControls_[0].control;
-    verifyOneDraw(control);
+    verifyOneDraw(control, "show");
     LOKA_VERIFY(toolbox_host::paintOperations.size() == 2);
     LOKA_VERIFY(toolbox_host::paintOperations[0] == "bar");
     LOKA_VERIFY(toolbox_host::paintOperations[1] == "erase");
@@ -197,6 +197,70 @@ namespace
     controller.rootNode_ = 0;
     Access::unmount(scene);
   }
+  void verifyVisibleHide(ControlRef control)
+  {
+    LOKA_VERIFY(control->visible);
+  }
+  void buttonHiddenMove(const char *mode)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ControlCleanupCheck cleanup(window);
+    ToolboxScenePlatformController controller(&window);
+    ButtonNode node(ButtonProps().text("Moved title"));
+    ToolboxButtonContext context(&node, &controller);
+    const Rect before = {10, 10, 30, 110};
+    const Rect after = {20, 20, 45, 140};
+    const Rect covered = {0, 0, 200, 200};
+    const bool created = std::strcmp(mode, "ButtonCreatedPaintsOnce") == 0;
+    const bool admitted = std::strcmp(mode, "ButtonMoveWithoutErasedPass") != 0;
+    context.updateData(String::Literal("Moved title"), 0, 0, controller.allocateControlId(), 0);
+    context.updateRect(before);
+    if (!created)
+    {
+      context.render(&controller);
+      controller.buttonControls_[0].control->calls.clear();
+      context.updateRect(after);
+    }
+    const unsigned draws = controller.debugStats_.controlDrawCount;
+    const unsigned total = controller.debugStats_.totalControlDrawCount;
+    toolbox_host::controlCalls = toolbox_host::ControlCalls();
+    if (!created)
+      toolbox_host::beforeHide = verifyVisibleHide;
+    if (admitted)
+    {
+      ToolboxErasedPass::Guard pass(controller.erasedPass(), covered);
+      context.render(&controller);
+    }
+    else
+      context.render(&controller);
+    toolbox_host::beforeHide = 0;
+    ControlRef control = controller.buttonControls_[0].control;
+    const std::size_t start = created ? 2 : 1;
+    if (created)
+    {
+      LOKA_VERIFY(control->calls[0].operation == "new" && !control->calls[0].painted);
+      LOKA_VERIFY(control->calls[1].operation == "hide" && !control->calls[1].painted);
+    }
+    else
+    {
+      LOKA_VERIFY(control->calls[0].operation == "hide");
+      LOKA_VERIFY(EmptyRect(&control->calls[0].ownerClip) == admitted);
+      LOKA_VERIFY(control->calls[0].painted == !admitted);
+    }
+    LOKA_VERIFY(control->calls[start].operation == "move" && !control->calls[start].painted);
+    LOKA_VERIFY(control->calls[start + 1].operation == "size" && !control->calls[start + 1].painted);
+    for (std::size_t i = start; i + 1 < control->calls.size(); ++i)
+    {
+      LOKA_VERIFY(!control->calls[i].painted);
+      LOKA_VERIFY(control->calls[i].operation != "draw");
+    }
+    LOKA_VERIFY(control->calls.back().operation == "show" && control->calls.back().painted);
+    LOKA_VERIFY(toolbox_host::controlCalls.draws == 0 && toolbox_host::controlCalls.shows == 1);
+    LOKA_VERIFY(controller.debugStats_.controlDrawCount == draws + 1);
+    LOKA_VERIFY(controller.debugStats_.totalControlDrawCount == total + 1);
+    controller.clearControls();
+  }
   void scrollBar()
   {
     ToolboxWindow window;
@@ -270,7 +334,7 @@ namespace
     LOKA_VERIFY(toolbox_host::paintOperations[1] == "bar");
     LOKA_VERIFY(toolbox_host::paintOperations[2] == "bar");
     LOKA_VERIFY(toolbox_host::paintOperations[3] == "bar");
-    LOKA_VERIFY(toolbox_host::controlCalls.draws == 3);
+    LOKA_VERIFY(toolbox_host::controlCalls.draws == 2);
     const Rect restored = toolbox_host::currentClip();
     LOKA_VERIFY(EqualRect(&restored, &outer));
     for (std::size_t i = 0; i < controller.scrollControls().size(); ++i)
@@ -308,7 +372,10 @@ namespace
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strncmp(argv[1], "PressDoor", 9) == 0)
+  if (std::strcmp(argv[1], "ButtonHiddenMove") == 0 || std::strcmp(argv[1], "ButtonCreatedPaintsOnce") == 0
+      || std::strcmp(argv[1], "ButtonMoveWithoutErasedPass") == 0)
+    buttonHiddenMove(argv[1]);
+  else if (std::strncmp(argv[1], "PressDoor", 9) == 0)
     press_door::run(argv[1]);
   else if (std::strcmp(argv[1], "ParkedNativeButton") == 0)
   {

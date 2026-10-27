@@ -1,3 +1,4 @@
+#include "app/scene/projection/PlatformNodeHandler.hpp"
 #ifndef LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
 #define LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
 
@@ -13,15 +14,16 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
-#ifdef LOKA_HOST_RECT_SURFACE
 #include "Quickdraw.h"
-#endif
 
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController
 {
 public:
   // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
+  loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
@@ -48,14 +50,35 @@ public:
   void requestStructurePresent() {}
   // RectSurface owns no controller-ledger handles; Node deletes its context.
   void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint) {}
-  bool intersectWithProjectionClip(const Rect &rect, Rect &out) const { out = rect; return !EmptyRect(&out); }
+
 #else
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { LOKA_VERIFY(false); }
 #endif
+  bool intersectWithProjectionClip(const Rect &rect, Rect &out) const
+  {
+    out = rect;
+    if (this->projectionParentScopes_.activeDepth())
+    {
+      const loka::core::Frame &clip = this->projectionParentScopes_.current().clipRect;
+      const Rect bounds = {static_cast<short>(clip.y),
+                           static_cast<short>(clip.x),
+                           static_cast<short>(clip.y + clip.height),
+                           static_cast<short>(clip.x + clip.width)};
+      out.left = rect.left > bounds.left ? rect.left : bounds.left;
+      out.top = rect.top > bounds.top ? rect.top : bounds.top;
+      out.right = rect.right < bounds.right ? rect.right : bounds.right;
+      out.bottom = rect.bottom < bounds.bottom ? rect.bottom : bounds.bottom;
+    }
+    return out.left < out.right && out.top < out.bottom;
+  }
   short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *)
   {
     LOKA_VERIFY(false);
     return 0;
+  }
+  void renderClipBox(loka::app::scene::Node *)
+  {
+    LOKA_VERIFY(false);
   }
   void renderZStack(loka::app::ZStackNode *)
   {

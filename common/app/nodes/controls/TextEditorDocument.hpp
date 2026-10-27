@@ -19,7 +19,7 @@ namespace loka
       EDITOR_REENTRANT,
       EDITOR_UNAVAILABLE,
       /** The editor alphabet refused the bytes: malformed sequences or forbidden NUL,
-          as well as non-ASCII while the alphabet remains closed. NUL is valid UTF-8. */
+          as well as non-ASCII on the Classic TextEdit rail. NUL is valid UTF-8. */
       EDITOR_NON_ASCII,
       EDITOR_INVALID_CURSOR,
       EDITOR_OWNER_MISMATCH

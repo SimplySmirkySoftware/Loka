@@ -621,3 +621,88 @@ namespace loka
   } // namespace app
 } // namespace loka
 #endif
+
+#if defined(TEST_BUILD) && defined(LOKA_HOST_CLIP_ALLOCATIONS)
+#include <cstdlib>
+#include <new>
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned clipAllocationFailures = 0;
+      unsigned clipAllocationAttempts = 0;
+      void *watchedClipContext = 0;
+      unsigned clipContextDeletes = 0;
+    } // namespace
+    void failToolboxClipBoxAllocations(unsigned count)
+    {
+      clipAllocationFailures = count;
+      clipAllocationAttempts = 0;
+    }
+    unsigned toolboxClipBoxAllocationAttempts()
+    {
+      return clipAllocationAttempts;
+    }
+    void watchToolboxClipBoxDeletion(void *context)
+    {
+      watchedClipContext = context;
+      clipContextDeletes = 0;
+    }
+    unsigned toolboxClipBoxDeletes()
+    {
+      return clipContextDeletes;
+    }
+  } // namespace testing
+} // namespace loka
+// This host executable replaces the allocation family as a pair so ASan sees
+// matching malloc/free operations. Only nothrow allocation consumes the fail
+// count: replacing production nothrow new with plain new must fail the pin.
+void *operator new(std::size_t size) throw(std::bad_alloc)
+{
+  void *memory = std::malloc(size ? size : 1);
+  if (!memory)
+    std::abort();
+  return memory;
+}
+void *operator new[](std::size_t size) throw(std::bad_alloc)
+{
+  return ::operator new(size);
+}
+void *operator new(std::size_t size, const std::nothrow_t &) throw()
+{
+  ++loka::testing::clipAllocationAttempts;
+  if (loka::testing::clipAllocationFailures)
+  {
+    --loka::testing::clipAllocationFailures;
+    return 0;
+  }
+  return std::malloc(size ? size : 1);
+}
+void *operator new[](std::size_t size, const std::nothrow_t &tag) throw()
+{
+  return ::operator new(size, tag);
+}
+void operator delete(void *memory) throw()
+{
+  if (memory && memory == loka::testing::watchedClipContext)
+  {
+    ++loka::testing::clipContextDeletes;
+    loka::testing::watchedClipContext = 0;
+  }
+  std::free(memory);
+}
+void operator delete[](void *memory) throw()
+{
+  ::operator delete(memory);
+}
+void operator delete(void *memory, const std::nothrow_t &) throw()
+{
+  ::operator delete(memory);
+}
+void operator delete[](void *memory, const std::nothrow_t &) throw()
+{
+  ::operator delete(memory);
+}
+#endif

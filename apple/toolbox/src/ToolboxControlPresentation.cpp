@@ -56,6 +56,11 @@ void ToolboxScenePlatformController::drawScrollBarControl(short id)
 void ToolboxScenePlatformController::drawControl(ControlRef control)
 {
   Draw1Control(control);
+  this->noteControlDraw();
+}
+
+void ToolboxScenePlatformController::noteControlDraw()
+{
   ++this->debugStats_.controlDrawCount;
   ++this->debugStats_.totalControlDrawCount;
 }

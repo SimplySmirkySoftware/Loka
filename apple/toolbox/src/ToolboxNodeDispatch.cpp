@@ -1,4 +1,5 @@
 #include "app/nodes/controls/Ribbon.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
 #include "app/layout/StackGaps.hpp"
@@ -15,6 +16,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
 #include "context/ToolboxRectSurfaceContext.hpp"
+#include "context/ToolboxClipBoxContext.hpp"
 
   short LayoutChildren(loka::app::scene::INestable *nestable,
                        loka::app::scene::LayoutState &state,
@@ -121,6 +123,98 @@ namespace
     loka::app::scene::BoundaryNode *currentBoundary_;
     short layoutResultY_;
   };
+
+  /** Both Box/Card layout routes, unchanged beneath an optional clip frame. */
+  short LayoutBoxContents(loka::app::scene::Node *node,
+                          loka::app::scene::LayoutState &state,
+                          ToolboxScenePlatformController *controller,
+                          loka::app::scene::BoundaryNode *boundary)
+  {
+    short width = 0;
+    ToolboxLayoutTraversal traversal(controller, boundary);
+    if (!controller->layoutHandlerRegistry()
+        || !ApplyToolboxPlatformLayoutHandler(*controller->layoutHandlerRegistry(), *node, state, traversal, width))
+    {
+      width = static_cast<short>(node->asBoxNode() ? ComputeToolboxBoxLayout(node->asBoxNode(), state, &traversal)
+                                                   : ComputeToolboxFramedLayout(node, state, &traversal));
+      state.y = traversal.layoutResultY();
+    }
+    return width;
+  }
+
+  short ClipFarEdge(int origin, int extent)
+  {
+    // Declared extents may be int-sized; clamp before addition can overflow.
+    return static_cast<short>(extent > SHRT_MAX - origin ? SHRT_MAX : origin + extent);
+  }
+
+  /** One placement, with guard lifetime ending before the final fact is written.
+      Cost: O(1) plus the existing child traversal; admission checks the stack's own depth. */
+  short LayoutClipBox(loka::app::scene::Node *node,
+                      loka::app::scene::LayoutState &state,
+                      ToolboxScenePlatformController *controller,
+                      loka::app::scene::BoundaryNode *boundary,
+                      bool flagged,
+                      int declaredWidth,
+                      int declaredHeight)
+  {
+    using namespace loka::app::scene;
+    const LayoutState incoming = state;
+    if (flagged)
+      controller->ensureClipBoxContext(node, incoming);
+    ToolboxClipBoxContext *context = static_cast<ToolboxClipBoxContext *>(node->getContext());
+    LayoutState projected;
+    short width = 0;
+    ToolboxClipPlacement placement;
+    if (flagged && context && controller->projectionParentScopes_.current().project(incoming, projected))
+    {
+      ProjectionParentScopeStack &stack = controller->projectionParentScopes_;
+      const loka::core::Frame &parentClip = stack.current().clipRect;
+      // The provisional width obeys the same cap as the final one: never wider than a positive offer.
+      const int declaredOrOffer = node->asBoxNode() && declaredWidth > 0 ? declaredWidth : incoming.width;
+      const int extent = incoming.width > 0 && declaredOrOffer > incoming.width ? incoming.width : declaredOrOffer;
+      Rect provisional = {
+          projected.y,
+          projected.x,
+          declaredHeight > 0 ? ClipFarEdge(projected.y, declaredHeight)
+                             : static_cast<short>(stack.activeDepth() ? parentClip.y + parentClip.height : SHRT_MAX),
+          extent > 0 ? ClipFarEdge(projected.x, extent)
+                     : static_cast<short>(stack.activeDepth() ? parentClip.x + parentClip.width : SHRT_MAX)};
+      // ROOT has no enclosing clip. Empty intersections still admit a frame.
+      Rect clipped = provisional;
+      if (stack.activeDepth() != 0)
+        controller->intersectWithProjectionClip(provisional, clipped);
+      ProjectionParentScope frame = stack.current();
+      frame.clipRect =
+          loka::core::Frame(clipped.left, clipped.top, clipped.right - clipped.left, clipped.bottom - clipped.top);
+      {
+        ProjectionClipScopeGuard guard(stack, frame);
+        width = LayoutBoxContents(node, state, controller, boundary);
+        if (guard.isActive())
+          placement = ToolboxClipPlacement(provisional);
+      }
+    }
+    else
+      width = LayoutBoxContents(node, state, controller, boundary);
+
+    if (flagged && node->asBoxNode() && incoming.width > 0 && width > incoming.width)
+      width = incoming.width;
+    if (context)
+    {
+      Rect rect;
+      const int height = static_cast<int>(state.y) - incoming.y;
+      if (placement.query(rect) && width > 0 && height > 0
+          && !controller->projectionParentScopes_.current().hasShortRangeRefusal())
+      {
+        rect.right = ClipFarEdge(rect.left, width);
+        rect.bottom = ClipFarEdge(rect.top, height);
+        context->setPlacement(ToolboxClipPlacement(rect));
+      }
+      else
+        context->setPlacement(ToolboxClipPlacement());
+    }
+    return width;
+  }
 
   class ActiveLayoutBoundaryScope
   {
@@ -241,20 +335,14 @@ namespace
     case loka::app::scene::NODE_KIND_BOX:
     {
       loka::app::BoxNode *box = static_cast<loka::app::BoxNode *>(node);
-      short width = 0;
-      bool usedHandler = false;
-      if (controller && controller->layoutHandlerRegistry())
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler = ApplyToolboxPlatformLayoutHandler(
-            *controller->layoutHandlerRegistry(), *box, state, traversal, width);
-      }
-      if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxBoxLayout(box, state, &traversal));
-        state.y = traversal.layoutResultY();
-      }
+      const short width = LayoutClipBox(
+          box,
+          state,
+          controller,
+          activeBoundary,
+          box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT,
+          box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT ? box->props.effectiveWidth() : 0,
+          box->props.height);
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
@@ -264,21 +352,16 @@ namespace
     case loka::app::scene::NODE_KIND_CARD:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
     {
-      loka::app::scene::Node *group = node;
-      short width = 0;
-      bool usedHandler = false;
-      if (controller && controller->layoutHandlerRegistry())
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        usedHandler =
-            ApplyToolboxPlatformLayoutHandler(*controller->layoutHandlerRegistry(), *group, state, traversal, width);
-      }
-      if (!usedHandler)
-      {
-        ToolboxLayoutTraversal traversal(controller, activeBoundary);
-        width = static_cast<short>(ComputeToolboxFramedLayout(group, state, &traversal));
-        state.y = traversal.layoutResultY();
-      }
+      const bool card = node->kind() == loka::app::scene::NODE_KIND_CARD;
+      const short width = card ? LayoutClipBox(node,
+                                               state,
+                                               controller,
+                                               activeBoundary,
+                                               static_cast<loka::app::CardNode *>(node)->props.childClip_
+                                                   == loka::app::layout::CHILD_CLIP_OWN_RECT,
+                                               0,
+                                               0)
+                               : LayoutBoxContents(node, state, controller, activeBoundary);
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
@@ -471,13 +554,26 @@ namespace
     case loka::app::scene::NODE_KIND_ZSTACK:
       controller->renderZStack(static_cast<loka::app::ZStackNode *>(node));
       return;
+    case loka::app::scene::NODE_KIND_BOX:
+      if (controller && node->asBoxNode()->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+      {
+        controller->renderClipBox(node);
+        return;
+      }
+      break;
+    case loka::app::scene::NODE_KIND_CARD:
+      if (controller
+          && static_cast<loka::app::CardNode *>(node)->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+      {
+        controller->renderClipBox(node);
+        return;
+      }
+      break;
     // Nodes without a built-in kind (boundaries, components, app-defined
     // containers) and these built-in containers render their children.
     case loka::app::scene::NODE_KIND_UNKNOWN:
-    case loka::app::scene::NODE_KIND_BOX:
     case loka::app::scene::NODE_KIND_GRID:
     case loka::app::scene::NODE_KIND_CANVAS:
-    case loka::app::scene::NODE_KIND_CARD:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
       break;
     // Built-in kinds answered above by asProjectedLayoutNode().

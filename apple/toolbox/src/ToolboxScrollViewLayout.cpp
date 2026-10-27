@@ -55,7 +55,7 @@ short ToolboxScenePlatformController::layoutScrollView(
       spans->invalidate();
     break;
   }
-  if (this->projectionParentScopes_.activeDepth() != 0)
+  if (this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
     // V1 admits one viewport. The inner subtree materializes nothing, while
     // the outer measurement scope remains usable for following siblings.
@@ -119,8 +119,13 @@ short ToolboxScenePlatformController::layoutScrollView(
 
   const Rect contentRect =
       ToolboxScrollViewContentRect(ToolboxScrollViewFrameRect(viewportRect, horizontalBar, edges), horizontalBar);
-  const loka::core::Frame viewportClip(
-      contentRect.left, contentRect.top, contentRect.right - contentRect.left, contentRect.bottom - contentRect.top);
+  Rect clippedViewport = contentRect;
+  if (this->projectionParentScopes_.currentIsClip())
+    this->intersectWithProjectionClip(contentRect, clippedViewport);
+  const loka::core::Frame viewportClip(clippedViewport.left,
+                                       clippedViewport.top,
+                                       clippedViewport.right - clippedViewport.left,
+                                       clippedViewport.bottom - clippedViewport.top);
   loka::app::scene::ProjectionParentScope childScope;
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();

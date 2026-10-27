@@ -1,3 +1,4 @@
+#include "ToolboxPaintDrawerType.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/style/CardShadow.hpp"
 #include "context/ToolboxCardBandContext.hpp"

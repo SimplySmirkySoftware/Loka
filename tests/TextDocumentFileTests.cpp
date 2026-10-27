@@ -552,6 +552,11 @@ void testTextAlphabetFileAdapter()
     LOKA_VERIFY(read(source, document, std::string(cases[i].bytes, cases[i].length)) == expectedResult);
     if (expectedResult != TEXT_DOCUMENT_OK)
       before.unchanged(document.lines);
+    else
+    {
+      LOKA_VERIFY(document.lines.size() == 1);
+      LOKA_VERIFY(row(document.lines, 0) == std::string(cases[i].bytes, cases[i].length));
+    }
   }
 }
 

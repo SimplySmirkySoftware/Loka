@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_NODES_CONTROLS_CARD_HPP
 #define LOKA_APP_NODES_CONTROLS_CARD_HPP
 
+#include "app/layout/ChildClip.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/style/CardStyle.hpp"
 #include <vector>
@@ -138,17 +139,26 @@ namespace loka
       typedef CardTypeTag TypeTag;
       typedef CardNode NodeType;
       CardStyle style;
+      layout::ChildClip childClip_;
       explicit CardProps(const CardStyle &look = CardStyle())
-          : style(look)
+          : style(look),
+            childClip_(layout::CHILD_CLIP_NONE)
       {
       }
       int hash() const
       {
-        return this->style.hash();
+        return this->style.hash() + this->childClip_;
       }
       bool operator<(const scene::PropsBase &rhs) const
       {
-        return rhs.propsTypeId() == this->propsTypeId() && this->style < static_cast<const CardProps &>(rhs).style;
+        if (rhs.propsTypeId() != this->propsTypeId())
+          return false;
+        const CardProps &other = static_cast<const CardProps &>(rhs);
+        if (this->style < other.style)
+          return true;
+        if (other.style < this->style)
+          return false;
+        return this->childClip_ < other.childClip_;
       }
     };
 
@@ -207,6 +217,14 @@ namespace loka
             return;
           }
         }
+      }
+      /** Clips children at this card's own rect. With a positive width offer,
+          reports no more than that width; a nonpositive offer keeps its natural width.
+          Toolbox clips in a later change; macOS and Win32 do not clip yet. */
+      CardDefinition &clipChildren()
+      {
+        this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
+        return *this;
       }
       virtual scene::NodeDefinitionBase *clone() const
       {
