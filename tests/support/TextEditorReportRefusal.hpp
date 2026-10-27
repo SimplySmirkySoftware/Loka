@@ -3,7 +3,7 @@
 #ifndef TEST_BUILD
 #error TextEditorReportRefusal is test-only
 #endif
-#include "app/scene/state/Request.hpp"
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "platform/String.hpp"
 namespace loka
 {

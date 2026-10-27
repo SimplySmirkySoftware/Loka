@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/scene/node/ComposableNode.hpp"
 using namespace loka::app;
 using namespace loka::app::scene;

@@ -6,7 +6,7 @@
 #include "app/scene/projection/SeamKey.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "app/scene/state/Reported.hpp"
-#include "app/scene/state/Request.hpp"
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/style/LineHighlighter.hpp"
 #include "app/nodes/controls/TextEditorDocument.hpp"
 namespace loka

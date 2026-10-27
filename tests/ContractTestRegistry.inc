@@ -1491,3 +1491,6 @@ LOKA_TEST(testClipChildrenCardRetainedDifferent)
 LOKA_TEST(testClipChildrenBoundaryRetained)
 LOKA_TEST(testClipChildrenMatchBirthAndParkedReentry)
 LOKA_TEST(testClipChildrenDetachedDelivery)
+
+LOKA_TEST(testRequestReasonsStayRequestTyped)
+LOKA_TEST(testRequestSingleHeterogeneousSeat)
