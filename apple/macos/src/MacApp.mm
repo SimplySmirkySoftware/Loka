@@ -275,9 +275,14 @@ void MacApp::stopInvalidationFlushTimer()
   }
 }
 
-void MacApp::dispatchNativeMenuCommand(int commandId)
+void MacApp::dispatchNativeMenuCommand(int commandId, void *nativeItem)
 {
-  this->menuAttachment_.dispatch(commandId);
+  this->menuAttachment_.dispatch(commandId, nativeItem);
+}
+
+bool MacApp::validateNativeMenuCommand(void *nativeItem)
+{
+  return this->menuAttachment_.validate((NSMenuItem *)nativeItem);
 }
 
 void MacApp::projectMenu(Window *window, const loka::app::MenuSources &sources)

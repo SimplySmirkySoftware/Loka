@@ -1,5 +1,7 @@
 #include "MacMenuProjectionTests.hpp"
 #include "support/TestVerify.hpp"
+#include "support/MacWindowSession.hpp"
+#include <cstdio>
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
 #include "MacScenePlatformController.hpp"
@@ -280,6 +282,8 @@ void testMacMenuAttachmentDisconnectStripsTargetAndAction()
   LOKA_VERIFY([o.item isEnabled] && [o.item state] == 0);
   fixture.root()->toggle();
   LOKA_VERIFY(![o.item isEnabled] && [o.item state] != 0);
+  [[o.item menu] update];
+  LOKA_VERIFY(![o.item isEnabled]);
   Scene other((Boundary<Root>()));
   o.attachment->releaseFrom(&other);
   LOKA_VERIFY([o.item target] == target && [o.item action] == action);
@@ -740,6 +744,8 @@ void testMacMenuEmptyActionTitleFollowsState()
     LOKA_VERIFY([[item title] isEqualToString:[NSString stringWithUTF8String:words[i]]]);
     LOKA_VERIFY([[item keyEquivalent] isEqualToString:key]);
     LOKA_VERIFY(![item isEnabled] && [item state] != 0);
+    [[item menu] update];
+    LOKA_VERIFY(![item isEnabled]);
     {
       StateTrackerGuard guard(&tracker);
       title.set(String::Literal("Mine"));
@@ -823,6 +829,461 @@ void testMacEditMenuDefaultsAndFallback()
     LOKA_VERIFY(app.menuAttachment().dispatch(static_cast<int>([item tag])));
     LOKA_VERIFY(calls == i + 1);
   }
+  app.menuAttachment().disconnect();
+  binding.unbind(&countEditMenuBinding, &calls);
+}
+
+void testMacMenuDeclaredEnabledProjection()
+{
+  CocoaHost host;
+  MutableState<bool> enabled(false), disabled(false);
+  PushStateTracker tracker;
+  tracker.addState(&enabled);
+  tracker.addState(&disabled);
+  Scene first((Boundary<Root>())), second((Boundary<Root>()));
+  TestApp app;
+  MenuBarDefinition offered;
+  offered << (Menu("Declared") << MenuItem("True").enabled(true) << MenuItem("False").enabled(false)
+                               << MenuItem("Default") << MenuItem("Live").enabled(&enabled)
+                               << MenuItem("Inverted").attr(MenuItemAttr().disabled(&disabled))
+                               << MenuItem("Mixed").enabled(false).attr(MenuItemAttr().disabled(&disabled))
+                               << (MenuItem("Parent").enabled(&enabled) << MenuItem("Child")));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, &first)));
+  NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  const bool initial[] = {true, false, true, false, true, false, false};
+  for (NSInteger i = 0; i < 7; ++i)
+    LOKA_VERIFY(!![[menu itemAtIndex:i] isEnabled] == initial[i]);
+  [menu update];
+  LOKA_VERIFY(![[menu itemAtIndex:1] isEnabled]);
+  LOKA_VERIFY(![[menu itemAtIndex:5] isEnabled]);
+  LOKA_VERIFY([[menu itemAtIndex:6] tag] == 0);
+  LOKA_VERIFY(!app.menuAttachment().dispatch(0));
+  LOKA_VERIFY(app.menuAttachment().validate([menu itemAtIndex:6]));
+  {
+    StateTrackerGuard guard(&tracker);
+    enabled.set(true);
+    disabled.set(true);
+  }
+  LOKA_VERIFY([[menu itemAtIndex:6] isEnabled]);
+  [menu update];
+  LOKA_VERIFY([[menu itemAtIndex:3] isEnabled]);
+  LOKA_VERIFY(![[menu itemAtIndex:4] isEnabled]);
+  LOKA_VERIFY(![[menu itemAtIndex:5] isEnabled]);
+  {
+    StateTrackerGuard guard(&tracker);
+    disabled.set(false);
+  }
+  [menu update];
+  LOKA_VERIFY([[menu itemAtIndex:4] isEnabled]);
+  LOKA_VERIFY([[menu itemAtIndex:5] isEnabled]);
+  // Replacement reconstructs initial priority, even though live priority differs.
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, &second)));
+  menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  [menu update];
+  const bool replaced[] = {true, false, true, true, true, false};
+  for (NSInteger i = 0; i < 6; ++i)
+    LOKA_VERIFY(!![[menu itemAtIndex:i] isEnabled] == replaced[i]);
+  app.menuAttachment().disconnect();
+}
+
+void testMacMenuEnabledNotificationAfterCommandGrowth()
+{
+  CocoaHost host;
+  MutableState<bool> enabled(true);
+  PushStateTracker tracker;
+  tracker.addState(&enabled);
+  Scene first((Boundary<Root>())), second((Boundary<Root>()));
+  TestApp app;
+  MenuBarDefinition small;
+  small << (Menu("Small") << MenuItem("Live").enabled(&enabled));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&small, &first)));
+  MenuDefinition grown = Menu("Grown") << MenuItem("Live").enabled(&enabled);
+  for (int i = 0; i < 128; ++i)
+    grown << MenuItem("Other");
+  MenuBarDefinition large;
+  large << grown;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&large, &second)));
+  NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  LOKA_VERIFY([menu numberOfItems] == 129);
+  {
+    StateTrackerGuard guard(&tracker);
+    enabled.set(false);
+  }
+  [menu update];
+  LOKA_VERIFY(![[menu itemAtIndex:0] isEnabled]);
+  for (NSInteger i = 1; i < [menu numberOfItems]; ++i)
+    LOKA_VERIFY([[menu itemAtIndex:i] isEnabled]);
+  app.menuAttachment().disconnect();
+}
+
+namespace
+{
+  enum ValidationEffect
+  {
+    VALIDATION_ONLY,
+    VALIDATION_NESTED,
+    VALIDATION_DISCONNECT,
+    VALIDATION_REPROJECT
+  };
+  struct EditValidationFacts
+  {
+    EditValidationFacts(MacApp &value)
+        : app(value),
+          menuCalls(0),
+          genericCalls(0),
+          actions(0),
+          answer(true),
+          effect(VALIDATION_ONLY),
+          nested(nil),
+          outer(nil),
+          sender(nil),
+          replacement(0)
+    {
+    }
+    MacApp &app;
+    unsigned menuCalls, genericCalls, actions;
+    bool answer;
+    ValidationEffect effect;
+    NSMenuItem *nested;
+    NSMenuItem *outer;
+    id sender;
+    const MenuBarDefinition *replacement;
+  };
+} // namespace
+
+// The application delegate is a native responder-chain destination even without
+// a key window. These three separate classes pin the two-stage validator lookup.
+@interface LokaEditPlainTarget : NSObject
+{
+  EditValidationFacts *facts_;
+}
+- (id)initWithFacts:(EditValidationFacts *)facts;
+- (EditValidationFacts *)facts;
+- (void)cut:(id)sender;
+- (void)copy:(id)sender;
+@end
+@implementation LokaEditPlainTarget
+- (id)initWithFacts:(EditValidationFacts *)facts
+{
+  self = [super init];
+  if (self)
+    facts_ = facts;
+  return self;
+}
+- (EditValidationFacts *)facts
+{
+  return facts_;
+}
+- (void)cut:(id)sender
+{
+  ++[self facts]->actions;
+  [self facts]->sender = sender;
+}
+- (void)copy:(id)sender
+{
+  [self cut:sender];
+}
+@end
+
+@interface LokaEditGenericTarget : LokaEditPlainTarget
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item;
+@end
+@implementation LokaEditGenericTarget
+- (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item
+{
+  LOKA_VERIFY([item action] == @selector(cut:) || [item action] == @selector(copy:));
+  ++[self facts]->genericCalls;
+  return NO;
+}
+@end
+
+@interface LokaEditMenuValidator : LokaEditGenericTarget
+- (BOOL)validateMenuItem:(NSMenuItem *)item;
+@end
+@implementation LokaEditMenuValidator
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+  EditValidationFacts *facts = [self facts];
+  ++facts->menuCalls;
+  SEL action = [item action];
+  LOKA_VERIFY(action == @selector(cut:) || action == @selector(copy:));
+  LOKA_VERIFY([[item title] length] == 0 && [item tag] == 0 && [item menu] == nil);
+  NSAutoreleasePool *nestedPool = [[NSAutoreleasePool alloc] init];
+  [NSString stringWithFormat:@"nested %u", facts->menuCalls];
+  [nestedPool drain];
+  LOKA_VERIFY([item action] == action);
+  if (facts->outer)
+  {
+    LOKA_VERIFY(item != facts->outer);
+    LOKA_VERIFY(action == @selector(copy:));
+    LOKA_VERIFY([facts->outer action] == @selector(cut:));
+  }
+  else if (facts->effect == VALIDATION_NESTED)
+  {
+    facts->outer = item;
+    LOKA_VERIFY(facts->app.validateNativeMenuCommand((void *)facts->nested));
+    LOKA_VERIFY([item action] == action);
+    facts->outer = nil;
+  }
+  else if (facts->effect == VALIDATION_DISCONNECT)
+  {
+    facts->effect = VALIDATION_ONLY;
+    facts->app.menuAttachment().disconnect();
+  }
+  else if (facts->effect == VALIDATION_REPROJECT)
+  {
+    facts->effect = VALIDATION_ONLY;
+    LOKA_VERIFY(facts->app.menuAttachment().project(sources(facts->replacement)));
+  }
+  // A validator's presentation changes must stay on its private input.
+  [item setTitle:@"Validator title"];
+  [item setTag:999];
+  [item setAction:@selector(copy:)];
+  return facts->answer ? YES : NO;
+}
+@end
+
+namespace
+{
+  struct EditDelegate
+  {
+    id previous;
+    id target;
+    EditDelegate(Class type, EditValidationFacts &facts)
+        : previous([[NSApp delegate] retain]),
+          target([[type alloc] initWithFacts:&facts])
+    {
+      [NSApp setDelegate:target];
+    }
+    ~EditDelegate()
+    {
+      [NSApp setDelegate:this->previous];
+      [this->target release];
+      [this->previous release];
+    }
+  };
+
+  MenuBarDefinition validationBar(EmitterState *binding, bool enabled = true)
+  {
+    MenuBarDefinition result;
+    result << (Menu("Edit") << MenuItem("Cut").actionType(MENU_ACTION_EDIT_CUT).enabled(enabled).onClick(binding)
+                            << MenuItem("Copy").actionType(MENU_ACTION_EDIT_COPY));
+    return result;
+  }
+} // namespace
+
+void testMacEditMenuNativeValidation()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  Class types[] = {[LokaEditPlainTarget class], [LokaEditGenericTarget class], [LokaEditMenuValidator class]};
+  for (int kind = 0; kind < 3; ++kind)
+  {
+    EditValidationFacts facts(app);
+    EditDelegate delegate(types[kind], facts);
+    for (int declared = 0; declared < 2; ++declared)
+    {
+      MenuBarDefinition offered = validationBar(&binding, declared != 0);
+      app.menuAttachment().disconnect();
+      LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+      NSMenuItem *item = commandItem();
+      LOKA_VERIFY([NSApp targetForAction:@selector(cut:) to:nil from:item] == delegate.target);
+      const bool expected = kind != 1 && declared != 0;
+      LOKA_VERIFY(app.validateNativeMenuCommand((void *)item) == expected);
+      [[item menu] update];
+      LOKA_VERIFY(!![item isEnabled] == expected);
+      if (kind == 2)
+      {
+        LOKA_VERIFY(facts.menuCalls > 0 && facts.genericCalls == 0);
+        facts.answer = false;
+        LOKA_VERIFY(!app.validateNativeMenuCommand((void *)item));
+      }
+      if (kind == 1)
+        LOKA_VERIFY(facts.genericCalls > 0 && facts.menuCalls == 0);
+      // sendAction accepting a native refusal/no-op must never run the binding.
+      const unsigned before = facts.actions;
+      [[item target] performSelector:[item action] withObject:item];
+      LOKA_VERIFY(facts.actions == before + 1 && facts.sender == item);
+      LOKA_VERIFY(calls == 0);
+      facts.answer = true;
+    }
+    app.menuAttachment().disconnect();
+  }
+  binding.unbind(&countEditMenuBinding, &calls);
+}
+
+void testMacEditMenuValidationReentry()
+{
+  CocoaHost host;
+  TestApp app;
+  EditValidationFacts facts(app);
+  EditDelegate delegate([LokaEditMenuValidator class], facts);
+  MenuBarDefinition offered = validationBar(0), replacement = validationBar(0, false);
+  facts.replacement = &replacement;
+  const ValidationEffect effects[] = {VALIDATION_NESTED, VALIDATION_DISCONNECT, VALIDATION_REPROJECT};
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    facts.effect = VALIDATION_ONLY;
+    app.menuAttachment().disconnect();
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+    NSMenuItem *item = [commandItem() retain];
+    facts.nested = [[item menu] itemAtIndex:1];
+    facts.effect = effects[i];
+    SEL wrapper = [item action];
+    const NSInteger tag = [item tag];
+    LOKA_VERIFY([NSApp targetForAction:@selector(cut:) to:nil from:item] == delegate.target);
+    LOKA_VERIFY(app.validateNativeMenuCommand((void *)item));
+    if (effects[i] == VALIDATION_NESTED)
+    {
+      LOKA_VERIFY([item action] == wrapper && [item tag] == tag);
+      LOKA_VERIFY([[item title] isEqualToString:@"Cut"]);
+      LOKA_VERIFY([item menu] != nil);
+    }
+    else
+      LOKA_VERIFY([item action] == NULL && [item tag] == 0);
+    if (effects[i] == VALIDATION_REPROJECT)
+    {
+      facts.effect = VALIDATION_ONLY;
+      LOKA_VERIFY(!app.validateNativeMenuCommand((void *)commandItem()));
+    }
+    [item release];
+  }
+  app.menuAttachment().disconnect();
+}
+
+void testMacEditMenuNoTargetValidationAndFallback()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  for (int variant = 0; variant < 3; ++variant)
+  {
+    MenuBarDefinition offered = validationBar(variant ? &binding : 0, variant != 2);
+    app.menuAttachment().disconnect();
+    LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+    NSMenuItem *item = commandItem();
+    LOKA_VERIFY([NSApp targetForAction:@selector(cut:) to:nil from:item] == nil);
+    LOKA_VERIFY(app.validateNativeMenuCommand((void *)item) == (variant == 1));
+    [[item menu] update];
+    LOKA_VERIFY(!![item isEnabled] == (variant == 1));
+    [[item target] performSelector:[item action] withObject:item];
+    LOKA_VERIFY(calls == static_cast<unsigned>(variant));
+  }
+  app.menuAttachment().disconnect();
+  binding.unbind(&countEditMenuBinding, &calls);
+}
+
+@interface LokaEditDispatchTextView : NSTextView
+{
+  unsigned calls_;
+  SEL verb_;
+  id sender_;
+}
+- (unsigned)calls;
+- (SEL)verb;
+- (id)sender;
+- (void)undo:(id)sender;
+@end
+@implementation LokaEditDispatchTextView
+- (unsigned)calls
+{
+  return calls_;
+}
+- (SEL)verb
+{
+  return verb_;
+}
+- (id)sender
+{
+  return sender_;
+}
+- (void)cut:(id)sender
+{
+  ++calls_;
+  verb_ = @selector(cut:);
+  sender_ = sender;
+}
+- (void)copy:(id)sender
+{
+  ++calls_;
+  verb_ = @selector(copy:);
+  sender_ = sender;
+}
+- (void)paste:(id)sender
+{
+  ++calls_;
+  verb_ = @selector(paste:);
+  sender_ = sender;
+}
+- (void)selectAll:(id)sender
+{
+  ++calls_;
+  verb_ = @selector(selectAll:);
+  sender_ = sender;
+}
+- (void)undo:(id)sender
+{
+  ++calls_;
+  verb_ = @selector(undo:);
+  sender_ = sender;
+}
+@end
+
+void testMacEditMenuDispatchToTextView()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  MenuDefinition edit = EditMenu();
+  for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+    if (!item->isSeparator)
+      item->onClick(&binding);
+  MenuBarDefinition offered;
+  offered << edit;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(50, 50, 240, 120)
+                                                 styleMask:NSTitledWindowMask
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+  [window setReleasedWhenClosed:NO];
+  LokaEditDispatchTextView *view = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
+  [window setContentView:view];
+  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp activateIgnoringOtherApps:YES];
+  [window makeKeyAndOrderFront:nil];
+  LOKA_VERIFY([window makeFirstResponder:view]);
+  NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+  SEL verbs[] = { @selector(undo:), @selector(cut:), @selector(copy:), @selector(paste:), @selector(selectAll:) };
+  if ([window isKeyWindow])
+  {
+    for (unsigned i = 0; i < 5; ++i)
+    {
+      NSMenuItem *item = [menu itemAtIndex:i == 0 ? 0 : i + 1];
+      [[item target] performSelector:[item action] withObject:item];
+      LOKA_VERIFY([view calls] == i + 1 && [view verb] == verbs[i]);
+      LOKA_VERIFY([view sender] == item && calls == 0);
+    }
+  }
+  else
+    std::printf("[skip] Edit menu NSTextView dispatch: %s\n",
+                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "window did not become key");
+  [window makeFirstResponder:nil];
+  [window orderOut:nil];
+  [window close];
+  [view release];
+  [window release];
+  NSMenuItem *item = [menu itemAtIndex:2];
+  LOKA_VERIFY([NSApp targetForAction:@selector(cut:) to:nil from:item] == nil);
+  [[item target] performSelector:[item action] withObject:item];
+  LOKA_VERIFY(calls == 1);
   app.menuAttachment().disconnect();
   binding.unbind(&countEditMenuBinding, &calls);
 }
