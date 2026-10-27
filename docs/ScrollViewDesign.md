@@ -295,13 +295,13 @@ or leaving ATTACHED cancels pending work synchronously; replacing only viewport
 or insets does not. Reclaim publishes nothing. See
 [request delivery sites and bounds](RequestDeliveryDesign.md#where-each-rail-consumes).
 
-All four rails deliver `scrollTo`. macOS `applyScrollRequest` applies the native
-origin and shares `publishClipViewBoundsOrigin` with bounds-notification input,
-reporting inside its notification mute. X availability follows the committed
-horizontal scroller for reply parity with the other rails, even where AppKit
-could move the clip without that scroller. A valid context supplies Y.
-SimpleViewer now posts `scrollTo` on image load; its viewport remains a
-rail-written fact, closing the former second-writer debt.
+macOS `applyScrollRequest` applies the native origin and shares
+`publishClipViewBoundsOrigin` with bounds-notification input, reporting inside
+its notification mute. X availability follows the committed horizontal
+scroller for reply parity with the other rails, even where AppKit could move
+the clip without that scroller. A valid context supplies Y. SimpleViewer now
+posts `scrollTo` on image load; its viewport remains a rail-written fact,
+closing the former second-writer debt.
 
 ## Known debts
 
