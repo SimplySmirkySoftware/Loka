@@ -760,7 +760,7 @@ namespace
         StateTrackerGuard guard(&fixture.tracker);
         fixture.request.set(requested);
       }
-      fixture.type(static_cast<wchar_t>(0xff21));
+      fixture.type(static_cast<wchar_t>(0xd800));
       LOKA_VERIFY(fixture.request.get().isNone());
       LOKA_VERIFY(trace.size() == 1 && trace.at(0).stimulus == SETTLE_INPUT && trace.at(0).count == 1);
       const Reply<LineCursor> reply = fixture.request.reply().state()->get();
@@ -789,7 +789,7 @@ namespace
         StateTrackerGuard guard(&fixture.tracker);
         fixture.request.set(LineCursor(fixture.lines.at(1).id, 1));
       }
-      fixture.type(static_cast<wchar_t>(0xff21));
+      fixture.type(static_cast<wchar_t>(0xd800));
       fixture.request.reply().state()->unbind(&detachOnReply, &fixture);
       LOKA_VERIFY(fixture.node->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
       LOKA_VERIFY(!EditorAccess::pending(*fixture.context));
@@ -1111,7 +1111,7 @@ namespace
       if (entry >= 2)
       {
         loka::win32::testing::failTextEditorSets(loka::win32::testing::TEXT_EDITOR_SET_REFUSED, 1);
-        fixture.type(static_cast<wchar_t>(0xff21));
+        fixture.type(static_cast<wchar_t>(0xd800));
         LOKA_VERIFY(EditorAccess::pending(*fixture.context));
       }
       RequestOnEveryReport repost(fixture);
@@ -1123,7 +1123,7 @@ namespace
         fixture.request.set(LineCursor(line, 1));
       }
       if (entry == 1)
-        fixture.type(static_cast<wchar_t>(0xff21));
+        fixture.type(static_cast<wchar_t>(0xd800));
       else if (entry == 3)
         SendMessageW(fixture.context->hwnd(), WM_TIMER, 853, 0);
       else
@@ -1536,7 +1536,7 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
     Fixture fixture;
     Observer observer(fixture);
     const Snapshot before(fixture);
-    fixture.type(static_cast<wchar_t>(0xff21));
+    fixture.type(static_cast<wchar_t>(0xd800));
     restored(fixture, before, observer);
     fixture.type(L'x');
     LOKA_VERIFY(observer.notifications == 1);
@@ -1575,7 +1575,7 @@ void testWin32TextEditorRefusalRestoresAndClearsUndo()
     const Snapshot before(fixture);
     // An unsolicited notification has no subclass input stack to unwind.
     // Its refusal stays read-only until a separate timer dispatch.
-    LOKA_VERIFY(SetWindowTextW(fixture.context->hwnd(), L"bad\xff21"));
+    LOKA_VERIFY(SetWindowTextW(fixture.context->hwnd(), L"bad\xd800"));
     before.unchanged(fixture);
     LOKA_VERIFY(observer.notifications == 0 && !EditorAccess::pending(*fixture.context));
     SendMessageW(fixture.host, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), reinterpret_cast<LPARAM>(fixture.context->hwnd()));
@@ -1761,7 +1761,7 @@ void testWin32TextEditorLayoutDpiAndRetirement()
   {
     Probe probe(child);
     loka::win32::testing::failTextEditorSets(loka::win32::testing::TEXT_EDITOR_SET_REFUSED, 1);
-    fixture.type(static_cast<wchar_t>(0xff21));
+    fixture.type(static_cast<wchar_t>(0xd800));
     LOKA_VERIFY(EditorAccess::pending(*fixture.context));
     const Snapshot before(fixture);
     NotifySubtreeNodeDetached(fixture.node);
@@ -1982,7 +1982,7 @@ void testWin32TextEditorUtf8ClosedPolicy()
   const std::wstring bmp(3000, static_cast<wchar_t>(0xff21));
   ChangeObservation observation(fixture.host);
   SendMessageW(fixture.context->hwnd(), EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(bmp.c_str()));
-  LOKA_VERIFY(observation.arrivals() > 0 && observation.status() == EDITOR_NON_ASCII);
+  LOKA_VERIFY(observation.arrivals() > 0 && observation.status() == EDITOR_CAPACITY);
   LOKA_VERIFY(fixture.lines.size() == 1 && fixture.lines.at(0).value.equals(String("")));
   fixture.matches();
   Fixture columns(1, "abcd");
@@ -2087,11 +2087,6 @@ void testWin32TextEditorDeferredUtf8Cases()
   for (std::size_t i = 0; i < sizeof(nativeCases) / sizeof(nativeCases[0]); ++i)
   {
     const NativeCase &item = nativeCases[i];
-    if (expected == &Case::closed)
-    {
-      std::printf("[deferred] Win32 TextEditor UTF-8: %s\n", item.name);
-      continue;
-    }
     Fixture fixture(1, "", 256, item.capacity);
     ChangeObservation observation(fixture.host);
     SendMessageW(fixture.context->hwnd(), EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(item.wide));
@@ -2102,6 +2097,20 @@ void testWin32TextEditorDeferredUtf8Cases()
     LOKA_VERIFY(fixture.cursor.state()->get() == LineCursor(fixture.lines.at(item.caretRow).id, item.caretByte));
     if (item.open != EDITOR_OK)
       LOKA_VERIFY(EditorAccess::restores(*fixture.context) > 0);
+    if (item.open == EDITOR_OK && item.caretByte > 2)
+    {
+      {
+        StateTrackerGuard guard(&fixture.tracker);
+        fixture.request.set(LineCursor(fixture.lines.at(item.caretRow).id, 1));
+      }
+      fixture.context->onPropsApplied();
+      LOKA_VERIFY(fixture.cursor.state()->get() == LineCursor(fixture.lines.at(item.caretRow).id, 0));
+      const LRESULT rowStart = SendMessageW(fixture.context->hwnd(), EM_LINEINDEX, item.caretRow, 0);
+      expectSelection(fixture, static_cast<DWORD>(rowStart));
+      SendMessageW(fixture.context->hwnd(), EM_SETSEL, 0, -1);
+      SendMessageW(fixture.context->hwnd(), EM_REPLACESEL, TRUE, reinterpret_cast<LPARAM>(L""));
+      LOKA_VERIFY(fixture.lines.size() == 1 && fixture.lines.at(0).value.equals(String("")));
+    }
     fixture.matches();
   }
 }

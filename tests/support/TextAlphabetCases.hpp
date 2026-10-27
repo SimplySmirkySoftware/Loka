@@ -44,7 +44,7 @@ namespace text_alphabet_cases
       "lone surrogate paste restores committed text",
       "NEL/U+2028/U+2029 logical row content and partial/full fragment visibility"};
   // The opening PR changes this one test-only selection.
-  static EditorResult Case::*const expected = &Case::closed;
+  static EditorResult Case::*const expected = &Case::open;
   /** Native rail scenarios activated with the shared alphabet selection in PR 4. */
   struct NativeCase
   {

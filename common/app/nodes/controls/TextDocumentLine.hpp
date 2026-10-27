@@ -26,15 +26,16 @@ namespace loka
       {
         return length <= capacity.bytes || length - capacity.bytes <= capacity.bytes;
       }
-      /** The one editor alphabet policy: pointer-valid, nonzero ASCII for now. */
+      /** The one editor alphabet policy: pointer-valid, well-formed UTF-8 without NUL. */
       inline bool EditorAlphabetAdmits(const char *bytes, std::size_t length)
       {
         if (!bytes && length)
           return false;
         for (std::size_t i = 0; i < length; ++i)
-          if (!bytes[i] || static_cast<unsigned char>(bytes[i]) > 127)
+          if (!bytes[i])
             return false;
-        return true;
+        std::size_t codePoints = 0;
+        return Utf8Scan(bytes, length, codePoints);
       }
       /** Raw rows admit the editor alphabet without CR or LF. */
       inline bool RowAdmits(const char *bytes, std::size_t length)
