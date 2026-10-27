@@ -197,6 +197,17 @@ namespace loka
       }
     };
 
+    namespace scene
+    {
+      template <> struct NodePropsApplier<CardNode, CardProps>
+      {
+        static bool apply(CardNode *node, const CardProps &props)
+        {
+          return layout::ApplyPropsKeepingChildClip(node, props);
+        }
+      };
+    } // namespace scene
+
     /** App-facing closed container. Appended definitions belong to its content column. */
     struct CardDefinition : public scene::NestableNodeDefinition<CardProps, CardNode, CardDefinition>,
                             public scene::TestIdDslMixin<CardDefinition>
@@ -220,7 +231,8 @@ namespace loka
       }
       /** Clips children at this card's own rect. With a positive width offer,
           reports no more than that width; a nonpositive offer keeps its natural width.
-          Toolbox clips in a later change; macOS and Win32 do not clip yet. */
+          Fixed when the card is created; switch with Match / Show arms or Keyed.
+          Toolbox clips; macOS and Win32 do not clip yet. */
       CardDefinition &clipChildren()
       {
         this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
