@@ -1380,6 +1380,16 @@ void testWin32TextEditorConversion()
   LOKA_VERIFY(loka::win32::TextEditorFromWide(L"\xff21", 1, logical) && logical == "\357\274\241");
   LOKA_VERIFY(!loka::win32::TextEditorToWide(std::string(1, static_cast<char>(0x80)), wide));
 }
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      std::size_t lastProjectionReservation();
+    }
+  } // namespace app
+} // namespace loka
 void testWin32TextEditorCapacityRows()
 {
   Fixture fixture(1, "0123456789", 1000, 65536);
@@ -1393,7 +1403,10 @@ void testWin32TextEditorCapacityRows()
   LOKA_VERIFY(SendMessageW(fixture.context->hwnd(), EM_GETLINECOUNT, 0, 0) == 1000);
   const std::string &text = EditorAccess::projectedText(*fixture.context);
   const std::wstring &wide = EditorAccess::projectedWide(*fixture.context);
-  LOKA_VERIFY(text.size() == 10999 && text.capacity() >= text.size());
+  LOKA_VERIFY(text.size() == 10999);
+  // Reserved for this document (capacity right after the reserve), not the 8 KiB constant.
+  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= text.size()
+              && loka::app::testing::lastProjectionReservation() <= text.size() + 64);
   LOKA_VERIFY(wide.size() == text.size() + 999);
   fixture.matches();
 

@@ -64,21 +64,13 @@ EditorResult Win32TextEditorContext::Projection::capture(TextEditorNode &node, c
   if (this->current(node))
     return EDITOR_OK;
   this->owner = 0;
-  // Measure this committed document, never the admitted capacity. project() still
-  // validates attachment and cursor ownership before serializing the owner's rows.
-  std::size_t bytes = 0;
-  EditorResult result =
-      node.props.buffer_ ? text_document_detail::Measure(node.props.buffer_->lines(), bytes) : EDITOR_UNAVAILABLE;
-  if (result == EDITOR_OK)
-  {
-    this->text.reserve(bytes);
-    result = node.seam(key).project(this->text);
-  }
+  // project() reserves text for the measured document; the wide buffer follows
+  // that length plus one UTF-16 unit per logical CR projected as CRLF.
+  const EditorResult result = node.seam(key).project(this->text);
   if (result == EDITOR_OK)
   {
     const unsigned short rows = node.props.buffer_->lines().size();
-    // Each logical CR adds one UTF-16 unit when projected as CRLF.
-    this->wide.reserve(bytes + (rows ? rows - 1 : 0));
+    this->wide.reserve(this->text.size() + (rows ? rows - 1 : 0));
   }
   if (result != EDITOR_OK || !loka::win32::TextEditorToWide(this->text, this->wide))
   {

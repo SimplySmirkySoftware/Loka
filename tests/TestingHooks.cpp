@@ -617,6 +617,18 @@ namespace loka
       {
         return textPayloadsUntilRefusal && --textPayloadsUntilRefusal == 0;
       }
+      namespace
+      {
+        std::size_t lastProjectionReservationBytes = 0;
+      }
+      void observeProjectionReservation(std::size_t bytes)
+      {
+        lastProjectionReservationBytes = bytes;
+      }
+      std::size_t lastProjectionReservation()
+      {
+        return lastProjectionReservationBytes;
+      }
     } // namespace testing
   } // namespace app
 } // namespace loka
