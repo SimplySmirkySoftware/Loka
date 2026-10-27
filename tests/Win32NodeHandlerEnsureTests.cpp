@@ -2924,8 +2924,8 @@ void testWin32TextFamilyDpiReplacement()
 
     loka::app::testing::TextEditorStateOwner editorState;
     loka::testing::TextBufferFixture lines;
-    LOKA_VERIFY(lines.attach(&editorState.tracker, 8, 1024) == ATTACH_OK);
-    LOKA_VERIFY(lines.insert(0, loka::core::String("editor")) == EDIT_OK);
+    LOKA_VERIFY(lines.attach(&editorState.tracker, 8, 1024) == loka::app::TextBuffer::ATTACH_OK);
+    LOKA_VERIFY(lines.insert(0, loka::core::String("editor")) == loka::core::EDIT_OK);
     TextEditorNode editor(TextEditorProps(lines, editorState.cursor));
     LayoutState editorSeat = attributedSeat(160);
     LOKA_VERIFY(controller.prepareProjectedLayout(&editor, editorSeat));
@@ -2992,7 +2992,7 @@ void testWin32TextFamilyDpiReplacement()
     LOKA_VERIFY(captureFontTable(controller) == installed);
     for (std::size_t i = 0; i < before.size(); ++i)
       LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(before[i].window, WM_GETFONT, 0, 0)) == before[i].font);
-    controller.performLayout(320, 240);
+    loka::dsl::testing::Win32ScenePlatformTestAccess::performLayout(controller, 320, 240);
     EnumChildWindows(root, VerifyNoOldFont, reinterpret_cast<LPARAM>(&installed));
     LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(monoWindow, WM_GETFONT, 0, 0))
                 == controller.fallbackFont(Monospace));

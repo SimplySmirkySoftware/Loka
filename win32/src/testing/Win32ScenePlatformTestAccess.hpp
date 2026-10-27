@@ -126,6 +126,12 @@ namespace loka
                  + queuedGenericPaintInvalidates(controller);
         }
 
+        /** The layout door a WM_SIZE would reach: the display-font retry runs here. */
+        static void performLayout(::Win32ScenePlatformController &controller, int clientWidth, int clientHeight)
+        {
+          controller.performLayout(clientWidth, clientHeight);
+        }
+
         static int clientWidth(const ::Win32ScenePlatformController &controller)
         {
           return controller.clientWidth_;
