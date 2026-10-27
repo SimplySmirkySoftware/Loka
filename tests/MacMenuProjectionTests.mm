@@ -1354,10 +1354,12 @@ void testMacEditMenuKeyWindowBeforeMainWindow()
                                                      styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
                                                        backing:NSBackingStoreBuffered
                                                          defer:NO];
-  NSWindow *keyWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(310, 50, 240, 120)
-                                                    styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
-                                                      backing:NSBackingStoreBuffered
-                                                        defer:NO];
+  // A panel can be key without becoming main, so the key window and the main
+  // window stay distinct on every AppKit (a second NSWindow takes both roles).
+  NSPanel *keyWindow = [[NSPanel alloc] initWithContentRect:NSMakeRect(310, 50, 240, 120)
+                                                  styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                    backing:NSBackingStoreBuffered
+                                                      defer:NO];
   [mainWindow setReleasedWhenClosed:NO];
   [keyWindow setReleasedWhenClosed:NO];
   LokaEditDispatchTextView *mainView = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
