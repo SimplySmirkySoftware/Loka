@@ -2,13 +2,14 @@
 #define LOKA_MAC_PLATFORM_CONTEXT_HPP
 
 #include "app/PlatformContext.hpp"
+#include <climits>
 
 class MacPlatformContext : public PlatformContext
 {
 public:
   virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
   {
-    out = loka::app::TextCapacity::of(256, 8192);
+    out = loka::app::TextCapacity::of(65535, INT_MAX);
     return true;
   }
   MacPlatformContext();
