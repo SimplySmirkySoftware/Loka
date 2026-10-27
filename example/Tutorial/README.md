@@ -12,13 +12,39 @@ When you want to check an answer, switch the active typedef to one of:
 - `Step1Node`: a minimal `Hello, Loka`
 - `Step2Node`: increment button and counter state
 - `Step3Node`: conditional content with `Show(condition) << ...`
-- `Step4Node`: predeclared repeated children revealed one by one, with summary text updated from state
+- `Step4Node`: a growing list built with `Keyed` + `For`, with a declared capacity of 100
+- `Step5Node`: the same list inside a `ScrollView`, so you can reach all 100 rows
 
 ## Suggested walkthrough
 
 1. Build and run `LokaTutorial`.
 2. Edit `src/DoItYourselfNode.hpp` to recreate the steps yourself.
 3. Uncomment a `StepNNode` typedef in `src/MyAppConfig.hpp` when you want to compare.
+
+## Step 4: a list with a capacity
+
+Each Add changes the count. `Keyed` retires the old generation first, then
+`For(...).window(0, count)` builds the numbered rows for the new generation.
+The reservation and Add guard share one capacity constant: 100. At capacity,
+Add is disabled and the summary reads `Items: 100 (full)`. Both the summary
+and enabled state derive from one immediate `BindingToken` watch declared in
+`declareBindings`.
+Show/Hide hides and restores the summary and list together.
+
+This builds every row; it is not a lazy list. Rows eventually extend below the
+window. Scrolling is a later step. The `increment-summary-toggle` scenario still
+adds twice, hides and restores the content, and ends at `Items: 2`.
+
+## Step 5: reach every row with ScrollView
+
+Wrap Step 4's list in `ScrollView`. The outer `VStack` gives it the remaining
+height, so the list scrolls inside the window while the buttons stay in place.
+Add still stops at 100, and Show/Hide hides and restores the summary and the
+scrollable list together. Each step repeats the list code so you can follow
+it on its own.
+
+The Boundary owns a viewport fact and passes it to `ScrollView`; the platform
+writes the visible area and scroll position into it. No extra watch is needed.
 
 ## Targets
 

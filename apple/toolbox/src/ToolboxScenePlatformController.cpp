@@ -237,37 +237,7 @@ namespace
     (void)controller;
   }
 
-  void RenderDirtyImageViews(loka::app::scene::Node *node,
-                             ToolboxScenePlatformController *controller,
-                             const Rect &dirtyRect)
-  {
-    if (!node)
-    {
-      return;
-    }
-    if (loka::app::ImageViewNode *image = node->asImageViewNode())
-    {
-      ToolboxImageViewContext *ctx = static_cast<ToolboxImageViewContext *>(image->getContext());
-      Rect intersection;
-      if (ctx && SectRect(&ctx->rect(), &dirtyRect, &intersection))
-      {
-        // Same erase-before-render ritual as composition replay. Unit-touching
-        // rects take that replay through the ledger gate; disjoint ImageViews
-        // have only window ground beneath.
-        EraseRect(&intersection);
-        ctx->render(controller);
-      }
-      return;
-    }
-    if (loka::app::scene::INestable *nestable = node->asNestable())
-    {
-      loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-      for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-      {
-        RenderDirtyImageViews(child, controller, dirtyRect);
-      }
-    }
-  }
+#include "ToolboxDirtyImageReplay.inc"
 
   bool CollectRectSurfaceDirtyRect(loka::app::scene::Node *node, Rect &outRect, ToolboxSceneDebugStats &stats)
   {

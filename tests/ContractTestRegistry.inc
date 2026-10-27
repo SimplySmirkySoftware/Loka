@@ -1484,5 +1484,13 @@ LOKA_TEST(testNullClipRootUnitAdmissionFixture)
 LOKA_TEST(testNullClipIntersectionAndSeventhRefusal)
 LOKA_TEST(testNullClipUnconstrainedEdges)
 
+LOKA_TEST(testClipChildrenBoxRetainedEqual)
+LOKA_TEST(testClipChildrenCardRetainedEqual)
+LOKA_TEST(testClipChildrenBoxRetainedDifferent)
+LOKA_TEST(testClipChildrenCardRetainedDifferent)
+LOKA_TEST(testClipChildrenBoundaryRetained)
+LOKA_TEST(testClipChildrenMatchBirthAndParkedReentry)
+LOKA_TEST(testClipChildrenDetachedDelivery)
+
 LOKA_TEST(testRequestReasonsStayRequestTyped)
 LOKA_TEST(testRequestSingleHeterogeneousSeat)

@@ -836,8 +836,9 @@ because it observes the same writable state.
 The same staged approach is useful for repeatable UI scenarios. Drive events,
 wait for the relevant update, and check the resulting state or presentation.
 The [`Tutorial scenarios`](../tests/scenarios/TutorialScenarios.cpp) provide a
-maintained example: increment a count, hide and restore a summary, then capture
-its text. This gives tests an ordered procedure as well as a final assertion.
+maintained example: Step 4 adds two rows with `Keyed` + `For`, hides and
+restores the summary and list, then captures `Items: 2`. This gives tests an
+ordered procedure as well as a final assertion.
 
 ### `Match()`
 
@@ -930,6 +931,12 @@ Read it in this order:
 an event emitter. These inputs make the direction of the update visible:
 `state -> event -> state update -> UI projection`.
 
+[`Step4Node.hpp`](../example/Tutorial/src/Step4Node.hpp) extends this counter
+into a list. One immediate `BindingToken` watch in `declareBindings` projects
+the count into its summary and Add-enabled state. At the declared capacity of
+100, Add is disabled and
+the summary reads `Items: 100 (full)`; the handler also refuses further adds.
+
 For a group of state writes, `StateTrackerGuard` provides a RAII transaction;
 see [StateTracker](#8-statetracker). C++98 callback APIs often use a function
 pointer plus `void *userData`: a static thunk recovers the object and calls its
@@ -1016,6 +1023,32 @@ trigger, and `Show()` is the structural switch.
 Before introducing a larger structural replacement, look for a state-driven
 switch that expresses the intent. For the attach/detach policies and their
 lifetime effects, see [Show](#show).
+
+### Grow A List With `Keyed` And `For`
+
+Step 4 keeps `Show()` around both the summary and the list. Inside that branch,
+`Keyed` watches the item count and declares a `Fragment` containing
+`For(...).window(0, count)`. `For` expands only during declaration; it does not
+watch the count itself. Each Add retires the old Keyed generation first and
+builds all n rows in a new generation. The enclosing Boundary composes once.
+
+The typed `SeatNodes<Nodes<...> >` reservation declares room for the authored
+Fragment, 100 Sections, and 100 Text nodes. One named capacity constant also
+controls the Add guard and enabled state. This is a bounded resident list,
+not a lazy viewport: rows can extend below the window until a later step adds
+scrolling. See [`Step4Node.hpp`](../example/Tutorial/src/Step4Node.hpp).
+
+### Reach Every Row With `ScrollView`
+
+[Step 5](../example/Tutorial/src/Step5Node.hpp) wraps Step 4's list in a
+`ScrollView`. The outer `VStack` gives the scroll view the remaining height,
+so all 100 rows can be reached inside the window. The buttons stay above it,
+and `Show` hides and restores both the summary and the scrollable list.
+
+The Boundary declares a viewport fact and lends it to `ScrollView`. The
+platform writes the visible area and scroll position; the lesson needs no
+extra watch. Step 5 repeats the list code to remain a standalone lesson,
+with the same capacity and immediate count projection as Step 4.
 
 ## 13. StdComposition And Boundary
 
@@ -1601,7 +1634,18 @@ the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
-Toolbox clips in a later change; macOS and Win32 do not clip yet.
+Toolbox clips; macOS and Win32 do not clip yet.
+
+The clip flag is fixed when the box or card is created, on every platform.
+Applying new properties to the same box updates the other properties and keeps
+its original clip flag. To switch clipping on or off, declare separate `Match`
+or `Show` arms, or re-declare under `Keyed`, so each new box has its own flag:
+
+```cpp
+MatchDefinition<Fold> photo = Match(*this->fold_.state());
+photo.arm(FOLD_COLLAPSED, Card().clipChildren() << ImageView().image(this->photo_.state()))
+    .otherwise(Card() << ImageView().image(this->photo_.state()));
+```
 
 ### Row And Column Natural Size
 

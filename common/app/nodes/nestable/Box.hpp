@@ -135,6 +135,17 @@ namespace loka
       }
     };
 
+    namespace scene
+    {
+      template <> struct NodePropsApplier<BoxNode, BoxProps>
+      {
+        static bool apply(BoxNode *node, const BoxProps &props)
+        {
+          return layout::ApplyPropsKeepingChildClip(node, props);
+        }
+      };
+    } // namespace scene
+
     struct BoxDefinition : public scene::NestableNodeDefinition<BoxProps, BoxNode, BoxDefinition>,
                            public scene::TestIdDslMixin<BoxDefinition>
     {
@@ -155,7 +166,8 @@ namespace loka
       }
       /** Clips children at this box's own rect. With a positive width offer,
           reports no more than that width; a nonpositive offer keeps its natural width.
-          Toolbox clips in a later change; macOS and Win32 do not clip yet. */
+          Fixed when the box is created; switch with Match / Show arms or Keyed.
+          Toolbox clips; macOS and Win32 do not clip yet. */
       BoxDefinition &clipChildren()
       {
         this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;

@@ -29,6 +29,11 @@ public:
 
   /** Placed window coordinates used to select dirty image replay. */
   const Rect &rect() const { return this->rect_; }
+  /** Layout-time visible placement; dirty replay has no projection scope. */
+  const Rect &paintRect() const
+  {
+    return this->paintRect_;
+  }
 
 private:
   void draw();
@@ -36,6 +41,7 @@ private:
 
   loka::app::ImageViewNode *node_;
   Rect rect_;
+  Rect paintRect_;
 };
 
 bool RegisterToolboxImageViewNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &registry);
