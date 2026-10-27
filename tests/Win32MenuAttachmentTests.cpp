@@ -4,6 +4,7 @@
 #include "support/LifecycleFactTestAccess.hpp"
 #include "context/Win32FocusParticipant.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
+#include "app/nodes/nestable/Show.hpp"
 #include <cstring>
 #include "Win32MenuAttachmentTests.hpp"
 #include <cstdio>
@@ -1069,15 +1070,18 @@ namespace
   class EditRoot : public BoundaryNodeFor<EditRoot>
   {
   public:
+    NodeState<bool> editorShown;
     explicit EditRoot(const BoundaryPropsFor<EditRoot> &p)
         : BoundaryNodeFor<EditRoot>(p)
     {
       this->state(editFacts->text, String("field"));
+      this->state(this->editorShown, true);
     }
     virtual void composeNode(NodeComposition &c)
     {
       c.declare(Column() << EditText(EditTextProps(editFacts->text)) << EditText()
-                         << TextEditor(TextEditorProps(editFacts->lines, editFacts->cursor)));
+                         << (Show(*this->editorShown.state()).destroyOnDetach()
+                             << TextEditor(TextEditorProps(editFacts->lines, editFacts->cursor))));
     }
   };
   struct EditFixture
@@ -1121,8 +1125,13 @@ namespace
     {
       BoundaryNode *root = loka::dsl::testing::SceneTestAccess::rootBoundary(*this->window.scene());
       Node *node = root->childrenHead()->asNestable()->childrenHead();
-      while (index-- && node)
+      for (unsigned i = 0; i != index && node; ++i)
         node = node->nextInComposition;
+      if (index == 2)
+      {
+        LOKA_VERIFY(node && node->asNestable());
+        node = node->asNestable()->childrenHead(); // Show's selected-arm Fragment.
+      }
       LOKA_VERIFY(node && node->getContext());
       return node;
     }
@@ -1384,12 +1393,15 @@ namespace
       const HWND hwnd = self.fixture.edit(2);
       if (self.retire)
       {
-        LifecycleFactTestAccess::MarkSubtreeRetired(node);
-        LifecycleFactTestAccess::DeliverFacts(node);
-        Win32ScenePlatformController *rail = static_cast<Win32ScenePlatformController *>(
-            loka::dsl::testing::SceneTestAccess::platformController(*self.fixture.window.scene()));
-        rail->releaseNodeContexts(node);
-        LOKA_VERIFY(!node->getContext() && !Win32FocusParticipant::read(hwnd));
+        // syncCaret publishes after EM_SETSEL returns, inside the input borrow.
+        // Request structural removal through the Scene's ordinary Show seat.
+        EditRoot &root =
+            *static_cast<EditRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*self.fixture.window.scene()));
+        root.editorShown.set(false);
+        self.fixture.admission.flush();
+        LOKA_VERIFY(self.fixture.window.scene()->isBorrowOpen());
+        LOKA_VERIFY(self.fixture.field(2) == node && node->getContext());
+        LOKA_VERIFY(IsWindow(hwnd) && Win32FocusParticipant::read(hwnd));
       }
       else
       {
@@ -1410,11 +1422,25 @@ void testWin32EditMenuSelectAllReentry()
     EditFixture f;
     if (!f.focus(2))
       continue;
+    const HWND hwnd = f.edit(2);
+    NodeContext *const context = f.field(2)->getContext();
     EditReentry probe(f, mode != 0);
     f.facts.cursor.state()->bind(&EditReentry::moved, &probe, false);
     f.dispatch(EDIT_SELECT_ALL);
     f.facts.cursor.state()->unbind(&EditReentry::moved, &probe);
     LOKA_VERIFY(probe.calls == 1 && f.calls == 0);
     LOKA_VERIFY(!f.window.scene()->isBorrowOpen());
+    if (mode != 0)
+    {
+      // BorrowScope exit does not pump: the pending seat still owns its editor.
+      LOKA_VERIFY(f.field(2)->getContext() == context);
+      LOKA_VERIFY(IsWindow(hwnd) && Win32FocusParticipant::read(hwnd));
+      f.admission.flush();
+      // Only inspect the surviving tree and native handle after reclamation.
+      Node *arm = f.field(1)->nextInComposition;
+      LOKA_VERIFY(arm && arm->asNestable());
+      LOKA_VERIFY(!arm->asNestable()->childrenHead());
+      LOKA_VERIFY(!IsWindow(hwnd));
+    }
   }
 }

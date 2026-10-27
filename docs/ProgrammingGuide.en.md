@@ -688,6 +688,9 @@ editor first; without a target, an optional app binding runs once. Native
 refusal or no-op does not run that binding. Win32 offers all five verbs to the
 focused native TextEditor or EditText, and Select All selects the whole text.
 Classic still takes the no-target path.
+Undo uses the focused native editor's own undo history, and replacing a
+TextEditor's native text from the app clears that history; it is not
+application-wide undo.
 
 Declare `StandardMenuPresets()` in the App's default menu bar to request About
 and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
