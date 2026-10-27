@@ -3,6 +3,7 @@
 #include "app/PlatformContext.hpp"
 #include "app/core/Window.hpp"
 #include "Win32App.hpp"
+#include <climits>
 
 class Win32Window;
 class AppConfigurable;
@@ -12,7 +13,8 @@ class Win32PlatformContext : public PlatformContext
 public:
   virtual bool queryTextEditorCapacity(loka::app::TextCapacity &out) const
   {
-    out = loka::app::TextCapacity::of(256, 8192);
+    // CRLF expansion plus the read terminator must fit EDIT's int length.
+    out = loka::app::TextCapacity::of(65535, INT_MAX - 65535);
     return true;
   }
   Win32PlatformContext();
