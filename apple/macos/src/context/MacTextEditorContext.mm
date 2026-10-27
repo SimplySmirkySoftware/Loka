@@ -138,8 +138,11 @@ namespace
     NativeLines(NSString *text, const TextCapacity &capacity, NSRange *buffer)
         : ranges(buffer),
           count(0),
-          result(EDITOR_OK)
+          result(buffer ? EDITOR_OK : EDITOR_UNAVAILABLE)
     {
+      // No installed row storage (cleared projection): refuse before any write.
+      if (!buffer)
+        return;
       const NSUInteger length = [text length];
       std::size_t budget;
       if (!text_document_detail::ExpandedSize(capacity.bytes, capacity.lines ? capacity.lines - 1 : 0, budget)
@@ -808,6 +811,10 @@ public:
       // An allocation refusal inside a take must close the next admission.
       if (follow == loka::app::scene::SCHEDULE_RESTORE)
         c.prepareRestore();
+      // A failed reconciliation cleared the projection, row buffers included:
+      // the take stops here instead of scanning an absent snapshot.
+      if (p.phase == Projection::UNAVAILABLE)
+        return false;
       if (p.phase == Projection::RECONCILE)
         p.phase = Projection::INPUT;
     }

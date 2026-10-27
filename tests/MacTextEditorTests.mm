@@ -813,6 +813,87 @@ void testMacTextEditorPagePriority()
   LOKA_VERIFY(f.lines.find(f.cursor.state()->get().line) > 2);
 }
 
+namespace
+{
+  /** A caret subscriber that, on the first report of a settle, rebinds the
+      editor to a buffer of another row capacity while row-buffer allocation
+      is refused: the next take's reconciliation cannot admit the new capacity. */
+  struct RebindOnReport
+  {
+    Fixture &fixture;
+    loka::testing::TextBufferFixture other;
+    unsigned reports;
+    RebindOnReport(Fixture &f)
+        : fixture(f),
+          other(),
+          reports(0)
+    {
+      LOKA_VERIFY(this->other.attach(&f.tracker, 1000, 8192) == ATTACH_OK);
+      for (unsigned short i = 0; i < 80; ++i)
+        LOKA_VERIFY(this->other.insert(i, String("abcd")) == EDIT_OK);
+      f.cursor.state()->bind(&reported, this, false);
+    }
+    ~RebindOnReport()
+    {
+      this->fixture.cursor.state()->unbind(&reported, this);
+    }
+    static void reported(void *data)
+    {
+      RebindOnReport &self = *static_cast<RebindOnReport *>(data);
+      if (self.reports++)
+        return;
+      Fixture &f = self.fixture;
+      loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 1);
+      LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+          &f.node, TextEditor(self.other, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    }
+  };
+} // namespace
+
+void testMacTextEditorPageAfterFailedReconciliation()
+{
+  // Two page commands in one settle. The first is granted and reports its
+  // caret; the subscriber rebinds the editor to a 1,000-row buffer while the
+  // row-buffer allocation is refused, so reconciliation fails to admit the
+  // new capacity and the projection goes unavailable. No later take measures
+  // with the stale row buffers (Codex review on #1615): the caret stays where
+  // the first take left it, and the retry recovers once allocation works.
+  typedef loka::app::testing::SettleTrace<EditorCommand, LineCursor> Trace;
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+  {
+    Fixture f(80);
+    LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+        &f.node, TextEditor(f.lines, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    f.context->onPropsApplied();
+    RebindOnReport subscriber(f);
+    loka::app::testing::SettleTraceCapture<LineCursor>::clear();
+    {
+      StateTrackerGuard guard(&f.tracker);
+      LOKA_VERIFY(f.commands.post(EditorCommand(EditorCommand::PAGE_DOWN)) == POST_ACCEPTED);
+      LOKA_VERIFY(f.commands.post(EditorCommand(EditorCommand::PAGE_DOWN)) == POST_ACCEPTED);
+    }
+    f.context->onPropsApplied();
+    LOKA_VERIFY(subscriber.reports >= 1);
+    // The first take is granted and traced; the rebind then makes the
+    // projection unavailable (row admission refused), so the second command
+    // drains without moving the caret or measuring with stale row storage.
+    Trace &trace = Trace::instance();
+    LOKA_VERIFY(trace.size() == 1 && trace.at(0).count >= 1);
+    LOKA_VERIFY(trace.at(0).takes[0].kind() == Reply<EditorCommand>::GRANTED);
+    for (unsigned k = 1; k < trace.at(0).count; ++k)
+      LOKA_VERIFY(trace.at(0).takes[k].kind() == Reply<EditorCommand>::REFUSED);
+    LOKA_VERIFY(f.commands.pending() == 0);
+    LOKA_VERIFY(![f.view isEditable]);
+    LOKA_VERIFY(f.cursor.state()->get() == trace.at(0).after);
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+    for (int turn = 0; turn < 20 && ![f.view isEditable]; ++turn)
+      f.turn();
+    LOKA_VERIFY([f.view isEditable]);
+    LOKA_VERIFY([[f.view string] length] == 80 * 5 - 1);
+  }
+  loka::core::testing::allowLokaAllocRaw();
+}
+
 void testMacTextEditorPageEmptyLine()
 {
   Fixture f(1, "");

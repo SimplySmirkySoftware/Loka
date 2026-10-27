@@ -19,6 +19,7 @@ void testMacTextEditorQueuedRequests();
 void testMacTextEditorPageCommands();
 void testMacTextEditorPageBindingReplacement();
 void testMacTextEditorPagePriority();
+void testMacTextEditorPageAfterFailedReconciliation();
 void testMacTextEditorPageEmptyLine();
 void testMacTextEditorPageGeometryDeclinesWrappedLine();
 
