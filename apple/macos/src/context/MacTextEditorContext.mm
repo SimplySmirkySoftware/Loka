@@ -294,7 +294,7 @@ namespace
 
   void InstallEditorFont(NSTextView *view, MacScenePlatformController &controller)
   {
-    NSFont *font = (NSFont *)controller.textFont(TextStyle(), true);
+    NSFont *font = (NSFont *)controller.textFont(TextStyle() + Monospace);
     if (!font)
       return;
     [view setFont:font];
@@ -533,7 +533,7 @@ struct MacTextEditorContext::Projection
         row = new (std::nothrow) Styles(entry.id, entry.value, node.props.highlighter_);
       if (force || changed || !row)
       {
-        NSDictionary *defaults = EditorBaseAttributes((NSFont *)controller.textFont(TextStyle(), true));
+        NSDictionary *defaults = EditorBaseAttributes((NSFont *)controller.textFont(TextStyle() + Monospace));
         [storage setAttributes:defaults range:lines.ranges[i]];
         if (row && row->highlight.value().valid())
         {
@@ -556,7 +556,7 @@ struct MacTextEditorContext::Projection
             for (std::size_t run = 0; run < value.segmentCount(); ++run)
             {
               std::string bytes;
-              NSFont *runFont = (NSFont *)controller.textFont(value.segment(run).style, true);
+              NSFont *runFont = (NSFont *)controller.textFont(value.segment(run).style + Monospace);
               if (!runFont || !loka::platform::CollectUtf8(value.segment(run).text, bytes))
               {
                 valid = false;

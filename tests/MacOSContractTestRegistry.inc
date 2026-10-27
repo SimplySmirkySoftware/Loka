@@ -129,6 +129,8 @@ LOKA_TEST(testMacRectSurfaceGroundAndSpritePixels)
 LOKA_TEST(testMacImageViewTransparentPixels)
 LOKA_TEST(testMacScrollViewTransparentBackground)
 
+LOKA_TEST(testMacTextFamilyMonospace)
+LOKA_TEST(testMacTextFamilyGeometry)
 LOKA_TEST(testMacTextColorTable)
 LOKA_TEST(testMacTextColorFallbacks)
 LOKA_TEST(testMacTextColorDynamic)

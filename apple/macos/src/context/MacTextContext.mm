@@ -28,7 +28,7 @@ namespace
 
   bool HasTextFontStyle(const loka::app::TextStyle &style)
   {
-    return style.size_.isSet() || style.hasWeight_ || style.hasItalic_;
+    return style.declaresFont();
   }
 
   TextGeometry ResolveTextGeometry(const loka::app::TextStyle &style, const MacScenePlatformController *controller)
