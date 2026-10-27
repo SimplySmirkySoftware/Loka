@@ -1,4 +1,7 @@
 #include "Win32TextEditorAccess.hpp"
+#include "support/TextEditorAccess.hpp"
+#include "context/Win32EditTextBridge.hpp"
+#include <string>
 #include "support/TextBufferFixture.hpp"
 #include "support/Headless.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
@@ -1250,14 +1253,19 @@ void testWin32EditMenuTextEditor()
     f.dispatch(EDIT_PASTE);
     LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("pasted")));
     f.dispatch(EDIT_UNDO);
-    if (clipboardAvailable)
-      LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.empty());
-    else
-    {
-      LOKA_VERIFY(f.facts.lines.size() == 2);
-      LOKA_VERIFY(f.facts.lines.at(0).value.equals(String("first")));
-      LOKA_VERIFY(f.facts.lines.at(1).value.equals(String("last")));
-    }
+    // The EDIT's undo depth is the OS's business (one EM_UNDO took back the
+    // paste and the cut together on the rig): pin that Undo reached the editor
+    // and that the model follows whatever the native text became.
+    std::wstring wide;
+    loka::win32::ReadEditTextWide(hwnd, wide);
+    std::string native, model;
+    LOKA_VERIFY(loka::win32::TextEditorFromWide(wide.data(), wide.size(), native) && native != "pasted");
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(*loka::testing::Win32TextEditorAccess::node(
+                                                                   *static_cast<Win32TextEditorContext *>(
+                                                                       f.field(2)->getContext())))
+                    .project(model)
+                == EDITOR_OK);
+    LOKA_VERIFY(model == native);
   }
   LOKA_VERIFY(f.calls == 0);
 }
@@ -1285,7 +1293,8 @@ void testWin32EditMenuEditText()
     f.dispatch(EDIT_PASTE);
     LOKA_VERIFY(f.facts.text.get().equals(String("pasted")));
     f.dispatch(EDIT_UNDO);
-    LOKA_VERIFY(f.facts.text.get().equals(String(clipboardAvailable ? "" : "field")));
+    LOKA_VERIFY(!f.facts.text.get().equals(String("pasted")));
+    LOKA_VERIFY(f.facts.text.get().equals(loka::win32::ReadEditTextString(hwnd)));
   }
   LOKA_VERIFY(f.calls == 0);
 }
