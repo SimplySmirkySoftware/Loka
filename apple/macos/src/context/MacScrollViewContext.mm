@@ -306,6 +306,22 @@ int MacScrollViewContext::commitScrollMetrics(int contentWidth,
   return clamped;
 }
 
+bool MacScrollViewContext::applyScrollRequest(const loka::core::Frame &target)
+{
+  NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
+  NSView *documentView = scrollView ? [scrollView documentView] : nil;
+  if (!scrollView || !documentView)
+    return false;
+  BoundsNotificationMute mute(*this);
+  const loka::core::Frame origin = this->node_->requestedOrigin();
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  loka::macos::ScrollMacDocument(documentView,
+                                 projection.scrollOffsetToNative(target.x != origin.x ? target.x : origin.x),
+                                 projection.scrollOffsetToNative(target.y != origin.y ? target.y : origin.y));
+  this->publishClipViewBoundsOrigin();
+  return true;
+}
+
 void MacScrollViewContext::publishClipViewBoundsOrigin()
 {
 #ifdef LOKA_LIFECYCLE_AUDIT

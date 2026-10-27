@@ -63,6 +63,16 @@ public:
     node.displayMode_.set(mode);
   }
 
+  static loka::app::ScrollTarget pendingScroll(simpleviewer::MainNode &node)
+  {
+    return node.scrollTo_.get();
+  }
+
+  static loka::core::Frame viewport(simpleviewer::MainNode &node)
+  {
+    return node.viewport_.get();
+  }
+
   static void setLoadedImage(simpleviewer::MainNode &node,
                              const loka::core::resource::Image &image)
   {
@@ -696,8 +706,28 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
                                               600,
                                               0,
                                               0);
-  MainAccess::setLoadedImage(*main, nextImage);
+  {
+    // Hold projection so the post can be distinguished from a direct fact write.
+    loka::app::scene::BorrowScope posting(harness.platform);
+    MainAccess::setLoadedImage(*main, nextImage);
+    LOKA_VERIFY(MainAccess::pendingScroll(*main) == loka::app::ScrollTarget::Origin(0, 0));
+    LOKA_VERIFY(MainAccess::viewport(*main).x == 11 && MainAccess::viewport(*main).y == 73);
+  }
+  flushScene(*harness.scene);
+  LOKA_VERIFY(MainAccess::pendingScroll(*main).isNone());
   LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 20));
+
+  scroll->props.viewport_.set(loka::core::Frame(11, 73, 0, 20));
+  MainAccess::setDisplayMode(*main, simpleviewer::DISPLAY_FIT);
+  flushScene(*harness.scene);
+  MainAccess::setLoadedImage(*main, tallImage);
+  flushScene(*harness.scene);
+  LOKA_VERIFY(MainAccess::pendingScroll(*main) == loka::app::ScrollTarget::Origin(0, 0));
+  LOKA_VERIFY(MainAccess::viewport(*main).x == 11 && MainAccess::viewport(*main).y == 73);
+  MainAccess::setDisplayMode(*main, simpleviewer::DISPLAY_ACTUAL_SCROLL);
+  flushScene(*harness.scene);
+  LOKA_VERIFY(MainAccess::pendingScroll(*main).isNone());
+  LOKA_VERIFY(MainAccess::viewport(*main).x == 0 && MainAccess::viewport(*main).y == 0);
 }
 
 void testSimpleViewerPaneScrollButtonUsesMenuEmitter()
