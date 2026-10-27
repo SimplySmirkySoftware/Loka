@@ -5,6 +5,7 @@
 #include <climits>
 
 #include "app/scene/Node.hpp"
+#include "app/nodes/nestable/ScrollViewRequests.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "app/scene/state/WriteSeat.hpp"
 #include "core/Frame.hpp"
@@ -75,10 +76,7 @@ namespace loka
     };
 
     /** Stable inputs for a scrollable projection-parent scope. viewport_ is the
-        rail-published fact; scrollTo_ is application intent, stored by the
-        contract but deliberately not yet consumed by any rail — wiring it
-        (clamping, zoom focal behavior) is its own mechanism in a later PR,
-        and zoom is its first named consumer (#537). */
+        rail-published fact; scrollTo_ borrows application-owned requests. */
     struct ScrollViewProps : public scene::NodePropsBase<ScrollViewProps>
     {
       typedef ScrollViewTypeTag TypeTag;
@@ -93,19 +91,19 @@ namespace loka
           origin.y may be negative down to -top while the gap shows.
           The whole WriteSeat retains the owner's tracked transaction door. */
       scene::WriteSeat<loka::core::Frame> viewport_;
-      scene::WriteSeat<int> scrollTo_;
+      scene::RequestBinding<ScrollTarget> scrollTo_;
       ScrollViewContentInsets contentInsets_;
 
       ScrollViewProps()
           : viewport_(),
-            scrollTo_(0),
+            scrollTo_(),
             contentInsets_()
       {
       }
 
       explicit ScrollViewProps(const scene::NodeState<loka::core::Frame> &viewport)
           : viewport_(viewport.writeSeat()),
-            scrollTo_(0),
+            scrollTo_(),
             contentInsets_()
       {
       }
@@ -130,19 +128,12 @@ namespace loka
         return *this;
       }
 
-      /** Binds application-authored scroll intent. Stored only for now: no
-          rail consumes it yet — the intent pipe is wired in a later PR with
-          zoom as its first consumer (#537), not as a side effect of a rail
-          landing. */
-      ScrollViewProps &scrollTo(const scene::WriteSeat<int> &value)
+      /** Takes one post at its first eligible visit. A refused visit takes and
+          drops it; a retained re-entry's first visit may jump. Null delivers
+          requests; native rail delivery follows in subsequent PRs. */
+      ScrollViewProps &scrollTo(scene::Request<ScrollTarget> &value)
       {
-        this->scrollTo_ = value;
-        return *this;
-      }
-
-      ScrollViewProps &scrollTo(const scene::NodeState<int> &value)
-      {
-        this->scrollTo_ = value.writeSeat();
+        this->scrollTo_ = scene::RequestBinding<ScrollTarget>(this->requestSeat(value));
         return *this;
       }
 
@@ -159,8 +150,8 @@ namespace loka
         {
           return mine < theirs;
         }
-        if (this->scrollTo_.state() != other.scrollTo_.state())
-          return this->scrollTo_.state() < other.scrollTo_.state();
+        if (!this->scrollTo_.same(other.scrollTo_))
+          return this->scrollTo_ < other.scrollTo_;
         return this->contentInsets_ < other.contentInsets_;
       }
     };
@@ -199,10 +190,23 @@ namespace loka
         if (!this->props.viewport_.isValid())
           return loka::core::Frame(0, 0, 0, 0);
         const loka::core::Frame current = this->props.viewport_.state()->get();
+        const loka::core::Frame origin = this->normalizedOrigin(current.x, current.y);
+        return loka::core::Frame(origin.x, origin.y, current.width, current.height);
+      }
+
+      /** Converts content coordinates to the representable extent origin,
+          clamping before addition so even INT_MAX is safe. */
+      loka::core::Frame normalizedOrigin(int x, int contentY) const
+      {
         const int top = this->props.contentInsets_.top();
-        const int y = current.y < -top ? -top : (current.y > SHRT_MAX - top ? SHRT_MAX - top : current.y);
-        return loka::core::Frame(
-            current.x < 0 ? 0 : (current.x > SHRT_MAX ? SHRT_MAX : current.x), y + top, current.width, current.height);
+        const int y = contentY < -top ? -top : (contentY > SHRT_MAX - top ? SHRT_MAX - top : contentY);
+        return loka::core::Frame(x < 0 ? 0 : (x > SHRT_MAX ? SHRT_MAX : x), y + top, 0, 0);
+      }
+
+      /** Shared request conversion, including the top gap destination. */
+      loka::core::Frame normalizedOrigin(const ScrollTarget &target) const
+      {
+        return this->normalizedOrigin(target.x(), target.contentY(this->props.contentInsets_.top()));
       }
 
       /** Translation subtracted from content coordinates by projection rails. */
@@ -231,6 +235,8 @@ namespace loka
 
       virtual void declareDirtySources(scene::DirtySourceRegistrar &registrar)
       {
+        if (this->props.scrollTo_.isValid())
+          registrar.markDirtyOnChange(this->props.scrollTo_.state(), scene::NODE_DIRTY_LAYOUT);
         if (this->props.viewport_.isValid())
         {
           registrar.markDirtyOnChange(this->props.viewport_.state(), scene::NODE_DIRTY_LAYOUT);
@@ -238,6 +244,13 @@ namespace loka
       }
 
       ScrollViewProps props;
+
+    protected:
+      virtual void onLifecycleFactChanged(scene::NodeLifecycleFact previous, scene::NodeLifecycleFact next)
+      {
+        if (previous == scene::NODE_FACT_ATTACHED && next != scene::NODE_FACT_ATTACHED)
+          scene::PendingRequests::cancel(this->props.scrollTo_);
+      }
 
     private:
       void writeViewport(int x, int extentY, int width, int height)
@@ -250,6 +263,20 @@ namespace loka
           this->props.viewport_.set(loka::core::Frame(x, y, width, height));
       }
     };
+
+    namespace scene
+    {
+      template <> struct NodePropsApplier<ScrollViewNode, ScrollViewProps>
+      {
+        static bool apply(ScrollViewNode *node, const ScrollViewProps &props)
+        {
+          if (!node->props.scrollTo_.same(props.scrollTo_))
+            PendingRequests::cancel(node->props.scrollTo_);
+          node->props = props;
+          return true;
+        }
+      };
+    } // namespace scene
 
     struct ScrollViewDefinition
         : public scene::NestableNodeDefinition<ScrollViewProps, ScrollViewNode, ScrollViewDefinition>,
@@ -291,13 +318,7 @@ namespace loka
         return *this;
       }
 
-      ScrollViewDefinition &scrollTo(const scene::WriteSeat<int> &value)
-      {
-        this->props.scrollTo(value);
-        return *this;
-      }
-
-      ScrollViewDefinition &scrollTo(const scene::NodeState<int> &value)
+      ScrollViewDefinition &scrollTo(scene::Request<ScrollTarget> &value)
       {
         this->props.scrollTo(value);
         return *this;

@@ -1,3 +1,4 @@
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "support/NullLayoutRefusal.hpp"
 #include "app/scene/Scene.hpp"
@@ -779,6 +780,57 @@ NullScenePlatformController::findLedgerRow(FakeControlHandle *handle)
   return 0;
 }
 
+/** The reached helper returns both its geometry result and request capability. */
+struct NullScenePlatformController::ScrollViewLayoutResult
+{
+  const int bottom;
+  const loka::app::ScrollViewVisit visit;
+  ScrollViewLayoutResult(int value, const loka::app::ScrollViewVisit &outcome)
+      : bottom(value),
+        visit(outcome)
+  {
+  }
+};
+namespace
+{
+  class NullScrollViewOwner : public loka::app::scene::SettleOwner<loka::core::Frame>
+  {
+  public:
+    NullScrollViewOwner(loka::app::scene::IPlatformController &controller, loka::app::scene::Node *node)
+        : loka::app::scene::SettleOwner<loka::core::Frame>(controller, node, node->getContext())
+    {
+    }
+    virtual loka::app::scene::FollowUpResult finishSettle(loka::app::scene::Node &, const loka::app::scene::FollowUps &)
+    {
+      return loka::app::scene::FOLLOW_UP_NONE;
+    }
+#ifdef TEST_BUILD
+    virtual loka::core::Frame fact(loka::app::scene::Node &base) const
+    {
+      const loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
+      return node.props.viewport_.isValid() ? node.props.viewport_.state()->get() : loka::core::Frame();
+    }
+#endif
+  };
+  class NullScrollViewSeat : public loka::app::ScrollViewSeat
+  {
+  public:
+    explicit NullScrollViewSeat(const loka::app::ScrollViewVisit &visit)
+        : loka::app::ScrollViewSeat(visit)
+    {
+    }
+    virtual loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
+    apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
+    {
+      loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
+      const loka::core::Frame target = node.normalizedOrigin(pending);
+      node.publishOrigin(target.x, target.y);
+      return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
+          node.props.viewport_.state()->get(), loka::app::SCROLL_OK);
+    }
+  };
+} // namespace
+
 int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
                                             const loka::app::scene::LayoutState &received,
                                             const loka::app::layout::LazyWindow *range,
@@ -805,7 +857,19 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
 
   if (node->asScrollViewNode())
   {
-    return this->layoutScrollView(node, state, range, spans);
+    loka::app::scene::BorrowScope visitScope(*this);
+    const ScrollViewLayoutResult result = this->layoutScrollView(node, state, range, spans);
+    NullScrollViewOwner owner(*this, node);
+    NullScrollViewSeat seat(result.visit);
+    loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
+                                                                   seat,
+                                                                   loka::app::scene::SETTLE_PROPS
+#ifdef TEST_BUILD
+                                                                   ,
+                                                                   owner.fact(*node)
+#endif
+    );
+    return result.bottom;
   }
 
   if (loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode())
@@ -926,24 +990,25 @@ int NullScenePlatformController::layoutNode(loka::app::scene::Node *node,
   return childState.y;
 }
 
-int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
-                                                  const loka::app::scene::LayoutState &state,
-                                                  const loka::app::layout::LazyWindow *range,
-                                                  loka::app::layout::StackSpans *spans)
+NullScenePlatformController::ScrollViewLayoutResult
+NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
+                                              const loka::app::scene::LayoutState &state,
+                                              const loka::app::layout::LazyWindow *range,
+                                              loka::app::layout::StackSpans *spans)
 {
   loka::app::ScrollViewNode *scrollView = node ? node->asScrollViewNode() : 0;
   if (!scrollView)
   {
     if (spans)
       spans->invalidate();
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
   if (this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
     this->refuseNestedScrollView();
     if (spans)
       spans->invalidate();
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
   if (state.height > 0 && state.y + state.height > SHRT_MAX)
   {
@@ -953,7 +1018,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     this->refuseScrollViewShortRange();
     if (spans)
       spans->invalidate();
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
 
   const loka::core::Frame translation = scrollView->contentTranslation();
@@ -967,7 +1032,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     this->refuseScrollViewShortRange();
     if (spans)
       spans->invalidate();
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
 
   loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope);
@@ -976,7 +1041,7 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     this->refuseNestedScrollView();
     if (spans)
       spans->invalidate();
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
 
   int currentY = state.y;
@@ -1038,13 +1103,15 @@ int NullScenePlatformController::layoutScrollView(loka::app::scene::Node *node,
     spans->placed(loka::core::Frame(translation.x, translation.y, state.width, state.height));
   if (state.height > 0)
   {
-    return state.y + state.height;
+    return ScrollViewLayoutResult(state.y + state.height,
+                                  refused ? loka::app::ScrollViewVisit::refused()
+                                          : loka::app::ScrollViewVisit::succeededUnclamped());
   }
   if (refused)
   {
-    return state.y;
+    return ScrollViewLayoutResult(state.y, loka::app::ScrollViewVisit::refused());
   }
-  return extentBottom;
+  return ScrollViewLayoutResult(extentBottom, loka::app::ScrollViewVisit::succeededUnclamped());
 }
 
 int NullScenePlatformController::projectLayout(loka::app::scene::Node *node,

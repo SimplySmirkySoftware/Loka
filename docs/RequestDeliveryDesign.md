@@ -71,8 +71,8 @@ trace. Lifecycle eligibility remains the seat's separate check.
 Window owns the controller; Scene and contexts borrow it. The controller owns
 one small noncopyable `BorrowPhase`; only `BorrowScope` (formerly `OperationScope`)
 opens it and restores the previous value. The policy openers are
-`SettleOwnerBase` and the rail input door described below; the scope constructor remains
-public for fixtures. There is no counter, allocation, flush on scope
+`SettleOwnerBase`, the projection-visit owner, and the rail input door described
+below; the scope constructor remains public for fixtures. There is no counter, allocation, flush on scope
 exit, or coupling to the focus publication phase. A non-template completion
 owner carries this interval independently of the fact type. A controller-less
 fixture door is available only in `loka::app::testing` under `TEST_BUILD`.
@@ -93,6 +93,11 @@ cannot synchronize, drain native retirements or complete focus. App admission
 skips that window's whole busy row: native visibility, Scene replacement,
 dialog-result delivery and close reclamation wait too. Other controllers are
 unaffected. Pending work remains on its existing clock until a later flush.
+A projection-visit scope follows the same rule. Inside a Scene run it defers
+Window synchronization and native-retirement draining. Outside one (for example
+the layout of a mount) it also refuses the immediate Scene run that a viewport
+publication asks for. Both wait for the next ordinary flush; scope exit does not
+flush.
 Focus publication alone still permits a Scene run. Layout reached from native
 callbacks also requires a borrow interval: it publishes node facts (for example,
 `RectSurfaceNode`'s laid-out extent), even when it does not run the Scene.
@@ -533,6 +538,13 @@ storage-edit completion (`applyHighlights`), `UNAVAILABLE` refusal. These are
 the entry completions governed by the settle contract above; shared projection
 helpers are not additional delivery sites.
 
+Null ScrollView consumes once after the reached `layoutScrollView` helper returns
+at the ScrollView branch of `layoutNode`, including refused visits. Its request
+box marks `NODE_DIRTY_LAYOUT`; each settle takes at most two requests, with no
+failed-arm take because `finishSettle` returns `FOLLOW_UP_NONE`. Consumption
+and origin publication may coalesce into the next placement pass. Children a
+refused ancestor never reaches keep their pending requests. Native ScrollView
+rails do not deliver yet (PR 1 of #1591).
 
 ## Focus requests (#960, common + Null)
 
