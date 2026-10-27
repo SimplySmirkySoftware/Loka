@@ -236,6 +236,72 @@ namespace
   }
 } // namespace
 
+void testMacTextFamilyMonospace()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *parent = [[NSView alloc] initWithFrame:NSZeroRect];
+  {
+    MacScenePlatformController controller(parent, RailMetrics());
+    NSFont *mono = (NSFont *)controller.textFont(Monospace);
+    NSFont *expectedMono = [NSFont userFixedPitchFontOfSize:[NSFont systemFontSize]];
+    LOKA_VERIFY(mono && [mono isFixedPitch]);
+    LOKA_VERIFY([[mono fontName] isEqualToString:[expectedMono fontName]]);
+    NSFont *plain = (NSFont *)controller.textFont(TextStyle());
+    NSFont *body = (NSFont *)controller.textFont(Body);
+    LOKA_VERIFY(plain && ![plain isFixedPitch]);
+    LOKA_VERIFY(body && ![body isFixedPitch]);
+    LOKA_VERIFY([[plain fontName] isEqualToString:[[NSFont systemFontOfSize:[NSFont systemFontSize]] fontName]]);
+    LOKA_VERIFY([[body fontName] isEqualToString:[[NSFont systemFontOfSize:12] fontName]]);
+    LOKA_VERIFY(controller.textFont(TextStyle().family(TEXT_FAMILY_SYSTEM)) == plain);
+    NSFont *bold = (NSFont *)controller.textFont(Monospace + Bold);
+    LOKA_VERIFY(bold && [bold isFixedPitch]);
+    LOKA_VERIFY([[NSFontManager sharedFontManager] traitsOfFont:bold] & NSBoldFontMask);
+    NSFont *sized = (NSFont *)controller.textFont(Monospace + FontSize<12>());
+    LOKA_VERIFY(sized && [sized isFixedPitch] && std::fabs([sized pointSize] - 12) < 0.01);
+  }
+  [parent release];
+  [pool drain];
+}
+
+void testMacTextFamilyGeometry()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *parent = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 100)];
+  {
+    MacScenePlatformController controller(parent, RailMetrics());
+    TextNode plain(Text("iiiiiiiiiiiiiiii").props);
+    TextNode mono((Text("iiiiiiiiiiiiiiii") + Monospace).props);
+    short plainWidth = 0, monoWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(&plain, plainWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(&mono, monoWidth));
+    NSFont *fixed = [NSFont userFixedPitchFontOfSize:[NSFont systemFontSize]];
+    NSFont *nativeDefault = [freshLabel() font];
+    NSAttributedString *fixedText = [[[NSAttributedString alloc]
+        initWithString:@"iiiiiiiiiiiiiiii"
+            attributes:[NSDictionary dictionaryWithObject:fixed forKey:NSFontAttributeName]] autorelease];
+    NSAttributedString *defaultText = [[[NSAttributedString alloc]
+        initWithString:@"iiiiiiiiiiiiiiii"
+            attributes:[NSDictionary dictionaryWithObject:nativeDefault forKey:NSFontAttributeName]] autorelease];
+    // Subtract the two advances to cancel the native cell's horizontal padding.
+    // Identity RailMetrics leaves only the two measurements' integer rounding.
+    const double advanceDifference = [fixedText size].width - [defaultText size].width;
+    LOKA_VERIFY(std::fabs((monoWidth - plainWidth) - advanceDifference) < 2.0);
+    if (![nativeDefault isFixedPitch])
+      LOKA_VERIFY(monoWidth != plainWidth);
+    else
+      std::printf("[skip] family width contrast: the native default font is fixed pitch\n");
+    controller.onChange(&mono, NODE_DIRTY_NONE, false);
+    controller.relayout(400, 100);
+    LOKA_VERIFY([[field(parent) font] isFixedPitch]);
+    LOKA_VERIFY([[[field(parent) font] fontName] isEqualToString:[fixed fontName]]);
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  [parent release];
+  [pool drain];
+}
+
 void testMacTextColorTable()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
