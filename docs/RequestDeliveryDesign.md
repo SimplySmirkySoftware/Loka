@@ -52,14 +52,15 @@ fixed order. The owner supplies `finishSettle` once and, under `TEST_BUILD`,
 pointer array on its own stack and walks them; each runner holds its binding
 by value and, under `TEST_BUILD`, its trace row; `FollowUps` stays local to the
 driver. The existing
-single-seat entry and a two-seat overload share that walk; TextEditor uses the
-two-seat overload for caret then command (#902).
+single-seat entry, a single heterogeneous-seat overload, and a two-seat
+overload share that walk; TextEditor uses the two-seat overload for caret then
+command (#902).
 Sources: [#898, ruling items 1–3](https://github.com/SimplySmirkySoftware/Loka/issues/898),
 [#900](https://github.com/SimplySmirkySoftware/Loka/pull/900), and
 [#904](https://github.com/SimplySmirkySoftware/Loka/pull/904).
 The non-template `SettleOwnerBase` opens a `BorrowScope` on the rail's
 controller before native calls or callback-capable work. It borrows the node
-and stores a comparison-only context identity. Both settle overloads require
+and stores a comparison-only context identity. All settle overloads require
 that owner; `hasSameContext()` checks identity at each seat entry, after
 publications, and after `finishSettle`. This is not an ATTACHED predicate: a
 parked context can still match. A mismatch stops later seats, the epilogue and
@@ -70,8 +71,8 @@ trace. Lifecycle eligibility remains the seat's separate check.
 Window owns the controller; Scene and contexts borrow it. The controller owns
 one small noncopyable `BorrowPhase`; only `BorrowScope` (formerly `OperationScope`)
 opens it and restores the previous value. The policy openers are
-`SettleOwnerBase` and the rail input door described below; the scope constructor remains
-public for fixtures. There is no counter, allocation, flush on scope
+`SettleOwnerBase`, the projection-visit owner, and the rail input door described
+below; the scope constructor remains public for fixtures. There is no counter, allocation, flush on scope
 exit, or coupling to the focus publication phase. A non-template completion
 owner carries this interval independently of the fact type. A controller-less
 fixture door is available only in `loka::app::testing` under `TEST_BUILD`.
@@ -92,6 +93,11 @@ cannot synchronize, drain native retirements or complete focus. App admission
 skips that window's whole busy row: native visibility, Scene replacement,
 dialog-result delivery and close reclamation wait too. Other controllers are
 unaffected. Pending work remains on its existing clock until a later flush.
+A projection-visit scope follows the same rule. Inside a Scene run it defers
+Window synchronization and native-retirement draining. Outside one (for example
+the layout of a mount) it also refuses the immediate Scene run that a viewport
+publication asks for. Both wait for the next ordinary flush; scope exit does not
+flush.
 Focus publication alone still permits a Scene run. Layout reached from native
 callbacks also requires a borrow interval: it publishes node facts (for example,
 `RectSurfaceNode`'s laid-out extent), even when it does not run the Scene.
@@ -217,7 +223,8 @@ not the completion path of a still-live take:
    that strands the phase.
 3. `validate` asks the seam whether the requested value is valid.
 4. `apply` performs the native write, clamp, or repair, returning a
-   `RequestApplication` and follow-up decision; check liveness afterward.
+   `RequestApplication<Fact, RequestTraits<Request>::Reason>` and follow-up
+   decision; check liveness afterward.
 5. `report` asks the seam to commit the applied value, then checks liveness.
    Build the reply from that seam result, not native apply success alone.
 6. `current` checks the captured binding before publishing the optional reply.
@@ -230,6 +237,12 @@ not the completion path of a still-live take:
 The owner's `finishSettle` runs once after both ordinary take opportunities
 for every seat, folding `FollowUps` from `apply` and `finishTake` into the
 completion decision.
+
+Each request type whose reply or settlement is instantiated names its reason
+through `RequestTraits<Request>::Reason`, `accepted()` and `unavailable()`.
+The fact type needs no trait. Editor request specializations live in
+`TextEditorRequests.hpp`; both keep `EditorResult` and its existing values.
+Plain requests (including Focus) require only `coalescable`, not a reason.
 
 The `formReply` overloads deduce their argument types: the same-type overload
 keeps `Granted`/`Clamped`/`Refused` selection; different request and fact types
@@ -257,8 +270,9 @@ slot alone does not justify it.
 `finishSettle` returns `FOLLOW_UP_ARMED`, `FOLLOW_UP_FAILED`, or `FOLLOW_UP_NONE`.
 A failed arm adds at most one refusal-only take per seat from that seat's last
 admission's still current, nonempty binding: `consume()` (last-wins clear or queue advance),
-check liveness/current binding, and publish `Refused(requested, EDITOR_UNAVAILABLE)`. It does not resolve, apply,
-report, or write the fact. The driver returns the arm result after this tail,
+check liveness/current binding, and publish
+`Refused(requested, RequestTraits<Request>::unavailable())`. It does not resolve,
+apply, report, or write the fact. The driver returns the arm result after this tail,
 so native admission stays closed until refusal publication finishes; retirement
 returns `FOLLOW_UP_NONE`. A binding discarded during consumption gets no reply
 ([#893](https://github.com/SimplySmirkySoftware/Loka/pull/893)).
@@ -312,10 +326,12 @@ last-wins binding always clears to `None`. It touches no endpoint storage after
 publication and returns the local snapshot. A synchronous subscriber's post
 therefore follows older queued work. Both settlement sites use this door:
 the ordinary take and the failed-arm refusal-only take. Cancellation uses
-`clearRing()` then `cancelFrom(snapshot)` across the selected seats, as described
+`PendingRequests::cancel` across only the selected seats, as described
 under [Command seat](#command-seat-902). A cancellation subscriber's repost
 consequently enters the emptied endpoint. The caller is
 `TextEditorNode::discardPendingRequest`, on binding change or detach.
+`PendingRequests` holds the cancellation friendship; `SeatRunner` retains
+consumption access, and nodes do not access the private binding primitives.
 Sources: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
 [#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 
@@ -444,9 +460,12 @@ If the slot stays nonempty at every command admission, that delay is indefinite;
 (#902 item 6, PR a and PRs b–d).
 
 A document-list replacement or detach discards both seats; changing only one
-request binding discards that seat. `discardPendingRequest` uses two passes:
-first clear all selected rings without notification and snapshot slot values
-into locals; then cancel command before caret. `cancelFrom(snapshot)` leaves a
+request binding discards that seat. `discardPendingRequest` passes only those
+seats to `PendingRequests::cancel`, command before caret. The helper first
+copies all bindings into stack locals, clears all selected rings without
+notification, and snapshots all slots (None for invalid bindings); then it
+cancels in argument order. Binding replacement during a subscriber callback
+cannot retarget the copied bindings. `cancelFrom(snapshot)` leaves a
 changed slot untouched, preserving work posted by an earlier
 cancellation subscriber. Otherwise it advances to a new ring head with forced
 publication, or publishes `None` when empty. Cancellation therefore publishes
@@ -519,6 +538,13 @@ storage-edit completion (`applyHighlights`), `UNAVAILABLE` refusal. These are
 the entry completions governed by the settle contract above; shared projection
 helpers are not additional delivery sites.
 
+Null ScrollView consumes once after the reached `layoutScrollView` helper returns
+at the ScrollView branch of `layoutNode`, including refused visits. Its request
+box marks `NODE_DIRTY_LAYOUT`; each settle takes at most two requests, with no
+failed-arm take because `finishSettle` returns `FOLLOW_UP_NONE`. Consumption
+and origin publication may coalesce into the next placement pass. Children a
+refused ancestor never reaches keep their pending requests. Native ScrollView
+rails do not deliver yet (PR 1 of #1591).
 
 ## Focus requests (#960, common + Null)
 

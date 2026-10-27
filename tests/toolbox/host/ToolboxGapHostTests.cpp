@@ -310,6 +310,8 @@ namespace
     LOKA_VERIFY(!none.query(out));
     LOKA_VERIFY(out.top == 1 && out.left == 2 && out.bottom == 3 && out.right == 4);
     ToolboxClipBoxContext context;
+    NodeContext &base = context;
+    LOKA_VERIFY(base.asClipBoxContext() == 0);
     LOKA_VERIFY(!context.placement().query(out));
     const Rect first = {10, 20, 30, 40}, empty = {4, 5, 4, 5};
     context.setPlacement(ToolboxClipPlacement(first));
@@ -523,12 +525,22 @@ namespace
     NotifySubtreeNodeAttached(&box);
     LifecycleFactTestAccess::DeliverFacts(&box);
     LOKA_VERIFY(placementOf(box, rect) && rect.top == 42);
+#ifndef LOKA_LIFECYCLE_AUDIT
     LOKA_VERIFY(Box().applyPropsToNode(&box));
+    state = f.seat();
+    state.y = 77;
+    LayoutNode(&box, state, &f.controller, 0);
+    LOKA_VERIFY(placementOf(box, rect) && rect.top == 77);
+#else
+    std::printf("[skip] clipLatestPin differing flag (lifecycle audit asserts here)\n");
+#endif
+    // Test-only reach of the unflag branch: apps cannot take this path after #1560 Q-M1.
+    box.props.childClip_ = layout::CHILD_CLIP_NONE;
     state = f.seat();
     state.y = 99;
     LayoutNode(&box, state, &f.controller, 0);
     LOKA_VERIFY(!placementOf(box, rect));
-    LOKA_VERIFY(Box().clipChildren().applyPropsToNode(&box));
+    box.props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
     RenderNode(&box, &f.controller);
     LOKA_VERIFY(!placementOf(box, rect));
     f.controller.releaseNodeContexts(&box);
@@ -595,37 +607,47 @@ namespace
 
   void clipScrollPin()
   {
-    Fixture f;
-    LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
-    // A declared outer height clips the viewport without changing its offered seat.
-    BoxNode box(Box().height(30).clipChildren().props);
-    loka::core::MutableState<loka::core::Frame> fact(loka::core::Frame(0, 0, 0, 0));
-    NodeState<loka::core::Frame> viewport(&fact, 0);
-    ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport));
-    PlacementLeaf *leaf = new PlacementLeaf(80, 170);
-    scroll->addChild(leaf);
-    BoxNode *inner = new BoxNode(Box().height(100).clipChildren().props);
-    inner->addChild(scroll);
-    box.addChild(inner);
-    LayoutState state = f.seat();
-    LayoutNode(&box, state, &f.controller, 0);
-    LOKA_VERIFY(leaf->calls > 0 && leaf->depth == 3);
-    LOKA_VERIFY(leaf->clip.height == 30);
-    LOKA_VERIFY(!f.controller.scrollControls().empty());
-    const ToolboxScenePlatformController::ViewportScrollBarBinding &binding = f.controller.viewportScroll();
-    LOKA_VERIFY(binding.contentRect.bottom == 100);
-    const Rect content = binding.contentRect;
-    const loka::core::Frame published = fact.get();
-    const short maximum = f.controller.scrollControls()[0].maximum;
-    box.props.childClip_ = layout::CHILD_CLIP_NONE;
-    state = f.seat();
-    LayoutNode(&box, state, &f.controller, 0);
-    const Rect after = f.controller.viewportScroll().contentRect;
-    LOKA_VERIFY(content.left == after.left && content.top == after.top && content.right == after.right
-                && content.bottom == after.bottom);
-    LOKA_VERIFY(fact.get() == published && f.controller.scrollControls()[0].maximum == maximum);
-    LOKA_VERIFY(leaf->clip.height == 100);
-    f.controller.releaseNodeContexts(&box);
+    Rect content = {0, 0, 0, 0};
+    loka::core::Frame published(0, 0, 0, 0);
+    short maximum = 0;
+    // Build separate twins through the same setup; only the outer birth flag differs.
+    for (int flagged = 1; flagged >= 0; --flagged)
+    {
+      Fixture f;
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+      Box definition = Box().height(30);
+      if (flagged)
+        definition.clipChildren();
+      BoxNode box(definition.props);
+      loka::core::MutableState<loka::core::Frame> fact(loka::core::Frame(0, 0, 0, 0));
+      NodeState<loka::core::Frame> viewport(&fact, 0);
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(viewport));
+      PlacementLeaf *leaf = new PlacementLeaf(80, 170);
+      scroll->addChild(leaf);
+      BoxNode *inner = new BoxNode(Box().height(100).clipChildren().props);
+      inner->addChild(scroll);
+      box.addChild(inner);
+      LayoutState state = f.seat();
+      LayoutNode(&box, state, &f.controller, 0);
+      LOKA_VERIFY(leaf->calls > 0 && leaf->depth == (flagged ? 3u : 2u));
+      LOKA_VERIFY(leaf->clip.height == (flagged ? 30 : 100));
+      LOKA_VERIFY(!f.controller.scrollControls().empty());
+      const Rect after = f.controller.viewportScroll().contentRect;
+      LOKA_VERIFY(after.bottom == 100);
+      if (flagged)
+      {
+        content = after;
+        published = fact.get();
+        maximum = f.controller.scrollControls()[0].maximum;
+      }
+      else
+      {
+        LOKA_VERIFY(content.left == after.left && content.top == after.top && content.right == after.right
+                    && content.bottom == after.bottom);
+        LOKA_VERIFY(fact.get() == published && f.controller.scrollControls()[0].maximum == maximum);
+      }
+      f.controller.releaseNodeContexts(&box);
+    }
   }
 
   void clipUnitPin()

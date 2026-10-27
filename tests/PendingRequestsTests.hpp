@@ -1,0 +1,8 @@
+#ifndef LOKA_TESTS_PENDING_REQUESTS_TESTS_HPP
+#define LOKA_TESTS_PENDING_REQUESTS_TESTS_HPP
+void testPendingRequestsSingleAndPair();
+void testPendingRequestsInvalidBinding();
+void testPendingRequestsCrossPostSurvives();
+void testPendingRequestsEqualCrossPostClears();
+void testPendingRequestsCopiesBindingsBeforePublication();
+#endif

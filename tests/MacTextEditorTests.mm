@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "MacPlatformContext.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "support/TextAlphabetCases.hpp"
@@ -134,6 +135,40 @@ namespace
     LOKA_VERIFY([actual pointSize] == [expected pointSize]);
   }
 
+  // Whether the font draws the scalar at this unit; both units of a surrogate
+  // pair follow their scalar. A unit the font does not cover is printed as a
+  // skipped pin so the omitted assertion stays visible in the run log.
+  bool fontCoversUnit(NSFont *font, NSString *string, NSUInteger index, const char *pin)
+  {
+    const NSRange sequence = [string rangeOfComposedCharacterSequenceAtIndex:index];
+    UTF32Char scalar = [string characterAtIndex:sequence.location];
+    if (sequence.length >= 2 && CFStringIsSurrogateHighCharacter(static_cast<UniChar>(scalar)))
+      scalar = CFStringGetLongCharacterForSurrogatePair(static_cast<UniChar>(scalar),
+                                                        [string characterAtIndex:sequence.location + 1]);
+    if ([[font coveredCharacterSet] longCharacterIsMember:scalar])
+      return true;
+    std::printf("[skip] %s: %s does not cover U+%04X at unit %lu\n",
+                pin,
+                [[font fontName] UTF8String],
+                static_cast<unsigned>(scalar),
+                static_cast<unsigned long>(index));
+    return false;
+  }
+
+  // The font the rail projected holds at every unit the font can draw. A unit
+  // outside the font's coverage is AppKit's to fix: 10.9's attribute fixing
+  // writes the substitute into the storage (STHeitiSC-Light over U+65E5 for
+  // Menlo), and -[NSTextView font] then reports that storage font of the first
+  // unit; later releases substitute at layout time and leave the storage font
+  // alone. Either way the rail's contract is the font it set, so the pin asks
+  // only where that font answers.
+  void verifyFontAt(NSTextStorage *storage, NSUInteger index, NSFont *expected)
+  {
+    if (!fontCoversUnit(expected, [storage string], index, "storage font pin"))
+      return;
+    verifyFont([storage attribute:NSFontAttributeName atIndex:index effectiveRange:0], expected);
+  }
+
   // Unstyled editor text keeps the system text color so it follows the
   // appearance; a missing attribute draws black (#1182).
   void verifyTextColor(NSColor *actual)
@@ -226,13 +261,15 @@ namespace
     void verifyPlainAttributes()
     {
       NSFont *font = (NSFont *)this->controller.textFont(TextStyle(), true);
-      verifyFont([this->view font], font);
+      NSTextStorage *storage = [this->view textStorage];
+      // The view font follows the first unit's storage font (see verifyFontAt).
+      if ([storage length] == 0 || fontCoversUnit(font, [storage string], 0, "view font pin"))
+        verifyFont([this->view font], font);
       verifyFont([[this->view typingAttributes] objectForKey:NSFontAttributeName], font);
       verifyTextColor([[this->view typingAttributes] objectForKey:NSForegroundColorAttributeName]);
-      NSTextStorage *storage = [this->view textStorage];
       for (NSUInteger i = 0; i < [storage length]; ++i)
       {
-        verifyFont([storage attribute:NSFontAttributeName atIndex:i effectiveRange:0], font);
+        verifyFontAt(storage, i, font);
         verifyTextColor([storage attribute:NSForegroundColorAttributeName atIndex:i effectiveRange:0]);
       }
     }
@@ -2061,8 +2098,10 @@ void testMacTextEditorUtf8OpenCarets()
     f.context->onPropsApplied();
     f.turn();
     LOKA_VERIFY([[f.view string] isEqualToString:@"a\U0001f600z"]);
-    verifyFont([[f.view textStorage] attribute:NSFontAttributeName atIndex:2 effectiveRange:0],
-               (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>(), true));
+    // The run spans the whole row: "z" after the pair proves the 4-byte scalar
+    // counted as two units; the pair itself is pinned where the font draws it.
+    for (NSUInteger unit = 0; unit < 4; ++unit)
+      verifyFontAt([f.view textStorage], unit, (NSFont *)f.controller.textFont(Bold + Italic + FontSize<18>(), true));
     // Reload the same multibyte row through the logical projection.
     LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("\346\227\245")) == EDIT_OK);
     f.context->onPropsApplied();

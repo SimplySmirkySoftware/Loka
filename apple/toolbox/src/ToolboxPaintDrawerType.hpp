@@ -3,6 +3,15 @@
 
 #include "app/scene/Node.hpp"
 
+namespace loka
+{
+  namespace app
+  {
+    // Node.hpp declares only the nodes with an asXxx() method; this list also names TextEditorNode.
+    class TextEditorNode;
+  } // namespace app
+} // namespace loka
+
 /** Only these built-in drawers are cast. Registration protects the same
     type keys, including in release builds, as on the Win32 rail. */
 inline bool IsToolboxPaintDrawerType(const void *key)

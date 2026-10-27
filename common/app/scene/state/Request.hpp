@@ -1,28 +1,15 @@
 #ifndef LOKA_APP_SCENE_STATE_REQUEST_HPP
 #define LOKA_APP_SCENE_STATE_REQUEST_HPP
 #include "app/scene/state/Reported.hpp"
-#include "app/nodes/controls/TextEditorDocument.hpp"
 namespace loka
 {
   namespace app
   {
-    class TextEditorNode;
     namespace scene
     {
       template <class Request, class Fact> class SeatRunner;
       template <typename T> class RequestBinding;
       template <typename T> struct RequestTraits;
-      template <> struct RequestTraits<LineCursor>
-      {
-        enum { coalescable = 1 };
-      };
-      template <> struct RequestTraits<EditorCommand>
-      {
-        enum
-        {
-          coalescable = 0
-        };
-      };
       /** Plain slots are only meaningful for explicitly coalescable values. */
       template <typename T> struct RequestDeclarationWall
       {
@@ -53,18 +40,18 @@ namespace loka
             : kind_(NO_REPLY),
               requested_(),
               applied_(),
-              reason_(EDITOR_OK)
+              reason_(RequestTraits<T>::accepted())
         {
         }
         static Reply Granted(const T &applied)
         {
-          return Reply(GRANTED, applied, applied, EDITOR_OK);
+          return Reply(GRANTED, applied, applied, RequestTraits<T>::accepted());
         }
         static Reply Clamped(const T &requested, const T &applied)
         {
-          return Reply(CLAMPED, requested, applied, EDITOR_OK);
+          return Reply(CLAMPED, requested, applied, RequestTraits<T>::accepted());
         }
-        static Reply Refused(const T &requested, EditorResult reason)
+        static Reply Refused(const T &requested, typename RequestTraits<T>::Reason reason)
         {
           return Reply(REFUSED, requested, T(), reason);
         }
@@ -82,7 +69,7 @@ namespace loka
           assert(this->kind_ == GRANTED || this->kind_ == CLAMPED);
           return this->applied_;
         }
-        EditorResult reason() const
+        typename RequestTraits<T>::Reason reason() const
         {
           assert(this->kind_ == REFUSED);
           return this->reason_;
@@ -94,7 +81,7 @@ namespace loka
         }
 
       private:
-        Reply(Kind kind, const T &requested, const T &applied, EditorResult reason)
+        Reply(Kind kind, const T &requested, const T &applied, typename RequestTraits<T>::Reason reason)
             : kind_(kind),
               requested_(requested),
               applied_(applied),
@@ -104,7 +91,7 @@ namespace loka
         Kind kind_;
         T requested_;
         T applied_;
-        EditorResult reason_;
+        typename RequestTraits<T>::Reason reason_;
       };
       template <typename T> class RequestWithReply;
       /** App-owned declaration handle. Borrow by reference; None means no request. */
@@ -320,7 +307,7 @@ namespace loka
 
       private:
         template <class Request, class Fact> friend class SeatRunner;
-        friend class app::TextEditorNode;
+        friend struct PendingRequests;
         T consume() const
         {
           const T taken = this->request_.state()->get();
@@ -348,6 +335,32 @@ namespace loka
         WriteSeat<T> request_;
         WriteSeat<Reply<T> > reply_;
         RequestQueueBase<T> *source_;
+      };
+      /** Cancels pending work only in the seats selected by the caller.
+          Copy all bindings, clear their rings, then snapshot all valid slots
+          (None for invalid bindings) before cancelling in argument order.
+          Stack copies keep callback-driven binding replacement from retargeting
+          cancellation; changed slots preserve subscriber reposts. */
+      struct PendingRequests
+      {
+        template <class A> static void cancel(const RequestBinding<A> &a)
+        {
+          const RequestBinding<A> first = a;
+          first.clearRing();
+          const A snapshot = first.isValid() ? first.state()->get() : A::None();
+          first.cancelFrom(snapshot);
+        }
+        template <class A, class B> static void cancel(const RequestBinding<A> &a, const RequestBinding<B> &b)
+        {
+          const RequestBinding<A> first = a;
+          const RequestBinding<B> second = b;
+          first.clearRing();
+          second.clearRing();
+          const A snapshotA = first.isValid() ? first.state()->get() : A::None();
+          const B snapshotB = second.isValid() ? second.state()->get() : B::None();
+          first.cancelFrom(snapshotA);
+          second.cancelFrom(snapshotB);
+        }
       };
     } // namespace scene
   } // namespace app

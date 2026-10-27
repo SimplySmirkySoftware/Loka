@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "request_command.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 
