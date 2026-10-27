@@ -927,6 +927,9 @@ MacScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const La
     }
     if (!this->layoutContainerBody(node, state, resultY))
       return LayoutNodeResult(state.width, state.y);
+    // Twin of the ZStack unit path: preserve the previous host rectangle on channel refusal.
+    if (this->refuseNarrowingInScrollScope(resultY))
+      return LayoutNodeResult(state.width, resultY);
   }
   [host lokaPlace:this->projection()
                       .projectFrame(loka::core::Frame(projected.x, projected.y, width, resultY - state.y))

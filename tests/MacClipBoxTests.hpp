@@ -24,4 +24,5 @@ void testMacClipBoxSkippedViewportKeepsControlsFocusAndUnits();
 void testMacClipBoxFailureKeepsSiblingProjection();
 void testMacClipBoxFocusedEditRetirement();
 void testMacClipBoxLargeOfferFixedSizeTwin();
+void testMacClipBoxChannelRefusalKeepsHostRect();
 #endif

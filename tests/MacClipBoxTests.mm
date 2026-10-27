@@ -21,6 +21,7 @@
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "app/RectSurface.hpp"
+#include <climits>
 #include <cstdio>
 
 @interface LokaClipTestRoot : NSView
@@ -768,4 +769,34 @@ void testMacClipBoxLargeOfferFixedSizeTwin()
   NSView *b = child(flat.host.root, [NSButton class]);
   LOKA_VERIFY(h && a && b && NSEqualRects([a frame], [b frame]));
   LOKA_VERIFY([h frame].size.width == 100 && [h frame].size.height == 40);
+}
+
+void testMacClipBoxChannelRefusalKeepsHostRect()
+{
+  Fixture f;
+  BoxNode *clip = box(180, 0);
+  BoxNode *leading = box(100, 40, false);
+  clip->addChild(leading);
+  clip->addChild(new ButtonNode(ButtonProps().text("Following")));
+  f.tree = clip;
+  ProjectionParentScopeStack &scopes = Access::projectionScopes(f.controller);
+  ProjectionViewportScopeGuard viewport(scopes, scopes.current());
+  LOKA_VERIFY(viewport.isActive());
+  const int firstBottom = f.at(0, 7, 180, 100);
+  LOKA_VERIFY(!scopes.current().hasShortRangeRefusal());
+  NSView *h = host(clip);
+  NSView *button = child(h, [NSButton class]);
+  LOKA_VERIFY(h && button && [button superview] == h);
+  const NSRect hostBefore = [h frame];
+  const NSRect childBefore = [button frame];
+  LOKA_VERIFY(hostBefore.size.height > 40);
+
+  // Twin of MacScrollViewGappedOriginRefuses: grow a leading Box past the
+  // short range. Here its bottom already overflows at the nonzero origin.
+  leading->props.setSize(100, SHRT_MAX);
+  const int refusedBottom = f.at(0, 7, 180, 100);
+  LOKA_VERIFY(scopes.current().hasShortRangeRefusal());
+  LOKA_VERIFY(refusedBottom < firstBottom);
+  LOKA_VERIFY(host(clip) == h && NSEqualRects([h frame], hostBefore));
+  LOKA_VERIFY([button superview] == h && NSEqualRects([button frame], childBefore));
 }
