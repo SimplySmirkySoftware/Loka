@@ -1038,6 +1038,18 @@ controls the Add guard and enabled state. This is a bounded resident list,
 not a lazy viewport: rows can extend below the window until a later step adds
 scrolling. See [`Step4Node.hpp`](../example/Tutorial/src/Step4Node.hpp).
 
+### Reach Every Row With `ScrollView`
+
+[Step 5](../example/Tutorial/src/Step5Node.hpp) wraps Step 4's list in a
+`ScrollView`. The outer `VStack` gives the scroll view the remaining height,
+so all 100 rows can be reached inside the window. The buttons stay above it,
+and `Show` hides and restores both the summary and the scrollable list.
+
+The Boundary declares a viewport fact and lends it to `ScrollView`. The
+platform writes the visible area and scroll position; the lesson needs no
+extra watch. Step 5 repeats the list code to remain a standalone lesson,
+with the same capacity and immediate count projection as Step 4.
+
 ## 13. StdComposition And Boundary
 
 StdComposition is Loka's current standard composition model. It deliberately
