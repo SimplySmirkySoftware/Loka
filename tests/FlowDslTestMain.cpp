@@ -162,6 +162,7 @@
 #include "SmirkBenchTests.hpp"
 #include "LazyListTests.hpp"
 #include "ScrollViewScopeTests.hpp"
+#include "ScrollViewRequestTests.hpp"
 #include "ToolboxLayoutContractTests.hpp"
 #include "ToolboxRectSurfaceRepaintPlanTests.hpp"
 #include "ToolboxGroundTests.hpp"
