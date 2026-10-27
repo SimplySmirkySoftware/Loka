@@ -406,6 +406,110 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   LOKA_VERIFY(!scopes.insideUnit());
 }
 
+void testProjectionFrameKindsAndClipAdmission()
+{
+  using namespace loka::app::scene;
+  using loka::core::Frame;
+  ProjectionParentScopeStack scopes;
+  ProjectionParentScope viewport(0, -7, -11, Frame(1, 2, 80, 90));
+  int nativeParent = 0;
+  ProjectionParentScope clip(&nativeParent, 300, 400, Frame(3, 4, 50, 60));
+  ProjectionParentScope unit;
+  LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+  LOKA_VERIFY(!scopes.current().channel);
+  ProjectionMeasurementChannel *viewportChannel = 0;
+  {
+    ProjectionViewportScopeGuard guard(scopes, viewport);
+    LOKA_VERIFY(guard.isActive());
+    viewportChannel = scopes.current().channel;
+    LOKA_VERIFY(viewportChannel);
+    LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+    {
+      ProjectionUnitScopeGuard unitGuard(scopes, unit);
+      LOKA_VERIFY(unitGuard.isActive());
+      LOKA_VERIFY(scopes.insideViewport() && scopes.insideUnit());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+    }
+    {
+      ProjectionClipScopeGuard clipGuard(scopes, clip);
+      LOKA_VERIFY(clipGuard.isActive());
+      LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.current().translationX == -7 && scopes.current().translationY == -11);
+      LOKA_VERIFY(scopes.current().clipRect == clip.clipRect);
+      LOKA_VERIFY(scopes.current().nativeParent == &nativeParent);
+      ProjectionViewportScopeGuard refused(scopes, viewport);
+      LOKA_VERIFY(!refused.isActive());
+      ProjectionUnitScopeGuard unitGuard(scopes, unit);
+      LOKA_VERIFY(unitGuard.isActive());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.insideViewport() && scopes.insideUnit());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 1);
+  }
+  ProjectionMeasurementChannel *rootUnitChannel = 0;
+  {
+    ProjectionUnitScopeGuard guard(scopes, unit);
+    LOKA_VERIFY(guard.isActive());
+    rootUnitChannel = scopes.current().channel;
+    LOKA_VERIFY(rootUnitChannel && rootUnitChannel != viewportChannel);
+    LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    ProjectionClipScopeGuard clipGuard(scopes, clip);
+    LOKA_VERIFY(clipGuard.isActive());
+    LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    LOKA_VERIFY(scopes.current().channel == rootUnitChannel);
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    LOKA_VERIFY(!scopes.pushUnit(unit));
+  }
+  {
+    ProjectionClipScopeGuard clipGuard(scopes, clip);
+    LOKA_VERIFY(clipGuard.isActive());
+    LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+    LOKA_VERIFY(!scopes.current().channel);
+    LOKA_VERIFY(scopes.current().translationX == 0 && scopes.current().translationY == 0);
+    {
+      ProjectionUnitScopeGuard guard(scopes, unit);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.current().channel == rootUnitChannel);
+      LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    }
+    {
+      ProjectionViewportScopeGuard guard(scopes, viewport);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+    }
+  }
+  LOKA_VERIFY(scopes.activeDepth() == 0);
+  // Six active frames, not six CLIPs: exercise both possible reservations.
+  for (unsigned withViewport = 0; withViewport != 2; ++withViewport)
+  {
+    if (withViewport)
+      LOKA_VERIFY(scopes.pushViewport(viewport));
+    for (unsigned i = withViewport; i != 6; ++i)
+      LOKA_VERIFY(scopes.pushClip(clip));
+    LOKA_VERIFY(scopes.activeDepth() == 6);
+    {
+      ProjectionClipScopeGuard refused(scopes, clip);
+      LOKA_VERIFY(!refused.isActive());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 6);
+    if (!withViewport)
+      LOKA_VERIFY(scopes.pushViewport(viewport));
+    LOKA_VERIFY(scopes.pushUnit(unit));
+    LOKA_VERIFY(scopes.activeDepth() == (withViewport ? 7u : 8u));
+    LOKA_VERIFY(!scopes.pushClip(clip));
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    LOKA_VERIFY(!scopes.pushUnit(unit));
+    while (scopes.activeDepth())
+      LOKA_VERIFY(scopes.pop());
+  }
+  LOKA_VERIFY(ProjectionParentScopeStack::MAX_ACTIVE_SCOPES == 8);
+  LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+  LOKA_VERIFY(!scopes.current().channel);
+}
+
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack()
 {
   NullScenePlatformController platform;

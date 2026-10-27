@@ -14,6 +14,7 @@ void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry();
 void testNullLayoutOnChangeUsesRegisteredTraversal();
 
 void testProjectionMeasurementChannelAndUnitAdmission();
+void testProjectionFrameKindsAndClipAdmission();
 
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack();
 
