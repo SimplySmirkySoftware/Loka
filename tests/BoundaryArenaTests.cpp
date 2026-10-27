@@ -669,7 +669,7 @@ namespace
       }
     }
 
-    loka::app::scene::StateBatchBase::CreateImmediateState<int>(&owner, immediate, 99);
+    loka::app::scene::StateBatchBase::CreateImmediateState(&owner, immediate, 99);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -739,8 +739,7 @@ namespace
       assert(loka::core::LokaAllocAuditLiveCount(heapStateSite) == heapLiveBefore + 1);
 #endif
 
-      loka::app::scene::StateBatchBase::CreateImmediateState<LargeStateValue>(
-          &owner, immediate, initial);
+      loka::app::scene::StateBatchBase::CreateImmediateState(&owner, immediate, initial);
       assert(immediate.dangerouslyMutableState()->isArenaAllocated());
     }
     // Slabs, block headers, and the heap-fallback state all returned through

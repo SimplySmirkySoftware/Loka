@@ -74,10 +74,10 @@ namespace loka
         ADMISSION_TAKE
       };
       /** A native application result, independent of the seam's acceptance. */
-      template <typename T> class RequestApplication
+      template <typename T, typename Reason> class RequestApplication
       {
       public:
-        RequestApplication(const T &value, EditorResult result, FollowUp follow = FOLLOW_NONE)
+        RequestApplication(const T &value, Reason result, FollowUp follow = FOLLOW_NONE)
             : value_(value),
               result_(result),
               follow_(follow)
@@ -87,7 +87,7 @@ namespace loka
         {
           return this->value_;
         }
-        EditorResult result() const
+        Reason result() const
         {
           return this->result_;
         }
@@ -98,7 +98,7 @@ namespace loka
 
       private:
         T value_;
-        EditorResult result_;
+        Reason result_;
         FollowUp follow_;
       };
       /** Stack seat policy. The driver supplies a live Node; each seat borrows
@@ -109,13 +109,15 @@ namespace loka
         virtual ~SeatOperation() {}
         /** Supply the binding even when deferring, for failed-arm refusal. */
         virtual Admission admit(Node &, RequestBinding<Request> &) = 0;
-        virtual EditorResult resolve(Node &, const RequestBinding<Request> &) = 0;
-        virtual EditorResult validate(Node &, const Request &) = 0;
-        virtual RequestApplication<Fact> apply(Node &, const Request &) = 0;
-        virtual EditorResult report(Node &, const Fact &) = 0;
+        virtual typename RequestTraits<Request>::Reason resolve(Node &, const RequestBinding<Request> &) = 0;
+        virtual typename RequestTraits<Request>::Reason validate(Node &, const Request &) = 0;
+        virtual RequestApplication<Fact, typename RequestTraits<Request>::Reason> apply(Node &, const Request &) = 0;
+        virtual typename RequestTraits<Request>::Reason report(Node &, const Fact &) = 0;
         virtual bool current(Node &, const RequestBinding<Request> &) = 0;
         /** Preserve native application and seam outcomes separately for repair. */
-        virtual FollowUp finishTake(Node &, const Reply<Request> &, const RequestApplication<Fact> &) = 0;
+        virtual FollowUp finishTake(Node &,
+                                    const Reply<Request> &,
+                                    const RequestApplication<Fact, typename RequestTraits<Request>::Reason> &) = 0;
       };
       /** Borrows the projection for the whole native entry, independently of Fact. */
       class SettleOwnerBase
@@ -172,16 +174,18 @@ namespace loka
 
       /** Different effect types acknowledge the request without a clamped payload. */
       template <class Request, class Fact>
-      Reply<Request> formReply(const Request &pending, const Fact &, EditorResult result)
+      Reply<Request> formReply(const Request &pending, const Fact &, typename RequestTraits<Request>::Reason result)
       {
-        return result != EDITOR_OK ? Reply<Request>::Refused(pending, result) : Reply<Request>::Granted(pending);
+        return result != RequestTraits<Request>::accepted() ? Reply<Request>::Refused(pending, result)
+                                                            : Reply<Request>::Granted(pending);
       }
       /** Same-type effects retain the existing Granted/Clamped distinction. */
-      template <class T> Reply<T> formReply(const T &pending, const T &applied, EditorResult result)
+      template <class T>
+      Reply<T> formReply(const T &pending, const T &applied, typename RequestTraits<T>::Reason result)
       {
-        return result != EDITOR_OK  ? Reply<T>::Refused(pending, result)
-               : pending != applied ? Reply<T>::Clamped(pending, applied)
-                                    : Reply<T>::Granted(applied);
+        return result != RequestTraits<T>::accepted() ? Reply<T>::Refused(pending, result)
+               : pending != applied                   ? Reply<T>::Clamped(pending, applied)
+                                                      : Reply<T>::Granted(applied);
       }
     } // namespace scene
 #ifdef TEST_BUILD
@@ -264,7 +268,7 @@ namespace loka
         scene::Admission admission[2];
         // Two ordinary takes and at most one follow-up-failure refusal.
         scene::Reply<Request> takes[3];
-        EditorResult seam[3];
+        typename scene::RequestTraits<Request>::Reason seam[3];
         unsigned count;
         unsigned seq;
         Fact before, after;
@@ -276,7 +280,7 @@ namespace loka
               after(fact)
         {
           admission[0] = admission[1] = scene::ADMISSION_EMPTY;
-          seam[0] = seam[1] = seam[2] = EDITOR_OK;
+          seam[0] = seam[1] = seam[2] = scene::RequestTraits<Request>::accepted();
         }
       };
       template <class Request, class Fact = Request> class SettleTrace : private SettleTraceCapture<Fact>::Trace
@@ -407,17 +411,17 @@ namespace loka
           const Request pending = this->binding_.consume();
           if (!this->owner_.hasSameContext())
             return false;
-          EditorResult result = this->op_.resolve(*this->owner_.node(), this->binding_);
-          if (result == EDITOR_OK)
+          typename RequestTraits<Request>::Reason result = this->op_.resolve(*this->owner_.node(), this->binding_);
+          if (result == RequestTraits<Request>::accepted())
             result = this->op_.validate(*this->owner_.node(), pending);
-          RequestApplication<Fact> applied(Fact(), result);
-          if (result == EDITOR_OK)
+          RequestApplication<Fact, typename RequestTraits<Request>::Reason> applied(Fact(), result);
+          if (result == RequestTraits<Request>::accepted())
             applied = this->op_.apply(*this->owner_.node(), pending);
           if (!this->owner_.hasSameContext())
             return false;
           this->follow_ = this->follow_.including(applied.followUp());
           result = applied.result();
-          if (result == EDITOR_OK)
+          if (result == RequestTraits<Request>::accepted())
             result = this->op_.report(*this->owner_.node(), applied.value());
           if (!this->owner_.hasSameContext())
             return false;
@@ -446,7 +450,7 @@ namespace loka
           const Request pending = this->binding_.consume();
           if (!this->owner_.hasSameContext())
             return false;
-          const Reply<Request> reply = Reply<Request>::Refused(pending, EDITOR_UNAVAILABLE);
+          const Reply<Request> reply = Reply<Request>::Refused(pending, RequestTraits<Request>::unavailable());
           // A clear subscriber can discard the binding without retiring the context.
           if (this->op_.current(*this->owner_.node(), this->binding_))
             this->binding_.reply_.set(reply, true);
@@ -454,7 +458,7 @@ namespace loka
             return false;
 #ifdef TEST_BUILD
           this->row_.takes[this->row_.count] = reply;
-          this->row_.seam[this->row_.count++] = EDITOR_UNAVAILABLE;
+          this->row_.seam[this->row_.count++] = RequestTraits<Request>::unavailable();
 #endif
           return true;
         }
@@ -514,6 +518,30 @@ namespace loka
           );
           SeatRunnerBase<Fact> *seats[1] = {&runner};
           return walk(op, follow, seats, 1);
+        }
+        /** Complete one request seat whose effect may have a different type. */
+        template <class R0>
+        static FollowUpResult settle(SettleOwner<Fact> &owner,
+                                     SeatOperation<R0, Fact> &seat0,
+                                     Settlement stimulus
+#ifdef TEST_BUILD
+                                     ,
+                                     const Fact &before
+#endif
+        )
+        {
+          FollowUps follow;
+          SeatRunner<R0, Fact> runner(owner,
+                                      seat0,
+                                      follow,
+                                      stimulus
+#ifdef TEST_BUILD
+                                      ,
+                                      before
+#endif
+          );
+          SeatRunnerBase<Fact> *seats[1] = {&runner};
+          return walk(owner, follow, seats, 1);
         }
         template <class R0, class R1>
         static FollowUpResult settle(SettleOwner<Fact> &owner,

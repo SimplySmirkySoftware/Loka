@@ -6,7 +6,7 @@
 #include "app/scene/projection/SeamKey.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "app/scene/state/Reported.hpp"
-#include "app/scene/state/Request.hpp"
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/style/LineHighlighter.hpp"
 #include "app/nodes/controls/TextEditorDocument.hpp"
 namespace loka
@@ -138,18 +138,12 @@ namespace loka
 
       void discardPendingRequest(bool command = true, bool caret = true)
       {
-        if (command)
-          this->props.command_.clearRing();
-        if (caret)
-          this->props.moveCaretTo_.clearRing();
-        const EditorCommand oldCommand =
-            this->props.command_.isValid() ? this->props.command_.state()->get() : EditorCommand::None();
-        const LineCursor oldCaret =
-            this->props.moveCaretTo_.isValid() ? this->props.moveCaretTo_.state()->get() : LineCursor::None();
-        if (command)
-          this->props.command_.cancelFrom(oldCommand);
-        if (caret)
-          this->props.moveCaretTo_.cancelFrom(oldCaret);
+        if (command && caret)
+          scene::PendingRequests::cancel(this->props.command_, this->props.moveCaretTo_);
+        else if (command)
+          scene::PendingRequests::cancel(this->props.command_);
+        else if (caret)
+          scene::PendingRequests::cancel(this->props.moveCaretTo_);
       }
 
       bool applyProps(const TextEditorProps &next)

@@ -1,5 +1,6 @@
 #ifndef LOKA_WIN32_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_WIN32_TEXT_EDITOR_CONTEXT_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "Win32RetirableContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/scene/state/RequestSettlement.hpp"
