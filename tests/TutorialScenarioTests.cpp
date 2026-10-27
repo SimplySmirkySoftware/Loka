@@ -2,6 +2,8 @@
 #include "TutorialScenarioTests.hpp"
 
 #include "support/TestVerify.hpp"
+#include "core/util/StateTrackerGuard.hpp"
+#include "platform/StringUTF8.hpp"
 
 #include <cassert>
 #include <cstdio>
@@ -322,4 +324,115 @@ void testTutorialStandaloneMountRefusalFailsClosed()
   LOKA_VERIFY(std::fclose(diagnostics) == 0);
   std::remove(auditPath);
   std::printf("testTutorialStandaloneMountRefusalFailsClosed passed\n");
+}
+
+namespace
+{
+  template <class T> T *TutorialNode(loka::app::scene::Scene &scene, const char *id)
+  {
+    long matches = 0;
+    long typed = 0;
+    T *node = 0;
+    loka::dsl::testing::scene_test_detail::findNodeByIdRecursive<T>(
+        loka::dsl::testing::SceneTestAccess::rootNode(scene), id, matches, typed, node);
+    LOKA_VERIFY(matches == 1 && typed == 1 && node != 0);
+    return node;
+  }
+
+  void PressTutorialButton(loka::app::scene::Scene &scene, const char *id)
+  {
+    loka::app::ButtonNode *button = TutorialNode<loka::app::ButtonNode>(scene, id);
+    {
+      loka::core::StateTrackerGuard guard(loka::dsl::testing::SceneTestAccess::rootBoundary(scene)->tracker());
+      button->props.onClick_->emit();
+    }
+    scene.flushInvalidation();
+    scene.flushInvalidation();
+  }
+
+  void VerifyTutorialRows(loka::app::scene::Node *node, int &rows)
+  {
+    if (!node)
+    {
+      return;
+    }
+    loka::app::TextNode *text = node->asTextNode();
+    if (text && text->props.text_)
+    {
+      std::string value;
+      LOKA_VERIFY(loka::platform::CollectUtf8(text->props.text_->get(), value));
+      if (value.compare(0, 5, "Item ") == 0)
+      {
+        ++rows;
+        std::string expected;
+        LOKA_VERIFY(loka::platform::CollectUtf8(
+            loka::core::String::Literal("Item ") + loka::core::String::FromInt(rows), expected));
+        LOKA_VERIFY(value == expected);
+      }
+    }
+    loka::app::scene::INestable *nestable = node->asNestable();
+    if (nestable)
+    {
+      for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
+      {
+        VerifyTutorialRows(child, rows);
+      }
+    }
+  }
+
+  void VerifyTutorialContents(loka::app::scene::Scene &scene, int expectedRows, const char *summary)
+  {
+    int rows = 0;
+    VerifyTutorialRows(loka::dsl::testing::SceneTestAccess::rootNode(scene), rows);
+    LOKA_VERIFY(rows == expectedRows);
+    long matches = 0;
+    long typed = 0;
+    loka::app::TextNode *text = 0;
+    loka::dsl::testing::scene_test_detail::findNodeByIdRecursive<loka::app::TextNode>(
+        loka::dsl::testing::SceneTestAccess::rootNode(scene), "Tutorial.Step4.Summary", matches, typed, text);
+    if (summary)
+    {
+      LOKA_VERIFY(matches == 1 && typed == 1 && text != 0);
+      LOKA_VERIFY(text->props.text_->get().equals(loka::core::String::Literal(summary)));
+    }
+    else
+    {
+      LOKA_VERIFY(matches == 0 && text == 0);
+    }
+  }
+} // namespace
+
+void testTutorialListCapacityAndVisibility()
+{
+  NullScenePlatformController platform;
+  loka::app::scene::Scene scene(CloneTutorialRoot());
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  VerifyTutorialContents(scene, 0, "Items: 0");
+  for (int count = 1; count <= 100; ++count)
+  {
+    loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
+    LOKA_VERIFY(add->props.enabled_ && add->props.enabled_->get());
+    PressTutorialButton(scene, "Tutorial.Step4.AddItemButton");
+    std::string summary;
+    LOKA_VERIFY(loka::platform::CollectUtf8(loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
+                                                + loka::core::String::Literal(count == 100 ? " (full)" : ""),
+                                            summary));
+    VerifyTutorialContents(scene, count, summary.c_str());
+    if (count == 2 || count == 100)
+    {
+      PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
+      VerifyTutorialContents(scene, 0, 0);
+      PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
+      VerifyTutorialContents(scene, count, summary.c_str());
+    }
+  }
+  loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
+  LOKA_VERIFY(add->props.enabled_ && !add->props.enabled_->get());
+  // Inject the event even though the UI is disabled: the action must guard capacity too.
+  PressTutorialButton(scene, "Tutorial.Step4.AddItemButton");
+  VerifyTutorialContents(scene, 100, "Items: 100 (full)");
+  LOKA_VERIFY(!add->props.enabled_->get());
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+  std::printf("testTutorialListCapacityAndVisibility passed\n");
 }
