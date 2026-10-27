@@ -103,6 +103,8 @@ public:
     return true;
   }
   virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state);
+  /** Paint children under the latest Box/Card placement, or without an extra clip on refusal. */
+  void renderClipBox(loka::app::scene::Node *node);
   /** One registry attempt per flagged Box/Card placement, before children. */
   void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);

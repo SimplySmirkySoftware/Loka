@@ -17,7 +17,10 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
   {
     return;
   }
-  const Rect viewportRect = binding->contentRect;
+  Rect viewportRect = binding->contentRect;
+  // Match layout: a viewport inside a clip box inherits its final paint bound.
+  if (this->projectionParentScopes_.currentIsClip())
+    this->intersectWithProjectionClip(binding->contentRect, viewportRect);
   const loka::core::Frame viewportClip(viewportRect.left,
                                        viewportRect.top,
                                        viewportRect.right - viewportRect.left,

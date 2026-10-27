@@ -348,6 +348,14 @@ public:
   {
     return this->hitLedger_.buttonHits_;
   }
+  const std::vector<CellHit> &cellHits() const
+  {
+    return this->hitLedger_.cellHits_;
+  }
+  const std::vector<ToolboxHitLedger::TextHit> &textHits() const
+  {
+    return this->hitLedger_.textHits_;
+  }
   void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
   void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
   void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
@@ -541,7 +549,13 @@ public:
 #endif
   short measureTextWidth(const loka::core::String &, const ToolboxTextFontDescriptor &) const;
   short measureTextWidth(const loka::core::String &) const;
-#if defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordCellHit(const Rect &,
+                     loka::core::EmitterState *,
+                     loka::app::scene::BoundaryNode *,
+                     ToolboxCellContext *,
+                     loka::core::State<loka::core::String> *);
+#elif defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)
   void recordCellHit(const Rect &, loka::core::EmitterState *, loka::app::scene::BoundaryNode *,
                      ToolboxCellContext *, loka::core::State<loka::core::String> *) {}
 #endif
@@ -579,11 +593,29 @@ public:
 #else
   void destroyButtonControl(short, loka::app::scene::NativeLifetimeHint) {}
 #endif
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordButtonHit(const Rect &,
+                       loka::core::EmitterState *,
+                       loka::core::State<bool> *,
+                       loka::app::scene::BoundaryNode *,
+                       ToolboxButtonContext *);
+  void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *);
+#else
   void recordButtonHit(const Rect &, loka::core::EmitterState *, loka::core::State<bool> *,
       loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *) {}
 #endif
-#ifdef LOKA_HOST_ZSTACK_UNITS
+#endif
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordTextHit(const Rect &,
+                     short,
+                     short,
+                     loka::core::State<loka::core::String> *,
+                     loka::app::scene::BoundaryNode *,
+                     bool,
+                     short,
+                     ToolboxTextContext *);
+#elif defined(LOKA_HOST_ZSTACK_UNITS)
   void recordTextHit(const Rect &rect,
                      short x,
                      short y,
@@ -624,6 +656,8 @@ public:
     registration.attach(this->compositionReplay);
   }
   ToolboxWindow *window_;
+  /** Paint children under the latest Box/Card placement, or without an extra clip on refusal. */
+  void renderClipBox(loka::app::scene::Node *node);
   /** One registry attempt per flagged Box/Card placement, before children. */
   void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);

@@ -580,6 +580,9 @@ namespace
 #endif
 }
 #include "core/Profiler.hpp"
+#ifdef LOKA_HOST_GAP_DISPATCH
+#include "ToolboxClipBoxRender.cpp"
+#endif
 #include "ToolboxZStack.cpp"
 #include "ToolboxRender.cpp"
 #ifdef LOKA_HOST_EDITOR_SCROLL

@@ -554,13 +554,26 @@ namespace
     case loka::app::scene::NODE_KIND_ZSTACK:
       controller->renderZStack(static_cast<loka::app::ZStackNode *>(node));
       return;
+    case loka::app::scene::NODE_KIND_BOX:
+      if (controller && node->asBoxNode()->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+      {
+        controller->renderClipBox(node);
+        return;
+      }
+      break;
+    case loka::app::scene::NODE_KIND_CARD:
+      if (controller
+          && static_cast<loka::app::CardNode *>(node)->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+      {
+        controller->renderClipBox(node);
+        return;
+      }
+      break;
     // Nodes without a built-in kind (boundaries, components, app-defined
     // containers) and these built-in containers render their children.
     case loka::app::scene::NODE_KIND_UNKNOWN:
-    case loka::app::scene::NODE_KIND_BOX:
     case loka::app::scene::NODE_KIND_GRID:
     case loka::app::scene::NODE_KIND_CANVAS:
-    case loka::app::scene::NODE_KIND_CARD:
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
       break;
     // Built-in kinds answered above by asProjectedLayoutNode().
