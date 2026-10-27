@@ -561,9 +561,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
   add_executable(LokaToolboxBoxLayoutTests
     tests/toolbox/host/ToolboxBoxLayoutHostTests.cpp
+    apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     apple/toolbox/src/ToolboxNodeDispatch.cpp
     apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp tests/TestingHooks.cpp)
-  target_include_directories(LokaToolboxBoxLayoutTests PRIVATE tests apple/toolbox/src)
+  target_include_directories(LokaToolboxBoxLayoutTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_options(LokaToolboxBoxLayoutTests PRIVATE
     -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxBoxLayoutHost.hpp)
   target_link_libraries(LokaToolboxBoxLayoutTests PRIVATE LokaCommonTesting)
@@ -596,6 +597,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
   add_executable(LokaToolboxRectSurfaceTests
     tests/toolbox/host/ToolboxRectSurfaceHostTests.cpp
+    apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     apple/toolbox/src/ToolboxNodeDispatch.cpp
     apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp
     apple/toolbox/src/context/ToolboxProjectedNodeContext.cpp
@@ -616,6 +618,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_executable(LokaToolboxAttributedTextTests
     apple/toolbox/src/context/ToolboxRibbonGroupEdgeContext.cpp
     apple/toolbox/src/context/ToolboxCardBandContext.cpp
+    apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
     tests/toolbox/host/ToolboxHost.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp
@@ -647,15 +650,16 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   get_target_property(_gap_host_sources LokaToolboxAttributedTextTests SOURCES)
   list(REMOVE_ITEM _gap_host_sources tests/toolbox/host/ToolboxAttributedTextHostTests.cpp)
   add_executable(LokaToolboxGapTests tests/toolbox/host/ToolboxGapHostTests.cpp
+    apple/toolbox/src/debug/ToolboxSceneDebugStats.cpp
     apple/toolbox/src/ToolboxNodeDispatch.cpp ${_gap_host_sources})
   target_include_directories(LokaToolboxGapTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
-  target_compile_definitions(LokaToolboxGapTests PRIVATE LOKA_HOST_GAP_DISPATCH)
+  target_compile_definitions(LokaToolboxGapTests PRIVATE LOKA_HOST_GAP_DISPATCH LOKA_HOST_CLIP_ALLOCATIONS)
   target_compile_options(LokaToolboxGapTests PRIVATE
     -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
   target_link_libraries(LokaToolboxGapTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxGapTests)
   set_target_properties(LokaToolboxGapTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root)
+  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-placement)
     add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
   endforeach()
 

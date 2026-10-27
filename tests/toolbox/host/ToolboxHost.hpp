@@ -624,6 +624,9 @@ public:
     registration.attach(this->compositionReplay);
   }
   ToolboxWindow *window_;
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
+  virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   mutable CursorOwner cursor;
   std::vector<loka::app::scene::NodeContext *> retired;

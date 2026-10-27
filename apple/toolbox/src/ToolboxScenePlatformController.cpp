@@ -1,3 +1,4 @@
+#include "ToolboxPaintDrawerType.hpp"
 #include "ToolboxPaintSuppressScope.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -445,13 +446,6 @@ short ToolboxScenePlatformController::measureTextWidth(
 {
   ToolboxTextMeasureScope scope(*this, descriptor);
   return scope.measure(value);
-}
-
-bool ToolboxScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
-{
-  if (!handler || IsToolboxPaintDrawerType(handler->nodeTypeKey()))
-    return false;
-  return this->nodeHandlerRegistry_.registerHandler(handler);
 }
 
 bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *node,

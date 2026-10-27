@@ -1,3 +1,4 @@
+#include "app/scene/projection/PlatformNodeHandler.hpp"
 #ifndef LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
 #define LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
 
@@ -22,6 +23,9 @@ class ToolboxScenePlatformController : public loka::app::scene::IPlatformControl
 public:
   // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
+  loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;

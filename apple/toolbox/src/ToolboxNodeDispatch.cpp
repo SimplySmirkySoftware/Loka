@@ -1,4 +1,5 @@
 #include "app/nodes/controls/Ribbon.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
 #include "app/layout/StackGaps.hpp"
@@ -241,6 +242,8 @@ namespace
     case loka::app::scene::NODE_KIND_BOX:
     {
       loka::app::BoxNode *box = static_cast<loka::app::BoxNode *>(node);
+      if (controller && box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+        controller->ensureClipBoxContext(box, state);
       short width = 0;
       bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
@@ -265,6 +268,9 @@ namespace
     case loka::app::scene::NODE_KIND_RIBBON_GROUP:
     {
       loka::app::scene::Node *group = node;
+      if (controller && node->kind() == loka::app::scene::NODE_KIND_CARD
+          && static_cast<loka::app::CardNode *>(node)->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT)
+        controller->ensureClipBoxContext(node, state);
       short width = 0;
       bool usedHandler = false;
       if (controller && controller->layoutHandlerRegistry())
