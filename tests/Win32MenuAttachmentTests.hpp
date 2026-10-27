@@ -28,4 +28,10 @@ void testWin32AppQuitTitleFallbackAndPayload();
 void testWin32InvisibleAppQuitKeepsOrdinaryQuit();
 void testWin32AppQuitRefusalPreservesProjection();
 void testWin32EditMenuDefaultsAndFallback();
+void testWin32EditMenuTextEditor();
+void testWin32EditMenuEditText();
+void testWin32EditMenuTargetWalls();
+void testWin32EditMenuSelectAllInput();
+void testWin32EditMenuPasteShortcut();
+void testWin32EditMenuSelectAllReentry();
 #endif

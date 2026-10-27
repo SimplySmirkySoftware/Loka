@@ -784,3 +784,40 @@ void Win32Window::handleNativeDpi(WPARAM wParam, LPARAM lParam)
   }
   this->storeCurrentNativeContentFrame();
 }
+
+bool Win32Window::handleEditCommand(loka::app::EditVerb verb)
+{
+  return Win32InputDoor::editCommand(*this, verb);
+}
+
+bool Win32Window::handleEditCommandInput(loka::app::EditVerb verb)
+{
+  const HWND focused = GetFocus();
+  loka::app::scene::NodeContext *const context = Win32FocusParticipant::attachedTarget(this->hwnd_, focused);
+  if (!context)
+    return false;
+  const bool textEditor = !context->owner()->asEditTextNode();
+  // Native input may retire the receiver. Use only copied facts after entry.
+  switch (verb)
+  {
+  case loka::app::EDIT_UNDO:
+    SendMessageW(focused, EM_UNDO, 0, 0);
+    break;
+  case loka::app::EDIT_CUT:
+    SendMessageW(focused, WM_CUT, 0, 0);
+    break;
+  case loka::app::EDIT_COPY:
+    SendMessageW(focused, WM_COPY, 0, 0);
+    break;
+  case loka::app::EDIT_PASTE:
+    SendMessageW(focused, WM_PASTE, 0, 0);
+    break;
+  case loka::app::EDIT_SELECT_ALL:
+    if (textEditor)
+      static_cast<Win32TextEditorContext *>(context)->selectAll();
+    else
+      SendMessageW(focused, EM_SETSEL, 0, -1);
+    break;
+  }
+  return true;
+}

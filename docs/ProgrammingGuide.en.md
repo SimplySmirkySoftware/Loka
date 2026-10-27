@@ -685,8 +685,9 @@ Place `EditMenu()` explicitly in a Scene menu bar for Undo, Cut, Copy, Paste,
 and Select All. It is an ordinary Edit menu and is not part of
 `StandardMenuPresets()`. Standard Edit actions offer to the focused native
 editor first; without a target, an optional app binding runs once. Native
-refusal or no-op does not run that binding. Native editing support is deferred;
-the current native rails take the no-target path.
+refusal or no-op does not run that binding. Win32 offers all five verbs to the
+focused native TextEditor or EditText, and Select All selects the whole text.
+Classic still takes the no-target path.
 
 Declare `StandardMenuPresets()` in the App's default menu bar to request About
 and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
