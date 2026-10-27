@@ -56,7 +56,6 @@ namespace loka
   }
 } // namespace loka
 
-class ToolboxScrollViewSeat;
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
     public loka::app::layout::INaturalWidthSource
 {
@@ -65,8 +64,6 @@ private:
   ToolboxPendingDialogs pendingDialogs_;
 
 public:
-  friend class ToolboxScrollViewSeat;
-
   /** Dirty delivery queries the previous layout key once; O(1), no rows. */
   Rect dirtyExtent(const Rect &rect) const
   {
@@ -438,6 +435,11 @@ public:
   void commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
                                     ScrollBarControlBinding &native,
                                     loka::app::ScrollBarOrientation axis);
+  /** Request side of the same commit: sets each row this visit committed,
+      without painting, then commits with no pending dirty. */
+  void applyViewportScrollRequest(loka::app::ScrollViewNode &node,
+                                  const ToolboxViewportRows &rows,
+                                  const loka::core::Frame &target);
   /** Optional move output is empty when unchanged/refused. A caller requesting it
       validates only after its final native setter/show, while the window port is current.
       Editor presentation is separate and conservatively leaves OS damage pending. */

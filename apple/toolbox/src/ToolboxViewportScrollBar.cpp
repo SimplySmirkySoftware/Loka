@@ -103,9 +103,9 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
       if (native && !EmptyRect(&movedFrom))
         this->validateOwnControlMove(movedFrom, native->rect);
     }
+    if (native)
+      x = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   }
-  if (horizontalBar && native)
-    x = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   if (!verticalPresent || !horizontalBar)
   {
     // A departing bar is hidden here, before the children paint into its

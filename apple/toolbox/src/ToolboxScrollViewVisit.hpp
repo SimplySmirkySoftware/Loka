@@ -11,7 +11,13 @@ public:
   {
     return static_cast<std::size_t>(-1);
   }
-  ToolboxViewportRows(int offset = 0, std::size_t x = absent(), std::size_t y = absent())
+  ToolboxViewportRows()
+      : offset_(0),
+        x_(absent()),
+        y_(absent())
+  {
+  }
+  explicit ToolboxViewportRows(int offset, std::size_t x, std::size_t y)
       : offset_(offset),
         x_(x),
         y_(y)

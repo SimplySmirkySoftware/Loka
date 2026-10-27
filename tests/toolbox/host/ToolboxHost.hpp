@@ -311,12 +311,14 @@ public:
 #else
 #include "context/ToolboxPopupMenuContext.hpp"
 #endif
-class ToolboxScrollViewSeat;
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
     public loka::app::layout::INaturalWidthSource
 {
 public:
-  friend class ToolboxScrollViewSeat;
+  void applyViewportScrollRequest(loka::app::ScrollViewNode &node,
+                                  const ToolboxViewportRows &rows,
+                                  const loka::core::Frame &target);
+
   void
   commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, const Rect *dirty);
 

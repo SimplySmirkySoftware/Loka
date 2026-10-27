@@ -276,23 +276,12 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
 }
 
 #include "ToolboxScrollViewSettlement.hpp"
-#include "ToolboxPaintSuppressScope.hpp"
 loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
 ToolboxScrollViewSeat::apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
 {
   loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
   const loka::core::Frame target = node.normalizedOrigin(pending);
-  {
-    ToolboxPaintSuppressScope suppress(this->controller_.paintSuppressClipRgn_);
-    std::size_t index;
-    if (this->rows_.queryRow(loka::app::ScrollViewVisit::X, index))
-      SetControlValue(this->controller_.scrollBarLedger_.scrollBarControls_[index].control,
-                      static_cast<short>(target.x));
-    if (this->rows_.queryRow(loka::app::ScrollViewVisit::Y, index))
-      SetControlValue(this->controller_.scrollBarLedger_.scrollBarControls_[index].control,
-                      static_cast<short>(target.y));
-  }
-  this->controller_.commitViewportScrollBarValue(node, this->rows_, 0);
+  this->controller_.applyViewportScrollRequest(node, this->rows_, target);
   return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
       node.props.viewport_.state()->get(), loka::app::SCROLL_OK);
 }

@@ -1,3 +1,4 @@
+#include "ToolboxPaintSuppressScope.hpp"
 /** Tracking and its commit are one operation; included by the rail and host. */
 void ToolboxScenePlatformController::commitScrollBarValueAt(std::size_t index)
 {
@@ -89,6 +90,21 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(loka::app::Scr
   node.publishOrigin(origin.x, origin.y);
   if (dirty)
     this->endBatchUpdate();
+}
+
+void ToolboxScenePlatformController::applyViewportScrollRequest(loka::app::ScrollViewNode &node,
+                                                                const ToolboxViewportRows &rows,
+                                                                const loka::core::Frame &target)
+{
+  {
+    ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
+    std::size_t index;
+    if (rows.queryRow(loka::app::ScrollViewVisit::X, index))
+      SetControlValue(this->scrollBarLedger_.scrollBarControls_[index].control, static_cast<short>(target.x));
+    if (rows.queryRow(loka::app::ScrollViewVisit::Y, index))
+      SetControlValue(this->scrollBarLedger_.scrollBarControls_[index].control, static_cast<short>(target.y));
+  }
+  this->commitViewportScrollBarValue(node, rows, 0);
 }
 
 #include "ToolboxPress.cpp"

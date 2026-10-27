@@ -97,17 +97,17 @@ namespace loka
       /** Native presence permits movement; the native setter owns range clamping. */
       bool canMove(Axis axis) const
       {
-        return axis == X ? this->x_ : this->y_;
+        return axis == X ? this->movableX_ : this->movableY_;
       }
     private:
       ScrollViewVisit(bool succeeded, bool x, bool y)
           : succeeded_(succeeded),
-            x_(x),
-            y_(y)
+            movableX_(x),
+            movableY_(y)
       {
       }
       bool succeeded_;
-      bool x_, y_;
+      bool movableX_, movableY_;
     };
     namespace scene
     {
