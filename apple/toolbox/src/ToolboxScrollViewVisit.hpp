@@ -48,8 +48,8 @@ struct ToolboxScrollViewLayoutResult
   const short width;
   const loka::app::ScrollViewVisit visit;
   const ToolboxViewportRows rows;
-  ToolboxScrollViewLayoutResult()
-      : width(0),
+  explicit ToolboxScrollViewLayoutResult(short value = 0)
+      : width(value),
         visit(loka::app::ScrollViewVisit::refused()),
         rows()
   {

@@ -65,13 +65,14 @@ namespace
       LifecycleFactTestAccess::DeliverFacts(&node);
       controller.releaseNodeContexts(&node);
     }
-    void visit(short width = 100, short height = 80)
+    short visit(short width = 100, short height = 80)
     {
       LayoutState state;
       state.width = width;
       state.height = height;
-      LayoutNode(&node, state, &controller, 0);
+      const short result = LayoutNode(&node, state, &controller, 0);
       LOKA_VERIFY(!controller.borrowPhase().open());
+      return result;
     }
     void post(int x, int y)
     {
@@ -89,6 +90,8 @@ namespace
   void delivery(bool clamp)
   {
     Fixture f;
+    const Rect previous = {0, 0, 260, 370};
+    ClipRect(&previous);
     // First visit creates both bars: the second push invalidates the first row pointer.
     f.post(clamp ? 30000 : 25, clamp ? 30000 : 40);
     f.visit();
@@ -99,9 +102,29 @@ namespace
     LOKA_VERIFY(GetControlValue(f.controller.scrollControl(1).control) == f.storage.viewport.get().x);
     LOKA_VERIFY(GetControlValue(f.controller.scrollControl(0).control) == f.storage.viewport.get().y);
     LOKA_VERIFY(f.controller.pendingDirtyRects_.empty());
+    LOKA_VERIFY(f.controller.batchEvents == "PP");
+    for (unsigned i = 0; i != 2; ++i)
+    {
+      const toolbox_host::ControlCall &call = f.controller.scrollControl(i).control->calls.back();
+      LOKA_VERIFY(call.operation == "value" && call.currentPort == f.window.window());
+      LOKA_VERIFY(EmptyRect(&call.ownerClip) && !call.painted);
+    }
+    const Rect restored = toolbox_host::currentClip();
+    LOKA_VERIFY(restored.top == previous.top && restored.left == previous.left && restored.bottom == previous.bottom
+                && restored.right == previous.right);
     const unsigned writes = f.writes;
     f.visit();
     LOKA_VERIFY(f.writes == writes);
+  }
+  void lateRefusal()
+  {
+    Fixture f;
+    f.content->props = Box().width(20).height(SHRT_MAX).props;
+    f.node.props.contentInsets(ScrollViewContentInsets::of(1, 0));
+    f.post(0, 20);
+    LOKA_VERIFY(f.visit() == 100);
+    f.result(SCROLL_UNAVAILABLE);
+    LOKA_VERIFY(f.writes == 0 && f.controller.scrollControls().empty());
   }
   void zeroRange()
   {
@@ -414,7 +437,7 @@ namespace
     app.flush();
     LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
   }
-  class OuterProbe : public ToolboxFullDrawPresenter
+  class OuterProbe : public NodeContext
   {
     SceneController &controller_;
 
@@ -425,7 +448,7 @@ namespace
           calls(0)
     {
     }
-    virtual void eraseBeforePaint()
+    virtual void render(IPlatformController *)
     {
       ++this->calls;
       LOKA_VERIFY(this->controller_.borrowPhase().open());
@@ -438,13 +461,14 @@ namespace
     f.probe = true;
     f.storage.request.set(ScrollTarget::Origin(25, 40));
     const Rect dirty = {0, 0, 260, 370};
+    OuterProbe outer(f.controller);
+    f.controller.renderContext = &outer;
     ToolboxInputDoor::renderDirty(f.controller, dirty);
+    f.controller.renderContext = 0;
     LOKA_VERIFY(f.storage.request.get().isNone());
     LOKA_VERIFY(f.storage.viewport.get().x == 25 && f.storage.viewport.get().y == 40);
     LOKA_VERIFY(f.callbacks >= 1);
     LOKA_VERIFY(!f.controller.borrowPhase().open());
-    OuterProbe outer(f.controller);
-    ToolboxInputDoor::render(f.controller, &outer);
     LOKA_VERIFY(outer.calls == 1 && !f.controller.borrowPhase().open());
     f.probe = false;
     f.ordinaryFlush();
@@ -457,6 +481,8 @@ int main(int argc, char **argv)
   const char *name = argv[1];
   if (!std::strcmp(name, "delivery"))
     delivery(false);
+  else if (!std::strcmp(name, "late-refusal"))
+    lateRefusal();
   else if (!std::strcmp(name, "zero-range"))
     zeroRange();
   else if (!std::strcmp(name, "clamp"))

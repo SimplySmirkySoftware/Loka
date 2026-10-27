@@ -271,7 +271,8 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
     }
     state.y = seatY;
   }
-  return shortRangeRefused ? ToolboxScrollViewLayoutResult() : ToolboxScrollViewLayoutResult(state.width, rows);
+  return shortRangeRefused ? ToolboxScrollViewLayoutResult(state.width)
+                           : ToolboxScrollViewLayoutResult(state.width, rows);
 }
 
 #include "ToolboxScrollViewSettlement.hpp"

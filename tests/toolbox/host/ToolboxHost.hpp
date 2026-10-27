@@ -332,7 +332,11 @@ public:
   }
   void setActiveLayoutBoundary(loka::app::scene::BoundaryNode *) {}
 #ifndef LOKA_HOST_CONTROL_ORDER
-  void renderScrollView(loka::app::ScrollViewNode *) {}
+  void renderScrollView(loka::app::ScrollViewNode *)
+  {
+    if (this->renderContext)
+      this->renderContext->render(this);
+  }
 #endif
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &)
   {
