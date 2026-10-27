@@ -229,8 +229,8 @@ namespace
   }
   /** True when any pixel of a picture drawn into `destination` can reach the
       port through the enclosing viewport. Outside one, every pixel can. The
-      frame line and the placeholder text are not asked: they are cheap and
-      may extend past the frame. */
+      frame line and placeholder text are cheap; the shared paint clip bounds
+      them without a separate cost skip. */
   bool PictureReachesPort(const ToolboxScenePlatformController *controller, const Rect &destination)
   {
     Rect reached;
@@ -242,7 +242,8 @@ ToolboxImageViewContext::ToolboxImageViewContext(loka::app::ImageViewNode *node,
                                                  ToolboxScenePlatformController *controller)
     : ToolboxProjectedNodeContext(controller),
       node_(node),
-      rect_()
+      rect_(),
+      paintRect_()
 {
   SetRect(&rect_, 0, 0, 0, 0);
 }
@@ -308,6 +309,11 @@ short ToolboxImageViewContext::layout(loka::app::scene::IPlatformController *, l
     }
   }
   updateRect(state.x, state.y, static_cast<short>(width), static_cast<short>(height));
+  this->paintRect_ = this->rect_;
+  if (this->controller() && !this->controller()->intersectWithProjectionClip(this->rect_, this->paintRect_))
+    SetRect(&this->paintRect_, 0, 0, 0, 0);
+  // ImageView has no presented fact: its inherited unsupported paint answer
+  // remains conservative across frame and clip changes.
   state.y = static_cast<short>(state.y + static_cast<short>(height));
   return static_cast<short>(width);
 }
@@ -335,6 +341,12 @@ void ToolboxImageViewContext::updateRect(short x, short y, short width, short he
 
 void ToolboxImageViewContext::draw()
 {
+  if (EmptyRect(&this->paintRect_))
+    return;
+  ToolboxPaintClip clip(this->paintRect_, ToolboxPaintClip::INTERSECT);
+  // Like Text, region refusal still draws under the caller's ambient clip.
+  if (clip.isActive() && !clip.touches(this->paintRect_))
+    return;
   // The caller restores the pixels beneath this transparent kind.
   FrameRect(&rect_);
 
@@ -364,11 +376,9 @@ void ToolboxImageViewContext::draw()
     Rect dstRect = ComputeImageDrawRect(rect_, fitMode, image.width(), image.height());
     if (fitMode == loka::app::IMAGE_FIT_COVER)
     {
-      // A cover image may be inside a unit, viewport, or dirty replay.
-      // Preserve every outer clip and refuse instead of drawing unbounded.
+      // Keep the branch-specific cost skip; the shared clip bounds the draw.
       Rect framed;
-      ToolboxPaintClip clip(rect_, ToolboxPaintClip::INTERSECT);
-      if (clip.isActive() && SectRect(&dstRect, &rect_, &framed) && PictureReachesPort(this->controller(), framed))
+      if (SectRect(&dstRect, &rect_, &framed) && PictureReachesPort(this->controller(), framed))
         DrawPicture(picture, &dstRect);
     }
     else if (PictureReachesPort(this->controller(), dstRect))

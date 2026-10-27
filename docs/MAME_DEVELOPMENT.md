@@ -147,8 +147,10 @@ tests/toolbox/verify-standalone-audit.sh \
 
 The TEST-only `LokaTutorialStandaloneFlow68K_APPL` target presents Tutorial
 Step 4 through the same typed `increment-summary-toggle` scenario used by the
-machine-verdict rail. It increments the derived item summary twice, hides it,
-proves that the conditional node left the scene, restores it, and holds the
+machine-verdict rail. Step 4 grows a `Keyed` + `For` list up to its declared
+capacity of 100; Add is then disabled and the summary says `Items: 100 (full)`.
+The scenario adds two rows, hides the summary and list together, proves that
+the summary left the scene, restores the content, and holds the
 final `Items: 2` scene until the user quits. Tutorial intentionally exercises
 no EditText path. Application-level text-entry verification belongs to
 HelloWorld's BMI controls and its `bmi-roundtrip` scenario.

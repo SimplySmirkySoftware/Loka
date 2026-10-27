@@ -2,6 +2,8 @@
 #include "TutorialScenarioTests.hpp"
 
 #include "support/TestVerify.hpp"
+#include "core/util/StateTrackerGuard.hpp"
+#include "platform/StringUTF8.hpp"
 
 #include <cassert>
 #include <cstdio>
@@ -10,6 +12,7 @@
 #include <vector>
 
 #include "../example/Tutorial/src/Step4Node.hpp"
+#include "../example/Tutorial/src/Step5Node.hpp"
 #include "app/scene/Scene.hpp"
 #include "app/core/AppComposition.hpp"
 #include "app/core/Window.hpp"
@@ -322,4 +325,197 @@ void testTutorialStandaloneMountRefusalFailsClosed()
   LOKA_VERIFY(std::fclose(diagnostics) == 0);
   std::remove(auditPath);
   std::printf("testTutorialStandaloneMountRefusalFailsClosed passed\n");
+}
+
+namespace
+{
+  template <class T> T *TutorialNode(loka::app::scene::Scene &scene, const char *id)
+  {
+    long matches = 0;
+    long typed = 0;
+    T *node = 0;
+    loka::dsl::testing::scene_test_detail::findNodeByIdRecursive<T>(
+        loka::dsl::testing::SceneTestAccess::rootNode(scene), id, matches, typed, node);
+    LOKA_VERIFY(matches == 1 && typed == 1 && node != 0);
+    return node;
+  }
+
+  void PressTutorialButton(loka::app::scene::Scene &scene, const char *id)
+  {
+    loka::app::ButtonNode *button = TutorialNode<loka::app::ButtonNode>(scene, id);
+    {
+      loka::core::StateTrackerGuard guard(loka::dsl::testing::SceneTestAccess::rootBoundary(scene)->tracker());
+      button->props.onClick_->emit();
+    }
+    scene.flushInvalidation();
+    scene.flushInvalidation();
+  }
+
+  void VerifyTutorialRows(loka::app::scene::Node *node, int &rows)
+  {
+    if (!node)
+    {
+      return;
+    }
+    loka::app::TextNode *text = node->asTextNode();
+    if (text && text->props.text_)
+    {
+      std::string value;
+      LOKA_VERIFY(loka::platform::CollectUtf8(text->props.text_->get(), value));
+      if (value.compare(0, 5, "Item ") == 0)
+      {
+        ++rows;
+        std::string expected;
+        LOKA_VERIFY(loka::platform::CollectUtf8(
+            loka::core::String::Literal("Item ") + loka::core::String::FromInt(rows), expected));
+        LOKA_VERIFY(value == expected);
+      }
+    }
+    loka::app::scene::INestable *nestable = node->asNestable();
+    if (nestable)
+    {
+      for (loka::app::scene::Node *child = nestable->childrenHead(); child; child = child->nextInComposition)
+      {
+        VerifyTutorialRows(child, rows);
+      }
+    }
+  }
+
+  void VerifyTutorialContents(loka::app::scene::Scene &scene,
+                              int expectedRows,
+                              const char *summary,
+                              const char *summaryId = "Tutorial.Step4.Summary")
+  {
+    int rows = 0;
+    VerifyTutorialRows(loka::dsl::testing::SceneTestAccess::rootNode(scene), rows);
+    LOKA_VERIFY(rows == expectedRows);
+    long matches = 0;
+    long typed = 0;
+    loka::app::TextNode *text = 0;
+    loka::dsl::testing::scene_test_detail::findNodeByIdRecursive<loka::app::TextNode>(
+        loka::dsl::testing::SceneTestAccess::rootNode(scene), summaryId, matches, typed, text);
+    if (summary)
+    {
+      LOKA_VERIFY(matches == 1 && typed == 1 && text != 0);
+      LOKA_VERIFY(text->props.text_->get().equals(loka::core::String::Literal(summary)));
+    }
+    else
+    {
+      LOKA_VERIFY(matches == 0 && text == 0);
+    }
+  }
+} // namespace
+
+void testTutorialListCapacityAndVisibility()
+{
+  NullScenePlatformController platform;
+  loka::app::scene::Scene scene(CloneTutorialRoot());
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  VerifyTutorialContents(scene, 0, "Items: 0");
+  for (int count = 1; count <= 100; ++count)
+  {
+    loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
+    LOKA_VERIFY(add->props.enabled_ && add->props.enabled_->get());
+    PressTutorialButton(scene, "Tutorial.Step4.AddItemButton");
+    std::string summary;
+    LOKA_VERIFY(loka::platform::CollectUtf8(loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
+                                                + loka::core::String::Literal(count == 100 ? " (full)" : ""),
+                                            summary));
+    VerifyTutorialContents(scene, count, summary.c_str());
+    if (count == 2 || count == 100)
+    {
+      PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
+      VerifyTutorialContents(scene, 0, 0);
+      PressTutorialButton(scene, "Tutorial.Step4.ToggleSummaryButton");
+      VerifyTutorialContents(scene, count, summary.c_str());
+    }
+  }
+  loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step4.AddItemButton");
+  LOKA_VERIFY(add->props.enabled_ && !add->props.enabled_->get());
+  // Inject the event even though the UI is disabled: the action must guard capacity too.
+  PressTutorialButton(scene, "Tutorial.Step4.AddItemButton");
+  VerifyTutorialContents(scene, 100, "Items: 100 (full)");
+  LOKA_VERIFY(!add->props.enabled_->get());
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+  std::printf("testTutorialListCapacityAndVisibility passed\n");
+}
+
+void testTutorialScrollListCapacityAndVisibility()
+{
+  NullScenePlatformController platform;
+  loka::app::scene::Scene scene(loka::app::scene::Boundary<tutorial::Step5Node>().clone());
+  scene.mount(&platform);
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  VerifyTutorialContents(scene, 0, "Items: 0", "Tutorial.Step5.Summary");
+  for (int count = 1; count <= 100; ++count)
+  {
+    loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step5.AddItemButton");
+    LOKA_VERIFY(add->props.enabled_ && add->props.enabled_->get());
+    PressTutorialButton(scene, "Tutorial.Step5.AddItemButton");
+    std::string summary;
+    LOKA_VERIFY(loka::platform::CollectUtf8(loka::core::String::Literal("Items: ") + loka::core::String::FromInt(count)
+                                                + loka::core::String::Literal(count == 100 ? " (full)" : ""),
+                                            summary));
+    VerifyTutorialContents(scene, count, summary.c_str(), "Tutorial.Step5.Summary");
+    if (count == 2 || count == 100)
+    {
+      PressTutorialButton(scene, "Tutorial.Step5.ToggleSummaryButton");
+      VerifyTutorialContents(scene, 0, 0, "Tutorial.Step5.Summary");
+      PressTutorialButton(scene, "Tutorial.Step5.ToggleSummaryButton");
+      VerifyTutorialContents(scene, count, summary.c_str(), "Tutorial.Step5.Summary");
+    }
+  }
+  loka::app::ButtonNode *add = TutorialNode<loka::app::ButtonNode>(scene, "Tutorial.Step5.AddItemButton");
+  LOKA_VERIFY(add->props.enabled_ && !add->props.enabled_->get());
+  // Inject the event even though the UI is disabled: the action must guard capacity too.
+  PressTutorialButton(scene, "Tutorial.Step5.AddItemButton");
+  VerifyTutorialContents(scene, 100, "Items: 100 (full)", "Tutorial.Step5.Summary");
+  LOKA_VERIFY(!add->props.enabled_->get());
+  loka::app::ScrollViewNode *scroll =
+      TutorialNode<loka::app::scene::Node>(scene, "Tutorial.Step5.ScrollView")->asScrollViewNode();
+  LOKA_VERIFY(scroll != 0);
+  int rows = 0;
+  VerifyTutorialRows(scroll, rows);
+  LOKA_VERIFY(rows == 100);
+  LOKA_VERIFY(scroll->props.viewport_.isValid());
+  // Null's heightless layout reports the full content extent, as in ScrollViewScopeTests.
+  loka::app::scene::LayoutState layout;
+  layout.width = 360;
+  layout.lineHeight = 10;
+  int extent = 0;
+  {
+    loka::core::StateTrackerGuard guard(loka::dsl::testing::SceneTestAccess::rootBoundary(scene)->tracker());
+    extent = platform.projectLayoutForTesting(scroll, layout);
+  }
+  LOKA_VERIFY(extent >= 100 * layout.lineHeight);
+  LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == 0);
+  layout.height = 280;
+  {
+    loka::core::StateTrackerGuard guard(loka::dsl::testing::SceneTestAccess::rootBoundary(scene)->tracker());
+    platform.projectLayoutForTesting(loka::dsl::testing::SceneTestAccess::rootNode(scene), layout);
+  }
+  const loka::core::Frame viewport = scroll->props.viewport_.state()->get();
+  LOKA_VERIFY(viewport.height > 0 && viewport.height < 280);
+  LOKA_VERIFY(extent > viewport.height);
+  // Simulate the rail's scroll publication, then hide and restore the whole branch.
+  scroll->publishOrigin(0, extent - viewport.height);
+  scene.flushInvalidation();
+  LOKA_VERIFY(scroll->requestedOrigin().y == extent - viewport.height);
+  PressTutorialButton(scene, "Tutorial.Step5.ToggleSummaryButton");
+  VerifyTutorialContents(scene, 0, 0, "Tutorial.Step5.Summary");
+  long matches = 0;
+  long typed = 0;
+  loka::app::scene::Node *hiddenScroll = 0;
+  loka::dsl::testing::scene_test_detail::findNodeByIdRecursive<loka::app::scene::Node>(
+      loka::dsl::testing::SceneTestAccess::rootNode(scene), "Tutorial.Step5.ScrollView", matches, typed, hiddenScroll);
+  LOKA_VERIFY(matches == 0 && hiddenScroll == 0);
+  PressTutorialButton(scene, "Tutorial.Step5.ToggleSummaryButton");
+  VerifyTutorialContents(scene, 100, "Items: 100 (full)", "Tutorial.Step5.Summary");
+  scroll = TutorialNode<loka::app::scene::Node>(scene, "Tutorial.Step5.ScrollView")->asScrollViewNode();
+  rows = 0;
+  VerifyTutorialRows(scroll, rows);
+  LOKA_VERIFY(rows == 100);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+  std::printf("testTutorialScrollListCapacityAndVisibility passed\n");
 }

@@ -35,7 +35,9 @@ struct ToolboxScrollViewMetrics;
 #ifndef LOKA_HOST_CONTROL_WIDTH
 #define LOKA_TOOLBOX_EDIT_TEXT_CONTEXT_HPP
 #endif
+#ifndef LOKA_HOST_IMAGE_VIEW
 #define LOKA_TOOLBOX_IMAGE_VIEW_CONTEXT_HPP
+#endif
 #define LOKA_TOOLBOX_OPEN_FILE_DIALOG_CONTEXT_HPP
 #define LOKA_TOOLBOX_CONFIRM_DIALOG_CONTEXT_HPP
 #ifndef LOKA_HOST_CONTROL_WIDTH
@@ -161,6 +163,10 @@ public:
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
     port.updateRgn = 0;
+#ifdef LOKA_HOST_IMAGE_VIEW
+    port.grafProcs = 0;
+    port.portBits.baseAddr = 0;
+#endif
     port.portBits.bounds = Rect();
     port.txFont = 3;
     port.txSize = 12;
@@ -814,7 +820,11 @@ LOKA_HOST_OTHER_HANDLER(Cell)
 #ifndef LOKA_HOST_CONTROL_WIDTH
 LOKA_HOST_OTHER_HANDLER(EditText)
 #endif
+#ifndef LOKA_HOST_IMAGE_VIEW
 LOKA_HOST_OTHER_HANDLER(ImageView)
+#else
+bool RegisterToolboxImageViewNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);
+#endif
 LOKA_HOST_OTHER_HANDLER(OpenFileDialog)
 LOKA_HOST_OTHER_HANDLER(ConfirmDialog)
 #ifndef LOKA_HOST_CONTROL_WIDTH
