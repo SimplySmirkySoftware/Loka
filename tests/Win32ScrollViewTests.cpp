@@ -1813,8 +1813,9 @@ void testWin32ScrollRequestRefusedVisits()
     LOKA_VERIFY(!f.node.getContext() && f.observed.values.empty());
   }
   {
-    ScrollRequestFixture f;
+    // The inner boxes outlive the fixture that owns the nested node borrowing them.
     ScrollRequestStorage inner;
+    ScrollRequestFixture f;
     ScrollViewNode *nested = new ScrollViewNode(ScrollViewProps(inner.viewport).scrollTo(inner.request));
     f.node.addChild(nested);
     inner.request.set(ScrollTarget::Origin(0, 40));
@@ -1823,9 +1824,6 @@ void testWin32ScrollRequestRefusedVisits()
     LOKA_VERIFY(!nested->getContext());
     LOKA_VERIFY(ScrollTrace::instance().size() != 0);
     LOKA_VERIFY(ScrollTrace::instance().at(0).seam[0] == SCROLL_UNAVAILABLE);
-    // Drop the borrowed inner handles before their owner leaves scope.
-    f.controller.onChange(0, NODE_DIRTY_NONE, false);
-    f.node.clearChildren();
   }
 }
 
