@@ -256,7 +256,22 @@ void testMacTextFamilyMonospace()
     LOKA_VERIFY(controller.textFont(TextStyle().family(TEXT_FAMILY_SYSTEM)) == plain);
     NSFont *bold = (NSFont *)controller.textFont(Monospace + Bold);
     LOKA_VERIFY(bold && [bold isFixedPitch]);
-    LOKA_VERIFY([[NSFontManager sharedFontManager] traitsOfFont:bold] & NSBoldFontMask);
+    // An AppKit linked against the 10.6 SDK answers Monaco for the user
+    // fixed-pitch font, and Monaco has no bold face, so the rail keeps the
+    // regular face. Discriminate on the family's faces, not on the host.
+    NSFontManager *manager = [NSFontManager sharedFontManager];
+    NSFont *boldFace = [manager fontWithFamily:[expectedMono familyName]
+                                        traits:NSBoldFontMask
+                                        weight:9
+                                          size:[NSFont systemFontSize]];
+    if (boldFace && ([manager traitsOfFont:boldFace] & NSBoldFontMask))
+      LOKA_VERIFY([manager traitsOfFont:bold] & NSBoldFontMask);
+    else
+    {
+      std::printf("[skip] bold fixed-pitch face: %s has none; the regular face stands in\n",
+                  [[expectedMono familyName] UTF8String]);
+      LOKA_VERIFY([[bold fontName] isEqualToString:[expectedMono fontName]]);
+    }
     NSFont *sized = (NSFont *)controller.textFont(Monospace + FontSize<12>());
     LOKA_VERIFY(sized && [sized isFixedPitch] && std::fabs([sized pointSize] - 12) < 0.01);
   }
