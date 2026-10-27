@@ -918,6 +918,17 @@ namespace
   return count_;
 }
 @end
+/** A push button that takes the classic mouseDown: path. On macOS 26 a stock
+    NSButton sends no action for events posted from this process (both twins
+    counted 0); this subclass sends it on 10.9 and 26 alike. */
+@interface LokaClipTestButton : NSButton
+@end
+@implementation LokaClipTestButton
+- (void)mouseDown:(NSEvent *)event
+{
+  [super mouseDown:event];
+}
+@end
 
 // Runtime acceptance pins: all event traffic stays in this process.
 namespace
@@ -1001,7 +1012,7 @@ void testMacClipBoxClickReachesSiblingBelow()
     LOKA_VERIFY(clipped ? h != nil : h == nil);
     NSView *parent = clipped ? [h superview] : f.host.root;
     LOKA_VERIFY(parent == f.host.root);
-    NSButton *button = [[[NSButton alloc] initWithFrame:NSMakeRect(80, 55, 100, 28)] autorelease];
+    NSButton *button = [[[LokaClipTestButton alloc] initWithFrame:NSMakeRect(80, 55, 100, 28)] autorelease];
     LokaClipTestClickTarget *target = [[[LokaClipTestClickTarget alloc] init] autorelease];
     [button setTitle:@"Sibling"];
     [button setTarget:target];
