@@ -2158,3 +2158,26 @@ void testWin32TextEditorEvidenceCaptureFailure()
     fixture.matches();
   }
 }
+
+void testWin32TextEditorMonospaceFont()
+{
+  using namespace loka::app;
+  Fixture fixture;
+  HFONT first = fixture.controller.textFont(Monospace).font();
+  if (!first)
+    std::printf("[skip] editor monospace available branch: no candidate installed\n");
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.fallbackFont(Monospace));
+  fixture.controller.updateDisplayScale(loka::win32::Win32DisplayScale(144));
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.fallbackFont(Monospace));
+  if (first && fixture.controller.textFont(Monospace).font())
+    LOKA_VERIFY(first != fixture.controller.textFont(Monospace).font());
+  static const wchar_t *const absent[] = {L"Loka missing editor face", 0};
+  loka::win32::testing::useMonospaceCandidatesForNextBuild(absent);
+  fixture.controller.updateDisplayScale(loka::win32::Win32DisplayScale(96));
+  LOKA_VERIFY(!fixture.controller.textFont(Monospace).font());
+  LOKA_VERIFY(fixture.controller.textFont(Monospace).family() == TEXT_FAMILY_MONOSPACE);
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.displayFont());
+}

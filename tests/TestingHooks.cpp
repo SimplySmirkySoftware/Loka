@@ -706,3 +706,38 @@ void operator delete[](void *memory, const std::nothrow_t &) throw()
   ::operator delete(memory);
 }
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace win32
+  {
+    namespace testing
+    {
+      namespace
+      {
+        const wchar_t *const *nextMonospaceCandidates = 0;
+        unsigned displayFontSlotsUntilFailure = 0;
+      } // namespace
+      void useMonospaceCandidatesForNextBuild(const wchar_t *const *faces)
+      {
+        nextMonospaceCandidates = faces;
+      }
+      const wchar_t *const *takeMonospaceCandidates()
+      {
+        const wchar_t *const *faces = nextMonospaceCandidates;
+        nextMonospaceCandidates = 0;
+        return faces;
+      }
+      void failDisplayFontCreation(unsigned successfulSlotsBeforeFailure)
+      {
+        displayFontSlotsUntilFailure = successfulSlotsBeforeFailure + 1;
+      }
+      bool refuseDisplayFontCreation()
+      {
+        return displayFontSlotsUntilFailure && --displayFontSlotsUntilFailure == 0;
+      }
+    } // namespace testing
+  } // namespace win32
+} // namespace loka
+#endif

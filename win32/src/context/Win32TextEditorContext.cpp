@@ -120,6 +120,8 @@ Win32TextEditorContext::Win32TextEditorContext(Win32ScenePlatformController *con
       this->retireWindow();
       return;
     }
+    SendMessageW(
+        this->hwnd(), WM_SETFONT, reinterpret_cast<WPARAM>(controller->fallbackFont(TextStyle() + Monospace)), FALSE);
     // The owner enforces the logical cap. Leave room for an over-cap native
     // action so it is refused atomically instead of accepting a truncated paste.
     // Zero has special multiline semantics; specify the native limit explicitly.

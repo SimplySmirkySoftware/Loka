@@ -13,6 +13,7 @@
 
 namespace
 {
+  const wchar_t kTextContext[] = L"Loka.TextContext";
   class Win32TextNodeHandler
       : public loka::app::scene::RetainedNodeHandler<Win32TextNodeHandler,
                                                      loka::app::TextNode,
@@ -71,7 +72,7 @@ namespace
     if (!text || !controller || !text->props.hasDeclaredLayoutStyle())
       return 0;
     const loka::app::TextStyle style = text->props.resolvedTextStyle();
-    return style.size_.isSet() || style.hasWeight_ || style.hasItalic_ ? controller->textFont(style) : 0;
+    return style.declaresFont() ? controller->fallbackFont(style) : 0;
   }
 
   /** A null selected font preserves the historical unstyled height. */
@@ -230,6 +231,11 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
       NULL);
   if (this->hwnd())
   {
+    if (!SetPropW(this->hwnd(), kTextContext, this))
+    {
+      this->retireWindow();
+      return;
+    }
     HDC hdc = GetDC(this->hwnd());
     if (hdc)
     {
@@ -239,6 +245,19 @@ Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
   }
   this->applyStyle();
   bindText();
+}
+
+Win32TextContext *Win32TextContext::fromWindow(HWND window)
+{
+  return static_cast<Win32TextContext *>(GetPropW(window, kTextContext));
+}
+
+bool Win32TextContext::queryFontStyle(loka::app::TextStyle &style) const
+{
+  if (!this->node_ || !this->node_->props.hasDeclaredLayoutStyle())
+    return false;
+  style = this->node_->props.resolvedTextStyle();
+  return style.declaresFont();
 }
 
 Win32TextContext::~Win32TextContext()
@@ -288,6 +307,8 @@ void Win32TextContext::onNativeFact(loka::app::scene::NodeLifecycleFact previous
     this->applyDetachedPresentation();
     if (next == loka::app::scene::NODE_FACT_RETIRED)
     {
+      if (this->hwnd())
+        RemovePropW(this->hwnd(), kTextContext);
       this->clearMeasurement();
       this->unbindText();
       this->textEnvironmentSubscription_.disconnectTextEnvironment();
@@ -396,7 +417,7 @@ bool Win32TextContext::captureBitmap(loka::core::resource::Image &out) const
 
 void Win32TextContext::clearMeasurement()
 {
-  this->measurement_.invalidate();
+  this->measurement_ = loka::app::MeasurementResult<Constraint, int>();
   this->textDelivery_ = loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN);
   if (this->hwnd())
     this->relayout(0, 0, 0, 0);

@@ -22,6 +22,7 @@
 #include <climits>
 #include <cstdio>
 #include <string>
+#include <vector>
 #include <windows.h>
 #include "Win32BuiltInSupport.hpp"
 #include "Win32ScenePlatformController.hpp"
@@ -181,7 +182,7 @@ namespace
             LOKA_VERIFY(page && caption && page != caption && caption != button);
             HDC dc = GetDC(page);
             LOKA_VERIFY(dc != NULL);
-            HGDIOBJ previous = SelectObject(dc, controller.textFont(FontSize<18>()));
+            HGDIOBJ previous = SelectObject(dc, controller.textFont(FontSize<18>()).font());
             TEXTMETRICW font;
             LOKA_VERIFY(GetTextMetricsW(dc, &font));
             const UINT flags = DT_LEFT | DT_NOPREFIX | DT_CALCRECT | DT_WORDBREAK | DT_EDITCONTROL;
@@ -616,6 +617,10 @@ namespace loka
       {
         context.draw(dc, rect);
       }
+      static std::size_t fontCount(const Win32AttributedTextTable &table)
+      {
+        return table.fonts_.size();
+      }
       static HFONT font(const Win32AttributedTextTable &table, std::size_t i)
       {
         return table.fonts_[i];
@@ -683,8 +688,8 @@ void testWin32AttributedTextPerRunProjection()
     LOKA_VERIFY(!controller.registerNodeHandler(&replacement));
     const AttributedString value = Styled("a ab", FontSize<12>() + Bold) + Styled("cd", FontSize<24>() + Italic);
     AttributedTextNode node((AttributedText(value) + BlockStyle().wrap(TEXT_WRAP_WORD)).props);
-    const int wordWidth = measureSpan(root, controller.textFont(FontSize<12>() + Bold), L"ab", 2)
-                          + measureSpan(root, controller.textFont(FontSize<24>() + Italic), L"cd", 2);
+    const int wordWidth = measureSpan(root, controller.textFont(FontSize<12>() + Bold).font(), L"ab", 2)
+                          + measureSpan(root, controller.textFont(FontSize<24>() + Italic).font(), L"cd", 2);
     // Choose odd logical width at odd origin: origin-free rounding differs.
     short width = static_cast<short>(scale.measurementToLu(wordWidth) + 2);
     if (!(width & 1))
@@ -939,7 +944,7 @@ void testWin32PlainTextWrappedLines()
     HDC dc = GetDC(child);
     LOKA_VERIFY(dc);
     HFONT font = reinterpret_cast<HFONT>(SendMessageW(child, WM_GETFONT, 0, 0));
-    LOKA_VERIFY(font == controller.textFont(props.resolvedTextStyle()));
+    LOKA_VERIFY(font == controller.textFont(props.resolvedTextStyle()).font());
     HGDIOBJ previous = SelectObject(dc, font);
     LOKA_VERIFY(previous && previous != HGDI_ERROR);
     SIZE glyphs = {0, 0};
@@ -1743,7 +1748,7 @@ void testWin32AttributedTextInksAndAdditivity()
     LOKA_VERIFY(table.build(runs, BlockStyle(), 400, dc, controller));
     LOKA_VERIFY(table.draw(dc, rect, BlockStyle()));
     LOKA_VERIFY(GetTextColor(dc) == sentinel);
-    const int runWidth = measureSpan(root, controller.textFont(font), L"MMMM", 4);
+    const int runWidth = measureSpan(root, controller.textFont(font).font(), L"MMMM", 4);
     const COLORREF inks[] = {RGB(0xC4, 0x2B, 0x1C), GetSysColor(COLOR_BTNTEXT), RGB(0x0F, 0x6C, 0xBD)};
     for (int run = 0; run < 3; ++run)
     {
@@ -2827,6 +2832,218 @@ void testWin32GapDoorScrollViewContent()
     verifyGapDoorInterval(controller, parent, second, third, 6);
     verifyGapDoorInterval(controller, parent, third, fourth, 6);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace loka
+{
+  namespace testing
+  {
+    class Win32TextFamilyAccess
+    {
+    public:
+      static bool hasMeasurement(const Win32TextContext &context)
+      {
+        Win32TextContext::Constraint constraint;
+        return context.measurement_.queryConstraint(constraint);
+      }
+    };
+  } // namespace testing
+} // namespace loka
+
+namespace
+{
+  std::vector<HFONT> captureFontTable(const Win32ScenePlatformController &controller)
+  {
+    using namespace loka::app;
+    std::vector<HFONT> handles;
+    // Enumerate the entire owner's vocabulary, including native and role rows.
+    for (int row = 0; row < detail::kStyleVocabularySizeCount + TEXT_SIZE_ROLE_COUNT + 1; ++row)
+      for (int bold = 0; bold < 2; ++bold)
+        for (int italic = 0; italic < 2; ++italic)
+          for (int family = 0; family < 2; ++family)
+          {
+            TextStyle style;
+            if (row < detail::kStyleVocabularySizeCount)
+              style = SizeOf(detail::StyleVocabularySizes[row]);
+            else if (row < detail::kStyleVocabularySizeCount + TEXT_SIZE_ROLE_COUNT)
+              style = SmallLabel;
+            if (bold)
+              style = style + Bold;
+            if (italic)
+              style = style + Italic;
+            if (family)
+              style = style + Monospace;
+            HFONT font = controller.textFont(style).font();
+            if (font)
+              handles.push_back(font);
+          }
+    return handles;
+  }
+
+  BOOL CALLBACK VerifyNoOldFont(HWND window, LPARAM data)
+  {
+    const std::vector<HFONT> &old = *reinterpret_cast<const std::vector<HFONT> *>(data);
+    HFONT current = reinterpret_cast<HFONT>(SendMessageW(window, WM_GETFONT, 0, 0));
+    for (std::size_t i = 0; i < old.size(); ++i)
+      LOKA_VERIFY(current != old[i]);
+    return TRUE;
+  }
+
+  struct WindowFont
+  {
+    HWND window;
+    HFONT font;
+  };
+  BOOL CALLBACK CaptureWindowFonts(HWND window, LPARAM data)
+  {
+    std::vector<WindowFont> &fonts = *reinterpret_cast<std::vector<WindowFont> *>(data);
+    const WindowFont entry = {window, reinterpret_cast<HFONT>(SendMessageW(window, WM_GETFONT, 0, 0))};
+    fonts.push_back(entry);
+    return TRUE;
+  }
+} // namespace
+
+void testWin32TextFamilyDpiReplacement()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    TextProps props("iiii WWWW");
+    props.textStyle_ = Monospace;
+    TextNode mono(props);
+    TextNode plain(TextProps("plain"));
+    HWND monoWindow = projectFontText(controller, root, mono);
+    HWND plainWindow = projectFontText(controller, root, plain);
+    Win32TextContext *monoContext = static_cast<Win32TextContext *>(mono.getContext());
+    LOKA_VERIFY(Win32TextContext::fromWindow(monoWindow) == monoContext);
+
+    loka::app::testing::TextEditorStateOwner editorState;
+    loka::testing::TextBufferFixture lines;
+    LOKA_VERIFY(lines.attach(&editorState.tracker, 8, 1024) == ATTACH_OK);
+    LOKA_VERIFY(lines.insert(0, loka::core::String("editor")) == EDIT_OK);
+    TextEditorNode editor(TextEditorProps(lines, editorState.cursor));
+    LayoutState editorSeat = attributedSeat(160);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&editor, editorSeat));
+    HWND editorWindow = static_cast<Win32TextEditorContext *>(editor.getContext())->hwnd();
+
+    AttributedTextNode attributed(AttributedTextProps(Styled("iiii WWWW", Monospace + Bold)));
+    LayoutState seat = attributedSeat(160);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&attributed, seat));
+    Win32AttributedTextContext *attributedContext = static_cast<Win32AttributedTextContext *>(attributed.getContext());
+    const Win32AttributedTextTable &cache = AttributedAccess::table(*attributedContext);
+    static const wchar_t *const absent[] = {L"Loka missing replacement face", 0};
+    const int dpi[] = {144, 192, 120};
+    const bool initiallyAvailable = controller.textFont(Monospace).font() != 0;
+    if (!initiallyAvailable)
+      std::printf("[skip] available -> absent: no monospace candidate installed\n");
+    for (int step = 0; step < 3; ++step)
+    {
+      layoutFontText(controller, mono);
+      seat = attributedSeat(160);
+      attributedContext->layout(&controller, seat);
+      LOKA_VERIFY(cache.valid());
+      LOKA_VERIFY(loka::testing::Win32TextFamilyAccess::hasMeasurement(*monoContext));
+      // Both contexts remain subscribed while hidden/parked.
+      monoContext->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+      attributedContext->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+      const std::vector<HFONT> old = captureFontTable(controller);
+      if (step == 0)
+        loka::win32::testing::useMonospaceCandidatesForNextBuild(absent);
+      controller.updateDisplayScale(loka::win32::Win32DisplayScale(dpi[step]));
+      LOKA_VERIFY(!cache.valid() && AttributedAccess::fontCount(cache) == 0);
+      LOKA_VERIFY(!loka::testing::Win32TextFamilyAccess::hasMeasurement(*monoContext));
+      EnumChildWindows(root, VerifyNoOldFont, reinterpret_cast<LPARAM>(&old));
+      const HFONT applied = controller.fallbackFont(Monospace);
+      LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(monoWindow, WM_GETFONT, 0, 0)) == applied);
+      LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(editorWindow, WM_GETFONT, 0, 0)) == applied);
+      LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(plainWindow, WM_GETFONT, 0, 0)) == controller.displayFont());
+      if (step == 0)
+      {
+        LOKA_VERIFY(!controller.textFont(Monospace).font());
+        LOKA_VERIFY(controller.textFont(Monospace).family() == TEXT_FAMILY_MONOSPACE);
+        LOKA_VERIFY(applied == controller.displayFont());
+      }
+      else if (!controller.textFont(Monospace).font())
+        std::printf("[skip] %s: no monospace candidate installed\n",
+                    step == 1 ? "absent -> available" : "available -> available");
+      else
+        LOKA_VERIFY(applied == controller.textFont(Monospace).font());
+      monoContext->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+      attributedContext->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+      seat = attributedSeat(160);
+      attributedContext->layout(&controller, seat);
+      LOKA_VERIFY(cache.valid());
+      LOKA_VERIFY(AttributedAccess::font(cache, 0) == controller.fallbackFont(Monospace + Bold));
+    }
+    std::vector<WindowFont> before;
+    EnumChildWindows(root, CaptureWindowFonts, reinterpret_cast<LPARAM>(&before));
+    const std::vector<HFONT> installed = captureFontTable(controller);
+    // Same-scale update must not create another table.
+    controller.updateDisplayScale(loka::win32::Win32DisplayScale(120));
+    LOKA_VERIFY(captureFontTable(controller) == installed);
+    // Refuse after partial construction so destruction of the temporary is exercised.
+    loka::win32::testing::failDisplayFontCreation(3);
+    controller.updateDisplayScale(loka::win32::Win32DisplayScale(168));
+    LOKA_VERIFY(captureFontTable(controller) == installed);
+    for (std::size_t i = 0; i < before.size(); ++i)
+      LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(before[i].window, WM_GETFONT, 0, 0)) == before[i].font);
+    controller.performLayout(320, 240);
+    EnumChildWindows(root, VerifyNoOldFont, reinterpret_cast<LPARAM>(&installed));
+    LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(monoWindow, WM_GETFONT, 0, 0))
+                == controller.fallbackFont(Monospace));
+    LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(editorWindow, WM_GETFONT, 0, 0))
+                == controller.fallbackFont(Monospace));
+    // Terminal detach strips the borrowed property before the native window retires.
+    monoContext->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    LOKA_VERIFY(!Win32TextContext::fromWindow(monoWindow));
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32TextFamilyGeometry()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    if (!controller.textFont(Monospace).font())
+      std::printf("[skip] monospace geometry: no candidate installed\n");
+    else
+    {
+      const char *samples[] = {"iiii", "WWWW"};
+      const wchar_t *wide[] = {L"iiii", L"WWWW"};
+      for (int i = 0; i < 2; ++i)
+      {
+        TextProps props(samples[i]);
+        props.textStyle_ = Monospace;
+        TextNode text(props);
+        HWND child = projectFontText(controller, root, text);
+        short width = 0;
+        LOKA_VERIFY(Win32TextContext::queryNaturalWidth(&text, &controller, width));
+        RECT expected = {0, 0, 0, 0};
+        LOKA_VERIFY(Win32TextContext::measureTextRect(child, controller.textFont(Monospace).font(), wide[i], expected));
+        LOKA_VERIFY(width == controller.displayScale().measurementToLu(expected.right - expected.left));
+        LOGFONTW descriptor;
+        LOKA_VERIFY(readFont(child, descriptor) == controller.textFont(Monospace).font());
+        HDC dc = GetDC(child);
+        LOKA_VERIFY(dc);
+        HGDIOBJ previous = SelectObject(dc, controller.textFont(Monospace).font());
+        TEXTMETRICW metrics;
+        LOKA_VERIFY(GetTextMetricsW(dc, &metrics));
+        SelectObject(dc, previous);
+        ReleaseDC(child, dc);
+        int height = controller.displayScale().measurementToLu(metrics.tmHeight + metrics.tmExternalLeading);
+        if (height < loka::app::layout::FallbackControlMetrics::kTextHeight)
+          height = loka::app::layout::FallbackControlMetrics::kTextHeight;
+        LOKA_VERIFY(layoutFontText(controller, text) == height);
+      }
+    }
   }
   LOKA_VERIFY(DestroyWindow(root));
 }
