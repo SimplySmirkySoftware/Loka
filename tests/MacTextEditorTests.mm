@@ -135,15 +135,23 @@ namespace
   }
 
   // Whether the font draws the scalar at this unit; both units of a surrogate
-  // pair follow their scalar.
-  bool fontCoversUnit(NSFont *font, NSString *string, NSUInteger index)
+  // pair follow their scalar. A unit the font does not cover is printed as a
+  // skipped pin so the omitted assertion stays visible in the run log.
+  bool fontCoversUnit(NSFont *font, NSString *string, NSUInteger index, const char *pin)
   {
     const NSRange sequence = [string rangeOfComposedCharacterSequenceAtIndex:index];
     UTF32Char scalar = [string characterAtIndex:sequence.location];
     if (sequence.length >= 2 && CFStringIsSurrogateHighCharacter(static_cast<UniChar>(scalar)))
       scalar = CFStringGetLongCharacterForSurrogatePair(static_cast<UniChar>(scalar),
                                                         [string characterAtIndex:sequence.location + 1]);
-    return [[font coveredCharacterSet] longCharacterIsMember:scalar];
+    if ([[font coveredCharacterSet] longCharacterIsMember:scalar])
+      return true;
+    std::printf("[skip] %s: %s does not cover U+%04X at unit %lu\n",
+                pin,
+                [[font fontName] UTF8String],
+                static_cast<unsigned>(scalar),
+                static_cast<unsigned long>(index));
+    return false;
   }
 
   // The font the rail projected holds at every unit the font can draw. A unit
@@ -155,7 +163,7 @@ namespace
   // only where that font answers.
   void verifyFontAt(NSTextStorage *storage, NSUInteger index, NSFont *expected)
   {
-    if (!fontCoversUnit(expected, [storage string], index))
+    if (!fontCoversUnit(expected, [storage string], index, "storage font pin"))
       return;
     verifyFont([storage attribute:NSFontAttributeName atIndex:index effectiveRange:0], expected);
   }
@@ -254,7 +262,7 @@ namespace
       NSFont *font = (NSFont *)this->controller.textFont(TextStyle(), true);
       NSTextStorage *storage = [this->view textStorage];
       // The view font follows the first unit's storage font (see verifyFontAt).
-      if ([storage length] == 0 || fontCoversUnit(font, [storage string], 0))
+      if ([storage length] == 0 || fontCoversUnit(font, [storage string], 0, "view font pin"))
         verifyFont([this->view font], font);
       verifyFont([[this->view typingAttributes] objectForKey:NSFontAttributeName], font);
       verifyTextColor([[this->view typingAttributes] objectForKey:NSForegroundColorAttributeName]);
