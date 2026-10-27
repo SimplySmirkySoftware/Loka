@@ -167,6 +167,7 @@ namespace
       const Rect seat = {0, 0, 260, 370};
       LOKA_VERIFY(
           controller.ensureViewportScrollBarControl(seat, &scroll, 500, 244, 0, ToolboxScrollViewMetrics(46, 0), true)
+              .verticalOffset()
           == 0);
       if (mode == 2)
       {
@@ -669,9 +670,11 @@ namespace
       const Rect viewport = {0, 0, 34, 100};
       ClipRect(&previous);
       toolbox_host::controlCalls = toolbox_host::ControlCalls();
-      LOKA_VERIFY(controller.ensureViewportScrollBarControl(
-                      viewport, &scroll, 200, 34, 17, ToolboxScrollViewMetrics(0, 0), false)
-                  == 17);
+      LOKA_VERIFY(
+          controller
+              .ensureViewportScrollBarControl(viewport, &scroll, 200, 34, 17, ToolboxScrollViewMetrics(0, 0), false)
+              .verticalOffset()
+          == 17);
       HostControl &control = *controller.scrollControl(0).control;
       const toolbox_host::ControlCalls &calls = toolbox_host::controlCalls;
       LOKA_VERIFY(calls.values == 1 && !EmptyRect(&calls.valueClip) && control.value == 17);

@@ -1147,7 +1147,7 @@ void testMacSmallLabelUsesTheSmallSystemFont()
     LOKA_VERIFY(smallBold != nil && smallBold != small);
     LOKA_VERIFY([smallBold pointSize] == [NSFont smallSystemFontSize]);
     LOKA_VERIFY(([[NSFontManager sharedFontManager] traitsOfFont:smallBold] & NSBoldFontMask) != 0);
-    NSFont *smallFixed = (NSFont *)controller.textFont(SmallLabel, true);
+    NSFont *smallFixed = (NSFont *)controller.textFont(SmallLabel + Monospace);
     LOKA_VERIFY(smallFixed != nil && [smallFixed isFixedPitch]);
     LOKA_VERIFY([smallFixed pointSize] == [NSFont smallSystemFontSize]);
   }
