@@ -25,4 +25,9 @@ void testMacClipBoxFailureKeepsSiblingProjection();
 void testMacClipBoxFocusedEditRetirement();
 void testMacClipBoxLargeOfferFixedSizeTwin();
 void testMacClipBoxChannelRefusalKeepsHostRect();
+void testMacClipBoxClickReachesSiblingBelow();
+void testMacClipBoxDragTracksLikeTwin();
+void testMacClipBoxPopupAnchorMatchesTwin();
+void testMacClipBoxGroundCapturesInBothBlurPaths();
+void testMacClipBoxUnresolvedWidthLayerBackedRssIsFlat();
 #endif
