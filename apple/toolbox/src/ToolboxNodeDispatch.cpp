@@ -1,3 +1,4 @@
+#include "ToolboxScrollViewSettlement.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
@@ -469,12 +470,24 @@ namespace
     }
     case loka::app::scene::NODE_KIND_SCROLL_VIEW:
     {
-      short width = controller
-                        ? controller->layoutScrollView(
-                              static_cast<loka::app::ScrollViewNode *>(node),
-                              state,
-                              activeBoundary)
-                        : 0;
+      short width = 0;
+      if (controller)
+      {
+        loka::app::scene::BorrowScope visitScope(*controller);
+        const ToolboxScrollViewLayoutResult result =
+            controller->layoutScrollView(static_cast<loka::app::ScrollViewNode *>(node), state, activeBoundary);
+        ToolboxScrollViewOwner owner(*controller, node);
+        ToolboxScrollViewSeat seat(*controller, result);
+        loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
+                                                                       seat,
+                                                                       loka::app::scene::SETTLE_PROPS
+#ifdef TEST_BUILD
+                                                                       ,
+                                                                       owner.fact(*node)
+#endif
+        );
+        width = result.width;
+      }
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width,

@@ -24,13 +24,14 @@ namespace
   }
 } // namespace
 
-int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewportRect,
-                                                                   loka::app::ScrollViewNode *scrollView,
-                                                                   int contentHeight,
-                                                                   int viewportHeight,
-                                                                   int requestedOffset,
-                                                                   const ToolboxScrollViewMetrics &horizontal,
-                                                                   bool horizontalBar)
+ToolboxViewportRows
+ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewportRect,
+                                                               loka::app::ScrollViewNode *scrollView,
+                                                               int contentHeight,
+                                                               int viewportHeight,
+                                                               int requestedOffset,
+                                                               const ToolboxScrollViewMetrics &horizontal,
+                                                               bool horizontalBar)
 {
   const ToolboxScrollViewMetrics metrics = ToolboxScrollViewResolveMetrics(
       contentHeight, viewportHeight, requestedOffset);
@@ -65,6 +66,7 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
     this->window_->querySizeBoxRect(sizeBox);
   ScrollBarControlBinding *native = 0;
   Rect movedFrom;
+  std::size_t x = ToolboxViewportRows::absent(), y = ToolboxViewportRows::absent();
   if (this->ensureScrollBarBinding(binding->barId[loka::app::SCROLL_BAR_VERTICAL],
                                    ToolboxScrollViewVerticalBarRect(
                                        viewportRect, horizontalBar, sizeBox, edges, scrollView->props.contentInsets_),
@@ -80,6 +82,8 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
     if (native && !EmptyRect(&movedFrom))
       this->validateOwnControlMove(movedFrom, native->rect);
   }
+  if (native)
+    y = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   // A refused or empty vertical binding must not skip horizontal handling.
   const bool verticalPresent = native != 0;
   if (horizontalBar)
@@ -100,6 +104,8 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
         this->validateOwnControlMove(movedFrom, native->rect);
     }
   }
+  if (horizontalBar && native)
+    x = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   if (!verticalPresent || !horizontalBar)
   {
     // A departing bar is hidden here, before the children paint into its
@@ -118,7 +124,7 @@ int ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &v
       }
     }
   }
-  return metrics.clampedOffset;
+  return ToolboxViewportRows(metrics.clampedOffset, x, y);
 }
 
 void ToolboxScenePlatformController::destroyViewportScrollBarControl(

@@ -76,6 +76,7 @@ public:
 
 private:
   friend class ToolboxScenePlatformController;
+  friend class ToolboxScrollViewSeat;
 
   std::vector<ScrollBarControlBinding> scrollBarControls_;
   std::vector<ViewportScrollBarBinding> viewportScrollBars_;

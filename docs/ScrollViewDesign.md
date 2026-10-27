@@ -261,14 +261,22 @@ decides.
 - **Toolbox has no wheel source today.** When one arrives, its first target
   follows the same rule.
 
-## Scroll requests (#1591, PR 1)
+## Scroll requests (#1591)
 
 `scrollTo(Request<ScrollTarget>&)` borrows an app-owned coalescable request.
-Null takes a post at the first eligible projection visit after posting, after
+Null and Toolbox take a post at the first eligible projection visit after posting, after
 layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
 coordinates and shares `requestedOrigin()` normalization. Null has no native
 range and does not clamp to a viewport range. The viewport publication is the
 report; there is no reply door.
+
+Toolbox shares `commitViewportScrollBarValue` between input and request: it
+reads selected native values, updates `appliedValue` before one origin
+publication, and publishes nothing for an unchanged selection. Input retains
+its batch and pending-dirty ordering; requests add neither. Only rows ensured
+and shown in this visit make an axis movable. A hidden, clipped, uncreated or
+unensured row is absent; a present row with maximum zero still accepts and
+clamps. The visit stores presence and indices, not a second native maximum.
 
 A reached refused visit or an unbound viewport takes and drops the request.
 An unreached child keeps it pending. A retained re-entry's first visit may jump;
@@ -281,11 +289,11 @@ or insets does not. Reclaim publishes nothing. See
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already
   placed at the refused pass's translation (both axes; pre-#580 for Y).
-- Native ScrollView request delivery remains for PRs 2–4 of #1591.
+- Win32 and macOS ScrollView request delivery remain for PRs 3–4 of #1591.
   SimpleViewer still resets the viewport by
   writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
   the app a second writer of a rail result channel. That is a recorded debt,
-  not a pattern to copy.
+  not a pattern to copy. Its move to `scrollTo` belongs to the last rail PR.
 - macOS layout measures width from the actual NSScrollView (`visibleWidth`),
   but horizontal chrome height comes from the system preferred scroller style
   (`MacProjection::clientHeightBelowHorizontalScroller`), not the view's style.

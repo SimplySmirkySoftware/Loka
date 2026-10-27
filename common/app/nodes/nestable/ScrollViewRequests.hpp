@@ -80,28 +80,34 @@ namespace loka
       };
       static ScrollViewVisit refused()
       {
-        return ScrollViewVisit(false);
+        return ScrollViewVisit(false, false, false);
       }
       static ScrollViewVisit succeededUnclamped()
       {
-        return ScrollViewVisit(true);
+        return ScrollViewVisit(true, true, true);
+      }
+      static ScrollViewVisit succeededWithNativeAxes(bool x, bool y)
+      {
+        return ScrollViewVisit(true, x, y);
       }
       bool succeeded() const
       {
         return this->succeeded_;
       }
-      /** No native axis restriction on Null; layout success is checked separately. */
-      bool canMove(Axis) const
+      /** Native presence permits movement; the native setter owns range clamping. */
+      bool canMove(Axis axis) const
       {
-        return true;
+        return axis == X ? this->x_ : this->y_;
       }
-      // Native per-axis reach forms arrive with their first caller in PR 2.
     private:
-      explicit ScrollViewVisit(bool succeeded)
-          : succeeded_(succeeded)
+      ScrollViewVisit(bool succeeded, bool x, bool y)
+          : succeeded_(succeeded),
+            x_(x),
+            y_(y)
       {
       }
       bool succeeded_;
+      bool x_, y_;
     };
     namespace scene
     {

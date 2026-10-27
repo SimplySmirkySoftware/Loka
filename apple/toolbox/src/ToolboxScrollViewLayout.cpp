@@ -25,10 +25,10 @@ namespace
   }
 }
 
-short ToolboxScenePlatformController::layoutScrollView(
-    loka::app::ScrollViewNode *scrollView,
-    loka::app::scene::LayoutState &state,
-    loka::app::scene::BoundaryNode *currentBoundary)
+ToolboxScrollViewLayoutResult
+ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scrollView,
+                                                 loka::app::scene::LayoutState &state,
+                                                 loka::app::scene::BoundaryNode *currentBoundary)
 {
   const loka::app::scene::Node::LayoutInputsCheckpoint checkpoint(*scrollView);
   const loka::app::scene::NodeDirtyFlags inputs = scrollView->takeLayoutInputs();
@@ -61,7 +61,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     // the outer measurement scope remains usable for following siblings.
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
-    return 0;
+    return ToolboxScrollViewLayoutResult();
   }
   if (!this->scrollViewClipRgn_)
   {
@@ -71,7 +71,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     // scrollbar over invisible interactive content.
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
-    return 0;
+    return ToolboxScrollViewLayoutResult();
   }
 
   const int viewportRight = static_cast<int>(state.x) + state.width;
@@ -83,7 +83,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     // before any child context or CDEF is installed from a narrowed rect.
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
-    return 0;
+    return ToolboxScrollViewLayoutResult();
   }
 
   Rect viewportRect;
@@ -110,7 +110,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     checkpoint.requeue();
     if (spans.isValid())
       spans->invalidate();
-    return 0;
+    return ToolboxScrollViewLayoutResult();
   }
   // The vertical bar always reserves width: horizontal range has no feedback from horizontalBar.
   // An X step revisits every row; the next pass recaptures the band.
@@ -134,7 +134,7 @@ short ToolboxScenePlatformController::layoutScrollView(
   {
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
-    return 0;
+    return ToolboxScrollViewLayoutResult();
   }
 
   loka::dsl::CompositionCursor<loka::app::scene::Node> direct(
@@ -178,7 +178,7 @@ short ToolboxScenePlatformController::layoutScrollView(
     {
       checkpoint.requeue();
       if (spans.isValid()) spans->invalidate();
-      return 0;
+      return ToolboxScrollViewLayoutResult();
     }
 
     loka::app::scene::LayoutState childState = state;
@@ -229,17 +229,18 @@ short ToolboxScenePlatformController::layoutScrollView(
     checkpoint.requeue();
     if (spans.isValid()) spans->invalidate();
   }
+  ToolboxViewportRows rows;
   if (!shortRangeRefused)
   {
     if (spans.isValid() && spans->valid())
       spans->placed(newViewport);
-    const int clampedOffset = this->ensureViewportScrollBarControl(viewportRect,
-                                                                   scrollView,
-                                                                   extent,
-                                                                   contentRect.bottom - contentRect.top,
-                                                                   requestedExtent,
-                                                                   horizontal,
-                                                                   horizontalBar);
+    rows = this->ensureViewportScrollBarControl(viewportRect,
+                                                scrollView,
+                                                extent,
+                                                contentRect.bottom - contentRect.top,
+                                                requestedExtent,
+                                                horizontal,
+                                                horizontalBar);
     for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
       if (this->scrollBarLedger_.viewportScrollBars_[i].scrollView == scrollView)
       {
@@ -249,7 +250,7 @@ short ToolboxScenePlatformController::layoutScrollView(
       }
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishViewport(
-        horizontal.clampedOffset, clampedOffset, childWidth, contentRect.bottom - contentRect.top);
+        horizontal.clampedOffset, rows.verticalOffset(), childWidth, contentRect.bottom - contentRect.top);
   }
 
   if (state.height > 0)
@@ -270,5 +271,27 @@ short ToolboxScenePlatformController::layoutScrollView(
     }
     state.y = seatY;
   }
-  return state.width;
+  return shortRangeRefused ? ToolboxScrollViewLayoutResult() : ToolboxScrollViewLayoutResult(state.width, rows);
+}
+
+#include "ToolboxScrollViewSettlement.hpp"
+#include "ToolboxPaintSuppressScope.hpp"
+loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
+ToolboxScrollViewSeat::apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
+{
+  loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
+  const loka::core::Frame target = node.normalizedOrigin(pending);
+  {
+    ToolboxPaintSuppressScope suppress(this->controller_.paintSuppressClipRgn_);
+    std::size_t index;
+    if (this->rows_.queryRow(loka::app::ScrollViewVisit::X, index))
+      SetControlValue(this->controller_.scrollBarLedger_.scrollBarControls_[index].control,
+                      static_cast<short>(target.x));
+    if (this->rows_.queryRow(loka::app::ScrollViewVisit::Y, index))
+      SetControlValue(this->controller_.scrollBarLedger_.scrollBarControls_[index].control,
+                      static_cast<short>(target.y));
+  }
+  this->controller_.commitViewportScrollBarValue(node, this->rows_, 0);
+  return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
+      node.props.viewport_.state()->get(), loka::app::SCROLL_OK);
 }

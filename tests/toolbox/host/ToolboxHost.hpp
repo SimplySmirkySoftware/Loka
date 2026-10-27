@@ -1,3 +1,4 @@
+#include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
 #include "ToolboxFullDrawPresenter.hpp"
@@ -310,10 +311,15 @@ public:
 #else
 #include "context/ToolboxPopupMenuContext.hpp"
 #endif
+class ToolboxScrollViewSeat;
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
     public loka::app::layout::INaturalWidthSource
 {
 public:
+  friend class ToolboxScrollViewSeat;
+  void
+  commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, const Rect *dirty);
+
 #ifdef LOKA_HOST_GAP_DISPATCH
   loka::app::scene::PlatformLayoutHandlerRegistry gapLayoutRegistry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry()
@@ -422,12 +428,13 @@ public:
   void invalidateUnitOverlap(const Rect &);
   short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void renderZStack(loka::app::ZStackNode *);
-  short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
+  ToolboxScrollViewLayoutResult
+  layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void requestStructurePresent();
   virtual void onBoundaryApply(loka::app::scene::Node *, loka::app::scene::BoundaryNode *,
       const loka::app::scene::BoundaryLocalApplyInfo &, const loka::app::scene::PlatformApplyPlan &);
   virtual void releaseNodeContexts(loka::app::scene::Node *);
-  int ensureViewportScrollBarControl(
+  ToolboxViewportRows ensureViewportScrollBarControl(
       const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
   short allocateControlId() { return this->controlIds_.allocate(); }
@@ -502,12 +509,20 @@ public:
   commitViewportScrollBarValue(ViewportScrollBarBinding &, ScrollBarControlBinding &, loka::app::ScrollBarOrientation);
   void addPendingDirty(const Rect &rect)
   {
+    this->batchEvents += "D";
     this->pendingDirtyRects_.push_back(rect);
   }
 
   bool handleTextKey(char);
-  void beginBatchUpdate() {}
-  void endBatchUpdate() {}
+  std::string batchEvents;
+  void beginBatchUpdate()
+  {
+    this->batchEvents += "B";
+  }
+  void endBatchUpdate()
+  {
+    this->batchEvents += "E";
+  }
   struct EditTextControlBinding;
   void updateStateFromEdit(EditTextControlBinding &, const loka::core::String &);
   void recordEditHit(const Rect &, loka::core::State<loka::core::String> *,

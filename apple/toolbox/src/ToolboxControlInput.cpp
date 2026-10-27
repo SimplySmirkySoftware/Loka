@@ -47,31 +47,48 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(ViewportScroll
                                                                   ScrollBarControlBinding &native,
                                                                   loka::app::ScrollBarOrientation axis)
 {
-  const int settled = static_cast<int>(GetControlValue(native.control));
-  if (settled == native.appliedValue)
-  {
-    // Cancelled thumb drags and range-edge presses publish no fact.
-    return;
-  }
-  loka::app::ScrollViewNode *scrollView = binding.scrollView;
+  const std::size_t index = static_cast<std::size_t>(&native - &this->scrollBarLedger_.scrollBarControls_[0]);
+  const ToolboxViewportRows rows(0,
+                                 axis == loka::app::SCROLL_BAR_HORIZONTAL ? index : ToolboxViewportRows::absent(),
+                                 axis == loka::app::SCROLL_BAR_VERTICAL ? index : ToolboxViewportRows::absent());
   const Rect rect = binding.rect;
-  native.appliedValue = settled;
+  this->commitViewportScrollBarValue(*binding.scrollView, rows, &rect);
+}
 
-  beginBatchUpdate();
-  addPendingDirty(rect);
-  // Unlike the DSL ScrollBar commit above, this fact belongs to the
-  // ScrollView owner. The complete NodeState door selects that tracker.
-  // This input moves one axis; the preceding layout has already clamped the other.
-  switch (axis)
+void ToolboxScenePlatformController::commitViewportScrollBarValue(loka::app::ScrollViewNode &node,
+                                                                  const ToolboxViewportRows &rows,
+                                                                  const Rect *dirty)
+{
+  loka::core::Frame origin = node.requestedOrigin();
+  bool changed = false;
+  const loka::app::ScrollViewVisit::Axis axes[] = {loka::app::ScrollViewVisit::X, loka::app::ScrollViewVisit::Y};
+  for (unsigned i = 0; i != 2; ++i)
   {
-  case loka::app::SCROLL_BAR_VERTICAL:
-    scrollView->publishOrigin(scrollView->requestedOrigin().x, settled);
-    break;
-  case loka::app::SCROLL_BAR_HORIZONTAL:
-    scrollView->publishOrigin(settled, scrollView->requestedOrigin().y);
-    break;
+    std::size_t index;
+    if (!rows.queryRow(axes[i], index))
+      continue;
+    ScrollBarControlBinding &native = this->scrollBarLedger_.scrollBarControls_[index];
+    const int settled = static_cast<int>(GetControlValue(native.control));
+    if (settled == native.appliedValue)
+      continue;
+    native.appliedValue = settled;
+    if (axes[i] == loka::app::ScrollViewVisit::X)
+      origin.x = settled;
+    else
+      origin.y = settled;
+    changed = true;
   }
-  endBatchUpdate();
+  if (!changed)
+    return;
+  // No row reference crosses publication, which can re-enter projection.
+  if (dirty)
+  {
+    this->beginBatchUpdate();
+    this->addPendingDirty(*dirty);
+  }
+  node.publishOrigin(origin.x, origin.y);
+  if (dirty)
+    this->endBatchUpdate();
 }
 
 #include "ToolboxPress.cpp"
