@@ -991,7 +991,7 @@ namespace
     const Rect rect = controller.buttonControls_[0].rect;
     LOKA_VERIFY(rect.left == 15 && rect.right == 90 && rect.top == 25 && rect.bottom <= 55);
     const toolbox_host::ControlCall &draw = controller.buttonControls_[0].control->calls.back();
-    LOKA_VERIFY(draw.operation == "draw" && draw.painted);
+    LOKA_VERIFY(draw.operation == "show" && draw.painted);
     LOKA_VERIFY(draw.ownerClip.left >= outer.left && draw.ownerClip.right <= outer.right);
     State<bool> enabled(false);
     controller.buttonControls_[0].enabled = &enabled;

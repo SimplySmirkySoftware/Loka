@@ -72,6 +72,74 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
 
+  const char kPermutedButtonTitle[] = "IIIIMMMM";
+  const char kMovedButtonTitle[] = "MMMMMMMM";
+  int gButtonTitleDraws = 0;
+
+  // Multiversal declares the QuickDraw text bottleneck buffer as Ptr, Universal
+  // Interfaces as const void *; the callback must match the UPP exactly.
+#if defined(LOKA_TOOLBOX_MULTIVERSAL_INTERFACES)
+  typedef Ptr QDTextBuffer;
+#else
+  typedef const void *QDTextBuffer;
+#endif
+  pascal void CountButtonTitle(short count, QDTextBuffer text, Point numer, Point denom)
+  {
+    if (count == sizeof(kMovedButtonTitle) - 1
+        && (std::memcmp(text, kMovedButtonTitle, sizeof(kMovedButtonTitle) - 1) == 0
+            || std::memcmp(text, kPermutedButtonTitle, sizeof(kPermutedButtonTitle) - 1) == 0))
+      ++gButtonTitleDraws;
+    StdText(count, text, numer, denom);
+  }
+
+  /** Scope the title bottleneck to one synchronous window-port draw. */
+  class ButtonTitleDrawScope
+  {
+  public:
+    explicit ButtonTitleDrawScope(GrafPtr port)
+        : port_(port),
+          color_((*reinterpret_cast<short *>(port) & static_cast<short>(0xC000)) != 0),
+          oldBW_(0),
+          oldColor_(0),
+          textProc_(NewQDTextUPP(CountButtonTitle))
+    {
+      gButtonTitleDraws = 0;
+      if (this->color_)
+      {
+        this->oldColor_ = reinterpret_cast<CGrafPtr>(this->port_)->grafProcs;
+        SetStdCProcs(&this->colorProcs_);
+        this->colorProcs_.textProc = this->textProc_;
+        reinterpret_cast<CGrafPtr>(this->port_)->grafProcs = &this->colorProcs_;
+      }
+      else
+      {
+        this->oldBW_ = this->port_->grafProcs;
+        SetStdProcs(&this->bwProcs_);
+        this->bwProcs_.textProc = this->textProc_;
+        this->port_->grafProcs = &this->bwProcs_;
+      }
+    }
+    ~ButtonTitleDrawScope()
+    {
+      if (this->color_)
+        reinterpret_cast<CGrafPtr>(this->port_)->grafProcs = this->oldColor_;
+      else
+        this->port_->grafProcs = this->oldBW_;
+      DisposeQDTextUPP(this->textProc_);
+    }
+
+  private:
+    ButtonTitleDrawScope(const ButtonTitleDrawScope &);
+    ButtonTitleDrawScope &operator=(const ButtonTitleDrawScope &);
+    GrafPtr const port_;
+    const bool color_;
+    QDProcsPtr oldBW_;
+    CQDProcsPtr oldColor_;
+    QDTextUPP const textProc_;
+    QDProcs bwProcs_;
+    CQDProcs colorProcs_;
+  };
+
   /** Observe one write-to-check interval, including any intervening OS update. */
   const char *PaintDeliveryRoute(const ToolboxSceneDebugStats &before,
                                  const ToolboxSceneDebugStats &after,
@@ -422,7 +490,7 @@ namespace
     {
       loka::core::StateTrackerGuard guard(this->tracker());
       if (label)
-        this->title_.set(loka::core::String::Literal("IIIIMMMM"));
+        this->title_.set(loka::core::String::Literal(kPermutedButtonTitle));
       else
         this->enabled_.set(false);
     }
@@ -434,7 +502,7 @@ namespace
     void widenTitle()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->title_.set(loka::core::String::Literal("MMMMMMMM"));
+      this->title_.set(loka::core::String::Literal(kMovedButtonTitle));
     }
   private:
     NodeState<int> offset_;
@@ -3910,7 +3978,7 @@ namespace
         if (label)
         {
           const short beforeWidth = controller->measureTextWidth(loka::core::String::Literal("MMMMIIII"));
-          const short afterWidth = controller->measureTextWidth(loka::core::String::Literal("IIIIMMMM"));
+          const short afterWidth = controller->measureTextWidth(loka::core::String::Literal(kPermutedButtonTitle));
           std::fprintf(self->log_, "button-label-widths before=%d after=%d\r", beforeWidth, afterWidth);
           self->recordArm("button-label-equal-width", beforeWidth == afterWidth, BUTTON_LABEL_CHECK);
         }
@@ -3970,13 +4038,25 @@ namespace
         const Rect beforeMove = (**control).contrlRect;
         const bool visible = (**control).contrlVis != 0;
         node->moveButton();
-        native->drawForFlush();
+        const unsigned long drawsBefore = controller->debugStatsForTesting().totalControlDrawCount;
+        {
+          ButtonTitleDrawScope titleDraws(native->window());
+          native->drawForFlush();
+        }
+        const unsigned long controlDraws = controller->debugStatsForTesting().totalControlDrawCount - drawsBefore;
         const Rect afterMove = (**control).contrlRect;
         const bool moved = afterMove.left != beforeMove.left || afterMove.top != beforeMove.top;
         const bool updateEmpty = EmptyRgn(reinterpret_cast<WindowPeek>(native->window())->updateRgn) != 0;
-        std::fprintf(
-            self->log_, "button-own-move-full-draw visible=%d moved=%d update_empty=%d\r", visible, moved, updateEmpty);
-        self->recordArm("button-own-move-full-draw", visible && moved && updateEmpty, COMPLETE);
+        std::fprintf(self->log_,
+                     "button-own-move-full-draw visible=%d moved=%d update_empty=%d title_draws=%d control_draws=%lu\r",
+                     visible,
+                     moved,
+                     updateEmpty,
+                     gButtonTitleDraws,
+                     controlDraws);
+        self->recordArm("button-own-move-full-draw",
+                        visible && moved && updateEmpty && gButtonTitleDraws == 1 && controlDraws == 1,
+                        COMPLETE);
         controller->destroyButtonControl(911, NATIVE_HINT_DEFAULT);
         self->recordArm("button-native-retired-refuses",
                         context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED, COMPLETE);

@@ -197,8 +197,16 @@ painter's border equal to QuickDraw's.
 `button-own-move-full-draw` retains the visible Button in the label window,
 changes its layout offset, calls `drawForFlush`, and immediately reads
 `WindowPeek::updateRgn` with `EmptyRgn`. Its diagnostic line records
-`visible`, `moved`, and `update_empty`; all three must be true. Without the
-own-move validation, the Control Manager leaves move/size damage pending and
+`visible`, `moved`, and `update_empty`; all three must be true. It also requires
+`title_draws=1` and `control_draws=1` (#1043 B4-3). A scoped QuickDraw text
+bottleneck on the window port counts both the installed and replacement Button
+titles (excluding sibling text) during that flush, chains to `StdText`, and
+restores the previous GrafPort/CGrafPort
+procedures afterwards. The control count is the controller's cumulative native
+draw delta, covering ShowControl as well as Draw1Control. Removing the hide
+before move/size makes the title count exceed one; retaining Draw1Control after
+ShowControl also makes it exceed one. Omitting ShowControl's accounting makes
+the control count zero. Without the own-move validation, the Control Manager leaves move/size damage pending and
 `update_empty` is false. The host fixture pins admission with synthetic update
 rectangles; it cannot establish the real Control Manager's invalidation behavior.
 
