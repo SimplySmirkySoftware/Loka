@@ -40,4 +40,13 @@ void testNullClipRootUnitAdmissionFixture();
 void testNullClipIntersectionAndSeventhRefusal();
 void testNullClipUnconstrainedEdges();
 
+void testClipChildrenBoxRetainedEqual();
+void testClipChildrenCardRetainedEqual();
+void testClipChildrenBoxRetainedDifferent();
+void testClipChildrenCardRetainedDifferent();
+void testClipChildrenBoundaryRetained();
+void testClipChildrenMatchBirthAndParkedReentry();
+
+void testClipChildrenDetachedDelivery();
+
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP
