@@ -331,6 +331,17 @@ namespace loka
         virtual BoundaryNode *boundary() const = 0;
       };
 
+      /** Opt-in marker for a rail's clip-box context, read only through
+          asClipBoxContext so foreign contexts answer 0. Carries no native
+          operation. No rail implements it here: macOS adopts it in M2;
+          Toolbox adoption belongs to a later Toolbox PR. */
+      struct IClipBoxContext
+      {
+      protected:
+        // Never deleted through the marker; the owning context type deletes itself.
+        ~IClipBoxContext() {}
+      };
+
       // Minimal NodeContext implementation
       struct NodeContext
       {
@@ -405,6 +416,10 @@ namespace loka
           return 0;
         }
         virtual IBoundaryTaggedContext *asBoundaryTagged()
+        {
+          return 0;
+        }
+        virtual IClipBoxContext *asClipBoxContext()
         {
           return 0;
         }

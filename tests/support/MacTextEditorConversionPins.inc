@@ -6,31 +6,36 @@ void testMacTextEditorConversionHelpers()
 {
   NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
   const TextCapacity capacity = TextCapacity::of(16, 128);
+  RowBuffers rows;
+  LOKA_VERIFY(rows.admit(capacity.lines));
   NSString *texts[] = {@"", @"a\r", @"a\r\nb\nc\rd\r\n", @"a\302\205\u2028\u2029b"};
   const unsigned short counts[] = {1, 2, 5, 1};
   for (unsigned i = 0; i < 4; ++i)
   {
-    const NativeLines lines(texts[i], capacity);
+    const NativeLines lines(texts[i], capacity, rows.before());
     LOKA_VERIFY(lines.result == EDITOR_OK && lines.count == counts[i]);
     LOKA_VERIFY(NSMaxRange(lines.ranges[lines.count - 1]) == [texts[i] length]);
   }
-  const NativeLines crlf(@"a\r\nb", TextCapacity::of(2, 3));
+  const NativeLines crlf(@"a\r\nb", TextCapacity::of(2, 3), rows.before());
   LOKA_VERIFY(crlf.result == EDITOR_OK && crlf.count == 2);
   LOKA_VERIFY(crlf.lineAt(1) == 0 && crlf.lineAt(2) == 0 && crlf.lineAt(3) == 1);
   const NativeRow first(@"a\r\nb", crlf.ranges[0]);
   LOKA_VERIFY(first.bytesFloor(2) == 1 && first.bytesCeil(2) == 1);
-  LOKA_VERIFY(NativeLines(@"a\r\nb", TextCapacity::of(1, 3)).result == EDITOR_CAPACITY);
+  LOKA_VERIFY(NativeLines(@"a\r\nb", TextCapacity::of(1, 3), rows.before()).result == EDITOR_CAPACITY);
+  // The row bound alone, with bytes to spare: refused before the second row is written.
+  LOKA_VERIFY(NativeLines(@"a\rb", TextCapacity::of(1, 100), rows.before()).result == EDITOR_CAPACITY);
   const unichar malformed[][2] = {{0, 'a'}, {0xD800, 'a'}, {0xDC00, 'a'}, {0xD800, 0xD801}};
   for (unsigned i = 0; i < 4; ++i)
   {
     NSString *text = [NSString stringWithCharacters:malformed[i] length:2];
-    LOKA_VERIFY(NativeLines(text, capacity).result == EDITOR_NON_ASCII);
+    LOKA_VERIFY(NativeLines(text, capacity, rows.before()).result == EDITOR_NON_ASCII);
   }
   const unichar lone = 0xD800;
-  LOKA_VERIFY(NativeLines([NSString stringWithCharacters:&lone length:1], capacity).result == EDITOR_NON_ASCII);
+  LOKA_VERIFY(NativeLines([NSString stringWithCharacters:&lone length:1], capacity, rows.before()).result
+              == EDITOR_NON_ASCII);
 
   NSString *mixed = @"x\n\u00e9\U0001f600z";
-  const NativeLines lines(mixed, capacity);
+  const NativeLines lines(mixed, capacity, rows.before());
   const NativeRow row(mixed, lines.ranges[1]);
   LOKA_VERIFY(row.byteLength() == 7);
   LOKA_VERIFY(row.unitsAt(0) == 0 && row.unitsAt(2) == 1 && row.unitsAt(6) == 3 && row.unitsAt(7) == 4);
@@ -45,7 +50,7 @@ void testMacTextEditorConversionHelpers()
   // Shared low surrogate leaves the generic span end inside the new pair.
   NSString *before = @"x\n\U00010000", *after = @"x\n\U00010400";
   const loka::app::detail::TextChangeSpan span(NativeCharacters(before, 2), 2, NativeCharacters(after, 2), 2);
-  const NativeLines afterLines(after, capacity);
+  const NativeLines afterLines(after, capacity, rows.before());
   const NSUInteger absoluteEnd = 2 + span.afterEnd();
   LOKA_VERIFY(absoluteEnd == 3 && afterLines.lineAt(absoluteEnd) == 1);
   const NativeRow pair(after, afterLines.ranges[1]);

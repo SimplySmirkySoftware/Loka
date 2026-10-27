@@ -20,6 +20,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstdio>
+#include <climits>
 
 namespace loka
 {
@@ -213,7 +214,10 @@ namespace
     MacTextEditorContext *context;
     NSScrollView *scroll;
     NSTextView *view;
-    explicit Fixture(unsigned short count = 3, const std::string &text = "abcd", std::size_t capacity = 8192)
+    explicit Fixture(unsigned short count = 3,
+                     const std::string &text = "abcd",
+                     std::size_t capacity = 8192,
+                     unsigned short capacityLines = 256)
         : host(),
           lines(),
           controller([host.window contentView], RailMetrics()),
@@ -222,7 +226,7 @@ namespace
           scroll(nil),
           view(nil)
     {
-      LOKA_VERIFY(this->lines.attach(&this->tracker, 256, capacity) == ATTACH_OK);
+      LOKA_VERIFY(this->lines.attach(&this->tracker, capacityLines, capacity) == ATTACH_OK);
       for (unsigned short i = 0; i < count; ++i)
         LOKA_VERIFY(this->lines.insert(i, String(text)) == EDIT_OK);
       // The initial caret is a fact the seam publishes, not an app request:
@@ -808,6 +812,87 @@ void testMacTextEditorPagePriority()
   LOKA_VERIFY(Trace::instance().size() == 1 && Trace::instance().at(0).count == 1);
   LOKA_VERIFY(f.commands.reply().state()->get().kind() == Reply<EditorCommand>::GRANTED);
   LOKA_VERIFY(f.lines.find(f.cursor.state()->get().line) > 2);
+}
+
+namespace
+{
+  /** A caret subscriber that, on the first report of a settle, rebinds the
+      editor to a buffer of another row capacity while row-buffer allocation
+      is refused: the next take's reconciliation cannot admit the new capacity. */
+  struct RebindOnReport
+  {
+    Fixture &fixture;
+    loka::testing::TextBufferFixture other;
+    unsigned reports;
+    RebindOnReport(Fixture &f)
+        : fixture(f),
+          other(),
+          reports(0)
+    {
+      LOKA_VERIFY(this->other.attach(&f.tracker, 1000, 8192) == ATTACH_OK);
+      for (unsigned short i = 0; i < 80; ++i)
+        LOKA_VERIFY(this->other.insert(i, String("abcd")) == EDIT_OK);
+      f.cursor.state()->bind(&reported, this, false);
+    }
+    ~RebindOnReport()
+    {
+      this->fixture.cursor.state()->unbind(&reported, this);
+    }
+    static void reported(void *data)
+    {
+      RebindOnReport &self = *static_cast<RebindOnReport *>(data);
+      if (self.reports++)
+        return;
+      Fixture &f = self.fixture;
+      loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 1);
+      LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+          &f.node, TextEditor(self.other, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    }
+  };
+} // namespace
+
+void testMacTextEditorPageAfterFailedReconciliation()
+{
+  // Two page commands in one settle. The first is granted and reports its
+  // caret; the subscriber rebinds the editor to a 1,000-row buffer while the
+  // row-buffer allocation is refused, so reconciliation fails to admit the
+  // new capacity and the projection goes unavailable. No later take measures
+  // with the stale row buffers (Codex review on #1615): the caret stays where
+  // the first take left it, and the retry recovers once allocation works.
+  typedef loka::app::testing::SettleTrace<EditorCommand, LineCursor> Trace;
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+  {
+    Fixture f(80);
+    LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+        &f.node, TextEditor(f.lines, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    f.context->onPropsApplied();
+    RebindOnReport subscriber(f);
+    loka::app::testing::SettleTraceCapture<LineCursor>::clear();
+    {
+      StateTrackerGuard guard(&f.tracker);
+      LOKA_VERIFY(f.commands.post(EditorCommand(EditorCommand::PAGE_DOWN)) == POST_ACCEPTED);
+      LOKA_VERIFY(f.commands.post(EditorCommand(EditorCommand::PAGE_DOWN)) == POST_ACCEPTED);
+    }
+    f.context->onPropsApplied();
+    LOKA_VERIFY(subscriber.reports >= 1);
+    // The first take is granted and traced; the rebind then makes the
+    // projection unavailable (row admission refused), so the second command
+    // drains without moving the caret or measuring with stale row storage.
+    Trace &trace = Trace::instance();
+    LOKA_VERIFY(trace.size() == 1 && trace.at(0).count >= 1);
+    LOKA_VERIFY(trace.at(0).takes[0].kind() == Reply<EditorCommand>::GRANTED);
+    for (unsigned k = 1; k < trace.at(0).count; ++k)
+      LOKA_VERIFY(trace.at(0).takes[k].kind() == Reply<EditorCommand>::REFUSED);
+    LOKA_VERIFY(f.commands.pending() == 0);
+    LOKA_VERIFY(![f.view isEditable]);
+    LOKA_VERIFY(f.cursor.state()->get() == trace.at(0).after);
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+    for (int turn = 0; turn < 20 && ![f.view isEditable]; ++turn)
+      f.turn();
+    LOKA_VERIFY([f.view isEditable]);
+    LOKA_VERIFY([[f.view string] length] == 80 * 5 - 1);
+  }
+  loka::core::testing::allowLokaAllocRaw();
 }
 
 void testMacTextEditorPageEmptyLine()
@@ -1570,7 +1655,7 @@ void testMacTextEditorRefusals()
   MacPlatformContext rail;
   TextCapacity maximum;
   LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
-  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
+  LOKA_VERIFY(maximum.lines == 65535 && maximum.bytes == INT_MAX);
   for (int failure = 0; failure < 5; ++failure)
   {
     Fixture f(failure == 0 ? 256 : 3);
@@ -1596,7 +1681,9 @@ void testMacTextEditorRefusals()
     if (failure == 2)
       loka::core::testing::failLokaAllocRaw("TextEditor", "Scratch", 1);
     if (failure == 3)
-      [tentative appendString:[@"x" stringByPaddingToLength:8193 withString:@"x" startingAtIndex:0]];
+      [tentative appendString:[@"x" stringByPaddingToLength:f.lines.capacity().bytes + 1
+                                                 withString:@"x"
+                                            startingAtIndex:0]];
     if (failure == 4)
       [tentative appendString:loneSurrogate()];
     f.edit(tentative, selection.location + 1);
@@ -1611,6 +1698,78 @@ void testMacTextEditorRefusals()
     LOKA_VERIFY(NSEqualPoints([f.scroll documentVisibleRect].origin, visible.origin));
     nextKey(f);
   }
+}
+
+void testMacTextEditorCapacityRows()
+{
+  // Keep the backend installed over all retained allocations; arm only Rows after admission.
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+  {
+    Fixture f(1, "abcd", 8192, 1000);
+    for (unsigned short i = 1; i < 1000; ++i)
+      LOKA_VERIFY(f.lines.insert(i, String("abcd")) == EDIT_OK);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.lines.size() == 1000);
+    LOKA_VERIFY([[[f.view string] componentsSeparatedByString:@"\n"] count] == 1000);
+    LOKA_VERIFY([[f.view string] length] == 4999);
+    const ItemId last = f.lines.at(999).id;
+    requestCaret(f, LineCursor(last, 4));
+    f.context->onPropsApplied();
+    LOKA_VERIFY([f.view selectedRange].location == 4999);
+    LOKA_VERIFY(f.cursor.state()->get() == LineCursor(last, 4));
+
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 1);
+    f.edit([[f.view string] stringByAppendingString:@"x"], 5000);
+    LOKA_VERIFY(bytes(f.lines.at(999).value) == "abcdx");
+    [f.view setSelectedRange:NSMakeRange(4998, 0)];
+    LOKA_VERIFY(f.cursor.state()->get() == LineCursor(last, 3));
+    LOKA_VERIFY([f.view isEditable] && Access::restores(*f.context) == 0);
+    // The first matching refusal is still armed: neither callback allocated row storage.
+    void *probe = LokaAllocRaw(sizeof(NSRange), LokaAllocationSite("TextEditor", "Rows"));
+    LOKA_VERIFY(probe == 0);
+    LokaFreeRaw(probe, LokaAllocationSite("TextEditor", "Rows"));
+
+    const Snapshot snapshot(f);
+    NSString *committed = [[[f.view string] copy] autorelease];
+    // Observe the exact refusal without publishing through the storage delegate first.
+    id storageDelegate = [[f.view textStorage] delegate];
+    [[f.view textStorage] setDelegate:nil];
+    [[f.view textStorage] replaceCharactersInRange:NSMakeRange([committed length], 0) withString:@"\n"];
+    std::size_t offset = [[f.view string] length];
+    LOKA_VERIFY(Access::observe(*f.context, offset) == EDITOR_CAPACITY);
+    [[f.view textStorage] setDelegate:storageDelegate];
+    f.notify();
+    LOKA_VERIFY(![f.view isEditable]);
+    snapshot.unchanged(f);
+    f.restored(1);
+    snapshot.unchanged(f);
+    LOKA_VERIFY([[f.view string] isEqualToString:committed]);
+  }
+  loka::core::testing::allowLokaAllocRaw();
+}
+
+void testMacTextEditorRowAdmissionRefusal()
+{
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+  {
+    Fixture f;
+    const Snapshot snapshot(f);
+    NotifySubtreeNodeDetached(&f.node);
+    LifecycleFactTestAccess::DeliverFacts(&f.node);
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 1);
+    NotifySubtreeNodeAttached(&f.node);
+    LifecycleFactTestAccess::DeliverFacts(&f.node);
+    LOKA_VERIFY(![f.view isEditable]);
+    snapshot.unchanged(f);
+    // The refusal schedules a restore like a refused payload allocation; the
+    // one-shot refusal has passed, so the retry at the next flush admits.
+    for (int turn = 0; turn < 20 && ![f.view isEditable]; ++turn)
+      f.turn();
+    LOKA_VERIFY([f.view isEditable]);
+    LOKA_VERIFY([[f.view string] isEqualToString:@"abcd\nabcd\nabcd"]);
+    snapshot.unchanged(f);
+  }
+  loka::core::testing::allowLokaAllocRaw();
 }
 
 void testMacTextEditorCompositionRefusal()

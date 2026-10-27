@@ -8,6 +8,8 @@ void testMacTextEditorStorageChanges();
 void testMacTextEditorStorageAttributes();
 void testMacTextEditorMultilinePasteRefusal();
 void testMacTextEditorRefusals();
+void testMacTextEditorCapacityRows();
+void testMacTextEditorRowAdmissionRefusal();
 void testMacTextEditorCompositionRefusal();
 void testMacTextEditorNestedInput();
 void testMacTextEditorReplacementFailure();
@@ -17,6 +19,7 @@ void testMacTextEditorQueuedRequests();
 void testMacTextEditorPageCommands();
 void testMacTextEditorPageBindingReplacement();
 void testMacTextEditorPagePriority();
+void testMacTextEditorPageAfterFailedReconciliation();
 void testMacTextEditorPageEmptyLine();
 void testMacTextEditorPageGeometryDeclinesWrappedLine();
 
