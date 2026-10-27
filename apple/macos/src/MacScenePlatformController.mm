@@ -664,10 +664,10 @@ MacScenePlatformController::layoutScrollViewNode(
     loka::app::ScrollViewNode *scrollView,
     const LayoutState &state)
 {
-  if (!scrollView || this->projectionParentScopes_.activeDepth() != 0)
+  if (!scrollView || this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
-    // V1 admits one active viewport. Refuse before creating the inner native
-    // view so the outer document remains the only structural clipping parent.
+    // V1 admits one active viewport, never inside a unit. Refuse before
+    // creating the inner native view.
     return LayoutNodeResult(state.width, state.y);
   }
   const int top = scrollView->props.contentInsets_.top();
@@ -827,8 +827,7 @@ int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const L
   {
     return state.y;
   }
-  if (this->projectionParentScopes_.activeDepth() != 0 &&
-      this->projectionParentScopes_.current().hasShortRangeRefusal())
+  if (this->projectionParentScopes_.current().hasShortRangeRefusal())
   {
     return state.y;
   }
@@ -1182,15 +1181,12 @@ bool MacScenePlatformController::narrowLayoutState(
 
 void MacScenePlatformController::refuseScrollViewShortRange()
 {
-  if (this->projectionParentScopes_.activeDepth() != 0)
-  {
-    this->projectionParentScopes_.current().markShortRangeRefused();
-  }
+  this->projectionParentScopes_.current().markShortRangeRefused();
 }
 
 bool MacScenePlatformController::refuseNarrowingInScrollScope(int resultY)
 {
-  if (this->projectionParentScopes_.activeDepth() == 0)
+  if (!this->projectionParentScopes_.current().channel)
   {
     return false;
   }
