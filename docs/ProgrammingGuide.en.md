@@ -1634,7 +1634,7 @@ the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
-Toolbox clips; macOS and Win32 do not clip yet.
+Toolbox and macOS clip; Win32 does not clip yet.
 
 The clip flag is fixed when the box or card is created, on every platform.
 Applying new properties to the same box updates the other properties and keeps
