@@ -99,6 +99,7 @@ namespace loka
       {
         return axis == X ? this->movableX_ : this->movableY_;
       }
+
     private:
       ScrollViewVisit(bool succeeded, bool x, bool y)
           : succeeded_(succeeded),
