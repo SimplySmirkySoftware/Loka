@@ -1820,7 +1820,7 @@ void testWin32ScrollRequestRefusedVisits()
     f.node.addChild(nested);
     inner.request.set(ScrollTarget::Origin(0, 40));
     f.visit();
-    LOKA_VERIFY(inner.request.get().isNone() && inner.viewport.get() == Frame());
+    LOKA_VERIFY(inner.request.get().isNone() && inner.viewport.get() == Frame(0, 0, 0, 0));
     LOKA_VERIFY(!nested->getContext());
     LOKA_VERIFY(ScrollTrace::instance().size() != 0);
     LOKA_VERIFY(ScrollTrace::instance().at(0).seam[0] == SCROLL_UNAVAILABLE);
