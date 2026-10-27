@@ -313,11 +313,11 @@ bool MacScrollViewContext::applyScrollRequest(const loka::core::Frame &target)
   if (!scrollView || !documentView)
     return false;
   BoundsNotificationMute mute(*this);
-  const loka::core::Frame origin = this->node_->requestedOrigin();
+  // An unmoved axis's target is the current fact, which this visit's
+  // commitScrollMetrics already scrolled to, so only moving axes change.
   const loka::macos::MacProjection &projection = this->controller()->projection();
-  loka::macos::ScrollMacDocument(documentView,
-                                 projection.scrollOffsetToNative(target.x != origin.x ? target.x : origin.x),
-                                 projection.scrollOffsetToNative(target.y != origin.y ? target.y : origin.y));
+  loka::macos::ScrollMacDocument(
+      documentView, projection.scrollOffsetToNative(target.x), projection.scrollOffsetToNative(target.y));
   this->publishClipViewBoundsOrigin();
   return true;
 }
