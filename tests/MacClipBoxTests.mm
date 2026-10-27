@@ -804,6 +804,21 @@ void testMacClipBoxChannelRefusalKeepsHostRect()
   LOKA_VERIFY(refusedBottom < firstBottom);
   LOKA_VERIFY(host(clip) == h && NSEqualRects([h frame], hostBefore));
   LOKA_VERIFY([button superview] == h && NSEqualRects([button frame], childBefore));
+
+  // A host created on a refused visit is not placed on that visit, so its
+  // creation alone must align the bounds origin with the frame origin.
+  Fixture g;
+  BoxNode *fresh = box(180, 0);
+  BoxNode *tall = box(100, SHRT_MAX, false);
+  fresh->addChild(tall);
+  g.tree = fresh;
+  ProjectionParentScopeStack &freshScopes = Access::projectionScopes(g.controller);
+  ProjectionViewportScopeGuard freshViewport(freshScopes, freshScopes.current());
+  LOKA_VERIFY(freshViewport.isActive());
+  g.at(0, 7, 180, 100);
+  LOKA_VERIFY(freshScopes.current().hasShortRangeRefusal());
+  NSView *fh = host(fresh);
+  LOKA_VERIFY(fh && [fh frame].origin.y > 0 && NSEqualPoints([fh bounds].origin, [fh frame].origin));
 }
 
 // Runtime declarations preserve the 10.6 SDK build.
