@@ -45,6 +45,10 @@ public:
       message's screen position; refuses targets outside that root. */
   static bool forwardMouseWheel(HWND root, UINT msg, WPARAM wParam, LPARAM lParam);
 
+  /** Request side of the same settled-position commit used by bar input.
+      Only moving axes are set; a failed native read reports no fact. */
+  bool applyScrollRequest(const loka::core::Frame &target);
+
 protected:
   virtual void onNativeFact(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
@@ -57,7 +61,9 @@ private:
   bool readScrollInfo(int bar, SCROLLINFO &info) const;
   int maximumOffset(const SCROLLINFO &info) const;
   void setVisualPosition(int bar, int value);
-  void publishOffset(int bar, int value);
+  class SettledPosition;
+  /** Shared input/request commit: pre-read, set, read back, then publish the pair once. */
+  bool commitSettledPosition(const SettledPosition &selection);
 
   HWND barHwnd() const
   {
