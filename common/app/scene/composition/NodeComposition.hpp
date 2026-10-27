@@ -619,7 +619,7 @@ namespace loka
           IStateOwner *stateOwner = context_->stateOwner();
           assert(stateOwner && "NodeComposition::dangerouslyUseState requires Boundary owner");
           NodeState<T> state;
-          StateBatchBase::CreateImmediateState<T>(stateOwner, state, initial);
+          StateBatchBase::CreateImmediateState(stateOwner, state, initial);
           return state;
         }
 

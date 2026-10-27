@@ -662,6 +662,8 @@ void testScenarioReelCompositionRefusalIsTerminal()
   props.scene(new loka::app::scene::Scene(root.take()));
   NullWindow window(&context, props);
   WindowAdmissionTestApp app(window);
+  // Drain initial viewport publication before arming the rearm-only refusal.
+  app.flush();
   loka::app::scene::Scene *scene = window.scene();
   const std::size_t mountedNodeCount = scene->liveNodeCount();
   loka::scenario_tests::ScenarioReel<loka::scenario_tests::HelloWorldScenario> reel(
@@ -721,6 +723,8 @@ void testSceneRearmRefusalPreservesNewerDetachRequest()
   props.scene(new loka::app::scene::Scene(root.take()));
   NullWindow window(&context, props);
   WindowAdmissionTestApp app(window);
+  // Drain initial viewport publication before arming the rearm-only refusal.
+  app.flush();
   loka::app::scene::Scene *scene = window.scene();
   g_scenarioRearmAllocationRefusals = 0;
   scene->getAttachedState()->bind(&RefuseScenarioCompositionAtDetach, scene, false);
@@ -758,6 +762,8 @@ void testScenarioLoopCompositionRefusalQuits()
   LOKA_VERIFY(window != 0);
   {
     ScenarioLoopAdmissionTestApp app(*window);
+    // Drain initial viewport publication before arming the rearm-only refusal.
+    app.flush();
     config.setApp(&app);
     loka::app::scene::Scene *scene = window->scene();
     g_scenarioRearmAllocationRefusals = 0;
@@ -914,6 +920,8 @@ void testScenarioReelReplacementPreservesDriverAndStopsBeforeDetach()
     props.scene(new loka::app::scene::Scene(root.take()));
     NullWindow window(&context, props);
     WindowAdmissionTestApp app(window);
+    // Drain initial viewport publication before arming the rearm-only refusal.
+    app.flush();
     g_reelDriverObservation = ReelDriverObservation();
     window.scene()->getAttachedState()->bind(&ObserveReelDriverAtDetach, window.scene(), false);
     {

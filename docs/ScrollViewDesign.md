@@ -3,11 +3,10 @@
 > **Status:** Normative
 >
 > **Owns:** The ScrollView viewport fact, how each rail derives a scroll range,
-> when a scroll bar exists, and when native scroll state commits
+> when a scroll bar exists, when native scroll state commits, and scroll requests
 >
 > **Does not own:** Exact API signatures, the lazy-list window selection
-> ([KeyedSeatDesign.md](KeyedSeatDesign.md)), or the application scroll-intent
-> pipe (`scrollTo_`, #537)
+> ([KeyedSeatDesign.md](KeyedSeatDesign.md))
 >
 > **Code truth:** [ScrollView.hpp](../common/app/nodes/nestable/ScrollView.hpp),
 > [LayoutHeuristics.hpp](../common/app/layout/LayoutHeuristics.hpp)
@@ -56,8 +55,8 @@ introduced in #1357; content insets use the conversions below):
 - `contentTranslation()` gives the content-coordinate translation for placement.
 - `publishViewport(x, extentY, width, height)` is the layout writer's door. It
   converts extent Y to content Y and publishes only when origin or size changes.
-- `publishOrigin(x, extentY)` is the input writer's door: it keeps the stored
-  size because input contexts own no seat. Both doors share one conversion,
+- `publishOrigin(x, extentY)` is the report door for input completion and request
+  delivery: it keeps the stored size because input contexts own no seat. Both doors share one conversion,
   comparison and write path. The same-value no-op breaks layout echoes: the
   size publication dirties layout once, and an unchanged next pass writes nothing.
 
@@ -78,7 +77,8 @@ change their content coordinates. A Column passes remaining height by default;
 
 The viewport fact keeps its content-coordinate meaning. While the top gap is
 visible, its Y origin may be negative down to `-top`. The rail remains its only
-writer, through `publishViewport` for layout and `publishOrigin` for input.
+writer, through `publishViewport` for layout and `publishOrigin` for input
+completion and request delivery.
 The node doors contain the conversion:
 
 - `requestedOrigin()` returns extent offsets: X is unchanged from its existing
@@ -261,12 +261,28 @@ decides.
 - **Toolbox has no wheel source today.** When one arrives, its first target
   follows the same rule.
 
+## Scroll requests (#1591, PR 1)
+
+`scrollTo(Request<ScrollTarget>&)` borrows an app-owned coalescable request.
+Null takes a post at the first eligible projection visit after posting, after
+layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
+coordinates and shares `requestedOrigin()` normalization. Null has no native
+range and does not clamp to a viewport range. The viewport publication is the
+report; there is no reply door.
+
+A reached refused visit or an unbound viewport takes and drops the request.
+An unreached child keeps it pending. A retained re-entry's first visit may jump;
+intervening input does not cancel a pending post. Replacing the request binding
+or leaving ATTACHED cancels pending work synchronously; replacing only viewport
+or insets does not. Reclaim publishes nothing. See
+[request delivery sites and bounds](RequestDeliveryDesign.md#where-each-rail-consumes).
+
 ## Known debts
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already
   placed at the refused pass's translation (both axes; pre-#580 for Y).
-- The request box (`scrollTo_`, #537) is not consumed by any rail yet, so an
-  app has no sanctioned door to move the viewport; SimpleViewer resets it by
+- Native ScrollView request delivery remains for PRs 2–4 of #1591.
+  SimpleViewer still resets the viewport by
   writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
   the app a second writer of a rail result channel. That is a recorded debt,
   not a pattern to copy.

@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "Win32PlatformContext.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"

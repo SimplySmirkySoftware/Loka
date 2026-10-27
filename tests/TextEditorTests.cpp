@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "support/TextAlphabetCases.hpp"
 #include "TextUtf8Tests.hpp"
 #include "app/nodes/controls/TextDocumentLine.hpp"
@@ -1278,7 +1279,7 @@ namespace
       WRITE_AND_RESTORE
     } mode;
     unsigned admitted, applied, finished, epilogues, repaints, scheduled;
-    RequestApplication<LineCursor> completedApplication;
+    RequestApplication<LineCursor, EditorResult> completedApplication;
     template <class FixtureT>
     SettlementProbe(FixtureT &f, Mode m)
         : RailOperation<LineCursor>(f.platform, &f.node, f.context),
@@ -1310,10 +1311,10 @@ namespace
       LOKA_VERIFY(this->mode != FAIL_ARM);
       return this->mode == REFUSE_VALIDATE ? EDITOR_STALE_ID : EDITOR_OK;
     }
-    virtual RequestApplication<LineCursor> apply(Node &, const LineCursor &value)
+    virtual RequestApplication<LineCursor, EditorResult> apply(Node &, const LineCursor &value)
     {
       ++this->applied;
-      return RequestApplication<LineCursor>(
+      return RequestApplication<LineCursor, EditorResult>(
           value, EDITOR_OK, (this->mode == WRITE || this->mode == WRITE_AND_RESTORE) ? REPAINT : FOLLOW_NONE);
     }
     virtual EditorResult report(Node &base, const LineCursor &value)
@@ -1327,7 +1328,8 @@ namespace
     {
       return static_cast<TextEditorNode &>(base).props.moveCaretTo_.same(binding);
     }
-    virtual FollowUp finishTake(Node &, const CaretReply &, const RequestApplication<LineCursor> &application)
+    virtual FollowUp
+    finishTake(Node &, const CaretReply &, const RequestApplication<LineCursor, EditorResult> &application)
     {
       this->completedApplication = application;
       ++this->finished;
@@ -1610,9 +1612,9 @@ namespace
     {
       return EDITOR_OK;
     }
-    virtual RequestApplication<LineCursor> apply(Node &, const LineCursor &value)
+    virtual RequestApplication<LineCursor, EditorResult> apply(Node &, const LineCursor &value)
     {
-      return RequestApplication<LineCursor>(value, EDITOR_OK, REPAINT);
+      return RequestApplication<LineCursor, EditorResult>(value, EDITOR_OK, REPAINT);
     }
     virtual EditorResult report(Node &base, const LineCursor &value)
     {
@@ -1622,7 +1624,7 @@ namespace
     {
       return this->binding_.same(binding);
     }
-    virtual FollowUp finishTake(Node &, const CaretReply &, const RequestApplication<LineCursor> &)
+    virtual FollowUp finishTake(Node &, const CaretReply &, const RequestApplication<LineCursor, EditorResult> &)
     {
       return SCHEDULE_RESTORE;
     }
@@ -2049,9 +2051,10 @@ namespace
     {
       return EDITOR_OK;
     }
-    virtual RequestApplication<LineCursor> apply(Node &base, const TestCommand &)
+    virtual RequestApplication<LineCursor, EditorResult> apply(Node &base, const TestCommand &)
     {
-      return RequestApplication<LineCursor>(static_cast<TextEditorNode &>(base).props.cursorState()->get(), EDITOR_OK);
+      return RequestApplication<LineCursor, EditorResult>(
+          static_cast<TextEditorNode &>(base).props.cursorState()->get(), EDITOR_OK);
     }
     virtual EditorResult report(Node &base, const LineCursor &value)
     {
@@ -2061,7 +2064,8 @@ namespace
     {
       return this->binding_.same(binding);
     }
-    virtual FollowUp finishTake(Node &, const Reply<TestCommand> &, const RequestApplication<LineCursor> &)
+    virtual FollowUp
+    finishTake(Node &, const Reply<TestCommand> &, const RequestApplication<LineCursor, EditorResult> &)
     {
       return FOLLOW_NONE;
     }

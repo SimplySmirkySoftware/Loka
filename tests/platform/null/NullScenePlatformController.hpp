@@ -359,10 +359,11 @@ private:
                  const loka::app::scene::LayoutState &state,
                     const loka::app::layout::LazyWindow *range = 0,
                     loka::app::layout::StackSpans *spans = 0);
-  int layoutScrollView(loka::app::scene::Node *node,
-                       const loka::app::scene::LayoutState &state,
-                    const loka::app::layout::LazyWindow *range = 0,
-                    loka::app::layout::StackSpans *spans = 0);
+  struct ScrollViewLayoutResult;
+  ScrollViewLayoutResult layoutScrollView(loka::app::scene::Node *node,
+                                          const loka::app::scene::LayoutState &state,
+                                          const loka::app::layout::LazyWindow *range = 0,
+                                          loka::app::layout::StackSpans *spans = 0);
   int projectLayout(loka::app::scene::Node *node,
                     const loka::app::scene::LayoutState &state,
                     const loka::app::layout::LazyWindow *range = 0,

@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "ToolboxTextCapacity.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "support/TextAlphabetCases.hpp"

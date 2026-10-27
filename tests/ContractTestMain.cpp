@@ -35,6 +35,8 @@
 #include "MacFocusTests.hpp"
 #endif
 #include "TextEditorTests.hpp"
+#include "RequestReasonTests.hpp"
+#include "PendingRequestsTests.hpp"
 #include "TextDocumentFileTests.hpp"
 #include "RailMetricsTests.hpp"
 #include "SurfaceGroundTests.hpp"
@@ -146,6 +148,7 @@
 #include "SmirkBenchTests.hpp"
 #include "LazyListTests.hpp"
 #include "ScrollViewScopeTests.hpp"
+#include "ScrollViewRequestTests.hpp"
 #include "ToolboxLayoutContractTests.hpp"
 #include "ToolboxRectSurfaceRepaintPlanTests.hpp"
 #include "ToolboxGroundTests.hpp"

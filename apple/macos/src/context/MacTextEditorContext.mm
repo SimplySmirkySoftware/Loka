@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "MacTextEditorContext.hpp"
 #include "../MacInputDoor.hpp"
 #include "app/nodes/controls/TextChangeSpan.hpp"
@@ -784,14 +785,15 @@ public:
       return ready;
     return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
-  virtual loka::app::scene::RequestApplication<LineCursor> apply(loka::app::scene::Node &base,
-                                                                 const LineCursor &pending)
+  virtual loka::app::scene::RequestApplication<LineCursor, EditorResult> apply(loka::app::scene::Node &base,
+                                                                               const LineCursor &pending)
   {
     return this->applySelection<LineCursor>(base, pending, *this, this->binding_.moveCaretTo_, false);
   }
-  loka::app::scene::RequestApplication<LineCursor> applyCommand(
-      loka::app::scene::Node &base, const LineCursor &target,
-      loka::app::scene::SeatOperation<EditorCommand, LineCursor> &seat)
+  loka::app::scene::RequestApplication<LineCursor, EditorResult>
+  applyCommand(loka::app::scene::Node &base,
+               const LineCursor &target,
+               loka::app::scene::SeatOperation<EditorCommand, LineCursor> &seat)
   {
     return this->applySelection<EditorCommand>(base, target, seat, this->binding_.command_, true);
   }
@@ -821,26 +823,28 @@ public:
     return true;
   }
   template <class Request>
-  loka::app::scene::RequestApplication<LineCursor> applySelection(
-      loka::app::scene::Node &base, const LineCursor &pending,
-      loka::app::scene::SeatOperation<Request, LineCursor> &seat,
-      const loka::app::scene::RequestBinding<Request> &request, bool scroll)
+  loka::app::scene::RequestApplication<LineCursor, EditorResult>
+  applySelection(loka::app::scene::Node &base,
+                 const LineCursor &pending,
+                 loka::app::scene::SeatOperation<Request, LineCursor> &seat,
+                 const loka::app::scene::RequestBinding<Request> &request,
+                 bool scroll)
   {
     MacTextEditorContext &c = context(base);
     Projection &p = *c.projection_;
     NSTextView *view = (NSTextView *)[(NSScrollView *)c.scroll_ documentView];
     loka::app::scene::FollowUp follow = loka::app::scene::FOLLOW_NONE;
     if (!this->ensureProjection(base, follow))
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE, follow);
     if (!seat.current(base, request))
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_OWNER_MISMATCH, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_OWNER_MISMATCH, follow);
     if (p.phase != Projection::INPUT)
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE, follow);
     // INPUT excludes nested input; copy the row before invoking native setters.
     const NativeLines native(p.committed, this->binding_.buffer_->capacity(), p.rows.before());
     const int index = this->binding_.buffer_->lines().find(pending.line);
     if (native.result != EDITOR_OK || index < 0 || index >= native.count)
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_STALE_ID, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_STALE_ID, follow);
     const NSRange row = native.ranges[index];
     const std::size_t column =
         ClampedColumn(this->binding_.buffer_->lines(), static_cast<unsigned short>(index), pending.column);
@@ -849,42 +853,46 @@ public:
     p.phase = Projection::APPLYING;
     [view setSelectedRange:NSMakeRange(row.location + units, 0)];
     if (!this->hasSameContext())
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
     if (!seat.current(base, request))
     {
       if (p.phase == Projection::APPLYING)
         p.phase = Projection::RECONCILE;
-      return loka::app::scene::RequestApplication<LineCursor>(
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(
           pending, EDITOR_OWNER_MISMATCH, loka::app::scene::REPAINT);
     }
     if (p.phase != Projection::APPLYING)
-      return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_REENTRANT, loka::app::scene::REPAINT);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(
+          pending, EDITOR_REENTRANT, loka::app::scene::REPAINT);
     if (scroll)
     {
       [view scrollRangeToVisible:NSMakeRange(row.location + units, 0)];
       if (!this->hasSameContext())
-        return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_UNAVAILABLE);
+        return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
       if (!seat.current(base, request))
       {
         if (p.phase == Projection::APPLYING)
           p.phase = Projection::RECONCILE;
-        return loka::app::scene::RequestApplication<LineCursor>(
+        return loka::app::scene::RequestApplication<LineCursor, EditorResult>(
             pending, EDITOR_OWNER_MISMATCH, loka::app::scene::REPAINT);
       }
       if (p.phase != Projection::APPLYING)
-        return loka::app::scene::RequestApplication<LineCursor>(pending, EDITOR_REENTRANT, loka::app::scene::REPAINT);
+        return loka::app::scene::RequestApplication<LineCursor, EditorResult>(
+            pending, EDITOR_REENTRANT, loka::app::scene::REPAINT);
     }
     p.selection = [view selectedRange];
     p.phase = Projection::INPUT;
-    return loka::app::scene::RequestApplication<LineCursor>(clamped, EDITOR_OK, loka::app::scene::REPAINT);
+    return loka::app::scene::RequestApplication<LineCursor, EditorResult>(
+        clamped, EDITOR_OK, loka::app::scene::REPAINT);
   }
   virtual EditorResult report(loka::app::scene::Node &base, const LineCursor &applied)
   {
     return static_cast<TextEditorNode &>(base).seam(context(base).key_).moveCaret(applied);
   }
-  virtual loka::app::scene::FollowUp finishTake(loka::app::scene::Node &base,
-                                                const loka::app::scene::Reply<LineCursor> &reply,
-                                                const loka::app::scene::RequestApplication<LineCursor> &applied)
+  virtual loka::app::scene::FollowUp
+  finishTake(loka::app::scene::Node &base,
+             const loka::app::scene::Reply<LineCursor> &reply,
+             const loka::app::scene::RequestApplication<LineCursor, EditorResult> &applied)
   {
     MacTextEditorContext &c = context(base);
     Projection &p = *c.projection_;
@@ -1063,8 +1071,8 @@ public:
     MacTextEditorContext &c = *static_cast<MacTextEditorContext *>(base.getContext());
     return static_cast<TextEditorNode &>(base).seam(c.key_).availability();
   }
-  virtual loka::app::scene::RequestApplication<LineCursor> apply(
-      loka::app::scene::Node &base, const EditorCommand &pending)
+  virtual loka::app::scene::RequestApplication<LineCursor, EditorResult> apply(loka::app::scene::Node &base,
+                                                                               const EditorCommand &pending)
   {
     MacTextEditorContext &c = *static_cast<MacTextEditorContext *>(base.getContext());
     unsigned visibleLines = 0;
@@ -1073,22 +1081,23 @@ public:
     // seat subscriber may have edited the list in this settle (bot P2, #908).
     loka::app::scene::FollowUp follow = loka::app::scene::FOLLOW_NONE;
     if (!this->rail_.ensureProjection(base, follow))
-      return loka::app::scene::RequestApplication<LineCursor>(target, EDITOR_UNAVAILABLE, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(target, EDITOR_UNAVAILABLE, follow);
     if (!c.queryVisibleLines(visibleLines))
-      return loka::app::scene::RequestApplication<LineCursor>(target, EDITOR_UNAVAILABLE, follow);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(target, EDITOR_UNAVAILABLE, follow);
     const EditorResult result =
         static_cast<TextEditorNode &>(base).seam(c.key_).pageTarget(pending, visibleLines, target);
     if (result != EDITOR_OK)
-      return loka::app::scene::RequestApplication<LineCursor>(target, result);
+      return loka::app::scene::RequestApplication<LineCursor, EditorResult>(target, result);
     return this->rail_.applyCommand(base, target, *this);
   }
   virtual EditorResult report(loka::app::scene::Node &base, const LineCursor &applied)
   {
     return this->rail_.report(base, applied);
   }
-  virtual loka::app::scene::FollowUp finishTake(
-      loka::app::scene::Node &base, const loka::app::scene::Reply<EditorCommand> &reply,
-      const loka::app::scene::RequestApplication<LineCursor> &applied)
+  virtual loka::app::scene::FollowUp
+  finishTake(loka::app::scene::Node &base,
+             const loka::app::scene::Reply<EditorCommand> &reply,
+             const loka::app::scene::RequestApplication<LineCursor, EditorResult> &applied)
   {
     const loka::app::scene::Reply<LineCursor> caretReply =
         reply.kind() == loka::app::scene::Reply<EditorCommand>::REFUSED

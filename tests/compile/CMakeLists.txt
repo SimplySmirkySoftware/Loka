@@ -643,3 +643,29 @@ foreach(kind IN ITEMS refuses accepts)
     ${PROJECT_SOURCE_DIR}/tests/toolbox/host ${PROJECT_SOURCE_DIR}/tests ${PROJECT_SOURCE_DIR}/apple/toolbox/src)
   target_compile_definitions(compilePin_toolbox-update-entry_${kind} PRIVATE LOKA_HOST_ZSTACK_UNITS=1)
 endforeach()
+
+loka_compile_pin(request-header-neutral
+  REFUSES pins/refuses_request-header-neutral.cpp
+  ACCEPTS pins/accepts_request-header-neutral.cpp
+)
+
+loka_compile_pin(settle-request-reason
+  REFUSES pins/refuses_settle-request-reason.cpp
+  ACCEPTS pins/accepts_settle-request-reason.cpp
+)
+
+loka_compile_pin(request-reasons-distinct
+  REFUSES pins/refuses_request-reasons-distinct.cpp
+  ACCEPTS pins/accepts_request-reasons-distinct.cpp
+)
+
+# Focus deliberately has no Reason; the editor return type is unchanged.
+# No meaningful refusing twin exists for this compatibility acceptance pin.
+add_library(compilePin_request-focus-and-editor_accepts OBJECT pins/accepts_request-focus-and-editor.cpp)
+target_link_libraries(compilePin_request-focus-and-editor_accepts PRIVATE LokaContractTestEnvironment)
+loka_enable_warnings(compilePin_request-focus-and-editor_accepts)
+set_target_properties(compilePin_request-focus-and-editor_accepts PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+add_test(NAME compileAccepts-request-focus-and-editor
+  COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+    --config $<CONFIG> --target compilePin_request-focus-and-editor_accepts)
+set_tests_properties(compileAccepts-request-focus-and-editor PROPERTIES RESOURCE_LOCK loka-build-dir)
