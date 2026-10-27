@@ -551,7 +551,15 @@ Its request observes `NODE_DIRTY_LAYOUT`; one settle takes at most two requests,
 with `FOLLOW_UP_NONE` and no failed-arm take. The visit borrow opens before the
 helper and restores after settlement. It also covers render outside a Scene
 run, under `ToolboxInputDoor::renderDirty`'s outer borrow, which remains open
-when the visit closes. Win32 and macOS delivery remain for PRs 3–4 of #1591.
+when the visit closes.
+
+Win32 ScrollView consumes at the ScrollView arm of `computeLayoutResult` in
+`Win32ScenePlatformController.cpp`, after `layoutScrollViewNode`, including
+refused visits. Its request observes `NODE_DIRTY_LAYOUT`; one settle takes at
+most two requests, with `FOLLOW_UP_NONE` and no failed-arm take. The visit
+borrow opens before layout and restores after settlement. For `WM_SIZE`/DPI
+layouts it nests under the input door's outer borrow, which remains open when
+the visit closes. Only macOS delivery remains for PR 4 of #1591.
 
 ## Focus requests (#960, common + Null)
 
