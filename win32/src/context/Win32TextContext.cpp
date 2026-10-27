@@ -417,7 +417,7 @@ bool Win32TextContext::captureBitmap(loka::core::resource::Image &out) const
 
 void Win32TextContext::clearMeasurement()
 {
-  this->measurement_ = loka::app::MeasurementResult<Constraint, int>();
+  this->measurement_.invalidate();
   this->textDelivery_ = loka::app::scene::PaintAnswer::refused(loka::app::scene::PAINT_REFUSED_HISTORY_UNKNOWN);
   if (this->hwnd())
     this->relayout(0, 0, 0, 0);
