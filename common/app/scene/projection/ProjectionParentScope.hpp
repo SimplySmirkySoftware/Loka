@@ -240,6 +240,12 @@ namespace loka
           return true;
         }
 
+        /** Whether the immediate enclosing frame supplies a clip-only boundary. */
+        bool currentIsClip() const
+        {
+          return this->current().kind_ == ProjectionParentScope::CLIP;
+        }
+
         bool insideUnit() const
         {
           return this->containsKind(ProjectionParentScope::UNIT);

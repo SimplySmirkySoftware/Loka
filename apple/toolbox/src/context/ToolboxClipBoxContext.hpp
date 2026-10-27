@@ -40,7 +40,7 @@ public:
   {
     return this->placement_;
   }
-  /** Replace the latest placement; layout starts writing this in T2a-2b. */
+  /** Replace the latest placement, including none after an unflagged or refused placement. */
   void setPlacement(const ToolboxClipPlacement &placement)
   {
     this->placement_ = placement;
