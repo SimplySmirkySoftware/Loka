@@ -931,7 +931,8 @@ MacScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const La
     if (this->refuseNarrowingInScrollScope(resultY))
       return LayoutNodeResult(state.width, resultY);
   }
-  context->place(this->projection().projectFrame(loka::core::Frame(projected.x, projected.y, width, resultY - state.y)));
+  context->place(
+      this->projection().projectFrame(loka::core::Frame(projected.x, projected.y, width, resultY - state.y)));
   return LayoutNodeResult(state.width, resultY);
 }
 
