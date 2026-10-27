@@ -1256,14 +1256,11 @@ void testMacEditMenuDispatchToTextView()
   [window setReleasedWhenClosed:NO];
   LokaEditDispatchTextView *view = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
   [window setContentView:view];
-  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  [NSApp activateIgnoringOtherApps:YES];
-  [window makeKeyAndOrderFront:nil];
+  const bool key = loka::testing::MacRequestKeyWindow(window);
   LOKA_VERIFY([window makeFirstResponder:view]);
   NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
   SEL verbs[] = { @selector(undo:), @selector(cut:), @selector(copy:), @selector(paste:), @selector(selectAll:) };
-  if ([window isKeyWindow])
+  if (key)
   {
     for (unsigned i = 0; i < 5; ++i)
     {
@@ -1274,8 +1271,7 @@ void testMacEditMenuDispatchToTextView()
     }
   }
   else
-    std::printf("[skip] Edit menu NSTextView dispatch: %s\n",
-                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "window did not become key");
+    std::printf("[skip] Edit menu NSTextView dispatch: %s\n", loka::testing::MacKeyRefusalReason());
   [window makeFirstResponder:nil];
   [window orderOut:nil];
   [window close];
@@ -1312,11 +1308,7 @@ void testMacEditMenuKeyPanelFieldEditor()
   NSString *text = @"Panel field editor text";
   [field setStringValue:text];
   [[panel contentView] addSubview:field];
-  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  [NSApp activateIgnoringOtherApps:YES];
-  [panel makeKeyAndOrderFront:nil];
-  if ([panel isKeyWindow])
+  if (loka::testing::MacRequestKeyWindow(panel))
   {
     LOKA_VERIFY([panel makeFirstResponder:field]);
     NSTextView *fieldEditor = (NSTextView *)[panel fieldEditor:YES forObject:field];
@@ -1339,8 +1331,7 @@ void testMacEditMenuKeyPanelFieldEditor()
     LOKA_VERIFY(calls == 0);
   }
   else
-    std::printf("[skip] Edit menu key panel field editor: %s\n",
-                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "panel did not become key");
+    std::printf("[skip] Edit menu key panel field editor: %s\n", loka::testing::MacKeyRefusalReason());
   [panel makeFirstResponder:nil];
   [panel orderOut:nil];
   [panel close];
@@ -1373,16 +1364,14 @@ void testMacEditMenuKeyWindowBeforeMainWindow()
   LokaEditDispatchTextView *keyView = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
   [mainWindow setContentView:mainView];
   [keyWindow setContentView:keyView];
-  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-  [NSApp activateIgnoringOtherApps:YES];
-  [mainWindow makeKeyAndOrderFront:nil];
+  const bool mainKey = loka::testing::MacRequestKeyWindow(mainWindow);
   [mainWindow makeMainWindow];
   [keyWindow orderFront:nil];
   [keyWindow makeKeyWindow];
+  const bool key = loka::testing::MacWaitForKeyStatus(keyWindow, true);
   LOKA_VERIFY([mainWindow makeFirstResponder:mainView]);
   LOKA_VERIFY([keyWindow makeFirstResponder:keyView]);
-  if ([keyWindow isKeyWindow])
+  if (mainKey && key)
   {
     if ([NSApp keyWindow] != [NSApp mainWindow])
     {
@@ -1393,21 +1382,20 @@ void testMacEditMenuKeyWindowBeforeMainWindow()
       LOKA_VERIFY([keyView sender] == item && [mainView calls] == 0 && calls == 0);
       [keyWindow orderOut:nil];
       [mainWindow makeKeyWindow];
-      if ([mainWindow isKeyWindow])
+      if (loka::testing::MacWaitForKeyStatus(mainWindow, true))
       {
         [[item target] performSelector:[item action] withObject:item];
         LOKA_VERIFY([mainView calls] == 1 && [mainView verb] == @selector(cut:));
         LOKA_VERIFY([mainView sender] == item && [keyView calls] == 1 && calls == 0);
       }
       else
-        std::printf("[skip] Edit menu key window vs main window: main window did not become key again\n");
+        std::printf("[skip] Edit menu key window vs main window: %s\n", loka::testing::MacKeyRefusalReason());
     }
     else
       std::printf("[skip] Edit menu key window vs main window: AppKit made the same window key and main\n");
   }
   else
-    std::printf("[skip] Edit menu key window vs main window: %s\n",
-                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "window did not become key");
+    std::printf("[skip] Edit menu key window vs main window: %s\n", loka::testing::MacKeyRefusalReason());
   [keyWindow makeFirstResponder:nil];
   [mainWindow makeFirstResponder:nil];
   [keyWindow orderOut:nil];
