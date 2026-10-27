@@ -972,3 +972,57 @@ void testNullClipUnconstrainedEdges()
     LOKA_VERIFY(probe->visited);
   }
 }
+
+void testClipBoxWidthResolutionTable()
+{
+  const int declared[] = {-7, 0, 20, 40, 60};
+  const int offered[] = {-9, 0, 40};
+  const int expected[5][3] = {{0, 0, 40}, {0, 0, 40}, {20, 20, 20}, {40, 40, 40}, {60, 60, 40}};
+  for (unsigned d = 0; d != 5; ++d)
+    for (unsigned o = 0; o != 3; ++o)
+    {
+      int width = -1234;
+      const bool resolved = loka::app::layout::ResolveClipBoxWidth(declared[d], offered[o], width);
+      LOKA_VERIFY(resolved == (expected[d][o] > 0));
+      LOKA_VERIFY(width == (resolved ? expected[d][o] : -1234));
+    }
+}
+
+void testProjectionClipAdmissionQuery()
+{
+  using namespace loka::app::scene;
+  // Exercise CLIP-only, viewport, unit, and viewport + unit prefixes.
+  for (unsigned prefix = 0; prefix != 4; ++prefix)
+  {
+    ProjectionParentScopeStack scopes;
+    const ProjectionParentScope frame;
+    LOKA_VERIFY(scopes.admitsClip());
+    if (prefix & 1)
+      LOKA_VERIFY(scopes.pushViewport(frame));
+    if (prefix & 2)
+      LOKA_VERIFY(scopes.pushUnit(frame));
+    const unsigned firstDepth = scopes.activeDepth();
+    for (unsigned depth = firstDepth; depth <= 6; ++depth)
+    {
+      const bool admitted = scopes.admitsClip();
+      LOKA_VERIFY(scopes.activeDepth() == depth);
+      LOKA_VERIFY(admitted == (depth < 6));
+      const bool pushed = scopes.pushClip(frame);
+      LOKA_VERIFY(pushed == admitted);
+      LOKA_VERIFY(scopes.activeDepth() == (depth < 6 ? depth + 1 : depth));
+    }
+    while (scopes.activeDepth())
+      LOKA_VERIFY(scopes.pop());
+    LOKA_VERIFY(scopes.admitsClip());
+  }
+}
+
+void testClipBoxContextDefaultDoor()
+{
+  struct PlainContext : loka::app::scene::NodeContext
+  {
+  };
+  PlainContext context;
+  loka::app::scene::NodeContext &base = context;
+  LOKA_VERIFY(base.asClipBoxContext() == 0);
+}
