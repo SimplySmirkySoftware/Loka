@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 void check(loka::app::TextEditorProps &props,
            loka::app::scene::NodeState<loka::app::LineCursor> &bare,

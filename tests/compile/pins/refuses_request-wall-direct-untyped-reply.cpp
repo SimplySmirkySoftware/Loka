@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "request_command.hpp"
 using namespace loka::app;
 using namespace loka::app::scene;

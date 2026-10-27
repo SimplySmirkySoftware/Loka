@@ -148,6 +148,9 @@ namespace loka
           CreateImmediateState(owner, out.request_, ::loka::app::detail::FocusTarget<K>::None());
         }
 
+        // Call these with T deduced, never as CreateImmediateState<T>(...): with an explicit
+        // argument GCC 4.2 instantiates each overload's parameter class while ranking them,
+        // and RequestQueueBase<T> needs RequestTraits<T>::Reason, which a plain state type lacks.
         template <typename T> static void CreateImmediateState(IStateOwner *owner, Request<T> &out, const T &initial)
         {
           (void)sizeof(typename RequestDeclarationWall<T>::Wall);

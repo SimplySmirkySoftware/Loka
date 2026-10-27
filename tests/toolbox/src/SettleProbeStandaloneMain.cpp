@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "../../support/TextBufferFixture.hpp"
 #include <cstdio>
 #include <Processes.h>
@@ -47,16 +48,16 @@ namespace
     {
       return EDITOR_OK;
     }
-    virtual RequestApplication<LineCursor> apply(Node &, const Request &)
+    virtual RequestApplication<LineCursor, EditorResult> apply(Node &, const Request &)
     {
       ++this->applications_;
-      return RequestApplication<LineCursor>(LineCursor(loka::core::ItemId(1, 1), 0), EDITOR_OK);
+      return RequestApplication<LineCursor, EditorResult>(LineCursor(loka::core::ItemId(1, 1), 0), EDITOR_OK);
     }
     virtual EditorResult report(Node &, const LineCursor &)
     {
       return EDITOR_OK;
     }
-    virtual FollowUp finishTake(Node &, const Reply<Request> &, const RequestApplication<LineCursor> &)
+    virtual FollowUp finishTake(Node &, const Reply<Request> &, const RequestApplication<LineCursor, EditorResult> &)
     {
       return FOLLOW_NONE;
     }

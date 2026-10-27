@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 /** View-key pins share the bar fixture and exercise production input bodies. */
 namespace
 {

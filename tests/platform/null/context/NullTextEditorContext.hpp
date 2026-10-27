@@ -1,5 +1,6 @@
 #ifndef LOKA_NULL_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_NULL_TEXT_EDITOR_CONTEXT_HPP
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "platform/null/NullEditCommandRecorder.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/scene/state/RequestSettlement.hpp"

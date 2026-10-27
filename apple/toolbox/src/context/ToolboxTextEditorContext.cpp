@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "../ToolboxTextCapacity.hpp"
 #include "ToolboxPaintGround.hpp"
 #include "ToolboxEditKey.hpp"
@@ -322,16 +323,16 @@ public:
     }
     return follow;
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const LineCursor &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const LineCursor &pending)
   {
     ToolboxTextEditorContext &c = context(base);
     const scene::FollowUp follow = this->prepareApply(base);
     if (c.status_ != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(pending, c.status_, follow);
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, c.status_, follow);
     const short offset = c.offsetOf(pending);
     const LineCursor clamped = c.cursorAt(offset);
     TESetSelect(offset, offset, c.te_);
-    return scene::RequestApplication<LineCursor>(clamped, EDITOR_OK, scene::REPAINT);
+    return scene::RequestApplication<LineCursor, EditorResult>(clamped, EDITOR_OK, scene::REPAINT);
   }
   virtual EditorResult report(scene::Node &base, const LineCursor &applied)
   {
@@ -339,7 +340,7 @@ public:
   }
   virtual scene::FollowUp finishTake(scene::Node &base,
                                      const scene::Reply<LineCursor> &reply,
-                                     const scene::RequestApplication<LineCursor> &application)
+                                     const scene::RequestApplication<LineCursor, EditorResult> &application)
   {
     ToolboxTextEditorContext &c = context(base);
     scene::FollowUp follow = scene::FOLLOW_NONE;
@@ -484,21 +485,21 @@ public:
     ToolboxTextEditorContext &c = *static_cast<ToolboxTextEditorContext *>(base.getContext());
     return static_cast<TextEditorNode &>(base).seam(c.key_).availability();
   }
-  virtual scene::RequestApplication<LineCursor> apply(scene::Node &base, const EditorCommand &pending)
+  virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const EditorCommand &pending)
   {
     ToolboxTextEditorContext &c = *static_cast<ToolboxTextEditorContext *>(base.getContext());
     unsigned visibleLines = 0;
     LineCursor target;
     const scene::FollowUp follow = this->rail_.prepareApply(base);
     if (c.status_ != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(target, c.status_, follow);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, c.status_, follow);
     if (!c.queryVisibleLines(visibleLines))
-      return scene::RequestApplication<LineCursor>(target, EDITOR_UNAVAILABLE, follow);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, EDITOR_UNAVAILABLE, follow);
     const EditorResult result =
         static_cast<TextEditorNode &>(base).seam(c.key_).pageTarget(pending, visibleLines, target);
     if (result != EDITOR_OK)
-      return scene::RequestApplication<LineCursor>(target, result, follow);
-    const scene::RequestApplication<LineCursor> applied = this->rail_.apply(base, target);
+      return scene::RequestApplication<LineCursor, EditorResult>(target, result, follow);
+    const scene::RequestApplication<LineCursor, EditorResult> applied = this->rail_.apply(base, target);
     if (applied.result() == EDITOR_OK)
     {
       this->rail_.armCommandScroll(base);
@@ -512,7 +513,7 @@ public:
   }
   virtual scene::FollowUp finishTake(scene::Node &base,
                                      const scene::Reply<EditorCommand> &reply,
-                                     const scene::RequestApplication<LineCursor> &applied)
+                                     const scene::RequestApplication<LineCursor, EditorResult> &applied)
   {
     const scene::Reply<LineCursor> caretReply = reply.kind() == scene::Reply<EditorCommand>::REFUSED
                                                     ? scene::Reply<LineCursor>::Refused(applied.value(), reply.reason())

@@ -1,3 +1,4 @@
+#include "app/nodes/controls/TextEditorRequests.hpp"
 #include "support/TextBufferFixture.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "app/nodes/nestable/Show.hpp"
