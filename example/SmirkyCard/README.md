@@ -491,8 +491,10 @@ with a tall list, a horizontal carousel and a detail page. The card loads its
 pictures once: `c.machine.displayDepth !== null && c.machine.displayDepth < 8`
 selects `NAMEM` (320x200 mono) for details and `NAMEMS` (160x100 mono) for
 list/carousel thumbnails; otherwise `NAME` (320x200 color) serves both.
-Named seats always refer to full pictures. Card sizes remain 150x94, 110x70
-and 320x200 respectively. [disk-pictures.txt](disk-pictures.txt) stages all 39
+Named seats always refer to full pictures. List cards are 160x100, the mono
+thumbnail's own size, so the list draws them unscaled (a 150x94 frame cost a
+QuickDraw scale per card, 49 ms instead of 21 ms each on a 68030); carousel
+cards are 110x70 and the detail page 320x200. [disk-pictures.txt](disk-pictures.txt) stages all 39
 machine stems plus `ICON` (320x200 colour) and `ICONMS` (160x100 mono), the
 smirking compact Mac shown on the About card; `ICONM` is generated but not staged.
 
