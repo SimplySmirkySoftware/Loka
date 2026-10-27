@@ -1327,7 +1327,7 @@ void testMacEditMenuKeyPanelFieldEditor()
     item = [menu itemAtIndex:3];
     LOKA_VERIFY([NSApp targetForAction:@selector(copy:) to:nil from:item] == fieldEditor);
     [[item target] performSelector:[item action] withObject:item];
-    LOKA_VERIFY([[pasteboard stringForType:NSStringPboardType] isEqualToString:text]);
+    LOKA_VERIFY([[pasteboard stringForType:NSPasteboardTypeString] isEqualToString:text]);
     LOKA_VERIFY(calls == 0);
   }
   else
