@@ -3,6 +3,7 @@
 #include "support/MacWindowSession.hpp"
 #include <cstdio>
 #include "MacApp.hpp"
+#include "MacObjCCompat.hpp"
 #include "MacWindow.hpp"
 #include "MacScenePlatformController.hpp"
 #include "testing/MacWindowTestAccess.hpp"
@@ -1249,7 +1250,7 @@ void testMacEditMenuDispatchToTextView()
   offered << edit;
   LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
   NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(50, 50, 240, 120)
-                                                 styleMask:NSTitledWindowMask
+                                                 styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
                                                    backing:NSBackingStoreBuffered
                                                      defer:NO];
   [window setReleasedWhenClosed:NO];
@@ -1286,4 +1287,64 @@ void testMacEditMenuDispatchToTextView()
   LOKA_VERIFY(calls == 1);
   app.menuAttachment().disconnect();
   binding.unbind(&countEditMenuBinding, &calls);
+}
+
+// This test-only replacement models a sender-dependent supplemental target.
+// All unrelated action resolution still uses AppKit's original implementation.
+static NSMenuItem *gEditResolutionSender = nil;
+static id gEditResolutionTarget = nil;
+@interface NSApplication (LokaMenuSenderResolution)
+- (id)lokaMenuTargetForAction:(SEL)action to:(id)target from:(id)sender;
+@end
+@implementation NSApplication (LokaMenuSenderResolution)
+- (id)lokaMenuTargetForAction:(SEL)action to:(id)target from:(id)sender
+{
+  if (action == @selector(cut:) && target == nil && gEditResolutionSender)
+    return sender == gEditResolutionSender ? gEditResolutionTarget : nil;
+  return [self lokaMenuTargetForAction:action to:target from:sender];
+}
+@end
+
+namespace
+{
+  struct SenderResolution
+  {
+    Method original;
+    Method replacement;
+    SenderResolution(NSMenuItem *sender, id target)
+        : original(class_getInstanceMethod([NSApplication class], @selector(targetForAction:to:from:))),
+          replacement(class_getInstanceMethod([NSApplication class], @selector(lokaMenuTargetForAction:to:from:)))
+    {
+      LOKA_VERIFY(this->original != NULL && this->replacement != NULL);
+      gEditResolutionSender = sender;
+      gEditResolutionTarget = target;
+      method_exchangeImplementations(this->original, this->replacement);
+    }
+    ~SenderResolution()
+    {
+      method_exchangeImplementations(this->original, this->replacement);
+      gEditResolutionSender = nil;
+      gEditResolutionTarget = nil;
+    }
+  };
+} // namespace
+
+void testMacEditMenuValidationUsesRealSender()
+{
+  CocoaHost host;
+  TestApp app;
+  MenuBarDefinition offered = validationBar(0);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSMenuItem *item = commandItem();
+  EditValidationFacts facts(app);
+  LokaEditMenuValidator *target = [[LokaEditMenuValidator alloc] initWithFacts:&facts];
+  {
+    SenderResolution resolution(item, target);
+    LOKA_VERIFY(app.validateNativeMenuCommand((void *)item));
+    LOKA_VERIFY(facts.menuCalls == 1 && facts.genericCalls == 0);
+    LOKA_VERIFY([[item title] isEqualToString:@"Cut"]);
+    LOKA_VERIFY([item action] == @selector(handleMenuAction:));
+  }
+  [target release];
+  app.menuAttachment().disconnect();
 }

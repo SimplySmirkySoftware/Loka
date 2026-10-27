@@ -30,4 +30,5 @@ void testMacEditMenuNativeValidation();
 void testMacEditMenuValidationReentry();
 void testMacEditMenuNoTargetValidationAndFallback();
 void testMacEditMenuDispatchToTextView();
+void testMacEditMenuValidationUsesRealSender();
 #endif // LOKA_TESTS_MAC_MENU_PROJECTION_TESTS_HPP
