@@ -543,8 +543,15 @@ at the ScrollView branch of `layoutNode`, including refused visits. Its request
 box marks `NODE_DIRTY_LAYOUT`; each settle takes at most two requests, with no
 failed-arm take because `finishSettle` returns `FOLLOW_UP_NONE`. Consumption
 and origin publication may coalesce into the next placement pass. Children a
-refused ancestor never reaches keep their pending requests. Native ScrollView
-rails do not deliver yet (PR 1 of #1591).
+refused ancestor never reaches keep their pending requests.
+
+Toolbox ScrollView consumes at the ScrollView layout arm of `LayoutNode` in
+`ToolboxNodeDispatch.cpp`, after `layoutScrollView`, including refused visits.
+Its request observes `NODE_DIRTY_LAYOUT`; one settle takes at most two requests,
+with `FOLLOW_UP_NONE` and no failed-arm take. The visit borrow opens before the
+helper and restores after settlement. It also covers render outside a Scene
+run, under `ToolboxInputDoor::renderDirty`'s outer borrow, which remains open
+when the visit closes. Win32 and macOS delivery remain for PRs 3–4 of #1591.
 
 ## Focus requests (#960, common + Null)
 

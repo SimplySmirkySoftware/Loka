@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxScrollViewVisit.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
@@ -189,13 +190,13 @@ public:
 
   /** Projects the ScrollView viewport's own scrollBarProc without borrowing
       the DSL ScrollBar binding or its window-tracker commit clock. */
-  int ensureViewportScrollBarControl(const Rect &viewportRect,
-                                     loka::app::ScrollViewNode *scrollView,
-                                     int contentHeight,
-                                     int viewportHeight,
-                                     int requestedOffset,
-                                     const ToolboxScrollViewMetrics &horizontal,
-                                     bool horizontalBar);
+  ToolboxViewportRows ensureViewportScrollBarControl(const Rect &viewportRect,
+                                                     loka::app::ScrollViewNode *scrollView,
+                                                     int contentHeight,
+                                                     int viewportHeight,
+                                                     int requestedOffset,
+                                                     const ToolboxScrollViewMetrics &horizontal,
+                                                     bool horizontalBar);
   void destroyViewportScrollBarControl(
       loka::app::ScrollViewNode *scrollView,
       loka::app::scene::NativeLifetimeHint lifetimeHint);
@@ -234,9 +235,9 @@ public:
   void invalidateUnitOverlap(const Rect &);
   short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void renderZStack(loka::app::ZStackNode *);
-  short layoutScrollView(loka::app::ScrollViewNode *scrollView,
-                         loka::app::scene::LayoutState &state,
-                         loka::app::scene::BoundaryNode *currentBoundary);
+  ToolboxScrollViewLayoutResult layoutScrollView(loka::app::ScrollViewNode *scrollView,
+                                                 loka::app::scene::LayoutState &state,
+                                                 loka::app::scene::BoundaryNode *currentBoundary);
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *surface,
                                const loka::core::Frame &extent)
   {
@@ -429,9 +430,16 @@ public:
   /** Publishes the value a finished tracking loop settled on, in the order
       the ruling fixes: binding first, then onChange. */
   void commitScrollBarValueAt(std::size_t index);
+  void
+  commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, const Rect *dirty);
   void commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
                                     ScrollBarControlBinding &native,
                                     loka::app::ScrollBarOrientation axis);
+  /** Request side of the same commit: sets each row this visit committed,
+      without painting, then commits with no pending dirty. */
+  void applyViewportScrollRequest(loka::app::ScrollViewNode &node,
+                                  const ToolboxViewportRows &rows,
+                                  const loka::core::Frame &target);
   /** Optional move output is empty when unchanged/refused. A caller requesting it
       validates only after its final native setter/show, while the window port is current.
       Editor presentation is separate and conservatively leaves OS damage pending. */
