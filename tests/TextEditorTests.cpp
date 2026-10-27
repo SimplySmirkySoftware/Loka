@@ -1,4 +1,9 @@
 #include "app/nodes/controls/TextEditorRequests.hpp"
+#include "support/TextAlphabetCases.hpp"
+#include "TextUtf8Tests.hpp"
+#include "app/nodes/controls/TextDocumentLine.hpp"
+#include "platform/null/NullPlatformContext.hpp"
+#include "support/TextBufferFixture.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
@@ -31,7 +36,7 @@ namespace
   typedef loka::testing::TextEditorInput Input;
   struct Fixture : loka::app::testing::TextEditorStateOwner
   {
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     NullScenePlatformController platform;
     TextEditorNode node;
     NullTextEditorContext *context;
@@ -162,13 +167,22 @@ namespace
 void testTextEditorActions()
 {
   // Column diffs are independent of native selection and storage edit unions.
-  struct SpanCase { const char *before; const char *after; unsigned start, oldEnd, newEnd; };
-  const SpanCase spanCases[] = {
-      {"abcd", "abxcd", 2, 2, 3}, {"abxcd", "abcd", 2, 3, 2},
-      {"abxcd", "abYZQd", 2, 4, 5}, {"abcd", "abXYd", 2, 3, 4},
-      {"aaaa", "aaa", 3, 4, 3}, {"", "x", 0, 0, 1},
-      {"x", "", 0, 1, 0}, {"abcd", "abcd", 4, 4, 4},
-      {"abcd", "Xbcd", 0, 1, 1}, {"abcd", "abcdX", 4, 4, 5}};
+  struct SpanCase
+  {
+    const char *before;
+    const char *after;
+    unsigned start, oldEnd, newEnd;
+  };
+  const SpanCase spanCases[] = {{"abcd", "abxcd", 2, 2, 3},
+                                {"abxcd", "abcd", 2, 3, 2},
+                                {"abxcd", "abYZQd", 2, 4, 5},
+                                {"abcd", "abXYd", 2, 3, 4},
+                                {"aaaa", "aaa", 3, 4, 3},
+                                {"", "x", 0, 0, 1},
+                                {"x", "", 0, 1, 0},
+                                {"abcd", "abcd", 4, 4, 4},
+                                {"abcd", "Xbcd", 0, 1, 1},
+                                {"abcd", "abcdX", 4, 4, 5}};
   for (unsigned i = 0; i < sizeof(spanCases) / sizeof(spanCases[0]); ++i)
   {
     const std::string before(spanCases[i].before), after(spanCases[i].after);
@@ -324,9 +338,7 @@ void testTextEditorRefusals()
   {
     Fixture f;
     Observer observer(f);
-    LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-    LOKA_VERIFY(f.lines.attach(&f.tracker, 256) == ATTACH_OK);
-    LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+    LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     observer.immediate = observer.settled = 0;
     Snapshot snapshot(f);
     LOKA_VERIFY(Input::type(*f.context, 'x') == EDITOR_STALE_ID);
@@ -373,7 +385,7 @@ void testTextEditorRefusals()
     LOKA_VERIFY(bytes(f.lines.at(0).value) == "abxycd");
   }
   {
-    Fixture f(257, "a", 257);
+    Fixture f(257, std::string(32, 'a'), 257);
     LOKA_VERIFY(Input::status(*f.context) == EDITOR_CAPACITY);
     LOKA_VERIFY(Input::buffer(*f.context).empty());
   }
@@ -398,7 +410,7 @@ void testTextEditorRefusals()
     std::string normalizedPaste(7800, 'a');
     for (int i = 0; i < 255; ++i)
       normalizedPaste += "\r\n";
-    LOKA_VERIFY(normalizedPaste.size() > TextEditorProps::kMaxBytes);
+    LOKA_VERIFY(normalizedPaste.size() > 8192);
     LOKA_VERIFY(Input::paste(*f.context, normalizedPaste) == EDITOR_OK);
     LOKA_VERIFY(f.lines.size() == 256 && Input::buffer(*f.context).size() == 8055);
   }
@@ -490,7 +502,7 @@ namespace
   class EditorSceneRoot : public BoundaryNodeFor<EditorSceneRoot>
   {
   public:
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Reported<LineCursor> cursor;
     RequestWithReply<LineCursor> request;
     explicit EditorSceneRoot(const BoundaryPropsFor<EditorSceneRoot> &p)
@@ -507,7 +519,7 @@ namespace
       StateTracker *owner = 0;
       if (this->lines.queryMutationTracker(owner) == EDIT_OK)
         return;
-      LOKA_VERIFY(this->lines.attach(this->tracker()->asPushTracker(), 258) == ATTACH_OK);
+      LOKA_VERIFY(this->lines.attach(this->tracker()->asPushTracker(), 256) == ATTACH_OK);
       LOKA_VERIFY(this->lines.insert(0, String("hello")) == EDIT_OK);
       this->request.set(LineCursor(this->lines.at(0).id, 1));
     }
@@ -566,12 +578,11 @@ void testTextEditorScene()
   for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
     LOKA_VERIFY(scene.flushInvalidation());
   LOKA_VERIFY(Input::buffer(*context) == "external");
-  for (unsigned short i = 1; i < 257; ++i)
-    LOKA_VERIFY(root->lines.insert(i, String()) == EDIT_OK);
+  LOKA_VERIFY(root->lines.update(root->lines.at(0).id, String(std::string(8193, 'x'))) == EDIT_OK);
   platform.projectLayoutForTesting(root, layout);
   LOKA_VERIFY(Input::status(*context) == EDITOR_CAPACITY && Input::buffer(*context).empty());
   LOKA_VERIFY(Input::type(*context, 'x') == EDITOR_CAPACITY);
-  LOKA_VERIFY(root->lines.remove(root->lines.at(256).id) == EDIT_OK);
+  LOKA_VERIFY(root->lines.update(root->lines.at(0).id, String("external")) == EDIT_OK);
   platform.projectLayoutForTesting(root, layout);
   LOKA_VERIFY(Input::status(*context) == EDITOR_OK && Input::type(*context, 'y') == EDITOR_OK);
   loka::dsl::testing::SceneTestAccess::unmount(scene);
@@ -763,7 +774,7 @@ void testTextEditorReplaceRefusals()
     before.unchanged(tight);
   }
   {
-    Fixture full(256, "", 257);
+    Fixture full(256, "", 256);
     const LineCursor first(full.lines.at(0).id, 0);
     const Snapshot before(full);
     LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(full.node).applyReplace(first, first, "\r", 1)
@@ -978,7 +989,6 @@ void testTextEditorRequestReposts()
     }
     f.tracker.setInvalidateCallback(0, 0);
   }
-
 }
 void testTextEditorRequestRefusal()
 {
@@ -989,16 +999,18 @@ void testTextEditorRequestRefusal()
   f.context->onPropsApplied();
   LOKA_VERIFY(f.request.get().isNone());
   LOKA_VERIFY(f.cursor.state()->get() == before && observer.reports == 0);
-  f.lines.detach();
+  loka::testing::TextBufferFixture unavailable;
+  applyEditorProps(f, TextEditorProps(unavailable, f.cursor).moveCaretTo(f.request));
   f.request.set(LineCursor(before.line, 1));
   f.context->onPropsApplied();
   LOKA_VERIFY(f.request.get().isNone());
   LOKA_VERIFY(f.cursor.state()->get() == before && observer.reports == 0);
+  applyEditorProps(f, TextEditorProps(f.lines, f.cursor).moveCaretTo(f.request));
 }
 void testTextEditorRequestBinding()
 {
   Fixture f;
-  ObservableList<String> other;
+  loka::testing::TextBufferFixture other;
   LOKA_VERIFY(other.attach(&f.tracker, 3) == ATTACH_OK);
   LOKA_VERIFY(other.insert(0, String("B")) == EDIT_OK);
   LOKA_VERIFY(other.at(0).id == f.lines.at(0).id);
@@ -1016,7 +1028,7 @@ void testTextEditorRequestCancellationRepost()
   for (int stale = 0; stale < 2; ++stale)
   {
     Fixture f;
-    ObservableList<String> other;
+    loka::testing::TextBufferFixture other;
     LOKA_VERIFY(other.attach(&f.tracker, 3) == ATTACH_OK);
     LOKA_VERIFY(other.insert(0, String("B")) == EDIT_OK);
     LOKA_VERIFY(other.at(0).id == f.lines.at(0).id);
@@ -1075,11 +1087,12 @@ void testTextEditorRequestCompletion()
 {
   for (int delivery = 0; delivery < 5; ++delivery)
   {
+    loka::testing::TextBufferFixture unavailable;
     Fixture f;
     const LineCursor wanted(f.lines.at(1).id, 1);
     if (delivery == 4)
     {
-      f.lines.detach();
+      applyEditorProps(f, TextEditorProps(unavailable, f.cursor).moveCaretTo(f.request));
       f.context->onPropsApplied();
     }
     const LineCursor before = f.cursor.state()->get();
@@ -1122,7 +1135,7 @@ void testTextEditorReportedStorage()
   LOKA_VERIFY(!refused.isValid() && !refused.state());
   loka::app::testing::TextEditorStateOwner storage;
   NullScenePlatformController platform;
-  ObservableList<String> lines;
+  loka::testing::TextBufferFixture lines;
   LOKA_VERIFY(lines.attach(&storage.tracker, 3) == ATTACH_OK);
   LOKA_VERIFY(lines.insert(0, String("abc")) == EDIT_OK);
   const LineCursor wanted(lines.at(0).id, 1);
@@ -1267,7 +1280,8 @@ namespace
     } mode;
     unsigned admitted, applied, finished, epilogues, repaints, scheduled;
     RequestApplication<LineCursor, EditorResult> completedApplication;
-    template <class FixtureT> SettlementProbe(FixtureT &f, Mode m)
+    template <class FixtureT>
+    SettlementProbe(FixtureT &f, Mode m)
         : RailOperation<LineCursor>(f.platform, &f.node, f.context),
           mode(m),
           admitted(0),
@@ -1432,8 +1446,8 @@ void testTextEditorSettlementSeam()
 {
   {
     Fixture f(1);
-    const String text = String::FromPlatform(Managed<loka::platform::String>::Wrap(
-        new loka::app::testing::TextEditorReportRefusal(f.request)));
+    const String text = String::FromPlatform(
+        Managed<loka::platform::String>::Wrap(new loka::app::testing::TextEditorReportRefusal(f.request)));
     LOKA_VERIFY(f.lines.update(f.lines.at(0).id, text) == EDIT_OK);
     f.context->onPropsApplied();
     const LineCursor before = f.cursor.state()->get();
@@ -1631,8 +1645,7 @@ void testSettleTwoSeatProbeOrder()
   f.request.set(a);
   f.otherRequest.set(b);
   Trace::instance().clear();
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-              == FOLLOW_UP_ARMED);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_ARMED);
   LOKA_VERIFY(f.request.get().isNone() && f.otherRequest.get().isNone());
   LOKA_VERIFY(first.epilogues == 1 && first.repaints == 1 && first.scheduled == 1);
   LOKA_VERIFY(f.cursor.state()->get() == after);
@@ -1657,8 +1670,7 @@ void testSettleTwoSeatEmptyEpilogue()
   OtherSettlementSeat second(f, ADMISSION_TAKE);
   f.request.set(applied);
   Trace::instance().clear();
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-              == FOLLOW_UP_NONE);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_NONE);
   // p1: the empty trailing seat must not absorb the owner's epilogue delta.
   LOKA_VERIFY(Trace::instance().size() == 1);
   const loka::app::testing::SettleTraceRow<LineCursor> &row = Trace::instance().at(0);
@@ -1675,8 +1687,7 @@ void testSettleTwoSeatProbeFailedArm()
   f.request.set(a);
   f.otherRequest.set(b);
   Trace::instance().clear();
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-              == FOLLOW_UP_FAILED);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_FAILED);
   LOKA_VERIFY(f.request.get().isNone() && f.otherRequest.get().isNone());
   LOKA_VERIFY(first.epilogues == 1 && first.finished == 0 && first.applied == 0);
   LOKA_VERIFY(f.cursor.state()->get() == before);
@@ -1707,8 +1718,7 @@ void testSettleTwoSeatProbeRetirement()
     f.request.set(subscriber.repost);
     f.otherRequest.set(pending);
     Trace::instance().clear();
-    LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-                == FOLLOW_UP_NONE);
+    LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_NONE);
     LOKA_VERIFY(f.node.getContext() == 0 && first.epilogues == 0);
     LOKA_VERIFY(f.otherRequest.get() == pending);
     LOKA_VERIFY(Trace::instance().size() == 0);
@@ -1722,13 +1732,14 @@ namespace
     PushStateTracker &tracker;
     RequestQueue<LineCursor, 4> queue;
     Reported<LineCursor> cursor;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     NullScenePlatformController platform;
     TextEditorNode node;
     NullTextEditorContext *context;
     QueueFixture()
         : tracker(*HeadlessStateOwner::tracker()->asPushTracker()),
-          node(TextEditorProps(lines, cursor)), context(0)
+          node(TextEditorProps(lines, cursor)),
+          context(0)
     {
       StateBatchBase::CreateImmediateState(this, this->queue, LineCursor::None());
       StateBatchBase::CreateImmediateState(this, this->cursor, LineCursor::None());
@@ -1743,7 +1754,10 @@ namespace
       this->context = static_cast<NullTextEditorContext *>(this->node.getContext());
       LOKA_VERIFY(this->context);
     }
-    LineCursor at(unsigned column) const { return LineCursor(this->lines.at(0).id, column); }
+    LineCursor at(unsigned column) const
+    {
+      return LineCursor(this->lines.at(0).id, column);
+    }
     void apply(const TextEditorProps &props)
     {
       TextEditorDefinition definition(props);
@@ -1754,11 +1768,15 @@ namespace
   {
     RequestQueueBase<LineCursor> &queue;
     std::vector<CaretReply> values;
-    explicit QueueReplies(RequestQueueBase<LineCursor> &q) : queue(q)
+    explicit QueueReplies(RequestQueueBase<LineCursor> &q)
+        : queue(q)
     {
       this->queue.reply().state()->bind(&changed, this, false);
     }
-    ~QueueReplies() { this->queue.reply().state()->unbind(&changed, this); }
+    ~QueueReplies()
+    {
+      this->queue.reply().state()->unbind(&changed, this);
+    }
     static void changed(void *data)
     {
       QueueReplies &self = *static_cast<QueueReplies *>(data);
@@ -1767,23 +1785,33 @@ namespace
   };
   struct QueueReentry
   {
-    enum Action { POST_NEXT, CANCEL_REPOST, DISCARD_NEXT };
+    enum Action
+    {
+      POST_NEXT,
+      CANCEL_REPOST,
+      DISCARD_NEXT
+    };
     QueueFixture &fixture;
     Action action;
     unsigned calls;
-    QueueReentry(QueueFixture &f, Action a) : fixture(f), action(a), calls(0)
+    QueueReentry(QueueFixture &f, Action a)
+        : fixture(f),
+          action(a),
+          calls(0)
     {
       f.queue.state()->bind(&changed, this, false);
     }
-    ~QueueReentry() { this->fixture.queue.state()->unbind(&changed, this); }
+    ~QueueReentry()
+    {
+      this->fixture.queue.state()->unbind(&changed, this);
+    }
     static void changed(void *data)
     {
       QueueReentry &self = *static_cast<QueueReentry *>(data);
       QueueFixture &f = self.fixture;
       if (self.calls)
         return;
-      if (self.action == CANCEL_REPOST ? !f.queue.state()->get().isNone()
-                                      : f.queue.state()->get() != f.at(2))
+      if (self.action == CANCEL_REPOST ? !f.queue.state()->get().isNone() : f.queue.state()->get() != f.at(2))
         return;
       ++self.calls;
       if (self.action == DISCARD_NEXT)
@@ -1810,14 +1838,18 @@ namespace
   class QueueSceneRoot : public BoundaryNodeFor<QueueSceneRoot>
   {
   public:
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Reported<LineCursor> cursor;
     RequestQueue<LineCursor, 4> queue;
-    explicit QueueSceneRoot(const BoundaryPropsFor<QueueSceneRoot> &p) : BoundaryNodeFor<QueueSceneRoot>(p)
+    explicit QueueSceneRoot(const BoundaryPropsFor<QueueSceneRoot> &p)
+        : BoundaryNodeFor<QueueSceneRoot>(p)
     {
       this->declareStates(3).state(this->cursor, LineCursor::None()).state(this->queue, LineCursor::None());
     }
-    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const { return false; }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
     virtual void attachNode(NodeComposition &)
     {
       StateTracker *owner = 0;
@@ -1831,7 +1863,7 @@ namespace
       c.declare(TextEditor(TextEditorProps(this->lines, this->cursor).moveCaretTo(this->queue)));
     }
   };
-}
+} // namespace
 void testRequestQueueFailedArmDoesNotStrandRemainder()
 {
   QueueFixture f;
@@ -1840,12 +1872,10 @@ void testRequestQueueFailedArmDoesNotStrandRemainder()
     LOKA_VERIFY(f.queue.post(f.at(i)) == POST_ACCEPTED);
   Trace::instance().clear();
   SettlementProbe arm(f, SettlementProbe::FAIL_ARM);
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(arm, SETTLE_DEFERRED,
-                                                   f.cursor.state()->get()) == FOLLOW_UP_FAILED);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(arm, SETTLE_DEFERRED, f.cursor.state()->get()) == FOLLOW_UP_FAILED);
   LOKA_VERIFY(f.queue.pending() == 2 && f.queue.state()->get() == f.at(2));
   LOKA_VERIFY(replies.values.size() == 1 && replies.values[0].requested() == f.at(1));
-  LOKA_VERIFY(replies.values[0].kind() == CaretReply::REFUSED
-              && replies.values[0].reason() == EDITOR_UNAVAILABLE);
+  LOKA_VERIFY(replies.values[0].kind() == CaretReply::REFUSED && replies.values[0].reason() == EDITOR_UNAVAILABLE);
   LOKA_VERIFY(Trace::instance().size() == 1 && Trace::instance().at(0).count == 1);
   LOKA_VERIFY(Trace::instance().at(0).takes[0].requested() == f.at(1)
               && Trace::instance().at(0).seam[0] == EDITOR_UNAVAILABLE);
@@ -1875,7 +1905,7 @@ void testRequestQueuePublishRepostCannotOvertakeRing()
 void testRequestQueueCancellationCannotEraseRepost()
 {
   QueueFixture f;
-  ObservableList<String> nextLines;
+  loka::testing::TextBufferFixture nextLines;
   LOKA_VERIFY(nextLines.attach(&f.tracker, 4) == ATTACH_OK);
   LOKA_VERIFY(nextLines.insert(0, String("abcdef")) == EDIT_OK);
   QueueReplies replies(f.queue);
@@ -2017,7 +2047,10 @@ namespace
     {
       return this->binding_.same(binding) ? EDITOR_OK : EDITOR_UNAVAILABLE;
     }
-    virtual EditorResult validate(Node &, const TestCommand &) { return EDITOR_OK; }
+    virtual EditorResult validate(Node &, const TestCommand &)
+    {
+      return EDITOR_OK;
+    }
     virtual RequestApplication<LineCursor, EditorResult> apply(Node &base, const TestCommand &)
     {
       return RequestApplication<LineCursor, EditorResult>(
@@ -2036,10 +2069,11 @@ namespace
     {
       return FOLLOW_NONE;
     }
+
   private:
     const RequestBinding<TestCommand> binding_;
   };
-}
+} // namespace
 
 void testSettleHeterogeneousTraceCapture()
 {
@@ -2058,8 +2092,7 @@ void testSettleHeterogeneousTraceCapture()
     command.value = i + 1;
     f.request.set(wanted);
     LOKA_VERIFY(queue.post(command) == POST_ACCEPTED);
-    LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-                == FOLLOW_UP_NONE);
+    LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_NONE);
     LOKA_VERIFY(Trace::instance().size() == i + 1 && CommandTrace::instance().size() == i + 1);
     const loka::app::testing::SettleTraceRow<LineCursor> &caret = Trace::instance().at(i);
     const loka::app::testing::SettleTraceRow<TestCommand, LineCursor> &verb = CommandTrace::instance().at(i);
@@ -2108,14 +2141,12 @@ void testSettleEmptySeatZeroCandidate()
   EpilogueSettlementProbe first(f, after);
   OtherSettlementSeat second(f, ADMISSION_TAKE);
   CursorCapture::clear();
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before)
-              == FOLLOW_UP_NONE);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, before) == FOLLOW_UP_NONE);
   LOKA_VERIFY(Trace::instance().size() == 1);
   LOKA_VERIFY(Trace::instance().at(0).count == 0 && Trace::instance().at(0).seq == 0);
   LOKA_VERIFY(Trace::instance().at(0).before == before && Trace::instance().at(0).after == after);
   Trace::instance().clear();
-  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, after)
-              == FOLLOW_UP_NONE);
+  LOKA_VERIFY(RequestSettlement<LineCursor>::settle(first, first, second, SETTLE_DEFERRED, after) == FOLLOW_UP_NONE);
   LOKA_VERIFY(Trace::instance().size() == 0);
   // Suppressed rows must not use sequence numbers.
   f.request.set(after);
@@ -2138,7 +2169,7 @@ namespace
     RequestQueue<LineCursor, 4> carets;
     Request<LineCursor> plainCaret;
     Reported<LineCursor> cursor;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     NullScenePlatformController platform;
     TextEditorNode node;
     NullTextEditorContext *context;
@@ -2360,8 +2391,7 @@ void testTextEditorCommandRefusals()
       f.move(LineCursor::None());
     else
     {
-      LOKA_VERIFY(f.lines.reset() == EDIT_OK);
-      LOKA_VERIFY(f.lines.insert(0, String("new")) == EDIT_OK);
+      LOKA_VERIFY(f.lines.replaceWithOne(String("new")) == EDIT_OK);
     }
     const LineCursor before = f.cursor.state()->get();
     CommandSubscriber subscriber(f, CommandSubscriber::COUNT);
@@ -2534,7 +2564,9 @@ void testTextEditorCommandTraceMerge()
       LOKA_VERIFY(value.find(i == 1 ? " seat=command requested=PAGE_DOWN" : " seat=command requested=PAGE_UP")
                   != std::string::npos);
     else
-      LOKA_VERIFY(value.find("requested=" + loka::scenario_tests::SettleCursorText(f.at(static_cast<unsigned short>(i / 2)))) != std::string::npos);
+      LOKA_VERIFY(
+          value.find("requested=" + loka::scenario_tests::SettleCursorText(f.at(static_cast<unsigned short>(i / 2))))
+          != std::string::npos);
   }
   LOKA_VERIFY(!audit.record.has("settle.9.4"));
   EditorCapture::clear();
@@ -2577,7 +2609,7 @@ namespace
   class CommandSceneRoot : public BoundaryNodeFor<CommandSceneRoot>
   {
   public:
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Reported<LineCursor> cursor;
     RequestQueue<EditorCommand, 4> commands;
     explicit CommandSceneRoot(const BoundaryPropsFor<CommandSceneRoot> &p)
@@ -2665,7 +2697,7 @@ void testTextEditorCommandBindingChecks()
 void testTextEditorCommandLinesReplacement()
 {
   CommandFixture f;
-  ObservableList<String> nextLines;
+  loka::testing::TextBufferFixture nextLines;
   LOKA_VERIFY(nextLines.attach(&f.tracker, 4) == ATTACH_OK);
   LOKA_VERIFY(nextLines.insert(0, String("new")) == EDIT_OK);
   CommandReplies commands(f.commands);
@@ -2705,8 +2737,14 @@ namespace
   class SettlementProbeEditor : public TextEditorNode
   {
   public:
-    explicit SettlementProbeEditor(const TextEditorProps &p) : TextEditorNode(p) {}
-    virtual ~SettlementProbeEditor() { ++settlementProbeDestructors; }
+    explicit SettlementProbeEditor(const TextEditorProps &p)
+        : TextEditorNode(p)
+    {
+    }
+    virtual ~SettlementProbeEditor()
+    {
+      ++settlementProbeDestructors;
+    }
   };
   class SettlementProbeSeat;
   SettlementProbeSeat *settlementProbeSeat = 0;
@@ -2715,7 +2753,7 @@ namespace
   class SettlementProbeRoot : public BoundaryNodeFor<SettlementProbeRoot>
   {
   public:
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Reported<LineCursor> cursor;
     RequestWithReply<LineCursor> request;
     explicit SettlementProbeRoot(const BoundaryPropsFor<SettlementProbeRoot> &p)
@@ -2743,15 +2781,15 @@ namespace
     NodeState<bool> shown;
     SettlementProbeRoot &model;
     explicit SettlementProbeSeat(const BoundaryPropsFor<SettlementProbeSeat> &p)
-        : BoundaryNodeFor<SettlementProbeSeat>(p), model(*settlementProbeRoot)
+        : BoundaryNodeFor<SettlementProbeSeat>(p),
+          model(*settlementProbeRoot)
     {
       settlementProbeSeat = this;
       this->state(this->shown, true);
     }
     virtual void composeNode(NodeComposition &c)
     {
-      c.declare(Show(*this->shown.state()).destroyOnDetach()
-                << NodeDefinition<TextEditorProps, SettlementProbeEditor>(
+      c.declare(Show(*this->shown.state()).destroyOnDetach() << NodeDefinition<TextEditorProps, SettlementProbeEditor>(
                     TextEditorProps(this->model.lines, this->model.cursor).moveCaretTo(this->model.request)));
     }
   };
@@ -2767,7 +2805,8 @@ namespace
     for (Node *child = children ? children->childrenHead() : 0; child; child = child->nextInComposition)
     {
       TextEditorNode *found = settlementProbeFind(child);
-      if (found) return found;
+      if (found)
+        return found;
     }
     return 0;
   }
@@ -2778,7 +2817,14 @@ namespace
     Scene *focusScene;
     NullTextEditorContext *focusInput;
     LineCursor focusCursor;
-    SettlementProbePresenter() : applies(0), drains(0), focusReads(0), focusScene(0), focusInput(0) {}
+    SettlementProbePresenter()
+        : applies(0),
+          drains(0),
+          focusReads(0),
+          focusScene(0),
+          focusInput(0)
+    {
+    }
     virtual void drainNativeRetirements()
     {
       ++this->drains;
@@ -2799,7 +2845,10 @@ namespace
       out = 0;
       return true;
     }
-    virtual bool canSkipGlobalChangeForBoundaryLocalPaint() const { return false; }
+    virtual bool canSkipGlobalChangeForBoundaryLocalPaint() const
+    {
+      return false;
+    }
     virtual void onChange(Node *root, NodeDirtyFlags flags, bool full)
     {
       ++this->applies;
@@ -2814,7 +2863,12 @@ namespace
     unsigned replies;
     bool postOnCursor;
     SettlementProbeObserver(SettlementProbeRoot &r, SettlementProbePresenter &p, bool input)
-        : root(r), platform(p), replied(false), posted(false), replies(0), postOnCursor(input)
+        : root(r),
+          platform(p),
+          replied(false),
+          posted(false),
+          replies(0),
+          postOnCursor(input)
     {
       settlementProbeDestructors = 0;
       this->root.request.reply().state()->bind(&reply, this, false);
@@ -2828,7 +2882,8 @@ namespace
     static void cursor(void *data)
     {
       SettlementProbeObserver &self = *static_cast<SettlementProbeObserver *>(data);
-      if (!self.postOnCursor || self.posted) return;
+      if (!self.postOnCursor || self.posted)
+        return;
       self.posted = true;
       self.root.request.set(LineCursor(self.root.lines.at(0).id, 3));
     }
@@ -2836,7 +2891,8 @@ namespace
     {
       SettlementProbeObserver &self = *static_cast<SettlementProbeObserver *>(data);
       ++self.replies;
-      if (self.replied) return;
+      if (self.replied)
+        return;
       self.replied = true;
       const unsigned before = self.platform.applies;
       const unsigned drains = self.platform.drains;
@@ -2855,7 +2911,7 @@ namespace
       self.root.request.set(LineCursor(self.root.lines.at(0).id, 4));
     }
   };
-}
+} // namespace
 void probeRequestSettlementLifecycle()
 {
   using namespace loka::app::testing;
@@ -2870,8 +2926,8 @@ void probeRequestSettlementLifecycle()
     WindowAdmissionTestApp app(window);
     app.flush();
     Scene &scene = *window.scene();
-    SettlementProbeRoot *root = static_cast<SettlementProbeRoot *>(
-        loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+    SettlementProbeRoot *root =
+        static_cast<SettlementProbeRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
     TextEditorNode *node = settlementProbeFind(root);
     LOKA_VERIFY(node && node->getContext());
     settlementProbeDestructors = 0;
@@ -2968,8 +3024,8 @@ void testPlatformOperationFocusTail()
     WindowAdmissionTestApp app(window);
     app.flush();
     Scene &scene = *window.scene();
-    SettlementProbeRoot &root = *static_cast<SettlementProbeRoot *>(
-        loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+    SettlementProbeRoot &root =
+        *static_cast<SettlementProbeRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
     TextEditorNode *node = settlementProbeFind(&root);
     LOKA_VERIFY(node && node->getContext());
     SettlementProbeObserver observer(root, platform, true);
@@ -2977,7 +3033,8 @@ void testPlatformOperationFocusTail()
     platform.focusInput = static_cast<NullTextEditorContext *>(node->getContext());
     platform.focusCursor = LineCursor(root.lines.at(0).id, 1);
     const unsigned applies = platform.applies;
-    if (clocked) app.operationLoop();
+    if (clocked)
+      app.operationLoop();
     else
     {
       WindowTestAccess::reconcileFocus(window);
@@ -3116,20 +3173,27 @@ namespace
     StateBase *revision;
     unsigned cursorCommits, listCommits;
     SeatDocumentCommit(Fixture &f)
-        : tracker(f.tracker), cursor(f.cursor.state()),
-          revision(const_cast<State<ListRevision> *>(&f.lines.revision())), cursorCommits(0), listCommits(0) {}
+        : tracker(f.tracker),
+          cursor(f.cursor.state()),
+          revision(const_cast<State<ListRevision> *>(&f.lines.revision())),
+          cursorCommits(0),
+          listCommits(0)
+    {
+    }
     static void count(void *data)
     {
       SeatDocumentCommit &self = *static_cast<SeatDocumentCommit *>(data);
       const PushStateTracker::StateList &dirty = self.tracker.committedSet().identities();
       for (size_t i = 0; i < dirty.size(); ++i)
       {
-        if (dirty[i] == self.cursor) ++self.cursorCommits;
-        if (dirty[i] == self.revision) ++self.listCommits;
+        if (dirty[i] == self.cursor)
+          ++self.cursorCommits;
+        if (dirty[i] == self.revision)
+          ++self.listCommits;
       }
     }
   };
-}
+} // namespace
 void testTextEditorSeatGuardOrders()
 {
   for (unsigned clocked = 0; clocked != 2; ++clocked)
@@ -3143,7 +3207,8 @@ void testTextEditorSeatGuardOrders()
         f.tracker.addState(&earlier);
         NodeState<int> earlierSeat(&earlier, &f.tracker);
         loka::core::ScopedPtr<Operation> turn(clocked ? new Operation : 0);
-        if (seatFirst) earlierSeat.set(1);
+        if (seatFirst)
+          earlierSeat.set(1);
         TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(f.node);
         const LineCursor before = f.cursor.state()->get();
         if (replace)
@@ -3154,9 +3219,365 @@ void testTextEditorSeatGuardOrders()
         LOKA_VERIFY(probe.cursorCommits == (clocked ? 0u : 1u));
         LOKA_VERIFY(probe.listCommits == (replace && !clocked ? 1u : 0u));
         LOKA_VERIFY(loka::core::testing::PushStateTrackerTestAccess::depth(f.tracker) == clocked);
-        if (turn.get()) turn->close();
+        if (turn.get())
+          turn->close();
         LOKA_VERIFY(probe.cursorCommits == 1 && probe.listCommits == replace);
         f.tracker.setInvalidateCallback(0, 0);
         f.tracker.removeState(&earlier);
       }
+}
+
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      void failTextPayloadAllocation(unsigned count);
+    }
+  } // namespace app
+} // namespace loka
+void testTextCapacityAdmission()
+{
+#ifndef __APPLE__
+  std::puts("[skip] macOS native capacity query pin requires the macOS test target");
+#endif
+#ifndef _WIN32
+  std::puts("[skip] Win32 native capacity query pin requires the Win32 test target");
+#endif
+  NullPlatformContext rail;
+  TextCapacity maximum = TextCapacity::of(7, 9);
+  LOKA_VERIFY(!rail.PlatformContext::queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 7 && maximum.bytes == 9);
+  LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
+  LOKA_VERIFY(maximum.lines == 65535 && maximum.bytes == INT_MAX);
+  class SmallRail : public NullPlatformContext
+  {
+  public:
+    virtual bool queryTextEditorCapacity(TextCapacity &out) const
+    {
+      out = TextCapacity::of(256, 8192);
+      return true;
+    }
+  } small;
+  class DecliningRail : public NullPlatformContext
+  {
+  public:
+    virtual bool queryTextEditorCapacity(TextCapacity &out) const
+    {
+      return this->PlatformContext::queryTextEditorCapacity(out);
+    }
+  } declining;
+  PushStateTracker tracker;
+  loka::core::testing::failLokaAllocRaw("TextBuffer", "handles", 1);
+  {
+    TextBuffer buffer;
+    LOKA_VERIFY(buffer.attach(&tracker, declining, TextCapacity::of(1, 1)) == TextBuffer::ATTACH_RAIL_DECLINED);
+    LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(257, 1)) == TextBuffer::ATTACH_OVER_RAIL_MAXIMUM);
+    LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(1, 8193)) == TextBuffer::ATTACH_OVER_RAIL_MAXIMUM);
+    LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(0, 1)) == TextBuffer::ATTACH_EMPTY_CAPACITY);
+    LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(1, 0)) == TextBuffer::ATTACH_EMPTY_CAPACITY);
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == 0);
+    LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(1, 1)) == TextBuffer::ATTACH_ALLOCATION_REFUSED);
+    LOKA_VERIFY(buffer.capacity().lines == 0 && buffer.capacity().bytes == 0);
+  }
+  loka::core::testing::allowLokaAllocRaw();
+  for (int failure = 1; failure <= 2; ++failure)
+  {
+    loka::core::testing::failLokaAllocRaw("ObservableList", "items", failure);
+    {
+      TextBuffer buffer;
+      LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(4, 16)) == TextBuffer::ATTACH_ALLOCATION_REFUSED);
+      LOKA_VERIFY(buffer.capacity().lines == 0 && loka::core::testing::lokaAllocRawLive() == 0);
+      LOKA_VERIFY(buffer.attach(&tracker, small, TextCapacity::of(4, 16)) == TextBuffer::ATTACH_OK);
+    }
+    loka::core::testing::allowLokaAllocRaw();
+  }
+  TextBuffer buffer;
+  LOKA_VERIFY(small.queryTextEditorCapacity(maximum));
+  const TextCapacity chosen = TextCapacity::of(1024, 16384).clampedTo(maximum);
+  LOKA_VERIFY(chosen.lines == 256 && chosen.bytes == 8192 && chosen.fitsIn(maximum));
+  LOKA_VERIFY(buffer.attach(&tracker, small, chosen) == TextBuffer::ATTACH_OK);
+  LOKA_VERIFY(loka::testing::InsertTextLine(buffer.lines(), 0, String("kept")) == EDIT_OK);
+  const ListRevision revision = buffer.lines().revision().get();
+  const ItemId id = buffer.lines().at(0).id;
+  LOKA_VERIFY(buffer.attach(0, declining, TextCapacity::of(0, 0)) == TextBuffer::ATTACH_ALREADY_ATTACHED);
+  LOKA_VERIFY(buffer.capacity().lines == 256 && buffer.capacity().bytes == 8192);
+  LOKA_VERIFY(buffer.lines().revision().get() == revision && buffer.lines().at(0).id == id);
+}
+void testTextCapacityWorkspaceExclusivity()
+{
+  PushStateTracker tracker;
+  NullPlatformContext rail;
+  TextBuffer buffer;
+  LOKA_VERIFY(buffer.attach(&tracker, rail, TextCapacity::of(4, 16)) == TextBuffer::ATTACH_OK);
+  {
+    EditScope first, nested;
+    LOKA_VERIFY(buffer.borrowWorkspace(first));
+    LOKA_VERIFY(!buffer.borrowWorkspace(nested));
+    LOKA_VERIFY(first.replacement().append(String("held")));
+    first.replacement().seal();
+    LOKA_VERIFY(first.replacement().data()[0].equals(String("held")));
+  }
+  EditScope next;
+  LOKA_VERIFY(buffer.borrowWorkspace(next));
+  LOKA_VERIFY(next.replacement().size() == 0);
+}
+void testTextCapacityNarrowingAndIdBudget()
+{
+  loka::app::testing::TextEditorStateOwner owner;
+  NullPlatformContext rail;
+  loka::testing::TextBufferFixture buffer;
+  LOKA_VERIFY(buffer.TextBuffer::attach(&owner.tracker, rail, TextCapacity::of(65535, INT_MAX))
+              == TextBuffer::ATTACH_OK);
+  LOKA_VERIFY(buffer.insert(0, String()) == EDIT_OK);
+  NullScenePlatformController platform;
+  TextEditorNode node(TextEditorProps(buffer, owner.cursor));
+  TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(node);
+  const LineCursor first(buffer.at(0).id, 0);
+  const std::string tooMany(65535, '\n');
+  const ListRevision before = buffer.revision().get();
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Scratch", 1);
+  LOKA_VERIFY(document.applyReplace(first, first, tooMany.data(), tooMany.size()) == EDITOR_CAPACITY);
+  LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == 0);
+  loka::core::testing::allowLokaAllocRaw();
+  LOKA_VERIFY(buffer.size() == 1 && buffer.at(0).id == first.line && buffer.revision().get() == before);
+  const std::string maximum(65534, '\n');
+  LOKA_VERIFY(document.applyReplace(first, first, maximum.data(), maximum.size()) == EDITOR_OK);
+  LOKA_VERIFY(buffer.size() == 65535 && buffer.at(65534).id.seq == 65535);
+  LOKA_VERIFY(buffer.remove(buffer.at(65534).id) == EDIT_OK);
+  LOKA_VERIFY(document.applyReplace(first, first, "\n", 1) == EDITOR_ID_EXHAUSTED);
+  LOKA_VERIFY(buffer.size() == 65534);
+}
+void testTextCapacityLatePayloadRefusal()
+{
+  Fixture f;
+  const Snapshot before(f);
+  const LineCursor first(f.lines.at(0).id, 0);
+  for (unsigned failure = 1; failure <= 3; ++failure)
+  {
+    loka::app::testing::failTextPayloadAllocation(failure);
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).applyReplace(first, first, "a\nb\nc", 5)
+                == EDITOR_ALLOCATION);
+    before.unchanged(f);
+  }
+  loka::app::testing::failTextPayloadAllocation(0);
+  LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).applyReplace(first, first, "a\nb\nc", 5)
+              == EDITOR_OK);
+  LOKA_VERIFY(f.lines.at(1).id.seq == 4 && f.lines.at(2).id.seq == 5);
+}
+
+void testTextCapacitySizeArithmetic()
+{
+  const std::size_t maximum = static_cast<std::size_t>(-1);
+  std::size_t out = 7;
+  LOKA_VERIFY(!text_document_detail::ExpandedSize(maximum, 1, out) && out == 7);
+  LOKA_VERIFY(text_document_detail::ExpandedSize(maximum - 65534, 65534, out) && out == maximum);
+  LOKA_VERIFY(!text_document_detail::ExpandedSize(maximum - 65533, 65534, out));
+  LOKA_VERIFY(text_document_detail::PasteFits(maximum, TextCapacity::of(1, maximum)));
+  LOKA_VERIFY(!text_document_detail::PasteFits(maximum, TextCapacity::of(1, maximum / 2)));
+  LOKA_VERIFY(text_document_detail::PasteFits(maximum - 1, TextCapacity::of(1, maximum / 2)));
+}
+
+void testTextCapacityQuiescentReclaim()
+{
+#if defined(LOKA_LIFECYCLE_AUDIT) && defined(__linux__) && !defined(__SANITIZE_ADDRESS__)
+  for (unsigned mode = 0; mode < 2; ++mode)
+  {
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (!child)
+    {
+      PushStateTracker tracker;
+      NullPlatformContext rail;
+      TextBuffer *buffer = new TextBuffer();
+      LOKA_VERIFY(buffer->attach(&tracker, rail, TextCapacity::of(4, 16)) == TextBuffer::ATTACH_OK);
+      if (!mode)
+      {
+        EditScope edit;
+        LOKA_VERIFY(buffer->borrowWorkspace(edit));
+        delete buffer;
+      }
+      else
+      {
+        struct DeleteOnPublish
+        {
+          static void changed(void *data)
+          {
+            delete static_cast<TextBuffer *>(data);
+          }
+        };
+        LOKA_VERIFY(loka::testing::InsertTextLine(buffer->lines(), 0, String("before")) == EDIT_OK);
+        const_cast<State<ListRevision> &>(buffer->lines().revision()).bind(&DeleteOnPublish::changed, buffer, false);
+        (void)buffer->lines().update(buffer->lines().at(0).id, String("after"));
+      }
+      _exit(0);
+    }
+    int status = 0;
+    LOKA_VERIFY(waitpid(child, &status, 0) == child);
+    LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+  }
+#else
+  std::puts("[skip] TextBuffer reclaim death pins require Linux lifecycle audit without ASan");
+#endif
+}
+
+void testTextUtf8Scanner()
+{
+  using namespace text_alphabet_cases;
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+  {
+    std::size_t count = 99;
+    // NUL is well-formed UTF-8 (policy, not the scanner, forbids it); every other refusal is malformed.
+    const bool valid = cases[i].scalars != 0;
+    LOKA_VERIFY(Utf8Scan(cases[i].bytes, cases[i].length, count) == valid);
+    LOKA_VERIFY(count == cases[i].scalars);
+    const std::string prefixed = std::string("A\303\251") + std::string(cases[i].bytes, cases[i].length);
+    LOKA_VERIFY(Utf8Scan(prefixed.data(), prefixed.size(), count) == valid);
+    LOKA_VERIFY(count == cases[i].scalars + 2);
+  }
+  std::size_t count = 99;
+  LOKA_VERIFY(Utf8Scan(0, 0, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan(0, 1, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan("\342x\200", 3, count) && count == 0);
+  LOKA_VERIFY(!Utf8Scan("\360\237\230", 3, count) && count == 0);
+  const char *invalid[] = {"\340\200\200",
+                           "\360\200\200\200",
+                           "\377",
+                           "\342\202",
+                           "\302x",
+                           "\342\202x",
+                           "\360x\200\200",
+                           "\360\220x\200",
+                           "\360\220\200x"};
+  const std::size_t lengths[] = {3, 4, 1, 2, 2, 3, 4, 4, 4};
+  for (unsigned i = 0; i < sizeof(lengths) / sizeof(lengths[0]); ++i)
+    LOKA_VERIFY(!Utf8Scan(invalid[i], lengths[i], count) && count == 0);
+  LOKA_VERIFY(
+      Utf8Scan("\177\302\200\337\277\340\240\200\355\237\277\356\200\200\357\277\277\360\220\200\200\364\217\277\277",
+               25,
+               count));
+  LOKA_VERIFY(count == 9);
+}
+void testTextUtf8Columns()
+{
+  using namespace text_alphabet_cases;
+  using namespace loka::app::text_document_detail;
+  for (unsigned i = 0; i < sizeof(boundaries) / sizeof(boundaries[0]); ++i)
+  {
+    const text_alphabet_cases::Boundary &b = boundaries[i];
+    const Case &c = cases[b.caseIndex];
+    const String value(std::string(c.bytes, c.length));
+    const LineBytes row(value, TextCapacity::of(256, 8192));
+    LOKA_VERIFY(Utf8ColumnOnBoundary(c.bytes, c.length, b.column) == b.boundary);
+    LOKA_VERIFY(Utf8RetreatToBoundary(c.bytes, c.length, b.column) == b.retreat);
+    // The byte view remains available even while alphabet admission is closed.
+    LOKA_VERIFY(ValidateRowColumn(row, static_cast<LineCursor::Column>(b.column))
+                == (b.boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+    LOKA_VERIFY(ValidateRowColumn(row, -1) == EDITOR_INVALID_CURSOR);
+    LOKA_VERIFY(ValidateRowColumn(row, static_cast<LineCursor::Column>(c.length + 1)) == EDITOR_INVALID_CURSOR);
+    if (b.boundary)
+      LOKA_VERIFY(CodePointIndex(row, static_cast<LineCursor::Column>(b.column))
+                  == (b.caseIndex == 7 ? b.column : (b.column ? 1u : 0u)));
+  }
+  // pageTarget copies min(source byte column, destination size), then retreats.
+  LOKA_VERIFY(Utf8RetreatToBoundary("a\360\237\230\200z", 6, 3) == 1);
+  // Both native rails clamp a signed request through one helper before converting units.
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, -5) == 0);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 99) == 6);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 3) == 1);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("a\360\237\230\200z", 6, 5) == 5);
+  LOKA_VERIFY(Utf8ClampColumnToBoundary("", 0, 7) == 0 && Utf8ClampColumnToBoundary("", 0, -1) == 0);
+  LOKA_VERIFY(!Utf8ColumnOnBoundary("a", 1, 2));
+  LOKA_VERIFY(RowAdmits("", 0) && PayloadAdmits(0, 0));
+  LOKA_VERIFY(!RowAdmits(0, 1) && !PayloadAdmits(0, 1));
+  LOKA_VERIFY(!RowAdmits("a\r\nb", 4) && PayloadAdmits("a\r\nb", 4));
+}
+namespace
+{
+  /** Preserve raw fixture bytes even on rails whose String constructor normalizes invalid UTF-8. */
+  class AlphabetBytes : public loka::platform::String
+  {
+  public:
+    explicit AlphabetBytes(const text_alphabet_cases::Case &value)
+        : bytes_(value.bytes, value.length)
+    {
+    }
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    {
+      out.bytes = this->bytes_.data();
+      out.length = this->bytes_.size();
+      return true;
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append(this->bytes_);
+      return true;
+    }
+
+  private:
+    const std::string bytes_;
+  };
+} // namespace
+
+void testTextAlphabetAdapters()
+{
+  using namespace text_alphabet_cases;
+  for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
+  {
+    const Case &c = cases[i];
+    Fixture f;
+    const Snapshot snapshot(f);
+    const LineCursor at(f.lines.at(0).id, 0);
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).applyReplace(at, at, c.bytes, c.length)
+                == c.*expected);
+    if (c.*expected != EDITOR_OK)
+      snapshot.unchanged(f);
+    Fixture projected(1);
+    const String raw = String::FromPlatform(Managed<loka::platform::String>::Wrap(new AlphabetBytes(c)));
+    LOKA_VERIFY(projected.lines.update(projected.lines.at(0).id, raw) == EDIT_OK);
+    projected.context->onPropsApplied();
+    std::string output;
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(projected.node).project(output) == c.*expected);
+    LOKA_VERIFY(Input::status(*projected.context) == c.*expected);
+    if (c.*expected == EDITOR_OK)
+    {
+      LOKA_VERIFY(output == std::string(c.bytes, c.length));
+      LOKA_VERIFY(Input::buffer(*projected.context) == output);
+      TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(projected.node);
+      const ItemId id = projected.lines.at(0).id;
+      for (std::size_t column = 0; column <= c.length; ++column)
+      {
+        const bool boundary = Utf8ColumnOnBoundary(c.bytes, c.length, column);
+        const LineCursor cursor(id, static_cast<LineCursor::Column>(column));
+        LOKA_VERIFY(document.moveCaret(cursor) == (boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+        const Snapshot before(projected);
+        const LineCursor start(id, 0), end(id, static_cast<LineCursor::Column>(c.length));
+        LOKA_VERIFY(
+            document.applyReplace(start, end, c.bytes, c.length, RowCursor(0, static_cast<LineCursor::Column>(column)))
+            == (boundary ? EDITOR_OK : EDITOR_INVALID_CURSOR));
+        if (!boundary)
+          before.unchanged(projected);
+        {
+          StateTrackerGuard guard(&projected.tracker);
+          projected.request.set(cursor);
+        }
+        projected.context->onPropsApplied();
+        const LineCursor clamped(id, static_cast<LineCursor::Column>(Utf8RetreatToBoundary(c.bytes, c.length, column)));
+        LOKA_VERIFY(projected.cursor.state()->get() == clamped);
+        LOKA_VERIFY(Input::caret(*projected.context) == clamped);
+      }
+    }
+  }
+  Fixture pages(2, "abcd");
+  LOKA_VERIFY(pages.lines.update(pages.lines.at(1).id, String("a\360\237\230\200z")) == EDIT_OK);
+  pages.context->onPropsApplied();
+  TextEditorDocument &document = loka::app::testing::TextEditorAccess::document(pages.node);
+  LOKA_VERIFY(document.moveCaret(LineCursor(pages.lines.at(0).id, 3)) == EDITOR_OK);
+  LineCursor target;
+  LOKA_VERIFY(document.pageTarget(EditorCommand(EditorCommand::PAGE_DOWN), 1, target) == EDITOR_OK);
+  LOKA_VERIFY(target == LineCursor(pages.lines.at(1).id, 1));
+#if !defined(__APPLE__) && !defined(_WIN32)
+  std::puts("[skip] native UTF-8 rails: this host has neither AppKit nor Win32; run the native test targets");
+#endif
 }

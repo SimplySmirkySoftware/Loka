@@ -57,4 +57,10 @@ void testPlatformOperationMountAudit();
 void testPlatformOperationNativeDrain();
 void testNullInputDoorNestedSettlement();
 void testTextEditorSeatGuardOrders();
+void testTextCapacityAdmission();
+void testTextCapacityWorkspaceExclusivity();
+void testTextCapacityNarrowingAndIdBudget();
+void testTextCapacityLatePayloadRefusal();
+void testTextCapacitySizeArithmetic();
+void testTextCapacityQuiescentReclaim();
 #endif

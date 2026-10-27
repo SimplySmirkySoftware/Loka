@@ -8,6 +8,8 @@
 #include "../platform/MacNativeGeometry.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include "platform/StringUTF8.hpp"
+#include "app/nodes/controls/TextDocumentLine.hpp"
+#include "core/LokaAlloc.hpp"
 #include <algorithm>
 #include <new>
 #include <cstdio>
@@ -17,51 +19,84 @@ using namespace loka::core;
 
 namespace
 {
-  /** Logical lines, including a final empty line. Native wrapping is irrelevant. */
+  /** Checked UTF-16 scalar read, bounded by the borrowed snapshot or row. */
+  bool ReadNativeScalar(NSString *text, NSUInteger end, NSUInteger &offset, unsigned int &scalar)
+  {
+    if (offset >= end)
+      return false;
+    const unichar first = [text characterAtIndex:offset++];
+    if (!first || (first >= 0xDC00 && first <= 0xDFFF))
+      return false;
+    scalar = first;
+    if (first >= 0xD800 && first <= 0xDBFF)
+    {
+      if (offset == end)
+        return false;
+      const unichar second = [text characterAtIndex:offset++];
+      if (second < 0xDC00 || second > 0xDFFF)
+        return false;
+      scalar = 0x10000 + ((first - 0xD800) << 10) + second - 0xDC00;
+    }
+    return true;
+  }
+
+  std::size_t ScalarBytes(unsigned int scalar)
+  {
+    return scalar < 0x80 ? 1 : scalar < 0x800 ? 2 : scalar < 0x10000 ? 3 : 4;
+  }
+
+  /** Logical CR/LF/CRLF rows, including a final empty row; never Cocoa lines. */
   struct NativeLines
   {
-    NSRange ranges[TextEditorProps::kMaxLines];
+    // Fixed storage until the native-capacity PR; matches MacPlatformContext query.
+    NSRange ranges[256];
     unsigned short count;
     EditorResult result;
-    explicit NativeLines(NSString *text)
+    NativeLines(NSString *text, const TextCapacity &capacity)
         : count(0),
           result(EDITOR_OK)
     {
       const NSUInteger length = [text length];
-      if (length > TextEditorProps::kMaxBytes)
+      std::size_t budget;
+      if (!text_document_detail::ExpandedSize(capacity.bytes, capacity.lines ? capacity.lines - 1 : 0, budget)
+          || length > budget)
       {
         this->result = EDITOR_CAPACITY;
         return;
       }
-      for (NSUInteger i = 0; i < length; ++i)
-      {
-        const unichar c = [text characterAtIndex:i];
-        if (!c || c > 127)
-        {
-          this->result = EDITOR_NON_ASCII;
-          return;
-        }
-      }
       NSUInteger offset = 0;
-      do
+      for (;;)
       {
-        if (this->count == TextEditorProps::kMaxLines)
+        if (this->count == capacity.lines || this->count == 256)
         {
           this->result = EDITOR_CAPACITY;
           return;
         }
-        if (offset == length)
+        const NSUInteger start = offset;
+        NSUInteger contentsEnd = offset;
+        while (offset < length)
         {
-          this->ranges[this->count++] = NSMakeRange(offset, 0);
-          break;
+          const NSUInteger scalarStart = offset;
+          unsigned int scalar;
+          if (!ReadNativeScalar(text, length, offset, scalar))
+          {
+            this->result = EDITOR_NON_ASCII;
+            return;
+          }
+          if (scalar == '\r' || scalar == '\n')
+          {
+            contentsEnd = scalarStart;
+            if (scalar == '\r' && offset < length && [text characterAtIndex:offset] == '\n')
+              ++offset;
+            break;
+          }
+          contentsEnd = offset;
         }
-        NSUInteger start = offset, end = offset, contentsEnd = offset;
-        [text getLineStart:&start end:&end contentsEnd:&contentsEnd forRange:NSMakeRange(offset, 0)];
-        this->ranges[this->count++] = NSMakeRange(offset, contentsEnd - offset);
-        if (end == length && contentsEnd == length)
-          break;
-        offset = end;
-      } while (offset <= length);
+        this->ranges[this->count++] = NSMakeRange(start, contentsEnd - start);
+        if (contentsEnd == length)
+          return;
+        // A separator at EOF starts one more iteration for the empty row.
+      }
     }
     unsigned short lineAt(NSUInteger offset) const
     {
@@ -71,6 +106,152 @@ namespace
       return i;
     }
   };
+
+  /** Immutable borrowed row from a successful NativeLines scan; no retained mapping or encoding buffer. */
+  class NativeRow
+  {
+  public:
+    NativeRow(NSString *text, NSRange range)
+        : text_(text),
+          range_(range)
+    {
+    }
+    NSUInteger unitsAt(std::size_t bytes) const
+    {
+      NSUInteger offset = this->range_.location;
+      std::size_t consumed = 0;
+      while (offset < NSMaxRange(this->range_) && consumed < bytes)
+      {
+        const NSUInteger start = offset;
+        unsigned int scalar;
+        if (!ReadNativeScalar(this->text_, NSMaxRange(this->range_), offset, scalar)
+            || ScalarBytes(scalar) > bytes - consumed)
+          return start - this->range_.location;
+        consumed += ScalarBytes(scalar);
+      }
+      return offset - this->range_.location;
+    }
+    std::size_t bytesFloor(NSUInteger units) const
+    {
+      return this->bytesAt(units, false);
+    }
+    std::size_t bytesCeil(NSUInteger units) const
+    {
+      return this->bytesAt(units, true);
+    }
+    std::size_t byteLength() const
+    {
+      return this->bytesFloor(this->range_.length);
+    }
+    bool appendUtf8(std::string &out) const
+    {
+      NSUInteger offset = this->range_.location;
+      while (offset < NSMaxRange(this->range_))
+      {
+        unsigned int scalar;
+        if (!ReadNativeScalar(this->text_, NSMaxRange(this->range_), offset, scalar))
+          return false;
+        const std::size_t width = ScalarBytes(scalar);
+        char bytes[4];
+        unsigned int remaining = scalar;
+        for (std::size_t i = width - 1; i > 0; --i)
+        {
+          bytes[i] = static_cast<char>(0x80 | (remaining & 0x3F));
+          remaining >>= 6;
+        }
+        bytes[0] = static_cast<char>(remaining | (width == 1 ? 0 : width == 2 ? 0xC0 : width == 3 ? 0xE0 : 0xF0));
+        out.append(bytes, width);
+      }
+      return true;
+    }
+
+  private:
+    std::size_t bytesAt(NSUInteger units, bool ceil) const
+    {
+      const NSUInteger end = this->range_.location + std::min(units, this->range_.length);
+      NSUInteger offset = this->range_.location;
+      std::size_t bytes = 0;
+      while (offset < end)
+      {
+        unsigned int scalar;
+        if (!ReadNativeScalar(this->text_, NSMaxRange(this->range_), offset, scalar))
+          break;
+        if (offset > end && !ceil)
+          break;
+        bytes += ScalarBytes(scalar);
+      }
+      return bytes;
+    }
+    NSString *const text_;
+    const NSRange range_;
+  };
+
+  bool SameAsModel(NSString *native, const std::string &scratch)
+  {
+    if (!native)
+      return false;
+    NSUInteger units = 0;
+    std::size_t bytes = 0;
+    const NSUInteger length = [native length];
+    while (units < length && bytes < scratch.size())
+    {
+      unsigned int actual, expected;
+      if (!ReadNativeScalar(native, length, units, actual)
+          || !loka::core::detail::DecodeUtf8Codepoint(scratch.data(), scratch.size(), bytes, expected)
+          || actual != (expected == '\r' ? '\n' : expected))
+        return false;
+    }
+    return units == length && bytes == scratch.size();
+  }
+
+  /** One changed projection's refusing bytes; NSString copies before destruction. */
+  class NativeTextBytes
+  {
+  public:
+    explicit NativeTextBytes(const std::string &scratch)
+        : length_(scratch.size()),
+          bytes_(scratch.empty() ? 0 : static_cast<char *>(LokaAllocRaw(scratch.size(), Site())))
+    {
+      if (this->bytes_)
+        for (std::size_t i = 0; i < scratch.size(); ++i)
+          this->bytes_[i] = scratch[i] == '\r' ? '\n' : scratch[i];
+    }
+    ~NativeTextBytes()
+    {
+      LokaFreeRaw(this->bytes_, Site());
+    }
+    NSString *copyString() const
+    {
+      if (this->length_ && !this->bytes_)
+        return nil;
+      return [[NSString alloc] initWithBytes:this->length_ ? this->bytes_ : ""
+                                      length:this->length_
+                                    encoding:NSUTF8StringEncoding];
+    }
+
+  private:
+    static LokaAllocationSite Site()
+    {
+      return LokaAllocationSite("MacTextEditor", "NativeTextBytes");
+    }
+    NativeTextBytes(const NativeTextBytes &);
+    NativeTextBytes &operator=(const NativeTextBytes &);
+    const std::size_t length_;
+    char *const bytes_;
+  };
+
+  /** Storage infers the insertion end; view notifications report a selection. */
+  std::size_t NativeCaretBytes(const NativeRow &row, NSUInteger units, MacTextEditorContext::TextObservation origin)
+  {
+    return origin == MacTextEditorContext::STORAGE_EDIT ? row.bytesCeil(units) : row.bytesFloor(units);
+  }
+
+  std::size_t ClampedColumn(const TextLines &lines, unsigned short index, int column)
+  {
+    const text_document_detail::LineBytes row(lines.at(index).value, lines.capacity());
+    const std::size_t bytes = std::min(row.size(), static_cast<std::size_t>(std::max(0, column)));
+    return Utf8RetreatToBoundary(row.data(), row.size(), bytes);
+  }
 
   bool EqualLine(NSString *a, NSRange ar, NSString *b, NSRange br)
   {
@@ -278,7 +459,7 @@ struct MacTextEditorContext::Projection
   Phase phase;
   NSString *committed;
   std::string scratch;
-  ItemId ids[TextEditorProps::kMaxLines];
+  ItemId ids[256];
   NSRange selection;
   Styles *styles;
   Projection()
@@ -287,7 +468,7 @@ struct MacTextEditorContext::Projection
         selection(NSMakeRange(0, 0)),
         styles(0)
   {
-    this->scratch.reserve(TextEditorProps::kMaxBytes);
+    this->scratch.reserve(8192);
   }
   ~Projection()
   {
@@ -307,7 +488,7 @@ struct MacTextEditorContext::Projection
     [this->committed release];
     this->committed = nil;
     this->clearStyles();
-    for (unsigned short i = 0; i < TextEditorProps::kMaxLines; ++i)
+    for (unsigned short i = 0; i < 256; ++i)
       this->ids[i] = ItemId::none();
   }
   /** Validate the snapshot before consuming native text or deferred styling. */
@@ -316,12 +497,9 @@ struct MacTextEditorContext::Projection
     const EditorResult available = node.seam(key).project(this->scratch);
     if (available != EDITOR_OK)
       return available;
-    if ([this->committed length] != this->scratch.size())
+    if (!SameAsModel(this->committed, this->scratch))
       return EDITOR_STALE_ID;
-    for (NSUInteger i = 0; i < this->scratch.size(); ++i)
-      if ([this->committed characterAtIndex:i] != (this->scratch[i] == '\r' ? '\n' : this->scratch[i]))
-        return EDITOR_STALE_ID;
-    const ObservableList<String> &committedLines = *node.props.lines_;
+    const TextLines &committedLines = node.props.buffer_->lines();
     for (unsigned short i = 0; i < committedLines.size(); ++i)
       if (this->ids[i] != committedLines.at(i).id)
         return EDITOR_STALE_ID;
@@ -329,7 +507,7 @@ struct MacTextEditorContext::Projection
   }
   void style(NSTextView *view, loka::app::TextEditorNode &node, MacScenePlatformController &controller, bool force)
   {
-    NativeLines lines([view string]);
+    NativeLines lines([view string], node.props.buffer_->capacity());
     if (lines.result != EDITOR_OK)
       return;
     Styles *old = this->styles;
@@ -337,9 +515,9 @@ struct MacTextEditorContext::Projection
     Styles **tail = &this->styles;
     NSTextStorage *storage = [view textStorage];
     [storage beginEditing];
-    for (unsigned short i = 0; i < node.props.lines_->size(); ++i)
+    for (unsigned short i = 0; i < node.props.buffer_->lines().size(); ++i)
     {
-      const ObservableList<String>::Entry &entry = node.props.lines_->at(i);
+      const TextLines::Entry &entry = node.props.buffer_->lines().at(i);
       Styles **slot = &old;
       while (*slot && (*slot)->id != entry.id)
         slot = &(*slot)->next;
@@ -372,7 +550,7 @@ struct MacTextEditorContext::Projection
           }
           NSString *styled = [[[NSString alloc] initWithBytes:joined.data()
                                                        length:joined.size()
-                                                     encoding:NSASCIIStringEncoding] autorelease];
+                                                     encoding:NSUTF8StringEncoding] autorelease];
           if (valid && styled && EqualLine(styled, NSMakeRange(0, [styled length]), [view string], lines.ranges[i]))
           {
             NSUInteger offset = lines.ranges[i].location;
@@ -385,8 +563,18 @@ struct MacTextEditorContext::Projection
                 valid = false;
                 break;
               }
-              [storage addAttribute:NSFontAttributeName value:runFont range:NSMakeRange(offset, bytes.size())];
-              offset += bytes.size();
+              NSString *runText = [[[NSString alloc] initWithBytes:bytes.data()
+                                                            length:bytes.size()
+                                                          encoding:NSUTF8StringEncoding] autorelease];
+              const NSUInteger rowEnd = NSMaxRange(lines.ranges[i]);
+              const NSUInteger runLength = [runText length];
+              if (!runText || offset < lines.ranges[i].location || offset > rowEnd || runLength > rowEnd - offset)
+              {
+                valid = false;
+                break;
+              }
+              [storage addAttribute:NSFontAttributeName value:runFont range:NSMakeRange(offset, runLength)];
+              offset += runLength;
             }
             if (!valid)
               [storage setAttributes:defaults range:lines.ranges[i]];
@@ -495,7 +683,7 @@ public:
     if (this->completion_ != Projection::IDLE || !c.scroll_)
       return EDITOR_UNAVAILABLE;
     StateTracker *owner = 0;
-    if (!this->binding_.lines_ || this->binding_.lines_->queryMutationTracker(owner) != EDIT_OK)
+    if (!this->binding_.buffer_ || this->binding_.buffer_->lines().queryMutationTracker(owner) != EDIT_OK)
       return EDITOR_UNAVAILABLE;
     return request.usesTracker(owner) ? EDITOR_OK : EDITOR_OWNER_MISMATCH;
   }
@@ -505,7 +693,7 @@ public:
     const EditorResult ready = node.seam(context(base).key_).availability();
     if (ready != EDITOR_OK)
       return ready;
-    return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
+    return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
   virtual loka::app::scene::RequestApplication<LineCursor, EditorResult> apply(loka::app::scene::Node &base,
                                                                                const LineCursor &pending)
@@ -558,15 +746,17 @@ public:
       return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_OWNER_MISMATCH, follow);
     if (p.phase != Projection::INPUT)
       return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE, follow);
-    const NativeLines native(p.committed);
-    const int index = this->binding_.lines_->find(pending.line);
+    const NativeLines native(p.committed, this->binding_.buffer_->capacity());
+    const int index = this->binding_.buffer_->lines().find(pending.line);
     if (native.result != EDITOR_OK || index < 0 || index >= native.count)
       return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_STALE_ID, follow);
     const NSRange row = native.ranges[index];
-    const NSUInteger column = std::min(row.length, static_cast<NSUInteger>(std::max(0, pending.column)));
+    const std::size_t column =
+        ClampedColumn(this->binding_.buffer_->lines(), static_cast<unsigned short>(index), pending.column);
+    const NSUInteger units = NativeRow(p.committed, row).unitsAt(column);
     const LineCursor clamped(pending.line, static_cast<int>(column));
     p.phase = Projection::APPLYING;
-    [view setSelectedRange:NSMakeRange(row.location + column, 0)];
+    [view setSelectedRange:NSMakeRange(row.location + units, 0)];
     if (!this->hasSameContext())
       return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
     if (!seat.current(base, request))
@@ -581,7 +771,7 @@ public:
           pending, EDITOR_REENTRANT, loka::app::scene::REPAINT);
     if (scroll)
     {
-      [view scrollRangeToVisible:NSMakeRange(row.location + column, 0)];
+      [view scrollRangeToVisible:NSMakeRange(row.location + units, 0)];
       if (!this->hasSameContext())
         return loka::app::scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
       if (!seat.current(base, request))
@@ -687,7 +877,7 @@ private:
   bool currentBinding(loka::app::scene::Node &base) const
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    return node.lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED && node.props.lines_ == this->binding_.lines_
+    return node.lifecycleFact() == loka::app::scene::NODE_FACT_ATTACHED && node.props.buffer_ == this->binding_.buffer_
            && node.props.cursorState() == this->binding_.cursorState();
   }
   static MacTextEditorContext &context(loka::app::scene::Node &node)
@@ -713,7 +903,7 @@ bool MacTextEditorContext::queryVisibleLines(unsigned &lines) const
     return false;
   // Force layout, including the extra fragment for a final empty logical line.
   (void)[layout glyphRangeForTextContainer:container];
-  const NativeLines native([view string]);
+  const NativeLines native([view string], this->node_->props.buffer_->capacity());
   if (native.result != EDITOR_OK)
     return false;
   const NSRect visible = [scroll documentVisibleRect];
@@ -1026,14 +1216,13 @@ loka::app::scene::FollowUp MacTextEditorContext::syncFromNode(RailOperation &op,
     // The entry refuses pending requests before scheduling an allocation retry.
     return result == EDITOR_ALLOCATION ? loka::app::scene::SCHEDULE_RESTORE : loka::app::scene::REPAINT;
   }
-  // NSString uses LF; the owner seam serializes CR. ASCII keeps offsets equal.
-  std::replace(p.scratch.begin(), p.scratch.end(), '\r', '\n');
   NSString *desired = p.committed;
-  bool same = desired && [desired length] == p.scratch.size();
-  for (NSUInteger i = 0; same && i < p.scratch.size(); ++i)
-    same = [desired characterAtIndex:i] == static_cast<unsigned char>(p.scratch[i]);
+  const bool same = SameAsModel(desired, p.scratch);
   if (!same)
-    desired = [[NSString alloc] initWithBytes:p.scratch.data() length:p.scratch.size() encoding:NSASCIIStringEncoding];
+  {
+    const NativeTextBytes bytes(p.scratch);
+    desired = bytes.copyString();
+  }
   if (!desired)
   {
     p.clear();
@@ -1057,7 +1246,7 @@ loka::app::scene::FollowUp MacTextEditorContext::syncFromNode(RailOperation &op,
     }
     [[view undoManager] removeAllActions];
   }
-  if ([[view string] length] != p.scratch.size() || ![[view string] isEqualToString:desired])
+  if (![[view string] isEqualToString:desired])
   {
     if (!same)
       [desired release];
@@ -1069,8 +1258,8 @@ loka::app::scene::FollowUp MacTextEditorContext::syncFromNode(RailOperation &op,
     [p.committed release];
     p.committed = desired;
   }
-  const ObservableList<String> &lines = *this->node_->props.lines_;
-  for (unsigned short i = 0; i < TextEditorProps::kMaxLines; ++i)
+  const TextLines &lines = this->node_->props.buffer_->lines();
+  for (unsigned short i = 0; i < 256; ++i)
     p.ids[i] = i < lines.size() ? lines.at(i).id : ItemId::none();
   if (nativeCommit)
   {
@@ -1102,15 +1291,17 @@ void MacTextEditorContext::restoreSelectionFromFact(RailOperation &op)
   Projection &p = *this->projection_;
   const Projection::Phase completion = p.phase;
   NSTextView *view = (NSTextView *)[(NSScrollView *)this->scroll_ documentView];
-  const NativeLines native(p.committed);
+  const NativeLines native(p.committed, this->node_->props.buffer_->capacity());
   const LineCursor cursor = this->node_->props.cursorState()->get();
-  const int index = this->node_->props.lines_->find(cursor.line);
+  const int index = this->node_->props.buffer_->lines().find(cursor.line);
   NSRange selection = p.selection;
   if (index >= 0)
   {
     const NSUInteger location =
         native.ranges[index].location
-        + std::min(native.ranges[index].length, static_cast<NSUInteger>(std::max(0, cursor.column)));
+        + NativeRow(p.committed, native.ranges[index])
+              .unitsAt(ClampedColumn(
+                  this->node_->props.buffer_->lines(), static_cast<unsigned short>(index), cursor.column));
     selection = NSMakeRange(location, 0);
   }
   selection.location = std::min(selection.location, [p.committed length]);
@@ -1152,10 +1343,13 @@ void MacTextEditorContext::handleSelectionDidChange()
   // over committed text is a caret-only event.
   if (![[view string] isEqualToString:p.committed])
     return;
-  const NativeLines lines(p.committed);
+  const NativeLines lines(p.committed, this->node_->props.buffer_->capacity());
   const NSRange selection = [view selectedRange];
   const unsigned short index = lines.lineAt(selection.location);
-  const LineCursor cursor(p.ids[index], static_cast<int>(selection.location - lines.ranges[index].location));
+  const LineCursor cursor(
+      p.ids[index],
+      static_cast<int>(
+          NativeRow(p.committed, lines.ranges[index]).bytesFloor(selection.location - lines.ranges[index].location)));
   const Projection::Phase completion = p.phase;
   p.phase = Projection::INPUT;
   const EditorResult result = this->node_->seam(this->key_).moveCaret(cursor);
@@ -1181,7 +1375,8 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
   const EditorResult available = p.validateDocument(*this->node_, this->key_);
   if (available != EDITOR_OK)
     return available;
-  const NativeLines before(p.committed), after(text);
+  const NativeLines before(p.committed, this->node_->props.buffer_->capacity()),
+      after(text, this->node_->props.buffer_->capacity());
   if (after.result != EDITOR_OK)
     return after.result;
   // validateDocument left the committed CR-separated snapshot in scratch.
@@ -1192,9 +1387,8 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
   {
     if (i)
       logical += '\r';
-    const NSRange range = after.ranges[i];
-    for (NSUInteger column = 0; column < range.length; ++column)
-      logical += static_cast<char>([text characterAtIndex:range.location + column]);
+    if (!NativeRow(text, after.ranges[i]).appendUtf8(logical))
+      return EDITOR_NON_ASCII;
   }
   int hintLine = -1, hintColumn = -1;
   if (source == STORAGE_EDIT)
@@ -1206,14 +1400,15 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
       const NSUInteger location = std::min(static_cast<NSUInteger>(caretOffset), [p.committed length]);
       hintLine = before.lineAt(location);
       const NSRange range = before.ranges[hintLine];
-      hintColumn = static_cast<int>(std::min(location - range.location, range.length));
+      hintColumn = static_cast<int>(NativeRow(p.committed, range).bytesFloor(location - range.location));
     }
   }
   else if (!p.selection.length && p.selection.location <= [p.committed length])
   {
     // Like Win32, interpret the captured native selection in the before snapshot.
     hintLine = before.lineAt(p.selection.location);
-    hintColumn = static_cast<int>(p.selection.location - before.ranges[hintLine].location);
+    hintColumn = static_cast<int>(NativeRow(p.committed, before.ranges[hintLine])
+                                      .bytesFloor(p.selection.location - before.ranges[hintLine].location));
   }
   const TextEditorLineDiff diff = DiffTextEditorLines(p.scratch, logical, hintLine, hintColumn);
   const unsigned short first = static_cast<unsigned short>(diff.first());
@@ -1224,8 +1419,12 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
     const NSUInteger caret = std::min(static_cast<NSUInteger>(caretOffset), [text length]);
     const unsigned short caretLine = after.lineAt(caret);
     // A later view notification can carry a new caret over committed text.
-    const LineCursor cursor(p.ids[caretLine], static_cast<int>(caret - after.ranges[caretLine].location));
-    return cursor == this->node_->props.cursorState()->get() ? EDITOR_OK : this->node_->seam(this->key_).moveCaret(cursor);
+    const LineCursor cursor(p.ids[caretLine],
+                            static_cast<int>(NativeCaretBytes(NativeRow(text, after.ranges[caretLine]),
+                                                              caret - after.ranges[caretLine].location,
+                                                              source)));
+    return cursor == this->node_->props.cursorState()->get() ? EDITOR_OK
+                                                             : this->node_->seam(this->key_).moveCaret(cursor);
   }
   const unsigned short oldEnd = static_cast<unsigned short>(first + diff.before());
   const unsigned short newEnd = static_cast<unsigned short>(first + diff.after());
@@ -1237,10 +1436,14 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
   {
     // Storage announces text before the view's selection is final. Compare the
     // complete changed span, including separators, to find the insertion end.
-    const loka::app::detail::TextChangeSpan span(
-        NativeCharacters(p.committed, oldRange.location), oldRange.length,
-        NativeCharacters(text, newRange.location), newRange.length);
-    caretOffset = newRange.location + span.afterEnd();
+    const loka::app::detail::TextChangeSpan span(NativeCharacters(p.committed, oldRange.location),
+                                                 oldRange.length,
+                                                 NativeCharacters(text, newRange.location),
+                                                 newRange.length);
+    const NSUInteger end = newRange.location + span.afterEnd();
+    const NSRange endRow = after.ranges[after.lineAt(end)];
+    const NativeRow row(text, endRow);
+    caretOffset = endRow.location + row.unitsAt(row.bytesCeil(end - endRow.location));
   }
   const NSUInteger caret = std::min(static_cast<NSUInteger>(caretOffset), [text length]);
   const unsigned short caretLine = after.lineAt(caret);
@@ -1249,14 +1452,19 @@ EditorResult MacTextEditorContext::applyNativeChange(TextObservation source, std
   {
     if (i != first)
       replacement += '\r';
-    NSString *line = [text substringWithRange:after.ranges[i]];
-    replacement.append([line UTF8String], [line lengthOfBytesUsingEncoding:NSUTF8StringEncoding]);
+    if (!NativeRow(text, after.ranges[i]).appendUtf8(replacement))
+      return EDITOR_NON_ASCII;
   }
-  return this->node_->seam(this->key_).applyReplace(
-      LineCursor(p.ids[first], 0),
-      LineCursor(p.ids[oldEnd - 1], static_cast<int>(before.ranges[oldEnd - 1].length)),
-      replacement.data(), replacement.size(),
-      RowCursor(caretLine, static_cast<int>(caret - after.ranges[caretLine].location)));
+  return this->node_->seam(this->key_)
+      .applyReplace(
+          LineCursor(p.ids[first], 0),
+          LineCursor(p.ids[oldEnd - 1],
+                     static_cast<int>(NativeRow(p.committed, before.ranges[oldEnd - 1]).byteLength())),
+          replacement.data(),
+          replacement.size(),
+          RowCursor(caretLine,
+                    static_cast<int>(NativeCaretBytes(
+                        NativeRow(text, after.ranges[caretLine]), caret - after.ranges[caretLine].location, source))));
 }
 
 void MacTextEditorContext::handleTextDidChange(TextObservation source, std::size_t caretOffset)
@@ -1363,3 +1571,7 @@ void RegisterMacTextEditorNodeHandler(loka::app::scene::PlatformNodeHandlerRegis
 {
   registry.registerHandler(&handler);
 }
+
+#ifdef TEST_BUILD
+#include "../../../../tests/support/MacTextEditorConversionPins.inc"
+#endif

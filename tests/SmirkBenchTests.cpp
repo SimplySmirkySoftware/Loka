@@ -429,7 +429,7 @@ void testSmirkBenchPlainEditorQueueAudit()
   scene::Node *node = findNodeByTestId(dsl::testing::SceneTestAccess::rootNode(fixture.scene), "SmirkBench.PlainEditor");
   LOKA_VERIFY(node && node->nodeTypeKey() == scene::NodeTypeToken<TextEditorNode>());
   TextEditorNode *editor = static_cast<TextEditorNode *>(node);
-  const LineCursor first(editor->props.lines_->at(0).id, 0);
+  const LineCursor first(editor->props.buffer_->lines().at(0).id, 0);
   const LineCursor last(first.line, 2);
   Trace &trace = Trace::instance();
   // Both request histories: a command trace left by an earlier test in the

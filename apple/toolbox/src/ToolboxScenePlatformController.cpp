@@ -1,3 +1,4 @@
+#include "ToolboxPaintDrawerType.hpp"
 #include "ToolboxPaintSuppressScope.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -447,13 +448,6 @@ short ToolboxScenePlatformController::measureTextWidth(
   return scope.measure(value);
 }
 
-bool ToolboxScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
-{
-  if (!handler || IsToolboxPaintDrawerType(handler->nodeTypeKey()))
-    return false;
-  return this->nodeHandlerRegistry_.registerHandler(handler);
-}
-
 bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *node,
                                                             loka::app::scene::LayoutState &state)
 {
@@ -492,37 +486,10 @@ bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::No
   return true;
 }
 
-void ToolboxScenePlatformController::refuseScrollViewShortRange()
-{
-  if (this->projectionParentScopes_.activeDepth() != 0)
-  {
-    this->projectionParentScopes_.current().markShortRangeRefused();
-  }
-}
-
-bool ToolboxScenePlatformController::refuseNarrowingInScrollScope(int resultY)
-{
-  if (this->projectionParentScopes_.activeDepth() == 0)
-  {
-    return false;
-  }
-  loka::app::scene::ProjectionParentScope &scope =
-      this->projectionParentScopes_.current();
-  if (scope.hasShortRangeRefusal())
-  {
-    return true;
-  }
-  if (resultY >= SHRT_MIN && resultY <= SHRT_MAX)
-  {
-    return false;
-  }
-  scope.markShortRangeRefused();
-  return true;
-}
-
 #include "ToolboxScrollViewLayout.cpp"
 
 #include "ToolboxScrollViewRender.cpp"
+#include "ToolboxClipBoxRender.cpp"
 
 short ToolboxScenePlatformController::allocateControlId()
 {

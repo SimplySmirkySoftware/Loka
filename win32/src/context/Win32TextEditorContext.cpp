@@ -4,6 +4,7 @@
 #include "Win32FocusParticipant.hpp"
 #include "Win32EditTextBridge.hpp"
 #include "app/nodes/controls/TextEditorDiff.hpp"
+#include "app/nodes/controls/TextDocumentLine.hpp"
 #include "../Win32ScenePlatformController.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <cassert>
@@ -49,15 +50,16 @@ Win32TextEditorContext::Projection::Projection()
       text(),
       wide()
 {
-  this->text.reserve(TextEditorProps::kMaxBytes);
-  this->wide.reserve(TextEditorProps::kMaxBytes + TextEditorProps::kMaxLines);
+  // Fixed reservation until the native-capacity PR; matches Win32PlatformContext query.
+  this->text.reserve(8192);
+  this->wide.reserve(8192 + 256);
 }
 bool Win32TextEditorContext::Projection::current(const TextEditorNode &node) const
 {
-  if (!this->owner || this->owner != node.props.lines_ || this->revision != this->owner->revision().get())
+  if (!this->owner || this->owner != node.props.buffer_ || this->revision != this->owner->lines().revision().get())
     return false;
   loka::core::StateTracker *tracker = 0;
-  const loka::core::ListEditResult ready = this->owner->queryMutationTracker(tracker);
+  const loka::core::ListEditResult ready = this->owner->lines().queryMutationTracker(tracker);
   return (ready == loka::core::EDIT_OK || ready == loka::core::EDIT_REENTRANT) && node.props.cursorUsesTracker(tracker);
 }
 EditorResult Win32TextEditorContext::Projection::capture(TextEditorNode &node, const scene::SeamKey<TextEditorNode> &key)
@@ -72,8 +74,8 @@ EditorResult Win32TextEditorContext::Projection::capture(TextEditorNode &node, c
     this->wide.clear();
     return result == EDITOR_OK ? EDITOR_NON_ASCII : result;
   }
-  this->owner = node.props.lines_;
-  this->revision = this->owner->revision().get();
+  this->owner = node.props.buffer_;
+  this->revision = this->owner->lines().revision().get();
   return EDITOR_OK;
 }
 
@@ -211,7 +213,7 @@ public:
     if (c.status_ != EDITOR_OK)
       return c.status_;
     loka::core::StateTracker *owner = 0;
-    if (!this->binding_.lines_ || this->binding_.lines_->queryMutationTracker(owner) != loka::core::EDIT_OK)
+    if (!this->binding_.buffer_ || this->binding_.buffer_->lines().queryMutationTracker(owner) != loka::core::EDIT_OK)
       return EDITOR_UNAVAILABLE;
     return request.usesTracker(owner) ? EDITOR_OK : EDITOR_OWNER_MISMATCH;
   }
@@ -221,7 +223,7 @@ public:
     const EditorResult ready = node.seam(context(base).key_).availability();
     if (ready != EDITOR_OK)
       return ready;
-    return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
+    return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
   /** Taking can notify an owner edit. Repair before asking EDIT for offsets
       or geometry, so both seats measure the reconciled projection. */
@@ -236,11 +238,16 @@ public:
     const scene::FollowUp follow = this->ensureProjection(base);
     if (c.phase_ != COMMIT || c.status_ != EDITOR_OK)
       return scene::RequestApplication<LineCursor, EditorResult>(pending, c.status_, follow);
-    const int row = c.node_->props.lines_->find(pending.line);
+    const int row = c.node_->props.buffer_->lines().find(pending.line);
     const int offset = static_cast<int>(SendMessageW(c.hwnd(), EM_LINEINDEX, row, 0));
-    const int length = static_cast<int>(SendMessageW(c.hwnd(), EM_LINELENGTH, offset, 0));
-    const int column = pending.column < 0 ? 0 : (pending.column > length ? length : pending.column);
-    SendMessageW(c.hwnd(), EM_SETSEL, offset + column, offset + column);
+    std::size_t start = 0, length = 0;
+    if (offset < 0 || !c.projection_.owner || !loka::win32::TextEditorRowRange(c.projection_.text, row, start, length))
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE, follow);
+    const char *bytes = c.projection_.text.data() + start;
+    const LineCursor::Column column =
+        static_cast<LineCursor::Column>(Utf8ClampColumnToBoundary(bytes, length, pending.column));
+    const int units = loka::win32::LogicalRow(bytes, length).unitsAt(static_cast<std::size_t>(column));
+    SendMessageW(c.hwnd(), EM_SETSEL, offset + units, offset + units);
     return scene::RequestApplication<LineCursor, EditorResult>(
         LineCursor(pending.line, column), EDITOR_OK, scene::REPAINT);
   }
@@ -315,7 +322,7 @@ private:
   bool currentBinding(scene::Node &base) const
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.lines_ == this->binding_.lines_
+    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.buffer_ == this->binding_.buffer_
            && node.props.cursorState() == this->binding_.cursorState();
   }
   static Win32TextEditorContext &context(scene::Node &node)
@@ -472,6 +479,8 @@ void Win32TextEditorContext::onPropsApplied()
 void Win32TextEditorContext::onNativeFact(scene::NodeLifecycleFact, scene::NodeLifecycleFact next)
 {
   RailOperation op(*this);
+  if (next != scene::NODE_FACT_ATTACHED)
+    this->selection_.evidence.clear();
   if (!this->hwnd())
     return;
   if (next == scene::NODE_FACT_ATTACHED)
@@ -496,8 +505,11 @@ void Win32TextEditorContext::onNativeFact(scene::NodeLifecycleFact, scene::NodeL
     this->node_ = 0;
   }
 }
-void Win32TextEditorContext::captureSelection()
+void Win32TextEditorContext::captureSelection(CaptureIntent intent)
 {
+  this->selection_.evidence = intent == PRE_INPUT && this->node_ && this->projection_.current(*this->node_)
+                                  ? EditEvidence(this->projection_.revision)
+                                  : EditEvidence();
   SendMessageW(this->hwnd(),
                EM_GETSEL,
                reinterpret_cast<WPARAM>(&this->selection_.start),
@@ -544,16 +556,21 @@ scene::FollowUp Win32TextEditorContext::replaceProjection()
 void Win32TextEditorContext::restoreSelection()
 {
   DWORD start = this->selection_.start, end = this->selection_.end;
-  if (this->node_->props.lines_ && this->node_->props.cursorState())
+  if (this->node_->props.buffer_ && this->node_->props.cursorState())
   {
     const LineCursor cursor = this->node_->props.cursorState()->get();
-    const int index = this->node_->props.lines_->find(cursor.line);
+    const int index = this->node_->props.buffer_->lines().find(cursor.line);
     if (index >= 0)
     {
       const int offset = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEINDEX, index, 0));
-      const int length = static_cast<int>(SendMessageW(this->hwnd(), EM_LINELENGTH, offset, 0));
-      const int column = cursor.column < 0 ? 0 : (cursor.column > length ? length : cursor.column);
-      start = end = static_cast<DWORD>(offset + column);
+      std::size_t rowStart = 0, length = 0;
+      if (offset >= 0 && this->projection_.owner
+          && loka::win32::TextEditorRowRange(this->projection_.text, index, rowStart, length))
+      {
+        const char *bytes = this->projection_.text.data() + rowStart;
+        const std::size_t column = Utf8ClampColumnToBoundary(bytes, length, cursor.column);
+        start = end = static_cast<DWORD>(offset + loka::win32::LogicalRow(bytes, length).unitsAt(column));
+      }
     }
   }
   SendMessageW(this->hwnd(), EM_SETSEL, start, end);
@@ -596,26 +613,31 @@ void Win32TextEditorContext::syncFromNode(scene::Settlement stimulus)
   }
   this->settle(stimulus, op);
 }
-RowCursor Win32TextEditorContext::nativeRowCaret() const
+RowCursor Win32TextEditorContext::nativeRowCaret(const std::string &logical) const
 {
   DWORD start = 0, end = 0;
   SendMessageW(this->hwnd(), EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
   const int index = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEFROMCHAR, end, 0));
   const int offset = static_cast<int>(SendMessageW(this->hwnd(), EM_LINEINDEX, index, 0));
-  return RowCursor(static_cast<unsigned short>(index), static_cast<int>(end) - offset);
+  std::size_t rowStart = 0, length = 0;
+  if (offset < 0 || !loka::win32::TextEditorRowRange(logical, index, rowStart, length))
+    return RowCursor::None();
+  const std::size_t column =
+      loka::win32::LogicalRow(logical.data() + rowStart, length).bytesFloor(static_cast<int>(end) - offset);
+  return RowCursor(static_cast<unsigned short>(index), static_cast<LineCursor::Column>(column));
 }
 LineCursor Win32TextEditorContext::nativeCaret() const
 {
-  if (!this->node_ || !this->node_->props.lines_)
+  if (!this->node_ || !this->node_->props.buffer_)
     return LineCursor::None();
-  const RowCursor caret = this->nativeRowCaret();
-  if (caret.isNone() || caret.row >= this->node_->props.lines_->size())
+  const RowCursor caret = this->nativeRowCaret(this->projection_.text);
+  if (caret.isNone() || caret.row >= this->node_->props.buffer_->lines().size())
     return LineCursor::None();
-  return LineCursor(this->node_->props.lines_->at(caret.row).id, caret.column);
+  return LineCursor(this->node_->props.buffer_->lines().at(caret.row).id, caret.column);
 }
 EditorResult Win32TextEditorContext::applyLines(int first, int oldCount, int newCount, const std::string &logical)
 {
-  loka::core::ObservableList<loka::core::String> &lines = *this->node_->props.lines_;
+  loka::app::TextLines &lines = this->node_->props.buffer_->lines();
   if (first < 0 || oldCount <= 0 || newCount <= 0 || first + oldCount > lines.size())
     return EDITOR_INVALID_CURSOR;
   const unsigned short last = static_cast<unsigned short>(first + oldCount - 1);
@@ -640,16 +662,22 @@ EditorResult Win32TextEditorContext::applyLines(int first, int oldCount, int new
       ++end;
   }
   // Native rows already describe the post-state, including newly inserted rows.
-  return this->node_->seam(this->key_).applyReplace(from, to, logical.data() + start, end - start, this->nativeRowCaret());
+  return this->node_->seam(this->key_)
+      .applyReplace(from, to, logical.data() + start, end - start, this->nativeRowCaret(logical));
 }
 EditorResult Win32TextEditorContext::commitNativeChange()
 {
-  if (!this->node_ || !this->node_->props.lines_)
+  // Take before every refusal/no-op and before either model call can notify.
+  const bool matchingEvidence = this->selection_.evidence.consumeMatching(this->projection_.revision);
+  if (!this->node_ || !this->node_->props.buffer_)
     return EDITOR_UNAVAILABLE;
   if (!this->projection_.current(*this->node_))
     return EDITOR_STALE_ID;
   const int length = GetWindowTextLengthW(this->hwnd());
-  if (length > TextEditorProps::kMaxBytes + TextEditorProps::kMaxLines - 1)
+  const TextCapacity &capacity = this->node_->props.buffer_->capacity();
+  std::size_t budget = 0;
+  if (!text_document_detail::ExpandedSize(capacity.bytes, capacity.lines ? capacity.lines - 1 : 0, budget)
+      || static_cast<std::size_t>(length) > budget)
     return EDITOR_CAPACITY;
   std::wstring wide;
   loka::win32::ReadEditTextWide(this->hwnd(), wide);
@@ -658,31 +686,40 @@ EditorResult Win32TextEditorContext::commitNativeChange()
   std::string logical;
   if (!loka::win32::TextEditorFromWide(wide.data(), wide.size(), logical))
     return EDITOR_NON_ASCII;
-  if (logical.size() > TextEditorProps::kMaxBytes)
+  if (!text_document_detail::PayloadAdmits(logical.data(), logical.size()))
+    return EDITOR_NON_ASCII;
+  if (logical.size() > this->node_->props.buffer_->capacity().bytes)
     return EDITOR_CAPACITY;
-  // The saved selection belongs to the pre-edit ASCII projection: native CRLF
-  // takes two offsets where the logical separator takes one. Derive the hint
-  // from that snapshot, never from line queries on the already edited control.
+  // Walk the before snapshot once; the final unterminated row also has units.
   int caretLine = 0;
   int caretColumn = static_cast<int>(this->selection_.end);
   std::size_t start = 0;
-  for (std::size_t end = this->projection_.text.find('\r'); end != std::string::npos;
-       end = this->projection_.text.find('\r', start))
+  for (;;)
   {
-    const int nativeLength = static_cast<int>(end - start) + 2;
-    if (caretColumn < nativeLength)
+    const std::size_t found = this->projection_.text.find('\r', start);
+    const std::size_t end = found == std::string::npos ? this->projection_.text.size() : found;
+    const loka::win32::LogicalRow row(this->projection_.text.data() + start, end - start);
+    const int units = row.unitLength();
+    if (found == std::string::npos || caretColumn < units + 2)
+    {
+      caretColumn = static_cast<int>(row.bytesFloor(caretColumn));
       break;
-    caretColumn -= nativeLength;
+    }
+    caretColumn -= units + 2;
     ++caretLine;
     start = end + 1;
   }
-  // A selection replacement has no single split/join caret. Undo may have a
-  // distant caret; the shared helper accepts the hint only when text agrees.
+  // Only a collapsed selection captured before this revision's input is evidence.
+  // Without it, repeated/empty edge rows deliberately use text-only identity.
   const loka::app::TextEditorLineDiff diff = loka::app::DiffTextEditorLines(
-      this->projection_.text, logical, this->selection_.start == this->selection_.end ? caretLine : -1, caretColumn);
+      this->projection_.text,
+      logical,
+      matchingEvidence && this->selection_.start == this->selection_.end ? caretLine : -1,
+      caretColumn);
   if (diff.before() == 0 && diff.after() == 0)
     return this->node_->seam(this->key_).moveCaret(this->nativeCaret());
-  if (this->node_->props.lines_->size() - diff.before() + diff.after() > TextEditorProps::kMaxLines)
+  if (this->node_->props.buffer_->lines().size() - diff.before() + diff.after()
+      > this->node_->props.buffer_->capacity().lines)
     return EDITOR_CAPACITY;
   return this->applyLines(diff.first(), diff.before(), diff.after(), logical);
 }
@@ -708,6 +745,8 @@ bool Win32TextEditorContext::handleCommand(WPARAM wParam, LPARAM)
     this->captureSelection();
   this->phase_ = COMMIT;
   const EditorResult result = this->status_ == EDITOR_OK ? this->commitNativeChange() : this->status_;
+  if (this->status_ != EDITOR_OK)
+    this->selection_.evidence.clear();
   if (!op.hasSameContext())
     return true;
   if (result == EDITOR_OK && this->node_)
@@ -804,9 +843,10 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
     return 0;
   }
   RailOperation op(*this);
-  this->captureSelection();
+  this->captureSelection(PRE_INPUT);
   this->phase_ = message == WM_PASTE ? PASTING : INPUT;
   const LRESULT result = CallWindowProcW(this->previousProc_, window, message, wParam, lParam);
+  this->selection_.evidence.clear();
   if (!op.hasSameContext())
     return result;
   if (!this->hwnd() || !this->node_)

@@ -103,6 +103,10 @@ public:
     return true;
   }
   virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state);
+  /** Paint children under the latest Box/Card placement, or without an extra clip on refusal. */
+  void renderClipBox(loka::app::scene::Node *node);
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
@@ -153,6 +157,8 @@ public:
   void hideRetiredControl(ControlRef control);
   void drawScrollBarControl(short id);
   void drawControl(ControlRef control);
+  /** Reconcile one Button; painted reports a ShowControl paint independently
+      of label submission success. The caller supplies the composition clip. */
   bool ensureButtonControl(short resourceId,
                            const Rect &rect,
                            const loka::core::String &label,
@@ -160,7 +166,8 @@ public:
                            loka::core::State<bool> *enabled,
                            loka::app::scene::NativeLifetimeHint lifetimeHint,
                            ToolboxButtonContext *context,
-                           ButtonControlBinding *&binding);
+                           ButtonControlBinding *&binding,
+                           bool *painted = 0);
   void destroyButtonControl(short resourceId, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Creates or refreshes the scrollBarProc control for one ScrollBar node.
       The declared range and the bound value are pushed on every projection,
@@ -243,12 +250,14 @@ public:
   }
   void renderScrollView(loka::app::ScrollViewNode *scrollView);
 #include "ToolboxScrollViewProjection.hpp"
-  bool refuseNarrowingInScrollScope(int resultY);
-  void refuseScrollViewShortRange();
 
 #include "ToolboxInputBodies.hpp"
 
 private:
+  void noteControlDraw();
+  /** Capture admitted move damage once; an empty rectangle means refusal. */
+  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const Rect &admittedArea);
   void activateEditControl(std::size_t index);
   void reachNativeButton(short id);
   void reachNativeBar(short id);

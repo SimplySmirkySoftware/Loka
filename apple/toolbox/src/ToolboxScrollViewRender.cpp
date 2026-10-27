@@ -12,12 +12,15 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
       break;
     }
   }
-  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_
-      || this->projectionParentScopes_.activeDepth() != 0)
+  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_ || this->projectionParentScopes_.insideViewport()
+      || this->projectionParentScopes_.insideUnit())
   {
     return;
   }
-  const Rect viewportRect = binding->contentRect;
+  Rect viewportRect = binding->contentRect;
+  // Match layout: a viewport inside a clip box inherits its final paint bound.
+  if (this->projectionParentScopes_.currentIsClip())
+    this->intersectWithProjectionClip(binding->contentRect, viewportRect);
   const loka::core::Frame viewportClip(viewportRect.left,
                                        viewportRect.top,
                                        viewportRect.right - viewportRect.left,

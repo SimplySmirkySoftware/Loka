@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "MacZStackUnitTests.hpp"
 #include "MacScenePlatformController.hpp"
 #include "MacSceneLayout.hpp"
@@ -934,7 +935,7 @@ void testMacZStackRetirementDetachesUnitBeforeDrain()
 void testMacZStackReattachedGroundStaysBelowUnits()
 {
   loka::app::testing::TextEditorStateOwner owner;
-  loka::core::ObservableList<loka::core::String> lines;
+  loka::testing::TextBufferFixture lines;
   LOKA_VERIFY(lines.attach(&owner.tracker, 4) == loka::core::ATTACH_OK);
   LOKA_VERIFY(lines.insert(0, loka::core::String("Ground editor")) == loka::core::EDIT_OK);
   Fixture f;

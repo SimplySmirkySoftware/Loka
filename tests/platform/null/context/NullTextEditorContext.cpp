@@ -4,6 +4,7 @@
 #include "platform/null/NullScenePlatformController.hpp"
 #include "app/scene/projection/RetainedNodeHandler.hpp"
 #include <algorithm>
+#include "app/nodes/controls/TextDocumentLine.hpp"
 using namespace loka::app;
 namespace
 {
@@ -33,12 +34,10 @@ NullTextEditorContext::NullTextEditorContext(scene::IPlatformController &control
       status_(EDITOR_UNAVAILABLE),
       restores_(0)
 {
-  // Reserve cancellation capacity before accepting any input.
-  this->buffer_.reserve(TextEditorProps::kMaxBytes);
 }
 void NullTextEditorContext::readLifecycleFactOnAttach()
 {
-  assert(this->node_ && this->node_->props.lines_);
+  assert(this->node_ && this->node_->props.buffer_);
   this->project(LineCursor::None());
   this->settle(scene::SETTLE_ATTACH,
                this->node_ && this->node_->props.cursorState() ? this->node_->props.cursorState()->get()
@@ -67,7 +66,7 @@ void NullTextEditorContext::project(LineCursor fallback)
     this->caret_ = LineCursor::None();
     return;
   }
-  const loka::core::ObservableList<loka::core::String> &lines = *this->node_->props.lines_;
+  const loka::app::TextLines &lines = this->node_->props.buffer_->lines();
   this->caret_ = this->node_->props.cursorState()->get();
   if (lines.find(this->caret_.line) < 0)
   {
@@ -83,7 +82,9 @@ void NullTextEditorContext::project(LineCursor fallback)
       start = this->buffer_.find('\r', start) + 1;
     const std::size_t end = this->buffer_.find('\r', start);
     const std::size_t length = (end == std::string::npos ? this->buffer_.size() : end) - start;
-    this->caret_.column = std::max(0, std::min(this->caret_.column, static_cast<int>(length)));
+    const int column = std::max(0, std::min(this->caret_.column, static_cast<int>(length)));
+    this->caret_.column = static_cast<LineCursor::Column>(
+        Utf8RetreatToBoundary(this->buffer_.data() + start, length, static_cast<std::size_t>(column)));
   }
 }
 void NullTextEditorContext::restoreCommittedProjection(LineCursor snapshot)
@@ -96,7 +97,7 @@ std::size_t NullTextEditorContext::nativeOffset() const
 {
   if (!this->node_)
     return 0;
-  const int index = this->node_->props.lines_->find(this->caret_.line);
+  const int index = this->node_->props.buffer_->lines().find(this->caret_.line);
   std::size_t offset = 0;
   for (int i = 0; i < index; ++i)
   {
@@ -167,7 +168,7 @@ public:
     if (context(base).phase_ != INPUT)
       return EDITOR_REENTRANT;
     loka::core::StateTracker *owner = 0;
-    if (!this->binding_.lines_ || this->binding_.lines_->queryMutationTracker(owner) != loka::core::EDIT_OK)
+    if (!this->binding_.buffer_ || this->binding_.buffer_->lines().queryMutationTracker(owner) != loka::core::EDIT_OK)
       return EDITOR_UNAVAILABLE;
     return request.usesTracker(owner) ? EDITOR_OK : EDITOR_OWNER_MISMATCH;
   }
@@ -177,19 +178,22 @@ public:
     const EditorResult ready = node.seam(context(base).key_).availability();
     if (ready != EDITOR_OK)
       return ready;
-    return node.props.lines_->find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
+    return node.props.buffer_->lines().find(pending.line) < 0 ? EDITOR_STALE_ID : EDITOR_OK;
   }
   virtual scene::RequestApplication<LineCursor, EditorResult> apply(scene::Node &base, const LineCursor &pending)
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    const int row = node.props.lines_->find(pending.line);
-    std::size_t length = 0;
+    const int row = node.props.buffer_->lines().find(pending.line);
     if (row < 0)
       return scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_STALE_ID);
-    if (!node.props.lines_->at(static_cast<unsigned short>(row))
-             .value.requiredUnits(loka::core::StringEncodingUtf8, length))
-      return scene::RequestApplication<LineCursor, EditorResult>(pending, EDITOR_UNAVAILABLE);
-    const LineCursor applied(pending.line, std::max(0, std::min(pending.column, static_cast<int>(length))));
+    const text_document_detail::LineBytes bytes(node.props.buffer_->lines().at(static_cast<unsigned short>(row)).value,
+                                                node.props.buffer_->capacity());
+    if (bytes.result() != EDITOR_OK)
+      return scene::RequestApplication<LineCursor, EditorResult>(pending, bytes.result());
+    const int column = std::max(0, std::min(pending.column, static_cast<int>(bytes.size())));
+    const LineCursor applied(pending.line,
+                             static_cast<LineCursor::Column>(
+                                 Utf8RetreatToBoundary(bytes.data(), bytes.size(), static_cast<std::size_t>(column))));
     context(base).caret_ = applied;
     return scene::RequestApplication<LineCursor, EditorResult>(applied, EDITOR_OK);
   }
@@ -223,7 +227,7 @@ private:
   bool currentBinding(scene::Node &base) const
   {
     TextEditorNode &node = static_cast<TextEditorNode &>(base);
-    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.lines_ == this->binding_.lines_
+    return node.lifecycleFact() == scene::NODE_FACT_ATTACHED && node.props.buffer_ == this->binding_.buffer_
            && node.props.cursorState() == this->binding_.cursorState();
   }
   static NullTextEditorContext &context(scene::Node &node)
@@ -370,7 +374,7 @@ EditorResult NullTextEditorContext::input(const std::string &bytes, bool join, c
     result = this->node_->seam(this->key_).moveCaret(*move);
   else if (join)
   {
-    const loka::core::ObservableList<loka::core::String> &lines = *this->node_->props.lines_;
+    const loka::app::TextLines &lines = this->node_->props.buffer_->lines();
     const int index = lines.find(before.line);
     if (before.column != 0)
       result = EDITOR_INVALID_CURSOR;

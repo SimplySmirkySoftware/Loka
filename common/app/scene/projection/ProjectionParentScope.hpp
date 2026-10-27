@@ -75,7 +75,8 @@ namespace loka
               translationX(0),
               translationY(0),
               clipRect(0, 0, 0, 0),
-              channel(0)
+              channel(0),
+              kind_(ROOT)
         {
         }
 
@@ -84,7 +85,8 @@ namespace loka
               translationX(translateX),
               translationY(translateY),
               clipRect(clip),
-              channel(0)
+              channel(0),
+              kind_(ROOT)
         {
         }
 
@@ -157,6 +159,16 @@ namespace loka
         ProjectionMeasurementChannel *channel;
 
       private:
+        friend class ProjectionParentScopeStack;
+        enum Kind
+        {
+          ROOT,
+          VIEWPORT,
+          UNIT,
+          CLIP
+        };
+        Kind kind_;
+
         static bool tryAdd(int lhs, int rhs, int &out)
         {
           if ((rhs > 0 && lhs > INT_MAX - rhs) ||
@@ -180,16 +192,17 @@ namespace loka
         }
       };
 
-      /** Allocation-free LIFO stack. V1 admits root -> viewport -> unit or
-          root -> unit; a viewport is admitted only directly under the root.
-          Admission is always-on; no new walk, one borrowed channel pointer per frame
-          and two small owned channel values on the stack. */
+      /** Allocation-free LIFO stack with at most eight active frames, excluding
+          ROOT. One VIEWPORT and one UNIT may be active; VIEWPORT cannot enter
+          either kind, and UNIT cannot enter UNIT. CLIP inherits its parent's
+          channel and translation and refuses at six active frames, reserving
+          room for VIEWPORT and UNIT. Admission scans only this stack's frames. */
       class ProjectionParentScopeStack
       {
       public:
         enum
         {
-          MAX_ACTIVE_SCOPES = 2
+          MAX_ACTIVE_SCOPES = 8
         };
 
         explicit ProjectionParentScopeStack(void *rootParent = 0)
@@ -218,23 +231,29 @@ namespace loka
 
         bool pushViewport(const ProjectionParentScope &scope)
         {
-          if (this->activeDepth_ != 0)
+          if (this->insideViewport() || this->insideUnit() || this->activeDepth_ >= MAX_ACTIVE_SCOPES)
             return false;
           this->viewportChannel_ = ProjectionMeasurementChannel();
           this->frames_[++this->activeDepth_] = scope;
           this->current().channel = &this->viewportChannel_;
+          this->current().kind_ = ProjectionParentScope::VIEWPORT;
           return true;
         }
 
-        /** For the closed set {root, viewport, unit}, a unit either binds
-            the root-unit channel or shares its viewport parent's channel.
-            A future channel-inheriting frame kind must revisit this rule. */
+        /** Whether the immediate enclosing frame supplies a clip-only boundary. */
+        bool currentIsClip() const
+        {
+          return this->current().kind_ == ProjectionParentScope::CLIP;
+        }
+
         bool insideUnit() const
         {
-          return this->current().channel == &this->rootUnitChannel_ ||
-                 (this->activeDepth_ >= 1 &&
-                  this->frames_[this->activeDepth_ - 1].channel == &this->viewportChannel_ &&
-                  this->current().channel == this->frames_[this->activeDepth_ - 1].channel);
+          return this->containsKind(ProjectionParentScope::UNIT);
+        }
+
+        bool insideViewport() const
+        {
+          return this->containsKind(ProjectionParentScope::VIEWPORT);
         }
 
         bool pushUnit(const ProjectionParentScope &scope)
@@ -243,11 +262,26 @@ namespace loka
             return false;
           ProjectionParentScope child = scope;
           child.channel = this->current().channel;
-          if (this->activeDepth_ == 0)
+          if (!this->current().channel)
           {
             this->rootUnitChannel_ = ProjectionMeasurementChannel();
             child.channel = &this->rootUnitChannel_;
           }
+          child.kind_ = ProjectionParentScope::UNIT;
+          this->frames_[++this->activeDepth_] = child;
+          return true;
+        }
+
+        /** Adds a clip without changing its parent's projection or measurement. */
+        bool pushClip(const ProjectionParentScope &scope)
+        {
+          if (this->activeDepth_ >= MAX_ACTIVE_SCOPES - 2)
+            return false;
+          ProjectionParentScope child = scope;
+          child.channel = this->current().channel;
+          child.translationX = this->current().translationX;
+          child.translationY = this->current().translationY;
+          child.kind_ = ProjectionParentScope::CLIP;
           this->frames_[++this->activeDepth_] = child;
           return true;
         }
@@ -280,6 +314,14 @@ namespace loka
         }
 
       private:
+        bool containsKind(ProjectionParentScope::Kind kind) const
+        {
+          for (unsigned i = 1; i <= this->activeDepth_; ++i)
+            if (this->frames_[i].kind_ == kind)
+              return true;
+          return false;
+        }
+
         ProjectionParentScope frames_[MAX_ACTIVE_SCOPES + 1];
         unsigned activeDepth_;
         ProjectionMeasurementChannel viewportChannel_;
@@ -336,6 +378,15 @@ namespace loka
       public:
         ProjectionUnitScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
             : ProjectionParentScopeGuard(stack.pushUnit(scope) ? &stack : 0)
+        {
+        }
+      };
+      /** Owns one admitted clip frame and its balanced pop. */
+      class ProjectionClipScopeGuard : public ProjectionParentScopeGuard
+      {
+      public:
+        ProjectionClipScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
+            : ProjectionParentScopeGuard(stack.pushClip(scope) ? &stack : 0)
         {
         }
       };

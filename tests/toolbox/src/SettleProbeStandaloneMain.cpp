@@ -1,4 +1,5 @@
 #include "app/nodes/controls/TextEditorRequests.hpp"
+#include "../../support/TextBufferFixture.hpp"
 #include <cstdio>
 #include <Processes.h>
 #include "ToolboxProbeTiming.hpp"
@@ -103,7 +104,7 @@ namespace
     Reported<LineCursor> cursor;
     RequestQueue<LineCursor, 4> carets;
     RequestQueue<EditorCommand, 4> commands;
-    loka::core::ObservableList<loka::core::String> lines;
+    loka::testing::TextBufferFixture lines;
     ProbeController controller;
     TextEditorNode node;
     Fixture()

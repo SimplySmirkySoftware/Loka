@@ -68,7 +68,7 @@ namespace loka
           point.h = (**te).viewRect.left + 1;
           point.v = (**te).viewRect.top + (**te).lineHeight + 1;
           ok = ToolboxInputDoor::mouseDown(controller, point)
-               && editor->props.cursorState()->get().line == editor->props.lines_->at(1).id;
+               && editor->props.cursorState()->get().line == editor->props.buffer_->lines().at(1).id;
           step = "click-line-2";
         }
         else if (tick == 3)
@@ -78,7 +78,7 @@ namespace loka
         }
         else if (tick == 4)
         {
-          ok = ToolboxInputDoor::keyDown(controller, '\r') && editor->props.lines_->size() == 4;
+          ok = ToolboxInputDoor::keyDown(controller, '\r') && editor->props.buffer_->lines().size() == 4;
           step = "split-3-to-4";
         }
         else if (tick == 5)
@@ -93,13 +93,13 @@ namespace loka
         }
         else if (tick == 7)
         {
-          ok = ToolboxInputDoor::keyDown(controller, '\b') && editor->props.lines_->size() == 3;
+          ok = ToolboxInputDoor::keyDown(controller, '\b') && editor->props.buffer_->lines().size() == 3;
           step = "join-4-to-3";
         }
         else if (tick == 8)
         {
           // Length preflight deliberately precedes dereferencing this oversized payload.
-          ok = context->paste("", app::TextEditorProps::kMaxBytes + 1) == app::EDITOR_CAPACITY
+          ok = context->paste("", editor->props.buffer_->capacity().bytes + 1) == app::EDITOR_CAPACITY
                && testing::ToolboxTextEditorAccess::restores(*context) == 1;
           step = "paste-cap-refused";
         }
@@ -107,7 +107,7 @@ namespace loka
         {
           TESetSelect(0, 32767, te);
           std::string projection;
-          ok = ToolboxInputDoor::keyDown(controller, 'b') && editor->props.lines_->size() == 1
+          ok = ToolboxInputDoor::keyDown(controller, 'b') && editor->props.buffer_->lines().size() == 1
                && app::testing::TextEditorAccess::document(*editor).project(projection) == app::EDITOR_OK
                && projection == "b";
           step = "replace-3-to-1";
@@ -125,8 +125,8 @@ namespace loka
           if (ok)
           {
             context->onPropsApplied();
-            const app::LineCursor first(editor->props.lines_->at(0).id, 0);
-            const app::LineCursor last(editor->props.lines_->at(0).id, 2);
+            const app::LineCursor first(editor->props.buffer_->lines().at(0).id, 0);
+            const app::LineCursor last(editor->props.buffer_->lines().at(0).id, 2);
             ok = trace.size() == 1 && trace.at(0).stimulus == app::scene::SETTLE_PROPS
                  && trace.at(0).count == 2 && trace.at(0).before == last && trace.at(0).after == last;
             for (unsigned i = 0; ok && i < 2; ++i)

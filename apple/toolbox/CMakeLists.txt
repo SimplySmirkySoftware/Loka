@@ -34,6 +34,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/context/ToolboxCellContext.cpp
   src/context/ToolboxRibbonGroupEdgeContext.cpp
   src/context/ToolboxCardBandContext.cpp
+  src/context/ToolboxClipBoxContext.cpp
   src/context/ToolboxTextEditorContext.cpp
   src/context/ToolboxEditTextContext.cpp
   src/ToolboxPendingDialogs.cpp

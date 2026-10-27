@@ -299,17 +299,30 @@ overwritten before it was taken gets no reply, and a request discarded because
 the editor's list or slot was rebound gets none either. The reply box costs a
 second State; a plain `Request<T>` costs none.
 
+`TextBuffer` owns the document rows, admitted `TextCapacity`, and per-edit
+workspace. Query `PlatformContext::queryTextEditorCapacity`, handle decline,
+and explicitly clamp the app's desired capacity before `buffer.attach(tracker,
+rail, want)`. Successful attachment fixes capacity until owner reclaim; a
+second attachment preserves the first. `buffer.lines()` exposes editing and
+observation through `TextLines`, with no attach/detach or raw-list conversion.
+The editor and file doors borrow the buffer. Byte capacities and columns are
+UTF-8 byte counts; columns must lie on code point boundaries. Rows contain
+well-formed UTF-8 without CR, LF, or NUL. `EDITOR_NON_ASCII` means the editor
+alphabet refused the bytes: malformed sequences and forbidden NUL (which is
+itself valid UTF-8). The Classic TextEdit rail still refuses non-ASCII with
+the same result.
+
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of
 the app's owning Node or Boundary, initialize both to `LineCursor::None()`
-through `this->state(...)`, and keep them and `lines` on the same owner tracker,
+through `this->state(...)`, and keep them and the `TextBuffer` on the same owner tracker,
 alive for the editor's lifetime:
 
 ```cpp
-// In compose, using the app-owned lines, cursor, and request members:
-c << TextEditor(this->lines, this->cursor).moveCaretTo(this->request);
+// In compose, using the app-owned buffer, cursor, and request members:
+c << TextEditor(this->buffer, this->cursor).moveCaretTo(this->request);
 // In an app action, request a caret on a line in the current list:
-this->request.set(LineCursor(this->lines.at(0).id, 0)); // Requires a nonempty list.
+this->request.set(LineCursor(this->buffer.lines().at(0).id, 0)); // Requires a nonempty list.
 // Read the committed logical caret (not a promise of native selection):
 const LineCursor actual = this->cursor.state()->get();
 // With a RequestWithReply, observe the outcome of the last take:
@@ -357,9 +370,9 @@ RequestQueue<LineCursor, 4> queue;
 // In its state declarations:
 this->state(this->queue, LineCursor::None());
 // In compose, using the app-owned lines and cursor:
-c << TextEditor(this->lines, this->cursor).moveCaretTo(this->queue);
+c << TextEditor(this->buffer, this->cursor).moveCaretTo(this->queue);
 // In an app action (requires a nonempty list):
-if (this->queue.post(LineCursor(this->lines.at(0).id, 0)) == scene::POST_QUEUE_FULL) {
+if (this->queue.post(LineCursor(this->buffer.lines().at(0).id, 0)) == scene::POST_QUEUE_FULL) {
   // Keep the work with the app and decide when to post it again.
 }
 ```
@@ -394,7 +407,7 @@ RequestQueue<EditorCommand, 4> pages;
 this->state(this->caret, LineCursor::None());
 this->state(this->pages, EditorCommand::None());
 // In compose:
-c << TextEditor(this->lines, this->cursor).moveCaretTo(this->caret).command(this->pages);
+c << TextEditor(this->buffer, this->cursor).moveCaretTo(this->caret).command(this->pages);
 // In an app action, with room for both posts:
 this->pages.post(EditorCommand(EditorCommand::PAGE_DOWN));
 this->pages.post(EditorCommand(EditorCommand::PAGE_DOWN));
@@ -1110,8 +1123,8 @@ top-left corner, not the seat rect. After the first layout, `width` and
 `height` report the visible content size (seat minus scroll bars), in the same
 content units; insets do not shrink it. The Null, Toolbox, Win32 and macOS rails report it.
 `contentInsets(top, bottom)` also keeps the vertical bar clear of those rows at
-the viewport edges on Toolbox and macOS; it does not move the horizontal bar or
-shrink the clip. Win32 does not yet shorten its bar (#1547).
+the viewport edges on Toolbox, Win32 and macOS; it does not move the horizontal bar or
+shrink the clip.
 Zero width and height mean "not reported yet". Initialise it with `Frame(0, 0, 0, 0)`.
 
 ```cpp
@@ -1141,8 +1154,7 @@ default: Grid rows overlap, an undeclared RectSurface is 0, and TextEditor is
 80 on Toolbox/macOS and 0 on Win32. Declare a height for those children.
 
 The vertical bar is normally present. When inset clearance leaves no track,
-Toolbox hides its bar and macOS keeps its scroller at zero height; Win32 does
-not yet apply the clearance (#1547). The horizontal bar appears only while there
+Toolbox and Win32 hide their bars and macOS keeps its scroller at zero height. The horizontal bar appears only while there
 is a horizontal range. The user's bar and wheel input publishes into the same
 `Frame`. `ScrollView` does not consume application scroll intent yet
 (`scrollTo`, #537): there is no sanctioned door for an app to move the viewport,
@@ -1586,6 +1598,11 @@ width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 
+`Box().clipChildren()` and `Card().clipChildren()` request clipping of children
+at the container's own rect. A clip box reports no width larger than a positive
+width offer; a nonpositive offer is unconstrained and keeps its natural width.
+Toolbox clips in a later change; macOS and Win32 do not clip yet.
+
 ### Row And Column Natural Size
 
 - `Row().naturalWidth()` seats undeclared-width children at their natural width
@@ -1667,7 +1684,7 @@ VStack().gap(0)
             // ... ribbon groups and items omitted
         )
         << (Show(errorVisible) << Text(this->error_.state())))
-    << TextEditor(this->lines_, this->cursor_);
+    << TextEditor(this->buffer_, this->cursor_);
     // ... caret request and test IDs omitted
 ```
 

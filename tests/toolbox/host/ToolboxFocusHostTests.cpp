@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "platform/String.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include <Script.h>
@@ -369,7 +370,7 @@ namespace
   void postedEditor()
   {
     TabFixture f;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     Reported<LineCursor> cursor;
     StateBatchBase::CreateImmediateState(&f, cursor, LineCursor::None());
     LOKA_VERIFY(lines.attach(f.tracker()->asPushTracker(), 16) == ATTACH_OK);

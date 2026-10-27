@@ -1,3 +1,4 @@
+#include "support/TextBufferFixture.hpp"
 #include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxHost.hpp"
@@ -87,6 +88,47 @@ namespace
     s.height = 80;
     s.spacing = 0;
     return s;
+  }
+  void clipFrameProjection()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ScrollViewNode scroll((ScrollViewProps()));
+    Probe *child = new Probe("clip-scroll-child", 30);
+    scroll.addChild(child);
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    ProjectionParentScope clip(window.window(), 123, 456, Frame(0, 0, 300, 200));
+    {
+      ProjectionClipScopeGuard guard(controller.projectionParentScopes_, clip);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(!controller.refuseNarrowingInScrollScope(SHRT_MAX + 1));
+      controller.refuseScrollViewShortRange();
+      LOKA_VERIFY(!controller.projectionParentScopes_.current().hasShortRangeRefusal());
+      LayoutState state = seat();
+      LOKA_VERIFY(controller.projectLayoutState(state));
+      LOKA_VERIFY(state.x == 10 && state.y == 20);
+      LOKA_VERIFY(controller.restoreProjectedLayoutState(state));
+      LOKA_VERIFY(state.x == 10 && state.y == 20);
+      controller.layoutScrollView(&scroll, state, 0);
+      LOKA_VERIFY(child->layouts == 1);
+      controller.renderScrollView(&scroll);
+      LOKA_VERIFY(child->renders == 1);
+      ProjectionParentScope viewport(window.window(), -7, -11, Frame(0, 0, 100, 80));
+      ProjectionViewportScopeGuard viewportGuard(controller.projectionParentScopes_, viewport);
+      LOKA_VERIFY(viewportGuard.isActive());
+      state = seat();
+      LOKA_VERIFY(controller.projectLayoutState(state));
+      LOKA_VERIFY(state.x == 3 && state.y == 9);
+      LOKA_VERIFY(controller.restoreProjectedLayoutState(state));
+      LOKA_VERIFY(state.x == 10 && state.y == 20);
+      LOKA_VERIFY(!controller.refuseNarrowingInScrollScope(20));
+      LOKA_VERIFY(controller.refuseNarrowingInScrollScope(SHRT_MAX + 1));
+      LOKA_VERIFY(controller.projectionParentScopes_.current().hasShortRangeRefusal());
+      LOKA_VERIFY(controller.refuseNarrowingInScrollScope(20));
+    }
+    LOKA_VERIFY(controller.projectionParentScopes_.activeDepth() == 0);
+    controller.destroy();
   }
   void equal(const Rect &a, const Rect &b)
   {
@@ -768,7 +810,7 @@ namespace
   void bandRepairSettles()
   {
     loka::app::testing::TextEditorStateOwner owner;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
     LOKA_VERIFY(lines.insert(0, String("a partly covered editor")) == EDIT_OK);
     StaticFixture f;
@@ -990,7 +1032,7 @@ namespace
     const Rect rect = controller.buttonControls_[0].rect;
     LOKA_VERIFY(rect.left == 15 && rect.right == 90 && rect.top == 25 && rect.bottom <= 55);
     const toolbox_host::ControlCall &draw = controller.buttonControls_[0].control->calls.back();
-    LOKA_VERIFY(draw.operation == "draw" && draw.painted);
+    LOKA_VERIFY(draw.operation == "show" && draw.painted);
     LOKA_VERIFY(draw.ownerClip.left >= outer.left && draw.ownerClip.right <= outer.right);
     State<bool> enabled(false);
     controller.buttonControls_[0].enabled = &enabled;
@@ -1125,7 +1167,7 @@ namespace
   void editorIdleRepair()
   {
     loka::app::testing::TextEditorStateOwner owner;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     LOKA_VERIFY(lines.attach(&owner.tracker, 16) == ATTACH_OK);
     LOKA_VERIFY(lines.insert(0, String("abcd")) == EDIT_OK);
     ToolboxWindow window;
@@ -1557,7 +1599,8 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"BandGeometry",
+  const char *names[] = {"ClipFrameProjection",
+                         "BandGeometry",
                          "BandLifetime",
                          "BandDelivery",
                          "BandSelection",
@@ -1601,7 +1644,9 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
     return 1;
   }
-  if (std::strcmp(argv[1], "StaticNoRequests") == 0)
+  if (std::strcmp(argv[1], "ClipFrameProjection") == 0)
+    clipFrameProjection();
+  else if (std::strcmp(argv[1], "StaticNoRequests") == 0)
     staticNoRequests();
   else if (std::strcmp(argv[1], "StaticRefusedReplay") == 0)
     staticRefusedReplay();

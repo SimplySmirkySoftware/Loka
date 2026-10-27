@@ -91,8 +91,11 @@ void ShowControl(ControlRef c)
 {
   ++toolbox_host::controlCalls.shows;
   toolbox_host::controlCalls.showClip = toolbox_host::currentClip();
+  const bool draws = !c->visible;
+  RecordControl(c, "show", draws);
+  if (c->calls.back().painted)
+    toolbox_host::paintOperations.push_back("bar");
   c->visible = true;
-  RecordControl(c, "show", true);
 }
 void Draw1Control(ControlRef c)
 {

@@ -14,6 +14,7 @@ void testNullLayoutNestedBoxAndRowProduceFixedChildGeometry();
 void testNullLayoutOnChangeUsesRegisteredTraversal();
 
 void testProjectionMeasurementChannelAndUnitAdmission();
+void testProjectionFrameKindsAndClipAdmission();
 
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack();
 
@@ -25,5 +26,15 @@ void testSharedAlignedRowExtentIsLargerOfMeasurementAndChild();
 void testSharedAlignedRowBottomAlignmentMeasuresBoxHeight();
 void testSharedAlignedRowRefusesOverflowingChildBox();
 void testBoxHeightExceedsGridAndCanvasCells();
+
+void testClipChildrenBoxPropsIdentityAndCopy();
+void testClipChildrenCardPropsIdentityAndCopy();
+void testNullClipBoxFrameAndUnflaggedGeometry();
+void testNullClipCardFrame();
+void testNullClipScrollAdmissionAndMeasurement();
+void testNullClipInsideViewportKeepsChannel();
+void testNullClipRootUnitAdmissionFixture();
+void testNullClipIntersectionAndSeventhRefusal();
+void testNullClipUnconstrainedEdges();
 
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP

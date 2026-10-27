@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/String.hpp"
+#include "app/text/Utf8Scan.hpp"
 #include "platform/Win32String.hpp"
 #include "platform/Win32DisplayScale.hpp"
 
@@ -67,23 +68,100 @@ namespace loka
       return CreateEditTextControl(parent, Win32DisplayScale::fromDevicePixels(pixels));
     }
 
-    /** Deliberate multiline twin of the single-line helpers below. Stage 1
-        accepts ASCII only; CRLF and lone CR/LF each represent one logical CR.
-        Callers reserve bounded cancellation storage before accepting input. */
+    /** Borrowed validated UTF-8 row shorter than INT_MAX bytes; no native reads or mapping cache.
+        Deliberate twin of NativeRow in apple/macos/src/context/MacTextEditorContext.mm. */
+    class LogicalRow
+    {
+    public:
+      LogicalRow(const char *bytes, std::size_t length)
+          : bytes_(bytes),
+            length_(length)
+      {
+      }
+      int unitsAt(std::size_t bytes) const
+      {
+        assert(app::Utf8ColumnOnBoundary(this->bytes_, this->length_, bytes));
+        std::size_t index = 0;
+        int units = 0;
+        while (index < bytes)
+        {
+          unsigned int scalar = 0;
+          if (!core::detail::DecodeUtf8Codepoint(this->bytes_, this->length_, index, scalar))
+            break;
+          units += scalar > 0xffff ? 2 : 1;
+        }
+        return units;
+      }
+      std::size_t bytesFloor(int units) const
+      {
+        std::size_t index = 0;
+        while (index < this->length_ && units > 0)
+        {
+          const std::size_t start = index;
+          unsigned int scalar = 0;
+          if (!core::detail::DecodeUtf8Codepoint(this->bytes_, this->length_, index, scalar))
+            return start;
+          const int width = scalar > 0xffff ? 2 : 1;
+          if (units < width)
+            return start;
+          units -= width;
+        }
+        return index;
+      }
+      int unitLength() const
+      {
+        return this->unitsAt(this->length_);
+      }
+
+    private:
+      const char *bytes_;
+      std::size_t length_;
+    };
+
+    /** Locate a borrowed row without constructing a prefix or row copy. */
+    inline bool TextEditorRowRange(const std::string &logical, int row, std::size_t &start, std::size_t &length)
+    {
+      if (row < 0)
+        return false;
+      start = 0;
+      while (row-- > 0)
+      {
+        const std::size_t end = logical.find('\r', start);
+        if (end == std::string::npos)
+          return false;
+        start = end + 1;
+      }
+      const std::size_t end = logical.find('\r', start);
+      length = (end == std::string::npos ? logical.size() : end) - start;
+      return true;
+    }
+
+    /** Multiline conversion; alphabet admission belongs to the model.
+        Outbound LF/NUL refuse; inbound CRLF and lone CR/LF normalize to CR. */
     inline bool TextEditorToWide(const std::string &logical, std::wstring &wide)
     {
       wide.clear();
-      for (std::size_t i = 0; i < logical.size(); ++i)
+      std::size_t start = 0;
+      for (std::size_t i = 0; i <= logical.size(); ++i)
       {
-        const unsigned char value = static_cast<unsigned char>(logical[i]);
-        if (!value || value > 127 || value == '\n')
+        if (i < logical.size() && (!logical[i] || logical[i] == '\n'))
         {
           wide.clear();
           return false;
         }
-        wide += static_cast<wchar_t>(value);
-        if (value == '\r')
-          wide += L'\n';
+        if (i == logical.size() || logical[i] == '\r')
+        {
+          std::size_t scalars = 0;
+          if (!app::Utf8Scan(logical.data() + start, i - start, scalars)
+              || !detail::AppendUtf8ToWide(logical.data() + start, i - start, wide, MB_ERR_INVALID_CHARS))
+          {
+            wide.clear();
+            return false;
+          }
+          if (i != logical.size())
+            wide += L"\r\n";
+          start = i + 1;
+        }
       }
       return true;
     }
@@ -91,19 +169,28 @@ namespace loka
     inline bool TextEditorFromWide(const wchar_t *wide, std::size_t length, std::string &logical)
     {
       logical.clear();
+      if (!wide && length)
+        return false;
+      std::wstring normalized;
       for (std::size_t i = 0; i < length; ++i)
       {
         const wchar_t value = wide[i];
-        if (!value || value > 127)
-        {
-          logical.clear();
+        // XP cannot ask WideCharToMultiByte to reject unpaired surrogates.
+        if (!value || (value >= 0xdc00 && value <= 0xdfff))
           return false;
+        if (value >= 0xd800 && value <= 0xdbff)
+        {
+          if (i + 1 == length || wide[i + 1] < 0xdc00 || wide[i + 1] > 0xdfff)
+            return false;
+          normalized += value;
+          normalized += wide[++i];
+          continue;
         }
-        logical += value == L'\n' ? '\r' : static_cast<char>(value);
+        normalized += value == L'\n' ? L'\r' : value;
         if (value == L'\r' && i + 1 < length && wide[i + 1] == L'\n')
           ++i;
       }
-      return true;
+      return detail::AppendWideToUtf8(normalized.data(), normalized.size(), logical);
     }
 
     inline void ReadEditTextWide(HWND hwnd, std::wstring &out)

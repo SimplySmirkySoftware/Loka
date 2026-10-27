@@ -348,6 +348,14 @@ public:
   {
     return this->hitLedger_.buttonHits_;
   }
+  const std::vector<CellHit> &cellHits() const
+  {
+    return this->hitLedger_.cellHits_;
+  }
+  const std::vector<ToolboxHitLedger::TextHit> &textHits() const
+  {
+    return this->hitLedger_.textHits_;
+  }
   void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
   void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
   void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
@@ -413,21 +421,6 @@ public:
   virtual void onBoundaryApply(loka::app::scene::Node *, loka::app::scene::BoundaryNode *,
       const loka::app::scene::BoundaryLocalApplyInfo &, const loka::app::scene::PlatformApplyPlan &);
   virtual void releaseNodeContexts(loka::app::scene::Node *);
-  void refuseScrollViewShortRange()
-  {
-    if (this->projectionParentScopes_.activeDepth())
-      this->projectionParentScopes_.current().markShortRangeRefused();
-  }
-  bool refuseNarrowingInScrollScope(int y)
-  {
-    if (!this->projectionParentScopes_.activeDepth()) return false;
-    if (y < SHRT_MIN || y > SHRT_MAX)
-    {
-      this->refuseScrollViewShortRange();
-      return true;
-    }
-    return this->projectionParentScopes_.current().hasShortRangeRefusal();
-  }
   int ensureViewportScrollBarControl(
       const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
@@ -556,7 +549,13 @@ public:
 #endif
   short measureTextWidth(const loka::core::String &, const ToolboxTextFontDescriptor &) const;
   short measureTextWidth(const loka::core::String &) const;
-#if defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordCellHit(const Rect &,
+                     loka::core::EmitterState *,
+                     loka::app::scene::BoundaryNode *,
+                     ToolboxCellContext *,
+                     loka::core::State<loka::core::String> *);
+#elif defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)
   void recordCellHit(const Rect &, loka::core::EmitterState *, loka::app::scene::BoundaryNode *,
                      ToolboxCellContext *, loka::core::State<loka::core::String> *) {}
 #endif
@@ -569,7 +568,8 @@ public:
                            loka::core::State<bool> *,
                            loka::app::scene::NativeLifetimeHint,
                            ToolboxButtonContext *,
-                           ButtonControlBinding *&);
+                           ButtonControlBinding *&,
+                           bool *painted = 0);
 #else
   bool ensureButtonControl(short,
                            const Rect &rect,
@@ -578,8 +578,11 @@ public:
                            loka::core::State<bool> *,
                            loka::app::scene::NativeLifetimeHint,
                            ToolboxButtonContext *,
-                           ButtonControlBinding *&binding)
+                           ButtonControlBinding *&binding,
+                           bool *painted = 0)
   {
+    if (painted)
+      *painted = false;
     binding = 0;
     toolbox_host::controlRect = rect;
     return true;
@@ -590,11 +593,29 @@ public:
 #else
   void destroyButtonControl(short, loka::app::scene::NativeLifetimeHint) {}
 #endif
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordButtonHit(const Rect &,
+                       loka::core::EmitterState *,
+                       loka::core::State<bool> *,
+                       loka::app::scene::BoundaryNode *,
+                       ToolboxButtonContext *);
+  void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *);
+#else
   void recordButtonHit(const Rect &, loka::core::EmitterState *, loka::core::State<bool> *,
       loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *) {}
 #endif
-#ifdef LOKA_HOST_ZSTACK_UNITS
+#endif
+#ifdef LOKA_HOST_CLIP_PAINT
+  void recordTextHit(const Rect &,
+                     short,
+                     short,
+                     loka::core::State<loka::core::String> *,
+                     loka::app::scene::BoundaryNode *,
+                     bool,
+                     short,
+                     ToolboxTextContext *);
+#elif defined(LOKA_HOST_ZSTACK_UNITS)
   void recordTextHit(const Rect &rect,
                      short x,
                      short y,
@@ -635,6 +656,11 @@ public:
     registration.attach(this->compositionReplay);
   }
   ToolboxWindow *window_;
+  /** Paint children under the latest Box/Card placement, or without an extra clip on refusal. */
+  void renderClipBox(loka::app::scene::Node *node);
+  /** One registry attempt per flagged Box/Card placement, before children. */
+  void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
+  virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   mutable CursorOwner cursor;
   std::vector<loka::app::scene::NodeContext *> retired;
@@ -723,6 +749,9 @@ public:
   /** Move/size callers: once per changed control per render; O(1), no rows.
       Requires the window port while the erased pass is open. */
   void validateOwnControlMove(const Rect &before, const Rect &after);
+  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const Rect &admittedArea);
+  void noteControlDraw();
   ToolboxErasedPass &erasedPass()
   {
     return this->erasedPass_;

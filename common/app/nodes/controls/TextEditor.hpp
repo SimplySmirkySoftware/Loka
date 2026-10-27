@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_TEXT_EDITOR_HPP
 #define LOKA_APP_TEXT_EDITOR_HPP
 #include "app/scene/Node.hpp"
+#include "app/TextBuffer.hpp"
 #include "app/FocusParticipant.hpp"
 #include "app/scene/projection/SeamKey.hpp"
 #include "app/scene/state/NodeState.hpp"
@@ -20,10 +21,12 @@ namespace loka
     {
     };
     class TextEditorNode;
-    /** App-owned lines, fact, request and optional highlighter outlive the node.
+    /** App-owned buffer, fact, request and optional highlighter outlive the node.
         List, fact and request use the same owner tracker. One request slot has
-        one consumer; requests resolve ItemIds against its current binding. Lines contain ASCII with
-        no embedded CR/LF/NUL; separators count toward the whole-document byte cap. */
+        one consumer; requests resolve ItemIds against its current binding. Rows contain well-formed UTF-8,
+        with no embedded CR/LF/NUL. NUL and malformed sequences are refused with EDITOR_NON_ASCII.
+        Columns are UTF-8 byte offsets on code point boundaries. The Classic TextEdit rail still refuses
+        non-ASCII with EDITOR_NON_ASCII; separators count toward the whole-document byte cap. */
     struct TextEditorProps : scene::NodePropsBase<TextEditorProps>
     {
       typedef TextEditorTypeTag TypeTag;
@@ -35,12 +38,7 @@ namespace loka
         this->focus_ = FocusBinding(this->reportSeat(fact), this->requestSeat(fact), key);
         return *this;
       }
-      enum
-      {
-        kMaxLines = 256,
-        kMaxBytes = 8192
-      };
-      core::ObservableList<core::String> *lines_;
+      TextBuffer *buffer_;
       scene::RequestBinding<LineCursor> moveCaretTo_;
       scene::RequestBinding<EditorCommand> command_;
 
@@ -51,15 +49,15 @@ namespace loka
     public:
       const LineHighlighter *highlighter_;
       TextEditorProps()
-          : lines_(0),
+          : buffer_(0),
             moveCaretTo_(),
             command_(),
             cursor_(),
             highlighter_(0)
       {
       }
-      TextEditorProps(core::ObservableList<core::String> &lines, scene::Reported<LineCursor> &cursor)
-          : lines_(&lines),
+      TextEditorProps(TextBuffer &buffer, scene::Reported<LineCursor> &cursor)
+          : buffer_(&buffer),
             moveCaretTo_(),
             command_(),
             cursor_(this->reportSeat(cursor)),
@@ -111,8 +109,8 @@ namespace loka
         const TextEditorProps &other = static_cast<const TextEditorProps &>(rhs);
         if (!this->focus_.same(other.focus_))
           return this->focus_ < other.focus_;
-        if (this->lines_ != other.lines_)
-          return this->lines_ < other.lines_;
+        if (this->buffer_ != other.buffer_)
+          return this->buffer_ < other.buffer_;
         if (this->cursor_.state() != other.cursor_.state())
           return this->cursor_.state() < other.cursor_.state();
         if (!this->moveCaretTo_.same(other.moveCaretTo_))
@@ -164,8 +162,8 @@ namespace loka
         const TextEditorNode *previous = transitioning;
         transitioning = this;
 #endif
-        this->discardPendingRequest(this->props.lines_ != next.lines_ || !this->props.command_.same(next.command_),
-                                    this->props.lines_ != next.lines_
+        this->discardPendingRequest(this->props.buffer_ != next.buffer_ || !this->props.command_.same(next.command_),
+                                    this->props.buffer_ != next.buffer_
                                         || !this->props.moveCaretTo_.same(next.moveCaretTo_));
         // A repost from cancellation is admitted to next. Do not clear again.
         const FocusBinding oldBinding = this->props.focus_;
@@ -210,17 +208,18 @@ namespace loka
       }
       virtual short layoutProjected(scene::IPlatformController *controller, scene::LayoutState &state)
       {
-        assert(this->props.lines_ && "TextEditor borrows a non-null app-owned list");
+        assert(this->props.buffer_ && "TextEditor borrows a non-null app-owned buffer");
         if (!controller || !scene::PrepareProjectedLayout(controller, this, state))
           return state.y;
         return scene::Node::layout(controller, state);
       }
       virtual void declareDirtySources(scene::DirtySourceRegistrar &registrar)
       {
-        assert(this->props.lines_);
-        if (this->props.lines_)
-          registrar.markDirtyOnChange(const_cast<core::State<core::ListRevision> *>(&this->props.lines_->revision()),
-                                      scene::NODE_DIRTY_PROPS);
+        assert(this->props.buffer_);
+        if (this->props.buffer_)
+          registrar.markDirtyOnChange(
+              const_cast<core::State<core::ListRevision> *>(&this->props.buffer_->lines().revision()),
+              scene::NODE_DIRTY_PROPS);
         if (this->props.cursorState())
           registrar.markDirtyOnChange(this->props.cursorState(), scene::NODE_DIRTY_PROPS);
         if (this->props.moveCaretTo_.isValid())
@@ -255,8 +254,8 @@ namespace loka
           : scene::NodeDefinition<TextEditorProps, TextEditorNode>(p)
       {
       }
-      TextEditorDefinition(core::ObservableList<core::String> &lines, scene::Reported<LineCursor> &cursor)
-          : scene::NodeDefinition<TextEditorProps, TextEditorNode>(TextEditorProps(lines, cursor))
+      TextEditorDefinition(TextBuffer &buffer, scene::Reported<LineCursor> &cursor)
+          : scene::NodeDefinition<TextEditorProps, TextEditorNode>(TextEditorProps(buffer, cursor))
       {
       }
       TextEditorDefinition &moveCaretTo(scene::Request<LineCursor> &value)

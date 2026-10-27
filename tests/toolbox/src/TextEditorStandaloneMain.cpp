@@ -1,4 +1,5 @@
 #include "app/nodes/controls/TextEditorRequests.hpp"
+#include "../../support/TextBufferFixture.hpp"
 #include <cstdio>
 #include <Processes.h>
 
@@ -50,14 +51,14 @@ namespace
       StateTracker *owner = 0;
       if (this->lines_.queryMutationTracker(owner) == EDIT_OK)
         return;
-      if (this->lines_.attach(this->tracker()->asPushTracker(), TextEditorProps::kMaxLines) != ATTACH_OK
-          || this->lines_.insert(0, String::Literal("first")) != EDIT_OK
-          || this->lines_.insert(1, String::Literal("second")) != EDIT_OK
-          || this->lines_.insert(2, String::Literal("third")) != EDIT_OK)
-      {
-        this->lines_.detach();
+      if (this->lines_.attach(this->tracker()->asPushTracker(), 256) != ATTACH_OK)
         return;
-      }
+      const ListOp<String> initial[] = {ListOp<String>(INSERT, ItemId(), 0, String::Literal("first")),
+                                        ListOp<String>(INSERT, ItemId(), 1, String::Literal("second")),
+                                        ListOp<String>(INSERT, ItemId(), 2, String::Literal("third"))};
+      ArrayListOpCursor<String> replacement(initial, 3);
+      if (this->lines_.apply(replacement) != EDIT_OK)
+        return;
       this->request_.set(LineCursor(this->lines_.at(0).id, 0));
     }
 
@@ -73,7 +74,7 @@ namespace
     }
 
   private:
-    ObservableList<String> lines_;
+    loka::testing::TextBufferFixture lines_;
     scene::Reported<LineCursor> cursor_;
     scene::Request<LineCursor> request_;
     scene::NodeState<String> status_;

@@ -1,4 +1,7 @@
 #include "app/nodes/controls/TextEditorRequests.hpp"
+#include "ToolboxTextCapacity.hpp"
+#include "support/TextBufferFixture.hpp"
+#include "support/TextAlphabetCases.hpp"
 #include "ToolboxGround.hpp"
 #include "ToolboxEditKey.hpp"
 #include "ToolboxInputDoor.hpp"
@@ -14,6 +17,7 @@
 #include "support/TestVerify.hpp"
 #include "support/TextEditorContractSnapshot.hpp"
 #include "support/LokaAllocFailure.hpp"
+#include <Sound.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -32,13 +36,16 @@ namespace
     Request<LineCursor> otherRequest;
     RequestQueue<LineCursor, 4> queue;
     RequestQueue<EditorCommand, 4> commands;
-    ObservableList<String> lines;
+    loka::testing::TextBufferFixture lines;
     ToolboxWindow window;
     ToolboxScenePlatformController controller;
     TextEditorNode node;
     ToolboxTextEditorContext *context;
-    Fixture(unsigned short count = 3, const std::string &text = "abcd", unsigned short capacity = 256,
-            bool preContextRequest = false)
+    Fixture(unsigned short count = 3,
+            const std::string &text = "abcd",
+            unsigned short capacity = 256,
+            bool preContextRequest = false,
+            std::size_t byteCapacity = 8192)
         : tracker(*HeadlessStateOwner::tracker()->asPushTracker()),
           controller(&window),
           node(TextEditorProps(lines, cursor)),
@@ -50,7 +57,7 @@ namespace
       StateBatchBase::CreateImmediateState(this, this->queue, LineCursor::None());
       StateBatchBase::CreateImmediateState(this, this->commands, EditorCommand::None());
       this->node.props = TextEditorProps(lines, cursor).moveCaretTo(request).command(commands);
-      LOKA_VERIFY(lines.attach(&tracker, capacity) == ATTACH_OK);
+      LOKA_VERIFY(lines.attach(&tracker, capacity, byteCapacity) == ATTACH_OK);
       for (unsigned short i = 0; i < count; ++i)
         LOKA_VERIFY(lines.insert(i, String(text)) == EDIT_OK);
       if (preContextRequest)
@@ -469,6 +476,131 @@ namespace
     std::printf("[pin] %s\n", s);
     std::fflush(stdout);
   }
+
+  /** Raw rows deliberately bypass String normalization, as in TextEditorTests. */
+  class AlphabetBytes : public loka::platform::String
+  {
+  public:
+    explicit AlphabetBytes(const text_alphabet_cases::Case &value)
+        : bytes_(value.bytes, value.length)
+    {
+    }
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    {
+      out.bytes = this->bytes_.data();
+      out.length = this->bytes_.size();
+      return true;
+    }
+    virtual bool appendUtf8(std::string &out) const
+    {
+      out.append(this->bytes_);
+      return true;
+    }
+
+  private:
+    const std::string bytes_;
+  };
+
+  void alphabetProjection()
+  {
+    Fixture f;
+    const TextBuffer *source = ToolboxTextEditorAccess::source(*f.context);
+    const ListRevision revision = ToolboxTextEditorAccess::revision(*f.context);
+    const std::string native = f.native();
+    const int sets = toolbox_host::sets;
+    const unsigned beeps = toolbox_host::beeps;
+    const String raw =
+        String::FromPlatform(Managed<loka::platform::String>::Wrap(new AlphabetBytes(text_alphabet_cases::cases[0])));
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, raw) == EDIT_OK);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(ToolboxTextEditorAccess::status(*f.context) == EDITOR_NON_ASCII);
+    LOKA_VERIFY(toolbox_host::sets == sets && f.native() == native);
+    LOKA_VERIFY(ToolboxTextEditorAccess::source(*f.context) == source);
+    LOKA_VERIFY(!(ToolboxTextEditorAccess::revision(*f.context) != revision));
+    post(f, LineCursor(f.lines.at(0).id, 0));
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.request.get().isNone());
+    LOKA_VERIFY(f.request.reply().state()->get().kind() == Reply<LineCursor>::REFUSED);
+    LOKA_VERIFY(f.request.reply().state()->get().reason() == EDITOR_NON_ASCII);
+    LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_NON_ASCII);
+    toolbox_host::draws.clear();
+    f.context->render(&f.controller);
+    LOKA_VERIFY(!toolbox_host::draws.empty());
+    LOKA_VERIFY(toolbox_host::draws.back().bytes == "Editor unavailable");
+    LOKA_VERIFY(toolbox_host::beeps == beeps && toolbox_host::sets == sets);
+    LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("ascii")) == EDIT_OK);
+    f.context->onPropsApplied();
+    LOKA_VERIFY(ToolboxTextEditorAccess::status(*f.context) == EDITOR_OK);
+    LOKA_VERIFY(f.native() == "ascii\rabcd\rabcd");
+    LOKA_VERIFY(!(ToolboxTextEditorAccess::revision(*f.context) != f.lines.revision().get()));
+    pin("TE alphabet outbound: refusal preserves projection, unavailable request/paint, ASCII recovery");
+  }
+
+  void alphabetPaste()
+  {
+    const char *const payloads[] = {0, 0, "\303\251", "a\0b"};
+    const std::size_t lengths[] = {1, 0, 2, 3};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      Fixture f;
+      const Snapshot before(f);
+      const short start = (**f.te()).selStart, end = (**f.te()).selEnd;
+      const unsigned beeps = toolbox_host::beeps;
+      LOKA_VERIFY(f.context->paste(payloads[i], lengths[i]) == (i == 1 ? EDITOR_OK : EDITOR_NON_ASCII));
+      before.unchanged(f);
+      LOKA_VERIFY((**f.te()).selStart == start && (**f.te()).selEnd == end);
+      LOKA_VERIFY(ToolboxTextEditorAccess::idle(*f.context));
+      LOKA_VERIFY(toolbox_host::beeps == beeps + (i >= 2 ? 1u : 0u));
+      LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_OK);
+    }
+    pin("TE alphabet paste: null delegation, high byte/NUL refusal, unchanged facts/collapsed selection, one beep, "
+        "idle "
+        "recovery");
+    {
+      Fixture f;
+      const Snapshot before(f);
+      const unsigned beeps = toolbox_host::beeps;
+      loka::core::testing::failLokaAllocRaw("TextEditor", "Scratch", 1);
+      LOKA_VERIFY(f.context->paste("\303\251", 2) == EDITOR_NON_ASCII);
+      before.unchanged(f);
+      LOKA_VERIFY(toolbox_host::beeps == beeps + 1);
+      LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_ALLOCATION);
+      before.unchanged(f);
+      LOKA_VERIFY(toolbox_host::beeps == beeps + 1);
+      loka::core::testing::allowLokaAllocRaw();
+      LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_OK);
+    }
+    for (int stale = 0; stale < 2; ++stale)
+    {
+      Fixture f;
+      if (stale)
+        LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("owner")) == EDIT_OK);
+      const unsigned beeps = toolbox_host::beeps;
+      const std::string payload(stale ? 2 : 8193, static_cast<char>(0x80));
+      LOKA_VERIFY(f.context->paste(payload.data(), payload.size()) == (stale ? EDITOR_STALE_ID : EDITOR_CAPACITY));
+      LOKA_VERIFY(toolbox_host::beeps == beeps);
+      LOKA_VERIFY(ToolboxTextEditorAccess::idle(*f.context));
+    }
+    pin("TE alphabet paste: capacity/stale precede alphabet; alphabet precedes scratch");
+    {
+      Fixture f;
+      const unsigned beeps = toolbox_host::beeps;
+      f.cursor.state()->bind(&retireContext, &f, false);
+      LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_OK);
+      f.cursor.state()->unbind(&retireContext, &f);
+      LOKA_VERIFY(!f.node.getContext() && toolbox_host::beeps == beeps);
+    }
+    {
+      Fixture f;
+      const unsigned beeps = toolbox_host::beeps;
+      post(f, LineCursor(f.lines.at(1).id, 1));
+      f.request.reply().state()->bind(&retireContext, &f, false);
+      LOKA_VERIFY(f.context->paste("\303\251", 2) == EDITOR_NON_ASCII);
+      f.request.reply().state()->unbind(&retireContext, &f);
+      LOKA_VERIFY(!f.node.getContext() && toolbox_host::beeps == beeps);
+    }
+    pin("TE alphabet paste: context loss in common callback or completion never beeps");
+  }
 } // namespace
 #include "ToolboxEditorScrollBarPins.hpp"
 #include "ToolboxScrollKeyPins.hpp"
@@ -579,6 +711,14 @@ static void parkedEditorKeys()
 }
 int main(int argc, char **argv)
 {
+  if (argc == 1 || (argc == 2 && std::strcmp(argv[1], "alphabet") == 0))
+  {
+    alphabetProjection();
+    alphabetPaste();
+    if (argc == 2)
+      return 0;
+  }
+  LOKA_VERIFY(ToolboxTextCapacity().lines == 256 && ToolboxTextCapacity().bytes == 8192);
   if (argc == 2 && std::strcmp(argv[1], "parked-keys") == 0)
   {
     parkedEditorKeys();
@@ -1651,9 +1791,7 @@ int main(int argc, char **argv)
     Fixture f(kind == 0 ? 256 : 3);
     if (kind == 1)
     {
-      LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-      LOKA_VERIFY(f.lines.attach(&f.tracker, 256) == ATTACH_OK);
-      LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+      LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     }
     Observer o(f);
     Snapshot before(f);
@@ -1671,9 +1809,7 @@ int main(int argc, char **argv)
   pin("capacity/stale ID/scratch refusal: unchanged facts, native restored once, next key succeeds");
   {
     Fixture f;
-    LOKA_VERIFY(f.lines.detach() == EDIT_OK);
-    LOKA_VERIFY(f.lines.attach(&f.tracker, 256) == ATTACH_OK);
-    LOKA_VERIFY(f.lines.insert(0, String("fresh")) == EDIT_OK);
+    LOKA_VERIFY(f.lines.replaceWithOne(String("fresh")) == EDIT_OK);
     Snapshot before(f);
     LOKA_VERIFY(f.context->paste("x", 1) == EDITOR_STALE_ID);
     before.unchanged(f);
@@ -1812,15 +1948,15 @@ int main(int argc, char **argv)
   }
   {
     Fixture f;
-    ObservableList<String> other;
+    loka::testing::TextBufferFixture other;
     LOKA_VERIFY(other.attach(&f.tracker, 256) == ATTACH_OK);
     for (unsigned short i = 0; i < 3; ++i)
       LOKA_VERIFY(other.insert(i, String("WXYZ")) == EDIT_OK);
     LOKA_VERIFY(!(other.revision().get() != f.lines.revision().get()));
-    f.node.props.lines_ = &other;
+    f.node.props.buffer_ = &other;
     f.context->onPropsApplied();
     LOKA_VERIFY(f.native() == "WXYZ\rWXYZ\rWXYZ");
-    f.node.props.lines_ = &f.lines;
+    f.node.props.buffer_ = &f.lines;
     f.context->onPropsApplied();
     Observer observer(f);
     observer.external = true;
@@ -1829,6 +1965,20 @@ int main(int argc, char **argv)
     LOKA_VERIFY(f.context->key('y') == EDITOR_OK);
     LOKA_VERIFY(f.native() == "abxycd\rowner\rabcd");
     pin("equal-revision props rebinding and owner settlement writes reconcile");
+  }
+  {
+    Fixture f(1, "a", 4, false, 4);
+    loka::testing::TextBufferFixture larger;
+    LOKA_VERIFY(larger.attach(&f.tracker, 4) == ATTACH_OK);
+    const std::string text(1024, 'b');
+    LOKA_VERIFY(larger.insert(0, String(text)) == EDIT_OK);
+    f.node.props.buffer_ = &larger;
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.native() == text);
+    f.node.props.buffer_ = &f.lines;
+    f.context->onPropsApplied();
+    LOKA_VERIFY(f.native() == "a");
+    pin("buffer replacement keeps the fixed TE restore storage large enough");
   }
   {
     Fixture f;

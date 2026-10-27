@@ -1,4 +1,6 @@
 #include <climits>
+#include "app/nodes/controls/Card.hpp"
+#include "core/util/OwnedDef.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/Canvas.hpp"
 #include "NullLayoutTests.hpp"
@@ -406,6 +408,110 @@ void testProjectionMeasurementChannelAndUnitAdmission()
   LOKA_VERIFY(!scopes.insideUnit());
 }
 
+void testProjectionFrameKindsAndClipAdmission()
+{
+  using namespace loka::app::scene;
+  using loka::core::Frame;
+  ProjectionParentScopeStack scopes;
+  ProjectionParentScope viewport(0, -7, -11, Frame(1, 2, 80, 90));
+  int nativeParent = 0;
+  ProjectionParentScope clip(&nativeParent, 300, 400, Frame(3, 4, 50, 60));
+  ProjectionParentScope unit;
+  LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+  LOKA_VERIFY(!scopes.current().channel);
+  ProjectionMeasurementChannel *viewportChannel = 0;
+  {
+    ProjectionViewportScopeGuard guard(scopes, viewport);
+    LOKA_VERIFY(guard.isActive());
+    viewportChannel = scopes.current().channel;
+    LOKA_VERIFY(viewportChannel);
+    LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+    {
+      ProjectionUnitScopeGuard unitGuard(scopes, unit);
+      LOKA_VERIFY(unitGuard.isActive());
+      LOKA_VERIFY(scopes.insideViewport() && scopes.insideUnit());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+    }
+    {
+      ProjectionClipScopeGuard clipGuard(scopes, clip);
+      LOKA_VERIFY(clipGuard.isActive());
+      LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.current().translationX == -7 && scopes.current().translationY == -11);
+      LOKA_VERIFY(scopes.current().clipRect == clip.clipRect);
+      LOKA_VERIFY(scopes.current().nativeParent == &nativeParent);
+      ProjectionViewportScopeGuard refused(scopes, viewport);
+      LOKA_VERIFY(!refused.isActive());
+      ProjectionUnitScopeGuard unitGuard(scopes, unit);
+      LOKA_VERIFY(unitGuard.isActive());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.insideViewport() && scopes.insideUnit());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 1);
+  }
+  ProjectionMeasurementChannel *rootUnitChannel = 0;
+  {
+    ProjectionUnitScopeGuard guard(scopes, unit);
+    LOKA_VERIFY(guard.isActive());
+    rootUnitChannel = scopes.current().channel;
+    LOKA_VERIFY(rootUnitChannel && rootUnitChannel != viewportChannel);
+    LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    ProjectionClipScopeGuard clipGuard(scopes, clip);
+    LOKA_VERIFY(clipGuard.isActive());
+    LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    LOKA_VERIFY(scopes.current().channel == rootUnitChannel);
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    LOKA_VERIFY(!scopes.pushUnit(unit));
+  }
+  {
+    ProjectionClipScopeGuard clipGuard(scopes, clip);
+    LOKA_VERIFY(clipGuard.isActive());
+    LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+    LOKA_VERIFY(!scopes.current().channel);
+    LOKA_VERIFY(scopes.current().translationX == 0 && scopes.current().translationY == 0);
+    {
+      ProjectionUnitScopeGuard guard(scopes, unit);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.current().channel == rootUnitChannel);
+      LOKA_VERIFY(scopes.insideUnit() && !scopes.insideViewport());
+    }
+    {
+      ProjectionViewportScopeGuard guard(scopes, viewport);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.current().channel == viewportChannel);
+      LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+    }
+  }
+  LOKA_VERIFY(scopes.activeDepth() == 0);
+  // Six active frames, not six CLIPs: exercise both possible reservations.
+  for (unsigned withViewport = 0; withViewport != 2; ++withViewport)
+  {
+    if (withViewport)
+      LOKA_VERIFY(scopes.pushViewport(viewport));
+    for (unsigned i = withViewport; i != 6; ++i)
+      LOKA_VERIFY(scopes.pushClip(clip));
+    LOKA_VERIFY(scopes.activeDepth() == 6);
+    {
+      ProjectionClipScopeGuard refused(scopes, clip);
+      LOKA_VERIFY(!refused.isActive());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 6);
+    if (!withViewport)
+      LOKA_VERIFY(scopes.pushViewport(viewport));
+    LOKA_VERIFY(scopes.pushUnit(unit));
+    LOKA_VERIFY(scopes.activeDepth() == (withViewport ? 7u : 8u));
+    LOKA_VERIFY(!scopes.pushClip(clip));
+    LOKA_VERIFY(!scopes.pushViewport(viewport));
+    LOKA_VERIFY(!scopes.pushUnit(unit));
+    while (scopes.activeDepth())
+      LOKA_VERIFY(scopes.pop());
+  }
+  LOKA_VERIFY(ProjectionParentScopeStack::MAX_ACTIVE_SCOPES == 8);
+  LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+  LOKA_VERIFY(!scopes.current().channel);
+}
+
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack()
 {
   NullScenePlatformController platform;
@@ -603,4 +709,266 @@ void testBoxHeightExceedsGridAndCanvasCells()
   const int canvasY = platform.projectLayoutForTesting(&canvas, makeState(10, 20, 100, 40));
   LOKA_VERIFY(cellContent->geometry().height == 80);
   LOKA_VERIFY(canvasY == 40);
+}
+
+namespace loka
+{
+  namespace testing
+  {
+    /** Private fixture access; Null has no production UNIT traversal. */
+    class NullClipAccess
+    {
+    public:
+      static app::scene::ProjectionParentScopeStack &scopes(NullScenePlatformController &controller)
+      {
+        return controller.projectionParentScopes_;
+      }
+      static bool refusesY(NullScenePlatformController &controller, int y)
+      {
+        return controller.refuseNarrowingInScrollScope(y);
+      }
+      static void install(NullScenePlatformController &controller, app::scene::IPlatformLayoutHandler *handler)
+      {
+        LOKA_VERIFY(controller.layoutHandlers_.registerHandler(handler));
+      }
+    };
+  } // namespace testing
+} // namespace loka
+
+namespace
+{
+  class ClipFrameProbe : public loka::app::scene::Node, public loka::app::scene::IProjectedLayoutNode
+  {
+  public:
+    const unsigned depth;
+    const bool viewport;
+    const bool unit;
+    const loka::core::Frame clip;
+    const int accumulated;
+    bool visited;
+    ClipFrameProbe(unsigned d, bool v, bool u, const loka::core::Frame &r, int height = 0)
+        : depth(d),
+          viewport(v),
+          unit(u),
+          clip(r),
+          accumulated(height),
+          visited(false)
+    {
+    }
+    virtual loka::app::scene::IProjectedLayoutNode *asProjectedLayoutNode()
+    {
+      return this;
+    }
+    virtual short layoutProjected(loka::app::scene::IPlatformController *controller,
+                                  loka::app::scene::LayoutState &state)
+    {
+      this->visited = true;
+      loka::app::scene::ProjectionParentScopeStack &scopes =
+          loka::testing::NullClipAccess::scopes(*static_cast<NullScenePlatformController *>(controller));
+      LOKA_VERIFY(scopes.activeDepth() == this->depth);
+      LOKA_VERIFY(scopes.insideViewport() == this->viewport);
+      LOKA_VERIFY(scopes.insideUnit() == this->unit);
+      LOKA_VERIFY((scopes.current().channel != 0) == (this->viewport || this->unit));
+      LOKA_VERIFY(scopes.current().clipRect == this->clip);
+      LOKA_VERIFY(scopes.current().contentHeight() == this->accumulated);
+      if (!this->viewport && !this->unit)
+        LOKA_VERIFY(!loka::testing::NullClipAccess::refusesY(*static_cast<NullScenePlatformController *>(controller),
+                                                             SHRT_MAX + 1));
+      return static_cast<short>(state.y + 7);
+    }
+  };
+
+  /** Exercises C1 UNIT admission under a real Null CLIP; not a native ZStack implementation. */
+  class ClipUnitHandler : public loka::app::scene::IPlatformLayoutHandler
+  {
+  public:
+    explicit ClipUnitHandler(NullScenePlatformController &controller)
+        : controller_(controller)
+    {
+    }
+    virtual const void *nodeTypeKey() const
+    {
+      return loka::app::scene::NodeTypeToken<loka::app::ZStackNode>();
+    }
+    virtual int layoutNode(loka::app::scene::Node *node,
+                           const loka::app::scene::LayoutState &state,
+                           loka::app::scene::IPlatformLayoutTraversal *traversal,
+                           const loka::app::layout::LazyWindow *,
+                           loka::app::layout::StackSpans *)
+    {
+      using namespace loka::app::scene;
+      ProjectionParentScopeStack &scopes = loka::testing::NullClipAccess::scopes(this->controller_);
+      LOKA_VERIFY(!scopes.current().channel);
+      const ProjectionParentScope parent = scopes.current();
+      ProjectionUnitScopeGuard guard(scopes, parent);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.current().channel);
+      return traversal->layoutChild(node->asNestable()->childrenHead(), state);
+    }
+
+  private:
+    NullScenePlatformController &controller_;
+  };
+
+  template <class Definition, class Props> void verifyClipProps()
+  {
+    Definition plain;
+    Definition clipped;
+    LOKA_VERIFY(plain.props.childClip_ == loka::app::layout::CHILD_CLIP_NONE);
+    LOKA_VERIFY(&clipped.clipChildren() == &clipped);
+    LOKA_VERIFY(clipped.props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
+    LOKA_VERIFY(plain.props.hash() != clipped.props.hash());
+    LOKA_VERIFY(plain.props < clipped.props);
+    LOKA_VERIFY(!(clipped.props < plain.props));
+    Definition copied(clipped);
+    LOKA_VERIFY(copied.props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
+    LOKA_VERIFY(copied.props.hash() == clipped.props.hash());
+    LOKA_VERIFY(!(copied.props < clipped.props) && !(clipped.props < copied.props));
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> clone(clipped.clone());
+    LOKA_VERIFY(clone.get());
+    const Props &clonedProps = *static_cast<const Props *>(clone->propsBase());
+    LOKA_VERIFY(clonedProps.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
+    LOKA_VERIFY(clonedProps.hash() == clipped.props.hash());
+    LOKA_VERIFY(!(clipped.props < *clone->propsBase()) && !(*clone->propsBase() < clipped.props));
+  }
+} // namespace
+
+void testClipChildrenBoxPropsIdentityAndCopy()
+{
+  verifyClipProps<loka::app::BoxDefinition, loka::app::BoxProps>();
+}
+
+void testClipChildrenCardPropsIdentityAndCopy()
+{
+  verifyClipProps<loka::app::CardDefinition, loka::app::CardProps>();
+}
+
+void testNullClipBoxFrameAndUnflaggedGeometry()
+{
+  using namespace loka::app;
+  for (int clipped = 0; clipped != 2; ++clipped)
+  {
+    NullScenePlatformController platform;
+    Box definition = Box().size(120, 40).padding(5);
+    if (clipped)
+      definition.clipChildren();
+    BoxNode box(definition.props);
+    ClipFrameProbe *probe =
+        new ClipFrameProbe(clipped, false, false, loka::core::Frame(10, 20, clipped ? 120 : 80, 40));
+    box.addChild(probe);
+    LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, 80, 40)) == 60);
+    LOKA_VERIFY(probe->visited);
+    LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+    // Flagging does not change the content offer; Null has no width result.
+    FixedLayoutProbeNode *geometry = new FixedLayoutProbeNode(7);
+    BoxNode geometryBox(definition.props);
+    geometryBox.addChild(geometry);
+    LOKA_VERIFY(platform.projectLayoutForTesting(&geometryBox, makeState(10, 20, 80, 40)) == 60);
+    assertGeometry(geometry, 15, 25, 110, 30);
+  }
+}
+
+void testNullClipCardFrame()
+{
+  NullScenePlatformController platform;
+  loka::app::CardNode card(loka::app::Card().clipChildren().props);
+  ClipFrameProbe *probe = new ClipFrameProbe(1, false, false, loka::core::Frame(10, 20, 80, SHRT_MAX - 20));
+  card.addChild(probe);
+  platform.projectLayoutForTesting(&card, makeState(10, 20, 80, 40));
+  LOKA_VERIFY(probe->visited);
+  LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+}
+
+void testNullClipScrollAdmissionAndMeasurement()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  BoxNode box(Box().size(60, 50).clipChildren().props);
+  ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps());
+  ClipFrameProbe *probe = new ClipFrameProbe(2, true, false, loka::core::Frame(10, 20, 60, 50));
+  scroll->addChild(probe);
+  BoxNode *wide = new BoxNode(Box().size(100, 50).props);
+  wide->addChild(scroll);
+  box.addChild(wide);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, 80, 40)) == 70);
+  LOKA_VERIFY(probe->visited);
+  LOKA_VERIFY(platform.nestedScrollViewRefusalCount() == 0);
+  LOKA_VERIFY(platform.scrollViewShortRangeRefusalCount() == 0);
+  LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+  NullScenePlatformController measuredPlatform;
+  BoxNode measuredBox(Box().clipChildren().props);
+  ScrollViewNode *measuredScroll = new ScrollViewNode(ScrollViewProps());
+  FixedLayoutProbeNode *measured = new FixedLayoutProbeNode(7);
+  measuredScroll->addChild(measured);
+  measuredBox.addChild(measuredScroll);
+  LOKA_VERIFY(measuredPlatform.projectLayoutForTesting(&measuredBox, makeState(10, 20, 80, 0)) == 27);
+  LOKA_VERIFY(measured->wasLaidOut());
+  LOKA_VERIFY(measuredPlatform.nestedScrollViewRefusalCount() == 0);
+}
+
+void testNullClipInsideViewportKeepsChannel()
+{
+  using namespace loka::app;
+  for (int inset = 0; inset <= 12; inset += 12)
+  {
+    NullScenePlatformController platform;
+    ScrollViewNode scroll(ScrollViewProps().contentInsets(ScrollViewContentInsets::of(inset, 0)));
+    BoxNode *box = new BoxNode(Box().height(40).clipChildren().props);
+    ClipFrameProbe *inner = new ClipFrameProbe(2, true, false, loka::core::Frame(10, 20 + inset, 80, 40));
+    box->addChild(inner);
+    scroll.addChild(box);
+    ClipFrameProbe *after = new ClipFrameProbe(1, true, false, loka::core::Frame(10, 20, 80, 100), 40);
+    scroll.addChild(after);
+    LOKA_VERIFY(platform.projectLayoutForTesting(&scroll, makeState(10, 20, 80, 100)) == 120);
+    LOKA_VERIFY(inner->visited && after->visited);
+    LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+  }
+}
+
+void testNullClipRootUnitAdmissionFixture()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  loka::testing::NullClipAccess::install(platform, new ClipUnitHandler(platform));
+  BoxNode box(Box().size(80, 40).clipChildren().props);
+  ZStackNode *unit = new ZStackNode(ZStack().expBlurUnit().props);
+  ClipFrameProbe *probe = new ClipFrameProbe(2, false, true, loka::core::Frame(10, 20, 80, 40));
+  unit->addChild(probe);
+  box.addChild(unit);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, 80, 40)) == 60);
+  LOKA_VERIFY(probe->visited);
+  LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+}
+
+void testNullClipIntersectionAndSeventhRefusal()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  BoxNode root(Box().size(60, 30).padding(5).clipChildren().props);
+  BoxNode *tail = &root;
+  for (int i = 0; i != 6; ++i)
+  {
+    BoxNode *child = new BoxNode(Box().size(200, 200).clipChildren().props);
+    tail->addChild(child);
+    tail = child;
+  }
+  ClipFrameProbe *probe = new ClipFrameProbe(6, false, false, loka::core::Frame(15, 25, 55, 25));
+  tail->addChild(probe);
+  LOKA_VERIFY(platform.projectLayoutForTesting(&root, makeState(10, 20, 80, 40)) == 50);
+  LOKA_VERIFY(probe->visited);
+  LOKA_VERIFY(platform.projectionParentScopeDepthForTesting() == 0);
+}
+
+void testNullClipUnconstrainedEdges()
+{
+  for (int width = -1; width <= 0; ++width)
+  {
+    NullScenePlatformController platform;
+    loka::app::BoxNode box(loka::app::Box().clipChildren().props);
+    ClipFrameProbe *probe =
+        new ClipFrameProbe(1, false, false, loka::core::Frame(10, 20, SHRT_MAX - 10, SHRT_MAX - 20));
+    box.addChild(probe);
+    LOKA_VERIFY(platform.projectLayoutForTesting(&box, makeState(10, 20, static_cast<short>(width), 0)) == 27);
+    LOKA_VERIFY(probe->visited);
+  }
 }
