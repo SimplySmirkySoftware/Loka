@@ -1289,6 +1289,139 @@ void testMacEditMenuDispatchToTextView()
   binding.unbind(&countEditMenuBinding, &calls);
 }
 
+void testMacEditMenuKeyPanelFieldEditor()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  MenuDefinition edit = EditMenu();
+  for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+    if (!item->isSeparator)
+      item->onClick(&binding);
+  MenuBarDefinition offered;
+  offered << edit;
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(50, 50, 240, 120)
+                                              styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                backing:NSBackingStoreBuffered
+                                                  defer:NO];
+  [panel setReleasedWhenClosed:NO];
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 40, 220, 24)];
+  NSString *text = @"Panel field editor text";
+  [field setStringValue:text];
+  [[panel contentView] addSubview:field];
+  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp activateIgnoringOtherApps:YES];
+  [panel makeKeyAndOrderFront:nil];
+  if ([panel isKeyWindow])
+  {
+    LOKA_VERIFY([panel makeFirstResponder:field]);
+    NSTextView *fieldEditor = (NSTextView *)[panel fieldEditor:YES forObject:field];
+    LOKA_VERIFY([fieldEditor isKindOfClass:[NSTextView class]]);
+    LOKA_VERIFY([panel firstResponder] == fieldEditor);
+    [fieldEditor setSelectedRange:NSMakeRange(0, 0)];
+    NSMenu *menu = [[[NSApp mainMenu] itemAtIndex:0] submenu];
+    NSMenuItem *item = [menu itemAtIndex:5];
+    LOKA_VERIFY([NSApp targetForAction:@selector(selectAll:) to:nil from:item] == fieldEditor);
+    LOKA_VERIFY(app.validateNativeMenuCommand((void *)item));
+    [[item target] performSelector:[item action] withObject:item];
+    LOKA_VERIFY(NSEqualRanges([fieldEditor selectedRange], NSMakeRange(0, [text length])));
+    LOKA_VERIFY(calls == 0);
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard declareTypes:[NSArray array] owner:nil];
+    item = [menu itemAtIndex:3];
+    LOKA_VERIFY([NSApp targetForAction:@selector(copy:) to:nil from:item] == fieldEditor);
+    [[item target] performSelector:[item action] withObject:item];
+    LOKA_VERIFY([[pasteboard stringForType:NSStringPboardType] isEqualToString:text]);
+    LOKA_VERIFY(calls == 0);
+  }
+  else
+    std::printf("[skip] Edit menu key panel field editor: %s\n",
+                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "panel did not become key");
+  [panel makeFirstResponder:nil];
+  [panel orderOut:nil];
+  [panel close];
+  [field release];
+  [panel release];
+  app.menuAttachment().disconnect();
+  binding.unbind(&countEditMenuBinding, &calls);
+}
+
+void testMacEditMenuKeyWindowBeforeMainWindow()
+{
+  CocoaHost host;
+  TestApp app;
+  unsigned calls = 0;
+  EmitterState binding;
+  binding.bind(&countEditMenuBinding, &calls, false);
+  MenuBarDefinition offered = validationBar(&binding);
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSWindow *mainWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(50, 50, 240, 120)
+                                                     styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                       backing:NSBackingStoreBuffered
+                                                         defer:NO];
+  NSWindow *keyWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(310, 50, 240, 120)
+                                                    styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                      backing:NSBackingStoreBuffered
+                                                        defer:NO];
+  [mainWindow setReleasedWhenClosed:NO];
+  [keyWindow setReleasedWhenClosed:NO];
+  LokaEditDispatchTextView *mainView = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
+  LokaEditDispatchTextView *keyView = [[LokaEditDispatchTextView alloc] initWithFrame:NSMakeRect(0, 0, 240, 120)];
+  [mainWindow setContentView:mainView];
+  [keyWindow setContentView:keyView];
+  if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp activateIgnoringOtherApps:YES];
+  [mainWindow makeKeyAndOrderFront:nil];
+  [mainWindow makeMainWindow];
+  [keyWindow orderFront:nil];
+  [keyWindow makeKeyWindow];
+  LOKA_VERIFY([mainWindow makeFirstResponder:mainView]);
+  LOKA_VERIFY([keyWindow makeFirstResponder:keyView]);
+  if ([keyWindow isKeyWindow])
+  {
+    if ([NSApp keyWindow] != [NSApp mainWindow])
+    {
+      LOKA_VERIFY([NSApp mainWindow] == mainWindow);
+      NSMenuItem *item = commandItem();
+      [[item target] performSelector:[item action] withObject:item];
+      LOKA_VERIFY([keyView calls] == 1 && [keyView verb] == @selector(cut:));
+      LOKA_VERIFY([keyView sender] == item && [mainView calls] == 0 && calls == 0);
+      [keyWindow orderOut:nil];
+      [mainWindow makeKeyWindow];
+      if ([mainWindow isKeyWindow])
+      {
+        [[item target] performSelector:[item action] withObject:item];
+        LOKA_VERIFY([mainView calls] == 1 && [mainView verb] == @selector(cut:));
+        LOKA_VERIFY([mainView sender] == item && [keyView calls] == 1 && calls == 0);
+      }
+      else
+        std::printf("[skip] Edit menu key window vs main window: main window did not become key again\n");
+    }
+    else
+      std::printf("[skip] Edit menu key window vs main window: AppKit made the same window key and main\n");
+  }
+  else
+    std::printf("[skip] Edit menu key window vs main window: %s\n",
+                loka::testing::MacConsoleScreenIsLocked() ? "console screen is locked" : "window did not become key");
+  [keyWindow makeFirstResponder:nil];
+  [mainWindow makeFirstResponder:nil];
+  [keyWindow orderOut:nil];
+  [mainWindow orderOut:nil];
+  [keyWindow close];
+  [mainWindow close];
+  [keyView release];
+  [mainView release];
+  [keyWindow release];
+  [mainWindow release];
+  app.menuAttachment().disconnect();
+  binding.unbind(&countEditMenuBinding, &calls);
+}
+
 // This test-only replacement models a sender-dependent supplemental target.
 // All unrelated action resolution still uses AppKit's original implementation.
 static NSMenuItem *gEditResolutionSender = nil;
