@@ -32,6 +32,7 @@ void testMacScrollViewInsetsGrowTheHeightlessExtent();
 void testMacScrollViewInsetsRefuseAnExtentAboveShort();
 
 void testMacScrollRequestBothAxesAndStoppedEcho();
+void testMacScrollRequestMissingDocumentAtApply();
 void testMacScrollRequestSmallDocument();
 void testMacScrollRequestOriginalMuteAndNativeControl();
 void testMacScrollRequestAbsentXAndHeightless();

@@ -1735,6 +1735,17 @@ namespace
     }
   };
 
+  void removeDocumentOnRequestTake(void *data)
+  {
+    ScrollRequestFixture &fixture = *static_cast<ScrollRequestFixture *>(data);
+    if (fixture.storage.request.get().isNone())
+    {
+      // Isolate the native apply refusal from AppKit's bounds notifications.
+      [[fixture.native() contentView] setPostsBoundsChangedNotifications:NO];
+      [fixture.native() setDocumentView:nil];
+    }
+  }
+
   void requestAndStoppedEcho(int top, bool beyond)
   {
     ScrollRequestFixture f(600, 700, top);
@@ -1779,6 +1790,31 @@ void testMacScrollRequestBothAxesAndStoppedEcho()
   requestAndStoppedEcho(0, true);
   requestAndStoppedEcho(12, false);
   requestAndStoppedEcho(12, true);
+}
+
+void testMacScrollRequestMissingDocumentAtApply()
+{
+  ScrollRequestFixture f;
+  f.visit();
+  f.observe();
+  NSScrollView *native = f.native();
+  NSView *document = [[native documentView] retain];
+  LOKA_VERIFY(document != nil);
+  const BOOL posts = [[native contentView] postsBoundsChangedNotifications];
+  const Frame before = f.storage.viewport.get();
+  // Consumption follows successful layout and precedes the native apply.
+  f.storage.request.state()->bind(&removeDocumentOnRequestTake, &f, false);
+  f.post(30, 40);
+  f.visit();
+  f.storage.request.state()->unbind(&removeDocumentOnRequestTake, &f);
+  LOKA_VERIFY([native documentView] == nil);
+  f.result(SCROLL_UNAVAILABLE);
+  LOKA_VERIFY(f.observed.count(ScrollObservation::TAKE) == 1);
+  LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 0);
+  LOKA_VERIFY(f.storage.viewport.get() == before);
+  [native setDocumentView:document];
+  [document release];
+  [[native contentView] setPostsBoundsChangedNotifications:posts];
 }
 
 void testMacScrollRequestSmallDocument()
