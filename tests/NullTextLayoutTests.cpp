@@ -235,8 +235,8 @@ void testNullTextSmallLabelMetrics()
 void testNullTextEllipsisBelowOneAdvanceIsEmpty()
 {
   using namespace loka::app;
-  TextNode glyph(Text("x").props);
   NullScenePlatformController platform;
+  TextNode glyph(Text("x").props);
   scene::LayoutState state;
   platform.projectLayoutForTesting(&glyph, state);
   const int advance = measurementFor(glyph).width();
