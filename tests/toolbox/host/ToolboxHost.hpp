@@ -315,6 +315,9 @@ class ToolboxScenePlatformController : public loka::app::scene::IPlatformControl
     public loka::app::layout::INaturalWidthSource
 {
 public:
+  bool applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                              const ToolboxScrollViewLayoutResult &result,
+                              const loka::core::Frame &target);
   void applyViewportScrollRequest(loka::app::ScrollViewNode &node,
                                   const ToolboxViewportRows &rows,
                                   const loka::core::Frame &target);

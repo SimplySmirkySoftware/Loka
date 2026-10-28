@@ -238,6 +238,11 @@ public:
   ToolboxScrollViewLayoutResult layoutScrollView(loka::app::ScrollViewNode *scrollView,
                                                  loka::app::scene::LayoutState &state,
                                                  loka::app::scene::BoundaryNode *currentBoundary);
+  /** Native step for SettleScrollViewVisit only; no other caller should use it.
+      Public so the free LayoutNode dispatch can form its member pointer. */
+  bool applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                              const ToolboxScrollViewLayoutResult &result,
+                              const loka::core::Frame &target);
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *surface,
                                const loka::core::Frame &extent)
   {
