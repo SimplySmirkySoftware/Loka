@@ -87,7 +87,15 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   hitLedger_.textHits_.clear();
   hitLedger_.popupHits_.clear();
   PROFILE_SECTION("layout");
+#ifdef TEST_BUILD
+  if (presenter)
+    presenter->beginLayoutForTesting();
+#endif
   LayoutNode(rootNode_, state, this, 0);
+#ifdef TEST_BUILD
+  if (presenter)
+    presenter->endLayoutForTesting();
+#endif
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();

@@ -896,3 +896,27 @@ if(NOT LOKA_SCENARIO_LOOP_CYCLES STREQUAL "")
     LOKA_SCENARIO_LOOP_CYCLES=${LOKA_SCENARIO_LOOP_CYCLES}
   )
 endif()
+
+# Toolbar 1a-0: product compositions with finite measurement drivers. These
+# vehicles use run-standalone.sh and LOG.TXT, not pixel golden verdicts.
+foreach(app IN ITEMS FloppyBird SmirkBench Tutorial)
+  if(app STREQUAL "FloppyBird")
+    set(kind 1)
+    set(extra ${CMAKE_SOURCE_DIR}/tests/scenarios/FloppyBirdScenarios.cpp
+      ${CMAKE_SOURCE_DIR}/tests/scenarios/RectSurfaceScenarioObservation.cpp)
+  elseif(app STREQUAL "SmirkBench")
+    set(kind 2)
+    set(extra "")
+  else()
+    set(kind 3)
+    set(extra "")
+  endif()
+  set(target "LokaMeasure${app}${LOKA_CLASSIC_TARGET_SUFFIX}")
+  loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
+    src/ToolbarMeasurementMain.cpp ${extra}
+    ${CMAKE_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
+    ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/${app}Size.r)
+  target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/example/${app}/src)
+  target_compile_definitions(${target} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_APP=${kind})
+endforeach()
