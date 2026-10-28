@@ -92,6 +92,8 @@ LOKA_TEST(testWin32AttributedTextLiveDpiChange)
 LOKA_TEST(testWin32AttributedTextPaintRouting)
 
 LOKA_TEST(testWin32TextEditorConversion)
+LOKA_TEST(testWin32TextEditorCapacityRows)
+LOKA_TEST(testWin32TextEditorCapacityDefaultRows)
 LOKA_TEST(testWin32TextEditorActionsUseLineQueries)
 LOKA_TEST(testWin32TextEditorRefusalRestoresAndClearsUndo)
 LOKA_TEST(testWin32TextEditorNestedInput)

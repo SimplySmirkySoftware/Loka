@@ -5,6 +5,7 @@ void testTextEditorRefusals();
 void testTextEditorHighlight();
 void testTextEditorScene();
 void testTextEditorReplace();
+void testTextEditorProjectReservesMeasuredLength();
 void testTextEditorReplaceRefusals();
 void testTextEditorRequestTake();
 void testTextEditorRequestIdle();
