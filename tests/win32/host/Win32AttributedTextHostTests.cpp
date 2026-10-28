@@ -370,7 +370,7 @@ int main(int argc, char **)
     LOKA_VERIFY(table.build(value, dots, 30, &dc, controller));
     LOKA_VERIFY(table.draw(&dc, rect, dots));
     LOKA_VERIFY(win32_host::draws.back().units == L"...");
-    LOKA_VERIFY(win32_host::draws.back().font == controller.textFont(Italic));
+    LOKA_VERIFY(win32_host::draws.back().font == controller.fallbackFont(Italic));
     LOKA_VERIFY(win32_host::draws[0].units == L"a");
     // The native prefix is 4px plus 24px of terminal-run dots, not the
     // breaker's overflowing width. Each physical alignment uses those 28px.

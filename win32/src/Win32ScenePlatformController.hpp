@@ -202,7 +202,7 @@ public:
   {
     return this->displayScale_;
   }
-  HFONT textFont(const loka::app::TextStyle &style) const
+  const loka::win32::Win32FontResolution &textFont(const loka::app::TextStyle &style) const
   {
     return this->displayFont_.find(style);
   }
@@ -214,6 +214,17 @@ public:
   const loka::app::layout::RowLayoutMetrics &rowLayoutMetrics() const
   {
     return this->rowLayoutMetrics_;
+  }
+
+  /** Explicit message-face fallback. Installation and replacement share this policy. */
+  static HFONT fallbackFont(const loka::win32::Win32DisplayFont &fonts, const loka::app::TextStyle &style)
+  {
+    const loka::win32::Win32FontResolution &resolved = fonts.find(style);
+    return resolved.font() ? resolved.font() : fonts.get();
+  }
+  HFONT fallbackFont(const loka::app::TextStyle &style) const
+  {
+    return fallbackFont(this->displayFont_, style);
   }
 
   HFONT displayFont() const

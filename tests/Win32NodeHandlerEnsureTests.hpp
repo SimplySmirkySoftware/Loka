@@ -63,4 +63,7 @@ void testWin32CardBandCreationRefusalAndRetry();
 void testWin32CardBandsLifecycleAndRepaint();
 void testWin32CardBandPaintOnlyClassification();
 
+void testWin32TextFamilyDpiReplacement();
+void testWin32TextFamilyGeometry();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP
