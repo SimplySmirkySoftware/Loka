@@ -31,8 +31,21 @@ namespace
   BOOL CALLBACK ApplyDisplayFont(HWND hwnd, LPARAM fontValue)
   {
     const DisplayFontReplacement &fonts = *reinterpret_cast<const DisplayFontReplacement *>(fontValue);
-    const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
-    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(fonts.previous.replacementFor(previous, fonts.next)), TRUE);
+    Win32TextContext *text = Win32TextContext::fromWindow(hwnd);
+    loka::app::TextStyle style;
+    HFONT applied;
+    if (text && text->queryFontStyle(style))
+    {
+      const loka::win32::Win32FontResolution &font = fonts.next.find(style);
+      applied = font.font() ? font.font() : fonts.next.get();
+    }
+    else
+    {
+      const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+      applied = fonts.previous.replacementFor(previous, fonts.next);
+    }
+    // This host has no EDIT contexts; the Windows pins cover that intent branch.
+    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
     return TRUE;
   }
 
@@ -190,9 +203,41 @@ HBRUSH GetSysColorBrush(int index)
 }
 // Exercise the real RectSurface direct-target fallback; native buffering and
 // pixels remain VM pins. These deliberately refuse allocation, not paint.
-HDC CreateCompatibleDC(HDC) { return 0; }
+HDC CreateCompatibleDC(HDC source)
+{
+  if (source)
+    return 0; // RectSurface buffering remains deliberately refused.
+  static HostFont stock = {10, 2, 1, 4};
+  HostDC *dc = new HostDC();
+  dc->font = &stock;
+  return dc;
+}
 HBITMAP CreateCompatibleBitmap(HDC, int, int) { return 0; }
-BOOL DeleteDC(HDC) { return TRUE; }
+BOOL DeleteDC(HDC dc)
+{
+  delete dc;
+  return TRUE;
+}
+// This host does not model installed faces: all mono candidates decline.
+// Real realization, pitch and advance are Windows-only contract pins.
+int GetTextFaceW(HDC, int, wchar_t *)
+{
+  return 0;
+}
+BOOL GetCharWidth32W(HDC, UINT, UINT, int *)
+{
+  return FALSE;
+}
+wchar_t *lstrcpynW(wchar_t *out, const wchar_t *text, int count)
+{
+  std::wcsncpy(out, text, count - 1);
+  out[count - 1] = 0;
+  return out;
+}
+int lstrcmpiW(const wchar_t *left, const wchar_t *right)
+{
+  return std::wcscmp(left, right);
+}
 BOOL BitBlt(HDC, int, int, int, int, HDC, int, int, DWORD)
 {
   LOKA_VERIFY(false && "buffered drawing is outside this host fixture");
@@ -343,6 +388,7 @@ void Win32ScenePlatformController::queueNativeRetirement(HWND h)
 {
   win32_host::windows.erase(std::find(win32_host::windows.begin(), win32_host::windows.end(), h));
   LOKA_VERIFY(GetPropW(h, L"Loka.Text.Color") == 0);
+  LOKA_VERIFY(GetPropW(h, L"Loka.TextContext") == 0);
   delete h;
 }
 namespace loka

@@ -180,7 +180,7 @@ bool Win32AttributedTextTable::buildRows(const AttributedString &value,
     const TextStyle style = decoded.spanCount() ? decoded.spanStyle(i) : TextStyle();
     if (decoded.spanCount())
       this->spans_[i] = decoded.span(i);
-    this->fonts_[i] = controller.textFont(style);
+    this->fonts_[i] = controller.fallbackFont(style);
     if (!selection.select(this->fonts_[i]))
       return false;
     std::size_t previous = 0;

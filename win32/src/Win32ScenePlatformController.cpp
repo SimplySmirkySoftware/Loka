@@ -212,8 +212,19 @@ namespace
   BOOL CALLBACK ApplyDisplayFont(HWND hwnd, LPARAM fontValue)
   {
     const DisplayFontReplacement &fonts = *reinterpret_cast<const DisplayFontReplacement *>(fontValue);
-    const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
-    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(fonts.previous.replacementFor(previous, fonts.next)), TRUE);
+    Win32TextContext *text = Win32TextContext::fromWindow(hwnd);
+    loka::app::TextStyle style;
+    HFONT applied;
+    if (text && text->queryFontStyle(style))
+      applied = Win32ScenePlatformController::fallbackFont(fonts.next, style);
+    else if (Win32TextEditorContext::fromWindow(hwnd))
+      applied = Win32ScenePlatformController::fallbackFont(fonts.next, loka::app::TextStyle() + loka::app::Monospace);
+    else
+    {
+      const HFONT previous = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+      applied = fonts.previous.replacementFor(previous, fonts.next);
+    }
+    SendMessageW(hwnd, WM_SETFONT, reinterpret_cast<WPARAM>(applied), TRUE);
     return TRUE;
   }
 

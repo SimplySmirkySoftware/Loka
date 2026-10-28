@@ -27,7 +27,7 @@ void testWin32RailMetricsProjection()
   LOKA_VERIFY(candidate.displayScale().projectEdge(8) == 10);
   LOKA_VERIFY(candidate.displayScale().capacityToLu(301) == 240);
   LOGFONTW explicitFont;
-  LOKA_VERIFY(GetObjectW(candidate.textFont(FontSize<24>()), sizeof(explicitFont), &explicitFont));
+  LOKA_VERIFY(GetObjectW(candidate.textFont(FontSize<24>()).font(), sizeof(explicitFont), &explicitFont));
   LOKA_VERIFY(explicitFont.lfHeight == -MulDiv(24, 96, 96));
   // Space scaling must not change the default row used by fixed controls.
   loka::win32::Win32DisplayFont unitFonts;
@@ -105,7 +105,7 @@ void testWin32RailMetricsSurviveDpiChange()
   Win32ScenePlatformController controller(NULL, Win32DisplayScale(96, metrics));
   LOKA_VERIFY(controller.displayScale().railMetrics() == metrics);
   LOGFONTW font;
-  LOKA_VERIFY(GetObjectW(controller.textFont(FontSize<24>()), sizeof(font), &font));
+  LOKA_VERIFY(GetObjectW(controller.textFont(FontSize<24>()).font(), sizeof(font), &font));
   LOKA_VERIFY(font.lfHeight == -MulDiv(24, 96 * 5, 96 * 4));
   // A font-only change must not compare equal in the font-table cache.
   loka::win32::Win32DisplayFont table;
@@ -121,7 +121,7 @@ void testWin32RailMetricsSurviveDpiChange()
   LOKA_VERIFY(controller.displayScale().percent() == 150);
   LOKA_VERIFY(controller.displayScale().railMetrics() == metrics);
   LOKA_VERIFY(controller.displayScale().projectEdge(8) == 18);
-  LOKA_VERIFY(GetObjectW(controller.textFont(FontSize<24>()), sizeof(font), &font));
+  LOKA_VERIFY(GetObjectW(controller.textFont(FontSize<24>()).font(), sizeof(font), &font));
   LOKA_VERIFY(font.lfHeight == -MulDiv(24, 144 * 5, 96 * 4));
   controller.updateDisplayScale(Win32DisplayScale(96));
   LOKA_VERIFY(controller.displayScale().railMetrics() == metrics);
@@ -137,7 +137,7 @@ void testWin32SmallLabelUsesTheMessageFaceAtTenUnits()
   LOGFONTW body;
   LOKA_VERIFY(GetObjectW(table.get(), sizeof(body), &body));
   // The role has its own row: the message face at -10 px, not the default row.
-  const HFONT caption = table.find(SmallLabel);
+  const HFONT caption = table.find(SmallLabel).font();
   LOGFONTW font;
   LOKA_VERIFY(caption && caption != table.get());
   LOKA_VERIFY(GetObjectW(caption, sizeof(font), &font));
@@ -145,7 +145,7 @@ void testWin32SmallLabelUsesTheMessageFaceAtTenUnits()
   LOKA_VERIFY(lstrcmpW(font.lfFaceName, body.lfFaceName) == 0);
   LOKA_VERIFY(font.lfWeight == body.lfWeight);
   // Weight composes with the role through the row's bold column.
-  const HFONT captionBold = table.find(SmallLabel + Bold);
+  const HFONT captionBold = table.find(SmallLabel + Bold).font();
   LOKA_VERIFY(captionBold && captionBold != caption);
   LOKA_VERIFY(GetObjectW(captionBold, sizeof(font), &font));
   LOKA_VERIFY(font.lfHeight == -10 && font.lfWeight == FW_BOLD);
@@ -153,9 +153,9 @@ void testWin32SmallLabelUsesTheMessageFaceAtTenUnits()
   // table swap carries a borrowed SmallLabel handle to the new table's row.
   loka::win32::Win32DisplayFont scaled;
   LOKA_VERIFY(scaled.create(Win32DisplayScale(144, RailMetrics(Ratio(5, 4), Ratio()))));
-  LOKA_VERIFY(GetObjectW(scaled.find(SmallLabel), sizeof(font), &font));
+  LOKA_VERIFY(GetObjectW(scaled.find(SmallLabel).font(), sizeof(font), &font));
   LOKA_VERIFY(font.lfHeight == -MulDiv(10, 144 * 5, 96 * 4));
-  LOKA_VERIFY(table.replacementFor(caption, scaled) == scaled.find(SmallLabel));
+  LOKA_VERIFY(table.replacementFor(caption, scaled) == scaled.find(SmallLabel).font());
 }
 
 namespace
@@ -283,3 +283,87 @@ namespace
 #endif
   }
 } // namespace
+
+namespace
+{
+  void verifyMonospaceFont(HFONT font)
+  {
+    LOKA_VERIFY(font);
+    HDC dc = CreateCompatibleDC(NULL);
+    LOKA_VERIFY(dc);
+    HGDIOBJ previous = SelectObject(dc, font);
+    LOKA_VERIFY(previous && previous != HGDI_ERROR);
+    wchar_t face[LF_FACESIZE];
+    TEXTMETRICW metrics;
+    int narrow = 0, wide = 0;
+    LOKA_VERIFY(GetTextFaceW(dc, LF_FACESIZE, face));
+    LOKA_VERIFY(lstrcmpiW(face, L"Consolas") == 0 || lstrcmpiW(face, L"Lucida Console") == 0
+                || lstrcmpiW(face, L"Courier New") == 0);
+    LOKA_VERIFY(GetTextMetricsW(dc, &metrics));
+    LOKA_VERIFY(!(metrics.tmPitchAndFamily & TMPF_FIXED_PITCH));
+    LOKA_VERIFY(GetCharWidth32W(dc, L'i', L'i', &narrow));
+    LOKA_VERIFY(GetCharWidth32W(dc, L'W', L'W', &wide));
+    LOKA_VERIFY(narrow > 0 && narrow == wide);
+    SelectObject(dc, previous);
+    DeleteDC(dc);
+  }
+} // namespace
+
+void testWin32TextFamilyMonospaceSlot()
+{
+  using namespace loka::app;
+  loka::win32::Win32DisplayFont table(loka::win32::Win32DisplayScale(96));
+  LOKA_VERIFY(table.get());
+  LOKA_VERIFY(table.find(TextStyle()).font() == table.get());
+  LOGFONTW messageDescriptor, bodyDescriptor;
+  LOKA_VERIFY(GetObjectW(table.get(), sizeof(messageDescriptor), &messageDescriptor));
+  LOKA_VERIFY(GetObjectW(table.find(Body).font(), sizeof(bodyDescriptor), &bodyDescriptor));
+  LOKA_VERIFY(lstrcmpiW(messageDescriptor.lfFaceName, bodyDescriptor.lfFaceName) == 0);
+  LOKA_VERIFY(table.find(Body).family() == TEXT_FAMILY_SYSTEM);
+  LOKA_VERIFY(table.find(TextStyle().family(TEXT_FAMILY_SYSTEM)).font() == table.get());
+  HDC dc = CreateCompatibleDC(NULL);
+  LOKA_VERIFY(dc);
+  HGDIOBJ previous = SelectObject(dc, table.get());
+  LOKA_VERIFY(previous && previous != HGDI_ERROR);
+  TEXTMETRICW metrics;
+  wchar_t face[LF_FACESIZE];
+  LOKA_VERIFY(GetTextFaceW(dc, LF_FACESIZE, face));
+  LOKA_VERIFY(GetTextMetricsW(dc, &metrics));
+  if (!(metrics.tmPitchAndFamily & TMPF_FIXED_PITCH))
+    std::printf("[skip] message face is fixed pitch: %ls\n", face);
+  SelectObject(dc, previous);
+  DeleteDC(dc);
+  if (!table.find(Monospace).font())
+  {
+    std::printf("[skip] monospace candidates: none of Consolas / Lucida Console / Courier New installed\n");
+    return;
+  }
+  LOKA_VERIFY(table.find(Monospace).family() == TEXT_FAMILY_MONOSPACE);
+  verifyMonospaceFont(table.find(Monospace).font());
+  verifyMonospaceFont(table.find(Monospace + Bold).font());
+  LOGFONTW descriptor;
+  LOKA_VERIFY(GetObjectW(table.find(Monospace + Bold).font(), sizeof(descriptor), &descriptor));
+  LOKA_VERIFY(descriptor.lfWeight == FW_BOLD);
+  verifyMonospaceFont(table.find(Monospace + FontSize<12>()).font());
+  LOKA_VERIFY(GetObjectW(table.find(Monospace + FontSize<12>()).font(), sizeof(descriptor), &descriptor));
+  LOKA_VERIFY(descriptor.lfHeight == -12);
+}
+
+void testWin32TextFamilyNoCandidate()
+{
+  using namespace loka::app;
+  static const wchar_t *const absent[] = {
+      L"Loka missing mono face 1", L"Loka missing mono face 2", L"Loka missing mono face 3", 0};
+  loka::win32::testing::useMonospaceCandidatesForNextBuild(absent);
+  loka::win32::Win32DisplayFont table(loka::win32::Win32DisplayScale(96));
+  LOKA_VERIFY(table.get());
+  const loka::win32::Win32FontResolution &resolution = table.find(Monospace);
+  LOKA_VERIFY(!resolution.font() && resolution.family() == TEXT_FAMILY_MONOSPACE);
+  LOKA_VERIFY(Win32ScenePlatformController::fallbackFont(table, Monospace) == table.get());
+  LOKA_VERIFY(table.find(TextStyle()).family() == TEXT_FAMILY_SYSTEM);
+  loka::win32::Win32DisplayFont natural(loka::win32::Win32DisplayScale(96));
+  if (!natural.find(Monospace).font())
+    std::printf("[skip] monospace candidates: none of Consolas / Lucida Console / Courier New installed\n");
+  else
+    verifyMonospaceFont(natural.find(Monospace).font());
+}
