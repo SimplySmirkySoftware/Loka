@@ -44,6 +44,7 @@ struct SIZE
 struct TEXTMETRICW
 {
   int tmAscent, tmDescent, tmExternalLeading, tmHeight;
+  unsigned char tmPitchAndFamily;
 };
 #define FALSE 0
 #define TRUE 1
@@ -184,7 +185,20 @@ struct PAINTSTRUCT { int unused; };
 #define SM_CYHSCROLL 3
 #define FW_BOLD 700
 #define SPI_GETNONCLIENTMETRICS 41
-struct LOGFONTW { int lfHeight, lfWidth, lfWeight; unsigned char lfItalic; };
+#define LF_FACESIZE 32
+#define FIXED_PITCH 1
+#define FF_MODERN 48
+#define TMPF_FIXED_PITCH 1
+struct LOGFONTW
+{
+  int lfHeight, lfWidth, lfWeight;
+  unsigned char lfItalic, lfPitchAndFamily;
+  wchar_t lfFaceName[LF_FACESIZE];
+};
+wchar_t *lstrcpynW(wchar_t *, const wchar_t *, int);
+int lstrcmpiW(const wchar_t *, const wchar_t *);
+int GetTextFaceW(HDC, int, wchar_t *);
+BOOL GetCharWidth32W(HDC, UINT, UINT, int *);
 struct NONCLIENTMETRICSW { UINT cbSize; LOGFONTW lfMessageFont; int iPaddedBorderWidth; };
 HDC GetDC(HWND);
 int ReleaseDC(HWND, HDC);

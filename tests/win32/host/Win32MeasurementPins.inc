@@ -208,7 +208,7 @@ namespace
       LOKA_VERIFY(measurementCalls() == calls);
       LOKA_VERIFY(win32_host::styleReads > styleReads && win32_host::fontReads > fontReads);
       LOKA_VERIFY((window->style & SS_TYPEMASK) == SS_CENTER);
-      LOKA_VERIFY(window->dc.font == controller.textFont(plain.props.resolvedTextStyle()));
+      LOKA_VERIFY(window->dc.font == controller.fallbackFont(plain.props.resolvedTextStyle()));
       for (int refusal = 0; refusal < 3; ++refusal)
       {
         ++state.width;

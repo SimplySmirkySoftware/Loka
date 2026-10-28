@@ -53,6 +53,8 @@ public:
                           int requestedY,
                           bool horizontalBar,
                           const loka::app::ScrollViewContentInsets &contentInsets);
+  /** Request side of the same report that bounds notifications use. */
+  bool applyScrollRequest(const loka::core::Frame &target);
   int clampOffset(int value, int maximum) const;
   /** The horizontal range a content width would give this viewport: the
       projected content width minus the native clip width, converted once,

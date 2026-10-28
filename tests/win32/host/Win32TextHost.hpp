@@ -32,10 +32,13 @@ public:
     this->large_.leading = 2;
     this->large_.advance = 8;
   }
-  HFONT textFont(const loka::app::TextStyle &style) const
+  HFONT fallbackFont(const loka::app::TextStyle &style) const
   {
     if (this->displayFont_.get())
-      return this->displayFont_.find(style);
+    {
+      const loka::win32::Win32FontResolution &font = this->displayFont_.find(style);
+      return font.font() ? font.font() : this->displayFont_.get();
+    }
     return style.hasItalic_ && style.italic_ ? &this->large_ : &this->small_;
   }
   const loka::win32::Win32DisplayScale &displayScale() const

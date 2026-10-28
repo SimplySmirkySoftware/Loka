@@ -2,6 +2,7 @@
 #define LOKA_MAC_SCENE_PLATFORM_CONTROLLER_HPP
 
 #include <vector>
+#include "app/nodes/nestable/ScrollView.hpp"
 #include "app/layout/RowLayout.hpp"
 #include "core/resource/Image.hpp"
 #include "app/layout/TextShaping.hpp"
@@ -186,12 +187,30 @@ private:
       loka::app::scene::Node *node,
       const LayoutState &state);
 
+  /** Layout calls at most once per Box/framed visit, inside the clip guard when admitted.
+      Looks up the controller-owned handler registry once, then runs the handler
+      or fallback over this node's children.
+      Handler narrowing refusal returns false without changing resultY. */
+  bool layoutContainerBody(loka::app::scene::Node *node, const LayoutState &state, int &resultY);
+  /** One admitted clip box per layout visit. Walks only this node's children;
+      allocation refusal walks none and leaves the existing projection intact. */
+  LayoutNodeResult layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth);
   static int layoutContainerChild(void *context, loka::app::scene::Node *child, const LayoutState &state);
   int layoutNodeFromSceneState(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   int layoutNode(loka::app::scene::Node *node, const LayoutState &state);
   LayoutNodeResult computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state);
-  LayoutNodeResult layoutScrollViewNode(loka::app::ScrollViewNode *scrollView,
-                                        const LayoutState &state);
+  /** Completed layout and request capability of this projection visit. */
+  struct ScrollViewLayoutResult
+  {
+    ScrollViewLayoutResult(const LayoutNodeResult &value, const loka::app::ScrollViewVisit &outcome)
+        : layout(value),
+          visit(outcome)
+    {
+    }
+    const LayoutNodeResult layout;
+    const loka::app::ScrollViewVisit visit;
+  };
+  ScrollViewLayoutResult layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state);
   int applyBoundaryLayoutResult(loka::app::scene::BoundaryNode *boundary, int x, int y, const LayoutNodeResult &result);
   LayoutNodeResult layoutRectSurfaceNode(loka::app::RectSurfaceNode *surface, const LayoutState &state);
   bool narrowLayoutState(const LayoutState &state,
