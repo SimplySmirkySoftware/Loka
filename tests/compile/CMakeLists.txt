@@ -669,3 +669,8 @@ add_test(NAME compileAccepts-request-focus-and-editor
   COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
     --config $<CONFIG> --target compilePin_request-focus-and-editor_accepts)
 set_tests_properties(compileAccepts-request-focus-and-editor PROPERTIES RESOURCE_LOCK loka-build-dir)
+
+loka_compile_pin(scrollview-visit-arity
+  REFUSES pins/refuses_scrollview_visit_arity.cpp
+  ACCEPTS pins/accepts_scrollview_visit_arity.cpp
+)

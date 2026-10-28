@@ -364,6 +364,9 @@ private:
                                           const loka::app::scene::LayoutState &state,
                                           const loka::app::layout::LazyWindow *range = 0,
                                           loka::app::layout::StackSpans *spans = 0);
+  bool applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                              const ScrollViewLayoutResult &result,
+                              const loka::core::Frame &target);
   int projectLayout(loka::app::scene::Node *node,
                     const loka::app::scene::LayoutState &state,
                     const loka::app::layout::LazyWindow *range = 0,
