@@ -593,7 +593,8 @@ namespace loka
   {
     namespace testing
     {
-      void observeProjectionReservation(std::size_t bytes);
+      void observeProjectionReservation(std::size_t requested, std::size_t capacity);
+      std::size_t lastProjectionRequest();
       std::size_t lastProjectionReservation();
     } // namespace testing
   } // namespace app
@@ -603,21 +604,26 @@ void testTextEditorProjectReservesMeasuredLength()
   // project() reserves the measured CR-inclusive length once, so a rail's
   // projection buffer follows the committed document instead of a constant.
   Fixture f(64, std::string(100, 'a'), 256);
-  loka::app::testing::observeProjectionReservation(0);
+  loka::app::testing::observeProjectionReservation(0, 0);
   std::string out;
   LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).project(out) == EDITOR_OK);
   LOKA_VERIFY(out.size() == 64 * 100 + 63);
-  // The hook reports the capacity right after the reservation, before any row is
-  // appended: at least the document (a dropped reserve leaves the short-string
-  // capacity) and not the admitted ceiling (a ceiling reserve would exceed the
-  // document by far more than a library's rounding, which stays under 64 bytes).
-  const std::size_t reserved = loka::app::testing::lastProjectionReservation();
-  LOKA_VERIFY(reserved >= out.size() && reserved <= out.size() + 64);
+  // The reservation door reports its request and the capacity right after it,
+  // before any row is appended. The request is exactly the measured document (a
+  // ceiling or constant reserve asks for something else, and a reserve that
+  // bypasses the door leaves the reset value); the capacity covers it (a dropped
+  // reserve leaves the short-string capacity). The capacity is not bounded from
+  // above: how far a library rounds a reserve up is the library's (old libstdc++
+  // rounds a large reserve to its page buckets), not Loka's.
+  const std::size_t requested = loka::app::testing::lastProjectionRequest();
+  LOKA_VERIFY(requested == out.size());
+  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= out.size());
   // A second projection into a stale string reserves for the same document again.
-  loka::app::testing::observeProjectionReservation(0);
+  loka::app::testing::observeProjectionReservation(0, 0);
   std::string stale("stale");
   LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).project(stale) == EDITOR_OK);
-  LOKA_VERIFY(stale == out && loka::app::testing::lastProjectionReservation() >= out.size());
+  LOKA_VERIFY(stale == out && loka::app::testing::lastProjectionRequest() == out.size());
+  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= out.size());
 }
 void testTextEditorReplace()
 {

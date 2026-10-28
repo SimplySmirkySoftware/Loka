@@ -1338,6 +1338,7 @@ namespace loka
   {
     namespace testing
     {
+      std::size_t lastProjectionRequest();
       std::size_t lastProjectionReservation();
     }
   } // namespace app
@@ -1356,9 +1357,10 @@ void testWin32TextEditorCapacityRows()
   const std::string &text = EditorAccess::projectedText(*fixture.context);
   const std::wstring &wide = EditorAccess::projectedWide(*fixture.context);
   LOKA_VERIFY(text.size() == 10999);
-  // Reserved for this document (capacity right after the reserve), not the 8 KiB constant.
-  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= text.size()
-              && loka::app::testing::lastProjectionReservation() <= text.size() + 64);
+  // Reserved for this document (the request is the measured length, not the 8 KiB
+  // constant); the capacity covers it, by however much the library rounds up.
+  LOKA_VERIFY(loka::app::testing::lastProjectionRequest() == text.size());
+  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= text.size());
   LOKA_VERIFY(wide.size() == text.size() + 999);
   fixture.matches();
 

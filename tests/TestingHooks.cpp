@@ -664,11 +664,17 @@ namespace loka
       }
       namespace
       {
+        std::size_t lastProjectionRequestBytes = 0;
         std::size_t lastProjectionReservationBytes = 0;
       }
-      void observeProjectionReservation(std::size_t bytes)
+      void observeProjectionReservation(std::size_t requested, std::size_t capacity)
       {
-        lastProjectionReservationBytes = bytes;
+        lastProjectionRequestBytes = requested;
+        lastProjectionReservationBytes = capacity;
+      }
+      std::size_t lastProjectionRequest()
+      {
+        return lastProjectionRequestBytes;
       }
       std::size_t lastProjectionReservation()
       {
