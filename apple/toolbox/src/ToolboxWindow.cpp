@@ -547,6 +547,9 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
     else
       presenter.eraseBeforePaint();
     this->drawGrowBox();
+#ifdef TEST_BUILD
+    presenter.finishDrawForTesting();
+#endif
   }
 
   SetPort(oldPort);

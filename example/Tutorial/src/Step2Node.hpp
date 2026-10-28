@@ -35,10 +35,10 @@ namespace tutorial
     virtual void composeNode(loka::app::scene::NodeComposition &c)
     {
       using namespace loka::app;
-      c.declare(VStack()                          //
-                << TutorialTitle("Step 2")        //
-                << Text(this->countText_.state()) //
-                << Button("Increment", &this->incrementEvent_)
+      c.declare(VStack()                                                          //
+                << TutorialTitle("Step 2")                                        //
+                << Text(this->countText_.state()).TEST_ID("Tutorial.Step2.Count") //
+                << Button("Increment", &this->incrementEvent_).TEST_ID("Tutorial.Step2.Increment")
                 << TutorialHint("A button can update state, and bound text follows it."));
     }
 
