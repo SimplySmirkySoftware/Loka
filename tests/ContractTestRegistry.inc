@@ -1475,6 +1475,8 @@ LOKA_TEST(testTextUtf8Columns)
 LOKA_TEST(testTextAlphabetAdapters)
 LOKA_TEST(testTextAlphabetFileAdapter)
 
+LOKA_TEST(testClipBoxShorthandMatchesClipChildren)
+LOKA_TEST(testClipBoxExpressionPositions)
 LOKA_TEST(testClipChildrenBoxPropsIdentityAndCopy)
 LOKA_TEST(testClipChildrenCardPropsIdentityAndCopy)
 LOKA_TEST(testClipBoxWidthResolutionTable)

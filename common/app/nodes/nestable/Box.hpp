@@ -228,6 +228,16 @@ namespace loka
 
     typedef BoxDefinition Box;
 
+    /** Shorthand for Box().clipChildren(): the same Box, with every Box modifier.
+        The clip flag is fixed when the box is created, exactly as for clipChildren();
+        switch with Match / Show arms or Keyed. See clipChildren() for clipping behavior. */
+    inline BoxDefinition ClipBox()
+    {
+      BoxDefinition box;
+      box.clipChildren();
+      return box;
+    }
+
     inline BoxNode *createNode(const BoxProps &props)
     {
       return new BoxNode(props);
