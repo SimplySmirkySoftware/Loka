@@ -215,3 +215,21 @@ Runtime red/green verification and the tracked-log update are pending the
 the red run, then restore it for green. Do not generate expected audit lines
 from the source: capture the real run. The 38-cell scenario bundle is expected
 to remain byte-identical.
+
+## Full-draw scroll observation (#1043 B2)
+
+`viewport-full-draw-observed` accompanies `column-scroll-reveals-current-text`
+(the 160-pixel reveal, `column_phase=64 delivery=FULL`). The `present_observe`
+line reports the interval's joined full-draw reasons, first vertical delta,
+number of moved viewports, overlapping foreground unit seats, OS entry damage
+bbox in window-local top/left/bottom/right order, and the first refusal.
+Presentation remains `erase`; the observation never selects a pixel-copy path.
+The arm expects `no_suppression_capability`: the reveal changes one vertical
+layout input, boundary apply requests `layout_dirty`, the settled entry has no
+OS damage, and the Column has no ZStack units. Global layout adds a rectangle
+request without adding another full-draw reason. Skipping `noteViewportMove` at the layout publication point makes the
+arm red (zero movement and `no_viewport_moved`).
+
+This added arm awaits the delegator's MAME run and captured expected audit;
+the preexisting tracked log is intentionally unchanged. Scenario dumps gain
+no observation lines because the scenario runner compares whole audit files.

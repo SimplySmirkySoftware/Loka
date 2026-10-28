@@ -3,11 +3,13 @@
 
 #include "app/scene/Node.hpp"
 #include <string>
+#include "ToolboxPresentObservation.hpp"
 
 class ToolboxSceneDebugStats
 {
 public:
   ToolboxSceneDebugStats();
+  ToolboxPresentObservation lastPresentObservation;
 
   static std::string flagsToString(loka::app::scene::NodeDirtyFlags flags);
   void begin(loka::app::scene::NodeDirtyFlags flags, bool fullRebuild);
