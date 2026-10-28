@@ -9,6 +9,8 @@ inline Rect ToolboxUpdateDamage(RgnHandle updateRgn, const Rect &portBitsBounds)
   if (updateRgn && *updateRgn)
   {
     damage = (**updateRgn).rgnBBox;
+    if (damage.left >= damage.right || damage.top >= damage.bottom)
+      return Rect();
     OffsetRect(&damage, portBitsBounds.left, portBitsBounds.top);
   }
   return damage;

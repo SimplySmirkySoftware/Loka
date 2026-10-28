@@ -220,15 +220,23 @@ to remain byte-identical.
 
 `viewport-full-draw-observed` accompanies `column-scroll-reveals-current-text`
 (the 160-pixel reveal, `column_phase=64 delivery=FULL`). The `present_observe`
-line reports the interval's joined full-draw reasons, first vertical delta,
+line reports the last moving pass's joined full-draw reasons, first vertical delta,
 number of moved viewports, overlapping foreground unit seats, OS entry damage
 bbox in window-local top/left/bottom/right order, and the first refusal.
+`lastMovedPresentObservation` retains that moving pass: viewport republication
+can cause the second full layout tracked by #1513, which has no movement.
+`lastPresentObservation` still describes the last completed pass. The same line
+logs its `last_refusal` separately (for that second pass, `no_viewport_moved`).
+Both snapshots clear on explicit diagnostic reset. Empty OS update bboxes are
+reported as `0,0,0,0`, independent of the window's port origin.
 Presentation remains `erase`; the observation never selects a pixel-copy path.
 The arm expects `no_suppression_capability`: the reveal changes one vertical
 layout input, boundary apply requests `layout_dirty`, the settled entry has no
 OS damage, and the Column has no ZStack units. Global layout adds a rectangle
 request without adding another full-draw reason. Skipping `noteViewportMove` at the layout publication point makes the
-arm red (zero movement and `no_viewport_moved`).
+arm red (zero movement and `no_viewport_moved`). Writing the moving snapshot
+unconditionally also makes the retention host pin red after the second pass;
+removing empty-bbox normalization makes both damage-entry pins red.
 
 This added arm awaits the delegator's MAME run and captured expected audit;
 the preexisting tracked log is intentionally unchanged. Scenario dumps gain

@@ -9,7 +9,11 @@ class ToolboxSceneDebugStats
 {
 public:
   ToolboxSceneDebugStats();
+  /** Last completed full layout, including passes with no viewport movement. */
   ToolboxPresentObservation lastPresentObservation;
+  /** Last completed full layout with movement; survives the #1513 republication pass.
+      Cleared with the rest of the debug stats on explicit reset. */
+  ToolboxPresentObservation lastMovedPresentObservation;
 
   static std::string flagsToString(loka::app::scene::NodeDirtyFlags flags);
   void begin(loka::app::scene::NodeDirtyFlags flags, bool fullRebuild);

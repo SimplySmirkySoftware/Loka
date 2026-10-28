@@ -808,7 +808,11 @@ public:
   std::vector<loka::core::State<loka::core::String> *> pendingTextStates_;
   struct RenderStats
   {
+    /** Last completed full layout, including passes with no viewport movement. */
     ToolboxPresentObservation lastPresentObservation;
+    /** Last completed full layout with movement; survives the #1513 republication pass.
+        Cleared with the rest of the debug stats on explicit reset. */
+    ToolboxPresentObservation lastMovedPresentObservation;
     unsigned renderCalls, totalRenderCalls, totalBoundaryApplyCount;
     unsigned renderDirtyCalls, totalRenderDirtyCalls;
     unsigned controlDrawCount, totalControlDrawCount;

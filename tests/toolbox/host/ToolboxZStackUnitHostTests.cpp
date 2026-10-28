@@ -1161,6 +1161,10 @@ namespace
     {
       return this->controller.debugStatsForTesting().lastPresentObservation;
     }
+    const ToolboxPresentObservation &lastMoved() const
+    {
+      return this->controller.debugStatsForTesting().lastMovedPresentObservation;
+    }
     void scroll(int dy)
     {
       this->origin.set(Frame(0, dy, 0, 0));
@@ -1188,6 +1192,13 @@ namespace
     LOKA_VERIFY(f.last().viewports() == 1);
     LOKA_VERIFY(f.last().verdict() == TOOLBOX_PRESENT_ERASE_ALL);
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    // #1513 republishes the viewport and can present a second, unmoved full layout.
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().viewports() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
+    LOKA_VERIFY(f.lastMoved().dy() == 17);
+    LOKA_VERIFY(f.lastMoved().viewports() == 1);
     f.scroll(29);
     LOKA_VERIFY(f.last().dy() == 12);
     // Native input has already changed appliedValue; placedOrigin must still see the move.
@@ -1266,6 +1277,17 @@ namespace
     const Rect damage = f.last().damage();
     LOKA_VERIFY(damage.top == local.top && damage.left == local.left && damage.bottom == local.bottom
                 && damage.right == local.right);
+    const Rect emptyBounds[] = {{0, 0, 0, 0}, {20, 10, 40, 10}, {40, 10, 20, 30}};
+    for (unsigned i = 0; i < sizeof(emptyBounds) / sizeof(emptyBounds[0]); ++i)
+    {
+      region.rgnBBox = emptyBounds[i];
+      if (flush)
+        f.window.drawForFlush();
+      else
+        f.window.drawForUpdate();
+      const Rect emptyDamage = f.last().damage();
+      LOKA_VERIFY(emptyDamage.top == 0 && emptyDamage.left == 0 && emptyDamage.bottom == 0 && emptyDamage.right == 0);
+    }
     f.window.port.updateRgn = 0;
   }
   void presentReset()
@@ -1278,6 +1300,7 @@ namespace
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
     f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
     f.controller.resetDebugStats();
+    LOKA_VERIFY(f.lastMoved().viewports() == 0);
     f.window.flushInvalidate();
     LOKA_VERIFY(f.last().reasons() == 0);
     // The no-root early exit must consume its interval too.

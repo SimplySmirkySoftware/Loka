@@ -102,6 +102,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   }
   this->observation_.complete(foregroundUnits);
   this->debugStats_.lastPresentObservation = this->observation_;
+  if (this->observation_.viewports() > 0)
+    this->debugStats_.lastMovedPresentObservation = this->observation_;
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
