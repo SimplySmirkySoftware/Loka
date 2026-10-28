@@ -306,6 +306,22 @@ int MacScrollViewContext::commitScrollMetrics(int contentWidth,
   return clamped;
 }
 
+bool MacScrollViewContext::applyScrollRequest(const loka::core::Frame &target)
+{
+  NSScrollView *scrollView = (NSScrollView *)this->scrollView_;
+  NSView *documentView = scrollView ? [scrollView documentView] : nil;
+  if (!scrollView || !documentView)
+    return false;
+  BoundsNotificationMute mute(*this);
+  // An unmoved axis's target is the current fact, which this visit's
+  // commitScrollMetrics already scrolled to, so only moving axes change.
+  const loka::macos::MacProjection &projection = this->controller()->projection();
+  loka::macos::ScrollMacDocument(
+      documentView, projection.scrollOffsetToNative(target.x), projection.scrollOffsetToNative(target.y));
+  this->publishClipViewBoundsOrigin();
+  return true;
+}
+
 void MacScrollViewContext::publishClipViewBoundsOrigin()
 {
 #ifdef LOKA_LIFECYCLE_AUDIT

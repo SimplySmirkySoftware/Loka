@@ -224,6 +224,8 @@ namespace loka
         unsigned g_textEditorSetFailures = 0;
         unsigned g_nativeChildWindowFailures = 0;
         unsigned g_nativeChildWindowSkips = 0;
+        unsigned g_scrollInfoReadFailures = 0;
+        unsigned g_scrollInfoReadSkips = 0;
       } // namespace
 
       void failNativeChildWindowCreations(unsigned count, unsigned skip)
@@ -242,6 +244,25 @@ namespace loka
         if (!g_nativeChildWindowFailures)
           return false;
         --g_nativeChildWindowFailures;
+        return true;
+      }
+
+      void failScrollInfoReads(unsigned count, unsigned skip)
+      {
+        g_scrollInfoReadFailures = count;
+        g_scrollInfoReadSkips = skip;
+      }
+
+      bool refuseScrollInfoRead()
+      {
+        if (g_scrollInfoReadSkips)
+        {
+          --g_scrollInfoReadSkips;
+          return false;
+        }
+        if (!g_scrollInfoReadFailures)
+          return false;
+        --g_scrollInfoReadFailures;
         return true;
       }
 

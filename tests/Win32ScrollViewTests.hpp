@@ -32,4 +32,17 @@ void testWin32ScrollViewFrameTabAndArrowFocus();
 
 void testWin32ScrollViewInsetBarTinyAndFractionalSeat();
 
+void testWin32ScrollRequestBothAxesAndNoEcho();
+void testWin32ScrollRequestClampReadBack();
+void testWin32ScrollRequestReadFailures();
+void testWin32ScrollRequestAbsentAxesAndHeightless();
+void testWin32ScrollRequestHeightlessKeepsUnmovedX();
+void testWin32ScrollRequestZeroRange();
+void testWin32ScrollRequestRefusedVisits();
+void testWin32ScrollViewSettledInputSequences();
+void testWin32ScrollRequestSceneBorrow();
+void testWin32ScrollRequestDeferredMount();
+void testWin32ScrollRequestNativeSizeOuterBorrow();
+void testWin32ScrollRequestFirstVisit();
+
 #endif // LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP

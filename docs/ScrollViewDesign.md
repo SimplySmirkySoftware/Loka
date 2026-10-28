@@ -264,8 +264,8 @@ decides.
 ## Scroll requests (#1591)
 
 `scrollTo(Request<ScrollTarget>&)` borrows an app-owned coalescable request.
-Null and Toolbox take a post at the first eligible projection visit after posting, after
-layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
+All four rails take a post at the first eligible projection visit after posting,
+after layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
 coordinates and shares `requestedOrigin()` normalization. Null has no native
 range and does not clamp to a viewport range. The viewport publication is the
 report; there is no reply door.
@@ -278,6 +278,16 @@ and shown in this visit make an axis movable. A hidden, clipped, uncreated or
 unensured row is absent; a present row with maximum zero still accepts and
 clamps. The visit stores presence and indices, not a second native maximum.
 
+Win32 input and requests share `commitSettledPosition`: pre-read every selected
+axis, set moving axes, read them back, then publish the pair once. Read-back is
+the reported value; a failed pre-read or read-back reports nothing. Requests
+set only axes whose normalized target differs from the current fact; unchosen
+axes keep that fact. A read-back failure may leave native positions moved;
+the next layout restores them from the fact. `SB_ENDSCROLL` only reads, thumb
+tracking remains visual-only, and the wheel retains per-step publications.
+The visit records axis presence, not maxima: X follows this visit's horizontal
+bar decision, and a valid context includes its vertical scrollbar control.
+
 A reached refused visit or an unbound viewport takes and drops the request.
 An unreached child keeps it pending. A retained re-entry's first visit may jump;
 intervening input does not cancel a pending post. Replacing the request binding
@@ -285,15 +295,18 @@ or leaving ATTACHED cancels pending work synchronously; replacing only viewport
 or insets does not. Reclaim publishes nothing. See
 [request delivery sites and bounds](RequestDeliveryDesign.md#where-each-rail-consumes).
 
+macOS `applyScrollRequest` applies the native origin and shares
+`publishClipViewBoundsOrigin` with bounds-notification input, reporting inside
+its notification mute. X availability follows the committed horizontal
+scroller for reply parity with the other rails, even where AppKit could move
+the clip without that scroller. A valid context supplies Y. SimpleViewer now
+posts `scrollTo` on image load; its viewport remains a rail-written fact,
+closing the former second-writer debt.
+
 ## Known debts
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already
   placed at the refused pass's translation (both axes; pre-#580 for Y).
-- Win32 and macOS ScrollView request delivery remain for PRs 3–4 of #1591.
-  SimpleViewer still resets the viewport by
-  writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
-  the app a second writer of a rail result channel. That is a recorded debt,
-  not a pattern to copy. Its move to `scrollTo` belongs to the last rail PR.
 - macOS layout measures width from the actual NSScrollView (`visibleWidth`),
   but horizontal chrome height comes from the system preferred scroller style
   (`MacProjection::clientHeightBelowHorizontalScroller`), not the view's style.

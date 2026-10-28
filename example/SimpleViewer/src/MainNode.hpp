@@ -133,6 +133,7 @@ namespace simpleviewer
           navMode_(),
           navOpen_(),
           viewport_(),
+          scrollTo_(),
           toggleNavEvent_(),
           imageLoad_(*this)
     {
@@ -150,6 +151,7 @@ namespace simpleviewer
       this->state(this->navMode_, NAV_WIDE);
       this->state(this->navOpen_, false);
       this->state(this->viewport_, loka::core::Frame(0, 0, 0, 0));
+      this->state(this->scrollTo_, loka::app::ScrollTarget::None());
     }
 
     virtual void composeNode(loka::app::scene::NodeComposition &c)
@@ -184,9 +186,8 @@ namespace simpleviewer
       display.arm(DISPLAY_FIT, this->imageView(IMAGE_VIEW_SIZE_FILL_PARENT))
           .arm(DISPLAY_ACTUAL, this->imageView(IMAGE_VIEW_SIZE_INTRINSIC))
           .arm(DISPLAY_ACTUAL_SCROLL,
-               ScrollView(this->viewport_)
-                       .TEST_ID("SimpleViewer.ActualScroll")
-               << this->imageView(IMAGE_VIEW_SIZE_INTRINSIC));
+               ScrollView(this->viewport_).scrollTo(this->scrollTo_).TEST_ID("SimpleViewer.ActualScroll")
+                   << this->imageView(IMAGE_VIEW_SIZE_INTRINSIC));
       display.setNodeTag(kDisplaySeatTag);
 
       ShowDefinition openDialog =
@@ -360,7 +361,7 @@ namespace simpleviewer
     void commitLoadedImage(const loka::core::resource::Image &image)
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->viewport_.set(loka::core::Frame(0, 0, 0, 0));
+      this->scrollTo_.set(loka::app::ScrollTarget::Origin(0, 0));
       this->image_.set(image, true);
     }
 
@@ -393,6 +394,7 @@ namespace simpleviewer
     loka::app::scene::NodeState<NavMode> navMode_;
     loka::app::scene::NodeState<bool> navOpen_;
     loka::app::scene::NodeState<loka::core::Frame> viewport_;
+    loka::app::scene::Request<loka::app::ScrollTarget> scrollTo_;
     loka::core::EmitterState toggleNavEvent_;
     ImageLoadSession imageLoad_;
     loka::app::scene::NodeState<DisplayMode> displayMode_;
