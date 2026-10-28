@@ -3,6 +3,7 @@ project(LokaTestsToolbox LANGUAGES CXX)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
   add_subdirectory(unicode-import)
+  add_subdirectory(unicode-probe)
 endif()
 
 if(NOT COMMAND loka_enable_standalone_performance)
