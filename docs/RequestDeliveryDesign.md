@@ -541,9 +541,9 @@ helpers are not additional delivery sites.
 The ScrollView arm's borrow, helper, post-helper identity, seat and single settle
 order lives in `SettleScrollViewVisit` in
 [`ScrollViewSettlement.hpp`](../common/app/nodes/nestable/ScrollViewSettlement.hpp).
-Null and Toolbox call it with their helpers and native steps; Null publishes
-the origin, and Toolbox applies the result's own viewport rows. Win32 and macOS
-still spell the arm by hand.
+Null, Toolbox and Win32 call it with their helpers and native steps; Null publishes
+the origin, Toolbox applies the result's own viewport rows, and Win32 applies
+through the node's context. macOS still spells the arm by hand.
 
 Null ScrollView consumes once after the reached `layoutScrollView` helper returns
 at the ScrollView branch of `layoutNode`, including refused visits. Its request
