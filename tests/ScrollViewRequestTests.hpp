@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
 #define LOKA_TESTS_SCROLL_VIEW_REQUEST_TESTS_HPP
 #include "app/nodes/nestable/ScrollView.hpp"
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/scene/Scene.hpp"
 #include "support/Headless.hpp"
@@ -121,6 +122,66 @@ namespace scroll_request_tests
       LOKA_VERIFY(self.platform.borrowPhase().open());
     }
   };
+  struct VisitResult
+  {
+    const ScrollViewVisit visit;
+    VisitResult()
+        : visit(ScrollViewVisit::succeededUnclamped())
+    {
+    }
+  };
+  class VisitController : public NullScenePlatformController
+  {
+  public:
+    enum Mode
+    {
+      REFUSE,
+      CREATE_CONTEXT,
+      CHANGE_FACT
+    };
+    explicit VisitController(Mode mode)
+        : mode_(mode),
+          applications_(0)
+    {
+    }
+    VisitResult layout(ScrollViewNode *node, const LayoutState &)
+    {
+      LOKA_VERIFY(this->borrowPhase().open());
+      if (this->mode_ == CREATE_CONTEXT)
+        node->setContext(new NodeContext(node));
+      if (this->mode_ == CHANGE_FACT)
+        node->publishOrigin(9, 10);
+      return VisitResult();
+    }
+    bool apply(ScrollViewNode &node, const VisitResult &, const Frame &)
+    {
+      ++this->applications_;
+      if (this->mode_ == REFUSE)
+        return false;
+      // Deliberately reports a fact different from the requested target.
+      node.publishOrigin(21, 22);
+      return true;
+    }
+    int applications() const
+    {
+      return this->applications_;
+    }
+
+  private:
+    const Mode mode_;
+    int applications_;
+  };
+  typedef loka::app::testing::SettleTrace<ScrollTarget, Frame> VisitTrace;
+  inline void verifyVisitTrace(ScrollRequestResult result, const Frame &before, const Frame &after)
+  {
+    LOKA_VERIFY(VisitTrace::instance().size() == 1);
+    const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &row = VisitTrace::instance().at(0);
+    LOKA_VERIFY(row.stimulus == SETTLE_PROPS);
+    LOKA_VERIFY(row.count == 1);
+    LOKA_VERIFY(row.seam[0] == result);
+    LOKA_VERIFY(row.before == before);
+    LOKA_VERIFY(row.after == after);
+  }
 } // namespace scroll_request_tests
 inline void testScrollRequestNormalizedTargets()
 {
@@ -327,5 +388,91 @@ inline void testScrollRequestVisitBorrowCoversLayout()
   LOKA_VERIFY(observer.calls == 2);
   LOKA_VERIFY(!f.platform.borrowPhase().open());
   f.storage.viewport.state()->unbind(&BorrowObserver::changed, &observer);
+}
+inline void testScrollRequestVisitApplyRefusal()
+{
+  using namespace scroll_request_tests;
+  VisitController platform(VisitController::REFUSE);
+  Storage storage;
+  ScrollViewNode node(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+  storage.request.set(ScrollTarget::Origin(7, 8));
+  VisitTrace::instance().clear();
+  SettleScrollViewVisit(platform, &VisitController::layout, &VisitController::apply, &node, bounds());
+  LOKA_VERIFY(platform.applications() == 1);
+  LOKA_VERIFY(storage.request.get().isNone());
+  verifyVisitTrace(SCROLL_UNAVAILABLE, Frame(0, 0, 80, 30), Frame(0, 0, 80, 30));
+}
+inline void testScrollRequestVisitCreatesContext()
+{
+  using namespace scroll_request_tests;
+  VisitController platform(VisitController::CREATE_CONTEXT);
+  Storage storage;
+  ScrollViewNode node(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+  LOKA_VERIFY(node.getContext() == 0);
+  storage.request.set(ScrollTarget::Origin(7, 8));
+  VisitTrace::instance().clear();
+  SettleScrollViewVisit(platform, &VisitController::layout, &VisitController::apply, &node, bounds());
+  LOKA_VERIFY(node.getContext() != 0);
+  LOKA_VERIFY(platform.applications() == 1);
+  LOKA_VERIFY(storage.request.get().isNone());
+  verifyVisitTrace(SCROLL_OK, Frame(0, 0, 80, 30), Frame(21, 22, 80, 30));
+}
+inline void testScrollRequestVisitDestinationFact()
+{
+  using namespace scroll_request_tests;
+  VisitController platform(VisitController::CHANGE_FACT);
+  Storage storage;
+  ScrollViewNode node((ScrollViewProps(storage.viewport)));
+  const VisitResult result;
+  ScrollViewVisitSeat<VisitController, VisitResult> seat(platform, result, &VisitController::apply);
+  const RequestApplication<Frame, ScrollRequestResult> applied = seat.apply(node, ScrollTarget::Origin(7, 8));
+  LOKA_VERIFY(applied.value() == Frame(21, 22, 80, 30));
+  LOKA_VERIFY(applied.result() == SCROLL_OK);
+  LOKA_VERIFY(platform.applications() == 1);
+}
+inline void testScrollRequestVisitFinishSettle()
+{
+  using namespace scroll_request_tests;
+  Fixture f;
+  ScrollViewVisitOwner owner(f.platform, &f.node);
+  LOKA_VERIFY(owner.finishSettle(f.node, FollowUps()) == FOLLOW_UP_NONE);
+}
+inline void testScrollRequestVisitFactAfterHelper()
+{
+  using namespace scroll_request_tests;
+  VisitController platform(VisitController::CHANGE_FACT);
+  Storage storage;
+  ScrollViewNode node(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+  storage.request.set(ScrollTarget::Origin(7, 8));
+  VisitTrace::instance().clear();
+  SettleScrollViewVisit(platform, &VisitController::layout, &VisitController::apply, &node, bounds());
+  LOKA_VERIFY(storage.request.get().isNone());
+  verifyVisitTrace(SCROLL_OK, Frame(9, 10, 80, 30), Frame(21, 22, 80, 30));
+}
+inline void testScrollRequestVisitTwoNodes()
+{
+  using namespace scroll_request_tests;
+  NullScenePlatformController platform;
+  Storage storage;
+  ScrollViewNode first(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+  ScrollViewNode second(ScrollViewProps(storage.otherViewport).scrollTo(storage.other));
+  storage.otherViewport.set(Frame(3, 4, 80, 30));
+  // Both belong to this projection, but only the reached node receives a visit.
+  platform.projectLayoutForTesting(&first, bounds());
+  platform.projectLayoutForTesting(&second, bounds());
+  storage.request.set(ScrollTarget::Origin(7, 8));
+  platform.projectLayoutForTesting(&first, bounds());
+  LOKA_VERIFY(storage.viewport.get() == Frame(7, 8, 80, 30));
+  LOKA_VERIFY(storage.request.get().isNone());
+  LOKA_VERIFY(storage.otherViewport.get() == Frame(3, 4, 80, 30));
+  LOKA_VERIFY(storage.other.get().isNone());
+  // A pre-existing pending request on the unreached node is also preserved.
+  storage.other.set(ScrollTarget::Origin(31, 32));
+  storage.request.set(ScrollTarget::Origin(11, 12));
+  platform.projectLayoutForTesting(&first, bounds());
+  LOKA_VERIFY(storage.viewport.get() == Frame(11, 12, 80, 30));
+  LOKA_VERIFY(storage.request.get().isNone());
+  LOKA_VERIFY(storage.otherViewport.get() == Frame(3, 4, 80, 30));
+  LOKA_VERIFY(storage.other.get() == ScrollTarget::Origin(31, 32));
 }
 #endif

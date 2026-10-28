@@ -1638,6 +1638,17 @@ width alone. Heights also normalize nonpositive values to zero and saturate
 above `SHRT_MAX`. For `width`, zero-valued `short` and `false` also select
 the integer overload; `0L`, `0U`, and typical `NULL` definitions are ambiguous.
 
+`ClipBox()` is the usual spelling for a box whose job is clipping. It is shorthand
+for `Box().clipChildren()`: the same Box, with the same modifiers and the same
+fixed-at-creation rule. For example:
+
+```cpp
+ClipBox().height(240) << ImageView().image(this->photo_.state());
+```
+
+`ClipBox()` is C++ DSL only; SmirkyCard's JS `Box` has no clip option and there
+is no JS `ClipBox`.
+
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.

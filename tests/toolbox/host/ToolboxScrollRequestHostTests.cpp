@@ -116,6 +116,55 @@ namespace
     f.visit();
     LOKA_VERIFY(f.writes == writes);
   }
+  void emptyRows()
+  {
+    Fixture f;
+    f.visit(500);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 1);
+    f.post(0, 40);
+    f.visit(500);
+    f.result(SCROLL_OK);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 1);
+    LOKA_VERIFY(f.storage.viewport.get().x == 0 && f.storage.viewport.get().y == 40);
+    LOKA_VERIFY(GetControlValue(f.controller.scrollControl(0).control) == 40);
+  }
+  void ownRows()
+  {
+    Storage first, second;
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    BoxNode root(Box().props);
+    ScrollViewNode *a = new ScrollViewNode(ScrollViewProps(first.viewport).scrollTo(first.request));
+    ScrollViewNode *b = new ScrollViewNode(ScrollViewProps(second.viewport).scrollTo(second.request));
+    a->addChild(new BoxNode(Box().width(400).height(500).props));
+    b->addChild(new BoxNode(Box().width(600).height(700).props));
+    root.addChild(a);
+    root.addChild(b);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    // Consecutive visits in one projection create distinct rows on both axes.
+    first.request.set(ScrollTarget::Origin(25, 40));
+    second.request.set(ScrollTarget::Origin(65, 90));
+    LayoutState state;
+    state.width = 100;
+    state.height = 80;
+    LayoutNode(&root, state, &controller, 0);
+    LOKA_VERIFY(!controller.borrowPhase().open());
+    LOKA_VERIFY(first.request.get().isNone() && second.request.get().isNone());
+    LOKA_VERIFY(controller.scrollControls().size() == 4);
+    LOKA_VERIFY(controller.scrollControl(0).maximum != controller.scrollControl(2).maximum);
+    LOKA_VERIFY(controller.scrollControl(1).maximum != controller.scrollControl(3).maximum);
+    LOKA_VERIFY(first.viewport.get().x == 25 && first.viewport.get().y == 40);
+    LOKA_VERIFY(second.viewport.get().x == 65 && second.viewport.get().y == 90);
+    LOKA_VERIFY(GetControlValue(controller.scrollControl(0).control) == 40);
+    LOKA_VERIFY(GetControlValue(controller.scrollControl(1).control) == 25);
+    LOKA_VERIFY(GetControlValue(controller.scrollControl(2).control) == 90);
+    LOKA_VERIFY(GetControlValue(controller.scrollControl(3).control) == 65);
+    LifecycleFactTestAccess::MarkSubtreeRetired(&root);
+    LifecycleFactTestAccess::DeliverFacts(&root);
+    controller.releaseNodeContexts(&root);
+  }
   void lateRefusal()
   {
     Fixture f;
@@ -481,6 +530,10 @@ int main(int argc, char **argv)
   const char *name = argv[1];
   if (!std::strcmp(name, "delivery"))
     delivery(false);
+  else if (!std::strcmp(name, "empty-rows"))
+    emptyRows();
+  else if (!std::strcmp(name, "own-rows"))
+    ownRows();
   else if (!std::strcmp(name, "late-refusal"))
     lateRefusal();
   else if (!std::strcmp(name, "zero-range"))

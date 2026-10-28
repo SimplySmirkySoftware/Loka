@@ -368,6 +368,9 @@ private:
     const loka::app::ScrollViewVisit visit;
   };
   ScrollViewLayoutResult layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state);
+  bool applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                              const ScrollViewLayoutResult &result,
+                              const loka::core::Frame &target);
   int applyBoundaryLayoutResult(loka::app::scene::BoundaryNode *boundary, int x, int y, const LayoutNodeResult &result);
   LayoutNodeResult layoutRectSurfaceNode(loka::app::RectSurfaceNode *surface, const LayoutState &state);
   bool narrowLayoutState(const LayoutState &state,

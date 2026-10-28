@@ -1,6 +1,7 @@
 #include <climits>
 #include <cstdio>
 #include "app/nodes/nestable/Match.hpp"
+#include "app/nodes/nestable/Keyed.hpp"
 #include "app/nodes/nestable/PolicyScope.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "support/PropsReconciliation.hpp"
@@ -837,6 +838,127 @@ namespace
     LOKA_VERIFY(!(clipped.props < *clone->propsBase()) && !(*clone->propsBase() < clipped.props));
   }
 } // namespace
+
+namespace
+{
+  void verifySameClipBoxProps(const loka::app::BoxProps &actual, const loka::app::BoxProps &expected)
+  {
+    LOKA_VERIFY(actual.propsTypeId() == expected.propsTypeId());
+    LOKA_VERIFY(actual.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
+    LOKA_VERIFY(actual.hash() == expected.hash());
+    LOKA_VERIFY(!(actual < expected) && !(expected < actual));
+  }
+
+  void verifyClipBoxDefinition(const loka::app::scene::NodeDefinitionBase *definition)
+  {
+    LOKA_VERIFY(definition);
+    LOKA_VERIFY(definition->propsBase()->propsTypeId() == loka::app::BoxProps::staticTypeId());
+    const loka::app::BoxProps &props = *static_cast<const loka::app::BoxProps *>(definition->propsBase());
+    LOKA_VERIFY(props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT);
+  }
+
+  class ClipBoxKeyedBoundary : public loka::app::scene::BoundaryNodeFor<ClipBoxKeyedBoundary>
+  {
+  public:
+    explicit ClipBoxKeyedBoundary(const loka::app::scene::BoundaryPropsFor<ClipBoxKeyedBoundary> &props)
+        : loka::app::scene::BoundaryNodeFor<ClipBoxKeyedBoundary>(props)
+    {
+      this->state(this->key_, 0);
+    }
+
+    virtual void composeNode(loka::app::scene::NodeComposition &composition)
+    {
+      using namespace loka::app;
+      composition.declare(
+          Keyed(*this->key_.state(),
+                this,
+                &ClipBoxKeyedBoundary::declareContent,
+                reservation::SeatNodes<
+                    reservation::Nodes<BoxNode, 1, reservation::Nodes<ButtonNode, 1, reservation::End> > >()));
+    }
+
+    void declareContent(loka::app::scene::NodeComposition &composition)
+    {
+      using namespace loka::app;
+      BoxDefinition definition = ClipBox() << Button("Child");
+      verifyClipBoxDefinition(&definition);
+      composition.declare(definition);
+    }
+
+  private:
+    loka::app::scene::NodeState<int> key_;
+  };
+} // namespace
+
+void testClipBoxShorthandMatchesClipChildren()
+{
+  using namespace loka::app;
+  const BoxDefinition clipped = ClipBox();
+  verifySameClipBoxProps(clipped.props, Box().clipChildren().props);
+  const BoxDefinition plain;
+  LOKA_VERIFY(plain.props.childClip_ == layout::CHILD_CLIP_NONE);
+  LOKA_VERIFY(plain.props.hash() != clipped.props.hash());
+  LOKA_VERIFY(plain.props < clipped.props);
+  LOKA_VERIFY(!(clipped.props < plain.props));
+
+  verifySameClipBoxProps(ClipBox().width(80).props, Box().clipChildren().width(80).props);
+  verifySameClipBoxProps(ClipBox().height(40).props, Box().clipChildren().height(40).props);
+  verifySameClipBoxProps(ClipBox().size(80, 40).props, Box().clipChildren().size(80, 40).props);
+  verifySameClipBoxProps(ClipBox().padding(4).props, Box().clipChildren().padding(4).props);
+  verifySameClipBoxProps(ClipBox().gap(3).props, Box().clipChildren().gap(3).props);
+  loka::core::MutableState<int> width(93);
+  const BoxDefinition live = ClipBox().width(80).height(40).size(90, 50).padding(4).gap(3).width(&width);
+  verifySameClipBoxProps(live.props,
+                         Box().clipChildren().width(80).height(40).size(90, 50).padding(4).gap(3).width(&width).props);
+  LOKA_VERIFY(live.props.widthState_ == &width);
+
+  const BoxDefinition copied(clipped);
+  verifySameClipBoxProps(copied.props, clipped.props);
+  loka::core::OwnedDef<scene::NodeDefinitionBase> clone(clipped.clone());
+  LOKA_VERIFY(clone.get());
+  verifyClipBoxDefinition(clone.get());
+  verifySameClipBoxProps(*static_cast<const BoxProps *>(clone->propsBase()), clipped.props);
+
+  BoxNode *node = createNode(ClipBox().props);
+  LOKA_VERIFY(node);
+  LOKA_VERIFY(node->kind() == scene::NODE_KIND_BOX);
+  LOKA_VERIFY(node->nodeTypeKey() == scene::NodeTypeToken<BoxNode>());
+  verifySameClipBoxProps(node->props, clipped.props);
+  scene::DestroyHeapNode(node);
+}
+
+void testClipBoxExpressionPositions()
+{
+  using namespace loka::app;
+  const BoxDefinition tagged = ClipBox().testId("TypedClipBox");
+  verifyClipBoxDefinition(&tagged);
+  const BoxDefinition nested = ClipBox() << Button("Child");
+  verifyClipBoxDefinition(&nested);
+  const ColumnDefinition stack = VStack() << (ClipBox() << Button("Child"));
+  verifyClipBoxDefinition(stack.childrenHead());
+  const CardDefinition card = Card() << (ClipBox() << Button("Child"));
+  verifyClipBoxDefinition(card.childrenHead()->asNestableDefinition()->childrenHead());
+  loka::core::MutableState<int> selection(0);
+  MatchDefinition<int> match = Match(selection).arm(0, ClipBox() << Button("Child"));
+  verifyClipBoxDefinition(match.armDefinition(0)->asNestableDefinition()->childrenHead());
+  loka::core::MutableState<bool> shown(true);
+  ShowDefinition show = Show(shown) << (ClipBox() << Button("Child"));
+  verifyClipBoxDefinition(show.armDefinition(1)->asNestableDefinition()->childrenHead());
+
+  NullScenePlatformController platform;
+  scene::Scene scene((scene::Boundary<ClipBoxKeyedBoundary>(scene::BoundaryPropsFor<ClipBoxKeyedBoundary>())));
+  LOKA_VERIFY(scene.mount(&platform));
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  PropsReconciliationSupport::settle(scene);
+  // The Keyed callback ran: below Keyed's generation scaffold, the first-child chain
+  // reaches the Box the callback declared, born with the flag.
+  BoxNode *keyedBox = 0;
+  for (scene::Node *node = PropsReconciliationSupport::root(scene)->childrenHead(); node && !keyedBox;
+       node = node->asNestable() ? node->asNestable()->childrenHead() : 0)
+    keyedBox = node->asBoxNode();
+  LOKA_VERIFY(keyedBox && keyedBox->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+}
 
 void testClipChildrenBoxPropsIdentityAndCopy()
 {

@@ -940,66 +940,24 @@ MacScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const La
   return LayoutNodeResult(state.width, resultY);
 }
 
-namespace
+bool MacScenePlatformController::applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                                                        const ScrollViewLayoutResult &,
+                                                        const loka::core::Frame &target)
 {
-  /** Stack owner whose identity is captured after the protected layout visit. */
-  class MacScrollViewOwner : public loka::app::scene::SettleOwner<loka::core::Frame>
-  {
-  public:
-    MacScrollViewOwner(loka::app::scene::IPlatformController &controller, loka::app::scene::Node *node)
-        : loka::app::scene::SettleOwner<loka::core::Frame>(controller, node, node->getContext())
-    {
-    }
-    virtual loka::app::scene::FollowUpResult finishSettle(loka::app::scene::Node &, const loka::app::scene::FollowUps &)
-    {
-      return loka::app::scene::FOLLOW_UP_NONE;
-    }
-#ifdef TEST_BUILD
-    virtual loka::core::Frame fact(loka::app::scene::Node &base) const
-    {
-      const loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
-      return node.props.viewport_.isValid() ? node.props.viewport_.state()->get() : loka::core::Frame();
-    }
-#endif
-  };
-  /** Request application uses the context's existing clip-bounds report. */
-  class MacScrollViewSeat : public loka::app::ScrollViewSeat
-  {
-  public:
-    explicit MacScrollViewSeat(const loka::app::ScrollViewVisit &visit)
-        : loka::app::ScrollViewSeat(visit)
-    {
-    }
-    virtual loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
-    apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
-    {
-      loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
-      MacScrollViewContext *context = static_cast<MacScrollViewContext *>(node.getContext());
-      const bool committed = context->applyScrollRequest(node.normalizedOrigin(pending));
-      return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
-          node.props.viewport_.state()->get(), committed ? loka::app::SCROLL_OK : loka::app::SCROLL_UNAVAILABLE);
-    }
-  };
-} // namespace
+  return static_cast<MacScrollViewContext *>(node.getContext())->applyScrollRequest(target);
+}
 
 MacScenePlatformController::LayoutNodeResult
 MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state)
 {
   if (loka::app::ScrollViewNode *scrollView = node->asScrollViewNode())
   {
-    loka::app::scene::BorrowScope visitScope(*this);
-    const ScrollViewLayoutResult result = this->layoutScrollViewNode(scrollView, state);
-    MacScrollViewOwner owner(*this, node);
-    MacScrollViewSeat seat(result.visit);
-    loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
-                                                                   seat,
-                                                                   loka::app::scene::SETTLE_PROPS
-#ifdef TEST_BUILD
-                                                                   ,
-                                                                   owner.fact(*node)
-#endif
-    );
-    return result.layout;
+    return loka::app::SettleScrollViewVisit(*this,
+                                            &MacScenePlatformController::layoutScrollViewNode,
+                                            &MacScenePlatformController::applyScrollViewRequest,
+                                            scrollView,
+                                            state)
+        .layout;
   }
   // Canvas shares geometry with Null; this rail only adapts its result channel.
   if (node->asCanvasNode())

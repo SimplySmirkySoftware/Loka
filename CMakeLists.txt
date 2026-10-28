@@ -669,7 +669,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxScrollRequestTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxScrollRequestTests)
   set_target_properties(LokaToolboxScrollRequestTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_scroll_request_case delivery clamp cancel input creation heightless no-horizontal stale clipped borrow render two-visits mount zero-range late-refusal)
+  foreach(_scroll_request_case empty-rows own-rows delivery clamp cancel input creation heightless no-horizontal stale clipped borrow render two-visits mount zero-range late-refusal)
     add_test(NAME testToolboxScrollRequest_${_scroll_request_case}
       COMMAND LokaToolboxScrollRequestTests ${_scroll_request_case})
   endforeach()

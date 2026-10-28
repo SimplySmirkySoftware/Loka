@@ -27,6 +27,8 @@ void testSharedAlignedRowBottomAlignmentMeasuresBoxHeight();
 void testSharedAlignedRowRefusesOverflowingChildBox();
 void testBoxHeightExceedsGridAndCanvasCells();
 
+void testClipBoxShorthandMatchesClipChildren();
+void testClipBoxExpressionPositions();
 void testClipChildrenBoxPropsIdentityAndCopy();
 void testClipChildrenCardPropsIdentityAndCopy();
 void testClipBoxWidthResolutionTable();

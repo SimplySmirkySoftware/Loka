@@ -275,13 +275,10 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
                            : ToolboxScrollViewLayoutResult(state.width, rows);
 }
 
-#include "ToolboxScrollViewSettlement.hpp"
-loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
-ToolboxScrollViewSeat::apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
+bool ToolboxScenePlatformController::applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                                                            const ToolboxScrollViewLayoutResult &result,
+                                                            const loka::core::Frame &target)
 {
-  loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
-  const loka::core::Frame target = node.normalizedOrigin(pending);
-  this->controller_.applyViewportScrollRequest(node, this->rows_, target);
-  return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
-      node.props.viewport_.state()->get(), loka::app::SCROLL_OK);
+  this->applyViewportScrollRequest(node, result.rows, target);
+  return true;
 }
