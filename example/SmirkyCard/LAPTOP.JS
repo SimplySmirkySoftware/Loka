@@ -207,17 +207,17 @@ card('first', class {
     const rows = [];
     const label = j => MACHINES[j].name + ' (' + MACHINES[j].year + ')';
     for (let i = 0; i < COUNT; i += 2) {
-      const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Open.' + MACHINES[i].id)];
+      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Open.' + MACHINES[i].id)];
       // A Row shares its width equally, so an odd last card gets an empty
       // partner and keeps the same width as every other card.
-      cards.push(i + 1 < COUNT ? this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id)
+      cards.push(i + 1 < COUNT ? this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id)
                                : Box(Text('')));
       rows.push(Show(this.wideList, Row(...cards)));
     }
     // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 10.
     for (let i = 0; i < COUNT; i += 2) {
-      const cards = [this.machineCard(i, 150, 94, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
-      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 150, 94, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
+      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
+      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
       rows.push(Show(this.narrow, VStack(...cards)));
     }
     return ZStack(
