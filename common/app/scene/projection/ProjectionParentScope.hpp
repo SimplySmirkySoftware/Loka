@@ -195,8 +195,9 @@ namespace loka
       /** Allocation-free LIFO stack with at most eight active frames, excluding
           ROOT. One VIEWPORT and one UNIT may be active; VIEWPORT cannot enter
           either kind, and UNIT cannot enter UNIT. CLIP inherits its parent's
-          channel and translation and refuses at six active frames, reserving
-          room for VIEWPORT and UNIT. Admission scans only this stack's frames. */
+          channel and refuses at six active frames, reserving
+          room for VIEWPORT and UNIT. Translation is inherited unless the caller
+          explicitly pushes a rebased clip. Admission scans only this stack's frames. */
       class ProjectionParentScopeStack
       {
       public:
@@ -281,15 +282,19 @@ namespace loka
         /** Adds a clip without changing its parent's projection or measurement. */
         bool pushClip(const ProjectionParentScope &scope)
         {
-          if (!this->admitsClip())
-            return false;
           ProjectionParentScope child = scope;
-          child.channel = this->current().channel;
           child.translationX = this->current().translationX;
           child.translationY = this->current().translationY;
-          child.kind_ = ProjectionParentScope::CLIP;
-          this->frames_[++this->activeDepth_] = child;
-          return true;
+          return this->pushClipFrame(child);
+        }
+
+        /** Adds a clip for a rail whose clip container has its own client origin.
+            The caller derives scope with deriveScrolled from current(); its
+            translation, native parent and clip rectangle are kept. Measurement
+            and admission are the parent's, as for pushClip. */
+        bool pushRebasedClip(const ProjectionParentScope &scope)
+        {
+          return this->pushClipFrame(scope);
         }
 
         bool pop()
@@ -320,6 +325,17 @@ namespace loka
         }
 
       private:
+        bool pushClipFrame(const ProjectionParentScope &scope)
+        {
+          if (!this->admitsClip())
+            return false;
+          ProjectionParentScope child = scope;
+          child.channel = this->current().channel;
+          child.kind_ = ProjectionParentScope::CLIP;
+          this->frames_[++this->activeDepth_] = child;
+          return true;
+        }
+
         bool containsKind(ProjectionParentScope::Kind kind) const
         {
           for (unsigned i = 1; i <= this->activeDepth_; ++i)
@@ -393,6 +409,15 @@ namespace loka
       public:
         ProjectionClipScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
             : ProjectionParentScopeGuard(stack.pushClip(scope) ? &stack : 0)
+        {
+        }
+      };
+      /** Owns one admitted rebased clip frame and its balanced pop. */
+      class ProjectionRebasedClipScopeGuard : public ProjectionParentScopeGuard
+      {
+      public:
+        ProjectionRebasedClipScopeGuard(ProjectionParentScopeStack &stack, const ProjectionParentScope &scope)
+            : ProjectionParentScopeGuard(stack.pushRebasedClip(scope) ? &stack : 0)
         {
         }
       };
