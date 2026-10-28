@@ -12,6 +12,14 @@ namespace loka
       class MacScenePlatformTestAccess
       {
       public:
+        /** Installs a test-provided layout policy through the owning registry, so
+            pins can offer unusual seats during a real viewport traversal. */
+        static bool registerLayoutHandler(::MacScenePlatformController &controller,
+                                          ::loka::app::scene::IPlatformLayoutHandler *handler)
+        {
+          return controller.layoutHandlerRegistry_.registerHandler(handler);
+        }
+
         /** Exercise framed layout at an explicit origin without exposing the
             controller's internal traversal on its production surface. */
         static int layoutNode(::MacScenePlatformController &controller,

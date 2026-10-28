@@ -1,3 +1,5 @@
+#include "ToolboxScrollViewVisit.hpp"
+#include "ToolboxScrollViewSettlement.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #ifndef LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
 #define LOKA_TEST_TOOLBOX_BOX_LAYOUT_HOST_HPP
@@ -84,8 +86,12 @@ public:
   {
     LOKA_VERIFY(false);
   }
-  short layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &,
-                        loka::app::scene::BoundaryNode *) { LOKA_VERIFY(false); return 0; }
+  ToolboxScrollViewLayoutResult
+  layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *)
+  {
+    LOKA_VERIFY(false);
+    return ToolboxScrollViewLayoutResult();
+  }
   void renderScrollView(loka::app::ScrollViewNode *) { LOKA_VERIFY(false); }
   virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   virtual void synchronize() {}
@@ -101,4 +107,13 @@ public:
 inline void EnsureToolboxRectSurfaceContext(loka::app::RectSurfaceNode *, ToolboxScenePlatformController *)
 { LOKA_VERIFY(false); }
 #endif
+
+inline loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
+ToolboxScrollViewSeat::apply(loka::app::scene::Node &, const loka::app::ScrollTarget &)
+{
+  LOKA_VERIFY(false);
+  return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
+      loka::core::Frame(), loka::app::SCROLL_UNAVAILABLE);
+}
+
 #endif
