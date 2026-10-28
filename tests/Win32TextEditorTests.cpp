@@ -20,47 +20,7 @@
 #include "support/TextAlphabetCases.hpp"
 #include <vector>
 
-namespace loka
-{
-  namespace testing
-  {
-    class Win32TextEditorAccess
-    {
-    public:
-      static app::TextEditorNode *node(const Win32TextEditorContext &context)
-      {
-        return context.node_;
-      }
-      static const app::scene::SeamKey<app::TextEditorNode> &key(const Win32TextEditorContext &context)
-      {
-        return context.key_;
-      }
-      static unsigned restores(const Win32TextEditorContext &context)
-      {
-        return context.restores_;
-      }
-      static app::EditorResult status(const Win32TextEditorContext &context)
-      {
-        return context.status_;
-      }
-      static WNDPROC nativeProcedure(const Win32TextEditorContext &context)
-      {
-        return context.previousProc_;
-      }
-      // Instrument native input below the existing rail entry, not a new production door.
-      static WNDPROC replaceNativeProcedure(Win32TextEditorContext &context, WNDPROC procedure)
-      {
-        WNDPROC old = context.previousProc_;
-        context.previousProc_ = procedure;
-        return old;
-      }
-      static bool pending(const Win32TextEditorContext &context)
-      {
-        return context.phase_ == Win32TextEditorContext::RETRY;
-      }
-    };
-  } // namespace testing
-} // namespace loka
+#include "Win32TextEditorAccess.hpp"
 namespace
 {
   using namespace loka::app;
@@ -1173,7 +1133,7 @@ namespace
     LOKA_VERIFY(start == 1 && end == 3 && probe.selections.size() == 1);
     LOKA_VERIFY(SendMessageW(fixture.context->hwnd(), EM_CANUNDO, 0, 0));
   }
-  void restored(Fixture &fixture, const Snapshot &snapshot, const Observer &observer)
+  void restored(Fixture &fixture, const Snapshot &snapshot, const Observer &observer, DWORD selection = 2)
   {
     snapshot.unchanged(fixture);
     fixture.matches();
@@ -1182,7 +1142,7 @@ namespace
     LOKA_VERIFY(!SendMessageW(fixture.context->hwnd(), EM_CANUNDO, 0, 0));
     DWORD start = 0, end = 0;
     SendMessageW(fixture.context->hwnd(), EM_GETSEL, reinterpret_cast<WPARAM>(&start), reinterpret_cast<LPARAM>(&end));
-    LOKA_VERIFY(start == 2 && end == 2);
+    LOKA_VERIFY(start == selection && end == selection);
   }
   // EDIT replaces a selection as two EN_CHANGE notifications (delete, then
   // insert), so a keystroke, Return, or paste over a selection commits twice;
@@ -1359,7 +1319,7 @@ void testWin32TextEditorConversion()
   Win32PlatformContext rail;
   TextCapacity maximum;
   LOKA_VERIFY(rail.queryTextEditorCapacity(maximum));
-  LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
+  LOKA_VERIFY(maximum.lines == 65535 && maximum.bytes == INT_MAX - 65535);
   std::wstring wide;
   std::string logical;
   LOKA_VERIFY(loka::win32::TextEditorToWide("first\r\rlast\r", wide));
@@ -1371,6 +1331,66 @@ void testWin32TextEditorConversion()
   LOKA_VERIFY(loka::win32::TextEditorFromWide(wide.data(), wide.size(), logical) && logical.size() == 8192);
   LOKA_VERIFY(loka::win32::TextEditorFromWide(L"\xff21", 1, logical) && logical == "\357\274\241");
   LOKA_VERIFY(!loka::win32::TextEditorToWide(std::string(1, static_cast<char>(0x80)), wide));
+}
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      std::size_t lastProjectionReservation();
+    }
+  } // namespace app
+} // namespace loka
+void testWin32TextEditorCapacityRows()
+{
+  Fixture fixture(1, "0123456789", 1000, 65536);
+  {
+    StateTrackerGuard guard(&fixture.tracker);
+    for (unsigned short row = 1; row < 1000; ++row)
+      LOKA_VERIFY(fixture.lines.insert(row, String("0123456789")) == EDIT_OK);
+  }
+  fixture.context->onPropsApplied();
+  LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
+  LOKA_VERIFY(SendMessageW(fixture.context->hwnd(), EM_GETLINECOUNT, 0, 0) == 1000);
+  const std::string &text = EditorAccess::projectedText(*fixture.context);
+  const std::wstring &wide = EditorAccess::projectedWide(*fixture.context);
+  LOKA_VERIFY(text.size() == 10999);
+  // Reserved for this document (capacity right after the reserve), not the 8 KiB constant.
+  LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= text.size()
+              && loka::app::testing::lastProjectionReservation() <= text.size() + 64);
+  LOKA_VERIFY(wide.size() == text.size() + 999);
+  fixture.matches();
+
+  const LineCursor last(fixture.lines.at(999).id, 10);
+  {
+    StateTrackerGuard guard(&fixture.tracker);
+    fixture.request.set(last);
+  }
+  fixture.context->onPropsApplied();
+  LOKA_VERIFY(fixture.request.get().isNone());
+  LOKA_VERIFY(fixture.cursor.state()->get() == last);
+  const DWORD end = static_cast<DWORD>(wide.size());
+  expectSelection(fixture, end);
+  LOKA_VERIFY(SendMessageW(fixture.context->hwnd(), EM_LINEFROMCHAR, end, 0) == 999);
+  SendMessageW(fixture.context->hwnd(), WM_KEYUP, VK_END, 1);
+  LOKA_VERIFY(fixture.cursor.state()->get() == last);
+
+  Observer observer(fixture);
+  ChangeObservation observation(fixture.host);
+  const Snapshot before(fixture);
+  SendMessageW(fixture.context->hwnd(), WM_CHAR, L'\r', 1);
+  LOKA_VERIFY(observation.arrivals() > 0 && observation.status() == EDITOR_CAPACITY);
+  restored(fixture, before, observer, end);
+}
+void testWin32TextEditorCapacityDefaultRows()
+{
+  Fixture fixture;
+  LOKA_VERIFY(fixture.lines.capacity().lines == 256 && fixture.lines.size() == 3);
+  LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
+  LOKA_VERIFY(SendMessageW(fixture.context->hwnd(), EM_GETLINECOUNT, 0, 0) == 3);
+  LOKA_VERIFY(EditorAccess::projectedText(*fixture.context) == "abcd\rabcd\rabcd");
+  fixture.matches();
 }
 void testWin32TextEditorActionsUseLineQueries()
 {
@@ -2157,4 +2177,27 @@ void testWin32TextEditorEvidenceCaptureFailure()
     LOKA_VERIFY(fixture.lines.size() == 3 && fixture.lines.at(2).id == b);
     fixture.matches();
   }
+}
+
+void testWin32TextEditorMonospaceFont()
+{
+  using namespace loka::app;
+  Fixture fixture;
+  HFONT first = fixture.controller.textFont(Monospace).font();
+  if (!first)
+    std::printf("[skip] editor monospace available branch: no candidate installed\n");
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.fallbackFont(Monospace));
+  fixture.controller.updateDisplayScale(loka::win32::Win32DisplayScale(144));
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.fallbackFont(Monospace));
+  if (first && fixture.controller.textFont(Monospace).font())
+    LOKA_VERIFY(first != fixture.controller.textFont(Monospace).font());
+  static const wchar_t *const absent[] = {L"Loka missing editor face", 0};
+  loka::win32::testing::useMonospaceCandidatesForNextBuild(absent);
+  fixture.controller.updateDisplayScale(loka::win32::Win32DisplayScale(96));
+  LOKA_VERIFY(!fixture.controller.textFont(Monospace).font());
+  LOKA_VERIFY(fixture.controller.textFont(Monospace).family() == TEXT_FAMILY_MONOSPACE);
+  LOKA_VERIFY(reinterpret_cast<HFONT>(SendMessageW(fixture.context->hwnd(), WM_GETFONT, 0, 0))
+              == fixture.controller.displayFont());
 }

@@ -31,4 +31,14 @@ void testMacScrollViewInsetsPlaceContentBelowTheTopInset();
 void testMacScrollViewInsetsGrowTheHeightlessExtent();
 void testMacScrollViewInsetsRefuseAnExtentAboveShort();
 
+void testMacScrollRequestBothAxesAndStoppedEcho();
+void testMacScrollRequestSmallDocument();
+void testMacScrollRequestOriginalMuteAndNativeControl();
+void testMacScrollRequestAbsentXAndHeightless();
+void testMacScrollRequestRefusedNestedVisit();
+void testMacScrollRequestFirstVisit();
+void testMacScrollRequestSceneBorrow();
+void testMacScrollRequestDeferredMount();
+void testMacScrollRequestPendingLayoutOuterBorrow();
+
 #endif // LOKA_TESTS_MAC_SCROLL_VIEW_TESTS_HPP

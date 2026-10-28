@@ -224,6 +224,8 @@ namespace loka
         unsigned g_textEditorSetFailures = 0;
         unsigned g_nativeChildWindowFailures = 0;
         unsigned g_nativeChildWindowSkips = 0;
+        unsigned g_scrollInfoReadFailures = 0;
+        unsigned g_scrollInfoReadSkips = 0;
       } // namespace
 
       void failNativeChildWindowCreations(unsigned count, unsigned skip)
@@ -242,6 +244,25 @@ namespace loka
         if (!g_nativeChildWindowFailures)
           return false;
         --g_nativeChildWindowFailures;
+        return true;
+      }
+
+      void failScrollInfoReads(unsigned count, unsigned skip)
+      {
+        g_scrollInfoReadFailures = count;
+        g_scrollInfoReadSkips = skip;
+      }
+
+      bool refuseScrollInfoRead()
+      {
+        if (g_scrollInfoReadSkips)
+        {
+          --g_scrollInfoReadSkips;
+          return false;
+        }
+        if (!g_scrollInfoReadFailures)
+          return false;
+        --g_scrollInfoReadFailures;
         return true;
       }
 
@@ -641,6 +662,18 @@ namespace loka
       {
         return textPayloadsUntilRefusal && --textPayloadsUntilRefusal == 0;
       }
+      namespace
+      {
+        std::size_t lastProjectionReservationBytes = 0;
+      }
+      void observeProjectionReservation(std::size_t bytes)
+      {
+        lastProjectionReservationBytes = bytes;
+      }
+      std::size_t lastProjectionReservation()
+      {
+        return lastProjectionReservationBytes;
+      }
     } // namespace testing
   } // namespace app
 } // namespace loka
@@ -729,4 +762,39 @@ void operator delete[](void *memory, const std::nothrow_t &) throw()
 {
   ::operator delete(memory);
 }
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace win32
+  {
+    namespace testing
+    {
+      namespace
+      {
+        const wchar_t *const *nextMonospaceCandidates = 0;
+        unsigned displayFontSlotsUntilFailure = 0;
+      } // namespace
+      void useMonospaceCandidatesForNextBuild(const wchar_t *const *faces)
+      {
+        nextMonospaceCandidates = faces;
+      }
+      const wchar_t *const *takeMonospaceCandidates()
+      {
+        const wchar_t *const *faces = nextMonospaceCandidates;
+        nextMonospaceCandidates = 0;
+        return faces;
+      }
+      void failDisplayFontCreation(unsigned successfulSlotsBeforeFailure)
+      {
+        displayFontSlotsUntilFailure = successfulSlotsBeforeFailure + 1;
+      }
+      bool refuseDisplayFontCreation()
+      {
+        return displayFontSlotsUntilFailure && --displayFontSlotsUntilFailure == 0;
+      }
+    } // namespace testing
+  } // namespace win32
+} // namespace loka
 #endif

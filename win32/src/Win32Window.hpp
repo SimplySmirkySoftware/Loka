@@ -36,6 +36,7 @@ public:
     return this;
   }
 
+  virtual bool handleEditCommand(loka::app::EditVerb verb);
   void setApp(Win32App *app);
   /** Borrows the rail owner; absent before enrollment. */
   Win32App *win32App() const { return this->app_; }
@@ -77,6 +78,7 @@ protected:
 
 private:
   friend class Win32InputDoor;
+  bool handleEditCommandInput(loka::app::EditVerb verb);
   void handleNativeSize(WPARAM wParam, LPARAM lParam);
   void handleNativeDpi(WPARAM wParam, LPARAM lParam);
   virtual void closeDialogResults() { this->dialogResults_.close(); }

@@ -50,9 +50,6 @@ Win32TextEditorContext::Projection::Projection()
       text(),
       wide()
 {
-  // Fixed reservation until the native-capacity PR; matches Win32PlatformContext query.
-  this->text.reserve(8192);
-  this->wide.reserve(8192 + 256);
 }
 bool Win32TextEditorContext::Projection::current(const TextEditorNode &node) const
 {
@@ -67,7 +64,14 @@ EditorResult Win32TextEditorContext::Projection::capture(TextEditorNode &node, c
   if (this->current(node))
     return EDITOR_OK;
   this->owner = 0;
+  // project() reserves text for the measured document; the wide buffer follows
+  // that length plus one UTF-16 unit per logical CR projected as CRLF.
   const EditorResult result = node.seam(key).project(this->text);
+  if (result == EDITOR_OK)
+  {
+    const unsigned short rows = node.props.buffer_->lines().size();
+    this->wide.reserve(this->text.size() + (rows ? rows - 1 : 0));
+  }
   if (result != EDITOR_OK || !loka::win32::TextEditorToWide(this->text, this->wide))
   {
     this->text.clear();
@@ -120,6 +124,8 @@ Win32TextEditorContext::Win32TextEditorContext(Win32ScenePlatformController *con
       this->retireWindow();
       return;
     }
+    SendMessageW(
+        this->hwnd(), WM_SETFONT, reinterpret_cast<WPARAM>(controller->fallbackFont(TextStyle() + Monospace)), FALSE);
     // The owner enforces the logical cap. Leave room for an over-cap native
     // action so it is refused atomically instead of accepting a truncated paste.
     // Zero has special multiline semantics; specify the native limit explicitly.
@@ -816,6 +822,44 @@ void Win32TextEditorContext::handleRestoreTimer()
     this->settle(scene::SETTLE_DEFERRED, op);
   }
 }
+/** One native step; capture, repair and settlement belong to performInput. */
+struct Win32TextEditorContext::NativeInput
+{
+  enum Kind
+  {
+    MESSAGE,
+    SELECT_ALL
+  };
+  const Kind kind;
+  const UINT message;
+  const WPARAM wParam;
+  const LPARAM lParam;
+  NativeInput(UINT m, WPARAM w, LPARAM l)
+      : kind(MESSAGE),
+        message(m),
+        wParam(w),
+        lParam(l)
+  {
+  }
+  NativeInput()
+      : kind(SELECT_ALL),
+        message(EM_SETSEL),
+        wParam(0),
+        lParam(-1)
+  {
+  }
+  LRESULT invoke(HWND window, WNDPROC previous) const
+  {
+    switch (this->kind)
+    {
+    case MESSAGE:
+      return CallWindowProcW(previous, window, this->message, this->wParam, this->lParam);
+    case SELECT_ALL:
+      return SendMessageW(window, EM_SETSEL, 0, -1);
+    }
+    return 0;
+  }
+};
 LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, LPARAM lParam)
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
@@ -831,6 +875,17 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
       this->phase_ = PASTING;
     return CallWindowProcW(this->previousProc_, window, message, wParam, lParam);
   }
+  return this->performInput(NativeInput(message, wParam, lParam));
+}
+void Win32TextEditorContext::selectAll()
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(this->controller()->borrowPhase().open());
+#endif
+  this->performInput(NativeInput());
+}
+LRESULT Win32TextEditorContext::performInput(const NativeInput &input)
+{
   if (this->phase_ != IDLE)
   {
     if (this->phase_ == COMMIT)
@@ -844,8 +899,8 @@ LRESULT Win32TextEditorContext::handleInputMessage(UINT message, WPARAM wParam, 
   }
   RailOperation op(*this);
   this->captureSelection(PRE_INPUT);
-  this->phase_ = message == WM_PASTE ? PASTING : INPUT;
-  const LRESULT result = CallWindowProcW(this->previousProc_, window, message, wParam, lParam);
+  this->phase_ = input.message == WM_PASTE ? PASTING : INPUT;
+  const LRESULT result = input.invoke(this->hwnd(), this->previousProc_);
   this->selection_.evidence.clear();
   if (!op.hasSameContext())
     return result;

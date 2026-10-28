@@ -121,59 +121,6 @@ namespace
         return found;
     return nil;
   }
-
-  /** Bound on waiting for AppKit to report a key-status change. */
-  const double kKeyStatusWaitSeconds = 2.0;
-
-  bool isKey(NSWindow *window)
-  {
-    return [window isKeyWindow] ? true : false;
-  }
-
-  /** Activation and key changes arrive through the event queue: deliver queued
-      events until the window's key status matches, for a bounded time. */
-  bool waitForKeyStatus(NSWindow *window, bool key)
-  {
-#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && (MAC_OS_X_VERSION_MAX_ALLOWED >= 101200)
-    const NSEventMask anyEvent = NSEventMaskAny;
-#else
-    const NSUInteger anyEvent = NSAnyEventMask;
-#endif
-    NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:kKeyStatusWaitSeconds];
-    while (isKey(window) != key && [limit timeIntervalSinceNow] > 0)
-    {
-      NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-      NSEvent *event = [NSApp nextEventMatchingMask:anyEvent
-                                          untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]
-                                             inMode:NSDefaultRunLoopMode
-                                            dequeue:YES];
-      if (event)
-        [NSApp sendEvent:event];
-      [pool drain];
-    }
-    return isKey(window) == key;
-  }
-
-  /** An unbundled test process is not a regular application until it asks, as
-      MacApp::run() does (apple/macos/src/MacApp.mm); only then can activation
-      make its window key. */
-  bool requestKeyWindow(NSWindow *window)
-  {
-    if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
-      [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-    [NSApp activateIgnoringOtherApps:YES];
-    [window makeKeyAndOrderFront:nil];
-    return waitForKeyStatus(window, true);
-  }
-
-  /** Diagnostic only; the discriminating condition is the window's key status. */
-  const char *keyRefusalReason()
-  {
-    if (loka::testing::MacConsoleScreenIsLocked())
-      return "the console screen is locked";
-    return [NSApp isActive] ? "the application is active but the window is not key"
-                            : "the application was not activated";
-  }
 } // namespace
 
 void testMacFocusReadAndCompletion()
@@ -191,7 +138,7 @@ void testMacFocusReadAndCompletion()
     NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(*window);
     LOKA_VERIFY(native != nil);
     // Key status decides which pins can run; the branch taken is always printed.
-    const bool key = requestKeyWindow(native);
+    const bool key = loka::testing::MacRequestKeyWindow(native);
     Scene &scene = *window->scene();
     Node *root = SceneAccess::rootNode(scene);
     LOKA_VERIFY(root && root->asNestable() && root->asNestable()->childrenCount() == 1);
@@ -316,7 +263,7 @@ void testMacFocusReadAndCompletion()
                                                       backing:NSBackingStoreBuffered
                                                         defer:NO];
       [other makeKeyAndOrderFront:nil];
-      LOKA_VERIFY(waitForKeyStatus(native, false));
+      LOKA_VERIFY(loka::testing::MacWaitForKeyStatus(native, false));
       LOKA_VERIFY([native makeFirstResponder:nil]);
       LOKA_VERIFY(!rail->readNativeFocus(read));
       app.flushInvalidationsTick();
@@ -324,7 +271,7 @@ void testMacFocusReadAndCompletion()
       [other orderOut:nil];
       [other release];
       [native makeKeyWindow];
-      LOKA_VERIFY(waitForKeyStatus(native, true));
+      LOKA_VERIFY(loka::testing::MacWaitForKeyStatus(native, true));
       // Regaining key status answers again; with no participant focused, the answer is none.
       LOKA_VERIFY([native makeFirstResponder:nil]);
       app.flushInvalidationsTick();
@@ -396,8 +343,8 @@ void testMacFocusReadAndCompletion()
                   "completion, Tab, Shift-Tab, the loop wrapping both ways, Tab from no field, rebuild, "
                   "HELD across key loss, TextEditor publication, unmarked responder, click): window not "
                   "key after %.1f s because %s; the class-checked hops and the non-key read still run.\n",
-                  kKeyStatusWaitSeconds,
-                  keyRefusalReason());
+                  loka::testing::kKeyStatusWaitSeconds,
+                  loka::testing::MacKeyRefusalReason());
       std::fflush(stdout);
       // HELD: a window that is not key cannot answer, whoever is its first responder.
       LOKA_VERIFY(!rail->readNativeFocus(read));
@@ -466,10 +413,12 @@ namespace
 
     bool key(const char *pin)
     {
-      if (requestKeyWindow(this->native))
+      if (loka::testing::MacRequestKeyWindow(this->native))
         return true;
       std::printf("[skip] %s: window not key after %.1f s because %s.\n",
-                  pin, kKeyStatusWaitSeconds, keyRefusalReason());
+                  pin,
+                  loka::testing::kKeyStatusWaitSeconds,
+                  loka::testing::MacKeyRefusalReason());
       std::fflush(stdout);
       return false;
     }
@@ -603,7 +552,7 @@ void testMacFocusInactiveRequest()
                                                     styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
                                                       backing:NSBackingStoreBuffered defer:NO];
       [other makeKeyAndOrderFront:nil];
-      LOKA_VERIFY(waitForKeyStatus(f.native, false));
+      LOKA_VERIFY(loka::testing::MacWaitForKeyStatus(f.native, false));
       NSResponder *const before = [f.native firstResponder];
       // Direct admission must decline too, independently of the common read gate.
       LOKA_VERIFY(!f.rail->applyNativeFocus(*f.secondNode->getContext()));
@@ -617,7 +566,7 @@ void testMacFocusInactiveRequest()
       [other orderOut:nil];
       [other release];
       [f.native makeKeyWindow];
-      LOKA_VERIFY(waitForKeyStatus(f.native, true));
+      LOKA_VERIFY(loka::testing::MacWaitForKeyStatus(f.native, true));
       f.app.flushInvalidationsTick();
       verifyFieldFocus(f, field(f.secondNode), 2u);
     }

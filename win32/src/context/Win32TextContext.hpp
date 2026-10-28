@@ -6,6 +6,7 @@
 #include "Win32RetirableContext.hpp"
 #include "../Win32TextEnvironment.hpp"
 #include "core/String.hpp"
+#include "app/style/Style.hpp"
 #include "app/layout/MeasurementResult.hpp"
 
 namespace loka
@@ -13,6 +14,7 @@ namespace loka
   namespace testing
   {
     class Win32TextColorAccess;
+    class Win32TextFamilyAccess;
   }
   namespace core
   {
@@ -72,6 +74,9 @@ public:
   void readLifecycleFactOnAttach();
   virtual void onPropsApplied();
   virtual void onTextEnvironmentChanged();
+  /** HWND-local intent lookup, paired with terminal property removal. */
+  static Win32TextContext *fromWindow(HWND window);
+  bool queryFontStyle(loka::app::TextStyle &style) const;
   void relayout(int x, int y, int width, int height);
 
 protected:
@@ -79,6 +84,7 @@ protected:
 
 private:
   friend class loka::testing::Win32TextColorAccess;
+  friend class loka::testing::Win32TextFamilyAccess;
   Win32TextEnvironment::Subscription textEnvironmentSubscription_;
   /** Plain measurement is keyed by the native width the STATIC receives
       (edges projected at the placement), so a placement whose rounding

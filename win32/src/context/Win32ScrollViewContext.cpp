@@ -257,6 +257,47 @@ int Win32ScrollViewContext::setScrollMetrics(int bar, int content, int viewport,
   return clamped;
 }
 
+/** Immutable selection of read-only or moving axes for one settled publication. */
+class Win32ScrollViewContext::SettledPosition
+{
+public:
+  static SettledPosition settled(int bar)
+  {
+    return SettledPosition(bar == SB_HORZ, bar == SB_VERT, false, 0, 0);
+  }
+  static SettledPosition moved(int bar, int value)
+  {
+    return SettledPosition(bar == SB_HORZ, bar == SB_VERT, true, value, value);
+  }
+  static SettledPosition requested(const loka::core::Frame &target, const loka::core::Frame &current)
+  {
+    return SettledPosition(target.x != current.x, target.y != current.y, true, target.x, target.y);
+  }
+  bool chooses(int bar) const
+  {
+    return bar == SB_HORZ ? this->x_ : this->y_;
+  }
+  bool sets(int bar) const
+  {
+    return this->move_ && this->chooses(bar);
+  }
+  int value(int bar) const
+  {
+    return bar == SB_HORZ ? this->target_.x : this->target_.y;
+  }
+
+private:
+  SettledPosition(bool x, bool y, bool move, int targetX, int targetY)
+      : x_(x),
+        y_(y),
+        move_(move),
+        target_(targetX, targetY, 0, 0)
+  {
+  }
+  const bool x_, y_, move_;
+  const loka::core::Frame target_;
+};
+
 bool Win32ScrollViewContext::handleScroll(int bar, int command, int thumbPosition)
 {
 #ifdef LOKA_LIFECYCLE_AUDIT
@@ -298,17 +339,13 @@ bool Win32ScrollViewContext::handleScroll(int bar, int command, int thumbPositio
     next = this->clampOffset(this->controller()->displayScale().scrollPositionToLu(thumbPosition), maximum);
     break;
   case SB_ENDSCROLL:
-    this->publishOffset(bar,
-                        this->clampOffset(this->controller()->displayScale().scrollPositionToLu(info.nPos), maximum));
-    return true;
+    return this->commitSettledPosition(SettledPosition::settled(bar));
   default:
     return false;
   }
   // Every settled step moves the native position with the fact: a click's
   // SB_ENDSCROLL arrives before layout and republishes that position.
-  this->setVisualPosition(bar, next);
-  this->publishOffset(bar, next);
-  return true;
+  return this->commitSettledPosition(SettledPosition::moved(bar, next));
 }
 
 bool Win32ScrollViewContext::readScrollInfo(int bar, SCROLLINFO &info) const
@@ -321,6 +358,10 @@ bool Win32ScrollViewContext::readScrollInfo(int bar, SCROLLINFO &info) const
   info.cbSize = sizeof(info);
   info.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
   HWND target = this->nativeBar(bar);
+#ifdef TEST_BUILD
+  if (loka::win32::testing::refuseScrollInfoRead())
+    return false;
+#endif
   return GetScrollInfo(target, bar, &info) != FALSE;
 }
 
@@ -366,19 +407,33 @@ void Win32ScrollViewContext::setVisualPosition(int bar, int value)
   SetScrollInfo(target, bar, &info, TRUE);
 }
 
-void Win32ScrollViewContext::publishOffset(int bar, int value)
+bool Win32ScrollViewContext::commitSettledPosition(const SettledPosition &selection)
 {
-  if (!this->node_)
-    return;
-  switch (bar)
+  const int bars[] = {SB_HORZ, SB_VERT};
+  SCROLLINFO info[2];
+  for (int i = 0; i != 2; ++i)
+    if (selection.chooses(bars[i]) && !this->readScrollInfo(bars[i], info[i]))
+      return false;
+  for (int i = 0; i != 2; ++i)
+    if (selection.sets(bars[i]))
+      this->setVisualPosition(bars[i], selection.value(bars[i]));
+  for (int i = 0; i != 2; ++i)
+    if (selection.sets(bars[i]) && !this->readScrollInfo(bars[i], info[i]))
+      return false;
+  if (this->node_ && (selection.chooses(SB_HORZ) || selection.chooses(SB_VERT)))
   {
-  case SB_HORZ:
-    this->node_->publishOrigin(value, this->node_->requestedOrigin().y);
-    break;
-  case SB_VERT:
-    this->node_->publishOrigin(this->node_->requestedOrigin().x, value);
-    break;
+    const loka::core::Frame current = this->node_->requestedOrigin();
+    const loka::win32::Win32DisplayScale &scale = this->controller()->displayScale();
+    this->node_->publishOrigin(selection.chooses(SB_HORZ) ? scale.scrollPositionToLu(info[0].nPos) : current.x,
+                               selection.chooses(SB_VERT) ? scale.scrollPositionToLu(info[1].nPos) : current.y);
   }
+  return true;
+}
+
+bool Win32ScrollViewContext::applyScrollRequest(const loka::core::Frame &target)
+{
+  const loka::core::Frame current = this->node_ ? this->node_->requestedOrigin() : loka::core::Frame();
+  return this->commitSettledPosition(SettledPosition::requested(target, current));
 }
 
 bool Win32ScrollViewContext::forwardMouseWheel(HWND root, UINT msg, WPARAM wParam, LPARAM lParam)

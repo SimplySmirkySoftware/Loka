@@ -18,7 +18,8 @@ public:
 
   virtual void run();
   virtual void quit();
-  void dispatchNativeMenuCommand(int commandId);
+  void dispatchNativeMenuCommand(int commandId, void *nativeItem);
+  bool validateNativeMenuCommand(void *nativeItem);
   void flushInvalidationsTick();
 
   /** Native quit handler entry; refuses without an available completion clock or while one event is held. */

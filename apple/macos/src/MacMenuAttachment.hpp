@@ -5,6 +5,12 @@
 #include "app/MenuProjectionRecord.hpp"
 #include <vector>
 
+#ifdef __OBJC__
+@class NSMenuItem;
+#else
+class NSMenuItem;
+#endif
+
 class MacApp;
 namespace loka { namespace app { namespace scene { class Scene; } } }
 
@@ -23,6 +29,8 @@ public:
   void disconnect();
   void releaseFrom(const loka::app::scene::Scene *scene);
   bool dispatch(int commandId);
+  bool dispatch(int commandId, void *nativeItem);
+  bool validate(NSMenuItem *item);
 
 private:
   MacMenuAttachment(const MacMenuAttachment &);
@@ -32,9 +40,11 @@ private:
     int commandId;
     loka::app::MenuActionType action;
     loka::core::EmitterState *emitter;
+    bool declaredEnabled;
   };
   struct MenuBinding
   {
+    MacMenuAttachment *owner;
     void *menuItem;
     const char *emptyTitle;
     loka::core::State<loka::core::String> *titleState;
@@ -42,6 +52,10 @@ private:
     bool invertEnabled;
     loka::core::State<bool> *checkedState;
   };
+  /** The only writer of declaredEnabled. Stores the declaration on the row
+      (when the item has one) and projects it to the native item. */
+  void applyDeclaredEnabled(NSMenuItem *item, MenuCommand *row, bool enabled);
+  MenuCommand *rowForTag(int tag);
   static void MenuTitleChangedThunk(void *userData);
   static void MenuEnabledChangedThunk(void *userData);
   static void MenuCheckedChangedThunk(void *userData);
