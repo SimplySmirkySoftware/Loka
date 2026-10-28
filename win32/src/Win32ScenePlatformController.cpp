@@ -1457,66 +1457,24 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
-namespace
+bool Win32ScenePlatformController::applyScrollViewRequest(loka::app::ScrollViewNode &node,
+                                                          const ScrollViewLayoutResult &,
+                                                          const loka::core::Frame &target)
 {
-  /** Stack owner whose identity is captured after the protected layout visit. */
-  class Win32ScrollViewOwner : public loka::app::scene::SettleOwner<loka::core::Frame>
-  {
-  public:
-    Win32ScrollViewOwner(loka::app::scene::IPlatformController &controller, loka::app::scene::Node *node)
-        : loka::app::scene::SettleOwner<loka::core::Frame>(controller, node, node->getContext())
-    {
-    }
-    virtual loka::app::scene::FollowUpResult finishSettle(loka::app::scene::Node &, const loka::app::scene::FollowUps &)
-    {
-      return loka::app::scene::FOLLOW_UP_NONE;
-    }
-#ifdef TEST_BUILD
-    virtual loka::core::Frame fact(loka::app::scene::Node &base) const
-    {
-      const loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
-      return node.props.viewport_.isValid() ? node.props.viewport_.state()->get() : loka::core::Frame();
-    }
-#endif
-  };
-  /** Request application uses the context's shared settled-position commit. */
-  class Win32ScrollViewSeat : public loka::app::ScrollViewSeat
-  {
-  public:
-    explicit Win32ScrollViewSeat(const loka::app::ScrollViewVisit &visit)
-        : loka::app::ScrollViewSeat(visit)
-    {
-    }
-    virtual loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
-    apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
-    {
-      loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
-      Win32ScrollViewContext *context = static_cast<Win32ScrollViewContext *>(node.getContext());
-      const bool committed = context->applyScrollRequest(node.normalizedOrigin(pending));
-      return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
-          node.props.viewport_.state()->get(), committed ? loka::app::SCROLL_OK : loka::app::SCROLL_UNAVAILABLE);
-    }
-  };
-} // namespace
+  return static_cast<Win32ScrollViewContext *>(node.getContext())->applyScrollRequest(target);
+}
 
 Win32ScenePlatformController::LayoutNodeResult
 Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state)
 {
   if (loka::app::ScrollViewNode *scrollView = node->asScrollViewNode())
   {
-    loka::app::scene::BorrowScope visitScope(*this);
-    const ScrollViewLayoutResult result = this->layoutScrollViewNode(scrollView, state);
-    Win32ScrollViewOwner owner(*this, node);
-    Win32ScrollViewSeat seat(result.visit);
-    loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
-                                                                   seat,
-                                                                   loka::app::scene::SETTLE_PROPS
-#ifdef TEST_BUILD
-                                                                   ,
-                                                                   owner.fact(*node)
-#endif
-    );
-    return result.layout;
+    return loka::app::SettleScrollViewVisit(*this,
+                                            &Win32ScenePlatformController::layoutScrollViewNode,
+                                            &Win32ScenePlatformController::applyScrollViewRequest,
+                                            scrollView,
+                                            state)
+        .layout;
   }
   // Canvas shares geometry with Null; this rail only adapts its result channel.
   if (node->asCanvasNode())
