@@ -4,6 +4,8 @@
 void testWin32EditTextBridgeRoundTripsUtf16();
 
 void testWin32TextEditorConversion();
+void testWin32TextEditorCapacityRows();
+void testWin32TextEditorCapacityDefaultRows();
 void testWin32TextEditorActionsUseLineQueries();
 void testWin32TextEditorRefusalRestoresAndClearsUndo();
 void testWin32TextEditorNestedInput();

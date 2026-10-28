@@ -1,3 +1,11 @@
+#include "app/nodes/boundary/StdComposition.hpp"
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
+#include "support/Headless.hpp"
+#include "support/WindowAdmissionTestApp.hpp"
+#include "testing/scene/SceneTestFlow.hpp"
+#include "MacInputDoor.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#include <vector>
 #include "MacScrollViewTests.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 
@@ -1522,4 +1530,686 @@ void testMacViewportClipShortRangeRefusalSkipsSubtree()
   [root release];
   [pool drain];
   std::printf("==== [testMacViewportClipShortRangeRefusalSkipsSubtree] PASSED ====\n");
+}
+
+namespace
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using loka::core::Frame;
+  typedef loka::app::testing::SettleTrace<ScrollTarget, Frame> ScrollTrace;
+
+  class ScrollRequestStorage : private HeadlessStateOwner
+  {
+  public:
+    NodeState<Frame> viewport;
+    Request<ScrollTarget> request;
+    explicit ScrollRequestStorage(bool immediate = true)
+    {
+      if (immediate)
+      {
+        StateBatchBase::CreateImmediateState(this, this->viewport, Frame());
+        StateBatchBase::CreateImmediateState(this, this->request, ScrollTarget::None());
+      }
+    }
+  };
+
+  /** One ordered record for takes, native observations and publications. */
+  struct ScrollObservation
+  {
+    enum Kind
+    {
+      TAKE,
+      PUBLICATION,
+      NOTIFICATION,
+      RETURNED
+    };
+    Kind kind;
+    NSPoint origin;
+    Frame fact;
+    BOOL posts;
+    ScrollObservation(Kind k, NSClipView *clip, const Frame &value)
+        : kind(k),
+          origin(clip ? [clip bounds].origin : NSZeroPoint),
+          fact(value),
+          posts(clip ? [clip postsBoundsChangedNotifications] : NO)
+    {
+    }
+  };
+  struct ScrollObservations
+  {
+    ScrollRequestStorage &storage;
+    NSClipView *clip;
+    std::vector<ScrollObservation> events;
+    explicit ScrollObservations(ScrollRequestStorage &s)
+        : storage(s),
+          clip(nil)
+    {
+      this->storage.viewport.state()->bind(&published, this, false);
+      this->storage.request.state()->bind(&taken, this, false);
+    }
+    ~ScrollObservations()
+    {
+      this->storage.viewport.state()->unbind(&published, this);
+      this->storage.request.state()->unbind(&taken, this);
+    }
+    void record(ScrollObservation::Kind kind)
+    {
+      this->events.push_back(ScrollObservation(kind, this->clip, this->storage.viewport.get()));
+    }
+    static void published(void *data)
+    {
+      static_cast<ScrollObservations *>(data)->record(ScrollObservation::PUBLICATION);
+    }
+    static void taken(void *data)
+    {
+      ScrollObservations &self = *static_cast<ScrollObservations *>(data);
+      if (self.storage.request.get().isNone())
+        self.record(ScrollObservation::TAKE);
+    }
+    unsigned count(ScrollObservation::Kind kind) const
+    {
+      unsigned result = 0;
+      for (std::size_t i = 0; i != this->events.size(); ++i)
+        if (this->events[i].kind == kind)
+          ++result;
+      return result;
+    }
+  };
+} // namespace
+
+@interface LokaScrollRequestObserver : NSObject
+{
+  ScrollObservations *observations_;
+}
+- (void)setObservations:(ScrollObservations *)value;
+- (void)boundsChanged:(NSNotification *)notification;
+@end
+@implementation LokaScrollRequestObserver
+- (void)setObservations:(ScrollObservations *)value
+{
+  observations_ = value;
+}
+- (void)boundsChanged:(NSNotification *)notification
+{
+  (void)notification;
+  observations_->record(ScrollObservation::NOTIFICATION);
+}
+@end
+
+namespace
+{
+  struct ScrollRequestHost
+  {
+    NSAutoreleasePool *pool;
+    NSView *host;
+    ScrollRequestHost()
+        : pool([[NSAutoreleasePool alloc] init]),
+          host(nil)
+    {
+      [NSApplication sharedApplication];
+      this->host = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 300, 160)];
+    }
+    ~ScrollRequestHost()
+    {
+      [this->host release];
+      [this->pool drain];
+    }
+  };
+  struct ScrollRequestFixture : ScrollRequestHost
+  {
+    ScrollRequestStorage storage;
+    MacScenePlatformController controller;
+    ScrollViewNode node;
+    ScrollObservations observed;
+    LokaScrollRequestObserver *observer;
+    ScrollRequestFixture(int width = 600, int height = 700, int top = 0)
+        : controller(host, RailMetrics()),
+          node(ScrollViewProps(storage.viewport)
+                   .scrollTo(storage.request)
+                   .contentInsets(ScrollViewContentInsets::of(top, 0))),
+          observed(storage),
+          observer([[LokaScrollRequestObserver alloc] init])
+    {
+      this->node.addChild(new BoxNode(Box().width(width).height(height).props));
+      this->controller.onChange(&this->node, NODE_DIRTY_NONE, false);
+    }
+    ~ScrollRequestFixture()
+    {
+      [[NSNotificationCenter defaultCenter] removeObserver:this->observer];
+      [this->observer setObservations:0];
+      [this->observer release];
+      this->controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    void visit(int height = 160)
+    {
+      this->controller.relayout(300, height == 0 ? 2 * MacSceneLayout::kRootInset : height);
+    }
+    NSScrollView *native() const
+    {
+      return scrollViewUnderRoot(this->host);
+    }
+    void observe()
+    {
+      this->observed.clip = [this->native() contentView];
+      [this->observer setObservations:&this->observed];
+      [[NSNotificationCenter defaultCenter] addObserver:this->observer
+                                               selector:@selector(boundsChanged:)
+                                                   name:NSViewBoundsDidChangeNotification
+                                                 object:this->observed.clip];
+    }
+    void post(int x, int y)
+    {
+      this->observed.events.clear();
+      ScrollTrace::instance().clear();
+      this->storage.request.set(ScrollTarget::Origin(x, y));
+    }
+    void result(ScrollRequestResult expected)
+    {
+      LOKA_VERIFY(this->storage.request.get().isNone());
+      LOKA_VERIFY(ScrollTrace::instance().size() != 0);
+      const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &row =
+          ScrollTrace::instance().at(ScrollTrace::instance().size() - 1);
+      LOKA_VERIFY(row.count == 1 && row.seam[0] == expected);
+    }
+    void checkPublication(int x, int y, int top)
+    {
+      LOKA_VERIFY(this->observed.count(ScrollObservation::TAKE) == 1);
+      LOKA_VERIFY(this->observed.count(ScrollObservation::PUBLICATION) == 1);
+      bool taken = false;
+      for (std::size_t i = 0; i != this->observed.events.size(); ++i)
+      {
+        const ScrollObservation &event = this->observed.events[i];
+        if (event.kind == ScrollObservation::TAKE)
+          taken = true;
+        if (event.kind == ScrollObservation::PUBLICATION)
+        {
+          LOKA_VERIFY(taken && event.posts == NO);
+          LOKA_VERIFY(event.fact.x == x && event.fact.y == y);
+          LOKA_VERIFY(event.origin.x == this->controller.projection().scrollOffsetToNative(x).pt);
+          LOKA_VERIFY(event.origin.y == this->controller.projection().scrollOffsetToNative(y + top).pt);
+        }
+      }
+      LOKA_VERIFY(this->storage.viewport.get().x == x && this->storage.viewport.get().y == y);
+      this->observed.record(ScrollObservation::RETURNED);
+    }
+  };
+
+  void requestAndStoppedEcho(int top, bool beyond)
+  {
+    ScrollRequestFixture f(600, 700, top);
+    f.visit();
+    f.post(10, 20);
+    f.visit();
+    f.observe();
+    const NSPoint originA = [f.observed.clip bounds].origin;
+    f.post(beyond ? 3000 : 30, beyond ? 3000 : 40);
+    f.visit();
+    f.result(SCROLL_OK);
+    const NSRect document = [[f.native() documentView] frame];
+    const NSRect clip = [[f.native() contentView] bounds];
+    const int x = beyond ? f.controller.projection().scrollPositionToLu(document.size.width - clip.size.width) : 30;
+    const int y =
+        beyond ? f.controller.projection().scrollPositionToLu(document.size.height - clip.size.height) - top : 40;
+    f.checkPublication(x, y, top);
+    LOKA_VERIFY([f.observed.clip postsBoundsChangedNotifications] == YES);
+    // L2 is deliberately stopped: only AppKit's run loop may deliver an echo.
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+    LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 1);
+    if (!f.observed.count(ScrollObservation::NOTIFICATION))
+      std::printf("[skip] no automatic bounds notification observed; synchrony not proven\n");
+    bool took = false;
+    for (std::size_t i = 0; i != f.observed.events.size(); ++i)
+    {
+      const ScrollObservation &event = f.observed.events[i];
+      if (event.kind == ScrollObservation::TAKE)
+        took = true;
+      // The helper restores its own mute before the request is taken, so an
+      // earlier notification may legitimately read A. After take, apply and
+      // report stay inside one mute and every notification must read B.
+      if (event.kind == ScrollObservation::NOTIFICATION)
+        LOKA_VERIFY(NSEqualPoints(event.origin, took ? clip.origin : originA));
+    }
+  }
+} // namespace
+
+void testMacScrollRequestBothAxesAndStoppedEcho()
+{
+  requestAndStoppedEcho(0, false);
+  requestAndStoppedEcho(0, true);
+  requestAndStoppedEcho(12, false);
+  requestAndStoppedEcho(12, true);
+}
+
+void testMacScrollRequestSmallDocument()
+{
+  ScrollRequestFixture f(40, 30);
+  f.visit();
+  f.observe();
+  // Both-axis motion is refused when X is absent, even for a small document.
+  const Frame before = f.storage.viewport.get();
+  f.post(3000, 3000);
+  f.visit();
+  f.result(SCROLL_UNAVAILABLE);
+  LOKA_VERIFY(f.storage.viewport.get() == before);
+  // A Y-only request is admitted and AppKit clamps to zero.
+  f.post(0, 3000);
+  f.visit();
+  f.result(SCROLL_OK);
+  const int nativeY = clipOffset(f.native());
+  LOKA_VERIFY(nativeY == 0);
+  LOKA_VERIFY(f.storage.viewport.get().y == 0);
+  LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 0);
+  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+  LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 0);
+  if (!f.observed.count(ScrollObservation::NOTIFICATION))
+    std::printf("[skip] no automatic bounds notification observed; synchrony not proven\n");
+}
+
+void testMacScrollRequestOriginalMuteAndNativeControl()
+{
+  ScrollRequestFixture f;
+  f.visit();
+  f.observe();
+  [f.observed.clip setPostsBoundsChangedNotifications:NO];
+  f.post(30, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  f.checkPublication(30, 40, 0);
+  LOKA_VERIFY([f.observed.clip postsBoundsChangedNotifications] == NO);
+  [f.observed.clip setBoundsOrigin:NSMakePoint(50, 60)];
+  [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification object:f.observed.clip];
+  LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == 2);
+  LOKA_VERIFY(f.storage.viewport.get().x == 50 && f.storage.viewport.get().y == 60);
+}
+
+void testMacScrollRequestAbsentXAndHeightless()
+{
+  ScrollRequestFixture f(40, 700);
+  f.visit();
+  f.observe();
+  const Frame before = f.storage.viewport.get();
+  f.post(30, 0);
+  f.visit();
+  f.result(SCROLL_UNAVAILABLE);
+  LOKA_VERIFY(f.storage.viewport.get() == before);
+  f.post(0, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  f.checkPublication(0, 40, 0);
+  ScrollRequestFixture wide;
+  wide.visit();
+  wide.post(25, 40);
+  wide.visit();
+  wide.visit(0);
+  LOKA_VERIFY(![wide.native() hasHorizontalScroller]);
+  LOKA_VERIFY(wide.storage.viewport.get().x == 25);
+  wide.post(25, 60);
+  wide.visit(0);
+  wide.result(SCROLL_OK);
+  LOKA_VERIFY(wide.storage.viewport.get().x == 25 && wide.storage.viewport.get().y == 60);
+  LOKA_VERIFY([[wide.native() contentView] bounds].origin.x == 25);
+}
+
+void testMacScrollRequestRefusedNestedVisit()
+{
+  // Borrowed endpoints must outlive the nested node and its cancellation.
+  ScrollRequestStorage inner;
+  ScrollRequestFixture f;
+  ScrollViewNode *nested = new ScrollViewNode(ScrollViewProps(inner.viewport).scrollTo(inner.request));
+  f.node.addChild(nested);
+  inner.request.set(ScrollTarget::Origin(10, 20));
+  ScrollTrace::instance().clear();
+  f.visit();
+  LOKA_VERIFY(inner.request.get().isNone());
+  LOKA_VERIFY(inner.viewport.get() == Frame());
+  LOKA_VERIFY(!nested->getContext());
+  bool refused = false;
+  for (std::size_t i = 0; i != ScrollTrace::instance().size(); ++i)
+  {
+    const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &row = ScrollTrace::instance().at(i);
+    if (row.count == 1 && row.seam[0] == SCROLL_UNAVAILABLE)
+      refused = true;
+  }
+  LOKA_VERIFY(refused);
+}
+
+void testMacScrollRequestFirstVisit()
+{
+  ScrollRequestFixture f;
+  LOKA_VERIFY(!f.node.getContext());
+  f.post(30, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.storage.viewport.get().x == 30 && f.storage.viewport.get().y == 40);
+  const int nativeY = clipOffset(f.native());
+  LOKA_VERIFY([[f.native() contentView] bounds].origin.x == 30 && nativeY == 40);
+}
+namespace
+{
+  class ScrollRoot;
+  struct ScrollRootProps : NodePropsBase<ScrollRootProps>
+  {
+    typedef ScrollRoot NodeType;
+    struct TypeTag
+    {
+    };
+    ScrollRequestStorage *storage;
+    explicit ScrollRootProps(ScrollRequestStorage *value = 0)
+        : storage(value)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      return this->storage < static_cast<const ScrollRootProps &>(rhs).storage;
+    }
+  };
+  class ScrollRoot : public StdCompositionBoundaryNodeBase<ScrollRootProps>
+  {
+  public:
+    explicit ScrollRoot(const ScrollRootProps &props)
+        : StdCompositionBoundaryNodeBase<ScrollRootProps>(props)
+    {
+      this->state(this->props.storage->viewport, Frame());
+      this->state(this->props.storage->request, ScrollTarget::None());
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(
+          ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
+          << Box().width(400).height(500));
+    }
+  };
+  class ScrollSceneController : public MacScenePlatformController
+  {
+  public:
+    unsigned focusReads;
+    bool project;
+    explicit ScrollSceneController(NSView *host, bool initialProjection = true)
+        : MacScenePlatformController(host, RailMetrics()),
+          focusReads(0),
+          project(initialProjection)
+    {
+    }
+    virtual void onChange(Node *root, NodeDirtyFlags flags, bool full)
+    {
+      MacScenePlatformController::onChange(root, this->project ? flags : NODE_DIRTY_NONE, full);
+    }
+    virtual void onBoundaryApply(Node *root,
+                                 BoundaryNode *boundary,
+                                 const BoundaryLocalApplyInfo &info,
+                                 const PlatformApplyPlan &plan)
+    {
+      MacScenePlatformController::onBoundaryApply(root, boundary, info, plan);
+      if (this->project && (info.hasLayoutWork || plan.hasLayoutWork()))
+        this->relayout(0, 0);
+    }
+    virtual bool readNativeFocus(NodeContext *&out)
+    {
+      ++this->focusReads;
+      out = 0;
+      return true;
+    }
+  };
+  class ScrollLogicalWindow : public Window
+  {
+
+  public:
+    unsigned syncs, admissions, drains;
+    ScrollLogicalWindow(ScrollRequestStorage &storage)
+        : Window(0, WindowProps().scene(new Scene(Boundary<ScrollRoot>(ScrollRootProps(&storage))))),
+          syncs(0),
+          admissions(0),
+          drains(0)
+    {
+    }
+    virtual ~ScrollLogicalWindow()
+    {
+      this->unmountSceneForTeardown(*this->scene());
+    }
+    virtual bool hasLiveScenePlatform() const
+    {
+      return true;
+    }
+    virtual void applyNativeVisibility()
+    {
+      ++this->admissions;
+    }
+    virtual bool hasPendingScenePlatformSync() const
+    {
+      return true;
+    }
+    virtual void synchronizeScenePlatform()
+    {
+      ++this->syncs;
+    }
+    virtual void drainNativeRetirements()
+    {
+      ++this->drains;
+    }
+  };
+  struct ScrollSceneFixture : ScrollRequestHost
+  {
+    ScrollRequestStorage storage;
+    ScrollSceneController controller;
+    ScrollLogicalWindow window;
+    WindowAdmissionTestApp app;
+    unsigned callbacks;
+    bool probe, expectRun;
+    ScrollSceneFixture()
+        : storage(false),
+          controller(host),
+          window(storage),
+          app(window),
+          callbacks(0),
+          probe(false),
+          expectRun(false)
+    {
+      LOKA_VERIFY(window.scene()->mount(&controller));
+      app.flush();
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+      app.flush();
+      while (window.scene()->hasPendingInvalidation())
+        LOKA_VERIFY(window.scene()->flushInvalidation());
+      storage.viewport.state()->bind(&changed, this, false);
+    }
+    ~ScrollSceneFixture()
+    {
+      storage.viewport.state()->unbind(&changed, this);
+    }
+    static void changed(void *data)
+    {
+      ScrollSceneFixture &f = *static_cast<ScrollSceneFixture *>(data);
+      ++f.callbacks;
+      if (!f.probe)
+        return;
+      LOKA_VERIFY(f.controller.borrowPhase().open());
+      LOKA_VERIFY(f.window.scene()->isRunInProgress() == f.expectRun);
+      const unsigned syncs = f.window.syncs, drains = f.window.drains;
+      const unsigned admissions = f.window.admissions, focus = f.controller.focusReads;
+      f.window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!f.window.scene()->flushInvalidation());
+      LOKA_VERIFY(!f.window.flushSceneInvalidation());
+      f.app.admitAndApplyWindows();
+      f.app.reconcileFocus();
+      LOKA_VERIFY(f.window.syncs == syncs && f.window.drains == drains);
+      LOKA_VERIFY(f.window.admissions == admissions && f.controller.focusReads == focus);
+    }
+    void ordinaryFlush()
+    {
+      const unsigned syncs = window.syncs, drains = window.drains;
+      const unsigned admissions = window.admissions, focus = controller.focusReads;
+      app.flush();
+      app.reconcileFocus();
+      LOKA_VERIFY(window.syncs > syncs && window.drains > drains);
+      LOKA_VERIFY(window.admissions > admissions && controller.focusReads > focus);
+      LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+    }
+  };
+  void sceneBorrow(bool probe)
+  {
+    ScrollSceneFixture f;
+    f.expectRun = true;
+    f.probe = probe;
+    f.storage.request.set(ScrollTarget::Origin(25, 40));
+    while (f.window.scene()->hasPendingInvalidation())
+      LOKA_VERIFY(f.window.scene()->flushInvalidation());
+    LOKA_VERIFY(f.storage.request.get().isNone());
+    LOKA_VERIFY(f.storage.viewport.get().x == 25 && f.storage.viewport.get().y == 40);
+    LOKA_VERIFY(f.callbacks == 1);
+    f.probe = false;
+    f.ordinaryFlush();
+  }
+  struct MountProbe
+  {
+    Scene &scene;
+    ScrollSceneController &controller;
+    unsigned calls;
+    MountProbe(Scene &s, ScrollSceneController &c)
+        : scene(s),
+          controller(c),
+          calls(0)
+    {
+    }
+    static void changed(void *data)
+    {
+      MountProbe &p = *static_cast<MountProbe *>(data);
+      ++p.calls;
+      LOKA_VERIFY(p.controller.borrowPhase().open() && !p.scene.isRunInProgress());
+      p.scene.requestInvalidate(NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!p.scene.flushInvalidation());
+    }
+  };
+  void deferredMount()
+  {
+    ScrollRequestStorage storage(false);
+    ScrollRequestHost native;
+    ScrollSceneController controller(native.host, false);
+    ScrollLogicalWindow window(storage);
+    WindowAdmissionTestApp app(window);
+    LOKA_VERIFY(window.scene()->mount(&controller));
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    MountProbe probe(*window.scene(), controller);
+    storage.viewport.state()->bind(&MountProbe::changed, &probe, false);
+    controller.project = true;
+    // Mac onChange projects the mounted tree outside a Scene run as well.
+    controller.onChange(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), NODE_DIRTY_LAYOUT, false);
+    LOKA_VERIFY(probe.calls == 1);
+    LOKA_VERIFY(window.scene()->hasPendingInvalidation() && !controller.borrowPhase().open());
+    storage.viewport.state()->unbind(&MountProbe::changed, &probe);
+    app.flush();
+    LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+  }
+} // namespace
+
+void testMacScrollRequestSceneBorrow()
+{
+  sceneBorrow(true);
+}
+void testMacScrollRequestDeferredMount()
+{
+  deferredMount();
+}
+namespace
+{
+  struct NativeScrollStorage : ScrollRequestStorage
+  {
+    NodeState<Frame> followingExtent;
+    NativeScrollStorage()
+        : ScrollRequestStorage(false)
+    {
+    }
+  };
+  class NativeScrollRoot;
+  struct NativeScrollProps : NodePropsBase<NativeScrollProps>
+  {
+    typedef NativeScrollRoot NodeType;
+    struct TypeTag
+    {
+    };
+    NativeScrollStorage *storage;
+    explicit NativeScrollProps(NativeScrollStorage *value = 0)
+        : storage(value)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      return this->storage < static_cast<const NativeScrollProps &>(rhs).storage;
+    }
+  };
+  class NativeScrollRoot : public StdCompositionBoundaryNodeBase<NativeScrollProps>
+  {
+  public:
+    explicit NativeScrollRoot(const NativeScrollProps &props)
+        : StdCompositionBoundaryNodeBase<NativeScrollProps>(props)
+    {
+      this->state(this->props.storage->viewport, Frame());
+      this->state(this->props.storage->request, ScrollTarget::None());
+      this->state(this->props.storage->followingExtent, Frame());
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(
+          VStack() << (ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
+                       << Box().width(2000).height(2000))
+                   << RectSurface().laidOutExtent(this->props.storage->followingExtent));
+    }
+  };
+  struct NativeScrollProbe
+  {
+    MacScenePlatformController &controller;
+    NativeScrollStorage &storage;
+    unsigned visits, following;
+    NativeScrollProbe(MacScenePlatformController &c, NativeScrollStorage &s)
+        : controller(c),
+          storage(s),
+          visits(0),
+          following(0)
+    {
+    }
+    static void viewport(void *data)
+    {
+      NativeScrollProbe &p = *static_cast<NativeScrollProbe *>(data);
+      ++p.visits;
+      LOKA_VERIFY(p.controller.borrowPhase().open());
+    }
+    static void afterVisit(void *data)
+    {
+      NativeScrollProbe &p = *static_cast<NativeScrollProbe *>(data);
+      ++p.following;
+      // This sibling publishes after the ScrollView arm's visit scope has closed.
+      LOKA_VERIFY(p.controller.borrowPhase().open());
+      LOKA_VERIFY(p.storage.request.get().isNone());
+      LOKA_VERIFY(p.storage.viewport.get().x == 30 && p.storage.viewport.get().y == 40);
+    }
+  };
+} // namespace
+
+void testMacScrollRequestPendingLayoutOuterBorrow()
+{
+  ScrollRequestHost native;
+  NativeScrollStorage storage;
+  MacScenePlatformController controller(native.host, RailMetrics());
+  Scene scene(Boundary<NativeScrollRoot>(NativeScrollProps(&storage)));
+  LOKA_VERIFY(scene.mount(&controller));
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  while (scene.hasPendingInvalidation())
+    LOKA_VERIFY(scene.flushInvalidation());
+  {
+    BorrowScope posting(controller);
+    storage.request.set(ScrollTarget::Origin(30, 40));
+  }
+  LOKA_VERIFY(!storage.request.get().isNone());
+  NativeScrollProbe probe(controller, storage);
+  storage.viewport.state()->bind(&NativeScrollProbe::viewport, &probe, false);
+  storage.followingExtent.state()->bind(&NativeScrollProbe::afterVisit, &probe, false);
+  [native.host setFrameSize:NSMakeSize(480, 320)];
+  controller.requestRelayout();
+  MacScenePlatformController::flushPendingRelayouts();
+  LOKA_VERIFY(probe.visits > 0 && probe.following == 1);
+  LOKA_VERIFY(storage.request.get().isNone() && !controller.borrowPhase().open());
+  storage.viewport.state()->unbind(&NativeScrollProbe::viewport, &probe);
+  storage.followingExtent.state()->unbind(&NativeScrollProbe::afterVisit, &probe);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
 }

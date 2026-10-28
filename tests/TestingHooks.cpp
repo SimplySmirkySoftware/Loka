@@ -23,7 +23,31 @@ namespace loka
       unsigned macPhotoCaptureFailures = 0;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
+      unsigned macClipBoxContextFailures = 0;
+      unsigned macClipHostViewFailures = 0;
     } // namespace
+    void failMacClipBoxContexts(unsigned count)
+    {
+      macClipBoxContextFailures = count;
+    }
+    bool declineMacClipBoxContext()
+    {
+      if (!macClipBoxContextFailures)
+        return false;
+      --macClipBoxContextFailures;
+      return true;
+    }
+    void failMacClipHostViews(unsigned count)
+    {
+      macClipHostViewFailures = count;
+    }
+    bool declineMacClipHostView()
+    {
+      if (!macClipHostViewFailures)
+        return false;
+      --macClipHostViewFailures;
+      return true;
+    }
     void failMacStackUnitViews(unsigned count)
     {
       macStackUnitViewFailures = count;
@@ -200,6 +224,8 @@ namespace loka
         unsigned g_textEditorSetFailures = 0;
         unsigned g_nativeChildWindowFailures = 0;
         unsigned g_nativeChildWindowSkips = 0;
+        unsigned g_scrollInfoReadFailures = 0;
+        unsigned g_scrollInfoReadSkips = 0;
       } // namespace
 
       void failNativeChildWindowCreations(unsigned count, unsigned skip)
@@ -218,6 +244,25 @@ namespace loka
         if (!g_nativeChildWindowFailures)
           return false;
         --g_nativeChildWindowFailures;
+        return true;
+      }
+
+      void failScrollInfoReads(unsigned count, unsigned skip)
+      {
+        g_scrollInfoReadFailures = count;
+        g_scrollInfoReadSkips = skip;
+      }
+
+      bool refuseScrollInfoRead()
+      {
+        if (g_scrollInfoReadSkips)
+        {
+          --g_scrollInfoReadSkips;
+          return false;
+        }
+        if (!g_scrollInfoReadFailures)
+          return false;
+        --g_scrollInfoReadFailures;
         return true;
       }
 
@@ -616,6 +661,18 @@ namespace loka
       bool refuseTextPayloadAllocation()
       {
         return textPayloadsUntilRefusal && --textPayloadsUntilRefusal == 0;
+      }
+      namespace
+      {
+        std::size_t lastProjectionReservationBytes = 0;
+      }
+      void observeProjectionReservation(std::size_t bytes)
+      {
+        lastProjectionReservationBytes = bytes;
+      }
+      std::size_t lastProjectionReservation()
+      {
+        return lastProjectionReservationBytes;
       }
     } // namespace testing
   } // namespace app

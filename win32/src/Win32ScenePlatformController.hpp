@@ -1,6 +1,8 @@
 #ifndef LOKA_WIN32_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_WIN32_SCENE_PLATFORM_CONTROLLER_HPP
 
+#include "app/nodes/nestable/ScrollViewRequests.hpp"
+
 #include <windows.h>
 #include "Win32TextEnvironment.hpp"
 #include "app/layout/TextShaping.hpp"
@@ -74,6 +76,8 @@ namespace loka
     namespace testing
     {
       void failNativeChildWindowCreations(unsigned count, unsigned skip = 0);
+      void failScrollInfoReads(unsigned count, unsigned skip = 0);
+      bool refuseScrollInfoRead();
       bool refuseNativeChildWindowCreation();
     } // namespace testing
   } // namespace win32
@@ -352,7 +356,18 @@ private:
   int layoutNodeFromSceneState(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   int layoutNode(loka::app::scene::Node *node, const LayoutState &state);
   LayoutNodeResult computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state);
-  LayoutNodeResult layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state);
+  /** Completed layout and request capability of this projection visit. */
+  struct ScrollViewLayoutResult
+  {
+    ScrollViewLayoutResult(const LayoutNodeResult &value, const loka::app::ScrollViewVisit &outcome)
+        : layout(value),
+          visit(outcome)
+    {
+    }
+    const LayoutNodeResult layout;
+    const loka::app::ScrollViewVisit visit;
+  };
+  ScrollViewLayoutResult layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state);
   int applyBoundaryLayoutResult(loka::app::scene::BoundaryNode *boundary, int x, int y, const LayoutNodeResult &result);
   LayoutNodeResult layoutRectSurfaceNode(loka::app::RectSurfaceNode *surface, const LayoutState &state);
   bool narrowLayoutState(const LayoutState &state,

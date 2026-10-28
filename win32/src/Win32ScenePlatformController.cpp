@@ -1,3 +1,4 @@
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include <new>
 #include "app/nodes/controls/Card.hpp"
@@ -1252,15 +1253,14 @@ Win32ScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *
   return LayoutNodeResult(state.width, state.y + height);
 }
 
-Win32ScenePlatformController::LayoutNodeResult
-Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *scrollView,
-                                                   const LayoutState &state)
+Win32ScenePlatformController::ScrollViewLayoutResult
+Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state)
 {
   if (!scrollView || this->projectionParentScopes_.activeDepth() != 0)
   {
     // V1 admits one active viewport. Refuse before creating the inner HWND so
     // the outer scope remains the only structural clipping parent.
-    return LayoutNodeResult(state.width, state.y);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
   if (state.x < SHRT_MIN || state.x > SHRT_MAX ||
       state.y < SHRT_MIN || state.y > SHRT_MAX ||
@@ -1270,7 +1270,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   {
     // The shared traversal above consumes a short result. Refuse the viewport
     // itself before its bottom or any child coordinate would narrow.
-    return LayoutNodeResult(state.width, state.y);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
 
   Win32ScrollViewContext *ctx =
@@ -1291,7 +1291,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     if (!ctx || !ctx->isValid())
     {
       delete ctx;
-      return LayoutNodeResult(state.width, state.y);
+      return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
     }
     scrollView->setContext(ctx);
     ctx->readLifecycleFactOnAttach();
@@ -1306,7 +1306,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   if (!parentScope.deriveScrolled(
           static_cast<void *>(ctx->viewportHwnd()), state.x, state.y, viewportClip, viewportScope))
   {
-    return LayoutNodeResult(state.width, state.y);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
   LayoutState childBase = state;
   {
@@ -1343,7 +1343,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   loka::app::scene::ProjectionParentScope childScope;
   if (!viewportScope.deriveScrolled(viewportScope.nativeParent, clampedX, translation, childClip, childScope))
   {
-    return LayoutNodeResult(state.width, state.y);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
 
   int currentY = state.y;
@@ -1354,7 +1354,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, childScope);
     if (!scopeGuard.isActive())
     {
-      return LayoutNodeResult(state.width, state.y);
+      return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
     }
 
     loka::app::scene::INestable *nestable = scrollView->asNestable();
@@ -1417,17 +1417,22 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     scrollView->publishViewport(clampedX, clampedOffset, childBase.width, viewportHeight);
   }
 
+  // Validity includes Y: construction retires the frame unless its SCROLLBAR exists.
+  const loka::app::ScrollViewVisit visit =
+      !shortRangeRefused && ctx->isValid() ? loka::app::ScrollViewVisit::succeededWithNativeAxes(horizontalBar, true)
+                                           : loka::app::ScrollViewVisit::refused();
+
   if (state.height > 0)
   {
-    return LayoutNodeResult(state.width, state.y + state.height);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y + state.height), visit);
   }
   if (shortRangeRefused || extentBottom > SHRT_MAX)
   {
-    return LayoutNodeResult(state.width, state.y);
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
   // The measured bottom includes both insets and must fit the short before
   // narrowing (the Toolbox heightless arm refuses the same wrap).
-  return LayoutNodeResult(state.width, extentBottom);
+  return ScrollViewLayoutResult(LayoutNodeResult(state.width, extentBottom), visit);
 }
 
 int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const LayoutState &state)
@@ -1452,12 +1457,66 @@ int Win32ScenePlatformController::layoutNode(loka::app::scene::Node *node, const
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
+namespace
+{
+  /** Stack owner whose identity is captured after the protected layout visit. */
+  class Win32ScrollViewOwner : public loka::app::scene::SettleOwner<loka::core::Frame>
+  {
+  public:
+    Win32ScrollViewOwner(loka::app::scene::IPlatformController &controller, loka::app::scene::Node *node)
+        : loka::app::scene::SettleOwner<loka::core::Frame>(controller, node, node->getContext())
+    {
+    }
+    virtual loka::app::scene::FollowUpResult finishSettle(loka::app::scene::Node &, const loka::app::scene::FollowUps &)
+    {
+      return loka::app::scene::FOLLOW_UP_NONE;
+    }
+#ifdef TEST_BUILD
+    virtual loka::core::Frame fact(loka::app::scene::Node &base) const
+    {
+      const loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
+      return node.props.viewport_.isValid() ? node.props.viewport_.state()->get() : loka::core::Frame();
+    }
+#endif
+  };
+  /** Request application uses the context's shared settled-position commit. */
+  class Win32ScrollViewSeat : public loka::app::ScrollViewSeat
+  {
+  public:
+    explicit Win32ScrollViewSeat(const loka::app::ScrollViewVisit &visit)
+        : loka::app::ScrollViewSeat(visit)
+    {
+    }
+    virtual loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>
+    apply(loka::app::scene::Node &base, const loka::app::ScrollTarget &pending)
+    {
+      loka::app::ScrollViewNode &node = static_cast<loka::app::ScrollViewNode &>(base);
+      Win32ScrollViewContext *context = static_cast<Win32ScrollViewContext *>(node.getContext());
+      const bool committed = context->applyScrollRequest(node.normalizedOrigin(pending));
+      return loka::app::scene::RequestApplication<loka::core::Frame, loka::app::ScrollRequestResult>(
+          node.props.viewport_.state()->get(), committed ? loka::app::SCROLL_OK : loka::app::SCROLL_UNAVAILABLE);
+    }
+  };
+} // namespace
+
 Win32ScenePlatformController::LayoutNodeResult
 Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state)
 {
   if (loka::app::ScrollViewNode *scrollView = node->asScrollViewNode())
   {
-    return this->layoutScrollViewNode(scrollView, state);
+    loka::app::scene::BorrowScope visitScope(*this);
+    const ScrollViewLayoutResult result = this->layoutScrollViewNode(scrollView, state);
+    Win32ScrollViewOwner owner(*this, node);
+    Win32ScrollViewSeat seat(result.visit);
+    loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
+                                                                   seat,
+                                                                   loka::app::scene::SETTLE_PROPS
+#ifdef TEST_BUILD
+                                                                   ,
+                                                                   owner.fact(*node)
+#endif
+    );
+    return result.layout;
   }
   // Canvas shares geometry with Null; this rail only adapts its result channel.
   if (node->asCanvasNode())
