@@ -1,4 +1,4 @@
-#include "ToolboxScrollViewSettlement.hpp"
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
@@ -472,20 +472,14 @@ namespace
       short width = 0;
       if (controller)
       {
-        loka::app::scene::BorrowScope visitScope(*controller);
-        const ToolboxScrollViewLayoutResult result =
-            controller->layoutScrollView(static_cast<loka::app::ScrollViewNode *>(node), state, activeBoundary);
-        ToolboxScrollViewOwner owner(*controller, node);
-        ToolboxScrollViewSeat seat(*controller, result);
-        loka::app::scene::RequestSettlement<loka::core::Frame>::settle(owner,
-                                                                       seat,
-                                                                       loka::app::scene::SETTLE_PROPS
-#ifdef TEST_BUILD
-                                                                       ,
-                                                                       owner.fact(*node)
-#endif
-        );
-        width = result.width;
+        width = loka::app::SettleScrollViewVisit(*controller,
+                                                 &ToolboxScenePlatformController::layoutScrollView,
+                                                 &ToolboxScenePlatformController::applyScrollViewRequest,
+                                                 static_cast<loka::app::ScrollViewNode *>(node),
+                                                 state,
+                                                 activeBoundary)
+                    .width;
+        // The visit borrow closes before setLayoutBounds below.
       }
       if (boundary)
       {
