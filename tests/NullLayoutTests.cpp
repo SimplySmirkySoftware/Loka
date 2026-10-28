@@ -950,7 +950,13 @@ void testClipBoxExpressionPositions()
   LOKA_VERIFY(scene.mount(&platform));
   loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
   PropsReconciliationSupport::settle(scene);
-  LOKA_VERIFY(PropsReconciliationSupport::root(scene)->childrenHead());
+  // The Keyed callback ran: below Keyed's generation scaffold, the first-child chain
+  // reaches the Box the callback declared, born with the flag.
+  BoxNode *keyedBox = 0;
+  for (scene::Node *node = PropsReconciliationSupport::root(scene)->childrenHead(); node && !keyedBox;
+       node = node->asNestable() ? node->asNestable()->childrenHead() : 0)
+    keyedBox = node->asBoxNode();
+  LOKA_VERIFY(keyedBox && keyedBox->props.childClip_ == layout::CHILD_CLIP_OWN_RECT);
   loka::dsl::testing::SceneTestAccess::unmount(scene);
 }
 
