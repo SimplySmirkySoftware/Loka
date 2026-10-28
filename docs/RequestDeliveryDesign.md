@@ -538,6 +538,12 @@ storage-edit completion (`applyHighlights`), `UNAVAILABLE` refusal. These are
 the entry completions governed by the settle contract above; shared projection
 helpers are not additional delivery sites.
 
+The ScrollView arm's borrow, helper, post-helper identity, seat and single settle
+order lives in `SettleScrollViewVisit` in
+[`ScrollViewSettlement.hpp`](../common/app/nodes/nestable/ScrollViewSettlement.hpp).
+Null calls it with its helper and a native step that publishes the origin;
+Toolbox, Win32 and macOS still spell the arm by hand.
+
 Null ScrollView consumes once after the reached `layoutScrollView` helper returns
 at the ScrollView branch of `layoutNode`, including refused visits. Its request
 box marks `NODE_DIRTY_LAYOUT`; each settle takes at most two requests, with no
