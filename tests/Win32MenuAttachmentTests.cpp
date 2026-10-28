@@ -1,3 +1,14 @@
+#include "Win32TextEditorAccess.hpp"
+#include "support/TextEditorAccess.hpp"
+#include "context/Win32EditTextBridge.hpp"
+#include <string>
+#include "support/TextBufferFixture.hpp"
+#include "support/Headless.hpp"
+#include "support/LifecycleFactTestAccess.hpp"
+#include "context/Win32FocusParticipant.hpp"
+#include "app/nodes/nestable/RowColumn.hpp"
+#include "app/nodes/nestable/Show.hpp"
+#include <cstring>
 #include "Win32MenuAttachmentTests.hpp"
 #include <cstdio>
 #include <cwchar>
@@ -1040,5 +1051,405 @@ void testWin32EditMenuDefaultsAndFallback()
     LOKA_VERIFY(!f.translate(keys[i]));
     LOKA_VERIFY(f.window.menuAttachment().dispatch(GetMenuItemID(menu, row)));
     LOKA_VERIFY(f.calls == static_cast<int>(i + 1));
+  }
+}
+
+namespace
+{
+  struct EditFacts : HeadlessStateOwner
+  {
+    NodeState<String> text;
+    Reported<LineCursor> cursor;
+    loka::testing::TextBufferFixture lines;
+    EditFacts()
+    {
+      StateBatchBase::CreateImmediateState(this, this->cursor, LineCursor::None());
+      LOKA_VERIFY(this->lines.attach(this->tracker()->asPushTracker(), 4) == ATTACH_OK);
+      LOKA_VERIFY(this->lines.insert(0, String("first")) == EDIT_OK);
+      LOKA_VERIFY(this->lines.insert(1, String("last")) == EDIT_OK);
+    }
+  };
+  EditFacts *editFacts = 0;
+  class EditRoot : public BoundaryNodeFor<EditRoot>
+  {
+  public:
+    NodeState<bool> editorShown;
+    explicit EditRoot(const BoundaryPropsFor<EditRoot> &p)
+        : BoundaryNodeFor<EditRoot>(p)
+    {
+      this->state(editFacts->text, String("field"));
+      this->state(this->editorShown, true);
+    }
+    virtual void composeNode(NodeComposition &c)
+    {
+      c.declare(Column() << EditText(EditTextProps(editFacts->text)) << EditText()
+                         << (Show(*this->editorShown.state()).destroyOnDetach()
+                             << TextEditor(TextEditorProps(editFacts->lines, editFacts->cursor))));
+    }
+  };
+  struct EditFixture
+  {
+    EditFacts facts;
+    NullPlatformContext platform;
+    int calls;
+    EmitterState emitter;
+    MenuBarDefinition bar;
+    Win32Window window;
+    WindowAdmissionTestApp admission;
+    static WindowProps props(EditFacts &facts)
+    {
+      editFacts = &facts;
+      return WindowProps().frame(60, 60, 400, 300).visible(true).scene(new Scene(Boundary<EditRoot>()));
+    }
+    explicit EditFixture(bool pasteShortcut = false)
+        : calls(0),
+          window(&this->platform, props(this->facts)),
+          admission(this->window)
+    {
+      this->emitter.deferBind(&count, &this->calls);
+      this->admission.flush();
+      MenuDefinition edit = EditMenu();
+      for (MenuItemDefinition *item = edit.itemsHead(); item; item = item->nextInComposition)
+        if (!item->isSeparator)
+        {
+          item->onClick(&this->emitter);
+          if (pasteShortcut && item->action == MENU_ACTION_EDIT_PASTE)
+            item->shortcut('V');
+        }
+      this->bar << edit;
+      LOKA_VERIFY(this->window.menuAttachment().project(sources(&this->bar, 0))
+                  == Win32MenuAttachment::PROJECT_APPLIED);
+    }
+    ~EditFixture()
+    {
+      this->emitter.deferUnbind(&count, &this->calls);
+    }
+    Node *field(unsigned index)
+    {
+      BoundaryNode *root = loka::dsl::testing::SceneTestAccess::rootBoundary(*this->window.scene());
+      Node *node = root->childrenHead()->asNestable()->childrenHead();
+      for (unsigned i = 0; i != index && node; ++i)
+        node = node->nextInComposition;
+      if (index == 2)
+      {
+        LOKA_VERIFY(node && node->asNestable());
+        node = node->asNestable()->childrenHead(); // Show's selected-arm Fragment.
+      }
+      LOKA_VERIFY(node && node->getContext());
+      return node;
+    }
+    HWND edit(unsigned index)
+    {
+      NodeContext *context = this->field(index)->getContext();
+      return index == 2 ? static_cast<Win32TextEditorContext *>(context)->hwnd()
+                        : static_cast<Win32EditTextContext *>(context)->hwnd();
+    }
+    bool focus(unsigned index)
+    {
+      SetActiveWindow(this->window.hwnd());
+      SetFocus(this->edit(index));
+      if (GetFocus() == this->edit(index))
+        return true;
+      std::puts("[skip] Edit menu: native focus refused; no-target checks still run.");
+      return false;
+    }
+    void dispatch(EditVerb verb)
+    {
+      int row = 0;
+      switch (verb)
+      {
+      case EDIT_UNDO:
+        row = 0;
+        break;
+      case EDIT_CUT:
+        row = 2;
+        break;
+      case EDIT_COPY:
+        row = 3;
+        break;
+      case EDIT_PASTE:
+        row = 4;
+        break;
+      case EDIT_SELECT_ALL:
+        row = 5;
+        break;
+      }
+      const UINT id = GetMenuItemID(GetSubMenu(GetMenu(this->window.hwnd()), 0), row);
+      LOKA_VERIFY(this->window.menuAttachment().dispatch(id));
+    }
+  };
+  void selectionIs(HWND hwnd, DWORD start, DWORD end)
+  {
+    DWORD actualStart = 0, actualEnd = 0;
+    SendMessageW(hwnd, EM_GETSEL, reinterpret_cast<WPARAM>(&actualStart), reinterpret_cast<LPARAM>(&actualEnd));
+    LOKA_VERIFY(actualStart == start && actualEnd == end);
+  }
+  bool clipboardIs(HWND owner, const wchar_t *expected)
+  {
+    if (!OpenClipboard(owner))
+    {
+      std::puts("[skip] Edit menu: clipboard read ownership refused; selection and model checks still run.");
+      return false;
+    }
+    HANDLE data = GetClipboardData(CF_UNICODETEXT);
+    LOKA_VERIFY(data);
+    const wchar_t *text = static_cast<const wchar_t *>(GlobalLock(data));
+    LOKA_VERIFY(text && std::wcscmp(text, expected) == 0);
+    GlobalUnlock(data);
+    LOKA_VERIFY(CloseClipboard());
+    return true;
+  }
+  bool putClipboard(HWND owner, const wchar_t *text)
+  {
+    if (!OpenClipboard(owner))
+    {
+      std::puts("[skip] Edit menu: clipboard write ownership refused; paste and undo checks skipped.");
+      return false;
+    }
+    const std::size_t bytes = (std::wcslen(text) + 1) * sizeof(wchar_t);
+    HGLOBAL data = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    LOKA_VERIFY(data);
+    void *target = GlobalLock(data);
+    LOKA_VERIFY(target);
+    std::memcpy(target, text, bytes);
+    GlobalUnlock(data);
+    LOKA_VERIFY(EmptyClipboard());
+    if (!SetClipboardData(CF_UNICODETEXT, data))
+    {
+      GlobalFree(data);
+      LOKA_VERIFY(CloseClipboard());
+      std::puts("[skip] Edit menu: clipboard transfer refused; paste and undo checks skipped.");
+      return false;
+    }
+    LOKA_VERIFY(CloseClipboard());
+    return true;
+  }
+} // namespace
+
+void testWin32EditMenuTextEditor()
+{
+  EditFixture f;
+  if (!f.focus(2))
+    return;
+  const HWND hwnd = f.edit(2);
+  f.dispatch(EDIT_SELECT_ALL);
+  selectionIs(hwnd, 0, 11); // Native CRLF between the two model rows.
+  LOKA_VERIFY(f.facts.cursor.state()->get() == LineCursor(f.facts.lines.at(1).id, 4));
+  LOKA_VERIFY(f.window.handleEditCommand(EDIT_SELECT_ALL));
+  LOKA_VERIFY(f.calls == 0);
+  f.dispatch(EDIT_COPY);
+  const bool clipboardAvailable = clipboardIs(f.window.hwnd(), L"first\r\nlast");
+  if (clipboardAvailable)
+  {
+    const ListRevision before = f.facts.lines.revision().get();
+    f.dispatch(EDIT_CUT);
+    LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.empty());
+    LOKA_VERIFY(f.facts.lines.revision().get() != before);
+  }
+  else
+    std::puts("[skip] Edit menu TextEditor: clipboard unavailable; Cut skipped, paste still attempted.");
+  if (putClipboard(f.window.hwnd(), L"pasted"))
+  {
+    f.dispatch(EDIT_PASTE);
+    LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("pasted")));
+    f.dispatch(EDIT_UNDO);
+    // The EDIT's undo depth is the OS's business (one EM_UNDO took back the
+    // paste and the cut together on the rig): pin that Undo reached the editor
+    // and that the model follows whatever the native text became.
+    std::wstring wide;
+    loka::win32::ReadEditTextWide(hwnd, wide);
+    std::string native, model;
+    LOKA_VERIFY(loka::win32::TextEditorFromWide(wide.data(), wide.size(), native) && native != "pasted");
+    LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(*loka::testing::Win32TextEditorAccess::node(
+                                                                   *static_cast<Win32TextEditorContext *>(
+                                                                       f.field(2)->getContext())))
+                    .project(model)
+                == EDITOR_OK);
+    LOKA_VERIFY(model == native);
+  }
+  LOKA_VERIFY(f.calls == 0);
+}
+
+void testWin32EditMenuEditText()
+{
+  EditFixture f;
+  if (!f.focus(0))
+    return;
+  const HWND hwnd = f.edit(0);
+  f.dispatch(EDIT_SELECT_ALL);
+  selectionIs(hwnd, 0, 5);
+  LOKA_VERIFY(f.window.handleEditCommand(EDIT_SELECT_ALL));
+  f.dispatch(EDIT_COPY);
+  const bool clipboardAvailable = clipboardIs(f.window.hwnd(), L"field");
+  if (clipboardAvailable)
+  {
+    f.dispatch(EDIT_CUT);
+    LOKA_VERIFY(f.facts.text.get().equals(String("")));
+  }
+  else
+    std::puts("[skip] Edit menu EditText: clipboard unavailable; Cut skipped, paste still attempted.");
+  if (putClipboard(f.window.hwnd(), L"pasted"))
+  {
+    f.dispatch(EDIT_PASTE);
+    LOKA_VERIFY(f.facts.text.get().equals(String("pasted")));
+    f.dispatch(EDIT_UNDO);
+    LOKA_VERIFY(!f.facts.text.get().equals(String("pasted")));
+    LOKA_VERIFY(f.facts.text.get().equals(loka::win32::ReadEditTextString(hwnd)));
+  }
+  LOKA_VERIFY(f.calls == 0);
+}
+
+void testWin32EditMenuTargetWalls()
+{
+  EditFixture f;
+  SetActiveWindow(f.window.hwnd());
+  SetFocus(f.window.hwnd());
+  // With activation refused there is still no marked target in this window.
+  const EditVerb verbs[] = {EDIT_UNDO, EDIT_CUT, EDIT_COPY, EDIT_PASTE, EDIT_SELECT_ALL};
+  for (unsigned i = 0; i != 5; ++i)
+  {
+    LOKA_VERIFY(!f.window.handleEditCommand(verbs[i]));
+    f.dispatch(verbs[i]);
+    LOKA_VERIFY(f.calls == static_cast<int>(i + 1));
+  }
+  EditFixture other;
+  if (other.focus(0))
+  {
+    LOKA_VERIFY(!f.window.handleEditCommand(EDIT_SELECT_ALL));
+    f.dispatch(EDIT_SELECT_ALL);
+    LOKA_VERIFY(f.calls == 6);
+  }
+  if (!f.focus(1))
+    return;
+  Node *node = f.field(1);
+  const HWND hidden = f.edit(1);
+  NotifySubtreeNodeDetached(node);
+  LifecycleFactTestAccess::DeliverFacts(node);
+  LOKA_VERIFY(!Win32FocusParticipant::read(hidden));
+  LOKA_VERIFY(!IsWindowVisible(hidden));
+  SetFocus(hidden);
+  LOKA_VERIFY(!f.window.handleEditCommand(EDIT_SELECT_ALL));
+  const int before = f.calls;
+  f.dispatch(EDIT_SELECT_ALL);
+  LOKA_VERIFY(f.calls == before + 1);
+  NotifySubtreeNodeAttached(node);
+  LifecycleFactTestAccess::DeliverFacts(node);
+}
+
+void testWin32EditMenuSelectAllInput()
+{
+  typedef loka::testing::Win32TextEditorAccess EditorAccess;
+  EditFixture f;
+  if (!f.focus(2))
+    return;
+  const HWND hwnd = f.edit(2);
+  Win32TextEditorContext &context = *static_cast<Win32TextEditorContext *>(f.field(2)->getContext());
+  SendMessageW(hwnd, EM_SETSEL, 7, 7);
+  SendMessageW(hwnd, WM_KEYDOWN, VK_END, 0);
+  const LineCursor keyboard = f.facts.cursor.state()->get();
+  const EditorResult keyboardStatus = EditorAccess::status(context);
+  LOKA_VERIFY(keyboard == LineCursor(f.facts.lines.at(1).id, 4));
+  SendMessageW(hwnd, EM_SETSEL, 0, 0);
+  SendMessageW(hwnd, WM_KEYDOWN, VK_HOME, 0);
+  LOKA_VERIFY(f.facts.cursor.state()->get() != keyboard);
+  f.dispatch(EDIT_SELECT_ALL);
+  LOKA_VERIFY(f.facts.cursor.state()->get() == keyboard);
+  LOKA_VERIFY(EditorAccess::status(context) == keyboardStatus && keyboardStatus == EDITOR_OK);
+  selectionIs(hwnd, 0, 11);
+  SendMessageW(hwnd, EM_SETSEL, 1, 2);
+  EditorAccess::status(context, EDITOR_UNAVAILABLE);
+  LOKA_VERIFY(f.window.handleEditCommand(EDIT_SELECT_ALL));
+  selectionIs(hwnd, 1, 2);
+  f.dispatch(EDIT_SELECT_ALL);
+  selectionIs(hwnd, 1, 2);
+  LOKA_VERIFY(f.calls == 0);
+  EditorAccess::status(context, EDITOR_OK);
+}
+
+void testWin32EditMenuPasteShortcut()
+{
+  EditFixture f(true);
+  if (!f.focus(2) || !putClipboard(f.window.hwnd(), L"once"))
+    return;
+  SendMessageW(f.edit(2), EM_SETSEL, 0, -1);
+  ControlKey control;
+  MSG message = keyMessage(f.window.hwnd(), 'V');
+  LOKA_VERIFY(f.window.menuAttachment().translateAccelerator(message));
+  pumpCommands(f.window.hwnd());
+  LOKA_VERIFY(f.facts.lines.size() == 1 && f.facts.lines.at(0).value.equals(String("once")));
+  LOKA_VERIFY(f.calls == 0);
+}
+
+namespace
+{
+  struct EditReentry
+  {
+    EditFixture &fixture;
+    const bool retire;
+    unsigned calls;
+    EditReentry(EditFixture &f, bool r)
+        : fixture(f),
+          retire(r),
+          calls(0)
+    {
+    }
+    static void moved(void *data)
+    {
+      EditReentry &self = *static_cast<EditReentry *>(data);
+      ++self.calls;
+      LOKA_VERIFY(self.fixture.window.scene()->isBorrowOpen());
+      Node *node = self.fixture.field(2);
+      const HWND hwnd = self.fixture.edit(2);
+      if (self.retire)
+      {
+        // syncCaret publishes after EM_SETSEL returns, inside the input borrow.
+        // Request structural removal through the Scene's ordinary Show seat.
+        EditRoot &root =
+            *static_cast<EditRoot *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*self.fixture.window.scene()));
+        root.editorShown.set(false);
+        self.fixture.admission.flush();
+        LOKA_VERIFY(self.fixture.window.scene()->isBorrowOpen());
+        LOKA_VERIFY(self.fixture.field(2) == node && node->getContext());
+        LOKA_VERIFY(IsWindow(hwnd) && Win32FocusParticipant::read(hwnd));
+      }
+      else
+      {
+        // The cursor subscriber runs in COMMIT. A nested Select All must be
+        // handled without touching the native selection or invoking fallback.
+        const LRESULT before = SendMessageW(hwnd, EM_GETSEL, 0, 0);
+        LOKA_VERIFY(self.fixture.window.handleEditCommand(EDIT_SELECT_ALL));
+        LOKA_VERIFY(SendMessageW(hwnd, EM_GETSEL, 0, 0) == before);
+      }
+    }
+  };
+} // namespace
+
+void testWin32EditMenuSelectAllReentry()
+{
+  for (unsigned mode = 0; mode != 2; ++mode)
+  {
+    EditFixture f;
+    if (!f.focus(2))
+      continue;
+    const HWND hwnd = f.edit(2);
+    NodeContext *const context = f.field(2)->getContext();
+    EditReentry probe(f, mode != 0);
+    f.facts.cursor.state()->bind(&EditReentry::moved, &probe, false);
+    f.dispatch(EDIT_SELECT_ALL);
+    f.facts.cursor.state()->unbind(&EditReentry::moved, &probe);
+    LOKA_VERIFY(probe.calls == 1 && f.calls == 0);
+    LOKA_VERIFY(!f.window.scene()->isBorrowOpen());
+    if (mode != 0)
+    {
+      // BorrowScope exit does not pump: the pending seat still owns its editor.
+      LOKA_VERIFY(f.field(2)->getContext() == context);
+      LOKA_VERIFY(IsWindow(hwnd) && Win32FocusParticipant::read(hwnd));
+      f.admission.flush();
+      // Only inspect the surviving tree and native handle after reclamation.
+      Node *arm = f.field(1)->nextInComposition;
+      LOKA_VERIFY(arm && arm->asNestable());
+      LOKA_VERIFY(!arm->asNestable()->childrenHead());
+      LOKA_VERIFY(!IsWindow(hwnd));
+    }
   }
 }

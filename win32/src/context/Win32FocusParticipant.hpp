@@ -25,6 +25,15 @@ public:
     return 0;
   }
 
+  /** Resolves only this root's marked target, with both identities agreeing. */
+  static loka::app::scene::NodeContext *attachedTarget(HWND root, HWND hwnd)
+  {
+    if (!hwnd || !IsChild(root, hwnd))
+      return 0;
+    loka::app::scene::NodeContext *const context = read(hwnd);
+    return context && target(context) == hwnd ? context : 0;
+  }
+
   static bool attach(HWND hwnd, loka::app::scene::NodeContext *context)
   {
     return SetPropW(hwnd, name(), context) != FALSE;

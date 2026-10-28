@@ -54,6 +54,12 @@ public:
   {
     Invocation(*c.controller())(c, &Win32TextEditorContext::handleRestoreTimer);
   }
+  static bool editCommand(Win32Window &w, loka::app::EditVerb verb)
+  {
+    if (!w.scenePlatformController_)
+      return false;
+    return Invocation(*w.scenePlatformController_)(w, &Win32Window::handleEditCommandInput, verb);
+  }
   static void windowSize(Win32Window &w, WPARAM wp, LPARAM lp)
   {
     Invocation(*w.scenePlatformController_)(w, &Win32Window::handleNativeSize, wp, lp);

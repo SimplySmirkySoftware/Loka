@@ -45,6 +45,10 @@ protected:
 
 private:
   friend class Win32InputDoor;
+  friend class Win32Window;
+  void selectAll();
+  struct NativeInput;
+  LRESULT performInput(const NativeInput &input);
   bool handleCommand(WPARAM wParam, LPARAM lParam);
   friend class loka::testing::Win32TextEditorAccess;
   enum Phase

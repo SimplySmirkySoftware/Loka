@@ -1947,7 +1947,7 @@ bool Win32ScenePlatformController::applyNativeFocus(loka::app::scene::NodeContex
   if (!loka::app::scene::IsAttachedCurrentContext(&ctx))
     return false;
   const HWND hwnd = Win32FocusParticipant::target(&ctx);
-  if (!hwnd || !IsChild(this->rootHwnd_, hwnd) || Win32FocusParticipant::read(hwnd) != &ctx)
+  if (Win32FocusParticipant::attachedTarget(this->rootHwnd_, hwnd) != &ctx)
     return false;
   // IME commit on kill-focus can run the Scene and free ctx: after SetFocus only
   // the copied HWND is compared. Its return is the previous handle, not success.
