@@ -65,6 +65,8 @@ LOKA_TEST(testMacTextEditorPageCommands)
 LOKA_TEST(testMacTextEditorPageGeometryDeclinesWrappedLine)
 LOKA_TEST(testMacTextEditorPagePriority)
 LOKA_TEST(testMacTextEditorPageAfterFailedReconciliation)
+LOKA_TEST(testMacTextEditorPageReconciliationFailsInsideTake)
+LOKA_TEST(testMacTextEditorPageGeometryFollowsReconciliation)
 LOKA_TEST(testMacTextEditorPageEmptyLine)
 LOKA_TEST(testMacTextEditorPageBindingReplacement)
 
