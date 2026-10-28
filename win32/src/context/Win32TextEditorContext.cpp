@@ -50,9 +50,6 @@ Win32TextEditorContext::Projection::Projection()
       text(),
       wide()
 {
-  // Fixed reservation until the native-capacity PR; matches Win32PlatformContext query.
-  this->text.reserve(8192);
-  this->wide.reserve(8192 + 256);
 }
 bool Win32TextEditorContext::Projection::current(const TextEditorNode &node) const
 {
@@ -67,7 +64,14 @@ EditorResult Win32TextEditorContext::Projection::capture(TextEditorNode &node, c
   if (this->current(node))
     return EDITOR_OK;
   this->owner = 0;
+  // project() reserves text for the measured document; the wide buffer follows
+  // that length plus one UTF-16 unit per logical CR projected as CRLF.
   const EditorResult result = node.seam(key).project(this->text);
+  if (result == EDITOR_OK)
+  {
+    const unsigned short rows = node.props.buffer_->lines().size();
+    this->wide.reserve(this->text.size() + (rows ? rows - 1 : 0));
+  }
   if (result != EDITOR_OK || !loka::win32::TextEditorToWide(this->text, this->wide))
   {
     this->text.clear();

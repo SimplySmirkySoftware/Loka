@@ -10,6 +10,7 @@ namespace loka
     namespace testing
     {
       bool refuseTextPayloadAllocation();
+      void observeProjectionReservation(std::size_t bytes);
     }
   } // namespace app
 } // namespace loka
@@ -137,6 +138,12 @@ namespace loka
       EditorResult result = this->measure(bytes);
       if (result != EDITOR_OK)
         return result;
+      // One reservation for the measured length: the rows append without regrowth.
+      // A rail that re-encodes the projection reserves its own buffer from out.size().
+      out.reserve(bytes);
+#ifdef TEST_BUILD
+      testing::observeProjectionReservation(out.capacity());
+#endif
       for (unsigned short i = 0; i < this->props_.buffer_->lines().size(); ++i)
       {
         const LineBytes line(this->props_.buffer_->lines().at(i).value, this->props_.buffer_->capacity());

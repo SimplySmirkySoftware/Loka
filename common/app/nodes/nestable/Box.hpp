@@ -167,7 +167,7 @@ namespace loka
       /** Clips children at this box's own rect. With a positive width offer,
           reports no more than that width; a nonpositive offer keeps its natural width.
           Fixed when the box is created; switch with Match / Show arms or Keyed.
-          Toolbox clips; macOS and Win32 do not clip yet. */
+          Toolbox and macOS clip; Win32 does not clip yet. */
       BoxDefinition &clipChildren()
       {
         this->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;

@@ -11,6 +11,7 @@
 #include "MacCardPainterTests.hpp"
 #include "MacRelayoutDisplayTests.hpp"
 #include "MacZStackUnitTests.hpp"
+#include "MacClipBoxTests.hpp"
 #include "MacTextColorTests.hpp"
 #endif
 #include "NativeResourceRetirementTests.hpp"

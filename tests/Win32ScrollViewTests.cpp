@@ -1,3 +1,7 @@
+#include "app/nodes/boundary/StdComposition.hpp"
+#include "app/nodes/nestable/ScrollViewSettlement.hpp"
+#include "support/Headless.hpp"
+#include "Win32InputDoor.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "Win32ScrollViewTests.hpp"
 
@@ -1573,4 +1577,659 @@ void testWin32ScrollViewInsetBarTinyAndFractionalSeat()
     controller.drainNativeRetirements();
   }
   LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using loka::core::Frame;
+  typedef loka::app::testing::SettleTrace<ScrollTarget, Frame> ScrollTrace;
+
+  class ScrollRequestStorage : private HeadlessStateOwner
+  {
+  public:
+    NodeState<Frame> viewport;
+    Request<ScrollTarget> request;
+    explicit ScrollRequestStorage(bool immediate = true, int x = 0)
+    {
+      if (immediate)
+      {
+        StateBatchBase::CreateImmediateState(this, this->viewport, Frame(x, 0, 0, 0));
+        StateBatchBase::CreateImmediateState(this, this->request, ScrollTarget::None());
+      }
+    }
+  };
+
+  struct ScrollValues
+  {
+    NodeState<Frame> &fact;
+    std::vector<Frame> values;
+    explicit ScrollValues(NodeState<Frame> &value)
+        : fact(value)
+    {
+      this->fact.state()->bind(&changed, this, false);
+    }
+    ~ScrollValues()
+    {
+      this->fact.state()->unbind(&changed, this);
+    }
+    static void changed(void *data)
+    {
+      ScrollValues &self = *static_cast<ScrollValues *>(data);
+      self.values.push_back(self.fact.get());
+    }
+  };
+
+  struct ScrollRequestHost
+  {
+    HWND host;
+    ScrollRequestHost()
+        : host(createHostWindow())
+    {
+      LOKA_VERIFY(this->host);
+    }
+    ~ScrollRequestHost()
+    {
+      LOKA_VERIFY(DestroyWindow(this->host));
+    }
+  };
+
+  struct ScrollRequestFixture : ScrollRequestHost
+  {
+    ScrollRequestStorage storage;
+    Win32ScenePlatformController controller;
+    ScrollViewNode node;
+    BoxNode *content;
+    ScrollValues observed;
+    ScrollRequestFixture(int width = 600, int height = 700, int initialX = 0, int top = 0)
+        : storage(true, initialX),
+          controller(host, loka::win32::Win32DisplayScale(96, RailMetrics())),
+          node(ScrollViewProps(storage.viewport)
+                   .scrollTo(storage.request)
+                   .contentInsets(ScrollViewContentInsets::of(top, 0))),
+          content(new BoxNode(Box().width(width).height(height).props)),
+          observed(storage.viewport)
+    {
+      LOKA_VERIFY(this->host);
+      RegisterWin32BuiltInSupport(this->controller);
+      this->node.addChild(this->content);
+      this->controller.onChange(&this->node, NODE_DIRTY_NONE, false);
+      ScrollTrace::instance().clear();
+    }
+    ~ScrollRequestFixture()
+    {
+      loka::win32::testing::failScrollInfoReads(0);
+      loka::win32::testing::failNativeChildWindowCreations(0);
+      this->controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    void visit(int height = 160)
+    {
+      this->controller.relayout(300, height == 0 ? 2 * Win32SceneLayout::kRootInset : height);
+    }
+    HWND viewport() const
+    {
+      return findChildWindowByClass(this->host, L"LOKA_SCROLL_VIEW");
+    }
+    Win32ScrollViewContext &context()
+    {
+      return *static_cast<Win32ScrollViewContext *>(this->node.getContext());
+    }
+    void post(int x, int y)
+    {
+      this->observed.values.clear();
+      ScrollTrace::instance().clear();
+      this->storage.request.set(ScrollTarget::Origin(x, y));
+    }
+    void result(ScrollRequestResult expected)
+    {
+      LOKA_VERIFY(this->storage.request.get().isNone());
+      LOKA_VERIFY(ScrollTrace::instance().size() != 0);
+      const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &row =
+          ScrollTrace::instance().at(ScrollTrace::instance().size() - 1);
+      LOKA_VERIFY(row.count == 1 && row.seam[0] == expected);
+    }
+  };
+} // namespace
+
+void testWin32ScrollRequestBothAxesAndNoEcho()
+{
+  ScrollRequestFixture f(600, 700, 0, 12);
+  f.visit();
+  f.post(30, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.observed.values.size() == 1);
+  LOKA_VERIFY(f.observed.values[0].x == 30 && f.observed.values[0].y == 40);
+  LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == 30);
+  LOKA_VERIFY(scrollInfo(f.viewport()).nPos == 40 + 12);
+  LOKA_VERIFY(Win32InputDoor::scroll(f.context(), SB_VERT, SB_ENDSCROLL, 0));
+  LOKA_VERIFY(f.observed.values.size() == 1);
+  LOKA_VERIFY(Win32InputDoor::scroll(f.context(), SB_VERT, SB_LINEDOWN, 0));
+  LOKA_VERIFY(f.observed.values.size() == 2);
+  LOKA_VERIFY(f.observed.values[1].x == 30 && f.observed.values[1].y == 56);
+  f.visit();
+  f.post(30, 56);
+  loka::win32::testing::failScrollInfoReads(1);
+  f.visit(); // Equal target selects no axis and performs no read.
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.observed.values.empty());
+  loka::win32::testing::failScrollInfoReads(0);
+}
+
+void testWin32ScrollRequestClampReadBack()
+{
+  ScrollRequestFixture f;
+  f.visit();
+  f.post(30000, 30000);
+  f.visit();
+  f.result(SCROLL_OK);
+  const SCROLLINFO x = scrollInfo(f.viewport(), SB_HORZ), y = scrollInfo(f.viewport());
+  LOKA_VERIFY(f.observed.values.size() == 1);
+  LOKA_VERIFY(f.observed.values[0].x == maximumOffset(x) && f.observed.values[0].y == maximumOffset(y));
+  LOKA_VERIFY(x.nPos == maximumOffset(x) && y.nPos == maximumOffset(y));
+}
+
+void testWin32ScrollRequestReadFailures()
+{
+  // Both pre-reads precede both setters; either read-back failure reports nothing.
+  for (unsigned skip = 0; skip != 4; ++skip)
+  {
+    ScrollRequestFixture f;
+    f.visit();
+    const Frame before = f.storage.viewport.get();
+    f.post(30, 40);
+    loka::win32::testing::failScrollInfoReads(1, skip);
+    f.visit();
+    f.result(SCROLL_UNAVAILABLE);
+    LOKA_VERIFY(f.observed.values.empty() && f.storage.viewport.get() == before);
+    LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == (skip < 2 ? 0 : 30));
+    LOKA_VERIFY(scrollInfo(f.viewport()).nPos == (skip < 2 ? 0 : 40));
+    f.visit();
+    LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == 0 && scrollInfo(f.viewport()).nPos == 0);
+    LOKA_VERIFY(f.observed.values.empty());
+  }
+}
+
+void testWin32ScrollRequestAbsentAxesAndHeightless()
+{
+  for (int heightless = 0; heightless != 2; ++heightless)
+  {
+    ScrollRequestFixture f(heightless ? 600 : 20);
+    const int height = heightless ? 0 : 160;
+    f.visit(height);
+    const Frame before = f.storage.viewport.get();
+    f.post(30, 0);
+    f.visit(height);
+    f.result(SCROLL_UNAVAILABLE);
+    LOKA_VERIFY(f.storage.viewport.get() == before && f.observed.values.empty());
+    f.post(0, 40);
+    f.visit(height);
+    f.result(SCROLL_OK);
+    LOKA_VERIFY(f.storage.viewport.get().x == 0 && f.storage.viewport.get().y == 40);
+  }
+}
+
+void testWin32ScrollRequestHeightlessKeepsUnmovedX()
+{
+  ScrollRequestFixture f(600, 700, 20);
+  f.visit(0);
+  LOKA_VERIFY(f.storage.viewport.get().x == 20);
+  LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == 0);
+  f.post(20, 40);
+  f.visit(0);
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.observed.values.size() == 1);
+  LOKA_VERIFY(f.observed.values[0].x == 20 && f.observed.values[0].y == 40);
+}
+
+void testWin32ScrollRequestZeroRange()
+{
+  ScrollRequestFixture f(20, 10);
+  f.visit();
+  const Frame before = f.storage.viewport.get();
+  LOKA_VERIFY(maximumOffset(scrollInfo(f.viewport())) == 0);
+  f.post(0, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.storage.viewport.get() == before && f.observed.values.empty());
+}
+
+void testWin32ScrollRequestRefusedVisits()
+{
+  {
+    ScrollRequestFixture f(20, SHRT_MAX, 0, 1);
+    f.post(0, 40);
+    f.visit();
+    f.result(SCROLL_UNAVAILABLE);
+    LOKA_VERIFY(f.observed.values.empty());
+  }
+  {
+    ScrollRequestFixture f;
+    f.post(0, 40);
+    loka::win32::testing::failNativeChildWindowCreations(1);
+    f.visit();
+    f.result(SCROLL_UNAVAILABLE);
+    LOKA_VERIFY(!f.node.getContext() && f.observed.values.empty());
+  }
+  {
+    // The inner boxes outlive the fixture that owns the nested node borrowing them.
+    ScrollRequestStorage inner;
+    ScrollRequestFixture f;
+    ScrollViewNode *nested = new ScrollViewNode(ScrollViewProps(inner.viewport).scrollTo(inner.request));
+    f.node.addChild(nested);
+    inner.request.set(ScrollTarget::Origin(0, 40));
+    f.visit();
+    LOKA_VERIFY(inner.request.get().isNone() && inner.viewport.get() == Frame(0, 0, 0, 0));
+    LOKA_VERIFY(!nested->getContext());
+    LOKA_VERIFY(ScrollTrace::instance().size() != 0);
+    LOKA_VERIFY(ScrollTrace::instance().at(0).seam[0] == SCROLL_UNAVAILABLE);
+  }
+}
+
+void testWin32ScrollViewSettledInputSequences()
+{
+  // Characterization uses only pre-PR-3 APIs, so it also runs at 904b823b.
+  HWND host = createHostWindow();
+  LOKA_VERIFY(host);
+  {
+    Win32ScenePlatformController controller(host, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    ViewportFact fact(0);
+    ScrollViewNode node((ScrollViewProps(fact.state())));
+    node.addChild(new BoxNode(Box().width(2000).height(2000).props));
+    establishLayout(controller, &node, 300, 160);
+    ScrollValues observed(fact.state());
+    Win32ScrollViewContext &context = *static_cast<Win32ScrollViewContext *>(node.getContext());
+    const int page = static_cast<int>(scrollInfo(context.viewportHwnd()).nPage);
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_LINEDOWN, 0));
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_PAGEDOWN, 0));
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_THUMBTRACK, 200));
+    LOKA_VERIFY(observed.values.size() == 2);
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_THUMBPOSITION, 200));
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_THUMBTRACK, 240));
+    LOKA_VERIFY(observed.values.size() == 3);
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_ENDSCROLL, 0));
+    LOKA_VERIFY(Win32InputDoor::scroll(context, SB_VERT, SB_ENDSCROLL, 0));
+    LOKA_VERIFY(observed.values.size() == 4);
+    const int expected[] = {16, 16 + page, 200, 240};
+    for (unsigned i = 0; i != 4; ++i)
+      LOKA_VERIFY(observed.values[i].x == 0 && observed.values[i].y == expected[i]);
+    for (int axis = 0; axis != 2; ++axis)
+    {
+      const int bar = axis == 0 ? SB_VERT : SB_HORZ;
+      UINT lines = 3;
+      if (!SystemParametersInfoW(axis == 0 ? SPI_GETWHEELSCROLLLINES : 0x006C, 0, &lines, 0))
+        lines = 3;
+      const bool pages = lines == WHEEL_PAGESCROLL;
+      const UINT steps = pages ? 1 : lines;
+      if (steps < 2)
+        std::printf("[skip] wheel per-step mutation discrimination on axis %d: system steps=%u\n", bar, steps);
+      const SCROLLINFO info = scrollInfo(context.viewportHwnd(), bar);
+      int position = axis == 0 ? 240 : 0;
+      const int step = pages ? static_cast<int>(info.nPage) : 16;
+      std::vector<int> sequence;
+      for (UINT i = 0; i != steps; ++i)
+      {
+        const int next = position + step > maximumOffset(info) ? maximumOffset(info) : position + step;
+        if (next != position)
+          sequence.push_back(next);
+        position = next;
+      }
+      observed.values.clear();
+      Win32InputDoor::mouseWheel(
+          context, bar, MAKEWPARAM(0, static_cast<WORD>(axis == 0 ? -WHEEL_DELTA : WHEEL_DELTA)));
+      LOKA_VERIFY(observed.values.size() == sequence.size());
+      for (std::size_t i = 0; i != sequence.size(); ++i)
+        LOKA_VERIFY((axis == 0 ? observed.values[i].y : observed.values[i].x) == sequence[i]);
+    }
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  LOKA_VERIFY(DestroyWindow(host));
+}
+
+namespace
+{
+  class ScrollRoot;
+  struct ScrollRootProps : NodePropsBase<ScrollRootProps>
+  {
+    typedef ScrollRoot NodeType;
+    struct TypeTag
+    {
+    };
+    ScrollRequestStorage *storage;
+    explicit ScrollRootProps(ScrollRequestStorage *value = 0)
+        : storage(value)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      return this->storage < static_cast<const ScrollRootProps &>(rhs).storage;
+    }
+  };
+  class ScrollRoot : public StdCompositionBoundaryNodeBase<ScrollRootProps>
+  {
+  public:
+    explicit ScrollRoot(const ScrollRootProps &props)
+        : StdCompositionBoundaryNodeBase<ScrollRootProps>(props)
+    {
+      this->state(this->props.storage->viewport, Frame());
+      this->state(this->props.storage->request, ScrollTarget::None());
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(
+          ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
+          << Box().width(400).height(500));
+    }
+  };
+  class ScrollSceneController : public Win32ScenePlatformController
+  {
+  public:
+    unsigned focusReads;
+    bool project;
+    explicit ScrollSceneController(HWND host, bool initialProjection = true)
+        : Win32ScenePlatformController(host, loka::win32::Win32DisplayScale(96, RailMetrics())),
+          focusReads(0),
+          project(initialProjection)
+    {
+      RegisterWin32BuiltInSupport(*this);
+    }
+    virtual void onChange(Node *root, NodeDirtyFlags flags, bool full)
+    {
+      Win32ScenePlatformController::onChange(root, this->project ? flags : NODE_DIRTY_NONE, full);
+    }
+    virtual void onBoundaryApply(Node *root,
+                                 BoundaryNode *boundary,
+                                 const BoundaryLocalApplyInfo &info,
+                                 const PlatformApplyPlan &plan)
+    {
+      Win32ScenePlatformController::onBoundaryApply(root, boundary, info, plan);
+      if (this->project && (info.hasLayoutWork || plan.hasLayoutWork()))
+        this->relayout(0, 0);
+    }
+    virtual bool readNativeFocus(NodeContext *&out)
+    {
+      ++this->focusReads;
+      out = 0;
+      return true;
+    }
+  };
+  class ScrollLogicalWindow : public Window
+  {
+
+  public:
+    unsigned syncs, admissions, drains;
+    ScrollLogicalWindow(ScrollRequestStorage &storage)
+        : Window(0, WindowProps().scene(new Scene(Boundary<ScrollRoot>(ScrollRootProps(&storage))))),
+          syncs(0),
+          admissions(0),
+          drains(0)
+    {
+    }
+    virtual ~ScrollLogicalWindow()
+    {
+      this->unmountSceneForTeardown(*this->scene());
+    }
+    virtual bool hasLiveScenePlatform() const
+    {
+      return true;
+    }
+    virtual void applyNativeVisibility()
+    {
+      ++this->admissions;
+    }
+    virtual bool hasPendingScenePlatformSync() const
+    {
+      return true;
+    }
+    virtual void synchronizeScenePlatform()
+    {
+      ++this->syncs;
+    }
+    virtual void drainNativeRetirements()
+    {
+      ++this->drains;
+    }
+  };
+  struct ScrollSceneFixture : ScrollRequestHost
+  {
+    ScrollRequestStorage storage;
+    ScrollSceneController controller;
+    ScrollLogicalWindow window;
+    WindowAdmissionTestApp app;
+    unsigned callbacks;
+    bool probe, expectRun;
+    ScrollSceneFixture()
+        : storage(false),
+          controller(host),
+          window(storage),
+          app(window),
+          callbacks(0),
+          probe(false),
+          expectRun(false)
+    {
+      LOKA_VERIFY(window.scene()->mount(&controller));
+      app.flush();
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+      app.flush();
+      while (window.scene()->hasPendingInvalidation())
+        LOKA_VERIFY(window.scene()->flushInvalidation());
+      storage.viewport.state()->bind(&changed, this, false);
+    }
+    ~ScrollSceneFixture()
+    {
+      storage.viewport.state()->unbind(&changed, this);
+    }
+    static void changed(void *data)
+    {
+      ScrollSceneFixture &f = *static_cast<ScrollSceneFixture *>(data);
+      ++f.callbacks;
+      if (!f.probe)
+        return;
+      LOKA_VERIFY(f.controller.borrowPhase().open());
+      LOKA_VERIFY(f.window.scene()->isRunInProgress() == f.expectRun);
+      const unsigned syncs = f.window.syncs, drains = f.window.drains;
+      const unsigned admissions = f.window.admissions, focus = f.controller.focusReads;
+      f.window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!f.window.scene()->flushInvalidation());
+      LOKA_VERIFY(!f.window.flushSceneInvalidation());
+      f.app.admitAndApplyWindows();
+      f.app.reconcileFocus();
+      LOKA_VERIFY(f.window.syncs == syncs && f.window.drains == drains);
+      LOKA_VERIFY(f.window.admissions == admissions && f.controller.focusReads == focus);
+    }
+    void ordinaryFlush()
+    {
+      const unsigned syncs = window.syncs, drains = window.drains;
+      const unsigned admissions = window.admissions, focus = controller.focusReads;
+      app.flush();
+      app.reconcileFocus();
+      LOKA_VERIFY(window.syncs > syncs && window.drains > drains);
+      LOKA_VERIFY(window.admissions > admissions && controller.focusReads > focus);
+      LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+    }
+  };
+  void sceneBorrow(bool probe)
+  {
+    ScrollSceneFixture f;
+    f.expectRun = true;
+    f.probe = probe;
+    f.storage.request.set(ScrollTarget::Origin(25, 40));
+    while (f.window.scene()->hasPendingInvalidation())
+      LOKA_VERIFY(f.window.scene()->flushInvalidation());
+    LOKA_VERIFY(f.storage.request.get().isNone());
+    LOKA_VERIFY(f.storage.viewport.get().x == 25 && f.storage.viewport.get().y == 40);
+    LOKA_VERIFY(f.callbacks == 1);
+    f.probe = false;
+    f.ordinaryFlush();
+  }
+  struct MountProbe
+  {
+    Scene &scene;
+    ScrollSceneController &controller;
+    unsigned calls;
+    MountProbe(Scene &s, ScrollSceneController &c)
+        : scene(s),
+          controller(c),
+          calls(0)
+    {
+    }
+    static void changed(void *data)
+    {
+      MountProbe &p = *static_cast<MountProbe *>(data);
+      ++p.calls;
+      LOKA_VERIFY(p.controller.borrowPhase().open() && !p.scene.isRunInProgress());
+      p.scene.requestInvalidate(NODE_DIRTY_LAYOUT);
+      LOKA_VERIFY(!p.scene.flushInvalidation());
+    }
+  };
+  void deferredMount()
+  {
+    ScrollRequestStorage storage(false);
+    ScrollRequestHost native;
+    ScrollSceneController controller(native.host, false);
+    ScrollLogicalWindow window(storage);
+    WindowAdmissionTestApp app(window);
+    LOKA_VERIFY(window.scene()->mount(&controller));
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    MountProbe probe(*window.scene(), controller);
+    storage.viewport.state()->bind(&MountProbe::changed, &probe, false);
+    controller.project = true;
+    // Win32 onChange projects the mounted tree outside a Scene run as well.
+    controller.onChange(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), NODE_DIRTY_LAYOUT, false);
+    LOKA_VERIFY(probe.calls == 1);
+    LOKA_VERIFY(window.scene()->hasPendingInvalidation() && !controller.borrowPhase().open());
+    storage.viewport.state()->unbind(&MountProbe::changed, &probe);
+    app.flush();
+    LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+  }
+} // namespace
+
+void testWin32ScrollRequestSceneBorrow()
+{
+  sceneBorrow(true);
+}
+void testWin32ScrollRequestDeferredMount()
+{
+  deferredMount();
+}
+
+namespace
+{
+  struct NativeScrollStorage : ScrollRequestStorage
+  {
+    NodeState<Frame> followingExtent;
+    NativeScrollStorage()
+        : ScrollRequestStorage(false)
+    {
+    }
+  };
+  class NativeScrollRoot;
+  struct NativeScrollProps : NodePropsBase<NativeScrollProps>
+  {
+    typedef NativeScrollRoot NodeType;
+    struct TypeTag
+    {
+    };
+    NativeScrollStorage *storage;
+    explicit NativeScrollProps(NativeScrollStorage *value = 0)
+        : storage(value)
+    {
+    }
+    bool operator<(const PropsBase &rhs) const
+    {
+      return this->storage < static_cast<const NativeScrollProps &>(rhs).storage;
+    }
+  };
+  class NativeScrollRoot : public StdCompositionBoundaryNodeBase<NativeScrollProps>
+  {
+  public:
+    explicit NativeScrollRoot(const NativeScrollProps &props)
+        : StdCompositionBoundaryNodeBase<NativeScrollProps>(props)
+    {
+      this->state(this->props.storage->viewport, Frame());
+      this->state(this->props.storage->request, ScrollTarget::None());
+      this->state(this->props.storage->followingExtent, Frame());
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(
+          VStack() << (ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
+                       << Box().width(2000).height(2000))
+                   << RectSurface().laidOutExtent(this->props.storage->followingExtent));
+    }
+  };
+  struct NativeScrollProbe
+  {
+    Win32ScenePlatformController &controller;
+    NativeScrollStorage &storage;
+    unsigned visits, following;
+    NativeScrollProbe(Win32ScenePlatformController &c, NativeScrollStorage &s)
+        : controller(c),
+          storage(s),
+          visits(0),
+          following(0)
+    {
+    }
+    static void viewport(void *data)
+    {
+      NativeScrollProbe &p = *static_cast<NativeScrollProbe *>(data);
+      ++p.visits;
+      LOKA_VERIFY(p.controller.borrowPhase().open());
+    }
+    static void afterVisit(void *data)
+    {
+      NativeScrollProbe &p = *static_cast<NativeScrollProbe *>(data);
+      ++p.following;
+      // This sibling publishes after the ScrollView arm's visit scope has closed.
+      LOKA_VERIFY(p.controller.borrowPhase().open());
+      LOKA_VERIFY(p.storage.request.get().isNone());
+      LOKA_VERIFY(p.storage.viewport.get().x == 30 && p.storage.viewport.get().y == 40);
+    }
+  };
+} // namespace
+
+void testWin32ScrollRequestNativeSizeOuterBorrow()
+{
+  NativeScrollStorage storage;
+  NullPlatformContext platform;
+  Win32Window window(&platform,
+                     WindowProps()
+                         .frame(50, 50, 360, 260)
+                         .visible(true)
+                         .scene(new Scene(Boundary<NativeScrollRoot>(NativeScrollProps(&storage)))));
+  WindowAdmissionTestApp app(window);
+  app.flush();
+  Win32ScenePlatformController *controller = static_cast<Win32ScenePlatformController *>(
+      loka::dsl::testing::SceneTestAccess::platformController(*window.scene()));
+  LOKA_VERIFY(controller && window.hwnd());
+  {
+    BorrowScope posting(*controller);
+    storage.request.set(ScrollTarget::Origin(30, 40));
+  }
+  LOKA_VERIFY(!storage.request.get().isNone());
+  NativeScrollProbe probe(*controller, storage);
+  storage.viewport.state()->bind(&NativeScrollProbe::viewport, &probe, false);
+  storage.followingExtent.state()->bind(&NativeScrollProbe::afterVisit, &probe, false);
+  SendMessageW(window.hwnd(), WM_SIZE, SIZE_RESTORED, MAKELPARAM(480, 320));
+  LOKA_VERIFY(probe.visits > 0 && probe.following == 1);
+  LOKA_VERIFY(storage.request.get().isNone() && !controller->borrowPhase().open());
+  storage.viewport.state()->unbind(&NativeScrollProbe::viewport, &probe);
+  storage.followingExtent.state()->unbind(&NativeScrollProbe::afterVisit, &probe);
+  app.flush();
+}
+
+void testWin32ScrollRequestFirstVisit()
+{
+  ScrollRequestFixture f;
+  LOKA_VERIFY(!f.node.getContext());
+  f.post(30, 40);
+  f.visit();
+  f.result(SCROLL_OK);
+  LOKA_VERIFY(f.observed.values.size() == 2);
+  LOKA_VERIFY(f.observed.values[0].x == 0 && f.observed.values[0].y == 0);
+  LOKA_VERIFY(f.observed.values[1].x == 30 && f.observed.values[1].y == 40);
+  LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == 30 && scrollInfo(f.viewport()).nPos == 40);
 }

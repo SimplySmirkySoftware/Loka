@@ -16,6 +16,14 @@ namespace loka
       {
         return context.key_;
       }
+      static const std::string &projectedText(const Win32TextEditorContext &context)
+      {
+        return context.projection_.text;
+      }
+      static const std::wstring &projectedWide(const Win32TextEditorContext &context)
+      {
+        return context.projection_.wide;
+      }
       static unsigned restores(const Win32TextEditorContext &context)
       {
         return context.restores_;
