@@ -21,12 +21,14 @@ void ToolboxScenePlatformController::commitScrollBarValueAt(std::size_t index)
   }
   // Copy out before the batch: publishing re-enters projection, which can
   // reallocate scrollBarControls_ underneath this reference.
-  const Rect rect = binding.rect;
+  Rect rect;
+  const bool visible = binding.placement.queryVisible(rect);
   loka::core::EmitterState *onChange = binding.onChange;
   binding.appliedValue = settled;
 
   beginBatchUpdate();
-  addPendingDirty(rect);
+  if (visible)
+    addPendingDirty(rect);
   // The write enters the window tracker's transaction the way handleTextKey
   // already does for typing: a settled value is scene input, and dependent
   // state resolves in the same transaction rather than at whatever tick

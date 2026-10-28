@@ -1218,15 +1218,16 @@ namespace
       LOKA_VERIFY(binding.contentRect.left == (i == 1 ? 12 : 0) && binding.contentRect.top == (i == 1 ? 12 : 0));
       LOKA_VERIFY(binding.contentRect.right == (i == 1 ? 332 : 345));
       LOKA_VERIFY(binding.contentRect.bottom == (i == 1 ? 248 : i == 2 ? 245 : 260));
-      LOKA_VERIFY(bar.rect.left == (i == 1 ? 332 : 345) && bar.rect.right == (i == 1 ? 348 : 361));
-      LOKA_VERIFY(bar.rect.bottom == 246 && bar.rect.top == (i == 1 ? 12 : -1));
+      LOKA_VERIFY(bar.placement.full().left == (i == 1 ? 332 : 345)
+                  && bar.placement.full().right == (i == 1 ? 348 : 361));
+      LOKA_VERIFY(bar.placement.full().bottom == 246 && bar.placement.full().top == (i == 1 ? 12 : -1));
       LOKA_VERIFY(bar.maximum == (i == 1 ? 264 : i == 2 ? 255 : 240));
       LOKA_VERIFY(bar.pageStep == (i == 1 ? 235 : i == 2 ? 244 : 259));
       if (i == 2)
       {
         const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
-        LOKA_VERIFY(horizontal.rect.left == -1 && horizontal.rect.top == 245);
-        LOKA_VERIFY(horizontal.rect.right == 346 && horizontal.rect.bottom == 261);
+        LOKA_VERIFY(horizontal.placement.full().left == -1 && horizontal.placement.full().top == 245);
+        LOKA_VERIFY(horizontal.placement.full().right == 346 && horizontal.placement.full().bottom == 261);
         LOKA_VERIFY(horizontal.maximum == 55 && horizontal.pageStep == 344);
       }
       f.controller.releaseNodeContexts(&root);

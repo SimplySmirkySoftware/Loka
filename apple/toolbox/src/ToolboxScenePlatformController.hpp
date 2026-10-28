@@ -310,7 +310,7 @@ private:
         Three sites in one dance, which is why the bit gets a sentence the
         name alone cannot carry. */
     bool usedThisFrame;
-    Rect rect;
+    ToolboxNativePlacement placement;
     std::string label;
     loka::app::scene::NativeLifetimeHint lifetimeHint;
   };

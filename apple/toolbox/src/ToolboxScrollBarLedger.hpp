@@ -9,6 +9,7 @@
 #include "app/layout/StackSpans.hpp"
 #include "app/scene/state/WriteSeat.hpp"
 #include "ToolboxEditorScrollBar.hpp"
+#include "ToolboxNativePlacement.hpp"
 #include <Quickdraw.h>
 #include <Controls.h>
 #include <cstddef>
@@ -50,7 +51,7 @@ public:
     int appliedValue;
     bool active;
     bool usedThisFrame;
-    Rect rect;
+    ToolboxNativePlacement placement;
     loka::app::scene::NativeLifetimeHint lifetimeHint;
   };
 

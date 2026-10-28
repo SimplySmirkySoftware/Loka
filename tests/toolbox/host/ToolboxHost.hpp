@@ -495,7 +495,7 @@ public:
   ToolboxScrollBarLedger scrollBarLedger_;
   struct ButtonControlBinding
   {
-    Rect rect;
+    ToolboxNativePlacement placement;
     short resourceId;
     ToolboxButtonContext *context;
     std::string label;
