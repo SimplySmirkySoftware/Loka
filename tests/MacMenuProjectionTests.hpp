@@ -24,4 +24,13 @@ void testMacMenuAppMiddlePreservesPayloads();
 void testMacMenuEmptyActionTitleFollowsState();
 void testMacMenuVisibilityReadOnceAndConstantFallback();
 void testMacEditMenuDefaultsAndFallback();
+void testMacMenuDeclaredEnabledProjection();
+void testMacMenuEnabledNotificationAfterCommandGrowth();
+void testMacEditMenuNativeValidation();
+void testMacEditMenuValidationReentry();
+void testMacEditMenuNoTargetValidationAndFallback();
+void testMacEditMenuDispatchToTextView();
+void testMacEditMenuValidationUsesRealSender();
+void testMacEditMenuKeyPanelFieldEditor();
+void testMacEditMenuKeyWindowBeforeMainWindow();
 #endif // LOKA_TESTS_MAC_MENU_PROJECTION_TESTS_HPP

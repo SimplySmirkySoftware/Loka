@@ -1,4 +1,3 @@
-#include "app/EditMenuDispatch.hpp"
 #include "MacMenuAttachment.hpp"
 #include "app/MenuComposition.hpp"
 #include "core/util/OwnedDef.hpp"
@@ -18,13 +17,17 @@
 
 @implementation LokaMenuTarget
 @synthesize owner = owner_;
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+  return self.owner ? self.owner->validateNativeMenuCommand((void *)item) : NO;
+}
 - (void)handleMenuAction:(id)sender
 {
   if (self.owner)
   {
     loka::core::Operation turn;
     NSInteger tag = [sender tag];
-    self.owner->dispatchNativeMenuCommand(static_cast<int>(tag));
+    self.owner->dispatchNativeMenuCommand(static_cast<int>(tag), (void *)sender);
     turn.close();
   }
 }
@@ -60,6 +63,39 @@ namespace
     if (action == loka::app::MENU_ACTION_QUIT_APP)
       return "Quit";
     return "Menu Item";
+  }
+
+  static SEL NativeEditSelector(loka::app::MenuActionType action)
+  {
+    switch (action)
+    {
+    case loka::app::MENU_ACTION_EDIT_UNDO:
+      return @selector(undo:);
+    case loka::app::MENU_ACTION_EDIT_CUT:
+      return @selector(cut:);
+    case loka::app::MENU_ACTION_EDIT_COPY:
+      return @selector(copy:);
+    case loka::app::MENU_ACTION_EDIT_PASTE:
+      return @selector(paste:);
+    case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
+      return @selector(selectAll:);
+    case loka::app::MENU_ACTION_ABOUT_APP:
+    case loka::app::MENU_ACTION_QUIT_APP:
+    case loka::app::MENU_ACTION_SHOW_COLOR_PICKER:
+    case loka::app::MENU_ACTION_NONE:
+    case loka::app::MENU_ACTION_COUNT:
+      return NULL;
+    }
+    return NULL;
+  }
+
+  static BOOL NativeValidation(id target, NSMenuItem *input)
+  {
+    if ([target respondsToSelector:@selector(validateMenuItem:)])
+      return [target validateMenuItem:input];
+    if ([target respondsToSelector:@selector(validateUserInterfaceItem:)])
+      return [target validateUserInterfaceItem:input];
+    return YES;
   }
 
   // AppKit can retain an item after its graph leaves the main menu. Unlike
@@ -149,7 +185,8 @@ void MacMenuAttachment::MenuEnabledChangedThunk(void *userData)
   {
     enabled = !enabled;
   }
-  [item setEnabled:enabled ? YES : NO];
+  MacMenuAttachment *owner = binding->owner;
+  owner->applyDeclaredEnabled(item, owner->rowForTag(static_cast<int>([item tag])), enabled);
 }
 
 void MacMenuAttachment::MenuCheckedChangedThunk(void *userData)
@@ -239,6 +276,7 @@ std::size_t MacMenuAttachment::BuildMenuItem(void *nativeMenu,
     }
     [menuItem setSubmenu:subMenu];
     [subMenu release];
+    this->applyDeclaredEnabled(menuItem, 0, itemDef->isEnabledInitial());
   }
   else
   {
@@ -250,24 +288,18 @@ std::size_t MacMenuAttachment::BuildMenuItem(void *nativeMenu,
     command.commandId = commandId;
     command.action = itemDef->action;
     command.emitter = itemDef->onClickState;
+    this->applyDeclaredEnabled(menuItem, &command, itemDef->isEnabledInitial());
     this->commands_.push_back(command);
   }
 
-  if (!itemDef->isEnabledInitial())
-  {
-    [menuItem setEnabled:NO];
-  }
   [menuItem setState:itemDef->isCheckedInitial() ? LOKA_MAC_CONTROL_STATE_ON : LOKA_MAC_CONTROL_STATE_OFF];
 
   loka::core::State<bool> *enabledBindingState = itemDef->enabledBindingState();
   loka::core::State<bool> *checkedBindingState = itemDef->checkedBindingState();
   if (itemDef->titleState || enabledBindingState || checkedBindingState)
   {
-    if (enabledBindingState)
-    {
-      [menuItem setEnabled:itemDef->isEnabledInitial() ? YES : NO];
-    }
     MacMenuAttachment::MenuBinding *binding = new MacMenuAttachment::MenuBinding();
+    binding->owner = this;
     binding->menuItem = (void *)menuItem;
     binding->emptyTitle = MenuEmptyTitle(itemDef->action);
     binding->titleState = itemDef->titleState;
@@ -429,7 +461,56 @@ bool MacMenuAttachment::project(const loka::app::MenuSources &sources)
   return true;
 }
 
+void MacMenuAttachment::applyDeclaredEnabled(NSMenuItem *item, MenuCommand *row, bool enabled)
+{
+  if (row)
+    row->declaredEnabled = enabled;
+  [item setEnabled:enabled ? YES : NO];
+}
+
+MacMenuAttachment::MenuCommand *MacMenuAttachment::rowForTag(int tag)
+{
+  if (!tag)
+    return 0;
+  for (size_t i = 0; i < this->commands_.size(); ++i)
+    if (this->commands_[i].commandId == tag)
+      return &this->commands_[i];
+  return 0;
+}
+
+bool MacMenuAttachment::validate(NSMenuItem *item)
+{
+  const MenuCommand *row = this->rowForTag(static_cast<int>([item tag]));
+  if (!row)
+    return true;
+  const loka::app::MenuActionType action = row->action;
+  const bool declaredEnabled = row->declaredEnabled;
+  const bool hasBinding = row->emitter != 0;
+  SEL sel = NativeEditSelector(action);
+  if (!sel)
+    return declaredEnabled;
+  // Each call's input belongs to the caller's ambient pool, including reentry.
+  NSMenuItem *input = [[[NSMenuItem alloc] initWithTitle:@"" action:sel keyEquivalent:@""] autorelease];
+  if (!input)
+    return false;
+  // Native resolution and validation may replace the projection. Use only copies.
+  id target = [NSApp targetForAction:sel to:nil from:item];
+  if (target)
+  {
+    if (!NativeValidation(target, input))
+      return false;
+  }
+  else if (!hasBinding)
+    return false;
+  return declaredEnabled;
+}
+
 bool MacMenuAttachment::dispatch(int commandId)
+{
+  return this->dispatch(commandId, 0);
+}
+
+bool MacMenuAttachment::dispatch(int commandId, void *nativeItem)
 {
   for (size_t i = 0; i < this->commands_.size(); ++i)
   {
@@ -454,9 +535,10 @@ bool MacMenuAttachment::dispatch(int commandId)
     case loka::app::MENU_ACTION_EDIT_PASTE:
     case loka::app::MENU_ACTION_EDIT_SELECT_ALL:
     {
-      loka::app::EditVerb verb;
-      if (loka::app::menuEditVerb(command.action, verb))
-        loka::app::dispatchEditMenuCommand(this->app_.activeWindow(), verb, command.emitter);
+      if ([NSApp sendAction:NativeEditSelector(command.action) to:nil from:(NSMenuItem *)nativeItem])
+        return true;
+      if (command.emitter)
+        command.emitter->emit();
       return true;
     }
     case loka::app::MENU_ACTION_COUNT:

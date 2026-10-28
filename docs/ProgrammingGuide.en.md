@@ -685,8 +685,14 @@ Place `EditMenu()` explicitly in a Scene menu bar for Undo, Cut, Copy, Paste,
 and Select All. It is an ordinary Edit menu and is not part of
 `StandardMenuPresets()`. Standard Edit actions offer to the focused native
 editor first; without a target, an optional app binding runs once. Native
-refusal or no-op does not run that binding. Native editing support is deferred;
-the current native rails take the no-target path.
+refusal or no-op does not run that binding. On macOS, the five verbs go through
+the responder chain to the focused native editor, and Edit items are enabled by
+validation from the target that would receive the verb, subject to the declared
+enabled value. Changes a validator makes to its validation input are not shown
+on the installed item. Undo uses the native editor's own undo history; replacing
+a TextEditor's native text from the app clears that history today. Win32 and
+Classic still take the no-target path until their native Edit implementations
+land.
 
 Declare `StandardMenuPresets()` in the App's default menu bar to request About
 and Quit, or use `AboutMenu()` / `QuitMenu()` for just one. Classic places About
