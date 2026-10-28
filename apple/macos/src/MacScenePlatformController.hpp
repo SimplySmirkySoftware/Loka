@@ -187,6 +187,14 @@ private:
       loka::app::scene::Node *node,
       const LayoutState &state);
 
+  /** Layout calls at most once per Box/framed visit, inside the clip guard when admitted.
+      Looks up the controller-owned handler registry once, then runs the handler
+      or fallback over this node's children.
+      Handler narrowing refusal returns false without changing resultY. */
+  bool layoutContainerBody(loka::app::scene::Node *node, const LayoutState &state, int &resultY);
+  /** One admitted clip box per layout visit. Walks only this node's children;
+      allocation refusal walks none and leaves the existing projection intact. */
+  LayoutNodeResult layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth);
   static int layoutContainerChild(void *context, loka::app::scene::Node *child, const LayoutState &state);
   int layoutNodeFromSceneState(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   int layoutNode(loka::app::scene::Node *node, const LayoutState &state);

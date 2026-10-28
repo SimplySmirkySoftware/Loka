@@ -23,7 +23,31 @@ namespace loka
       unsigned macPhotoCaptureFailures = 0;
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
+      unsigned macClipBoxContextFailures = 0;
+      unsigned macClipHostViewFailures = 0;
     } // namespace
+    void failMacClipBoxContexts(unsigned count)
+    {
+      macClipBoxContextFailures = count;
+    }
+    bool declineMacClipBoxContext()
+    {
+      if (!macClipBoxContextFailures)
+        return false;
+      --macClipBoxContextFailures;
+      return true;
+    }
+    void failMacClipHostViews(unsigned count)
+    {
+      macClipHostViewFailures = count;
+    }
+    bool declineMacClipHostView()
+    {
+      if (!macClipHostViewFailures)
+        return false;
+      --macClipHostViewFailures;
+      return true;
+    }
     void failMacStackUnitViews(unsigned count)
     {
       macStackUnitViewFailures = count;
