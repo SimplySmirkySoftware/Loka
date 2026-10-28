@@ -264,8 +264,8 @@ decides.
 ## Scroll requests (#1591)
 
 `scrollTo(Request<ScrollTarget>&)` borrows an app-owned coalescable request.
-Null, Toolbox and Win32 take a post at the first eligible projection visit after posting, after
-layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
+All four rails take a post at the first eligible projection visit after posting,
+after layout completes. `Top()` exposes the top gap; `Origin(x, y)` uses content
 coordinates and shares `requestedOrigin()` normalization. Null has no native
 range and does not clamp to a viewport range. The viewport publication is the
 report; there is no reply door.
@@ -295,15 +295,18 @@ or leaving ATTACHED cancels pending work synchronously; replacing only viewport
 or insets does not. Reclaim publishes nothing. See
 [request delivery sites and bounds](RequestDeliveryDesign.md#where-each-rail-consumes).
 
+macOS `applyScrollRequest` applies the native origin and shares
+`publishClipViewBoundsOrigin` with bounds-notification input, reporting inside
+its notification mute. X availability follows the committed horizontal
+scroller for reply parity with the other rails, even where AppKit could move
+the clip without that scroller. A valid context supplies Y. SimpleViewer now
+posts `scrollTo` on image load; its viewport remains a rail-written fact,
+closing the former second-writer debt.
+
 ## Known debts
 
 - #1372: a short-range-refused Win32 traversal leaves the children it already
   placed at the refused pass's translation (both axes; pre-#580 for Y).
-- macOS ScrollView request delivery remains for PR 4 of #1591.
-  SimpleViewer still resets the viewport by
-  writing the fact box directly (`viewport_.set(Frame(0, 0, …))`), which makes
-  the app a second writer of a rail result channel. That is a recorded debt,
-  not a pattern to copy. Its move to `scrollTo` belongs to the last rail PR.
 - macOS layout measures width from the actual NSScrollView (`visibleWidth`),
   but horizontal chrome height comes from the system preferred scroller style
   (`MacProjection::clientHeightBelowHorizontalScroller`), not the view's style.

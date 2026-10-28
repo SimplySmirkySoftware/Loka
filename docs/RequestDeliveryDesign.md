@@ -559,7 +559,19 @@ refused visits. Its request observes `NODE_DIRTY_LAYOUT`; one settle takes at
 most two requests, with `FOLLOW_UP_NONE` and no failed-arm take. The visit
 borrow opens before layout and restores after settlement. For `WM_SIZE`/DPI
 layouts it nests under the input door's outer borrow, which remains open when
-the visit closes. Only macOS delivery remains for PR 4 of #1591.
+the visit closes.
+
+macOS ScrollView consumes at the ScrollView arm of `computeLayoutResult` in
+`MacScenePlatformController.mm`, after `layoutScrollViewNode`, including
+refused visits. Its request observes `NODE_DIRTY_LAYOUT`; one settle takes at
+most two requests, with `FOLLOW_UP_NONE` and no failed-arm take. The visit
+borrow opens before layout and restores after settlement; resize and deferred
+layout retain the input door's outer borrow after the visit closes.
+`applyScrollRequest` applies the native origin and calls the existing
+`publishClipViewBoundsOrigin` report inside the request's bounds-notification
+mute. A deferred bounds notification after restore re-reads the same clip
+bounds: unchanged geometry publishes nothing further, while the ground
+subscription still receives. All four rails now deliver ScrollView requests.
 
 ## Focus requests (#960, common + Null)
 
