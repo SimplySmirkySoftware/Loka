@@ -42,6 +42,9 @@
 #include "context/MacRectSurfaceContext.hpp"
 #include "context/MacScrollViewContext.hpp"
 #include "context/MacZStackContext.hpp"
+#include "context/MacClipBoxContext.hpp"
+#include "context/LokaClipHostView.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "core/Profiler.hpp"
 #include <map>
 #include <new>
@@ -336,6 +339,8 @@ MacScenePlatformController::~MacScenePlatformController()
 
 bool MacScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
 {
+  if (!handler || IsMacClipBoxType(handler->nodeTypeKey()))
+    return false;
   return this->nodeHandlerRegistry_.registerHandler(handler);
 }
 
@@ -841,6 +846,97 @@ int MacScenePlatformController::layoutNode(loka::app::scene::Node *node, const L
   return this->applyBoundaryLayoutResult(node->asBoundary(), local.x, local.y, this->computeLayoutResult(node, local));
 }
 
+bool MacScenePlatformController::layoutContainerBody(loka::app::scene::Node *node,
+                                                     const LayoutState &state,
+                                                     int &resultY)
+{
+  using namespace loka::app::scene;
+  IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(node);
+  if (handler)
+  {
+    loka::app::scene::LayoutState handlerState;
+    if (!this->narrowLayoutState(state, handlerState, false))
+      return false;
+    MacPlatformLayoutTraversal traversal(this);
+    resultY = handler->layoutNode(node, handlerState, &traversal);
+  }
+  else if (loka::app::BoxNode *box = node->asBoxNode())
+  {
+    resultY = loka::app::layout::computeBoxLayoutResultY(
+        box,
+        MacSceneLayout::spacing(),
+        state,
+        this,
+        &MacScenePlatformController::layoutContainerChild,
+        loka::app::layout::resolveLayoutGap(box, state.spacing(), MacSceneLayout::spacing()),
+        0);
+  }
+  else
+    resultY = loka::app::layout::computeFramedLayoutResultY(
+        node, state, this, &MacScenePlatformController::layoutContainerChild, 0);
+  return true;
+}
+
+MacScenePlatformController::LayoutNodeResult
+MacScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth)
+{
+  using namespace loka::app::scene;
+  NodeContext *installed = node->getContext();
+  IClipBoxContext *clip = installed ? installed->asClipBoxContext() : 0;
+  if (installed && !clip)
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(false && "clip box requires its own context; never replace a foreign context");
+#endif
+    return LayoutNodeResult(state.width, state.y);
+  }
+  MacClipBoxContext *context = clip ? static_cast<MacClipBoxContext *>(clip) : 0;
+  if (!context)
+  {
+#ifdef TEST_BUILD
+    if (loka::testing::declineMacClipBoxContext())
+      return LayoutNodeResult(state.width, state.y);
+#endif
+    context = new (std::nothrow) MacClipBoxContext(this);
+    if (!context)
+      return LayoutNodeResult(state.width, state.y);
+    node->setContext(context);
+    context->readLifecycleFactOnAttach();
+  }
+  loka::app::scene::LayoutState projected;
+  const LayoutState origin(state.x, state.y, 0, 0, state.spacing());
+  if (!this->narrowLayoutState(origin, projected, true))
+    return LayoutNodeResult(state.width, state.y);
+  int width = 0;
+  const ProjectionParentScope &parent = this->projectionParentScopes_.current();
+  if (!loka::app::layout::ResolveClipBoxWidth(declaredWidth, state.width, width))
+    width = loka::app::layout::kClipFarRightLu + parent.translationX - projected.x;
+  const loka::core::Frame seat(projected.x, projected.y, width, 0);
+  if (!context->ensureHost(this->projectionParentView(), this->projection().projectFrame(seat)))
+    return LayoutNodeResult(state.width, state.y);
+  LokaClipHostView *host = (LokaClipHostView *)context->view();
+  const ProjectionParentScope clipScope(host, 0, 0, parent.clipRect);
+  int resultY = state.y;
+  {
+    ProjectionClipScopeGuard guard(this->projectionParentScopes_, clipScope);
+    if (!guard.isActive())
+    {
+#ifdef LOKA_LIFECYCLE_AUDIT
+      assert(false && "admitted clip push must succeed");
+#endif
+      return LayoutNodeResult(state.width, state.y + this->projection().measurementToLu([host frame].size.height));
+    }
+    if (!this->layoutContainerBody(node, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
+    // Twin of the ZStack unit path: preserve the previous host rectangle on channel refusal.
+    if (this->refuseNarrowingInScrollScope(resultY))
+      return LayoutNodeResult(state.width, resultY);
+  }
+  context->place(
+      this->projection().projectFrame(loka::core::Frame(projected.x, projected.y, width, resultY - state.y)));
+  return LayoutNodeResult(state.width, resultY);
+}
+
 MacScenePlatformController::LayoutNodeResult
 MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state)
 {
@@ -928,52 +1024,23 @@ MacScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, co
 
   if (loka::app::BoxNode *box = node->asBoxNode())
   {
+    if (box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT && this->projectionParentScopes_.admitsClip())
+      return this->layoutClipBox(box, state, box->props.effectiveWidth());
     int resultY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(box);
-    if (handler)
-    {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
-      {
-        return LayoutNodeResult(state.width, state.y);
-      }
-      loka::app::scene::MacPlatformLayoutTraversal traversal(this);
-      resultY = handler->layoutNode(box, handlerState, &traversal);
-    }
-    else
-    {
-      resultY = loka::app::layout::computeBoxLayoutResultY(
-          box,
-          MacSceneLayout::spacing(),
-          state,
-          this,
-          &MacScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(box, state.spacing(), MacSceneLayout::spacing()),
-          0);
-    }
+    if (!this->layoutContainerBody(box, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
     return LayoutNodeResult(state.width, resultY);
   }
 
   if (node->asFramedNode())
   {
-    loka::app::scene::Node *group = node;
+    if (node->kind() == loka::app::scene::NODE_KIND_CARD
+        && static_cast<loka::app::CardNode *>(node)->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT
+        && this->projectionParentScopes_.admitsClip())
+      return this->layoutClipBox(node, state, 0);
     int resultY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
-    if (handler)
-    {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
-      {
-        return LayoutNodeResult(state.width, state.y);
-      }
-      loka::app::scene::MacPlatformLayoutTraversal traversal(this);
-      resultY = handler->layoutNode(group, handlerState, &traversal);
-    }
-    else
-    {
-      resultY = loka::app::layout::computeFramedLayoutResultY(
-          group, state, this, &MacScenePlatformController::layoutContainerChild, 0);
-    }
+    if (!this->layoutContainerBody(node, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
     return LayoutNodeResult(state.width, resultY);
   }
 
