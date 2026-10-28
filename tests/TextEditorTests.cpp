@@ -608,12 +608,13 @@ void testTextEditorProjectReservesMeasuredLength()
   std::string out;
   LOKA_VERIFY(loka::app::testing::TextEditorAccess::document(f.node).project(out) == EDITOR_OK);
   LOKA_VERIFY(out.size() == 64 * 100 + 63);
-  // The hook reports the request and the capacity right after the reservation,
+  // The reservation door reports its request and the capacity right after it,
   // before any row is appended. The request is exactly the measured document (a
-  // ceiling reserve asks for far more); the capacity covers it (a dropped reserve
-  // leaves the short-string capacity). The capacity is not bounded from above:
-  // how far a library rounds a reserve up is the library's (old libstdc++ rounds
-  // a large reserve to its page buckets), not Loka's.
+  // ceiling or constant reserve asks for something else, and a reserve that
+  // bypasses the door leaves the reset value); the capacity covers it (a dropped
+  // reserve leaves the short-string capacity). The capacity is not bounded from
+  // above: how far a library rounds a reserve up is the library's (old libstdc++
+  // rounds a large reserve to its page buckets), not Loka's.
   const std::size_t requested = loka::app::testing::lastProjectionRequest();
   LOKA_VERIFY(requested == out.size());
   LOKA_VERIFY(loka::app::testing::lastProjectionReservation() >= out.size());

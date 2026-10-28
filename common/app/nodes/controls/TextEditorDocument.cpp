@@ -22,6 +22,18 @@ namespace loka
     namespace
     {
       using text_document_detail::LineBytes;
+      /** The one reservation of a projection buffer: the measured length is asked
+       *  for once, and the test hook observes that request beside the grant. The
+       *  grant may exceed the request by however much the library rounds up (old
+       *  libstdc++ rounds a large reserve to its page buckets); only the request is
+       *  Loka's to pin. */
+      void reserveProjection(std::string &out, std::size_t bytes)
+      {
+        out.reserve(bytes);
+#ifdef TEST_BUILD
+        testing::observeProjectionReservation(bytes, out.capacity());
+#endif
+      }
       /** Local checked construction storage. No retained draft or owner state. */
       class EditorScratch
       {
@@ -140,12 +152,7 @@ namespace loka
         return result;
       // One reservation for the measured length: the rows append without regrowth.
       // A rail that re-encodes the projection reserves its own buffer from out.size().
-      // The hook reports what was asked and what the library granted; the grant may
-      // round up (old libstdc++ rounds a large reserve to its page buckets).
-      out.reserve(bytes);
-#ifdef TEST_BUILD
-      testing::observeProjectionReservation(bytes, out.capacity());
-#endif
+      reserveProjection(out, bytes);
       for (unsigned short i = 0; i < this->props_.buffer_->lines().size(); ++i)
       {
         const LineBytes line(this->props_.buffer_->lines().at(i).value, this->props_.buffer_->capacity());
