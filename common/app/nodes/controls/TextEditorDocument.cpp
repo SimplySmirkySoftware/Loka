@@ -10,7 +10,7 @@ namespace loka
     namespace testing
     {
       bool refuseTextPayloadAllocation();
-      void observeProjectionReservation(std::size_t bytes);
+      void observeProjectionReservation(std::size_t requested, std::size_t capacity);
     }
   } // namespace app
 } // namespace loka
@@ -140,9 +140,11 @@ namespace loka
         return result;
       // One reservation for the measured length: the rows append without regrowth.
       // A rail that re-encodes the projection reserves its own buffer from out.size().
+      // The hook reports what was asked and what the library granted; the grant may
+      // round up (old libstdc++ rounds a large reserve to its page buckets).
       out.reserve(bytes);
 #ifdef TEST_BUILD
-      testing::observeProjectionReservation(out.capacity());
+      testing::observeProjectionReservation(bytes, out.capacity());
 #endif
       for (unsigned short i = 0; i < this->props_.buffer_->lines().size(); ++i)
       {
