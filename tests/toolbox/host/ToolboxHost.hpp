@@ -717,6 +717,7 @@ public:
         window_(window),
         renderContext(0),
         rootNode_(0),
+        activeViewportContent_(0),
         controlIds_(100)
   {
     SetRect(&projectionClip, -30000, -30000, 30000, 30000);
@@ -803,6 +804,7 @@ public:
   {
     return this->erasedPass_;
   }
+  ToolboxViewportContentObservation *activeViewportContent_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;

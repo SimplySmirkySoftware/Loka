@@ -362,6 +362,8 @@ private:
   ToolboxErasedPass erasedPass_;
 
 public:
+  /** Borrowed only while the layoutScrollView local's Scope is alive. */
+  ToolboxViewportContentObservation *activeViewportContent_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::Node *rootNode_;
   loka::app::scene::Node *pendingRootNode_;

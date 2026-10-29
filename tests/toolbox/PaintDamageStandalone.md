@@ -230,9 +230,10 @@ logs its `last_refusal` separately (for that second pass, `no_viewport_moved`).
 Both snapshots clear on explicit diagnostic reset. Empty OS update bboxes are
 reported as `0,0,0,0`, independent of the window's port origin.
 Presentation remains `erase`; the observation never selects a pixel-copy path.
-The arm expects `no_suppression_capability`: the reveal changes one vertical
-layout input, boundary apply requests `layout_dirty`, the settled entry has no
-OS damage, and the Column has no ZStack units. Global layout adds a rectangle
+The arm expects `unsupported_kind`: EditText and PopupMenu remain mounted
+inside the Offscreen viewport. The reveal changes one vertical layout input,
+boundary apply requests `layout_dirty`, the settled entry has no OS damage,
+and the Column has no ZStack units. Global layout adds a rectangle
 request without adding another full-draw reason. Skipping `noteViewportMove` at the layout publication point makes the
 arm red (zero movement and `no_viewport_moved`). Writing the moving snapshot
 unconditionally also makes the retention host pin red after the second pass;
@@ -241,3 +242,16 @@ removing empty-bbox normalization makes both damage-entry pins red.
 This added arm awaits the delegator's MAME run and captured expected audit;
 the preexisting tracked log is intentionally unchanged. Scenario dumps gain
 no observation lines because the scenario runner compares whole audit files.
+
+The `present_observe` record includes `content_inputs` (successful projected-leaf
+visits with nonzero pre-layout inputs), `unsupported_kinds` (visited nodes whose
+paint/clip contract is not admitted), and `walk_reasons` (full requests arriving
+during layout). Counts cover visited nodes only: band windows may skip rows,
+and only a successfully moved viewport contributes its local counts. They are
+diagnostics, not a content-invariance proof; the verdict remains `erase`.
+
+The subsequent `viewport-content-dirty-refused` arm writes the visible Text and reveals by
+160 pixels in one transaction/completion. It requires `content_inputs` even
+with those unsupported controls present. Removing the successful-leaf
+`noteContentInputs()` call turns this arm red (delegator verifies in MAME).
+The tracked audit is regenerated only from the delegator's green MAME run.

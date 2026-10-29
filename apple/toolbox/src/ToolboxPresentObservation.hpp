@@ -4,6 +4,7 @@
 #include "ToolboxFullDrawReason.hpp"
 #include <Quickdraw.h>
 #include <string>
+#include <cassert>
 
 /** Observation never authorizes copying pixels. */
 enum ToolboxPresentVerdict
@@ -19,6 +20,9 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED,
   TOOLBOX_PRESENT_HORIZONTAL_MOVE,
   TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT,
+  TOOLBOX_PRESENT_CONTENT_INPUTS,
+  TOOLBOX_PRESENT_REQUESTS_DURING_WALK,
+  TOOLBOX_PRESENT_UNSUPPORTED_KIND,
   TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT,
   TOOLBOX_PRESENT_FOREGROUND_UNITS,
   TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
@@ -49,6 +53,12 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
     return "horizontal_move";
   case TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT:
     return "reasons_beyond_layout";
+  case TOOLBOX_PRESENT_CONTENT_INPUTS:
+    return "content_inputs";
+  case TOOLBOX_PRESENT_REQUESTS_DURING_WALK:
+    return "requests_during_walk";
+  case TOOLBOX_PRESENT_UNSUPPORTED_KIND:
+    return "unsupported_kind";
   case TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT:
     return "damage_outside_viewport";
   case TOOLBOX_PRESENT_FOREGROUND_UNITS:
@@ -60,6 +70,64 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
   }
   return "unknown";
 }
+
+/** Counts visited nodes only; band windows may skip rows. Pre-layout inputs
+    contribute only after successful projected layout. Diagnostics, verdict erase:
+    zero counts are not a content-invariance proof (window-anchored raster phase,
+    late publication, clipping are separate gates). */
+class ToolboxViewportContentObservation
+{
+public:
+  ToolboxViewportContentObservation()
+      : contentInputs_(0),
+        unsupportedKinds_(0)
+  {
+  }
+  /** Dispatch calls once per successful dirty leaf visit; O(1), walks nothing. */
+  void noteContentInputs()
+  {
+    ++this->contentInputs_;
+  }
+  /** Dispatch calls once per refused-kind visit; O(1), walks nothing. */
+  void noteUnsupportedKind()
+  {
+    ++this->unsupportedKinds_;
+  }
+  /** Completed visit count; O(1), walks nothing. */
+  unsigned contentInputs() const
+  {
+    return this->contentInputs_;
+  }
+  /** Completed visit count; O(1), walks nothing. */
+  unsigned unsupportedKinds() const
+  {
+    return this->unsupportedKinds_;
+  }
+
+  /** Borrows the layoutScrollView local only during child layout. O(1), no walk. */
+  class Scope
+  {
+  public:
+    Scope(ToolboxViewportContentObservation *&active, ToolboxViewportContentObservation &value)
+        : active_(active)
+    {
+      assert(!this->active_ && "nested viewports refuse before child layout");
+      this->active_ = &value;
+    }
+    ~Scope()
+    {
+      this->active_ = 0;
+    }
+
+  private:
+    Scope(const Scope &);
+    Scope &operator=(const Scope &);
+    ToolboxViewportContentObservation *&active_;
+  };
+
+private:
+  unsigned contentInputs_, unsupportedKinds_;
+};
 
 /** Controller-owned interval facts; completed copies contain no borrowed identities. */
 class ToolboxPresentObservation
@@ -79,6 +147,7 @@ public:
     explicit Interval(ToolboxPresentObservation &observation)
         : observation_(observation)
     {
+      this->observation_.phase_ = WALKING;
     }
     ~Interval()
     {
@@ -93,11 +162,15 @@ public:
     ToolboxPresentObservation &observation_;
   };
 
-  /** O(1) per full request; completed intervals defer new causes until reset. */
+  /** O(1) per full request, walks nothing; completed intervals defer new causes.
+      Viewport publication can change an already-laid-out leaf through a binding;
+      requests during WALKING are this pass's trace of that late paint input. */
   void noteReason(ToolboxFullDrawReason reason)
   {
     if (this->phase_ == COMPLETED)
       this->nextReasons_ |= 1U << reason;
+    else if (this->phase_ == WALKING)
+      this->walkReasons_ |= 1U << reason;
     else
       this->reasons_ |= 1U << reason;
   }
@@ -106,8 +179,8 @@ public:
   {
     this->damage_ = damage;
   }
-  /** O(1) per moved viewport layout; both axes share one copied seat. */
-  void noteViewportMove(const Rect &contentRect, int dx, int dy)
+  /** layoutScrollView calls once per successful move; O(1) merge, walks nothing. */
+  void noteViewportMove(const Rect &contentRect, int dx, int dy, const ToolboxViewportContentObservation &content)
   {
     if (dx == 0 && dy == 0)
       return;
@@ -116,6 +189,8 @@ public:
       this->viewport_ = contentRect;
       this->dy_ = dy;
     }
+    this->contentInputs_ += content.contentInputs();
+    this->unsupportedKinds_ += content.unsupportedKinds();
     ++this->viewports_;
     this->horizontal_ = this->horizontal_ || dx != 0;
   }
@@ -133,6 +208,12 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_HORIZONTAL_MOVE;
     else if (this->reasons_ != (1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY))
       this->refusal_ = TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT;
+    else if (this->contentInputs_)
+      this->refusal_ = TOOLBOX_PRESENT_CONTENT_INPUTS;
+    else if (this->walkReasons_)
+      this->refusal_ = TOOLBOX_PRESENT_REQUESTS_DURING_WALK;
+    else if (this->unsupportedKinds_)
+      this->refusal_ = TOOLBOX_PRESENT_UNSUPPORTED_KIND;
     else if (this->damage_.left < this->damage_.right && this->damage_.top < this->damage_.bottom
              && (this->damage_.left < this->viewport_.left || this->damage_.top < this->viewport_.top
                  || this->damage_.right > this->viewport_.right || this->damage_.bottom > this->viewport_.bottom))
@@ -145,7 +226,8 @@ public:
   /** O(1) at interval exit or explicit diagnostic reset; no owned resources. */
   void reset()
   {
-    this->reasons_ = this->nextReasons_ = 0;
+    this->reasons_ = this->nextReasons_ = this->walkReasons_ = 0;
+    this->contentInputs_ = this->unsupportedKinds_ = 0;
     this->damage_ = this->viewport_ = Rect();
     this->dy_ = 0;
     this->viewports_ = this->foregroundUnits_ = 0;
@@ -153,6 +235,21 @@ public:
     this->phase_ = COLLECTING;
     this->verdict_ = TOOLBOX_PRESENT_ERASE_ALL;
     this->refusal_ = TOOLBOX_PRESENT_NO_VIEWPORT_MOVED;
+  }
+  /** Merged successful moved-viewport visits; O(1), no walk. */
+  unsigned contentInputs() const
+  {
+    return this->contentInputs_;
+  }
+  /** Merged refused-kind visits; O(1), no walk. */
+  unsigned unsupportedKinds() const
+  {
+    return this->unsupportedKinds_;
+  }
+  /** Requests received during layout; O(1), no walk. */
+  unsigned walkReasons() const
+  {
+    return this->walkReasons_;
   }
   unsigned reasons() const
   {
@@ -189,9 +286,20 @@ public:
   /** Only diagnostic readers construct text; collecting and completing allocate nothing. */
   std::string reasonNames() const
   {
+    return reasonNames(this->reasons_);
+  }
+  /** Diagnostic formatting only; scans the fixed reason enum, no owner rows. */
+  std::string walkReasonNames() const
+  {
+    return reasonNames(this->walkReasons_);
+  }
+
+private:
+  static std::string reasonNames(unsigned reasons)
+  {
     std::string result;
     for (int i = 0; i < TOOLBOX_FULL_DRAW_REASON_COUNT; ++i)
-      if (this->reasons_ & (1U << i))
+      if (reasons & (1U << i))
       {
         if (!result.empty())
           result += '+';
@@ -204,9 +312,11 @@ private:
   enum Phase
   {
     COLLECTING,
+    WALKING,
     COMPLETED
   };
-  unsigned reasons_, nextReasons_;
+  unsigned reasons_, nextReasons_, walkReasons_;
+  unsigned contentInputs_, unsupportedKinds_;
   Rect damage_, viewport_;
   int dy_;
   unsigned viewports_, foregroundUnits_;

@@ -1,3 +1,4 @@
+#include "ToolboxPresentObservation.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
@@ -28,6 +29,7 @@ public:
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }
+  ToolboxViewportContentObservation *activeViewportContent_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   // Mirror ToolboxScenePlatformController::refuseNarrowingInScrollScope;
   // dispatch and Box layout below are the unmodified production bodies.
@@ -46,7 +48,16 @@ public:
   bool projectLayoutState(loka::app::scene::LayoutState &) { return true; }
 #ifdef LOKA_HOST_RECT_SURFACE
   unsigned extentRecords;
-  ToolboxScenePlatformController() : extentRecords(0) {}
+#endif
+  ToolboxScenePlatformController()
+      : activeViewportContent_(0)
+#ifdef LOKA_HOST_RECT_SURFACE
+        ,
+        extentRecords(0)
+#endif
+  {
+  }
+#ifdef LOKA_HOST_RECT_SURFACE
   void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &) { ++this->extentRecords; }
   void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *) {}
   void requestStructurePresent() {}
