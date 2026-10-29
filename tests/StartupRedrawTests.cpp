@@ -1,3 +1,4 @@
+#include "support/LokaAllocFailure.hpp"
 #include "StartupRedrawTests.hpp"
 #include "support/TestVerify.hpp"
 #include <cassert>
@@ -383,8 +384,10 @@ void testToolboxEditControlDetachRetiresExactContext()
   int retiringContext = 0;
   int survivingContext = 0;
   ToolboxEditControlLedger<ToolboxOwnedEditBindingProbe, void> editControls;
-  editControls.add(ToolboxOwnedEditBindingProbe(&retiringContext, &sharedTextState, 101));
-  editControls.add(ToolboxOwnedEditBindingProbe(&survivingContext, &sharedTextState, 202));
+  LOKA_VERIFY(editControls.prepareAppend());
+  editControls.commitAppend(ToolboxOwnedEditBindingProbe(&retiringContext, &sharedTextState, 101));
+  LOKA_VERIFY(editControls.prepareAppend());
+  editControls.commitAppend(ToolboxOwnedEditBindingProbe(&survivingContext, &sharedTextState, 202));
   editControls.focus(1);
 
   std::size_t retiringIndex = 0;
@@ -397,15 +400,16 @@ void testToolboxEditControlDetachRetiresExactContext()
   assert(editControls.size() == 1 && editControls[0].ownerContext == &survivingContext &&
          editControls[0].text == &sharedTextState && editControls[0].handle == 202 &&
          "a live EditText sharing the same State must retain its own binding");
-  assert(editControls.focused() && editControls.focused()->handle == 202 &&
-         "retiring a lower binding must preserve focus on the surviving control");
+  assert(editControls.focused() // loka-assert-ok: Pure index lookup.
+         && editControls.focused()->handle == 202
+         && "retiring a lower binding must preserve focus on the surviving control");
 
   std::size_t survivingIndex = 0;
   // find() fills survivingIndex; erased under NDEBUG it would leave the
   // initial 0 and erase whichever binding happens to sit first.
   LOKA_VERIFY(editControls.find(&survivingContext, survivingIndex));
   editControls.erase(survivingIndex);
-  assert(!editControls.focused() &&
+  assert(!editControls.focused() && // loka-assert-ok: focused only queries the index.
          "retiring the focused context must synchronously clear native edit focus");
 }
 
@@ -417,9 +421,12 @@ void testToolboxEditControlSharedStateChangeFansOut()
   int secondContext = 0;
   int unrelatedContext = 0;
   ToolboxEditControlLedger<ToolboxOwnedEditBindingProbe, void> editControls;
-  editControls.add(ToolboxOwnedEditBindingProbe(&firstContext, &sharedTextState, 101));
-  editControls.add(ToolboxOwnedEditBindingProbe(&secondContext, &sharedTextState, 202));
-  editControls.add(ToolboxOwnedEditBindingProbe(&unrelatedContext, &unrelatedTextState, 303));
+  LOKA_VERIFY(editControls.prepareAppend());
+  editControls.commitAppend(ToolboxOwnedEditBindingProbe(&firstContext, &sharedTextState, 101));
+  LOKA_VERIFY(editControls.prepareAppend());
+  editControls.commitAppend(ToolboxOwnedEditBindingProbe(&secondContext, &sharedTextState, 202));
+  LOKA_VERIFY(editControls.prepareAppend());
+  editControls.commitAppend(ToolboxOwnedEditBindingProbe(&unrelatedContext, &unrelatedTextState, 303));
 
   ToolboxEditSyncProbe sync;
   const std::size_t synchronizedCount = editControls.forEachTextBinding(
@@ -428,4 +435,70 @@ void testToolboxEditControlSharedStateChangeFansOut()
   (void)synchronizedCount;
   assert(synchronizedCount == 2 && sync.count == 2 && sync.firstHandle == 101 && sync.secondHandle == 202 &&
          "a shared text state change must synchronize every live native edit binding");
+}
+
+/** Candidate allocation, commit, cancellation, and spare capacity are distinct doors. */
+void testToolboxEditControlPreparedStorage()
+{
+  using namespace loka::core::testing;
+  failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+  {
+    ToolboxEditControlLedger<ToolboxOwnedEditBindingProbe, void> rows;
+    int owners[33];
+    int text = 0;
+    LOKA_VERIFY(rows.prepareAppend());
+    failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 1);
+    rows.commitAppend(ToolboxOwnedEditBindingProbe(&owners[0], &text, 101));
+    LOKA_VERIFY(lokaAllocRawAttempts() == 0);
+    rows.focus(0);
+    for (int i = 1; i != 4; ++i)
+    {
+      LOKA_VERIFY(rows.prepareAppend());
+      rows.commitAppend(ToolboxOwnedEditBindingProbe(&owners[i], &text, 101 + i));
+    }
+    LOKA_VERIFY(lokaAllocRawAttempts() == 0);
+    LOKA_VERIFY(!rows.prepareAppend());
+    LOKA_VERIFY(rows.size() == 4 && rows.focused()->handle == 101);
+    LOKA_VERIFY(rows[3].ownerContext == &owners[3]);
+    failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+    LOKA_VERIFY(rows.prepareAppend());
+    rows.cancel();
+    LOKA_VERIFY(rows.size() == 4 && rows.focused()->handle == 101);
+    LOKA_VERIFY(lokaAllocRawLive() == 1);
+    failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+    for (int i = 4; i != 33; ++i)
+    {
+      LOKA_VERIFY(rows.prepareAppend());
+      rows.commitAppend(ToolboxOwnedEditBindingProbe(&owners[i], &text, 101 + i));
+    }
+    LOKA_VERIFY(lokaAllocRawAttempts() == 4);
+    LOKA_VERIFY(rows.size() == 33 && rows.focused()->handle == 101);
+    rows.erase(0);
+    LOKA_VERIFY(!rows.focused() && rows[0].handle == 102);
+    rows.clear();
+    LOKA_VERIFY(rows.empty());
+  }
+  LOKA_VERIFY(lokaAllocRawLive() == 0);
+  allowLokaAllocRaw();
+}
+
+/** Geometric growth uses three allocations for sixteen rows, not one per append. */
+void testToolboxEditControlCapacityReuse()
+{
+  using namespace loka::core::testing;
+  failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+  {
+    ToolboxEditControlLedger<ToolboxOwnedEditBindingProbe, void> rows;
+    int owners[16];
+    int text = 0;
+    for (int i = 0; i != 16; ++i)
+    {
+      LOKA_VERIFY(rows.prepareAppend());
+      rows.commitAppend(ToolboxOwnedEditBindingProbe(&owners[i], &text, i));
+    }
+    LOKA_VERIFY(lokaAllocRawAttempts() == 3);
+    LOKA_VERIFY(rows.size() == 16);
+  }
+  LOKA_VERIFY(lokaAllocRawLive() == 0);
+  allowLokaAllocRaw();
 }

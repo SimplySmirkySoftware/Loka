@@ -63,6 +63,8 @@ class ToolboxTextFontDescriptor;
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "TextEdit.h"
 #include "ToolboxEditControlLedger.hpp"
+#include "ToolboxEditorSeat.hpp"
+#include "ToolboxUnicodeEditorLedger.hpp"
 #include "ToolboxHitLedger.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/FocusParticipant.hpp"
@@ -494,6 +496,7 @@ public:
   {
     this->flushTE();
     this->flushControls();
+    this->unicodeEditors_.drain();
   }
   loka::app::layout::StackSpans *scrollSpans()
   { return this->scrollBarLedger_.viewportScrollBars_.empty() ? 0 : this->scrollBarLedger_.viewportScrollBars_[0].spans.get(); }
@@ -541,19 +544,9 @@ public:
   void updateStateFromEdit(EditTextControlBinding &, const loka::core::String &);
   void recordEditHit(const Rect &, loka::core::State<loka::core::String> *,
                      loka::app::scene::BoundaryNode *, ToolboxEditTextContext *);
-  struct EditTextControlBinding
-  {
-    loka::app::scene::NodeContext *ownerContext;
-    TEHandle te;
-    loka::core::State<loka::core::String> *text;
-    loka::app::scene::WriteSeat<loka::core::String> textSeat;
-    ToolboxEditInstalled installed;
-    ToolboxTextEditorContext *editor;
-    Rect rect;
-    bool usedThisFrame;
-    loka::app::scene::NativeLifetimeHint lifetimeHint;
-  };
+#include "ToolboxEditControlBinding.inc"
   ToolboxEditControlLedger<EditTextControlBinding, loka::app::scene::NodeContext> editControls_;
+  ToolboxUnicodeEditorLedger unicodeEditors_;
   template <typename T> struct RetiredNativeEntry
   {
     T handle;
