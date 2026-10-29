@@ -1042,6 +1042,28 @@ void testWin32WindowAndViewportGroundRoles()
   LOKA_VERIFY(windowPixel(root, 220, 100) == GetSysColor(COLOR_BTNFACE));
   LOKA_VERIFY(windowPixel(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), 120, 60)
               == GetSysColor(COLOR_BTNFACE));
+  // The root has no WS_CLIPCHILDREN and paints the same ground beneath children;
+  // only a container-only repaint over a sentinel proves its WM_PAINT answer.
+  {
+    HWND container = FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL);
+    const COLORREF sentinel = RGB(0x12, 0x34, 0x56);
+    HDC dc = GetDC(container);
+    LOKA_VERIFY(dc != NULL);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(container, &client));
+    HBRUSH brush = CreateSolidBrush(sentinel);
+    LOKA_VERIFY(brush != NULL);
+    LOKA_VERIFY(FillRect(dc, &client, brush));
+    DeleteObject(brush);
+    ReleaseDC(container, dc);
+    LOKA_VERIFY(windowPixel(container, 120, 60) == sentinel);
+    LOKA_VERIFY(InvalidateRect(container, NULL, FALSE));
+    UpdateWindow(container);
+    if (sentinel == GetSysColor(COLOR_BTNFACE))
+      std::printf("[skip] viewport sentinel equals live BTNFACE; WM_PAINT not discriminated\n");
+    else
+      LOKA_VERIFY(windowPixel(container, 120, 60) == GetSysColor(COLOR_BTNFACE));
+  }
   verifyStaticColors(root, firstHwnd);
   verifyStaticColors(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), secondHwnd);
   HDC dc = CreateCompatibleDC(NULL);

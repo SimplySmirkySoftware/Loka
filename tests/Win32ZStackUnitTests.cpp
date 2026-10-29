@@ -153,6 +153,15 @@ namespace
     DeleteDC(dc);
     return color;
   }
+  COLORREF windowPixel(HWND hwnd, int x, int y)
+  {
+    HDC dc = GetDC(hwnd);
+    LOKA_VERIFY(dc != NULL);
+    const COLORREF pixel = GetPixel(dc, x, y);
+    ReleaseDC(hwnd, dc);
+    LOKA_VERIFY(pixel != CLR_INVALID);
+    return pixel;
+  }
   // Thread-local hook lifetime is bounded by one synchronous test pass.
   class UnitOrderProbe
   {
@@ -312,6 +321,27 @@ void testWin32ZStackUnitPaintsOpaqueGround()
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
   // Positive control: the same lower surface really paints ink outside the unit.
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120) == GetSysColor(COLOR_WINDOWTEXT));
+  // The root has no WS_CLIPCHILDREN and paints the same ground beneath children;
+  // only a container-only repaint over a sentinel proves its WM_PAINT answer.
+  {
+    const COLORREF sentinel = RGB(0x12, 0x34, 0x56);
+    HDC dc = GetDC(unit);
+    LOKA_VERIFY(dc != NULL);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(unit, &client));
+    HBRUSH brush = CreateSolidBrush(sentinel);
+    LOKA_VERIFY(brush != NULL);
+    LOKA_VERIFY(FillRect(dc, &client, brush));
+    DeleteObject(brush);
+    ReleaseDC(unit, dc);
+    LOKA_VERIFY(windowPixel(unit, 100, 50) == sentinel);
+    LOKA_VERIFY(InvalidateRect(unit, NULL, FALSE));
+    UpdateWindow(unit);
+    if (sentinel == GetSysColor(COLOR_BTNFACE))
+      std::printf("[skip] unit sentinel equals live BTNFACE; WM_PAINT not discriminated\n");
+    else
+      LOKA_VERIFY(windowPixel(unit, 100, 50) == GetSysColor(COLOR_BTNFACE));
+  }
   for (int phase = 0; phase < 2; ++phase)
   {
     Access::resetRedrawStats(f.controller);
