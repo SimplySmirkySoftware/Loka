@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <Fonts.h>
+#include <TextEdit.h>
 #include <MacMemory.h>
 
 #include "StandaloneFlowRunner.hpp"
@@ -71,6 +72,184 @@ namespace
 {
   using namespace loka::app;
   using namespace loka::app::scene;
+
+  /** One synchronous native experiment; all TE and region storage dies before
+      returning to the event loop. No Loka EditText state participates. */
+  class NativeTEClipProbe
+  {
+  public:
+    NativeTEClipProbe(GrafPtr port, std::FILE *log)
+        : port_(port), log_(log), savedClip_(NewRgn()), reference_(0), probe_(0)
+    {
+      GetPort(&this->previousPort_);
+      SetPort(this->port_);
+      if (this->savedClip_)
+        GetClip(this->savedClip_);
+    }
+    ~NativeTEClipProbe()
+    {
+      if (this->savedClip_)
+      {
+        this->disposeRecords();
+        SetClip(this->savedClip_);
+        DisposeRgn(this->savedClip_);
+      }
+      SetPort(this->previousPort_);
+    }
+
+    // Called once per cut from the final idle phase; walks only this probe's
+    // 124 x 20 snapshot and at most 120 x 16 visible comparison pixels per op.
+    void run(char cut, bool narrowView)
+    {
+      if (!this->savedClip_)
+      {
+        std::fprintf(this->log_, "te-probe skipped=region-allocation\r");
+        return;
+      }
+      SetRect(&this->referenceRect_, 10, 100, 130, 116);
+      SetRect(&this->full_, 150, 100, 270, 116);
+      this->visible_ = this->full_;
+      if (cut == 'v')
+        this->visible_.right = this->full_.left + 40;
+      else
+        this->visible_.bottom = this->full_.top + 8;
+      ClipRect(&this->port_->portRect);
+      Rect clear;
+      SetRect(&clear, 8, 98, 272, 118);
+      EraseRect(&clear);
+      this->reference_ = TENew(&this->referenceRect_, &this->referenceRect_);
+      SetClip(this->savedClip_);
+      this->setCallClip(narrowView);
+      this->probe_ = TENew(&this->full_, narrowView ? &this->visible_ : &this->full_);
+      SetClip(this->savedClip_);
+      if (!this->reference_ || !this->probe_)
+      {
+        std::fprintf(this->log_, "te-probe cut=%c case=%s skipped=te-allocation\r", cut, narrowView ? "a" : "c");
+        this->disposeRecords();
+        return;
+      }
+      const char initial[] = "abc";
+      for (int which = 0; which != 2; ++which)
+      {
+        TEHandle te = which ? this->probe_ : this->reference_;
+        this->setCallClip(!which || narrowView);
+        TEAutoView(true, te);
+        SetClip(this->savedClip_);
+        this->setCallClip(!which || narrowView);
+        TESetText(initial, sizeof(initial) - 1, te);
+        SetClip(this->savedClip_);
+        this->setCallClip(!which || narrowView);
+        TESetSelect(sizeof(initial) - 1, sizeof(initial) - 1, te);
+        SetClip(this->savedClip_);
+        this->setCallClip(!which || narrowView);
+        TEUpdate(which ? &this->full_ : &this->referenceRect_, te);
+        SetClip(this->savedClip_);
+      }
+      const char *names[] = {"activate", "key-run", "idle-1", "idle-2", "select-all", "deactivate"};
+      for (int op = 0; op != 6; ++op)
+      {
+        this->snapshot();
+        this->operate(this->reference_, op, true);
+        this->operate(this->probe_, op, narrowView);
+        int outside = 0;
+        int inside = 0;
+        int index = 0;
+        for (short y = this->full_.top - 2; y < this->full_.bottom + 2; ++y)
+          for (short x = this->full_.left - 2; x < this->full_.right + 2; ++x, ++index)
+          {
+            const bool pixel = GetPixel(x, y) != 0;
+            if (x < this->visible_.left || x >= this->visible_.right
+                || y < this->visible_.top || y >= this->visible_.bottom)
+              outside += pixel != (this->pixels_[index] != 0);
+            else
+              inside += pixel != (GetPixel(x - this->full_.left + this->referenceRect_.left, y) != 0);
+          }
+        const int top = (**this->probe_).destRect.top - (**this->probe_).viewRect.top;
+        if (narrowView)
+          std::fprintf(this->log_, "te-probe-a op=%s outside_changed=%d dest_top=%d\r", names[op], outside, top);
+        else
+          std::fprintf(this->log_,
+                       "te-probe cut=%c op=%s outside_changed=%d inside_diff=%d dest_top=%d ref_dest_top=%d\r",
+                       cut, names[op], outside, inside, top,
+                       (**this->reference_).destRect.top - (**this->reference_).viewRect.top);
+        if (op == 4)
+          std::fprintf(this->log_, "te-probe cut=%c case=%s op=click skipped=mouse-tracking\r", cut, narrowView ? "a" : "c");
+      }
+      this->disposeRecords();
+    }
+
+  private:
+    GrafPtr port_;
+    GrafPtr previousPort_;
+    std::FILE *log_;
+    RgnHandle savedClip_;
+    TEHandle reference_;
+    TEHandle probe_;
+    Rect referenceRect_;
+    Rect full_;
+    Rect visible_;
+    unsigned char pixels_[124 * 20];
+
+    void setCallClip(bool whole) { ClipRect(whole ? &this->port_->portRect : &this->visible_); }
+    void disposeRecords()
+    {
+      // TEDispose releases storage; it does not repaint. Keep the probe's
+      // disposal clipped too, including partial-allocation refusal.
+      if (this->reference_)
+      {
+        this->setCallClip(true);
+        TEDispose(this->reference_);
+        this->reference_ = 0;
+        SetClip(this->savedClip_);
+      }
+      if (this->probe_)
+      {
+        this->setCallClip(false);
+        TEDispose(this->probe_);
+        this->probe_ = 0;
+        SetClip(this->savedClip_);
+      }
+    }
+    void snapshot()
+    {
+      int index = 0;
+      for (short y = this->full_.top - 2; y < this->full_.bottom + 2; ++y)
+        for (short x = this->full_.left - 2; x < this->full_.right + 2; ++x)
+          this->pixels_[index++] = GetPixel(x, y) != 0;
+    }
+    void operate(TEHandle te, int op, bool whole)
+    {
+      if (op == 1)
+      {
+        // A key-run is one measured operation, but each TEKey gets its own
+        // clip scope. 96 ASCII letters wrap even at the inherited small font.
+        for (int i = 0; i != 96; ++i)
+        {
+          this->setCallClip(whole);
+          TEKey(static_cast<char>('a' + i % 26), te);
+          SetClip(this->savedClip_);
+        }
+        return;
+      }
+      this->setCallClip(whole);
+      switch (op)
+      {
+      case 0: TEActivate(te); break;
+      case 2:
+      case 3:
+        // Make the blink due without pumping events or allowing a repaint
+        // between the two records. Only timing is forced, not caret state.
+        (**te).caretTime = 0;
+        TEIdle(te);
+        break;
+      case 4: TESetSelect(0, (**te).teLength, te); break;
+      case 5: TEDeactivate(te); break;
+      }
+      SetClip(this->savedClip_);
+    }
+    NativeTEClipProbe(const NativeTEClipProbe &);
+    NativeTEClipProbe &operator=(const NativeTEClipProbe &);
+  };
 
   const char kPermutedButtonTitle[] = "IIIIMMMM";
   const char kMovedButtonTitle[] = "MMMMMMMM";
@@ -1649,7 +1828,9 @@ namespace
       CARD_DISABLED,
       CARD_RESTORED,
       CARD_SCROLLED,
-      COMPLETE
+      COMPLETE,
+      TE_PROBE_SHOW,
+      TE_PROBE_RUN
     };
     App *app_;
     ViewportDamageNode *node_;
@@ -1733,6 +1914,8 @@ namespace
       case UNIT_SURFACE_CHECK:
         target = self->unitSurfaceWindow_;
         break;
+      case TE_PROBE_SHOW:
+      case TE_PROBE_RUN:
       case SETTLE: case WRITE: case CHECK:
         target = self->paintWindow_;
         break;
@@ -1807,6 +1990,27 @@ namespace
       if (!native)
       {
         self->finish(false);
+        return;
+      }
+      if (self->phase_ == TE_PROBE_SHOW)
+      {
+        ShowWindow(native->window());
+        SelectWindow(native->window());
+        native->requestInvalidate();
+        self->phase_ = TE_PROBE_RUN;
+        return;
+      }
+      if (self->phase_ == TE_PROBE_RUN)
+      {
+        target->flushSceneInvalidation();
+        native->flushInvalidate();
+        {
+          NativeTEClipProbe probe(native->window(), self->log_);
+          probe.run('v', false);
+          probe.run('h', false);
+          probe.run('v', true);
+        }
+        self->finish(true);
         return;
       }
       // One bounded delivery per phase; never wait for a permanently pending
@@ -1918,9 +2122,7 @@ namespace
                      draws);
         self->recordArm(name,
                         unchanged && whole == 0 && draws == 0 && std::strcmp(route, "composition") == 0,
-                        button ? UNIT_SURFACE_SHOW : COMPLETE);
-        if (!button)
-          self->finish(true);
+                        button ? UNIT_SURFACE_SHOW : TE_PROBE_SHOW);
       }
       SetPort(previous);
     }
