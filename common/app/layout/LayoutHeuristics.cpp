@@ -1,6 +1,7 @@
 #include "app/layout/LayoutHeuristics.hpp"
 
 #include "app/nodes/nestable/Fragment.hpp"
+#include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include "dsl/composition/CompositionList.hpp"
 #include <climits>
@@ -168,6 +169,35 @@ namespace loka
 
       namespace
       {
+        /** Follow only transparent wrappers with exactly one live leaf. */
+        TextNode *singleTextLeaf(scene::Node *seat)
+        {
+          if (!isLayoutPassThrough(seat))
+            return seat ? seat->asTextNode() : 0;
+          scene::INestable *group = seat->asNestable();
+          loka::dsl::CompositionCursor<scene::Node> children(group->childrenHead(), group->childrenCount());
+          scene::Node *live = 0;
+          for (scene::Node *child = children.next(); child; child = children.next())
+          {
+            if (!childTakesLayoutSeat(child))
+              continue;
+            if (live)
+              return 0;
+            live = child;
+          }
+          return singleTextLeaf(live);
+        }
+
+        /** Shape/style eligibility; callers supply the positive natural-width answer. */
+        bool shrinkableTextSeat(scene::Node *seat)
+        {
+          if (preferredChildWidthForRow(seat) >= 0)
+            return false;
+          TextNode *text = singleTextLeaf(seat);
+          return text && text->props.blockStyle_.truncation_ == TEXT_TRUNCATION_ELLIPSIS
+                 && (!text->props.blockStyle_.hasWrap_ || text->props.blockStyle_.wrap_ == TEXT_WRAP_NONE);
+        }
+
         /** Pass-local seat classification and spacing shared by allocation and measurement. */
         class RowWidthTally
         {
@@ -346,10 +376,45 @@ namespace loka
               if (!queryContentOverflowWidth(child, spacing, source, measured))
                 return false;
             }
-            else if ((stack && stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL)
-                     || child->asFramedNode()
-                     || (image && image->props.hasAttr_ && image->props.attr_.hasSizePolicyValue_
-                         && image->props.attr_.sizePolicyValue_ == IMAGE_VIEW_SIZE_INTRINSIC))
+            else if (scene::IFramedNode *frame = child->asFramedNode())
+            {
+              if (!queryContentOverflowWidth(child, spacing, source, measured))
+                return false;
+              const FrameGeometry geometry = frame->frameGeometry();
+              long answer = static_cast<long>(measured) + geometry.insets.left + geometry.insets.right;
+              if (answer < geometry.minimumWidth)
+                answer = geometry.minimumWidth;
+              if (answer > SHRT_MAX)
+                return false;
+              measured = static_cast<short>(answer);
+            }
+            else if (stack && stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL)
+            {
+              RowWidthTally original;
+              RowWidthTally shrunk;
+              loka::dsl::CompositionCursor<scene::Node> seats(stack->childrenHead(), stack->childrenCount());
+              for (scene::Node *seat = seats.next(); seat; seat = seats.next())
+              {
+                if (!childTakesLayoutSeat(seat))
+                  continue;
+                int claim = preferredChildWidthForRow(seat);
+                if (claim < 0)
+                {
+                  short natural = 0;
+                  if (!queryNaturalWidth(seat, spacing, source, natural))
+                    return false;
+                  claim = natural;
+                }
+                original.add(claim, true);
+                shrunk.add(claim > 0 && shrinkableTextSeat(seat) ? 1 : claim, true);
+              }
+              const int gap = resolveLayoutGap(stack, spacing.horizontalGap(), spacing);
+              if (original.occupied(gap).value() <= 0 || original.occupied(gap).value() > SHRT_MAX)
+                return false;
+              measured = static_cast<short>(shrunk.occupied(gap).value());
+            }
+            else if (image && image->props.hasAttr_ && image->props.attr_.hasSizePolicyValue_
+                     && image->props.attr_.sizePolicyValue_ == IMAGE_VIEW_SIZE_INTRINSIC)
             {
               if (!queryNaturalWidth(child, spacing, source, measured))
                 return false;
@@ -374,8 +439,8 @@ namespace loka
                                                  const INaturalWidthSource *source)
           : source_(0),
             spacing_(spacing),
-            baseFlexWidth_(0),
-            flexRemainder_(0),
+            flex_(0),
+            shrink_(),
             liveSeatsSeen_(0)
       {
         switch (policy)
@@ -387,11 +452,19 @@ namespace loka
           break;
         }
         RowWidthTally tally;
+        LayoutWidthSum shrinkSum;
+        long shrinkCount = 0;
         loka::dsl::CompositionCursor<loka::app::scene::Node> consult(childrenHead, childCount);
         for (loka::app::scene::Node *child = consult.next(); child; child = consult.next())
         {
           const bool takesSeat = childTakesLayoutSeat(child);
-          tally.add(takesSeat ? this->preferredWidth(child) : 0, takesSeat);
+          const int width = takesSeat ? this->preferredWidth(child) : 0;
+          tally.add(width, takesSeat);
+          if (this->source_ && width > 0 && shrinkableTextSeat(child))
+          {
+            shrinkSum.add(width);
+            ++shrinkCount;
+          }
         }
         const long flexSeats = tally.flexSeats();
         const long occupied = tally.occupied(gap).value();
@@ -402,8 +475,53 @@ namespace loka
         }
         if (flexSeats > 0)
         {
-          this->baseFlexWidth_ = static_cast<int>(remainingWidth / flexSeats);
-          this->flexRemainder_ = static_cast<int>(remainingWidth - this->baseFlexWidth_ * flexSeats);
+          this->flex_ = RowWidthDivision(static_cast<int>(remainingWidth / flexSeats),
+                                         static_cast<int>(remainingWidth % flexSeats));
+        }
+        if (occupied <= SHRT_MAX && occupied > availableWidth && shrinkCount > 0)
+        {
+          const long sum = shrinkSum.value();
+          long budget = sum - (occupied - availableWidth);
+          if (budget < shrinkCount)
+            budget = shrinkCount;
+          if (budget == sum)
+            return;
+          if (shrinkCount == 1)
+          {
+            this->shrink_ = RowWidthDivision(static_cast<int>(budget));
+            return;
+          }
+          // Each raised cap freezes at least one more short seat. Thus at most
+          // k scans, without a per-child table or measurements of other seats.
+          long cap = budget / shrinkCount;
+          for (long pass = 0; pass < shrinkCount; ++pass)
+          {
+            long shortSum = 0;
+            long tallCount = 0;
+            loka::dsl::CompositionCursor<scene::Node> seats(childrenHead, childCount);
+            for (scene::Node *seat = seats.next(); seat; seat = seats.next())
+            {
+              if (!shrinkableTextSeat(seat))
+                continue;
+              short natural = 0;
+              if (!queryNaturalWidth(seat, this->spacing_, this->source_, natural))
+                continue;
+              if (natural <= cap)
+                shortSum += natural;
+              else
+                ++tallCount;
+            }
+            if (tallCount == 0)
+              return;
+            const long nextCap = (budget - shortSum) / tallCount;
+            if (nextCap == cap)
+            {
+              this->shrink_ =
+                  RowWidthDivision(static_cast<int>(cap), static_cast<int>(budget - shortSum - cap * tallCount));
+              return;
+            }
+            cap = nextCap;
+          }
         }
       }
 
@@ -427,13 +545,10 @@ namespace loka
         int width = preferredWidth;
         if (preferredWidth < 0)
         {
-          width = this->baseFlexWidth_;
-          if (this->flexRemainder_ > 0)
-          {
-            ++width;
-            --this->flexRemainder_;
-          }
+          width = this->flex_.take(INT_MAX);
         }
+        else if (this->source_ && width > 0 && shrinkableTextSeat(child))
+          width = this->shrink_.take(width);
         const bool gapBefore = this->liveSeatsSeen_ > 0;
         ++this->liveSeatsSeen_;
         return RowChildWidth(width, true, gapBefore);

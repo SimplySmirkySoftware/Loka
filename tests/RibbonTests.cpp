@@ -519,5 +519,5 @@ void testFramedCapabilityLayoutAndMeasurement()
   parent.addChild(overflowFrame);
   short overflow = 0;
   LOKA_VERIFY(layout::queryContentOverflowWidth(&parent, loka::app::layout::RailSpacing(12, 0, 9), &natural, overflow));
-  LOKA_VERIFY(overflow == 112);
+  LOKA_VERIFY(overflow == 12);
 }

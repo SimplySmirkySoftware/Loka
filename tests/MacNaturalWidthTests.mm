@@ -2,6 +2,7 @@
 #include "MacObjCCompat.hpp"
 #include "MacScenePlatformController.hpp"
 #include "app/nodes/ImageView.hpp"
+#include "app/nodes/Text.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "MacSceneLayout.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
@@ -244,6 +245,34 @@ void testMacDirectRowNaturalWidthFrames()
     LOKA_VERIFY([first frame].size.width == std::ceil([[first cell] cellSize].width));
     LOKA_VERIFY([second frame].size.width == std::ceil([[second cell] cellSize].width));
     LOKA_VERIFY([second frame].origin.x == NSMaxX([first frame]) + MacSceneLayout::kGap);
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    DirectRow row;
+    ButtonNode *first = new ButtonNode(ButtonProps().text("< Back"));
+    TextProps titleProps("A deliberately long toolbar title that must shrink before the last button");
+    titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode *title = new TextNode(titleProps);
+    ButtonNode *last = new ButtonNode(ButtonProps().text("Main"));
+    row.addChild(first);
+    row.addChild(title);
+    row.addChild(last);
+    controller.onChange(&row, NODE_DIRTY_NONE, false);
+    short firstWidth = 0, titleWidth = 0, lastWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(first, firstWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(title, titleWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(last, lastWidth));
+    const int offer = firstWidth + lastWidth + 2 * MacSceneLayout::kGap + titleWidth / 2;
+    controller.relayout(offer + 2 * MacSceneLayout::kRootInset, kClientHeight);
+    LOKA_VERIFY([[root subviews] count] == 3);
+    const NSRect firstFrame = [buttonAt(root, 0) frame];
+    const NSRect titleFrame = [[[root subviews] objectAtIndex:1] frame];
+    const NSRect lastFrame = [buttonAt(root, 2) frame];
+    LOKA_VERIFY(firstFrame.size.width == firstWidth);
+    LOKA_VERIFY(lastFrame.size.width == lastWidth);
+    LOKA_VERIFY(titleFrame.size.width > 0 && titleFrame.size.width < titleWidth);
+    LOKA_VERIFY(NSMaxX(lastFrame) <= MacSceneLayout::kRootInset + offer);
     controller.onChange(0, NODE_DIRTY_NONE, false);
   }
   LOKA_VERIFY([[root subviews] count] == 0);

@@ -138,10 +138,14 @@ A rail never measures content width during layout. The range comes from
 ruling): only content that **overflows the width it is offered** counts: a
 declared width (`ImageView`/`RectSurface` with `size`, a positive-width `Box`), an
 INTRINSIC image whose natural width the rail's leaf answers, or a NATURAL row
-(whose natural width sums its leaves, text included:
+(whose fully shrunk width counts eligible single-line ELLIPSIS Text seats as 1,
+after refusing saturation of the original natural sum:
 `testContentOverflowNestedMaximumAndOverflow`). Text, buttons and offer-bound
 boxes placed directly in the content column are laid out at the offered width
-and contribute 0 (`testContentOverflowIgnoresOfferBoundText`).
+and contribute 0 (`testContentOverflowIgnoresOfferBoundText`). Framed nodes recursively
+estimate their content, add left and right insets, and take at least their minimum
+width. This preserves the known right-inset and minimum-width overestimate; it
+is not the union of laid-out rectangles.
 
 Cost: the question runs once per ScrollView layout pass and walks the
 ScrollView's content subtree, not only its direct children: it descends into
