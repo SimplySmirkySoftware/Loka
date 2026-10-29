@@ -9,7 +9,7 @@ namespace loka
   namespace win32
   {
     /** The messages every container child window (a ZStack unit, a ScrollView
-        viewport) answers alike. It paints the window ground beneath its
+        viewport, or a clip box) answers alike. It paints the window ground beneath its
         transparent static children (#1199, so no WS_CLIPCHILDREN), and it
         routes control commands to the controller: a control parented to a
         container notifies the container, not the root window, so the command

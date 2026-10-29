@@ -1,3 +1,4 @@
+#include "context/Win32ClipBoxContext.hpp"
 #include "Win32ZStackUnitTests.hpp"
 #include "support/TestVerify.hpp"
 #include <climits>
@@ -225,29 +226,48 @@ namespace
   }
 } // namespace
 
-void testWin32ZStackLaterChildGetsUnitWindow()
+static void checkWin32ZStackLaterChildGetsUnitWindow(bool clipped)
 {
   Fixture f;
   ZStackNode *stack = stackWithGround(f);
   StackNode *column = buttonColumn("B");
   stack->addChild(column);
+  BoxProps wrapperProps;
+  wrapperProps.childClip_ = clipped ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+  BoxNode *wrapper = new BoxNode(wrapperProps);
+  if (clipped)
+  {
+    wrapper->addChild(stack);
+    f.tree = wrapper;
+  }
+  else
+    delete wrapper;
   f.layout();
-  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
-  LOKA_VERIFY(unit && GetWindow(f.root(), GW_CHILD) == unit);
-  LOKA_VERIFY(!FindWindowExW(f.root(), unit, L"LOKA_STACK_UNIT", NULL));
+  HWND parent =
+      clipped ? static_cast<Win32ClipBoxContext *>(wrapper->getContext()->asClipBoxContext())->hwnd() : f.root();
+  HWND unit = childOfClass(parent, L"LOKA_STACK_UNIT");
+  LOKA_VERIFY(unit && GetWindow(parent, GW_CHILD) == unit);
+  LOKA_VERIFY(!FindWindowExW(parent, unit, L"LOKA_STACK_UNIT", NULL));
   const RECT rect = rectInParent(unit);
-  LOKA_VERIFY(rect.left == Win32SceneLayout::kRootInset && rect.top == Win32SceneLayout::kRootInset);
+  LOKA_VERIFY(rect.left == (clipped ? 0 : Win32SceneLayout::kRootInset)
+              && rect.top == (clipped ? 0 : Win32SceneLayout::kRootInset));
   LOKA_VERIFY(rect.right - rect.left == 300 - 2 * Win32SceneLayout::kRootInset);
   LOKA_VERIFY(rect.bottom - rect.top == f.controller.rowLayoutMetrics().buttonHeight);
   HWND button = native(column->childrenHead());
   LOKA_VERIFY(GetParent(button) == unit);
   const RECT buttonRect = rectInParent(button);
   LOKA_VERIFY(buttonRect.left == 0 && buttonRect.top == 0);
-  LOKA_VERIFY(GetParent(native(stack->childrenHead())) == f.root());
+  LOKA_VERIFY(GetParent(native(stack->childrenHead())) == parent);
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
   const POINT inside = {rect.left + 2, rect.top + 2};
-  HWND hit = ChildWindowFromPointEx(f.root(), inside, CWP_SKIPINVISIBLE);
+  HWND hit = ChildWindowFromPointEx(parent, inside, CWP_SKIPINVISIBLE);
   LOKA_VERIFY(hit == unit || hit == button);
+}
+
+void testWin32ZStackLaterChildGetsUnitWindow()
+{
+  checkWin32ZStackLaterChildGetsUnitWindow(false);
+  checkWin32ZStackLaterChildGetsUnitWindow(true);
 }
 
 void testWin32ZStackUnitAnswersContainerMessages()
@@ -530,7 +550,7 @@ void testWin32ScrollViewRefusedInsideUnit()
   LOKA_VERIFY(!GetWindow(unit, GW_CHILD));
 }
 
-void testWin32ZStackUnitForwardsWheelToViewport()
+static void checkWin32ZStackUnitForwardsWheelToViewport(bool clipped)
 {
   loka::core::MutableState<loka::core::Frame> storage(loka::core::Frame(0, 0, 0, 0));
   NodeState<loka::core::Frame> origin(&storage, 0);
@@ -538,12 +558,26 @@ void testWin32ZStackUnitForwardsWheelToViewport()
   ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(origin));
   f.tree = scroll;
   ZStackNode *stack = new ZStackNode((ZStackProps()));
-  scroll->addChild(stack);
+  BoxProps wrapperProps;
+  wrapperProps.childClip_ = clipped ? layout::CHILD_CLIP_OWN_RECT : layout::CHILD_CLIP_NONE;
+  BoxNode *wrapper = new BoxNode(wrapperProps);
+  if (clipped)
+  {
+    wrapper->addChild(stack);
+    scroll->addChild(wrapper);
+  }
+  else
+  {
+    delete wrapper;
+    scroll->addChild(stack);
+  }
   stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(200, 600)));
   stack->addChild(buttonColumn("B"));
   f.layout(300, 140);
   HWND viewport = viewportUnder(f.root());
-  HWND unit = childOfClass(viewport, L"LOKA_STACK_UNIT");
+  HWND parent =
+      clipped ? static_cast<Win32ClipBoxContext *>(wrapper->getContext()->asClipBoxContext())->hwnd() : viewport;
+  HWND unit = childOfClass(parent, L"LOKA_STACK_UNIT");
   LOKA_VERIFY(unit);
   ShowWindow(f.root(), SW_SHOWNOACTIVATE);
   LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
@@ -565,6 +599,12 @@ void testWin32ZStackUnitForwardsWheelToViewport()
                         : lines > static_cast<UINT>(maximum) / 16 ? static_cast<UINT>(maximum)
                                                                   : lines * 16;
   LOKA_VERIFY(origin.get().y == (distance > static_cast<UINT>(maximum) ? maximum : static_cast<int>(distance)));
+}
+
+void testWin32ZStackUnitForwardsWheelToViewport()
+{
+  checkWin32ZStackUnitForwardsWheelToViewport(false);
+  checkWin32ZStackUnitForwardsWheelToViewport(true);
 }
 
 namespace
