@@ -1290,15 +1290,20 @@ namespace
     LOKA_VERIFY(f.last().unsupportedKinds() == 1);
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
   }
-  void presentCardBandRefused()
+  void presentCardBandPhase()
   {
     CardNode *card = new CardNode(CardProps());
     card->addChild(new CardBandNode(CardBandProps(CARD_BAND_TOP)));
     card->addChild(new BoxNode(Box().size(180, 600).props));
     PresentFixture f(false, 0, card);
     f.scroll(17);
-    LOKA_VERIFY(f.last().unsupportedKinds() >= 1);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    LOKA_VERIFY(f.last().phaseBound() >= 1);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_DITHER_PHASE);
+    f.scroll(33);
+    LOKA_VERIFY(f.last().dy() == 16);
+    LOKA_VERIFY(f.last().phaseBound() >= 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
   }
   template <int Mode> class PresentLiveNode;
   template <int Mode>
@@ -1640,7 +1645,7 @@ namespace
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT);
     // Each later refusal remains present while the earlier one wins.
-    for (unsigned gate = 0; gate < 3; ++gate)
+    for (unsigned gate = 0; gate < 4; ++gate)
     {
       observation.reset();
       observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
@@ -1650,19 +1655,23 @@ namespace
         content.noteContentInputs();
       if (gate < 2)
         observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
-      content.noteUnsupportedKind();
+      if (gate < 3)
+        content.noteUnsupportedKind();
+      content.notePhaseBound();
       observation.noteViewportMove(viewport, 0, 3, content);
       observation.noteDamage(outside);
       observation.complete(1);
       LOKA_VERIFY(observation.refusal()
                   == (gate == 0   ? TOOLBOX_PRESENT_CONTENT_INPUTS
                       : gate == 1 ? TOOLBOX_PRESENT_REQUESTS_DURING_WALK
-                                  : TOOLBOX_PRESENT_UNSUPPORTED_KIND));
+                      : gate == 2 ? TOOLBOX_PRESENT_UNSUPPORTED_KIND
+                                  : TOOLBOX_PRESENT_DITHER_PHASE));
       LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY));
       LOKA_VERIFY(observation.walkReasonNames() == (gate < 2 ? "child_dirty" : "none"));
     }
     LOKA_VERIFY(observation.contentInputs() == 0 && observation.unsupportedKinds() == 0);
     LOKA_VERIFY(observation.walkReasons() == 0);
+    LOKA_VERIFY(observation.phaseBound() == 0);
     observation.reset();
     {
       ToolboxPresentObservation::Interval interval(observation);
@@ -2169,7 +2178,7 @@ int main(int argc, char **argv)
                          "PresentContentInputs",
                          "PresentUnsupportedKind",
                          "PresentContainerInputNotCounted",
-                         "PresentCardBandRefused",
+                         "PresentCardBandPhase",
                          "PresentClipBoxRefused",
 
                          "ClipFrameProjection",
@@ -2242,8 +2251,8 @@ int main(int argc, char **argv)
     presentUnsupportedKind();
   else if (std::strcmp(argv[1], "PresentContainerInputNotCounted") == 0)
     presentContainerInputNotCounted();
-  else if (std::strcmp(argv[1], "PresentCardBandRefused") == 0)
-    presentCardBandRefused();
+  else if (std::strcmp(argv[1], "PresentCardBandPhase") == 0)
+    presentCardBandPhase();
   else if (std::strcmp(argv[1], "PresentClipBoxRefused") == 0)
     presentClipBoxRefused();
   else if (std::strcmp(argv[1], "PresentSiblingViewport") == 0)

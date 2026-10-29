@@ -78,15 +78,12 @@ namespace
     case NODE_KIND_STACK:
     case NODE_KIND_CELL:
     case NODE_KIND_CARD:
+    case NODE_KIND_CARD_BAND:
     case NODE_KIND_TEXT:
     case NODE_KIND_ATTRIBUTED_TEXT:
     case NODE_KIND_BUTTON:
     case NODE_KIND_SCROLL_BAR:
       return true;
-    case NODE_KIND_CARD_BAND:
-      // Its shadow stencil phase is anchored to window coordinates, so a translated copy and a repaint differ; admitted
-      // again only when the phase follows the band, an owner decision pending as Q-E.
-      return false;
     case NODE_KIND_SCROLL_VIEW:
       // Nested viewport.
       return false;
@@ -347,6 +344,8 @@ namespace
       }
       if (controller->activeViewportContent_ && !ToolboxPresentAdmitsKind(*node, boundary))
         controller->activeViewportContent_->noteUnsupportedKind();
+      if (controller->activeViewportContent_ && node->kind() == loka::app::scene::NODE_KIND_CARD_BAND)
+        controller->activeViewportContent_->notePhaseBound();
       if (controller->activeViewportContent_ && inputs.inputs() != loka::app::scene::NODE_DIRTY_NONE)
         controller->activeViewportContent_->noteContentInputs();
       if (boundary)

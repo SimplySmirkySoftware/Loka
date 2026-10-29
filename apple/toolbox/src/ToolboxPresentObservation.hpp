@@ -23,6 +23,7 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_CONTENT_INPUTS,
   TOOLBOX_PRESENT_REQUESTS_DURING_WALK,
   TOOLBOX_PRESENT_UNSUPPORTED_KIND,
+  TOOLBOX_PRESENT_DITHER_PHASE,
   TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT,
   TOOLBOX_PRESENT_FOREGROUND_UNITS,
   TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
@@ -59,6 +60,8 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
     return "requests_during_walk";
   case TOOLBOX_PRESENT_UNSUPPORTED_KIND:
     return "unsupported_kind";
+  case TOOLBOX_PRESENT_DITHER_PHASE:
+    return "dither_phase";
   case TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT:
     return "damage_outside_viewport";
   case TOOLBOX_PRESENT_FOREGROUND_UNITS:
@@ -80,7 +83,8 @@ class ToolboxViewportContentObservation
 public:
   ToolboxViewportContentObservation()
       : contentInputs_(0),
-        unsupportedKinds_(0)
+        unsupportedKinds_(0),
+        phaseBound_(0)
   {
   }
   /** Dispatch calls once per successful dirty leaf visit; O(1), walks nothing. */
@@ -92,6 +96,18 @@ public:
   void noteUnsupportedKind()
   {
     ++this->unsupportedKinds_;
+  }
+  /** Dispatch calls once per successful CardBand visit; O(1), walks nothing.
+      Its 8x8 shadow phase is window-anchored: context/ToolboxCardBandContext.cpp
+      and common/app/style/CardShadow.cpp (CardShadowStencilInk). */
+  void notePhaseBound()
+  {
+    ++this->phaseBound_;
+  }
+  /** Completed window-anchored raster visits; O(1), walks nothing. */
+  unsigned phaseBound() const
+  {
+    return this->phaseBound_;
   }
   /** Completed visit count; O(1), walks nothing. */
   unsigned contentInputs() const
@@ -126,7 +142,7 @@ public:
   };
 
 private:
-  unsigned contentInputs_, unsupportedKinds_;
+  unsigned contentInputs_, unsupportedKinds_, phaseBound_;
 };
 
 /** Controller-owned interval facts; completed copies contain no borrowed identities. */
@@ -191,6 +207,7 @@ public:
     }
     this->contentInputs_ += content.contentInputs();
     this->unsupportedKinds_ += content.unsupportedKinds();
+    this->phaseBound_ += content.phaseBound();
     ++this->viewports_;
     this->horizontal_ = this->horizontal_ || dx != 0;
   }
@@ -214,6 +231,8 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_REQUESTS_DURING_WALK;
     else if (this->unsupportedKinds_)
       this->refusal_ = TOOLBOX_PRESENT_UNSUPPORTED_KIND;
+    else if (this->phaseBound_ > 0 && (this->dy_ & 7) != 0)
+      this->refusal_ = TOOLBOX_PRESENT_DITHER_PHASE;
     else if (this->damage_.left < this->damage_.right && this->damage_.top < this->damage_.bottom
              && (this->damage_.left < this->viewport_.left || this->damage_.top < this->viewport_.top
                  || this->damage_.right > this->viewport_.right || this->damage_.bottom > this->viewport_.bottom))
@@ -227,7 +246,7 @@ public:
   void reset()
   {
     this->reasons_ = this->nextReasons_ = this->walkReasons_ = 0;
-    this->contentInputs_ = this->unsupportedKinds_ = 0;
+    this->contentInputs_ = this->unsupportedKinds_ = this->phaseBound_ = 0;
     this->damage_ = this->viewport_ = Rect();
     this->dy_ = 0;
     this->viewports_ = this->foregroundUnits_ = 0;
@@ -245,6 +264,11 @@ public:
   unsigned unsupportedKinds() const
   {
     return this->unsupportedKinds_;
+  }
+  /** Merged window-anchored raster visits; O(1), no walk. */
+  unsigned phaseBound() const
+  {
+    return this->phaseBound_;
   }
   /** Requests received during layout; O(1), no walk. */
   unsigned walkReasons() const
@@ -316,7 +340,7 @@ private:
     COMPLETED
   };
   unsigned reasons_, nextReasons_, walkReasons_;
-  unsigned contentInputs_, unsupportedKinds_;
+  unsigned contentInputs_, unsupportedKinds_, phaseBound_;
   Rect damage_, viewport_;
   int dy_;
   unsigned viewports_, foregroundUnits_;

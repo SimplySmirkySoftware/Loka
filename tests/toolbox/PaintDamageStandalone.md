@@ -245,8 +245,13 @@ no observation lines because the scenario runner compares whole audit files.
 
 The `present_observe` record includes `content_inputs` (successful projected-leaf
 visits with nonzero pre-layout inputs), `unsupported_kinds` (visited nodes whose
-paint/clip contract is not admitted), and `walk_reasons` (full requests arriving
-during layout). Counts cover visited nodes only: band windows may skip rows,
+paint/clip contract is not admitted), `walk_reasons` (full requests arriving
+during layout), and `phase_bound` (successful visited CardBand leaves whose
+8x8 shadow stencil is anchored to window coordinates). A phase-bound move
+whose vertical delta is not a multiple of 8 reports `dither_phase`, after
+`unsupported_kind` and before damage refusal. The Offscreen column has no
+CardBand and its reveal is 160 = 8 × 20, so neither arm changes.
+Counts cover visited nodes only: band windows may skip rows,
 and only a successfully moved viewport contributes its local counts. They are
 diagnostics, not a content-invariance proof; the verdict remains `erase`.
 

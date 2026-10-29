@@ -2913,7 +2913,7 @@ namespace
         const Rect &damage = observation.damage();
         std::fprintf(self->log_,
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
-                     "content_inputs=%u unsupported_kinds=%u walk_reasons=%s verdict=%s "
+                     "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
                      "refusal=%s last_refusal=%s\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
@@ -2926,6 +2926,7 @@ namespace
                      observation.contentInputs(),
                      observation.unsupportedKinds(),
                      observation.walkReasonNames().c_str(),
+                     observation.phaseBound(),
                      ToolboxPresentVerdictName(observation.verdict()),
                      ToolboxPresentRefusalName(observation.refusal()),
                      ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()));
