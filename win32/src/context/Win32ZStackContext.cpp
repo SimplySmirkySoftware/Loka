@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <new>
-#include "../Win32PaintGround.hpp"
+#include "Win32ContainerWindow.hpp"
 #include "../Win32ScenePlatformController.hpp"
 
 Win32ZStackContext::Unit::Unit(Win32ScenePlatformController *controller, unsigned index)
@@ -115,7 +115,6 @@ void Win32ZStackContext::Unit::EnsureClassRegistered()
   RegisterClassW(&wc);
 }
 
-// Deliberate twin of Win32ScrollViewContext::WndProc, without scroll handling.
 LRESULT CALLBACK Win32ZStackContext::Unit::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   Unit *self = reinterpret_cast<Unit *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -125,21 +124,9 @@ LRESULT CALLBACK Win32ZStackContext::Unit::WndProc(HWND hwnd, UINT msg, WPARAM w
     self = static_cast<Unit *>(create->lpCreateParams);
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
   }
-  if (msg == WM_CTLCOLORSTATIC)
-    return reinterpret_cast<LRESULT>(
-        loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
-  if (msg == WM_ERASEBKGND)
-    return 1;
-  if (msg == WM_PAINT)
-  {
-    PAINTSTRUCT paint;
-    HDC dc = BeginPaint(hwnd, &paint);
-    Win32ScenePlatformController::paintWindowGround(dc, paint.rcPaint);
-    EndPaint(hwnd, &paint);
-    return 0;
-  }
-  if (msg == WM_COMMAND && self && self->window_.controller()
-      && self->window_.controller()->handleCommand(wParam, lParam))
-    return 0;
+  LRESULT result;
+  if (loka::win32::Win32AnswerContainerMessage(
+          hwnd, msg, wParam, lParam, self ? self->window_.controller() : 0, result))
+    return result;
   return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
