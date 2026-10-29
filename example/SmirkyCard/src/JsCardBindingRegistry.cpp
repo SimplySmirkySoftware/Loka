@@ -858,9 +858,31 @@ namespace smirkycard
         out = loka::app::layout::LayoutGap::standardWindowMargin();
       return standard;
     }
-    bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree)
+    /** Immutable global identity, literal diagnostics and creation-time clipping policy. */
+    struct BoxGlobal
     {
-      if (!requirePlainObject(ctx, options, "Box options"))
+      const char *const name;
+      const char *const optionsLabel;
+      const char *const allocationRefused;
+      const char *const invalidClaims;
+      const char *const invalidChild;
+      const bool clipsChild;
+    };
+    const BoxGlobal kBoxGlobal = {"Box",
+                                  "Box options",
+                                  "JavaScript Box allocation refused.",
+                                  "JavaScript Box has an invalid width, height or padding.",
+                                  "JavaScript Box has an invalid child.",
+                                  false};
+    const BoxGlobal kClipBoxGlobal = {"ClipBox",
+                                      "ClipBox options",
+                                      "JavaScript ClipBox allocation refused.",
+                                      "JavaScript ClipBox has an invalid width, height or padding.",
+                                      "JavaScript ClipBox has an invalid child.",
+                                      true};
+    bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree, const BoxGlobal &global)
+    {
+      if (!requirePlainObject(ctx, options, global.optionsLabel))
         return false;
       JsOwnProperties names(ctx);
       if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
@@ -878,7 +900,7 @@ namespace smirkycard
           JS_FreeCString(ctx, name);
         if (!isWidth && !isHeight && !isPadding)
         {
-          JS_ThrowTypeError(ctx, "Box options accept only width, height and padding");
+          JS_ThrowTypeError(ctx, "%s options accept only width, height and padding", global.name);
           return false;
         }
         JSValue value = JS_GetProperty(ctx, options, names.atom(i));
@@ -891,8 +913,9 @@ namespace smirkycard
         {
           JS_FreeValue(ctx, value);
           JS_ThrowTypeError(ctx,
-                            isPadding ? "Box padding must be standard or an integer in 0..4096"
-                                      : "Box width and height must be integers in 1..4096");
+                            isPadding ? "%s padding must be standard or an integer in 0..4096"
+                                      : "%s width and height must be integers in 1..4096",
+                            global.name);
           return false;
         }
         if (JS_SetPropertyStr(ctx, tree, isPadding ? "padding" : isWidth ? "width" : "height", value) < 0)
@@ -945,25 +968,28 @@ namespace smirkycard
     class BoxLowering : public IJsNodeLowering
     {
     public:
-      BoxLowering()
+      BoxLowering(const BoxGlobal &global)
+          : global_(global)
       {
-        this->name = "Box";
+        this->name = global.name;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
         if (argc < 1 || argc > 2 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
-          return JS_ThrowTypeError(ctx, "Box(child, options?) requires one tree and an optional options object");
+          return JS_ThrowTypeError(
+              ctx, "%s(child, options?) requires one tree and an optional options object", this->name);
         JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
         const bool valid = JS_IsNumber(childKind);
         JS_FreeValue(ctx, childKind);
         if (!valid)
-          return JS_ThrowTypeError(ctx, "Box(child, options?) requires one tree and an optional options object");
+          return JS_ThrowTypeError(
+              ctx, "%s(child, options?) requires one tree and an optional options object", this->name);
         JSValue tree = newTree(ctx, this->kind);
         if (JS_IsException(tree))
           return tree;
         if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
-            || (argc == 2 && !copyBoxOptions(ctx, argv[1], tree)) || JS_FreezeObject(ctx, tree) < 0)
+            || (argc == 2 && !copyBoxOptions(ctx, argv[1], tree, this->global_)) || JS_FreezeObject(ctx, tree) < 0)
         {
           JS_FreeValue(ctx, tree);
           return JS_EXCEPTION;
@@ -973,10 +999,11 @@ namespace smirkycard
       virtual loka::app::scene::NodeDefinitionBase *
       lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
       {
-        loka::app::BoxDefinition *box = new (std::nothrow) loka::app::BoxDefinition();
+        loka::app::BoxDefinition *box = new (std::nothrow)
+            loka::app::BoxDefinition(this->global_.clipsChild ? loka::app::ClipBox() : loka::app::Box());
         if (!box)
         {
-          node.fail("JavaScript Box allocation refused.");
+          node.fail(this->global_.allocationRefused);
           return 0;
         }
         int width = 0, height = 0;
@@ -986,7 +1013,7 @@ namespace smirkycard
         if (!valid)
         {
           delete box;
-          node.fail("JavaScript Box has an invalid width, height or padding.");
+          node.fail(this->global_.invalidClaims);
           return 0;
         }
         box->padding(padding);
@@ -995,7 +1022,7 @@ namespace smirkycard
         if (height)
           box->height(height);
         loka::app::scene::NodeDefinitionBase *content =
-            lowerSingleChild(node, ctx, tree, depth, "JavaScript Box has an invalid child.");
+            lowerSingleChild(node, ctx, tree, depth, this->global_.invalidChild);
         if (!content)
         {
           delete box;
@@ -1004,6 +1031,9 @@ namespace smirkycard
         box->asNestableDefinition()->addOwnedChild(content);
         return box;
       }
+
+    private:
+      const BoxGlobal &global_;
     };
     bool copyImageOptions(JSContext *ctx, JSValueConst options, JSValue tree)
     {
@@ -1157,6 +1187,8 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) ScrollViewLowering())
            && registry.registerLowering(new (std::nothrow) CardLowering())
            && registry.registerLowering(new (std::nothrow) StackLowering("ZStack", StackLowering::STACK_DEPTH))
-           && registry.registerLowering(new (std::nothrow) BoxLowering()) && registry.registerGlobal(card);
+           && registry.registerLowering(new (std::nothrow) BoxLowering(kBoxGlobal))
+           && registry.registerLowering(new (std::nothrow) BoxLowering(kClipBoxGlobal))
+           && registry.registerGlobal(card);
   }
 } // namespace smirkycard
