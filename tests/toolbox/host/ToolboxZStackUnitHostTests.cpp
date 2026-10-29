@@ -1051,7 +1051,10 @@ namespace
     RenderNode(&stack, &controller);
     LOKA_VERIFY(controller.buttonControls_.size() == 1);
     const Rect rect = controller.buttonControls_[0].placement.full();
-    LOKA_VERIFY(rect.left == 15 && rect.right == 90 && rect.top == 25 && rect.bottom <= 55);
+    LOKA_VERIFY(rect.left == 3 && rect.right == 103 && rect.top == 11 && rect.bottom == 55);
+    Rect visible;
+    LOKA_VERIFY(controller.buttonControls_[0].placement.queryVisible(visible));
+    LOKA_VERIFY(visible.left == 15 && visible.right == 90 && visible.top == 25 && visible.bottom == 55);
     const toolbox_host::ControlCall &draw = controller.buttonControls_[0].control->calls.back();
     LOKA_VERIFY(draw.operation == "show" && draw.painted);
     LOKA_VERIFY(draw.ownerClip.left >= outer.left && draw.ownerClip.right <= outer.right);
@@ -1075,7 +1078,7 @@ namespace
     controller.refreshButtonEnabled(controller.buttonControls_[0]);
     LOKA_VERIFY(toolbox_host::invalidations == beforeInvalidation + 1);
     LOKA_VERIFY(controller.pendingDirtyRects_.size() == 1);
-    equal(controller.pendingDirtyRects_[0], rect);
+    equal(controller.pendingDirtyRects_[0], visible);
     controller.inBatchUpdate_ = false;
     for (size_t i = 0; i < native->calls.size(); ++i)
       LOKA_VERIFY(!native->calls[i].painted);
