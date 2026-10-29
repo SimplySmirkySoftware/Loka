@@ -1032,6 +1032,16 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68EnvironmentTest.sh)
     add_test(NAME scriptRetro68ToolchainFlavor
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68ToolchainFlavorTest.sh)
+    add_executable(LokaToolbarMeasurementTests tests/toolbox/host/ToolbarMeasurementTests.cpp)
+    target_include_directories(LokaToolbarMeasurementTests PRIVATE
+      apple/toolbox/src tests/toolbox/src)
+    target_compile_definitions(LokaToolbarMeasurementTests PRIVATE TEST_BUILD)
+    target_compile_options(LokaToolbarMeasurementTests PRIVATE -UNDEBUG -fno-exceptions)
+    set_target_properties(LokaToolbarMeasurementTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+    loka_enable_warnings(LokaToolbarMeasurementTests)
+    add_test(NAME toolbarMeasurement COMMAND LokaToolbarMeasurementTests)
+    add_test(NAME toolbarMeasurementWiring
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/toolbox/host/CheckToolbarMeasurement.py)
     add_test(NAME scriptCiPaths
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/CiPathsTest.py)
     add_test(NAME scriptRetro68SizeReport
