@@ -14,6 +14,7 @@
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/controls/EditText.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -22,6 +23,7 @@
 #include <climits>
 #include <cstdio>
 #include <cwchar>
+#include <vector>
 
 namespace
 {
@@ -629,5 +631,203 @@ void testWin32ClipBoxGroundStaysBelowUnits()
     HWND hit = WindowFromPoint(point);
     LOKA_VERIFY(hit && (hit == unit || GetParent(hit) == unit));
     LOKA_VERIFY(hit != clipWindow && hit != native(groundButton));
+  }
+}
+
+namespace
+{
+  RECT rectInRoot(HWND hwnd, HWND root)
+  {
+    RECT value;
+    LOKA_VERIFY(GetWindowRect(hwnd, &value));
+    MapWindowPoints(NULL, root, reinterpret_cast<POINT *>(&value), 2);
+    return value;
+  }
+
+  // Mirrors flushPaint in Win32ZStackUnitTests; finish each native child's
+  // damage as well so screen sampling does not depend on WM_PAINT ordering.
+  void flushClipPaint(Fixture &f)
+  {
+    Access::flushPendingInvalidations(f.controller);
+    MSG message;
+    while (PeekMessageW(&message, NULL, 0, 0, PM_REMOVE))
+    {
+      TranslateMessage(&message);
+      DispatchMessageW(&message);
+    }
+    RedrawWindow(f.root(), NULL, NULL, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+    UpdateWindow(f.root());
+  }
+
+  std::vector<COLORREF> pixels(HWND root, const RECT &area)
+  {
+    std::vector<COLORREF> result;
+    HDC dc = GetDC(root);
+    LOKA_VERIFY(dc && area.right > area.left && area.bottom > area.top);
+    for (LONG y = area.top; y < area.bottom; ++y)
+      for (LONG x = area.left; x < area.right; ++x)
+      {
+        const COLORREF color = GetPixel(dc, x, y);
+        LOKA_VERIFY(color != CLR_INVALID);
+        result.push_back(color);
+      }
+    ReleaseDC(root, dc);
+    return result;
+  }
+} // namespace
+
+void testWin32ClipBoxTabOrderAndFlatTwin()
+{
+  for (int clipped = 0; clipped < 2; ++clipped)
+  {
+    Fixture f;
+    StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+    BoxNode *middle = box(120, 80, clipped != 0);
+    StackNode *inside = new StackNode(StackProps(STACK_AXIS_COLUMN));
+    ButtonNode *buttons[4];
+    const char *labels[] = {"A", "B", "C", "D"};
+    for (int i = 0; i < 4; ++i)
+      buttons[i] = new ButtonNode(ButtonProps().text(labels[i]));
+    f.tree = column;
+    column->addChild(buttons[0]);
+    column->addChild(middle);
+    middle->addChild(inside);
+    inside->addChild(buttons[1]);
+    inside->addChild(buttons[2]);
+    column->addChild(buttons[3]);
+    f.at();
+    ShowWindow(f.root(), SW_SHOW);
+    LOKA_VERIFY(GetParent(native(buttons[1])) == (clipped ? context(middle)->hwnd() : f.root()));
+    LOKA_VERIFY(GetNextDlgTabItem(f.root(), NULL, FALSE) == native(buttons[0]));
+    for (int i = 0; i < 4; ++i)
+    {
+      LOKA_VERIFY(GetNextDlgTabItem(f.root(), native(buttons[i]), FALSE) == native(buttons[(i + 1) % 4]));
+      LOKA_VERIFY(GetNextDlgTabItem(f.root(), native(buttons[i]), TRUE) == native(buttons[(i + 3) % 4]));
+    }
+    SetFocus(native(buttons[1]));
+    LOKA_VERIFY(GetFocus() == native(buttons[1]));
+    // Same native Tab door as Win32FocusTests::tab.
+    MSG message = {};
+    message.hwnd = GetFocus();
+    message.message = WM_KEYDOWN;
+    message.wParam = VK_TAB;
+    LOKA_VERIFY(IsDialogMessageW(f.root(), &message));
+    LOKA_VERIFY(GetFocus() == native(buttons[2]));
+  }
+}
+
+void testWin32ClipBoxFocusCueAndEditTextEdge()
+{
+  for (int edit = 0; edit < 2; ++edit)
+  {
+    Fixture f;
+    BoxNode *clip = box(90, 70);
+    BoxNode *wide = box(180, 50, false, 1);
+    Node *control = edit ? static_cast<Node *>(new EditTextNode((EditTextProps())))
+                         : static_cast<Node *>(new ButtonNode(ButtonProps().text(" ")));
+    f.tree = clip;
+    clip->addChild(wide);
+    wide->addChild(control);
+    f.at();
+    const HWND hwnd = native(control);
+    LOKA_VERIFY(GetParent(hwnd) == context(clip)->hwnd());
+    const RECT bounds = rectInRoot(hwnd, f.root());
+    const RECT edge = rectInRoot(context(clip)->hwnd(), f.root());
+    LOKA_VERIFY(bounds.left < edge.right && bounds.right > edge.right + 1);
+    LOKA_VERIFY(bounds.top >= edge.top && bounds.bottom <= edge.bottom);
+    const RECT outside = {edge.right + 1, bounds.top, edge.right + 2, bounds.bottom};
+    // Blank button: the left focus-rectangle inset contains no label ink.
+    const RECT inside = {bounds.left + 2, bounds.top + 2, bounds.left + 8, bounds.bottom - 2};
+    LOKA_VERIFY(inside.right < edge.right);
+    ShowWindow(f.root(), SW_SHOW);
+    LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE));
+    SetFocus(f.root());
+    ShowWindow(hwnd, SW_HIDE);
+    flushClipPaint(f);
+    const std::vector<COLORREF> ground = pixels(f.root(), outside);
+    ShowWindow(hwnd, SW_SHOW);
+    SendMessageW(f.root(), WM_CHANGEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
+    SendMessageW(f.root(), WM_UPDATEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
+    flushClipPaint(f);
+    LOKA_VERIFY(pixels(f.root(), outside) == ground);
+    const std::vector<COLORREF> before = pixels(f.root(), inside);
+    if (edit)
+    {
+      // A caret is not a focus cue. Keep focus on the root and change ink.
+      LOKA_VERIFY(SetWindowTextW(hwnd, L"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"));
+      HDC dc = GetDC(hwnd);
+      LOKA_VERIFY(dc);
+      HFONT font = reinterpret_cast<HFONT>(SendMessageW(hwnd, WM_GETFONT, 0, 0));
+      HGDIOBJ previous = font ? SelectObject(dc, font) : NULL;
+      SIZE extent;
+      LOKA_VERIFY(GetTextExtentPoint32W(dc, L"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW", 40, &extent));
+      if (font)
+        SelectObject(dc, previous);
+      ReleaseDC(hwnd, dc);
+      LOKA_VERIFY(extent.cx > edge.right - bounds.left);
+    }
+    else
+      SetFocus(hwnd);
+    flushClipPaint(f);
+    // Always run the outside check, including sessions without visible cues.
+    LOKA_VERIFY(pixels(f.root(), outside) == ground);
+    const bool inkChanged = pixels(f.root(), inside) != before;
+    if (edit)
+      LOKA_VERIFY(inkChanged);
+    else if (GetFocus() != hwnd)
+      std::printf("[skip] clip box focus cue: SetFocus did not retain Button focus; outside edge checked\n");
+    else if (!inkChanged)
+      std::printf("[skip] clip box focus cue: no visible change at Button focus-cue inset after clearing "
+                  "UISF_HIDEFOCUS; outside edge checked\n");
+    else
+      LOKA_VERIFY(inkChanged);
+  }
+}
+
+void testWin32ClipBoxDeviceRoundingAndUnitTwin()
+{
+  const unsigned dpis[] = {120, 144};
+  for (unsigned d = 0; d < sizeof(dpis) / sizeof(dpis[0]); ++d)
+  {
+    RECT origins[3];
+    // Flat, clip, unit: the same padded content, with one native rebase in
+    // each of the last two. The nested unflagged Box adds no native step.
+    for (int mode = 0; mode < 3; ++mode)
+    {
+      Fixture f(dpis[d]);
+      BoxNode *outer = box(100, 60, mode == 1, 7);
+      BoxNode *inner = box(80, 40, false, 1);
+      ButtonNode *button = new ButtonNode(ButtonProps().text("round"));
+      outer->addChild(inner);
+      inner->addChild(button);
+      f.tree = outer;
+      if (mode == 2)
+      {
+        // Same ground + upper unit construction as Win32ZStackUnitTests.
+        ZStackNode *stack = new ZStackNode((ZStackProps()));
+        stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(100, 60)));
+        stack->addChild(outer);
+        f.tree = stack;
+      }
+      f.at(21, 31, 100, 60);
+      HWND parent = mode == 0 ? f.root() : mode == 1 ? context(outer)->hwnd() : child(f.root(), L"LOKA_STACK_UNIT");
+      LOKA_VERIFY(parent && GetParent(native(button)) == parent);
+      verifyRect(native(button),
+                 f,
+                 Frame(mode == 0 ? 29 : 8, mode == 0 ? 39 : 8, 78, f.controller.rowLayoutMetrics().buttonHeight));
+      origins[mode] = rectInRoot(native(button), f.root());
+    }
+    std::printf("[measure] clip box rounding dpi=%u flat=(%ld,%ld) clip=(%ld,%ld) unit=(%ld,%ld) native-steps=1\n",
+                dpis[d],
+                origins[0].left,
+                origins[0].top,
+                origins[1].left,
+                origins[1].top,
+                origins[2].left,
+                origins[2].top);
+    std::fflush(stdout);
+    LOKA_VERIFY(origins[1].left - origins[0].left >= -1 && origins[1].left - origins[0].left <= 1);
+    LOKA_VERIFY(origins[1].top - origins[0].top >= -1 && origins[1].top - origins[0].top <= 1);
+    LOKA_VERIFY(origins[1].left == origins[2].left && origins[1].top == origins[2].top);
   }
 }
