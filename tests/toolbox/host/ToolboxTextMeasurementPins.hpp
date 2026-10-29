@@ -195,6 +195,70 @@ namespace
     std::printf("measurement pin: first=%d retry=%d hit=0\n", first, before);
   }
 
+  void PlainEllipsisCase(
+      const char *source, short width, TextWrap wrap, short lineHeight, bool refuseClip, const char *expected)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    TextDefinitionWithAttr definition = Text(source) + BlockStyle().wrap(wrap).truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode *node = static_cast<TextNode *>(definition.create());
+    LOKA_VERIFY(node);
+    LayoutState seat = Seat(width);
+    seat.lineHeight = lineHeight;
+    NodeContext *installed = controller.nodeHandlerRegistry_.find(node)->ensureContext(node, &controller, seat);
+    LOKA_VERIFY(installed);
+    ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(installed);
+    node->layout(&controller, seat);
+    toolbox_host::reset();
+    const Rect callerClip = toolbox_host::currentClip();
+    toolbox_host::failRegions = refuseClip ? 2 : 0;
+    context.draw(&controller);
+    LOKA_VERIFY(toolbox_host::regions == 2);
+    LOKA_VERIFY(toolbox_host::failRegions == 0);
+    LOKA_VERIFY(toolbox_host::textHits == 1);
+    LOKA_VERIFY(toolbox_host::pascalDraws.size() == 1);
+    LOKA_VERIFY(toolbox_host::draws.size() == 1);
+    const Rect expectedClip = refuseClip ? callerClip : MeasurementClip(context);
+    LOKA_VERIFY(EqualRect(&toolbox_host::draws[0].clip, &expectedClip));
+    const std::string &drawn = toolbox_host::pascalDraws[0];
+    const short advance = TextWidth(drawn.data(), 0, static_cast<short>(drawn.size()));
+    std::printf("ellipsis width=%d wrap=%d lineHeight=%d refused=%d bytes=%lu advance=%d\n",
+                width,
+                static_cast<int>(wrap),
+                lineHeight,
+                refuseClip,
+                static_cast<unsigned long>(drawn.size()),
+                advance);
+    std::fflush(stdout);
+    // The promise is horizontal advance, even under the broad caller clip.
+    LOKA_VERIFY(width <= 0 || advance <= width);
+    LOKA_VERIFY(drawn == expected);
+    LOKA_VERIFY(context.visibleWidth() == advance);
+    DestroyHeapNode(node);
+  }
+
+  void PlainEllipsisPins(bool refuseClip)
+  {
+    // Default host font advances four pixels per byte: dots occupy 12.
+    // Include widths through 16 and a short baseline, as in the E2 probe.
+    for (short width = 1; width <= 16; ++width)
+      for (int mode = 0; mode != 3; ++mode)
+        PlainEllipsisCase("abcdefgh",
+                          width,
+                          mode == 1 ? TEXT_WRAP_CHAR : TEXT_WRAP_NONE,
+                          mode == 2 ? 4 : 14,
+                          refuseClip,
+                          width < 12   ? ""
+                          : width < 16 ? "..."
+                                       : "a...");
+    PlainEllipsisCase("ab", 8, TEXT_WRAP_NONE, 14, refuseClip, "ab");
+    PlainEllipsisCase("abcdefgh", 20, TEXT_WRAP_NONE, 14, refuseClip, "ab...");
+    PlainEllipsisCase("abcdefgh", 0, TEXT_WRAP_NONE, 14, refuseClip, "abcdefgh");
+    PlainEllipsisCase("abcdefgh", -1, TEXT_WRAP_NONE, 14, refuseClip, "abcdefgh");
+  }
+
   void PlainWrappedPaintPins()
   {
     Pin("PlainWrappedPaintSharesMeasurement");

@@ -1416,6 +1416,7 @@ LOKA_TEST(testCardShadowSeatLookAndReentry)
 LOKA_TEST(testCardShadowStateWidthRetainsBands)
 LOKA_TEST(testProjectionMeasurementChannelAndUnitAdmission)
 LOKA_TEST(testProjectionFrameKindsAndClipAdmission)
+LOKA_TEST(testProjectionRebasedClip)
 
 LOKA_TEST(testStackBlurIndependentReference)
 LOKA_TEST(testStackBlurRefusals)
