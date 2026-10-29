@@ -488,6 +488,9 @@ namespace
       LOKA_VERIFY(controller.queryNaturalWidth(first, firstWidth));
       LOKA_VERIFY(controller.queryNaturalWidth(title, titleWidth));
       LOKA_VERIFY(controller.queryNaturalWidth(last, lastWidth));
+      // Native views are projected by layout; lay the Row out once at its natural width first.
+      controller.relayout(
+          firstWidth + titleWidth + lastWidth + 2 * MacSceneLayout::kGap + 2 * MacSceneLayout::kRootInset, 80);
       LOKA_VERIFY([[root subviews] count] == 3);
       NSTextField *field = (NSTextField *)[[root subviews] objectAtIndex:1];
       LOKA_VERIFY([field isKindOfClass:[NSTextField class]]);
@@ -594,9 +597,15 @@ void testMacToolbarEllipsisNarrowPixels()
         break;
       }
     }
-    if (!screen || loka::testing::MacConsoleScreenIsLocked())
+    if (!screen)
     {
-      std::printf("[skip] toolbar backing=%d: no matching screen or console locked\n", backing);
+      std::printf("[skip] toolbar backing=%d: no attached screen has this backing scale\n", backing);
+      continue;
+    }
+    if (loka::testing::MacConsoleScreenIsLocked())
+    {
+      std::printf("[skip] toolbar backing=%d: console screen is locked (a sleeping display reads as locked)\n",
+                  backing);
       continue;
     }
     toolbarPixels(screen, backing, RailMetrics());
