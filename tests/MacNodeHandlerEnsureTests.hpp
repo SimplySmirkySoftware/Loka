@@ -25,6 +25,7 @@ void testMacButtonNativeHeightColumn();
 void testMacButtonNativeHeightCenteredRow();
 void testMacButtonDeclinedHeightKeepsRowAligned();
 void testMacDirectRowNaturalWidthFrames();
+void testMacToolbarEllipsisNarrowPixels();
 void testMacOrdinaryRowStillSharesWidth();
 
 void testMacContainerGapLeafExits();
