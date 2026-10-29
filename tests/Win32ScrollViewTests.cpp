@@ -2497,7 +2497,7 @@ void testWin32ToolbarEllipsisSeatPixels()
       std::printf("[toolbar pixels] dpi=%u seat=%d projected=%ld inside=%u outside=%u buttons=%u\n",
                   dpis[d],
                   seat,
-                  textRect.right - textRect.left,
+                  static_cast<long>(textRect.right - textRect.left),
                   inside,
                   outside,
                   buttons);
