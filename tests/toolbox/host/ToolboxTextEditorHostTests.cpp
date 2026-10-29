@@ -625,7 +625,9 @@ static void parkedEditorPress()
       const Rect field = {150, 0, 170, 100};
       LOKA_VERIFY(f.controller.ensureEditTextControl(context, field, &text, NATIVE_HINT_DEFAULT).te);
       LOKA_VERIFY(f.controller.applyNativeFocus(*context));
-      const Rect rect = bar ? f.controller.scrollControl(0).rect : f.context->geometry().text;
+      Rect rect = f.context->geometry().text;
+      if (bar)
+        LOKA_VERIFY(f.controller.scrollControl(0).placement.queryVisible(rect));
       Point point = {static_cast<short>(rect.top + 2), static_cast<short>(rect.left + 2)};
       if (phase)
       {

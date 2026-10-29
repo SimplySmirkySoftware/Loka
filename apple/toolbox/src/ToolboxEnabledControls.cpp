@@ -18,7 +18,9 @@ void ToolboxScenePlatformController::refreshButtonEnabled(ButtonControlBinding &
   {
     ToolboxPortScope port(this->window_->window());
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
-    this->requestControlRepaint(binding.rect);
+    Rect visible;
+    if (binding.placement.queryVisible(visible))
+      this->requestControlRepaint(visible);
     if (binding.enabled->get())
     {
       HiliteControl(binding.control, 0);
@@ -39,7 +41,9 @@ void ToolboxScenePlatformController::refreshScrollBarEnabled(ScrollBarControlBin
   {
     ToolboxPortScope port(this->window_->window());
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
-    this->requestControlRepaint(binding.rect);
+    Rect visible;
+    if (binding.placement.queryVisible(visible))
+      this->requestControlRepaint(visible);
     HiliteControl(binding.control, binding.active ? 0 : 255);
   }
 }

@@ -38,6 +38,27 @@ public:
 };
 namespace
 {
+  void nativePlacement()
+  {
+    const Rect full = {1, 2, 31, 42};
+    const Rect visible = {5, 6, 21, 32};
+    const ToolboxNativePlacement placement(full, visible);
+    LOKA_VERIFY(EqualRect(&placement.full(), &full));
+    Rect out;
+    LOKA_VERIFY(placement.queryVisible(out));
+    LOKA_VERIFY(EqualRect(&out, &visible));
+    const ToolboxNativePlacement emptyVisible(full, Rect());
+    LOKA_VERIFY(EqualRect(&emptyVisible.full(), &full));
+    LOKA_VERIFY(!emptyVisible.queryVisible(out));
+    const Rect zeroWidth = {1, 2, 31, 2};
+    LOKA_VERIFY(!ToolboxNativePlacement(full, zeroWidth).queryVisible(out));
+    const Rect zeroHeight = {1, 2, 1, 42};
+    LOKA_VERIFY(!ToolboxNativePlacement(full, zeroHeight).queryVisible(out));
+    const ToolboxNativePlacement empty;
+    LOKA_VERIFY(EmptyRect(&empty.full()));
+    LOKA_VERIFY(!empty.queryVisible(out));
+  }
+
   /** Pins record operations and bounding-box clips, never pixel/region verdicts. */
   class Probe : public RectSurfaceNode, public IProjectedLayoutNode
   {
@@ -1029,7 +1050,7 @@ namespace
     LOKA_VERIFY(controller.unitLedger_.mark() == 1);
     RenderNode(&stack, &controller);
     LOKA_VERIFY(controller.buttonControls_.size() == 1);
-    const Rect rect = controller.buttonControls_[0].rect;
+    const Rect rect = controller.buttonControls_[0].placement.full();
     LOKA_VERIFY(rect.left == 15 && rect.right == 90 && rect.top == 25 && rect.bottom <= 55);
     const toolbox_host::ControlCall &draw = controller.buttonControls_[0].control->calls.back();
     LOKA_VERIFY(draw.operation == "show" && draw.painted);
@@ -1433,7 +1454,9 @@ namespace
     controller.refreshScrollBarEnabled(bar);
     LOKA_VERIFY(toolbox_host::invalidations == beforeBar);
     LOKA_VERIFY(controller.pendingDirtyRects_.size() == 1);
-    equal(controller.pendingDirtyRects_[0], bar.rect);
+    Rect visible;
+    LOKA_VERIFY(bar.placement.queryVisible(visible));
+    equal(controller.pendingDirtyRects_[0], visible);
     controller.inBatchUpdate_ = false;
     controller.refreshScrollBarEnabled(bar);
     LOKA_VERIFY(toolbox_host::invalidations == beforeBar + 1);
@@ -1829,7 +1852,8 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"PresentReasons",
+  const char *names[] = {"NativePlacement",
+                         "PresentReasons",
                          "PresentMove",
                          "PresentForeground",
                          "PresentUpdateDamage",
@@ -1881,7 +1905,9 @@ int main(int argc, char **argv)
     std::fprintf(stderr, "Unknown Toolbox ZStack unit test: %s\n", argc == 2 ? argv[1] : "<missing name>");
     return 1;
   }
-  if (std::strcmp(argv[1], "ClipFrameProjection") == 0)
+  if (std::strcmp(argv[1], "NativePlacement") == 0)
+    nativePlacement();
+  else if (std::strcmp(argv[1], "ClipFrameProjection") == 0)
     clipFrameProjection();
   else if (std::strcmp(argv[1], "PresentReasons") == 0)
     presentReasons();
