@@ -230,8 +230,11 @@ logs its `last_refusal` separately (for that second pass, `no_viewport_moved`).
 Both snapshots clear on explicit diagnostic reset. Empty OS update bboxes are
 reported as `0,0,0,0`, independent of the window's port origin.
 Presentation remains `erase`; the observation never selects a pixel-copy path.
-The arm expects `unsupported_kind`: EditText and PopupMenu remain mounted
-inside the Offscreen viewport. The reveal changes one vertical layout input,
+The arm expects `content_inputs` with `content_inputs=1` and
+`unsupported_kinds=2`: the hidden-check phase wrote the offscreen Text without
+any draw in between, so its PROPS mark is still pending when the reveal lays it
+out, and that refusal precedes the mounted EditText and PopupMenu (the two
+unsupported kinds). The reveal changes one vertical layout input,
 boundary apply requests `layout_dirty`, the settled entry has no OS damage,
 and the Column has no ZStack units. Global layout adds a rectangle
 request without adding another full-draw reason. Skipping `noteViewportMove` at the layout publication point makes the

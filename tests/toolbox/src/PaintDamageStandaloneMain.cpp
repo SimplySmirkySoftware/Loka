@@ -2933,12 +2933,16 @@ namespace
         // The reveal writes one vertical origin by 160: its dirty source is
         // LAYOUT, so boundary apply requests layout_dirty (global layout only
         // adds a rect request). No OS damage remains at this settled entry and
-        // this Column has no ZStack units. Mounted EditText and PopupMenu
-        // are unsupported kinds, so the observation refuses them.
+        // this Column has no ZStack units. The hidden-check phase wrote the
+        // offscreen Text with no draw in between (whole_window=0, rects=0), so
+        // its PROPS mark is still pending when the reveal lays it out:
+        // content_inputs=1 refuses first, ahead of the mounted EditText and
+        // PopupMenu (unsupported_kinds=2). Measured on MAME maciix.
         self->recordArm("viewport-full-draw-observed",
                         observation.dy() == 160 && observation.viewports() == 1
-                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL
-                            && observation.refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND,
+                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 1
+                            && observation.unsupportedKinds() == 2
+                            && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS,
                         OFFSCREEN_REVEAL_CHECK);
         // Re-entry must establish history before another paint-only write.
         self->initial_ = stats;
