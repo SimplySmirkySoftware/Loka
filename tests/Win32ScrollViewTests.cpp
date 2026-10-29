@@ -2501,6 +2501,7 @@ void testWin32ToolbarEllipsisSeatPixels()
                   inside,
                   outside,
                   buttons);
+      std::fflush(stdout);
       LOKA_VERIFY(outside == 0 && buttons == 0);
       if (seat == titleWidth)
         LOKA_VERIFY(inside > 0);
