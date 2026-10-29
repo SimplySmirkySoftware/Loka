@@ -884,6 +884,7 @@ MacScenePlatformController::LayoutNodeResult
 MacScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth)
 {
   using namespace loka::app::scene;
+  // Mirrors Toolbox LayoutClipBox in apple/toolbox/src/ToolboxNodeDispatch.cpp.
   NodeContext *installed = node->getContext();
   IClipBoxContext *clip = installed ? installed->asClipBoxContext() : 0;
   if (installed && !clip)

@@ -7,7 +7,9 @@
 void ToolboxScenePlatformController::renderClipBox(loka::app::scene::Node *node)
 {
   using namespace loka::app::scene;
-  const ToolboxClipBoxContext *context = static_cast<const ToolboxClipBoxContext *>(node->getContext());
+  NodeContext *installed = node->getContext();
+  IClipBoxContext *clipContext = installed ? installed->asClipBoxContext() : 0;
+  const ToolboxClipBoxContext *context = clipContext ? static_cast<ToolboxClipBoxContext *>(clipContext) : 0;
   Rect rect;
   if (context && context->placement().query(rect))
   {
