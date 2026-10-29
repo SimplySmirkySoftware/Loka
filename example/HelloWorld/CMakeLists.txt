@@ -75,6 +75,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32RetirableContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32OwnedChildWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ZStackContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ClipBoxContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32PlatformContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32BitmapCapture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ButtonContext.cpp
@@ -100,6 +101,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32InputDoorTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ScrollViewTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ZStackUnitTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ClipBoxTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ThreadModalScopeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32EditTextBridgeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32FocusTests.cpp

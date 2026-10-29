@@ -1,3 +1,5 @@
+#include "context/Win32ClipBoxContext.hpp"
+#include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "support/Headless.hpp"
@@ -330,7 +332,7 @@ void testWin32ScrollViewViewportSizeBothOverflows()
   checkViewportSize(400, 400, true, true);
 }
 
-void testWin32ScrollViewParentsAndClipsProjectedChildren()
+static void checkWin32ScrollViewParentsAndClipsProjectedChildren(bool clipped)
 {
   std::printf("\n==== [testWin32ScrollViewParentsAndClipsProjectedChildren] start ====\n");
   HWND root = createHostWindow();
@@ -345,14 +347,20 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
     // that instead dies after the controller is torn down by
     // clearNodeContexts' releaseContext, which does not retire).
     ViewportFact offset(10);
-    loka::app::ScrollViewNode scrollView(
-        (loka::app::ScrollViewProps(offset.state())));
+    loka::app::BoxProps wrapperProps;
+    wrapperProps.childClip_ = clipped ? loka::app::layout::CHILD_CLIP_OWN_RECT : loka::app::layout::CHILD_CLIP_NONE;
+    loka::app::BoxNode wrapper(wrapperProps);
+    loka::app::ScrollViewNode &scrollView = *new loka::app::ScrollViewNode(loka::app::ScrollViewProps(offset.state()));
+    if (clipped)
+      wrapper.addChild(&scrollView);
     addButtonColumn(scrollView, 6);
-    establishLayout(controller, &scrollView, 300, 140);
+    establishLayout(controller, clipped ? static_cast<loka::app::scene::Node *>(&wrapper) : &scrollView, 300, 140);
 
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
-    LOKA_VERIFY(GetParent(GetParent(viewport)) == root);
+    HWND expectedParent =
+        clipped ? static_cast<Win32ClipBoxContext *>(wrapper.getContext()->asClipBoxContext())->hwnd() : root;
+    LOKA_VERIFY(GetParent(GetParent(viewport)) == expectedParent);
     const LONG_PTR viewportStyle = GetWindowLongPtr(viewport, GWL_STYLE);
     assert((viewportStyle & WS_VSCROLL) == 0);
     // #1199: transparent children need the parent's ground beneath them;
@@ -418,9 +426,17 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
     // Release the root pointer before the nodes leave scope so the
     // controller's own teardown does not walk destroyed nodes.
     controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+    if (!clipped)
+      delete &scrollView;
   }
   LOKA_VERIFY(DestroyWindow(root));
   std::printf("==== [testWin32ScrollViewParentsAndClipsProjectedChildren] PASSED ====\n");
+}
+
+void testWin32ScrollViewParentsAndClipsProjectedChildren()
+{
+  checkWin32ScrollViewParentsAndClipsProjectedChildren(false);
+  checkWin32ScrollViewParentsAndClipsProjectedChildren(true);
 }
 
 void testWin32ScrollViewOffsetIsRelayoutInput()

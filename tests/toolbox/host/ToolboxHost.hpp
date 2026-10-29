@@ -1,3 +1,4 @@
+#include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
@@ -795,8 +796,8 @@ public:
   /** Move/size callers: once per changed control per render; O(1), no rows.
       Requires the window port while the erased pass is open. */
   void validateOwnControlMove(const Rect &before, const Rect &after);
-  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
-  void validateOwnControlMove(const Rect &admittedArea);
+  ToolboxOwnControlMoveFootprint admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const ToolboxOwnControlMoveFootprint &footprint);
   void noteControlDraw();
   ToolboxErasedPass &erasedPass()
   {

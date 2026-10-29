@@ -494,10 +494,10 @@ namespace
       else
         this->enabled_.set(false);
     }
-    void moveButton()
+    void moveButton(int offset = 12)
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(12);
+      this->offset_.set(offset);
     }
     void widenTitle()
     {
@@ -4081,6 +4081,30 @@ namespace
                      controlDraws);
         self->recordArm("button-own-move-full-draw",
                         visible && moved && updateEmpty && gButtonTitleDraws == 1 && controlDraws == 1,
+                        COMPLETE);
+        // Stage a full control across the right port edge, then scroll one step.
+        const short edgeOffset = static_cast<short>(native->window()->portRect.right - 90);
+        node->moveButton(edgeOffset);
+        native->drawForFlush();
+        node->moveButton(edgeOffset - 4);
+        const unsigned long edgeDrawsBefore = controller->debugStatsForTesting().totalControlDrawCount;
+        {
+          ButtonTitleDrawScope titleDraws(native->window());
+          native->drawForFlush();
+        }
+        const Rect edgeRect = (**control).contrlRect;
+        const unsigned long edgeDraws = controller->debugStatsForTesting().totalControlDrawCount - edgeDrawsBefore;
+        const bool edgeUpdateEmpty = EmptyRgn(reinterpret_cast<WindowPeek>(native->window())->updateRgn) != 0;
+        const bool crosses =
+            edgeRect.left < native->window()->portRect.right && edgeRect.right > native->window()->portRect.right;
+        std::fprintf(self->log_,
+                     "button-own-move-edge-draw crosses=%d update_empty=%d title_draws=%d control_draws=%lu\r",
+                     crosses,
+                     edgeUpdateEmpty,
+                     gButtonTitleDraws,
+                     edgeDraws);
+        self->recordArm("button-own-move-edge-draw",
+                        crosses && edgeUpdateEmpty && gButtonTitleDraws == 1 && edgeDraws == 1,
                         COMPLETE);
         controller->destroyButtonControl(911, NATIVE_HINT_DEFAULT);
         self->recordArm("button-native-retired-refuses",

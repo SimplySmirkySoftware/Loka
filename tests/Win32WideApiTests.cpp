@@ -1,3 +1,4 @@
+#include "context/Win32ClipBoxContext.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "Win32WideApiTests.hpp"
 #include "support/TestVerify.hpp"
@@ -123,6 +124,14 @@ void testWin32CustomWindowClassesUseWideApiFamily()
         &controller, root, 90, 0, 80, 60, &scrollViewNode);
     verifyWideChildWindow(root, L"LOKA_SCROLL_VIEW");
     verifyWideChildWindow(root, L"LOKA_SCROLL_FRAME");
+
+    Win32ClipBoxContext clip(&controller);
+    LOKA_VERIFY(clip.ensure(root, controller.displayScale().projectFrame(loka::core::Frame(0, 0, 80, 30))));
+    verifyWideChildWindow(root, L"LOKA_CLIP_BOX");
+    LOKA_VERIFY(SetWindowTextW(clip.hwnd(), payload));
+    LOKA_VERIFY(GetWindowTextW(clip.hwnd(), roundTrip, 8) == 3);
+    LOKA_VERIFY(std::wcscmp(roundTrip, payload) == 0);
+    clip.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
 
     Win32ZStackContext units(&controller);
     Win32ZStackContext::Unit **cursor = units.unitsBegin();
