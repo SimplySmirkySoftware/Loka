@@ -347,6 +347,16 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")
+  {
+    PlainEllipsisPins(false);
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "plain-ellipsis-refused")
+  {
+    PlainEllipsisPins(true);
+    return 0;
+  }
   const ToolboxTextFontDescriptor smallLabel(SmallLabel);
   LOKA_VERIFY(smallLabel.font(0) == 3 && smallLabel.font(4) == 3);
   LOKA_VERIFY(smallLabel.size(12) == 9 && smallLabel.size(24) == 9);

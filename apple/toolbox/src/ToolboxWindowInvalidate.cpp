@@ -1,18 +1,21 @@
 /** Shared production invalidation procedure, also compiled by the host fixture. */
 void ToolboxWindow::requestInvalidate()
 {
-  requestInvalidateWithReason("unknown");
+  requestInvalidateWithReason(TOOLBOX_FULL_DRAW_UNKNOWN);
 }
 
-void ToolboxWindow::requestInvalidateWithReason(const char *reason)
+void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 {
+  // Keep every cause even when the first request already schedules the full draw.
+  if (scenePlatformController_)
+    scenePlatformController_->notePresentReason(reason);
   if (needsInvalidate_)
   {
     return;
   }
   if (scenePlatformController_)
   {
-    scenePlatformController_->noteWindowFullRequest(reason);
+    scenePlatformController_->noteWindowFullRequest(ToolboxFullDrawReasonName(reason));
   }
   needsInvalidate_ = true;
   pendingInvalidateRects_.clear();

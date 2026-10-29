@@ -859,7 +859,7 @@ void ToolboxWindow::requestInvalidate()
   ++toolbox_host::invalidations;
   this->requestInvalidateImpl();
 }
-void ToolboxWindow::requestInvalidateWithReason(const char *reason)
+void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 {
   ++toolbox_host::invalidations;
   this->requestInvalidateWithReasonImpl(reason);
@@ -882,12 +882,18 @@ void ToolboxWindow::drawForUpdate()
   if (this->scenePlatformController_)
     assert(!this->scenePlatformController_->erasedPass().isOpen());
   const Rect evidence = ToolboxUpdateEvidence(this->port.updateRgn, this->port.portBits.bounds);
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->notePresentDamage(
+        ToolboxUpdateDamage(this->port.updateRgn, this->port.portBits.bounds));
   BeginUpdate(&this->port);
   this->drawWhole(evidence);
   EndUpdate(&this->port);
 }
 void ToolboxWindow::drawForFlush()
 {
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->notePresentDamage(
+        ToolboxUpdateDamage(this->port.updateRgn, this->port.portBits.bounds));
   this->drawWhole(this->port.portRect);
 }
 void ToolboxWindow::drawWhole(const Rect &evidence)

@@ -32,9 +32,13 @@ private:
 };
 
 /** Node-owned clip fact; no native resources, projection, or drawing role. */
-class ToolboxClipBoxContext : public loka::app::scene::NodeContext
+class ToolboxClipBoxContext : public loka::app::scene::NodeContext, public loka::app::scene::IClipBoxContext
 {
 public:
+  virtual loka::app::scene::IClipBoxContext *asClipBoxContext()
+  {
+    return this;
+  }
   void readLifecycleFactOnAttach() {}
   const ToolboxClipPlacement &placement() const
   {

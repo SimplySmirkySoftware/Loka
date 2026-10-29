@@ -11,4 +11,9 @@ void testNullTextLayoutWordWrapMeasuresStandaloneSpaces();
 
 void testNullTextSmallLabelMetrics();
 
+void testNullTextEllipsisBelowOneAdvanceIsEmpty();
+
+void testNullTextNaturalWidthUsesCurrentValueAndStyle();
+void testNullTextNaturalWidthDeclinesWithoutWriting();
+
 #endif // LOKA_TESTS_NULL_TEXT_LAYOUT_TESTS_HPP

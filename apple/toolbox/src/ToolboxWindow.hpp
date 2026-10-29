@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_WINDOW_HPP
 #define LOKA_TOOLBOX_WINDOW_HPP
+#include "ToolboxFullDrawReason.hpp"
 
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
@@ -44,7 +45,7 @@ public:
   void ensureSceneMounted();
   void open();
   void requestInvalidate();
-  void requestInvalidateWithReason(const char *reason);
+  void requestInvalidateWithReason(ToolboxFullDrawReason reason);
   void requestInvalidateRect(const Rect &rect);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
