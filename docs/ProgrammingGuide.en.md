@@ -1654,7 +1654,9 @@ is no JS `ClipBox`.
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
-Toolbox and macOS clip; Win32 does not clip yet.
+Toolbox, macOS and Win32 clip. On Win32, a clip box whose width is neither
+declared nor offered gets width 0, so its content is hidden; Toolbox and macOS
+leave the right edge unclipped instead.
 On macOS the system draws focus rings, so a focused control's ring can extend
 past a clip box's edge; a ScrollView's edge cuts it.
 

@@ -238,6 +238,8 @@ namespace
     LOKA_VERIFY(visible.bottom == 60 && row.control->hilite == 255);
     const Point outside = {75, 200}, inside = {50, 200};
     const Rect column = f.context->geometry().bar;
+    LOKA_VERIFY(EqualRect(&row.control->rect, &column));
+    LOKA_VERIFY(EqualRect(&row.placement.full(), &column));
     LOKA_VERIFY(PtInRect(outside, &column) && !PtInRect(outside, &visible));
     LOKA_VERIFY(PtInRect(inside, &visible));
     TERec &te = **f.te();

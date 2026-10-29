@@ -17,8 +17,9 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   {
     return false;
   }
-  Rect controlRect;
-  if (!this->intersectWithProjectionClip(rect, controlRect))
+  Rect visible;
+  const Rect &controlRect = rect;
+  if (!this->intersectWithProjectionClip(rect, visible))
   {
     return true;
   }
@@ -61,7 +62,7 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
     entry.emitter = emitter;
     entry.enabled = enabled;
     entry.usedThisFrame = true;
-    entry.placement = ToolboxNativePlacement(controlRect, controlRect);
+    entry.placement = ToolboxNativePlacement(controlRect, visible);
     entry.label = "";
     entry.lifetimeHint = lifetimeHint;
     buttonControls_.push_back(entry);
@@ -77,19 +78,23 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   const Rect before = binding->placement.full();
   const bool moved = created || before.left != controlRect.left || before.top != controlRect.top
                      || before.right != controlRect.right || before.bottom != controlRect.bottom;
-  const Rect admittedMove = moved ? this->admitOwnControlMove(before, controlRect) : Rect();
+  const ToolboxOwnControlMoveFootprint admittedMove =
+      moved ? this->admitOwnControlMove(before, controlRect) : ToolboxOwnControlMoveFootprint();
   if (moved && !created)
   {
     // Moving and sizing hidden reduces the measured three CDEF draws to one.
-    ToolboxPaintSuppressScope suppress(EmptyRect(&admittedMove) ? 0 : this->paintSuppressClipRgn_);
+    ToolboxPaintSuppressScope suppress(admittedMove.empty() ? 0 : this->paintSuppressClipRgn_);
     HideControl(binding->control);
   }
   if (moved)
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
-    SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
+    if (created
+        || binding->placement.full().right - binding->placement.full().left != controlRect.right - controlRect.left
+        || binding->placement.full().bottom - binding->placement.full().top != controlRect.bottom - controlRect.top)
+      SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
   }
-  binding->placement = ToolboxNativePlacement(controlRect, controlRect);
+  binding->placement = ToolboxNativePlacement(controlRect, visible);
   bool submitted;
   {
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);

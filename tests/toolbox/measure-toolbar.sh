@@ -6,8 +6,9 @@ case "${1:-}" in
   floppybird) APP=LokaMeasureFloppyBird68K; DIRECTORY=tests/toolbox ;;
   smirkbench) APP=LokaMeasureSmirkBench68K; DIRECTORY=tests/toolbox ;;
   tutorial) APP=LokaMeasureTutorial68K; DIRECTORY=tests/toolbox ;;
+  rows) APP=LokaMeasureRows68K; DIRECTORY=tests/toolbox ;;
   main) APP=LokaMeasureMain68K; DIRECTORY=example/SmirkyCard ;;
-  *) echo 'Usage: measure-toolbar.sh {floppybird|smirkbench|tutorial|main}' >&2; exit 2 ;;
+  *) echo 'Usage: measure-toolbar.sh {floppybird|smirkbench|tutorial|main|rows}' >&2; exit 2 ;;
 esac
 . "$ROOT/scripts/retro68-env.sh"
 loka_load_retro68_environment "$ROOT"
@@ -32,5 +33,9 @@ for run in 1 2 3; do
   # Configuration is already exported; do not let the child re-import a different machine or wait.
   MAME_ENV_FILE=/dev/null bash "$ROOT/tests/toolbox/run-standalone.sh" "$BINARY" > "$DEST/run-$run.txt" 2>&1
   cp "$ROOT/build/mame-standalone/$APP/LOG.TXT" "$DEST/run-$run.log"
-  python3 "$ROOT/tests/toolbox/toolbar-measurement-report.py" verdict "$DEST/run-$run.log"
+  if [ "$1" = rows ]; then
+    python3 "$ROOT/tests/toolbox/toolbar-measurement-report.py" rows "$DEST/run-$run.log"
+  else
+    python3 "$ROOT/tests/toolbox/toolbar-measurement-report.py" verdict "$DEST/run-$run.log"
+  fi
 done

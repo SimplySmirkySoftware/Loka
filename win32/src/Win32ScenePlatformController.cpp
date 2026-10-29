@@ -1,5 +1,6 @@
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "context/Win32ZStackContext.hpp"
+#include "context/Win32ClipBoxContext.hpp"
 #include <new>
 #include "app/nodes/controls/Card.hpp"
 #include "Win32PaintGround.hpp"
@@ -484,7 +485,10 @@ void Win32ScenePlatformController::requestDirtyRect(HWND targetHwnd, const RECT 
 
 bool Win32ScenePlatformController::registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler)
 {
-  if (!handler)
+  // Box and Card own their clip-box context, as on macOS and Toolbox, so no
+  // handler may install a foreign context on them.
+  if (!handler || handler->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::BoxNode>()
+      || handler->nodeTypeKey() == loka::app::scene::NodeTypeToken<loka::app::CardNode>())
     return false;
   // Built-ins register privately through RegisterWin32BuiltInSupport. Like
   // Null's owned drawers, these contexts cannot be replaced by a foreign type:
@@ -1564,52 +1568,23 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
 
   if (loka::app::BoxNode *box = node->asBoxNode())
   {
+    if (box->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT && this->projectionParentScopes_.admitsClip())
+      return this->layoutClipBox(box, state, box->props.effectiveWidth());
     int resultY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(box);
-    if (handler)
-    {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
-      {
-        return LayoutNodeResult(state.width, state.y);
-      }
-      loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
-      resultY = handler->layoutNode(box, handlerState, &traversal);
-    }
-    else
-    {
-      resultY = loka::app::layout::computeBoxLayoutResultY(
-          box,
-          Win32SceneLayout::spacing(),
-          state,
-          this,
-          &Win32ScenePlatformController::layoutContainerChild,
-          loka::app::layout::resolveLayoutGap(box, state.spacing(), Win32SceneLayout::spacing()),
-          0);
-    }
+    if (!this->layoutContainerBody(box, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
     return LayoutNodeResult(state.width, resultY);
   }
 
   if (node->asFramedNode())
   {
-    loka::app::scene::Node *group = node;
+    if (node->kind() == loka::app::scene::NODE_KIND_CARD
+        && static_cast<loka::app::CardNode *>(node)->props.childClip_ == loka::app::layout::CHILD_CLIP_OWN_RECT
+        && this->projectionParentScopes_.admitsClip())
+      return this->layoutClipBox(node, state, 0);
     int resultY = state.y;
-    loka::app::scene::IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(group);
-    if (handler)
-    {
-      loka::app::scene::LayoutState handlerState;
-      if (!this->narrowLayoutState(state, handlerState, false))
-      {
-        return LayoutNodeResult(state.width, state.y);
-      }
-      loka::app::scene::Win32PlatformLayoutTraversal traversal(this);
-      resultY = handler->layoutNode(group, handlerState, &traversal);
-    }
-    else
-    {
-      resultY = loka::app::layout::computeFramedLayoutResultY(
-          group, state, this, &Win32ScenePlatformController::layoutContainerChild, 0);
-    }
+    if (!this->layoutContainerBody(node, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
     return LayoutNodeResult(state.width, resultY);
   }
 
@@ -1721,6 +1696,102 @@ Win32ScenePlatformController::computeLayoutResult(loka::app::scene::Node *node, 
   }
 
   return LayoutNodeResult(state.width, state.y);
+}
+
+bool Win32ScenePlatformController::layoutContainerBody(loka::app::scene::Node *node,
+                                                       const LayoutState &state,
+                                                       int &resultY)
+{
+  using namespace loka::app::scene;
+  IPlatformLayoutHandler *handler = this->layoutHandlerRegistry_.find(node);
+  if (handler)
+  {
+    loka::app::scene::LayoutState handlerState;
+    if (!this->narrowLayoutState(state, handlerState, false))
+      return false;
+    Win32PlatformLayoutTraversal traversal(this);
+    resultY = handler->layoutNode(node, handlerState, &traversal);
+  }
+  else if (loka::app::BoxNode *box = node->asBoxNode())
+  {
+    resultY = loka::app::layout::computeBoxLayoutResultY(
+        box,
+        Win32SceneLayout::spacing(),
+        state,
+        this,
+        &Win32ScenePlatformController::layoutContainerChild,
+        loka::app::layout::resolveLayoutGap(box, state.spacing(), Win32SceneLayout::spacing()),
+        0);
+  }
+  else
+    resultY = loka::app::layout::computeFramedLayoutResultY(
+        node, state, this, &Win32ScenePlatformController::layoutContainerChild, 0);
+  return true;
+}
+
+Win32ScenePlatformController::LayoutNodeResult
+Win32ScenePlatformController::layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth)
+{
+  // Mirrors macOS layoutClipBox (MacScenePlatformController.mm) and Toolbox LayoutClipBox;
+  // Win32 differs in the rebased CLIP, the width-0 rule and the reported height on refusal.
+  using namespace loka::app::scene;
+  NodeContext *installed = node->getContext();
+  IClipBoxContext *clip = installed ? installed->asClipBoxContext() : 0;
+  if (installed && !clip)
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(false && "clip box requires its own context; never replace a foreign context");
+#endif
+    return LayoutNodeResult(state.width, state.y);
+  }
+  Win32ClipBoxContext *context = clip ? static_cast<Win32ClipBoxContext *>(clip) : 0;
+  if (!context)
+  {
+#ifdef TEST_BUILD
+    if (loka::testing::declineWin32ClipBoxContext())
+      return LayoutNodeResult(state.width, state.y);
+#endif
+    context = new (std::nothrow) Win32ClipBoxContext(this);
+    if (!context)
+      return LayoutNodeResult(state.width, state.y);
+    node->setContext(context);
+    context->readLifecycleFactOnAttach();
+  }
+  int previousHeight = 0;
+  context->queryPlacedHeight(previousHeight);
+  loka::app::scene::LayoutState projected;
+  const LayoutState origin(state.x, state.y, 0, 0, state.spacing());
+  if (!this->narrowLayoutState(origin, projected, true))
+    return LayoutNodeResult(state.width, state.y + previousHeight);
+  int width = 0;
+  loka::app::layout::ResolveClipBoxWidth(declaredWidth, state.width, width);
+  if (!context->ensure(this->projectionParentHwnd(),
+                       this->displayScale_.projectFrame(loka::core::Frame(projected.x, projected.y, width, 0))))
+    return LayoutNodeResult(state.width, state.y);
+  ProjectionParentScope frame;
+  if (!this->projectionParentScopes_.current().deriveScrolled(
+          context->hwnd(), projected.x, projected.y, loka::core::Frame(0, 0, width, 0), frame))
+    return LayoutNodeResult(state.width, state.y + previousHeight);
+  int resultY = state.y;
+  {
+    ProjectionRebasedClipScopeGuard guard(this->projectionParentScopes_, frame);
+    if (!guard.isActive())
+    {
+#ifdef LOKA_LIFECYCLE_AUDIT
+      assert(false && "admitted clip push must succeed");
+#endif
+      return LayoutNodeResult(state.width, state.y + previousHeight);
+    }
+    if (!this->layoutContainerBody(node, state, resultY))
+      return LayoutNodeResult(state.width, state.y);
+    // Twin of the ZStack unit path: preserve placement on channel refusal.
+    if (this->refuseNarrowingInScrollScope(resultY))
+      return LayoutNodeResult(state.width, state.y + previousHeight);
+  }
+  context->place(
+      this->displayScale_.projectFrame(loka::core::Frame(projected.x, projected.y, width, resultY - state.y)),
+      resultY - state.y);
+  return LayoutNodeResult(state.width, resultY);
 }
 
 Win32ScenePlatformController::LayoutNodeResult
