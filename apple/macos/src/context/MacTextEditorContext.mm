@@ -810,15 +810,17 @@ public:
       follow = c.syncFromNode(*this, false);
       if (!this->hasSameContext())
         return false;
-      // An allocation refusal inside a take must close the next admission.
-      if (follow == loka::app::scene::SCHEDULE_RESTORE)
-        c.prepareRestore();
-      // A failed reconciliation cleared the projection, row buffers included:
-      // the take stops here instead of scanning an absent snapshot.
-      if (p.phase == Projection::UNAVAILABLE)
+      // Only a completed reconciliation keeps the take's RECONCILE phase. A
+      // failed one released the row buffers, refused the new capacity or
+      // could not replace the native text, so the take stops here instead of
+      // scanning an absent snapshot, and the phase it leaves (UNAVAILABLE,
+      // which the next take's resolve refuses, or QUEUED, which defers it)
+      // is what the next admission reads. The restore it asks for travels
+      // in the follow-up to finishSettle, which queues it; queuing it here
+      // first would hide the unavailable phase behind the queued one (#1617).
+      if (p.phase != Projection::RECONCILE)
         return false;
-      if (p.phase == Projection::RECONCILE)
-        p.phase = Projection::INPUT;
+      p.phase = Projection::INPUT;
     }
     return true;
   }
