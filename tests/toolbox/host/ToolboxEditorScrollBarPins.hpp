@@ -221,7 +221,7 @@ namespace
       LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
       LOKA_VERIFY(!f.controller.editControls_.focused());
       LOKA_VERIFY(!(**f.te()).active && (**f.te()).selStart == selection);
-      LOKA_VERIFY(!PtInRect(point, &f.controller.editControls_[0].rect));
+      LOKA_VERIFY(!PtInRect(point, &f.controller.editControls_[0].placement.visible()));
     }
   }
   void BarClippedHit()
@@ -254,8 +254,8 @@ namespace
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));
     LOKA_VERIFY(te.clickCompletions.size() == 1 && te.selStart == selection);
     LOKA_VERIFY(!f.controller.editControls_.focused() && !te.active);
-    LOKA_VERIFY(!PtInRect(outside, &f.controller.editControls_[0].rect));
-    LOKA_VERIFY(!PtInRect(inside, &f.controller.editControls_[0].rect));
+    LOKA_VERIFY(!PtInRect(outside, &f.controller.editControls_[0].placement.visible()));
+    LOKA_VERIFY(!PtInRect(inside, &f.controller.editControls_[0].placement.visible()));
     row.usedThisFrame = false;
     f.controller.publishFixturePressOrder();
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, inside));

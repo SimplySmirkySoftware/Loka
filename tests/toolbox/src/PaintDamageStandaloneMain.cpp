@@ -17,6 +17,7 @@
 #include "ObservedMainDefinition.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxWindow.hpp"
+#include "ToolboxPortScope.hpp"
 #include "context/ToolboxImageViewContext.hpp"
 #include "ToolboxApp.hpp"
 #include "ToolboxLayoutMetrics.hpp"
@@ -409,10 +410,12 @@ namespace
     {
       // The spacer plus inter-seat gap is 48: the 62px viewport leaves
       // 14 px of the 20px EditText chrome visible and clips 6 px.
-      composition.declare(Box().size(180, 62)
-                          << (ScrollView()
-                              << (Column() << Box().size(150, 48 - kRootGap)
-                                  << EditText(this->text_).TEST_ID("PaintDamage.Edit"))));
+      composition.declare(
+          Column() << (Box().size(180, 62)
+                       << (ScrollView() << (Column() << Box().size(150, 48 - kRootGap)
+                                                     << EditText(this->text_).TEST_ID("PaintDamage.Edit"))))
+                   << (ClipBox().size(40, 24)
+                       << (Box().width(120) << EditText(this->text_).TEST_ID("PaintDamage.ClipEdit"))));
     }
   private:
     NodeState<loka::core::String> text_;
@@ -1295,6 +1298,15 @@ namespace
         this->context = static_cast<ToolboxEditTextContext *>(native);
     }
     ToolboxEditTextContext *context;
+  };
+
+  struct FindClippedEdit : public FindEdit
+  {
+    virtual void visit(Node *node, NodeContext *native, BoundaryNode *)
+    {
+      if (node->testId() == "PaintDamage.ClipEdit")
+        this->context = static_cast<ToolboxEditTextContext *>(native);
+    }
   };
 
   /** Fixture-local answers, including the first refusal's kind to pair with
@@ -4139,7 +4151,10 @@ namespace
       if (self->phase_ == EDIT_WRITE)
       {
         const Rect chrome = edit.context->chromeRect();
-        const bool clipped = geometry.view.bottom < chrome.bottom - 1;
+        const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+        const PaintAnswer paint = edit.context->queryPaintDamage(query);
+        const bool clipped = paint.kind == PAINT_ANSWER_EXACT && paint.damage.y + paint.damage.height < chrome.bottom
+                             && geometry.view.bottom == chrome.bottom - 1;
         std::fprintf(self->log_, "edit_initially_clipped=%d\r", clipped ? 1 : 0);
         if (!clipped)
         {
@@ -4155,6 +4170,76 @@ namespace
                         && EqualRect(&geometry.view, &self->editGeometry_.view);
       std::fprintf(self->log_, "edit_replay_preserves_projection=%d\r", same ? 1 : 0);
       self->recordArm("edit-replay", same, BOUNDS_SHOW);
+      self->checkEditClipEdge(*native, *controller);
+    }
+
+    /** One synchronous arm: input delivery does not pump repair painting. */
+    void checkEditClipEdge(ToolboxWindow &native, ToolboxScenePlatformController &controller)
+    {
+      FindClippedEdit edit;
+      enumerateAttachedResidents(this->edit_, edit);
+      ToolboxScenePlatformController::EditTextGeometry geometry;
+      if (!edit.context || !controller.queryEditTextGeometryForTesting(edit.context, geometry))
+      {
+        this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
+        return;
+      }
+      SelectWindow(native.window());
+      native.drawForFlush();
+      ToolboxPortScope port(native.window());
+      const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+      const PaintAnswer paint = edit.context->queryPaintDamage(query);
+      const Rect chrome = edit.context->chromeRect();
+      Rect visible = geometry.view;
+      if (paint.kind != PAINT_ANSWER_EXACT)
+      {
+        this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
+        return;
+      }
+      visible.right = static_cast<short>(paint.damage.x + paint.damage.width);
+      const bool crosses = visible.right > visible.left && visible.right < geometry.view.right;
+      Rect frame = chrome;
+      InsetRect(&frame, -2, -2);
+      Rect top = frame, bottom = frame, left = frame, right = frame;
+      top.bottom = visible.top;
+      bottom.top = visible.bottom;
+      left.top = right.top = visible.top;
+      left.bottom = right.bottom = visible.bottom;
+      left.right = visible.left;
+      right.left = visible.right;
+      CardCapture topBefore(top), bottomBefore(bottom), leftBefore(left), rightBefore(right);
+      const bool captured = topBefore.ready() && bottomBefore.ready() && leftBefore.ready() && rightBefore.ready();
+      if (!crosses || !captured)
+      {
+        this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
+        return;
+      }
+      bool accepted = controller.applyNativeFocus(*edit.context);
+      // Observe every key endpoint, before any repair repaint, including the
+      // auto-view displacement after enough input to wrap several lines.
+      int outsideChanged =
+          topBefore.differences() + bottomBefore.differences() + leftBefore.differences() + rightBefore.differences();
+      for (int key = 0; key < 96; ++key)
+      {
+        accepted = native.handleKeyDown('H') && accepted;
+        outsideChanged +=
+            topBefore.differences() + bottomBefore.differences() + leftBefore.differences() + rightBefore.differences();
+      }
+      int insideInk = 0;
+      for (short y = visible.top; y < visible.bottom; ++y)
+        for (short x = visible.left; x < visible.right; ++x)
+          insideInk += GetPixel(x, y) != 0;
+      ToolboxScenePlatformController::EditTextGeometry after;
+      const bool scrolled =
+          controller.queryEditTextGeometryForTesting(edit.context, after) && after.destination.top < after.view.top;
+      std::fprintf(this->log_,
+                   "edittext-clip-edge crosses=%d accepted=%d scrolled=%d outside_changed=%d inside_ink_nonzero=%d\r",
+                   crosses,
+                   accepted,
+                   scrolled,
+                   outsideChanged,
+                   insideInk > 0);
+      this->recordArm("edittext-clip-edge", accepted && scrolled && outsideChanged == 0 && insideInk > 0, BOUNDS_SHOW);
     }
   };
 }

@@ -1,3 +1,5 @@
+#include "ToolboxEditDoor.hpp"
+
 /** Included by the production controller and Linux host fixture. */
 void ToolboxScenePlatformController::updateStateFromEdit(
     EditTextControlBinding &binding, const loka::core::String &before)
@@ -23,7 +25,10 @@ void ToolboxScenePlatformController::updateStateFromEdit(
     // The edited bytes were never accepted. If the repair could not commit
     // either, degrade the projection to empty rather than leave them visible.
     if (!binding.installed.holds(binding.text->get()))
+    {
+      ToolboxEditDoor door(this->window_->window(), binding.placement);
       TESetText(static_cast<const void *>(""), 0, binding.te);
+    }
     this->addPendingDirty(context->chromeRect());
     SysBeep(1);
     return;

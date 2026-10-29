@@ -849,7 +849,7 @@ namespace
     f.window.drawForFlush();
     LOKA_VERIFY(f.controller.editControls_.size() == 1);
     const Rect band = unitRow(f.controller, &stack, 1)->rect;
-    const Rect editorRect = f.controller.editControls_[0].rect;
+    const Rect editorRect = f.controller.editControls_[0].placement.visible();
     LOKA_VERIFY(editorRect.bottom > band.bottom && editorRect.top < band.bottom);
     Rect dirty = band;
     --dirty.right;
@@ -1517,12 +1517,9 @@ namespace
     binding.ownerContext = 0;
     binding.editor = 0;
     binding.text = 0;
-    binding.rect = Rect();
-    binding.rect.left = 5;
-    binding.rect.top = 25;
-    binding.rect.right = 90;
-    binding.rect.bottom = 75;
-    binding.te = TENew(&binding.rect, &binding.rect);
+    const Rect bindingRect = {25, 5, 75, 90};
+    binding.placement = ToolboxNativePlacement(bindingRect, bindingRect);
+    binding.te = TENew(&binding.placement.full(), &binding.placement.full());
     binding.usedThisFrame = true;
     binding.lifetimeHint = NATIVE_HINT_EAGER_RELEASE;
     LOKA_VERIFY(controller.editControls_.prepareAppend());
@@ -1542,18 +1539,18 @@ namespace
     // Unit A contains the editor, but the shorter later unit B crosses it.
     // A caret toggle must repair B without requesting anything for A.
     const Rect insideAOverlappingB = {25, 15, 55, 90};
-    controller.editControls_[0].rect = insideAOverlappingB;
+    controller.editControls_[0].placement = ToolboxNativePlacement(insideAOverlappingB, insideAOverlappingB);
     ToolboxInputDoor::idleTextEdits(controller);
     LOKA_VERIFY(toolbox_host::invalidatedRects.size() == 1);
     const Rect overlapB = {25, 15, 50, 90};
     equal(toolbox_host::invalidatedRects[0], overlapB);
     toolbox_host::invalidatedRects.clear();
     const Rect contained = {25, 15, 45, 90};
-    controller.editControls_[0].rect = contained;
+    controller.editControls_[0].placement = ToolboxNativePlacement(contained, contained);
     ToolboxInputDoor::idleTextEdits(controller);
     LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
     const Rect touching = {60, 10, 80, 90};
-    controller.editControls_[0].rect = touching;
+    controller.editControls_[0].placement = ToolboxNativePlacement(touching, touching);
     ToolboxInputDoor::idleTextEdits(controller);
     LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
     controller.rootNode_ = &stack;
@@ -1565,7 +1562,7 @@ namespace
     controller.clearControls();
     // A vanished window cannot supply a safe deactivation port. Its active
     // record must retire eagerly instead of entering the EditText churn pool.
-    binding.te = TENew(&binding.rect, &binding.rect);
+    binding.te = TENew(&binding.placement.full(), &binding.placement.full());
     TEActivate(binding.te);
     controller.window_ = 0;
     controller.retireEditTextBinding(binding, NATIVE_HINT_DEFAULT);

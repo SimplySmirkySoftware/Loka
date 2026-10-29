@@ -2132,7 +2132,7 @@ int main(int argc, char **argv)
     f.context->render(&f.controller);
     LOKA_VERIFY((**f.te()).viewRect.left == 30 && (**f.te()).viewRect.right == 80);
     LOKA_VERIFY((**f.te()).destRect.left == 13 && (**f.te()).destRect.right == 192);
-    LOKA_VERIFY(f.controller.editControls_[0].rect.left == 30);
+    LOKA_VERIFY(f.controller.editControls_[0].placement.visible().left == 30);
     f.controller.editControls_[0].usedThisFrame = false;
     SetRect(&f.controller.projectionClip, 300, 300, 310, 310);
     state.y = 20;

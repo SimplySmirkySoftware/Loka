@@ -9,7 +9,7 @@ struct EditTextControlBinding
         unicode(0),
         text(state),
         te(0),
-        rect(),
+        placement(),
         usedThisFrame(false),
         lifetimeHint(loka::app::scene::NATIVE_HINT_DEFAULT)
   {
@@ -20,7 +20,7 @@ struct EditTextControlBinding
   loka::core::State<loka::core::String> *text;
   loka::app::scene::WriteSeat<loka::core::String> textSeat;
   TEHandle te;
-  Rect rect;
+  ToolboxNativePlacement placement;
   bool usedThisFrame;
   ToolboxEditInstalled installed;
   loka::app::scene::NativeLifetimeHint lifetimeHint;

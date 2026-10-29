@@ -811,11 +811,11 @@ void ToolboxScenePlatformController::refreshEditTextBindingForStateChange(EditTe
   syncEditTextFromState(binding);
   if (inBatchUpdate_)
   {
-    addPendingDirty(binding.rect);
+    addPendingDirty(binding.placement.visible());
     return;
   }
   ++debugStats_.textChangedImmediateInvalidateCount;
-  window_->requestInvalidateRect(binding.rect);
+  window_->requestInvalidateRect(binding.placement.visible());
 }
 
 void ToolboxScenePlatformController::refreshPopupEnabled(PopupHit &binding)
