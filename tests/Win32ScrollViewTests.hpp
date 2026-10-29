@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP
 #define LOKA_TESTS_WIN32_SCROLL_VIEW_TESTS_HPP
 
+void testWin32ScrollViewRebasedClipSeat();
 void testWin32ScrollViewViewportSizeNoOverflow();
 void testWin32ScrollViewViewportSizeVerticalOverflow();
 void testWin32ScrollViewViewportSizeBothOverflows();
