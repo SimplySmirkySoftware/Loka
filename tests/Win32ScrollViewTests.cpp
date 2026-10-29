@@ -2396,3 +2396,201 @@ void testWin32ScrollViewRebasedClipSeat()
       LOKA_VERIFY(heightRoundingWitnesses > 0);
   }
 }
+
+namespace
+{
+  // Same capture/bitmap-selection door as Win32RectSurfaceRedrawTests.
+  std::vector<COLORREF> toolbarPixels(Win32ScenePlatformController &controller, HWND host)
+  {
+    LOKA_VERIFY(RedrawWindow(host, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW));
+    loka::core::resource::Image capture;
+    LOKA_VERIFY(controller.captureWindowClientBitmap(host, capture));
+    RECT client;
+    LOKA_VERIFY(GetClientRect(host, &client));
+    HDC dc = CreateCompatibleDC(NULL);
+    LOKA_VERIFY(dc);
+    HGDIOBJ previous = SelectObject(dc, static_cast<HBITMAP>(capture.nativeHandle()));
+    LOKA_VERIFY(previous && previous != HGDI_ERROR);
+    std::vector<COLORREF> pixels;
+    for (int y = 0; y < client.bottom; ++y)
+      for (int x = 0; x < client.right; ++x)
+      {
+        const COLORREF pixel = GetPixel(dc, x, y);
+        LOKA_VERIFY(pixel != CLR_INVALID);
+        pixels.push_back(pixel);
+      }
+    SelectObject(dc, previous);
+    DeleteDC(dc);
+    return pixels;
+  }
+} // namespace
+
+void testWin32ToolbarEllipsisSeatPixels()
+{
+  using namespace loka::app;
+  const unsigned dpis[] = {96, 144};
+  const wchar_t *caption = L"A deliberately long toolbar title that must shrink before the last button";
+  for (unsigned d = 0; d != sizeof(dpis) / sizeof(dpis[0]); ++d)
+  {
+    const loka::win32::Win32DisplayScale scale(dpis[d], loka::win32::DefaultRailMetrics());
+    ScrollRequestHost native;
+    // Keep the whole capture visible on the interactive desktop.
+    LOKA_VERIFY(SetWindowPos(native.host, HWND_TOP, 20, 20, 900, 240, SWP_NOACTIVATE));
+    ShowWindow(native.host, SW_SHOWNOACTIVATE);
+    UpdateWindow(native.host);
+    NullPlatformContext captureOwner;
+    Win32ScenePlatformController controller(native.host, scale, &captureOwner);
+    RegisterWin32BuiltInSupport(controller);
+    StackProps props;
+    props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+    StackNode row(props);
+    ButtonNode *back = new ButtonNode(ButtonProps().text("< Back"));
+    TextProps titleProps("A deliberately long toolbar title that must shrink before the last button");
+    titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode *title = new TextNode(titleProps);
+    ButtonNode *main = new ButtonNode(ButtonProps().text("Main"));
+    row.addChild(back);
+    row.addChild(title);
+    row.addChild(main);
+    controller.onChange(&row, NODE_DIRTY_NONE, false);
+    short backWidth = 0, titleWidth = 0, mainWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(back, backWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(title, titleWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(main, mainWidth));
+    TextProps dotsProps("...");
+    dotsProps.blockStyle_ = titleProps.blockStyle_;
+    TextNode dots(dotsProps);
+    short dotsWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(&dots, dotsWidth));
+    LOKA_VERIFY(dotsWidth > 0 && titleWidth > dotsWidth + 2);
+    // Full-title positive control, then every integer width across the dots threshold.
+    for (int seat = titleWidth; seat >= 1; seat = seat == titleWidth ? dotsWidth + 2 : seat - 1)
+    {
+      const int offer = backWidth + mainWidth + 2 * Win32SceneLayout::kGap + seat;
+      controller.relayout(offer + 2 * Win32SceneLayout::kRootInset, 100);
+      LOKA_VERIFY(title->getContext());
+      HWND titleWindow = static_cast<Win32TextContext *>(title->getContext())->hwnd();
+      HWND backWindow = FindWindowExW(native.host, NULL, L"Button", L"< Back");
+      HWND mainWindow = FindWindowExW(native.host, NULL, L"Button", L"Main");
+      LOKA_VERIFY(titleWindow && backWindow && mainWindow);
+      LOKA_VERIFY((GetWindowLongPtrW(titleWindow, GWL_STYLE) & SS_ENDELLIPSIS) == SS_ENDELLIPSIS);
+      const RECT textRect = childRectInParent(titleWindow, native.host);
+      const RECT backRect = childRectInParent(backWindow, native.host);
+      const RECT mainRect = childRectInParent(mainWindow, native.host);
+      const int titleX = Win32SceneLayout::kRootInset + backWidth + Win32SceneLayout::kGap;
+      LOKA_VERIFY(textRect.right - textRect.left == scale.nativeLength(titleX, titleX + seat).px);
+      RECT client;
+      LOKA_VERIFY(GetClientRect(native.host, &client));
+      LOKA_VERIFY(backRect.left >= 0 && mainRect.right <= client.right);
+      LOKA_VERIFY(textRect.left >= 0 && textRect.right <= client.right);
+      LOKA_VERIFY(textRect.top >= 0 && textRect.bottom <= client.bottom);
+      LOKA_VERIFY(SetWindowTextW(titleWindow, caption));
+      const std::vector<COLORREF> titled = toolbarPixels(controller, native.host);
+      // Native caption only: keep the offer and logical natural width unchanged.
+      LOKA_VERIFY(SetWindowTextW(titleWindow, L""));
+      const std::vector<COLORREF> empty = toolbarPixels(controller, native.host);
+      const RECT emptyText = childRectInParent(titleWindow, native.host);
+      const RECT emptyBack = childRectInParent(backWindow, native.host);
+      const RECT emptyMain = childRectInParent(mainWindow, native.host);
+      LOKA_VERIFY(EqualRect(&textRect, &emptyText));
+      LOKA_VERIFY(EqualRect(&backRect, &emptyBack) && EqualRect(&mainRect, &emptyMain));
+      LOKA_VERIFY(titled.size() == empty.size());
+      unsigned inside = 0, outside = 0, buttons = 0;
+      for (int y = 0; y < client.bottom; ++y)
+        for (int x = 0; x < client.right; ++x)
+        {
+          const size_t index = static_cast<size_t>(y) * client.right + x;
+          if (titled[index] == empty[index])
+            continue;
+          const POINT point = {x, y};
+          if (PtInRect(&textRect, point))
+            ++inside;
+          else
+            ++outside;
+          if (PtInRect(&backRect, point) || PtInRect(&mainRect, point))
+            ++buttons;
+        }
+      std::printf("[toolbar pixels] dpi=%u seat=%d projected=%ld inside=%u outside=%u buttons=%u\n",
+                  dpis[d],
+                  seat,
+                  static_cast<long>(textRect.right - textRect.left),
+                  inside,
+                  outside,
+                  buttons);
+      std::fflush(stdout);
+      LOKA_VERIFY(outside == 0 && buttons == 0);
+      if (seat == titleWidth)
+        LOKA_VERIFY(inside > 0);
+      if (seat == 1)
+        LOKA_VERIFY(textRect.right - textRect.left >= 1);
+    }
+    controller.onChange(0, NODE_DIRTY_NONE, false);
+  }
+}
+
+void testWin32ToolbarShrunkScrollRequestClamp()
+{
+  using namespace loka::app;
+  ScrollRequestHost native;
+  ScrollRequestStorage storage;
+  Win32ScenePlatformController controller(native.host, loka::win32::Win32DisplayScale(96, RailMetrics()));
+  RegisterWin32BuiltInSupport(controller);
+  ScrollViewNode scroll(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+  StackProps props;
+  props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+  StackNode *row = new StackNode(props);
+  TextProps titleProps("A deliberately long toolbar title that must shrink before the last button");
+  titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  TextNode *title = new TextNode(titleProps);
+  row->addChild(new BoxNode(Box().width(400).height(30).props));
+  row->addChild(title);
+  scroll.addChild(row);
+  ScrollValues observed(storage.viewport);
+  controller.onChange(&scroll, NODE_DIRTY_NONE, false);
+  controller.relayout(300, 160);
+  // Both offers are below the unshrunk width; the second removes the range.
+  short naturalTitle = 0;
+  LOKA_VERIFY(controller.queryNaturalWidth(title, naturalTitle));
+  LOKA_VERIFY(naturalTitle > 40);
+  const int offers[] = {300, 400 + Win32SceneLayout::kGap + 20 + 2 * Win32SceneLayout::kRootInset};
+  for (unsigned i = 0; i != sizeof(offers) / sizeof(offers[0]); ++i)
+  {
+    observed.values.clear();
+    ScrollTrace::instance().clear();
+    storage.request.set(ScrollTarget::Origin(30000, 0));
+    // The real Win32 ScrollView arm owns SettleScrollViewVisit.
+    controller.relayout(offers[i], 160);
+    LOKA_VERIFY(storage.request.get().isNone());
+    HWND viewport = findChildWindowByClass(native.host, L"LOKA_SCROLL_VIEW");
+    LOKA_VERIFY(viewport);
+    const SCROLLINFO info = scrollInfo(viewport, SB_HORZ);
+    const int range = i == 0 ? 400 + Win32SceneLayout::kGap + 1 - storage.viewport.get().width : 0;
+    LOKA_VERIFY(i != 0 || range > 0);
+    LOKA_VERIFY(maximumOffset(info) == range && info.nPos == range);
+    LOKA_VERIFY(storage.viewport.get().x == range);
+    LOKA_VERIFY(((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_HSCROLL) != 0) == (range > 0));
+    const size_t publications = observed.values.size();
+    LOKA_VERIFY(publications > 0 && publications <= 2);
+    // Bounded feedback visits must neither consume again nor publish an echo.
+    controller.relayout(offers[i], 160);
+    controller.relayout(offers[i], 160);
+    LOKA_VERIFY(observed.values.size() == publications);
+    unsigned takes = 0;
+    for (unsigned n = 0; n < ScrollTrace::instance().size(); ++n)
+    {
+      const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &trace = ScrollTrace::instance().at(n);
+      takes += trace.count;
+      // With no horizontal range the request to move x is refused (ScrollViewSettlement validate).
+      if (trace.count)
+        LOKA_VERIFY(trace.count == 1 && trace.seam[0] == (range > 0 ? SCROLL_OK : SCROLL_UNAVAILABLE));
+    }
+    LOKA_VERIFY(takes == 1 && ScrollTrace::instance().overwritten() == 0);
+    std::printf("[toolbar clamp] offer=%d range=%d x=%d publications=%lu takes=%u\n",
+                offers[i],
+                range,
+                storage.viewport.get().x,
+                static_cast<unsigned long>(publications),
+                takes);
+  }
+  controller.onChange(0, NODE_DIRTY_NONE, false);
+}

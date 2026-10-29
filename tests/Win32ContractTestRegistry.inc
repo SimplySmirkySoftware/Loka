@@ -284,6 +284,8 @@ LOKA_TEST(testWin32ScrollRequestDeferredMount)
 LOKA_TEST(testWin32ScrollRequestNativeSizeOuterBorrow)
 LOKA_TEST(testWin32ScrollRequestFirstVisit)
 
+LOKA_TEST(testWin32ToolbarEllipsisSeatPixels)
+LOKA_TEST(testWin32ToolbarShrunkScrollRequestClamp)
 LOKA_TEST(testWin32ClipBoxGeometryAndFlatTwins)
 LOKA_TEST(testWin32ClipBoxCardBandsAndFlatTwin)
 LOKA_TEST(testWin32ClipBoxMixing)
