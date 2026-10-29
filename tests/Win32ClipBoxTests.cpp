@@ -16,6 +16,7 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
 #include <climits>
@@ -535,5 +536,98 @@ void testWin32ClipBoxNaturalHeightAndFirstChannelRefusal()
       LOKA_VERIFY(context(clip)->queryPlacedHeight(height) && height == expected);
       verifyRect(context(clip)->hwnd(), f, Frame(21, 31, 100, expected));
     }
+  }
+}
+
+void testWin32ClipBoxEmptyAreaHitPassesThrough()
+{
+  for (int insideScroll = 0; insideScroll < 2; ++insideScroll)
+  {
+    Fixture f;
+    BoxNode *clip = box(160, 90);
+    // Buttons fill their offer; this unflagged seat leaves real empty space
+    // to the right of the one Button without adding another native parent.
+    BoxNode *buttonSeat = box(70, 0, false);
+    ButtonNode *button = new ButtonNode(ButtonProps().text("hit"));
+    buttonSeat->addChild(button);
+    clip->addChild(buttonSeat);
+    ScrollViewNode *scroll = 0;
+    if (insideScroll)
+    {
+      scroll = new ScrollViewNode((ScrollViewProps()));
+      scroll->addChild(clip);
+      f.tree = scroll;
+    }
+    else
+      f.tree = clip;
+    f.at();
+    HWND clipWindow = context(clip)->hwnd();
+    HWND parent = insideScroll ? child(native(scroll), L"LOKA_SCROLL_VIEW") : f.root();
+    HWND buttonWindow = child(clipWindow, L"Button");
+    LOKA_VERIFY(parent && buttonWindow == native(button));
+    LOKA_VERIFY(GetParent(clipWindow) == parent);
+    const RECT buttonRect = rect(buttonWindow);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(clipWindow, &client));
+    LOKA_VERIFY(buttonRect.right < client.right && buttonRect.bottom > buttonRect.top);
+    POINT emptyPoint = {(buttonRect.right + client.right) / 2, (buttonRect.top + buttonRect.bottom) / 2};
+    POINT buttonPoint = {(buttonRect.left + buttonRect.right) / 2, (buttonRect.top + buttonRect.bottom) / 2};
+    LOKA_VERIFY(ClientToScreen(clipWindow, &emptyPoint));
+    LOKA_VERIFY(ClientToScreen(clipWindow, &buttonPoint));
+    ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+    LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+    // ChildWindowFromPointEx ignores WM_NCHITTEST, so it cannot discriminate
+    // m4 (removing HTTRANSPARENT). WindowFromPoint tests same-thread hit routing.
+    LOKA_VERIFY(WindowFromPoint(emptyPoint) == parent);
+    LOKA_VERIFY(WindowFromPoint(buttonPoint) == buttonWindow);
+  }
+}
+
+void testWin32ClipBoxGroundStaysBelowUnits()
+{
+  Fixture f;
+  ZStackNode *stack = new ZStackNode((ZStackProps()));
+  BoxNode *ground = box(160, 90);
+  ButtonNode *groundButton = new ButtonNode(ButtonProps().text("ground"));
+  ground->addChild(groundButton);
+  stack->addChild(ground);
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  ButtonNode *upperButton = new ButtonNode(ButtonProps().text("upper"));
+  column->addChild(upperButton);
+  stack->addChild(column);
+  f.tree = stack;
+  ShowWindow(f.root(), SW_SHOWNOACTIVATE);
+  LOKA_VERIFY(SetWindowPos(f.root(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE));
+  for (int pass = 0; pass < 2; ++pass)
+  {
+    f.at();
+    HWND clipWindow = context(ground)->hwnd();
+    HWND unit = child(f.root(), L"LOKA_STACK_UNIT");
+    LOKA_VERIFY(unit && GetParent(clipWindow) == f.root());
+    LOKA_VERIFY(GetParent(native(upperButton)) == unit);
+    // The first sibling is topmost. Raising the clip after unit ordering
+    // must fail this check even though the clip's empty area is transparent.
+    bool sawUnit = false;
+    bool sawClip = false;
+    for (HWND hwnd = GetWindow(f.root(), GW_CHILD); hwnd; hwnd = GetWindow(hwnd, GW_HWNDNEXT))
+    {
+      if (hwnd == unit)
+        sawUnit = true;
+      if (hwnd == clipWindow)
+      {
+        LOKA_VERIFY(sawUnit);
+        sawClip = true;
+      }
+    }
+    LOKA_VERIFY(sawUnit && sawClip);
+    const RECT clipRect = rect(clipWindow);
+    const RECT unitRect = rect(unit);
+    RECT overlap;
+    LOKA_VERIFY(IntersectRect(&overlap, &clipRect, &unitRect));
+    POINT point = {(overlap.left + overlap.right) / 2, (overlap.top + overlap.bottom) / 2};
+    LOKA_VERIFY(ClientToScreen(f.root(), &point));
+    HWND hit = WindowFromPoint(point);
+    LOKA_VERIFY(hit && (hit == unit || GetParent(hit) == unit));
+    LOKA_VERIFY(hit != clipWindow && hit != native(groundButton));
   }
 }
