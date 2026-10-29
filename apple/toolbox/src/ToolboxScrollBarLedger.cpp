@@ -97,16 +97,21 @@ ToolboxOwnControlMoveFootprint ToolboxScenePlatformController::admitOwnControlMo
   for (unsigned i = 0; i < 3; ++i)
   {
     Rect clipped;
-    if (!SectRect(&areas[i], &portRect, &clipped) || !this->erasedPass_.admitsCapture(clipped))
-      SetRect(&clipped, 0, 0, 0, 0);
-    areas[i] = clipped;
+    // Only the in-port intersection needs capture evidence. Keep the whole
+    // rectangle when admitted: the Control Manager also invalidates its
+    // off-port part, which cannot contain visible damage of this window.
+    // An empty intersection is pure off-window damage, safe even without a
+    // captured pass; admitsCapture deliberately refuses empty rectangles.
+    if (SectRect(&areas[i], &portRect, &clipped) && !this->erasedPass_.admitsCapture(clipped))
+      SetRect(&areas[i], 0, 0, 0, 0);
   }
   return ToolboxOwnControlMoveFootprint(areas[0], areas[1], areas[2]);
 }
 
 void ToolboxScenePlatformController::validateOwnControlMove(const ToolboxOwnControlMoveFootprint &footprint)
 {
-  // Do not validate the bounding box: its corners can contain foreign damage.
+  // Discharge each kept rectangle whole, including its safe off-port damage.
+  // No region allocation or bounding box: corners can contain foreign damage.
   if (!EmptyRect(&footprint.before()))
     ValidRect(&footprint.before());
   if (!EmptyRect(&footprint.after()))

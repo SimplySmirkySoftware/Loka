@@ -112,12 +112,7 @@ void HideControl(ControlRef c)
   toolbox_host::controlCalls.lastHidden = c;
   RecordControl(c, "hide", c->visible);
   if (c->visible && c->owner)
-  {
-    // Native window damage cannot extend beyond its port rectangle.
-    const Rect damage = Intersection(c->rect, static_cast<ToolboxWindow::WindowPort *>(c->owner)->portRect);
-    if (!EmptyRect(&damage))
-      c->owner->native.update.push_back(damage);
-  }
+    c->owner->native.update.push_back(c->rect);
   c->visible = false;
 }
 short TestControl(ControlRef control, Point point)

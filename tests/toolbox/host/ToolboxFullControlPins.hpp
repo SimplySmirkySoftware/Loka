@@ -51,6 +51,13 @@ namespace full_control
     if (edge)
     {
       LOKA_VERIFY(draws == 1);
+      for (std::size_t i = 0; i < window.port.native.update.size(); ++i)
+      {
+        const Rect &damage = window.port.native.update[i];
+        const Rect &portRect = window.port.portRect;
+        LOKA_VERIFY(damage.left >= portRect.left && damage.top >= portRect.top && damage.right <= portRect.right
+                    && damage.bottom <= portRect.bottom);
+      }
       LOKA_VERIFY(window.port.native.update.empty());
       LOKA_VERIFY(EqualRect(&control->rect, &moved));
     }
@@ -106,6 +113,10 @@ namespace full_control
     const Rect intermediate = {40, 120, 56, 220};
     const Rect corner = {20, 10, 30, 30};
     const Rect outside = {100, 240, 110, 250};
+    // Both foreign rectangles are inside the port, outside the move footprint.
+    Rect inPort;
+    LOKA_VERIFY(SectRect(&corner, &window.port.portRect, &inPort) && EqualRect(&corner, &inPort));
+    LOKA_VERIFY(SectRect(&outside, &window.port.portRect, &inPort) && EqualRect(&outside, &inPort));
     const bool partial = std::strstr(mode, "Partial") != 0;
     window.port.native.update.clear();
     window.port.native.update.push_back(before);
@@ -125,6 +136,19 @@ namespace full_control
     {
       LOKA_VERIFY(EqualRect(&window.port.native.update[0], &after));
       LOKA_VERIFY(EqualRect(&window.port.native.update[1], &intermediate));
+      // Wholly off-port control damage needs no captured visible pixels.
+      const Rect offBefore = {280, 10, 300, 110};
+      const Rect offAfter = {300, 30, 310, 80};
+      const Rect offIntermediate = {300, 30, 320, 130};
+      window.port.native.update.clear();
+      window.port.native.update.push_back(offBefore);
+      window.port.native.update.push_back(offAfter);
+      window.port.native.update.push_back(offIntermediate);
+      window.port.native.update.push_back(corner);
+      LOKA_VERIFY(!controller.erasedPass().isOpen());
+      controller.validateOwnControlMove(offBefore, offAfter);
+      LOKA_VERIFY(window.port.native.update.size() == 1);
+      LOKA_VERIFY(EqualRect(&window.port.native.update[0], &corner));
     }
   }
   void run(const char *mode)

@@ -170,7 +170,7 @@ namespace
       // new origin, so damage past the final rectangle must be discharged too.
       const Rect tall = {0, 0, 100, 16};
       const Rect shortMoved = {200, 0, 250, 16};
-      const Rect intermediate = {250, 0, 260, 16};
+      const Rect intermediate = {250, 0, 300, 16};
       const Rect wide = {0, 0, 320, 100};
       f.window.port.native.update.clear();
       f.window.port.native.update.push_back(tall);

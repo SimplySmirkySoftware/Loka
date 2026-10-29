@@ -2,7 +2,9 @@
 #define LOKA_TOOLBOX_OWN_CONTROL_MOVE_FOOTPRINT_HPP
 #include <Quickdraw.h>
 
-/** Independently admitted before, after, and old-size-at-new-origin damage. */
+/** Whole before, after, and old-size-at-new-origin rectangles admitted independently.
+    Only their in-port intersections need capture evidence; off-port portions
+    cannot contain visible window damage. A refused rectangle is empty. */
 class ToolboxOwnControlMoveFootprint
 {
 public:

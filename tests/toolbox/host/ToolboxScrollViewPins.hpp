@@ -577,8 +577,7 @@ namespace
     f.step(17, 120);
     Rect after = toolbox_host::currentClip();
     LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
-    Rect departing;
-    LOKA_VERIFY(SectRect(&controls[1]->rect, &f.window.port.portRect, &departing));
+    const Rect departing = controls[1]->rect;
     f.step(0, 500);
     after = toolbox_host::currentClip();
     LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
