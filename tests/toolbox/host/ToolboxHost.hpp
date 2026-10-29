@@ -1,6 +1,8 @@
 #include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "ToolboxPresentObservation.hpp"
+#include "ToolboxFullDrawReason.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxUnitHairline.hpp"
@@ -193,8 +195,8 @@ public:
   std::vector<Rect> pendingInvalidateRects_;
   void requestInvalidate();
   void requestInvalidateImpl();
-  void requestInvalidateWithReason(const char *);
-  void requestInvalidateWithReasonImpl(const char *);
+  void requestInvalidateWithReason(ToolboxFullDrawReason);
+  void requestInvalidateWithReasonImpl(ToolboxFullDrawReason);
   void requestInvalidateRect(const Rect &);
   void requestInvalidateRectImpl(const Rect &);
   void flushInvalidate();
@@ -210,7 +212,10 @@ public:
   void drawDirty(const Rect &);
 #else
   void requestInvalidate() { ++toolbox_host::invalidations; }
-  void requestInvalidateWithReason(const char *) { ++toolbox_host::invalidations; }
+  void requestInvalidateWithReason(ToolboxFullDrawReason)
+  {
+    ++toolbox_host::invalidations;
+  }
 #endif
   ToolboxScenePlatformController *scenePlatformController()
   {
@@ -742,6 +747,7 @@ public:
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxPresentObservation observation_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   ToolboxPressLedger pressLedger_;
@@ -766,6 +772,16 @@ public:
       return ToolboxUnitHairlineRect(rect, unit, line);
     }
   } frostCache_;
+  /** Window requests: O(1) per request, before request coalescing; no rows. */
+  void notePresentReason(ToolboxFullDrawReason reason)
+  {
+    this->observation_.noteReason(reason);
+  }
+  /** Window full-draw entries: O(1) bbox snapshot before OS validation; no rows. */
+  void notePresentDamage(const Rect &damage)
+  {
+    this->observation_.noteDamage(damage);
+  }
   void noteWindowFullRequest(const char *) {}
   void noteWindowRectRequest() {}
   void noteWindowFlushFull() {}
@@ -792,6 +808,11 @@ public:
   std::vector<loka::core::State<loka::core::String> *> pendingTextStates_;
   struct RenderStats
   {
+    /** Last completed full layout, including passes with no viewport movement. */
+    ToolboxPresentObservation lastPresentObservation;
+    /** Last completed full layout with movement; survives the #1513 republication pass.
+        Cleared with the rest of the debug stats on explicit reset. */
+    ToolboxPresentObservation lastMovedPresentObservation;
     unsigned renderCalls, totalRenderCalls, totalBoundaryApplyCount;
     unsigned renderDirtyCalls, totalRenderDirtyCalls;
     unsigned controlDrawCount, totalControlDrawCount;
@@ -807,6 +828,15 @@ public:
     }
     void refreshHitCounts(int, int, int, int, int) {}
   } debugStats_;
+  const RenderStats &debugStatsForTesting() const
+  {
+    return this->debugStats_;
+  }
+  void resetDebugStats()
+  {
+    this->observation_.reset();
+    this->debugStats_ = RenderStats();
+  }
   void clearEnabledBindings() {}
   void drawControlsInRect(const Rect &);
   void hideRetiredControl(ControlRef control);
