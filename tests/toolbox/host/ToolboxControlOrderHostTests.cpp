@@ -370,11 +370,14 @@ namespace
 } // namespace
 #include "ToolboxParkedPressHost.hpp"
 #include "ToolboxPressDoorHost.hpp"
+#include "ToolboxNativeDoorPins.hpp"
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strcmp(argv[1], "ButtonHiddenMove") == 0 || std::strcmp(argv[1], "ButtonCreatedPaintsOnce") == 0
-      || std::strcmp(argv[1], "ButtonMoveWithoutErasedPass") == 0)
+  if (std::strncmp(argv[1], "NativeDoor", 10) == 0)
+    native_door::run(argv[1]);
+  else if (std::strcmp(argv[1], "ButtonHiddenMove") == 0 || std::strcmp(argv[1], "ButtonCreatedPaintsOnce") == 0
+           || std::strcmp(argv[1], "ButtonMoveWithoutErasedPass") == 0)
     buttonHiddenMove(argv[1]);
   else if (std::strncmp(argv[1], "PressDoor", 9) == 0)
     press_door::run(argv[1]);

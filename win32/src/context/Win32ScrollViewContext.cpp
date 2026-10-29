@@ -1,4 +1,5 @@
 #include "../Win32PaintGround.hpp"
+#include "Win32ContainerWindow.hpp"
 #include "Win32InputDoor.hpp"
 #include "Win32ScrollViewContext.hpp"
 
@@ -534,27 +535,13 @@ LRESULT CALLBACK Win32ScrollViewContext::FrameWndProc(HWND hwnd, UINT msg, WPARA
   return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-// Deliberate twin of Win32ZStackContext::Unit::WndProc, with viewport input.
 LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
   Win32ScrollViewContext *self = FromViewport(hwnd);
 
-  if (msg == WM_CTLCOLORSTATIC)
-    return reinterpret_cast<LRESULT>(
-        loka::win32::Win32StaticTextColors(reinterpret_cast<HDC>(wParam), reinterpret_cast<HWND>(lParam)));
-
-  // Match Win32Window: paint-only subtree requests must restore the ground
-  // even without RDW_ERASE, and erasure must not be a separate clearing pass.
-  if (msg == WM_ERASEBKGND)
-    return 1;
-  if (msg == WM_PAINT)
-  {
-    PAINTSTRUCT paint;
-    HDC dc = BeginPaint(hwnd, &paint);
-    Win32ScenePlatformController::paintWindowGround(dc, paint.rcPaint);
-    EndPaint(hwnd, &paint);
-    return 0;
-  }
+  LRESULT result;
+  if (loka::win32::Win32AnswerContainerMessage(hwnd, msg, wParam, lParam, self ? self->controller() : 0, result))
+    return result;
 
   if (msg == WM_HSCROLL && lParam == 0 && self
       && Win32InputDoor::scroll(*self, SB_HORZ, LOWORD(wParam), HIWORD(wParam)))
@@ -564,14 +551,6 @@ LRESULT CALLBACK Win32ScrollViewContext::WndProc(HWND hwnd, UINT msg, WPARAM wPa
   if ((msg == WM_MOUSEWHEEL || msg == kMouseHorizontalWheelMessage) && self)
   {
     Win32InputDoor::mouseWheel(*self, msg == kMouseHorizontalWheelMessage ? SB_HORZ : SB_VERT, wParam);
-    return 0;
-  }
-  if (msg == WM_COMMAND && self && self->controller() &&
-      self->controller()->handleCommand(wParam, lParam))
-  {
-    // Controls parented to the viewport notify it, not the root window;
-    // forward through the same controller door Win32Window::WndProc uses so
-    // a Button inside a ScrollView still reaches its Loka handler.
     return 0;
   }
   return DefWindowProcW(hwnd, msg, wParam, lParam);

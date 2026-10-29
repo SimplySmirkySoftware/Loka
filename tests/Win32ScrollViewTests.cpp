@@ -6,6 +6,7 @@
 #include "Win32ScrollViewTests.hpp"
 
 #include "Win32SceneLayout.hpp"
+#include "testing/Win32ScenePlatformTestAccess.hpp"
 #include "support/TestVerify.hpp"
 
 #include <cassert>
@@ -351,7 +352,7 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
 
     HWND viewport = findChildWindowByClass(root, L"LOKA_SCROLL_VIEW");
     LOKA_VERIFY(viewport);
-    assert(GetParent(GetParent(viewport)) == root);
+    LOKA_VERIFY(GetParent(GetParent(viewport)) == root);
     const LONG_PTR viewportStyle = GetWindowLongPtr(viewport, GWL_STYLE);
     assert((viewportStyle & WS_VSCROLL) == 0);
     // #1199: transparent children need the parent's ground beneath them;
@@ -366,8 +367,8 @@ void testWin32ScrollViewParentsAndClipsProjectedChildren()
     assert(buttons.size() == 6);
     for (std::size_t i = 0; i < buttons.size(); ++i)
     {
-      assert(GetParent(buttons[i]) == viewport &&
-             "projected controls must be structurally clipped by the viewport HWND");
+      LOKA_VERIFY(GetParent(buttons[i]) == viewport
+                  && "projected controls must be structurally clipped by the viewport HWND");
     }
 
     RECT viewportClient;
@@ -2232,4 +2233,150 @@ void testWin32ScrollRequestFirstVisit()
   LOKA_VERIFY(f.observed.values[0].x == 0 && f.observed.values[0].y == 0);
   LOKA_VERIFY(f.observed.values[1].x == 30 && f.observed.values[1].y == 40);
   LOKA_VERIFY(scrollInfo(f.viewport(), SB_HORZ).nPos == 30 && scrollInfo(f.viewport()).nPos == 40);
+}
+
+namespace
+{
+  int layoutUnderRebasedClips(Win32ScenePlatformController &controller,
+                              loka::app::ScrollViewNode &node,
+                              const Win32ScenePlatformController::LayoutState &state,
+                              const HWND *parents,
+                              int depth,
+                              int index = 0)
+  {
+    using namespace loka::app::scene;
+    typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
+    if (index == depth)
+      return Access::layoutNode(controller, &node, state);
+    ProjectionParentScopeStack &scopes = Access::projectionParentScopes(controller);
+    ProjectionParentScope clip;
+    LOKA_VERIFY(scopes.current().deriveScrolled(
+        parents[index], index == 0 ? 11 : 6, index == 0 ? 13 : 8, loka::core::Frame(0, 0, 300, 240), clip));
+    ProjectionRebasedClipScopeGuard guard(scopes, clip);
+    LOKA_VERIFY(guard.isActive());
+    return layoutUnderRebasedClips(controller, node, state, parents, depth, index + 1);
+  }
+} // namespace
+
+void testWin32ScrollViewRebasedClipSeat()
+{
+  using namespace loka::app;
+  typedef loka::dsl::testing::Win32ScenePlatformTestAccess Access;
+  // Red on the base: every CLIP case is refused by the active-depth entry test.
+  // Root twins isolate native seat rounding from content traversal and facts.
+  WNDCLASSW wc;
+  ZeroMemory(&wc, sizeof(wc));
+  wc.lpfnWndProc = DefWindowProcW;
+  wc.hInstance = GetModuleHandleW(NULL);
+  wc.lpszClassName = L"LOKA_TEST_SCROLL_CLIP";
+  LOKA_VERIFY(RegisterClassW(&wc) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS);
+  const unsigned dpis[] = {96, 120, 144};
+  struct ClipCase
+  {
+    int depth;
+    bool horizontal;
+  };
+  const ClipCase cases[] = {{1, false}, {1, true}, {2, false}, {2, true}};
+  for (unsigned d = 0; d != sizeof(dpis) / sizeof(dpis[0]); ++d)
+  {
+    int heightRoundingWitnesses = 0;
+    for (unsigned c = 0; c != sizeof(cases) / sizeof(cases[0]); ++c)
+    {
+      // Four edge phases and two odd heights cover the 125% metric residues.
+      for (int phase = 0; phase != 4; ++phase)
+      {
+        std::printf("[rebased clip] dpi=%u depth=%d horizontal=%d phase=%d\n",
+                    dpis[d],
+                    cases[c].depth,
+                    cases[c].horizontal,
+                    phase);
+        HWND root = createHostWindow();
+        LOKA_VERIFY(root);
+        const loka::win32::Win32DisplayScale scale(dpis[d], RailMetrics());
+        HWND parents[2];
+        for (int i = 0; i != 2; ++i)
+        {
+          const RECT r = scale.projectFrame(loka::core::Frame(i == 0 ? 11 : 6, i == 0 ? 13 : 8, 300, 240)).r;
+          parents[i] = CreateWindowExW(0,
+                                       wc.lpszClassName,
+                                       L"",
+                                       WS_CHILD,
+                                       r.left,
+                                       r.top,
+                                       r.right - r.left,
+                                       r.bottom - r.top,
+                                       i == 0 ? root : parents[0],
+                                       NULL,
+                                       wc.hInstance,
+                                       NULL);
+          LOKA_VERIFY(parents[i]);
+        }
+        {
+          Win32ScenePlatformController controller(root, scale);
+          RegisterWin32BuiltInSupport(controller);
+          ViewportFact clippedFact(9), rootFact(9);
+          ScrollViewNode clipped(ScrollViewProps(clippedFact.state()).contentInsets(ScrollViewContentInsets::of(3, 5)));
+          ScrollViewNode twin(ScrollViewProps(rootFact.state()).contentInsets(ScrollViewContentInsets::of(3, 5)));
+          addButtonColumn(clipped, 6);
+          addButtonColumn(twin, 6);
+          clipped.addChild(new BoxNode(Box().width(cases[c].horizontal ? 400 : 20).height(400).props));
+          twin.addChild(new BoxNode(Box().width(cases[c].horizontal ? 400 : 20).height(400).props));
+          const int x = 41 + phase, y = 51 + phase;
+          const int height = cases[c].depth == 1 ? 101 : 103;
+          const int seatX = x - (cases[c].depth == 1 ? 11 : 17);
+          const int seatY = y - (cases[c].depth == 1 ? 13 : 21);
+          const Win32ScenePlatformController::LayoutState content(x, y, 101, height, Win32SceneLayout::kGap);
+          const Win32ScenePlatformController::LayoutState seat(seatX, seatY, 101, height, Win32SceneLayout::kGap);
+          if (cases[c].horizontal)
+          {
+            if (scale.clientHeightBelowHorizontalBar(loka::core::Frame(x, y, 101, height))
+                != scale.clientHeightBelowHorizontalBar(loka::core::Frame(seatX, seatY, 101, height)))
+              ++heightRoundingWitnesses;
+            else
+              std::printf("[skip] m5 discrimination in this cell: equal rounded client heights\n");
+          }
+          // Two visits cover both construction and retained relayout.
+          for (int visit = 0; visit != 2; ++visit)
+          {
+            const int rootBottom = Access::layoutNode(controller, &twin, seat);
+            const int clipBottom = layoutUnderRebasedClips(controller, clipped, content, parents, cases[c].depth);
+            LOKA_VERIFY(rootBottom - seatY == height && clipBottom - y == height);
+            LOKA_VERIFY(Access::projectionParentScopes(controller).activeDepth() == 0);
+            LOKA_VERIFY(clipped.getContext() && twin.getContext());
+            Win32ScrollViewContext *actual = static_cast<Win32ScrollViewContext *>(clipped.getContext());
+            Win32ScrollViewContext *expected = static_cast<Win32ScrollViewContext *>(twin.getContext());
+            LOKA_VERIFY(GetParent(actual->hwnd()) == parents[cases[c].depth - 1]);
+            const RECT frame = childRectInParent(actual->hwnd(), parents[cases[c].depth - 1]);
+            const RECT wanted = scale.projectFrame(loka::core::Frame(seatX, seatY, 101, height)).r;
+            LOKA_VERIFY(EqualRect(&frame, &wanted));
+            HWND actualButton = findChildWindowByClass(actual->viewportHwnd(), L"Button");
+            HWND expectedButton = findChildWindowByClass(expected->viewportHwnd(), L"Button");
+            LOKA_VERIFY(actualButton && expectedButton);
+            const RECT child = childRectInParent(actualButton, actual->viewportHwnd());
+            const RECT rootChild = childRectInParent(expectedButton, expected->viewportHwnd());
+            LOKA_VERIFY(EqualRect(&child, &rootChild));
+            HWND actualBar = FindWindowExW(actual->hwnd(), NULL, L"SCROLLBAR", NULL);
+            HWND expectedBar = FindWindowExW(expected->hwnd(), NULL, L"SCROLLBAR", NULL);
+            LOKA_VERIFY(actualBar && expectedBar);
+            const RECT bar = childRectInParent(actualBar, actual->hwnd());
+            const RECT rootBar = childRectInParent(expectedBar, expected->hwnd());
+            LOKA_VERIFY(EqualRect(&bar, &rootBar));
+            LOKA_VERIFY(((GetWindowLongPtrW(actual->viewportHwnd(), GWL_STYLE) & WS_HSCROLL) != 0)
+                        == cases[c].horizontal);
+            LOKA_VERIFY(clippedFact.state().get() == rootFact.state().get());
+            const SCROLLINFO actualInfo = scrollInfo(actual->viewportHwnd());
+            const SCROLLINFO expectedInfo = scrollInfo(expected->viewportHwnd());
+            LOKA_VERIFY(actualInfo.nMax == expectedInfo.nMax && actualInfo.nMax > 400);
+            LOKA_VERIFY(actualInfo.nPage == expectedInfo.nPage && actualInfo.nPos == expectedInfo.nPos);
+          }
+        }
+        // Node retirement and controller drain precede destruction of clip parents.
+        LOKA_VERIFY(DestroyWindow(root));
+      }
+    }
+    // At 96 DPI m4/m5 cannot differ; at 150% m5 also depends on the native metric.
+    // The two 125% height residues guarantee at least one m5 witness.
+    if (dpis[d] == 120)
+      LOKA_VERIFY(heightRoundingWitnesses > 0);
+  }
 }

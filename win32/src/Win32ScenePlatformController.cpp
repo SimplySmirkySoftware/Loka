@@ -1256,10 +1256,10 @@ Win32ScenePlatformController::layoutRectSurfaceNode(loka::app::RectSurfaceNode *
 Win32ScenePlatformController::ScrollViewLayoutResult
 Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *scrollView, const LayoutState &state)
 {
-  if (!scrollView || this->projectionParentScopes_.activeDepth() != 0)
+  if (!scrollView || this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
   {
-    // V1 admits one active viewport. Refuse before creating the inner HWND so
-    // the outer scope remains the only structural clipping parent.
+    // Refuse nested viewports and viewports inside units before creating HWNDs;
+    // both kinds already own a projection measurement channel.
     return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
   if (state.x < SHRT_MIN || state.x > SHRT_MAX ||
@@ -1273,21 +1273,29 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
 
+  loka::app::scene::LayoutState content;
+  content.x = static_cast<short>(state.x);
+  content.y = static_cast<short>(state.y);
+  content.width = static_cast<short>(state.width);
+  content.height = static_cast<short>(state.height);
+  loka::app::scene::LayoutState seat;
+  if (!this->projectionParentScopes_.current().project(content, seat))
+  {
+    return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
+  }
+  // Native geometry uses seat; traversal and every reported value stay in
+  // content coordinates. At the root and today's admitted positions they agree.
+
   Win32ScrollViewContext *ctx =
       static_cast<Win32ScrollViewContext *>(scrollView->getContext());
   if (ctx)
   {
-    ctx->relayout(state.x, state.y, state.width, state.height);
+    ctx->relayout(seat.x, seat.y, seat.width, seat.height);
   }
   else
   {
-    ctx = new Win32ScrollViewContext(this,
-                                     this->projectionParentHwnd(),
-                                     state.x,
-                                     state.y,
-                                     state.width,
-                                     state.height,
-                                     scrollView);
+    ctx = new Win32ScrollViewContext(
+        this, this->projectionParentHwnd(), seat.x, seat.y, seat.width, seat.height, scrollView);
     if (!ctx || !ctx->isValid())
     {
       delete ctx;
@@ -1304,7 +1312,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   const loka::app::scene::ProjectionParentScope &parentScope =
       this->projectionParentScopes_.current();
   if (!parentScope.deriveScrolled(
-          static_cast<void *>(ctx->viewportHwnd()), state.x, state.y, viewportClip, viewportScope))
+          static_cast<void *>(ctx->viewportHwnd()), seat.x, seat.y, viewportClip, viewportScope))
   {
     return ScrollViewLayoutResult(LayoutNodeResult(state.width, state.y), loka::app::ScrollViewVisit::refused());
   }
@@ -1335,8 +1343,8 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
   int viewportHeight = state.height;
   if (horizontalBar)
   {
-    viewportHeight = this->displayScale_.clientHeightBelowHorizontalBar(
-        loka::core::Frame(state.x, state.y, state.width, state.height));
+    viewportHeight =
+        this->displayScale_.clientHeightBelowHorizontalBar(loka::core::Frame(seat.x, seat.y, seat.width, seat.height));
   }
   childBase.height = static_cast<short>(viewportHeight);
   const loka::core::Frame childClip(0, 0, state.width, viewportHeight);
@@ -1411,7 +1419,7 @@ Win32ScenePlatformController::layoutScrollViewNode(loka::app::ScrollViewNode *sc
     // Both bars commit together with the successful layout.
     ctx->setScrollMetrics(SB_HORZ, horizontalBar ? contentWidthLu : 0, childBase.width, clampedX);
     ctx->commitVerticalBarInsets(scrollView->props.contentInsets_,
-                                 loka::core::Frame(state.x, state.y, state.width, state.height));
+                                 loka::core::Frame(seat.x, seat.y, seat.width, seat.height));
     const int clampedOffset = ctx->setScrollMetrics(SB_VERT, extent, viewportHeight, requestedExtent);
     // Publish only after successful layout and after the scope has popped.
     scrollView->publishViewport(clampedX, clampedOffset, childBase.width, viewportHeight);

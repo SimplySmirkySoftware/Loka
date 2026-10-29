@@ -553,6 +553,63 @@ namespace
     }
   }
 
+  void ScrollViewSuppressionPin(const std::string &mode)
+  {
+    const bool refused = mode == "suppression-refused";
+    if (refused)
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + 2;
+    ScrollFixture f;
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(toolbox_host::failRegions == 0);
+    LOKA_VERIFY((f.controller.paintSuppressClipRgn_ == 0) == refused);
+    f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+    f.step(0);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 2);
+    const Rect normal = {-10, -10, 200, 600};
+    const Rect partial = {2, 3, 30, 110};
+    const Rect empty = {0, 0, 0, 0};
+    const Rect before = mode == "suppression-empty" ? empty : mode == "suppression-partial" ? partial : normal;
+    ClipRect(&before);
+    ControlRef controls[2] = {f.controller.scrollControl(0).control, f.controller.scrollControl(1).control};
+    for (unsigned i = 0; i < 2; ++i)
+      controls[i]->calls.clear();
+    f.window.port.native.update.clear();
+    f.step(17, 120);
+    Rect after = toolbox_host::currentClip();
+    LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
+    const Rect departing = controls[1]->rect;
+    f.step(0, 500);
+    after = toolbox_host::currentClip();
+    LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
+    const char *operations[] = {"move", "size", "minimum", "maximum", "value", "hilite", "show", "hide"};
+    for (unsigned op = 0; op < sizeof(operations) / sizeof(operations[0]); ++op)
+    {
+      unsigned seen = 0, painted = 0;
+      for (unsigned bar = 0; bar < 2; ++bar)
+        for (std::size_t i = 0; i < controls[bar]->calls.size(); ++i)
+        {
+          const toolbox_host::ControlCall &call = controls[bar]->calls[i];
+          if (call.operation != operations[op])
+            continue;
+          ++seen;
+          if (call.painted)
+            ++painted;
+          LOKA_VERIFY(call.currentPort == f.window.window());
+          if (!refused)
+            LOKA_VERIFY(!call.painted && EmptyRect(&call.ownerClip));
+        }
+      LOKA_VERIFY(seen > 0);
+      // ShowControl of an already shown control does not paint even on refusal.
+      if (refused && std::strcmp(operations[op], "show") != 0)
+        LOKA_VERIFY(painted > 0);
+    }
+    bool queued = false;
+    for (std::size_t i = 0; i < f.window.port.native.update.size(); ++i)
+      if (EqualRect(&f.window.port.native.update[i], &departing))
+        queued = true;
+    LOKA_VERIFY(queued && !controls[1]->visible);
+  }
+
   void ScrollViewPins()
   {
     ScrollViewInsetBarPins();
@@ -648,12 +705,13 @@ namespace
       LOKA_VERIFY(toolbox_host::draws.size() > contentDraws && calls.draws == 0);
       f.controller.drawControlsInRect(viewport);
       LOKA_VERIFY(calls.draws == 1);
-      LOKA_VERIFY(calls.drawClip.top == previous.top && calls.drawClip.left == previous.left
-                  && calls.drawClip.bottom == previous.bottom && calls.drawClip.right == previous.right);
+      Rect visible, expectedDraw;
+      LOKA_VERIFY(f.controller.scrollControl(0).placement.queryVisible(visible));
+      SectRect(&previous, &visible, &expectedDraw);
+      LOKA_VERIFY(EqualRect(&calls.drawClip, &expectedDraw));
       LOKA_VERIFY(mounted.values == 1 && EmptyRect(&mounted.valueClip));
       LOKA_VERIFY(mounted.shows == 1 && EmptyRect(&mounted.showClip) && mounted.draws == 1);
-      LOKA_VERIFY(mounted.drawClip.top == previous.top && mounted.drawClip.left == previous.left
-                  && mounted.drawClip.bottom == previous.bottom && mounted.drawClip.right == previous.right);
+      LOKA_VERIFY(EqualRect(&mounted.drawClip, &expectedDraw));
       const Rect unclipped = {-30000, -30000, 30000, 30000};
       ClipRect(&unclipped);
     }
@@ -682,8 +740,10 @@ namespace
       LOKA_VERIFY(calls.shows == 1 && !EmptyRect(&calls.showClip));
       controller.drawControlsInRect(viewport);
       LOKA_VERIFY(calls.draws == 1);
-      LOKA_VERIFY(calls.drawClip.top == previous.top && calls.drawClip.left == previous.left
-                  && calls.drawClip.bottom == previous.bottom && calls.drawClip.right == previous.right);
+      Rect visible, expectedDraw;
+      LOKA_VERIFY(controller.scrollControl(0).placement.queryVisible(visible));
+      SectRect(&previous, &visible, &expectedDraw);
+      LOKA_VERIFY(EqualRect(&calls.drawClip, &expectedDraw));
       const Rect unclipped = {-30000, -30000, 30000, 30000};
       ClipRect(&unclipped);
     }

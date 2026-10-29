@@ -88,8 +88,8 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
-    binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   }
+  binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   bool submitted;
   {
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
