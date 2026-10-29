@@ -81,32 +81,38 @@ namespace
   }
 } // namespace
 
-Rect ToolboxScenePlatformController::admitOwnControlMove(const Rect &before, const Rect &after) const
+ToolboxOwnControlMoveFootprint ToolboxScenePlatformController::admitOwnControlMove(const Rect &before,
+                                                                                   const Rect &after) const
 {
-  // MoveControl first places the OLD size at the new origin, then SizeControl
-  // shrinks or grows it; the Control Manager invalidates that intermediate
-  // rectangle too, so the discharged area is the box over all three.
-  const short midBottom = static_cast<short>(after.top + (before.bottom - before.top));
-  const short midRight = static_cast<short>(after.left + (before.right - before.left));
-  Rect area = {before.top < after.top ? before.top : after.top,
-               before.left < after.left ? before.left : after.left,
-               before.bottom > after.bottom ? before.bottom : after.bottom,
-               before.right > after.right ? before.right : after.right};
-  if (midBottom > area.bottom)
-    area.bottom = midBottom;
-  if (midRight > area.right)
-    area.right = midRight;
-  // drawWhole keeps the window port current throughout the erased pass.
-  // Only our move's area is discharged; never validate the whole port here.
-  if (!this->erasedPass_.admitsCapture(area))
-    SetRect(&area, 0, 0, 0, 0);
-  return area;
+  // MoveControl places the old size at the new origin before SizeControl runs.
+  Rect areas[3] = {before,
+                   after,
+                   {after.top,
+                    after.left,
+                    static_cast<short>(after.top + before.bottom - before.top),
+                    static_cast<short>(after.left + before.right - before.left)}};
+  if (!this->window_ || !this->window_->window())
+    return ToolboxOwnControlMoveFootprint();
+  const Rect portRect = this->window_->window()->portRect;
+  for (unsigned i = 0; i < 3; ++i)
+  {
+    Rect clipped;
+    if (!SectRect(&areas[i], &portRect, &clipped) || !this->erasedPass_.admitsCapture(clipped))
+      SetRect(&clipped, 0, 0, 0, 0);
+    areas[i] = clipped;
+  }
+  return ToolboxOwnControlMoveFootprint(areas[0], areas[1], areas[2]);
 }
 
-void ToolboxScenePlatformController::validateOwnControlMove(const Rect &area)
+void ToolboxScenePlatformController::validateOwnControlMove(const ToolboxOwnControlMoveFootprint &footprint)
 {
-  if (!EmptyRect(&area))
-    ValidRect(&area);
+  // Do not validate the bounding box: its corners can contain foreign damage.
+  if (!EmptyRect(&footprint.before()))
+    ValidRect(&footprint.before());
+  if (!EmptyRect(&footprint.after()))
+    ValidRect(&footprint.after());
+  if (!EmptyRect(&footprint.intermediate()))
+    ValidRect(&footprint.intermediate());
 }
 
 void ToolboxScenePlatformController::validateOwnControlMove(const Rect &before, const Rect &after)
@@ -131,8 +137,9 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
   {
     return false;
   }
-  Rect controlRect;
-  if (!this->intersectWithProjectionClip(rect, controlRect))
+  Rect visible;
+  const Rect &controlRect = rect;
+  if (!this->intersectWithProjectionClip(rect, visible))
   {
     return true;
   }
@@ -176,7 +183,7 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
     entry.appliedValue = 0;
     entry.active = false;
     entry.usedThisFrame = true;
-    entry.placement = ToolboxNativePlacement(controlRect, controlRect);
+    entry.placement = ToolboxNativePlacement(controlRect, visible);
     entry.lifetimeHint = lifetimeHint;
     scrollBarLedger_.scrollBarControls_.push_back(entry);
     binding = &scrollBarLedger_.scrollBarControls_.back();
@@ -192,11 +199,14 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
       || binding->placement.full().right != controlRect.right || binding->placement.full().bottom != controlRect.bottom)
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
-    SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
+    if (created
+        || binding->placement.full().right - binding->placement.full().left != controlRect.right - controlRect.left
+        || binding->placement.full().bottom - binding->placement.full().top != controlRect.bottom - controlRect.top)
+      SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
     if (movedFrom)
       *movedFrom = binding->placement.full();
   }
-  binding->placement = ToolboxNativePlacement(controlRect, controlRect);
+  binding->placement = ToolboxNativePlacement(controlRect, visible);
   SetControlMinimum(binding->control, static_cast<short>(minimum));
   SetControlMaximum(binding->control, static_cast<short>(maximum));
   return true;
