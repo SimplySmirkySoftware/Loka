@@ -5,6 +5,7 @@
 #include "app/scene/projection/PlatformController.hpp"
 #include "app/nodes/controls/ScrollBar.hpp"
 #include "core/State.hpp"
+#include "core/Frame.hpp"
 #include "core/Managed.hpp"
 #include "app/layout/StackSpans.hpp"
 #include "app/scene/state/WriteSeat.hpp"
@@ -66,6 +67,8 @@ public:
     bool usedThisFrame;
     Rect rect;
     Rect contentRect;
+    /** Content origin placed by the last successful layout; layout alone compares and replaces it. */
+    loka::core::Frame placedOrigin;
   };
 
   explicit ToolboxScrollBarLedger(std::size_t bucketDepth)

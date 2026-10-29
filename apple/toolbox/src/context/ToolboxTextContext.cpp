@@ -187,8 +187,13 @@ namespace
       native.copyPascal(0, end, out);
       std::memcpy(out + 1 + out[0], "...", 3);
       out[0] = static_cast<unsigned char>(out[0] + 3);
-      if (!end || StringWidth(out) <= maxWidth)
+      if (StringWidth(out) <= maxWidth)
         return;
+      if (!end)
+      {
+        out[0] = 0;
+        return;
+      }
       end = native.previous(end);
     }
   }

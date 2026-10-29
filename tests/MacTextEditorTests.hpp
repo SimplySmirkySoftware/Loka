@@ -20,6 +20,8 @@ void testMacTextEditorPageCommands();
 void testMacTextEditorPageBindingReplacement();
 void testMacTextEditorPagePriority();
 void testMacTextEditorPageAfterFailedReconciliation();
+void testMacTextEditorPageReconciliationFailsInsideTake();
+void testMacTextEditorPageGeometryFollowsReconciliation();
 void testMacTextEditorPageEmptyLine();
 void testMacTextEditorPageGeometryDeclinesWrappedLine();
 

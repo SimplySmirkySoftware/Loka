@@ -2901,6 +2901,31 @@ namespace
       }
       else if (self->phase_ == OFFSCREEN_REVEAL_CHECK)
       {
+        const ToolboxPresentObservation &observation = stats.lastMovedPresentObservation;
+        const Rect &damage = observation.damage();
+        std::fprintf(self->log_,
+                     "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d verdict=%s "
+                     "refusal=%s last_refusal=%s\r",
+                     observation.reasonNames().c_str(),
+                     observation.dy(),
+                     observation.viewports(),
+                     observation.foregroundUnits(),
+                     damage.top,
+                     damage.left,
+                     damage.bottom,
+                     damage.right,
+                     ToolboxPresentVerdictName(observation.verdict()),
+                     ToolboxPresentRefusalName(observation.refusal()),
+                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()));
+        // The reveal writes one vertical origin by 160: its dirty source is
+        // LAYOUT, so boundary apply requests layout_dirty (global layout only
+        // adds a rect request). No OS damage remains at this settled entry and
+        // this Column has no ZStack units. Suppression capability is still absent.
+        self->recordArm("viewport-full-draw-observed",
+                        observation.dy() == 160 && observation.viewports() == 1
+                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL
+                            && observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
+                        OFFSCREEN_REVEAL_CHECK);
         // Re-entry must establish history before another paint-only write.
         self->initial_ = stats;
         self->offscreen_->writeText(true, "MMMM");

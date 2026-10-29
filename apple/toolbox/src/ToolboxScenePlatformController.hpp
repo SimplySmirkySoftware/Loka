@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxPresentObservation.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
@@ -352,6 +353,7 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+  ToolboxPresentObservation observation_;
   friend class ToolboxBlurSnapshotInspection;
   ToolboxPressLedger pressLedger_;
   ToolboxFrostCache frostCache_;
@@ -529,6 +531,16 @@ public:
   {
     ++debugStats_.drawDirtyCalls;
     ++debugStats_.totalDrawDirtyCalls;
+  }
+  /** Window requests: O(1) per request, before request coalescing; no rows. */
+  void notePresentReason(ToolboxFullDrawReason reason)
+  {
+    this->observation_.noteReason(reason);
+  }
+  /** Window full-draw entries: O(1) bbox snapshot before OS validation; no rows. */
+  void notePresentDamage(const Rect &damage)
+  {
+    this->observation_.noteDamage(damage);
   }
   void noteWindowFullRequest(const char *reason)
   {

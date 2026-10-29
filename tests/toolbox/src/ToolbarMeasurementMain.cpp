@@ -265,7 +265,7 @@ namespace
           return;
         }
         this->journal_.begin("launch", this->tick_, false);
-        native->requestInvalidateWithReason("toolbar_measurement");
+        native->requestInvalidate();
         return;
       }
       const int score = this->gameModel().score();
@@ -360,7 +360,7 @@ namespace
         this->journal_.begin("main-result", this->clock_.currentTick());
       static_cast<smirkycard::CardScene *>(window->scene())->tickScenario();
 #endif
-      native->requestInvalidateWithReason("toolbar_measurement");
+      native->requestInvalidate();
     }
     App *app_;
     long tick_;

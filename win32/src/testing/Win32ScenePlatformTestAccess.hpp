@@ -132,6 +132,20 @@ namespace loka
           controller.performLayout(clientWidth, clientHeight);
         }
 
+        /** Test-owned guards exercise frames before a rail creates clip parents. */
+        static ::loka::app::scene::ProjectionParentScopeStack &
+        projectionParentScopes(::Win32ScenePlatformController &controller)
+        {
+          return controller.projectionParentScopes_;
+        }
+
+        static int layoutNode(::Win32ScenePlatformController &controller,
+                              ::loka::app::scene::Node *node,
+                              const ::Win32ScenePlatformController::LayoutState &state)
+        {
+          return controller.layoutNode(node, state);
+        }
+
         static int clientWidth(const ::Win32ScenePlatformController &controller)
         {
           return controller.clientWidth_;

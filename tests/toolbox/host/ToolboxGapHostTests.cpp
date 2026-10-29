@@ -310,8 +310,11 @@ namespace
     LOKA_VERIFY(!none.query(out));
     LOKA_VERIFY(out.top == 1 && out.left == 2 && out.bottom == 3 && out.right == 4);
     ToolboxClipBoxContext context;
-    NodeContext &base = context;
+    NodeContext base;
     LOKA_VERIFY(base.asClipBoxContext() == 0);
+    LOKA_VERIFY(context.asClipBoxContext() == &context);
+    NodeContext &installed = context;
+    LOKA_VERIFY(installed.asClipBoxContext() == &context);
     LOKA_VERIFY(!context.placement().query(out));
     const Rect first = {10, 20, 30, 40}, empty = {4, 5, 4, 5};
     context.setPlacement(ToolboxClipPlacement(first));
@@ -361,6 +364,53 @@ namespace
       return this->natural;
     }
   };
+
+  void clipForeignContextPin()
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    std::printf("[skip] foreign clip context: lifecycle audit intentionally asserts; run without audit\n");
+#else
+    struct Foreign : NodeContext
+    {
+    };
+    struct ForeignChild : PlacementLeaf
+    {
+      virtual void render(IPlatformController *platform)
+      {
+        ToolboxScenePlatformController &controller = *static_cast<ToolboxScenePlatformController *>(platform);
+        LOKA_VERIFY(controller.projectionParentScopes_.activeDepth() == 0);
+        DrawText("x", 0, 1);
+      }
+    };
+    for (int handler = 0; handler != 2; ++handler)
+    {
+      Fixture f(WindowProps(), handler != 0);
+      HostPortScope port(f.window.window());
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(f.controller));
+      BoxNode box(Box().clipChildren().props);
+      ForeignChild *child = new ForeignChild();
+      box.addChild(child);
+      NodeContext *foreign = new Foreign();
+      box.setContext(foreign);
+      for (unsigned pass = 0; pass != 2; ++pass)
+      {
+        LayoutState state = f.seat();
+        state.width = 50;
+        LOKA_VERIFY(LayoutNode(&box, state, &f.controller, 0) == 80);
+        LOKA_VERIFY(box.getContext() == foreign && !foreign->asClipBoxContext());
+        LOKA_VERIFY(child->calls == pass + 1 && child->depth == 0 && state.y == 20);
+        LOKA_VERIFY(f.controller.projectionParentScopes_.activeDepth() == 0);
+      }
+      const Rect broad = {0, 0, 300, 300};
+      ClipRect(&broad);
+      toolbox_host::draws.clear();
+      RenderNode(&box, &f.controller);
+      LOKA_VERIFY(box.getContext() == foreign && !foreign->asClipBoxContext());
+      LOKA_VERIFY(toolbox_host::draws.size() == 1);
+      LOKA_VERIFY(EqualRect(&toolbox_host::draws.back().clip, &broad));
+    }
+#endif
+  }
 
   bool placementOf(Node &node, Rect &rect)
   {
@@ -1305,6 +1355,8 @@ int main(int argc, char **argv)
     clipRegistryPin();
   else if (!std::strcmp(mode, "clip-lifecycle"))
     clipLifecyclePin();
+  else if (!std::strcmp(mode, "clip-foreign-context"))
+    clipForeignContextPin();
   else if (!std::strcmp(mode, "clip-placement"))
     clipPlacementPin();
   else if (!std::strcmp(mode, "clip-width"))
