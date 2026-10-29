@@ -333,8 +333,7 @@ namespace loka
 
       /** Opt-in marker for a rail's clip-box context, read only through
           asClipBoxContext so foreign contexts answer 0. Carries no native
-          operation. No rail implements it here: macOS adopts it in M2;
-          Toolbox adoption belongs to a later Toolbox PR. */
+          operation. macOS and Toolbox adopt it; Win32 does not clip yet. */
       struct IClipBoxContext
       {
       protected:
