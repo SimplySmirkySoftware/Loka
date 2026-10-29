@@ -1044,6 +1044,15 @@ void testWin32WindowAndViewportGroundRoles()
               == GetSysColor(COLOR_BTNFACE));
   verifyStaticColors(root, firstHwnd);
   verifyStaticColors(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL), secondHwnd);
+  HDC dc = CreateCompatibleDC(NULL);
+  LOKA_VERIFY(dc != NULL);
+  // DefWindowProcW answers 0 because the viewport class brush is NULL.
+  LOKA_VERIFY(SendMessageW(FindWindowExW(viewport.hwnd(), NULL, L"LOKA_SCROLL_VIEW", NULL),
+                           WM_ERASEBKGND,
+                           reinterpret_cast<WPARAM>(dc),
+                           0)
+              == 1);
+  DeleteDC(dc);
   first.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   second.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
   viewport.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
