@@ -621,6 +621,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
     tests/toolbox/host/ToolboxHost.cpp
+    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp
     tests/toolbox/host/ToolboxScrollViewHost.cpp
     apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp
@@ -697,6 +698,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   loka_enable_warnings(LokaToolboxTextEditorTests)
   set_target_properties(LokaToolboxTextEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxTextEditorTests COMMAND LokaToolboxTextEditorTests)
+  add_test(NAME testToolboxEditorLedgerCharacter COMMAND LokaToolboxTextEditorTests ledger-character)
+  add_test(NAME testToolboxEditorLedgerRefusal COMMAND LokaToolboxTextEditorTests ledger-refusal)
   foreach(_bar_case creation geometry replay-retained replay-composition metrics terminal refusal placement port-idle gesture inactive clipped-hit bulk retained unused)
     add_test(NAME testToolboxEditorBar_${_bar_case} COMMAND LokaToolboxTextEditorTests bar-${_bar_case})
   endforeach()

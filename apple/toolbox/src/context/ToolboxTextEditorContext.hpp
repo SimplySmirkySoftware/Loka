@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_TEXT_EDITOR_CONTEXT_HPP
 #include "app/nodes/controls/TextEditorRequests.hpp"
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxEditorSeat.hpp"
 #include "context/ToolboxProjectedNodeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include <TextEdit.h>
@@ -19,7 +20,7 @@ namespace loka
 
 /** Plain whole-document projection. The controller's edit ledger owns TE;
     this context owns cancellation storage and the synchronous input phase. */
-class ToolboxTextEditorContext : public ToolboxProjectedNodeContext
+class ToolboxTextEditorContext : public ToolboxProjectedNodeContext, public ToolboxEditorSeat
 {
 public:
   ToolboxTextEditorContext(loka::app::TextEditorNode *, ToolboxScenePlatformController *,
@@ -31,6 +32,27 @@ public:
   virtual short layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &);
   virtual void render(loka::app::scene::IPlatformController *);
   void repaint(TEHandle);
+  virtual void repaintNative()
+  {
+    this->repaint(this->te_);
+  }
+  virtual loka::app::EditorResult click(const Point &point, const EventRecord &)
+  {
+    return this->click(point);
+  }
+  virtual bool offerKeyEvent(const EventRecord &)
+  {
+    return false;
+  }
+  virtual bool editVerb(loka::app::EditVerb)
+  {
+    return false;
+  }
+  virtual bool hasNativeHandle() const
+  {
+    return this->te_ != 0;
+  }
+  virtual void focus(bool) {}
   ToolboxTextEditorRects geometry() const;
   Rect chromeRect() const
   {

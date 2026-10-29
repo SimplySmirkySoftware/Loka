@@ -365,7 +365,7 @@ void ToolboxWindow::invalidateGrowIcon()
   SetPort(oldPort);
 }
 
-bool ToolboxWindow::handleMouseDown(const Point &globalPoint)
+bool ToolboxWindow::handleMouseDown(const Point &globalPoint, const EventRecord &event)
 {
   if (!window_ || !scenePlatformController_)
   {
@@ -376,9 +376,14 @@ bool ToolboxWindow::handleMouseDown(const Point &globalPoint)
   SetPort(window_);
   Point localPoint = globalPoint;
   GlobalToLocal(&localPoint);
-  bool handled = ToolboxInputDoor::mouseDown(*scenePlatformController_, localPoint);
+  bool handled = ToolboxInputDoor::mouseDown(*scenePlatformController_, localPoint, event);
   SetPort(oldPort);
   return handled;
+}
+
+bool ToolboxWindow::offerKeyEvent(const EventRecord &event)
+{
+  return this->scenePlatformController_ && ToolboxInputDoor::offerKeyEvent(*this->scenePlatformController_, event);
 }
 
 bool ToolboxWindow::handleKeyDown(char key)

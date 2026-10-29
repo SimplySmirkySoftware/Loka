@@ -696,6 +696,8 @@ static void parkedEditorKeys()
       if (phase == 2)
         LifecycleFactTestAccess::DeliverFacts(&f.node);
     }
+    const EventRecord event = EventRecord();
+    LOKA_VERIFY(!ToolboxInputDoor::offerKeyEvent(f.controller, event));
     const bool typed = ToolboxInputDoor::keyDown(f.controller, 'x');
     const bool scrolled = ToolboxInputDoor::scrollKey(f.controller, SCROLL_END);
     NodeContext *actual = 0;
@@ -711,8 +713,142 @@ static void parkedEditorKeys()
     std::printf("[pin] parked TextEditor keys phase=%d passed\n", phase);
   }
 }
+/** B1: native presence belongs to the ledger throughout retirement and clip refusal. */
+static void editorLedgerCharacterization()
+{
+  {
+    Fixture f;
+    const TEHandle captured = f.te();
+    f.controller.activateEditControl(0);
+    LOKA_VERIFY((**captured).active);
+    f.context->invalidateNativePresentation();
+    LOKA_VERIFY(!f.te() && f.controller.editControls_[0].te == captured);
+    f.controller.activateEditControl(f.controller.editControls_.size());
+    LOKA_VERIFY(!(**captured).active);
+    f.controller.activateEditControl(0);
+    LOKA_VERIFY((**captured).active);
+    LOKA_VERIFY(f.controller.editControls_.focused()->te == captured);
+  }
+  {
+    Fixture f;
+    f.controller.rootNode_ = &f.node;
+    f.controller.editControls_[0].usedThisFrame = false;
+    SetRect(&f.controller.projectionClip, 300, 300, 310, 310);
+    f.context->render(&f.controller);
+    LOKA_VERIFY(!f.te() && !f.controller.editControls_[0].usedThisFrame);
+    const Rect dirty = {20, 10, 100, 210};
+    toolbox_host::paintOperations.clear();
+    ToolboxInputDoor::renderDirty(f.controller, dirty);
+    LOKA_VERIFY(std::count(toolbox_host::paintOperations.begin(), toolbox_host::paintOperations.end(), "frame") == 0);
+    // Finish the native removal phase while retaining the row for this probe.
+    f.controller.retireEditTextBinding(f.controller.editControls_[0], NATIVE_HINT_EAGER_RELEASE);
+    f.controller.editControls_[0].usedThisFrame = true;
+    toolbox_host::paintOperations.clear();
+    ToolboxInputDoor::renderDirty(f.controller, dirty);
+    LOKA_VERIFY(std::count(toolbox_host::paintOperations.begin(), toolbox_host::paintOperations.end(), "frame") == 0);
+  }
+  for (int bulk = 0; bulk != 2; ++bulk)
+  {
+    Fixture f;
+    f.controller.activateEditControl(0);
+    const TEHandle captured = f.te();
+    const int disposals = toolbox_host::disposals;
+    if (bulk)
+      f.controller.clearControls();
+    else
+      f.controller.retireEditTextControl(f.context, NATIVE_HINT_EAGER_RELEASE);
+    LOKA_VERIFY(!f.te() && f.controller.editControls_.empty());
+    LOKA_VERIFY(!f.controller.editControls_.focused() && !(**captured).active);
+    LOKA_VERIFY(toolbox_host::disposals == disposals);
+    f.controller.flushTE();
+    LOKA_VERIFY(toolbox_host::disposals == disposals + 1);
+  }
+  std::puts("[pin] editor ledger B1 activation, replay, individual and bulk retirement");
+}
+static void editorSeatOffers()
+{
+  const EventRecord event = EventRecord();
+  for (int phase = 0; phase != 5; ++phase)
+  {
+    Fixture f(3, phase == 1 ? std::string("\303\251") : std::string("abcd"));
+    if (phase == 2)
+      f.context->invalidateNativePresentation();
+    if (phase == 3)
+    {
+      f.controller.editControls_[0].usedThisFrame = false;
+      SetRect(&f.controller.projectionClip, 300, 300, 310, 310);
+      f.context->render(&f.controller);
+    }
+    if (phase == 4)
+      f.controller.retireEditTextControl(f.context, NATIVE_HINT_EAGER_RELEASE);
+    ToolboxEditorSeat &seat = *f.context;
+    const int sets = toolbox_host::sets;
+    const int selections = toolbox_host::selections;
+    LOKA_VERIFY(!seat.offerKeyEvent(event));
+    LOKA_VERIFY(!ToolboxInputDoor::offerKeyEvent(f.controller, event));
+    if (!f.controller.editControls_.empty())
+    {
+      f.controller.activateEditControl(0);
+      LOKA_VERIFY(!ToolboxInputDoor::offerKeyEvent(f.controller, event));
+    }
+    LOKA_VERIFY(toolbox_host::sets == sets && toolbox_host::selections == selections);
+  }
+}
+static void editorLedgerRefusal()
+{
+  using namespace loka::core::testing;
+  // Arm around a balanced region: the same backend must release all growth.
+  failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+  {
+    Fixture f;
+    ToolboxEditTextContext ordinary[4];
+    MutableState<String> text(String("ordinary"));
+    const Rect rect = {20, 10, 40, 210};
+    for (int i = 0; i != 3; ++i)
+      LOKA_VERIFY(f.controller.ensureEditTextControl(&ordinary[i], rect, &text, NATIVE_HINT_DEFAULT).te);
+    f.controller.activateEditControl(0);
+    const TEHandle captured = f.te();
+    for (int kind = 0; kind != 2; ++kind)
+    {
+      failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 1);
+      toolbox_host::failNew = 1;
+      if (kind)
+        LOKA_VERIFY(!f.controller.ensureEditTextControl(&ordinary[3], rect, &text, NATIVE_HINT_DEFAULT).te);
+      else
+      {
+        TextEditorNode node(TextEditorProps(f.lines, f.cursor));
+        LayoutState state;
+        IPlatformNodeHandler *handler = f.controller.nodeHandlerRegistry_.find(&node);
+        ToolboxTextEditorContext *editor =
+            static_cast<ToolboxTextEditorContext *>(handler->ensureContext(&node, &f.controller, state));
+        LOKA_VERIFY(editor);
+        LOKA_VERIFY(!f.controller.ensureTextEditorControl(editor, rect, NATIVE_HINT_DEFAULT));
+      }
+      LOKA_VERIFY(toolbox_host::failNew == 1);
+      toolbox_host::failNew = 0;
+      LOKA_VERIFY(f.controller.editControls_.size() == 4);
+      LOKA_VERIFY(f.controller.editControls_.focused()->te == captured && (**captured).active);
+    }
+    failLokaAllocRaw("ToolboxEditControlLedger", "Rows", 0);
+    for (int i = 0; i != 3; ++i)
+      f.controller.retireEditTextControl(&ordinary[i], NATIVE_HINT_EAGER_RELEASE);
+  }
+  LOKA_VERIFY(lokaAllocRawLive() == 0);
+  allowLokaAllocRaw();
+}
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "ledger-refusal") == 0)
+  {
+    editorLedgerRefusal();
+    return 0;
+  }
+  if (argc == 2 && std::strcmp(argv[1], "ledger-character") == 0)
+  {
+    editorLedgerCharacterization();
+    editorSeatOffers();
+    return 0;
+  }
   if (argc == 1 || (argc == 2 && std::strcmp(argv[1], "alphabet") == 0))
   {
     alphabetProjection();

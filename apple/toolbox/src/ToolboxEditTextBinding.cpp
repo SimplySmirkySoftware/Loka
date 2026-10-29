@@ -29,6 +29,8 @@ ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(To
   }
   if (!binding)
   {
+    if (!this->editControls_.prepareAppend())
+      return ToolboxEditPresentation();
     TEHandle te = 0;
     if (textEditBucket_.tryAcquire(te))
     {
@@ -44,20 +46,18 @@ ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(To
       te = TENew(&controlRect, &controlRect);
       if (!te)
       {
+        this->editControls_.cancel();
         return ToolboxEditPresentation();
       }
     }
-    EditTextControlBinding entry;
-    entry.ownerContext = ownerContext;
-    entry.editor = 0;
-    entry.text = text;
+    EditTextControlBinding entry(ownerContext, 0, text);
     entry.textSeat = ownerContext->projectedWriteSeat();
     entry.te = te;
     entry.rect = controlRect;
     entry.usedThisFrame = true;
     entry.installed.revoke();
     entry.lifetimeHint = lifetimeHint;
-    editControls_.add(entry);
+    editControls_.commitAppend(entry);
     binding = &editControls_.back();
     syncEditTextFromState(*binding);
     TEAutoView(true, binding->te);
@@ -120,6 +120,12 @@ void ToolboxScenePlatformController::retireEditTextBinding(
                              ? loka::app::scene::NATIVE_HINT_EAGER_RELEASE
                              : lifetimeHint);
     binding.te = 0;
+  }
+  if (binding.unicode)
+  {
+    ToolboxUnicodeEditorResource *resource = this->unicodeEditors_.take(binding.ownerContext);
+    this->unicodeEditors_.retire(resource);
+    binding.unicode = 0;
   }
   binding.textSeat = loka::app::scene::WriteSeat<loka::core::String>();
 }
