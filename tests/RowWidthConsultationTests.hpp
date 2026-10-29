@@ -40,4 +40,15 @@ void testBoxWidthColumnAlignment();
 void testBoxWidthParentOffersAndHeight();
 void testBoxWidthOverflowEstimates();
 
+void testRowEllipsisShrinkIntegerRule();
+void testRowEllipsisShrinkClassificationAndSaturation();
+void testContentOverflowShrunkFramesAndNestedSeats();
+
+void testMountedNullToolbarShrinksInsideFixedBoxes();
+
+void testRowEllipsisCurrentArmsAndComponent();
+
+void testRowEllipsisRefusalsAndLiveGaps();
+void testContentOverflowFixedCarouselAndSharedSeat();
+
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP

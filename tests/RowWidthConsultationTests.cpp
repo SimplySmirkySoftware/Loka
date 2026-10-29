@@ -4,6 +4,9 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
 #include <climits>
+#include <cstdlib>
+#include "platform/StringUTF8.hpp"
+#include <cstdio>
 #include "RowWidthConsultationTests.hpp"
 
 #include "app/OpenFileDialog.hpp"
@@ -12,11 +15,15 @@
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/Text.hpp"
+#include "app/nodes/AttributedText.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/Fragment.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
+#include "app/nodes/nestable/Keyed.hpp"
+#include "app/scene/node/ComponentNode.hpp"
+#include "platform/null/context/NullTextContext.hpp"
 #include "app/scene/Scene.hpp"
 #include "app/scene/state/NodeState.hpp"
 #include "core/StateTracker.hpp"
@@ -974,4 +981,478 @@ void testBoxWidthOverflowEstimates()
     LOKA_VERIFY(width == (parent == 3 ? 809 : 800));
     LOKA_VERIFY(ToolboxScrollViewMaximum(width, 200) == (parent == 3 ? 609 : 600));
   }
+}
+
+namespace
+{
+  class ShrinkWidthProbe : public loka::app::layout::INaturalWidthSource
+  {
+  public:
+    ShrinkWidthProbe()
+        : calls(0)
+    {
+    }
+    virtual bool queryNaturalWidth(loka::app::scene::Node *node, short &width) const
+    {
+      ++calls;
+      loka::app::TextNode *text = node->asTextNode();
+      if (!text)
+      {
+        if (node->asBoxNode() || node->asAttributedTextNode())
+        {
+          width = 200;
+          return true;
+        }
+        return false;
+      }
+      std::string bytes;
+      if (!loka::platform::CollectUtf8(text->props.text_->get(), bytes))
+        return false;
+      width = static_cast<short>(atoi(bytes.c_str()));
+      return width > 0;
+    }
+    mutable int calls;
+  };
+
+  loka::app::TextNode *shrinkText(int width)
+  {
+    char buffer[16];
+    std::snprintf(buffer, sizeof buffer, "%d", width);
+    loka::app::TextProps props(buffer);
+    props.blockStyle_ = loka::app::BlockStyle().truncation(loka::app::TEXT_TRUNCATION_ELLIPSIS);
+    return new loka::app::TextNode(props);
+  }
+
+  void checkShrinkWidths(const int *natural, int count, int deficit, int gap)
+  {
+    using namespace loka::app;
+    StackNode row(Row().naturalWidth().props);
+    TextNode *seats[3];
+    int sum = 0;
+    int maximum = 0;
+    for (int i = 0; i < count; ++i)
+    {
+      seats[i] = shrinkText(natural[i]);
+      row.addChild(seats[i]);
+      sum += natural[i];
+      if (natural[i] > maximum)
+        maximum = natural[i];
+    }
+    const int budget = sum - deficit < count ? count : sum - deficit;
+    int cap = maximum;
+    if (budget != sum)
+    {
+      cap = 1;
+      for (int candidate = 1; candidate <= maximum; ++candidate)
+      {
+        int total = 0;
+        for (int i = 0; i < count; ++i)
+          total += natural[i] < candidate ? natural[i] : candidate;
+        if (total <= budget)
+          cap = candidate;
+      }
+    }
+    int capped = 0;
+    for (int i = 0; i < count; ++i)
+      capped += natural[i] < cap ? natural[i] : cap;
+    int remainder = budget - capped;
+    ShrinkWidthProbe source;
+    layout::RowWidthConsultation widths(row.childrenHead(),
+                                        row.childrenCount(),
+                                        sum + (count - 1) * gap - deficit,
+                                        gap,
+                                        layout::RailSpacing(12, gap, 9),
+                                        ROW_UNDECLARED_WIDTH_NATURAL,
+                                        &source);
+    if (count == 1 || deficit == 0 || budget == sum)
+      LOKA_VERIFY(source.calls == count);
+    else
+      LOKA_VERIFY(source.calls <= count * (count + 1));
+    int actualSum = 0;
+    for (int i = 0; i < count; ++i)
+    {
+      int expected = natural[i] < cap ? natural[i] : cap;
+      if (natural[i] > cap && remainder > 0)
+      {
+        ++expected;
+        --remainder;
+      }
+      const layout::RowChildWidth answer = widths.next(seats[i]);
+      LOKA_VERIFY(answer.width() == expected);
+      LOKA_VERIFY(answer.width() >= 1 && answer.width() <= natural[i]);
+      LOKA_VERIFY(answer.hasGapBefore() == (i > 0));
+      actualSum += answer.width();
+    }
+    LOKA_VERIFY(actualSum == budget);
+    if (count == 1 || deficit == 0 || budget == sum)
+      LOKA_VERIFY(source.calls == 2 * count);
+  }
+} // namespace
+
+void testRowEllipsisShrinkIntegerRule()
+{
+  const int single[] = {260};
+  checkShrinkWidths(single, 1, 86, 8);
+  checkShrinkWidths(single, 1, 400, 8);
+  const int unequal[] = {120, 40};
+  checkShrinkWidths(unequal, 2, 60, 8);
+  const int equal[] = {120, 120};
+  checkShrinkWidths(equal, 2, 1, 8);
+  const int ones[] = {1, 1, 1};
+  checkShrinkWidths(ones, 3, 30, 8);
+  for (int count = 1; count <= 3; ++count)
+    for (int a = 1; a <= 8; ++a)
+      for (int b = 1; b <= (count >= 2 ? 8 : 1); ++b)
+        for (int c = 1; c <= (count >= 3 ? 8 : 1); ++c)
+          for (int deficit = 0; deficit <= 30; ++deficit)
+          {
+            const int widths[] = {a, b, c};
+            checkShrinkWidths(widths, count, deficit, 8);
+          }
+}
+
+void testRowEllipsisShrinkClassificationAndSaturation()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  for (int shape = 0; shape < 10; ++shape)
+  {
+    StackNode row(Row().naturalWidth().props);
+    TextNode *text = shrinkText(200);
+    scene::Node *seat = text;
+    if (shape == 1)
+      text->props.blockStyle_ = BlockStyle();
+    if (shape == 2)
+      text->props.blockStyle_.wrap(TEXT_WRAP_WORD);
+    if (shape >= 3 && shape <= 6)
+    {
+      FragmentNode *wrapper = new FragmentNode(FragmentProps());
+      wrapper->addChild(text);
+      if (shape == 4)
+        wrapper->addChild(shrinkText(100));
+      if (shape == 5)
+        wrapper->addChild(new BoxNode(Box().size(0, 0).props));
+      if (shape == 6)
+        wrapper->addChild(new FragmentNode(FragmentProps()));
+      seat = wrapper;
+    }
+    if (shape == 7)
+    {
+      BoxNode *box = new BoxNode(Box().width(200).props);
+      box->addChild(text);
+      seat = box;
+    }
+    if (shape == 8)
+    {
+      CardNode *card = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+      StackNode *column = new StackNode(Column().props);
+      card->addChild(column);
+      column->addChild(text);
+      seat = card;
+    }
+    if (shape == 9)
+    {
+      BoxNode *box = new BoxNode(Box().props);
+      box->addChild(text);
+      seat = box;
+    }
+    row.addChild(seat);
+    ShrinkWidthProbe source;
+    RowWidthConsultation widths(
+        row.childrenHead(), row.childrenCount(), 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+    const int actual = widths.next(seat).width();
+    LOKA_VERIFY(actual == ((shape == 0 || shape == 3 || shape == 6) ? 50 : shape == 8 ? 209 : 200));
+    // Even a zero-size Box is a second live leaf; the injected answer avoids a flex false positive.
+    if (shape == 5)
+      LOKA_VERIFY(source.calls == 4);
+  }
+  StackNode content(Column().props);
+  StackNode *row = new StackNode(Row().naturalWidth().props);
+  content.addChild(row);
+  row->addChild(shrinkText(20000));
+  row->addChild(shrinkText(20000));
+  ShrinkWidthProbe source;
+  RowWidthConsultation widths(
+      row->childrenHead(), row->childrenCount(), 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(widths.next(row->childrenHead()).width() == 20000);
+  short overflow = 123;
+  LOKA_VERIFY(!queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, overflow));
+  LOKA_VERIFY(overflow == 123);
+}
+
+void testContentOverflowShrunkFramesAndNestedSeats()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  for (int shape = 0; shape < 5; ++shape)
+  {
+    StackNode content(Column().props);
+    StackNode *row = new StackNode(Row().naturalWidth().props);
+    if (shape == 1)
+    {
+      StackNode *outer = new StackNode(Row().naturalWidth().props);
+      content.addChild(outer);
+      outer->addChild(row);
+      outer->addChild(shrinkText(100));
+    }
+    else
+    {
+      CardNode *card = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+      StackNode *column = new StackNode(Column().props);
+      card->addChild(column);
+      column->addChild(row);
+      if (shape == 2)
+      {
+        StackNode *outer = new StackNode(Row().naturalWidth().props);
+        content.addChild(outer);
+        outer->addChild(card);
+      }
+      else
+        content.addChild(card);
+    }
+    if (shape == 3)
+      row->addChild(new BoxNode(Box().size(100, 20).props));
+    row->addChild(shrinkText(200));
+    if (shape == 4)
+      row->addChild(shrinkText(200));
+    ShrinkWidthProbe source;
+    short overflow = 0;
+    LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, overflow));
+    const int expected[] = {17, 209, 209, 118, 19};
+    LOKA_VERIFY(overflow == expected[shape]);
+    for (int window = 16; window <= 18; ++window)
+      LOKA_VERIFY(ToolboxScrollViewMaximum(overflow, window) == expected[shape] - window
+                  || (expected[shape] <= window && ToolboxScrollViewMaximum(overflow, window) == 0));
+  }
+}
+
+namespace
+{
+  loka::app::TextNode *toolbarText(loka::app::scene::Node *node)
+  {
+    if (node->asTextNode())
+      return node->asTextNode();
+    loka::app::scene::INestable *group = node->asNestable();
+    for (loka::app::scene::Node *child = group ? group->childrenHead() : 0; child; child = child->nextInComposition)
+      if (loka::app::TextNode *text = toolbarText(child))
+        return text;
+    return 0;
+  }
+
+  class ToolbarPresenter : public NullScenePlatformController
+  {
+  public:
+    virtual void onChange(loka::app::scene::Node *root, loka::app::scene::NodeDirtyFlags, bool)
+    {
+      this->projectLayoutForTesting(root, rowState(180));
+    }
+  };
+} // namespace
+
+void testMountedNullToolbarShrinksInsideFixedBoxes()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  for (int scrolling = 0; scrolling < 2; ++scrolling)
+    for (int container = 0; container < 3; ++container)
+    {
+      ToolbarPresenter platform;
+      RowTextSeatRecord record;
+      g_rowTextSeatRecord = &record;
+      RowSeatTextDefinition title("A very long toolbar title that cannot fit beside both buttons");
+      title.props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+      RowDefinition row = Row().naturalWidth();
+      row << Button("< Back") << title << Button("Main");
+      NodeDefinitionBase *definition = 0;
+      if (container == 0)
+        definition = scrolling ? (ScrollView() << row).clone() : row.clone();
+      else
+      {
+        BoxDefinition box = container == 1 ? Box().width(160) : Box().size(160, 20);
+        box << row;
+        RowDefinition outer;
+        outer << box;
+        definition = scrolling ? (ScrollView() << outer).clone() : outer.clone();
+      }
+      LOKA_VERIFY(definition);
+      Scene scene(definition);
+      LOKA_VERIFY(scene.mount(&platform));
+      loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+      ButtonNode first(ButtonProps().text("< Back"));
+      ButtonNode last(ButtonProps().text("Main"));
+      short firstWidth = 0, lastWidth = 0;
+      LOKA_VERIFY(platform.queryNaturalWidth(&first, firstWidth));
+      LOKA_VERIFY(platform.queryNaturalWidth(&last, lastWidth));
+      const int offer = container == 0 ? 180 : 160;
+      LOKA_VERIFY(record.calls > 0);
+      TextNode *text = toolbarText(loka::dsl::testing::SceneTestAccess::rootNode(scene));
+      LOKA_VERIFY(text && text->getContext());
+      const NullTextMeasurement &measurement = static_cast<NullTextContext *>(text->getContext())->measurement();
+      LOKA_VERIFY(measurement.lineCount() == 1);
+      LOKA_VERIFY(measurement.width() <= record.state.width);
+      LOKA_VERIFY(loka::app::testing::NullTextMeasurementAccess::line(measurement, 0).width <= record.state.width);
+      LOKA_VERIFY(record.state.width == offer - firstWidth - lastWidth - 8);
+      LOKA_VERIFY(record.state.x == firstWidth + 4);
+      LOKA_VERIFY(record.state.x + record.state.width + 4 + lastWidth <= offer);
+      loka::dsl::testing::SceneTestAccess::unmount(scene);
+      g_rowTextSeatRecord = 0;
+    }
+}
+
+namespace
+{
+  class ShrinkComponent : public loka::app::scene::ComponentNode
+  {
+    virtual void composeChildren(loka::app::scene::NodeComposition &) {}
+  };
+
+  class ShrinkArms : public loka::app::scene::BoundaryNodeFor<ShrinkArms>
+  {
+  public:
+    loka::app::scene::NodeState<bool> shown;
+    loka::app::scene::NodeState<int> key;
+    explicit ShrinkArms(const loka::app::scene::BoundaryPropsFor<ShrinkArms> &props)
+        : loka::app::scene::BoundaryNodeFor<ShrinkArms>(props)
+    {
+      this->declareStates(2).state(this->shown, true).state(this->key, 0);
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &c)
+    {
+      using namespace loka::app;
+      c.declare(Row().naturalWidth()
+                << (Show(*this->shown.state())
+                    << Keyed(*this->key.state(),
+                             this,
+                             &ShrinkArms::arm,
+                             reservation::SeatNodes<reservation::Nodes<RowSeatTextNode, 1, reservation::End> >())));
+    }
+    void arm(loka::app::scene::NodeComposition &c)
+    {
+      RowSeatTextDefinition title(this->key.get() ? "Changed title still too long to fit in this short row's offer"
+                                                  : "Original title too long to fit in this short row's offer");
+      title.props.blockStyle_ = loka::app::BlockStyle().truncation(loka::app::TEXT_TRUNCATION_ELLIPSIS);
+      c.declare(title);
+    }
+  };
+} // namespace
+
+void testRowEllipsisCurrentArmsAndComponent()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  ShrinkComponent component;
+  component.addChild(shrinkText(200));
+  ShrinkWidthProbe source;
+  RowWidthConsultation widths(&component, 1, 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(widths.next(&component).width() == 50);
+  LOKA_VERIFY(source.calls == 2);
+  ToolbarPresenter platform;
+  RowTextSeatRecord record;
+  g_rowTextSeatRecord = &record;
+  scene::Scene scene((scene::Boundary<ShrinkArms>()));
+  LOKA_VERIFY(scene.mount(&platform));
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  ShrinkArms *root = static_cast<ShrinkArms *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+  for (int generation = 0; generation < 2; ++generation)
+  {
+    if (generation)
+    {
+      loka::core::StateTrackerGuard transaction(root->tracker());
+      root->key.set(1);
+    }
+    for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+      LOKA_VERIFY(scene.flushInvalidation());
+    LOKA_VERIFY(record.state.width == 180);
+    short overflow = 42;
+    LOKA_VERIFY(queryContentOverflowWidth(root, RailSpacing(12, 4, 9), &platform, overflow));
+    LOKA_VERIFY(overflow == 1);
+  }
+  {
+    loka::core::StateTrackerGuard transaction(root->tracker());
+    root->shown.set(false);
+  }
+  for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+    LOKA_VERIFY(scene.flushInvalidation());
+  short overflow = 42;
+  // Empty NATURAL Rows keep the pre-existing refusal, rather than inventing a natural width.
+  LOKA_VERIFY(!queryContentOverflowWidth(root, RailSpacing(12, 4, 9), &platform, overflow));
+  LOKA_VERIFY(overflow == 42);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
+  g_rowTextSeatRecord = 0;
+}
+
+void testRowEllipsisRefusalsAndLiveGaps()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  ShrinkWidthProbe source;
+  StackNode content(Column().props);
+  StackNode *row = new StackNode(Row().naturalWidth().props);
+  content.addChild(row);
+  TextNode *title = shrinkText(200);
+  row->addChild(title);
+  row->addChild(new FragmentNode(FragmentProps()));
+  BoxNode *zero = new BoxNode(Box().size(0, 0).props);
+  row->addChild(zero);
+  RowWidthConsultation widths(
+      row->childrenHead(), row->childrenCount(), 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(source.calls == 2);
+  LOKA_VERIFY(widths.next(title).width() == 1);
+  LOKA_VERIFY(!widths.next(title->nextInComposition).isLiveSeat());
+  const RowChildWidth zeroSeat = widths.next(zero);
+  LOKA_VERIFY(zeroSeat.width() == 200 && zeroSeat.hasGapBefore());
+  short overflow = 0;
+  LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, overflow));
+  LOKA_VERIFY(overflow == 209);
+  TextNode declined(TextProps("0"));
+  declined.props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  RowWidthConsultation declinedWidths(
+      &declined, 1, 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(declinedWidths.next(&declined).width() == 50);
+  AttributedTextProps attributedProps;
+  attributedProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  AttributedTextNode attributed(attributedProps);
+  RowWidthConsultation attributedWidths(
+      &attributed, 1, 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(attributedWidths.next(&attributed).width() == 200);
+  row->addChild(shrinkText(0));
+  overflow = 321;
+  LOKA_VERIFY(!queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, overflow));
+  LOKA_VERIFY(overflow == 321);
+}
+
+void testContentOverflowFixedCarouselAndSharedSeat()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  StackNode content(Column().props);
+  StackNode *row = new StackNode(Row().naturalWidth().props);
+  content.addChild(row);
+  for (int i = 0; i < 2; ++i)
+  {
+    BoxNode *box = new BoxNode(Box().size(160, 40).props);
+    CardNode *card = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+    card->addChild(shrinkText(200));
+    box->addChild(card);
+    row->addChild(box);
+  }
+  ShrinkWidthProbe source;
+  short overflow = 0;
+  LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, overflow));
+  LOKA_VERIFY(overflow == 328 && source.calls == 0);
+  RowWidthConsultation widths(
+      row->childrenHead(), row->childrenCount(), 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+  LOKA_VERIFY(widths.next(row->childrenHead()).width() == 160);
+  LOKA_VERIFY(widths.next(row->childrenHead()->nextInComposition).width() == 160);
+  LOKA_VERIFY(source.calls == 0);
+  StackNode nestedContent(Column().props);
+  StackNode *outer = new StackNode(Row().naturalWidth().props);
+  StackNode *shared = new StackNode(Row().props);
+  shared->addChild(shrinkText(20));
+  shared->addChild(shrinkText(100));
+  outer->addChild(shared);
+  outer->addChild(shrinkText(100));
+  nestedContent.addChild(outer);
+  LOKA_VERIFY(queryContentOverflowWidth(&nestedContent, RailSpacing(12, 8, 9), &source, overflow));
+  LOKA_VERIFY(overflow == 217);
 }
