@@ -1722,6 +1722,39 @@ void testWin32NaturalWidthDirectRow()
         second, root, scale, Win32SceneLayout::kRootInset + firstWidth + Win32SceneLayout::kGap, secondWidth);
     controller.onChange(0, scene::NODE_DIRTY_NONE, false);
   }
+  {
+    Win32ScenePlatformController controller(root, scale);
+    StackProps props;
+    props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+    DirectNaturalWidthRow row(props);
+    ButtonNode *first = new ButtonNode(ButtonProps().text("< Back"));
+    TextProps titleProps("A deliberately long toolbar title that must shrink before the last button");
+    titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode *title = new TextNode(titleProps);
+    ButtonNode *last = new ButtonNode(ButtonProps().text("Main"));
+    row.addChild(first);
+    row.addChild(title);
+    row.addChild(last);
+    controller.onChange(&row, scene::NODE_DIRTY_NONE, false);
+    short firstWidth = 0, titleWidth = 0, lastWidth = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(first, firstWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(title, titleWidth));
+    LOKA_VERIFY(controller.queryNaturalWidth(last, lastWidth));
+    const int titleSeat = titleWidth / 2;
+    const int offer = firstWidth + lastWidth + 2 * Win32SceneLayout::kGap + titleSeat;
+    controller.relayout(offer + 2 * Win32SceneLayout::kRootInset, 160);
+    verifyButtonSeat(first, root, scale, Win32SceneLayout::kRootInset, firstWidth);
+    const int lastX = Win32SceneLayout::kRootInset + firstWidth + titleSeat + 2 * Win32SceneLayout::kGap;
+    verifyButtonSeat(last, root, scale, lastX, lastWidth);
+    Win32TextContext *context = static_cast<Win32TextContext *>(title->getContext());
+    LOKA_VERIFY(context && context->hwnd());
+    const RECT frame = childRectInParent(context->hwnd(), root);
+    const int titleX = Win32SceneLayout::kRootInset + firstWidth + Win32SceneLayout::kGap;
+    LOKA_VERIFY(frame.right - frame.left == scale.nativeLength(titleX, titleX + titleSeat).px);
+    LOKA_VERIFY(titleSeat > 0 && titleSeat < titleWidth);
+    LOKA_VERIFY(scale.projectEdge(lastX + lastWidth) <= scale.projectEdge(Win32SceneLayout::kRootInset + offer));
+    controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+  }
   LOKA_VERIFY(DestroyWindow(root));
 }
 
