@@ -473,9 +473,8 @@ namespace
     [window orderFront:nil];
     {
       MacScenePlatformController controller(root, metrics);
-      StackProps rowProps(STACK_AXIS_ROW);
-      rowProps.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
-      StackNode row(rowProps);
+      // DirectRow keeps the seats directly under root, as testMacDirectRowNaturalWidthFrames does.
+      DirectRow row;
       ButtonNode *first = new ButtonNode(ButtonProps().text("< Back"));
       TextProps titleProps("A toolbar title wide enough to need truncation");
       titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
