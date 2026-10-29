@@ -718,10 +718,13 @@ void testWin32ClipBoxTabOrderAndFlatTwin()
 
 void testWin32ClipBoxFocusCueAndEditTextEdge()
 {
-  for (int edit = 0; edit < 2; ++edit)
+  // Share setup and sampling with the flat Button sensitivity control.
+  for (int variant = 0; variant < 3; ++variant)
   {
+    const bool edit = variant == 1;
+    const bool clipped = variant != 2;
     Fixture f;
-    BoxNode *clip = box(90, 70);
+    BoxNode *clip = box(90, 70, clipped);
     BoxNode *wide = box(180, 50, false, 1);
     Node *control = edit ? static_cast<Node *>(new EditTextNode((EditTextProps())))
                          : static_cast<Node *>(new ButtonNode(ButtonProps().text(" ")));
@@ -730,13 +733,15 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
     wide->addChild(control);
     f.at();
     const HWND hwnd = native(control);
-    LOKA_VERIFY(GetParent(hwnd) == context(clip)->hwnd());
+    LOKA_VERIFY(GetParent(hwnd) == (clipped ? context(clip)->hwnd() : f.root()));
     const RECT bounds = rectInRoot(hwnd, f.root());
-    const RECT edge = rectInRoot(context(clip)->hwnd(), f.root());
-    LOKA_VERIFY(bounds.left < edge.right && bounds.right > edge.right + 1);
+    const RECT edge = clipped ? rectInRoot(context(clip)->hwnd(), f.root())
+                              : f.controller.displayScale().projectFrame(Frame(21, 31, 90, 70)).r;
+    LOKA_VERIFY(bounds.left < edge.right && bounds.right > edge.right + 3);
     LOKA_VERIFY(bounds.top >= edge.top && bounds.bottom <= edge.bottom);
-    const RECT outside = {edge.right + 1, bounds.top, edge.right + 2, bounds.bottom};
-    // Blank button: the left focus-rectangle inset contains no label ink.
+    const RECT outside = {edge.right + 1, bounds.top, edge.right + 4, bounds.bottom};
+    // Blank Button: inset changes show its focused look (cue or themed
+    // focus border) changed, without label ink contributing to the sample.
     const RECT inside = {bounds.left + 2, bounds.top + 2, bounds.left + 8, bounds.bottom - 2};
     LOKA_VERIFY(inside.right < edge.right);
     ShowWindow(f.root(), SW_SHOW);
@@ -749,7 +754,9 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
     SendMessageW(f.root(), WM_CHANGEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
     SendMessageW(f.root(), WM_UPDATEUISTATE, MAKEWPARAM(UIS_CLEAR, UISF_HIDEFOCUS), 0);
     flushClipPaint(f);
-    LOKA_VERIFY(pixels(f.root(), outside) == ground);
+    const std::vector<COLORREF> outsideBeforeFocus = pixels(f.root(), outside);
+    if (clipped)
+      LOKA_VERIFY(outsideBeforeFocus == ground);
     const std::vector<COLORREF> before = pixels(f.root(), inside);
     if (edit)
     {
@@ -769,15 +776,26 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
     else
       SetFocus(hwnd);
     flushClipPaint(f);
-    // Always run the outside check, including sessions without visible cues.
-    LOKA_VERIFY(pixels(f.root(), outside) == ground);
+    // Clipped controls must preserve ground even without a visible focused look.
+    // The flat twin must show that these outside columns can detect focus ink.
+    const std::vector<COLORREF> outsideAfterFocus = pixels(f.root(), outside);
+    if (clipped)
+      LOKA_VERIFY(outsideAfterFocus == ground);
     const bool inkChanged = pixels(f.root(), inside) != before;
-    if (edit)
+    if (!clipped)
+    {
+      if (GetFocus() != hwnd || outsideAfterFocus == outsideBeforeFocus)
+        std::printf(
+            "[skip] clip box focus cue: flat twin showed no outside change; outside check sensitivity not shown\n");
+      else
+        LOKA_VERIFY(outsideAfterFocus != outsideBeforeFocus);
+    }
+    else if (edit)
       LOKA_VERIFY(inkChanged);
     else if (GetFocus() != hwnd)
       std::printf("[skip] clip box focus cue: SetFocus did not retain Button focus; outside edge checked\n");
     else if (!inkChanged)
-      std::printf("[skip] clip box focus cue: no visible change at Button focus-cue inset after clearing "
+      std::printf("[skip] clip box focus cue: no visible change in Button focused look at inset after clearing "
                   "UISF_HIDEFOCUS; outside edge checked\n");
     else
       LOKA_VERIFY(inkChanged);
@@ -787,47 +805,60 @@ void testWin32ClipBoxFocusCueAndEditTextEdge()
 void testWin32ClipBoxDeviceRoundingAndUnitTwin()
 {
   const unsigned dpis[] = {120, 144};
+  const int seats[][3] = {{21, 31, 7}, {22, 33, 6}};
   for (unsigned d = 0; d < sizeof(dpis) / sizeof(dpis[0]); ++d)
-  {
-    RECT origins[3];
-    // Flat, clip, unit: the same padded content, with one native rebase in
-    // each of the last two. The nested unflagged Box adds no native step.
-    for (int mode = 0; mode < 3; ++mode)
+    for (unsigned seat = 0; seat < sizeof(seats) / sizeof(seats[0]); ++seat)
     {
-      Fixture f(dpis[d]);
-      BoxNode *outer = box(100, 60, mode == 1, 7);
-      BoxNode *inner = box(80, 40, false, 1);
-      ButtonNode *button = new ButtonNode(ButtonProps().text("round"));
-      outer->addChild(inner);
-      inner->addChild(button);
-      f.tree = outer;
-      if (mode == 2)
+      const int x = seats[seat][0];
+      const int y = seats[seat][1];
+      const int padding = seats[seat][2];
+      const int local = padding + 1;
+      RECT origins[3];
+      // Flat, clip, unit: the same padded content, with one native rebase in
+      // each of the last two. The nested unflagged Box adds no native step.
+      for (int mode = 0; mode < 3; ++mode)
       {
-        // Same ground + upper unit construction as Win32ZStackUnitTests.
-        ZStackNode *stack = new ZStackNode((ZStackProps()));
-        stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(100, 60)));
-        stack->addChild(outer);
-        f.tree = stack;
+        Fixture f(dpis[d]);
+        BoxNode *outer = box(100, 60, mode == 1, padding);
+        BoxNode *inner = box(80, 40, false, 1);
+        ButtonNode *button = new ButtonNode(ButtonProps().text("round"));
+        outer->addChild(inner);
+        inner->addChild(button);
+        f.tree = outer;
+        if (mode == 2)
+        {
+          // Same ground + upper unit construction as Win32ZStackUnitTests.
+          ZStackNode *stack = new ZStackNode((ZStackProps()));
+          stack->addChild(new RectSurfaceNode(RectSurfaceProps().size(100, 60)));
+          stack->addChild(outer);
+          f.tree = stack;
+        }
+        f.at(x, y, 100, 60);
+        HWND parent = mode == 0 ? f.root() : mode == 1 ? context(outer)->hwnd() : child(f.root(), L"LOKA_STACK_UNIT");
+        LOKA_VERIFY(parent && GetParent(native(button)) == parent);
+        verifyRect(native(button),
+                   f,
+                   Frame(mode == 0 ? x + local : local,
+                         mode == 0 ? y + local : local,
+                         78,
+                         f.controller.rowLayoutMetrics().buttonHeight));
+        origins[mode] = rectInRoot(native(button), f.root());
       }
-      f.at(21, 31, 100, 60);
-      HWND parent = mode == 0 ? f.root() : mode == 1 ? context(outer)->hwnd() : child(f.root(), L"LOKA_STACK_UNIT");
-      LOKA_VERIFY(parent && GetParent(native(button)) == parent);
-      verifyRect(native(button),
-                 f,
-                 Frame(mode == 0 ? 29 : 8, mode == 0 ? 39 : 8, 78, f.controller.rowLayoutMetrics().buttonHeight));
-      origins[mode] = rectInRoot(native(button), f.root());
+      std::printf("[measure] clip box rounding dpi=%u seat=(%d,%d) padding=%d flat=(%ld,%ld) clip=(%ld,%ld) "
+                  "unit=(%ld,%ld) native-steps=1\n",
+                  dpis[d],
+                  x,
+                  y,
+                  padding,
+                  origins[0].left,
+                  origins[0].top,
+                  origins[1].left,
+                  origins[1].top,
+                  origins[2].left,
+                  origins[2].top);
+      std::fflush(stdout);
+      LOKA_VERIFY(origins[1].left - origins[0].left >= -1 && origins[1].left - origins[0].left <= 1);
+      LOKA_VERIFY(origins[1].top - origins[0].top >= -1 && origins[1].top - origins[0].top <= 1);
+      LOKA_VERIFY(origins[1].left == origins[2].left && origins[1].top == origins[2].top);
     }
-    std::printf("[measure] clip box rounding dpi=%u flat=(%ld,%ld) clip=(%ld,%ld) unit=(%ld,%ld) native-steps=1\n",
-                dpis[d],
-                origins[0].left,
-                origins[0].top,
-                origins[1].left,
-                origins[1].top,
-                origins[2].left,
-                origins[2].top);
-    std::fflush(stdout);
-    LOKA_VERIFY(origins[1].left - origins[0].left >= -1 && origins[1].left - origins[0].left <= 1);
-    LOKA_VERIFY(origins[1].top - origins[0].top >= -1 && origins[1].top - origins[0].top <= 1);
-    LOKA_VERIFY(origins[1].left == origins[2].left && origins[1].top == origins[2].top);
-  }
 }

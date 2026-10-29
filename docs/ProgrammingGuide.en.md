@@ -1659,9 +1659,9 @@ declared nor offered gets width 0, so its content is hidden; Toolbox and macOS
 leave the right edge unclipped instead.
 On macOS the system draws focus rings, so a focused control's ring can extend
 past a clip box's edge; a ScrollView's edge cuts it.
-On Win32 a focused control's focus cue is cut at the clip box's edge like the
-rest of the control. At 125% and 150% display scaling, a control inside a Win32
-clip box is placed with the same rounding as inside a ZStack unit.
+On Win32 a control inside a clip box is cut at the box's edge, including a
+focused Button's focus cue. At 125% and 150% display scaling, a control inside
+a Win32 clip box lands on the same device pixel as inside a ZStack unit.
 
 The clip flag is fixed when the box or card is created, on every platform.
 Applying new properties to the same box updates the other properties and keeps
