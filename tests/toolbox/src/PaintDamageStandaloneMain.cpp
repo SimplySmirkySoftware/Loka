@@ -99,7 +99,9 @@ namespace
 
     // Called once per cut from the final idle phase; walks only this probe's
     // 124 x 20 snapshot and at most 120 x 16 visible comparison pixels per op.
-    void run(char cut, bool narrowView)
+    // unclipped = positive control: the probe record runs with the whole port
+    // as clip, so a working instrument must see outside_changed > 0.
+    void run(char cut, bool narrowView, bool unclipped = false)
     {
       if (!this->savedClip_)
       {
@@ -119,7 +121,7 @@ namespace
       EraseRect(&clear);
       this->reference_ = TENew(&this->referenceRect_, &this->referenceRect_);
       SetClip(this->savedClip_);
-      this->setCallClip(narrowView);
+      this->setCallClip(narrowView || unclipped);
       this->probe_ = TENew(&this->full_, narrowView ? &this->visible_ : &this->full_);
       SetClip(this->savedClip_);
       if (!this->reference_ || !this->probe_)
@@ -132,16 +134,16 @@ namespace
       for (int which = 0; which != 2; ++which)
       {
         TEHandle te = which ? this->probe_ : this->reference_;
-        this->setCallClip(!which || narrowView);
+        this->setCallClip(!which || narrowView || unclipped);
         TEAutoView(true, te);
         SetClip(this->savedClip_);
-        this->setCallClip(!which || narrowView);
+        this->setCallClip(!which || narrowView || unclipped);
         TESetText(initial, sizeof(initial) - 1, te);
         SetClip(this->savedClip_);
-        this->setCallClip(!which || narrowView);
+        this->setCallClip(!which || narrowView || unclipped);
         TESetSelect(sizeof(initial) - 1, sizeof(initial) - 1, te);
         SetClip(this->savedClip_);
-        this->setCallClip(!which || narrowView);
+        this->setCallClip(!which || narrowView || unclipped);
         TEUpdate(which ? &this->full_ : &this->referenceRect_, te);
         SetClip(this->savedClip_);
       }
@@ -150,9 +152,10 @@ namespace
       {
         this->snapshot();
         this->operate(this->reference_, op, true);
-        this->operate(this->probe_, op, narrowView);
+        this->operate(this->probe_, op, narrowView || unclipped);
         int outside = 0;
         int inside = 0;
+        int ink = 0;
         int index = 0;
         for (short y = this->full_.top - 2; y < this->full_.bottom + 2; ++y)
           for (short x = this->full_.left - 2; x < this->full_.right + 2; ++x, ++index)
@@ -162,15 +165,20 @@ namespace
                 || y < this->visible_.top || y >= this->visible_.bottom)
               outside += pixel != (this->pixels_[index] != 0);
             else
+            {
               inside += pixel != (GetPixel(x - this->full_.left + this->referenceRect_.left, y) != 0);
+              ink += pixel;
+            }
           }
         const int top = (**this->probe_).destRect.top - (**this->probe_).viewRect.top;
-        if (narrowView)
+        if (unclipped)
+          std::fprintf(this->log_, "te-probe-control op=%s outside_changed=%d inside_ink=%d\r", names[op], outside, ink);
+        else if (narrowView)
           std::fprintf(this->log_, "te-probe-a op=%s outside_changed=%d dest_top=%d\r", names[op], outside, top);
         else
           std::fprintf(this->log_,
-                       "te-probe cut=%c op=%s outside_changed=%d inside_diff=%d dest_top=%d ref_dest_top=%d\r",
-                       cut, names[op], outside, inside, top,
+                       "te-probe cut=%c op=%s outside_changed=%d inside_diff=%d inside_ink=%d dest_top=%d ref_dest_top=%d\r",
+                       cut, names[op], outside, inside, ink, top,
                        (**this->reference_).destRect.top - (**this->reference_).viewRect.top);
         if (op == 4)
           std::fprintf(this->log_, "te-probe cut=%c case=%s op=click skipped=mouse-tracking\r", cut, narrowView ? "a" : "c");
@@ -2009,6 +2017,7 @@ namespace
           probe.run('v', false);
           probe.run('h', false);
           probe.run('v', true);
+          probe.run('v', false, true);
         }
         self->finish(true);
         return;
