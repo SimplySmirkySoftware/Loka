@@ -1017,7 +1017,7 @@ namespace
   loka::app::TextNode *shrinkText(int width)
   {
     char buffer[16];
-    sprintf(buffer, "%d", width);
+    std::snprintf(buffer, sizeof buffer, "%d", width);
     loka::app::TextProps props(buffer);
     props.blockStyle_ = loka::app::BlockStyle().truncation(loka::app::TEXT_TRUNCATION_ELLIPSIS);
     return new loka::app::TextNode(props);
