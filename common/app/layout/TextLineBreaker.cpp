@@ -428,7 +428,8 @@ namespace loka
           const int size = detail::SnapTextSizePoints(line.metrics.ascent + line.metrics.descent);
           const int advance = syntheticAdvance(size);
           const int capacity = availableWidth / advance;
-          width = (capacity > 0 ? capacity : 1) * advance;
+          // Synthetic ellipsis occupies one advance; below that, paint an empty line.
+          width = capacity * advance;
           break;
         }
         }
