@@ -1,3 +1,5 @@
+#include "ToolboxNativeDoorScope.hpp"
+
 /** Event-local completed selection. Nothing here survives the input operation. */
 struct ResolvedPress
 {
@@ -207,7 +209,12 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
     loka::core::EmitterState *emitter = this->buttonControls_[index].emitter;
     const ControlRef control = press.control;
     this->beginBatchUpdate();
-    const ControlPartCode tracked = TrackControl(control, point, 0);
+    ControlPartCode tracked = 0;
+    if (visible && this->window_ && this->window_->window())
+    {
+      ToolboxNativeDoorScope door(this->window_->window(), rect);
+      tracked = TrackControl(control, point, 0);
+    }
     if (visible)
       this->invalidateUnitOverlap(rect);
     // A Button without onClick tracks like any button and emits nothing.
@@ -226,8 +233,12 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
     const ControlRef control = press.control;
     gActiveScrollBarLineStep = source.lineStep;
     gActiveScrollBarPageStep = source.pageStep;
-    TrackControl(control, point, press.part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
     Rect visible;
+    if (source.placement.queryVisible(visible) && this->window_ && this->window_->window())
+    {
+      ToolboxNativeDoorScope door(this->window_->window(), visible);
+      TrackControl(control, point, press.part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
+    }
     if (source.placement.queryVisible(visible))
       this->invalidateUnitOverlap(visible);
     if (editor.editor())
