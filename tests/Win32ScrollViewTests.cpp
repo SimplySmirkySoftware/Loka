@@ -2564,8 +2564,9 @@ void testWin32ToolbarShrunkScrollRequestClamp()
     {
       const loka::app::testing::SettleTraceRow<ScrollTarget, Frame> &trace = ScrollTrace::instance().at(n);
       takes += trace.count;
+      // With no horizontal range the request to move x is refused (ScrollViewSettlement validate).
       if (trace.count)
-        LOKA_VERIFY(trace.count == 1 && trace.seam[0] == SCROLL_OK);
+        LOKA_VERIFY(trace.count == 1 && trace.seam[0] == (range > 0 ? SCROLL_OK : SCROLL_UNAVAILABLE));
     }
     LOKA_VERIFY(takes == 1 && ScrollTrace::instance().overwritten() == 0);
     std::printf("[toolbar clamp] offer=%d range=%d x=%d publications=%lu takes=%u\n",
