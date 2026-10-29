@@ -311,6 +311,7 @@ well-formed UTF-8 without CR, LF, or NUL. `EDITOR_NON_ASCII` means the editor
 alphabet refused the bytes: malformed sequences and forbidden NUL (which is
 itself valid UTF-8). The Classic TextEdit rail still refuses non-ASCII with
 the same result.
+A leading UTF-8 byte order mark is dropped on read and never written; an interior U+FEFF is kept.
 
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of
