@@ -1660,9 +1660,8 @@ leave the right edge unclipped instead.
 On macOS the system draws focus rings, so a focused control's ring can extend
 past a clip box's edge; a ScrollView's edge cuts it.
 On Win32 a focused control's focus cue is cut at the clip box's edge like the
-rest of the control. At 125% and 150% display scaling, Win32 clip boxes round
-like ZStack units: local rounding can shift the device origin by at most one
-device pixel per nesting step compared with the unflagged layout.
+rest of the control. At 125% and 150% display scaling, a control inside a Win32
+clip box is placed with the same rounding as inside a ZStack unit.
 
 The clip flag is fixed when the box or card is created, on every platform.
 Applying new properties to the same box updates the other properties and keeps
