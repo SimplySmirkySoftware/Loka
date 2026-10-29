@@ -16,6 +16,7 @@ void testWin32TextEditorQueuedRequests();
 
 void testWin32TextEditorUtf8BoundaryHelpers();
 void testWin32TextEditorHintEvidence();
+void testWin32TextEditorMultibyteHintEvidence();
 void testWin32TextEditorUtf8ClosedPolicy();
 void testWin32TextEditorEvidenceLifetime();
 void testWin32TextEditorDeferredUtf8Cases();
