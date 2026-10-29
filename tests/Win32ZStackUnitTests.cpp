@@ -102,6 +102,10 @@ namespace
     LOKA_VERIFY(node && node->getContext());
     return static_cast<Win32RetirableContext *>(node->getContext())->hwnd();
   }
+  void CountClickThunk(void *userData)
+  {
+    ++*static_cast<int *>(userData);
+  }
   StackNode *buttonColumn(const char *label)
   {
     StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
@@ -148,6 +152,15 @@ namespace
     SelectObject(dc, previous);
     DeleteDC(dc);
     return color;
+  }
+  COLORREF windowPixel(HWND hwnd, int x, int y)
+  {
+    HDC dc = GetDC(hwnd);
+    LOKA_VERIFY(dc != NULL);
+    const COLORREF pixel = GetPixel(dc, x, y);
+    ReleaseDC(hwnd, dc);
+    LOKA_VERIFY(pixel != CLR_INVALID);
+    return pixel;
   }
   // Thread-local hook lifetime is bounded by one synchronous test pass.
   class UnitOrderProbe
@@ -237,6 +250,48 @@ void testWin32ZStackLaterChildGetsUnitWindow()
   LOKA_VERIFY(hit == unit || hit == button);
 }
 
+void testWin32ZStackUnitAnswersContainerMessages()
+{
+  int clicks = 0;
+  loka::core::EmitterState onClick;
+  Fixture f;
+  ZStackNode *stack = stackWithGround(f);
+  StackNode *column = new StackNode(StackProps(STACK_AXIS_COLUMN));
+  ButtonNode *buttonNode = new ButtonNode(ButtonProps().text("click").onClick(&onClick));
+  TextNode *textNode = new TextNode(TextProps("unit"));
+  column->addChild(buttonNode);
+  column->addChild(textNode);
+  stack->addChild(column);
+  f.layout();
+  HWND unit = childOfClass(f.root(), L"LOKA_STACK_UNIT");
+  HWND button = native(buttonNode);
+  HWND text = native(textNode);
+  LOKA_VERIFY(unit && button && text);
+  LOKA_VERIFY(GetParent(button) == unit);
+  LOKA_VERIFY(GetParent(text) == unit);
+
+  // DefWindowProcW would drop the command, return a system brush/default ink,
+  // and answer erase with 0 because the container class brush is NULL.
+  onClick.bind(&CountClickThunk, &clicks, false);
+  SendMessageW(button, BM_CLICK, 0, 0);
+  LOKA_VERIFY(clicks == 1);
+
+  HDC dc = CreateCompatibleDC(NULL);
+  LOKA_VERIFY(dc != NULL);
+  const COLORREF sentinel = RGB(1, 2, 3);
+  if (sentinel == GetSysColor(COLOR_BTNTEXT))
+    std::printf("[skip] STATIC sentinel equals live BTNTEXT; text mutation not discriminated\n");
+  SetTextColor(dc, sentinel);
+  SetBkMode(dc, OPAQUE);
+  const LRESULT brush =
+      SendMessageW(unit, WM_CTLCOLORSTATIC, reinterpret_cast<WPARAM>(dc), reinterpret_cast<LPARAM>(text));
+  LOKA_VERIFY(reinterpret_cast<HBRUSH>(brush) == GetStockObject(NULL_BRUSH));
+  LOKA_VERIFY(GetTextColor(dc) == GetSysColor(COLOR_BTNTEXT));
+  LOKA_VERIFY(GetBkMode(dc) == TRANSPARENT);
+  LOKA_VERIFY(SendMessageW(unit, WM_ERASEBKGND, reinterpret_cast<WPARAM>(dc), 0) == 1);
+  DeleteDC(dc);
+}
+
 void testWin32ZStackUnitPaintsOpaqueGround()
 {
   loka::core::PushStateTracker tracker;
@@ -266,6 +321,27 @@ void testWin32ZStackUnitPaintsOpaqueGround()
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 50) == GetSysColor(COLOR_BTNFACE));
   // Positive control: the same lower surface really paints ink outside the unit.
   LOKA_VERIFY(capturedPixel(f, rect.left + 100, rect.top + 120) == GetSysColor(COLOR_WINDOWTEXT));
+  // The root has no WS_CLIPCHILDREN and paints the same ground beneath children;
+  // only a container-only repaint over a sentinel proves its WM_PAINT answer.
+  {
+    const COLORREF sentinel = RGB(0x12, 0x34, 0x56);
+    HDC dc = GetDC(unit);
+    LOKA_VERIFY(dc != NULL);
+    RECT client;
+    LOKA_VERIFY(GetClientRect(unit, &client));
+    HBRUSH brush = CreateSolidBrush(sentinel);
+    LOKA_VERIFY(brush != NULL);
+    LOKA_VERIFY(FillRect(dc, &client, brush));
+    DeleteObject(brush);
+    ReleaseDC(unit, dc);
+    LOKA_VERIFY(windowPixel(unit, 100, 50) == sentinel);
+    LOKA_VERIFY(InvalidateRect(unit, NULL, FALSE));
+    UpdateWindow(unit);
+    if (sentinel == GetSysColor(COLOR_BTNFACE))
+      std::printf("[skip] unit sentinel equals live BTNFACE; WM_PAINT not discriminated\n");
+    else
+      LOKA_VERIFY(windowPixel(unit, 100, 50) == GetSysColor(COLOR_BTNFACE));
+  }
   for (int phase = 0; phase < 2; ++phase)
   {
     Access::resetRedrawStats(f.controller);

@@ -41,8 +41,9 @@ bool ToolboxScenePlatformController::presentEditorScrollBar(short id,
       else
         HideControl(row.control);
     }
-    if (changed)
-      this->window_->requestInvalidateRect(row.rect);
+    Rect visibleRect;
+    if (changed && row.placement.queryVisible(visibleRect))
+      this->window_->requestInvalidateRect(visibleRect);
     return true;
   }
   return false;

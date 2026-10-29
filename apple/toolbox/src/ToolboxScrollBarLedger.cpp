@@ -176,7 +176,7 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
     entry.appliedValue = 0;
     entry.active = false;
     entry.usedThisFrame = true;
-    entry.rect = controlRect;
+    entry.placement = ToolboxNativePlacement(controlRect, controlRect);
     entry.lifetimeHint = lifetimeHint;
     scrollBarLedger_.scrollBarControls_.push_back(entry);
     binding = &scrollBarLedger_.scrollBarControls_.back();
@@ -188,14 +188,14 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
   binding->pageStep = pageStep;
   binding->lifetimeHint = lifetimeHint;
   binding->usedThisFrame = true;
-  if (created || binding->rect.left != controlRect.left || binding->rect.top != controlRect.top
-      || binding->rect.right != controlRect.right || binding->rect.bottom != controlRect.bottom)
+  if (created || binding->placement.full().left != controlRect.left || binding->placement.full().top != controlRect.top
+      || binding->placement.full().right != controlRect.right || binding->placement.full().bottom != controlRect.bottom)
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
     if (movedFrom)
-      *movedFrom = binding->rect;
-    binding->rect = controlRect;
+      *movedFrom = binding->placement.full();
+    binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   }
   SetControlMinimum(binding->control, static_cast<short>(minimum));
   SetControlMaximum(binding->control, static_cast<short>(maximum));
@@ -245,7 +245,7 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
   HiliteControl(binding->control, binding->active ? 0 : 255);
   ShowControl(binding->control);
   if (!EmptyRect(&movedFrom))
-    this->validateOwnControlMove(movedFrom, binding->rect);
+    this->validateOwnControlMove(movedFrom, binding->placement.full());
   return true;
 }
 

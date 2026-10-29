@@ -3,6 +3,7 @@
 
 void testWin32ZStackLaterChildGetsUnitWindow();
 void testWin32ZStackUnitPaintsOpaqueGround();
+void testWin32ZStackUnitAnswersContainerMessages();
 void testWin32ZStackUnitsStackInCompositionOrder();
 void testWin32ZStackUnitTakesTabFirst();
 void testWin32ZStackRootUnitChildRefusalKeepsPreviousRectangle();
