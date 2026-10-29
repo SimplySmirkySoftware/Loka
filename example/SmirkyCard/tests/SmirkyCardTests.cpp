@@ -3748,6 +3748,30 @@ namespace
     }
   };
 
+  void checkMainResultMeasurementCompanion()
+  {
+    const std::string source = readCardSource("MAIN.JS");
+    const std::string companion = readCardSource("MAIN.FLOW.JS");
+    CardRunnerHarness h(source.c_str(), companion.c_str(), 7, true);
+    h.mount();
+    loka::app::scene::Scene *out = 0;
+    loka::dsl::FlowError error;
+    LOKA_VERIFY(
+        loka::dsl::testing::EnterText("SmirkyCard.Script", "globalThis.toolbarResult=(globalThis.toolbarResult||100)+1")
+            .run(h.window->scene(), out, error)
+        == loka::dsl::FLOW_STEP_SUCCEEDED);
+    for (int i = 1; i <= 10; ++i)
+    {
+      h.tick();
+      char expected[16];
+      std::sprintf(expected, "%d", 100 + i);
+      LOKA_VERIFY(textValue(windowNode(*h.window, "SmirkyCard.Result")->asTextNode()) == expected);
+    }
+    h.ticks(2);
+    LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
+    LOKA_VERIFY(h.steps.size() == 20);
+  }
+
   void checkViewerScenario()
   {
     writeMain("_handle_image.bin", "img");
@@ -5257,6 +5281,12 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--main-result"))
+  {
+    checkMainResultMeasurementCompanion();
+    return 0;
+  }
+
   if (argc == 2 && !std::strcmp(argv[1], "--viewport-seat"))
   {
     checkViewportSeat();

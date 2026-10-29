@@ -94,7 +94,7 @@ short LayoutNode(loka::app::scene::Node *node, loka::app::scene::LayoutState &st
 namespace
 {
   // Painting neighbors are outside these structure-routing pins.
-  const char kViewportPaintWidenReason[] = "paint-widened-viewport-render";
+  const ToolboxFullDrawReason kViewportPaintWidenReason = TOOLBOX_FULL_DRAW_PAINT_WIDENED_VIEWPORT_RENDER;
   struct ToolboxPaintAnswerSource
   {
     /** Exact damage may share a conservative, non-erasing destination only when true. */

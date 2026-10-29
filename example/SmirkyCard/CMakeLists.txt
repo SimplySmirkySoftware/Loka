@@ -183,10 +183,11 @@ if(TARGET LokaCommonTesting)
   target_compile_definitions(LokaSmirkyCardTests PRIVATE
     SMIRKYCARD_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME smirkyCardSceneSwitch COMMAND LokaSmirkyCardTests)
+  add_test(NAME smirkyCardMainResult COMMAND LokaSmirkyCardTests --main-result)
 endif()
 
 # One call plus two JS files adds a scenario; the config and main contain no card names.
-function(smirkycard_add_scenario_runner name)
+function(smirkycard_add_scenario_inputs name)
   cmake_parse_arguments(SCENARIO "" "CARD;FLOW;SCENARIO;APP_NAME;SEED" "" ${ARGN})
   set(embed_dir "${CMAKE_CURRENT_BINARY_DIR}/${name}-scenario")
   file(MAKE_DIRECTORY "${embed_dir}")
@@ -213,6 +214,11 @@ function(smirkycard_add_scenario_runner name)
     "SMIRKYCARD_SCENARIO_NAME=\"${SCENARIO_SCENARIO}\""
     "SMIRKYCARD_SCENARIO_APP_NAME=\"${SCENARIO_APP_NAME}\""
     "SMIRKYCARD_SCENARIO_COMPANION=\"${SCENARIO_FLOW}\"")
+endfunction()
+
+function(smirkycard_add_scenario_runner name)
+  cmake_parse_arguments(SCENARIO "" "CARD;FLOW;SCENARIO;APP_NAME;SEED" "" ${ARGN})
+  smirkycard_add_scenario_inputs(${name} ${ARGN})
   # Registered whenever SmirkyCard builds for Classic, so the SmirkyCard build
   # task makes the app and its scenario runner together (EXCLUDE_FROM_ALL).
   if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
@@ -253,4 +259,19 @@ endif()
 # tests/toolbox/smirkycard: the 68K size bank discovers only example/ artifacts.
 if(CMAKE_SYSTEM_NAME STREQUAL "Retro68")
   add_subdirectory(${PROJECT_SOURCE_DIR}/tests/toolbox/smirkycard ${PROJECT_BINARY_DIR}/tests/toolbox/smirkycard)
+endif()
+
+# MAIN.JS measurement companion and Classic vehicle (Toolbar 1a-0).
+smirkycard_add_scenario_inputs(MainResult CARD MAIN.JS FLOW MAIN.FLOW.JS
+  SCENARIO main-result APP_NAME "SmirkyCard" SEED 7)
+if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
+  set(target "LokaMeasureMain${LOKA_CLASSIC_TARGET_SUFFIX}")
+  loka_add_toolbox_test_application(${target} LokaAppleToolboxTestCore
+    ${PROJECT_SOURCE_DIR}/tests/toolbox/src/ToolbarMeasurementMain.cpp
+    src/ScenarioRunAudit.cpp ${SMIRKYCARD_SIZE_R}
+    ${PROJECT_SOURCE_DIR}/tests/scenarios/ScenarioTypes.cpp
+    ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp)
+  smirkycard_cpp_target(${target})
+  target_link_libraries(${target} PRIVATE MainResultScenarioInputs)
+  target_compile_definitions(${target} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_APP=4)
 endif()

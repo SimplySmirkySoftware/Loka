@@ -45,7 +45,10 @@ namespace
 }
 
 /** Null measures intrinsic images 1:1 in pixels and push buttons at eight units per
-    UTF-32 scalar plus sixteen units of title inset; answers remain stable during layout. */
+    UTF-32 scalar plus sixteen units of title inset. Text uses its current value and
+    resolved style through the layout synthetic width source, declining empty,
+    multiline, unmeasurable or unrepresentable values without writing. Answers
+    do not depend on placement and remain stable during layout. */
 bool NullScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
   if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
@@ -54,6 +57,23 @@ bool NullScenePlatformController::queryNaturalWidth(loka::app::scene::Node *chil
     if (!loka::app::queryIntrinsicImageWidth(image->props, pixels) || pixels > SHRT_MAX)
       return false;
     width = static_cast<short>(pixels);
+    return true;
+  }
+  if (loka::app::TextNode *text = child ? child->asTextNode() : 0)
+  {
+    if (!text->props.text_)
+      return false;
+    const loka::app::SyntheticTextWidthSource source(text->props.text_->get(), text->props.resolvedTextStyle());
+    if (!source.valid() || source.length() == 0)
+      return false;
+    for (std::size_t i = 0; i < source.length(); ++i)
+      if (source.character(i).value == '\r' || source.character(i).value == '\n')
+        return false;
+    int measured = 0;
+    // Measure before the line breaker's short saturation, using its width source.
+    if (!source.width(0, source.length(), 0, measured) || measured <= 0 || measured > SHRT_MAX)
+      return false;
+    width = static_cast<short>(measured);
     return true;
   }
   loka::app::ButtonNode *button = child ? child->asButtonNode() : 0;

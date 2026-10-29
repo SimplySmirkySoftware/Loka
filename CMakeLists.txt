@@ -643,6 +643,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   loka_enable_warnings(LokaToolboxAttributedTextTests)
   set_target_properties(LokaToolboxAttributedTextTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME testToolboxScrollViewX COMMAND LokaToolboxAttributedTextTests scroll-x)
+  foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
+    add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
+  endforeach()
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
@@ -674,7 +677,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxScrollRequestTests ${_scroll_request_case})
   endforeach()
 
-  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
+  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
     add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
   endforeach()
 
@@ -895,7 +898,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxZStackUnitTests)
   set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
+  foreach(_order_case PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 
@@ -1032,6 +1035,16 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68EnvironmentTest.sh)
     add_test(NAME scriptRetro68ToolchainFlavor
       COMMAND bash ${PROJECT_SOURCE_DIR}/tests/scripts/Retro68ToolchainFlavorTest.sh)
+    add_executable(LokaToolbarMeasurementTests tests/toolbox/host/ToolbarMeasurementTests.cpp)
+    target_include_directories(LokaToolbarMeasurementTests PRIVATE
+      apple/toolbox/src tests/toolbox/src)
+    target_compile_definitions(LokaToolbarMeasurementTests PRIVATE TEST_BUILD)
+    target_compile_options(LokaToolbarMeasurementTests PRIVATE -UNDEBUG -fno-exceptions)
+    set_target_properties(LokaToolbarMeasurementTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+    loka_enable_warnings(LokaToolbarMeasurementTests)
+    add_test(NAME toolbarMeasurement COMMAND LokaToolbarMeasurementTests)
+    add_test(NAME toolbarMeasurementWiring
+      COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/toolbox/host/CheckToolbarMeasurement.py)
     add_test(NAME scriptCiPaths
       COMMAND python3 ${PROJECT_SOURCE_DIR}/tests/scripts/CiPathsTest.py)
     add_test(NAME scriptRetro68SizeReport

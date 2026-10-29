@@ -496,6 +496,9 @@ void ToolboxWindow::drawForUpdate()
     assert(!this->scenePlatformController_->erasedPass().isOpen());
   const Rect evidence =
       ToolboxUpdateEvidence(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds);
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->notePresentDamage(
+        ToolboxUpdateDamage(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds));
   BeginUpdate(this->window_);
   this->drawWhole(evidence);
   EndUpdate(this->window_);
@@ -504,7 +507,12 @@ void ToolboxWindow::drawForUpdate()
 void ToolboxWindow::drawForFlush()
 {
   if (this->window_)
+  {
+    if (this->scenePlatformController_)
+      this->scenePlatformController_->notePresentDamage(
+          ToolboxUpdateDamage(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds));
     this->drawWhole(this->window_->portRect);
+  }
 }
 
 void ToolboxWindow::drawWhole(const Rect &evidence)
@@ -539,6 +547,9 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
     else
       presenter.eraseBeforePaint();
     this->drawGrowBox();
+#ifdef TEST_BUILD
+    presenter.finishDrawForTesting();
+#endif
   }
 
   SetPort(oldPort);

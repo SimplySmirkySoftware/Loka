@@ -5,6 +5,7 @@
 void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
 {
   PROFILE_FUNC();
+  ToolboxPresentObservation::Interval interval(this->observation_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
   this->pressLedger_.begin();
@@ -87,9 +88,30 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   hitLedger_.textHits_.clear();
   hitLedger_.popupHits_.clear();
   PROFILE_SECTION("layout");
+#ifdef TEST_BUILD
+  if (presenter)
+    presenter->beginLayoutForTesting();
+#endif
   LayoutNode(rootNode_, state, this, 0);
+#ifdef TEST_BUILD
+  if (presenter)
+    presenter->endLayoutForTesting();
+#endif
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
+  // Once per full layout, the unit ledger visits its own rows with one cursor.
+  unsigned foregroundUnits = 0;
+  if (this->observation_.viewports())
+  {
+    ToolboxUnitLedger::Mark cursor = 0;
+    Rect overlap;
+    while (this->unitLedger_.nextOverlap(this->observation_.viewport(), cursor, overlap))
+      ++foregroundUnits;
+  }
+  this->observation_.complete(foregroundUnits);
+  this->debugStats_.lastPresentObservation = this->observation_;
+  if (this->observation_.viewports() > 0)
+    this->debugStats_.lastMovedPresentObservation = this->observation_;
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);

@@ -25,7 +25,7 @@ void ToolboxScenePlatformController::onBoundaryApply(loka::app::scene::Node *roo
   {
     // Rectangle replay uses captured placement. Layout work must reach
     // render() before painting values that depend on the new geometry.
-    this->window_->requestInvalidateWithReason("layout_dirty");
+    this->window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     return;
   }
   // Structure and composited work cannot use exact delivery. Keep their
