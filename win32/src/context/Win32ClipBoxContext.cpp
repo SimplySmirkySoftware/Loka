@@ -1,11 +1,9 @@
 #include "Win32ClipBoxContext.hpp"
 #include "Win32ContainerWindow.hpp"
-#include <cassert>
-#include <climits>
 
 Win32ClipBoxContext::Win32ClipBoxContext(Win32ScenePlatformController *controller)
     : Win32RetirableContext(controller),
-      placedHeight_(INT_MIN)
+      placedHeight_()
 {
 }
 
@@ -30,18 +28,13 @@ bool Win32ClipBoxContext::ensure(HWND parent, const loka::win32::NativeRect &sea
 
 void Win32ClipBoxContext::place(const loka::win32::NativeRect &rect, int logicalHeight)
 {
-  // A difference of short layout coordinates cannot equal the absent sentinel.
-  assert(logicalHeight != INT_MIN);
   this->positionNativeWindow(this->hwnd(), rect);
-  this->placedHeight_ = logicalHeight;
+  this->placedHeight_ = Win32PlacedHeight(logicalHeight);
 }
 
 bool Win32ClipBoxContext::queryPlacedHeight(int &out) const
 {
-  if (this->placedHeight_ == INT_MIN)
-    return false;
-  out = this->placedHeight_;
-  return true;
+  return this->placedHeight_.query(out);
 }
 
 void Win32ClipBoxContext::readLifecycleFactOnAttach()

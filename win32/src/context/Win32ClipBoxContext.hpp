@@ -3,6 +3,35 @@
 
 #include "Win32RetirableContext.hpp"
 
+/** The last height place wrote; none before the first placement. Read only by
+    the controller's refusal path for this box. Not derived from the window:
+    device-to-logical conversion is lossy at 125% and stale after a DPI change. */
+class Win32PlacedHeight
+{
+public:
+  Win32PlacedHeight()
+      : present_(false),
+        logicalHeight_(0)
+  {
+  }
+  explicit Win32PlacedHeight(int logicalHeight)
+      : present_(true),
+        logicalHeight_(logicalHeight)
+  {
+  }
+  bool query(int &out) const
+  {
+    if (!this->present_)
+      return false;
+    out = this->logicalHeight_;
+    return true;
+  }
+
+private:
+  bool present_;
+  int logicalHeight_;
+};
+
 /** Node-owned clip parent; the base transfers its HWND to the controller clock
     at retirement. Only the last placed logical height survives layout visits. */
 class Win32ClipBoxContext : public Win32RetirableContext, public loka::app::scene::IClipBoxContext
@@ -29,7 +58,7 @@ protected:
 private:
   static void EnsureClassRegistered();
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-  int placedHeight_;
+  Win32PlacedHeight placedHeight_;
   Win32ClipBoxContext(const Win32ClipBoxContext &);
   Win32ClipBoxContext &operator=(const Win32ClipBoxContext &);
 };
