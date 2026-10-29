@@ -311,6 +311,8 @@ well-formed UTF-8 without CR, LF, or NUL. `EDITOR_NON_ASCII` means the editor
 alphabet refused the bytes: malformed sequences and forbidden NUL (which is
 itself valid UTF-8). The Classic TextEdit rail still refuses non-ASCII with
 the same result.
+On read, only a leading UTF-8 byte order mark is removed; a U+FEFF anywhere
+else is kept. Saving does not add one.
 
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of
@@ -1652,7 +1654,9 @@ is no JS `ClipBox`.
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
 width offer; a nonpositive offer is unconstrained and keeps its natural width.
-Toolbox and macOS clip; Win32 does not clip yet.
+Toolbox, macOS and Win32 clip. On Win32, a clip box whose width is neither
+declared nor offered gets width 0, so its content is hidden; Toolbox and macOS
+leave the right edge unclipped instead.
 On macOS the system draws focus rings, so a focused control's ring can extend
 past a clip box's edge; a ScrollView's edge cuts it.
 

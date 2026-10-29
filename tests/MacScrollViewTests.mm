@@ -2249,3 +2249,77 @@ void testMacScrollRequestPendingLayoutOuterBorrow()
   storage.followingExtent.state()->unbind(&NativeScrollProbe::afterVisit, &probe);
   loka::dsl::testing::SceneTestAccess::unmount(scene);
 }
+
+namespace
+{
+  void shrunkRowScrollRequest(bool removeRange)
+  {
+    // Keep the existing fixture's zero-sized Box; it has no horizontal claim.
+    ScrollRequestFixture f(0, 0);
+    StackProps props(STACK_AXIS_ROW);
+    props.rowUndeclaredWidth_ = ROW_UNDECLARED_WIDTH_NATURAL;
+    StackNode *row = new StackNode(props);
+    const int fixedWidth = removeRange ? 40 : 340;
+    row->addChild(new BoxNode(Box().width(fixedWidth).height(20).props));
+    TextNode *title = new TextNode(
+        TextProps("A deliberately very long toolbar title that initially leaves a large horizontal scrolling range"));
+    row->addChild(title);
+    f.node.addChild(row);
+    f.visit();
+    f.post(20, 0);
+    f.visit();
+    f.result(SCROLL_OK);
+    LOKA_VERIFY(f.storage.viewport.get().x == 20);
+    f.observe();
+    const CGFloat oldDocumentWidth = [[f.native() documentView] frame].size.width;
+    // Pending request and shrink enter the same real controller visit. No
+    // layout helper or context commit is called directly by this pin.
+    f.post(3000, 0);
+    title->props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    f.visit();
+    f.result(removeRange ? SCROLL_UNAVAILABLE : SCROLL_OK);
+    MacScrollViewContext *context = static_cast<MacScrollViewContext *>(f.node.getContext());
+    const int estimate = fixedWidth + MacSceneLayout::kGap + 1;
+    const CGFloat points = f.controller.projection().projectLength(0, estimate).pt;
+    const CGFloat clipWidth = [f.native() contentSize].width;
+    const int expected = points > clipWidth ? f.controller.projection().scrollPositionToLu(points - clipWidth) : 0;
+    LOKA_VERIFY(context->horizontalRange(estimate) == expected);
+    LOKA_VERIFY(removeRange ? expected == 0 : expected > 0);
+    LOKA_VERIFY(f.storage.viewport.get().x == expected);
+    LOKA_VERIFY([[f.native() documentView] frame].size.width == (points > clipWidth ? points : clipWidth));
+    LOKA_VERIFY([[f.native() documentView] frame].size.width < oldDocumentWidth);
+    LOKA_VERIFY([[f.native() contentView] bounds].origin.x
+                == f.controller.projection().scrollOffsetToNative(expected).pt);
+    LOKA_VERIFY(f.observed.count(ScrollObservation::TAKE) == 1);
+    LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) <= 2);
+    LOKA_VERIFY(ScrollTrace::instance().size() == 1);
+    const Frame settled = f.storage.viewport.get();
+    const unsigned publications = f.observed.count(ScrollObservation::PUBLICATION);
+    // A bounded feedback drain through the same visit door must reach idle.
+    for (int i = 0; i < 3 && f.controller.hasPendingRelayout(); ++i)
+      f.visit();
+    LOKA_VERIFY(!f.controller.hasPendingRelayout());
+    f.visit();
+    [[NSNotificationCenter defaultCenter] postNotificationName:NSViewBoundsDidChangeNotification
+                                                        object:[f.native() contentView]];
+    LOKA_VERIFY(f.storage.viewport.get() == settled);
+    LOKA_VERIFY(f.observed.count(ScrollObservation::TAKE) == 1);
+    LOKA_VERIFY(f.observed.count(ScrollObservation::PUBLICATION) == publications);
+    std::printf("[pin] shrunk Row removeRange=%d estimate=%d points=%.2f range=%d takes=1 publications=%u\n",
+                removeRange,
+                estimate,
+                static_cast<double>(points),
+                expected,
+                publications);
+  }
+} // namespace
+
+void testMacScrollRequestShrunkRowClamps()
+{
+  shrunkRowScrollRequest(false);
+}
+
+void testMacScrollRequestShrunkRowRemovesRange()
+{
+  shrunkRowScrollRequest(true);
+}

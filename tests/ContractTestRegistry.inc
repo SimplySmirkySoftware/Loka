@@ -1243,6 +1243,10 @@ LOKA_TEST(testBootstrapProjectsOnce)
 
 // Text document doors (#1131 PR 1).
 LOKA_TEST(testTextDocumentSplitMatrix)
+LOKA_TEST(testTextDocumentBomRead)
+LOKA_TEST(testTextDocumentBomRoundTrip)
+LOKA_TEST(testTextDocumentInteriorBom)
+LOKA_TEST(testTextDocumentBomCapacity)
 LOKA_TEST(testTextDocumentLimits)
 LOKA_TEST(testTextDocumentReplacement)
 LOKA_TEST(testTextDocumentCommitRefusals)

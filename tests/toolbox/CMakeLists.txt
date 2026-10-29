@@ -920,3 +920,9 @@ foreach(app IN ITEMS FloppyBird SmirkBench Tutorial)
   target_include_directories(${target} PRIVATE ${CMAKE_SOURCE_DIR}/example/${app}/src)
   target_compile_definitions(${target} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_APP=${kind})
 endforeach()
+
+# Page 1b: one Row pass, separate from the 1a full-draw stop condition.
+loka_add_toolbox_test_application(LokaMeasureRows${LOKA_CLASSIC_TARGET_SUFFIX} LokaAppleToolboxTestCore
+  src/ToolbarRowMeasurementMain.cpp ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/TutorialSize.r)
+target_compile_definitions(LokaMeasureRows${LOKA_CLASSIC_TARGET_SUFFIX} PRIVATE TEST_BUILD LOKA_DIAG=1)

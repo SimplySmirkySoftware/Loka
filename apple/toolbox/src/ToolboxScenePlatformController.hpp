@@ -6,6 +6,7 @@
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
+#include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxBlurSnapshot.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
 #include "ToolboxFrostCache.hpp"
@@ -264,9 +265,9 @@ public:
 
 private:
   void noteControlDraw();
-  /** Capture admitted move damage once; an empty rectangle means refusal. */
-  Rect admitOwnControlMove(const Rect &before, const Rect &after) const;
-  void validateOwnControlMove(const Rect &admittedArea);
+  /** Capture each move rectangle once; refused rectangles remain empty. */
+  ToolboxOwnControlMoveFootprint admitOwnControlMove(const Rect &before, const Rect &after) const;
+  void validateOwnControlMove(const ToolboxOwnControlMoveFootprint &footprint);
   void activateEditControl(std::size_t index);
   void reachNativeButton(short id);
   void reachNativeBar(short id);

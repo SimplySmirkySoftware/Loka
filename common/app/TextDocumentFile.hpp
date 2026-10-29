@@ -43,7 +43,8 @@ namespace loka
     const char kTextDocumentNewline[] = "\n";
 #endif
 
-    /** Read within the admitted capacity plus CRLF expansion, split CR/LF/CRLF, and replace through one
+    /** Read within the admitted capacity plus CRLF expansion and a leading UTF-8 BOM,
+        drop that BOM, split CR/LF/CRLF, and replace through one
         list apply. All refusals preserve rows, IDs and revision. An empty file
         becomes one empty row; trailing separators remain trailing empty rows.
         Located/refused Files never retry their display name as a path.
