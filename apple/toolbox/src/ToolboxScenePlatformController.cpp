@@ -57,7 +57,7 @@
 
 namespace
 {
-  const char kViewportPaintWidenReason[] = "paint-widened-viewport-render";
+  const ToolboxFullDrawReason kViewportPaintWidenReason = TOOLBOX_FULL_DRAW_PAINT_WIDENED_VIEWPORT_RENDER;
 
 #include "ToolboxPaintAnswers.hpp"
 
@@ -734,7 +734,7 @@ void ToolboxScenePlatformController::handleTextChanged(loka::core::State<loka::c
         else
         {
           ++debugStats_.textChangedImmediateInvalidateCount;
-          window_->requestInvalidateWithReason("text_relayout");
+          window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_TEXT_RELAYOUT);
         }
         return;
       }
@@ -974,14 +974,14 @@ void ToolboxScenePlatformController::requestInvalidateForChange(loka::app::scene
     // Classic redraw currently prefers broad invalidation for child changes.
     ++debugStats_.fullInvalidateRequests;
     ++debugStats_.totalFullInvalidateRequests;
-    window_->requestInvalidateWithReason("child_dirty");
+    window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
     return;
   }
   if (fullRebuild || !rootNodeForChange)
   {
     ++debugStats_.fullInvalidateRequests;
     ++debugStats_.totalFullInvalidateRequests;
-    window_->requestInvalidateWithReason("full_rebuild_or_no_root");
+    window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_FULL_REBUILD_OR_NO_ROOT);
     return;
   }
 
@@ -1012,6 +1012,7 @@ std::string ToolboxScenePlatformController::debugStatsSummary() const
 
 void ToolboxScenePlatformController::resetDebugStats()
 {
+  this->observation_.reset();
   debugStats_.reset();
   // The pool counters are measurements too; leaving them cumulative would
   // let the next sync copy pre-reset activity into the fresh stats.

@@ -6,7 +6,7 @@ void ToolboxScenePlatformController::requestStructurePresent()
       this->scrollBarLedger_.viewportScrollBars_[i].spans->invalidate();
   if (window_)
   {
-    window_->requestInvalidateWithReason("structure-swap");
+    window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_STRUCTURE_SWAP);
   }
 }
 
