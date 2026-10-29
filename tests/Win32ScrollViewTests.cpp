@@ -2349,8 +2349,8 @@ void testWin32ScrollViewRebasedClipSeat()
             const RECT frame = childRectInParent(actual->hwnd(), parents[cases[c].depth - 1]);
             const RECT wanted = scale.projectFrame(loka::core::Frame(seatX, seatY, 101, height)).r;
             LOKA_VERIFY(EqualRect(&frame, &wanted));
-            HWND actualButton = findChildWindowByClass(actual->viewportHwnd(), L"BUTTON");
-            HWND expectedButton = findChildWindowByClass(expected->viewportHwnd(), L"BUTTON");
+            HWND actualButton = findChildWindowByClass(actual->viewportHwnd(), L"Button");
+            HWND expectedButton = findChildWindowByClass(expected->viewportHwnd(), L"Button");
             LOKA_VERIFY(actualButton && expectedButton);
             const RECT child = childRectInParent(actualButton, actual->viewportHwnd());
             const RECT rootChild = childRectInParent(expectedButton, expected->viewportHwnd());
