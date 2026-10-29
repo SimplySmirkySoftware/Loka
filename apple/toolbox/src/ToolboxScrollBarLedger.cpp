@@ -195,8 +195,8 @@ bool ToolboxScenePlatformController::ensureScrollBarBinding(short resourceId,
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
     if (movedFrom)
       *movedFrom = binding->placement.full();
-    binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   }
+  binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   SetControlMinimum(binding->control, static_cast<short>(minimum));
   SetControlMaximum(binding->control, static_cast<short>(maximum));
   return true;

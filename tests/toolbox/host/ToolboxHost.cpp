@@ -127,6 +127,8 @@ void GetPort(GrafPtr *out)
 }
 void SetPort(GrafPtr value)
 {
+  // Like GetPort above, expose the native clip handle when selecting a port.
+  value->clipRgn = &value->native.clipRegionPointer;
   port = value;
 }
 void TextFont(short value)

@@ -3,18 +3,13 @@
 namespace
 {
   void ApplyViewportScrollBarValue(ToolboxScrollBarLedger::ScrollBarControlBinding *native,
-                                   const ToolboxScrollViewMetrics &metrics,
-                                   RgnHandle paintSuppressClipRgn)
+                                   const ToolboxScrollViewMetrics &metrics)
   {
     if (native)
     {
       native->value = 0;
       native->onChange = 0;
       native->enabled = 0;
-      // SetControlValue requests drawCntl 129 (indicator movement), not 0
-      // (the whole control). Suppress setter painting; renderScrollView's
-      // Draw1Control after restoring the outer clip still restores the complete bar after content erasure.
-      ToolboxPaintSuppressScope suppress(paintSuppressClipRgn);
       SetControlValue(native->control, static_cast<short>(metrics.clampedOffset));
       native->appliedValue = metrics.clampedOffset;
       native->active = metrics.maximum > 0;
@@ -64,6 +59,13 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
   Rect sizeBox = Rect();
   if (this->window_)
     this->window_->querySizeBoxRect(sizeBox);
+  // One suppression covers every native setter of these bars: move, size,
+  // minimum and maximum in the ensures, value, hilite and show, and the
+  // departing bar's HideControl. The scratch region is exclusive, so a second
+  // scope inside would save the empty clip and leave it behind. A departing
+  // bar's update stays queued. renderScrollView's Draw1Control, after the
+  // outer clip is restored, still draws the complete bar after content erasure.
+  ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   ScrollBarControlBinding *native = 0;
   Rect movedFrom;
   std::size_t x = ToolboxViewportRows::absent(), y = ToolboxViewportRows::absent();
@@ -78,7 +80,7 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                    native,
                                    &movedFrom))
   {
-    ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
+    ApplyViewportScrollBarValue(native, metrics);
     if (native && !EmptyRect(&movedFrom))
       this->validateOwnControlMove(movedFrom, native->placement.full());
   }
@@ -99,7 +101,7 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                      native,
                                      &movedFrom))
     {
-      ApplyViewportScrollBarValue(native, horizontal, this->paintSuppressClipRgn_);
+      ApplyViewportScrollBarValue(native, horizontal);
       if (native && !EmptyRect(&movedFrom))
         this->validateOwnControlMove(movedFrom, native->placement.full());
     }

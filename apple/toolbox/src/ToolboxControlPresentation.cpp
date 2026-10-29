@@ -1,4 +1,5 @@
 // Included by the controller and the Toolbox host fixture.
+#include "ToolboxNativeDoorScope.hpp"
 void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
 {
   for (size_t i = 0; i < buttonControls_.size(); ++i)
@@ -31,7 +32,11 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     {
       continue;
     }
-    this->drawControl(binding.control);
+    if (this->window_ && this->window_->window())
+    {
+      ToolboxNativeDoorScope door(this->window_->window(), visible);
+      this->drawControl(binding.control);
+    }
   }
 }
 
@@ -45,11 +50,14 @@ void ToolboxScenePlatformController::drawScrollBarControl(short id)
       continue;
     if (!row.control || !row.usedThisFrame || !(**row.control).contrlVis)
       return;
-    GrafPtr port;
-    GetPort(&port);
+    if (!this->window_ || !this->window_->window())
+      return;
+    GrafPtr port = this->window_->window();
+    ToolboxPortScope owner(port);
     Rect visible;
     if (!row.placement.queryVisible(visible) || !RectInRgn(&visible, port->clipRgn))
       return;
+    ToolboxNativeDoorScope door(port, visible);
     this->drawControl(row.control);
     return;
   }
