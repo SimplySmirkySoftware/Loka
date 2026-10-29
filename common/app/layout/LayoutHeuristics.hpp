@@ -112,8 +112,38 @@ namespace loka
         bool gapBefore_;
       };
 
+      /** Pass-local front-first division, also used as a natural-width cap.
+          A negative cap preserves the natural answer. */
+      class RowWidthDivision
+      {
+      public:
+        explicit RowWidthDivision(int cap = -1, int remainder = 0)
+            : cap_(cap),
+              remainder_(remainder)
+        {
+        }
+        int take(int natural)
+        {
+          if (this->cap_ < 0 || natural <= this->cap_)
+            return natural;
+          int width = this->cap_;
+          if (this->remainder_ > 0)
+          {
+            ++width;
+            --this->remainder_;
+          }
+          return width;
+        }
+
+      private:
+        int cap_;
+        int remainder_;
+      };
+
       /** Answers the maximum offer-independent width within the parent's composed child count,
-          treating children as vertically stacked ScrollView content and recursing into Columns;
+          treating children as vertically stacked ScrollView content and recursing into Columns.
+          NATURAL Rows count fully shrunk seats after checking the unshrunk sum for saturation.
+          Frames count content overflow plus insets, at least their minimum width;
           rail spacing is forwarded unchanged; each Row resolves its own gap, and a null parent or
          offer-bound children answer zero. Unavailable measurements or results above SHRT_MAX refuse without changing
          width. */
@@ -123,7 +153,10 @@ namespace loka
                                      short &width);
 
       /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
-          leaf answers (including intrinsic images) at most twice, SHARED rows never consult them.
+          leaf answers (including intrinsic images) at most twice when the Row fits. A short Row
+          adds up to k constructor scans, k being the number of shrinkable seats; each scan consults
+          every single-line ELLIPSIS Text seat once, including one whose answer is declined, because
+          nothing is remembered between scans. SHARED rows never consult them.
           The resolved gap allocates this Row; rail spacing resolves named values in nested Rows.
           Private recursive natural measurement walks each Stack's subtree without caching to find
           the smallest seating width, independently of ScrollView's offer-bound overflow rule. */
@@ -144,8 +177,8 @@ namespace loka
         int preferredWidth(loka::app::scene::Node *child) const;
         const INaturalWidthSource *source_;
         const RailSpacing spacing_;
-        int baseFlexWidth_;
-        int flexRemainder_;
+        RowWidthDivision flex_;
+        RowWidthDivision shrink_;
         int liveSeatsSeen_;
       };
 

@@ -1047,7 +1047,7 @@ void testGapDoorNaturalWidths()
           &outer, 1, 200, 4, loka::app::layout::RailSpacing(12, 4, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
       const int expected = policy ? 10 + 20 + innerWidth : 2 * innerWidth + 20;
       LOKA_VERIFY(natural.next(&outer).width() == expected);
-      // A framed parent makes both Row policies eligible for overflow measurement.
+      // A frame recurses into overflow: SHARED stays offer-bound; NATURAL keeps its seats.
       CardNode frame((CardProps(CardStyle(CARD_SHADOW_DROP))));
       StackNode *copy = new StackNode(outer.props);
       copy->addChild(Button("a").create());
@@ -1070,7 +1070,9 @@ void testGapDoorNaturalWidths()
       const bool known = queryContentOverflowWidth(&parent, loka::app::layout::RailSpacing(12, 4, 9), &source, width);
       parent.detachChildren();
       LOKA_VERIFY(known);
-      LOKA_VERIFY(width == expected + frame.frameGeometry().insets.left + frame.frameGeometry().insets.right);
+      LOKA_VERIFY(width
+                  == (policy ? expected + frame.frameGeometry().insets.left + frame.frameGeometry().insets.right
+                             : frame.frameGeometry().minimumWidth));
     }
   }
 }

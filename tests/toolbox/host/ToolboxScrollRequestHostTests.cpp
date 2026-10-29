@@ -10,6 +10,9 @@
 #include "support/WindowAdmissionTestApp.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstring>
+#include "app/nodes/Text.hpp"
+#include "app/nodes/nestable/Keyed.hpp"
+#include "core/util/StateTrackerGuard.hpp"
 using namespace loka::app;
 using namespace loka::app::scene;
 using loka::core::Frame;
@@ -486,6 +489,79 @@ namespace
     app.flush();
     LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
   }
+  template <bool Refused> class ShrinkRoot : public BoundaryNodeFor<ShrinkRoot<Refused> >
+  {
+  public:
+    NodeState<Frame> viewport;
+    Request<ScrollTarget> request;
+    NodeState<bool> shrink;
+    explicit ShrinkRoot(const BoundaryPropsFor<ShrinkRoot<Refused> > &props)
+        : BoundaryNodeFor<ShrinkRoot<Refused> >(props)
+    {
+      this->declareStates(3)
+          .state(this->viewport, Frame())
+          .state(this->request, ScrollTarget::None())
+          .state(this->shrink, false);
+    }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
+    virtual void composeNode(NodeComposition &c)
+    {
+      c.declare(ScrollView(this->viewport).scrollTo(this->request)
+                << (Row().naturalWidth() << Keyed(
+                        *this->shrink.state(),
+                        this,
+                        &ShrinkRoot::arm,
+                        reservation::SeatNodes<
+                            reservation::Nodes<TextNode, 1, reservation::Nodes<BoxNode, 1, reservation::End> > >())));
+    }
+    void arm(NodeComposition &c)
+    {
+      if (!this->shrink.get())
+        c.declare(Box().width(400).height(20));
+      else
+        c.declare(Text(Refused ? "refused\nwidth" : "A very long title that must shrink to the available width")
+                  + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS));
+    }
+  };
+  template <bool Refused> void shrinkSettlement()
+  {
+    ToolboxWindow native;
+    HostPortScope port(native.window());
+    SceneController controller(native);
+    Scene scene((Boundary<ShrinkRoot<Refused> >()));
+    LOKA_VERIFY(scene.mount(&controller));
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    ShrinkRoot<Refused> *root =
+        static_cast<ShrinkRoot<Refused> *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+    scene.requestInvalidate(NODE_DIRTY_LAYOUT);
+    for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+      LOKA_VERIFY(scene.flushInvalidation());
+    root->request.set(ScrollTarget::Origin(200, 0));
+    for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+      LOKA_VERIFY(scene.flushInvalidation());
+    LOKA_VERIFY(root->viewport.get().x == 200);
+    Trace::instance().clear();
+    {
+      loka::core::StateTrackerGuard transaction(root->tracker());
+      root->shrink.set(true);
+      root->request.set(ScrollTarget::Origin(300, 0));
+    }
+    const unsigned before = controller.visits;
+    for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+      LOKA_VERIFY(scene.flushInvalidation());
+    LOKA_VERIFY(!scene.hasPendingInvalidation());
+    LOKA_VERIFY(root->request.get().isNone());
+    LOKA_VERIFY(root->viewport.get().x == 0);
+    LOKA_VERIFY(controller.visits - before <= 3);
+    unsigned takes = 0;
+    for (unsigned i = 0; i < Trace::instance().size(); ++i)
+      takes += Trace::instance().at(i).count;
+    LOKA_VERIFY(takes == 1);
+    loka::dsl::testing::SceneTestAccess::unmount(scene);
+  }
   class OuterProbe : public NodeContext
   {
     SceneController &controller_;
@@ -537,7 +613,11 @@ int main(int argc, char **argv)
   else if (!std::strcmp(name, "late-refusal"))
     lateRefusal();
   else if (!std::strcmp(name, "zero-range"))
+  {
     zeroRange();
+    shrinkSettlement<false>();
+    shrinkSettlement<true>();
+  }
   else if (!std::strcmp(name, "clamp"))
     delivery(true);
   else if (!std::strcmp(name, "cancel"))
