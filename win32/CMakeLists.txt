@@ -24,6 +24,7 @@ set(SOURCES
   src/context/Win32RetirableContext.cpp
   src/context/Win32OwnedChildWindow.cpp
   src/context/Win32ZStackContext.cpp
+  src/context/Win32ClipBoxContext.cpp
   src/Win32CardPainter.cpp
   src/context/Win32CardBandContext.cpp
   src/context/Win32RibbonGroupEdgeContext.cpp

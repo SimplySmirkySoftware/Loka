@@ -146,7 +146,7 @@ namespace
     // The host has synthetic update rectangles, not a real Control Manager.
     // Seed the move's damage to pin admission and preservation of foreign damage.
     const Rect foreign = {200, 200, 210, 210};
-    // The discharged box also covers the old size at the new origin (40 + 120).
+    // Capture also covers the old size at the new origin (40 + 120).
     const Rect covered = {0, 0, 170, 100};
     f.window.port.native.update.clear();
     f.window.port.native.update.push_back(barRect);
@@ -157,7 +157,7 @@ namespace
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), moved);
       f.controller.validateOwnControlMove(barRect, moved);
-      LOKA_VERIFY(f.window.port.native.update.size() == 3);
+      LOKA_VERIFY(f.window.port.native.update.size() == 2);
     }
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), covered);
