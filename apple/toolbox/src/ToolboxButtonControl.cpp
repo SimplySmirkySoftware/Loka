@@ -61,7 +61,7 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
     entry.emitter = emitter;
     entry.enabled = enabled;
     entry.usedThisFrame = true;
-    entry.rect = controlRect;
+    entry.placement = ToolboxNativePlacement(controlRect, controlRect);
     entry.label = "";
     entry.lifetimeHint = lifetimeHint;
     buttonControls_.push_back(entry);
@@ -74,7 +74,7 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   binding->lifetimeHint = lifetimeHint;
   bindEnabledState(enabled);
   binding->usedThisFrame = true;
-  const Rect before = binding->rect;
+  const Rect before = binding->placement.full();
   const bool moved = created || before.left != controlRect.left || before.top != controlRect.top
                      || before.right != controlRect.right || before.bottom != controlRect.bottom;
   const Rect admittedMove = moved ? this->admitOwnControlMove(before, controlRect) : Rect();
@@ -88,8 +88,8 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   {
     MoveControl(binding->control, controlRect.left, controlRect.top);
     SizeControl(binding->control, controlRect.right - controlRect.left, controlRect.bottom - controlRect.top);
-    binding->rect = controlRect;
   }
+  binding->placement = ToolboxNativePlacement(controlRect, controlRect);
   bool submitted;
   {
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);

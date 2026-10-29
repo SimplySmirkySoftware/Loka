@@ -1,3 +1,5 @@
+#include "ToolboxNativeDoorScope.hpp"
+
 /** Event-local completed selection. Nothing here survives the input operation. */
 struct ResolvedPress
 {
@@ -46,7 +48,9 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::NATIVE_BUTTON:
   {
     const ButtonControlBinding &binding = this->buttonControls_[row.index];
-    if (!binding.control || !(**binding.control).contrlVis || !PtInRect(point, &binding.rect))
+    Rect visible;
+    if (!binding.control || !(**binding.control).contrlVis || !binding.placement.queryVisible(visible)
+        || !PtInRect(point, &visible))
       return false;
     value.context = binding.context;
     value.control = binding.control;
@@ -56,7 +60,9 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::NATIVE_BAR:
   {
     const ScrollBarControlBinding &binding = this->scrollBarLedger_.scrollBarControls_[row.index];
-    if (!binding.control || !(**binding.control).contrlVis || !PtInRect(point, &binding.rect))
+    Rect visible;
+    if (!binding.control || !(**binding.control).contrlVis || !binding.placement.queryVisible(visible)
+        || !PtInRect(point, &visible))
       return false;
     value.control = binding.control;
     value.editor = binding.editor;
@@ -198,12 +204,19 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
   {
   case PressRow::NATIVE_BUTTON:
   {
-    const Rect rect = this->buttonControls_[index].rect;
+    Rect rect;
+    const bool visible = this->buttonControls_[index].placement.queryVisible(rect);
     loka::core::EmitterState *emitter = this->buttonControls_[index].emitter;
     const ControlRef control = press.control;
     this->beginBatchUpdate();
-    const ControlPartCode tracked = TrackControl(control, point, 0);
-    this->invalidateUnitOverlap(rect);
+    ControlPartCode tracked = 0;
+    if (visible && this->window_ && this->window_->window())
+    {
+      ToolboxNativeDoorScope door(this->window_->window(), rect);
+      tracked = TrackControl(control, point, 0);
+    }
+    if (visible)
+      this->invalidateUnitOverlap(rect);
     // A Button without onClick tracks like any button and emits nothing.
     if (tracked && emitter)
       emitter->emit();
@@ -220,8 +233,14 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
     const ControlRef control = press.control;
     gActiveScrollBarLineStep = source.lineStep;
     gActiveScrollBarPageStep = source.pageStep;
-    TrackControl(control, point, press.part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
-    this->invalidateUnitOverlap(source.rect);
+    Rect visible;
+    if (source.placement.queryVisible(visible) && this->window_ && this->window_->window())
+    {
+      ToolboxNativeDoorScope door(this->window_->window(), visible);
+      TrackControl(control, point, press.part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
+    }
+    if (source.placement.queryVisible(visible))
+      this->invalidateUnitOverlap(visible);
     if (editor.editor())
     {
       const int settled = GetControlValue(control);

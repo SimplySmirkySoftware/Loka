@@ -642,6 +642,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxAttributedTextTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxAttributedTextTests)
   set_target_properties(LokaToolboxAttributedTextTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_suppression normal empty partial refused)
+    add_test(NAME testToolboxViewportSuppression_${_suppression}
+      COMMAND LokaToolboxAttributedTextTests suppression-${_suppression})
+  endforeach()
   add_test(NAME testToolboxScrollViewX COMMAND LokaToolboxAttributedTextTests scroll-x)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
     add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
@@ -885,6 +889,13 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
   endforeach()
 
+  foreach(_door Button Bar Replay Draw)
+    foreach(_clip Normal Empty Refused)
+      add_test(NAME testToolboxNativeDoor${_door}${_clip}
+        COMMAND LokaToolboxControlOrderTests NativeDoor${_door}${_clip})
+    endforeach()
+  endforeach()
+
   add_executable(LokaToolboxZStackUnitTests tests/toolbox/host/ToolboxZStackUnitHostTests.cpp
     apple/toolbox/src/ToolboxNodeDispatch.cpp
     apple/toolbox/src/context/ToolboxScrollBarContext.cpp
@@ -898,7 +909,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxZStackUnitTests)
   set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
+  foreach(_order_case NativePlacement PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 

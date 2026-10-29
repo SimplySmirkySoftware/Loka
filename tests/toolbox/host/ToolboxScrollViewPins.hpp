@@ -141,17 +141,17 @@ namespace
       LOKA_VERIFY(content.right == (mode == 2 ? 84 : mode == 1 ? 332 : 345));
       LOKA_VERIFY(content.bottom == (mode == 2 ? 34 : mode == 3 ? 245 : 260 - margin));
       const ToolboxScenePlatformController::ScrollBarControlBinding &vertical = f.controller.scrollControls()[0];
-      LOKA_VERIFY(vertical.rect.left == content.right
-                  && vertical.rect.right == expectedSeat.right + (mode == 0 || mode == 3 ? 1 : 0));
-      LOKA_VERIFY(vertical.rect.top == (mode == 1 ? margin : -1));
-      LOKA_VERIFY(vertical.rect.bottom == (mode == 2 ? 34 : 246));
+      LOKA_VERIFY(vertical.placement.full().left == content.right
+                  && vertical.placement.full().right == expectedSeat.right + (mode == 0 || mode == 3 ? 1 : 0));
+      LOKA_VERIFY(vertical.placement.full().top == (mode == 1 ? margin : -1));
+      LOKA_VERIFY(vertical.placement.full().bottom == (mode == 2 ? 34 : 246));
       LOKA_VERIFY(vertical.maximum == (mode == 2 ? 306 : mode == 3 ? 105 : mode == 1 ? 104 : 80));
       LOKA_VERIFY(vertical.pageStep == (mode == 2 ? 33 : mode == 3 ? 244 : mode == 1 ? 235 : 259));
       if (mode == 3)
       {
         const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
-        LOKA_VERIFY(horizontal.rect.left == -1 && horizontal.rect.top == 245);
-        LOKA_VERIFY(horizontal.rect.right == 346 && horizontal.rect.bottom == 261);
+        LOKA_VERIFY(horizontal.placement.full().left == -1 && horizontal.placement.full().top == 245);
+        LOKA_VERIFY(horizontal.placement.full().right == 346 && horizontal.placement.full().bottom == 261);
         LOKA_VERIFY(horizontal.maximum == 55 && horizontal.pageStep == 344);
       }
     }
@@ -178,8 +178,8 @@ namespace
       LOKA_VERIFY(controller.scrollControls().size() == 2);
       // Without a size box the bars stop at each other and leave the corner
       // empty; with one, each shares the size box's line (#1406).
-      LOKA_VERIFY(controller.scrollControls()[0].rect.bottom == (mode == 0 ? 246 : 245));
-      LOKA_VERIFY(controller.scrollControls()[1].rect.right == (mode == 0 ? 346 : 354));
+      LOKA_VERIFY(controller.scrollControls()[0].placement.full().bottom == (mode == 0 ? 246 : 245));
+      LOKA_VERIFY(controller.scrollControls()[1].placement.full().right == (mode == 0 ? 346 : 354));
       LOKA_VERIFY(controller.scrollControls()[1].maximum == 46 && controller.scrollControls()[1].pageStep == 353);
     }
     // Offset seats also exercise the horizontal stop and each empty-bar floor.
@@ -220,10 +220,10 @@ namespace
       LOKA_VERIFY(horizontal.resourceId == binding.barId[SCROLL_BAR_HORIZONTAL]);
       LOKA_VERIFY(horizontal.maximum == 316 && horizontal.pageStep == 83);
       const Rect expectedHorizontal = {18, -1, 34, 84};
-      LOKA_VERIFY(SameScrollRect(horizontal.rect, expectedHorizontal));
+      LOKA_VERIFY(SameScrollRect(horizontal.placement.full(), expectedHorizontal));
       LOKA_VERIFY(f.controller.scrollMaximum(binding.barId[SCROLL_BAR_VERTICAL]) == 350 - 18);
       const Rect expectedVertical = {-1, 84, 18, 100};
-      LOKA_VERIFY(SameScrollRect(f.controller.scrollControls()[0].rect, expectedVertical));
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollControls()[0].placement.full(), expectedVertical));
       const Rect seat = {0, 0, 34, 100};
       LOKA_VERIFY(SameScrollRect(binding.contentRect, ToolboxScrollViewContentRect(seat, true)));
     }
@@ -510,7 +510,7 @@ namespace
       const Rect content = {0, 0, 18, 84};
       const Rect horizontal = {18, -1, 34, 84};
       LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, content));
-      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(0).rect, horizontal));
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(0).placement.full(), horizontal));
     }
     Pin("ToolboxScrollViewBottomInsetKeepsHorizontalAndContentRect");
     {
@@ -518,12 +518,12 @@ namespace
       f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
       f.step(0);
       const Rect content = f.controller.viewportScroll().contentRect;
-      const Rect horizontal = f.controller.scrollControl(1).rect;
+      const Rect horizontal = f.controller.scrollControl(1).placement.full();
       f.scroll.props.contentInsets(ScrollViewContentInsets::of(0, 10));
       f.step(0);
       LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, content));
-      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(1).rect, horizontal));
-      LOKA_VERIFY(f.controller.scrollControl(0).rect.bottom == 18);
+      LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(1).placement.full(), horizontal));
+      LOKA_VERIFY(f.controller.scrollControl(0).placement.full().bottom == 18);
       LOKA_VERIFY(f.controller.scrollControl(0).pageStep == 17 && f.controller.scrollControl(0).lineStep == 1);
     }
     Pin("ToolboxScrollViewRefusedVerticalStillHandlesHorizontal");
@@ -551,6 +551,63 @@ namespace
       f.step(0);
       LOKA_VERIFY(vertical->visible);
     }
+  }
+
+  void ScrollViewSuppressionPin(const std::string &mode)
+  {
+    const bool refused = mode == "suppression-refused";
+    if (refused)
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + 2;
+    ScrollFixture f;
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(toolbox_host::failRegions == 0);
+    LOKA_VERIFY((f.controller.paintSuppressClipRgn_ == 0) == refused);
+    f.column->addChild(new ImageViewNode(ImageViewProps().size(400, 10)));
+    f.step(0);
+    LOKA_VERIFY(f.controller.scrollControls().size() == 2);
+    const Rect normal = {-10, -10, 200, 600};
+    const Rect partial = {2, 3, 30, 110};
+    const Rect empty = {0, 0, 0, 0};
+    const Rect before = mode == "suppression-empty" ? empty : mode == "suppression-partial" ? partial : normal;
+    ClipRect(&before);
+    ControlRef controls[2] = {f.controller.scrollControl(0).control, f.controller.scrollControl(1).control};
+    for (unsigned i = 0; i < 2; ++i)
+      controls[i]->calls.clear();
+    f.window.port.native.update.clear();
+    f.step(17, 120);
+    Rect after = toolbox_host::currentClip();
+    LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
+    const Rect departing = controls[1]->rect;
+    f.step(0, 500);
+    after = toolbox_host::currentClip();
+    LOKA_VERIFY(std::memcmp(&after, &before, sizeof(Rect)) == 0);
+    const char *operations[] = {"move", "size", "minimum", "maximum", "value", "hilite", "show", "hide"};
+    for (unsigned op = 0; op < sizeof(operations) / sizeof(operations[0]); ++op)
+    {
+      unsigned seen = 0, painted = 0;
+      for (unsigned bar = 0; bar < 2; ++bar)
+        for (std::size_t i = 0; i < controls[bar]->calls.size(); ++i)
+        {
+          const toolbox_host::ControlCall &call = controls[bar]->calls[i];
+          if (call.operation != operations[op])
+            continue;
+          ++seen;
+          if (call.painted)
+            ++painted;
+          LOKA_VERIFY(call.currentPort == f.window.window());
+          if (!refused)
+            LOKA_VERIFY(!call.painted && EmptyRect(&call.ownerClip));
+        }
+      LOKA_VERIFY(seen > 0);
+      // ShowControl of an already shown control does not paint even on refusal.
+      if (refused && std::strcmp(operations[op], "show") != 0)
+        LOKA_VERIFY(painted > 0);
+    }
+    bool queued = false;
+    for (std::size_t i = 0; i < f.window.port.native.update.size(); ++i)
+      if (EqualRect(&f.window.port.native.update[i], &departing))
+        queued = true;
+    LOKA_VERIFY(queued && !controls[1]->visible);
   }
 
   void ScrollViewPins()
@@ -648,12 +705,13 @@ namespace
       LOKA_VERIFY(toolbox_host::draws.size() > contentDraws && calls.draws == 0);
       f.controller.drawControlsInRect(viewport);
       LOKA_VERIFY(calls.draws == 1);
-      LOKA_VERIFY(calls.drawClip.top == previous.top && calls.drawClip.left == previous.left
-                  && calls.drawClip.bottom == previous.bottom && calls.drawClip.right == previous.right);
+      Rect visible, expectedDraw;
+      LOKA_VERIFY(f.controller.scrollControl(0).placement.queryVisible(visible));
+      SectRect(&previous, &visible, &expectedDraw);
+      LOKA_VERIFY(EqualRect(&calls.drawClip, &expectedDraw));
       LOKA_VERIFY(mounted.values == 1 && EmptyRect(&mounted.valueClip));
       LOKA_VERIFY(mounted.shows == 1 && EmptyRect(&mounted.showClip) && mounted.draws == 1);
-      LOKA_VERIFY(mounted.drawClip.top == previous.top && mounted.drawClip.left == previous.left
-                  && mounted.drawClip.bottom == previous.bottom && mounted.drawClip.right == previous.right);
+      LOKA_VERIFY(EqualRect(&mounted.drawClip, &expectedDraw));
       const Rect unclipped = {-30000, -30000, 30000, 30000};
       ClipRect(&unclipped);
     }
@@ -682,8 +740,10 @@ namespace
       LOKA_VERIFY(calls.shows == 1 && !EmptyRect(&calls.showClip));
       controller.drawControlsInRect(viewport);
       LOKA_VERIFY(calls.draws == 1);
-      LOKA_VERIFY(calls.drawClip.top == previous.top && calls.drawClip.left == previous.left
-                  && calls.drawClip.bottom == previous.bottom && calls.drawClip.right == previous.right);
+      Rect visible, expectedDraw;
+      LOKA_VERIFY(controller.scrollControl(0).placement.queryVisible(visible));
+      SectRect(&previous, &visible, &expectedDraw);
+      LOKA_VERIFY(EqualRect(&calls.drawClip, &expectedDraw));
       const Rect unclipped = {-30000, -30000, 30000, 30000};
       ClipRect(&unclipped);
     }

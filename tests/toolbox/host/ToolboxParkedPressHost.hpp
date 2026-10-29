@@ -181,7 +181,8 @@ namespace parked_press
             this->rect, node, 300, 84, 0, ToolboxScrollViewMetrics(300, 0), true);
         const unsigned index = kind == VIEWPORT_VERTICAL ? 0 : 1;
         LOKA_VERIFY(this->controller.scrollControls().size() == 2);
-        const Rect bar = this->controller.scrollControl(index).rect;
+        Rect bar;
+        LOKA_VERIFY(this->controller.scrollControl(index).placement.queryVisible(bar));
         this->point.v = bar.top + 2;
         this->point.h = bar.left + 2;
         this->controller.scrollControl(index).control->tracking = toolbox_host::TrackScript(129, 129, 42);
@@ -438,8 +439,10 @@ namespace parked_press
     const unsigned index = kind == VIEWPORT_HORIZONTAL ? 1 : 0;
     ControlRef control =
         kind == NATIVE_BUTTON ? f.controller.buttonControls_[0].control : f.controller.scrollControl(index).control;
-    const Rect oldRect =
-        kind == NATIVE_BUTTON ? f.controller.buttonControls_[0].rect : f.controller.scrollControl(index).rect;
+    Rect oldRect;
+    const ToolboxNativePlacement &placement =
+        kind == NATIVE_BUTTON ? f.controller.buttonControls_[0].placement : f.controller.scrollControl(index).placement;
+    LOKA_VERIFY(placement.queryVisible(oldRect));
     LOKA_VERIFY(f.target->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
     if (kind == NATIVE_BUTTON)
       LOKA_VERIFY(f.controller.buttonControls_[0].context == f.target->getContext());

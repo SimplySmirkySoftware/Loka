@@ -233,11 +233,13 @@ namespace
     SetRect(&f.controller.projectionClip, -30000, -30000, 30000, 30000);
     ToolboxScrollBarLedger::ScrollBarControlBinding &row = f.controller.scrollControl(0);
     LOKA_VERIFY(row.usedThisFrame && row.editor.editor() == f.context);
-    LOKA_VERIFY(row.rect.bottom == 60 && row.control->hilite == 255);
+    Rect visible;
+    LOKA_VERIFY(row.placement.queryVisible(visible));
+    LOKA_VERIFY(visible.bottom == 60 && row.control->hilite == 255);
     const Point outside = {75, 200}, inside = {50, 200};
     const Rect column = f.context->geometry().bar;
-    LOKA_VERIFY(PtInRect(outside, &column) && !PtInRect(outside, &row.rect));
-    LOKA_VERIFY(PtInRect(inside, &row.rect));
+    LOKA_VERIFY(PtInRect(outside, &column) && !PtInRect(outside, &visible));
+    LOKA_VERIFY(PtInRect(inside, &visible));
     TERec &te = **f.te();
     const short selection = te.selStart;
     HostTECompletion click = {te.destRect, 0, 0};

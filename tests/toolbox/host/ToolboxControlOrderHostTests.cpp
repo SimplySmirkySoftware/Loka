@@ -184,7 +184,8 @@ namespace
         LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
         LOKA_VERIFY(control->visible && controller.buttonControls_[0].label == "First");
         // The retained control is still on screen, so the press door still reaches it.
-        const Rect rect = controller.buttonControls_[0].rect;
+        Rect rect;
+        LOKA_VERIFY(controller.buttonControls_[0].placement.queryVisible(rect));
         const Point inside = {static_cast<short>((rect.top + rect.bottom) / 2),
                               static_cast<short>((rect.left + rect.right) / 2)};
         const unsigned before = firstPresses();
@@ -369,11 +370,14 @@ namespace
 } // namespace
 #include "ToolboxParkedPressHost.hpp"
 #include "ToolboxPressDoorHost.hpp"
+#include "ToolboxNativeDoorPins.hpp"
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strcmp(argv[1], "ButtonHiddenMove") == 0 || std::strcmp(argv[1], "ButtonCreatedPaintsOnce") == 0
-      || std::strcmp(argv[1], "ButtonMoveWithoutErasedPass") == 0)
+  if (std::strncmp(argv[1], "NativeDoor", 10) == 0)
+    native_door::run(argv[1]);
+  else if (std::strcmp(argv[1], "ButtonHiddenMove") == 0 || std::strcmp(argv[1], "ButtonCreatedPaintsOnce") == 0
+           || std::strcmp(argv[1], "ButtonMoveWithoutErasedPass") == 0)
     buttonHiddenMove(argv[1]);
   else if (std::strncmp(argv[1], "PressDoor", 9) == 0)
     press_door::run(argv[1]);
