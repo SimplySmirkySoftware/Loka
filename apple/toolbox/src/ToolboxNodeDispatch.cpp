@@ -161,9 +161,21 @@ namespace
   {
     using namespace loka::app::scene;
     const LayoutState incoming = state;
+    // Mirrors macOS layoutClipBox in apple/macos/src/MacScenePlatformController.mm.
+    NodeContext *installed = node->getContext();
+    IClipBoxContext *clip = installed ? installed->asClipBoxContext() : 0;
+    if (flagged && installed && !clip)
+    {
+#ifdef LOKA_LIFECYCLE_AUDIT
+      assert(false && "clip box requires its own context; never replace a foreign context");
+#endif
+      return LayoutBoxContents(node, state, controller, boundary);
+    }
     if (flagged)
       controller->ensureClipBoxContext(node, incoming);
-    ToolboxClipBoxContext *context = static_cast<ToolboxClipBoxContext *>(node->getContext());
+    installed = node->getContext();
+    clip = installed ? installed->asClipBoxContext() : 0;
+    ToolboxClipBoxContext *context = clip ? static_cast<ToolboxClipBoxContext *>(clip) : 0;
     LayoutState projected;
     short width = 0;
     ToolboxClipPlacement placement;

@@ -1120,6 +1120,236 @@ namespace
     LOKA_VERIFY(controller.unitLedger_.mark() == 0);
     controller.clearControls();
   }
+  /** Real dispatch/layout/render with an app-origin state and optional foreground unit. */
+  struct PresentFixture
+  {
+    ToolboxWindow window;
+    HostPortScope port;
+    ToolboxScenePlatformController controller;
+    MutableState<Frame> origin;
+    NodeState<Frame> viewportState;
+    ScrollViewNode viewport;
+    PresentFixture(bool foreground = false, int initialOrigin = 0)
+        : port(window.window()),
+          controller(&window),
+          origin(Frame(0, initialOrigin, 0, 0)),
+          viewportState(&origin, 0),
+          viewport(ScrollViewProps(viewportState))
+    {
+      if (foreground)
+      {
+        ZStackNode *stack = new ZStackNode(ZStackProps());
+        stack->addChild(new Probe("observation-ground", 600));
+        stack->addChild(new Probe("observation-foreground", 80));
+        this->viewport.addChild(stack);
+      }
+      else
+        this->viewport.addChild(new Probe("observation-content", 600));
+      this->controller.rootNode_ = &this->viewport;
+      this->window.scenePlatformController_ = &this->controller;
+      this->window.requestInvalidate();
+      this->window.flushInvalidate();
+      LOKA_VERIFY(this->last().viewports() == 0);
+    }
+    ~PresentFixture()
+    {
+      this->controller.rootNode_ = 0;
+      this->window.scenePlatformController_ = 0;
+      this->controller.clearControls();
+    }
+    const ToolboxPresentObservation &last() const
+    {
+      return this->controller.debugStatsForTesting().lastPresentObservation;
+    }
+    const ToolboxPresentObservation &lastMoved() const
+    {
+      return this->controller.debugStatsForTesting().lastMovedPresentObservation;
+    }
+    void scroll(int dy)
+    {
+      this->origin.set(Frame(0, dy, 0, 0));
+      this->window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      this->window.flushInvalidate();
+    }
+  };
+  void presentReasons()
+  {
+    PresentFixture f;
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_TEXT_RELAYOUT);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().reasons()
+                == ((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_TEXT_RELAYOUT)));
+    LOKA_VERIFY(f.last().reasonNames() == "layout_dirty+text_relayout");
+  }
+  void presentMove()
+  {
+    PresentFixture f;
+    f.scroll(17);
+    // One vertical layout move, only layout reason, empty entry damage, no units.
+    // Native-control paint suppression is the remaining unproved capability.
+    LOKA_VERIFY(f.last().dy() == 17);
+    LOKA_VERIFY(f.last().viewports() == 1);
+    LOKA_VERIFY(f.last().verdict() == TOOLBOX_PRESENT_ERASE_ALL);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    // #1513 republishes the viewport and can present a second, unmoved full layout.
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().viewports() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
+    LOKA_VERIFY(f.lastMoved().dy() == 17);
+    LOKA_VERIFY(f.lastMoved().viewports() == 1);
+    f.scroll(29);
+    LOKA_VERIFY(f.last().dy() == 12);
+    // Native input has already changed appliedValue; placedOrigin must still see the move.
+    f.controller.scrollControl(0).appliedValue = 45;
+    f.scroll(45);
+    LOKA_VERIFY(f.last().dy() == 16);
+    PresentFixture initiallyScrolled(false, 9);
+    initiallyScrolled.scroll(26);
+    LOKA_VERIFY(initiallyScrolled.last().dy() == 17);
+  }
+  void presentSiblingMove()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    MutableState<Frame> firstOrigin((Frame()));
+    MutableState<Frame> secondOrigin((Frame()));
+    NodeState<Frame> firstState(&firstOrigin, 0), secondState(&secondOrigin, 0);
+    StackNode column(Column().gap(0).props);
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      BoxNode *box = new BoxNode(Box().size(180, 100).props);
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(i ? secondState : firstState));
+      scroll->addChild(new Probe("sibling-scroll-content", 600));
+      box->addChild(scroll);
+      column.addChild(box);
+    }
+    controller.rootNode_ = &column;
+    window.scenePlatformController_ = &controller;
+    window.requestInvalidate();
+    window.flushInvalidate();
+    const Rect first = controller.viewportScroll().contentRect;
+    secondOrigin.set(Frame(0, 17, 0, 0));
+    window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    window.flushInvalidate();
+    const ToolboxPresentObservation &second = controller.debugStatsForTesting().lastPresentObservation;
+    LOKA_VERIFY(second.viewports() == 1 && second.dy() == 17);
+    LOKA_VERIFY(second.viewport().top >= first.bottom);
+    firstOrigin.set(Frame(0, 17, 0, 0));
+    secondOrigin.set(Frame(0, 34, 0, 0));
+    window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    window.flushInvalidate();
+    const ToolboxPresentObservation &both = controller.debugStatsForTesting().lastPresentObservation;
+    LOKA_VERIFY(both.viewports() == 2 && both.dy() == 17);
+    LOKA_VERIFY(both.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
+    controller.rootNode_ = 0;
+    window.scenePlatformController_ = 0;
+    controller.clearControls();
+  }
+  void presentForeground()
+  {
+    PresentFixture f(true);
+    f.scroll(17);
+    LOKA_VERIFY(f.last().dy() == 17 && f.last().viewports() == 1);
+    LOKA_VERIFY(f.last().foregroundUnits() >= 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_FOREGROUND_UNITS);
+  }
+  void presentDamage(bool flush)
+  {
+    PresentFixture f;
+    const Rect local = {25, 31, 70, 93};
+    Rect global = local;
+    f.window.port.portBits.bounds.left = -11;
+    f.window.port.portBits.bounds.top = -19;
+    OffsetRect(&global, 11, 19);
+    // A nonrectangular OS region still has an observation bbox, although it
+    // cannot provide the rectangular erased-pass capture evidence.
+    Region region = {sizeof(Region) + 2, global};
+    Region *pointer = &region;
+    f.window.port.updateRgn = &pointer;
+    f.window.port.native.update.push_back(local);
+    if (flush)
+      f.window.drawForFlush();
+    else
+      f.window.drawForUpdate();
+    const Rect damage = f.last().damage();
+    LOKA_VERIFY(damage.top == local.top && damage.left == local.left && damage.bottom == local.bottom
+                && damage.right == local.right);
+    const Rect emptyBounds[] = {{0, 0, 0, 0}, {20, 10, 40, 10}, {40, 10, 20, 30}};
+    for (unsigned i = 0; i < sizeof(emptyBounds) / sizeof(emptyBounds[0]); ++i)
+    {
+      region.rgnBBox = emptyBounds[i];
+      if (flush)
+        f.window.drawForFlush();
+      else
+        f.window.drawForUpdate();
+      const Rect emptyDamage = f.last().damage();
+      LOKA_VERIFY(emptyDamage.top == 0 && emptyDamage.left == 0 && emptyDamage.bottom == 0 && emptyDamage.right == 0);
+    }
+    f.window.port.updateRgn = 0;
+  }
+  void presentReset()
+  {
+    PresentFixture f;
+    f.scroll(17);
+    f.window.drawForFlush();
+    LOKA_VERIFY(f.last().reasons() == 0);
+    LOKA_VERIFY(f.last().viewports() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
+    f.controller.resetDebugStats();
+    LOKA_VERIFY(f.lastMoved().viewports() == 0);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().reasons() == 0);
+    // The no-root early exit must consume its interval too.
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
+    f.controller.rootNode_ = 0;
+    f.window.flushInvalidate();
+    f.controller.rootNode_ = &f.viewport;
+    f.window.drawForFlush();
+    LOKA_VERIFY(f.last().reasons() == 0);
+  }
+  void presentOrder()
+  {
+    const Rect viewport = {10, 10, 100, 100};
+    const Rect outside = {0, 0, 200, 200};
+    ToolboxPresentObservation observation;
+    observation.noteReason(TOOLBOX_FULL_DRAW_UNKNOWN);
+    observation.noteDamage(outside);
+    observation.complete(1);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
+    observation.reset();
+    observation.noteViewportMove(viewport, 2, 3);
+    observation.noteViewportMove(viewport, 0, 4);
+    observation.complete(1);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
+    observation.reset();
+    observation.noteViewportMove(viewport, 2, 3);
+    observation.complete(1);
+    LOKA_VERIFY(observation.viewports() == 1);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
+    observation.reset();
+    observation.noteViewportMove(viewport, 0, 3);
+    observation.complete(1);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
+    observation.reset();
+    observation.noteViewportMove(viewport, 0, 3);
+    observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    observation.noteDamage(outside);
+    observation.complete(1);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT);
+    observation.reset();
+    {
+      ToolboxPresentObservation::Interval interval(observation);
+      observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      observation.complete(0);
+      observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
+    }
+    observation.complete(0);
+    LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_CHILD_DIRTY));
+  }
   void clippedUnitExtent()
   {
     ToolboxWindow window;
@@ -1599,7 +1829,14 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
-  const char *names[] = {"ClipFrameProjection",
+  const char *names[] = {"PresentReasons",
+                         "PresentMove",
+                         "PresentForeground",
+                         "PresentUpdateDamage",
+                         "PresentFlushDamage",
+                         "PresentReset",
+                         "PresentOrder",
+                         "ClipFrameProjection",
                          "BandGeometry",
                          "BandLifetime",
                          "BandDelivery",
@@ -1646,6 +1883,23 @@ int main(int argc, char **argv)
   }
   if (std::strcmp(argv[1], "ClipFrameProjection") == 0)
     clipFrameProjection();
+  else if (std::strcmp(argv[1], "PresentReasons") == 0)
+    presentReasons();
+  else if (std::strcmp(argv[1], "PresentMove") == 0)
+  {
+    presentMove();
+    presentSiblingMove();
+  }
+  else if (std::strcmp(argv[1], "PresentForeground") == 0)
+    presentForeground();
+  else if (std::strcmp(argv[1], "PresentUpdateDamage") == 0)
+    presentDamage(false);
+  else if (std::strcmp(argv[1], "PresentFlushDamage") == 0)
+    presentDamage(true);
+  else if (std::strcmp(argv[1], "PresentReset") == 0)
+    presentReset();
+  else if (std::strcmp(argv[1], "PresentOrder") == 0)
+    presentOrder();
   else if (std::strcmp(argv[1], "StaticNoRequests") == 0)
     staticNoRequests();
   else if (std::strcmp(argv[1], "StaticRefusedReplay") == 0)

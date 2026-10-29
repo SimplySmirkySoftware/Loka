@@ -40,11 +40,13 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
   const ToolboxScrollViewEdges edges = ToolboxScrollViewFrameEdges(seat, portEdges, hasPort);
   const int childWidth = ToolboxScrollViewChildWidth(seat, edges);
   loka::core::Managed<loka::app::layout::StackSpans> spans;
+  bool previouslyPlaced = false;
   for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
   {
     ViewportScrollBarBinding &binding = this->scrollBarLedger_.viewportScrollBars_[i];
     if (binding.scrollView != scrollView)
       continue;
+    previouslyPlaced = true;
     spans = binding.spans;
     // A resized port can change contact while the stored seat stays fixed.
     if (spans.isValid()
@@ -244,8 +246,18 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
     for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
       if (this->scrollBarLedger_.viewportScrollBars_[i].scrollView == scrollView)
       {
-        this->scrollBarLedger_.viewportScrollBars_[i].spans = spans;
-        this->scrollBarLedger_.viewportScrollBars_[i].contentRect = contentRect;
+        ViewportScrollBarBinding &row = this->scrollBarLedger_.viewportScrollBars_[i];
+        // A newly admitted row establishes its origin without claiming a pixel move.
+        if (previouslyPlaced)
+        {
+          const int dx = horizontal.clampedOffset - row.placedOrigin.x;
+          const int dy = translation - row.placedOrigin.y;
+          if (dx != 0 || dy != 0)
+            this->observation_.noteViewportMove(contentRect, dx, dy);
+        }
+        row.placedOrigin = loka::core::Frame(horizontal.clampedOffset, translation, 0, 0);
+        row.spans = spans;
+        row.contentRect = contentRect;
         break;
       }
     // Publish only after successful layout and after the scope has popped.

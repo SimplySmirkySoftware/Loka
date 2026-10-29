@@ -677,7 +677,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxScrollRequestTests ${_scroll_request_case})
   endforeach()
 
-  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
+  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
     add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
   endforeach()
 
@@ -898,7 +898,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxZStackUnitTests)
   set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
+  foreach(_order_case PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 
