@@ -3,6 +3,9 @@
 #include "support/RailTextLayoutFixture.hpp"
 
 #include <cassert>
+#include <climits>
+#include <string>
+#include "support/LokaAllocFailure.hpp"
 
 #include "app/nodes/Text.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
@@ -71,9 +74,9 @@ void testNullTextLayoutTruncationModesProduceDifferentWidths()
   platform.projectLayoutForTesting(&clipText, state);
   platform.projectLayoutForTesting(&ellipsisText, state);
 
-  assert(measurementFor(noneText).width() == 40);
-  assert(measurementFor(clipText).width() == 22);
-  assert(measurementFor(ellipsisText).width() == 20);
+  LOKA_VERIFY(measurementFor(noneText).width() == 40);
+  LOKA_VERIFY(measurementFor(clipText).width() == 22);
+  LOKA_VERIFY(measurementFor(ellipsisText).width() == 20);
   // Characterize the existing ellipsis snap independently of role resolution.
   const loka::app::TextLineRecord rawLine = {loka::app::TextLineMetrics(16), 100, 0, 0};
   LOKA_VERIFY(loka::app::SyntheticTextLineWidth(
@@ -124,12 +127,12 @@ void testNullTextLayoutHonorsExplicitBreaksAndForceBreaksLongWords()
 
   (void)breakResultY;
   assert(breakResultY == 24);
-  assert(measurementFor(breakText).width() == 4);
-  assert(measurementFor(breakText).lineCount() == 2);
+  LOKA_VERIFY(measurementFor(breakText).width() == 4);
+  LOKA_VERIFY(measurementFor(breakText).lineCount() == 2);
   (void)longWordResultY;
   assert(longWordResultY == 24);
-  assert(measurementFor(longWordText).width() == 16);
-  assert(measurementFor(longWordText).lineCount() == 2);
+  LOKA_VERIFY(measurementFor(longWordText).width() == 16);
+  LOKA_VERIFY(measurementFor(longWordText).lineCount() == 2);
 }
 
 void testNullTextLayoutUsesFixedAdvancePerCodePoint()
@@ -143,8 +146,8 @@ void testNullTextLayoutUsesFixedAdvancePerCodePoint()
 
   platform.projectLayoutForTesting(&text, state);
 
-  assert(measurementFor(text).width() == 12);
-  assert(measurementFor(text).lineCount() == 1);
+  LOKA_VERIFY(measurementFor(text).width() == 12);
+  LOKA_VERIFY(measurementFor(text).lineCount() == 1);
 }
 
 void testNullTextLayoutPreservesNegativeStartY()
@@ -160,7 +163,7 @@ void testNullTextLayoutPreservesNegativeStartY()
 
   (void)resultY;
   assert(resultY == -8);
-  assert(measurementFor(text).height() == 12);
+  LOKA_VERIFY(measurementFor(text).height() == 12);
 }
 
 void testNullTextLayoutWrapsAtPositiveSubGlyphWidth()
@@ -183,10 +186,10 @@ void testNullTextLayoutWrapsAtPositiveSubGlyphWidth()
   assert(wordResultY == 24);
   (void)characterResultY;
   assert(characterResultY == 24);
-  assert(measurementFor(wordText).width() == 4);
-  assert(measurementFor(characterText).width() == 4);
-  assert(measurementFor(wordText).lineCount() == 2);
-  assert(measurementFor(characterText).lineCount() == 2);
+  LOKA_VERIFY(measurementFor(wordText).width() == 4);
+  LOKA_VERIFY(measurementFor(characterText).width() == 4);
+  LOKA_VERIFY(measurementFor(wordText).lineCount() == 2);
+  LOKA_VERIFY(measurementFor(characterText).lineCount() == 2);
 }
 
 void testNullTextLayoutWordWrapMeasuresStandaloneSpaces()
@@ -203,8 +206,8 @@ void testNullTextLayoutWordWrapMeasuresStandaloneSpaces()
 
   (void)resultY;
   assert(resultY == 24);
-  assert(measurementFor(text).width() == 8);
-  assert(measurementFor(text).lineCount() == 2);
+  LOKA_VERIFY(measurementFor(text).width() == 8);
+  LOKA_VERIFY(measurementFor(text).lineCount() == 2);
 }
 
 void testNullTextSmallLabelMetrics()
@@ -227,4 +230,109 @@ void testNullTextSmallLabelMetrics()
   testing::NullTextMeasurementAccess::failMeasure(1);
   const bool measured = MeasureNullText(SmallLabel, BlockStyle(), 0, state, refused);
   LOKA_VERIFY(!measured && refused.height() == 9);
+}
+
+void testNullTextEllipsisBelowOneAdvanceIsEmpty()
+{
+  using namespace loka::app;
+  NullScenePlatformController platform;
+  TextNode glyph(Text("x").props);
+  scene::LayoutState state;
+  platform.projectLayoutForTesting(&glyph, state);
+  const int advance = measurementFor(glyph).width();
+  LOKA_VERIFY(advance == 4);
+  for (short width = 1; width <= advance; ++width)
+  {
+    TextProps props("abcdefghij");
+    props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode text(props);
+    state.width = width;
+    platform.projectLayoutForTesting(&text, state);
+    const NullTextMeasurement &measurement = measurementFor(text);
+    LOKA_VERIFY(measurement.lineCount() == 1);
+    LOKA_VERIFY(measurement.height() == 12);
+    LOKA_VERIFY(measurement.width() == (width < advance ? 0 : advance));
+    LOKA_VERIFY(testing::NullTextMeasurementAccess::line(measurement, 0).width == (width < advance ? 0 : advance));
+    const SyntheticTextWidthSource source(props.text_->get(), props.resolvedTextStyle());
+    const TextLineBreaker lines(source, props.blockStyle_, width, props.resolvedTextStyle());
+    loka::core::Frame extent;
+    LOKA_VERIFY(SyntheticTextExtent(lines, props.blockStyle_, width, extent));
+    LOKA_VERIFY(extent.width == measurement.width());
+  }
+  TextProps props("abcdefghij");
+  props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  TextNode unconstrained(props);
+  state.width = 0;
+  platform.projectLayoutForTesting(&unconstrained, state);
+  LOKA_VERIFY(measurementFor(unconstrained).width() == 40);
+}
+
+void testNullTextNaturalWidthUsesCurrentValueAndStyle()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NullScenePlatformController platform;
+  TextNode plain(Text("abcd").props);
+  short width = -1;
+  LOKA_VERIFY(platform.queryNaturalWidth(&plain, width));
+  LOKA_VERIFY(width == 16);
+  scene::LayoutState state;
+  state.width = 100;
+  platform.projectLayoutForTesting(&plain, state);
+  LOKA_VERIFY(width == measurementFor(plain).width());
+  short repeated = -1;
+  LOKA_VERIFY(platform.queryNaturalWidth(&plain, repeated));
+  LOKA_VERIFY(repeated == width);
+
+  MutableState<String> value(String::Literal("ab"));
+  MutableState<TextStyle> style((TextStyle()));
+  TextProps props(&value);
+  props.textStyleState_ = &style;
+  TextNode live(props);
+  LOKA_VERIFY(platform.queryNaturalWidth(&live, width));
+  LOKA_VERIFY(width == 8);
+  value.set(String::Literal("abcdef"));
+  LOKA_VERIFY(platform.queryNaturalWidth(&live, width));
+  LOKA_VERIFY(width == 24);
+  style.set(SmallLabel);
+  LOKA_VERIFY(platform.queryNaturalWidth(&live, width));
+  LOKA_VERIFY(width == 18);
+  platform.projectLayoutForTesting(&live, state);
+  LOKA_VERIFY(width == measurementFor(live).width());
+  TextNode unicode(Text(String::Utf8("\xC3\xA9\xC3\xA9", 4)).props);
+  LOKA_VERIFY(platform.queryNaturalWidth(&unicode, width));
+  LOKA_VERIFY(width == 8);
+}
+
+void testNullTextNaturalWidthDeclinesWithoutWriting()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  NullScenePlatformController platform;
+  const char *values[] = {"", "a\nb", "a\rb", "a\r\nb", "\n"};
+  for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); ++i)
+  {
+    TextNode text(Text(values[i]).props);
+    short width = 123;
+    LOKA_VERIFY(!platform.queryNaturalWidth(&text, width));
+    LOKA_VERIFY(width == 123);
+  }
+  TextNode absent((TextProps()));
+  short width = 123;
+  LOKA_VERIFY(!platform.queryNaturalWidth(&absent, width));
+  LOKA_VERIFY(width == 123);
+  const std::string large(SHRT_MAX / 4 + 1, 'x');
+  TextNode saturated(Text(String::Utf8(large.c_str(), large.size())).props);
+  LOKA_VERIFY(!platform.queryNaturalWidth(&saturated, width));
+  LOKA_VERIFY(width == 123);
+  const std::string fits(SHRT_MAX / 4, 'x');
+  TextNode representable(Text(String::Utf8(fits.c_str(), fits.size())).props);
+  LOKA_VERIFY(platform.queryNaturalWidth(&representable, width));
+  LOKA_VERIFY(width == SHRT_MAX / 4 * 4);
+  width = 123;
+  loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 1);
+  const bool answered = platform.queryNaturalWidth(&representable, width);
+  loka::core::testing::allowLokaAllocRaw();
+  LOKA_VERIFY(!answered);
+  LOKA_VERIFY(width == 123);
 }

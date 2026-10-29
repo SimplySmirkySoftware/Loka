@@ -1525,3 +1525,7 @@ LOKA_TEST(testScrollRequestVisitDestinationFact)
 LOKA_TEST(testScrollRequestVisitFinishSettle)
 LOKA_TEST(testScrollRequestVisitFactAfterHelper)
 LOKA_TEST(testScrollRequestVisitTwoNodes)
+
+LOKA_TEST(testNullTextEllipsisBelowOneAdvanceIsEmpty)
+LOKA_TEST(testNullTextNaturalWidthUsesCurrentValueAndStyle)
+LOKA_TEST(testNullTextNaturalWidthDeclinesWithoutWriting)
