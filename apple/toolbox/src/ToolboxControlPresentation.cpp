@@ -8,8 +8,9 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     {
       continue;
     }
-    if (rect.right < binding.rect.left || rect.left > binding.rect.right || rect.bottom < binding.rect.top
-        || rect.top > binding.rect.bottom)
+    Rect visible;
+    if (!binding.placement.queryVisible(visible) || rect.right < visible.left || rect.left > visible.right
+        || rect.bottom < visible.top || rect.top > visible.bottom)
     {
       continue;
     }
@@ -24,8 +25,9 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     {
       continue;
     }
-    if (rect.right < binding.rect.left || rect.left > binding.rect.right || rect.bottom < binding.rect.top
-        || rect.top > binding.rect.bottom)
+    Rect visible;
+    if (!binding.placement.queryVisible(visible) || rect.right < visible.left || rect.left > visible.right
+        || rect.bottom < visible.top || rect.top > visible.bottom)
     {
       continue;
     }
@@ -45,7 +47,8 @@ void ToolboxScenePlatformController::drawScrollBarControl(short id)
       return;
     GrafPtr port;
     GetPort(&port);
-    if (!RectInRgn(&row.rect, port->clipRgn))
+    Rect visible;
+    if (!row.placement.queryVisible(visible) || !RectInRgn(&visible, port->clipRgn))
       return;
     this->drawControl(row.control);
     return;

@@ -40,6 +40,10 @@ namespace loka
       {
         return context.restores_;
       }
+      static bool visibleLines(const MacTextEditorContext &context, unsigned &lines)
+      {
+        return context.queryVisibleLines(lines);
+      }
     };
   } // namespace testing
 } // namespace loka
@@ -893,6 +897,94 @@ void testMacTextEditorPageAfterFailedReconciliation()
     LOKA_VERIFY([[f.view string] length] == 80 * 5 - 1);
   }
   loka::core::testing::allowLokaAllocRaw();
+}
+
+namespace
+{
+  /** Rebind the editor to another buffer without the props-applied entry, so
+      no repair runs before the next take, then deliver the posted command
+      through the native selection entry, which repairs nothing itself. */
+  void deliverThroughSelection(Fixture &f, loka::testing::TextBufferFixture &other)
+  {
+    LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+        &f.node, TextEditor(other, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    loka::app::testing::SettleTraceCapture<LineCursor>::clear();
+    {
+      StateTrackerGuard guard(&f.tracker);
+      LOKA_VERIFY(f.commands.post(EditorCommand(EditorCommand::PAGE_DOWN)) == POST_ACCEPTED);
+    }
+    // Offset 5 is row 1 of the committed "abcd" rows; the row ids of two fresh
+    // buffers filled in the same order coincide, so the caret fact moves there.
+    [f.view setSelectedRange:NSMakeRange(5, 0)];
+  }
+} // namespace
+
+void testMacTextEditorPageReconciliationFailsInsideTake()
+{
+  // One page command whose take reaches apply over a stale projection: the
+  // editor was rebound to a 1,000-row buffer of the same text, and the
+  // row-buffer allocation is refused once. The take's own reconciliation
+  // fails to admit the new capacity, so the take is refused and the native
+  // editor closes for the restore; before the fix the refusal converted the
+  // unavailable phase into the queued one ahead of the check, the take went
+  // on, and a second reconciliation granted it (#1617).
+  typedef loka::app::testing::SettleTrace<EditorCommand, LineCursor> Trace;
+  loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+  {
+    Fixture f(80);
+    LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+        &f.node, TextEditor(f.lines, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+    f.context->onPropsApplied();
+    loka::testing::TextBufferFixture other;
+    LOKA_VERIFY(other.attach(&f.tracker, 1000, 8192) == ATTACH_OK);
+    for (unsigned short i = 0; i < 80; ++i)
+      LOKA_VERIFY(other.insert(i, String("abcd")) == EDIT_OK);
+    LOKA_VERIFY(other.at(1).id == f.lines.at(1).id);
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 1);
+    deliverThroughSelection(f, other);
+    Trace &trace = Trace::instance();
+    LOKA_VERIFY(trace.size() == 1 && trace.at(0).count == 1);
+    LOKA_VERIFY(trace.at(0).takes[0].kind() == Reply<EditorCommand>::REFUSED);
+    LOKA_VERIFY(trace.at(0).takes[0].reason() == EDITOR_UNAVAILABLE);
+    LOKA_VERIFY(f.cursor.state()->get() == LineCursor(other.at(1).id, 0));
+    LOKA_VERIFY(f.commands.pending() == 0);
+    LOKA_VERIFY(![f.view isEditable]);
+    loka::core::testing::failLokaAllocRaw("TextEditor", "Rows", 0);
+    for (int turn = 0; turn < 20 && ![f.view isEditable]; ++turn)
+      f.turn();
+    LOKA_VERIFY([f.view isEditable]);
+    LOKA_VERIFY([[f.view string] length] == 80 * 5 - 1);
+  }
+  loka::core::testing::allowLokaAllocRaw();
+}
+
+void testMacTextEditorPageGeometryFollowsReconciliation()
+{
+  // The same stale take, reconciled successfully: the editor shows two rows
+  // when the take begins and eighty once reconciled. The page target must be
+  // measured over the reconciled text, so the caret lands a full viewport
+  // down, not two rows down; a command apply that measured before its
+  // reconciliation would page by the stale two rows (#1617).
+  typedef loka::app::testing::SettleTrace<EditorCommand, LineCursor> Trace;
+  Fixture f(2);
+  LOKA_VERIFY((NodePropsApplier<TextEditorNode, TextEditorProps>::apply(
+      &f.node, TextEditor(f.lines, f.cursor).moveCaretTo(f.queue).command(f.commands).props)));
+  f.context->onPropsApplied();
+  loka::testing::TextBufferFixture other;
+  LOKA_VERIFY(other.attach(&f.tracker, 256, 8192) == ATTACH_OK);
+  for (unsigned short i = 0; i < 80; ++i)
+    LOKA_VERIFY(other.insert(i, String("abcd")) == EDIT_OK);
+  LOKA_VERIFY(other.at(1).id == f.lines.at(1).id);
+  deliverThroughSelection(f, other);
+  Trace &trace = Trace::instance();
+  LOKA_VERIFY(trace.size() == 1 && trace.at(0).count == 1);
+  LOKA_VERIFY(trace.at(0).takes[0].kind() == Reply<EditorCommand>::GRANTED);
+  LOKA_VERIFY([[f.view string] length] == 80 * 5 - 1);
+  unsigned visible = 0;
+  LOKA_VERIFY(Access::visibleLines(*f.context, visible) && visible > 2);
+  const LineCursor after = f.cursor.state()->get();
+  LOKA_VERIFY(after.line == other.at(static_cast<unsigned short>(1 + visible)).id);
+  LOKA_VERIFY(after != LineCursor(other.at(3).id, 0));
 }
 
 void testMacTextEditorPageEmptyLine()

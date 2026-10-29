@@ -15,6 +15,7 @@ void testNullLayoutOnChangeUsesRegisteredTraversal();
 
 void testProjectionMeasurementChannelAndUnitAdmission();
 void testProjectionFrameKindsAndClipAdmission();
+void testProjectionRebasedClip();
 
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack();
 

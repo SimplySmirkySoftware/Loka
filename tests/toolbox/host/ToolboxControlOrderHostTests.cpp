@@ -184,7 +184,8 @@ namespace
         LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
         LOKA_VERIFY(control->visible && controller.buttonControls_[0].label == "First");
         // The retained control is still on screen, so the press door still reaches it.
-        const Rect rect = controller.buttonControls_[0].rect;
+        Rect rect;
+        LOKA_VERIFY(controller.buttonControls_[0].placement.queryVisible(rect));
         const Point inside = {static_cast<short>((rect.top + rect.bottom) / 2),
                               static_cast<short>((rect.left + rect.right) / 2)};
         const unsigned before = firstPresses();

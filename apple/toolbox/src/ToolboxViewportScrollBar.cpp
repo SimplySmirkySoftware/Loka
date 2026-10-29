@@ -80,7 +80,7 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
   {
     ApplyViewportScrollBarValue(native, metrics, this->paintSuppressClipRgn_);
     if (native && !EmptyRect(&movedFrom))
-      this->validateOwnControlMove(movedFrom, native->rect);
+      this->validateOwnControlMove(movedFrom, native->placement.full());
   }
   if (native)
     y = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
@@ -101,7 +101,7 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
     {
       ApplyViewportScrollBarValue(native, horizontal, this->paintSuppressClipRgn_);
       if (native && !EmptyRect(&movedFrom))
-        this->validateOwnControlMove(movedFrom, native->rect);
+        this->validateOwnControlMove(movedFrom, native->placement.full());
     }
     if (native)
       x = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);

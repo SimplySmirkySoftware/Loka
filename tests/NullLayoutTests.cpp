@@ -518,6 +518,93 @@ void testProjectionFrameKindsAndClipAdmission()
   LOKA_VERIFY(!scopes.current().channel);
 }
 
+void testProjectionRebasedClip()
+{
+  using namespace loka::app::scene;
+  using loka::core::Frame;
+  int rootParent = 0;
+  int nativeParent = 0;
+  ProjectionParentScopeStack scopes(&rootParent);
+  const ProjectionParentScope root = scopes.current();
+  ProjectionParentScope rebased;
+  LOKA_VERIFY(scopes.current().deriveScrolled(&nativeParent, 30, 40, Frame(3, 4, 80, 90), rebased));
+  LOKA_VERIFY(scopes.pushRebasedClip(rebased));
+  LOKA_VERIFY(scopes.currentIsClip());
+  LOKA_VERIFY(scopes.current().translationX == -30 && scopes.current().translationY == -40);
+  LOKA_VERIFY(scopes.current().nativeParent == &nativeParent);
+  LOKA_VERIFY(scopes.current().clipRect == rebased.clipRect);
+  LOKA_VERIFY(!scopes.current().channel);
+  LOKA_VERIFY(!scopes.insideViewport() && !scopes.insideUnit());
+  LayoutState content = makeState(50, 60, 10, 20);
+  LayoutState projected;
+  LOKA_VERIFY(scopes.current().project(content, projected));
+  LOKA_VERIFY(projected.x == 20 && projected.y == 20);
+  int restoredY = 0;
+  LOKA_VERIFY(scopes.current().restoreContentY(projected.y, restoredY));
+  LOKA_VERIFY(restoredY == content.y);
+  LOKA_VERIFY(scopes.pop());
+  LOKA_VERIFY(!scopes.currentIsClip());
+  LOKA_VERIFY(scopes.current().nativeParent == root.nativeParent);
+  LOKA_VERIFY(scopes.current().clipRect == root.clipRect);
+  LOKA_VERIFY(scopes.current().channel == root.channel);
+  LOKA_VERIFY(scopes.current().translationX == root.translationX && scopes.current().translationY == root.translationY);
+  {
+    ProjectionClipScopeGuard guard(scopes, rebased);
+    LOKA_VERIFY(guard.isActive());
+    LOKA_VERIFY(scopes.currentIsClip());
+    LOKA_VERIFY(scopes.current().translationX == root.translationX
+                && scopes.current().translationY == root.translationY);
+  }
+  ProjectionParentScope viewport(&rootParent, -7, -11, Frame(1, 2, 100, 110));
+  {
+    ProjectionViewportScopeGuard viewportGuard(scopes, viewport);
+    LOKA_VERIFY(viewportGuard.isActive());
+    const ProjectionParentScope parent = scopes.current();
+    LOKA_VERIFY(parent.channel);
+    LOKA_VERIFY(scopes.current().deriveScrolled(&nativeParent, 30, 40, Frame(3, 4, 80, 90), rebased));
+    // The push inherits measurement itself, independently of the input channel.
+    rebased.channel = 0;
+    {
+      ProjectionRebasedClipScopeGuard guard(scopes, rebased);
+      LOKA_VERIFY(guard.isActive());
+      LOKA_VERIFY(scopes.currentIsClip());
+      LOKA_VERIFY(scopes.current().translationX == -37 && scopes.current().translationY == -51);
+      LOKA_VERIFY(scopes.current().channel == parent.channel);
+      LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+      LOKA_VERIFY(scopes.current().nativeParent == &nativeParent);
+      LOKA_VERIFY(scopes.current().clipRect == rebased.clipRect);
+      while (scopes.admitsClip())
+        LOKA_VERIFY(scopes.pushRebasedClip(rebased));
+      LOKA_VERIFY(scopes.activeDepth() == ProjectionParentScopeStack::MAX_ACTIVE_SCOPES - 2);
+      const ProjectionParentScope full = scopes.current();
+      LOKA_VERIFY(!scopes.pushClip(rebased));
+      LOKA_VERIFY(!scopes.pushRebasedClip(rebased));
+      {
+        ProjectionRebasedClipScopeGuard refused(scopes, rebased);
+        LOKA_VERIFY(!refused.isActive());
+      }
+      LOKA_VERIFY(scopes.activeDepth() == ProjectionParentScopeStack::MAX_ACTIVE_SCOPES - 2);
+      LOKA_VERIFY(scopes.currentIsClip());
+      LOKA_VERIFY(scopes.current().nativeParent == full.nativeParent);
+      LOKA_VERIFY(scopes.current().clipRect == full.clipRect);
+      LOKA_VERIFY(scopes.current().channel == full.channel);
+      LOKA_VERIFY(scopes.current().translationX == full.translationX
+                  && scopes.current().translationY == full.translationY);
+      while (scopes.activeDepth() > 2)
+        LOKA_VERIFY(scopes.pop());
+    }
+    LOKA_VERIFY(scopes.activeDepth() == 1);
+    LOKA_VERIFY(!scopes.currentIsClip());
+    LOKA_VERIFY(scopes.insideViewport() && !scopes.insideUnit());
+    LOKA_VERIFY(scopes.current().nativeParent == parent.nativeParent);
+    LOKA_VERIFY(scopes.current().clipRect == parent.clipRect);
+    LOKA_VERIFY(scopes.current().channel == parent.channel);
+    LOKA_VERIFY(scopes.current().translationX == parent.translationX
+                && scopes.current().translationY == parent.translationY);
+  }
+  LOKA_VERIFY(scopes.activeDepth() == 0);
+}
+
 void testNullLayoutWidthOnlyBoxUnderRootAndZStack()
 {
   NullScenePlatformController platform;
