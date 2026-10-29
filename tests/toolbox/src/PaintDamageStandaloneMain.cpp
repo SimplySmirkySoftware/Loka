@@ -4178,25 +4178,30 @@ namespace
     {
       FindClippedEdit edit;
       enumerateAttachedResidents(this->edit_, edit);
+      SelectWindow(native.window());
+      native.drawForFlush();
       ToolboxScenePlatformController::EditTextGeometry geometry;
       if (!edit.context || !controller.queryEditTextGeometryForTesting(edit.context, geometry))
       {
+        std::fprintf(this->log_, "edittext-clip-edge setup=geometry context=%d\r", edit.context ? 1 : 0);
         this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
         return;
       }
-      SelectWindow(native.window());
-      native.drawForFlush();
       ToolboxPortScope port(native.window());
       const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
       const PaintAnswer paint = edit.context->queryPaintDamage(query);
       const Rect chrome = edit.context->chromeRect();
-      Rect visible = geometry.view;
+      // A clean paint answer owes zero damage; it is not a visibility query.
+      const Rect visible = geometry.placement.visible();
       if (paint.kind != PAINT_ANSWER_EXACT)
       {
+        std::fprintf(this->log_,
+                     "edittext-clip-edge setup=paint kind=%d reason=%d\r",
+                     static_cast<int>(paint.kind),
+                     static_cast<int>(paint.reason));
         this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
         return;
       }
-      visible.right = static_cast<short>(paint.damage.x + paint.damage.width);
       const bool crosses = visible.right > visible.left && visible.right < geometry.view.right;
       Rect frame = chrome;
       InsetRect(&frame, -2, -2);
@@ -4211,6 +4216,19 @@ namespace
       const bool captured = topBefore.ready() && bottomBefore.ready() && leftBefore.ready() && rightBefore.ready();
       if (!crosses || !captured)
       {
+        std::fprintf(
+            this->log_,
+            "edittext-clip-edge setup=crosses crosses=%d captured=%d view=(%d,%d,%d,%d) damage=(%d,%d,%d,%d)\r",
+            crosses,
+            captured,
+            geometry.view.left,
+            geometry.view.top,
+            geometry.view.right,
+            geometry.view.bottom,
+            paint.damage.x,
+            paint.damage.y,
+            paint.damage.width,
+            paint.damage.height);
         this->recordArm("edittext-clip-edge", false, BOUNDS_SHOW);
         return;
       }

@@ -506,11 +506,12 @@ public:
       its bound State; calling ensureEditTextControl would repair the value and
       make the probe non-discriminating. */
   bool queryEditTextValueForTesting(ToolboxEditTextContext *ownerContext, std::string &out) const;
-  /** Native TE geometry, for the viewport dirty-replay contract pin. */
+  /** Native TE geometry and last applied interaction placement, without re-ensuring. */
   struct EditTextGeometry
   {
     Rect destination;
     Rect view;
+    ToolboxNativePlacement placement;
   };
   bool queryEditTextGeometryForTesting(ToolboxEditTextContext *ownerContext, EditTextGeometry &out) const;
 #endif

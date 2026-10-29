@@ -1170,6 +1170,7 @@ bool ToolboxScenePlatformController::queryEditTextGeometryForTesting(
     return false;
   out.destination = (**te).destRect;
   out.view = (**te).viewRect;
+  out.placement = this->editControls_[index].placement;
   return true;
 }
 
