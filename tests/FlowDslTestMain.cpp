@@ -87,6 +87,7 @@
 #include "Win32LiveResizeTests.hpp"
 #include "Win32ScrollViewTests.hpp"
 #include "Win32ZStackUnitTests.hpp"
+#include "Win32ClipBoxTests.hpp"
 #include "Win32InputDoorTests.hpp"
 #include "Win32EditTextBridgeTests.hpp"
 #include "Win32FilePathTests.hpp"

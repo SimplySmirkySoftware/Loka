@@ -1,3 +1,4 @@
+#include "context/Win32ClipBoxContext.hpp"
 #include "context/Win32ZStackContext.hpp"
 #include "context/Win32CardBandContext.hpp"
 #include "app/nodes/controls/Card.hpp"
@@ -129,8 +130,10 @@ void testWin32RectSurfaceTicksRepaintOnlySurface()
   DestroyWindow(root);
 }
 
-static void
-exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false, bool paintBeforeApply = false)
+static void exercisePaintOnlyChangeUnderScrollView(bool refused,
+                                                   bool removeSprites = false,
+                                                   bool paintBeforeApply = false,
+                                                   bool clipped = false)
 {
   using namespace loka::app;
   using namespace loka::app::scene;
@@ -168,7 +171,15 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
   VStack content = VStack() << RectSurface(&a).size(100, 60) << Box().size(100, 20)
                             << RectSurface(&b).size(100, 60)
                             << PopupMenu(items, 2).selectedIndex(loka::app::scene::WriteSeat<int>(&selection)).enabled(&enabled) << EditText(loka::app::scene::WriteSeat<loka::core::String>(&editText));
-  ScrollView declaration = ScrollView() << content;
+  BoxDefinition wrapper = Box();
+  if (clipped)
+    wrapper.clipChildren();
+  wrapper << content;
+  ScrollView declaration;
+  if (clipped)
+    declaration << wrapper;
+  else
+    declaration << content;
   Scene scene((Boundary<Tree<ScrollView> >(Props<ScrollView>(&declaration))));
   scene.mount(&controller);
   SceneAccess::updateAttached(scene, true);
@@ -185,14 +196,16 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
   HWND viewport =
       FindWindowExW(FindWindowExW(rootHwnd, NULL, L"LOKA_SCROLL_FRAME", NULL), NULL, L"LOKA_SCROLL_VIEW", NULL);
   LOKA_VERIFY(viewport != NULL);
+  HWND contentParent = clipped ? FindWindowExW(viewport, NULL, L"LOKA_CLIP_BOX", NULL) : viewport;
+  LOKA_VERIFY(contentParent != NULL);
   // #1199: the viewport paints beneath transparent children; native parentage
   // still clips projected children to the viewport's client area.
   LOKA_VERIFY((GetWindowLongPtrW(viewport, GWL_STYLE) & WS_CLIPCHILDREN) == 0);
-  LOKA_VERIFY(FindWindowExW(viewport, NULL, L"COMBOBOX", NULL) != NULL);
-  LOKA_VERIFY(FindWindowExW(viewport, NULL, L"EDIT", NULL) != NULL);
-  HWND first = FindWindowExW(viewport, NULL, L"LOKA_RECT_SURFACE", NULL);
+  LOKA_VERIFY(FindWindowExW(contentParent, NULL, L"COMBOBOX", NULL) != NULL);
+  LOKA_VERIFY(FindWindowExW(contentParent, NULL, L"EDIT", NULL) != NULL);
+  HWND first = FindWindowExW(contentParent, NULL, L"LOKA_RECT_SURFACE", NULL);
   LOKA_VERIFY(first != NULL);
-  HWND second = FindWindowExW(viewport, first, L"LOKA_RECT_SURFACE", NULL);
+  HWND second = FindWindowExW(contentParent, first, L"LOKA_RECT_SURFACE", NULL);
   LOKA_VERIFY(second != NULL);
   RECT firstRect, secondRect;
   LOKA_VERIFY(GetWindowRect(first, &firstRect));
@@ -307,17 +320,21 @@ exercisePaintOnlyChangeUnderScrollView(bool refused, bool removeSprites = false,
 void testWin32PaintOnlyChangeUnderScrollViewKeepsSiblingPixels()
 {
   exercisePaintOnlyChangeUnderScrollView(false);
+  exercisePaintOnlyChangeUnderScrollView(false, false, false, true);
 }
 
 void testWin32RefusedAnswerKeepsBroadFallback()
 {
   exercisePaintOnlyChangeUnderScrollView(true);
+  exercisePaintOnlyChangeUnderScrollView(true, false, false, true);
 }
 
 void testWin32RemovedSpritesRestoreGround()
 {
   exercisePaintOnlyChangeUnderScrollView(false, true);
   exercisePaintOnlyChangeUnderScrollView(false, true, true);
+  exercisePaintOnlyChangeUnderScrollView(false, true, false, true);
+  exercisePaintOnlyChangeUnderScrollView(false, true, true, true);
 }
 
 void testWin32PaintAnswerContracts()
@@ -938,6 +955,12 @@ void testWin32AttributedTextShrinkRestoresGround()
   Win32ScenePlatformController controller(
       host.window.hwnd(), loka::win32::Win32DisplayScale(96, loka::app::RailMetrics()));
   exerciseAttributedTextShrink(controller, host.window.hwnd());
+  Win32ClipBoxContext clip(&controller);
+  LOKA_VERIFY(
+      clip.ensure(host.window.hwnd(), controller.displayScale().projectFrame(loka::core::Frame(10, 10, 280, 100))));
+  exerciseAttributedTextShrink(controller, clip.hwnd());
+  clip.onFactChanged(loka::app::scene::NODE_FACT_ATTACHED, loka::app::scene::NODE_FACT_RETIRED);
+  controller.drainNativeRetirements();
 }
 
 void testWin32ScrollViewAttributedTextShrinkRestoresGround()

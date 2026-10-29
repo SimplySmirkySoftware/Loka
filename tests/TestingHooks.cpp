@@ -24,8 +24,20 @@ namespace loka
       unsigned macCardBitmapFailures = 0;
       unsigned macCardPathFailures = 0;
       unsigned macClipBoxContextFailures = 0;
+      unsigned win32ClipBoxContextFailures = 0;
       unsigned macClipHostViewFailures = 0;
     } // namespace
+    void failWin32ClipBoxContexts(unsigned count)
+    {
+      win32ClipBoxContextFailures = count;
+    }
+    bool declineWin32ClipBoxContext()
+    {
+      if (!win32ClipBoxContextFailures)
+        return false;
+      --win32ClipBoxContextFailures;
+      return true;
+    }
     void failMacClipBoxContexts(unsigned count)
     {
       macClipBoxContextFailures = count;
