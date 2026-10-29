@@ -10,9 +10,24 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
+#include "app/nodes/nestable/RowColumn.hpp"
 #include <cstdio>
 #include <cstring>
 
+namespace loka
+{
+  namespace testing
+  {
+    class ToolboxTextContextAccess
+    {
+    public:
+      static Rect rect(const ToolboxTextContext &context)
+      {
+        return context.rect_;
+      }
+    };
+  } // namespace testing
+} // namespace loka
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::core;
@@ -337,6 +352,185 @@ namespace
       c.recordTextHit(broad, 0, 0, &this->value_, 0, false, 300, &this->text_);
     }
   };
+  /** Like ReplayEditor in the neighbouring unit fixture: the host controller
+      omits prepareProjectedLayout, so project explicitly into the real context. */
+  class ShrinkText : public TextNode
+  {
+  public:
+    explicit ShrinkText(const char *label)
+        : TextNode(Text(label).props)
+    {
+      this->props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
+    }
+  };
+  class ShrinkButton : public ButtonNode
+  {
+  public:
+    explicit ShrinkButton(const char *label)
+        : ButtonNode(Button(label).props)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
+    }
+  };
+  /** Exercise real Row dispatch and PlainDisplay together, with no synthetic widths. */
+  void shrinkSweep(const char *mode)
+  {
+    const bool ancestor = !std::strcmp(mode, "shrink-clip") || !std::strcmp(mode, "shrink-frame");
+    const bool refused = !std::strcmp(mode, "shrink-refused");
+    const bool frame = !std::strcmp(mode, "shrink-frame");
+    Fixture f;
+    BoxNode box(ancestor ? ClipBox().height(1).props : Box().props);
+    StackNode *row = new StackNode(Row().naturalWidth().props);
+    ButtonNode *back = new ShrinkButton("< Back");
+    TextNode *title = new ShrinkText("A title longer than the available toolbar space");
+    ButtonNode *main = new ShrinkButton("Main");
+    back->setContext(new ToolboxButtonContext(back, &f.controller));
+    title->setContext(new ToolboxTextContext(title, &f.controller));
+    main->setContext(new ToolboxButtonContext(main, &f.controller));
+    row->addChild(back);
+    row->addChild(title);
+    row->addChild(main);
+    box.addChild(row);
+    short a = 0, t = 0, b = 0;
+    LOKA_VERIFY(f.controller.queryNaturalWidth(back, a));
+    LOKA_VERIFY(f.controller.queryNaturalWidth(title, t));
+    LOKA_VERIFY(f.controller.queryNaturalWidth(main, b));
+    const int gap = 8;
+    const int fixed = a + b + 2 * gap;
+    for (int offer = fixed + t; offer >= fixed + 1; --offer)
+    {
+      LayoutState state = f.seat();
+      state.width = static_cast<short>(offer);
+      state.spacing = gap;
+      state.inputs = NODE_DIRTY_LAYOUT;
+      if (frame)
+        for (unsigned i = 0; i != 6; ++i)
+          LOKA_VERIFY(
+              f.controller.projectionParentScopes_.pushClip(ProjectionParentScope(0, 0, 0, Frame(0, 0, 300, 300))));
+      LayoutNode(&box, state, &f.controller, 0);
+      ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(title->getContext());
+      const Rect seat = loka::testing::ToolboxTextContextAccess::rect(context);
+      if (ancestor)
+      {
+        Rect placed;
+        LOKA_VERIFY(static_cast<ToolboxClipBoxContext *>(box.getContext())->placement().query(placed) == !frame);
+      }
+      LOKA_VERIFY(seat.right - seat.left == offer - fixed);
+      LOKA_VERIFY(seat.left == f.seat().x + a + gap);
+      RenderNode(back, &f.controller);
+      RenderNode(main, &f.controller);
+      toolbox_host::draws.clear();
+      toolbox_host::pascalDraws.clear();
+      // Render the title separately for the allocation-refusal axis: both of
+      // its own paint clip regions must be refused, not an ancestor's regions.
+      toolbox_host::failRegions = refused ? 2 : 0;
+      if (refused)
+        RenderNode(title, &f.controller);
+      else
+        RenderNode(&box, &f.controller);
+      LOKA_VERIFY(toolbox_host::failRegions == 0);
+      LOKA_VERIFY(!toolbox_host::pascalDraws.empty());
+      // Buttons use DrawControl; the sole Pascal text draw is the title.
+      const std::string &bytes = toolbox_host::pascalDraws.front();
+      unsigned char nativeText[256];
+      LOKA_VERIFY(bytes.size() <= 255);
+      nativeText[0] = static_cast<unsigned char>(bytes.size());
+      std::memcpy(nativeText + 1, bytes.data(), bytes.size());
+      const int advance = StringWidth(nativeText);
+      const unsigned char dots[] = {3, '.', '.', '.'};
+      LOKA_VERIFY(advance <= offer - fixed);
+      LOKA_VERIFY(context.visibleWidth() == advance);
+      if (offer - fixed < StringWidth(dots))
+        LOKA_VERIFY(bytes.empty());
+      if (refused)
+        equal(toolbox_host::draws.front().clip, broad);
+      if (ancestor)
+        LOKA_VERIFY(toolbox_host::draws.front().clip.bottom == (frame ? seat.bottom : f.seat().y + 1));
+      {
+        LOKA_VERIFY(f.controller.buttonControls_.size() == 2);
+        const Rect left = f.controller.buttonControls_[0].control->rect;
+        const Rect right = f.controller.buttonControls_[1].control->rect;
+        LOKA_VERIFY(left.left == f.seat().x && left.right - left.left == a);
+        LOKA_VERIFY(seat.left - left.right == gap);
+        LOKA_VERIFY(right.left - seat.right == gap && right.right - right.left == b);
+        LOKA_VERIFY(right.right == f.seat().x + offer);
+      }
+      if (frame)
+        for (unsigned i = 0; i != 6; ++i)
+          LOKA_VERIFY(f.controller.projectionParentScopes_.pop());
+      equal(toolbox_host::currentClip(), broad);
+    }
+    f.controller.clearControls();
+    f.controller.releaseNodeContexts(&box);
+  }
+  void multipleTitles(unsigned count)
+  {
+    Fixture f;
+    StackNode row(Row().naturalWidth().props);
+    const char *labels[] = {"Short", "A distinctly longer label", "Tiny", "The longest title in this narrow row"};
+    TextNode *texts[4];
+    short natural[4];
+    int sum = 0;
+    for (unsigned i = 0; i < count; ++i)
+    {
+      texts[i] = new ShrinkText(labels[i]);
+      texts[i]->setContext(new ToolboxTextContext(texts[i], &f.controller));
+      row.addChild(texts[i]);
+      LOKA_VERIFY(f.controller.queryNaturalWidth(texts[i], natural[i]));
+      sum += natural[i];
+    }
+    // Independent integer oracle: enumerate caps rather than water-filling.
+    for (int budget = sum - 1; budget >= static_cast<int>(count); --budget)
+    {
+      int cap = 1, used = 0;
+      for (int candidate = 1; candidate <= sum; ++candidate)
+      {
+        int total = 0;
+        for (unsigned i = 0; i < count; ++i)
+          total += natural[i] < candidate ? natural[i] : candidate;
+        if (total > budget)
+          break;
+        cap = candidate;
+        used = total;
+      }
+      int remainder = budget - used;
+      LayoutState offer = f.seat();
+      offer.spacing = 8;
+      offer.width = static_cast<short>(budget + (count - 1) * 8);
+      offer.inputs = NODE_DIRTY_LAYOUT;
+      LayoutNode(&row, offer, &f.controller, 0);
+      int x = f.seat().x;
+      for (unsigned i = 0; i < count; ++i)
+      {
+        int expected = natural[i] < cap ? natural[i] : cap;
+        if (natural[i] > cap && remainder > 0)
+        {
+          ++expected;
+          --remainder;
+        }
+        ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(texts[i]->getContext());
+        const Rect rect = loka::testing::ToolboxTextContextAccess::rect(context);
+        LOKA_VERIFY(rect.left == x && rect.right - rect.left == expected);
+        toolbox_host::pascalDraws.clear();
+        RenderNode(texts[i], &f.controller);
+        LOKA_VERIFY(toolbox_host::pascalDraws.size() == 1);
+        if (natural[i] <= cap)
+          LOKA_VERIFY(toolbox_host::pascalDraws.front() == labels[i]);
+        x += expected + 8;
+      }
+      LOKA_VERIFY(remainder == 0);
+    }
+    f.controller.releaseNodeContexts(&row);
+  }
   void hits()
   {
     Fixture f;
@@ -363,7 +557,11 @@ int main(int argc, char **argv)
   LOKA_VERIFY(argc == 2);
   toolbox_host::reset();
   const char *mode = argv[1];
-  if (!std::strcmp(mode, "box"))
+  if (!std::strcmp(mode, "multi-two") || !std::strcmp(mode, "multi-four"))
+    multipleTitles(!std::strcmp(mode, "multi-two") ? 2 : 4);
+  else if (!std::strncmp(mode, "shrink-", 7))
+    shrinkSweep(mode);
+  else if (!std::strcmp(mode, "box"))
     walk(0, true);
   else if (!std::strcmp(mode, "card"))
     walk(1, true);

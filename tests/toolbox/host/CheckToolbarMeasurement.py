@@ -41,6 +41,35 @@ class Wiring(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     report.verdict(path)
 
+    def test_row_report(self):
+        spec = importlib.util.spec_from_file_location('report', ROOT / 'tests/toolbox/toolbar-measurement-report.py')
+        report = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(report)
+        lines = ['toolbar_row_summary complete=1 cases=6',
+                 'toolbar_row_environment clock=Microseconds observed_resolution_us=1']
+        for name, k, scans in [('k1', 1, 0), ('k2', 2, 2), ('k4', 4, 2), ('fit', 4, 0), ('floor', 4, 1), ('b-equals-s', 4, 0)]:
+            offer, occupied = (27, 28) if name == 'b-equals-s' else (10, 10)
+            source = 'synthetic-unit' if name == 'b-equals-s' else 'toolbox'
+            lines += [f'toolbar_row case={name} repetitions=31 median_us=3 maximum_us=5 offer={offer} occupied={occupied}',
+                      f'toolbar_row_inputs case={name} k={k} scans={scans} source={source}']
+        valid = '\n'.join(lines)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'LOG.TXT'
+            path.write_text(valid)
+            with contextlib.redirect_stdout(io.StringIO()):
+                report.rows(path)
+            for invalid in (valid.replace('repetitions=31', 'repetitions=2'),
+                            valid.replace('complete=1', 'complete=0'),
+                            valid.replace('maximum_us=5', 'maximum_us=1'),
+                            valid.replace('case=k4 k=4 scans=2', 'case=k4 k=4 scans=1'),
+                            valid.replace('occupied=10', 'occupied=11'),
+                            valid + '\n' + lines[2],
+                            valid.replace('source=toolbox', 'source=synthetic-unit'),
+                            valid.replace('observed_resolution_us=1', 'observed_resolution_us=0')):
+                path.write_text(invalid)
+                with self.assertRaises(ValueError):
+                    report.rows(path)
+
     def test_clock_and_empty_bracket(self):
         clock = (ROOT / 'tests/toolbox/src/ToolbarMeasurementClock.hpp').read_text()
         self.assertIn('Microseconds(&value);', clock)

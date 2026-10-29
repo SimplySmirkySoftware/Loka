@@ -45,10 +45,51 @@ def verdict(path):
     print(summaries[0])
 
 
+def rows(path):
+    lines = Path(path).read_text().splitlines()
+    def records(prefix):
+        return [dict(item.split('=', 1) for item in line.split()[1:])
+                for line in lines if line.startswith(prefix + ' ')]
+    environments = records('toolbar_row_environment')
+    if (len(environments) != 1 or environments[0]['clock'] != 'Microseconds'
+            or int(environments[0]['observed_resolution_us']) <= 0):
+        raise ValueError('missing Row clock facts')
+    summaries = records('toolbar_row_summary')
+    samples = records('toolbar_row')
+    inputs = records('toolbar_row_inputs')
+    names = {'k1', 'k2', 'k4', 'fit', 'floor', 'b-equals-s'}
+    if (summaries != [{'complete': '1', 'cases': '6'}] or len(samples) != 6
+            or {s['case'] for s in samples} != names or len(inputs) != 6
+            or {s['case'] for s in inputs} != names):
+        raise ValueError('incomplete Row measurement')
+    for sample in samples:
+        if (int(sample['repetitions']) < 30 or int(sample['median_us']) < 0
+                or int(sample['maximum_us']) < int(sample['median_us'])
+                or (sample['case'] != 'b-equals-s' and sample['offer'] != sample['occupied'])
+                or (sample['case'] == 'b-equals-s' and (sample['offer'], sample['occupied']) != ('27', '28'))):
+            raise ValueError('invalid one-pass Row statistics')
+    for row in inputs:
+        expected_source = 'synthetic-unit' if row['case'] == 'b-equals-s' else 'toolbox'
+        if row['source'] != expected_source:
+            raise ValueError('incorrect source attribution')
+        scans = int(row['scans'])
+        if scans > int(row['k']) or (row['case'] in ('k1', 'fit', 'b-equals-s') and scans != 0):
+            raise ValueError('invalid scan count')
+        if row['case'] == 'k4' and scans < 2:
+            raise ValueError('k4 did not exercise multiple scans')
+    samples = {s['case']: s for s in samples}
+    for name in ('k2', 'k4'):
+        row = samples[name]
+        print('toolbar_row_delta case=' + name, end=' ')
+        print(' '.join(f'{stat}_over_{base}_us=' + str(int(row[stat + '_us']) - int(samples[base][stat + '_us']))
+                       for base in ('fit', 'k1') for stat in ('median', 'maximum')))
+    print('toolbar_row_summary complete=1 cases=6 (cost only; no heaviness verdict)')
+
+
 def provenance(build, binary, destination):
     build, binary, destination = map(Path, (build, binary, destination))
     commands = json.loads((build / 'compile_commands.json').read_text())
-    selected = [row for row in commands if 'ToolbarMeasurementMain.cpp' in row['file']
+    selected = [row for row in commands if ('ToolbarMeasurementMain.cpp' in row['file'] or 'ToolbarRowMeasurementMain.cpp' in row['file'])
                 or 'LokaAppleToolboxTestCore.dir' in row.get('command', '')]
     if (not selected or any('LOKA_PROFILE_FUNC_TICKS=1' in row['command'] for row in selected)
             or any('-DTEST_BUILD' not in row['command'] for row in selected)):
@@ -71,16 +112,19 @@ def provenance(build, binary, destination):
         'build_commands': selected,
         'clock': 'Microseconds; observed resolution and empty-bracket cost in each run log',
         'screen_and_system': 'actual depth, size and Gestalt System version in each run log',
-        'semantics': 'maximum erase-through-grow-box duration; no cost subtraction',
+        'semantics': ('one Row consultation plus next for every seat; no drawing' if 'MeasureRows' in binary.name
+                      else 'maximum erase-through-grow-box duration; no cost subtraction'),
     }, indent=2) + '\n')
 
 if __name__ == '__main__':
     try:
         if sys.argv[1] == 'verdict':
             verdict(sys.argv[2])
+        elif sys.argv[1] == 'rows':
+            rows(sys.argv[2])
         elif sys.argv[1] == 'provenance':
             provenance(*sys.argv[2:])
         else:
-            raise ValueError('expected verdict or provenance')
+            raise ValueError('expected verdict, rows or provenance')
     except (ValueError, KeyError, OSError) as error:
         sys.exit(str(error))
