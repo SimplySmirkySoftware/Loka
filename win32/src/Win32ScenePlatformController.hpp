@@ -355,6 +355,8 @@ private:
   static int layoutContainerChild(void *context, loka::app::scene::Node *child, const LayoutState &state);
   int layoutNodeFromSceneState(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   int layoutNode(loka::app::scene::Node *node, const LayoutState &state);
+  bool layoutContainerBody(loka::app::scene::Node *node, const LayoutState &state, int &resultY);
+  LayoutNodeResult layoutClipBox(loka::app::scene::Node *node, const LayoutState &state, int declaredWidth);
   LayoutNodeResult computeLayoutResult(loka::app::scene::Node *node, const LayoutState &state);
   /** Completed layout and request capability of this projection visit. */
   struct ScrollViewLayoutResult
