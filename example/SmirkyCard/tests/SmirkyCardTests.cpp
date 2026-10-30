@@ -4606,7 +4606,7 @@ namespace
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ClipBox(Text('x')),{child:42})}}));",
                         "JavaScript ClipBox has an invalid child.");
     std::string tree = "Text('deep').TEST_ID('DeepClipBox')";
-    for (int depth = 0; depth < 10; ++depth)
+    for (int depth = 0; depth < 11; ++depth)
       tree = "ClipBox(" + tree + ")";
     smirkycard::ScriptRuntime deepRuntime;
     const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
@@ -4617,7 +4617,7 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
     LOKA_VERIFY(windowNode(deepWindow, "DeepClipBox"));
     const std::string refused = "card('first',c=>({compose(){return ClipBox(" + tree + ")}}));";
-    checkComposeRefusal(refused.c_str(), "exceeds depth 10");
+    checkComposeRefusal(refused.c_str(), "exceeds depth 11");
   }
 
   void checkBoxLowering()
@@ -4728,7 +4728,7 @@ namespace
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
-    for (int depth = 0; depth < 10; ++depth)
+    for (int depth = 0; depth < 11; ++depth)
       tree = "Box(" + tree + ")";
     smirkycard::ScriptRuntime deepRuntime;
     const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
@@ -4739,7 +4739,7 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
     LOKA_VERIFY(windowNode(deepWindow, "DeepBox"));
     const std::string refused = "card('first',c=>({compose(){return Box(" + tree + ")}}));";
-    checkComposeRefusal(refused.c_str(), "exceeds depth 10");
+    checkComposeRefusal(refused.c_str(), "exceeds depth 11");
     // A width on Object.prototype is not a claim: lowering reads the tree's own properties only.
     smirkycard::ScriptRuntime poisonRuntime;
     LOKA_VERIFY(poisonRuntime.loadBuiltin("Object.prototype.width=300;"
@@ -4926,7 +4926,7 @@ namespace
                         "Card(Show(s,ScrollView(Text('x'))))))}}});",
                         "cannot contain another ScrollView");
     std::string nested = "ScrollView(Text('nested'))";
-    for (int depth = 0; depth < 8; ++depth)
+    for (int depth = 0; depth < 9; ++depth)
       nested = "Box(" + nested + ")";
     const std::string nestedSource = "card('first',c=>({compose(){return ScrollView(" + nested + ")}}));";
     checkComposeRefusal(nestedSource.c_str(), "cannot contain another ScrollView");
@@ -4935,8 +4935,8 @@ namespace
     for (unsigned i = 0; i < 2; ++i)
     {
       std::string tree = "Text('deep').TEST_ID('Deep')";
-      for (int depth = 0; depth < 10; ++depth)
-        tree = std::string(depth == 9 ? wrappers[i] : "Card") + "(" + tree + ")";
+      for (int depth = 0; depth < 11; ++depth)
+        tree = std::string(depth == 10 ? wrappers[i] : "Card") + "(" + tree + ")";
       smirkycard::ScriptRuntime deepRuntime;
       const std::string source = "card('first',c=>({compose(){return " + tree + "}}));";
       LOKA_VERIFY(deepRuntime.loadBuiltin(source.c_str(), error));
@@ -4946,7 +4946,7 @@ namespace
       loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
       LOKA_VERIFY(windowNode(deepWindow, "Deep"));
       const std::string refused = "card('first',c=>({compose(){return Card(" + tree + ")}}));";
-      checkComposeRefusal(refused.c_str(), "exceeds depth 10");
+      checkComposeRefusal(refused.c_str(), "exceeds depth 11");
     }
   }
 
@@ -5075,6 +5075,20 @@ namespace
              "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===10)})()",
              "true");
     expectJs(h.runtime,
+             "(()=>{const list=[],carousel=[];function walk(t,d,p){"
+             "if(t.children && t.children[1] && t.children[1].testId){"
+             "const id=t.children[1].testId,thumb=t.children[0];"
+             "if(/Laptop\\.(Open|Narrow)\\./.test(id))list.push("
+             "thumb.kind===ClipBox(Text('')).kind && thumb.child.kind===ImageView(laptop.thumbs[0]).kind"
+             " && d+2===11);"
+             "if(/Laptop\\.Wide\\./.test(id))carousel.push("
+             "p.kind===Card(Text('')).kind && t.kind===VStack().kind"
+             " && thumb.kind===ImageView(laptop.thumbs[0]).kind);}"
+             "if(t.child)walk(t.child,d+1,t);if(t.children)t.children.forEach(c=>walk(c,d+1,t));}"
+             "walk(laptop.compose(),0,null);return list.length===26 && list.every(Boolean)"
+             " && carousel.length===13 && carousel.every(Boolean)})()",
+             "true");
+    expectJs(h.runtime,
              "[laptop.list(),laptop.detailPage()].every(t=>t.kind===ZStack(Text('')).kind&&t.blurUnit===1&&"
              "t.children[0].kind===ScrollView(Text('')).kind&&t.children[0].insetTop===30&&"
              "t.children[1].kind===Box(Text('')).kind&&t.children[1].height===30)",
@@ -5085,7 +5099,23 @@ namespace
     LOKA_VERIFY(windowNode(*h.window, "Laptop.About.Name"));
     checkLaptopBands(*h.window);
     // Inspect the actual ImageView inputs, not merely the existence of thumbs.
-    expectJs(h.runtime, "laptop.machineCard(0,150,94,'x','x').child.children[0].seat===laptop.thumbs[0]", "true");
+    expectJs(
+        h.runtime, "laptop.machineCard(0,150,94,'x','x',true).child.children[0].child.seat===laptop.thumbs[0]", "true");
+  }
+
+  loka::app::scene::Node *laptopThumbnail(loka::app::scene::Node *node, const char *buttonId)
+  {
+    if (!node)
+      return 0;
+    loka::app::scene::INestable *nest = node->asNestable();
+    loka::app::scene::Node *first = nest ? nest->childrenHead() : 0;
+    if (node->asStackNode() && first && first->asBoxNode() && first->nextInComposition
+        && find(first->nextInComposition, buttonId))
+      return first;
+    for (loka::app::scene::Node *child = first; child; child = child->nextInComposition)
+      if (loka::app::scene::Node *thumbnail = laptopThumbnail(child, buttonId))
+        return thumbnail;
+    return 0;
   }
 
   void checkLaptopScenario()
@@ -5197,6 +5227,15 @@ namespace
             const std::string twoColumns = std::string("Laptop.Open.") + ids[j];
             LOKA_VERIFY((windowNode(*h.window, oneColumn.c_str()) != 0) == narrow);
             LOKA_VERIFY((windowNode(*h.window, twoColumns.c_str()) != 0) == !narrow);
+            loka::app::scene::Node *thumbnail =
+                laptopThumbnail(loka::dsl::testing::SceneTestAccess::rootNode(*h.window->scene()),
+                                narrow ? oneColumn.c_str() : twoColumns.c_str());
+            LOKA_VERIFY(thumbnail && thumbnail->asBoxNode());
+            const loka::app::BoxDefinition expectedClip = loka::app::ClipBox();
+            const loka::app::BoxProps &actual = thumbnail->asBoxNode()->props;
+            LOKA_VERIFY(!(actual < expectedClip.props) && !(expectedClip.props < actual));
+            loka::app::scene::Node *image = thumbnail->asNestable()->childrenHead();
+            LOKA_VERIFY(image && image->asImageViewNode() && !image->nextInComposition);
           }
         }
       }

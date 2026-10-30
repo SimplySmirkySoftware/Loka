@@ -99,8 +99,8 @@ card('first', class {
     // Named seats so a scenario can ask c.test.imageFacts('pb180c').
     MACHINES.forEach((m, i) => { this[m.id] = this.pics[i]; });
     // Page and presentation, as the three things that can be on screen.
-    // Depth 9 is the JS tree limit, so the page is not a wrapper seat: each
-    // pane has its own Show seat and the handlers keep them consistent.
+    // Each pane has its own Show seat to stay within the tree depth limit;
+    // the handlers keep those seats consistent.
     this.wide = false;
     this.browse = c.state(true);
     this.detail = c.state(false);
@@ -172,9 +172,11 @@ card('first', class {
   // left (the first list row took the whole viewport), and a horizontal
   // ScrollView measures its Row through Text, Button and ImageView widths,
   // which a Cell does not answer on any rail yet.
-  machineCard(i, width, height, label, testId) {
+  machineCard(i, width, height, label, testId, clipThumbnail) {
+    const thumbnail = ImageView(this.thumbs[i], {width: width, height: height, fit: 'contain'});
+    // Lists clip at the content edge; the carousel needs the image's natural width.
     return Card(VStack(
-      ImageView(this.thumbs[i], {width: width, height: height, fit: 'contain'}),
+      clipThumbnail ? ClipBox(thumbnail) : thumbnail,
       Button(label, () => this.open(i)).TEST_ID(testId)));
   }
 
@@ -200,24 +202,24 @@ card('first', class {
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
         Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
       ScrollView(Row(...MACHINES.map((m, i) =>
-        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id))).naturalWidth())), {padding: 'standard'}), this.toolbar()).expBlurUnit();
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id, false))).naturalWidth())), {padding: 'standard'}), this.toolbar()).expBlurUnit();
   }
 
   list() {
     const rows = [];
     const label = j => MACHINES[j].name + ' (' + MACHINES[j].year + ')';
     for (let i = 0; i < COUNT; i += 2) {
-      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Open.' + MACHINES[i].id)];
+      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Open.' + MACHINES[i].id, true)];
       // A Row shares its width equally, so an odd last card gets an empty
       // partner and keeps the same width as every other card.
-      cards.push(i + 1 < COUNT ? this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id)
+      cards.push(i + 1 < COUNT ? this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Open.' + MACHINES[i + 1].id, true)
                                : Box(Text('')));
       rows.push(Show(this.wideList, Row(...cards)));
     }
-    // Seven wide rows and seven narrow pairs: 14 children, leaves at depth 10.
+    // Seven wide rows and seven narrow pairs: 14 children, thumbnails at depth 11.
     for (let i = 0; i < COUNT; i += 2) {
-      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Narrow.' + MACHINES[i].id)];
-      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id));
+      const cards = [this.machineCard(i, 160, 100, label(i), 'Laptop.Narrow.' + MACHINES[i].id, true)];
+      if (i + 1 < COUNT) cards.push(this.machineCard(i + 1, 160, 100, label(i + 1), 'Laptop.Narrow.' + MACHINES[i + 1].id, true));
       rows.push(Show(this.narrow, VStack(...cards)));
     }
     return ZStack(
