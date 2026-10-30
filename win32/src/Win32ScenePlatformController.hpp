@@ -88,6 +88,7 @@ class Win32ScenePlatformController : public loka::app::scene::IPlatformControlle
                                      public loka::app::layout::INaturalSizeSource
 {
 public:
+  virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Retire door for a RectSurface context: takes back that surface's pending
       seat rows so a surface reclaimed during delivery publishes nothing. */
