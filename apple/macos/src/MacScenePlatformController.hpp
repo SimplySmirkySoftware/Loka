@@ -65,6 +65,7 @@ class MacScenePlatformController : public loka::app::scene::IPlatformController,
 {
 public:
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
+  virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   /** Push-button cell measurement in Row allocation units; zero declines. */
   short measurePushButtonNaturalWidth(const loka::core::String &label) const;
   /** Row metrics measured once at construction: the native push-button cell

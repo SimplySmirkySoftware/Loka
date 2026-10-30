@@ -122,7 +122,15 @@ namespace
             const int measured = projection.measurementToLu(nativeHeight) + 2;
             const int textHeight = measured > minimum ? measured : minimum;
             const int captionY = MacSceneLayout::kRootInset + (boxed ? 170 : textHeight) + MacSceneLayout::kGap;
-            const int buttonY = captionY + 20 + MacSceneLayout::kGap;
+            // The boxed Row centres its plain caption against the Bold leaf.
+            const Ratio &spaceScale = metrics[scaleIndex].spaceScale;
+            const NSRect captionFrame = [[views objectAtIndex:boxed ? 2 : 1] frame];
+            const double luPerPoint = static_cast<double>(spaceScale.den) / spaceScale.num;
+            const int captionHeight = boxed ? static_cast<int>(std::floor(NSMaxY(captionFrame) * luPerPoint + 0.5)
+                                                               - std::floor(NSMinY(captionFrame) * luPerPoint + 0.5))
+                                            : 20;
+            const int plainCaptionY = captionY + (boxed ? (captionHeight - 20) / 2 : 0);
+            const int buttonY = captionY + captionHeight + MacSceneLayout::kGap;
             const int buttonHeight = projection.measurementToLu([[button cell] cellSize].height);
             LOKA_VERIFY(
                 NSEqualRects([page frame],
@@ -130,13 +138,13 @@ namespace
                                  .projectFrame(loka::core::Frame(
                                      MacSceneLayout::kRootInset, MacSceneLayout::kRootInset, pageWidth, textHeight))
                                  .r));
-            LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(captionY).pt);
+            LOKA_VERIFY([caption frame].origin.y == projection.projectEdge(plainCaptionY).pt);
             LOKA_VERIFY(NSMinY([button frame]) == projection.projectEdge(buttonY).pt);
             LOKA_VERIFY(NSMaxY([button frame]) == projection.projectEdge(buttonY + buttonHeight).pt);
             // The actual Scrapbook fixed Box prevents measured text changes
             // reaching the caption/buttons, for either one or two native lines.
             if (boxed)
-              LOKA_VERIFY(buttonY == MacSceneLayout::kRootInset + 170 + 20 + 2 * MacSceneLayout::kGap);
+              LOKA_VERIFY(buttonY == MacSceneLayout::kRootInset + 170 + captionHeight + 2 * MacSceneLayout::kGap);
             std::printf("  Mac text extent: font=%d/%d space=%d/%d boxed=%d lines=%d "
                         "nativeText=%.2f textLu=%d buttonLu=%d..%d framePt=%.2f..%.2f clientPt=%.2f\n",
                         metrics[scaleIndex].fontScale.num,
