@@ -14,6 +14,13 @@ struct HostTECompletion
   Rect destRect;
   short selStart, selEnd;
 };
+/** Snapshot at a native TextEdit entry; regions in this fake are rectangular. */
+struct HostTECall
+{
+  std::string operation;
+  GrafPtr port;
+  Rect clip;
+};
 struct TERec
 {
   Rect destRect, viewRect;
@@ -25,6 +32,8 @@ struct TERec
   bool autoView;
   bool active;
   int idleCalls;
+  unsigned calTextCalls;
+  std::vector<HostTECall> calls;
   short caretState;
   std::vector<HostTECompletion> keyCompletions, clickCompletions, idleCompletions;
 };

@@ -6,14 +6,15 @@
 /** Select the owner port and intersect its current clip with the visible rect.
     Owns its saved region; allocation refusal leaves the owner clip unchanged.
     Restores the owner clip and previous port without invalidating. This narrows
-    drawing only, not the pointer movement accepted by TrackControl. */
+    drawing only, not the pointer movement accepted by TrackControl. With
+    intersect=false, select the owner only and leave its clip untouched. */
 class ToolboxNativeDoorScope
 {
 public:
-  ToolboxNativeDoorScope(GrafPtr owner, const Rect &visible)
+  ToolboxNativeDoorScope(GrafPtr owner, const Rect &visible, bool intersect = true)
       : port_(owner),
         owner_(owner),
-        savedClip_(NewRgn())
+        savedClip_(intersect ? NewRgn() : 0)
   {
     if (this->savedClip_)
     {

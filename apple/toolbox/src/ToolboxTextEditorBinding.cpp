@@ -1,3 +1,4 @@
+#include "ToolboxEditDoor.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 
 /** Included by the controller and the host fixture: one native installation path. */
@@ -5,7 +6,7 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
                                                                  const Rect &rect,
                                                                  loka::app::scene::NativeLifetimeHint hint)
 {
-  // The binding's rect is the visible box (hit testing, invalidation); only
+  // The row's interaction placement uses the hit box; only
   // TextEdit's own rects sit inside the frame.
   Rect port = Rect(), sizeBox = Rect();
   const bool hasPort = this->window_ && this->window_->queryPortRect(port);
@@ -22,7 +23,7 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
   {
     EditTextControlBinding &binding = this->editControls_[index];
     binding.usedThisFrame = true;
-    binding.rect = visibleBox;
+    binding.placement = ToolboxNativePlacement(geometry.hit, visibleBox);
     (**binding.te).viewRect = clipped;
     return binding.te;
   }
@@ -41,7 +42,7 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
   }
   EditTextControlBinding entry(context, context, 0);
   entry.te = te;
-  entry.rect = visibleBox;
+  entry.placement = ToolboxNativePlacement(geometry.hit, visibleBox);
   entry.usedThisFrame = true;
   entry.lifetimeHint = hint;
   this->editControls_.commitAppend(entry);
@@ -64,10 +65,18 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
   if (previousTE || oldUnicode)
   {
     if (previousTE)
-      TEDeactivate(previousTE);
+    {
+      if (!old->editor && !old->unicode)
+      {
+        ToolboxEditDoor door(this->window_->window(), old->placement);
+        TEDeactivate(previousTE);
+      }
+      else
+        TEDeactivate(previousTE);
+    }
     else
       old->editor->focus(false);
-    this->invalidateUnitOverlap(old->rect);
+    this->invalidateUnitOverlap(old->placement.visible());
   }
   this->editControls_.clearFocus();
   if (nextTE || nextUnicode)
@@ -75,10 +84,19 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
     this->editControls_.focus(index);
     this->fallbackFocus_.cut();
     if (nextTE)
-      TEActivate(nextTE);
+    {
+      const EditTextControlBinding &next = this->editControls_[index];
+      if (!next.editor && !next.unicode)
+      {
+        ToolboxEditDoor door(this->window_->window(), next.placement);
+        TEActivate(nextTE);
+      }
+      else
+        TEActivate(nextTE);
+    }
     else
       this->editControls_[index].editor->focus(true);
-    this->invalidateUnitOverlap(this->editControls_[index].rect);
+    this->invalidateUnitOverlap(this->editControls_[index].placement.visible());
   }
   SetPort(previousPort);
 }
@@ -95,9 +113,12 @@ void ToolboxScenePlatformController::idleTextEdits()
       else
       {
         const short caretBefore = (**editControls_[i].te).caretState;
-        TEIdle(editControls_[i].te);
+        {
+          ToolboxEditDoor door(this->window_->window(), editControls_[i].placement);
+          TEIdle(editControls_[i].te);
+        }
         if (caretBefore != (**editControls_[i].te).caretState)
-          this->invalidateUnitOverlap(editControls_[i].rect);
+          this->invalidateUnitOverlap(editControls_[i].placement.visible());
       }
     }
   }

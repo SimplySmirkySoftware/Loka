@@ -1,3 +1,4 @@
+#include "ToolboxEditDoor.hpp"
 #include "ToolboxNativeDoorScope.hpp"
 
 /** Event-local completed selection. Nothing here survives the input operation. */
@@ -90,7 +91,8 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::EDIT_CONTROL:
   {
     const EditTextControlBinding &binding = this->editControls_[row.index];
-    if (!(binding.te || (binding.unicode && binding.editor->hasNativeHandle())) || !PtInRect(point, &binding.rect))
+    if (!(binding.te || (binding.unicode && binding.editor->hasNativeHandle()))
+        || !PtInRect(point, &binding.placement.visible()))
       return false;
     value.context = binding.ownerContext;
     break;
@@ -260,14 +262,17 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
   case PressRow::EDIT_CONTROL:
   {
     const TEHandle te = this->editControls_[index].te;
-    const Rect rect = this->editControls_[index].rect;
+    const Rect rect = this->editControls_[index].placement.visible();
     ToolboxEditorSeat *editor = this->editControls_[index].editor;
     this->activateEditControl(index);
     if (editor)
       editor->click(point, event);
     else
     {
-      TEClick(point, false, te);
+      {
+        ToolboxEditDoor door(this->window_->window(), this->editControls_[index].placement);
+        TEClick(point, false, te);
+      }
       this->invalidateUnitOverlap(rect);
     }
     return true;

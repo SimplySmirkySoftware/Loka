@@ -281,6 +281,17 @@ namespace toolbox_host
   unsigned corruptSets = 0, refuseReads = 0;
   int copied = 0, sets = 0, disposals = 0, failSets = 0, failNew = 0, updates = 0, selections = 0;
 }
+namespace
+{
+  void RecordTECall(TEHandle te, const char *operation)
+  {
+    HostTECall call;
+    call.operation = operation;
+    GetPort(&call.port);
+    call.clip = toolbox_host::currentClip();
+    (**te).calls.push_back(call);
+  }
+} // namespace
 TEHandle TENew(const Rect *dest, const Rect *view)
 {
   if (toolbox_host::failNew)
@@ -303,6 +314,8 @@ TEHandle TENew(const Rect *dest, const Rect *view)
   (**te).autoView = false;
   (**te).active = false;
   (**te).idleCalls = 0;
+  (**te).calTextCalls = 0;
+  RecordTECall(te, "new");
   (**te).caretState = 0;
   TECalText(te);
   return te;
@@ -322,6 +335,7 @@ namespace
 }
 void TEDispose(TEHandle te)
 {
+  RecordTECall(te, "dispose");
   ++toolbox_host::disposals;
   delete *te;
   *te = 0;
@@ -329,6 +343,7 @@ void TEDispose(TEHandle te)
 }
 void TESetText(const void *bytes, long length, TEHandle te)
 {
+  RecordTECall(te, "set-text");
   ++toolbox_host::sets;
   if (toolbox_host::failSets)
   {
@@ -343,12 +358,14 @@ void TESetText(const void *bytes, long length, TEHandle te)
 }
 Handle TEGetText(TEHandle te)
 {
+  RecordTECall(te, "get-text");
   if (toolbox_host::refuseReads) { --toolbox_host::refuseReads; return 0; }
   (**te).data = const_cast<char *>((**te).text.data());
   return &(**te).data;
 }
 void TESetSelect(short a, short b, TEHandle te)
 {
+  RecordTECall(te, "select");
   ++toolbox_host::selections;
   (**te).selStart = a;
   (**te).selEnd = b;
@@ -367,6 +384,7 @@ namespace
 } // namespace
 void TEKey(char key, TEHandle te)
 {
+  RecordTECall(te, "key");
   TERec &t = **te;
   if (key >= 28 && key <= 31)
   {
@@ -392,6 +410,7 @@ void TEKey(char key, TEHandle te)
 }
 void TEClick(Point p, bool, TEHandle te)
 {
+  RecordTECall(te, "click");
   short offset = 0;
   int row = std::max(0, (p.v - (**te).viewRect.top) / 16);
   for (; offset < (**te).teLength && row; ++offset)
@@ -403,10 +422,13 @@ void TEClick(Point p, bool, TEHandle te)
 }
 void TEAutoView(bool value, TEHandle te)
 {
+  RecordTECall(te, "auto-view");
   (**te).autoView = value;
 }
 void TECalText(TEHandle te)
 {
+  RecordTECall(te, "cal-text");
+  ++(**te).calTextCalls;
   TERec &t = **te;
   t.nLines = 0;
   const int capacity = std::max(1, (t.destRect.right - t.destRect.left) / 6);
@@ -426,10 +448,12 @@ void TECalText(TEHandle te)
 }
 void TEScroll(short horizontal, short vertical, TEHandle te)
 {
+  RecordTECall(te, "scroll");
   OffsetRect(&(**te).destRect, horizontal, vertical);
 }
-void TEUpdate(const Rect *, TEHandle)
+void TEUpdate(const Rect *, TEHandle te)
 {
+  RecordTECall(te, "update");
   toolbox_host::paintOperations.push_back("text");
   ++toolbox_host::updates;
 }
@@ -480,10 +504,21 @@ void ToolboxScenePlatformController::flushTE()
   this->flushRetiredEntriesInto(this->retiredTextEdits_, this->textEditBucket_);
 }
 
-void TEActivate(TEHandle te) { GetPort(&toolbox_host::activationPort); (**te).active = true; }
-void TEDeactivate(TEHandle te) { GetPort(&toolbox_host::deactivationPort); (**te).active = false; }
+void TEActivate(TEHandle te)
+{
+  RecordTECall(te, "activate");
+  GetPort(&toolbox_host::activationPort);
+  (**te).active = true;
+}
+void TEDeactivate(TEHandle te)
+{
+  RecordTECall(te, "deactivate");
+  GetPort(&toolbox_host::deactivationPort);
+  (**te).active = false;
+}
 void TEIdle(TEHandle te)
 {
+  RecordTECall(te, "idle");
   ++(**te).idleCalls;
   ApplyTECompletion(te, (**te).idleCompletions);
   if (toolbox_host::afterIdle)
