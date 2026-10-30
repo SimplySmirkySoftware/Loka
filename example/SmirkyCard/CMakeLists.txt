@@ -184,6 +184,9 @@ if(TARGET LokaCommonTesting)
     SMIRKYCARD_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME smirkyCardSceneSwitch COMMAND LokaSmirkyCardTests)
   add_test(NAME smirkyCardMainResult COMMAND LokaSmirkyCardTests --main-result)
+  # Both runs create and remove _smirky_scenario.audit and _smirky_scenario/ in
+  # the binary directory, so a parallel ctest must not overlap them.
+  set_tests_properties(smirkyCardSceneSwitch smirkyCardMainResult PROPERTIES RESOURCE_LOCK smirkycard_scratch)
 endif()
 
 # One call plus two JS files adds a scenario; the config and main contain no card names.

@@ -16,7 +16,7 @@ namespace
 
   template <class Row> bool AcceptsNativeFocus(const Row &row)
   {
-    return row.usedThisFrame && row.te && !EmptyRect(&row.rect);
+    return row.usedThisFrame && (row.te || (row.unicode && row.editor->hasNativeHandle())) && !EmptyRect(&row.rect);
   }
 
   bool TabKeyBefore(const Rect &a, std::size_t aIndex, const Rect &b, std::size_t bIndex)
@@ -171,13 +171,22 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
   return true;
 }
 
+bool ToolboxScenePlatformController::offerKeyEvent(const EventRecord &event)
+{
+  EditTextControlBinding *row = this->editControls_.focused();
+  if (!row || !row->unicode || ParkedContext(row->ownerContext))
+    return false;
+  return row->editor->offerKeyEvent(event);
+}
+
 bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
 {
   EditTextControlBinding *focusedEdit = this->editControls_.focused();
   // A parked owner keeps its focused row until the sweep; its keys do nothing.
   if (focusedEdit && ParkedContext(focusedEdit->ownerContext))
     return true;
-  if (focusedEdit && focusedEdit->te && focusedEdit->editor)
+  if (focusedEdit && (focusedEdit->te || (focusedEdit->unicode && focusedEdit->editor->hasNativeHandle()))
+      && focusedEdit->editor)
   {
     focusedEdit->editor->scrollKey(key);
     return true;

@@ -90,7 +90,7 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   for (size_t i = 0; i < editControls_.size(); ++i)
   {
     EditTextControlBinding &binding = editControls_[i];
-    if (!binding.ownerContext || !binding.te || !binding.usedThisFrame)
+    if (!binding.ownerContext || !(binding.te || binding.unicode) || !binding.usedThisFrame)
     {
       continue;
     }
@@ -105,7 +105,8 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
     }
     // Replay borrows established TE placement; it never reprojects or changes
     // the registry after the viewport's projection scope has popped.
-    if (binding.editor) binding.editor->repaint(binding.te);
+    if (binding.editor)
+      binding.editor->repaintNative();
     else static_cast<ToolboxEditTextContext *>(binding.ownerContext)->repaint(
         ToolboxEditPresentation(binding.te, binding.installed));
   }

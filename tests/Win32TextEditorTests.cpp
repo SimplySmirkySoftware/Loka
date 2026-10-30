@@ -1998,6 +1998,38 @@ void testWin32TextEditorHintEvidence()
   }
 }
 
+void testWin32TextEditorMultibyteHintEvidence()
+{
+  // Keep the repeated multibyte-row case, then make the following row empty
+  // so text-only matching and the byte-column evidence choose different rows.
+  for (int empty = 0; empty < 2; ++empty)
+  {
+    Fixture fixture(2, "");
+    const ItemId edited = fixture.lines.at(0).id, other = fixture.lines.at(1).id;
+    const String day = String::Utf8("\xe6\x97\xa5", 3);
+    LOKA_VERIFY(fixture.lines.update(edited, day) == EDIT_OK);
+    if (!empty)
+      LOKA_VERIFY(fixture.lines.update(other, day) == EDIT_OK);
+    fixture.context->onPropsApplied();
+    const HWND window = fixture.context->hwnd();
+    // End of the first row: one UTF-16 unit, three UTF-8 bytes.
+    SendMessageW(window, EM_SETSEL, 1, 1);
+    {
+      EvidenceTrace trace(fixture, empty ? L"\x65e5\r\n\r\n" : L"\x65e5\r\n\r\n\x65e5", 3, false, false);
+      SendMessageW(window, WM_CHAR, L'\r', 1);
+    }
+    LOKA_VERIFY(EditorAccess::status(*fixture.context) == EDITOR_OK);
+    LOKA_VERIFY(fixture.lines.size() == 3);
+    LOKA_VERIFY(fixture.lines.at(0).id == edited);
+    // Discriminator in the empty-following-row case: without bytesFloor,
+    // column 1 cannot reproduce the split. Text-only matching retains other
+    // at row 1 instead of row 2; two identical nonempty rows alone cannot tell.
+    LOKA_VERIFY(fixture.lines.at(2).id == other);
+    LOKA_VERIFY(fixture.lines.at(1).id != edited && fixture.lines.at(1).id != other);
+    fixture.matches();
+  }
+}
+
 void testWin32TextEditorUtf8ClosedPolicy()
 {
   // Fits the native unit budget but expands beyond the exact UTF-8 capacity.

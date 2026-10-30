@@ -12,3 +12,5 @@ void testToolboxAutoControlIdsSaturateAtShortMax();
 void testToolboxFocusedEditSurvivesLowerBindingErase();
 void testToolboxEditControlDetachRetiresExactContext();
 void testToolboxEditControlSharedStateChangeFansOut();
+void testToolboxEditControlPreparedStorage();
+void testToolboxEditControlCapacityReuse();

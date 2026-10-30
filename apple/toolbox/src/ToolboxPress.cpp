@@ -90,7 +90,7 @@ bool ToolboxScenePlatformController::resolvePress(const PressRow &row, const Poi
   case PressRow::EDIT_CONTROL:
   {
     const EditTextControlBinding &binding = this->editControls_[row.index];
-    if (!binding.te || !PtInRect(point, &binding.rect))
+    if (!(binding.te || (binding.unicode && binding.editor->hasNativeHandle())) || !PtInRect(point, &binding.rect))
       return false;
     value.context = binding.ownerContext;
     break;
@@ -179,7 +179,7 @@ bool ToolboxScenePlatformController::pressOnEmptySpace()
   return false;
 }
 
-bool ToolboxScenePlatformController::handleMouseDown(const Point &point)
+bool ToolboxScenePlatformController::handleMouseDown(const Point &point, const EventRecord &event)
 {
   ResolvedPress press;
   if (!this->pressLedger_.topmostAt(point, *this, press))
@@ -193,11 +193,13 @@ bool ToolboxScenePlatformController::handleMouseDown(const Point &point)
   case PRESS_OWNER_ATTACHED:
     break;
   }
-  return this->dispatchPress(press, point);
+  return this->dispatchPress(press, point, event);
 }
 
 /** One dispatch per accepted press. Copy all borrowed row inputs before callbacks. */
-bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, const Point &point)
+bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
+                                                   const Point &point,
+                                                   const EventRecord &event)
 {
   const std::size_t index = press.row.index;
   switch (press.row.kind)
@@ -259,10 +261,10 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press, c
   {
     const TEHandle te = this->editControls_[index].te;
     const Rect rect = this->editControls_[index].rect;
-    ToolboxTextEditorContext *editor = this->editControls_[index].editor;
+    ToolboxEditorSeat *editor = this->editControls_[index].editor;
     this->activateEditControl(index);
     if (editor)
-      editor->click(point);
+      editor->click(point, event);
     else
     {
       TEClick(point, false, te);

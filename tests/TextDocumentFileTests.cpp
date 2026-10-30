@@ -200,6 +200,68 @@ void testTextDocumentSplitMatrix()
   }
 }
 
+void testTextDocumentBomRead()
+{
+  TempFile source;
+  Document document;
+  LOKA_VERIFY(read(source,
+                   document,
+                   "\xef\xbb\xbf"
+                   "a\nb")
+              == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(document.lines.size() == 2);
+  LOKA_VERIFY(row(document.lines, 0) == "a");
+  LOKA_VERIFY(row(document.lines, 1) == "b");
+  // A BOM-only file is an empty file: one empty row.
+  LOKA_VERIFY(read(source, document, "\xef\xbb\xbf") == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(document.lines.size() == 1 && row(document.lines, 0).empty());
+}
+
+void testTextDocumentBomRoundTrip()
+{
+  TempFile target;
+  Document document;
+  LOKA_VERIFY(read(target,
+                   document,
+                   "\xef\xbb\xbf"
+                   "a\nb")
+              == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(WriteTextDocument(&target.context, target.file, document.lines) == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(target.bytes() == "a\nb");
+}
+
+void testTextDocumentInteriorBom()
+{
+  TempFile source;
+  Document document;
+  const std::string interior = "a\xef\xbb\xbf"
+                               "b";
+  LOKA_VERIFY(read(source, document, interior) == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(document.lines.size() == 1);
+  LOKA_VERIFY(row(document.lines, 0).size() == 5);
+  LOKA_VERIFY(row(document.lines, 0) == interior);
+}
+
+void testTextDocumentBomCapacity()
+{
+  TempFile source;
+  Document document;
+  std::string body(7937, 'a');
+  for (unsigned i = 0; i < 255; ++i)
+    body += "\r\n";
+  LOKA_VERIFY(body.size() == 8447);
+  const std::string bom = "\xef\xbb\xbf";
+  LOKA_VERIFY(read(source, document, bom + body) == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(document.lines.size() == 256);
+  LOKA_VERIFY(row(document.lines, 0).size() == 7937);
+  LOKA_VERIFY(row(document.lines, 255).empty());
+  const Snapshot before(document.lines);
+  LOKA_VERIFY(read(source, document, bom + body + 'a') == TEXT_DOCUMENT_TOO_LARGE);
+  before.unchanged(document.lines);
+  LOKA_VERIFY(read(source, document, body + 'a') == TEXT_DOCUMENT_TOO_LARGE);
+  before.unchanged(document.lines);
+}
+
 void testTextDocumentLimits()
 {
   TempFile source;
@@ -568,6 +630,10 @@ void testTextAlphabetFileAdapter()
   }
 LOKA_GENERIC_TEXT_SKIP(testTextAlphabetFileAdapter)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentSplitMatrix)
+LOKA_GENERIC_TEXT_SKIP(testTextDocumentBomRead)
+LOKA_GENERIC_TEXT_SKIP(testTextDocumentBomRoundTrip)
+LOKA_GENERIC_TEXT_SKIP(testTextDocumentInteriorBom)
+LOKA_GENERIC_TEXT_SKIP(testTextDocumentBomCapacity)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentLimits)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentReplacement)
 LOKA_GENERIC_TEXT_SKIP(testTextDocumentCommitRefusals)

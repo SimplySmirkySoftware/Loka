@@ -1,9 +1,24 @@
 #include "ToolbarMeasurementRun.hpp"
+#include "ToolbarRowMeasurementScene.hpp"
+#include "ToolboxHost.hpp"
 #include <cassert>
 #include <cstring>
 using namespace loka::testing;
 namespace
 {
+  struct FakeClock
+  {
+    unsigned long ticks;
+    FakeClock()
+        : ticks(0)
+    {
+    }
+    unsigned long now()
+    {
+      return ++ticks;
+    }
+  };
+
   class Receiver : public WholeDrawReceiver
   {
   public:
@@ -48,6 +63,36 @@ namespace
 } // namespace
 int main()
 {
+  {
+    FakeClock clock;
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController platform(&window);
+    loka::app::scene::Scene scene((loka::app::scene::Boundary<ToolbarRows>()));
+    assert(scene.mount(&platform));
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    std::FILE *out = std::tmpfile();
+    assert(out);
+    assert(RunToolbarRows(scene, platform, clock, out));
+    assert(clock.ticks == 6 * 31 * 2);
+    std::rewind(out);
+    char line[512];
+    unsigned rows = 0, deltas = 0;
+    while (std::fgets(line, sizeof(line), out))
+    {
+      if (std::strstr(line, "toolbar_row case="))
+      {
+        ++rows;
+        assert(std::strstr(line, "repetitions=31 median_us=1 maximum_us=1"));
+      }
+      if (std::strstr(line, "toolbar_row_delta"))
+        ++deltas;
+    }
+    assert(rows == 6 && deltas == 2);
+    std::fclose(out);
+    loka::dsl::testing::SceneTestAccess::unmount(scene);
+  }
+
   Receiver receiver;
   {
     WholeDrawReceiverScope scope(receiver);

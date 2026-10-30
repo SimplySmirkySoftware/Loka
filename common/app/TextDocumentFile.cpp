@@ -10,6 +10,9 @@ namespace loka
   {
     namespace
     {
+      // Drop only the leading signature; interior U+FEFF remains ordinary row text.
+      const unsigned char kTextDocumentBom[] = {0xef, 0xbb, 0xbf};
+
       /** Admission is checked by ReadBytes before allocation, including growth. */
       class TextReadCapacity : public platform::file::ReadCapacity
       {
@@ -22,7 +25,10 @@ namespace loka
         {
           const std::size_t extra = this->capacity_.lines ? this->capacity_.lines - 1 : 0;
           std::size_t allowance = 0;
-          return text_document_detail::ExpandedSize(this->capacity_.bytes, extra, allowance) && bytes <= allowance;
+          if (!text_document_detail::ExpandedSize(this->capacity_.bytes, extra, allowance)
+              || sizeof(kTextDocumentBom) > static_cast<std::size_t>(-1) - allowance)
+            return false;
+          return bytes <= allowance + sizeof(kTextDocumentBom);
         }
 
       private:
@@ -149,7 +155,10 @@ namespace loka
         return TEXT_DOCUMENT_ALLOCATION;
       std::size_t count = 0;
       std::size_t start = 0, normalized = 0;
-      for (std::size_t i = 0;; ++i)
+      if (bytes.size() >= sizeof(kTextDocumentBom) && bytes.data()[0] == kTextDocumentBom[0]
+          && bytes.data()[1] == kTextDocumentBom[1] && bytes.data()[2] == kTextDocumentBom[2])
+        start = sizeof(kTextDocumentBom);
+      for (std::size_t i = start;; ++i)
       {
         if (i < bytes.size() && bytes.data()[i] != '\r' && bytes.data()[i] != '\n')
           continue;

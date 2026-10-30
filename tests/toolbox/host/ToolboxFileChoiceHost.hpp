@@ -6,6 +6,7 @@
 #include "ToolboxFullDrawPresenter.hpp"
 #include "app/scene/projection/PlatformController.hpp"
 #include "Quickdraw.h"
+#include <Dialogs.h>
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
 #include "ToolboxPendingDialogs.hpp"
@@ -40,7 +41,14 @@ public:
   {
     this->render(0);
   }
-  bool handleMouseDown(const Point &) { return false; }
+  bool handleMouseDown(const Point &, const EventRecord &)
+  {
+    return false;
+  }
+  bool offerKeyEvent(const EventRecord &)
+  {
+    return false;
+  }
   bool handleKeyDown(char) { return false; }
   bool handleTabKey(ToolboxTabDirection)
   {

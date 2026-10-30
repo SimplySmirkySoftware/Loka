@@ -1513,7 +1513,7 @@ namespace
     LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
     LayoutState state = seat();
     LayoutNode(&stack, state, &controller, 0);
-    ToolboxScenePlatformController::EditTextControlBinding binding;
+    ToolboxScenePlatformController::EditTextControlBinding binding(0, 0, 0);
     binding.ownerContext = 0;
     binding.editor = 0;
     binding.text = 0;
@@ -1525,7 +1525,8 @@ namespace
     binding.te = TENew(&binding.rect, &binding.rect);
     binding.usedThisFrame = true;
     binding.lifetimeHint = NATIVE_HINT_EAGER_RELEASE;
-    controller.editControls_.add(binding);
+    LOKA_VERIFY(controller.editControls_.prepareAppend());
+    controller.editControls_.commitAppend(binding);
     controller.editControls_.focus(0);
     toolbox_host::invalidatedRects.clear();
     ToolboxInputDoor::idleTextEdits(controller);

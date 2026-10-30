@@ -34,6 +34,8 @@ void testMacScrollViewInsetsRefuseAnExtentAboveShort();
 void testMacScrollRequestBothAxesAndStoppedEcho();
 void testMacScrollRequestMissingDocumentAtApply();
 void testMacScrollRequestSmallDocument();
+void testMacScrollRequestShrunkRowClamps();
+void testMacScrollRequestShrunkRowRemovesRange();
 void testMacScrollRequestOriginalMuteAndNativeControl();
 void testMacScrollRequestAbsentXAndHeightless();
 void testMacScrollRequestRefusedNestedVisit();

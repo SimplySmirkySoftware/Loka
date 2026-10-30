@@ -9,6 +9,7 @@
 #include "ToolboxActivationPhase.hpp"
 #include "ToolboxWindowGeometry.hpp"
 #include <Windows.h>
+#include <Events.h>
 #include <vector>
 
 class App;
@@ -49,7 +50,8 @@ public:
   void requestInvalidateRect(const Rect &rect);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
-  bool handleMouseDown(const Point &globalPoint);
+  bool handleMouseDown(const Point &globalPoint, const EventRecord &event);
+  bool offerKeyEvent(const EventRecord &event);
   /** Tracks a grow-box drag from the given global mouse-down point, resizes
       the native window, and publishes the new content frame (GH #524). */
   void handleGrow(const Point &globalPoint);

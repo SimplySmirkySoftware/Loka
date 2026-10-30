@@ -381,7 +381,7 @@ void ToolboxApp::run()
           {
             // Queued damage never drops a press; the controller refuses presses
             // on parked rows itself through the render-order press door (#1493).
-            clicked->handleMouseDown(event.where);
+            clicked->handleMouseDown(event.where, event);
             this->cursorOwner_.reconcile();
           }
         }
@@ -462,7 +462,12 @@ void ToolboxApp::run()
       // An input method delivers committed text one byte per key-down, and the
       // trail may arrive in a later iteration, so the lead is held across
       // non-key events instead of pulling another event (#1439).
-      if (this->twoByteKey_.holdsLead())
+      if (!command && active && active->offerKeyEvent(event))
+      {
+        this->twoByteKey_.release();
+        handled = true;
+      }
+      if (!handled && this->twoByteKey_.holdsLead())
       {
         const unsigned char lead = this->twoByteKey_.lead();
         this->twoByteKey_.release();
