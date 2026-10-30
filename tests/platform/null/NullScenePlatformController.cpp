@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <climits>
+#include "platform/StringUTF8.hpp"
 #include <algorithm>
 #include "app/scene/projection/PaintEnumeration.hpp"
 
@@ -88,6 +89,25 @@ bool NullScenePlatformController::queryNaturalWidth(loka::app::scene::Node *chil
   return width > 0;
 }
 
+bool NullScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+{
+  loka::app::TextNode *text = child ? child->asTextNode() : 0;
+  if (!text || !text->props.text_)
+    return false;
+  const loka::app::BlockStyle &block = text->props.blockStyle_;
+  if (block.hasWrap_ && block.wrap_ != loka::app::TEXT_WRAP_NONE)
+    return false;
+  const loka::app::TextStyle style = text->props.resolvedTextStyle();
+  std::string value;
+  if (!loka::platform::CollectUtf8(text->props.text_->get(), value) || value.find_first_of("\r\n") != std::string::npos)
+    return false;
+  const int measured = loka::app::SyntheticTextSize(style.size_);
+  if (measured <= 0 || measured > SHRT_MAX)
+    return false;
+  height = static_cast<short>(measured);
+  return true;
+}
+
 class NullScenePlatformController::LayoutTraversal
     : public loka::app::scene::IPlatformLayoutTraversal
 {
@@ -101,6 +121,11 @@ public:
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const
   {
     return this->controller_ && this->controller_->queryNaturalWidth(child, width);
+  }
+
+  virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+  {
+    return this->controller_ && this->controller_->queryNaturalHeight(child, height);
   }
 
   virtual int layoutChild(loka::app::scene::Node *child,

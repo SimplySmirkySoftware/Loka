@@ -68,7 +68,8 @@ namespace loka
                                                                         metrics.editTextHeight,
                                                                         metrics.popupMenuHeight,
                                                                         metrics.textHeight,
-                                                                        metrics.imageFallbackHeight);
+                                                                        metrics.imageFallbackHeight,
+                                                                        source);
             if (h > rowHeight)
             {
               rowHeight = h;
@@ -110,7 +111,8 @@ namespace loka
                                                                                   metrics.editTextHeight,
                                                                                   metrics.popupMenuHeight,
                                                                                   metrics.textHeight,
-                                                                                  metrics.imageFallbackHeight);
+                                                                                  metrics.imageFallbackHeight,
+                                                                                  source);
             int offset = 0;
             const int remain = rowHeight - childHeight;
             if (remain > 0)
