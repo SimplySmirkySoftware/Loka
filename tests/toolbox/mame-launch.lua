@@ -56,6 +56,27 @@ local KEY_SEEN_TIMEOUT = 5.0
 local KEY_SEEN_STEP = 0.01
 local keyMemory = manager.machine.devices[":maincpu"].spaces["program"]
 
+-- KeyMap is read at its low-memory address, which is also its physical
+-- address only where the guest keeps low memory at physical 0 (pmac6100 maps
+-- it elsewhere). The launch starts with the Finder current, so CurApName
+-- (0x910) reading "Finder" there confirms the address; otherwise tap() keeps
+-- its fixed timing and the launcher says so once.
+local CUR_AP_NAME = 0x910
+local keyMapReadable = nil
+
+local function decideKeyMapReadable()
+    local length = keyMemory:read_u8(CUR_AP_NAME)
+    local name = {}
+    for i = 1, math.min(length, 31) do
+        name[i] = string.char(keyMemory:read_u8(CUR_AP_NAME + i))
+    end
+    keyMapReadable = table.concat(name) == "Finder"
+    if not keyMapReadable then
+        say("[skip] key waits: CurApName (0x%x) does not read Finder at launch, so KeyMap is not at 0x%x on this machine",
+            CUR_AP_NAME, KEY_MAP)
+    end
+end
+
 local function keyCode(key)
     local port = assert(tonumber(key.port.tag:match("^:macadb:KEY(%d+)$")), "not an ADB key: " .. key.name)
     assert(key.mask ~= 0 and (key.mask & (key.mask - 1)) == 0, "ADB key field is not one bit: " .. key.name)
@@ -67,6 +88,10 @@ local function keyCode(key)
 end
 
 local function awaitKeySeen(key, down)
+    assert(keyMapReadable ~= nil, "decideKeyMapReadable() runs before the first key")
+    if not keyMapReadable then
+        return
+    end
     local code = keyCode(key)
     local waited = 0.0
     while (((keyMemory:read_u8(KEY_MAP + (code >> 3)) >> (code & 7)) & 1) == 1) ~= down do
@@ -134,6 +159,7 @@ end
 
 say("booting (%s emulated seconds)", BOOT_WAIT)
 emu.wait(BOOT_WAIT)
+decideKeyMapReadable()
 tap(lKey)
 commandKey:set_value(1); tap(oKey); commandKey:clear_value()
 emu.wait(5)
