@@ -54,13 +54,12 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(ViewportScroll
   const ToolboxViewportRows rows(0,
                                  axis == loka::app::SCROLL_BAR_HORIZONTAL ? index : ToolboxViewportRows::absent(),
                                  axis == loka::app::SCROLL_BAR_VERTICAL ? index : ToolboxViewportRows::absent());
-  const Rect rect = binding.rect;
-  this->commitViewportScrollBarValue(*binding.scrollView, rows, &rect);
+  this->commitViewportScrollBarValue(*binding.scrollView, rows, true);
 }
 
 void ToolboxScenePlatformController::commitViewportScrollBarValue(loka::app::ScrollViewNode &node,
                                                                   const ToolboxViewportRows &rows,
-                                                                  const Rect *dirty)
+                                                                  bool nativeInput)
 {
   loka::core::Frame origin = node.requestedOrigin();
   bool changed = false;
@@ -84,13 +83,14 @@ void ToolboxScenePlatformController::commitViewportScrollBarValue(loka::app::Scr
   if (!changed)
     return;
   // No row reference crosses publication, which can re-enter projection.
-  if (dirty)
+  if (nativeInput)
   {
     this->beginBatchUpdate();
-    this->addPendingDirty(*dirty);
+    if (this->window_)
+      this->window_->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
   }
   node.publishOrigin(origin.x, origin.y);
-  if (dirty)
+  if (nativeInput)
     this->endBatchUpdate();
 }
 
@@ -106,7 +106,7 @@ void ToolboxScenePlatformController::applyViewportScrollRequest(loka::app::Scrol
     if (rows.queryRow(loka::app::ScrollViewVisit::Y, index))
       SetControlValue(this->scrollBarLedger_.scrollBarControls_[index].control, static_cast<short>(target.y));
   }
-  this->commitViewportScrollBarValue(node, rows, 0);
+  this->commitViewportScrollBarValue(node, rows, false);
 }
 
 #include "ToolboxPress.cpp"

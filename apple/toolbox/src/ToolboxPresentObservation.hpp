@@ -211,7 +211,8 @@ public:
     ++this->viewports_;
     this->horizontal_ = this->horizontal_ || dx != 0;
   }
-  /** O(1) after full layout; the controller supplies its ledger overlap count. */
+  /** O(1) after full layout; admits nonempty layout_dirty/viewport_input reasons.
+      The controller supplies its ledger overlap count. */
   void complete(unsigned foregroundUnits)
   {
     this->foregroundUnits_ = foregroundUnits;
@@ -223,7 +224,8 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
     else if (this->horizontal_)
       this->refusal_ = TOOLBOX_PRESENT_HORIZONTAL_MOVE;
-    else if (this->reasons_ != (1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY))
+    else if (!this->reasons_
+             || (this->reasons_ & ~((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT))))
       this->refusal_ = TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT;
     else if (this->contentInputs_)
       this->refusal_ = TOOLBOX_PRESENT_CONTENT_INPUTS;

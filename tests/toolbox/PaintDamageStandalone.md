@@ -230,6 +230,8 @@ logs its `last_refusal` separately (for that second pass, `no_viewport_moved`).
 Both snapshots clear on explicit diagnostic reset. Empty OS update bboxes are
 reported as `0,0,0,0`, independent of the window's port origin.
 Presentation remains `erase`; the observation never selects a pixel-copy path.
+The admitted scroll-only reason set is any nonempty subset of `layout_dirty` and
+`viewport_input`; other reasons refuse as `reasons_beyond_layout`.
 The arm expects `content_inputs` with `content_inputs=1` and
 `unsupported_kinds=2`: the hidden-check phase wrote the offscreen Text without
 any draw in between, so its PROPS mark is still pending when the reveal lays it

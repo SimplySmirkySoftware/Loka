@@ -1,3 +1,4 @@
+#include "debug/ToolboxSceneDebugStats.hpp"
 #include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
@@ -215,10 +216,7 @@ public:
   void drawDirty(const Rect &);
 #else
   void requestInvalidate() { ++toolbox_host::invalidations; }
-  void requestInvalidateWithReason(ToolboxFullDrawReason)
-  {
-    ++toolbox_host::invalidations;
-  }
+  void requestInvalidateWithReason(ToolboxFullDrawReason);
 #endif
   ToolboxScenePlatformController *scenePlatformController()
   {
@@ -229,11 +227,7 @@ public:
 #endif
   loka::core::StateTracker *getTracker() { return &this->tracker_; }
 #ifndef LOKA_HOST_ZSTACK_UNITS
-  void requestInvalidateRect(const Rect &rect)
-  {
-    ++toolbox_host::invalidations;
-    toolbox_host::invalidatedRects.push_back(rect);
-  }
+  void requestInvalidateRect(const Rect &rect);
 #endif
   WindowPort *window()
   {
@@ -330,8 +324,7 @@ public:
                                   const ToolboxViewportRows &rows,
                                   const loka::core::Frame &target);
 
-  void
-  commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, const Rect *dirty);
+  void commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, bool nativeInput);
 
 #ifdef LOKA_HOST_GAP_DISPATCH
   loka::app::scene::PlatformLayoutHandlerRegistry gapLayoutRegistry;
@@ -533,6 +526,16 @@ public:
 
   bool handleTextKey(char);
   std::string batchEvents;
+#ifdef LOKA_HOST_ZSTACK_UNITS
+  void beginBatchUpdate();
+  void endBatchUpdate();
+  void requestInvalidateForChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool);
+  void requestInvalidateForText(loka::core::State<loka::core::String> *);
+  // Production batch bookkeeping, exercised only by the real-layout host.
+  bool pendingFullInvalidate_;
+  loka::app::scene::NodeDirtyFlags pendingInvalidateFlags_;
+  loka::app::scene::Node *pendingRootNode_;
+#else
   void beginBatchUpdate()
   {
     this->batchEvents += "B";
@@ -541,6 +544,7 @@ public:
   {
     this->batchEvents += "E";
   }
+#endif
   struct EditTextControlBinding;
   void updateStateFromEdit(EditTextControlBinding &, const loka::core::String &);
   void recordEditHit(const Rect &, loka::core::State<loka::core::String> *,
@@ -703,6 +707,11 @@ public:
 #ifdef LOKA_HOST_CONTROL_ORDER
         pushButtonBucket_(0),
 #endif
+#ifdef LOKA_HOST_ZSTACK_UNITS
+        pendingFullInvalidate_(false),
+        pendingInvalidateFlags_(loka::app::scene::NODE_DIRTY_NONE),
+        pendingRootNode_(0),
+#endif
         poolIntakeAuditFailCount_(0),
         inBatchUpdate_(false),
         compositionReplay_(compositionReplay),
@@ -737,7 +746,11 @@ public:
   }
   bool intersectWithProjectionClip(const Rect &rect, Rect &out) const;
   void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
+#ifdef LOKA_HOST_ZSTACK_UNITS
+  virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool);
+#else
   virtual void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
+#endif
   loka::app::scene::Node *rootNode_;
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
@@ -777,10 +790,23 @@ public:
   {
     this->observation_.noteDamage(damage);
   }
-  void noteWindowFullRequest(const char *) {}
-  void noteWindowRectRequest() {}
-  void noteWindowFlushFull() {}
-  void noteWindowFlushDirty() {}
+  void noteWindowFullRequest(const char *reason)
+  {
+    ++this->debugStats_.windowFullRequestCount;
+    this->debugStats_.windowFullRequestSource = reason;
+  }
+  void noteWindowRectRequest()
+  {
+    ++this->debugStats_.windowRectRequestCount;
+  }
+  void noteWindowFlushFull()
+  {
+    ++this->debugStats_.windowFlushFullCount;
+  }
+  void noteWindowFlushDirty()
+  {
+    ++this->debugStats_.windowFlushDirtyCount;
+  }
   /** Dirty delivery queries the previous layout key once; O(1), no rows. */
   Rect dirtyExtent(const Rect &rect) const
   {
@@ -802,28 +828,8 @@ public:
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;
   std::vector<loka::core::State<loka::core::String> *> pendingTextStates_;
-  struct RenderStats
-  {
-    /** Last completed full layout, including passes with no viewport movement. */
-    ToolboxPresentObservation lastPresentObservation;
-    /** Last completed full layout with movement; survives the #1513 republication pass.
-        Cleared with the rest of the debug stats on explicit reset. */
-    ToolboxPresentObservation lastMovedPresentObservation;
-    unsigned renderCalls, totalRenderCalls, totalBoundaryApplyCount;
-    unsigned renderDirtyCalls, totalRenderDirtyCalls;
-    unsigned controlDrawCount, totalControlDrawCount;
-    RenderStats()
-        : renderCalls(0),
-          totalRenderCalls(0),
-          totalBoundaryApplyCount(0),
-          renderDirtyCalls(0),
-          totalRenderDirtyCalls(0),
-          controlDrawCount(0),
-          totalControlDrawCount(0)
-    {
-    }
-    void refreshHitCounts(int, int, int, int, int) {}
-  } debugStats_;
+  typedef ToolboxSceneDebugStats RenderStats;
+  RenderStats debugStats_;
   const RenderStats &debugStatsForTesting() const
   {
     return this->debugStats_;

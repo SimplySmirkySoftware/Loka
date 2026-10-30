@@ -221,13 +221,15 @@ namespace
     Point point = {static_cast<short>(bar->rect.top + 20), static_cast<short>(bar->rect.left + 3)};
     f.controller.batchEvents.clear();
     const unsigned tracks = toolbox_host::tracks;
+    const unsigned requests = toolbox_host::invalidations;
     ToolboxInputDoor::mouseDown(f.controller, point);
     LOKA_VERIFY(toolbox_host::tracks == tracks + 1);
-    LOKA_VERIFY(f.controller.batchEvents == (cancelled ? "" : "BDPE"));
+    LOKA_VERIFY(toolbox_host::invalidations == requests + (cancelled ? 0 : 1));
+    LOKA_VERIFY(f.controller.batchEvents == (cancelled ? "" : "BPE"));
     LOKA_VERIFY(f.writes == writes + (cancelled ? 0 : 1));
     LOKA_VERIFY(f.storage.viewport.get().y == (cancelled ? 40 : 0));
     LOKA_VERIFY(f.storage.viewport.get().x == 25);
-    LOKA_VERIFY(f.controller.pendingDirtyRects_.size() == (cancelled ? 0u : 1u));
+    LOKA_VERIFY(f.controller.pendingDirtyRects_.empty());
   }
   void absent(const char *kind)
   {

@@ -223,8 +223,8 @@ namespace
       controller.buttonControls_[0].control->calls.clear();
       context.updateRect(after);
     }
-    const unsigned draws = controller.debugStats_.controlDrawCount;
-    const unsigned total = controller.debugStats_.totalControlDrawCount;
+    const int draws = controller.debugStats_.controlDrawCount;
+    const int total = controller.debugStats_.totalControlDrawCount;
     toolbox_host::controlCalls = toolbox_host::ControlCalls();
     if (!created)
       toolbox_host::beforeHide = verifyVisibleHide;

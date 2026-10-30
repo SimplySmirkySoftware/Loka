@@ -432,8 +432,7 @@ public:
   /** Publishes the value a finished tracking loop settled on, in the order
       the ruling fixes: binding first, then onChange. */
   void commitScrollBarValueAt(std::size_t index);
-  void
-  commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, const Rect *dirty);
+  void commitViewportScrollBarValue(loka::app::ScrollViewNode &node, const ToolboxViewportRows &rows, bool nativeInput);
   void commitViewportScrollBarValue(ViewportScrollBarBinding &binding,
                                     ScrollBarControlBinding &native,
                                     loka::app::ScrollBarOrientation axis);

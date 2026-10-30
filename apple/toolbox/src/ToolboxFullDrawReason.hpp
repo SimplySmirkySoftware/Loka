@@ -11,6 +11,8 @@ enum ToolboxFullDrawReason
   TOOLBOX_FULL_DRAW_FULL_REBUILD_OR_NO_ROOT,
   TOOLBOX_FULL_DRAW_STRUCTURE_SWAP,
   TOOLBOX_FULL_DRAW_PAINT_WIDENED_VIEWPORT_RENDER,
+  /** A settled native bar value published as the viewport's requested origin. */
+  TOOLBOX_FULL_DRAW_VIEWPORT_INPUT,
   TOOLBOX_FULL_DRAW_REASON_COUNT
 };
 
@@ -33,6 +35,8 @@ inline const char *ToolboxFullDrawReasonName(ToolboxFullDrawReason reason)
     return "structure-swap";
   case TOOLBOX_FULL_DRAW_PAINT_WIDENED_VIEWPORT_RENDER:
     return "paint-widened-viewport-render";
+  case TOOLBOX_FULL_DRAW_VIEWPORT_INPUT:
+    return "viewport_input";
   case TOOLBOX_FULL_DRAW_REASON_COUNT:
     break;
   }
