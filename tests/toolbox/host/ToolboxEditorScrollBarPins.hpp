@@ -338,7 +338,7 @@ namespace
     (**f.te()).idleCompletions.push_back(completion);
     f.window.idleControls(ACTIVATION_FOREGROUND);
     LOKA_VERIFY(bar->value == 2);
-    const unsigned renders = f.controller.debugStats_.totalRenderCalls;
+    const int renders = f.controller.debugStats_.totalRenderCalls;
     const int updates = toolbox_host::updates;
     bar->calls.clear();
     toolbox_host::paintOperations.clear();
@@ -359,7 +359,7 @@ namespace
     LOKA_VERIFY(!bar->visible && f.controller.scrollControl(0).usedThisFrame);
     f.window.idleControls(ACTIVATION_FOREGROUND);
     LOKA_VERIFY(bar->visible);
-    const unsigned recoveredRenders = f.controller.debugStats_.totalRenderCalls;
+    const int recoveredRenders = f.controller.debugStats_.totalRenderCalls;
     ToolboxInputDoor::renderDirty(f.controller, f.context->chromeRect());
     LOKA_VERIFY(f.controller.debugStats_.totalRenderCalls == recoveredRenders + (composition ? 1 : 0));
     const unsigned stableDamage = toolbox_host::invalidations;

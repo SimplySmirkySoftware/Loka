@@ -277,7 +277,8 @@ report; there is no reply door.
 Toolbox shares `commitViewportScrollBarValue` between input and request: it
 reads selected native values, updates `appliedValue` before one origin
 publication, and publishes nothing for an unchanged selection. Input retains
-its batch and pending-dirty ordering; requests add neither. Only rows ensured
+its batch and requests a whole-window `viewport_input` draw before publication;
+requests add neither the batch nor that door request. Only rows ensured
 and shown in this visit make an axis movable. A hidden, clipped, uncreated or
 unensured row is absent; a present row with maximum zero still accepts and
 clamps. The visit stores presence and indices, not a second native maximum.

@@ -107,6 +107,11 @@ namespace
   { return false; }
   bool CollectRectSurfaceDirtyRect(loka::app::scene::Node *, Rect &, ToolboxScenePlatformController::RenderStats &)
   { return false; }
+#ifndef LOKA_HOST_ZSTACK_UNITS
   Rect BoundaryToRect(const loka::app::scene::BoundaryNode *, const Rect &fallback) { return fallback; }
+#endif
 }
+#ifdef LOKA_HOST_ZSTACK_UNITS
+#include "ToolboxBatchUpdate.cpp"
+#endif
 #include "ToolboxBoundaryApply.cpp"

@@ -922,3 +922,19 @@ void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeCon
 #include "ToolboxRetireContextRows.inc"
   this->retired.push_back(context);
 }
+
+#ifndef LOKA_HOST_ZSTACK_UNITS
+void ToolboxWindow::requestInvalidateRect(const Rect &rect)
+{
+  ++toolbox_host::invalidations;
+  toolbox_host::invalidatedRects.push_back(rect);
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->noteWindowRectRequest();
+}
+void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
+{
+  ++toolbox_host::invalidations;
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->noteWindowFullRequest(ToolboxFullDrawReasonName(reason));
+}
+#endif

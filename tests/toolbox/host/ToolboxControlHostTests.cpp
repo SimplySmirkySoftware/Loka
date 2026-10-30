@@ -242,6 +242,7 @@ namespace
     ToolboxWindow window;
     HostPortScope port(window.window());
     ToolboxScenePlatformController controller(&window);
+    window.scenePlatformController_ = &controller;
     PushStateTracker tracker;
     MutableState<Frame> value(Frame(7, 8, 90, 80));
     tracker.addState(&value);
@@ -266,7 +267,11 @@ namespace
     LOKA_VERIFY(value.get().y == (page ? 152 : off ? 40 : 8));
     LOKA_VERIFY(value.get().x == 7 && value.get().width == 90 && value.get().height == 80);
     LOKA_VERIFY(notices.count == (page || off ? 1u : 0u));
-    LOKA_VERIFY(controller.pendingDirtyRects_.size() == (page || off ? 1u : 0u));
+    LOKA_VERIFY(controller.pendingDirtyRects_.empty());
+    LOKA_VERIFY(controller.debugStatsForTesting().windowFullRequestCount == (page || off ? 1 : 0));
+    if (page || off)
+      LOKA_VERIFY(std::strcmp(controller.debugStatsForTesting().windowFullRequestSource, "viewport_input") == 0);
+    LOKA_VERIFY(controller.debugStatsForTesting().windowRectRequestCount == 0);
     value.unbind(&Changes::changed, &notices);
     controller.ensureViewportScrollBarControl(viewport, &scroll, 80, 80, 0, ToolboxScrollViewMetrics(0, 0), false);
     LOKA_VERIFY(!controller.scrollControl(0).active && c->hilite == 255);
@@ -277,6 +282,11 @@ namespace
     HideControl(c);
     controller.publishFixturePressOrder();
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
+    // A detached window declines drawing but still publishes the settled value.
+    controller.window_ = 0;
+    SetControlValue(c, 64);
+    controller.commitViewportScrollBarValue(scroll, ToolboxViewportRows(0, ToolboxViewportRows::absent(), 0), true);
+    LOKA_VERIFY(value.get().y == 52);
   }
   void ports()
   {

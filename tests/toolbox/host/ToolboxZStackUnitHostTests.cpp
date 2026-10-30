@@ -1400,6 +1400,63 @@ namespace
       return this->controller.debugStatsForTesting().lastMovedPresentObservation;
     }
   };
+  void viewportInput(const char *which)
+  {
+    PresentLiveFixture<0> f;
+    f.controller.resetDebugStats();
+    const ToolboxSceneDebugStats before = f.controller.debugStatsForTesting();
+    ControlRef bar = f.controller.scrollControl(0).control;
+    bar->tracking = toolbox_host::TrackScript(21, 21, 0);
+    bar->tracking.callbacks.assign(1, 21);
+    const Point point = {static_cast<short>(bar->rect.top + 4), static_cast<short>(bar->rect.left + 3)};
+    LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
+    LOKA_VERIFY(f.controller.debugStats_.windowRectRequestCount == before.windowRectRequestCount);
+    const bool fullPending = f.window.needsInvalidate_;
+    const char *firstRequest = f.controller.debugStatsForTesting().windowFullRequestSource;
+    const bool followUp = std::strcmp(which, "ViewportInputFollowUp") == 0;
+    if (followUp)
+    {
+      // The old dirty seat skipped the follow-up. Its replacement reaches the
+      // production no-op door once; the count precedes its NONE/false return.
+      LOKA_VERIFY(f.controller.debugStatsForTesting().requestInvalidateCallCount == 1);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().requestInvalidateFlags == NODE_DIRTY_NONE);
+      LOKA_VERIFY(!f.controller.debugStatsForTesting().requestInvalidateFullRebuild);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().batchAccumOnChangeCount == 0);
+    }
+    std::printf("door: calls=%d rects=%d batch-flags=%d batch-full=%d\n",
+                f.controller.debugStats_.requestInvalidateCallCount,
+                f.controller.debugStats_.windowRectRequestCount,
+                f.controller.pendingInvalidateFlags_,
+                f.controller.pendingFullInvalidate_);
+    loka::dsl::testing::SceneTestAccess::flushInvalidation(f.scene);
+    f.window.flushInvalidate();
+    const ToolboxSceneDebugStats &after = f.controller.debugStatsForTesting();
+    std::printf("viewport input: calls %lu -> %lu, rects %lu -> %lu, full %lu -> %lu, dirty %lu -> %lu, reasons=%s "
+                "refusal=%s\n",
+                (unsigned long)before.requestInvalidateCallCount,
+                (unsigned long)after.requestInvalidateCallCount,
+                (unsigned long)before.windowRectRequestCount,
+                (unsigned long)after.windowRectRequestCount,
+                (unsigned long)before.windowFlushFullCount,
+                (unsigned long)after.windowFlushFullCount,
+                (unsigned long)before.windowFlushDirtyCount,
+                (unsigned long)after.windowFlushDirtyCount,
+                f.last().reasonNames().c_str(),
+                ToolboxPresentRefusalName(f.last().refusal()));
+    const ToolboxPresentObservation &observation = after.lastPresentObservation;
+    LOKA_VERIFY(observation.reasonNames() == "layout_dirty+viewport_input");
+    LOKA_VERIFY(observation.reasons()
+                == ((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT)));
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(fullPending);
+    LOKA_VERIFY(firstRequest && std::strcmp(firstRequest, "viewport_input") == 0);
+    LOKA_VERIFY(after.windowFlushFullCount == before.windowFlushFullCount + 1);
+    LOKA_VERIFY(after.windowFlushDirtyCount == before.windowFlushDirtyCount);
+    // Scene's later global layout retains its one rectangle fallback request.
+    LOKA_VERIFY(after.windowRectRequestCount == 1);
+    if (followUp)
+      LOKA_VERIFY(after.requestInvalidateCallCount == 1);
+  }
   void presentSiblingViewport()
   {
     PresentLiveFixture<1> f;
@@ -1644,6 +1701,27 @@ namespace
     observation.noteDamage(outside);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT);
+    observation.reset();
+    observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.complete(0);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    observation.reset();
+    observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
+    observation.complete(0);
+    // No movement precedes the reason gate, even for an admitted input reason.
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.complete(0);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    observation.reset();
+    observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
+    observation.noteReason(TOOLBOX_FULL_DRAW_TEXT_RELAYOUT);
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.complete(0);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     // Each later refusal remains present while the earlier one wins.
     for (unsigned gate = 0; gate < 4; ++gate)
     {
@@ -1865,7 +1943,7 @@ namespace
     ToolboxInputDoor::idleTextEdits(controller);
     LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
     controller.rootNode_ = &stack;
-    const unsigned before = controller.debugStats_.totalRenderCalls;
+    const int before = controller.debugStats_.totalRenderCalls;
     ToolboxInputDoor::renderDirty(controller, touching);
     LOKA_VERIFY(controller.debugStats_.totalRenderCalls == before);
     controller.rootNode_ = 0;
@@ -1911,7 +1989,7 @@ namespace
     const Rect dirty = {65, 10, 80, 110};
     ClipRect(&dirty); // drawDirty's outer clip, supplied by the native window.
     toolbox_host::draws.clear();
-    const unsigned before = controller.debugStats_.totalRenderCalls;
+    const int before = controller.debugStats_.totalRenderCalls;
     ToolboxInputDoor::renderDirty(controller, dirty);
     LOKA_VERIFY(controller.debugStats_.totalRenderCalls == before);
     LOKA_VERIFY(toolbox_host::draws.size() == 1);
@@ -2154,7 +2232,7 @@ namespace
     if (std::strcmp(mode, "DirtyTouchingUnitTakesCompositionReplay") == 0)
     {
       controller.rootNode_ = &stack;
-      const unsigned before = controller.debugStats_.totalRenderCalls;
+      const int before = controller.debugStats_.totalRenderCalls;
       ToolboxInputDoor::renderDirty(controller, expected);
       LOKA_VERIFY(controller.debugStats_.totalRenderCalls == before + 1);
       LOKA_VERIFY(upper->renders >= 2);
@@ -2172,6 +2250,8 @@ int main(int argc, char **argv)
                          "PresentFlushDamage",
                          "PresentReset",
                          "PresentOrder",
+                         "ViewportInputReason",
+                         "ViewportInputFollowUp",
                          "PresentRefusedVisit",
                          "PresentSiblingViewport",
                          "PresentLatePublication",
@@ -2262,6 +2342,8 @@ int main(int argc, char **argv)
     presentLatePublication();
   else if (std::strcmp(argv[1], "PresentRefusedVisit") == 0)
     presentRefusedVisit();
+  else if (std::strncmp(argv[1], "ViewportInput", 13) == 0)
+    viewportInput(argv[1]);
   else if (std::strcmp(argv[1], "PresentOrder") == 0)
     presentOrder();
   else if (std::strcmp(argv[1], "StaticNoRequests") == 0)
