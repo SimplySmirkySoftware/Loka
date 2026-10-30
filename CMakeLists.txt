@@ -486,11 +486,12 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
   add_executable(LokaToolboxOutOfMemoryTests
     tests/toolbox/host/ToolboxOutOfMemoryHostTests.cpp
+    apple/toolbox/src/ToolboxSuddenTerminate.cpp
     apple/toolbox/src/ToolboxOutOfMemory.cpp
     apple/toolbox/src/ToolboxDialogConstruction.cpp
     apple/toolbox/src/ToolboxReserveGrowZone.cpp)
   target_include_directories(LokaToolboxOutOfMemoryTests PRIVATE
-    tests/toolbox/host/oom apple/toolbox/src tests)
+    tests/toolbox/host/oom tests/toolbox/host/startup apple/toolbox/src tests)
   target_compile_options(LokaToolboxOutOfMemoryTests PRIVATE -fno-exceptions -fno-rtti)
   loka_enable_warnings(LokaToolboxOutOfMemoryTests)
   set_target_properties(LokaToolboxOutOfMemoryTests PROPERTIES
