@@ -203,7 +203,8 @@ namespace loka
                                             int editTextHeight,
                                             int popupMenuHeight,
                                             int textHeight,
-                                            int imageFallbackHeight)
+                                            int imageFallbackHeight,
+                                            const INaturalSizeSource *source)
       {
         if (!child)
         {
@@ -229,6 +230,9 @@ namespace loka
         }
         if (child->asTextNode())
         {
+          short height = 0;
+          if (source && source->queryNaturalHeight(child, height))
+            return height;
           return textHeight;
         }
         if (loka::app::ImageViewNode *image = child->asImageViewNode())

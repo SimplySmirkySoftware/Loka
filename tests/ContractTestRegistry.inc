@@ -1544,3 +1544,7 @@ LOKA_TEST(testMountedNullToolbarShrinksInsideFixedBoxes)
 LOKA_TEST(testRowEllipsisCurrentArmsAndComponent)
 LOKA_TEST(testRowEllipsisRefusalsAndLiveGaps)
 LOKA_TEST(testContentOverflowFixedCarouselAndSharedSeat)
+
+LOKA_TEST(testNullNaturalHeightAlignedRow)
+LOKA_TEST(testNullNaturalHeightDeclinesAndSourceRouting)
+LOKA_TEST(testNullNaturalHeightMatchesLeafAndPreservesFailures)

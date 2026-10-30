@@ -39,6 +39,7 @@ public:
     /** Exact damage may share a conservative, non-erasing destination only when true. */
     enum { kMergesExactDamage = 0 };
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
+  virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   /** Retire door for a RectSurface context: takes back that surface's pending
       seat rows so a surface reclaimed during delivery publishes nothing. */
   void cancelRectSurfaceExtent(loka::app::RectSurfaceNode *surface)
