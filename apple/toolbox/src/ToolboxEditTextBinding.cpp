@@ -1,14 +1,37 @@
 #include "platform/ToolboxPascalText.hpp"
 #include "ToolboxPortScope.hpp"
+#include "ToolboxEditDoor.hpp"
+#include <climits>
 #include "ToolboxPaintSuppressScope.hpp"
 #include <cstring>
+namespace
+{
+  // Like TextEditor's displaced layout, narrow only after checking every edge.
+  bool ToolboxMoveEditRect(const Rect &source, long dx, long dy, Rect &out)
+  {
+    const long left = static_cast<long>(source.left) + dx;
+    const long right = static_cast<long>(source.right) + dx;
+    const long top = static_cast<long>(source.top) + dy;
+    const long bottom = static_cast<long>(source.bottom) + dy;
+    if (left < SHRT_MIN || left > SHRT_MAX || right < SHRT_MIN || right > SHRT_MAX || top < SHRT_MIN || top > SHRT_MAX
+        || bottom < SHRT_MIN || bottom > SHRT_MAX)
+      return false;
+    out.left = static_cast<short>(left);
+    out.right = static_cast<short>(right);
+    out.top = static_cast<short>(top);
+    out.bottom = static_cast<short>(bottom);
+    return true;
+  }
+} // namespace
+
 /** Shared production binding path, also compiled by the host TextEdit fixture. */
 ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(ToolboxEditTextContext *ownerContext,
                                                                const Rect &rect,
                                                                loka::core::State<loka::core::String> *text,
                                                                loka::app::scene::NativeLifetimeHint lifetimeHint)
 {
-  if (!text || !ownerContext)
+  // A row exists only with its owner window: every native interval on it opens that window's door.
+  if (!text || !ownerContext || !this->window_ || !this->window_->window())
   {
     return ToolboxEditPresentation();
   }
@@ -31,36 +54,37 @@ ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(To
   {
     if (!this->editControls_.prepareAppend())
       return ToolboxEditPresentation();
+    ToolboxPortScope port(this->window_->window());
     TEHandle te = 0;
     if (textEditBucket_.tryAcquire(te))
     {
       // Restore the fresh-created baseline: pooled records keep their last
       // text and rects; the new binding starts with no installation certificate.
       TESetText(static_cast<const void *>(""), 0, te);
-      (**te).destRect = controlRect;
-      (**te).viewRect = controlRect;
-      TECalText(te);
+      (**te).destRect = rect;
+      (**te).viewRect = rect;
     }
     else
     {
-      te = TENew(&controlRect, &controlRect);
+      te = TENew(&rect, &rect);
       if (!te)
       {
         this->editControls_.cancel();
         return ToolboxEditPresentation();
       }
     }
+    TECalText(te);
+    TEAutoView(true, te);
     EditTextControlBinding entry(ownerContext, 0, text);
     entry.textSeat = ownerContext->projectedWriteSeat();
     entry.te = te;
-    entry.rect = controlRect;
+    entry.placement = ToolboxNativePlacement(rect, controlRect);
     entry.usedThisFrame = true;
     entry.installed.revoke();
     entry.lifetimeHint = lifetimeHint;
     editControls_.commitAppend(entry);
     binding = &editControls_.back();
     syncEditTextFromState(*binding);
-    TEAutoView(true, binding->te);
   }
   if (this->fallbackFocusContext() == ownerContext)
     this->fallbackFocus_.cut();
@@ -74,18 +98,30 @@ ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(To
   }
   binding->usedThisFrame = true;
   binding->lifetimeHint = lifetimeHint;
-  if (binding->rect.left != controlRect.left || binding->rect.top != controlRect.top || binding->rect.right != controlRect.right
-      || binding->rect.bottom != controlRect.bottom)
+  const Rect &previous = binding->placement.full();
+  if (!EqualRect(&previous, &rect) && binding->te)
   {
-    binding->rect = controlRect;
-    if (binding->te)
+    ToolboxPortScope port(this->window_->window());
+    Rect dest = rect, view = rect;
+    // Size changes reset displacement, even when the origin also changes.
+    if (static_cast<long>(previous.right) - previous.left == static_cast<long>(rect.right) - rect.left
+        && static_cast<long>(previous.bottom) - previous.top == static_cast<long>(rect.bottom) - rect.top)
     {
-      (**binding->te).destRect = controlRect;
-      (**binding->te).viewRect = controlRect;
-      TECalText(binding->te);
-      TEAutoView(true, binding->te);
+      const long dx = static_cast<long>(rect.left) - previous.left;
+      const long dy = static_cast<long>(rect.top) - previous.top;
+      Rect movedDest, movedView;
+      if (ToolboxMoveEditRect((**binding->te).destRect, dx, dy, movedDest)
+          && ToolboxMoveEditRect((**binding->te).viewRect, dx, dy, movedView))
+      {
+        dest = movedDest;
+        view = movedView;
+      }
     }
+    (**binding->te).destRect = dest;
+    (**binding->te).viewRect = view;
+    TECalText(binding->te);
   }
+  binding->placement = ToolboxNativePlacement(rect, controlRect);
   if (!inBatchUpdate_)
   {
     syncEditTextFromState(*binding);
@@ -158,29 +194,36 @@ void ToolboxScenePlatformController::retireEditTextControl(
 
 void ToolboxScenePlatformController::syncEditTextFromState(EditTextControlBinding &binding)
 {
-  if (binding.editor || !binding.te || !*binding.te || !binding.text) return;
+  if (binding.editor || binding.unicode || !binding.te || !*binding.te || !binding.text)
+    return;
   const loka::core::String source = binding.text->get();
   if (binding.installed.holds(source)) return;
   ToolboxNativeText candidate;
   // Pre-install refusals preserve both the native value and its certificate (#1026).
   if (!candidate.build(source) || candidate.size() > 32767) return;
-  TESetText(candidate.size() ? static_cast<const void *>(candidate.data()) : "",
-            static_cast<long>(candidate.size()), binding.te);
-  CharsHandle handle = TEGetText(binding.te);
-  bool verified = handle && *handle && (**binding.te).teLength >= 0
-      && static_cast<std::size_t>((**binding.te).teLength) == candidate.size();
-  if (verified)
+  bool verified = false;
   {
-    const signed char state = HGetState(reinterpret_cast<Handle>(handle));
-    HLock(reinterpret_cast<Handle>(handle));
-    verified = !candidate.size() || std::memcmp(*handle, candidate.data(), candidate.size()) == 0;
-    HSetState(reinterpret_cast<Handle>(handle), state);
+    ToolboxEditDoor door(this->window_->window(), binding.placement);
+    TESetText(candidate.size() ? static_cast<const void *>(candidate.data()) : "",
+              static_cast<long>(candidate.size()),
+              binding.te);
+    CharsHandle handle = TEGetText(binding.te);
+    verified = handle && *handle && (**binding.te).teLength >= 0
+               && static_cast<std::size_t>((**binding.te).teLength) == candidate.size();
+    if (verified)
+    {
+      const signed char state = HGetState(reinterpret_cast<Handle>(handle));
+      HLock(reinterpret_cast<Handle>(handle));
+      verified = !candidate.size() || std::memcmp(*handle, candidate.data(), candidate.size()) == 0;
+      HSetState(reinterpret_cast<Handle>(handle), state);
+    }
+    if (verified)
+    {
+      TESetSelect(static_cast<short>(candidate.size()), static_cast<short>(candidate.size()), binding.te);
+    }
   }
   if (verified)
-  {
     binding.installed.commit(source);
-    TESetSelect(static_cast<short>(candidate.size()), static_cast<short>(candidate.size()), binding.te);
-  }
   else
   {
     binding.installed.revoke();

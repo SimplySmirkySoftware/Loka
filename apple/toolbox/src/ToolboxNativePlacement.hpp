@@ -23,6 +23,12 @@ public:
     return this->full_;
   }
 
+  /** The interaction rectangle, including an empty applied placement. */
+  const Rect &visible() const
+  {
+    return this->visible_;
+  }
+
   /** Answer the visible rectangle only when it is nonempty. */
   bool queryVisible(Rect &out) const
   {

@@ -15,6 +15,7 @@
 #include "testing/scene/SceneFocusTestAccess.hpp"
 #include "toolbox/ToolboxTextEditorAccess.hpp"
 #include "ToolboxBuiltInSupport.hpp"
+#include "ToolboxTextEditorGeometry.hpp"
 #include <cstdio>
 #include <cstring>
 using namespace loka::app;
@@ -274,7 +275,8 @@ namespace
     f.controller.editControls_[1].usedThisFrame = false;
     f.tab(TAB_FORWARD, f.second);
     f.controller.editControls_[1].usedThisFrame = true;
-    SetRect(&f.controller.editControls_[1].rect, 0, 0, 0, 0);
+    f.controller.editControls_[1].placement =
+        ToolboxNativePlacement(f.controller.editControls_[1].placement.full(), Rect());
     f.tab(TAB_BACKWARD, f.third);
     f.place(f.first, 0, 0);
     TEHandle te = f.controller.editControls_[1].te;
@@ -395,8 +397,10 @@ namespace
     LOKA_VERIFY(te);
     std::size_t editorIndex = 0;
     LOKA_VERIFY(f.controller.editControls_.find(context, editorIndex));
-    LOKA_VERIFY(f.controller.editControls_[editorIndex].rect.top > f.controller.editControls_[1].rect.top);
-    LOKA_VERIFY(f.controller.editControls_[editorIndex].rect.top < f.controller.editControls_[0].rect.top);
+    LOKA_VERIFY(f.controller.editControls_[editorIndex].placement.visible().top
+                > f.controller.editControls_[1].placement.visible().top);
+    LOKA_VERIFY(f.controller.editControls_[editorIndex].placement.visible().top
+                < f.controller.editControls_[0].placement.visible().top);
     f.controller.activateEditControl(1);
     f.tab(TAB_FORWARD, f.third); // The editor between the fields is not a target.
     TESetSelect(8, 10, te);
@@ -445,10 +449,11 @@ namespace
     f.controller.editControls_[1].usedThisFrame = false;
     LOKA_VERIFY(!f.controller.applyNativeFocus(*f.context(f.second)));
     f.controller.editControls_[1].usedThisFrame = true;
-    const Rect rect = f.controller.editControls_[1].rect;
-    SetRect(&f.controller.editControls_[1].rect, 0, 0, 0, 0);
+    const Rect rect = f.controller.editControls_[1].placement.visible();
+    f.controller.editControls_[1].placement =
+        ToolboxNativePlacement(f.controller.editControls_[1].placement.full(), Rect());
     LOKA_VERIFY(!f.controller.applyNativeFocus(*f.context(f.second)));
-    f.controller.editControls_[1].rect = rect;
+    f.controller.editControls_[1].placement = ToolboxNativePlacement(rect, rect);
     const TEHandle te = f.controller.editControls_[1].te;
     f.controller.editControls_[1].te = 0;
     LOKA_VERIFY(!f.controller.applyNativeFocus(*f.context(f.second)));
@@ -981,11 +986,14 @@ namespace
     LOKA_VERIFY(f.text.get().equals(value) && toolbox_host::beeps == beeps + 1);
     std::puts("fallback scalar insertion/deletion and refusal pins passed");
   }
+#include "ToolboxEditDoorPins.hpp"
 } // namespace
 int main(int argc, char **argv)
 {
   if (argc == 2)
   {
+    if (edit_door::run(argv[1]))
+      return 0;
     if (std::strcmp(argv[1], "tab-geometry") == 0)
     {
       tabGeometry();

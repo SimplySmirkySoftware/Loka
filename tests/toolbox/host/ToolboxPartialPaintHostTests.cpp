@@ -106,6 +106,34 @@ int main(int argc, char **argv)
   if (id == "edit") context = new ToolboxEditTextContext(node->asEditTextNode(), &controller);
   LOKA_VERIFY(context);
   node->setContext(context);
+  if (std::strcmp(mode, "edit-fallback-frame") == 0)
+  {
+    ToolboxEditTextContext *edit = static_cast<ToolboxEditTextContext *>(context);
+    const Rect outer = {0, 0, 20, 80};
+    const Rect text = {2, 1, 19, 79};
+    const Rect frameClip = {0, 0, 1, 80};
+    SetRect(&controller.projectionClip, 0, 0, 40, 20);
+    edit->updateData(root.text.state());
+    edit->updateRect(outer, text, 1, 16);
+    edit->draw(&controller);
+    LOKA_VERIFY(controller.editControls_.size() == 1);
+    const TEHandle te = controller.editControls_[0].te;
+    LOKA_VERIFY(EqualRect(&(**te).destRect, &text));
+    LOKA_VERIFY(EqualRect(&(**te).viewRect, &text));
+    controller.retireEditTextControl(edit, NATIVE_HINT_EAGER_RELEASE);
+    controller.projectionClip = frameClip;
+    edit->updateRect(outer, text, 1, 16);
+    edit->draw(&controller);
+    LOKA_VERIFY(controller.editControls_.empty());
+    controller.publishFixturePressOrder();
+    const Point framePoint = {0, 10};
+    const Point clippedPoint = {5, 10};
+    LOKA_VERIFY(controller.isPointInEdit(framePoint));
+    LOKA_VERIFY(!controller.isPointInEdit(clippedPoint));
+    Access::unmount(scene);
+    std::puts("Clipped text keeps the visible frame fallback hit");
+    return 0;
+  }
   if (std::strcmp(mode, "text-ink") == 0)
   {
     window.port.fgColor = greenColor;

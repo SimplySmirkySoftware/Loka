@@ -735,11 +735,11 @@ void ToolboxScenePlatformController::refreshEditTextBindingForStateChange(EditTe
   syncEditTextFromState(binding);
   if (inBatchUpdate_)
   {
-    addPendingDirty(binding.rect);
+    addPendingDirty(binding.placement.visible());
     return;
   }
   ++debugStats_.textChangedImmediateInvalidateCount;
-  window_->requestInvalidateRect(binding.rect);
+  window_->requestInvalidateRect(binding.placement.visible());
 }
 
 void ToolboxScenePlatformController::refreshPopupEnabled(PopupHit &binding)
@@ -970,6 +970,7 @@ bool ToolboxScenePlatformController::queryEditTextGeometryForTesting(
     return false;
   out.destination = (**te).destRect;
   out.view = (**te).viewRect;
+  out.placement = this->editControls_[index].placement;
   return true;
 }
 

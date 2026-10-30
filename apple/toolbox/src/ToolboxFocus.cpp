@@ -1,3 +1,4 @@
+#include "ToolboxEditDoor.hpp"
 #include "ToolboxEditKey.hpp"
 #include "ToolboxPortScope.hpp"
 #include "platform/ToolboxPascalText.hpp"
@@ -16,7 +17,8 @@ namespace
 
   template <class Row> bool AcceptsNativeFocus(const Row &row)
   {
-    return row.usedThisFrame && (row.te || (row.unicode && row.editor->hasNativeHandle())) && !EmptyRect(&row.rect);
+    return row.usedThisFrame && (row.te || (row.unicode && row.editor->hasNativeHandle()))
+           && !EmptyRect(&row.placement.visible());
   }
 
   bool TabKeyBefore(const Rect &a, std::size_t aIndex, const Rect &b, std::size_t bIndex)
@@ -143,28 +145,29 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
     if (!loka::app::scene::IsAttachedCurrentContext(row.ownerContext))
       continue;
     Rect visible;
-    if (!SectRect(&row.rect, &portRect, &visible))
+    if (!SectRect(&row.placement.visible(), &portRect, &visible))
       continue;
     if (edge == count
-        || (forward ? TabKeyBefore(row.rect, i, this->editControls_[edge].rect, edge)
-                    : TabKeyBefore(this->editControls_[edge].rect, edge, row.rect, i)))
+        || (forward ? TabKeyBefore(row.placement.visible(), i, this->editControls_[edge].placement.visible(), edge)
+                    : TabKeyBefore(this->editControls_[edge].placement.visible(), edge, row.placement.visible(), i)))
       edge = i;
     if (hasOrigin
-        && (forward ? TabKeyBefore(this->editControls_[origin].rect, origin, row.rect, i)
-                    : TabKeyBefore(row.rect, i, this->editControls_[origin].rect, origin))
+        && (forward ? TabKeyBefore(this->editControls_[origin].placement.visible(), origin, row.placement.visible(), i)
+                    : TabKeyBefore(row.placement.visible(), i, this->editControls_[origin].placement.visible(), origin))
         && (next == count
-            || (forward ? TabKeyBefore(row.rect, i, this->editControls_[next].rect, next)
-                        : TabKeyBefore(this->editControls_[next].rect, next, row.rect, i))))
+            || (forward
+                    ? TabKeyBefore(row.placement.visible(), i, this->editControls_[next].placement.visible(), next)
+                    : TabKeyBefore(this->editControls_[next].placement.visible(), next, row.placement.visible(), i))))
       next = i;
   }
   const std::size_t target = next != count ? next : edge;
   if (target == count)
     return false;
   TEHandle te = this->editControls_[target].te;
-  const Rect rect = this->editControls_[target].rect;
+  const Rect rect = this->editControls_[target].placement.visible();
   this->activateEditControl(target);
   {
-    ToolboxPortScope port(this->window_->window());
+    ToolboxEditDoor door(this->window_->window(), this->editControls_[target].placement);
     TESetSelect(0, (**te).teLength, te);
   }
   this->invalidateUnitOverlap(rect);
@@ -213,9 +216,14 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       case EDIT_KEY_CONSUME: return true;
       case EDIT_KEY_REFUSE_HIGH: SysBeep(1); return true;
       case EDIT_KEY_NAVIGATE:
-        TEKey(key, focusedEdit->te);
-        this->invalidateUnitOverlap(focusedEdit->rect);
+      {
+        {
+          ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
+          TEKey(key, focusedEdit->te);
+        }
+        this->invalidateUnitOverlap(focusedEdit->placement.visible());
         return true;
+      }
       case EDIT_KEY_DELETE_BACKWARD:
       case EDIT_KEY_DELETE_FORWARD:
       case EDIT_KEY_INSERT: break;
@@ -237,12 +245,15 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       SysBeep(1);
     else if (kind != EDIT_KEY_DELETE_FORWARD || start != end || end != length)
     {
-      if (kind == EDIT_KEY_DELETE_FORWARD && start == end)
-        TESetSelect(static_cast<short>(start), static_cast<short>(start + 1), te);
       // No certificate is observable for a native mutation awaiting readback.
       focusedEdit->installed.revoke();
-      TEKey(kind == EDIT_KEY_INSERT ? key : 8, te);
-      this->invalidateUnitOverlap(focusedEdit->rect);
+      {
+        ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
+        if (kind == EDIT_KEY_DELETE_FORWARD && start == end)
+          TESetSelect(static_cast<short>(start), static_cast<short>(start + 1), te);
+        TEKey(kind == EDIT_KEY_INSERT ? key : 8, te);
+      }
+      this->invalidateUnitOverlap(focusedEdit->placement.visible());
       this->updateStateFromEdit(*focusedEdit, before);
       // Publication may retire or relocate the row. Do not borrow it again.
     }

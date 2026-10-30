@@ -7,6 +7,7 @@
 #include "context/ToolboxClipBoxContext.hpp"
 #include "context/ToolboxCellContext.hpp"
 #include "context/ToolboxTextContext.hpp"
+#include "context/ToolboxPaintSupport.hpp"
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/controls/Ribbon.hpp"
@@ -381,6 +382,121 @@ namespace
       return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
     }
   };
+  /** Host dispatch needs the same explicit layout projection as ShrinkText. */
+  class PlacedEdit : public EditTextNode
+  {
+  public:
+    explicit PlacedEdit(const NodeState<String> &text)
+        : EditTextNode(EditTextProps(text))
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
+    }
+  };
+  void editPaintEvidence()
+  {
+    Fixture f;
+    SetRect(&f.window.port.portRect, 0, 0, 220, 160);
+    MutableState<String> value(String::Literal("Clipped edit"));
+    NodeState<String> text(&value, 0);
+    StackNode root(Column().props);
+    BoxNode *viewportSeat = new BoxNode(Box().size(180, 62).props);
+    ScrollViewNode *viewport = new ScrollViewNode(ScrollViewProps());
+    StackNode *contents = new StackNode(Column().props);
+    contents->addChild(new BoxNode(Box().size(150, 40).props));
+    PlacedEdit *scrolled = new PlacedEdit(text);
+    scrolled->setContext(new ToolboxEditTextContext(scrolled, &f.controller));
+    contents->addChild(scrolled);
+    viewport->addChild(contents);
+    viewportSeat->addChild(viewport);
+    root.addChild(viewportSeat);
+    BoxNode *clip = new BoxNode(ClipBox().size(40, 24).props);
+    BoxNode *wide = new BoxNode(Box().width(120).props);
+    PlacedEdit *field = new PlacedEdit(text);
+    ToolboxEditTextContext *context = new ToolboxEditTextContext(field, &f.controller);
+    field->setContext(context);
+    wide->addChild(field);
+    clip->addChild(wide);
+    root.addChild(clip);
+    LayoutState state;
+    state.x = state.y = 12;
+    state.width = 196;
+    state.height = 136;
+    state.lineHeight = 14; // The production root render offer uses 14.
+    state.spacing = 8;
+    LayoutNode(&root, state, &f.controller, 0);
+    const Rect laidOutChrome = context->chromeRect();
+    const Rect clipRect = placement(*clip);
+    const Rect expectedClip = {82, 12, 106, 52};
+    equal(clipRect, expectedClip);
+    const Rect port = f.window.port.portRect;
+    LOKA_VERIFY(laidOutChrome.left - 2 >= port.left && laidOutChrome.top - 2 >= port.top);
+    LOKA_VERIFY(laidOutChrome.right + 2 <= port.right && laidOutChrome.bottom + 2 <= port.bottom);
+    const Rect paintRect = intersection(laidOutChrome, clipRect);
+    LOKA_VERIFY(!EmptyRect(&paintRect));
+    RenderNode(&root, &f.controller);
+    LOKA_VERIFY(f.controller.editControls_.size() == 2);
+    std::size_t index = 0;
+    LOKA_VERIFY(f.controller.editControls_.find(context, index));
+    const ToolboxNativePlacement applied = f.controller.editControls_[index].placement;
+    Rect full = laidOutChrome;
+    ++full.left;
+    full.top += 2;
+    --full.right;
+    --full.bottom;
+    equal(applied.full(), full);
+    Rect visible;
+    LOKA_VERIFY(applied.queryVisible(visible));
+    equal(visible, intersection(applied.full(), clipRect));
+    LOKA_VERIFY(visible.right < applied.full().right);
+    equal(context->chromeRect(), laidOutChrome);
+    const TEHandle te = f.controller.editControls_[index].te;
+    equal((**te).viewRect, applied.full());
+    const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+    const PaintAnswer clean = context->queryPaintDamage(query);
+    LOKA_VERIFY(clean.kind == PAINT_ANSWER_EXACT);
+    LOKA_VERIFY(clean.damage.x == paintRect.left && clean.damage.y == paintRect.top);
+    LOKA_VERIFY(clean.damage.width == 0 && clean.damage.height == 0);
+    // Paint debt is empty after presentation; applied native visibility is not.
+    value.set(String::Literal("Changed without rendering"));
+    const PaintAnswer changed = context->queryPaintDamage(query);
+    LOKA_VERIFY(changed.kind == PAINT_ANSWER_EXACT);
+    LOKA_VERIFY(changed.damage.x == paintRect.left && changed.damage.y == paintRect.top);
+    LOKA_VERIFY(changed.damage.width == paintRect.right - paintRect.left);
+    LOKA_VERIFY(changed.damage.height == paintRect.bottom - paintRect.top);
+    RenderNode(&root, &f.controller);
+    const PaintAnswer repainted = context->queryPaintDamage(query);
+    LOKA_VERIFY(repainted.kind == PAINT_ANSWER_EXACT);
+    LOKA_VERIFY(repainted.damage.width == 0 && repainted.damage.height == 0);
+    equal(f.controller.editControls_[index].placement.visible(), visible);
+    std::printf("edit evidence full=(%d,%d,%d,%d) visible=(%d,%d,%d,%d) "
+                "clip=(%d,%d,%d,%d) paint=(%d,%d,%d,%d) clean=(%d,%d,%d,%d)\n",
+                applied.full().left,
+                applied.full().top,
+                applied.full().right,
+                applied.full().bottom,
+                visible.left,
+                visible.top,
+                visible.right,
+                visible.bottom,
+                clipRect.left,
+                clipRect.top,
+                clipRect.right,
+                clipRect.bottom,
+                paintRect.left,
+                paintRect.top,
+                paintRect.right,
+                paintRect.bottom,
+                clean.damage.x,
+                clean.damage.y,
+                clean.damage.width,
+                clean.damage.height);
+    f.controller.clearControls();
+    f.controller.releaseNodeContexts(&root);
+  }
   /** Exercise real Row dispatch and PlainDisplay together, with no synthetic widths. */
   void shrinkSweep(const char *mode)
   {
@@ -557,12 +673,17 @@ int main(int argc, char **argv)
   LOKA_VERIFY(argc == 2);
   toolbox_host::reset();
   const char *mode = argv[1];
-  if (!std::strcmp(mode, "multi-two") || !std::strcmp(mode, "multi-four"))
+  if (!std::strcmp(mode, "edit-paint-evidence"))
+    editPaintEvidence();
+  else if (!std::strcmp(mode, "multi-two") || !std::strcmp(mode, "multi-four"))
     multipleTitles(!std::strcmp(mode, "multi-two") ? 2 : 4);
   else if (!std::strncmp(mode, "shrink-", 7))
     shrinkSweep(mode);
   else if (!std::strcmp(mode, "box"))
+  {
     walk(0, true);
+    editPaintEvidence();
+  }
   else if (!std::strcmp(mode, "card"))
     walk(1, true);
   else if (!std::strcmp(mode, "unflagged"))
