@@ -716,7 +716,7 @@ namespace
       collectGapTexts(child, texts, count);
   }
 
-  class GapNaturalSource : public INaturalWidthSource
+  class GapNaturalSource : public INaturalSizeSource
   {
   public:
     virtual bool queryNaturalWidth(Node *, short &width) const
@@ -990,7 +990,7 @@ void testGapDoorOverflow()
   fixedAllocation.next(fixed.childrenHead());
   fixedAllocation.next(fixed.childrenHead()->nextInComposition);
   LOKA_VERIFY(fixedAllocation.next(fixed.childrenHead()->nextInComposition->nextInComposition).width() == 0);
-  class WideSource : public INaturalWidthSource
+  class WideSource : public INaturalSizeSource
   {
   public:
     virtual bool queryNaturalWidth(Node *, short &width) const

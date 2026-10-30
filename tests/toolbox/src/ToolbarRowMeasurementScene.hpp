@@ -33,13 +33,13 @@ namespace loka
       }
     };
     /** Counting is a separate untimed probe; the timed source is the rail itself. */
-    class ToolbarQueryCount : public app::layout::INaturalWidthSource
+    class ToolbarQueryCount : public app::layout::INaturalSizeSource
     {
-      const app::layout::INaturalWidthSource &source_;
+      const app::layout::INaturalSizeSource &source_;
       mutable unsigned count_;
 
     public:
-      explicit ToolbarQueryCount(const app::layout::INaturalWidthSource &source)
+      explicit ToolbarQueryCount(const app::layout::INaturalSizeSource &source)
           : source_(source),
             count_(0)
       {
@@ -56,7 +56,7 @@ namespace loka
     };
     /** Integer-branch calibration only: Chicago 12 labels do not naturally
         measure one pixel. Never use this synthetic source for native cost deltas. */
-    class ToolbarUnitNaturalWidths : public app::layout::INaturalWidthSource
+    class ToolbarUnitNaturalWidths : public app::layout::INaturalSizeSource
     {
     public:
       virtual bool queryNaturalWidth(app::scene::Node *node, short &width) const
@@ -69,7 +69,7 @@ namespace loka
     };
     template <class Clock>
     bool RunToolbarRows(app::scene::Scene &scene,
-                        const app::layout::INaturalWidthSource &source,
+                        const app::layout::INaturalSizeSource &source,
                         Clock &clock,
                         std::FILE *out)
     {

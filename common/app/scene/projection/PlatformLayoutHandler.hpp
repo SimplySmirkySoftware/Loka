@@ -2,7 +2,7 @@
 #define LOKA_CORE2_SCENE_PROJECTION_PLATFORM_LAYOUT_HANDLER_HPP
 
 #include "app/scene/Node.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "app/layout/StackSpans.hpp"
 #include <climits>
 
@@ -12,7 +12,7 @@ namespace loka
   {
     namespace scene
     {
-      class IPlatformLayoutTraversal : public loka::app::layout::INaturalWidthSource
+      class IPlatformLayoutTraversal : public loka::app::layout::INaturalSizeSource
       {
       public:
         virtual ~IPlatformLayoutTraversal() {}

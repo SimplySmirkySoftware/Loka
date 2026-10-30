@@ -4170,7 +4170,7 @@ namespace
       macOS controllers): Text and Button labels and INTRINSIC images; a Cell
       has no natural width on any rail, so a card that puts its click target
       in a Cell gives a horizontal ScrollView no range. */
-  class LaptopNaturalWidthSource : public loka::app::layout::INaturalWidthSource
+  class LaptopNaturalWidthSource : public loka::app::layout::INaturalSizeSource
   {
   public:
     virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const

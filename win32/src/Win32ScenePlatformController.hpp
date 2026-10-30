@@ -6,7 +6,7 @@
 #include <windows.h>
 #include "Win32TextEnvironment.hpp"
 #include "app/layout/TextShaping.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include <vector>
 #include "app/layout/RowLayout.hpp"
 #include "app/RectSurface.hpp"
@@ -85,7 +85,7 @@ namespace loka
 #endif
 
 class Win32ScenePlatformController : public loka::app::scene::IPlatformController,
-    public loka::app::layout::INaturalWidthSource
+                                     public loka::app::layout::INaturalSizeSource
 {
 public:
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;

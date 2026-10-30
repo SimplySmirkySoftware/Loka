@@ -6,7 +6,7 @@
 #include "app/layout/RowLayout.hpp"
 #include "core/resource/Image.hpp"
 #include "app/layout/TextShaping.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "platform/MacProjection.hpp"
 #include "app/RectSurface.hpp"
 #include "app/style/StyleVocab.hpp"
@@ -61,7 +61,7 @@ namespace loka
 } // namespace loka
 
 class MacScenePlatformController : public loka::app::scene::IPlatformController,
-    public loka::app::layout::INaturalWidthSource
+                                   public loka::app::layout::INaturalSizeSource
 {
 public:
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;

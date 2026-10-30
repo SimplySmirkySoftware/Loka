@@ -404,7 +404,7 @@ void testRowWidthHeuristicForwardsOnlySingleFragmentClaims()
 
 namespace
 {
-  class NaturalWidthProbe : public loka::app::layout::INaturalWidthSource
+  class NaturalWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     explicit NaturalWidthProbe(loka::app::scene::Node *answered)
@@ -515,7 +515,7 @@ void testNullNaturalWidthDeclinesUnrepresentableWidth()
 
 namespace
 {
-  class StackWidthProbe : public loka::app::layout::INaturalWidthSource
+  class StackWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     StackWidthProbe(short a, short b, short caption)
@@ -985,7 +985,7 @@ void testBoxWidthOverflowEstimates()
 
 namespace
 {
-  class ShrinkWidthProbe : public loka::app::layout::INaturalWidthSource
+  class ShrinkWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     ShrinkWidthProbe()
