@@ -3,6 +3,7 @@
 #include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include <cassert>
+#include "app/nodes/ImageView.hpp"
 #include "app/layout/StackGaps.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "ToolboxLayoutMetrics.hpp"
@@ -53,6 +54,58 @@
 
 namespace
 {
+  /** Dispatch asks once per visited node; O(1), walks no rows. */
+  bool ToolboxPresentAdmitsKind(loka::app::scene::Node &node, loka::app::scene::BoundaryNode *boundary)
+  {
+    using namespace loka::app;
+    using namespace loka::app::scene;
+    if (boundary)
+      return true;
+    switch (node.kind())
+    {
+    case NODE_KIND_UNKNOWN:
+      // Transparent components paint nothing; custom leaves may read undeclared state.
+      return !node.asProjectedLayoutNode() && !node.asCanvasNode();
+    case NODE_KIND_BOX:
+      // Child clipping can change without leaf inputs.
+      return node.asBoxNode()->props.childClip_ != layout::CHILD_CLIP_OWN_RECT;
+    case NODE_KIND_IMAGE_VIEW:
+    {
+      // COVER PICTs have no trustworthy native clip until #1560.
+      const ImageViewProps &props = static_cast<ImageViewNode &>(node).props;
+      return !(props.hasAttr_ && props.attr_.hasFitValue_ && props.attr_.fitValue_ == IMAGE_FIT_COVER);
+    }
+    case NODE_KIND_STACK:
+    case NODE_KIND_CELL:
+    case NODE_KIND_CARD:
+    case NODE_KIND_CARD_BAND:
+    case NODE_KIND_TEXT:
+    case NODE_KIND_ATTRIBUTED_TEXT:
+    case NODE_KIND_BUTTON:
+    case NODE_KIND_SCROLL_BAR:
+      return true;
+    case NODE_KIND_SCROLL_VIEW:
+      // Nested viewport.
+      return false;
+    case NODE_KIND_ZSTACK:
+    case NODE_KIND_GRID:
+      // No trustworthy translated unit/grid clip.
+      return false;
+    case NODE_KIND_EDIT_TEXT:
+    case NODE_KIND_POPUP_MENU:
+    case NODE_KIND_OPEN_FILE_DIALOG:
+    case NODE_KIND_RECT_SURFACE:
+    case NODE_KIND_CANVAS:
+    case NODE_KIND_TEXT_EDITOR:
+    case NODE_KIND_CONFIRM_DIALOG:
+    case NODE_KIND_RIBBON_GROUP:
+    case NODE_KIND_RIBBON_GROUP_EDGE:
+      // Paint can read state not covered by the sampled inputs.
+      return false;
+    }
+    return false;
+  }
+
   /** Restores the caller's gap on every dispatch return. */
   class LayoutSpacingScope
   {
@@ -273,6 +326,9 @@ namespace
     }
     LayoutSpacingScope spacingScope(state, node);
     loka::app::scene::BoundaryNode *boundary = node->asBoundary();
+    if (controller->activeViewportContent_ && !node->asProjectedLayoutNode()
+        && !ToolboxPresentAdmitsKind(*node, boundary))
+      controller->activeViewportContent_->noteUnsupportedKind();
     loka::app::scene::BoundaryNode *activeBoundary = boundary ? boundary : currentBoundary;
     const short startX = state.x;
     const short startY = state.y;
@@ -286,6 +342,12 @@ namespace
         inputs.requeue();
         return 0;
       }
+      if (controller->activeViewportContent_ && !ToolboxPresentAdmitsKind(*node, boundary))
+        controller->activeViewportContent_->noteUnsupportedKind();
+      if (controller->activeViewportContent_ && node->kind() == loka::app::scene::NODE_KIND_CARD_BAND)
+        controller->activeViewportContent_->notePhaseBound();
+      if (controller->activeViewportContent_ && inputs.inputs() != loka::app::scene::NODE_DIRTY_NONE)
+        controller->activeViewportContent_->noteContentInputs();
       if (boundary)
       {
         boundary->setLayoutBounds(startX, startY, width, static_cast<short>(state.y - startY));
