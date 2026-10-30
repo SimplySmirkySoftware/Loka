@@ -850,12 +850,12 @@ void testWin32ClipBoxDeviceRoundingAndUnitTwin()
                   x,
                   y,
                   padding,
-                  origins[0].left,
-                  origins[0].top,
-                  origins[1].left,
-                  origins[1].top,
-                  origins[2].left,
-                  origins[2].top);
+                  static_cast<long>(origins[0].left),
+                  static_cast<long>(origins[0].top),
+                  static_cast<long>(origins[1].left),
+                  static_cast<long>(origins[1].top),
+                  static_cast<long>(origins[2].left),
+                  static_cast<long>(origins[2].top));
       std::fflush(stdout);
       LOKA_VERIFY(origins[1].left - origins[0].left >= -1 && origins[1].left - origins[0].left <= 1);
       LOKA_VERIFY(origins[1].top - origins[0].top >= -1 && origins[1].top - origins[0].top <= 1);
