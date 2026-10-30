@@ -45,20 +45,31 @@ class Wiring(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('report', ROOT / 'tests/toolbox/toolbar-measurement-report.py')
         report = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(report)
-        lines = ['toolbar_row_summary complete=1 cases=6',
+        lines = ['toolbar_row_summary complete=1 cases=7',
                  'toolbar_row_environment clock=Microseconds observed_resolution_us=1']
-        for name, k, scans in [('k1', 1, 0), ('k2', 2, 2), ('k4', 4, 2), ('fit', 4, 0), ('floor', 4, 1), ('b-equals-s', 4, 0)]:
+        for name, k, scans in [('k1', 1, 0), ('k2', 2, 2), ('k4', 4, 2), ('fit', 4, 0), ('floor', 4, 1), ('b-equals-s', 4, 0), ('aligned-title', 6, 0)]:
             offer, occupied = (27, 28) if name == 'b-equals-s' else (10, 10)
             source = 'synthetic-unit' if name == 'b-equals-s' else 'toolbox'
             lines += [f'toolbar_row case={name} repetitions=31 median_us=3 maximum_us=5 offer={offer} occupied={occupied}',
                       f'toolbar_row_inputs case={name} k={k} scans={scans} source={source}']
+        lines += ['toolbar_row_height case=aligned-title answered=1 query=23 leaf=23 equal=1']
         valid = '\n'.join(lines)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'LOG.TXT'
             path.write_text(valid)
             with contextlib.redirect_stdout(io.StringIO()):
                 report.rows(path)
-            for invalid in (valid.replace('repetitions=31', 'repetitions=2'),
+            base = valid.replace('answered=1 query=23 leaf=23 equal=1',
+                                 'answered=0 query=-1 leaf=23 equal=0')
+            path.write_text(base)
+            with contextlib.redirect_stdout(io.StringIO()):
+                report.rows(path)
+            for invalid in (base.replace('equal=0', 'equal=1'),
+                            base.replace('query=-1', 'query=0'),
+                            valid.replace('query=23', 'query=22'),
+                            valid.replace('equal=1', 'equal=0'),
+                            valid.replace(lines[-1], ''),
+                            valid.replace('repetitions=31', 'repetitions=2'),
                             valid.replace('complete=1', 'complete=0'),
                             valid.replace('maximum_us=5', 'maximum_us=1'),
                             valid.replace('case=k4 k=4 scans=2', 'case=k4 k=4 scans=1'),
