@@ -233,7 +233,7 @@ argument yet. The default CardStyle is the machine's standard look: a DROP shado
 on 68k, a WIDE shadow on PowerPC 601-604, and a WIDE shadow with ALPHA ink on G3
 or faster where the rail can draw it (#1425). Until each rail answers its CPU
 class, every target still draws DROP. Both refuse missing, extra, array, or non-tree children with
-TypeError and each counts one level toward the depth-ten tree limit.
+TypeError and each counts one level toward the depth-eleven tree limit.
 
 `Box(child, {width: 300})` offers its child a width of 300 and
 `Box(child, {height: 24})` makes the Box 24 tall, each axis on its own, under any
@@ -249,6 +249,11 @@ the tree's own properties. `Box(child)` and `Box(child, {})` carry no claim; lik
 C++ `Box()`, the Box still takes its own seat in a Row and has no natural width.
 A fixed Box wider than its parent overflows rather than shrinking. There are no
 min/max keys yet.
+
+`ClipBox(child, options?)` is a Box that clips its child at its own rect, like C++
+`ClipBox()`. It accepts the same options and refusals as `Box` and counts one
+level toward the depth limit. The global that builds the tree decides clipping:
+a tree built by `Box` never clips.
 
 Use `ScrollView(VStack(...).naturalHeight())` for a Column that should stack children at their own heights.
 Use `ScrollView(Row(...).naturalWidth())` for a Row that should scroll sideways.
@@ -272,7 +277,7 @@ the existing refusal card with a message naming that budget and the Reload
 button. Records are allocated only for seats declared and clickables lowered;
 there is no eight-slot allocation or dispatch table. The refusal UI's Reload
 button is a separate host control. The existing 16-children-per-stack and
-depth-ten tree limits still apply. Grid capacity does not raise the seat or
+depth-eleven tree limits still apply. Grid capacity does not raise the seat or
 clickable budgets (a 256-cell Grid can use Text, but cannot contain 256 Cells).
 
 The card owns stable seat handles and JS handler records. Each clickable is a
@@ -500,9 +505,11 @@ smirking compact Mac shown on the About card; `ICONM` is generated but not stage
 
 The list follows its viewport: positive width below 320 selects one column.
 Seven wide row Shows and seven narrow Shows containing paired VStacks give
-14 children, with both arms' leaves at depth 10 (inclusive). Carousel and detail
+14 children, with both arms' thumbnails at depth 11 (inclusive). Carousel and detail
 rows each contain 13 children, below the 16-child wall. Tall/Wide still selects
-list/carousel independently of viewport width.
+list/carousel independently of viewport width. List thumbnails are cut at the card's
+content edge by a `ClipBox`. Carousel thumbnails are not wrapped, so their
+ImageViews supply the natural width of the horizontally scrolling Row.
 
 Each page owns a `ZStack(ground, toolbar()).expBlurUnit()` with a 30-unit-high
 Box toolbar. List and detail use a direct ScrollView ground with top inset 30,
@@ -510,7 +517,7 @@ so the band covers only the inset while the list scrolls under it. Carousel rese
 height with an empty Box. Only the selected page's Show materializes its band
 and toolbar IDs. The outer ZStack remains static blur: opening About covers
 the window while the selected page's live band remains beneath it. Tree depth
-is counted from zero; depth 10 is admitted and depth 11 is refused.
+is counted from zero; depth 11 is admitted and depth 12 is refused.
 
 The original hand-drawn artwork is by the repository owner, licensed under the
 same license as the repository. Regenerate all 84 PNG/PICT outputs (including

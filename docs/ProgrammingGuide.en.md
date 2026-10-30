@@ -1648,8 +1648,7 @@ fixed-at-creation rule. For example:
 ClipBox().height(240) << ImageView().image(this->photo_.state());
 ```
 
-`ClipBox()` is C++ DSL only; SmirkyCard's JS `Box` has no clip option and there
-is no JS `ClipBox`.
+SmirkyCard's JavaScript has `ClipBox(child, options?)` with the same options as its `Box`.
 
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive
