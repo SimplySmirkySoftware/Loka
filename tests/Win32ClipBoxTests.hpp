@@ -4,6 +4,9 @@
 void testWin32ClipBoxGeometryAndFlatTwins();
 void testWin32ClipBoxCardBandsAndFlatTwin();
 void testWin32ClipBoxMixing();
+void testWin32ClipBoxTabOrderAndFlatTwin();
+void testWin32ClipBoxFocusCueAndEditTextEdge();
+void testWin32ClipBoxDeviceRoundingAndUnitTwin();
 void testWin32ClipBoxZeroWidthDoesNotCoverSibling();
 void testWin32ClipBoxCreationRefusalsRetry();
 void testWin32ClipBoxDepthRefusalStaysFlat();
