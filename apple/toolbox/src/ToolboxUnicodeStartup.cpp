@@ -1,5 +1,5 @@
-#if LOKA_TOOLBOX_UNICODE
 #include "ToolboxUnicodeStartup.hpp"
+#if LOKA_TOOLBOX_UNICODE
 #include "ToolboxDialogConstruction.hpp"
 #include <Gestalt.h>
 #include <Processes.h>
@@ -25,3 +25,11 @@ namespace loka
   } // namespace toolbox
 } // namespace loka
 #endif
+
+namespace loka
+{
+  namespace toolbox
+  {
+    void UnicodeTextSuddenTerminate() {}
+  } // namespace toolbox
+} // namespace loka

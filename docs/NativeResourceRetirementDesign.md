@@ -190,6 +190,8 @@ and thus the context final drain. There is no macOS-specific drain call.
 
 ## Shutdown and invalid lifetime containment
 
+[Sudden termination](SuddenTerminationDesign.md) does not invoke this document's retirement and does not relax the quiescent-shutdown premise.
+
 Exit order is App, ConfigT, PlatformContext. Config-owned Images dropped after
 App destruction still queue into the surviving context. PlatformContext's value
 member performs final drain. Entry must be quiescent: no active Operation, no

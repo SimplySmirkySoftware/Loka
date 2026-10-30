@@ -17,6 +17,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxOperatorNew.cpp
   src/ToolboxUnicodeStartup.cpp
   src/ToolboxUnicodeEditorLedger.cpp
+  src/ToolboxSuddenTerminate.cpp
   src/ToolboxOutOfMemory.cpp
   src/ToolboxDialogConstruction.cpp
   src/ToolboxReserveGrowZone.cpp
