@@ -51,4 +51,11 @@ void testRowEllipsisCurrentArmsAndComponent();
 void testRowEllipsisRefusalsAndLiveGaps();
 void testContentOverflowFixedCarouselAndSharedSeat();
 
+void testRowWrappedButtonHeightOffers();
+void testRowShownButtonAndMultipleLeafHeightOffers();
+
+void testRowSingleLiveLeafWidthShapes();
+
+void testSingleLiveLeafStopsAtSecondSeat();
+
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP
