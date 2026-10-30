@@ -2,7 +2,7 @@
 #define LOKA_APP_LAYOUT_HEURISTICS_HPP
 
 #include "app/RectSurface.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "app/layout/RailSpacing.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -22,6 +22,51 @@ namespace loka
       int resolveLayoutGap(scene::Node *node, int received, const RailSpacing &spacing);
       /** Dialogs and pass-through subtrees without a seat consume no layout gap. */
       bool childTakesLayoutSeat(scene::Node *child);
+
+      /** Completed seat shape: no seat, one borrowed terminal, or at least two leaves.
+          The pointer is present only for ONE_LEAF; this value neither owns nor retains it. */
+      class SeatLeaves
+      {
+      public:
+        enum Kind
+        {
+          NO_SEAT,
+          ONE_LEAF,
+          MANY_LEAVES
+        };
+
+        explicit SeatLeaves(scene::Node *leaf = 0)
+            : kind_(leaf ? ONE_LEAF : NO_SEAT),
+              leaf_(leaf)
+        {
+        }
+
+        static SeatLeaves many()
+        {
+          return SeatLeaves(MANY_LEAVES);
+        }
+        Kind kind() const
+        {
+          return this->kind_;
+        }
+        scene::Node *leaf() const
+        {
+          return this->leaf_;
+        }
+
+      private:
+        explicit SeatLeaves(Kind kind)
+            : kind_(kind),
+              leaf_(0)
+        {
+        }
+        Kind kind_;
+        scene::Node *leaf_;
+      };
+
+      /** Walk transparent descendants once, stopping at terminals and the second live seat.
+          O(visited nodes) time, O(wrapper depth) stack; reads the child's composition only. */
+      SeatLeaves singleLiveLeaf(scene::Node *seat);
 
       /** Converts an intermediate layout calculation to the target's
           declared coordinate width at the assignment boundary. */
@@ -149,7 +194,7 @@ namespace loka
          width. */
       bool queryContentOverflowWidth(scene::Node *parent,
                                      const RailSpacing &spacing,
-                                     const INaturalWidthSource *source,
+                                     const INaturalSizeSource *source,
                                      short &width);
 
       /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
@@ -169,13 +214,13 @@ namespace loka
                              int gap,
                              const RailSpacing &spacing,
                              RowUndeclaredWidth policy,
-                             const INaturalWidthSource *source);
+                             const INaturalSizeSource *source);
 
         RowChildWidth next(loka::app::scene::Node *child);
 
       private:
         int preferredWidth(loka::app::scene::Node *child) const;
-        const INaturalWidthSource *source_;
+        const INaturalSizeSource *source_;
         const RailSpacing spacing_;
         RowWidthDivision flex_;
         RowWidthDivision shrink_;
@@ -197,17 +242,28 @@ namespace loka
         return remainingHeight;
       }
 
+      /** Aligned Row height table; transparent wrappers expose exactly one live leaf. */
       inline int preferredChildHeightForRow(loka::app::scene::Node *child,
                                             int fallbackHeight,
                                             int buttonHeight,
                                             int editTextHeight,
                                             int popupMenuHeight,
                                             int textHeight,
-                                            int imageFallbackHeight)
+                                            int imageFallbackHeight,
+                                            const INaturalSizeSource *source)
       {
         if (!child)
         {
           return fallbackHeight;
+        }
+        if (isLayoutPassThrough(child))
+        {
+          const SeatLeaves leaves = singleLiveLeaf(child);
+          if (leaves.kind() == SeatLeaves::NO_SEAT)
+            return 0;
+          if (leaves.kind() == SeatLeaves::MANY_LEAVES)
+            return fallbackHeight;
+          child = leaves.leaf();
         }
         if (!childTakesLayoutSeat(child))
         {
@@ -229,6 +285,9 @@ namespace loka
         }
         if (child->asTextNode())
         {
+          short height = 0;
+          if (source && source->queryNaturalHeight(child, height))
+            return height;
           return textHeight;
         }
         if (loka::app::ImageViewNode *image = child->asImageViewNode())

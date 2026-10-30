@@ -335,7 +335,7 @@ namespace
   {
     return static_cast<RibbonChildSeatTraversal *>(context)->layoutChild(node, state);
   }
-  class RibbonConstantWidth : public layout::INaturalWidthSource
+  class RibbonConstantWidth : public layout::INaturalSizeSource
   {
   public:
     explicit RibbonConstantWidth(short width)

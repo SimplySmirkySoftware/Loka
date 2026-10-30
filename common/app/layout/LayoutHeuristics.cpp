@@ -167,25 +167,32 @@ namespace loka
         return -1;
       }
 
+      SeatLeaves singleLiveLeaf(scene::Node *seat)
+      {
+        if (!isLayoutPassThrough(seat))
+          return SeatLeaves(childTakesLayoutSeat(seat) ? seat : 0);
+        scene::INestable *group = seat->asNestable();
+        loka::dsl::CompositionCursor<scene::Node> children(group->childrenHead(), group->childrenCount());
+        SeatLeaves result;
+        for (scene::Node *child = children.next(); child; child = children.next())
+        {
+          const SeatLeaves descendant = singleLiveLeaf(child);
+          if (descendant.kind() == SeatLeaves::NO_SEAT)
+            continue;
+          if (descendant.kind() == SeatLeaves::MANY_LEAVES || result.kind() == SeatLeaves::ONE_LEAF)
+            return SeatLeaves::many();
+          result = descendant;
+        }
+        return result;
+      }
+
       namespace
       {
-        /** Follow only transparent wrappers with exactly one live leaf. */
+        /** Width eligibility is a projection of the same terminal-seat fact as height. */
         TextNode *singleTextLeaf(scene::Node *seat)
         {
-          if (!isLayoutPassThrough(seat))
-            return seat ? seat->asTextNode() : 0;
-          scene::INestable *group = seat->asNestable();
-          loka::dsl::CompositionCursor<scene::Node> children(group->childrenHead(), group->childrenCount());
-          scene::Node *live = 0;
-          for (scene::Node *child = children.next(); child; child = children.next())
-          {
-            if (!childTakesLayoutSeat(child))
-              continue;
-            if (live)
-              return 0;
-            live = child;
-          }
-          return singleTextLeaf(live);
+          scene::Node *leaf = singleLiveLeaf(seat).leaf();
+          return leaf ? leaf->asTextNode() : 0;
         }
 
         /** Shape/style eligibility; callers supply the positive natural-width answer. */
@@ -240,7 +247,7 @@ namespace loka
 
         bool queryNaturalWidth(scene::Node *child,
                                const RailSpacing &spacing,
-                               const INaturalWidthSource *source,
+                               const INaturalSizeSource *source,
                                short &width)
         {
           // A pass-through wrapper (a component such as a JS Button or Cell, a
@@ -353,7 +360,7 @@ namespace loka
 
       bool queryContentOverflowWidth(scene::Node *parent,
                                      const RailSpacing &spacing,
-                                     const INaturalWidthSource *source,
+                                     const INaturalSizeSource *source,
                                      short &width)
       {
         int maximum = 0;
@@ -436,7 +443,7 @@ namespace loka
                                                  int gap,
                                                  const RailSpacing &spacing,
                                                  RowUndeclaredWidth policy,
-                                                 const INaturalWidthSource *source)
+                                                 const INaturalSizeSource *source)
           : source_(0),
             spacing_(spacing),
             flex_(0),

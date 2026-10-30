@@ -306,6 +306,11 @@ namespace loka
           return this->controller_ && this->controller_->queryNaturalWidth(child, width);
         }
 
+        virtual bool queryNaturalHeight(Node *child, short &height) const
+        {
+          return this->controller_ && this->controller_->queryNaturalHeight(child, height);
+        }
+
         virtual int layoutChild(Node *child, const LayoutState &state)
         {
           if (!this->controller_)
@@ -376,6 +381,11 @@ bool Win32ScenePlatformController::measurePushButtonNaturalWidth(
     return false;
   width = static_cast<short>(logicalWidth);
   return true;
+}
+
+bool Win32ScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+{
+  return child && child->asTextNode() && Win32TextContext::queryNaturalHeight(child->asTextNode(), this, height);
 }
 
 bool Win32ScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const

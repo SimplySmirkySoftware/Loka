@@ -165,6 +165,23 @@ bool MacTextContext::queryNaturalWidth(const loka::app::TextNode *text,
   return true;
 }
 
+bool MacTextContext::queryNaturalHeight(const loka::app::TextNode *text,
+                                        const MacScenePlatformController *controller,
+                                        short &height)
+{
+  if (!controller || !text || !text->props.text_
+      || (text->props.blockStyle_.hasWrap_ && text->props.blockStyle_.wrap_ != loka::app::TEXT_WRAP_NONE))
+    return false;
+  std::string utf8;
+  if (!loka::platform::CollectUtf8(text->props.text_->get(), utf8) || utf8.find_first_of("\n\r") != std::string::npos)
+    return false;
+  const TextGeometry geometry = ResolveTextGeometry(text->props.resolvedTextStyle(), controller);
+  if (geometry.minimumHeight <= 0 || geometry.minimumHeight > SHRT_MAX)
+    return false;
+  height = static_cast<short>(geometry.minimumHeight);
+  return true;
+}
+
 MacTextContext::MacTextContext(MacScenePlatformController *controller,
                                void *parentView,
                                int x,

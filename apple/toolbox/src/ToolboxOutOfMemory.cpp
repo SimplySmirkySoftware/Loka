@@ -1,4 +1,5 @@
 #include "ToolboxOutOfMemory.hpp"
+#include "ToolboxSuddenTerminate.hpp"
 #include "ToolboxDialogConstruction.hpp"
 #include "ToolboxReserveGrowZone.hpp"
 #include <LowMem.h>
@@ -128,6 +129,7 @@ namespace loka
     {
       if (gOutOfMemoryReserve.beginReporting())
         ShowOutOfMemoryDialog();
+      SuddenTerminate();
       ExitToShell();
 #if defined(LOKA_RETRO68)
       __builtin_unreachable();

@@ -52,4 +52,8 @@ void testClipChildrenMatchBirthAndParkedReentry();
 
 void testClipChildrenDetachedDelivery();
 
+void testNullNaturalHeightAlignedRow();
+void testNullNaturalHeightDeclinesAndSourceRouting();
+void testNullNaturalHeightMatchesLeafAndPreservesFailures();
+
 #endif // LOKA_TESTS_NULL_LAYOUT_TESTS_HPP

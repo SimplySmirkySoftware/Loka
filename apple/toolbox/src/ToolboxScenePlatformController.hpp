@@ -12,7 +12,7 @@
 #include "ToolboxFrostCache.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "ToolboxEditInstalled.hpp"
 #include "ToolboxPendingDialogs.hpp"
 
@@ -61,7 +61,7 @@ namespace loka
 } // namespace loka
 
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
-    public loka::app::layout::INaturalWidthSource
+                                       public loka::app::layout::INaturalSizeSource
 {
 private:
   struct ButtonControlBinding;
