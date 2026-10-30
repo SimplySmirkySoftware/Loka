@@ -192,6 +192,29 @@ bool Win32TextContext::queryNaturalWidth(const loka::app::TextNode *node,
   return true;
 }
 
+bool Win32TextContext::queryNaturalHeight(const loka::app::TextNode *node,
+                                          const Win32ScenePlatformController *controller,
+                                          short &height)
+{
+  if (!node || !controller || !node->props.text_)
+    return false;
+  const loka::app::BlockStyle &block = node->props.blockStyle_;
+  if (block.hasWrap_ && block.wrap_ != loka::app::TEXT_WRAP_NONE)
+    return false;
+  std::wstring wide;
+  if (!loka::win32::MaterializeWideString(node->props.text_->get(), wide)
+      || wide.find_first_of(L"\r\n") != std::wstring::npos)
+    return false;
+  int local = 0;
+  // Keep the leaf's null-font argument: unstyled Text has a 20-lu minimum.
+  // MinimumTextHeight writes its fallback even on failure; commit only success.
+  if (!MinimumTextHeight(controller->rootHwnd(), ResolveTextFont(node, controller), controller, local) || local <= 0
+      || local > SHRT_MAX)
+    return false;
+  height = static_cast<short>(local);
+  return true;
+}
+
 Win32TextContext::Win32TextContext(Win32ScenePlatformController *controller,
                                    HWND parent,
                                    int x,

@@ -58,6 +58,9 @@ public:
       Refusal leaves width untouched; no context or measurement cache is created. */
   static bool
   queryNaturalWidth(const loka::app::TextNode *node, const Win32ScenePlatformController *controller, short &width);
+  /** One-line height shared with Text layout; refusal leaves height untouched. */
+  static bool
+  queryNaturalHeight(const loka::app::TextNode *node, const Win32ScenePlatformController *controller, short &height);
   virtual loka::app::scene::PaintAnswer queryPaintDamage(const loka::app::scene::PaintQuery &query) const;
   virtual loka::app::scene::ICapturableBitmap *asCapturableBitmap()
   {

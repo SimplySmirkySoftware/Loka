@@ -442,9 +442,15 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     loka::dsl::CompositionCursor<loka::app::scene::Node> measure(row->childrenHead(), childCount);
     for (loka::app::scene::Node *child = measure.next(); child; child = measure.next())
     {
-      short height = static_cast<short>(loka::app::layout::preferredChildHeightForRow(
-          child, lineHeight, controlHeight, editTextHeight, controlHeight, controlHeight,
-          ToolboxLayoutMetrics::kImageFallbackHeight));
+      short height =
+          static_cast<short>(loka::app::layout::preferredChildHeightForRow(child,
+                                                                           lineHeight,
+                                                                           controlHeight,
+                                                                           editTextHeight,
+                                                                           controlHeight,
+                                                                           controlHeight,
+                                                                           ToolboxLayoutMetrics::kImageFallbackHeight,
+                                                                           traversal));
       if (height > rowHeight)
       {
         rowHeight = height;
@@ -474,9 +480,15 @@ int ComputeToolboxRowLayout(loka::app::StackNode *row,
     rowState.width = static_cast<short>(allocation.width());
     if (row->props.hasVerticalAlignment_)
     {
-      short childHeight = static_cast<short>(loka::app::layout::preferredChildHeightForRow(
-          child, rowHeight, controlHeight, editTextHeight, controlHeight, controlHeight,
-          ToolboxLayoutMetrics::kImageFallbackHeight));
+      short childHeight =
+          static_cast<short>(loka::app::layout::preferredChildHeightForRow(child,
+                                                                           rowHeight,
+                                                                           controlHeight,
+                                                                           editTextHeight,
+                                                                           controlHeight,
+                                                                           controlHeight,
+                                                                           ToolboxLayoutMetrics::kImageFallbackHeight,
+                                                                           traversal));
       short remain = static_cast<short>(rowHeight - childHeight);
       short offset = 0;
       if (remain > 0)

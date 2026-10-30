@@ -16,7 +16,7 @@
 #include "ToolboxActivationPhase.hpp"
 #include "support/TestVerify.hpp"
 struct ToolboxScrollViewMetrics;
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "app/core/Window.hpp"
 #include "ToolboxWindowGeometry.hpp"
 #ifdef LOKA_HOST_GAP_DISPATCH
@@ -314,7 +314,7 @@ public:
 #include "context/ToolboxPopupMenuContext.hpp"
 #endif
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
-    public loka::app::layout::INaturalWidthSource
+                                       public loka::app::layout::INaturalSizeSource
 {
 public:
   bool applyScrollViewRequest(loka::app::ScrollViewNode &node,

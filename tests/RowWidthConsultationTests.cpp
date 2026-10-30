@@ -404,7 +404,7 @@ void testRowWidthHeuristicForwardsOnlySingleFragmentClaims()
 
 namespace
 {
-  class NaturalWidthProbe : public loka::app::layout::INaturalWidthSource
+  class NaturalWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     explicit NaturalWidthProbe(loka::app::scene::Node *answered)
@@ -515,7 +515,7 @@ void testNullNaturalWidthDeclinesUnrepresentableWidth()
 
 namespace
 {
-  class StackWidthProbe : public loka::app::layout::INaturalWidthSource
+  class StackWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     StackWidthProbe(short a, short b, short caption)
@@ -985,7 +985,7 @@ void testBoxWidthOverflowEstimates()
 
 namespace
 {
-  class ShrinkWidthProbe : public loka::app::layout::INaturalWidthSource
+  class ShrinkWidthProbe : public loka::app::layout::INaturalSizeSource
   {
   public:
     ShrinkWidthProbe()
@@ -1564,8 +1564,8 @@ void testRowShownButtonAndMultipleLeafHeightOffers()
       scene::Node *bare = root->asNestable()->childrenHead()->nextInComposition;
       scene::Node *wrapper = bare->nextInComposition;
       LOKA_VERIFY(wrapper && isLayoutPassThrough(wrapper));
-      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 7, 10, 11, 12, 13, 14) == (shape == 0 ? 10 : shape == 3 ? 0 : 7));
-      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 40, 10, 11, 12, 13, 14)
+      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 7, 10, 11, 12, 13, 14, 0) == (shape == 0 ? 10 : shape == 3 ? 0 : 7));
+      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 40, 10, 11, 12, 13, 14, 0)
                   == (shape == 0   ? 10
                       : shape == 3 ? 0
                                    : 40));

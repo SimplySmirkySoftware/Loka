@@ -1,4 +1,15 @@
+#include "app/layout/RowLayout.hpp"
+#include "platform/null/context/NullTextContext.hpp"
 #include <climits>
+namespace loka
+{
+  namespace testing
+  {
+    void failNullTextMeasurements(unsigned count, app::scene::Node *markDuringRefusal);
+    bool declineNullTextMeasurement();
+  } // namespace testing
+} // namespace loka
+
 #include <cstdio>
 #include "app/nodes/nestable/Match.hpp"
 #include "app/nodes/nestable/Keyed.hpp"
@@ -1437,4 +1448,187 @@ void testClipChildrenDetachedDelivery()
   settle(scene);
   LOKA_VERIFY(root(scene)->childrenHead() == branch);
   SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  /** Records offers while the real Null controller supplies the leaf extents. */
+  struct NaturalHeightOffers
+  {
+    NullScenePlatformController platform;
+    loka::app::scene::LayoutState text;
+    loka::app::scene::LayoutState button;
+
+    static int layout(void *context, loka::app::scene::Node *child, const loka::app::scene::LayoutState &state)
+    {
+      NaturalHeightOffers &offers = *static_cast<NaturalHeightOffers *>(context);
+      if (child->asTextNode())
+        offers.text = state;
+      if (child->asButtonNode())
+        offers.button = state;
+      return offers.platform.projectLayoutForTesting(child, state);
+    }
+  };
+
+  class TextOnlyHeightSource : public loka::app::layout::INaturalSizeSource
+  {
+  public:
+    virtual bool queryNaturalWidth(loka::app::scene::Node *, short &) const
+    {
+      return false;
+    }
+    virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+    {
+      LOKA_VERIFY(child->asTextNode() != 0);
+      height = 18;
+      return true;
+    }
+  };
+
+  int layoutHeightRow(loka::app::StackNode &row,
+                      NaturalHeightOffers &offers,
+                      const loka::app::layout::INaturalSizeSource *source)
+  {
+    loka::app::layout::RowLayoutMetrics metrics;
+    metrics.fallbackHeight = metrics.buttonHeight = metrics.editTextHeight = 10;
+    metrics.popupMenuHeight = metrics.textHeight = metrics.imageFallbackHeight = 10;
+    return loka::app::layout::computeRowLayoutResultY(&row,
+                                                      makeState(0, 0, 200, 10),
+                                                      metrics,
+                                                      loka::app::layout::RailSpacing(12, 4, 9),
+                                                      source,
+                                                      &offers,
+                                                      &NaturalHeightOffers::layout,
+                                                      0,
+                                                      0);
+  }
+} // namespace
+
+void testNullNaturalHeightAlignedRow()
+{
+  using namespace loka::app;
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  for (unsigned title = 0; title < 2; ++title)
+  {
+    for (unsigned alignment = 0; alignment < 3; ++alignment)
+    {
+      NaturalHeightOffers offers;
+      StackNode row(Row().alignVertical(alignments[alignment]).props);
+      TextProps props("label");
+      if (title)
+        props.textStyle_ = Title;
+      row.addChild(new TextNode(props));
+      row.addChild(new ButtonNode(Button("button").props));
+      const int expectedHeight = title ? 18 : 12;
+      const int offset = static_cast<int>(alignment) * (expectedHeight - 10) / 2;
+      LOKA_VERIFY(layoutHeightRow(row, offers, &offers.platform) == 32 + offset);
+      LOKA_VERIFY(offers.text.height == expectedHeight);
+      LOKA_VERIFY(offers.text.y == 0);
+      LOKA_VERIFY(offers.button.height == 10);
+      LOKA_VERIFY(offers.button.y == offset);
+      // Registered Stack handler goes through Null's LayoutTraversal adapter.
+      LOKA_VERIFY(offers.platform.projectLayoutForTesting(&row, makeState(0, 0, 200, 10)) == 32 + offset);
+    }
+  }
+}
+
+void testNullNaturalHeightDeclinesAndSourceRouting()
+{
+  using namespace loka::app;
+  NaturalHeightOffers offers;
+  for (unsigned condition = 0; condition < 5; ++condition)
+  {
+    StackNode row(Row().alignVertical(VERTICAL_ALIGNMENT_TOP).props);
+    TextProps props(condition == 1 ? "a\nb" : condition == 2 ? "a\rb" : "label");
+    props.textStyle_ = Title;
+    if (condition == 0)
+    {
+      props.blockStyle_.hasWrap_ = true;
+      props.blockStyle_.wrap_ = TEXT_WRAP_WORD;
+    }
+    if (condition >= 3)
+      props.textStyle_.size_ = TextSizeValue::points(condition == 3 ? 0 : -1);
+    TextNode *text = new TextNode(props);
+    row.addChild(text);
+    short sentinel = 77;
+    LOKA_VERIFY(!offers.platform.queryNaturalHeight(text, sentinel));
+    LOKA_VERIFY(sentinel == 77);
+    layoutHeightRow(row, offers, &offers.platform);
+    LOKA_VERIFY(offers.text.height == 10);
+  }
+  StackNode row(Row().alignVertical(VERTICAL_ALIGNMENT_CENTER).props);
+  row.addChild(new TextNode((Text("label") + Title).props));
+  row.addChild(new ButtonNode(Button("button").props));
+  layoutHeightRow(row, offers, 0);
+  LOKA_VERIFY(offers.text.height == 10 && offers.button.y == 0);
+  TextOnlyHeightSource source;
+  layoutHeightRow(row, offers, &source);
+  LOKA_VERIFY(offers.text.height == 18 && offers.button.y == 4);
+  short sentinel = 77;
+  ButtonNode button((ButtonProps()));
+  LOKA_VERIFY(!offers.platform.queryNaturalHeight(&button, sentinel));
+  LOKA_VERIFY(!offers.platform.queryNaturalHeight(0, sentinel));
+  LOKA_VERIFY(sentinel == 77);
+}
+
+void testNullNaturalHeightMatchesLeafAndPreservesFailures()
+{
+  using namespace loka::app;
+  const TextStyle styles[] = {TextStyle(),
+                              Bold,
+                              Heading,
+                              Title,
+                              SmallLabel,
+                              Caption,
+                              FontSize<9>(),
+                              FontSize<10>(),
+                              FontSize<12>(),
+                              FontSize<14>(),
+                              FontSize<18>(),
+                              FontSize<24>()};
+  const int expected[] = {12, 12, 12, 18, 9, 9, 9, 10, 12, 14, 18, 24};
+  NullScenePlatformController platform;
+  for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i)
+  {
+    for (unsigned empty = 0; empty < 2; ++empty)
+    {
+      TextProps props(empty ? "" : "label");
+      props.textStyle_ = styles[i];
+      props.blockStyle_.hasWrap_ = true;
+      props.blockStyle_.wrap_ = TEXT_WRAP_NONE;
+      TextNode text(props);
+      short height = 77;
+      LOKA_VERIFY(platform.queryNaturalHeight(&text, height));
+      LOKA_VERIFY(height == expected[i]);
+      short repeated = 88;
+      LOKA_VERIFY(platform.queryNaturalHeight(&text, repeated));
+      LOKA_VERIFY(repeated == height);
+      NullTextContext context(&text);
+      scene::LayoutState state = makeState(0, 0, 200, 10);
+      LOKA_VERIFY(context.layout(&platform, state) == height);
+      LOKA_VERIFY(context.measurement().height() == height);
+    }
+  }
+  loka::core::MutableState<TextStyle> liveStyle(Title);
+  TextProps liveProps("label");
+  liveProps.textStyleState_ = &liveStyle;
+  TextNode liveText(liveProps);
+  short liveHeight = 77;
+  LOKA_VERIFY(platform.queryNaturalHeight(&liveText, liveHeight));
+  LOKA_VERIFY(liveHeight == 18);
+  liveStyle.set(SmallLabel);
+  LOKA_VERIFY(platform.queryNaturalHeight(&liveText, liveHeight));
+  LOKA_VERIFY(liveHeight == 9);
+  TextNode text((Text("label") + Title).props);
+  short height = 77;
+  loka::testing::failNullTextMeasurements(2, 0);
+  testing::NullTextMeasurementAccess::failMeasure(2);
+  LOKA_VERIFY(platform.queryNaturalHeight(&text, height));
+  LOKA_VERIFY(platform.queryNaturalHeight(&text, height));
+  LOKA_VERIFY(loka::testing::declineNullTextMeasurement());
+  LOKA_VERIFY(loka::testing::declineNullTextMeasurement());
+  LOKA_VERIFY(!loka::testing::declineNullTextMeasurement());
+  LOKA_VERIFY(!RefuseNullTextMeasurement());
+  LOKA_VERIFY(RefuseNullTextMeasurement());
+  LOKA_VERIFY(!RefuseNullTextMeasurement());
 }

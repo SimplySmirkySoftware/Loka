@@ -247,7 +247,7 @@ namespace loka
 
         bool queryNaturalWidth(scene::Node *child,
                                const RailSpacing &spacing,
-                               const INaturalWidthSource *source,
+                               const INaturalSizeSource *source,
                                short &width)
         {
           // A pass-through wrapper (a component such as a JS Button or Cell, a
@@ -360,7 +360,7 @@ namespace loka
 
       bool queryContentOverflowWidth(scene::Node *parent,
                                      const RailSpacing &spacing,
-                                     const INaturalWidthSource *source,
+                                     const INaturalSizeSource *source,
                                      short &width)
       {
         int maximum = 0;
@@ -443,7 +443,7 @@ namespace loka
                                                  int gap,
                                                  const RailSpacing &spacing,
                                                  RowUndeclaredWidth policy,
-                                                 const INaturalWidthSource *source)
+                                                 const INaturalSizeSource *source)
           : source_(0),
             spacing_(spacing),
             flex_(0),
