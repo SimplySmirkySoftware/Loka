@@ -2,7 +2,7 @@
 #define LOKA_APP_LAYOUT_HEURISTICS_HPP
 
 #include "app/RectSurface.hpp"
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "app/layout/RailSpacing.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -149,7 +149,7 @@ namespace loka
          width. */
       bool queryContentOverflowWidth(scene::Node *parent,
                                      const RailSpacing &spacing,
-                                     const INaturalWidthSource *source,
+                                     const INaturalSizeSource *source,
                                      short &width);
 
       /** Owns one Row pass's flex remainder and live-seat progression: NATURAL rows consult stable
@@ -169,13 +169,13 @@ namespace loka
                              int gap,
                              const RailSpacing &spacing,
                              RowUndeclaredWidth policy,
-                             const INaturalWidthSource *source);
+                             const INaturalSizeSource *source);
 
         RowChildWidth next(loka::app::scene::Node *child);
 
       private:
         int preferredWidth(loka::app::scene::Node *child) const;
-        const INaturalWidthSource *source_;
+        const INaturalSizeSource *source_;
         const RailSpacing spacing_;
         RowWidthDivision flex_;
         RowWidthDivision shrink_;

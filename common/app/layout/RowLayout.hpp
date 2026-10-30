@@ -36,7 +36,7 @@ namespace loka
                                   const LayoutStateT &state,
                                   const RowLayoutMetrics &metrics,
                                   const RailSpacing &spacing,
-                                  const INaturalWidthSource *source,
+                                  const INaturalSizeSource *source,
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
                                   int gap,

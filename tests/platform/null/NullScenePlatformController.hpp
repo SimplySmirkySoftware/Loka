@@ -1,7 +1,7 @@
 #ifndef LOKA_TESTS_PLATFORM_NULL_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TESTS_PLATFORM_NULL_SCENE_PLATFORM_CONTROLLER_HPP
 
-#include "app/layout/NaturalWidthSource.hpp"
+#include "app/layout/NaturalSizeSource.hpp"
 #include "app/scene/projection/CollectPaintAnswers.hpp"
 #include <cstddef>
 #include "platform/null/NullMenuAttachment.hpp"
@@ -33,7 +33,7 @@ class NullScrollBarContext;
 class NullWindow;
 
 class NullScenePlatformController : public loka::app::scene::IPlatformController,
-    public loka::app::layout::INaturalWidthSource
+                                    public loka::app::layout::INaturalSizeSource
 {
 public:
     /** Exact damage may share a conservative, non-erasing destination only when true. */

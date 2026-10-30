@@ -185,7 +185,7 @@ namespace
       return node->getContext();
     }
   };
-  class CardWidth : public INaturalWidthSource
+  class CardWidth : public INaturalSizeSource
   {
   public:
     const short value;
@@ -199,7 +199,7 @@ namespace
       return this->value >= 0;
     }
   };
-  int measured(CardNode &card, const INaturalWidthSource &source)
+  int measured(CardNode &card, const INaturalSizeSource &source)
   {
     RowWidthConsultation width(
         &card, 1, 301, 0, loka::app::layout::RailSpacing(12, 0, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
