@@ -108,3 +108,123 @@ class WiringTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests" / "toolbox" / "unicode-abi"))
+import compare_subset as abi  # noqa: E402
+import manifest  # noqa: E402
+
+# Lines in the shape powerpc-apple-macos-objdump prints for an XCOFF object.
+OBJDUMP_H = """
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00000020  00000000  00000000  000000a8  2**2
+                  CONTENTS, ALLOC, LOAD, CODE
+  1 .data         00000020  00000020  00000020  000000c8  2**3
+                  CONTENTS, ALLOC, LOAD, RELOC, DATA
+  2 .bss          00000000  00000040  00000040  00000000  2**3
+                  ALLOC
+"""
+OBJDUMP_T = """
+SYMBOL TABLE:
+[  0](sec -2)(fl 0x00)(ty    0)(scl 103) (nx 1) 0x00000000 probe.cpp
+[  6](sec  1)(fl 0x00)(ty    0)(scl   2) (nx 1) 0x00000000 loka_mlte_abi_layout
+[ 12](sec  2)(fl 0x00)(ty    0)(scl   2) (nx 1) 0x00000020 loka_mlte_sig_0
+[ 16](sec  0)(fl 0x00)(ty    0)(scl   2) (nx 1) 0x00000000 TXNFakeOne
+"""
+OBJDUMP_S = """
+Contents of section .text:
+ 0000 00000003 01020304 00000004 48000014  ............H...
+ 0010 60000000 60000000 60000000 60000000  `...`...`...`...
+"""
+
+
+class AbiDriverTests(unittest.TestCase):
+    def test_output_wall_accepts_only_the_fixed_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            (repo / "build").mkdir(parents=True)
+            root = repo / "build" / "toolbox-unicode-abi"
+            self.assertEqual(abi.output_wall(root, repo), root.resolve())
+            with self.assertRaisesRegex(abi.AbiError, "outside"):
+                abi.output_wall(repo / "build" / "elsewhere", repo)
+            with self.assertRaisesRegex(abi.AbiError, "outside"):
+                abi.output_wall(Path(directory) / "toolbox-unicode-abi", repo)
+            outside = Path(directory) / "outside"
+            outside.mkdir()
+            root.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(abi.AbiError, "outside"):
+                abi.output_wall(root, repo)
+
+    def test_output_wall_refuses_a_symlinked_build_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            repo.mkdir()
+            elsewhere = Path(directory) / "elsewhere"
+            elsewhere.mkdir()
+            (repo / "build").symlink_to(elsewhere, target_is_directory=True)
+            with self.assertRaisesRegex(abi.AbiError, "symlink"):
+                abi.output_wall(repo / "build" / "toolbox-unicode-abi", repo)
+
+    def test_parse_and_decode(self):
+        sections = abi.parse_sections(OBJDUMP_H)
+        symbols = abi.parse_symbols(OBJDUMP_T)
+        contents = abi.parse_contents(OBJDUMP_S)
+        self.assertEqual(sections[0], (".text", 0x20, 0))
+        self.assertEqual(symbols["loka_mlte_sig_0"], (2, 0x20))
+        values, name = abi.decode_array(sections, symbols, contents, "loka_mlte_abi_layout", 3)
+        self.assertEqual((values, name), ([3, 0x01020304, 4], ".text"))
+        with self.assertRaisesRegex(abi.AbiError, "leave section"):
+            abi.decode_array(sections, symbols, contents, "loka_mlte_abi_layout", 9)
+        with self.assertRaisesRegex(abi.AbiError, "symbol missing"):
+            abi.decode_array(sections, symbols, contents, "absent", 1)
+        with self.assertRaisesRegex(abi.AbiError, "no bytes"):
+            abi.decode_array(sections, symbols, {}, "loka_mlte_abi_layout", 1)
+        for parse in (abi.parse_sections, abi.parse_symbols, abi.parse_contents):
+            with self.subTest(parse=parse.__name__), self.assertRaises(abi.AbiError):
+                parse("nothing here\n")
+
+    def test_linkage(self):
+        names = {name for name, _, _ in manifest.FUNCTIONS}
+        abi.check_linkage(set(names))
+        with self.assertRaisesRegex(abi.AbiError, "C\\+\\+ linkage"):
+            abi.check_linkage(names | {"_Z6TXNCutP15OpaqueTXNObject"})
+        with self.assertRaisesRegex(abi.AbiError, "missing \\['TXNCut'\\]"):
+            abi.check_linkage(names - {"TXNCut"})
+        with self.assertRaisesRegex(abi.AbiError, "extra \\['TXNActivate'\\]"):
+            abi.check_linkage(names | {"TXNActivate"})
+        self.assertEqual(abi.parse_undefined("         U TXNFakeOne\n00000020 D loka_mlte_sig_0\n"), {"TXNFakeOne"})
+
+    def test_compare_and_generated_shapes(self):
+        labels = abi.layout_labels()
+        expected = abi.layout_expected()
+        self.assertEqual(len(labels), len(expected))
+        self.assertEqual(expected[0], len(expected))
+        self.assertEqual(abi.compare(labels, expected, list(expected)), [])
+        altered = list(expected)
+        altered[-1] ^= 1
+        self.assertEqual(len(abi.compare(labels, expected, altered)), 1)
+        with self.assertRaisesRegex(abi.AbiError, "lengths"):
+            abi.compare(labels, expected, expected[:-1])
+        self.assertEqual(abi.layout_source(abi.SUBSET_INCLUDE).count("offsetof("),
+                         sum(len(fields) for _, _, _, fields in manifest.TYPES))
+        self.assertEqual(abi.signature_source(abi.SDK_INCLUDE).count("__attribute__((used))"),
+                         len(manifest.FUNCTIONS))
+        self.assertIn(", int)", abi.signature_source(abi.SUBSET_INCLUDE, abi.mismatched_functions()))
+        self.assertNotIn('extern "C"', abi.mangled_source())
+
+    def test_manifest_is_consistent(self):
+        names = [name for name, _, _, _ in manifest.TYPES]
+        self.assertEqual(len(names), len(set(names)))
+        for name, size, is_class, fields in manifest.TYPES:
+            self.assertEqual(bool(fields), is_class, name)
+            for field, offset, field_size in fields:
+                self.assertLessEqual(offset + field_size, size, f"{name}.{field}")
+        constants = [name for name, _ in manifest.CONSTANTS]
+        self.assertEqual(len(constants), len(set(constants)))
+        functions = [name for name, _, _ in manifest.FUNCTIONS]
+        self.assertEqual(len(functions), len(set(functions)))
+        self.assertEqual(manifest.fourcc("TEXT"), 0x54455854)
+        with self.assertRaises(ValueError):
+            manifest.fourcc("TEX")
