@@ -2,6 +2,7 @@
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolbarRowMeasurementScene.hpp"
 #include "ToolbarMeasurementClock.hpp"
+#include "ToolboxNodeDispatch.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "app/core/AppConfigurable.hpp"
 #include "app/core/AppComposition.hpp"
@@ -20,6 +21,57 @@
 using namespace loka;
 namespace
 {
+  /** Time a complete retained Row layout, including its two height consultations.
+      Construction, painting, leaf comparison and report IO stay outside the bracket. */
+  template <class Clock>
+  bool MeasureAlignedTitle(app::scene::Scene &scene,
+                           ToolboxScenePlatformController &controller,
+                           Clock &clock,
+                           std::FILE *out)
+  {
+    app::scene::Node *row = 0, *title = 0;
+    dsl::FlowError error;
+    if (dsl::testing::LookupNodeById<app::scene::Node>(&scene, "aligned-title", row, error) != dsl::FLOW_STEP_SUCCEEDED
+        || dsl::testing::LookupNodeById<app::scene::Node>(&scene, "aligned-title-label", title, error)
+               != dsl::FLOW_STEP_SUCCEEDED
+        || !title->context)
+      return false;
+    app::scene::LayoutState offer;
+    offer.width = 600;
+    offer.height = 100;
+    offer.lineHeight = ToolboxLayoutMetrics::kDefaultLineHeight;
+    offer.spacing = ToolboxLayoutMetrics::kDefaultGap;
+    offer.inputs = app::scene::NODE_DIRTY_LAYOUT;
+    unsigned long samples[31];
+    int occupied = 0;
+    for (unsigned i = 0; i != 31; ++i)
+    {
+      app::scene::LayoutState state = offer;
+      const unsigned long start = clock.now();
+      occupied = LayoutNode(row, state, &controller, 0);
+      samples[i] = clock.now() - start;
+    }
+    std::sort(samples, samples + 31);
+    short answer = -1;
+    const bool answered = controller.queryNaturalHeight(title, answer);
+    app::scene::LayoutState leaf = offer;
+    title->context->layout(&controller, leaf);
+    std::fprintf(out, "toolbar_row_inputs case=aligned-title k=6 scans=0 source=toolbox clock=Microseconds\n");
+    std::fprintf(out,
+                 "toolbar_row case=aligned-title repetitions=31 median_us=%lu maximum_us=%lu offer=600 occupied=%d\n",
+                 samples[15],
+                 samples[30],
+                 occupied);
+    std::fprintf(out,
+                 "toolbar_row_height case=aligned-title answered=%d query=%d leaf=%d equal=%d\n",
+                 answered,
+                 answer,
+                 leaf.y - offer.y,
+                 answered && answer == leaf.y - offer.y);
+    // A declined answer is recorded for the same vehicle on the 1c-2 base.
+    return !answered || answer == leaf.y - offer.y;
+  }
+
   /** The App owns the window; the synchronous idle callback owns its report. */
   class RowMeasurementApp : public AppConfigurable
   {
@@ -94,8 +146,9 @@ namespace
                        port.right - port.left,
                        port.bottom - port.top);
           const bool ok = environmentKnown && resolution != ~0UL
-                          && testing::RunToolbarRows(*window->scene(), *controller, self, out);
-          std::fprintf(out, "toolbar_row_summary complete=%d cases=6\n", ok);
+                          && testing::RunToolbarRows(*window->scene(), *controller, self, out)
+                          && MeasureAlignedTitle(*window->scene(), *controller, self, out);
+          std::fprintf(out, "toolbar_row_summary complete=%d cases=7\n", ok);
           std::fclose(out);
         }
       }

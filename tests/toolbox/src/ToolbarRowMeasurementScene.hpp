@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_TOOLBAR_ROW_MEASUREMENT_SCENE_HPP
 #define LOKA_TESTS_TOOLBAR_ROW_MEASUREMENT_SCENE_HPP
 #include "app/nodes/boundary/StdComposition.hpp"
+#include "app/nodes/nestable/Show.hpp"
 #include "ToolbarRowMeasurement.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 namespace loka
@@ -18,18 +19,27 @@ namespace loka
     }
     class ToolbarRows : public app::scene::BoundaryNodeFor<ToolbarRows>
     {
+      app::scene::NodeState<bool> shown_;
+
     public:
       explicit ToolbarRows(const app::scene::BoundaryPropsFor<ToolbarRows> &props)
-          : app::scene::BoundaryNodeFor<ToolbarRows>(props)
+          : app::scene::BoundaryNodeFor<ToolbarRows>(props),
+            shown_()
       {
+        this->state(this->shown_, true);
       }
       virtual void composeNode(app::scene::NodeComposition &c)
       {
-        c.declare(app::Column() << (app::Box().width(1) << ToolbarMeasuredRow(1).TEST_ID("k1"))
-                                << (app::Box().width(20) << ToolbarMeasuredRow(2).TEST_ID("k2"))
-                                << (app::Box().width(180) << ToolbarMeasuredRow(4).TEST_ID("k4"))
-                                << (app::Box().width(600) << ToolbarMeasuredRow(4).TEST_ID("fit"))
-                                << (app::Box().width(28) << ToolbarMeasuredRow(4).TEST_ID("floor")));
+        c.declare(app::Column()
+                  << (app::Box().width(1) << ToolbarMeasuredRow(1).TEST_ID("k1"))
+                  << (app::Box().width(20) << ToolbarMeasuredRow(2).TEST_ID("k2"))
+                  << (app::Box().width(180) << ToolbarMeasuredRow(4).TEST_ID("k4"))
+                  << (app::Box().width(600) << ToolbarMeasuredRow(4).TEST_ID("fit"))
+                  << (app::Box().width(28) << ToolbarMeasuredRow(4).TEST_ID("floor"))
+                  << (app::Row().naturalWidth().alignVertical(app::VERTICAL_ALIGNMENT_CENTER).TEST_ID("aligned-title")
+                      << app::Button("Back") << (app::Show(*this->shown_.state()) << app::Button("More")) << app::Box()
+                      << (app::Text("Title").TEST_ID("aligned-title-label") + app::Title) << app::Box()
+                      << app::Button("Done")));
       }
     };
     /** Counting is a separate untimed probe; the timed source is the rail itself. */

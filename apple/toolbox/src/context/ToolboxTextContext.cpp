@@ -232,10 +232,12 @@ namespace
     }
     else
     {
-      FontInfo fontInfo;
-      GetFontInfo(&fontInfo);
-      const short pitch = static_cast<short>(fontInfo.ascent + fontInfo.descent + fontInfo.leading);
-      geometry = TextGeometry(pitch, fontInfo.ascent, pitch);
+      long linePitch = 0;
+      short baseline = 0;
+      if (!measure.queryLineMetrics(linePitch, baseline))
+        return false;
+      const short pitch = static_cast<short>(linePitch);
+      geometry = TextGeometry(pitch, baseline, pitch);
     }
     if (wraps)
     {

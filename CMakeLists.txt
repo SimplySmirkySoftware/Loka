@@ -682,7 +682,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
       COMMAND LokaToolboxScrollRequestTests ${_scroll_request_case})
   endforeach()
 
-  foreach(_gap_case column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
+  foreach(_gap_case height-row height-facts column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
     add_test(NAME testToolboxGap_${_gap_case} COMMAND LokaToolboxGapTests ${_gap_case})
   endforeach()
 

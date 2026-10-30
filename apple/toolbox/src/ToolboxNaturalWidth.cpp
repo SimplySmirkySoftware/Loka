@@ -67,3 +67,25 @@ bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *c
   width = measured;
   return true;
 }
+
+bool ToolboxScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+{
+  loka::app::TextNode *text = child ? child->asTextNode() : 0;
+  if (!text || !text->props.text_)
+    return false;
+  if (text->props.blockStyle_.hasWrap_ && text->props.blockStyle_.wrap_ != loka::app::TEXT_WRAP_NONE)
+    return false;
+  const loka::app::TextStyle style = text->props.resolvedTextStyle();
+  if (!style.size_.isSet())
+    return false;
+  std::string utf8;
+  if (!loka::platform::CollectUtf8(text->props.text_->get(), utf8) || utf8.find_first_of("\r\n") != std::string::npos)
+    return false;
+  ToolboxTextMeasureScope scope(*this, ToolboxTextFontDescriptor(style));
+  long pitch = 0;
+  short baseline = 0;
+  if (!scope.queryLineMetrics(pitch, baseline) || pitch < 1 || pitch > SHRT_MAX)
+    return false;
+  height = static_cast<short>(pitch);
+  return true;
+}
