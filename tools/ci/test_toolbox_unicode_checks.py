@@ -6,8 +6,13 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-import check_pef_imports as pef
-import check_toolbox_startup_wiring as wiring
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests" / "toolbox" / "unicode-abi"))
+import check_pef_imports as pef  # noqa: E402
+import check_toolbox_startup_wiring as wiring  # noqa: E402
+import compare_subset as abi  # noqa: E402
+import manifest  # noqa: E402
 
 
 def fixture(names=("InterfaceLib",), option=0, symbol_class=2):
@@ -106,14 +111,6 @@ class WiringTests(unittest.TestCase):
             wiring.check("nm", app, app)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-import sys as _sys
-_sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests" / "toolbox" / "unicode-abi"))
-import compare_subset as abi  # noqa: E402
-import manifest  # noqa: E402
 
 # Lines in the shape powerpc-apple-macos-objdump prints for an XCOFF object.
 OBJDUMP_H = """
@@ -228,3 +225,7 @@ class AbiDriverTests(unittest.TestCase):
         self.assertEqual(manifest.fourcc("TEXT"), 0x54455854)
         with self.assertRaises(ValueError):
             manifest.fourcc("TEX")
+
+
+if __name__ == "__main__":
+    unittest.main()
