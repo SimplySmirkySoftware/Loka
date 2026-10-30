@@ -2223,10 +2223,10 @@ void testWin32TextNaturalHeightAnswersAndDeclines()
           LOKA_VERIFY(controller.queryNaturalHeight(&text, answer));
           if (style == 0)
             LOKA_VERIFY(answer == 20);
-          controller.onChange(&text, scene::NODE_DIRTY_NONE, false);
+          controller.onChange(&text, loka::app::scene::NODE_DIRTY_NONE, false);
           controller.relayout(640, 160);
           verifyTextHeightFrame(controller, text, root, Win32SceneLayout::kRootInset, answer);
-          controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+          controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
         }
       TextProps wrappedProps("wrapped");
       wrappedProps.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_WORD);
@@ -2257,7 +2257,7 @@ void testWin32TextNaturalHeightAnswersAndDeclines()
       TextNode live(liveProps);
       short before = 0, after = 0;
       LOKA_VERIFY(controller.queryNaturalHeight(&live, before));
-      controller.onChange(&live, scene::NODE_DIRTY_NONE, false);
+      controller.onChange(&live, loka::app::scene::NODE_DIRTY_NONE, false);
       controller.relayout(640, 160);
       verifyTextHeightFrame(controller, live, root, Win32SceneLayout::kRootInset, before);
       {
@@ -2268,7 +2268,7 @@ void testWin32TextNaturalHeightAnswersAndDeclines()
       LOKA_VERIFY(after > before);
       controller.relayout(640, 160);
       verifyTextHeightFrame(controller, live, root, Win32SceneLayout::kRootInset, after);
-      controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+      controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
     }
     LOKA_VERIFY(DestroyWindow(root));
   }
