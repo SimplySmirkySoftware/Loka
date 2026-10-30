@@ -10,6 +10,8 @@
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/MacNativeRefusal.hpp"
 #include "support/TestVerify.hpp"
+#include "support/MacWindowSession.hpp"
+#include <cstdio>
 #include <climits>
 #include <cmath>
 #include <string>
@@ -418,6 +420,196 @@ void testMacButtonDeclinedHeightKeepsRowAligned()
     delete controller;
     LOKA_VERIFY([[root subviews] count] == 0);
     [root release];
+  }
+  [pool drain];
+}
+
+// Like MacObjCCompat's NSWindow category, only supplies the legacy SDK
+// return type; respondsToSelector: remains the runtime availability check.
+@interface NSScreen (LokaToolbarBackingScaleCompat)
+- (CGFloat)backingScaleFactor;
+@end
+
+// Deliberate twin of MacClipBoxTests' flipped capture root. Opaque ground
+// makes every cached pixel defined, including the space between the seats.
+@interface LokaToolbarPixelRoot : NSView
+@end
+@implementation LokaToolbarPixelRoot
+- (BOOL)isFlipped
+{
+  return YES;
+}
+- (void)drawRect:(NSRect)dirty
+{
+  (void)dirty;
+  [[NSColor whiteColor] set];
+  NSRectFill([self bounds]);
+}
+@end
+
+namespace
+{
+  NSBitmapImageRep *toolbarCapture(NSView *root)
+  {
+    [root setNeedsDisplay:YES];
+    [root displayIfNeeded];
+    NSBitmapImageRep *rep = [root bitmapImageRepForCachingDisplayInRect:[root bounds]];
+    LOKA_VERIFY(rep != nil);
+    [root cacheDisplayInRect:[root bounds] toBitmapImageRep:rep];
+    return rep;
+  }
+
+  void toolbarPixels(NSScreen *screen, int backing, const RailMetrics &metrics)
+  {
+    NSView *root = [[LokaToolbarPixelRoot alloc] initWithFrame:NSMakeRect(0, 0, 1000, 100)];
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, 1000, 100)
+                                                   styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO
+                                                      screen:screen];
+    LOKA_VERIFY(root && window);
+    [window setReleasedWhenClosed:NO];
+    [window setContentView:root];
+    [window orderFront:nil];
+    {
+      MacScenePlatformController controller(root, metrics);
+      // DirectRow keeps the seats directly under root, as testMacDirectRowNaturalWidthFrames does.
+      DirectRow row;
+      ButtonNode *first = new ButtonNode(ButtonProps().text("< Back"));
+      TextProps titleProps("A toolbar title wide enough to need truncation");
+      titleProps.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+      TextNode *title = new TextNode(titleProps);
+      ButtonNode *last = new ButtonNode(ButtonProps().text("Main"));
+      row.addChild(first);
+      row.addChild(title);
+      row.addChild(last);
+      controller.onChange(&row, NODE_DIRTY_NONE, false);
+      short firstWidth = 0, titleWidth = 0, lastWidth = 0;
+      LOKA_VERIFY(controller.queryNaturalWidth(first, firstWidth));
+      LOKA_VERIFY(controller.queryNaturalWidth(title, titleWidth));
+      LOKA_VERIFY(controller.queryNaturalWidth(last, lastWidth));
+      // Native views are projected by layout; lay the Row out once at its natural width first.
+      controller.relayout(
+          firstWidth + titleWidth + lastWidth + 2 * MacSceneLayout::kGap + 2 * MacSceneLayout::kRootInset, 80);
+      LOKA_VERIFY([[root subviews] count] == 3);
+      NSTextField *field = (NSTextField *)[[root subviews] objectAtIndex:1];
+      LOKA_VERIFY([field isKindOfClass:[NSTextField class]]);
+      LOKA_VERIFY([[field cell] lineBreakMode] == NSLineBreakByTruncatingTail);
+      NSString *text = [[field stringValue] copy];
+      const CGFloat dots = [@"\u2026" sizeWithAttributes:[NSDictionary dictionaryWithObject:[field font]
+                                                                                     forKey:NSFontAttributeName]]
+                               .width;
+      const int narrow = controller.projection().measurementToLu(dots) + 4;
+      LOKA_VERIFY(titleWidth > narrow);
+      // Full title is the positive control; then every logical width around
+      // and below the ellipsis, including the lower bound of one.
+      for (int seat = narrow + 1; seat >= 1; --seat)
+      {
+        NSAutoreleasePool *capturePool = [[NSAutoreleasePool alloc] init];
+        const int width = seat == narrow + 1 ? titleWidth : seat;
+        const int offer = firstWidth + lastWidth + 2 * MacSceneLayout::kGap + width;
+        [field setStringValue:text];
+        controller.relayout(offer + 2 * MacSceneLayout::kRootInset, 80);
+        const NSRect frame = [field frame];
+        const NSRect firstFrame = [buttonAt(root, 0) frame];
+        const NSRect lastFrame = [buttonAt(root, 2) frame];
+        const int x = MacSceneLayout::kRootInset + firstWidth + MacSceneLayout::kGap;
+        LOKA_VERIFY(frame.size.width == controller.projection().projectLength(x, x + width).pt);
+        NSBitmapImageRep *withTitle = toolbarCapture(root);
+        // Change only native ink: an empty logical title declines natural
+        // measurement and would change the seat. Do not reconsult the Row.
+        [field setStringValue:@""];
+        LOKA_VERIFY(NSEqualRects(frame, [field frame]));
+        LOKA_VERIFY(NSEqualRects(firstFrame, [buttonAt(root, 0) frame]));
+        LOKA_VERIFY(NSEqualRects(lastFrame, [buttonAt(root, 2) frame]));
+        NSBitmapImageRep *empty = toolbarCapture(root);
+        LOKA_VERIFY([withTitle pixelsWide] == [empty pixelsWide]);
+        LOKA_VERIFY([withTitle pixelsHigh] == [empty pixelsHigh]);
+        LOKA_VERIFY([withTitle samplesPerPixel] == [empty samplesPerPixel]);
+        const CGFloat sx = [withTitle pixelsWide] / [root bounds].size.width;
+        const CGFloat sy = [withTitle pixelsHigh] / [root bounds].size.height;
+        LOKA_VERIFY(sx == backing && sy == backing);
+        LOKA_VERIFY([withTitle samplesPerPixel] <= 5);
+        unsigned inside = 0, outside = 0;
+        for (NSInteger py = 0; py < [withTitle pixelsHigh]; ++py)
+          for (NSInteger px = 0; px < [withTitle pixelsWide]; ++px)
+          {
+            NSUInteger a[5] = {0}, b[5] = {0};
+            [withTitle getPixel:a atX:px y:py];
+            [empty getPixel:b atX:px y:py];
+            bool different = false;
+            for (NSInteger c = 0; c < [withTitle samplesPerPixel]; ++c)
+              different = different || a[c] != b[c];
+            if (different)
+            {
+              if (NSPointInRect(NSMakePoint((px + 0.5) / sx, (py + 0.5) / sy), frame))
+                ++inside;
+              else
+                ++outside;
+            }
+          }
+        std::printf("[pin] toolbar backing=%d space=%d/%d seat=%d frame=(%.2f,%.2f,%.2f,%.2f) inside=%u outside=%u\n",
+                    backing,
+                    metrics.spaceScale.num,
+                    metrics.spaceScale.den,
+                    width,
+                    static_cast<double>(frame.origin.x),
+                    static_cast<double>(frame.origin.y),
+                    static_cast<double>(frame.size.width),
+                    static_cast<double>(frame.size.height),
+                    inside,
+                    outside);
+        std::fflush(stdout);
+        LOKA_VERIFY(outside == 0);
+        if (width == titleWidth)
+          LOKA_VERIFY(inside > 0);
+        if (width == 1)
+          LOKA_VERIFY(inside == 0);
+        [capturePool drain];
+      }
+      [text release];
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+    }
+    LOKA_VERIFY([[root subviews] count] == 0);
+    [window orderOut:nil];
+    [window close];
+    [window release];
+    [root release];
+  }
+} // namespace
+
+void testMacToolbarEllipsisNarrowPixels()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  for (int backing = 1; backing <= 2; ++backing)
+  {
+    NSScreen *screen = nil;
+    NSArray *screens = [NSScreen screens];
+    for (NSUInteger i = 0; i < [screens count]; ++i)
+    {
+      NSScreen *candidate = [screens objectAtIndex:i];
+      const CGFloat scale =
+          [candidate respondsToSelector:@selector(backingScaleFactor)] ? [candidate backingScaleFactor] : 1;
+      if (scale == backing)
+      {
+        screen = candidate;
+        break;
+      }
+    }
+    if (!screen)
+    {
+      std::printf("[skip] toolbar backing=%d: no attached screen has this backing scale\n", backing);
+      continue;
+    }
+    if (loka::testing::MacConsoleScreenIsLocked())
+    {
+      std::printf("[skip] toolbar backing=%d: console screen is locked (a sleeping display reads as locked)\n",
+                  backing);
+      continue;
+    }
+    toolbarPixels(screen, backing, RailMetrics());
+    toolbarPixels(screen, backing, loka::macos::DefaultRailMetrics());
   }
   [pool drain];
 }

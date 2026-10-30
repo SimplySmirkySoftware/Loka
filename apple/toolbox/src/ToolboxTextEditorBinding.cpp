@@ -26,6 +26,8 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
     (**binding.te).viewRect = clipped;
     return binding.te;
   }
+  if (!this->editControls_.prepareAppend())
+    return 0;
   ToolboxTextMeasureScope fontScope(*this);
   // Plain TextEdit captures the port font and its metrics at creation.
   TextFont(4); // Monaco; Universal Interfaces omit the legacy monaco constant.
@@ -33,16 +35,16 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
   TextFace(0);
   TEHandle te = TENew(&textRect, &clipped);
   if (!te)
+  {
+    this->editControls_.cancel();
     return 0;
-  EditTextControlBinding entry;
-  entry.ownerContext = context;
-  entry.editor = context;
-  entry.text = 0;
+  }
+  EditTextControlBinding entry(context, context, 0);
   entry.te = te;
   entry.rect = visibleBox;
   entry.usedThisFrame = true;
   entry.lifetimeHint = hint;
-  this->editControls_.add(entry);
+  this->editControls_.commitAppend(entry);
   TEAutoView(true, te);
   return te;
 }
@@ -53,20 +55,29 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
   const EditTextControlBinding *old = this->editControls_.focused();
   const TEHandle previousTE = old ? old->te : 0;
   const TEHandle nextTE = index < this->editControls_.size() ? this->editControls_[index].te : 0;
+  ToolboxUnicodeEditorResource *oldUnicode = old ? old->unicode : 0;
+  ToolboxUnicodeEditorResource *nextUnicode =
+      index < this->editControls_.size() ? this->editControls_[index].unicode : 0;
   GrafPtr previousPort = 0;
   GetPort(&previousPort);
   SetPort(this->window_->window());
-  if (previousTE)
+  if (previousTE || oldUnicode)
   {
-    TEDeactivate(previousTE);
+    if (previousTE)
+      TEDeactivate(previousTE);
+    else
+      old->editor->focus(false);
     this->invalidateUnitOverlap(old->rect);
   }
   this->editControls_.clearFocus();
-  if (nextTE)
+  if (nextTE || nextUnicode)
   {
     this->editControls_.focus(index);
     this->fallbackFocus_.cut();
-    TEActivate(nextTE);
+    if (nextTE)
+      TEActivate(nextTE);
+    else
+      this->editControls_[index].editor->focus(true);
     this->invalidateUnitOverlap(this->editControls_[index].rect);
   }
   SetPort(previousPort);
@@ -77,7 +88,7 @@ void ToolboxScenePlatformController::idleTextEdits()
   for (size_t i = 0; i < editControls_.size(); ++i)
   {
     if (editControls_[i].editor) editControls_[i].editor->retryProjection();
-    if (&editControls_[i] == editControls_.focused() && editControls_[i].te)
+    if (&editControls_[i] == editControls_.focused() && (editControls_[i].te || editControls_[i].unicode))
     {
       if (editControls_[i].editor)
         editControls_[i].editor->idleTick();

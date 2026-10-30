@@ -530,8 +530,8 @@ void ToolboxScenePlatformController::synchronize()
 
 bool ToolboxScenePlatformController::hasPendingSync() const
 {
-  return !this->retiredControls_.empty() || !this->retiredScrollBarControls_.empty()
-         || !this->retiredTextEdits_.empty();
+  return !this->retiredControls_.empty() || !this->retiredScrollBarControls_.empty() || !this->retiredTextEdits_.empty()
+         || this->unicodeEditors_.hasPending();
 }
 
 void ToolboxScenePlatformController::drainNativeRetirements()
@@ -1096,6 +1096,7 @@ void ToolboxScenePlatformController::flushRetiredNativeHandles()
   flushRetiredEntriesInto(retiredScrollBarControls_, scrollBarLedger_.scrollBarBucket_);
   flushRetiredEntriesInto(retiredTextEdits_, textEditBucket_);
   syncNativePoolStats();
+  this->unicodeEditors_.drain();
 }
 
 namespace

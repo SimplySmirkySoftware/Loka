@@ -10,9 +10,27 @@
 #include "support/WindowAdmissionTestApp.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstring>
+#include "ToolboxLayoutMetrics.hpp"
+#include "app/layout/LayoutHeuristics.hpp"
+#include "context/ToolboxTextContext.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/nestable/Keyed.hpp"
 #include "core/util/StateTrackerGuard.hpp"
+namespace loka
+{
+  namespace testing
+  {
+    class ToolboxTextContextAccess
+    {
+    public:
+      static Rect rect(const ToolboxTextContext &context)
+      {
+        return context.rect_;
+      }
+    };
+  } // namespace testing
+} // namespace loka
 using namespace loka::app;
 using namespace loka::app::scene;
 using loka::core::Frame;
@@ -562,6 +580,138 @@ namespace
     LOKA_VERIFY(takes == 1);
     loka::dsl::testing::SceneTestAccess::unmount(scene);
   }
+  /** Host equivalent of ReplayEditor: keep real Text projection and renderer. */
+  class RangeText : public TextNode
+  {
+  public:
+    RangeText()
+        : TextNode(Text("A long title that would formerly create empty scrolling space").props)
+    {
+      this->props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      return controller->projectLayoutState(state) ? this->Node::layout(platform, state) : 0;
+    }
+  };
+  void shrinkRange(const char *mode)
+  {
+    const bool framed = !std::strcmp(mode, "range-frame");
+    const bool carousel = !std::strcmp(mode, "range-carousel");
+    Storage storage;
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    ScrollViewNode scroll(ScrollViewProps(storage.viewport).scrollTo(storage.request));
+    StackNode *row = new StackNode(Row().naturalWidth().props);
+    RangeText *title = new RangeText();
+    title->setContext(new ToolboxTextContext(title, &controller));
+    RangeText *rightmost = title;
+    short titleNatural = 0;
+    LOKA_VERIFY(controller.queryNaturalWidth(title, titleNatural));
+    int estimate = 0;
+    if (carousel)
+    {
+      // Cards are opaque natural seats. Their labels do not shrink the outer Row.
+      CardNode *first = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+      first->addChild(title);
+      row->addChild(first);
+      CardNode *second = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+      RangeText *last = new RangeText();
+      last->setContext(new ToolboxTextContext(last, &controller));
+      second->addChild(last);
+      rightmost = last;
+      row->addChild(second);
+      const int cardWidth = titleNatural + 9;
+      estimate = 2 * cardWidth + ToolboxLayoutMetrics::kDefaultGap;
+      scroll.addChild(row);
+    }
+    else
+    {
+      if (!framed)
+        row->addChild(new BoxNode(Box().width(120).height(20).props));
+      row->addChild(title);
+      estimate = framed ? 1 : 120 + ToolboxLayoutMetrics::kDefaultGap + 1;
+      if (framed)
+      {
+        StackNode *column = new StackNode(Column().props);
+        CardNode *card = new CardNode(CardProps(CardStyle(CARD_SHADOW_DROP)));
+        card->addChild(row);
+        column->addChild(card);
+        scroll.addChild(column);
+        estimate += 9;
+        if (estimate < 17)
+          estimate = 17;
+        LOKA_VERIFY(titleNatural + 9 > 100); // Pre-B-2 frame natural estimate had a range.
+      }
+      else
+        scroll.addChild(row);
+    }
+    const int offers[] = {100, 700};
+    for (unsigned pass = 0; pass != 2; ++pass)
+    {
+      LayoutState state;
+      state.width = offers[pass];
+      state.height = 80;
+      state.spacing = ToolboxLayoutMetrics::kDefaultGap;
+      state.inputs = NODE_DIRTY_LAYOUT;
+      LayoutNode(&scroll, state, &controller, 0);
+      short actual = 0;
+      LOKA_VERIFY(layout::queryContentOverflowWidth(&scroll, ToolboxLayoutMetrics::spacing(), &controller, actual));
+      LOKA_VERIFY(actual == estimate);
+      const Rect visible = controller.viewportScroll().contentRect;
+      const int width = visible.right - visible.left;
+      const int maximum = estimate > width ? estimate - width : 0;
+      bool bar = false;
+      for (unsigned i = 0; i < controller.scrollControls().size(); ++i)
+      {
+        const ToolboxScrollBarLedger::ScrollBarControlBinding &binding = controller.scrollControl(i);
+        if (binding.resourceId == controller.viewportScroll().barId[SCROLL_BAR_HORIZONTAL])
+        {
+          bar = binding.control->visible;
+          if (bar)
+            LOKA_VERIFY(binding.maximum == maximum);
+        }
+      }
+      LOKA_VERIFY(bar == (estimate > width));
+      if (maximum)
+      {
+        storage.request.set(ScrollTarget::Origin(maximum, 0));
+        state.width = offers[pass];
+        state.height = 80;
+        state.y = 0;
+        LayoutNode(&scroll, state, &controller, 0);
+        LOKA_VERIFY(storage.viewport.get().x == maximum);
+        // Delivery completes the entry; the next layout applies the reported origin.
+        state.y = 0;
+        state.width = offers[pass];
+        state.height = 80;
+        LayoutNode(&scroll, state, &controller, 0);
+        // At maximum the estimated right edge reaches the viewport edge.
+        // Card's known right inset is part of that estimate (page 2.5).
+        LOKA_VERIFY(estimate - storage.viewport.get().x == width);
+        const Rect edge =
+            loka::testing::ToolboxTextContextAccess::rect(*static_cast<ToolboxTextContext *>(rightmost->getContext()));
+        LOKA_VERIFY(edge.right == visible.right - (carousel ? 6 : 0));
+      }
+      else
+      {
+        LOKA_VERIFY(storage.viewport.get().x == 0);
+        if (framed && pass == 0)
+        {
+          const Rect edge =
+              loka::testing::ToolboxTextContextAccess::rect(*static_cast<ToolboxTextContext *>(title->getContext()));
+          LOKA_VERIFY(edge.right == visible.right - 6);
+        }
+      }
+    }
+    LifecycleFactTestAccess::MarkSubtreeRetired(&scroll);
+    LifecycleFactTestAccess::DeliverFacts(&scroll);
+    controller.releaseNodeContexts(&scroll);
+  }
   class OuterProbe : public NodeContext
   {
     SceneController &controller_;
@@ -604,7 +754,9 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *name = argv[1];
-  if (!std::strcmp(name, "delivery"))
+  if (!std::strncmp(name, "range-", 6))
+    shrinkRange(name);
+  else if (!std::strcmp(name, "delivery"))
     delivery(false);
   else if (!std::strcmp(name, "empty-rows"))
     emptyRows();

@@ -11,10 +11,15 @@ class ToolboxInputDoor
   typedef loka::app::scene::detail::InputInvocation Invocation;
 
 public:
-  static bool mouseDown(ToolboxScenePlatformController &c, const Point &point)
+  static bool mouseDown(ToolboxScenePlatformController &c, const Point &point, const EventRecord &event = EventRecord())
   {
-    return Invocation(c).operator()<ToolboxScenePlatformController, bool, const Point &>(
-        c, &ToolboxScenePlatformController::handleMouseDown, point);
+    return Invocation(c).operator()<ToolboxScenePlatformController, bool, const Point &, const EventRecord &>(
+        c, &ToolboxScenePlatformController::handleMouseDown, point, event);
+  }
+  static bool offerKeyEvent(ToolboxScenePlatformController &c, const EventRecord &event)
+  {
+    return Invocation(c).operator()<ToolboxScenePlatformController, bool, const EventRecord &>(
+        c, &ToolboxScenePlatformController::offerKeyEvent, event);
   }
   static bool keyDown(ToolboxScenePlatformController &c, char key)
   {

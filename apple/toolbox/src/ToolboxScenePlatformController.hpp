@@ -24,6 +24,8 @@
 #include "ToolboxApp.hpp"
 #include "ToolboxWindow.hpp"
 #include "ToolboxEditControlLedger.hpp"
+#include "ToolboxEditorSeat.hpp"
+#include "ToolboxUnicodeEditorLedger.hpp"
 #include "ToolboxEnabledChangeDispatch.hpp"
 #include "ToolboxHitLedger.hpp"
 #include "ToolboxCompositionReplay.hpp"
@@ -320,18 +322,7 @@ private:
   typedef ToolboxScrollBarLedger::ScrollBarControlBinding ScrollBarControlBinding;
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
 
-  struct EditTextControlBinding
-  {
-    loka::app::scene::NodeContext *ownerContext;
-    ToolboxTextEditorContext *editor;
-    loka::core::State<loka::core::String> *text;
-    loka::app::scene::WriteSeat<loka::core::String> textSeat;
-    TEHandle te;
-    Rect rect;
-    bool usedThisFrame;
-    ToolboxEditInstalled installed;
-    loka::app::scene::NativeLifetimeHint lifetimeHint;
-  };
+#include "ToolboxEditControlBinding.inc"
 
   /** A native handle waiting for the platform safe point. The hint rides
       along so the flush can route it: EAGER_RELEASE handles are disposed
@@ -373,6 +364,7 @@ public:
   std::vector<ButtonControlBinding> buttonControls_;
   ToolboxScrollBarLedger scrollBarLedger_;
   ToolboxEditControlLedger<EditTextControlBinding, loka::app::scene::NodeContext> editControls_;
+  ToolboxUnicodeEditorLedger unicodeEditors_;
   std::vector<loka::core::State<loka::core::String> *> boundTextStates_;
   std::vector<TextBinding *> textBindings_;
   ToolboxEnabledStateBindingPath<ToolboxScenePlatformController,

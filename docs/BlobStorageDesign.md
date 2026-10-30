@@ -76,8 +76,12 @@ READ_ALLOCATION_REFUSED means record, control-block, or byte allocation could
 not be obtained. READ_CAPACITY_REFUSED means a caller's semantic ceiling was
 exceeded. READ_SIZE_OVERFLOW means arithmetic cannot represent the extent.
 TextDocument maps allocation to TEXT_DOCUMENT_ALLOCATION and capacity/overflow
-to TOO_LARGE, preserving its editor ceiling. Neither allocation nor capacity
-refusal triggers another I/O path. PlatformReadCapacity is removed; the optional
+to TOO_LARGE, preserving its editor ceiling. For text files, the raw read
+allowance is `B + (L ? L − 1 : 0) + 3`: the admitted byte capacity, possible
+CRLF expansion for the admitted line count, and a leading UTF-8 byte order mark.
+Both additions refuse on overflow; normalized rows still obey the admitted
+byte capacity. Neither allocation nor capacity refusal triggers another I/O
+path. PlatformReadCapacity is removed; the optional
 largest-contiguous-allocation query remains a measurement fact.
 
 ## Images and recovery

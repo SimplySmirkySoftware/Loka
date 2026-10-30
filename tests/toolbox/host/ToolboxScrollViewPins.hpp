@@ -146,7 +146,8 @@ namespace
       LOKA_VERIFY(vertical.placement.full().top == (mode == 1 ? margin : -1));
       LOKA_VERIFY(vertical.placement.full().bottom == (mode == 2 ? 34 : 246));
       LOKA_VERIFY(vertical.maximum == (mode == 2 ? 306 : mode == 3 ? 105 : mode == 1 ? 104 : 80));
-      LOKA_VERIFY(vertical.pageStep == (mode == 2 ? 33 : mode == 3 ? 244 : mode == 1 ? 235 : 259));
+      // (extent - 1) rounded down to a multiple of 8 (#1043 Q-E).
+    LOKA_VERIFY(vertical.pageStep == (mode == 2 ? 32 : mode == 3 ? 240 : mode == 1 ? 232 : 256));
       if (mode == 3)
       {
         const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
@@ -180,7 +181,7 @@ namespace
       // empty; with one, each shares the size box's line (#1406).
       LOKA_VERIFY(controller.scrollControls()[0].placement.full().bottom == (mode == 0 ? 246 : 245));
       LOKA_VERIFY(controller.scrollControls()[1].placement.full().right == (mode == 0 ? 346 : 354));
-      LOKA_VERIFY(controller.scrollControls()[1].maximum == 46 && controller.scrollControls()[1].pageStep == 353);
+      LOKA_VERIFY(controller.scrollControls()[1].maximum == 46 && controller.scrollControls()[1].pageStep == 352);
     }
     // Offset seats also exercise the horizontal stop and each empty-bar floor.
     const ToolboxScrollViewRect box(345, 245, 360, 260);
@@ -218,7 +219,8 @@ namespace
       LOKA_VERIFY(!f.controller.scrollControl(0).editor.editor() && !f.controller.scrollControl(1).editor.editor());
       const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
       LOKA_VERIFY(horizontal.resourceId == binding.barId[SCROLL_BAR_HORIZONTAL]);
-      LOKA_VERIFY(horizontal.maximum == 316 && horizontal.pageStep == 83);
+      // Page = (84 - 1) rounded down to a multiple of 8 (#1043 Q-E).
+      LOKA_VERIFY(horizontal.maximum == 316 && horizontal.pageStep == 80);
       const Rect expectedHorizontal = {18, -1, 34, 84};
       LOKA_VERIFY(SameScrollRect(horizontal.placement.full(), expectedHorizontal));
       LOKA_VERIFY(f.controller.scrollMaximum(binding.barId[SCROLL_BAR_VERTICAL]) == 350 - 18);
@@ -524,7 +526,7 @@ namespace
       LOKA_VERIFY(SameScrollRect(f.controller.viewportScroll().contentRect, content));
       LOKA_VERIFY(SameScrollRect(f.controller.scrollControl(1).placement.full(), horizontal));
       LOKA_VERIFY(f.controller.scrollControl(0).placement.full().bottom == 18);
-      LOKA_VERIFY(f.controller.scrollControl(0).pageStep == 17 && f.controller.scrollControl(0).lineStep == 1);
+      LOKA_VERIFY(f.controller.scrollControl(0).pageStep == 16 && f.controller.scrollControl(0).lineStep == 16);
     }
     Pin("ToolboxScrollViewRefusedVerticalStillHandlesHorizontal");
     {

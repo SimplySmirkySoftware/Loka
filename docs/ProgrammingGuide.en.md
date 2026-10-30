@@ -311,6 +311,8 @@ well-formed UTF-8 without CR, LF, or NUL. `EDITOR_NON_ASCII` means the editor
 alphabet refused the bytes: malformed sequences and forbidden NUL (which is
 itself valid UTF-8). The Classic TextEdit rail still refuses non-ASCII with
 the same result.
+On read, only a leading UTF-8 byte order mark is removed; a U+FEFF anywhere
+else is kept. Saving does not add one.
 
 For `TextEditor`, declare `Reported<LineCursor> cursor` and
 `Request<LineCursor> request` (or `RequestWithReply<LineCursor>`) as members of
@@ -1646,8 +1648,7 @@ fixed-at-creation rule. For example:
 ClipBox().height(240) << ImageView().image(this->photo_.state());
 ```
 
-`ClipBox()` is C++ DSL only; SmirkyCard's JS `Box` has no clip option and there
-is no JS `ClipBox`.
+SmirkyCard's JavaScript has `ClipBox(child, options?)` with the same options as its `Box`.
 
 `Box().clipChildren()` and `Card().clipChildren()` request clipping of children
 at the container's own rect. A clip box reports no width larger than a positive

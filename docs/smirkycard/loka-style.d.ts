@@ -28,5 +28,5 @@ export interface BlockStyle {
  * Text(value: string | Seat, style?: TextStyle, block?: BlockStyle)
  * Markup(markup: string, style?: TextStyle, block?: BlockStyle)
  * ZStack(...children).expStaticBlurUnit(): immutable ZStack tree; refuses other node kinds.
- * Static blur fills the ground extent without stretching its child. Tree depth is at most 9.
+ * Static blur fills the ground extent without stretching its child. Tree depth is at most 11.
  */
