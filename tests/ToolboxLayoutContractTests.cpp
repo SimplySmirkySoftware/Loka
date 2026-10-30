@@ -468,3 +468,25 @@ void testToolboxColumnNaturalHeightOffersAndExtent()
   LOKA_VERIFY(traversal.lastState_.height == 30);
   LOKA_VERIFY(state.y == 50);
 }
+
+void testToolboxWrappedButtonHeightSeat()
+{
+  using namespace loka::app;
+  StackNode row(Row().alignVertical(VERTICAL_ALIGNMENT_CENTER).props);
+  row.addChild(new BoxNode(Box().size(40, 40).props));
+  row.addChild(new ButtonNode(ButtonProps()));
+  FragmentNode *wrapper = new FragmentNode(FragmentProps());
+  wrapper->addChild(new ButtonNode(ButtonProps()));
+  row.addChild(wrapper);
+  scene::PlatformLayoutHandlerRegistry registry;
+  RegisterToolboxPlatformLayoutHandlers(registry);
+  ToolboxRowSeatTraversal traversal;
+  scene::LayoutState state = FixedBoxInputState();
+  short width = 0;
+  LOKA_VERIFY(ApplyToolboxPlatformLayoutHandler(registry, row, state, traversal, width));
+  LOKA_VERIFY(traversal.callCount_ == 3);
+  LOKA_VERIFY(traversal.seats_[1].y == 33);
+  LOKA_VERIFY(traversal.seats_[1].height == 14);
+  LOKA_VERIFY(traversal.seats_[2].y == traversal.seats_[1].y);
+  LOKA_VERIFY(traversal.seats_[2].height == traversal.seats_[1].height);
+}

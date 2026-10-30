@@ -1456,3 +1456,248 @@ void testContentOverflowFixedCarouselAndSharedSeat()
   LOKA_VERIFY(queryContentOverflowWidth(&nestedContent, RailSpacing(12, 8, 9), &source, overflow));
   LOKA_VERIFY(overflow == 217);
 }
+
+namespace
+{
+  class HeightButton : public loka::app::ButtonNode
+  {
+  public:
+    explicit HeightButton(const loka::app::ButtonProps &props)
+        : loka::app::ButtonNode(props),
+          offer()
+    {
+    }
+    virtual short layoutProjected(loka::app::scene::IPlatformController *controller,
+                                  loka::app::scene::LayoutState &state)
+    {
+      this->offer = state;
+      return loka::app::ButtonNode::layoutProjected(controller, state);
+    }
+    loka::app::scene::LayoutState offer;
+  };
+
+  class HeightPropsComponent;
+
+  struct HeightProps : public loka::app::scene::NodePropsBase<HeightProps>
+  {
+    typedef HeightProps TypeTag;
+    typedef HeightPropsComponent NodeType;
+    virtual bool operator<(const loka::app::scene::PropsBase &rhs) const
+    {
+      return this->propsTypeId() < rhs.propsTypeId();
+    }
+  };
+
+  // Models JsClickNode's component base without depending on SmirkyCard.
+  class HeightPropsComponent : public loka::app::scene::ComponentNodeWithProps<HeightProps>
+  {
+  public:
+    explicit HeightPropsComponent(const HeightProps &props = HeightProps())
+        : loka::app::scene::ComponentNodeWithProps<HeightProps>(props)
+    {
+    }
+    virtual void composeChildren(loka::app::scene::NodeComposition &) {}
+  };
+} // namespace
+
+void testRowWrappedButtonHeightOffers()
+{
+  // Observed before the fix: the TOP wrapper got y=0, height=40; the bare Button got height=10.
+  using namespace loka::app;
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  for (int alignment = 0; alignment < 3; ++alignment)
+    for (int shape = 0; shape < 3; ++shape)
+    {
+      NullScenePlatformController platform;
+      StackNode row(Row().alignVertical(alignments[alignment]).props);
+      row.addChild(new BoxNode(Box().size(40, 40).props));
+      HeightButton *bare = new HeightButton(ButtonProps());
+      HeightButton *wrapped = new HeightButton(ButtonProps());
+      row.addChild(bare);
+      scene::NestableNode *wrapper = shape == 0 ? static_cast<scene::NestableNode *>(new FragmentNode(FragmentProps()))
+                                     : shape == 1 ? static_cast<scene::NestableNode *>(new ShrinkComponent())
+                                                  : static_cast<scene::NestableNode *>(new HeightPropsComponent());
+      wrapper->addChild(wrapped);
+      row.addChild(wrapper);
+      platform.projectLayoutForTesting(&row, rowState(500));
+      std::fprintf(stderr,
+                   "wrapped height shape=%d alignment=%d: bare y=%d h=%d wrapped y=%d h=%d\n",
+                   shape,
+                   alignment,
+                   bare->offer.y,
+                   bare->offer.height,
+                   wrapped->offer.y,
+                   wrapped->offer.height);
+      LOKA_VERIFY(wrapped->offer.height == bare->offer.height);
+      LOKA_VERIFY(wrapped->offer.y == bare->offer.y);
+      LOKA_VERIFY(bare->offer.height == 10);
+      LOKA_VERIFY(bare->offer.y == (alignment == 0 ? 0 : alignment == 1 ? 15 : 30));
+    }
+}
+
+void testRowShownButtonAndMultipleLeafHeightOffers()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  for (int alignment = 0; alignment < 3; ++alignment)
+    for (int shape = 0; shape < 4; ++shape)
+    {
+      NullScenePlatformController platform;
+      loka::core::MutableState<bool> shown(shape != 3);
+      scene::NodeDefinition<ButtonProps, HeightButton> button((ButtonProps()));
+      RowDefinition row = Row().alignVertical(alignments[alignment]);
+      row << Box().size(40, 40) << button;
+      if (shape == 1)
+        row << (Show(shown) << button << button);
+      else if (shape == 2)
+        row << (Show(shown) << ImageView() << Text("caption"));
+      else
+        row << (Show(shown) << button);
+      scene::Scene scene(row.clone());
+      LOKA_VERIFY(scene.mount(&platform));
+      loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+      scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(scene);
+      while (root && !root->asStackNode() && root->asNestable())
+        root = root->asNestable()->childrenHead();
+      LOKA_VERIFY(root && root->asStackNode());
+      scene::Node *bare = root->asNestable()->childrenHead()->nextInComposition;
+      scene::Node *wrapper = bare->nextInComposition;
+      LOKA_VERIFY(wrapper && isLayoutPassThrough(wrapper));
+      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 7, 10, 11, 12, 13, 14) == (shape == 0 ? 10 : shape == 3 ? 0 : 7));
+      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 40, 10, 11, 12, 13, 14)
+                  == (shape == 0   ? 10
+                      : shape == 3 ? 0
+                                   : 40));
+      platform.projectLayoutForTesting(root, rowState(500));
+      if (shape == 0)
+      {
+        HeightButton *leaf = static_cast<HeightButton *>(wrapper->asNestable()->childrenHead());
+        HeightButton *bareButton = static_cast<HeightButton *>(bare);
+        LOKA_VERIFY(leaf->offer.y == bareButton->offer.y);
+        LOKA_VERIFY(leaf->offer.height == bareButton->offer.height);
+      }
+      if (shape == 1)
+      {
+        HeightButton *first = static_cast<HeightButton *>(wrapper->asNestable()->childrenHead());
+        LOKA_VERIFY(first->offer.y == 0);
+        LOKA_VERIFY(first->offer.height == 40);
+      }
+      loka::dsl::testing::SceneTestAccess::unmount(scene);
+    }
+}
+
+namespace
+{
+  class LeafShapeWidthProbe : public ShrinkWidthProbe
+  {
+  public:
+    virtual bool queryNaturalWidth(loka::app::scene::Node *node, short &width) const
+    {
+      if (node->asScrollViewNode())
+      {
+        width = 200;
+        return true;
+      }
+      return ShrinkWidthProbe::queryNaturalWidth(node, width);
+    }
+  };
+} // namespace
+
+void testRowSingleLiveLeafWidthShapes()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  for (int shape = 0; shape < 8; ++shape)
+  {
+    loka::core::EmitterState dialogResult;
+    FragmentNode wrapper((FragmentProps()));
+    scene::NestableNode *content = &wrapper;
+    if (shape == 0)
+      for (int depth = 0; depth < 8; ++depth)
+      {
+        FragmentNode *inner = new FragmentNode(FragmentProps());
+        content->addChild(inner);
+        content = inner;
+      }
+    if (shape == 1)
+      content->addChild(new FragmentNode(FragmentProps()));
+    if (shape == 2)
+      content->addChild(new OpenFileDialogNode(OpenFileDialogProps().onResult(&dialogResult)));
+    if (shape == 6)
+    {
+      FragmentNode *inner = new FragmentNode(FragmentProps());
+      content->addChild(inner);
+      content = inner;
+    }
+    TextNode *text = shape == 7 ? 0 : shrinkText(200);
+    scene::Node *terminal = text;
+    if (shape == 5)
+    {
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps());
+      content->addChild(scroll);
+      scroll->addChild(text);
+      terminal = scroll;
+    }
+    else if (text)
+      content->addChild(text);
+    if (shape == 1 || shape == 7)
+      content->addChild(new FragmentNode(FragmentProps()));
+    if (shape == 3)
+      content->addChild(new BoxNode(Box().props));
+    if (shape == 4)
+      content->addChild(new StackNode(Row().props));
+    if (shape == 6)
+      content->addChild(shrinkText(100));
+    const SeatLeaves leaves = singleLiveLeaf(&wrapper);
+    const SeatLeaves::Kind expectedKind = shape == 7                               ? SeatLeaves::NO_SEAT
+                                          : shape == 3 || shape == 4 || shape == 6 ? SeatLeaves::MANY_LEAVES
+                                                                                   : SeatLeaves::ONE_LEAF;
+    LOKA_VERIFY(leaves.kind() == expectedKind);
+    LOKA_VERIFY(leaves.leaf() == (expectedKind == SeatLeaves::ONE_LEAF ? terminal : 0));
+    LeafShapeWidthProbe source;
+    RowWidthConsultation widths(&wrapper, 1, 50, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+    const int expected[] = {50, 50, 50, 200, 50, 200, 200, 0};
+    LOKA_VERIFY(widths.next(&wrapper).width() == expected[shape]);
+  }
+}
+
+namespace
+{
+  class SeatVisitProbe : public loka::app::scene::Node
+  {
+  public:
+    explicit SeatVisitProbe(int &visits)
+        : visits_(visits)
+    {
+    }
+    virtual loka::app::scene::NodeKind kind() const
+    {
+      ++this->visits_;
+      return loka::app::scene::NODE_KIND_UNKNOWN;
+    }
+
+  private:
+    int &visits_;
+  };
+} // namespace
+
+void testSingleLiveLeafStopsAtSecondSeat()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  LOKA_VERIFY(singleLiveLeaf(0).kind() == SeatLeaves::NO_SEAT);
+  loka::core::EmitterState result;
+  OpenFileDialogNode dialog(OpenFileDialogProps().onResult(&result));
+  LOKA_VERIFY(singleLiveLeaf(&dialog).kind() == SeatLeaves::NO_SEAT);
+  int visits = 0;
+  FragmentNode outer((FragmentProps()));
+  FragmentNode *inner = new FragmentNode(FragmentProps());
+  outer.addChild(inner);
+  inner->addChild(new ButtonNode(ButtonProps()));
+  inner->addChild(new ButtonNode(ButtonProps()));
+  inner->addChild(new SeatVisitProbe(visits));
+  outer.addChild(new SeatVisitProbe(visits));
+  LOKA_VERIFY(singleLiveLeaf(&outer).kind() == SeatLeaves::MANY_LEAVES);
+  LOKA_VERIFY(visits == 0);
+}

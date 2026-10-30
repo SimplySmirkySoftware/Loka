@@ -23,6 +23,51 @@ namespace loka
       /** Dialogs and pass-through subtrees without a seat consume no layout gap. */
       bool childTakesLayoutSeat(scene::Node *child);
 
+      /** Completed seat shape: no seat, one borrowed terminal, or at least two leaves.
+          The pointer is present only for ONE_LEAF; this value neither owns nor retains it. */
+      class SeatLeaves
+      {
+      public:
+        enum Kind
+        {
+          NO_SEAT,
+          ONE_LEAF,
+          MANY_LEAVES
+        };
+
+        explicit SeatLeaves(scene::Node *leaf = 0)
+            : kind_(leaf ? ONE_LEAF : NO_SEAT),
+              leaf_(leaf)
+        {
+        }
+
+        static SeatLeaves many()
+        {
+          return SeatLeaves(MANY_LEAVES);
+        }
+        Kind kind() const
+        {
+          return this->kind_;
+        }
+        scene::Node *leaf() const
+        {
+          return this->leaf_;
+        }
+
+      private:
+        explicit SeatLeaves(Kind kind)
+            : kind_(kind),
+              leaf_(0)
+        {
+        }
+        Kind kind_;
+        scene::Node *leaf_;
+      };
+
+      /** Walk transparent descendants once, stopping at terminals and the second live seat.
+          O(visited nodes) time, O(wrapper depth) stack; reads the child's composition only. */
+      SeatLeaves singleLiveLeaf(scene::Node *seat);
+
       /** Converts an intermediate layout calculation to the target's
           declared coordinate width at the assignment boundary. */
       template <typename LayoutStateT>
@@ -197,6 +242,7 @@ namespace loka
         return remainingHeight;
       }
 
+      /** Aligned Row height table; transparent wrappers expose exactly one live leaf. */
       inline int preferredChildHeightForRow(loka::app::scene::Node *child,
                                             int fallbackHeight,
                                             int buttonHeight,
@@ -208,6 +254,15 @@ namespace loka
         if (!child)
         {
           return fallbackHeight;
+        }
+        if (isLayoutPassThrough(child))
+        {
+          const SeatLeaves leaves = singleLiveLeaf(child);
+          if (leaves.kind() == SeatLeaves::NO_SEAT)
+            return 0;
+          if (leaves.kind() == SeatLeaves::MANY_LEAVES)
+            return fallbackHeight;
+          child = leaves.leaf();
         }
         if (!childTakesLayoutSeat(child))
         {
