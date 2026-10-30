@@ -1,4 +1,6 @@
 #include "ToolboxOutOfMemory.hpp"
+#include "ToolboxSuddenTerminate.hpp"
+#include "ToolboxUnicodeStartup.hpp"
 #include "ToolboxDialogConstruction.hpp"
 #include "ToolboxReserveGrowZone.hpp"
 #include <Dialogs.h>
@@ -19,8 +21,10 @@ static int installs, uppCreations;
 static bool refuseReserve, refuseItems, refuseDialog, reenterReporting;
 static int liveHandles, liveFilters;
 static bool refuseFilter;
+static int ptrAttempts, handleAttempts, filterAttempts;
 ModalFilterUPP NewModalFilterUPP(ModalFilterUPP p)
 {
+  ++filterAttempts;
   if (refuseFilter)
     return 0;
   ++liveFilters;
@@ -69,6 +73,7 @@ void BlockMoveData(const void *src, void *dst, Size n)
 }
 Ptr NewPtr(Size n)
 {
+  ++ptrAttempts;
   LOKA_VERIFY(n == 8192);
   events += 'A';
   return refuseReserve ? 0 : static_cast<Ptr>(std::malloc(n));
@@ -81,11 +86,12 @@ void DisposePtr(Ptr p)
 }
 Handle NewHandle(Size n)
 {
+  ++handleAttempts;
   if (reenterReporting)
   {
     const std::string before = events;
     loka::toolbox::QuitForOutOfMemory();
-    LOKA_VERIFY(events == before + "Q");
+    LOKA_VERIFY(events == before + "UQ");
     return 0; // The real nested ExitToShell never returns.
   }
   if (refuseItems)
@@ -187,12 +193,78 @@ void ModalDialog(ModalFilterUPP filter, short *hit)
   if (++modalCalls == 1)
     *hit = 2;
 }
+enum ParticipantProbe
+{
+  PROBE_NONE,
+  PROBE_PTR,
+  PROBE_HANDLE,
+  PROBE_FILTER
+};
+static ParticipantProbe participantProbe = PROBE_NONE;
+static Boolean ProbeFilter(DialogPtr, EventRecord *, short *)
+{
+  return 0;
+}
+namespace loka
+{
+  namespace toolbox
+  {
+    void UnicodeTextSuddenTerminate()
+    {
+      events += 'U';
+      switch (participantProbe)
+      {
+      case PROBE_NONE:
+        break;
+      case PROBE_PTR:
+        if (Ptr p = NewPtr(8192))
+          DisposePtr(p);
+        break;
+      case PROBE_HANDLE:
+        if (Handle h = NewHandle(8))
+          DisposeHandle(h);
+        break;
+      case PROBE_FILTER:
+        if (ModalFilterUPP p = NewModalFilterUPP(ProbeFilter))
+          DisposeModalFilterUPP(p);
+        break;
+      }
+    }
+  } // namespace toolbox
+} // namespace loka
+
+static void CheckSuddenTerminateAttempts()
+{
+  // Only attempts through these three Toolbox fakes are measured. This target
+  // excludes ToolboxOperatorNew.cpp: host new/malloc and the string recording U
+  // bypass them. Production zero allocation needs source/dependency review.
+  for (int refusing = 0; refusing < 2; ++refusing)
+  {
+    refuseReserve = refuseItems = refuseFilter = refusing != 0;
+    for (int probe = PROBE_NONE; probe <= PROBE_FILTER; ++probe)
+    {
+      participantProbe = static_cast<ParticipantProbe>(probe);
+      const int beforePtr = ptrAttempts;
+      const int beforeHandle = handleAttempts;
+      const int beforeFilter = filterAttempts;
+      loka::toolbox::SuddenTerminate();
+      LOKA_VERIFY(ptrAttempts - beforePtr == (probe == PROBE_PTR ? 1 : 0));
+      LOKA_VERIFY(handleAttempts - beforeHandle == (probe == PROBE_HANDLE ? 1 : 0));
+      LOKA_VERIFY(filterAttempts - beforeFilter == (probe == PROBE_FILTER ? 1 : 0));
+      LOKA_VERIFY(liveHandles == 0 && liveFilters == 0);
+    }
+  }
+  participantProbe = PROBE_NONE;
+  refuseReserve = refuseItems = refuseFilter = false;
+  events.clear();
+}
 int main()
 {
+  CheckSuddenTerminateAttempts();
   loka::toolbox::QuitIfOutOfMemoryReserveSpent();
   LOKA_VERIFY(events.empty());
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "Q");
+  LOKA_VERIFY(events == "UQ");
   events.clear();
   refuseReserve = true;
   loka::toolbox::ArmOutOfMemoryReserve();
@@ -200,7 +272,7 @@ int main()
   loka::toolbox::QuitIfOutOfMemoryReserveSpent();
   LOKA_VERIFY(events == "A");
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "AQ");
+  LOKA_VERIFY(events == "AUQ");
   events.clear();
   refuseReserve = false;
   loka::toolbox::ArmOutOfMemoryReserve();
@@ -215,14 +287,14 @@ int main()
   LOKA_VERIFY(events == "A");
   LOKA_VERIFY(applicationProcedure(8193) == 0 && events == "A");
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARDBMMXQ");
+  LOKA_VERIFY(events == "ARDBMMXUQ");
   LOKA_VERIFY(outlines == 3);
   // 640x480: centred, a third of the way down below the 20-pixel menu bar.
   LOKA_VERIFY(dialogBounds.left == 144 && dialogBounds.right == 496);
   LOKA_VERIFY(dialogBounds.top == 126 && dialogBounds.bottom == 266);
   events.clear();
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "Q");
+  LOKA_VERIFY(events == "UQ");
   // A 512x342 screen (Mac Plus) keeps the whole alert on screen.
   qd.screenBits.bounds.bottom = 342;
   qd.screenBits.bounds.right = 512;
@@ -230,7 +302,7 @@ int main()
   modalCalls = 0;
   loka::toolbox::ArmOutOfMemoryReserve();
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARDBMMXQ");
+  LOKA_VERIFY(events == "ARDBMMXUQ");
   LOKA_VERIFY(dialogBounds.left == 80 && dialogBounds.right == 432);
   LOKA_VERIFY(dialogBounds.top == 80 && dialogBounds.bottom == 220);
   // Each rearm below simulates another process after the host exit recorder.
@@ -249,7 +321,7 @@ int main()
       loka::toolbox::QuitIfOutOfMemoryReserveSpent();
     else
       loka::toolbox::QuitForOutOfMemory();
-    LOKA_VERIFY(events == "ARDBMMXQ");
+    LOKA_VERIFY(events == "ARDBMMXUQ");
     events.clear();
     loka::toolbox::QuitIfOutOfMemoryReserveSpent();
     LOKA_VERIFY(events.empty());
@@ -258,25 +330,25 @@ int main()
   loka::toolbox::ArmOutOfMemoryReserve();
   reenterReporting = true;
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARQQ");
+  LOKA_VERIFY(events == "ARUQUQ");
   reenterReporting = false;
   events.clear();
   loka::toolbox::ArmOutOfMemoryReserve();
   refuseItems = true;
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARQ" && liveHandles == 0 && liveFilters == 0);
+  LOKA_VERIFY(events == "ARUQ" && liveHandles == 0 && liveFilters == 0);
   refuseItems = false;
   events.clear();
   loka::toolbox::ArmOutOfMemoryReserve();
   refuseDialog = true;
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARQ" && liveHandles == 0 && liveFilters == 0);
+  LOKA_VERIFY(events == "ARUQ" && liveHandles == 0 && liveFilters == 0);
   refuseDialog = false;
   events.clear();
   loka::toolbox::ArmOutOfMemoryReserve();
   refuseFilter = true;
   loka::toolbox::QuitForOutOfMemory();
-  LOKA_VERIFY(events == "ARQ" && liveHandles == 0 && liveFilters == 0);
+  LOKA_VERIFY(events == "ARUQ" && liveHandles == 0 && liveFilters == 0);
   refuseFilter = false;
   // No terminator: preserve embedded NUL bytes and cap the DITL byte length.
   const char message[] = {'a', 0, 'b'};

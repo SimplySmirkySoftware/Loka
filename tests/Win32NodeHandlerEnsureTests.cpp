@@ -202,7 +202,16 @@ namespace
             const int padded = scale.measurementToLu(nativeHeight) + 8;
             const int textHeight = padded > minimum ? padded : minimum;
             const int captionY = Win32SceneLayout::kRootInset + (boxed ? 170 : textHeight) + Win32SceneLayout::kGap;
-            const int buttonY = captionY + 20 + Win32SceneLayout::kGap;
+            int captionHeight = 20;
+            if (boxed)
+            {
+              TextNode *badge = fixture.caption->nextInComposition->asTextNode();
+              Win32TextContext *badgeContext = static_cast<Win32TextContext *>(badge->getContext());
+              LOKA_VERIFY(badgeContext && badgeContext->hwnd());
+              const RECT badgeFrame = childRectInParent(badgeContext->hwnd(), root);
+              captionHeight = scale.unprojectEdge(badgeFrame.bottom) - scale.unprojectEdge(badgeFrame.top);
+            }
+            const int buttonY = captionY + captionHeight + Win32SceneLayout::kGap;
             const RECT pageFrame = childRectInParent(page, root);
             const RECT expectedPage =
                 scale
@@ -210,13 +219,13 @@ namespace
                         loka::core::Frame(Win32SceneLayout::kRootInset, Win32SceneLayout::kRootInset, pageWidth, textHeight))
                     .r;
             LOKA_VERIFY(EqualRect(&pageFrame, &expectedPage));
-            LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY));
+            LOKA_VERIFY(childRectInParent(caption, root).top == scale.projectEdge(captionY + (captionHeight - 20) / 2));
             const RECT buttonFrame = childRectInParent(button, root);
             LOKA_VERIFY(buttonFrame.top == scale.projectEdge(buttonY));
             const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
             LOKA_VERIFY(buttonFrame.bottom == scale.projectEdge(buttonY + buttonHeight));
             if (boxed)
-              LOKA_VERIFY(buttonY == Win32SceneLayout::kRootInset + 170 + 20 + 2 * Win32SceneLayout::kGap);
+              LOKA_VERIFY(buttonY == Win32SceneLayout::kRootInset + 170 + captionHeight + 2 * Win32SceneLayout::kGap);
             std::printf("  Win32 text extent: space=%d/%d boxed=%d lines=%d nativeText=%d "
                         "textLu=%d buttonLu=%d..%d framePx=%ld..%ld clientPx=%ld\n",
                         metrics[scaleIndex].spaceScale.num, metrics[scaleIndex].spaceScale.den,
@@ -2078,6 +2087,189 @@ void testWin32ButtonDeclinedHeightKeepsRowAligned()
     LOKA_VERIFY(Win32SceneLayout::spacing().horizontalGap() == Win32SceneLayout::kGap);
     verifyButtonCenteredRow(*controller, root, direct != 0, true);
     delete controller;
+    LOKA_VERIFY(DestroyWindow(root));
+  }
+}
+
+namespace
+{
+  // Observe the offered seat at the existing projection door, then use the
+  // production Text node, handler, context and native layout unchanged.
+  class NaturalHeightController : public Win32ScenePlatformController
+  {
+  public:
+    NaturalHeightController(HWND root, const loka::win32::Win32DisplayScale &scale)
+        : Win32ScenePlatformController(root, scale)
+    {
+    }
+    virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state)
+    {
+      if (node && node->asTextNode())
+      {
+        short answer = 0;
+        LOKA_VERIFY(this->queryNaturalHeight(node, answer));
+        LOKA_VERIFY(state.height == answer);
+      }
+      return Win32ScenePlatformController::prepareProjectedLayout(node, state);
+    }
+  };
+
+  void verifyTextHeightFrame(
+      Win32ScenePlatformController &controller, loka::app::TextNode &text, HWND root, int top, short answer)
+  {
+    Win32TextContext *context = static_cast<Win32TextContext *>(text.getContext());
+    LOKA_VERIFY(context && context->hwnd());
+    const RECT frame = childRectInParent(context->hwnd(), root);
+    LOKA_VERIFY(frame.top == controller.displayScale().projectEdge(top));
+    LOKA_VERIFY(frame.bottom == controller.displayScale().projectEdge(top + answer));
+    // The query calls MinimumTextHeight on root; layout calls the same function
+    // on the Text HWND. Also compare the two DC metrics independently below.
+    const loka::app::TextStyle style = text.props.resolvedTextStyle();
+    if (style.declaresFont())
+    {
+      const HWND windows[] = {root, context->hwnd()};
+      int heights[2] = {0, 0};
+      for (int i = 0; i < 2; ++i)
+      {
+        HDC dc = GetDC(windows[i]);
+        LOKA_VERIFY(dc != NULL);
+        HGDIOBJ previous = SelectObject(dc, controller.fallbackFont(style));
+        LOKA_VERIFY(previous && previous != HGDI_ERROR);
+        TEXTMETRICW metrics;
+        LOKA_VERIFY(GetTextMetricsW(dc, &metrics));
+        heights[i] = controller.displayScale().measurementToLu(metrics.tmHeight + metrics.tmExternalLeading);
+        LOKA_VERIFY(SelectObject(dc, previous) != NULL);
+        LOKA_VERIFY(ReleaseDC(windows[i], dc));
+      }
+      LOKA_VERIFY(heights[0] == heights[1]);
+      LOKA_VERIFY(answer == (heights[0] > 20 ? heights[0] : 20));
+    }
+  }
+} // namespace
+
+void testWin32TextNaturalHeightAlignedRow()
+{
+  using namespace loka::app;
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96),
+      loka::win32::Win32DisplayScale(96, loka::win32::DefaultRailMetrics()),
+      loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  const TextStyle styles[] = {FontSize<24>(), Title};
+  for (int i = 0; i < 3; ++i)
+    for (int direct = 0; direct < 2; ++direct)
+      for (int alignment = 0; alignment < 3; ++alignment)
+        for (int style = 0; style < 2; ++style)
+        {
+          HWND root = buttonHeightHost(scales[i]);
+          {
+            NaturalHeightController controller(root, scales[i]);
+            StackProps props(STACK_AXIS_ROW);
+            props.alignVertical(alignments[alignment]);
+            StackNode *row = direct ? new DirectNaturalWidthRow(props) : new StackNode(props);
+            TextProps label("Title");
+            label.textStyle_ = styles[style];
+            TextNode *text = new TextNode(label);
+            ButtonNode *button = new ButtonNode(ButtonProps().text("Button"));
+            row->addChild(text);
+            row->addChild(button);
+            short answer = 0;
+            LOKA_VERIFY(controller.queryNaturalHeight(text, answer));
+            if (style == 0)
+              LOKA_VERIFY(answer > 20);
+            controller.onChange(row, scene::NODE_DIRTY_NONE, false);
+            controller.relayout(640, 160);
+            const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
+            const int rowHeight = answer > buttonHeight ? answer : buttonHeight;
+            const int offset = alignment == 0 ? 0 : alignment == 1 ? (rowHeight - answer) / 2 : rowHeight - answer;
+            verifyTextHeightFrame(controller, *text, root, Win32SceneLayout::kRootInset + offset, answer);
+            if (alignment == 1)
+            {
+              const RECT textFrame =
+                  childRectInParent(static_cast<Win32TextContext *>(text->getContext())->hwnd(), root);
+              const RECT buttonFrame =
+                  childRectInParent(static_cast<Win32ButtonContext *>(button->getContext())->hwnd(), root);
+              LOKA_VERIFY(std::abs((textFrame.top + textFrame.bottom) - (buttonFrame.top + buttonFrame.bottom))
+                          <= 2 * scales[i].nativeLength(0, 1).px);
+            }
+            controller.onChange(0, scene::NODE_DIRTY_NONE, false);
+            delete row;
+          }
+          LOKA_VERIFY(DestroyWindow(root));
+        }
+}
+
+void testWin32TextNaturalHeightAnswersAndDeclines()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  const loka::win32::Win32DisplayScale scales[] = {
+      loka::win32::Win32DisplayScale(96),
+      loka::win32::Win32DisplayScale(96, loka::win32::DefaultRailMetrics()),
+      loka::win32::Win32DisplayScale(144, loka::win32::DefaultRailMetrics())};
+  for (int i = 0; i < 3; ++i)
+  {
+    HWND root = buttonHeightHost(scales[i]);
+    {
+      Win32ScenePlatformController controller(root, scales[i]);
+      const TextStyle styles[] = {TextStyle(), SmallLabel, Heading, Title, FontSize<24>()};
+      for (int style = 0; style < 5; ++style)
+        for (int empty = 0; empty < 2; ++empty)
+        {
+          TextProps props(empty ? "" : "Label");
+          props.textStyle_ = styles[style];
+          TextNode text(props);
+          short answer = 0;
+          LOKA_VERIFY(controller.queryNaturalHeight(&text, answer));
+          if (style == 0)
+            LOKA_VERIFY(answer == 20);
+          controller.onChange(&text, loka::app::scene::NODE_DIRTY_NONE, false);
+          controller.relayout(640, 160);
+          verifyTextHeightFrame(controller, text, root, Win32SceneLayout::kRootInset, answer);
+          controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+        }
+      TextProps wrappedProps("wrapped");
+      wrappedProps.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_WORD);
+      TextNode wrapped(wrappedProps);
+      TextNode newline(TextProps("one\ntwo"));
+      TextNode carriageReturn(TextProps("one\rtwo"));
+      short sentinel = 123;
+      LOKA_VERIFY(!controller.queryNaturalHeight(&wrapped, sentinel));
+      LOKA_VERIFY(sentinel == 123);
+      LOKA_VERIFY(!controller.queryNaturalHeight(&newline, sentinel));
+      LOKA_VERIFY(sentinel == 123);
+      LOKA_VERIFY(!controller.queryNaturalHeight(&carriageReturn, sentinel));
+      LOKA_VERIFY(sentinel == 123);
+      TextProps declaredProps("declared");
+      declaredProps.textStyle_ = FontSize<24>();
+      TextNode declared(declaredProps);
+      {
+        Win32ImportRefusal refusal(
+            "gdi32.dll", "GetTextMetricsW", reinterpret_cast<ULONG_PTR>(&declineButtonTextMetrics));
+        LOKA_VERIFY(!controller.queryNaturalHeight(&declared, sentinel));
+        LOKA_VERIFY(sentinel == 123);
+      }
+      PushStateTracker tracker;
+      MutableState<TextStyle> style((FontSize<12>()));
+      tracker.addState(&style);
+      TextProps liveProps("Live");
+      liveProps.textStyleState_ = &style;
+      TextNode live(liveProps);
+      short before = 0, after = 0;
+      LOKA_VERIFY(controller.queryNaturalHeight(&live, before));
+      controller.onChange(&live, loka::app::scene::NODE_DIRTY_NONE, false);
+      controller.relayout(640, 160);
+      verifyTextHeightFrame(controller, live, root, Win32SceneLayout::kRootInset, before);
+      {
+        StateTrackerGuard guard(&tracker);
+        style.set(FontSize<24>());
+      }
+      LOKA_VERIFY(controller.queryNaturalHeight(&live, after));
+      LOKA_VERIFY(after > before);
+      controller.relayout(640, 160);
+      verifyTextHeightFrame(controller, live, root, Win32SceneLayout::kRootInset, after);
+      controller.onChange(0, loka::app::scene::NODE_DIRTY_NONE, false);
+    }
     LOKA_VERIFY(DestroyWindow(root));
   }
 }
