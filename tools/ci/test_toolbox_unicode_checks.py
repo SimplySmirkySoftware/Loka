@@ -1,4 +1,5 @@
 """Hand-built PEF mutations and nm output/error contract pins."""
+import os
 import struct
 import tempfile
 from pathlib import Path
@@ -153,6 +154,23 @@ class AbiDriverTests(unittest.TestCase):
             root.symlink_to(outside, target_is_directory=True)
             with self.assertRaisesRegex(abi.AbiError, "outside"):
                 abi.output_wall(root, repo)
+
+    def test_toolchain_paths_are_absolute(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory) / "retro" / "toolchain" / "bin"
+            bin_dir.mkdir(parents=True)
+            for name in ("powerpc-apple-macos-g++", "powerpc-apple-macos-nm", "powerpc-apple-macos-objdump"):
+                (bin_dir / name).write_text("")
+            previous = Path.cwd()
+            try:
+                os.chdir(directory)
+                tools = abi.Toolchain("retro")
+            finally:
+                os.chdir(previous)
+            self.assertTrue(tools.gxx.is_absolute())
+            self.assertEqual(tools.gxx, bin_dir.resolve() / "powerpc-apple-macos-g++")
+            with self.assertRaisesRegex(abi.AbiError, "missing tool"):
+                abi.Toolchain(Path(directory) / "absent")
 
     def test_output_wall_refuses_a_symlinked_build_directory(self):
         with tempfile.TemporaryDirectory() as directory:

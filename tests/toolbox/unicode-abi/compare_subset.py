@@ -198,7 +198,9 @@ def compare(labels, left, right):
 
 class Toolchain:
     def __init__(self, build_dir):
-        bin_dir = Path(build_dir) / "toolchain" / "bin"
+        # Absolute before any subprocess runs: their cwd is the output root,
+        # so a relative toolchain path would stop resolving there.
+        bin_dir = Path(build_dir).expanduser().resolve() / "toolchain" / "bin"
         self.gxx = bin_dir / "powerpc-apple-macos-g++"
         self.nm = bin_dir / "powerpc-apple-macos-nm"
         self.objdump = bin_dir / "powerpc-apple-macos-objdump"
