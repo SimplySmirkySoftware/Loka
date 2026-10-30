@@ -613,3 +613,213 @@ void testMacToolbarEllipsisNarrowPixels()
   }
   [pool drain];
 }
+
+namespace
+{
+  // Observe the offer before the real Text projection lays out its native leaf.
+  class HeightCheckedText : public TextNode
+  {
+  public:
+    explicit HeightCheckedText(const TextProps &props)
+        : TextNode(props)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *controller, LayoutState &state)
+    {
+      short height = kUntouched;
+      LOKA_VERIFY(static_cast<MacScenePlatformController *>(controller)->queryNaturalHeight(this, height));
+      LOKA_VERIFY(state.height == height);
+      return TextNode::layoutProjected(controller, state);
+    }
+  };
+
+  void verifyTextHeightRow(NSView *root, const RailMetrics &metrics)
+  {
+    const VerticalAlignment alignments[] = {
+        VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+    for (int direct = 0; direct < 2; ++direct)
+    {
+      MacScenePlatformController controller(root, metrics);
+      StackNode *row = direct ? new DirectRow() : new StackNode(StackProps(STACK_AXIS_ROW));
+      TextProps props("Title");
+      props.textStyle_ = FontSize<24>();
+      TextNode *text = new HeightCheckedText(props);
+      row->addChild(text);
+      row->addChild(new ButtonNode(ButtonProps().text("Button")));
+      controller.onChange(row, NODE_DIRTY_NONE, false);
+      for (int alignment = 0; alignment < 3; ++alignment)
+      {
+        row->props.alignVertical(alignments[alignment]);
+        short height = kUntouched;
+        LOKA_VERIFY(controller.queryNaturalHeight(text, height));
+        LOKA_VERIFY(height > 20);
+        controller.relayout(kClientWidth, kClientHeight);
+        LOKA_VERIFY([[root subviews] count] == 2);
+        NSView *label = [[root subviews] objectAtIndex:0];
+        LOKA_VERIFY([label isKindOfClass:[NSTextField class]]);
+        const NSRect frame = [label frame];
+        const NSRect button = [buttonAt(root, 1) frame];
+        const int buttonHeight = controller.rowLayoutMetrics().buttonHeight;
+        const int rowHeight = height > buttonHeight ? height : buttonHeight;
+        const int offset = alignment == 0 ? 0 : alignment == 1 ? (rowHeight - height) / 2 : rowHeight - height;
+        const int top = MacSceneLayout::kRootInset + offset;
+        const loka::macos::MacProjection &projection = controller.projection();
+        LOKA_VERIFY(NSMinY(frame) == projection.projectEdge(top).pt);
+        LOKA_VERIFY(NSMaxY(frame) == projection.projectEdge(top + height).pt);
+        const Ratio &scale = metrics.spaceScale;
+        const double pointsPerLu = static_cast<double>(scale.num) / scale.den;
+        if (alignment == 1)
+          LOKA_VERIFY(std::fabs(NSMidY(frame) - NSMidY(button)) <= pointsPerLu);
+      }
+      controller.onChange(0, NODE_DIRTY_NONE, false);
+      delete row;
+      LOKA_VERIFY([[root subviews] count] == 0);
+    }
+  }
+
+  CGFloat MacOversizedTextAscender(id, SEL)
+  {
+    return static_cast<CGFloat>(SHRT_MAX) * 4;
+  }
+} // namespace
+
+void testMacTextNaturalHeightAlignedRow()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  // Always exercise both routing paths even on a headless rig.
+  NSView *root = newRootView();
+  verifyTextHeightRow(root, RailMetrics());
+  verifyTextHeightRow(root, loka::macos::DefaultRailMetrics());
+  [root release];
+  for (int backing = 1; backing <= 2; ++backing)
+  {
+    NSScreen *screen = nil;
+    NSArray *screens = [NSScreen screens];
+    for (NSUInteger i = 0; i < [screens count]; ++i)
+    {
+      NSScreen *candidate = [screens objectAtIndex:i];
+      const CGFloat scale =
+          [candidate respondsToSelector:@selector(backingScaleFactor)] ? [candidate backingScaleFactor] : 1;
+      if (scale == backing)
+      {
+        screen = candidate;
+        break;
+      }
+    }
+    if (!screen)
+    {
+      std::printf("[skip] Text natural height backing=%d: no attached screen has this backing scale\n", backing);
+      continue;
+    }
+    root = newRootView();
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(40, 40, kClientWidth, kClientHeight)
+                                                   styleMask:LOKA_MAC_WINDOW_STYLE_TITLED
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO
+                                                      screen:screen];
+    LOKA_VERIFY(window != nil);
+    [window setReleasedWhenClosed:NO];
+    [window setContentView:root];
+    LOKA_VERIFY([window screen] == screen);
+    verifyTextHeightRow(root, RailMetrics());
+    verifyTextHeightRow(root, loka::macos::DefaultRailMetrics());
+    std::printf("[pin] Text natural height backing=%d: direct and registered TOP/CENTER/BOTTOM\n", backing);
+    [window close];
+    [window release];
+    [root release];
+  }
+  [pool drain];
+}
+
+void testMacTextNaturalHeightMatchesLeafAndLiveStyle()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = newRootView();
+  const RailMetrics metrics[] = {RailMetrics(), loka::macos::DefaultRailMetrics()};
+  const TextStyle styles[] = {TextStyle(), SmallLabel, Heading, Title, FontSize<24>()};
+  for (int scale = 0; scale < 2; ++scale)
+    for (int empty = 0; empty < 2; ++empty)
+    {
+      MacScenePlatformController controller(root, metrics[scale]);
+      loka::core::MutableState<TextStyle> style;
+      NodeDefinitionBase *definition = (Text(empty ? "" : "Title") + &style).clone();
+      LOKA_VERIFY(definition != 0);
+      Scene scene(definition);
+      LOKA_VERIFY(scene.mount(&controller));
+      SceneTestAccess::updateAttached(scene, true);
+      Node *leaf = SceneTestAccess::rootNode(scene);
+      while (leaf && !leaf->asTextNode())
+        leaf = leaf->asNestable() ? leaf->asNestable()->childrenHead() : 0;
+      LOKA_VERIFY(leaf && leaf->asTextNode());
+      short previous = 0;
+      for (int i = 0; i < 5; ++i)
+      {
+        {
+          loka::core::StateTrackerGuard guard(SceneTestAccess::rootBoundary(scene)->tracker());
+          style.set(styles[i]);
+        }
+        if (scene.hasPendingInvalidation())
+          LOKA_VERIFY(SceneTestAccess::flushInvalidation(scene));
+        short height = kUntouched, repeated = kUntouched;
+        LOKA_VERIFY(controller.queryNaturalHeight(leaf, height));
+        LOKA_VERIFY(controller.queryNaturalHeight(leaf, repeated));
+        LOKA_VERIFY(repeated == height);
+        if (i == 0)
+          LOKA_VERIFY(height == 20);
+        if (i == 4)
+          LOKA_VERIFY(height > previous);
+        controller.relayout(kClientWidth, kClientHeight);
+        LOKA_VERIFY([[root subviews] count] == 1);
+        const NSRect frame = [[[root subviews] objectAtIndex:0] frame];
+        const loka::macos::MacProjection &projection = controller.projection();
+        LOKA_VERIFY(frame.size.height
+                    == projection.projectLength(MacSceneLayout::kRootInset, MacSceneLayout::kRootInset + height).pt);
+        previous = height;
+      }
+      SceneTestAccess::unmount(scene);
+    }
+  LOKA_VERIFY([[root subviews] count] == 0);
+  [root release];
+  [pool drain];
+}
+
+void testMacTextNaturalHeightDeclines()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = newRootView();
+  {
+    MacScenePlatformController controller(root, RailMetrics());
+    TextProps wrapped("Title");
+    wrapped.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_WORD);
+    TextNode wrapping(wrapped);
+    TextNode newline(TextProps("First\nSecond"));
+    TextNode carriageReturn(TextProps("First\rSecond"));
+    TextNode missing((TextProps()));
+    ButtonNode button((ButtonProps()));
+    Node *declines[] = {&wrapping, &newline, &carriageReturn, &missing, &button, 0};
+    for (int i = 0; i < 6; ++i)
+    {
+      short height = kUntouched;
+      LOKA_VERIFY(!controller.queryNaturalHeight(declines[i], height));
+      LOKA_VERIFY(height == kUntouched);
+    }
+    TextProps props("Oversized");
+    props.textStyle_ = FontSize<24>();
+    TextNode oversized(props);
+    NSFont *font = (NSFont *)controller.textFont(props.textStyle_);
+    LOKA_VERIFY(font != nil);
+    short height = kUntouched;
+    {
+      MacNativeRefusal refusal(@selector(ascender), reinterpret_cast<IMP>(&MacOversizedTextAscender), [font class]);
+      LOKA_VERIFY(!controller.queryNaturalHeight(&oversized, height));
+      LOKA_VERIFY(height == kUntouched);
+    }
+    LOKA_VERIFY(controller.queryNaturalHeight(&oversized, height));
+    LOKA_VERIFY(height > 20);
+  }
+  [root release];
+  [pool drain];
+}
