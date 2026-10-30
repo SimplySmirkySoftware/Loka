@@ -1564,7 +1564,10 @@ void testRowShownButtonAndMultipleLeafHeightOffers()
       scene::Node *bare = root->asNestable()->childrenHead()->nextInComposition;
       scene::Node *wrapper = bare->nextInComposition;
       LOKA_VERIFY(wrapper && isLayoutPassThrough(wrapper));
-      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 7, 10, 11, 12, 13, 14, 0) == (shape == 0 ? 10 : shape == 3 ? 0 : 7));
+      LOKA_VERIFY(preferredChildHeightForRow(wrapper, 7, 10, 11, 12, 13, 14, 0)
+                  == (shape == 0   ? 10
+                      : shape == 3 ? 0
+                                   : 7));
       LOKA_VERIFY(preferredChildHeightForRow(wrapper, 40, 10, 11, 12, 13, 14, 0)
                   == (shape == 0   ? 10
                       : shape == 3 ? 0
