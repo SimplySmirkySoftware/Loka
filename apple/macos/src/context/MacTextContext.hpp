@@ -36,6 +36,9 @@ public:
       Refusal leaves width untouched; no cache or native context is required. */
   static bool
   queryNaturalWidth(const loka::app::TextNode *text, const MacScenePlatformController *controller, short &width);
+  /** Current one-line leaf height; refusal leaves height untouched. */
+  static bool
+  queryNaturalHeight(const loka::app::TextNode *text, const MacScenePlatformController *controller, short &height);
   virtual void onPropsApplied();
   virtual loka::app::scene::ICapturableBitmap *asCapturableBitmap()
   {

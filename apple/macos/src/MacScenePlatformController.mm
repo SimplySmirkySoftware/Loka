@@ -76,6 +76,11 @@ namespace loka
           return this->controller_ && this->controller_->queryNaturalWidth(child, width);
         }
 
+        virtual bool queryNaturalHeight(Node *child, short &height) const
+        {
+          return this->controller_ && this->controller_->queryNaturalHeight(child, height);
+        }
+
         virtual int layoutChild(Node *child, const LayoutState &state)
         {
           if (!this->controller_)
@@ -164,6 +169,13 @@ namespace
     return metrics;
   }
 } // namespace
+
+bool MacScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+{
+  // An aligned Row asks twice per Text per pass. Only this leaf's UTF-8 is
+  // scanned; the shared geometry reads its current style and font metrics.
+  return child && MacTextContext::queryNaturalHeight(child->asTextNode(), this, height);
+}
 
 bool MacScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
