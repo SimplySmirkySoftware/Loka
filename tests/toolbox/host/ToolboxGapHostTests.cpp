@@ -1272,7 +1272,8 @@ namespace
                   && bar.placement.full().right == (i == 1 ? 348 : 361));
       LOKA_VERIFY(bar.placement.full().bottom == 246 && bar.placement.full().top == (i == 1 ? 12 : -1));
       LOKA_VERIFY(bar.maximum == (i == 1 ? 264 : i == 2 ? 255 : 240));
-      LOKA_VERIFY(bar.pageStep == (i == 1 ? 235 : i == 2 ? 244 : 259));
+      // (extent - 1) rounded down to a multiple of 8: 235 -> 232, 244 -> 240, 259 -> 256 (#1043 Q-E).
+      LOKA_VERIFY(bar.pageStep == (i == 1 ? 232 : i == 2 ? 240 : 256));
       if (i == 2)
       {
         const ToolboxScenePlatformController::ScrollBarControlBinding &horizontal = f.controller.scrollControls()[1];
