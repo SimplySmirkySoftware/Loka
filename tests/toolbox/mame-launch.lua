@@ -45,11 +45,12 @@ local function keyByName(name)
 end
 
 -- The guest sees a key only if it polls ADB while the key is down, and it can
--- go more than 100 ms without polling: a launch Command-O fell into such a gap,
--- so the application never opened and the cell timed out (#1674). A key is
--- therefore held until the guest's KeyMap (0x174) shows it down, and after
--- release the next key waits until KeyMap shows it up. MAME's ADB keyboard
--- lays the Mac virtual key codes out 16 to a :macadb:KEYn port.
+-- go more than 100 ms without polling: the O of the launch Command-O fell into
+-- such a gap, so the application never opened and the cell timed out (#1674).
+-- tap() therefore holds a key past its 0.10 s until the guest's KeyMap (0x174)
+-- shows it down, and after the release waits until KeyMap shows it up. A key
+-- seen within the usual timing adds no time. MAME's ADB keyboard lays the Mac
+-- virtual key codes out 16 to a :macadb:KEYn port.
 local KEY_MAP = 0x174
 local KEY_SEEN_TIMEOUT = 5.0
 local KEY_SEEN_STEP = 0.01
@@ -65,8 +66,7 @@ local function keyCode(key)
     return port * 16 + bit
 end
 
--- usual: how long a wait is unremarkable; a longer one is reported.
-local function awaitKeySeen(key, down, usual)
+local function awaitKeySeen(key, down)
     local code = keyCode(key)
     local waited = 0.0
     while (((keyMemory:read_u8(KEY_MAP + (code >> 3)) >> (code & 7)) & 1) == 1) ~= down do
@@ -78,28 +78,18 @@ local function awaitKeySeen(key, down, usual)
         emu.wait(KEY_SEEN_STEP)
         waited = waited + KEY_SEEN_STEP
     end
-    if waited > usual then
+    if waited > 0 then
         say("key %s seen %s after %.2f more emulated seconds", key.name, down and "down" or "up", waited)
     end
-end
-
-local function pressKey(key)
-    key:set_value(1)
-    awaitKeySeen(key, true, 0.10)
-end
-
-local function releaseKey(key)
-    key:clear_value()
-    awaitKeySeen(key, false, 0.20)
 end
 
 local function tap(key)
     key:set_value(1)
     emu.wait(0.10)
-    awaitKeySeen(key, true, 0)
+    awaitKeySeen(key, true)
     key:clear_value()
     emu.wait(0.20)
-    awaitKeySeen(key, false, 0)
+    awaitKeySeen(key, false)
 end
 
 local function findScreen()
@@ -145,7 +135,7 @@ end
 say("booting (%s emulated seconds)", BOOT_WAIT)
 emu.wait(BOOT_WAIT)
 tap(lKey)
-pressKey(commandKey); tap(oKey); releaseKey(commandKey)
+commandKey:set_value(1); tap(oKey); commandKey:clear_value()
 emu.wait(5)
 -- Select only the application. A select-all would also open the plain data
 -- files beside it, and their "application not found" alerts land on top of
@@ -173,7 +163,7 @@ if not STANDALONE then
     baselineFrame, baselineWidth, baselineHeight = captureSnapshotPixels(video)
     baselineSignal = completionSignalPixels(baselineFrame, baselineWidth, baselineHeight)
 end
-pressKey(commandKey); tap(oKey); releaseKey(commandKey)
+commandKey:set_value(1); tap(oKey); commandKey:clear_value()
 if STANDALONE then
     -- These apps have no screen completion marker. Allow a bounded interval
     -- for their own quit; the shell retrieves LOG.TXT only after MAME exits.
