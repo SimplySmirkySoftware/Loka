@@ -317,7 +317,7 @@ namespace
       if (hidden)
         this->hidden_.set(loka::core::String::Literal(value));
       else
-        this->text_.set(loka::core::String::Literal("IIII"));
+        this->text_.set(loka::core::String::Literal(value));
     }
     void writeButton(bool wider)
     {
@@ -1652,6 +1652,8 @@ namespace
       OFFSCREEN_HIDDEN_CHECK,
       OFFSCREEN_REVEAL_CHECK,
       OFFSCREEN_REVEALED_WRITE_CHECK,
+      OFFSCREEN_CONTENT_SETUP,
+      OFFSCREEN_CONTENT_CHECK,
       OFFSCREEN_DETACH_CHECK,
       RIBBON_SHOW,
       RIBBON_CHECK,
@@ -1797,7 +1799,13 @@ namespace
         target = self->textStyleChangeWindow_;
         break;
       case OFFSCREEN_SHOW: case OFFSCREEN_WRITE: case OFFSCREEN_SIBLING_CHECK:
-      case OFFSCREEN_TEXT_CHECK: case OFFSCREEN_HIDDEN_CHECK: case OFFSCREEN_REVEAL_CHECK: case OFFSCREEN_REVEALED_WRITE_CHECK: case OFFSCREEN_DETACH_CHECK:
+      case OFFSCREEN_TEXT_CHECK:
+      case OFFSCREEN_HIDDEN_CHECK:
+      case OFFSCREEN_REVEAL_CHECK:
+      case OFFSCREEN_REVEALED_WRITE_CHECK:
+      case OFFSCREEN_CONTENT_SETUP:
+      case OFFSCREEN_CONTENT_CHECK:
+      case OFFSCREEN_DETACH_CHECK:
         target = self->offscreenWindow_;
         break;
       case RIBBON_SHOW:
@@ -2916,7 +2924,8 @@ namespace
         const ToolboxPresentObservation &observation = stats.lastMovedPresentObservation;
         const Rect &damage = observation.damage();
         std::fprintf(self->log_,
-                     "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d verdict=%s "
+                     "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
+                     "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
                      "refusal=%s last_refusal=%s\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
@@ -2926,17 +2935,26 @@ namespace
                      damage.left,
                      damage.bottom,
                      damage.right,
+                     observation.contentInputs(),
+                     observation.unsupportedKinds(),
+                     observation.walkReasonNames().c_str(),
+                     observation.phaseBound(),
                      ToolboxPresentVerdictName(observation.verdict()),
                      ToolboxPresentRefusalName(observation.refusal()),
                      ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()));
         // The reveal writes one vertical origin by 160: its dirty source is
         // LAYOUT, so boundary apply requests layout_dirty (global layout only
         // adds a rect request). No OS damage remains at this settled entry and
-        // this Column has no ZStack units. Suppression capability is still absent.
+        // this Column has no ZStack units. The hidden-check phase wrote the
+        // offscreen Text with no draw in between (whole_window=0, rects=0), so
+        // its PROPS mark is still pending when the reveal lays it out:
+        // content_inputs=1 refuses first, ahead of the mounted EditText and
+        // PopupMenu (unsupported_kinds=2). Measured on MAME maciix.
         self->recordArm("viewport-full-draw-observed",
                         observation.dy() == 160 && observation.viewports() == 1
-                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL
-                            && observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
+                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 1
+                            && observation.unsupportedKinds() == 2
+                            && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS,
                         OFFSCREEN_REVEAL_CHECK);
         // Re-entry must establish history before another paint-only write.
         self->initial_ = stats;
@@ -2954,8 +2972,26 @@ namespace
       else if (self->phase_ == OFFSCREEN_REVEALED_WRITE_CHECK)
       {
         const PaintAnswer presented = offscreenAnswer(window, "Offscreen.Text", query);
-        self->recordArm("column-revealed-text-exact", whole == 0 && rects >= 1
-                        && presented.kind == PAINT_ANSWER_EXACT && presented.damage.width == 0, OFFSCREEN_DETACH_CHECK);
+        self->recordArm("column-revealed-text-exact",
+                        whole == 0 && rects >= 1 && presented.kind == PAINT_ANSWER_EXACT && presented.damage.width == 0,
+                        OFFSCREEN_CONTENT_SETUP);
+        self->offscreen_->scrollToTop();
+      }
+      else if (self->phase_ == OFFSCREEN_CONTENT_SETUP)
+      {
+        // One completion: retain the visible Text's input until the reveal walk.
+        loka::core::StateTrackerGuard transaction(self->offscreen_->tracker());
+        self->offscreen_->writeText(false, "MMMM");
+        self->offscreen_->reveal();
+        self->phase_ = OFFSCREEN_CONTENT_CHECK;
+      }
+      else if (self->phase_ == OFFSCREEN_CONTENT_CHECK)
+      {
+        const ToolboxPresentObservation &observation = stats.lastMovedPresentObservation;
+        self->recordArm("viewport-content-dirty-refused",
+                        observation.contentInputs() >= 1 && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS
+                            && observation.dy() == 160,
+                        OFFSCREEN_DETACH_CHECK);
         self->offscreen_->scrollToTop();
       }
       else

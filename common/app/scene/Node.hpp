@@ -735,6 +735,11 @@ namespace loka
         public:
           explicit LayoutInputsCheckpoint(Node &node)
               : node_(node), inputs_(node.uses_.mark) {}
+          /** The mark as it stood before layout; the node still owns and consumes it. */
+          NodeDirtyFlags inputs() const
+          {
+            return this->inputs_;
+          }
           void requeue() const { this->node_.requeueLayoutInputs(this->inputs_); }
         private:
           Node &node_;

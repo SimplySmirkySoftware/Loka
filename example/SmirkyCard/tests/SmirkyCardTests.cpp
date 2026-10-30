@@ -4502,6 +4502,124 @@ namespace
     LOKA_VERIFY(resolveWindowContentMargin(app.window(), loka::app::layout::RailSpacing(12, 4, 9)) == 0);
   }
 
+  void checkClipBoxLowering()
+  {
+    std::fputs("[pin] ClipBox props, per-kind clipping, validation, frozen copy and depth\n", stderr);
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("card('first',c=>({compose(){return VStack("
+                                    "ClipBox(Text('c')).TEST_ID('ClipPlain'),"
+                                    "ClipBox(Text('w'),{width:300}).TEST_ID('ClipWidth'),"
+                                    "ClipBox(Text('h'),{height:8}).TEST_ID('ClipHeight'),"
+                                    "ClipBox(Text('b'),{width:120,height:40}).TEST_ID('ClipBoth'),"
+                                    "ClipBox(Text('p'),{padding:12}).TEST_ID('ClipPadding'),"
+                                    "ClipBox(Text('s'),{padding:'standard'}).TEST_ID('ClipStandard'),"
+                                    "ClipBox(Text('e'),{}).TEST_ID('ClipEmpty'),"
+                                    "Box(Text('plain')).TEST_ID('Unclipped'))}}));",
+                                    error));
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    const char *ids[] = {
+        "ClipPlain", "ClipWidth", "ClipHeight", "ClipBoth", "ClipPadding", "ClipStandard", "ClipEmpty"};
+    const char *labels[] = {"c", "w", "h", "b", "p", "s", "e"};
+    const int widths[] = {0, 300, 0, 120, 0, 0, 0};
+    const int heights[] = {0, 0, 8, 40, 0, 0, 0};
+    for (unsigned i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node && node->asBoxNode());
+      loka::app::BoxDefinition expected = loka::app::ClipBox();
+      loka::app::BoxDefinition plain = loka::app::Box();
+      if (widths[i])
+      {
+        expected.width(widths[i]);
+        plain.width(widths[i]);
+      }
+      if (heights[i])
+      {
+        expected.height(heights[i]);
+        plain.height(heights[i]);
+      }
+      if (i == 4 || i == 5)
+      {
+        const loka::app::layout::LayoutGap padding =
+            i == 4 ? loka::app::layout::LayoutGap::of(12) : loka::app::layout::LayoutGap::standardWindowMargin();
+        expected.padding(padding);
+        plain.padding(padding);
+      }
+      const loka::app::BoxProps &actual = node->asBoxNode()->props;
+      LOKA_VERIFY(!(actual < expected.props) && !(expected.props < actual));
+      LOKA_VERIFY(actual < plain.props || plain.props < actual);
+      loka::app::scene::Node *text = node->asNestable()->childrenHead();
+      LOKA_VERIFY(text && text->asTextNode() && !text->nextInComposition);
+      LOKA_VERIFY(text->asTextNode()->props.text_->get().compare(loka::core::String::Literal(labels[i])) == 0);
+    }
+    loka::app::scene::Node *unclipped = windowNode(window, "Unclipped");
+    LOKA_VERIFY(unclipped && unclipped->asBoxNode());
+    const loka::app::BoxProps plain;
+    LOKA_VERIFY(!(unclipped->asBoxNode()->props < plain) && !(plain < unclipped->asBoxNode()->props));
+    const char *badBuilds[] = {"ClipBox()",
+                               "ClipBox(Text('a'),{},1)",
+                               "ClipBox([Text('a')])",
+                               "ClipBox(1)",
+                               "ClipBox({})",
+                               "ClipBox(Text('a'),[])",
+                               "ClipBox(Text('a'),5)",
+                               "ClipBox(Text('a'),{width:0})",
+                               "ClipBox(Text('a'),{width:-1})",
+                               "ClipBox(Text('a'),{width:1.5})",
+                               "ClipBox(Text('a'),{width:4097})",
+                               "ClipBox(Text('a'),{height:NaN})",
+                               "ClipBox(Text('a'),{height:Infinity})",
+                               "ClipBox(Text('a'),{width:'12'})",
+                               "ClipBox(Text('a'),{padding:-1})",
+                               "ClipBox(Text('a'),{padding:4097})",
+                               "ClipBox(Text('a'),{padding:1.5})",
+                               "ClipBox(Text('a'),{padding:'big'})",
+                               "ClipBox(Text('a'),{padding:null})",
+                               "ClipBox(Text('a'),{minWidth:10})",
+                               "ClipBox(Text('a'),{[Symbol('w')]:1})",
+                               "ClipBox(Text('a'),Object.create({width:10}))",
+                               "ClipBox(Text('a'),{width:undefined})",
+                               "ClipBox(Text('a'),null)"};
+    for (unsigned i = 0; i < sizeof(badBuilds) / sizeof(badBuilds[0]); ++i)
+    {
+      const std::string expression =
+          std::string("(()=>{try{") + badBuilds[i] + ";return false}catch(e){return e instanceof TypeError}})()";
+      expectJs(runtime, expression.c_str(), "true");
+    }
+    expectJs(runtime,
+             "(()=>{const child=Text('x'),o={width:300,height:8,padding:12},t=ClipBox(child,o).TEST_ID('copy');"
+             "o.width=1;o.height=2;o.padding=0;return "
+             "Object.isFrozen(t)&&t.child===child&&t.width===300&&t.height===8&&t.padding===12&&"
+             "![ClipBox(child),ClipBox(child,{})].some(t=>'width' in t||'height' in t)&&"
+             "[ClipBox(child),ClipBox(child,{})].every(Object.isFrozen)})()",
+             "true");
+
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ClipBox(Text('x')),{width:0})}}));",
+                        "JavaScript ClipBox has an invalid width, height or padding.");
+    checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ClipBox(Text('x')),{child:42})}}));",
+                        "JavaScript ClipBox has an invalid child.");
+    std::string tree = "Text('deep').TEST_ID('DeepClipBox')";
+    for (int depth = 0; depth < 11; ++depth)
+      tree = "ClipBox(" + tree + ")";
+    smirkycard::ScriptRuntime deepRuntime;
+    const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
+    LOKA_VERIFY(deepRuntime.loadBuiltin(script.c_str(), error));
+    WindowProps deepProps;
+    deepProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, deepRuntime));
+    NullWindow deepWindow(&context, deepProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
+    LOKA_VERIFY(windowNode(deepWindow, "DeepClipBox"));
+    const std::string refused = "card('first',c=>({compose(){return ClipBox(" + tree + ")}}));";
+    checkComposeRefusal(refused.c_str(), "exceeds depth 11");
+  }
+
   void checkBoxLowering()
   {
     std::fputs("[pin] Box independent dimensions, validation and depth\n", stderr);
@@ -4610,7 +4728,7 @@ namespace
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
-    for (int depth = 0; depth < 10; ++depth)
+    for (int depth = 0; depth < 11; ++depth)
       tree = "Box(" + tree + ")";
     smirkycard::ScriptRuntime deepRuntime;
     const std::string script = "card('first',c=>({compose(){return " + tree + "}}));";
@@ -4621,7 +4739,7 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
     LOKA_VERIFY(windowNode(deepWindow, "DeepBox"));
     const std::string refused = "card('first',c=>({compose(){return Box(" + tree + ")}}));";
-    checkComposeRefusal(refused.c_str(), "exceeds depth 10");
+    checkComposeRefusal(refused.c_str(), "exceeds depth 11");
     // A width on Object.prototype is not a claim: lowering reads the tree's own properties only.
     smirkycard::ScriptRuntime poisonRuntime;
     LOKA_VERIFY(poisonRuntime.loadBuiltin("Object.prototype.width=300;"
@@ -4808,7 +4926,7 @@ namespace
                         "Card(Show(s,ScrollView(Text('x'))))))}}});",
                         "cannot contain another ScrollView");
     std::string nested = "ScrollView(Text('nested'))";
-    for (int depth = 0; depth < 8; ++depth)
+    for (int depth = 0; depth < 9; ++depth)
       nested = "Box(" + nested + ")";
     const std::string nestedSource = "card('first',c=>({compose(){return ScrollView(" + nested + ")}}));";
     checkComposeRefusal(nestedSource.c_str(), "cannot contain another ScrollView");
@@ -4817,8 +4935,8 @@ namespace
     for (unsigned i = 0; i < 2; ++i)
     {
       std::string tree = "Text('deep').TEST_ID('Deep')";
-      for (int depth = 0; depth < 10; ++depth)
-        tree = std::string(depth == 9 ? wrappers[i] : "Card") + "(" + tree + ")";
+      for (int depth = 0; depth < 11; ++depth)
+        tree = std::string(depth == 10 ? wrappers[i] : "Card") + "(" + tree + ")";
       smirkycard::ScriptRuntime deepRuntime;
       const std::string source = "card('first',c=>({compose(){return " + tree + "}}));";
       LOKA_VERIFY(deepRuntime.loadBuiltin(source.c_str(), error));
@@ -4828,7 +4946,7 @@ namespace
       loka::dsl::testing::SceneTestAccess::updateAttached(*deepWindow.scene(), true);
       LOKA_VERIFY(windowNode(deepWindow, "Deep"));
       const std::string refused = "card('first',c=>({compose(){return Card(" + tree + ")}}));";
-      checkComposeRefusal(refused.c_str(), "exceeds depth 10");
+      checkComposeRefusal(refused.c_str(), "exceeds depth 11");
     }
   }
 
@@ -4957,6 +5075,20 @@ namespace
              "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===10)})()",
              "true");
     expectJs(h.runtime,
+             "(()=>{const list=[],carousel=[];function walk(t,d,p){"
+             "if(t.children && t.children[1] && t.children[1].testId){"
+             "const id=t.children[1].testId,thumb=t.children[0];"
+             "if(/Laptop\\.(Open|Narrow)\\./.test(id))list.push("
+             "thumb.kind===ClipBox(Text('')).kind && thumb.child.kind===ImageView(laptop.thumbs[0]).kind"
+             " && d+2===11);"
+             "if(/Laptop\\.Wide\\./.test(id))carousel.push("
+             "p.kind===Card(Text('')).kind && t.kind===VStack().kind"
+             " && thumb.kind===ImageView(laptop.thumbs[0]).kind);}"
+             "if(t.child)walk(t.child,d+1,t);if(t.children)t.children.forEach(c=>walk(c,d+1,t));}"
+             "walk(laptop.compose(),0,null);return list.length===26 && list.every(Boolean)"
+             " && carousel.length===13 && carousel.every(Boolean)})()",
+             "true");
+    expectJs(h.runtime,
              "[laptop.list(),laptop.detailPage()].every(t=>t.kind===ZStack(Text('')).kind&&t.blurUnit===1&&"
              "t.children[0].kind===ScrollView(Text('')).kind&&t.children[0].insetTop===30&&"
              "t.children[1].kind===Box(Text('')).kind&&t.children[1].height===30)",
@@ -4967,7 +5099,23 @@ namespace
     LOKA_VERIFY(windowNode(*h.window, "Laptop.About.Name"));
     checkLaptopBands(*h.window);
     // Inspect the actual ImageView inputs, not merely the existence of thumbs.
-    expectJs(h.runtime, "laptop.machineCard(0,150,94,'x','x').child.children[0].seat===laptop.thumbs[0]", "true");
+    expectJs(
+        h.runtime, "laptop.machineCard(0,150,94,'x','x',true).child.children[0].child.seat===laptop.thumbs[0]", "true");
+  }
+
+  loka::app::scene::Node *laptopThumbnail(loka::app::scene::Node *node, const char *buttonId)
+  {
+    if (!node)
+      return 0;
+    loka::app::scene::INestable *nest = node->asNestable();
+    loka::app::scene::Node *first = nest ? nest->childrenHead() : 0;
+    if (node->asStackNode() && first && first->asBoxNode() && first->nextInComposition
+        && find(first->nextInComposition, buttonId))
+      return first;
+    for (loka::app::scene::Node *child = first; child; child = child->nextInComposition)
+      if (loka::app::scene::Node *thumbnail = laptopThumbnail(child, buttonId))
+        return thumbnail;
+    return 0;
   }
 
   void checkLaptopScenario()
@@ -5079,6 +5227,15 @@ namespace
             const std::string twoColumns = std::string("Laptop.Open.") + ids[j];
             LOKA_VERIFY((windowNode(*h.window, oneColumn.c_str()) != 0) == narrow);
             LOKA_VERIFY((windowNode(*h.window, twoColumns.c_str()) != 0) == !narrow);
+            loka::app::scene::Node *thumbnail =
+                laptopThumbnail(loka::dsl::testing::SceneTestAccess::rootNode(*h.window->scene()),
+                                narrow ? oneColumn.c_str() : twoColumns.c_str());
+            LOKA_VERIFY(thumbnail && thumbnail->asBoxNode());
+            const loka::app::BoxDefinition expectedClip = loka::app::ClipBox();
+            const loka::app::BoxProps &actual = thumbnail->asBoxNode()->props;
+            LOKA_VERIFY(!(actual < expectedClip.props) && !(expectedClip.props < actual));
+            loka::app::scene::Node *image = thumbnail->asNestable()->childrenHead();
+            LOKA_VERIFY(image && image->asImageViewNode() && !image->nextInComposition);
           }
         }
       }
@@ -5316,6 +5473,7 @@ int main(int argc, char **argv)
     checkCardWindowMargin();
     checkCardMarginPlacement();
     checkBoxLowering();
+    checkClipBoxLowering();
     checkMinimumLowerings();
     checkZStackLowering();
     checkLoweringRefusals();
@@ -5456,6 +5614,7 @@ int main(int argc, char **argv)
   checkCardWindowMargin();
   checkCardMarginPlacement();
   checkBoxLowering();
+  checkClipBoxLowering();
   checkMinimumLowerings();
   checkLoweringRefusals();
   checkTypedSeats();

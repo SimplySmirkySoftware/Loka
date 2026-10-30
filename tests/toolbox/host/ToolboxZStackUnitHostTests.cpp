@@ -7,6 +7,7 @@
 #include "ToolboxDirtyReplay.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "app/nodes/nestable/Box.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/nodes/nestable/Show.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -1145,31 +1146,59 @@ namespace
     controller.clearControls();
   }
   /** Real dispatch/layout/render with an app-origin state and optional foreground unit. */
+  /** The host base omits projected preparation; mirror the production door so
+      Text really owns a context and consumes its pre-layout inputs. */
+  class PresentController : public ToolboxScenePlatformController
+  {
+  public:
+    explicit PresentController(ToolboxWindow *window)
+        : ToolboxScenePlatformController(window)
+    {
+    }
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      if (!node || !this->projectLayoutState(state))
+        return false;
+      IPlatformNodeHandler *handler = this->nodeHandlerRegistry_.find(node);
+      LOKA_VERIFY(handler);
+      NodeContext *context = handler->ensureContext(node, this, state);
+      if (!context)
+        return false;
+      if (IBoundaryTaggedContext *tagged = context->asBoundaryTagged())
+        tagged->setBoundary(this->activeLayoutBoundary());
+      return true;
+    }
+  };
   struct PresentFixture
   {
     ToolboxWindow window;
     HostPortScope port;
-    ToolboxScenePlatformController controller;
+    PresentController controller;
     MutableState<Frame> origin;
     NodeState<Frame> viewportState;
-    ScrollViewNode viewport;
-    PresentFixture(bool foreground = false, int initialOrigin = 0)
+    ZStackNode stack;
+    ScrollViewNode &viewport;
+    PresentFixture(bool foreground = false, int initialOrigin = 0, Node *content = 0)
         : port(window.window()),
           controller(&window),
           origin(Frame(0, initialOrigin, 0, 0)),
           viewportState(&origin, 0),
-          viewport(ScrollViewProps(viewportState))
+          stack(ZStackProps()),
+          viewport(*new ScrollViewNode(ScrollViewProps(viewportState)))
     {
-      if (foreground)
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(this->controller));
+      LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(this->controller.gapLayoutRegistry));
+      if (!content)
       {
-        ZStackNode *stack = new ZStackNode(ZStackProps());
-        stack->addChild(new Probe("observation-ground", 600));
-        stack->addChild(new Probe("observation-foreground", 80));
-        this->viewport.addChild(stack);
+        BoxNode *box = new BoxNode(Box().size(180, 600).props);
+        box->addChild(new TextNode(TextProps("content")));
+        content = box;
       }
-      else
-        this->viewport.addChild(new Probe("observation-content", 600));
-      this->controller.rootNode_ = &this->viewport;
+      this->viewport.addChild(content);
+      this->stack.addChild(&this->viewport);
+      if (foreground)
+        this->stack.addChild(new Probe("observation-foreground", 80));
+      this->controller.rootNode_ = foreground ? static_cast<Node *>(&this->stack) : &this->viewport;
       this->window.scenePlatformController_ = &this->controller;
       this->window.requestInvalidate();
       this->window.flushInvalidate();
@@ -1196,6 +1225,255 @@ namespace
       this->window.flushInvalidate();
     }
   };
+  class UnknownPresentLeaf : public Probe
+  {
+  public:
+    UnknownPresentLeaf()
+        : Probe("unknown", 600)
+    {
+    }
+    explicit UnknownPresentLeaf(const RectSurfaceProps &)
+        : Probe("unknown", 600)
+    {
+    }
+    virtual NodeKind kind() const
+    {
+      return NODE_KIND_UNKNOWN;
+    }
+  };
+  class TransparentPresentNode : public NestableNode
+  {
+  };
+  void presentUnsupportedKind()
+  {
+    PresentFixture leaf(false, 0, new UnknownPresentLeaf());
+    leaf.scroll(17);
+    LOKA_VERIFY(leaf.last().unsupportedKinds() >= 1);
+    LOKA_VERIFY(leaf.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    TransparentPresentNode *component = new TransparentPresentNode();
+    BoxNode *box = new BoxNode(Box().size(180, 600).props);
+    box->addChild(new TextNode(TextProps("transparent content")));
+    component->addChild(box);
+    PresentFixture transparent(false, 0, component);
+    transparent.scroll(17);
+    LOKA_VERIFY(transparent.last().unsupportedKinds() == 0);
+    LOKA_VERIFY(transparent.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+  }
+  void presentRefusedVisit()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
+    ProjectionParentScope viewport(window.window(), 0, -1000, Frame(0, 0, 300, 200));
+    ProjectionViewportScopeGuard viewportScope(controller.projectionParentScopes_, viewport);
+    ToolboxViewportContentObservation content;
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, content);
+      UnknownPresentLeaf leaf;
+      // Native Y fits, but restoring the content Y crosses SHRT_MAX.
+      leaf.requeueLayoutInputs(NODE_DIRTY_PROPS);
+      LayoutState state = seat();
+      state.y = SHRT_MAX - 100;
+      LayoutNode(&leaf, state, &controller, 0);
+      LOKA_VERIFY(content.contentInputs() == 0 && content.unsupportedKinds() == 0);
+      LOKA_VERIFY(Node::LayoutInputsCheckpoint(leaf).inputs() == NODE_DIRTY_PROPS);
+    }
+    LOKA_VERIFY(controller.activeViewportContent_ == 0);
+  }
+  void presentClipBoxRefused()
+  {
+    BoxNode *box = new BoxNode(Box().size(180, 600).clipChildren().props);
+    box->addChild(new TextNode(TextProps("clipped")));
+    PresentFixture f(false, 0, box);
+    f.scroll(17);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+  }
+  void presentCardBandPhase()
+  {
+    CardNode *card = new CardNode(CardProps());
+    card->addChild(new CardBandNode(CardBandProps(CARD_BAND_TOP)));
+    card->addChild(new BoxNode(Box().size(180, 600).props));
+    PresentFixture f(false, 0, card);
+    f.scroll(17);
+    LOKA_VERIFY(f.last().phaseBound() >= 1);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_DITHER_PHASE);
+    f.scroll(33);
+    LOKA_VERIFY(f.last().dy() == 16);
+    LOKA_VERIFY(f.last().phaseBound() >= 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+  }
+  template <int Mode> class PresentLiveNode;
+  template <int Mode>
+  class PresentLiveNode : public StdCompositionBoundaryNodeBase<BoundaryPropsFor<PresentLiveNode<Mode> > >
+  {
+  public:
+    typedef BoundaryPropsFor<PresentLiveNode<Mode> > PresentLiveProps;
+    typedef typename PresentLiveProps::TypeTag TypeTag;
+    NodeState<Frame> viewport;
+    NodeState<String> text;
+    NodeState<TextStyle> style;
+    NodeState<int> width;
+    NodeState<Frame> stationaryViewport;
+    Request<ScrollTarget> request;
+    explicit PresentLiveNode(const PresentLiveProps &props)
+        : StdCompositionBoundaryNodeBase<PresentLiveProps>(props)
+    {
+      this->state(this->viewport, Frame());
+      this->state(this->text, String("before"));
+      this->state(this->style, TextStyle());
+      this->state(this->width, 180);
+      this->state(this->stationaryViewport, Frame());
+      this->state(this->request, ScrollTarget::None());
+    }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
+    virtual void composeNode(NodeComposition &c)
+    {
+      if (Mode == 1)
+        c.declare(
+            Column().gap(0) << (Box().size(180, 100)
+                                << (ScrollView(this->stationaryViewport)
+                                    << (Box().size(180, 600)
+                                        << Text(this->text.state())
+                                        << NodeDefinition<RectSurfaceProps, UnknownPresentLeaf>(RectSurfaceProps()))))
+                            << (Box().size(180, 100)
+                                << (ScrollView(this->viewport) << (Box().size(180, 600) << Text("clean")))));
+      else
+        c.declare(
+            ScrollView(this->viewport).scrollTo(this->request)
+            << (Box().width(this->width.state()).height(600) << (Text(this->text.state()) + this->style.state())));
+    }
+    virtual void declareBindings(BindingToken &token)
+    {
+      if (Mode == 2)
+        token.watch(*this->viewport.state(), this, &PresentLiveNode::published);
+    }
+    void published()
+    {
+      if (this->viewport.get().y)
+      {
+        StateTrackerGuard transaction(this->tracker());
+        this->style.set(TextStyle().color(TEXT_COLOR_RED));
+      }
+    }
+  };
+  template <int Mode> struct PresentLiveFixture
+  {
+    ToolboxWindow window;
+    HostPortScope port;
+    PresentController controller;
+    Scene scene;
+    PresentLiveNode<Mode> *root;
+    PresentLiveFixture()
+        : port(window.window()),
+          controller(&window),
+          scene((Boundary<PresentLiveNode<Mode> >()))
+    {
+      LOKA_VERIFY(RegisterToolboxBuiltInSupport(this->controller));
+      LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(this->controller.gapLayoutRegistry));
+      LOKA_VERIFY(this->scene.mount(&this->controller));
+      loka::dsl::testing::SceneTestAccess::updateAttached(this->scene, true);
+      this->root = static_cast<PresentLiveNode<Mode> *>(loka::dsl::testing::SceneTestAccess::rootBoundary(this->scene));
+      this->controller.rootNode_ = this->root;
+      this->window.scenePlatformController_ = &this->controller;
+      this->draw();
+    }
+    ~PresentLiveFixture()
+    {
+      this->controller.rootNode_ = 0;
+      this->window.scenePlatformController_ = 0;
+      loka::dsl::testing::SceneTestAccess::unmount(this->scene);
+    }
+    void draw()
+    {
+      loka::dsl::testing::SceneTestAccess::flushInvalidation(this->scene);
+      this->window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      this->window.flushInvalidate();
+    }
+    const ToolboxPresentObservation &last() const
+    {
+      return this->controller.debugStatsForTesting().lastMovedPresentObservation;
+    }
+  };
+  void presentSiblingViewport()
+  {
+    PresentLiveFixture<1> f;
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->text.set(String("stationary dirty text"));
+      f.root->viewport.set(Frame(0, 17, 0, 0));
+    }
+    f.draw();
+    LOKA_VERIFY(f.last().viewports() == 1 && f.last().dy() == 17);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 0 && f.last().contentInputs() == 0);
+  }
+  void presentLatePublication()
+  {
+    PresentLiveFixture<2> f;
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->request.set(ScrollTarget::Origin(0, 17));
+    }
+    f.draw();
+    const ToolboxPresentObservation moved = f.controller.debugStatsForTesting().lastPresentObservation;
+    f.draw();
+    const ToolboxPresentObservation next = f.controller.debugStatsForTesting().lastPresentObservation;
+    std::printf("late publication: moved inputs=%u walk=%u; next inputs=%u walk=%u\n",
+                moved.contentInputs(),
+                moved.walkReasons(),
+                next.contentInputs(),
+                next.walkReasons());
+    // Publication writes the style after child layout. Boundary apply is deferred:
+    // the request settles first, then the next full pass sees the Text input and move.
+    LOKA_VERIFY(moved.contentInputs() == 0 && moved.walkReasons() == 0);
+    LOKA_VERIFY(next.contentInputs() == 1 && next.walkReasons() == 0);
+    LOKA_VERIFY(next.dy() == 17 && next.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS);
+  }
+
+  void presentContentInputs()
+  {
+    for (unsigned variant = 0; variant < 2; ++variant)
+    {
+      PresentLiveFixture<0> f;
+      {
+        StateTrackerGuard transaction(f.root->tracker());
+        if (variant)
+          f.root->text.set(String("after"));
+        else
+          f.root->style.set(TextStyle().color(TEXT_COLOR_RED));
+        f.root->viewport.set(Frame(0, 17, 0, 0));
+      }
+      f.draw();
+      LOKA_VERIFY(f.last().contentInputs() == 1);
+      LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS);
+      {
+        StateTrackerGuard transaction(f.root->tracker());
+        f.root->viewport.set(Frame(0, 34, 0, 0));
+      }
+      f.draw();
+      LOKA_VERIFY(f.last().contentInputs() == 0);
+      LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    }
+  }
+  void presentContainerInputNotCounted()
+  {
+    // Known gap: Box never takes its mark despite moved descendant geometry.
+    // PR 2's per-leaf translation check (T1 placement facts) closes this gap.
+    PresentLiveFixture<0> f;
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->width.set(170);
+      f.root->viewport.set(Frame(0, 17, 0, 0));
+    }
+    f.draw();
+    LOKA_VERIFY(f.last().contentInputs() == 0);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 0);
+  }
   void presentReasons()
   {
     PresentFixture f;
@@ -1246,7 +1524,9 @@ namespace
     {
       BoxNode *box = new BoxNode(Box().size(180, 100).props);
       ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(i ? secondState : firstState));
-      scroll->addChild(new Probe("sibling-scroll-content", 600));
+      BoxNode *content = new BoxNode(Box().size(180, 600).props);
+      content->addChild(new TextNode(TextProps("sibling content")));
+      scroll->addChild(content);
       box->addChild(scroll);
       column.addChild(box);
     }
@@ -1345,25 +1625,53 @@ namespace
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3);
-    observation.noteViewportMove(viewport, 0, 4);
+    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 4, ToolboxViewportContentObservation());
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3);
+    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentObservation());
     observation.complete(1);
     LOKA_VERIFY(observation.viewports() == 1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3);
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3);
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteDamage(outside);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT);
+    // Each later refusal remains present while the earlier one wins.
+    for (unsigned gate = 0; gate < 4; ++gate)
+    {
+      observation.reset();
+      observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      ToolboxPresentObservation::Interval interval(observation);
+      ToolboxViewportContentObservation content;
+      if (gate == 0)
+        content.noteContentInputs();
+      if (gate < 2)
+        observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
+      if (gate < 3)
+        content.noteUnsupportedKind();
+      content.notePhaseBound();
+      observation.noteViewportMove(viewport, 0, 3, content);
+      observation.noteDamage(outside);
+      observation.complete(1);
+      LOKA_VERIFY(observation.refusal()
+                  == (gate == 0   ? TOOLBOX_PRESENT_CONTENT_INPUTS
+                      : gate == 1 ? TOOLBOX_PRESENT_REQUESTS_DURING_WALK
+                      : gate == 2 ? TOOLBOX_PRESENT_UNSUPPORTED_KIND
+                                  : TOOLBOX_PRESENT_DITHER_PHASE));
+      LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY));
+      LOKA_VERIFY(observation.walkReasonNames() == (gate < 2 ? "child_dirty" : "none"));
+    }
+    LOKA_VERIFY(observation.contentInputs() == 0 && observation.unsupportedKinds() == 0);
+    LOKA_VERIFY(observation.walkReasons() == 0);
+    LOKA_VERIFY(observation.phaseBound() == 0);
     observation.reset();
     {
       ToolboxPresentObservation::Interval interval(observation);
@@ -1861,6 +2169,16 @@ int main(int argc, char **argv)
                          "PresentFlushDamage",
                          "PresentReset",
                          "PresentOrder",
+                         "PresentRefusedVisit",
+                         "PresentSiblingViewport",
+                         "PresentLatePublication",
+
+                         "PresentContentInputs",
+                         "PresentUnsupportedKind",
+                         "PresentContainerInputNotCounted",
+                         "PresentCardBandPhase",
+                         "PresentClipBoxRefused",
+
                          "ClipFrameProjection",
                          "BandGeometry",
                          "BandLifetime",
@@ -1925,6 +2243,22 @@ int main(int argc, char **argv)
     presentDamage(true);
   else if (std::strcmp(argv[1], "PresentReset") == 0)
     presentReset();
+  else if (std::strcmp(argv[1], "PresentContentInputs") == 0)
+    presentContentInputs();
+  else if (std::strcmp(argv[1], "PresentUnsupportedKind") == 0)
+    presentUnsupportedKind();
+  else if (std::strcmp(argv[1], "PresentContainerInputNotCounted") == 0)
+    presentContainerInputNotCounted();
+  else if (std::strcmp(argv[1], "PresentCardBandPhase") == 0)
+    presentCardBandPhase();
+  else if (std::strcmp(argv[1], "PresentClipBoxRefused") == 0)
+    presentClipBoxRefused();
+  else if (std::strcmp(argv[1], "PresentSiblingViewport") == 0)
+    presentSiblingViewport();
+  else if (std::strcmp(argv[1], "PresentLatePublication") == 0)
+    presentLatePublication();
+  else if (std::strcmp(argv[1], "PresentRefusedVisit") == 0)
+    presentRefusedVisit();
   else if (std::strcmp(argv[1], "PresentOrder") == 0)
     presentOrder();
   else if (std::strcmp(argv[1], "StaticNoRequests") == 0)

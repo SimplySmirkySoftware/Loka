@@ -169,6 +169,7 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
     range = &band;
   }
 
+  ToolboxViewportContentObservation contentObservation;
   const short seatY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
@@ -183,6 +184,7 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
       return ToolboxScrollViewLayoutResult();
     }
 
+    ToolboxViewportContentObservation::Scope contentScope(this->activeViewportContent_, contentObservation);
     loka::app::scene::LayoutState childState = state;
     childState.height = static_cast<short>(contentRect.bottom - contentRect.top);
     childState.width = static_cast<short>(childWidth);
@@ -253,7 +255,7 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
           const int dx = horizontal.clampedOffset - row.placedOrigin.x;
           const int dy = translation - row.placedOrigin.y;
           if (dx != 0 || dy != 0)
-            this->observation_.noteViewportMove(contentRect, dx, dy);
+            this->observation_.noteViewportMove(contentRect, dx, dy, contentObservation);
         }
         row.placedOrigin = loka::core::Frame(horizontal.clampedOffset, translation, 0, 0);
         row.spans = spans;
