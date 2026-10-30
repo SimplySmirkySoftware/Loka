@@ -36,7 +36,7 @@ namespace loka
                                   const LayoutStateT &state,
                                   const RowLayoutMetrics &metrics,
                                   const RailSpacing &spacing,
-                                  const INaturalWidthSource *source,
+                                  const INaturalSizeSource *source,
                                   void *context,
                                   int (*layoutChild)(void *, loka::app::scene::Node *, const LayoutStateT &),
                                   int gap,
@@ -68,7 +68,8 @@ namespace loka
                                                                         metrics.editTextHeight,
                                                                         metrics.popupMenuHeight,
                                                                         metrics.textHeight,
-                                                                        metrics.imageFallbackHeight);
+                                                                        metrics.imageFallbackHeight,
+                                                                        source);
             if (h > rowHeight)
             {
               rowHeight = h;
@@ -110,7 +111,8 @@ namespace loka
                                                                                   metrics.editTextHeight,
                                                                                   metrics.popupMenuHeight,
                                                                                   metrics.textHeight,
-                                                                                  metrics.imageFallbackHeight);
+                                                                                  metrics.imageFallbackHeight,
+                                                                                  source);
             int offset = 0;
             const int remain = rowHeight - childHeight;
             if (remain > 0)

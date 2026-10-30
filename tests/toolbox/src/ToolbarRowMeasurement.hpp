@@ -12,7 +12,7 @@ namespace loka
   {
     /** A synchronous pass; node construction, painting and reporting are outside
         its clock bracket. The caller owns the Row and the measurement port. */
-    inline int MeasureToolbarRowPass(app::StackNode &row, int offer, const app::layout::INaturalWidthSource &source)
+    inline int MeasureToolbarRowPass(app::StackNode &row, int offer, const app::layout::INaturalSizeSource &source)
     {
       app::layout::RowWidthConsultation widths(row.childrenHead(),
                                                row.childrenCount(),
@@ -44,7 +44,7 @@ namespace loka
     template <class Clock>
     ToolbarRowTimes MeasureToolbarRow(app::StackNode &row,
                                       int offer,
-                                      const app::layout::INaturalWidthSource &source,
+                                      const app::layout::INaturalSizeSource &source,
                                       Clock &clock,
                                       std::FILE *out,
                                       const char *name)

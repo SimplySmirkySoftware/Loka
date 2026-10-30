@@ -66,4 +66,7 @@ void testWin32CardBandPaintOnlyClassification();
 void testWin32TextFamilyDpiReplacement();
 void testWin32TextFamilyGeometry();
 
+void testWin32TextNaturalHeightAlignedRow();
+void testWin32TextNaturalHeightAnswersAndDeclines();
+
 #endif // LOKA_TESTS_WIN32_NODE_HANDLER_ENSURE_TESTS_HPP
