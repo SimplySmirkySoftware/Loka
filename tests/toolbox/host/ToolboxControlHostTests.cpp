@@ -262,7 +262,8 @@ namespace
     const Point point = {40, 90};
     controller.publishFixturePressOrder();
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(controller, point));
-    LOKA_VERIFY(value.get().y == (page ? 166 : off ? 10 : 8));
+    // Two callbacks: page = 20 + 2 * 72 - 12 (viewport 80, page (80 - 1) & ~7), line = 20 + 2 * 16 - 12.
+    LOKA_VERIFY(value.get().y == (page ? 152 : off ? 40 : 8));
     LOKA_VERIFY(value.get().x == 7 && value.get().width == 90 && value.get().height == 80);
     LOKA_VERIFY(notices.count == (page || off ? 1u : 0u));
     LOKA_VERIFY(controller.pendingDirtyRects_.size() == (page || off ? 1u : 0u));

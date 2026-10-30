@@ -2,6 +2,17 @@
 #include "ToolboxPaintSuppressScope.hpp"
 namespace
 {
+  /** One arrow click moves 16 pixels, the Win32 rail's line (kLineStepPixels).
+      A multiple of 8 keeps CardBand's window-anchored 8x8 dither phase, so a
+      viewport presented by shifting pixels matches a repaint (#1043, Q-E). */
+  const int kViewportLineStepPixels = 16;
+  /** One page is the viewport extent less one line of overlap, rounded down to
+      a multiple of 8 for the same phase reason; never less than one line. */
+  int ViewportPageStep(int extent)
+  {
+    const int page = (extent - 1) & ~7;
+    return page > 0 ? page : kViewportLineStepPixels;
+  }
   void ApplyViewportScrollBarValue(ToolboxScrollBarLedger::ScrollBarControlBinding *native,
                                    const ToolboxScrollViewMetrics &metrics)
   {
@@ -74,8 +85,8 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                        viewportRect, horizontalBar, sizeBox, edges, scrollView->props.contentInsets_),
                                    0,
                                    metrics.maximum,
-                                   1,
-                                   viewportHeight > 1 ? viewportHeight - 1 : 1,
+                                   kViewportLineStepPixels,
+                                   ViewportPageStep(viewportHeight),
                                    scrollView->nativeLifetimeHint(),
                                    native,
                                    &movedFrom))
@@ -95,8 +106,8 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                      ToolboxScrollViewHorizontalBarRect(viewportRect, sizeBox, edges),
                                      0,
                                      horizontal.maximum,
-                                     1,
-                                     childWidth > 1 ? childWidth - 1 : 1,
+                                     kViewportLineStepPixels,
+                                     ViewportPageStep(childWidth),
                                      scrollView->nativeLifetimeHint(),
                                      native,
                                      &movedFrom))
