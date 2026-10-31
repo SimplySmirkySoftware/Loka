@@ -35,8 +35,9 @@ public:
     if (this->style_.hasWeight_)
       portFace = static_cast<Style>((portFace & ~bold)
           | (this->style_.weight_ == loka::app::TEXT_WEIGHT_BOLD ? bold : 0));
-    if (this->style_.hasItalic_)
-      portFace = static_cast<Style>((portFace & ~italic) | (this->style_.italic_ ? italic : 0));
+    bool on = false;
+    if (this->style_.queryItalic(on))
+      portFace = static_cast<Style>((portFace & ~italic) | (on ? italic : 0));
     return portFace;
   }
 

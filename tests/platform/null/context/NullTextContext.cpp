@@ -151,8 +151,9 @@ NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
   this->fontSize = loka::app::SyntheticTextSize(textStyle.size_);
   if (textStyle.hasWeight_)
     weight = textStyle.weight_;
-  if (textStyle.hasItalic_)
-    italic = textStyle.italic_;
+  bool on = false;
+  if (textStyle.queryItalic(on))
+    italic = on;
   if (props.blockStyle_.hasWrap_)
     wrap = props.blockStyle_.wrap_;
   if (props.blockStyle_.hasTruncation_)

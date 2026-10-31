@@ -1570,3 +1570,5 @@ LOKA_TEST(testNullNaturalHeightMatchesLeafAndPreservesFailures)
 
 LOKA_TEST(testItalicOrderAndMergeTable)
 LOKA_TEST(testNullItalicPaintRecording)
+
+LOKA_TEST(testTextToggleValueContract)
