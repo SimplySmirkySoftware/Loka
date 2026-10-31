@@ -650,6 +650,14 @@ namespace
     int depth, entries, exits;
 
   private:
+    virtual bool openBatch()
+    {
+      return false;
+    }
+    virtual void closeBatch()
+    {
+      LOKA_VERIFY(false);
+    }
     virtual void enterBusy()
     {
       ++this->depth;

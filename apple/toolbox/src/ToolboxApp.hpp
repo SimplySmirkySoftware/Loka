@@ -48,9 +48,18 @@ private:
   CursorOwner &operator=(const CursorOwner &);
   virtual void enterBusy();
   virtual void exitBusy();
+  virtual bool openBatch();
+  virtual void closeBatch();
+  enum BatchPhase
+  {
+    BATCH_NONE,
+    BATCH_OPEN,
+    BATCH_HELD
+  };
   ToolboxApp &app_;
   HoverCursor hoverCursor_;
   short busyDepth_;
+  BatchPhase batchPhase_;
   AppliedCursor lastApplied_;
   unsigned long nativeApplies_;
   unsigned long outerEntries_;
