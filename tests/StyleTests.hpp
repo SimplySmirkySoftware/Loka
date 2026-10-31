@@ -1,6 +1,8 @@
 #ifndef LOKA_TESTS_STYLE_TESTS_HPP
 #define LOKA_TESTS_STYLE_TESTS_HPP
 
+void testItalicOrderAndMergeTable();
+void testNullItalicPaintRecording();
 void testTextColorVocabularyAndMerge();
 void testTextStyleMergeAndSizeVocabulary();
 void testTextPropsDeclaredStyleGuardsNativeLabelConfiguration();

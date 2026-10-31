@@ -381,3 +381,58 @@ void testRetainedTextFamilyRecording()
   LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_UNSET);
   SceneTestAccess::unmount(scene);
 }
+
+namespace
+{
+  loka::app::TextStyle italicCase(int index)
+  {
+    using namespace loka::app;
+    TextStyle style;
+    if (index & 1)
+      style.family(TEXT_FAMILY_MONOSPACE);
+    if (index & 2)
+      style.weight(TEXT_WEIGHT_NORMAL);
+    if (index & 4)
+      style.size_ = TextSizeValue::points(0);
+    if (index / 8)
+      style.italic(index / 8 == 2);
+    return style;
+  }
+} // namespace
+
+void testItalicOrderAndMergeTable()
+{
+  // Frozen before the fold: index = italic * 8 + zeroSize * 4 + normalWeight * 2 + family.
+  // Rank records every pair's exact old order, including presence between off and on.
+  const int rank[] = {0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+  for (int i = 0; i < 24; ++i)
+    for (int j = 0; j < 24; ++j)
+    {
+      const loka::app::TextStyle left = italicCase(i), right = italicCase(j);
+      LOKA_VERIFY((left == right) == (i == j));
+      LOKA_VERIFY((left != right) == (i != j));
+      LOKA_VERIFY((left < right) == (rank[i] < rank[j]));
+      const int mergedItalic = j / 8 ? j / 8 : i / 8;
+      LOKA_VERIFY(left + right == italicCase(mergedItalic * 8 + ((i | j) & 7)));
+      for (int k = 0; k < 24; ++k)
+        LOKA_VERIFY(!(left < right) || !(right < italicCase(k)) || left < italicCase(k));
+    }
+}
+
+void testNullItalicPaintRecording()
+{
+  using namespace loka::app;
+  const TextStyle styles[] = {TextStyle(), TextStyle().italic(false), TextStyle().italic(true)};
+  for (int i = 0; i < 3; ++i)
+  {
+    NullScenePlatformController platform;
+    TextNode node((Text("italic") + styles[i]).props);
+    loka::app::scene::LayoutState state;
+    state.width = 100;
+    platform.projectLayoutForTesting(&node, state);
+    const NullTextContext *context = static_cast<NullTextContext *>(node.getContext());
+    LOKA_VERIFY(context != 0);
+    LOKA_VERIFY(loka::app::testing::NullTextStyleAccess::italic(*context) == (i == 2));
+    LOKA_VERIFY(styles[i].declaresFont() == (i != 0));
+  }
+}
