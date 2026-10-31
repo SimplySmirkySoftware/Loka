@@ -3,6 +3,7 @@
 #include "ToolboxDialogConstruction.hpp"
 #include "unicode/MacTextEditorSubset.h"
 #include <Gestalt.h>
+#include <Memory.h>
 #include <Processes.h>
 namespace loka
 {
@@ -10,6 +11,12 @@ namespace loka
   {
     UnicodeText::Session::Session()
     {
+      // Textension sizes its allocations against the zone as it stands, not
+      // against the room the zone could still grow into: with the zone
+      // unexpanded (FreeMem 1280 bytes on Mac OS 9.2.1) TXNNewObject answers
+      // memFullErr. Loka's own accounting already covers both shapes
+      // (queryLargestContiguousAllocation), so the TE rail stays as it is.
+      MaxApplZone();
       if (TXNInitTextension(0, 0, 0) != noErr)
       {
         const char message[] = "The text engine could not start. Please quit.";

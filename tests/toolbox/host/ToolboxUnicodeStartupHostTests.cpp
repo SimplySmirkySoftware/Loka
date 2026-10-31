@@ -49,7 +49,8 @@ int main()
     LOKA_VERIFY(TextensionFake::inits() == 1 && TextensionFake::terminates() == 0);
   }
   LOKA_VERIFY(TextensionFake::terminates() == 1 && TextensionFake::live() == 0);
-  LOKA_VERIFY(TextensionFake::calls()[0] == "init" && TextensionFake::calls()[1] == "terminate");
+  LOKA_VERIFY(TextensionFake::calls()[0] == "maxapplzone" && TextensionFake::calls()[1] == "init"
+              && TextensionFake::calls()[2] == "terminate");
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
   if (!child)

@@ -167,3 +167,7 @@ Boolean TXNTSMCheck(TXNObject object, EventRecord *)
   record("tsm");
   return false;
 }
+void MaxApplZone()
+{
+  record("maxapplzone");
+}
