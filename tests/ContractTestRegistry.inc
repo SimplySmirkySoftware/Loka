@@ -1579,6 +1579,11 @@ LOKA_TEST(testWebURLRefusalPreservesOutput)
 LOKA_TEST(testWebURLLengthBoundary)
 LOKA_TEST(testWebURLNoneAndEquality)
 
+LOKA_TEST(testURLOpenerOutcomeValue)
+LOKA_TEST(testURLOpenerFIFO)
+LOKA_TEST(testURLOpenerReentry)
+LOKA_TEST(testURLOpenerRegime)
+
 LOKA_TEST(testItalicOrderAndMergeTable)
 LOKA_TEST(testNullItalicPaintRecording)
 
