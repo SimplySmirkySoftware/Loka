@@ -5,6 +5,9 @@
 // "switch the typedef" path) after pressing Add 100 times to the declared
 // capacity. The Keyed reservation for 100 rows alone raises the startup need to
 // 461.6K. The default DoItYourself root needs less (338.8K, 2026-10-10).
+// The largest root is Step6Node (2026-10-31, 0.0.8 Tutorial PR 3, Add at
+// (107,128) in the Toolbar band): 540.0K after 100 Adds = live 509512 B +
+// fixed 43428 B, 478.2K at startup. Its minimum is still 608K.
 // Rerun tests/toolbox/measure-example-heaps.sh after a size-relevant change.
 // 68K: minimum = need x 1.1 rounded up to 32K, preferred = need x 1.5 rounded up to 64K.
 // Rez resource ordering: Retro68APPL.r's SIZE (-1) is Rezzed first; this one
