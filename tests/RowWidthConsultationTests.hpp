@@ -59,6 +59,7 @@ void testRowSingleLiveLeafWidthShapes();
 void testSingleLiveLeafStopsAtSecondSeat();
 
 void testRowLabelsShareTables();
+void testRowPolicyShapeWork();
 void testRowLabelsShareWrapperFacts();
 void testMountedNullLabelsShareStateAndFloor();
 void testRowLabelsShareFloorsAndCandidates();

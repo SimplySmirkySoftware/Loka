@@ -2054,3 +2054,101 @@ void testRowLabelsShareWrapperFacts()
       LOKA_VERIFY(source.labelCalls == 0);
   }
 }
+
+namespace
+{
+  template <class Base, class Props> class RowShapeWorkProbe : public Base
+  {
+  public:
+    explicit RowShapeWorkProbe(const Props &props)
+        : Base(props),
+          textCalls(0),
+          boxCalls(0)
+    {
+    }
+    virtual loka::app::TextNode *asTextNode()
+    {
+      ++this->textCalls;
+      return Base::asTextNode();
+    }
+    virtual loka::app::BoxNode *asBoxNode()
+    {
+      ++this->boxCalls;
+      return Base::asBoxNode();
+    }
+    int textCalls, boxCalls;
+  };
+
+  class RowShapeWorkSource : public loka::app::layout::INaturalSizeSource
+  {
+  public:
+    explicit RowShapeWorkSource(bool answer)
+        : answer_(answer),
+          calls(0)
+    {
+    }
+    virtual bool queryNaturalWidth(loka::app::scene::Node *, short &width) const
+    {
+      ++this->calls;
+      width = 20;
+      return this->answer_;
+    }
+    const bool answer_;
+    mutable int calls;
+  };
+
+  template <class Base, class Props> void checkRowShapeWork(const Props &props, bool declared)
+  {
+    using namespace loka::app;
+    using namespace loka::app::layout;
+    for (int natural = 0; natural < 2; ++natural)
+      for (int answered = 0; answered < 2; ++answered)
+      {
+        StackProps rowProps = Row().props;
+        rowProps.rowUndeclaredWidth_ = natural ? ROW_UNDECLARED_WIDTH_NATURAL : ROW_UNDECLARED_WIDTH_SHARED;
+        StackNode content(Column().props);
+        StackNode *row = new StackNode(rowProps);
+        content.addChild(row);
+        RowShapeWorkProbe<Base, Props> *seat = new RowShapeWorkProbe<Base, Props>(props);
+        row->addChild(seat);
+        RowShapeWorkSource source(answered != 0);
+        RowWidthConsultation widths(
+            row->childrenHead(), 1, 100, 8, RailSpacing(12, 8, 9), rowProps.rowUndeclaredWidth_, &source);
+        const int textProbes = natural && answered && !declared ? 1 : 0;
+        LOKA_VERIFY(seat->textCalls == textProbes);
+        // One Box query belongs to declared-width resolution, not shape classification.
+        LOKA_VERIFY(seat->boxCalls == 1);
+        LOKA_VERIFY(source.calls == (natural && !declared ? 1 : 0));
+        const RowChildWidth result = widths.next(seat);
+        LOKA_VERIFY(result.width() == (declared ? 10 : natural && answered ? 20 : 100));
+        LOKA_VERIFY(seat->textCalls == 2 * textProbes);
+        LOKA_VERIFY(seat->boxCalls == 2);
+        LOKA_VERIFY(source.calls == (natural && !declared ? 2 : 0));
+
+        seat->textCalls = seat->boxCalls = source.calls = 0;
+        short range = 123;
+        LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, range)
+                    == (!natural || declared || answered));
+        LOKA_VERIFY(seat->textCalls == textProbes);
+        LOKA_VERIFY(seat->boxCalls == (natural ? 1 : 0));
+
+        // An outer NATURAL Row asks this Row's nested natural width, not its range.
+        seat->textCalls = seat->boxCalls = source.calls = 0;
+        RowWidthConsultation nested(row, 1, 100, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+        LOKA_VERIFY(seat->textCalls == 0);
+        LOKA_VERIFY(seat->boxCalls == 1);
+        LOKA_VERIFY(source.calls == (declared ? 0 : 1));
+      }
+  }
+} // namespace
+
+void testRowPolicyShapeWork()
+{
+  using namespace loka::app;
+  checkRowShapeWork<BoxNode>(Box().width(10).props, true);
+  checkRowShapeWork<ButtonNode>(ButtonProps().text("button"), false);
+  TextProps label("label");
+  label.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  checkRowShapeWork<TextNode>(label, false);
+  checkRowShapeWork<BoxNode>(Box().props, false);
+}

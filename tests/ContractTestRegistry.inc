@@ -1538,6 +1538,7 @@ LOKA_TEST(testNullTextNaturalWidthUsesCurrentValueAndStyle)
 LOKA_TEST(testNullTextNaturalWidthDeclinesWithoutWriting)
 
 LOKA_TEST(testRowLabelsShareTables)
+LOKA_TEST(testRowPolicyShapeWork)
 LOKA_TEST(testRowLabelsShareWrapperFacts)
 LOKA_TEST(testRowLabelsShareFloorsAndCandidates)
 LOKA_TEST(testRowLabelsShareNestedAndRange)

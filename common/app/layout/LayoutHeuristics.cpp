@@ -188,58 +188,77 @@ namespace loka
 
       namespace
       {
-        /** Immutable facts about one live seat; no measurements or allocation decisions. */
+        /** Declared width for one live seat; shape is classified only when a policy reads it. */
         class RowSeatFacts
         {
         public:
           enum Shape
           {
-            DECLARED_WIDTH,
+            UNCLASSIFIED,
             LABEL,
             SPACER,
             OTHER
           };
           explicit RowSeatFacts(scene::Node *seat)
-              : shape_(OTHER),
+              : seat_(seat),
+                widthKind_(UNDECLARED),
                 width_(0)
           {
             const int declared = preferredChildWidthForRow(seat);
             if (declared >= 0)
             {
-              this->shape_ = DECLARED_WIDTH;
+              this->widthKind_ = DECLARED;
               this->width_ = declared;
-              return;
             }
-            scene::Node *leaf = singleLiveLeaf(seat).leaf();
+          }
+          Shape shape(RowUndeclaredWidth policy) const
+          {
+            switch (policy)
+            {
+            case ROW_UNDECLARED_WIDTH_SHARED:
+              return UNCLASSIFIED;
+            case ROW_UNDECLARED_WIDTH_NATURAL:
+            case ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE:
+              break;
+            }
+            if (this->widthKind_ == DECLARED)
+              return OTHER;
+            scene::Node *leaf = singleLiveLeaf(this->seat_).leaf();
             TextNode *text = leaf ? leaf->asTextNode() : 0;
             if (text && text->props.blockStyle_.truncation_ == TEXT_TRUNCATION_ELLIPSIS
                 && (!text->props.blockStyle_.hasWrap_ || text->props.blockStyle_.wrap_ == TEXT_WRAP_NONE))
-              this->shape_ = LABEL;
-            else if (leaf && leaf->asBoxNode() && leaf->asBoxNode()->childrenCount() == 0
-                     && preferredChildWidthForRow(leaf) < 0)
-              this->shape_ = SPACER;
-          }
-          Shape shape() const
-          {
-            return this->shape_;
+              return LABEL;
+            if (policy == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE && leaf)
+            {
+              BoxNode *box = leaf->asBoxNode();
+              if (box && box->childrenCount() == 0 && preferredChildWidthForRow(leaf) < 0)
+                return SPACER;
+            }
+            return OTHER;
           }
           bool queryDeclaredWidth(int &width) const
           {
-            if (this->shape_ != DECLARED_WIDTH)
+            if (this->widthKind_ != DECLARED)
               return false;
             width = this->width_;
             return true;
           }
 
         private:
-          Shape shape_;
+          enum WidthKind
+          {
+            UNDECLARED,
+            DECLARED
+          };
+          scene::Node *const seat_;
+          WidthKind widthKind_;
           int width_;
         };
 
-        /** Shape/style eligibility; callers supply the positive natural-width answer. */
+        /** Shape/style eligibility; water-filling retains its pre-measurement scan. */
         bool shrinkableTextSeat(scene::Node *seat)
         {
-          return RowSeatFacts(seat).shape() == RowSeatFacts::LABEL;
+          return RowSeatFacts(seat).shape(ROW_UNDECLARED_WIDTH_NATURAL) == RowSeatFacts::LABEL;
         }
 
         /** Pass-local seat classification and spacing shared by allocation and measurement. */
@@ -351,9 +370,12 @@ namespace loka
               if (!takesSeat)
                 continue;
               const RowSeatFacts facts(seat);
-              if (stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE
-                  && (facts.shape() == RowSeatFacts::LABEL || facts.shape() == RowSeatFacts::SPACER))
-                return false;
+              if (stack->props.rowUndeclaredWidth_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE)
+              {
+                const RowSeatFacts::Shape shape = facts.shape(stack->props.rowUndeclaredWidth_);
+                if (shape == RowSeatFacts::LABEL || shape == RowSeatFacts::SPACER)
+                  return false;
+              }
               int declared = -1;
               facts.queryDeclaredWidth(declared);
               int resolved = declared;
@@ -410,8 +432,10 @@ namespace loka
                               const RowSeatFacts &facts,
                               RowUndeclaredWidth policy,
                               const RailSpacing &spacing,
-                              const INaturalSizeSource *source)
+                              const INaturalSizeSource *source,
+                              RowSeatFacts::Shape &shape)
         {
+          shape = RowSeatFacts::UNCLASSIFIED;
           int declared = -1;
           if (facts.queryDeclaredWidth(declared))
             return declared;
@@ -420,14 +444,19 @@ namespace loka
           case ROW_UNDECLARED_WIDTH_SHARED:
             return -1;
           case ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE:
-            if (facts.shape() == RowSeatFacts::LABEL || facts.shape() == RowSeatFacts::SPACER)
+            shape = facts.shape(policy);
+            if (shape == RowSeatFacts::LABEL || shape == RowSeatFacts::SPACER)
               return -1;
             break;
           case ROW_UNDECLARED_WIDTH_NATURAL:
             break;
           }
           short natural = 0;
-          return source && queryNaturalWidth(child, spacing, source, natural) ? natural : -1;
+          if (!source || !queryNaturalWidth(child, spacing, source, natural))
+            return -1;
+          if (policy == ROW_UNDECLARED_WIDTH_NATURAL)
+            shape = facts.shape(policy);
+          return natural;
         }
 
       } // namespace
@@ -486,10 +515,11 @@ namespace loka
                     continue;
                   live = true;
                   const RowSeatFacts facts(seat);
+                  const RowSeatFacts::Shape shape = facts.shape(ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE);
                   int claim = 0;
-                  if (facts.shape() == RowSeatFacts::LABEL)
+                  if (shape == RowSeatFacts::LABEL)
                     claim = 1;
-                  else if (facts.shape() != RowSeatFacts::SPACER && !facts.queryDeclaredWidth(claim))
+                  else if (shape != RowSeatFacts::SPACER && !facts.queryDeclaredWidth(claim))
                   {
                     short natural = 0;
                     if (!queryNaturalWidth(seat, spacing, source, natural))
@@ -523,7 +553,8 @@ namespace loka
                     claim = natural;
                   }
                   original.add(claim, true);
-                  shrunk.add(claim > 0 && facts.shape() == RowSeatFacts::LABEL ? 1 : claim, true);
+                  shrunk.add(claim > 0 && facts.shape(ROW_UNDECLARED_WIDTH_NATURAL) == RowSeatFacts::LABEL ? 1 : claim,
+                             true);
                 }
                 const int gap = resolveLayoutGap(stack, spacing.horizontalGap(), spacing);
                 if (original.occupied(gap).value() <= 0 || original.occupied(gap).value() > SHRT_MAX)
@@ -583,11 +614,12 @@ namespace loka
           if (!childTakesLayoutSeat(child))
             continue;
           const RowSeatFacts facts(child);
-          const int width = preferredRowWidth(child, facts, this->policy_, this->spacing_, this->source_);
+          RowSeatFacts::Shape shape;
+          const int width = preferredRowWidth(child, facts, this->policy_, this->spacing_, this->source_, shape);
           tally.add(width, true);
-          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE && facts.shape() == RowSeatFacts::LABEL)
+          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE && shape == RowSeatFacts::LABEL)
             floors.add(1);
-          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL && width > 0 && facts.shape() == RowSeatFacts::LABEL)
+          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL && width > 0 && shape == RowSeatFacts::LABEL)
           {
             shrinkSum.add(width);
             ++shrinkCount;
@@ -661,16 +693,17 @@ namespace loka
           return RowChildWidth(0, false, false);
         }
         const RowSeatFacts facts(child);
-        const int preferredWidth = preferredRowWidth(child, facts, this->policy_, this->spacing_, this->source_);
+        RowSeatFacts::Shape shape;
+        const int preferredWidth = preferredRowWidth(child, facts, this->policy_, this->spacing_, this->source_, shape);
         int width = preferredWidth;
         if (preferredWidth < 0)
         {
           width = this->flex_.take(INT_MAX);
           // Restore the label floor reserved before division in the constructor.
-          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE && facts.shape() == RowSeatFacts::LABEL)
+          if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE && shape == RowSeatFacts::LABEL)
             ++width;
         }
-        else if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL && width > 0 && facts.shape() == RowSeatFacts::LABEL)
+        else if (this->policy_ == ROW_UNDECLARED_WIDTH_NATURAL && width > 0 && shape == RowSeatFacts::LABEL)
           width = this->shrink_.take(width);
         const bool gapBefore = this->liveSeatsSeen_ > 0;
         ++this->liveSeatsSeen_;

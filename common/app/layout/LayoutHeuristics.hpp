@@ -204,7 +204,9 @@ namespace loka
           leaf answers (including intrinsic images) at most twice when the Row fits. A short Row
           adds up to k constructor scans, k being the number of shrinkable seats; each scan consults
           every single-line ELLIPSIS Text seat once, including one whose answer is declined, because
-          nothing is remembered between scans. SHARED rows never consult them.
+          nothing is remembered between scans. SHARED rows never consult them or classify seat shapes.
+          NATURAL classifies only LABEL after a positive undeclared natural answer; nested natural
+          measurement needs no shape. Water-filling retains its existing pre-measurement eligibility scan.
           Row layout constructs one consultation per pass. LABELS_SHARE classifies each live
           child once in construction and once in next; labels and empty Boxes are never measured,
           other undeclared seats at most twice. Labels reserve one before sharing the remainder.
