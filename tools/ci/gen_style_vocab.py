@@ -159,7 +159,7 @@ def generate_cpp(vocab):
 
 
 def ts_type(value):
-    return {"fontSize": "FontSize", "weight": "TextWeight", "italic": "boolean", "color": "TextColor", "family": "TextFamily",
+    return {"fontSize": "FontSize", "weight": "TextWeight", "italic": "boolean", "underline": "boolean", "color": "TextColor", "family": "TextFamily",
             "wrap": "TextWrap", "truncation": "TextTruncation", "align": "TextAlign"}[value]
 
 

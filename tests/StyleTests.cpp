@@ -10,6 +10,7 @@
 #include "core/util/StateTrackerGuard.hpp"
 
 #include "app/nodes/Text.hpp"
+#include "app/nodes/nestable/Show.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 #include "platform/null/context/NullTextContext.hpp"
 #include "support/TestVerify.hpp"
@@ -473,4 +474,151 @@ void testTextToggleValueContract()
   LOKA_VERIFY(TextStyle().italic(false).queryItalic(on) && !on);
   LOKA_VERIFY(TextStyle().italic(true).queryItalic(on) && on);
   LOKA_VERIFY(sizeof(TextToggleValue) == 1);
+}
+
+void testUnderlineStyleContract()
+{
+  using namespace loka::app;
+  const TextStyle values[] = {TextStyle(), TextStyle().underline(false), Underline};
+  bool on = true;
+  LOKA_VERIFY(!values[0].queryUnderline(on) && on);
+  LOKA_VERIFY(values[1].queryUnderline(on) && !on);
+  LOKA_VERIFY(values[2].queryUnderline(on) && on);
+  LOKA_VERIFY((Underline + Bold).queryUnderline(on) && on);
+  LOKA_VERIFY((Underline + Bold).hasWeight_ && (Underline + Bold).weight_ == TEXT_WEIGHT_BOLD);
+  LOKA_VERIFY(!Underline.declaresFont());
+  LOKA_VERIFY(!(Text("same") + Underline).props.hasDeclaredLayoutStyle());
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j)
+    {
+      LOKA_VERIFY((values[i] == values[j]) == (i == j));
+      LOKA_VERIFY(values[i] + values[j] == values[j ? j : i]);
+      LOKA_VERIFY((values[i] < values[j]) == (i < j));
+      LOKA_VERIFY((Styled("same", values[i]) == Styled("same", values[j])) == (i == j));
+      for (int k = 0; k < 3; ++k)
+        LOKA_VERIFY(!(values[i] < values[j]) || !(values[j] < values[k]) || values[i] < values[k]);
+    }
+  LOKA_VERIFY(Underline < Monospace);
+  LOKA_VERIFY(!(Monospace < Underline));
+  const AttributedString split = Styled("a", TextStyle()) + Styled("b", Underline);
+  LOKA_VERIFY(split.valid() && split.segmentCount() == 2);
+  LOKA_VERIFY(split.segment(0).style == TextStyle() && split.segment(1).style == Underline);
+  LOKA_VERIFY(split != Styled("ab", TextStyle()));
+}
+
+void testNullUnderlinePaintRecording()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using loka::app::testing::NullTextStyleAccess;
+  using loka::dsl::testing::SceneTestAccess;
+  const TextStyle styles[] = {TextStyle(), Underline, TextStyle().underline(false), TextStyle()};
+  LOKA_VERIFY(NullTextPaintStyle().underline == TextToggleValue(TEXT_TOGGLE_OFF));
+  loka::core::MutableState<TextStyle> live;
+  BoxDefinition box;
+  box << Text("same").testId("underline");
+  NullScenePlatformController platform;
+  Scene scene((Boundary<PropsReconciliationSupport::Tree<BoxDefinition> >(
+      PropsReconciliationSupport::Props<BoxDefinition>(&box))));
+  scene.mount(&platform);
+  SceneTestAccess::updateAttached(scene, true);
+  TextNode *node = 0;
+  loka::dsl::FlowError error;
+  loka::dsl::testing::LookupNodeById(&scene, "underline", node, error);
+  LOKA_VERIFY(node != 0);
+  for (int mode = 0; mode < 2; ++mode)
+  {
+    if (mode)
+    {
+      LOKA_VERIFY((Text("same") + &live).applyPropsToNode(node));
+      PropsReconciliationSupport::root(scene)->markViewDirty(NODE_DIRTY_LAYOUT);
+      PropsReconciliationSupport::settle(scene);
+    }
+    for (int i = 0; i < 4; ++i)
+    {
+      if (mode)
+        live.set(styles[i]);
+      else
+        LOKA_VERIFY((Text("same") + styles[i]).applyPropsToNode(node));
+      if (!mode)
+        PropsReconciliationSupport::root(scene)->markViewDirty(NODE_DIRTY_LAYOUT);
+      PropsReconciliationSupport::settle(scene);
+      const NullTextContext *context = static_cast<NullTextContext *>(node->getContext());
+      LOKA_VERIFY(context != 0);
+      LOKA_VERIFY(NullTextStyleAccess::underline(*context)
+                  == TextToggleValue(i == 1 ? TEXT_TOGGLE_ON : TEXT_TOGGLE_OFF));
+      LOKA_VERIFY(node->props.text_->get().equals(loka::core::String::Literal("same")));
+    }
+  }
+  const NullTextPaintStyle plain(Text("same").props), underlined((Text("same") + Underline).props);
+  LOKA_VERIFY(!(plain == underlined));
+  SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  class UnderlineParkedRoot : public loka::app::scene::BoundaryNodeFor<UnderlineParkedRoot>
+  {
+  public:
+    loka::app::scene::NodeState<bool> shown;
+    loka::app::scene::NodeState<loka::app::TextStyle> style;
+    explicit UnderlineParkedRoot(const loka::app::scene::BoundaryPropsFor<UnderlineParkedRoot> &props)
+        : loka::app::scene::BoundaryNodeFor<UnderlineParkedRoot>(props)
+    {
+      this->state(this->shown, true);
+      this->state(this->style, loka::app::TextStyle());
+    }
+    virtual bool flushViewDirtyImmediately(loka::app::scene::NodeDirtyFlags) const
+    {
+      return false;
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &composition)
+    {
+      composition.declare(loka::app::Show(*this->shown.state())
+                          << (loka::app::Text("same") + this->style.state()).testId("parked"));
+    }
+  };
+} // namespace
+
+void testNullUnderlineParkedReattach()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  using loka::app::testing::NullTextStyleAccess;
+  using loka::dsl::testing::SceneTestAccess;
+  NullScenePlatformController platform;
+  Scene scene((Boundary<UnderlineParkedRoot>()));
+  scene.mount(&platform);
+  SceneTestAccess::updateAttached(scene, true);
+  UnderlineParkedRoot *root = static_cast<UnderlineParkedRoot *>(SceneTestAccess::rootBoundary(scene));
+  TextNode *node = 0;
+  loka::dsl::FlowError error;
+  loka::dsl::testing::LookupNodeById(&scene, "parked", node, error);
+  LOKA_VERIFY(node != 0);
+  const NullTextContext *context = static_cast<NullTextContext *>(node->getContext());
+  LOKA_VERIFY(context != 0);
+  const TextStyle styles[] = {TextStyle(), Underline, TextStyle().underline(false), TextStyle()};
+  for (int i = 0; i < 4; ++i)
+  {
+    {
+      loka::core::StateTrackerGuard guard(root->tracker());
+      root->shown.set(false);
+    }
+    PropsReconciliationSupport::settle(scene);
+    LOKA_VERIFY(node->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
+    {
+      loka::core::StateTrackerGuard guard(root->tracker());
+      root->style.set(styles[i]);
+    }
+    PropsReconciliationSupport::settle(scene);
+    {
+      loka::core::StateTrackerGuard guard(root->tracker());
+      root->shown.set(true);
+    }
+    PropsReconciliationSupport::settle(scene);
+    LOKA_VERIFY(node->getContext() == context);
+    LOKA_VERIFY(NullTextStyleAccess::underline(*context) == TextToggleValue(i == 1 ? TEXT_TOGGLE_ON : TEXT_TOGGLE_OFF));
+    LOKA_VERIFY(node->props.text_->get().equals(loka::core::String::Literal("same")));
+  }
+  SceneTestAccess::unmount(scene);
 }
