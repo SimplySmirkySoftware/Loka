@@ -1682,6 +1682,12 @@ photo.arm(FOLD_COLLAPSED, Card().clipChildren() << ImageView().image(this->photo
 
 These opt-ins belong to the fixed-axis definitions, not the live-axis `Stack`.
 
+`Spacer()` is for Rows and holds no children (adding one is a compile error).
+In a natural-width Row, it shares the space left by sized children with other
+children that have no natural width, taking zero when nothing is left. In a
+shared Row, it takes an equal share with the other children without declared
+widths. It is as tall as an empty Box.
+
 ### Spacing: Gaps, Padding, And The Window Margin
 
 Use `gap(...)` on `VStack`, `HStack`, `Stack`, or `Box` for the space between
