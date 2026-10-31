@@ -10,6 +10,8 @@
 #include "ToolboxBusy.hpp"
 #include "ToolboxMenuAttachment.hpp"
 #include "ToolboxTwoByteKey.hpp"
+class ToolboxIdleClock;
+struct EventRecord;
 class ToolboxApp;
 class ToolboxSceneDebugStats;
 
@@ -97,6 +99,7 @@ protected:
 private:
   friend class CursorOwner;
   void sampleHover(bool force);
+  void iterate(ToolboxIdleClock &clock, bool gotEvent, const EventRecord &fetched);
   /** Applies recorded scene changes and, while foreground, paints each window
       once at the run-loop tick's presentation boundary. */
   void present(ActivationPhase phase, loka::core::Operation &turn);

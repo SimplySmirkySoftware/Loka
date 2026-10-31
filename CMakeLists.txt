@@ -472,6 +472,13 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaUpstreamGaugePins PRIVATE LokaCommonTesting)
   add_test(NAME LokaUpstreamGaugePins COMMAND LokaUpstreamGaugePins)
 
+  add_executable(LokaToolboxIterationTests tests/toolbox/host/ToolboxIterationHostTests.cpp)
+  target_include_directories(LokaToolboxIterationTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_options(LokaToolboxIterationTests PRIVATE -fno-exceptions -fno-rtti)
+  loka_enable_warnings(LokaToolboxIterationTests)
+  set_target_properties(LokaToolboxIterationTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxIterationTests COMMAND LokaToolboxIterationTests)
+
   add_executable(LokaToolboxUnicodeStartupTests
     tests/toolbox/host/ToolboxUnicodeStartupHostTests.cpp
     apple/toolbox/src/ToolboxUnicodeStartup.cpp

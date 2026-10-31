@@ -1,6 +1,6 @@
 """Structural pin for initial-mount, turn-end and allocation wiring; the host does not run ToolboxApp::run.
 
-The real event-loop/bootstrap fixture is absent. Runtime path acceptance remains
+The iteration has a host trace fixture; bootstrap runtime acceptance remains
 on MAME; this check only detects removal/movement of the fatal calls.
 """
 from pathlib import Path
@@ -41,6 +41,9 @@ while depth:
 checks.append(re.search(r"\{\s*loka::core::Operation::Regime \w+;\s*while \(running_\)", app))
 checks.append(re.match(r"\s*\}\s*(?://[^\n]*\n\s*)*this->retireComponents\(\);", app[body_end:]))
 loop = app[body_start + 1:body_end - 1]
+checks.append(re.search(r"WaitNextEvent\([^;]+;\s*this->iterate\(clock, gotEvent, record\);\s*$", loop))
+iteration = (root / "apple/toolbox/src/ToolboxIteration.cpp").read_text()
+loop = iteration[iteration.index("void ToolboxApp::iterate"):].rstrip().removesuffix("}")
 checks.append(re.search(r"this->present\([^;]+;[\s\S]*"
                         r"loka::toolbox::QuitIfOutOfMemoryReserveSpent\(\);\s*$", loop))
 checks.append(loop.count("QuitIfOutOfMemoryReserveSpent();") == 1)
