@@ -3724,31 +3724,42 @@ namespace
       const short portFont = port->txFont;
       const short portSize = port->txSize;
       const Style portFace = port->txFace;
-      const loka::app::TextStyle normal = loka::app::TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false);
-      const loka::app::TextStyle styles[] = {
-          FontSize<9>() + normal, FontSize<12>() + normal,
-          FontSize<18>() + normal, FontSize<24>() + normal,
-          FontSize<12>() + normal + Bold, FontSize<12>() + normal + Italic};
-      const char *restoreNames[] = {
-          "font-9-restores-port", "font-12-restores-port",
-          "font-18-restores-port", "font-24-restores-port",
-          "font-bold-restores-port", "font-italic-restores-port"};
-      const char *selectionNames[] = {
-          "font-9-selects-descriptor", "font-12-selects-descriptor",
-          "font-18-selects-descriptor", "font-24-selects-descriptor",
-          "font-bold-selects-descriptor", "font-italic-selects-descriptor"};
-      const short sizes[] = {9, 12, 18, 24, 12, 12};
-      const Style faces[] = {0, 0, 0, 0, bold, italic};
-      short widths[6];
-      for (int i = 0; i < 6; ++i)
+      const loka::app::TextStyle normal =
+          loka::app::TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false).underline(false);
+      const loka::app::TextStyle styles[] = {FontSize<9>() + normal,
+                                             FontSize<12>() + normal,
+                                             FontSize<18>() + normal,
+                                             FontSize<24>() + normal,
+                                             FontSize<12>() + normal + Bold,
+                                             FontSize<12>() + normal + Italic,
+                                             FontSize<12>() + normal + Underline};
+      const char *restoreNames[] = {"font-9-restores-port",
+                                    "font-12-restores-port",
+                                    "font-18-restores-port",
+                                    "font-24-restores-port",
+                                    "font-bold-restores-port",
+                                    "font-italic-restores-port",
+                                    "font-underline-restores-port"};
+      const char *selectionNames[] = {"font-9-selects-descriptor",
+                                      "font-12-selects-descriptor",
+                                      "font-18-selects-descriptor",
+                                      "font-24-selects-descriptor",
+                                      "font-bold-selects-descriptor",
+                                      "font-italic-selects-descriptor",
+                                      "font-underline-selects-descriptor"};
+      const short sizes[] = {9, 12, 18, 24, 12, 12, 12};
+      const Style faces[] = {0, 0, 0, 0, bold, italic, underline};
+      short widths[7];
+      for (int i = 0; i < 7; ++i)
       {
         {
           const ToolboxTextFontDescriptor descriptor(styles[i]);
           ToolboxTextMeasureScope scope(controller, descriptor);
           widths[i] = scope.measure(loka::core::String::Literal("MMMMMMMM"));
-          this->recordArm(selectionNames[i], port->txFont == (portFont == 0 ? GetSysFont() : portFont)
-                          && port->txSize == sizes[i]
-                          && port->txFace == static_cast<Style>((portFace & ~(bold | italic)) | faces[i]),
+          this->recordArm(selectionNames[i],
+                          port->txFont == (portFont == 0 ? GetSysFont() : portFont) && port->txSize == sizes[i]
+                              && port->txFace
+                                     == static_cast<Style>((portFace & ~(bold | italic | underline)) | faces[i]),
                           TEXT_WIDTH_WRITE);
         }
         GrafPtr restored = 0;
@@ -3756,13 +3767,21 @@ namespace
         this->recordArm(restoreNames[i], restored == port && port->txFont == portFont
                         && port->txSize == portSize && port->txFace == portFace, TEXT_WIDTH_WRITE);
       }
-      std::fprintf(this->log_, "font-widths 9=%d 12=%d 18=%d 24=%d bold=%d italic=%d\r",
-                   widths[0], widths[1], widths[2], widths[3], widths[4], widths[5]);
+      std::fprintf(this->log_,
+                   "font-widths 9=%d 12=%d 18=%d 24=%d bold=%d italic=%d underline=%d\r",
+                   widths[0],
+                   widths[1],
+                   widths[2],
+                   widths[3],
+                   widths[4],
+                   widths[5],
+                   widths[6]);
       this->recordArm("font-width-9-lt-12", widths[0] < widths[1], TEXT_WIDTH_WRITE);
       this->recordArm("font-width-12-lt-18", widths[1] < widths[2], TEXT_WIDTH_WRITE);
       this->recordArm("font-width-18-lt-24", widths[2] < widths[3], TEXT_WIDTH_WRITE);
       this->recordArm("font-bold-12-gt-normal", widths[4] > widths[1], TEXT_WIDTH_WRITE);
       this->recordArm("font-italic-12-ge-normal", widths[5] >= widths[1], TEXT_WIDTH_WRITE);
+      this->recordArm("font-underline-12-eq-normal", widths[6] == widths[1], TEXT_WIDTH_WRITE);
 
       loka::app::TextStyle unsnapped;
       unsnapped.size_ = loka::app::TextSizeValue::points(11);
@@ -3777,12 +3796,17 @@ namespace
                       port->txFont == portFont && port->txSize == portSize && port->txFace == portFace,
                       TEXT_WIDTH_WRITE);
       const ToolboxTextFontDescriptor inherited;
-      this->recordArm("font-unset-inherits-port", inherited.font(portFont) == portFont
-                      && inherited.size(17) == 17 && inherited.face(bold | italic) == (bold | italic),
+      this->recordArm("font-unset-inherits-port",
+                      inherited.font(portFont) == portFont && inherited.size(17) == 17
+                          && inherited.face(bold | italic | underline) == (bold | italic | underline)
+                          && inherited.face(0) == 0,
                       TEXT_WIDTH_WRITE);
-      this->recordArm("font-explicit-face-clears-only-own-bits",
-                      ToolboxTextFontDescriptor(normal).face(bold | italic | underline) == underline,
-                      TEXT_WIDTH_WRITE);
+      this->recordArm(
+          "font-explicit-face-clears-only-own-bits",
+          ToolboxTextFontDescriptor(normal).face(bold | italic | underline | outline) == outline
+              && ToolboxTextFontDescriptor(loka::app::TextStyle().italic(false)).face(italic | underline) == underline
+              && ToolboxTextFontDescriptor(loka::app::TextStyle().underline(false)).face(italic | underline) == italic,
+          TEXT_WIDTH_WRITE);
 
       TextNode small((Text("MMMMMMMM") + FontSize<12>() + normal).props);
       TextNode large((Text("MMMMMMMM") + FontSize<24>() + normal).props);
@@ -3829,6 +3853,48 @@ namespace
       GetPen(&baseline);
       this->recordArm("font-unset-wrap-pitch-12", wrappedState.y - 80 == 28, TEXT_WIDTH_WRITE);
       this->recordArm("font-unset-wrap-baseline-22", baseline.v - 80 == 22, TEXT_WIDTH_WRITE);
+      // The same narrow seat exercises wrapping and ellipsis with the selected face.
+      const BlockStyle underlineBlocks[] = {BlockStyle().wrap(TEXT_WRAP_CHAR),
+                                            BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS)};
+      const char *extentNames[] = {"font-underline-wrapped-equal-extent", "font-underline-truncated-equal-extent"};
+      for (int i = 0; i < 2; ++i)
+      {
+        TextNode plain((Text("MMMMMMMM") + normal + underlineBlocks[i]).props);
+        TextNode lined((Text("MMMMMMMM") + normal + Underline + underlineBlocks[i]).props);
+        ToolboxTextContext plainContext(&plain, &controller);
+        ToolboxTextContext linedContext(&lined, &controller);
+        LayoutState plainState;
+        plainState.x = 12;
+        plainState.y = 80;
+        plainState.width = 32;
+        plainState.lineHeight = 12;
+        LayoutState linedState = plainState;
+        plainContext.layout(&controller, plainState);
+        linedContext.layout(&controller, linedState);
+        plainContext.repaint();
+        Point plainPen;
+        GetPen(&plainPen);
+        linedContext.repaint();
+        Point linedPen;
+        GetPen(&linedPen);
+        this->recordArm(extentNames[i],
+                        plainState.y == linedState.y && plainContext.visibleWidth() == linedContext.visibleWidth()
+                            && plainPen.h == linedPen.h && plainPen.v == linedPen.v
+                            && (i != 0 || plainState.y - 80 > 16),
+                        TEXT_WIDTH_WRITE);
+      }
+      {
+        ToolboxAttributedTextTable plain;
+        ToolboxAttributedTextTable lined;
+        const bool built =
+            plain.build(Styled("MMMM", normal) + Styled("MMMM", normal), BlockStyle(), 0, controller)
+            && lined.build(Styled("MMMM", normal) + Styled("MMMM", normal + Underline), BlockStyle(), 0, controller);
+        this->recordArm("font-underline-attributed-equal-advance",
+                        built && plain.lines().lineCount() == 1 && lined.lines().lineCount() == 1
+                            && plain.lines().line(0).width == lined.lines().line(0).width
+                            && plain.height() == lined.height(),
+                        TEXT_WIDTH_WRITE);
+      }
       Rect scratch;
       SetRect(&scratch, 12, 80, 76, 148);
       EraseRect(&scratch);

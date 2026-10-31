@@ -16,6 +16,7 @@ enum
   redColor = 205, greenColor = 341, blueColor = 409, cyanColor = 273, magentaColor = 137, yellowColor = 69,
   bold = 1,
   italic = 2,
+  underline = 4,
   srcOr = 1,
   patCopy = 8,
   patOr = 9

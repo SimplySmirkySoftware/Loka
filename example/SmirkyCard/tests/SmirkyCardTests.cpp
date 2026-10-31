@@ -1197,12 +1197,12 @@ namespace
     loka::core::String error;
     LOKA_VERIFY(runtime.loadBuiltin(
         "card('first',class{constructor(c){this.c=c;this.text=this.c.state('live')}compose(){return VStack("
-        "Text('a',{size:24,weight:'bold',italic:true,family:'monospace'}).TEST_ID('Styled'),"
+        "Text('a',{size:24,weight:'bold',italic:true,underline:true,family:'monospace'}).TEST_ID('Styled'),"
         "Text('a',{size:13}).TEST_ID('Snap13'),Text('a',{size:16}).TEST_ID('Snap16'),"
         "Text('a',{size:21}).TEST_ID('Snap21'),Text('a',{size:18}).TEST_ID('Exact18'),"
         "Text('a',{size:24}).TEST_ID('Chained'),"
         "Text('a',{size:'smallLabel'}).TEST_ID('SmallLabel'),"
-        "Text('a',{weight:'normal',italic:false,family:'system'}).TEST_ID('Normal'),"
+        "Text('a',{weight:'normal',italic:false,underline:false,family:'system'}).TEST_ID('Normal'),"
         "Text('a').TEST_ID('Plain'),Text(this.text,{size:18}).TEST_ID('Live'),"
         "Text(this.c.error,{italic:true}).TEST_ID('Error'))}});",
         error));
@@ -1216,17 +1216,18 @@ namespace
     loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
     const char *ids[] = {
         "Chained", "Styled", "Snap13", "Snap16", "Snap21", "Exact18", "Normal", "Plain", "Live", "Error", "SmallLabel"};
-    const TextStyle styles[] = {FontSize<24>(),
-                                FontSize<24>() + Bold + Italic + Monospace,
-                                FontSize<12>(),
-                                FontSize<14>(),
-                                FontSize<18>(),
-                                FontSize<18>(),
-                                TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false).family(TEXT_FAMILY_SYSTEM),
-                                TextStyle(),
-                                FontSize<18>(),
-                                Italic,
-                                SmallLabel};
+    const TextStyle styles[] = {
+        FontSize<24>(),
+        FontSize<24>() + Bold + Italic + Underline + Monospace,
+        FontSize<12>(),
+        FontSize<14>(),
+        FontSize<18>(),
+        FontSize<18>(),
+        TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false).underline(false).family(TEXT_FAMILY_SYSTEM),
+        TextStyle(),
+        FontSize<18>(),
+        Italic,
+        SmallLabel};
     for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
     {
       loka::app::scene::Node *node = find(root, ids[i]);
@@ -1460,6 +1461,9 @@ namespace
                             "{weight:1}",
                             "{weight:'heavy'}",
                             "{italic:1}",
+                            "{underline:1}",
+                            "{underline:undefined}",
+                            "{underline:'true'}",
                             "null",
                             "[]",
                             "new Date()",
@@ -1478,7 +1482,7 @@ namespace
           std::string("card('first',class{constructor(c){this.c=c;}compose(){return Text('a',") + styles[i] + ")}});";
       checkComposeRefusal(source.c_str(), "TypeError");
       if (!std::strncmp(styles[i], "{family:", 8) || !std::strncmp(styles[i], "{color:", 7)
-          || !std::strncmp(styles[i], "{weight:", 8))
+          || !std::strncmp(styles[i], "{weight:", 8) || !std::strncmp(styles[i], "{underline:", 11))
       {
         smirkycard::ScriptRuntime runtime;
         loka::core::String result, error;
@@ -1513,6 +1517,11 @@ namespace
     LOKA_VERIFY(result
                 == Styled("var ", base) + Styled("x", base + Bold) + Styled(" = ", base) + Styled("1", base + Italic)
                        + Styled(";", base));
+    sample = "<u>a</u><b><u>b</u>c</b>d";
+    LOKA_VERIFY(smirkycard::ParseSmirkyMarkup(sample, std::strlen(sample), base, result));
+    LOKA_VERIFY(result
+                == Styled("a", base + Underline) + Styled("b", base + Bold + Underline) + Styled("c", base + Bold)
+                       + Styled("d", base));
     sample = "<code><size=24><b>a</b></size>b</code>c";
     LOKA_VERIFY(smirkycard::ParseSmirkyMarkup(sample, std::strlen(sample), base, result));
     LOKA_VERIFY(result
@@ -1541,7 +1550,9 @@ namespace
     const char *bad[] = {"<code>x",
                          "<code>x</b>",
                          "</code>",
-                         "<u>x</u>",
+                         "</u>",
+                         "<u>x",
+                         "<b><u>x</b></u>",
                          "<b>x",
                          "<b>x</i>",
                          "</b>",
