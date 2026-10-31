@@ -27,6 +27,10 @@ namespace loka
 } // namespace loka
 
 /** Read one unit from a nonempty counted input; never join malformed bytes. */
+#if defined(__GNUC__)
+// Under -Os the encoder's loop otherwise calls an out-of-line copy (E1-2, maciix).
+inline ToolboxTextUnit ToolboxNextTextUnit(const char *, std::size_t, bool) __attribute__((always_inline));
+#endif
 inline ToolboxTextUnit ToolboxNextTextUnit(const char *input, std::size_t remaining, bool roman)
 {
   assert(input && remaining);
