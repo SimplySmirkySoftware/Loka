@@ -97,6 +97,8 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   binding->placement = ToolboxNativePlacement(controlRect, visible);
   bool submitted;
   {
+    if (!this->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
     submitted = ReconcileToolboxButtonControl(binding->control, label, binding->enabled, binding->label);
   }

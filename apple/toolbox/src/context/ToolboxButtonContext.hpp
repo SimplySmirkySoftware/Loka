@@ -9,6 +9,17 @@
 #include <Controls.h>
 #include <string>
 
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    void failToolboxButtonDrawConversions(unsigned count);
+    bool consumeToolboxButtonDrawConversionRefusal();
+  } // namespace testing
+} // namespace loka
+#endif
+
 /** Reconcile one installed control; the controller owns its title cache. */
 bool ReconcileToolboxButtonControl(ControlRef control, const loka::core::String &label,
                                    loka::core::State<bool> *enabled, std::string &installedLabel);

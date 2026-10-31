@@ -1,5 +1,15 @@
 #ifndef LOKA_TOOLBOX_ATTRIBUTED_TEXT_TABLE_HPP
 #define LOKA_TOOLBOX_ATTRIBUTED_TEXT_TABLE_HPP
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    void failToolboxAttributedDraws(unsigned count);
+    bool refuseToolboxAttributedDraw();
+  } // namespace testing
+} // namespace loka
+#endif
 
 #include "app/layout/TextLineBreaker.hpp"
 #include "app/layout/MeasurementResult.hpp"

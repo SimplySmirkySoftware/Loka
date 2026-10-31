@@ -35,6 +35,8 @@ void ToolboxScenePlatformController::drawControlsInRect(const Rect &rect)
     if (this->window_ && this->window_->window())
     {
       ToolboxNativeDoorScope door(this->window_->window(), visible);
+      if (!door.clipAllocated())
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       this->drawControl(binding.control);
     }
   }
@@ -58,6 +60,8 @@ void ToolboxScenePlatformController::drawScrollBarControl(short id)
     if (!row.placement.queryVisible(visible) || !RectInRgn(&visible, port->clipRgn))
       return;
     ToolboxNativeDoorScope door(port, visible);
+    if (!door.clipAllocated())
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     this->drawControl(row.control);
     return;
   }

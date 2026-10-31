@@ -217,6 +217,8 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     if (visible && this->window_ && this->window_->window())
     {
       ToolboxNativeDoorScope door(this->window_->window(), rect);
+      if (!door.clipAllocated())
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       tracked = TrackControl(control, point, 0);
     }
     if (visible)
@@ -241,6 +243,8 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     if (source.placement.queryVisible(visible) && this->window_ && this->window_->window())
     {
       ToolboxNativeDoorScope door(this->window_->window(), visible);
+      if (!door.clipAllocated())
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       TrackControl(control, point, press.part == kControlIndicatorPart ? 0 : ScrollBarActionUPP());
     }
     if (source.placement.queryVisible(visible))
@@ -271,6 +275,8 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     {
       {
         ToolboxEditDoor door(this->window_->window(), this->editControls_[index].placement);
+        if (door.clipAllocationRefused(this->editControls_[index].placement))
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         TEClick(point, false, te);
       }
       this->invalidateUnitOverlap(rect);

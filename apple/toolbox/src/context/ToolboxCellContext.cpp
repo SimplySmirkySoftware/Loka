@@ -100,6 +100,8 @@ void ToolboxCellContext::draw(ToolboxScenePlatformController *controller)
 {
   (void)controller;
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   // Full/clipped render and dirty replay share the #763 history rule.
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
@@ -113,7 +115,10 @@ void ToolboxCellContext::draw(ToolboxScenePlatformController *controller)
   FrameRect(&drawRect);
   Str255 text;
   if (!ToolboxEncodePascal(current, text))
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
     return;
+  }
   if (text[0] != 0)
   {
     short textWidth = StringWidth(text);

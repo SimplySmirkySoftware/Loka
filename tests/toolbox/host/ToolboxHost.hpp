@@ -209,6 +209,7 @@ namespace toolbox_host
   extern unsigned staticCaptures, staticCopies, staticReleases;
   extern unsigned bandCaptures, bandCopies, bandReleases, bandHairlines;
   extern bool staticEligible, staticCaptureSucceeds, staticCopySucceeds;
+  extern unsigned refuseHairlines;
 } // namespace toolbox_host
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
@@ -281,6 +282,7 @@ public:
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
   void drawForFlush();
+  void drawGrowBox();
 
 private:
   void drawWhole(const Rect &evidence);
@@ -643,6 +645,10 @@ public:
   void queueRetiredTextEdit(TEHandle, loka::app::scene::NativeLifetimeHint);
   bool hasLiveBinding(TEHandle) const;
   void disposeNativeHandle(TEHandle);
+  /** O(1), no rows: ensure once per draw, fallback only when no TE was acquired. */
+  bool editTextInClip(const Rect &textRect, Rect &controlRect) const;
+  /** O(1), no rows: the editor ensure and its missing-TE report share this query. */
+  bool textEditorInClip(const Rect &hit, const Rect &text, Rect &visible, Rect &clipped) const;
   ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *, const Rect &, loka::core::State<loka::core::String> *,
                                 loka::app::scene::NativeLifetimeHint);
   void retireEditTextBinding(EditTextControlBinding &, loka::app::scene::NativeLifetimeHint);
@@ -852,11 +858,35 @@ public:
     bool paintHairline(ToolboxWindow::WindowPort *, const Rect &rect, const Rect &unit)
     {
       ++toolbox_host::bandHairlines;
+      if (toolbox_host::refuseHairlines)
+      {
+        --toolbox_host::refuseHairlines;
+        return false;
+      }
       Rect line;
       return ToolboxUnitHairlineRect(rect, unit, line);
     }
   } frostCache_;
   /** Window requests: O(1) per request, before request coalescing; no rows. */
+  virtual void noteMissingRenderContext();
+  bool paintInProgress() const
+  {
+    return this->observation_.paintInProgress();
+  }
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    this->observation_.notePaintRefusal(reason, site);
+  }
+  void noteWindowDraw()
+  {
+    ++this->debugStats_.drawCalls;
+    ++this->debugStats_.totalDrawCalls;
+  }
+  void noteWindowDirtyDraw()
+  {
+    ++this->debugStats_.drawDirtyCalls;
+    ++this->debugStats_.totalDrawDirtyCalls;
+  }
   void notePresentReason(ToolboxFullDrawReason reason)
   {
     this->observation_.noteReason(reason);
@@ -1020,6 +1050,10 @@ namespace toolbox_host
 class ToolboxRectSurfaceContext : public loka::app::scene::NodeContext
 {
 public:
+  void renderDirty(const Rect &)
+  {
+    LOKA_VERIFY(false);
+  }
   void setBoundary(loka::app::scene::BoundaryNode *)
   {
     LOKA_VERIFY(false);

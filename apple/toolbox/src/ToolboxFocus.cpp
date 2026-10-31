@@ -168,6 +168,8 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
   this->activateEditControl(target);
   {
     ToolboxEditDoor door(this->window_->window(), this->editControls_[target].placement);
+    if (door.clipAllocationRefused(this->editControls_[target].placement))
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     TESetSelect(0, (**te).teLength, te);
   }
   this->invalidateUnitOverlap(rect);
@@ -219,6 +221,8 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       {
         {
           ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
+          if (door.clipAllocationRefused(focusedEdit->placement))
+            LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
           TEKey(key, focusedEdit->te);
         }
         this->invalidateUnitOverlap(focusedEdit->placement.visible());
@@ -249,6 +253,8 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
       focusedEdit->installed.revoke();
       {
         ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
+        if (door.clipAllocationRefused(focusedEdit->placement))
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         if (kind == EDIT_KEY_DELETE_FORWARD && start == end)
           TESetSelect(static_cast<short>(start), static_cast<short>(start + 1), te);
         TEKey(kind == EDIT_KEY_INSERT ? key : 8, te);

@@ -188,14 +188,14 @@ namespace
     ToolboxScenePlatformController controller;
     ZStackNode stack;
     Probe *unit;
-    StaticFixture()
+    StaticFixture(Probe *ground = 0, Probe *upper = 0)
         : port(window.window()),
           controller(&window),
           stack(ZStackProps()),
-          unit(new Probe("unit", 30))
+          unit(upper ? upper : new Probe("unit", 30))
     {
       this->stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
-      this->stack.addChild(new Probe("ground", 70));
+      this->stack.addChild(ground ? ground : new Probe("ground", 70));
       this->stack.addChild(this->unit);
       this->controller.rootNode_ = &this->stack;
       this->window.scenePlatformController_ = &this->controller;
@@ -267,7 +267,7 @@ namespace
     {
       f.window.requestInvalidateRect(f.rect());
       const unsigned before = toolbox_host::invalidations;
-      toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + 2;
       f.window.flushInvalidate();
       toolbox_host::refuseRegionAttempt = 0;
       LOKA_VERIFY(toolbox_host::invalidations == before);
@@ -356,10 +356,10 @@ namespace
             if (open)
             {
               ToolboxErasedPass::Guard guard(pass, area);
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
             }
             else
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
             const bool admitted = open && contains == 1 && (o != 2 || covers);
             LOKA_VERIFY(painted == admitted);
             LOKA_VERIFY(toolbox_host::staticCaptures == (admitted ? 1u : 0u));
@@ -369,7 +369,7 @@ namespace
             for (unsigned later = 0; later < 3; ++later)
             {
               ToolboxErasedPass::Guard guard(pass, rect);
-              const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass) == BLUR_PICTURE;
+              const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
               LOKA_VERIFY(copied);
               LOKA_VERIFY(toolbox_host::staticCaptures == 1);
             }
@@ -556,11 +556,11 @@ namespace
     f.controller.staticBlur_.reconcile(ledger.firstBlurUnits());
     ToolboxErasedPass::Guard pass(f.controller.erasedPass(), rect);
     const bool laterPainted =
-        f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass()) == BLUR_PICTURE;
+        f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass(), true) == BLUR_PICTURE;
     LOKA_VERIFY(!laterPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     const bool firstPainted =
-        f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass()) == BLUR_PICTURE;
+        f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true) == BLUR_PICTURE;
     LOKA_VERIFY(firstPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
   }
@@ -612,6 +612,8 @@ namespace
     toolbox_host::staticCaptureSucceeds = true;
     const unsigned before = toolbox_host::invalidations;
     f.update(false);
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.firstRefusal().reason
+                == TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
                 == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::DISABLED);
     LOKA_VERIFY(toolbox_host::invalidations == before);
@@ -914,16 +916,20 @@ namespace
     equal(f.controller.dirtyExtent(frozenRect), frozenRect);
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), f.window.port.portRect);
-      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass());
-      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass());
-      const ToolboxBlurPaint c = f.controller.bandBlur_.paint(f.window.window(), last, f.controller.erasedPass());
+      const ToolboxBlurPaint a =
+          f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass(), true);
+      const ToolboxBlurPaint b =
+          f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true);
+      const ToolboxBlurPaint c = f.controller.bandBlur_.paint(f.window.window(), last, f.controller.erasedPass(), true);
       LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE && c == BLUR_ABSENT);
     }
     const unsigned requests = toolbox_host::invalidations;
     for (unsigned i = 0; i < 5; ++i)
     {
-      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass());
-      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass());
+      const ToolboxBlurPaint a =
+          f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass(), true);
+      const ToolboxBlurPaint b =
+          f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true);
       LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE);
     }
     LOKA_VERIFY(toolbox_host::invalidations == requests);
@@ -1672,11 +1678,247 @@ namespace
     f.window.drawForFlush();
     LOKA_VERIFY(f.last().reasons() == 0);
   }
+  void paintEarlyReturn(bool overflow)
+  {
+    PresentFixture f;
+    f.scroll(16);
+    LOKA_VERIFY(f.last().viewports() == 1);
+    const Rect saved = f.window.port.portRect;
+    if (overflow)
+    {
+      f.window.port.portRect.left = SHRT_MIN;
+      f.window.port.portRect.right = SHRT_MAX;
+    }
+    else
+      f.controller.rootNode_ = 0;
+    f.window.drawForFlush();
+    LOKA_VERIFY(f.last().viewports() == 0);
+    LOKA_VERIFY(!f.last().paintFinished());
+    LOKA_VERIFY(!f.last().firstRefusal().refused());
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_REFUSED);
+    f.window.port.portRect = saved;
+    f.controller.rootNode_ = &f.viewport;
+  }
+  template <ToolboxBlurKind K> void paintCaptureGate()
+  {
+    StaticFixture f;
+    const Rect rect = {10, 10, 40, 110};
+    ToolboxUnitLedger::UnitSeat row = {&f.stack, 1, rect, rect};
+    ToolboxUnitLedger::FirstBlurUnits selection = {&row, &row};
+    ToolboxBlurSnapshot<K> snapshot;
+    snapshot.reconcile(selection);
+    ToolboxErasedPass pass;
+    ToolboxErasedPass::Guard guard(pass, rect);
+    const unsigned &captureCount = K == TOOLBOX_BLUR_FROZEN ? toolbox_host::staticCaptures : toolbox_host::bandCaptures;
+    const unsigned requests = toolbox_host::invalidations;
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_ABSENT);
+    LOKA_VERIFY(captureCount == 0);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::EMPTY);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_PICTURE);
+    LOKA_VERIFY(captureCount == 1);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_PICTURE);
+    LOKA_VERIFY(captureCount == 1);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::READY);
+    toolbox_host::staticCopySucceeds = false;
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_PARTIAL);
+    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::READY);
+    toolbox_host::staticCopySucceeds = true;
+    if (K == TOOLBOX_BLUR_LIVE)
+    {
+      toolbox_host::staticCaptureSucceeds = false;
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_ABSENT);
+      LOKA_VERIFY(!ToolboxBlurSnapshotInspection::hasPixels(snapshot));
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::DISABLED);
+      toolbox_host::staticCaptureSucceeds = true;
+      const unsigned captures = captureCount;
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_ABSENT);
+      LOKA_VERIFY(captureCount == captures);
+      --row.rect.bottom;
+      snapshot.reconcile(selection);
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_PICTURE);
+    }
+    LOKA_VERIFY(toolbox_host::invalidations == requests);
+  }
+
+  class RefusingPaintProbe : public Probe
+  {
+  public:
+    bool refuses;
+    RefusingPaintProbe(const char *name, short height)
+        : Probe(name, height),
+          refuses(true)
+    {
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      Probe::render(platform);
+      if (this->refuses)
+        LOKA_PAINT_REFUSE(ToolboxPaintRefusals(static_cast<ToolboxScenePlatformController *>(platform)),
+                          TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    }
+  };
+  void paintGroundGate(bool live, bool foreground)
+  {
+    RefusingPaintProbe *refusal = new RefusingPaintProbe("refusing-paint", foreground ? 30 : 70);
+    StaticFixture f(foreground ? 0 : refusal, foreground ? refusal : 0);
+    if (live)
+      f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    const unsigned &captures = live ? toolbox_host::bandCaptures : toolbox_host::staticCaptures;
+    f.window.drawForFlush();
+    LOKA_VERIFY(captures == (foreground ? 1u : 0u));
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.firstRefusal().reason
+                == TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    refusal->refuses = false;
+    f.window.drawForFlush();
+    LOKA_VERIFY(captures == (foreground && live ? 2u : 1u));
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+  }
+  void paintConstructorRegion()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    ToolboxScenePlatformController controller(&window);
+    toolbox_host::refuseRegionAttempt = 0;
+    Probe root("healthy", 30);
+    controller.rootNode_ = &root;
+    window.scenePlatformController_ = &controller;
+    for (unsigned pass = 0; pass < 2; ++pass)
+    {
+      window.drawForFlush();
+      LOKA_VERIFY(controller.debugStats_.lastPresentObservation.firstRefusal().reason
+                  == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+      LOKA_VERIFY(controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    }
+    controller.rootNode_ = 0;
+    window.scenePlatformController_ = 0;
+  }
+
+  void paintShellGrow()
+  {
+    PresentFixture f;
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    f.window.drawGrowBox();
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(f.controller.observation_.eligibility() == TOOLBOX_PAINT_REFUSED);
+    f.scroll(16);
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentEntryEligibility == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(f.last().outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+  }
+  void paintShellDirty(bool nested)
+  {
+    StaticFixture f;
+    class DirectRoot : public Node
+    {
+    public:
+      virtual void render(IPlatformController *) {}
+    } direct;
+    if (!nested)
+      f.controller.rootNode_ = &direct;
+    f.window.drawForFlush();
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    if (!nested)
+    {
+      // An offscreen hit selects direct replay without a visible leaf obligation.
+      const Rect offscreen = {1000, 1000, 1020, 1080};
+      ToolboxScenePlatformController::CellHit hit = {offscreen, 0, 0, 0, 0};
+      f.controller.installHit(hit);
+    }
+    const int renders = f.controller.debugStats_.totalRenderCalls;
+    toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+    f.window.drawDirty(f.window.port.portRect);
+    toolbox_host::refuseRegionAttempt = 0;
+    LOKA_VERIFY(f.controller.debugStats_.totalRenderCalls == renders + (nested ? 1 : 0));
+    LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(f.controller.observation_.eligibility() == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    f.controller.rootNode_ = &f.stack;
+  }
+
+  void paintEligibilityRules()
+  {
+    ToolboxPresentObservation observation;
+    ToolboxSceneDebugStats stats;
+    LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    const Rect viewport = {0, 0, 100, 100};
+    observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    observation.noteViewportMove(viewport, 0, 8, ToolboxViewportContentObservation());
+    observation.complete(0);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
+    observation.reset();
+    {
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
+    LOKA_VERIFY(stats.lastPresentEntryEligibility == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    unsigned expectedSiteLine = 0;
+    {
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      observation.complete(0);
+      expectedSiteLine = __LINE__ + 1;
+      LOKA_PAINT_REFUSE(observation, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+      LOKA_PAINT_REFUSE(observation, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+      observation.markPaintFinished();
+      observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
+    }
+    LOKA_VERIFY(stats.lastPresentEntryEligibility == TOOLBOX_PAINT_CLEAN);
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+    char suffix[96];
+    std::sprintf(suffix, "ToolboxZStackUnitHostTests.cpp:%u", expectedSiteLine);
+    const char *site = stats.lastPresentObservation.firstRefusal().site;
+    LOKA_VERIFY(site && std::strlen(site) >= std::strlen(suffix));
+    LOKA_VERIFY(std::strcmp(site + std::strlen(site) - std::strlen(suffix), suffix) == 0);
+#else
+    (void)expectedSiteLine;
+    LOKA_VERIFY(stats.lastPresentObservation.firstRefusal().site == 0);
+#endif
+    LOKA_VERIFY(stats.lastPresentObservation.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_CHILD_DIRTY));
+    LOKA_VERIFY(!observation.firstRefusal().refused());
+    {
+      ToolboxPresentObservation::Interval interval(observation, false, stats);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
+    LOKA_VERIFY(stats.lastPresentObservation.paintFinished());
+    LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    {
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
+    LOKA_PAINT_REFUSE(observation, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_REFUSED);
+    {
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
+    }
+    LOKA_VERIFY(!stats.lastPresentObservation.paintFinished());
+    LOKA_VERIFY(!stats.lastPresentObservation.firstRefusal().refused());
+    LOKA_VERIFY(stats.lastPresentObservation.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    LOKA_VERIFY(!observation.outsideRefusal().refused());
+    LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
+  }
+
   void presentOrder()
   {
     const Rect viewport = {10, 10, 100, 100};
     const Rect outside = {0, 0, 200, 200};
     ToolboxPresentObservation observation;
+    ToolboxSceneDebugStats warmStats;
+    {
+      ToolboxPresentObservation::Interval warm(observation, true, warmStats);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
     observation.noteReason(TOOLBOX_FULL_DRAW_UNKNOWN);
     observation.noteDamage(outside);
     observation.complete(1);
@@ -1727,7 +1969,8 @@ namespace
     {
       observation.reset();
       observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
-      ToolboxPresentObservation::Interval interval(observation);
+      ToolboxSceneDebugStats stats;
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
       ToolboxViewportContentObservation content;
       if (gate == 0)
         content.noteContentInputs();
@@ -1746,13 +1989,15 @@ namespace
                                   : TOOLBOX_PRESENT_DITHER_PHASE));
       LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY));
       LOKA_VERIFY(observation.walkReasonNames() == (gate < 2 ? "child_dirty" : "none"));
+      observation.markPaintFinished();
     }
     LOKA_VERIFY(observation.contentInputs() == 0 && observation.unsupportedKinds() == 0);
     LOKA_VERIFY(observation.walkReasons() == 0);
     LOKA_VERIFY(observation.phaseBound() == 0);
     observation.reset();
     {
-      ToolboxPresentObservation::Interval interval(observation);
+      ToolboxSceneDebugStats stats;
+      ToolboxPresentObservation::Interval interval(observation, true, stats);
       observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
       observation.complete(0);
       observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
@@ -2191,9 +2436,14 @@ namespace
     if (std::strcmp(mode, "RefusedChildHasNoRowAndNoRender") == 0)
     {
       upper->refuse = true;
+      controller.observation_.reset();
       LayoutNode(&stack, state, &controller, 0);
       LOKA_VERIFY(controller.unitLedger_.mark() == 0);
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      controller.observation_.reset();
       RenderNode(&stack, &controller);
+      // Isolate render: absent seats do not repeat the layout-owned refusal.
+      LOKA_VERIFY(!controller.observation_.outsideRefusal().refused());
       LOKA_VERIFY(upper->renders == 0);
       return;
     }
@@ -2237,9 +2487,27 @@ namespace
     }
   }
 } // namespace
+#include "ToolboxPaintRefusalPins.hpp"
 int main(int argc, char **argv)
 {
-  const char *names[] = {"NativePlacement",
+  if (argc == 2 && std::strncmp(argv[1], "Refusal", 7) == 0)
+  {
+    runRefusalPin(argv[1]);
+    return 0;
+  }
+  const char *names[] = {"PaintGroundFrozen",
+                         "PaintGroundLive",
+                         "PaintForeground",
+                         "PaintConstructorRegion",
+                         "PaintShellGrow",
+                         "PaintShellDirtyDirect",
+                         "PaintShellDirtyNested",
+                         "PaintEligibility",
+                         "PaintNullRoot",
+                         "PaintOversizedPort",
+                         "PaintCaptureFrozen",
+                         "PaintCaptureLive",
+                         "NativePlacement",
                          "PresentReasons",
                          "PresentMove",
                          "PresentForeground",
@@ -2341,6 +2609,30 @@ int main(int argc, char **argv)
     presentRefusedVisit();
   else if (std::strncmp(argv[1], "ViewportInput", 13) == 0)
     viewportInput(argv[1]);
+  else if (std::strcmp(argv[1], "PaintNullRoot") == 0)
+    paintEarlyReturn(false);
+  else if (std::strcmp(argv[1], "PaintOversizedPort") == 0)
+    paintEarlyReturn(true);
+  else if (std::strcmp(argv[1], "PaintCaptureFrozen") == 0)
+    paintCaptureGate<TOOLBOX_BLUR_FROZEN>();
+  else if (std::strcmp(argv[1], "PaintCaptureLive") == 0)
+    paintCaptureGate<TOOLBOX_BLUR_LIVE>();
+  else if (std::strcmp(argv[1], "PaintGroundFrozen") == 0)
+    paintGroundGate(false, false);
+  else if (std::strcmp(argv[1], "PaintGroundLive") == 0)
+    paintGroundGate(true, false);
+  else if (std::strcmp(argv[1], "PaintForeground") == 0)
+    paintGroundGate(false, true);
+  else if (std::strcmp(argv[1], "PaintConstructorRegion") == 0)
+    paintConstructorRegion();
+  else if (std::strcmp(argv[1], "PaintShellGrow") == 0)
+    paintShellGrow();
+  else if (std::strcmp(argv[1], "PaintShellDirtyDirect") == 0)
+    paintShellDirty(false);
+  else if (std::strcmp(argv[1], "PaintShellDirtyNested") == 0)
+    paintShellDirty(true);
+  else if (std::strcmp(argv[1], "PaintEligibility") == 0)
+    paintEligibilityRules();
   else if (std::strcmp(argv[1], "PresentOrder") == 0)
     presentOrder();
   else if (std::strcmp(argv[1], "StaticNoRequests") == 0)

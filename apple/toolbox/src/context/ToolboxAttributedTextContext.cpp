@@ -118,6 +118,7 @@ short ToolboxAttributedTextContext::layout(loka::app::scene::IPlatformController
       && this->table_.valid() && this->table_.matches(value);
   if (!this->reconcileProjection(state.width, !reused))
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     controller->refuseTextMeasurement(this->node_, state);
     this->presented_.invalidate();
     return 0;
@@ -168,7 +169,10 @@ void ToolboxAttributedTextContext::render(loka::app::scene::IPlatformController 
   short constraint = placementWidth;
   this->table_.queryConstraint(constraint);
   if (!this->reconcileProjection(constraint, false))
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
+  }
   // Geometry layout would place differently waits for layout: paint what
   // fits, but never certify the value as presented.
   const bool fits = this->placedWidth(constraint) == placementWidth
@@ -183,6 +187,8 @@ void ToolboxAttributedTextContext::render(loka::app::scene::IPlatformController 
   }
   ToolboxTextMeasureScope port(*this->controller());
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   // A missed replay changes no pixels and must preserve the previous history.
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
@@ -197,6 +203,10 @@ void ToolboxAttributedTextContext::render(loka::app::scene::IPlatformController 
                                          *this->controller(),
                                          this->node_->props.blockStyle_,
                                          this->rect_.right - this->rect_.left);
+  if (!fits)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+  if (!painted)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
   if (painted && completes && fits)
     this->presented_.commit(this->table_.value(), ToolboxPaintScope());
 }

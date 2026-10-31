@@ -19,6 +19,8 @@ bool ToolboxScenePlatformController::presentEditorScrollBar(short id,
     const bool visible = (**row.control).contrlVis != 0;
     bool changed = visible != presentation.shown;
     {
+      if (!this->paintSuppressClipRgn_)
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
       if (presentation.shown)
       {
@@ -57,25 +59,35 @@ bool ToolboxScenePlatformController::ensureEditorScrollBar(short id,
 {
   if (!this->window_ || !this->window_->window())
     return false;
-  ToolboxPortScope port(this->window_->window());
-  ScrollBarControlBinding *row = 0;
-  {
-    ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
-    if (!EmptyRect(&rect))
-      this->ensureScrollBarBinding(id,
-                                   rect,
-                                   0,
-                                   presentation.shown ? presentation.maximum : 0,
-                                   1,
-                                   presentation.shown ? presentation.pageStep : 1,
-                                   hint,
-                                   row);
-  }
-  if (!row)
+  if (EmptyRect(&rect))
   {
     this->presentEditorScrollBar(id, ToolboxEditorScrollBarPresentation());
     return false;
   }
+  ToolboxPortScope port(this->window_->window());
+  ScrollBarControlBinding *row = 0;
+  bool acquired = false;
+  {
+    ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
+    if (!EmptyRect(&rect))
+      acquired = this->ensureScrollBarBinding(id,
+                                              rect,
+                                              0,
+                                              presentation.shown ? presentation.maximum : 0,
+                                              1,
+                                              presentation.shown ? presentation.pageStep : 1,
+                                              hint,
+                                              row);
+  }
+  if (!row)
+  {
+    if (!acquired)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
+    this->presentEditorScrollBar(id, ToolboxEditorScrollBarPresentation());
+    return false;
+  }
+  if (!this->paintSuppressClipRgn_)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   row->editor.install(editor);
   return true;
 }

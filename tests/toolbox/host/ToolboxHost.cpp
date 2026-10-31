@@ -662,7 +662,11 @@ namespace
 #endif
     return false;
   }
+#ifdef LOKA_HOST_ZSTACK_UNITS
+#include "ToolboxDirtyRectReplay.inc"
+#else
   void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
+#endif
   void RenderDirtyImageViews(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
 } // namespace
 #include "ToolboxDirtyPresentation.cpp"
@@ -831,6 +835,7 @@ namespace toolbox_host
   unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
   unsigned bandCaptures = 0, bandCopies = 0, bandReleases = 0, bandHairlines = 0;
   bool staticEligible = true, staticCaptureSucceeds = true, staticCopySucceeds = true;
+  unsigned refuseHairlines = 0;
 } // namespace toolbox_host
 struct ToolboxBlurPixels::Image
 {
@@ -931,25 +936,9 @@ void ToolboxWindow::drawForFlush()
         ToolboxUpdateDamage(this->port.updateRgn, this->port.portBits.bounds));
   this->drawWhole(this->port.portRect);
 }
-void ToolboxWindow::drawWhole(const Rect &evidence)
-{
-  if (!this->scenePlatformController_)
-    return;
-  RgnHandle clip = NewRgn();
-  const Rect empty = {0, 0, 0, 0};
-  const Rect captureEvidence = ToolboxCaptureEvidence(clip ? this->port.portRect : empty, evidence);
-  ToolboxErasedPass::Guard erased(this->scenePlatformController_->erasedPass(), captureEvidence);
-  ToolboxPortErasePresenter presenter(this->port.portRect);
-  ToolboxInputDoor::render(*this->scenePlatformController_, &presenter);
-  if (clip)
-    DisposeRgn(clip);
-}
-void ToolboxWindow::drawDirty(const Rect &rect)
-{
-  if (this->scenePlatformController_)
-    ToolboxRenderDirtyInCompositionOrder(*this->scenePlatformController_,
-                                         this->scenePlatformController_->dirtyExtent(rect));
-}
+static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
+#include "ToolboxWindowPaint.cpp"
+
 #endif
 void ToolboxScenePlatformController::retireNodeContext(loka::app::scene::NodeContext *context,
                                                        loka::app::scene::NativeLifetimeHint lifetimeHint)
