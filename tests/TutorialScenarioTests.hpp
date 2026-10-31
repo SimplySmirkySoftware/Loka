@@ -4,6 +4,7 @@
 void testTutorialIncrementSummaryToggleDrivesUiCommands();
 void testTutorialListCapacityAndVisibility();
 void testTutorialScrollListCapacityAndVisibility();
+void testTutorialToolbarListCapacityAndVisibility();
 void testTutorialIncrementSummaryToggleHoldsFinalSceneAndMatchesAudit();
 void testTutorialStandaloneMenuUsesExampleDeclaration();
 void testTutorialStandaloneFlowWritesExpectedAudit();
