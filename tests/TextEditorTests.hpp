@@ -64,4 +64,7 @@ void testTextCapacityNarrowingAndIdBudget();
 void testTextCapacityLatePayloadRefusal();
 void testTextCapacitySizeArithmetic();
 void testTextCapacityQuiescentReclaim();
+void testRequestQueueVacatedPositionsHoldNone();
+void testRequestQueueWrapPreservesFifo();
+void testRequestQueueClearResetsStorageAndHead();
 #endif
