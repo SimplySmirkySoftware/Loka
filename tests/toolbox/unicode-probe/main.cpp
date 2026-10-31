@@ -311,6 +311,11 @@ namespace
       if (((ev.message >> 24) & 0xFF) == suspendResumeMessage)
       {
         const bool resumed = (ev.message & resumeFlag) != 0;
+        // K2 (re-measure): the rail form. Textension keeps a private scrap;
+        // the public clipboard reaches TXNPaste only after this conversion.
+        const OSStatus convertStatus = resumed ? TXNConvertFromPublicScrap() : TXNConvertToPublicScrap();
+        logf("%s convert=%ld pastable=%d", resumed ? "RESUME from-public" : "SUSPEND to-public",
+             (long)convertStatus, (int)TXNIsScrapPastable());
         TXNFocus(gTxn, resumed);
         TXNActivate(gTxn, gFrame, resumed);
       }
