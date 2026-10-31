@@ -1,0 +1,6 @@
+#ifndef LOKA_TESTS_REQUEST_RING_TESTS_HPP
+#define LOKA_TESTS_REQUEST_RING_TESTS_HPP
+void testRequestRingFullRefusalPreservesStorage();
+void testRequestRingAdvanceVacatesAndWraps();
+void testRequestRingClearResetsStorageAndHead();
+#endif
