@@ -9,6 +9,25 @@ namespace loka
     class ToolboxTextEditorAccess
     {
     public:
+      static void scrollTo(ToolboxTextEditorContext &c, const app::LineCursor &cursor)
+      {
+        c.scrollTo(cursor);
+      }
+      static void repaint(ToolboxTextEditorContext &c, TEHandle te)
+      {
+        c.repaint(te);
+      }
+      static void forgetTE(ToolboxTextEditorContext &c)
+      {
+        c.te_ = 0;
+      }
+      static void renderMissingNode(ToolboxTextEditorContext &c, app::scene::IPlatformController *p)
+      {
+        app::TextEditorNode *saved = c.node_;
+        c.node_ = 0;
+        c.render(p);
+        c.node_ = saved;
+      }
       static void projecting(ToolboxTextEditorContext &c, bool value)
       {
         c.phase_ = value ? ToolboxTextEditorContext::PROJECT : ToolboxTextEditorContext::IDLE;

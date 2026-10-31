@@ -27,6 +27,7 @@ struct NullTextPaintStyle
         weight(loka::app::TEXT_WEIGHT_NORMAL),
         color(loka::app::TEXT_COLOR_UNSET),
         italic(false),
+        underline(loka::app::TEXT_TOGGLE_OFF),
         wrap(loka::app::TEXT_WRAP_NONE),
         truncation(loka::app::TEXT_TRUNCATION_NONE),
         align(loka::app::TEXT_ALIGN_LEFT)
@@ -36,13 +37,15 @@ struct NullTextPaintStyle
   bool operator==(const NullTextPaintStyle &other) const
   {
     return fontSize == other.fontSize && weight == other.weight && italic == other.italic && color == other.color
-           && family == other.family && wrap == other.wrap && truncation == other.truncation && align == other.align;
+           && underline == other.underline && family == other.family && wrap == other.wrap
+           && truncation == other.truncation && align == other.align;
   }
   int fontSize;
   loka::app::TextWeight weight;
   loka::app::TextColor color;
   bool italic;
   loka::app::TextFamilyValue family;
+  loka::app::TextToggleValue underline;
   loka::app::TextWrap wrap;
   loka::app::TextTruncation truncation;
   loka::app::TextAlign align;
@@ -94,9 +97,17 @@ namespace loka
   {
     namespace testing
     {
-      /** Captured family from the last placement/presentation, not a props reread. */
+      /** Captured style from the last placement/presentation, not a props reread. */
       struct NullTextStyleAccess
       {
+        static TextToggleValue underline(const NullTextContext &context)
+        {
+          return context.placedStyle_.underline;
+        }
+        static bool italic(const NullTextContext &context)
+        {
+          return context.placedStyle_.italic;
+        }
         static TextFamily family(const NullTextContext &context)
         {
           return context.placedStyle_.family.family();

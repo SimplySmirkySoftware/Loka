@@ -3,6 +3,7 @@
 
 #include "app/style/TextSizeValue.hpp"
 #include "app/style/TextFamilyValue.hpp"
+#include "app/style/TextToggleValue.hpp"
 #include "app/style/StyleVocab.hpp"
 
 namespace loka
@@ -16,9 +17,8 @@ namespace loka
           : size_(size),
             weight_(TEXT_WEIGHT_NORMAL),
             color_(TEXT_COLOR_UNSET),
-            italic_(false),
-            hasWeight_(false),
-            hasItalic_(false)
+            italic_(),
+            hasWeight_(false)
       {
       }
 
@@ -47,17 +47,34 @@ namespace loka
         return this->family_.family();
       }
 
-      /** Whether any font axis is declared, independently of color and block style. */
+      /** Whether any font axis is declared, independently of color, underline and block style. */
       bool declaresFont() const
       {
-        return this->size_.isSet() || this->hasWeight_ || this->hasItalic_ || this->family_.isSet();
+        return this->size_.isSet() || this->hasWeight_ || this->italic_.isSet() || this->family_.isSet();
       }
 
       TextStyle &italic(bool value = true)
       {
-        this->italic_ = value;
-        this->hasItalic_ = true;
+        this->italic_ = TextToggleValue(value ? TEXT_TOGGLE_ON : TEXT_TOGGLE_OFF);
         return *this;
+      }
+
+      /** Returns presence and writes on only when italic is declared. */
+      bool queryItalic(bool &on) const
+      {
+        return this->italic_.query(on);
+      }
+
+      TextStyle &underline(bool value = true)
+      {
+        this->underline_ = TextToggleValue(value ? TEXT_TOGGLE_ON : TEXT_TOGGLE_OFF);
+        return *this;
+      }
+
+      /** Returns presence and writes on only when underline is declared. */
+      bool queryUnderline(bool &on) const
+      {
+        return this->underline_.query(on);
       }
 
       TextStyle operator+(const TextStyle &right) const
@@ -70,22 +87,19 @@ namespace loka
           result.weight_ = right.weight_;
           result.hasWeight_ = true;
         }
-        if (right.hasItalic_)
-        {
-          result.italic_ = right.italic_;
-          result.hasItalic_ = true;
-        }
+        result.italic_ = this->italic_ + right.italic_;
         if (right.color_ != TEXT_COLOR_UNSET)
           result.color_ = right.color_;
         result.family_ = this->family_ + right.family_;
+        result.underline_ = this->underline_ + right.underline_;
         return result;
       }
 
       bool operator==(const TextStyle &other) const
       {
         return this->size_ == other.size_ && this->weight_ == other.weight_ && this->italic_ == other.italic_
-               && this->hasWeight_ == other.hasWeight_ && this->hasItalic_ == other.hasItalic_
-               && this->color_ == other.color_ && this->family_ == other.family_;
+               && this->hasWeight_ == other.hasWeight_ && this->color_ == other.color_ && this->family_ == other.family_
+               && this->underline_ == other.underline_;
       }
 
       bool operator!=(const TextStyle &other) const
@@ -104,28 +118,30 @@ namespace loka
           return points < otherPoints;
         if (this->weight_ != other.weight_)
           return this->weight_ < other.weight_;
-        if (this->italic_ != other.italic_)
-          return this->italic_ < other.italic_;
+        if (this->italic_.isOn() != other.italic_.isOn())
+          return this->italic_.isOn() < other.italic_.isOn();
         if (!(this->size_ == other.size_))
           return this->size_ < other.size_;
         if (this->hasWeight_ != other.hasWeight_)
           return this->hasWeight_ < other.hasWeight_;
-        if (this->hasItalic_ != other.hasItalic_)
-          return this->hasItalic_ < other.hasItalic_;
+        if (this->italic_.isSet() != other.italic_.isSet())
+          return this->italic_.isSet() < other.italic_.isSet();
         if (this->color_ != other.color_)
           return this->color_ < other.color_;
-        return this->family_ < other.family_;
+        if (!(this->family_ == other.family_))
+          return this->family_ < other.family_;
+        return this->underline_ < other.underline_;
       }
 
       TextSizeValue size_;
       TextWeight weight_;
-      /** Color carries its own absence in UNSET. Weight and italic keep has* flags
-          because their value domains have no distinct unset member. */
+      /** Color carries its own absence in UNSET. Weight keeps a hasWeight_ flag
+          because its value domain has no distinct unset member. */
       TextColor color_;
-      bool italic_;
+      TextToggleValue italic_;
       bool hasWeight_;
-      bool hasItalic_;
       TextFamilyValue family_;
+      TextToggleValue underline_;
     };
 
     /** Paragraph-level text style. Unset fields are transparent during merge. */
@@ -257,6 +273,7 @@ namespace loka
 
     static const TextStyle Bold = TextStyle().weight(TEXT_WEIGHT_BOLD);
     static const TextStyle Italic = TextStyle().italic();
+    static const TextStyle Underline = TextStyle().underline();
     static const TextStyle Monospace = TextStyle().family(TEXT_FAMILY_MONOSPACE);
     static const TextStyle Body = FontSize<12>();
     static const TextStyle Caption = FontSize<9>();

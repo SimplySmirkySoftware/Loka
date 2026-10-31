@@ -2131,3 +2131,27 @@ void testMacGapDoorScrollViewContent()
   [root release];
   [pool drain];
 }
+
+void testMacTextItalicTraits()
+{
+  std::printf("\n==== [testMacTextItalicTraits] start ====\n");
+  using namespace loka::app;
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+  LOKA_VERIFY(root != nil);
+  {
+    MacScenePlatformController controller((void *)root, loka::macos::DefaultRailMetrics());
+    const TextStyle styles[] = {TextStyle(), TextStyle().italic(false), TextStyle().italic(true)};
+    for (int i = 0; i < 3; ++i)
+    {
+      const TextDefinitionWithAttr text = Text("italic") + styles[i];
+      NSFont *font = (NSFont *)controller.textFont(text.props.resolvedTextStyle());
+      LOKA_VERIFY(font != nil);
+      LOKA_VERIFY((([[NSFontManager sharedFontManager] traitsOfFont:font] & NSItalicFontMask) != 0) == (i == 2));
+    }
+  }
+  [root release];
+  [pool drain];
+  std::printf("==== [testMacTextItalicTraits] PASSED ====\n");
+}

@@ -1,4 +1,5 @@
 #include "app/scene/node/ComposableNode.hpp"
+#include "app/scene/projection/PlatformController.hpp"
 #include "app/scene/boundary/detail/BoundaryObservedState.hpp"
 
 namespace loka
@@ -46,6 +47,14 @@ namespace loka
       {
         for (ObservedUse *row = this->head; row; row = row->next)
           if (!row->subscription) row->state = 0;
+      }
+
+      void Node::render(IPlatformController *controller)
+      {
+        if (this->context)
+          this->context->render(controller);
+        else if (controller)
+          controller->noteMissingRenderContext();
       }
 
       bool Node::prepareObservedUses()

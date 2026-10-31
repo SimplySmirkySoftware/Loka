@@ -715,13 +715,7 @@ namespace loka
           (void)name;
           return 0;
         }
-        virtual void render(IPlatformController *controller)
-        {
-          if (context)
-          {
-            context->render(controller);
-          }
-        }
+        virtual void render(IPlatformController *controller);
         /** Reserve the declared observation rows before publishing a candidate. */
         bool prepareObservedUses();
         /** Restores a refused layout's inputs without losing newer marks. */

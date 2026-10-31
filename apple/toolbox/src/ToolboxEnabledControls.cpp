@@ -17,6 +17,8 @@ void ToolboxScenePlatformController::refreshButtonEnabled(ButtonControlBinding &
   if (binding.control)
   {
     ToolboxPortScope port(this->window_->window());
+    if (!this->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
     Rect visible;
     if (binding.placement.queryVisible(visible))
@@ -40,6 +42,8 @@ void ToolboxScenePlatformController::refreshScrollBarEnabled(ScrollBarControlBin
   if (binding.control)
   {
     ToolboxPortScope port(this->window_->window());
+    if (!this->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
     Rect visible;
     if (binding.placement.queryVisible(visible))

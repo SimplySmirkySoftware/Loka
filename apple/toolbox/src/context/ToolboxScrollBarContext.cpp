@@ -95,6 +95,7 @@ void ToolboxScrollBarContext::draw(ToolboxScenePlatformController *controller)
 {
   if (!node_)
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
   }
   if (controller && resourceId_ <= 0)
@@ -115,6 +116,7 @@ void ToolboxScrollBarContext::draw(ToolboxScenePlatformController *controller)
   }
   // No Control Manager control: outline the band so the layout stays legible
   // instead of leaving a hole, the same fallback the button arm uses.
+  LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   FrameRect(&rect_);
 }
 

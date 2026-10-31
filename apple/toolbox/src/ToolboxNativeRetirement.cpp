@@ -99,6 +99,8 @@ void ToolboxScenePlatformController::hideRetiredControl(ControlRef control)
     return;
   }
   ToolboxPortScope port(this->window_->window());
+  if (!this->paintSuppressClipRgn_)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
   HideControl(control);
 }

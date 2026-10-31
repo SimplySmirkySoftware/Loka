@@ -66,12 +66,13 @@ void ToolboxScenePlatformController::renderDirty(const Rect &rect)
   for (size_t i = 0; i < cellReplayCount; ++i)
   {
     CellHit hit = hitLedger_.cellHits_[i];
-    if (!hit.context)
+    if (!RectsIntersect(rect, hit.rect))
     {
       continue;
     }
-    if (!RectsIntersect(rect, hit.rect))
+    if (!hit.context)
     {
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
       continue;
     }
     hit.context->draw(this);

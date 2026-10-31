@@ -12,6 +12,7 @@ namespace
   Rect clip = {SHRT_MIN, SHRT_MIN, SHRT_MAX, SHRT_MAX};
   std::vector<Rect> paints;
   std::vector<Rect> unions;
+  unsigned refuseRegions = 0;
 }
 // Rectangular QuickDraw subset: these pins union only one visible sprite, so
 // a bounding rectangle is an exact region. Record inputs before native clipping.
@@ -29,6 +30,11 @@ bool SectRect(const Rect *a, const Rect *b, Rect *out)
 }
 RgnHandle NewRgn()
 {
+  if (refuseRegions)
+  {
+    --refuseRegions;
+    return 0;
+  }
   RgnHandle r = new Region *;
   *r = new Region;
   (**r).rgnSize = sizeof(Region);
@@ -108,6 +114,49 @@ namespace
     }
     if (scroll) controller.projectionParentScopes_.pop();
   }
+  void paintRefusalPin(const char *mode)
+  {
+    ToolboxScenePlatformController controller;
+    loka::core::MutableState<RectSurfaceModel> model((RectSurfaceModel()));
+    RectSurfaceNode node(RectSurfaceProps().model(&model).useRegionClip(true));
+    const bool fallback = std::strcmp(mode, "paint-fallback") == 0;
+    if (fallback)
+      refuseRegions = 3;
+    node.setContext(new ToolboxRectSurfaceContext(&node, &controller));
+    ToolboxRectSurfaceContext *context = static_cast<ToolboxRectSurfaceContext *>(node.getContext());
+    LayoutState placement;
+    placement.x = 20;
+    placement.y = 20;
+    placement.width = 100;
+    placement.height = 100;
+    context->layout(&controller, placement);
+    context->render(&controller);
+    controller.paintObservation.reset();
+    const bool missing = std::strcmp(mode, "paint-missing") == 0;
+    const bool dirtyMissing = std::strcmp(mode, "paint-dirty-missing") == 0;
+    const bool disjoint = std::strcmp(mode, "paint-disjoint") == 0;
+    const bool query = std::strcmp(mode, "paint-query") == 0;
+    const bool clipRefused = std::strcmp(mode, "paint-clip") == 0;
+    if (missing || dirtyMissing || disjoint || query)
+      node.props.model_ = 0;
+    Rect rect = {20, 20, 120, 120};
+    if (disjoint)
+      SetRect(&rect, 200, 200, 300, 300);
+    if (clipRefused)
+      refuseRegions = 2;
+    if (query)
+    {
+      LOKA_VERIFY(!context->dirtyRect(rect));
+    }
+    else if (missing || clipRefused)
+      context->render(&controller);
+    else
+      context->renderDirty(rect);
+    LOKA_VERIFY(controller.paintObservation.outsideRefusal().reason
+                == (clipRefused               ? TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION
+                    : missing || dirtyMissing ? TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET
+                                              : TOOLBOX_PAINT_REFUSAL_NONE));
+  }
   void spritePin(const char *mode)
   {
     RectSurfaceModel model;
@@ -170,8 +219,11 @@ namespace
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
-  if (std::strncmp(argv[1], "sprite-", 7) == 0 || std::strncmp(argv[1], "dirty-", 6) == 0
-      || std::strcmp(argv[1], "region") == 0) spritePin(argv[1]);
+  if (std::strncmp(argv[1], "paint-", 6) == 0)
+    paintRefusalPin(argv[1]);
+  else if (std::strncmp(argv[1], "sprite-", 7) == 0 || std::strncmp(argv[1], "dirty-", 6) == 0
+           || std::strcmp(argv[1], "region") == 0)
+    spritePin(argv[1]);
   else layoutPin(argv[1]);
   return 0;
 }

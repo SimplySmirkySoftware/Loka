@@ -15,6 +15,11 @@ public:
   {
   }
 
+  bool clipAllocationRefused(const ToolboxNativePlacement &placement) const
+  {
+    return !EqualRect(&placement.full(), &placement.visible()) && !this->scope_.clipAllocated();
+  }
+
 private:
   ToolboxEditDoor(const ToolboxEditDoor &);
   ToolboxEditDoor &operator=(const ToolboxEditDoor &);
