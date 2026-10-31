@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "ToolboxUnicodeEditorLedger.hpp"
 #include "ToolboxEditorFrame.hpp"
 #include "ToolboxTextensionFake.hpp"
@@ -110,6 +111,7 @@ static void lifecycle()
 }
 static void destructorDeath(bool retired)
 {
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
   if (!child)
@@ -127,6 +129,11 @@ static void destructorDeath(bool retired)
   int status = 0;
   LOKA_VERIFY(waitpid(child, &status, 0) == child);
   LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+  (void)retired;
+  std::puts(
+      "[skip] ledger destructor death pin requires Linux without ASan or NDEBUG (the list asserts are compiled out)");
+#endif
 }
 void testUnicodeTeardown();
 int main()

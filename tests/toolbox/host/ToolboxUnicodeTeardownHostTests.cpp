@@ -67,7 +67,7 @@ namespace
 void testUnicodeTeardown()
 {
   sequence(false);
-#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__)
+#if defined(__linux__) && !defined(__SANITIZE_ADDRESS__) && !defined(NDEBUG)
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
   if (!child)
@@ -79,6 +79,6 @@ void testUnicodeTeardown()
   LOKA_VERIFY(waitpid(child, &status, 0) == child);
   LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
 #else
-  std::puts("[skip] teardown death pin requires Linux without ASan");
+  std::puts("[skip] teardown death pin requires Linux without ASan or NDEBUG (the Regime assert is compiled out)");
 #endif
 }
