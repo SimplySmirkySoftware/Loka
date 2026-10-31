@@ -1854,3 +1854,451 @@ void testSingleLiveLeafStopsAtSecondSeat()
   LOKA_VERIFY(singleLiveLeaf(&outer).kind() == SeatLeaves::MANY_LEAVES);
   LOKA_VERIFY(visits == 0);
 }
+
+namespace
+{
+  loka::app::StackProps labelsShareProps()
+  {
+    loka::app::StackProps props = loka::app::Row().gap(8).props;
+    props.rowUndeclaredWidth_ = loka::app::ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE;
+    return props;
+  }
+
+  class LabelShareProbe : public loka::app::layout::INaturalSizeSource
+  {
+  public:
+    LabelShareProbe()
+        : labelCalls(0),
+          otherCalls(0),
+          refuse(false)
+    {
+    }
+    virtual bool queryNaturalWidth(loka::app::scene::Node *node, short &width) const
+    {
+      using namespace loka::app;
+      if (TextNode *text = node->asTextNode())
+      {
+        if (text->props.blockStyle_.truncation_ == TEXT_TRUNCATION_ELLIPSIS)
+          ++this->labelCalls;
+        else
+          ++this->otherCalls;
+        width = 20;
+        return !this->refuse;
+      }
+      ++this->otherCalls;
+      if (ButtonNode *button = node->asButtonNode())
+      {
+        std::string title;
+        loka::platform::CollectUtf8(button->props.text_->get(), title);
+        width = title == "first" ? 40 : 30;
+        return !this->refuse;
+      }
+      // An empty Box must be recognized before even a successful rail answer.
+      width = 99;
+      return !this->refuse;
+    }
+    mutable int labelCalls, otherCalls;
+    bool refuse;
+  };
+} // namespace
+
+void testRowLabelsShareTables()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  const int expectedWidths[3][5][5] = {
+      {{40, 0, 1, 1, 30}, {40, 0, 1, 1, 30}, {40, 1, 1, 1, 30}, {40, 1, 2, 1, 30}, {40, 1, 2, 2, 30}},
+      {{40, 1, 1, 0, 30}, {40, 1, 1, 0, 30}, {40, 2, 1, 0, 30}, {40, 2, 2, 0, 30}, {40, 2, 2, 1, 30}},
+      {{40, 1, 1, 30, 0}, {40, 1, 1, 30, 0}, {40, 2, 1, 30, 0}, {40, 2, 2, 30, 0}, {40, 2, 2, 30, 1}}};
+  const int expectedX[3][5][5] = {
+      {{0, 48, 56, 65, 74}, {0, 48, 56, 65, 74}, {0, 48, 57, 66, 75}, {0, 48, 57, 67, 76}, {0, 48, 57, 67, 77}},
+      {{0, 48, 57, 66, 74}, {0, 48, 57, 66, 74}, {0, 48, 58, 67, 75}, {0, 48, 58, 68, 76}, {0, 48, 58, 68, 77}},
+      {{0, 48, 57, 66, 104}, {0, 48, 57, 66, 104}, {0, 48, 58, 67, 105}, {0, 48, 58, 68, 106}, {0, 48, 58, 68, 106}}};
+  for (int order = 0; order < 3; ++order)
+    for (int offer = 103; offer <= 107; ++offer)
+    {
+      StackNode content(Column().props);
+      StackNode *row = new StackNode(labelsShareProps());
+      content.addChild(row);
+      scene::Node *seats[5];
+      seats[0] = new ButtonNode(ButtonProps().text("first"));
+      seats[1] = order == 0 ? static_cast<scene::Node *>(new BoxNode(Box().props)) : shrinkText(200);
+      seats[2] = shrinkText(300);
+      seats[3] = order == 0   ? static_cast<scene::Node *>(shrinkText(400))
+                 : order == 1 ? static_cast<scene::Node *>(new BoxNode(Box().props))
+                              : new ButtonNode(ButtonProps().text("last"));
+      seats[4] = order == 2 ? static_cast<scene::Node *>(new BoxNode(Box().props))
+                            : new ButtonNode(ButtonProps().text("last"));
+      for (int i = 0; i < 5; ++i)
+        row->addChild(seats[i]);
+      LabelShareProbe source;
+      RowWidthConsultation widths(row->childrenHead(),
+                                  row->childrenCount(),
+                                  offer,
+                                  8,
+                                  RailSpacing(12, 8, 9),
+                                  row->props.rowUndeclaredWidth_,
+                                  &source);
+      int x = 0;
+      for (int i = 0; i < 5; ++i)
+      {
+        const RowChildWidth seat = widths.next(seats[i]);
+        LOKA_VERIFY(seat.isLiveSeat());
+        LOKA_VERIFY(seat.hasGapBefore() == (i != 0));
+        x += seat.hasGapBefore() ? 8 : 0;
+        LOKA_VERIFY(x == expectedX[order][offer - 103][i]);
+        LOKA_VERIFY(seat.width() == expectedWidths[order][offer - 103][i]);
+        x += seat.width();
+      }
+      LOKA_VERIFY(x == (offer < 104 ? 104 : offer));
+      short range = -7;
+      LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, range));
+      LOKA_VERIFY(range == 104);
+      LOKA_VERIFY(source.labelCalls == 0);
+      LOKA_VERIFY(source.otherCalls == 6);
+    }
+}
+
+void testRowLabelsShareFloorsAndCandidates()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  LabelShareProbe source;
+  StackNode buttons(labelsShareProps());
+  ButtonNode *first = new ButtonNode(ButtonProps().text("first"));
+  ButtonNode *last = new ButtonNode(ButtonProps().text("last"));
+  buttons.addChild(first);
+  buttons.addChild(last);
+  RowWidthConsultation fixed(
+      buttons.childrenHead(), 2, 100, 8, RailSpacing(12, 8, 9), buttons.props.rowUndeclaredWidth_, &source);
+  LOKA_VERIFY(fixed.next(first).width() == 40);
+  LOKA_VERIFY(fixed.next(last).width() == 30);
+  for (int offer = 0; offer <= 23; ++offer)
+  {
+    StackNode row(labelsShareProps());
+    TextNode *label = shrinkText(200);
+    BoxNode *space = new BoxNode(Box().props);
+    row.addChild(label);
+    row.addChild(space);
+    RowWidthConsultation widths(
+        row.childrenHead(), 2, offer, 8, RailSpacing(12, 8, 9), row.props.rowUndeclaredWidth_, 0);
+    const int remainder = offer > 9 ? offer - 9 : 0;
+    LOKA_VERIFY(widths.next(label).width() == 1 + (remainder + 1) / 2);
+    LOKA_VERIFY(widths.next(space).width() == remainder / 2);
+  }
+  for (int refused = 0; refused < 2; ++refused)
+  {
+    StackNode content(Column().props);
+    StackNode *row = new StackNode(labelsShareProps());
+    content.addChild(row);
+    TextNode *label = shrinkText(200);
+    TextNode *plain = new TextNode(TextProps("plain"));
+    row->addChild(label);
+    row->addChild(plain);
+    source.refuse = refused != 0;
+    source.otherCalls = 0;
+    RowWidthConsultation widths(
+        row->childrenHead(), 2, 40, 8, RailSpacing(12, 8, 9), row->props.rowUndeclaredWidth_, &source);
+    LOKA_VERIFY(widths.next(label).width() == (refused ? 17 : 12));
+    LOKA_VERIFY(widths.next(plain).width() == (refused ? 15 : 20));
+    LOKA_VERIFY(source.otherCalls == 2);
+    short range = 123;
+    LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, range) == !refused);
+    LOKA_VERIFY(range == (refused ? 123 : 29));
+    LOKA_VERIFY(source.labelCalls == 0);
+  }
+}
+
+void testRowLabelsShareNestedAndRange()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  // label, Spacer, buttons+fixed, refusal, empty, overflow, hidden, lone Spacer.
+  for (int shape = 0; shape < 8; ++shape)
+  {
+    StackNode content(Column().props);
+    StackNode *outer = new StackNode(Row().naturalWidth().gap(8).props);
+    StackNode *inner = new StackNode(labelsShareProps());
+    content.addChild(outer);
+    outer->addChild(inner);
+    LabelShareProbe source;
+    if (shape == 0)
+      inner->addChild(shrinkText(200));
+    if (shape == 1 || shape == 7)
+      inner->addChild(new BoxNode(Box().props));
+    if (shape == 2 || shape == 3 || shape == 6)
+    {
+      inner->addChild(new ButtonNode(ButtonProps().text("first")));
+      inner->addChild(new BoxNode(Box().width(10).props));
+      inner->addChild(new ButtonNode(ButtonProps().text("last")));
+      if (shape == 6)
+        inner->addChild(new FragmentNode(FragmentProps()));
+    }
+    if (shape == 3)
+      source.refuse = true;
+    if (shape == 5)
+    {
+      inner->addChild(new BoxNode(Box().width(SHRT_MAX).props));
+      inner->addChild(new BoxNode(Box().width(1).props));
+    }
+    short width = 123;
+    const bool known = shape == 2 || shape == 6;
+    LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, width) == known);
+    LOKA_VERIFY(width == (known ? 96 : 123));
+    LOKA_VERIFY(source.labelCalls == 0);
+    // Asking the outer as content measures the inner's range directly.
+    width = 123;
+    const bool rangeKnown = known || shape == 0 || shape == 1 || shape == 7;
+    LOKA_VERIFY(queryContentOverflowWidth(outer, RailSpacing(12, 8, 9), &source, width) == rangeKnown);
+    LOKA_VERIFY(width == (known ? 96 : shape == 0 ? 1 : (shape == 1 || shape == 7) ? 0 : 123));
+    LOKA_VERIFY(source.labelCalls == 0);
+  }
+}
+
+namespace
+{
+  class LabelSharePresenter : public NullScenePlatformController
+  {
+  public:
+    virtual bool canSkipGlobalChangeForBoundaryLocalPaint() const
+    {
+      return false;
+    }
+  };
+  loka::app::scene::LayoutState g_labelShareButtons[2];
+  class LabelShareButton : public loka::app::ButtonNode
+  {
+  public:
+    typedef loka::app::ButtonTypeTag TypeTag;
+    explicit LabelShareButton(const loka::app::ButtonProps &props)
+        : loka::app::ButtonNode(props)
+    {
+    }
+    virtual short layoutProjected(loka::app::scene::IPlatformController *controller,
+                                  loka::app::scene::LayoutState &state)
+    {
+      std::string title;
+      loka::platform::CollectUtf8(this->props.text_->get(), title);
+      g_labelShareButtons[title == "first" ? 0 : 1] = state;
+      return loka::app::ButtonNode::layoutProjected(controller, state);
+    }
+  };
+  void verifySameSeat(const loka::app::scene::LayoutState &a, const loka::app::scene::LayoutState &b)
+  {
+    LOKA_VERIFY(a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height);
+  }
+} // namespace
+
+void testMountedNullLabelsShareStateAndFloor()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  for (int narrow = 0; narrow < 2; ++narrow)
+  {
+    LabelSharePresenter platform;
+    loka::core::MutableState<loka::core::String> title(loka::core::String::Literal("Items: 3"));
+    RowTextSeatRecord record;
+    g_rowTextSeatRecord = &record;
+    RowSeatTextDefinition label("unused");
+    label.props.text(&title);
+    label.props.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS).align(TEXT_ALIGN_CENTER);
+    RowDefinition row;
+    row.props = labelsShareProps();
+    row << NodeDefinition<ButtonProps, LabelShareButton>(ButtonProps().text("first")) << label
+        << NodeDefinition<ButtonProps, LabelShareButton>(ButtonProps().text("last"));
+    Scene scene(row.clone());
+    LOKA_VERIFY(scene.mount(&platform));
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    Node *root = loka::dsl::testing::SceneTestAccess::rootNode(scene);
+    ButtonNode first(ButtonProps().text("first")), last(ButtonProps().text("last"));
+    short a = 0, b = 0;
+    LOKA_VERIFY(platform.queryNaturalWidth(&first, a));
+    LOKA_VERIFY(platform.queryNaturalWidth(&last, b));
+    const LayoutState offer = rowState(static_cast<short>(a + b + 16 + (narrow ? 1 : 100)));
+    const int height = platform.projectLayoutForTesting(root, offer);
+    const LayoutState originalLabel = record.state;
+    const LayoutState originalButtons[] = {g_labelShareButtons[0], g_labelShareButtons[1]};
+    TextNode *text = toolbarText(root);
+    LOKA_VERIFY(text && text->getContext());
+    NullTextContext *context = static_cast<NullTextContext *>(text->getContext());
+    LOKA_VERIFY(context->commitPresented(title.get(), platform.paintScope()));
+    LOKA_VERIFY(originalLabel.width == (narrow ? 1 : 100));
+    const char *normalValues[] = {"Items: 100 (full)", "Items: 3"};
+    const char *floorValues[] = {"A very long label", "x", "", "A very long label"};
+    for (int i = 0; i < (narrow ? 4 : 2); ++i)
+    {
+      const unsigned long changes = platform.onChangeCallCount();
+      {
+        loka::core::StateTrackerGuard transaction(root->asBoundary()->tracker());
+        title.set(loka::core::String::Literal(narrow ? floorValues[i] : normalValues[i]));
+      }
+      if (scene.hasPendingInvalidation())
+        LOKA_VERIFY(scene.flushInvalidation());
+      LOKA_VERIFY(platform.onChangeCallCount() > changes);
+      LOKA_VERIFY((platform.lastOnChangeFlags() & NODE_DIRTY_LAYOUT) == 0);
+      LOKA_VERIFY((platform.lastOnChangeFlags() & NODE_DIRTY_PROPS) != 0);
+      std::string actual;
+      LOKA_VERIFY(loka::platform::CollectUtf8(text->props.text_->get(), actual));
+      LOKA_VERIFY(actual == (narrow ? floorValues[i] : normalValues[i]));
+      LOKA_VERIFY(platform.projectLayoutForTesting(root, offer) == height);
+      verifySameSeat(record.state, originalLabel);
+      verifySameSeat(g_labelShareButtons[0], originalButtons[0]);
+      verifySameSeat(g_labelShareButtons[1], originalButtons[1]);
+      LOKA_VERIFY(context->measurement().lineCount() == 1);
+      const loka::core::Frame &line = loka::app::testing::NullTextMeasurementAccess::line(context->measurement(), 0);
+      LOKA_VERIFY(line.x == (originalLabel.width - line.width) / 2);
+      if (narrow)
+      {
+        LOKA_VERIFY(loka::app::testing::NullTextMeasurementAccess::line(context->measurement(), 0).width == 0);
+      }
+      LOKA_VERIFY(context->commitPresented(title.get(), platform.paintScope()));
+    }
+    loka::dsl::testing::SceneTestAccess::unmount(scene);
+    g_rowTextSeatRecord = 0;
+  }
+}
+
+void testRowLabelsShareWrapperFacts()
+{
+  using namespace loka::app;
+  using namespace loka::app::layout;
+  for (int shape = 0; shape < 5; ++shape)
+  {
+    StackNode content(Column().props);
+    StackNode *row = new StackNode(labelsShareProps());
+    content.addChild(row);
+    FragmentNode *wrapper = new FragmentNode(FragmentProps());
+    // A no-seat sibling prevents the Fragment's single-child declared forwarding.
+    wrapper->addChild(new FragmentNode(FragmentProps()));
+    wrapper->addChild(shape == 0   ? static_cast<scene::Node *>(new BoxNode(Box().width(10).props))
+                      : shape == 1 ? static_cast<scene::Node *>(new BoxNode(Box().props))
+                                   : shrinkText(200));
+    if (shape == 3)
+      wrapper->childrenHead()->nextInComposition->asTextNode()->props.blockStyle_.wrap(TEXT_WRAP_WORD);
+    if (shape == 4)
+      wrapper->addChild(shrinkText(300));
+    row->addChild(new FragmentNode(FragmentProps()));
+    row->addChild(wrapper);
+    row->addChild(new FragmentNode(FragmentProps()));
+    row->addChild(new BoxNode(Box().width(10).props));
+    LabelShareProbe source;
+    RowWidthConsultation widths(row->childrenHead(),
+                                row->childrenCount(),
+                                50,
+                                8,
+                                RailSpacing(12, 8, 9),
+                                row->props.rowUndeclaredWidth_,
+                                &source);
+    const RowChildWidth hidden = widths.next(row->childrenHead());
+    LOKA_VERIFY(!hidden.isLiveSeat() && !hidden.hasGapBefore() && hidden.width() == 0);
+    const RowChildWidth first = widths.next(wrapper);
+    LOKA_VERIFY(!first.hasGapBefore());
+    LOKA_VERIFY(first.width() == (shape == 0 ? 10 : shape <= 2 ? 32 : 20));
+    LOKA_VERIFY(!widths.next(wrapper->nextInComposition).isLiveSeat());
+    const RowChildWidth last = widths.next(wrapper->nextInComposition->nextInComposition);
+    LOKA_VERIFY(last.hasGapBefore() && last.width() == 10);
+    short range = 123;
+    LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, range));
+    LOKA_VERIFY(range == (shape == 0 ? 28 : shape == 1 ? 18 : shape == 2 ? 19 : 38));
+    if (shape <= 2)
+      LOKA_VERIFY(source.labelCalls == 0);
+  }
+}
+
+namespace
+{
+  template <class Base, class Props> class RowShapeWorkProbe : public Base
+  {
+  public:
+    explicit RowShapeWorkProbe(const Props &props)
+        : Base(props),
+          textCalls(0),
+          boxCalls(0)
+    {
+    }
+    virtual loka::app::TextNode *asTextNode()
+    {
+      ++this->textCalls;
+      return Base::asTextNode();
+    }
+    virtual loka::app::BoxNode *asBoxNode()
+    {
+      ++this->boxCalls;
+      return Base::asBoxNode();
+    }
+    int textCalls, boxCalls;
+  };
+
+  class RowShapeWorkSource : public loka::app::layout::INaturalSizeSource
+  {
+  public:
+    explicit RowShapeWorkSource(bool answer)
+        : answer_(answer),
+          calls(0)
+    {
+    }
+    virtual bool queryNaturalWidth(loka::app::scene::Node *, short &width) const
+    {
+      ++this->calls;
+      width = 20;
+      return this->answer_;
+    }
+    const bool answer_;
+    mutable int calls;
+  };
+
+  template <class Base, class Props> void checkRowShapeWork(const Props &props, bool declared)
+  {
+    using namespace loka::app;
+    using namespace loka::app::layout;
+    for (int natural = 0; natural < 2; ++natural)
+      for (int answered = 0; answered < 2; ++answered)
+      {
+        StackProps rowProps = Row().props;
+        rowProps.rowUndeclaredWidth_ = natural ? ROW_UNDECLARED_WIDTH_NATURAL : ROW_UNDECLARED_WIDTH_SHARED;
+        StackNode content(Column().props);
+        StackNode *row = new StackNode(rowProps);
+        content.addChild(row);
+        RowShapeWorkProbe<Base, Props> *seat = new RowShapeWorkProbe<Base, Props>(props);
+        row->addChild(seat);
+        RowShapeWorkSource source(answered != 0);
+        RowWidthConsultation widths(
+            row->childrenHead(), 1, 100, 8, RailSpacing(12, 8, 9), rowProps.rowUndeclaredWidth_, &source);
+        const int textProbes = natural && answered && !declared ? 1 : 0;
+        LOKA_VERIFY(seat->textCalls == textProbes);
+        // One Box query belongs to declared-width resolution, not shape classification.
+        LOKA_VERIFY(seat->boxCalls == 1);
+        LOKA_VERIFY(source.calls == (natural && !declared ? 1 : 0));
+        const RowChildWidth result = widths.next(seat);
+        LOKA_VERIFY(result.width() == (declared ? 10 : natural && answered ? 20 : 100));
+        LOKA_VERIFY(seat->textCalls == 2 * textProbes);
+        LOKA_VERIFY(seat->boxCalls == 2);
+        LOKA_VERIFY(source.calls == (natural && !declared ? 2 : 0));
+
+        seat->textCalls = seat->boxCalls = source.calls = 0;
+        short range = 123;
+        LOKA_VERIFY(queryContentOverflowWidth(&content, RailSpacing(12, 8, 9), &source, range)
+                    == (!natural || declared || answered));
+        LOKA_VERIFY(seat->textCalls == textProbes);
+        LOKA_VERIFY(seat->boxCalls == (natural ? 1 : 0));
+
+        // An outer NATURAL Row asks this Row's nested natural width, not its range.
+        seat->textCalls = seat->boxCalls = source.calls = 0;
+        RowWidthConsultation nested(row, 1, 100, 8, RailSpacing(12, 8, 9), ROW_UNDECLARED_WIDTH_NATURAL, &source);
+        LOKA_VERIFY(seat->textCalls == 0);
+        LOKA_VERIFY(seat->boxCalls == 1);
+        LOKA_VERIFY(source.calls == (declared ? 0 : 1));
+      }
+  }
+} // namespace
+
+void testRowPolicyShapeWork()
+{
+  using namespace loka::app;
+  checkRowShapeWork<BoxNode>(Box().width(10).props, true);
+  checkRowShapeWork<ButtonNode>(ButtonProps().text("button"), false);
+  TextProps label("label");
+  label.blockStyle_ = BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+  checkRowShapeWork<TextNode>(label, false);
+  checkRowShapeWork<BoxNode>(Box().props, false);
+}

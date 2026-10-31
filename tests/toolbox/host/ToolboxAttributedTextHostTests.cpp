@@ -344,6 +344,7 @@ namespace
 
 #include "ToolboxTextMeasurementPins.hpp"
 #include "ToolboxScrollViewPins.hpp"
+#include "ToolboxToolbarPins.hpp"
 
 namespace
 {
@@ -428,6 +429,11 @@ int main(int argc, char **argv)
   if (argc > 1 && std::string(argv[1]) == "busy-batch-nested")
   {
     BusyBatchPins(true);
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "toolbar")
+  {
+    ToolbarPaintPins();
     return 0;
   }
   if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")

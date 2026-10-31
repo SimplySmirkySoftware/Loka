@@ -6,7 +6,7 @@
 #include "app/nodes/nestable/Box.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ZStack.hpp"
-#include "app/nodes/controls/Button.hpp"
+#include "app/nodes/controls/Toolbar.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/FileImageSource.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -101,10 +101,9 @@ namespace cardshowcase
                       << Text("Leave room for wonder.") + FontSize<24>() + Blue
                       << Text("Follow a new color.") + FontSize<24>() + Magenta
                       << Text("Keep exploring.") + FontSize<24>() + Green)))
-          << (Box().padding(8) << (Row().naturalWidth() << Button("< Back")
-                                                        << Text("Expressive Loka - a study in color and light")
-                                                               + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS)
-                                                        << Button("Share"))));
+          << (Box().padding(8) << (Toolbar() << ToolbarItem("< Back")
+                                             << ToolbarItem::label("Expressive Loka - a study in color and light")
+                                             << ToolbarItem("Share"))));
     }
 
   private:
