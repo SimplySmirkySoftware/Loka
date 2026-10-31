@@ -75,7 +75,7 @@ namespace
 } // namespace
 
 CursorOwner::CursorOwner(ToolboxApp &app)
-    : app_(app), hoverCursor_(HOVER_ARROW), busyDepth_(0), lastApplied_(UNKNOWN),
+    : app_(app), hoverCursor_(HOVER_ARROW), busyDepth_(0), batchPhase_(BATCH_NONE), lastApplied_(UNKNOWN),
       nativeApplies_(0), outerEntries_(0), outerExits_(0), iBeam_(), watch_()
 {
 }
@@ -136,8 +136,36 @@ void CursorOwner::reconcile()
   this->app_.sampleHover(true);
 }
 
+// Deliberate transition twin: tests/toolbox/host/ToolboxHost.hpp.
+bool CursorOwner::openBatch()
+{
+  if (this->batchPhase_ != BATCH_NONE || this->busyDepth_ != 0)
+    return false;
+  this->batchPhase_ = BATCH_OPEN;
+  return true;
+}
+
+void CursorOwner::closeBatch()
+{
+  if (this->batchPhase_ == BATCH_HELD)
+  {
+    assert(this->busyDepth_ == 1);
+    --this->busyDepth_;
+    ++this->outerExits_;
+    this->reconcile();
+  }
+  this->batchPhase_ = BATCH_NONE;
+}
+
 void CursorOwner::enterBusy()
 {
+  if (this->batchPhase_ == BATCH_OPEN && this->busyDepth_ == 0)
+  {
+    this->batchPhase_ = BATCH_HELD;
+    ++this->busyDepth_;
+    ++this->outerEntries_;
+    this->apply(true);
+  }
   assert(this->busyDepth_ < SHRT_MAX);
   ++this->busyDepth_;
   if (this->busyDepth_ == 1)
@@ -160,6 +188,7 @@ void CursorOwner::exitBusy()
 
 void CursorOwner::assertIdle() const
 {
+  assert(this->batchPhase_ == BATCH_NONE);
   assert(this->busyDepth_ == 0);
 }
 

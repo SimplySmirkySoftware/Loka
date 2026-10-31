@@ -84,34 +84,91 @@ class ToolboxTextEditorContext;
 #include <vector>
 #include <string>
 
+// Deliberate twin of ToolboxApp.cpp CursorOwner and ToolboxBusy.hpp:
+// ToolboxRender.cpp is compiled against both owners. Keep transition order equal.
 struct CursorOwner
 {
-  int depth, entries;
-  CursorOwner()
-      : depth(0),
-        entries(0)
+  int depth, entries, outerEntries, outerExits;
+  CursorOwner() : depth(0), entries(0), outerEntries(0), outerExits(0), phase_(BATCH_NONE) {}
+
+private:
+  friend class BusyScope;
+  friend class BusyBatch;
+  enum BatchPhase { BATCH_NONE, BATCH_OPEN, BATCH_HELD };
+  BatchPhase phase_;
+  bool openBatch()
   {
+    if (this->phase_ != BATCH_NONE || this->depth != 0)
+      return false;
+    this->phase_ = BATCH_OPEN;
+    return true;
+  }
+  void closeBatch()
+  {
+    if (this->phase_ == BATCH_HELD)
+    {
+      assert(this->depth == 1);
+      --this->depth;
+      ++this->outerExits;
+    }
+    this->phase_ = BATCH_NONE;
+  }
+  void enterBusy()
+  {
+    if (this->phase_ == BATCH_OPEN && this->depth == 0)
+    {
+      this->phase_ = BATCH_HELD;
+      ++this->depth;
+      ++this->outerEntries;
+    }
+    assert(this->depth < SHRT_MAX);
+    ++this->depth;
+    ++this->entries;
+    if (this->depth == 1)
+      ++this->outerEntries;
+  }
+  void exitBusy()
+  {
+    assert(this->depth > 0);
+    --this->depth;
+    if (this->depth == 0)
+      ++this->outerExits;
   }
 };
 class BusyScope
 {
 public:
-  explicit BusyScope(CursorOwner *owner)
-      : owner_(owner)
+  explicit BusyScope(CursorOwner *owner) : owner_(owner)
   {
-    if (owner_)
-    {
-      ++owner_->depth;
-      ++owner_->entries;
-    }
+    if (this->owner_)
+      this->owner_->enterBusy();
   }
   ~BusyScope()
   {
-    if (owner_)
-      --owner_->depth;
+    if (this->owner_)
+      this->owner_->exitBusy();
   }
-
 private:
+  BusyScope(const BusyScope &);
+  BusyScope &operator=(const BusyScope &);
+  CursorOwner *owner_;
+};
+class BusyBatch
+{
+public:
+  explicit BusyBatch(CursorOwner *owner) : owner_(owner)
+  {
+    if (this->owner_ && !this->owner_->openBatch())
+      this->owner_ = 0;
+  }
+  ~BusyBatch()
+  {
+    if (this->owner_)
+      this->owner_->closeBatch();
+  }
+private:
+  BusyBatch(const BusyBatch &);
+  BusyBatch &operator=(const BusyBatch &);
   CursorOwner *owner_;
 };
 class ToolboxWindowContext
@@ -697,10 +754,11 @@ public:
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
   mutable CursorOwner cursor;
+  CursorOwner *const sharedCursor_;
   std::vector<loka::app::scene::NodeContext *> retired;
   Rect projectionClip;
   loka::app::scene::NodeContext *renderContext;
-  explicit ToolboxScenePlatformController(ToolboxWindow *window)
+  explicit ToolboxScenePlatformController(ToolboxWindow *window, CursorOwner *sharedCursor = 0)
       : leafLayouts(0),
         scrollViewClipRgn_(NewRgn()),
         paintSuppressClipRgn_(NewRgn()),
@@ -718,6 +776,7 @@ public:
         compositionReplay_(compositionReplay),
         forceFullRedraw_(false),
         window_(window),
+        sharedCursor_(sharedCursor),
         renderContext(0),
         rootNode_(0),
         activeViewportContent_(0),
@@ -743,7 +802,7 @@ public:
   }
   CursorOwner *cursorOwner() const
   {
-    return &cursor;
+    return this->sharedCursor_ ? this->sharedCursor_ : &this->cursor;
   }
   bool intersectWithProjectionClip(const Rect &rect, Rect &out) const;
   void retireNodeContext(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);

@@ -345,8 +345,75 @@ namespace
 #include "ToolboxTextMeasurementPins.hpp"
 #include "ToolboxScrollViewPins.hpp"
 
+namespace
+{
+  /** Two real sized measurements requested from a render's existing presenter door. */
+  class BusyMeasurements : public ToolboxFullDrawPresenter
+  {
+    ToolboxScenePlatformController &controller_;
+  public:
+    explicit BusyMeasurements(ToolboxScenePlatformController &controller) : controller_(controller) {}
+    virtual void eraseBeforePaint()
+    {
+      TextNode first((Text("First") + FontSize<18>()).props);
+      TextNode second((Text("Second") + FontSize<18>()).props);
+      ToolboxTextContext a(&first, &this->controller_);
+      ToolboxTextContext b(&second, &this->controller_);
+      LayoutState state = Seat(100);
+      a.layout(&this->controller_, state);
+      state = Seat(100);
+      b.layout(&this->controller_, state);
+    }
+  };
+  class NestedBusyRender : public ToolboxFullDrawPresenter
+  {
+    ToolboxScenePlatformController &inner_;
+    BusyMeasurements &measurements_;
+  public:
+    NestedBusyRender(ToolboxScenePlatformController &inner, BusyMeasurements &measurements)
+        : inner_(inner), measurements_(measurements) {}
+    virtual void eraseBeforePaint()
+    {
+      ToolboxInputDoor::render(this->inner_, &this->measurements_);
+      LOKA_VERIFY(this->inner_.cursorOwner()->depth == 1);
+      LOKA_VERIFY(this->inner_.cursorOwner()->outerEntries == 1);
+      LOKA_VERIFY(this->inner_.cursorOwner()->outerExits == 0);
+    }
+  };
+  void BusyBatchPins(bool nested)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    TextSize(12);
+    CursorOwner owner;
+    ToolboxScenePlatformController outer(&window, &owner), inner(&window, &owner);
+    TextNode root(Text("Root").props);
+    outer.rootNode_ = &root;
+    inner.rootNode_ = &root;
+    BusyMeasurements measurements(inner);
+    if (nested)
+    {
+      Pin("ToolboxBusyBatchNestedInnerOnly");
+      NestedBusyRender presenter(inner, measurements);
+      ToolboxInputDoor::render(outer, &presenter);
+    }
+    else
+    {
+      Pin("ToolboxBusyBatchTwoMeasurements");
+      ToolboxInputDoor::render(inner, &measurements);
+    }
+    LOKA_VERIFY(owner.entries >= 2);
+    LOKA_VERIFY(owner.outerEntries == 1);
+    LOKA_VERIFY(owner.outerExits == 1);
+    LOKA_VERIFY(owner.depth == 0);
+    outer.rootNode_ = inner.rootNode_ = 0;
+  }
+}
+
 int main(int argc, char **argv)
 {
+  if (argc > 1 && std::string(argv[1]) == "busy-batch") { BusyBatchPins(false); return 0; }
+  if (argc > 1 && std::string(argv[1]) == "busy-batch-nested") { BusyBatchPins(true); return 0; }
   if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")
   {
     PlainEllipsisPins(false);

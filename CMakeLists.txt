@@ -652,6 +652,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
     add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
   endforeach()
+  add_test(NAME testToolboxBusyBatch COMMAND LokaToolboxAttributedTextTests busy-batch)
+  add_test(NAME testToolboxBusyBatchNested COMMAND LokaToolboxAttributedTextTests busy-batch-nested)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 

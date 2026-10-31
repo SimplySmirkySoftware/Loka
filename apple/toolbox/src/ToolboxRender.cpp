@@ -8,6 +8,7 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   ToolboxPresentObservation::Interval interval(this->observation_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
+  BusyBatch batch(this->cursorOwner());
   this->pressLedger_.begin();
   ++debugStats_.renderCalls;
   ++debugStats_.totalRenderCalls;

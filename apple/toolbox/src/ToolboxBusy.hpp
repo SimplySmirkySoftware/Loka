@@ -2,8 +2,8 @@
 #define LOKA_TOOLBOX_BUSY_HPP
 
 /** The app-wide owner of "the main thread is blocked" feedback, the watch
-    cursor of #808. CursorOwner is the one implementation; BusyScope is the
-    only caller. */
+    cursor of #808. CursorOwner is the one implementation; BusyScope and BusyBatch
+    are its synchronous borrow doors. */
 class ToolboxBusyOwner
 {
 protected:
@@ -13,6 +13,9 @@ private:
   friend class BusyScope;
   virtual void enterBusy() = 0;
   virtual void exitBusy() = 0;
+  friend class BusyBatch;
+  virtual bool openBatch() = 0;
+  virtual void closeBatch() = 0;
 };
 
 /** Synchronous, non-copyable borrow; nested scopes issue no native writes. */
@@ -35,6 +38,31 @@ public:
 private:
   BusyScope(const BusyScope &);
   BusyScope &operator=(const BusyScope &);
+  ToolboxBusyOwner *owner_;
+};
+
+/** Batches synchronous busy borrows until the end of a render, taking its
+    level lazily at the first borrow. A nested batch is inert. Every borrow
+    begun inside the batch must end before it closes; current borrowers are
+    stack scopes. A full-tree draw entry bypassing controller.render needs
+    its own batch. See the deliberate host twin in tests/toolbox/host/ToolboxHost.hpp. */
+class BusyBatch
+{
+public:
+  explicit BusyBatch(ToolboxBusyOwner *owner) : owner_(owner)
+  {
+    if (this->owner_ && !this->owner_->openBatch())
+      this->owner_ = 0;
+  }
+  ~BusyBatch()
+  {
+    if (this->owner_)
+      this->owner_->closeBatch();
+  }
+
+private:
+  BusyBatch(const BusyBatch &);
+  BusyBatch &operator=(const BusyBatch &);
   ToolboxBusyOwner *owner_;
 };
 
