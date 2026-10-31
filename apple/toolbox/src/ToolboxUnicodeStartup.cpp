@@ -1,12 +1,26 @@
 #include "ToolboxUnicodeStartup.hpp"
 #if LOKA_TOOLBOX_UNICODE
 #include "ToolboxDialogConstruction.hpp"
+#include "unicode/MacTextEditorSubset.h"
 #include <Gestalt.h>
 #include <Processes.h>
 namespace loka
 {
   namespace toolbox
   {
+    UnicodeText::Session::Session()
+    {
+      if (TXNInitTextension(0, 0, 0) != noErr)
+      {
+        const char message[] = "The text engine could not start. Please quit.";
+        RunEmergencyQuitDialog(message, sizeof(message) - 1);
+        ExitToShell();
+      }
+    }
+    UnicodeText::Session::~Session()
+    {
+      TXNTerminateTextension();
+    }
     bool UnicodeSystemAdmits(OSErr err, long response)
     {
       return err == noErr && response >= 0x0900;
@@ -22,6 +36,15 @@ namespace loka
         ExitToShell();
       }
     }
+  } // namespace toolbox
+} // namespace loka
+#else
+namespace loka
+{
+  namespace toolbox
+  {
+    UnicodeText::Session::Session() {}
+    UnicodeText::Session::~Session() {}
   } // namespace toolbox
 } // namespace loka
 #endif
