@@ -838,6 +838,42 @@ static void editorLedgerRefusal()
 }
 int main(int argc, char **argv)
 {
+  if (argc == 2 && (std::strcmp(argv[1], "clip-omission") == 0 || std::strcmp(argv[1], "clip-visible-refused") == 0))
+  {
+    const bool offscreen = std::strcmp(argv[1], "clip-omission") == 0;
+    Fixture f;
+    HostPortScope port(f.window.window());
+    TextEditorNode node(TextEditorProps(f.lines, f.cursor));
+    NotifySubtreeNodeAttached(&node);
+    LayoutState state;
+    state.x = 10;
+    state.y = offscreen ? 400 : 20;
+    state.width = 180;
+    state.height = 80;
+    SetRect(&f.controller.projectionClip, 0, 0, 200, 200);
+    IPlatformNodeHandler *handler = f.controller.nodeHandlerRegistry_.find(&node);
+    LOKA_VERIFY(handler);
+    ToolboxTextEditorContext *context =
+        static_cast<ToolboxTextEditorContext *>(handler->ensureContext(&node, &f.controller, state));
+    LOKA_VERIFY(context);
+    context->layout(&f.controller, state);
+    f.controller.observation_.reset();
+    toolbox_host::failNew = 1;
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      context->render(&f.controller);
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+    }
+    const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
+    LOKA_VERIFY(result.eligibility() == (offscreen ? TOOLBOX_PAINT_CLEAN : TOOLBOX_PAINT_REFUSED));
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (offscreen ? TOOLBOX_PAINT_REFUSAL_NONE : TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION));
+    LOKA_VERIFY(toolbox_host::failNew == (offscreen ? 1 : 0));
+    toolbox_host::failNew = 0;
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    return 0;
+  }
   if (argc == 2 && std::strncmp(argv[1], "debt-", 5) == 0)
   {
     Fixture f;
@@ -885,7 +921,7 @@ int main(int argc, char **argv)
       ToolboxTextEditorAccess::forgetTE(*f.context);
       f.context->render(&f.controller);
       f.request.state()->unbind(&retireContext, &f);
-      site = "ToolboxTextEditorContext.cpp:1054";
+      site = "ToolboxTextEditorContext.cpp:1059";
     }
     else if (mode == "debt-bar-hide")
     {

@@ -36,7 +36,7 @@ ToolboxEditPresentation ToolboxScenePlatformController::ensureEditTextControl(To
     return ToolboxEditPresentation();
   }
   Rect controlRect;
-  if (!this->intersectWithProjectionClip(rect, controlRect))
+  if (!this->editTextInClip(rect, controlRect))
   {
     return ToolboxEditPresentation();
   }
@@ -240,4 +240,10 @@ void ToolboxScenePlatformController::syncEditTextFromState(EditTextControlBindin
     if (binding.ownerContext)
       static_cast<ToolboxEditTextContext *>(binding.ownerContext)->invalidateNativePresentation();
   }
+}
+
+/** Drawing and acquisition share the same intentional-omission query. */
+bool ToolboxScenePlatformController::editTextInClip(const Rect &textRect, Rect &controlRect) const
+{
+  return this->intersectWithProjectionClip(textRect, controlRect);
 }

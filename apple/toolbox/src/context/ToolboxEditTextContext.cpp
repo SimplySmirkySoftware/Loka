@@ -154,7 +154,9 @@ void ToolboxEditTextContext::draw(ToolboxScenePlatformController *controller)
       return;
     }
   }
-  LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
+  Rect controlRect;
+  if (!controller || controller->editTextInClip(this->textRect_, controlRect))
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   ToolboxPaintClip clip(this->paintRect_);
   if (!clip.isActive())
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);

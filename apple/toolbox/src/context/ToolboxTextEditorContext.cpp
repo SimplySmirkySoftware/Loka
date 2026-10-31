@@ -1022,7 +1022,12 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
   if (te)
     this->controller()->reachEditControl(this);
   else
-    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
+  {
+    const ToolboxTextEditorRects geometry = this->geometry();
+    Rect visible, clipped;
+    if (this->controller()->textEditorInClip(geometry.hit, geometry.text, visible, clipped))
+      LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
+  }
   if (te != this->te_)
   {
     this->te_ = te;

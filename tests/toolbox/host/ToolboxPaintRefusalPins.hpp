@@ -4,6 +4,7 @@
 #include "ToolboxScrollViewDecisions.hpp"
 #include "ToolboxPaintResultText.hpp"
 #include "context/ToolboxScrollBarContext.hpp"
+#include "app/nodes/controls/EditText.hpp"
 namespace
 {
   void refusalSite(const ToolboxPaintRefusalRecord &record, const char *suffix)
@@ -391,9 +392,28 @@ namespace
     c.paintSuppressClipRgn_ = scratch;
     refusalSite(c.observation_.outsideRefusal(), expected);
   }
+  void editOmission(bool offscreen)
+  {
+    MutableState<String> text(String("native edit"));
+    NodeState<String> textSeat(&text, 0);
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    content->addChild(new EditTextNode(EditTextProps(textSeat)));
+    toolbox_host::failNew = 1;
+    PresentFixture f(false, offscreen ? 160 : 0, content);
+    const ToolboxPresentObservation &result = f.last();
+    LOKA_VERIFY(result.paintFinished());
+    LOKA_VERIFY(result.eligibility() == (offscreen ? TOOLBOX_PAINT_CLEAN : TOOLBOX_PAINT_REFUSED));
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (offscreen ? TOOLBOX_PAINT_REFUSAL_NONE : TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION));
+    LOKA_VERIFY(f.controller.editControls_.empty());
+    LOKA_VERIFY(toolbox_host::failNew == (offscreen ? 1 : 0));
+    toolbox_host::failNew = 0;
+  }
   void runRefusalPin(const char *mode)
   {
-    if (std::strstr(mode, "Control"))
+    if (std::strcmp(mode, "RefusalEditOffscreen") == 0 || std::strcmp(mode, "RefusalEditVisibleRefused") == 0)
+      editOmission(std::strcmp(mode, "RefusalEditOffscreen") == 0);
+    else if (std::strstr(mode, "Control"))
       refusalControls(mode);
     else if (std::strstr(mode, "Clip") || std::strstr(mode, "Scroll"))
       refusalScopes(mode);

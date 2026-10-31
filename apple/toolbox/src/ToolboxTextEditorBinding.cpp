@@ -15,8 +15,7 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
   const ToolboxTextEditorRects geometry = ToolboxTextEditorGeometry(rect, port, hasPort, sizeBox);
   const Rect textRect = geometry.text;
   Rect visibleBox, clipped;
-  if (!this->intersectWithProjectionClip(geometry.hit, visibleBox)
-      || !this->intersectWithProjectionClip(textRect, clipped))
+  if (!this->textEditorInClip(geometry.hit, textRect, visibleBox, clipped))
     return 0;
   std::size_t index = 0;
   if (this->editControls_.find(context, index))
@@ -128,4 +127,13 @@ void ToolboxScenePlatformController::idleTextEdits()
       }
     }
   }
+}
+
+/** Empty editor geometry and clip-outside placement are input omissions. */
+bool ToolboxScenePlatformController::textEditorInClip(const Rect &hit,
+                                                      const Rect &text,
+                                                      Rect &visible,
+                                                      Rect &clipped) const
+{
+  return this->intersectWithProjectionClip(hit, visible) && this->intersectWithProjectionClip(text, clipped);
 }

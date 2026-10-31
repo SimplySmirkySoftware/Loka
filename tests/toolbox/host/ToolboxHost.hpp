@@ -572,6 +572,10 @@ public:
   void queueRetiredTextEdit(TEHandle, loka::app::scene::NativeLifetimeHint);
   bool hasLiveBinding(TEHandle) const;
   void disposeNativeHandle(TEHandle);
+  /** O(1), no rows: ensure once per draw, fallback only when no TE was acquired. */
+  bool editTextInClip(const Rect &textRect, Rect &controlRect) const;
+  /** O(1), no rows: the editor ensure and its missing-TE report share this query. */
+  bool textEditorInClip(const Rect &hit, const Rect &text, Rect &visible, Rect &clipped) const;
   ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *, const Rect &, loka::core::State<loka::core::String> *,
                                 loka::app::scene::NativeLifetimeHint);
   void retireEditTextBinding(EditTextControlBinding &, loka::app::scene::NativeLifetimeHint);

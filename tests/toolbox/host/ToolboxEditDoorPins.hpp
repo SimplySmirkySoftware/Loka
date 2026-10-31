@@ -331,7 +331,7 @@ namespace edit_door
       if (std::strcmp(mode, "idle") == 0)
       {
         ToolboxInputDoor::idleTextEdits(f.controller);
-        expected = "ToolboxTextEditorBinding.cpp:123";
+        expected = "ToolboxTextEditorBinding.cpp:122";
       }
       else if (std::strcmp(mode, "sync") == 0)
       {
@@ -348,7 +348,7 @@ namespace edit_door
       {
         f.controller.activateEditControl(1);
         expected =
-            std::strcmp(mode, "activate") == 0 ? "ToolboxTextEditorBinding.cpp:95" : "ToolboxTextEditorBinding.cpp:73";
+            std::strcmp(mode, "activate") == 0 ? "ToolboxTextEditorBinding.cpp:94" : "ToolboxTextEditorBinding.cpp:72";
       }
       else if (std::strcmp(mode, "click") == 0)
       {
