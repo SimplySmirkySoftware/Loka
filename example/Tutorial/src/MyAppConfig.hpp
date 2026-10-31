@@ -12,6 +12,7 @@
 #include "Step3Node.hpp"
 #include "Step4Node.hpp"
 #include "Step5Node.hpp"
+#include "Step6Node.hpp"
 
 class TutorialAppConfig : public AppConfigurable
 {
@@ -29,6 +30,7 @@ public:
     // typedef tutorial::Step3Node TutorialNode;
     // typedef tutorial::Step4Node TutorialNode;
     // typedef tutorial::Step5Node TutorialNode;
+    // typedef tutorial::Step6Node TutorialNode;
 
     c << WindowDef(this->productionWindowProps(
         loka::app::scene::Boundary<TutorialNode>()));

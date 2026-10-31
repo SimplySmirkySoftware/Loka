@@ -1059,6 +1059,12 @@ platform writes the visible area and scroll position; the lesson needs no
 extra watch. Step 5 repeats the list code to remain a standalone lesson,
 with the same capacity and immediate count projection as Step 4.
 
+[Step 6](../example/Tutorial/src/Step6Node.hpp) moves Add, the count and
+Show/Hide into a [Toolbar](#toolbar) band above the list. The label takes the
+remaining width and centres its text. `Show` now hides only the `ScrollView`,
+so the count stays visible when the map is hidden. The standalone lesson keeps
+Step 5's capacity, reservation and viewport fact.
+
 ## 13. StdComposition And Boundary
 
 StdComposition is Loka's current standard composition model. It deliberately

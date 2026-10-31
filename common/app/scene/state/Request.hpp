@@ -1,6 +1,7 @@
 #ifndef LOKA_APP_SCENE_STATE_REQUEST_HPP
 #define LOKA_APP_SCENE_STATE_REQUEST_HPP
 #include "app/scene/state/Reported.hpp"
+#include "app/scene/state/RequestRing.hpp"
 namespace loka
 {
   namespace app
@@ -185,26 +186,31 @@ namespace loka
         {
           if (value.isNone())
             return POST_INVALID;
-          if (this->seat_.get().isNone() && this->count_ == 0)
+          if (this->seat_.get().isNone() && this->ring_.count() == 0)
           {
             this->seat_.set(value);
             return POST_ACCEPTED;
           }
-          if (this->count_ == this->cap_)
+          if (!this->ring_.pushBack(value))
             return POST_QUEUE_FULL;
-          this->ring_[(this->head_ + this->count_) % this->cap_] = value;
-          ++this->count_;
           return POST_ACCEPTED;
         }
         /** Current ring occupancy, excluding the published slot. */
-        unsigned pending() const { return this->count_; }
+        unsigned pending() const
+        {
+          return this->ring_.count();
+        }
         const Reported<Reply<T> > &reply() const { return this->reply_; }
         bool isValid() const { return this->seat_.isValid(); }
         core::State<T> *state() const { return this->seat_.state(); }
 
       protected:
         RequestQueueBase(T *ring, unsigned char capacity)
-            : seat_(), reply_(), ring_(ring), cap_(capacity), head_(0), count_(0) {}
+            : seat_(),
+              reply_(),
+              ring_(ring, capacity)
+        {
+        }
 
       private:
         friend class RequestBinding<T>;
@@ -215,35 +221,21 @@ namespace loka
         RequestQueueBase &operator=(const RequestQueueBase &);
         bool advance(T &next)
         {
-          if (!this->count_)
-            return false;
-          next = this->ring_[this->head_];
-          // Vacated entries hold None so a payload that owns a resource is not
-          // retained until the position is overwritten.
-          this->ring_[this->head_] = T::None();
-          this->head_ = (this->head_ + 1) % this->cap_;
-          --this->count_;
-          return true;
+          return this->ring_.advance(next);
         }
         void clearRing()
         {
-          while (this->count_)
-          {
-            this->ring_[this->head_] = T::None();
-            this->head_ = (this->head_ + 1) % this->cap_;
-            --this->count_;
-          }
-          this->head_ = 0;
+          this->ring_.clear();
         }
         NodeState<T> seat_;
         Reported<Reply<T> > reply_;
-        T *ring_;
-        unsigned char cap_, head_, count_;
+        RequestRing<T> ring_;
       };
       /** Fixed ring of 1..255 waiting values, plus the endpoint's published slot. */
       template <typename T, unsigned N> class RequestQueue : public RequestQueueBase<T>
       {
-        typedef char CapacityWall[(N >= 1 && N <= 255) ? 1 : -1];
+        typedef typename RequestRingCapacity<N>::Wall CapacityWall;
+
       public:
         RequestQueue() : RequestQueueBase<T>(this->storage_, N)
         {
