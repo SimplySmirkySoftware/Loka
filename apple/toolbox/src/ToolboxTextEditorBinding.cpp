@@ -108,8 +108,7 @@ void ToolboxScenePlatformController::idleTextEdits()
 {
   for (size_t i = 0; i < editControls_.size(); ++i)
   {
-    if (editControls_[i].editor)
-      editControls_[i].editor->retryProjection();
+    if (editControls_[i].editor) editControls_[i].editor->retryProjection();
     if (&editControls_[i] == editControls_.focused() && (editControls_[i].te || editControls_[i].unicode))
     {
       if (editControls_[i].editor)

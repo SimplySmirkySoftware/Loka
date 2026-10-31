@@ -207,7 +207,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
         ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
         if (toolboxWindow && toolboxWindow->window() == target)
         {
-          // A front-window change arrives as two originals: the old window
+          // A front-window change arrives as two records: the old window
           // without activeFlag, then the new one with it. Only the second
           // names the active window.
           if ((original.modifiers & activeFlag) != 0)

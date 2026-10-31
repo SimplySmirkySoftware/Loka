@@ -5,10 +5,7 @@
 class ToolboxApp : public WindowAdmissionTestApp
 {
 public:
-  struct Cursor
-  {
-    void reconcile() {}
-  } cursorOwner_;
+  struct Cursor { void reconcile() {} } cursorOwner_;
   bool running_;
   explicit ToolboxApp(Window &window, Window *second = 0)
       : WindowAdmissionTestApp(window, second),

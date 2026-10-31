@@ -84,23 +84,17 @@ void CursorOwner::apply(bool force)
     this->lastApplied_ = UNKNOWN;
     return;
   }
-  const AppliedCursor effective = this->busyDepth_ > 0 ? WATCH : (this->hoverCursor_ == HOVER_IBEAM ? IBEAM : ARROW);
+  const AppliedCursor effective = this->busyDepth_ > 0 ? WATCH
+      : (this->hoverCursor_ == HOVER_IBEAM ? IBEAM : ARROW);
   if (!force && effective == this->lastApplied_)
     return;
   const Cursor *cursor = 0;
   switch (effective)
   {
-  case ARROW:
-    cursor = &qd.arrow;
-    break;
-  case IBEAM:
-    cursor = this->iBeam_.get();
-    break;
-  case WATCH:
-    cursor = this->watch_.get();
-    break;
-  case UNKNOWN:
-    break;
+  case ARROW: cursor = &qd.arrow; break;
+  case IBEAM: cursor = this->iBeam_.get(); break;
+  case WATCH: cursor = this->watch_.get(); break;
+  case UNKNOWN: break;
   }
   if (!cursor)
   {

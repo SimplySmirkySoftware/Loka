@@ -229,7 +229,6 @@ class ToolboxWindow : public Window
 {
   loka::core::PushStateTracker tracker_;
   loka::core::MutableState<bool> visible_;
-
 public:
   virtual bool handleEditCommand(loka::app::EditVerb);
   struct WindowPort : GrafPort
@@ -305,10 +304,7 @@ private:
 public:
   void drawDirty(const Rect &);
 #else
-  void requestInvalidate()
-  {
-    ++toolbox_host::invalidations;
-  }
+  void requestInvalidate() { ++toolbox_host::invalidations; }
   void requestInvalidateWithReason(ToolboxFullDrawReason);
 #endif
   ToolboxScenePlatformController *scenePlatformController()
@@ -316,16 +312,9 @@ public:
     return this->scenePlatformController_;
   }
 #ifndef LOKA_HOST_ZSTACK_UNITS
-  void flushInvalidate()
-  {
-    if (this->onFlush)
-      this->onFlush(this->flushData);
-  }
+  void flushInvalidate() { if (this->onFlush) this->onFlush(this->flushData); }
 #endif
-  loka::core::StateTracker *getTracker()
-  {
-    return &this->tracker_;
-  }
+  loka::core::StateTracker *getTracker() { return &this->tracker_; }
 #ifndef LOKA_HOST_ZSTACK_UNITS
   void requestInvalidateRect(const Rect &rect);
 #endif
@@ -343,19 +332,11 @@ public:
 class ToolboxEditTextContext : public loka::app::scene::NativeNodeContext
 {
 public:
-  explicit ToolboxEditTextContext(loka::app::EditTextNode *node = 0)
-  {
-    this->setOwner(node);
-  }
+  explicit ToolboxEditTextContext(loka::app::EditTextNode *node = 0) { this->setOwner(node); }
   loka::app::scene::WriteSeat<loka::core::String> projectedWriteSeat() const
-  {
-    return this->owner() ? this->owner()->asEditTextNode()->props.text_
-                         : loka::app::scene::WriteSeat<loka::core::String>();
-  }
+  { return this->owner() ? this->owner()->asEditTextNode()->props.text_ : loka::app::scene::WriteSeat<loka::core::String>(); }
   virtual loka::core::State<loka::core::String> *projectedTextState()
-  {
-    return this->projectedWriteSeat().state();
-  }
+  { return this->projectedWriteSeat().state(); }
   void invalidateNativePresentation() {}
   void repaint(const ToolboxEditPresentation &)
   {
@@ -378,11 +359,7 @@ public:
   loka::core::EmitterState *emitter_;
   loka::core::State<bool> *enabled_;
   Rect rect_;
-  ToolboxButtonContext()
-      : emitter_(0),
-        enabled_(0)
-  {
-  }
+  ToolboxButtonContext() : emitter_(0), enabled_(0) {}
   void repaint(ControlRef, std::string &) {}
   void forgetPresentedControl() {}
   bool handleMouseDown(const Point &, ToolboxScenePlatformController *);
@@ -396,10 +373,7 @@ class ToolboxCellContext : public loka::app::scene::NativeNodeContext
 public:
   loka::app::CellNode *node_;
   Rect rect_;
-  ToolboxCellContext()
-      : node_(0)
-  {
-  }
+  ToolboxCellContext() : node_(0) {}
   void draw(ToolboxScenePlatformController *)
   {
     LOKA_VERIFY(false);
@@ -420,22 +394,9 @@ public:
   loka::core::State<bool> *enabled_;
   loka::app::scene::BoundaryNode *boundary_;
   Rect rect_;
-  ToolboxPopupMenuContext()
-      : items_(0),
-        selectedIndex_(0),
-        onChange_(0),
-        enabled_(0),
-        boundary_(0)
-  {
-  }
-  short menuId() const
-  {
-    return 2000;
-  }
-  short clampIndex(int value) const
-  {
-    return static_cast<short>(value);
-  }
+  ToolboxPopupMenuContext() : items_(0), selectedIndex_(0), onChange_(0), enabled_(0), boundary_(0) {}
+  short menuId() const { return 2000; }
+  short clampIndex(int value) const { return static_cast<short>(value); }
   bool handleMouseDown(const Point &, ToolboxScenePlatformController *);
 };
 #else
@@ -485,16 +446,10 @@ public:
       standalone layout's inset-only width for that case. */
   bool measurePushButtonNaturalWidth(const loka::core::String &label, short &width) const;
   short measurePushButtonNaturalWidth(const loka::core::String &label) const;
-  ToolboxPendingDialogs &pendingDialogs()
-  {
-    return this->pendingDialogs_;
-  }
+  ToolboxPendingDialogs &pendingDialogs() { return this->pendingDialogs_; }
   MeasurementRetryQueue relayoutRetries;
   virtual void requestRelayout();
-  void requestSceneRelayout(loka::app::scene::Node *)
-  {
-    this->relayoutRetries.request();
-  }
+  void requestSceneRelayout(loka::app::scene::Node *) { this->relayoutRetries.request(); }
 
   typedef ToolboxHitLedger::EditHit EditHit;
   typedef ToolboxHitLedger::ButtonHit ButtonHit;
@@ -513,18 +468,9 @@ public:
   {
     return this->hitLedger_.textHits_;
   }
-  void installHit(const ButtonHit &hit)
-  {
-    this->hitLedger_.buttonHits_.push_back(hit);
-  }
-  void installHit(const CellHit &hit)
-  {
-    this->hitLedger_.cellHits_.push_back(hit);
-  }
-  void installHit(const PopupHit &hit)
-  {
-    this->hitLedger_.popupHits_.push_back(hit);
-  }
+  void installHit(const ButtonHit &hit) { this->hitLedger_.buttonHits_.push_back(hit); }
+  void installHit(const CellHit &hit) { this->hitLedger_.cellHits_.push_back(hit); }
+  void installHit(const PopupHit &hit) { this->hitLedger_.popupHits_.push_back(hit); }
   /** Synthetic render for legacy fixtures that install rows directly.
       Ground hits precede the native/edit faces those fixtures place above them.
       New ordering pins use the production render walk instead. */
@@ -585,18 +531,13 @@ public:
   ToolboxScrollViewLayoutResult
   layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void requestStructurePresent();
-  virtual void onBoundaryApply(loka::app::scene::Node *,
-                               loka::app::scene::BoundaryNode *,
-                               const loka::app::scene::BoundaryLocalApplyInfo &,
-                               const loka::app::scene::PlatformApplyPlan &);
+  virtual void onBoundaryApply(loka::app::scene::Node *, loka::app::scene::BoundaryNode *,
+      const loka::app::scene::BoundaryLocalApplyInfo &, const loka::app::scene::PlatformApplyPlan &);
   virtual void releaseNodeContexts(loka::app::scene::Node *);
   ToolboxViewportRows ensureViewportScrollBarControl(
       const Rect &, loka::app::ScrollViewNode *, int, int, int, const ToolboxScrollViewMetrics &, bool);
   void destroyViewportScrollBarControl(loka::app::ScrollViewNode *, loka::app::scene::NativeLifetimeHint);
-  short allocateControlId()
-  {
-    return this->controlIds_.allocate();
-  }
+  short allocateControlId() { return this->controlIds_.allocate(); }
   void destroyScrollBarControl(short, loka::app::scene::NativeLifetimeHint);
   bool presentEditorScrollBar(short, const ToolboxEditorScrollBarPresentation &);
   void revokeEditorScrollBar(short);
@@ -607,12 +548,8 @@ public:
                              loka::app::scene::NativeLifetimeHint);
 
   void emitHitEmitter(loka::core::EmitterState *);
-  void applyPopupSelectionChange(const Rect &,
-                                 loka::app::scene::BoundaryNode *,
-                                 loka::core::State<int> *,
-                                 const loka::app::scene::WriteSeat<int> &,
-                                 loka::core::EmitterState *,
-                                 int);
+  void applyPopupSelectionChange(const Rect &, loka::app::scene::BoundaryNode *,
+      loka::core::State<int> *, const loka::app::scene::WriteSeat<int> &, loka::core::EmitterState *, int);
   typedef ToolboxScrollBarLedger::ScrollBarControlBinding ScrollBarControlBinding;
   typedef ToolboxScrollBarLedger::ViewportScrollBarBinding ViewportScrollBarBinding;
   bool ensureScrollBarBinding(short,
@@ -646,11 +583,7 @@ public:
     this->unicodeEditors_.drain();
   }
   loka::app::layout::StackSpans *scrollSpans()
-  {
-    return this->scrollBarLedger_.viewportScrollBars_.empty()
-               ? 0
-               : this->scrollBarLedger_.viewportScrollBars_[0].spans.get();
-  }
+  { return this->scrollBarLedger_.viewportScrollBars_.empty() ? 0 : this->scrollBarLedger_.viewportScrollBars_[0].spans.get(); }
   ToolboxScrollBarLedger scrollBarLedger_;
   struct ButtonControlBinding
   {
@@ -704,10 +637,8 @@ public:
 #endif
   struct EditTextControlBinding;
   void updateStateFromEdit(EditTextControlBinding &, const loka::core::String &);
-  void recordEditHit(const Rect &,
-                     loka::core::State<loka::core::String> *,
-                     loka::app::scene::BoundaryNode *,
-                     ToolboxEditTextContext *);
+  void recordEditHit(const Rect &, loka::core::State<loka::core::String> *,
+                     loka::app::scene::BoundaryNode *, ToolboxEditTextContext *);
 #include "ToolboxEditControlBinding.inc"
   ToolboxEditControlLedger<EditTextControlBinding, loka::app::scene::NodeContext> editControls_;
   ToolboxUnicodeEditorLedger unicodeEditors_;
@@ -721,10 +652,10 @@ public:
   loka::app::scene::ExactMatchHandleBucket<TEHandle> textEditBucket_;
   unsigned poolIntakeAuditFailCount_;
   bool inBatchUpdate_;
-  template <typename T>
-  void queueRetiredNativeHandle(std::vector<RetiredNativeEntry<T> > &, T, loka::app::scene::NativeLifetimeHint);
-  template <typename T>
-  void flushRetiredEntriesInto(std::vector<RetiredNativeEntry<T> > &, loka::app::scene::ExactMatchHandleBucket<T> &);
+  template <typename T> void queueRetiredNativeHandle(std::vector<RetiredNativeEntry<T> > &, T,
+                                                     loka::app::scene::NativeLifetimeHint);
+  template <typename T> void flushRetiredEntriesInto(std::vector<RetiredNativeEntry<T> > &,
+                                                    loka::app::scene::ExactMatchHandleBucket<T> &);
   void queueRetiredTextEdit(TEHandle, loka::app::scene::NativeLifetimeHint);
   bool hasLiveBinding(TEHandle) const;
   void disposeNativeHandle(TEHandle);
@@ -732,10 +663,8 @@ public:
   bool editTextInClip(const Rect &textRect, Rect &controlRect) const;
   /** O(1), no rows: the editor ensure and its missing-TE report share this query. */
   bool textEditorInClip(const Rect &hit, const Rect &text, Rect &visible, Rect &clipped) const;
-  ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *,
-                                                const Rect &,
-                                                loka::core::State<loka::core::String> *,
-                                                loka::app::scene::NativeLifetimeHint);
+  ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *, const Rect &, loka::core::State<loka::core::String> *,
+                                loka::app::scene::NativeLifetimeHint);
   void retireEditTextBinding(EditTextControlBinding &, loka::app::scene::NativeLifetimeHint);
   void retireEditTextControlAt(std::size_t, loka::app::scene::NativeLifetimeHint);
   void retireEditTextControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
@@ -754,13 +683,8 @@ public:
                      ToolboxCellContext *,
                      loka::core::State<loka::core::String> *);
 #elif defined(LOKA_HOST_CELL_PAINT) || defined(LOKA_HOST_CONTROL_WIDTH)
-  void recordCellHit(const Rect &,
-                     loka::core::EmitterState *,
-                     loka::app::scene::BoundaryNode *,
-                     ToolboxCellContext *,
-                     loka::core::State<loka::core::String> *)
-  {
-  }
+  void recordCellHit(const Rect &, loka::core::EmitterState *, loka::app::scene::BoundaryNode *,
+                     ToolboxCellContext *, loka::core::State<loka::core::String> *) {}
 #endif
 #ifdef LOKA_HOST_CONTROL_WIDTH
 #ifdef LOKA_HOST_CONTROL_ORDER
@@ -804,13 +728,8 @@ public:
                        ToolboxButtonContext *);
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *);
 #else
-  void recordButtonHit(const Rect &,
-                       loka::core::EmitterState *,
-                       loka::core::State<bool> *,
-                       loka::app::scene::BoundaryNode *,
-                       ToolboxButtonContext *)
-  {
-  }
+  void recordButtonHit(const Rect &, loka::core::EmitterState *, loka::core::State<bool> *,
+      loka::app::scene::BoundaryNode *, ToolboxButtonContext *) {}
   void recordPopupHit(const Rect &, loka::core::State<bool> *, ToolboxPopupMenuContext *) {}
 #endif
 #endif
@@ -837,25 +756,15 @@ public:
     this->hitLedger_.textHits_.push_back(hit);
   }
 #else
-  void recordTextHit(const Rect &,
-                     short,
-                     short,
-                     loka::core::State<loka::core::String> *,
-                     loka::app::scene::BoundaryNode *,
-                     bool,
-                     short,
-                     ToolboxTextContext *)
-  {
-    ++toolbox_host::textHits;
-  }
+  void recordTextHit(const Rect &, short, short, loka::core::State<loka::core::String> *,
+                     loka::app::scene::BoundaryNode *, bool, short, ToolboxTextContext *) { ++toolbox_host::textHits; }
 #endif
   void bindTextState(loka::core::State<loka::core::String> *) {}
   void unbindTextState(loka::core::State<loka::core::String> *) {}
   bool hasLiveBinding(loka::core::State<loka::core::String> *s) const
   {
     for (std::size_t i = 0; i < editControls_.size(); ++i)
-      if (editControls_[i].text == s)
-        return true;
+      if (editControls_[i].text == s) return true;
     return false;
   }
   void activateEditControl(std::size_t index);
