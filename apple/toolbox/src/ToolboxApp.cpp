@@ -256,6 +256,7 @@ void ToolboxApp::run()
 #if LOKA_TOOLBOX_UNICODE
   loka::toolbox::RequireUnicodeSystem();
 #endif
+  loka::toolbox::UnicodeText::Session unicodeText;
   loka::toolbox::ArmOutOfMemoryReserve();
   InitCursor();
   this->cursorOwner_.initialize();
@@ -289,163 +290,21 @@ void ToolboxApp::run()
   running_ = true;
   // The run loop is the clock regime: a joining write without an Operation
   // turn is a defect here and a legacy fallback everywhere else (#1057 C5).
-  loka::core::Operation::Regime regime;
-  while (running_)
   {
-    EventRecord event;
-    WaitNextEvent(everyEvent, &event, 1, 0);
-    loka::core::Operation turn;
-    // Consume the OS foreground fact before idle work or hover can write the
-    // shared cursor on the iteration that delivers a suspend event.
-    if (event.what == osEvt && IsSuspendResumeEvent(event))
+    loka::core::Operation::Regime regime;
+    while (running_)
     {
-      this->activationPhase_ =
-          IsResumeEvent(event) ? ACTIVATION_FOREGROUND : ACTIVATION_BACKGROUND;
-      this->cursorOwner_.reconcile();
-    }
-    // TODO: Re-enable invalidation once Classic update flow is stable.
-    if (group_)
-    {
-      const AppComponentGroup::Components comps = group_->getComponents();
-      for (std::size_t i = 0; i < comps.size(); ++i)
+      EventRecord event;
+      WaitNextEvent(everyEvent, &event, 1, 0);
+      loka::core::Operation turn;
+      // Consume the OS foreground fact before idle work or hover can write the
+      // shared cursor on the iteration that delivers a suspend event.
+      if (event.what == osEvt && IsSuspendResumeEvent(event))
       {
-        Window *w = comps[i]->asWindow();
-        ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-        if (toolboxWindow)
-        {
-          toolboxWindow->idleControls(activationPhase_);
-        }
-      }
-    }
-    if (activationPhase_ == ACTIVATION_FOREGROUND)
-      this->sampleHover(false);
-    if (event.what == updateEvt)
-    {
-      // An OS update event arrives in every phase -- another window exposing
-      // part of a background Loka window still needs that region repainted,
-      // and skipping BeginUpdate/EndUpdate would leave the update region
-      // pending so WaitNextEvent returns the same event forever. Mutation-driven
-      // window presentation also runs in every phase (#503); present() keeps
-      // pending dialogs and focus reconciliation foreground-only.
-      WindowPtr target = reinterpret_cast<WindowPtr>(event.message);
-      if (target && group_)
-      {
-        const AppComponentGroup::Components comps = group_->getComponents();
-        for (std::size_t i = 0; i < comps.size(); ++i)
-        {
-          Window *w = comps[i]->asWindow();
-          ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-          if (toolboxWindow && toolboxWindow->window() == target)
-          {
-            if (toolboxWindow->scenePlatformController())
-            {
-              toolboxWindow->scenePlatformController()->noteWindowUpdateEvtDraw();
-            }
-            // The entry snapshots update evidence before opening its update bracket.
-            toolboxWindow->drawForUpdate();
-            break;
-          }
-        }
-      }
-    }
-    else if (event.what == mouseDown)
-    {
-      WindowPtr target = 0;
-      short part = FindWindow(event.where, &target);
-      if (part == inMenuBar)
-      {
-        long choice = MenuSelect(event.where);
+        this->activationPhase_ = IsResumeEvent(event) ? ACTIVATION_FOREGROUND : ACTIVATION_BACKGROUND;
         this->cursorOwner_.reconcile();
-        if (choice != 0)
-        {
-          short menuId = static_cast<short>(choice >> 16);
-          short item = static_cast<short>(choice & 0xFFFF);
-          this->handleMenuSelection(menuId, item);
-          HiliteMenu(0);
-        }
       }
-      if (part == inGoAway && target)
-      {
-        if (TrackGoAway(target, event.where))
-        {
-          ToolboxWindow *closing = 0;
-          if (group_)
-          {
-            const AppComponentGroup::Components comps = group_->getComponents();
-            for (std::size_t i = 0; i < comps.size(); ++i)
-            {
-              Window *w = comps[i]->asWindow();
-              ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-              if (toolboxWindow && toolboxWindow->window() == target)
-              {
-                closing = toolboxWindow;
-                break;
-              }
-            }
-          }
-          // Same request/terminal split as NullWindow::simulateCloseAsked.
-          if (closing && !this->closeAsked(static_cast<Window *>(closing)))
-          {
-            requestWindowClose(closing);
-          }
-        }
-      }
-      else if (part == inContent && target)
-      {
-        if (target != FrontWindow())
-        {
-          // The first content click selects a back window without reaching its content.
-          SelectWindow(target);
-        }
-        else
-        {
-          ToolboxWindow *clicked = 0;
-          if (group_)
-          {
-            const AppComponentGroup::Components comps = group_->getComponents();
-            for (std::size_t i = 0; i < comps.size(); ++i)
-            {
-              Window *w = comps[i]->asWindow();
-              ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-              if (toolboxWindow && toolboxWindow->window() == target)
-              {
-                clicked = toolboxWindow;
-                break;
-              }
-            }
-          }
-          if (clicked)
-          {
-            // Queued damage never drops a press; the controller refuses presses
-            // on parked rows itself through the render-order press door (#1493).
-            clicked->handleMouseDown(event.where, event);
-            this->cursorOwner_.reconcile();
-          }
-        }
-      }
-      else if (part == inDrag && target)
-      {
-        Rect bounds = qd.screenBits.bounds;
-        DragWindow(target, event.where, &bounds);
-        this->cursorOwner_.reconcile();
-        ToolboxWindow *dragged = FindToolboxWindow(group_, target);
-        if (dragged)
-        {
-          dragged->storeCurrentNativeContentFrame();
-        }
-      }
-      else if (part == inGrow && target)
-      {
-        ToolboxWindow *grown = FindToolboxWindow(group_, target);
-        if (grown)
-        {
-          grown->handleGrow(event.where);
-        }
-      }
-    }
-    else if (event.what == activateEvt)
-    {
-      WindowPtr target = reinterpret_cast<WindowPtr>(event.message);
+      // TODO: Re-enable invalidation once Classic update flow is stable.
       if (group_)
       {
         const AppComponentGroup::Components comps = group_->getComponents();
@@ -453,135 +312,282 @@ void ToolboxApp::run()
         {
           Window *w = comps[i]->asWindow();
           ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-          if (toolboxWindow && toolboxWindow->window() == target)
+          if (toolboxWindow)
           {
-            // A front-window change arrives as two records: the old window
-            // without activeFlag, then the new one with it. Only the second
-            // names the active window.
-            if ((event.modifiers & activeFlag) != 0)
-              setActiveWindow(toolboxWindow);
-            // The grow icon follows the window hilite state; redraw only
-            // its corner through the ordinary update event.
-            toolboxWindow->invalidateGrowIcon();
-            break;
+            toolboxWindow->idleControls(activationPhase_);
           }
         }
       }
-    }
-    else if (event.what == osEvt && IsSuspendResumeEvent(event))
-    {
-      ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
-      if (active && active->window())
+      if (activationPhase_ == ACTIVATION_FOREGROUND)
+        this->sampleHover(false);
+      if (event.what == updateEvt)
       {
-        HiliteWindow(active->window(), activationPhase_ == ACTIVATION_FOREGROUND);
-        active->invalidateGrowIcon();
-      }
-      if (activationPhase_ == ACTIVATION_FOREGROUND && menuBarDrawDeferred_)
-      {
-        // Background projection or bindings updated menu data but deferred
-        // the shared menu bar write; show it once now the bar is ours again.
-        DrawMenuBar();
-        menuBarDrawDeferred_ = false;
-      }
-    }
-    else if (event.what == keyDown || event.what == autoKey)
-    {
-      ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
-      char key = static_cast<char>(event.message & charCodeMask);
-      // A Command key is a menu command, never text: it goes to MenuKey only,
-      // so a focused field cannot swallow it, and a plain key never reaches
-      // MenuKey (#1086). Option-only keys stay text. A held Command key's
-      // autoKey repeats are swallowed so a command runs once per press.
-      const bool command = (event.modifiers & cmdKey) != 0;
-      bool handled = false;
-      const unsigned char byte = static_cast<unsigned char>(key);
-      const short keyScript = static_cast<short>(GetScriptManagerVariable(smKeyScript));
-      // An input method delivers committed text one byte per key-down, and the
-      // trail may arrive in a later iteration, so the lead is held across
-      // non-key events instead of pulling another event (#1439).
-      if (!command && active && active->offerKeyEvent(event))
-      {
-        this->twoByteKey_.release();
-        handled = true;
-      }
-      if (!handled && this->twoByteKey_.holdsLead())
-      {
-        const unsigned char lead = this->twoByteKey_.lead();
-        this->twoByteKey_.release();
-        handled = !command && ToolboxIsTrailByte(lead, byte, keyScript);
-        // Refuse a complete pair once. Otherwise drop only the held lead and
-        // let this event follow its normal path, including holding a new lead.
-        SysBeep(1);
-      }
-#if LOKA_RETRO68_DIAGNOSTICS
-      if (active && command && (key == 'd' || key == 'D'))
-      {
-        active->requestDeferredDebugDump();
-        handled = true;
-      }
-#endif
-      if (!command)
-      {
-        if (!handled && byte >= 0x80 && ToolboxIsLeadByte(byte, keyScript))
+        // An OS update event arrives in every phase -- another window exposing
+        // part of a background Loka window still needs that region repainted,
+        // and skipping BeginUpdate/EndUpdate would leave the update region
+        // pending so WaitNextEvent returns the same event forever. Mutation-driven
+        // window presentation also runs in every phase (#503); present() keeps
+        // pending dialogs and focus reconciliation foreground-only.
+        WindowPtr target = reinterpret_cast<WindowPtr>(event.message);
+        if (target && group_)
         {
-          this->twoByteKey_.hold(byte);
+          const AppComponentGroup::Components comps = group_->getComponents();
+          for (std::size_t i = 0; i < comps.size(); ++i)
+          {
+            Window *w = comps[i]->asWindow();
+            ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+            if (toolboxWindow && toolboxWindow->window() == target)
+            {
+              if (toolboxWindow->scenePlatformController())
+              {
+                toolboxWindow->scenePlatformController()->noteWindowUpdateEvtDraw();
+              }
+              // The entry snapshots update evidence before opening its update bracket.
+              toolboxWindow->drawForUpdate();
+              break;
+            }
+          }
+        }
+      }
+      else if (event.what == mouseDown)
+      {
+        WindowPtr target = 0;
+        short part = FindWindow(event.where, &target);
+        if (part == inMenuBar)
+        {
+          long choice = MenuSelect(event.where);
+          this->cursorOwner_.reconcile();
+          if (choice != 0)
+          {
+            short menuId = static_cast<short>(choice >> 16);
+            short item = static_cast<short>(choice & 0xFFFF);
+            this->handleMenuSelection(menuId, item);
+            HiliteMenu(0);
+          }
+        }
+        if (part == inGoAway && target)
+        {
+          if (TrackGoAway(target, event.where))
+          {
+            ToolboxWindow *closing = 0;
+            if (group_)
+            {
+              const AppComponentGroup::Components comps = group_->getComponents();
+              for (std::size_t i = 0; i < comps.size(); ++i)
+              {
+                Window *w = comps[i]->asWindow();
+                ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+                if (toolboxWindow && toolboxWindow->window() == target)
+                {
+                  closing = toolboxWindow;
+                  break;
+                }
+              }
+            }
+            // Same request/terminal split as NullWindow::simulateCloseAsked.
+            if (closing && !this->closeAsked(static_cast<Window *>(closing)))
+            {
+              requestWindowClose(closing);
+            }
+          }
+        }
+        else if (part == inContent && target)
+        {
+          if (target != FrontWindow())
+          {
+            // The first content click selects a back window without reaching its content.
+            SelectWindow(target);
+          }
+          else
+          {
+            ToolboxWindow *clicked = 0;
+            if (group_)
+            {
+              const AppComponentGroup::Components comps = group_->getComponents();
+              for (std::size_t i = 0; i < comps.size(); ++i)
+              {
+                Window *w = comps[i]->asWindow();
+                ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+                if (toolboxWindow && toolboxWindow->window() == target)
+                {
+                  clicked = toolboxWindow;
+                  break;
+                }
+              }
+            }
+            if (clicked)
+            {
+              // Queued damage never drops a press; the controller refuses presses
+              // on parked rows itself through the render-order press door (#1493).
+              clicked->handleMouseDown(event.where, event);
+              this->cursorOwner_.reconcile();
+            }
+          }
+        }
+        else if (part == inDrag && target)
+        {
+          Rect bounds = qd.screenBits.bounds;
+          DragWindow(target, event.where, &bounds);
+          this->cursorOwner_.reconcile();
+          ToolboxWindow *dragged = FindToolboxWindow(group_, target);
+          if (dragged)
+          {
+            dragged->storeCurrentNativeContentFrame();
+          }
+        }
+        else if (part == inGrow && target)
+        {
+          ToolboxWindow *grown = FindToolboxWindow(group_, target);
+          if (grown)
+          {
+            grown->handleGrow(event.where);
+          }
+        }
+      }
+      else if (event.what == activateEvt)
+      {
+        WindowPtr target = reinterpret_cast<WindowPtr>(event.message);
+        if (group_)
+        {
+          const AppComponentGroup::Components comps = group_->getComponents();
+          for (std::size_t i = 0; i < comps.size(); ++i)
+          {
+            Window *w = comps[i]->asWindow();
+            ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+            if (toolboxWindow && toolboxWindow->window() == target)
+            {
+              // A front-window change arrives as two records: the old window
+              // without activeFlag, then the new one with it. Only the second
+              // names the active window.
+              if ((event.modifiers & activeFlag) != 0)
+                setActiveWindow(toolboxWindow);
+              // The grow icon follows the window hilite state; redraw only
+              // its corner through the ordinary update event.
+              toolboxWindow->invalidateGrowIcon();
+              break;
+            }
+          }
+        }
+      }
+      else if (event.what == osEvt && IsSuspendResumeEvent(event))
+      {
+        ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
+        if (active && active->window())
+        {
+          HiliteWindow(active->window(), activationPhase_ == ACTIVATION_FOREGROUND);
+          active->invalidateGrowIcon();
+        }
+        if (activationPhase_ == ACTIVATION_FOREGROUND && menuBarDrawDeferred_)
+        {
+          // Background projection or bindings updated menu data but deferred
+          // the shared menu bar write; show it once now the bar is ours again.
+          DrawMenuBar();
+          menuBarDrawDeferred_ = false;
+        }
+      }
+      else if (event.what == keyDown || event.what == autoKey)
+      {
+        ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
+        char key = static_cast<char>(event.message & charCodeMask);
+        // A Command key is a menu command, never text: it goes to MenuKey only,
+        // so a focused field cannot swallow it, and a plain key never reaches
+        // MenuKey (#1086). Option-only keys stay text. A held Command key's
+        // autoKey repeats are swallowed so a command runs once per press.
+        const bool command = (event.modifiers & cmdKey) != 0;
+        bool handled = false;
+        const unsigned char byte = static_cast<unsigned char>(key);
+        const short keyScript = static_cast<short>(GetScriptManagerVariable(smKeyScript));
+        // An input method delivers committed text one byte per key-down, and the
+        // trail may arrive in a later iteration, so the lead is held across
+        // non-key events instead of pulling another event (#1439).
+        if (!command && active && active->offerKeyEvent(event))
+        {
+          this->twoByteKey_.release();
           handled = true;
         }
-        const unsigned char keyCode = static_cast<unsigned char>((event.message & keyCodeMask) >> 8);
-        ToolboxScrollKey scrollKey;
-        if (!handled && QueryToolboxScrollKey(keyCode, scrollKey))
-          handled = active && active->handleScrollKey(scrollKey);
-        ToolboxTabDirection tabDirection;
-        if (!handled && QueryToolboxTabKey(byte, (event.modifiers & shiftKey) != 0, tabDirection))
-          handled = active && active->handleTabKey(tabDirection);
-        if (!handled)
-          handled = active && active->handleKeyDown(key);
-        if (!handled)
+        if (!handled && this->twoByteKey_.holdsLead())
         {
-          handled = this->handleKeyPress(key);
+          const unsigned char lead = this->twoByteKey_.lead();
+          this->twoByteKey_.release();
+          handled = !command && ToolboxIsTrailByte(lead, byte, keyScript);
+          // Refuse a complete pair once. Otherwise drop only the held lead and
+          // let this event follow its normal path, including holding a new lead.
+          SysBeep(1);
+        }
+#if LOKA_RETRO68_DIAGNOSTICS
+        if (active && command && (key == 'd' || key == 'D'))
+        {
+          active->requestDeferredDebugDump();
+          handled = true;
+        }
+#endif
+        if (!command)
+        {
+          if (!handled && byte >= 0x80 && ToolboxIsLeadByte(byte, keyScript))
+          {
+            this->twoByteKey_.hold(byte);
+            handled = true;
+          }
+          const unsigned char keyCode = static_cast<unsigned char>((event.message & keyCodeMask) >> 8);
+          ToolboxScrollKey scrollKey;
+          if (!handled && QueryToolboxScrollKey(keyCode, scrollKey))
+            handled = active && active->handleScrollKey(scrollKey);
+          ToolboxTabDirection tabDirection;
+          if (!handled && QueryToolboxTabKey(byte, (event.modifiers & shiftKey) != 0, tabDirection))
+            handled = active && active->handleTabKey(tabDirection);
+          if (!handled)
+            handled = active && active->handleKeyDown(key);
+          if (!handled)
+          {
+            handled = this->handleKeyPress(key);
+          }
+        }
+        else if (!handled && event.what == keyDown)
+        {
+          long choice = MenuKey(key);
+          if (choice != 0)
+          {
+            short menuId = static_cast<short>(choice >> 16);
+            short item = static_cast<short>(choice & 0xFFFF);
+            this->handleMenuSelection(menuId, item);
+            HiliteMenu(0);
+          }
         }
       }
-      else if (!handled && event.what == keyDown)
+      unsigned long now = TickCount();
+      double elapsedSeconds = 0.0;
+      if (now >= lastTick)
       {
-        long choice = MenuKey(key);
-        if (choice != 0)
-        {
-          short menuId = static_cast<short>(choice >> 16);
-          short item = static_cast<short>(choice & 0xFFFF);
-          this->handleMenuSelection(menuId, item);
-          HiliteMenu(0);
-        }
+        elapsedSeconds = static_cast<double>(now - lastTick) / 60.0;
       }
-    }
-    unsigned long now = TickCount();
-    double elapsedSeconds = 0.0;
-    if (now >= lastTick)
-    {
-      elapsedSeconds = static_cast<double>(now - lastTick) / 60.0;
-    }
-    lastTick = now;
-    double dispatchElapsedSeconds = 0.0;
-    if (this->consumeIdle(elapsedSeconds, dispatchElapsedSeconds))
-    {
-      this->handleIdle(dispatchElapsedSeconds);
-    }
-    this->present(activationPhase_, turn);
-    this->cursorOwner_.assertIdle();
-    if (event.what == nullEvent && group_)
-    {
-      const AppComponentGroup::Components comps = group_->getComponents();
-      for (std::size_t i = 0; i < comps.size(); ++i)
+      lastTick = now;
+      double dispatchElapsedSeconds = 0.0;
+      if (this->consumeIdle(elapsedSeconds, dispatchElapsedSeconds))
       {
-        Window *w = comps[i]->asWindow();
-        ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
-        if (toolboxWindow)
+        this->handleIdle(dispatchElapsedSeconds);
+      }
+      this->present(activationPhase_, turn);
+      this->cursorOwner_.assertIdle();
+      if (event.what == nullEvent && group_)
+      {
+        const AppComponentGroup::Components comps = group_->getComponents();
+        for (std::size_t i = 0; i < comps.size(); ++i)
         {
-          toolboxWindow->flushDeferredDebugDump();
+          Window *w = comps[i]->asWindow();
+          ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
+          if (toolboxWindow)
+          {
+            toolboxWindow->flushDeferredDebugDump();
+          }
         }
       }
+      loka::toolbox::QuitIfOutOfMemoryReserveSpent();
     }
-    loka::toolbox::QuitIfOutOfMemoryReserveSpent();
   }
+  // Teardown runs outside the Regime (tracked writes in detach hooks) and
+  // inside the Unicode session, like the macOS rail; the destructor's second
+  // retireComponents() is harmless.
+  this->retireComponents();
 }
 
 #include "ToolboxPresent.cpp"
