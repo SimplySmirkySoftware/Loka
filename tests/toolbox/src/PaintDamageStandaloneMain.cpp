@@ -1,3 +1,4 @@
+#include "ToolboxPaintResultText.hpp"
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/style/CardShadow.hpp"
 #include "core/Profiler.hpp"
@@ -2940,7 +2941,7 @@ namespace
         std::fprintf(self->log_,
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
                      "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
-                     "refusal=%s last_refusal=%s\r",
+                     "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
                      observation.viewports(),
@@ -2955,21 +2956,25 @@ namespace
                      observation.phaseBound(),
                      ToolboxPresentVerdictName(observation.verdict()),
                      ToolboxPresentRefusalName(observation.refusal()),
-                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()));
-        // The reveal writes one vertical origin by 160: its dirty source is
-        // LAYOUT, so boundary apply requests layout_dirty (global layout only
-        // adds a rect request). No OS damage remains at this settled entry and
-        // this Column has no ZStack units. The hidden-check phase wrote the
-        // offscreen Text with no draw in between (whole_window=0, rects=0), so
-        // its PROPS mark is still pending when the reveal lays it out:
-        // content_inputs=1 refuses first, ahead of the mounted EditText and
-        // PopupMenu (unsupported_kinds=2). Measured on MAME maciix.
-        self->recordArm("viewport-full-draw-observed",
-                        observation.dy() == 160 && observation.viewports() == 1
-                            && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 1
-                            && observation.unsupportedKinds() == 2
-                            && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS,
-                        OFFSCREEN_REVEAL_CHECK);
+                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()),
+                     ToolboxPaintEligibilityName(stats.lastMovedEntryEligibility),
+                     ToolboxPaintRefusalName(observation.outsideRefusal().reason),
+                     observation.outsideRefusal().refused() && observation.outsideRefusal().site
+                         ? observation.outsideRefusal().site
+                         : "-");
+        std::fprintf(self->log_, "%s\r", ToolboxPaintResultText(observation).c_str());
+        // Measured on MAME maciix, 2026-10-31: the preceding composition
+        // replay did not cover the window (rule 4). No covering pass intervenes,
+        // so this admission sees REFUSED before content inputs or unsupported
+        // kinds. This reveal itself covers the window and exits CLEAN (rule 3).
+        self->recordArm(
+            "viewport-full-draw-observed",
+            observation.dy() == 160 && observation.viewports() == 1
+                && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 1
+                && observation.unsupportedKinds() == 2 && observation.refusal() == TOOLBOX_PRESENT_PAINT_REFUSED
+                && stats.lastMovedEntryEligibility == TOOLBOX_PAINT_REFUSED && observation.paintFinished()
+                && !observation.firstRefusal().refused() && observation.eligibility() == TOOLBOX_PAINT_CLEAN,
+            OFFSCREEN_REVEAL_CHECK);
         // Re-entry must establish history before another paint-only write.
         self->initial_ = stats;
         self->offscreen_->writeText(true, "MMMM");
@@ -2993,6 +2998,14 @@ namespace
       }
       else if (self->phase_ == OFFSCREEN_CONTENT_SETUP)
       {
+        // The pass that presented scrollToTop is the entry history of the next
+        // moved pass: its outgoing result and the refusal it recorded are the
+        // target evidence for the content-dirty arm's eligibility_in value.
+        std::fprintf(self->log_,
+                     "present_before_content refusal=%s eligibility_in=%s %s\r",
+                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()),
+                     ToolboxPaintEligibilityName(stats.lastPresentEntryEligibility),
+                     ToolboxPaintResultText(stats.lastPresentObservation).c_str());
         // One completion: retain the visible Text's input until the reveal walk.
         loka::core::StateTrackerGuard transaction(self->offscreen_->tracker());
         self->offscreen_->writeText(false, "MMMM");
@@ -3002,9 +3015,16 @@ namespace
       else if (self->phase_ == OFFSCREEN_CONTENT_CHECK)
       {
         const ToolboxPresentObservation &observation = stats.lastMovedPresentObservation;
+        std::fprintf(self->log_,
+                     "present_content refusal=%s content_inputs=%u dy=%d eligibility_in=%s %s\r",
+                     ToolboxPresentRefusalName(observation.refusal()),
+                     observation.contentInputs(),
+                     observation.dy(),
+                     ToolboxPaintEligibilityName(stats.lastMovedEntryEligibility),
+                     ToolboxPaintResultText(observation).c_str());
         self->recordArm("viewport-content-dirty-refused",
                         observation.contentInputs() >= 1 && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS
-                            && observation.dy() == 160,
+                            && observation.dy() == 160 && stats.lastMovedEntryEligibility == TOOLBOX_PAINT_CLEAN,
                         OFFSCREEN_DETACH_CHECK);
         self->offscreen_->scrollToTop();
       }

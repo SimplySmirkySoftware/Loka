@@ -106,6 +106,124 @@ int main(int argc, char **argv)
   if (id == "edit") context = new ToolboxEditTextContext(node->asEditTextNode(), &controller);
   LOKA_VERIFY(context);
   node->setContext(context);
+  if (std::strncmp(mode, "text-debt-", 10) == 0)
+  {
+    const std::string operation(mode + 10);
+    if (operation == "lines")
+      node->asTextNode()->props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_CHAR);
+    LayoutState placement = Seat();
+    context->layout(&controller, placement);
+    controller.observation_.reset();
+    if (operation == "projection" || operation == "layout")
+    {
+      StateTrackerGuard guard(root.tracker());
+      root.text.set(String::FromPlatform(Managed<loka::platform::String>::Wrap(new RefusingUtf8())));
+    }
+    if (operation == "lines")
+    {
+      StateTrackerGuard guard(root.tracker());
+      root.text.set(String("changed"));
+    }
+    ToolboxWindow *saved = controller.window_;
+    if (operation == "measure")
+      controller.window_ = 0;
+    if (operation == "layout")
+    {
+      placement = Seat();
+      context->layout(&controller, placement);
+    }
+    else
+      static_cast<ToolboxTextContext *>(context)->repaint();
+    controller.window_ = saved;
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason
+                == (operation == "measure" || operation == "layout" ? TOOLBOX_PAINT_REFUSAL_MEASUREMENT
+                                                                    : TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET));
+    Access::unmount(scene);
+    return 0;
+  }
+  if (std::strstr(mode, "-debt-"))
+  {
+    LayoutState placement = Seat();
+    context->layout(&controller, placement);
+    RgnHandle scratch = controller.paintSuppressClipRgn_;
+    HostControl native;
+    native.owner = window.window();
+    std::string label("V");
+    const String bad = String::FromPlatform(Managed<loka::platform::String>::Wrap(new RefusingUtf8()));
+    const bool conversion = std::strstr(mode, "conversion") != 0 || (id == "button" && std::strstr(mode, "stale") != 0);
+    if (conversion)
+    {
+      StateTrackerGuard guard(root.tracker());
+      root.text.set(bad);
+    }
+    loka::Vector<String> items;
+    if (id == "popup")
+    {
+      items.push_back(bad);
+      node->asPopupMenuNode()->props.items_ = &items;
+      placement = Seat();
+      context->layout(&controller, placement);
+    }
+    controller.observation_.reset();
+    ToolboxPaintRefusal expected = TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET;
+    if (id == "button")
+    {
+      ToolboxButtonContext *button = static_cast<ToolboxButtonContext *>(context);
+      if (std::strstr(mode, "acquire"))
+      {
+        toolbox_host::refuseControls = 1;
+        button->draw(&controller);
+        toolbox_host::refuseControls = 0;
+        expected = TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION;
+      }
+      else
+      {
+        if (std::strstr(mode, "suppress"))
+        {
+          controller.paintSuppressClipRgn_ = 0;
+          expected = TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION;
+        }
+        if (conversion)
+          expected = TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION;
+        button->repaint(std::strstr(mode, "missing") ? 0 : &native, label);
+      }
+    }
+    else if (id == "edit")
+    {
+      ToolboxEditTextContext *edit = static_cast<ToolboxEditTextContext *>(context);
+      if (std::strstr(mode, "stale"))
+      {
+        edit->draw(&controller);
+        LOKA_VERIFY(controller.editControls_.size() == 1);
+        controller.editControls_[0].installed.revoke();
+        controller.observation_.reset();
+        controller.inBatchUpdate_ = true;
+        edit->draw(&controller);
+        controller.inBatchUpdate_ = false;
+        expected = TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION;
+      }
+      else if (std::strstr(mode, "missing"))
+        edit->repaint(ToolboxEditPresentation());
+      else
+      {
+        toolbox_host::failNew = 1;
+        edit->draw(&controller);
+        toolbox_host::failNew = 0;
+        expected = TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION;
+      }
+    }
+    else
+    {
+      context->render(&controller);
+      expected = TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION;
+    }
+    controller.paintSuppressClipRgn_ = scratch;
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == expected);
+    if (id == "popup")
+      node->asPopupMenuNode()->props.items_ = 0;
+    Access::unmount(scene);
+    return 0;
+  }
   if (std::strcmp(mode, "edit-fallback-frame") == 0)
   {
     ToolboxEditTextContext *edit = static_cast<ToolboxEditTextContext *>(context);
@@ -210,6 +328,20 @@ int main(int argc, char **argv)
         LOKA_VERIFY(toolbox_host::draws[i].ink == blueColor);
       LOKA_VERIFY(window.port.fgColor == greenColor);
     }
+    Access::unmount(scene);
+    return 0;
+  }
+  if (std::strcmp(mode, "button-conversion") == 0)
+  {
+    LayoutState placement = Seat();
+    context->layout(&controller, placement);
+    controller.observation_.reset();
+    const std::size_t controls = controller.buttonControls_.size();
+    loka::testing::failToolboxButtonDrawConversions(1);
+    // The owner's direct fallback painter has no native acquisition in this call.
+    static_cast<ToolboxButtonContext *>(context)->draw(0);
+    LOKA_VERIFY(controller.buttonControls_.size() == controls);
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
     Access::unmount(scene);
     return 0;
   }
@@ -388,9 +520,11 @@ int main(int argc, char **argv)
     Draw(*context, controller, mode, control, installedLabel);
     ExactEmpty(*context, query);
   }
+  controller.observation_.reset();
   toolbox_host::failRegions = 2;
   Draw(*context, controller, mode, control, installedLabel);
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+  LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   toolbox_host::failRegions = 0;
   Draw(*context, controller, mode, control, installedLabel);
   ExactEmpty(*context, query);

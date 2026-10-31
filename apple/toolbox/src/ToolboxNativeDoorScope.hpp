@@ -24,6 +24,11 @@ public:
     }
   }
 
+  bool clipAllocated() const
+  {
+    return this->savedClip_ != 0;
+  }
+
   ~ToolboxNativeDoorScope()
   {
     if (this->savedClip_)

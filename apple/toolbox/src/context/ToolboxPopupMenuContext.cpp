@@ -143,12 +143,16 @@ short ToolboxPopupMenuContext::clampIndex(int index) const
 void ToolboxPopupMenuContext::draw()
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   this->paintFace(clip);
 }
 
 void ToolboxPopupMenuContext::repaint()
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   // Erase under whichever clip is in force: the intersected one, or the
@@ -174,6 +178,7 @@ void ToolboxPopupMenuContext::paintFace(const ToolboxPaintClip &clip)
     return;
   if (!this->node_)
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     this->presented_.invalidate();
     return;
   }
@@ -199,6 +204,8 @@ void ToolboxPopupMenuContext::paintFace(const ToolboxPaintClip &clip)
   LineTo(arrowRight, arrowMidY - 3);
   LineTo(static_cast<short>(arrowRight - 3), arrowMidY + 3);
   LineTo(static_cast<short>(arrowRight - 6), arrowMidY - 3);
+  if (!labelDrawn)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
   if (labelDrawn && completes)
     this->presented_.commit(face, ToolboxPaintScope());
 }

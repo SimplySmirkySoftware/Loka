@@ -2,6 +2,9 @@
 #define LOKA_TOOLBOX_PRESENT_OBSERVATION_HPP
 
 #include "ToolboxFullDrawReason.hpp"
+#include "ToolboxPaintRefusal.hpp"
+
+class ToolboxSceneDebugStats;
 #include <Quickdraw.h>
 #include <string>
 #include <cassert>
@@ -20,6 +23,7 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED,
   TOOLBOX_PRESENT_HORIZONTAL_MOVE,
   TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT,
+  TOOLBOX_PRESENT_PAINT_REFUSED,
   TOOLBOX_PRESENT_CONTENT_INPUTS,
   TOOLBOX_PRESENT_REQUESTS_DURING_WALK,
   TOOLBOX_PRESENT_UNSUPPORTED_KIND,
@@ -54,6 +58,8 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
     return "horizontal_move";
   case TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT:
     return "reasons_beyond_layout";
+  case TOOLBOX_PRESENT_PAINT_REFUSED:
+    return "paint_refused";
   case TOOLBOX_PRESENT_CONTENT_INPUTS:
     return "content_inputs";
   case TOOLBOX_PRESENT_REQUESTS_DURING_WALK:
@@ -150,6 +156,7 @@ class ToolboxPresentObservation
 {
 public:
   ToolboxPresentObservation()
+      : eligibility_(TOOLBOX_PAINT_REFUSED)
   {
     this->reset();
   }
@@ -160,22 +167,23 @@ public:
   class Interval
   {
   public:
-    explicit Interval(ToolboxPresentObservation &observation)
-        : observation_(observation)
+    Interval(ToolboxPresentObservation &observation, bool coversWindow, ToolboxSceneDebugStats &stats)
+        : observation_(observation),
+          coversWindow_(coversWindow),
+          entryEligibility_(observation.eligibility_),
+          debugStats_(stats)
     {
       this->observation_.phase_ = WALKING;
     }
-    ~Interval()
-    {
-      const unsigned next = this->observation_.nextReasons_;
-      this->observation_.reset();
-      this->observation_.reasons_ = next;
-    }
+    ~Interval();
 
   private:
     Interval(const Interval &);
     Interval &operator=(const Interval &);
     ToolboxPresentObservation &observation_;
+    const bool coversWindow_;
+    const ToolboxPaintEligibility entryEligibility_;
+    ToolboxSceneDebugStats &debugStats_;
   };
 
   /** O(1) per full request, walks nothing; completed intervals defer new causes.
@@ -183,7 +191,7 @@ public:
       requests during WALKING are this pass's trace of that late paint input. */
   void noteReason(ToolboxFullDrawReason reason)
   {
-    if (this->phase_ == COMPLETED)
+    if (this->phase_ == COMPLETED || this->phase_ == PAINT_FINISHED)
       this->nextReasons_ |= 1U << reason;
     else if (this->phase_ == WALKING)
       this->walkReasons_ |= 1U << reason;
@@ -227,6 +235,8 @@ public:
     else if (!this->reasons_
              || (this->reasons_ & ~((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT))))
       this->refusal_ = TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT;
+    else if (this->eligibility_ == TOOLBOX_PAINT_REFUSED)
+      this->refusal_ = TOOLBOX_PRESENT_PAINT_REFUSED;
     else if (this->contentInputs_)
       this->refusal_ = TOOLBOX_PRESENT_CONTENT_INPUTS;
     else if (this->walkReasons_)
@@ -253,10 +263,58 @@ public:
     this->dy_ = 0;
     this->viewports_ = this->foregroundUnits_ = 0;
     this->horizontal_ = false;
+    this->firstRefusal_ = ToolboxPaintRefusalRecord();
+    this->outsideRefusal_ = ToolboxPaintRefusalRecord();
     this->phase_ = COLLECTING;
     this->verdict_ = TOOLBOX_PRESENT_ERASE_ALL;
     this->refusal_ = TOOLBOX_PRESENT_NO_VIEWPORT_MOVED;
   }
+  /** Once per unmet screen obligation, never for every helper false. O(1), no rows. */
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    if (this->phase_ == COLLECTING)
+    {
+      this->assignEligibility(TOOLBOX_PAINT_REFUSED);
+      if (!this->outsideRefusal_.refused())
+        this->outsideRefusal_ = ToolboxPaintRefusalRecord(reason, site);
+    }
+    else if (!this->firstRefusal_.refused())
+      this->firstRefusal_ = ToolboxPaintRefusalRecord(reason, site);
+  }
+  /** Capture admission is the named foreign reader (owner decision 6).
+      Once per blur unit paint; immutable bool projection, O(1), no rows. */
+  bool refusedSoFar() const
+  {
+    return this->firstRefusal_.refused();
+  }
+  /** Render tail, once per completed paint; O(1), no rows. */
+  void markPaintFinished()
+  {
+    assert(this->phase_ == COMPLETED);
+    if (this->phase_ == COMPLETED)
+      this->phase_ = PAINT_FINISHED;
+  }
+  bool paintInProgress() const
+  {
+    return this->phase_ != COLLECTING;
+  }
+  bool paintFinished() const
+  {
+    return this->phase_ == PAINT_FINISHED;
+  }
+  ToolboxPaintEligibility eligibility() const
+  {
+    return this->eligibility_;
+  }
+  const ToolboxPaintRefusalRecord &firstRefusal() const
+  {
+    return this->firstRefusal_;
+  }
+  const ToolboxPaintRefusalRecord &outsideRefusal() const
+  {
+    return this->outsideRefusal_;
+  }
+
   /** Merged successful moved-viewport visits; O(1), no walk. */
   unsigned contentInputs() const
   {
@@ -339,8 +397,15 @@ private:
   {
     COLLECTING,
     WALKING,
-    COMPLETED
+    COMPLETED,
+    PAINT_FINISHED
   };
+  void assignEligibility(ToolboxPaintEligibility value)
+  {
+    this->eligibility_ = value;
+  }
+  ToolboxPaintEligibility eligibility_;
+  ToolboxPaintRefusalRecord firstRefusal_, outsideRefusal_;
   unsigned reasons_, nextReasons_, walkReasons_;
   unsigned contentInputs_, unsupportedKinds_, phaseBound_;
   Rect damage_, viewport_;

@@ -385,10 +385,15 @@ void ToolboxTextContext::paint(bool erase)
   if (EmptyRect(&this->paintRect_))
     return;
   if (!this->reconcileProjection())
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
+  }
   const ToolboxTextFontDescriptor descriptor(this->node_->props.resolvedTextStyle());
   ToolboxTextMeasureScope measure(*this->controller(), descriptor);
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   const bool completes = ToolboxPaintCompletes(clip, this->paintRect_, this->presented_,
@@ -398,6 +403,7 @@ void ToolboxTextContext::paint(bool erase)
     return;
   if (!measure.valid())
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_MEASUREMENT);
     this->clearMeasurement();
     return;
   }
@@ -428,6 +434,8 @@ void ToolboxTextContext::paint(bool erase)
                  this->node_->props.resolvedTextStyle().color_);
     painted = true;
   }
+  if (!painted)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
   if (painted && completes)
     this->presented_.commit(this->text_->get(), ToolboxPaintScope());
 }
@@ -468,6 +476,7 @@ short ToolboxTextContext::layout(loka::app::scene::IPlatformController *controll
   }
   if (!this->reconcileProjection())
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_MEASUREMENT);
     controller->refuseTextMeasurement(this->node_, state);
     return 0;
   }
@@ -480,6 +489,7 @@ short ToolboxTextContext::layout(loka::app::scene::IPlatformController *controll
     TextGeometry geometry;
     if (!ResolveTextGeometry(style, state, this->projection_, this->wrapMode_, this->truncationMode_, measure, geometry))
     {
+      LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_MEASUREMENT);
       controller->refuseTextMeasurement(this->node_, state);
       this->clearMeasurement();
       return 0;

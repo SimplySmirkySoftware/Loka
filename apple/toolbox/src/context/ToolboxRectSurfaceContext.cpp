@@ -113,13 +113,18 @@ short ToolboxRectSurfaceContext::layout(loka::app::scene::IPlatformController *,
 void ToolboxRectSurfaceContext::render(loka::app::scene::IPlatformController *)
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   // The #412 clipped full walk may exclude this surface entirely. Preserve
   // its last painted sprite positions so a pending dirty flush can erase them.
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   this->presented_.invalidate();
   if (!this->node_ || !this->node_->props.model_)
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
+  }
   loka::toolbox::ToolboxPaintGround(
       loka::app::GroundForKind(loka::app::scene::NODE_KIND_RECT_SURFACE), rect_);
   const loka::app::RectSurfaceModel model = node_->props.model_->get();
@@ -134,13 +139,14 @@ void ToolboxRectSurfaceContext::render(loka::app::scene::IPlatformController *)
 
 void ToolboxRectSurfaceContext::renderDirty(const Rect &requestedDirtyRect)
 {
-  if (!node_ || !node_->props.model_)
-  {
-    return;
-  }
   Rect dirtyRect;
   if (!SectRect(&requestedDirtyRect, &this->paintRect_, &dirtyRect))
     return;
+  if (!node_ || !node_->props.model_)
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return;
+  }
 
   const loka::app::RectSurfaceModel model = node_->props.model_->get();
   bool useRegionClip = false;

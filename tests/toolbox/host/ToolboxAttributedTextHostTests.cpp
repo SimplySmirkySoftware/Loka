@@ -1,3 +1,5 @@
+#include "context/ToolboxCardBandContext.hpp"
+#include "context/ToolboxRibbonGroupEdgeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxBuiltInSupport.hpp"
@@ -285,9 +287,11 @@ namespace
     node->props = AttributedText(Styled(loka::core::String(std::string(100, 'x')), Bold)).props;
     context->onPropsApplied();
     loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 1);
+    controller.observation_.reset();
     toolbox_host::reset();
     context->render(&controller);
     LOKA_VERIFY(toolbox_host::draws.empty());
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     LOKA_VERIFY(!ToolboxAttributedTextContextAccess::known(*context));
     LOKA_VERIFY(!ToolboxAttributedTextContextAccess::table(*context).valid());
     Rect refused = ToolboxAttributedTextContextAccess::rect(*context);
@@ -332,7 +336,9 @@ namespace
     LOKA_VERIFY(ToolboxAttributedTextContextAccess::known(*context));
     const Rect small = ToolboxAttributedTextContextAccess::rect(*context);
     node->props = AttributedText(Styled("abcdef", Bold)).props;
+    controller.observation_.reset();
     context->render(&controller);
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     LOKA_VERIFY(ToolboxAttributedTextContextAccess::table(*context).width() > small.right - small.left);
     LOKA_VERIFY(!ToolboxAttributedTextContextAccess::known(*context));
     context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
@@ -421,6 +427,43 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::string(argv[1]) == "refusal-partial")
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    AttributedTextNode node(AttributedText(Styled("paint", Bold)).props);
+    ToolboxAttributedTextContext context(&node, &controller);
+    LayoutState placement = Seat(80);
+    context.layout(&controller, placement);
+    controller.observation_.reset();
+    loka::testing::failToolboxAttributedDraws(1);
+    context.render(&controller);
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    return 0;
+  }
+  if (argc == 2 && (std::string(argv[1]) == "refusal-card" || std::string(argv[1]) == "refusal-ribbon"))
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    CardBandNode card((CardBandProps()));
+    RibbonGroupEdgeNode ribbon((RibbonGroupEdgeProps()));
+    ToolboxCardBandContext cardContext(&card, &controller);
+    ToolboxRibbonGroupEdgeContext ribbonContext(&ribbon, &controller);
+    NodeContext &context = std::string(argv[1]) == "refusal-card" ? static_cast<NodeContext &>(cardContext)
+                                                                  : static_cast<NodeContext &>(ribbonContext);
+    LayoutState placement = Seat(80);
+    placement.height = 30;
+    context.layout(&controller, placement);
+    controller.observation_.reset();
+    toolbox_host::failRegions = 2;
+    context.render(&controller);
+    toolbox_host::failRegions = 0;
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "busy-batch")
   {
     BusyBatchPins(false);
@@ -572,10 +615,12 @@ int main(int argc, char **argv)
     LOKA_VERIFY(toolbox_host::erases == 2);
 
     Pin("ToolboxAttributedTextFailedRebuildDegrades");
+    controller.observation_.reset();
     loka::core::testing::failLokaAllocRaw("ToolboxAttributedText", "Break", 1);
     seat = Seat(30);
     context->layout(&controller, seat);
     LOKA_VERIFY(!table.valid());
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     LOKA_VERIFY(!ToolboxAttributedTextContextAccess::known(*context));
     LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
     context->render(&controller);
