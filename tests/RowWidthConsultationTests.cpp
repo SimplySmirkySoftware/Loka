@@ -13,6 +13,7 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/RectSurface.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
+#include "app/layout/RowLayout.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/AttributedText.hpp"
@@ -420,6 +421,120 @@ namespace
     loka::app::scene::Node *answered_;
     mutable int calls_;
   };
+}
+
+namespace
+{
+  /** Records Row offers while Null supplies natural sizes and lays out each child. */
+  struct SpacerRowOffers
+  {
+    NullScenePlatformController platform;
+    loka::core::Frame frames[3];
+    unsigned count;
+
+    SpacerRowOffers()
+        : count(0)
+    {
+    }
+
+    static int layout(void *context, loka::app::scene::Node *child, const loka::app::scene::LayoutState &state)
+    {
+      SpacerRowOffers &offers = *static_cast<SpacerRowOffers *>(context);
+      LOKA_VERIFY(offers.count < 3);
+      offers.frames[offers.count++] = loka::core::Frame(state.x, state.y, state.width, state.height);
+      return offers.platform.projectLayoutForTesting(child, state);
+    }
+  };
+
+  void layoutSpacerRow(loka::app::StackNode &row, short width, SpacerRowOffers &offers)
+  {
+    loka::app::layout::RowLayoutMetrics metrics;
+    // Same metrics as the registered Null Row handler and the 1c height pins.
+    metrics.fallbackHeight = metrics.buttonHeight = metrics.editTextHeight = 10;
+    metrics.popupMenuHeight = metrics.textHeight = metrics.imageFallbackHeight = 10;
+    loka::app::layout::computeRowLayoutResultY(&row,
+                                               rowState(width),
+                                               metrics,
+                                               loka::app::layout::RailSpacing(12, 4, 9),
+                                               &offers.platform,
+                                               &offers,
+                                               &SpacerRowOffers::layout,
+                                               4,
+                                               0);
+    LOKA_VERIFY(offers.count == 3);
+  }
+} // namespace
+
+void testSpacerNaturalRowRemainderAndOverflow()
+{
+  using namespace loka::app;
+  SpacerRowOffers wide;
+  SpacerRowOffers narrow;
+  SpacerRowOffers split;
+  StackNode row(Row().naturalWidth().gap(4).props);
+  row.addChild(new ButtonNode(Button("A").props)); // Null natural width 24.
+  row.addChild(new BoxNode(Spacer().props));
+  row.addChild(new ButtonNode(Button("BB").props)); // Null natural width 32.
+  layoutSpacerRow(row, 101, wide);
+  LOKA_VERIFY(wide.frames[0] == loka::core::Frame(0, 0, 24, 20));
+  LOKA_VERIFY(wide.frames[1] == loka::core::Frame(28, 0, 37, 20));
+  LOKA_VERIFY(wide.frames[2] == loka::core::Frame(69, 0, 32, 20));
+  LOKA_VERIFY(wide.frames[2].x + wide.frames[2].width == 101);
+  layoutSpacerRow(row, 50, narrow);
+  LOKA_VERIFY(narrow.frames[0] == loka::core::Frame(0, 0, 24, 20));
+  LOKA_VERIFY(narrow.frames[1] == loka::core::Frame(28, 0, 0, 20));
+  LOKA_VERIFY(narrow.frames[2] == loka::core::Frame(32, 0, 32, 20));
+  LOKA_VERIFY(narrow.frames[2].x + narrow.frames[2].width == 64);
+
+  StackNode centered(Row().naturalWidth().gap(4).props);
+  centered.addChild(new BoxNode(Spacer().props));
+  centered.addChild(new ButtonNode(Button("A").props));
+  centered.addChild(new BoxNode(Spacer().props));
+  layoutSpacerRow(centered, 101, split);
+  // 101 - 24 - 8 = 69: the front gets the odd unit, 35 then 34.
+  LOKA_VERIFY(split.frames[0] == loka::core::Frame(0, 0, 35, 20));
+  LOKA_VERIFY(split.frames[1] == loka::core::Frame(39, 0, 24, 20));
+  LOKA_VERIFY(split.frames[2] == loka::core::Frame(67, 0, 34, 20));
+}
+
+void testSpacerSharedRowEqualShares()
+{
+  using namespace loka::app;
+  SpacerRowOffers offers;
+  StackNode row(Row().gap(4).props);
+  row.addChild(new TextNode(Text("A").props));
+  row.addChild(new BoxNode(Spacer().props));
+  row.addChild(new TextNode(Text("BB").props));
+  layoutSpacerRow(row, 100, offers);
+  // 100 - 8 = 92: 31, 31, 30, with remainder units at the front.
+  LOKA_VERIFY(offers.frames[0] == loka::core::Frame(0, 0, 31, 20));
+  LOKA_VERIFY(offers.frames[1] == loka::core::Frame(35, 0, 31, 20));
+  LOKA_VERIFY(offers.frames[2] == loka::core::Frame(70, 0, 30, 20));
+}
+
+void testSpacerRowMatchesEmptyBoxFrames()
+{
+  using namespace loka::app;
+  for (int policy = 0; policy < 2; ++policy)
+    for (int width = 50; width <= 101; width += 51)
+    {
+      StackProps props = Row().gap(4).props;
+      props.rowUndeclaredWidth_ = policy ? ROW_UNDECLARED_WIDTH_NATURAL : ROW_UNDECLARED_WIDTH_SHARED;
+      SpacerRowOffers spacerOffers;
+      SpacerRowOffers boxOffers;
+      StackNode spacerRow(props);
+      StackNode boxRow(props);
+      spacerRow.addChild(new ButtonNode(Button("A").props));
+      spacerRow.addChild(new BoxNode(Spacer().props));
+      spacerRow.addChild(new ButtonNode(Button("BB").props));
+      boxRow.addChild(new ButtonNode(Button("A").props));
+      boxRow.addChild(new BoxNode(Box().props));
+      boxRow.addChild(new ButtonNode(Button("BB").props));
+      layoutSpacerRow(spacerRow, static_cast<short>(width), spacerOffers);
+      layoutSpacerRow(boxRow, static_cast<short>(width), boxOffers);
+      for (unsigned child = 0; child < 3; ++child)
+        LOKA_VERIFY(spacerOffers.frames[child] == boxOffers.frames[child]);
+    }
 }
 
 void testRowNaturalWidthConsultation()
@@ -1499,6 +1614,41 @@ namespace
     virtual void composeChildren(loka::app::scene::NodeComposition &) {}
   };
 } // namespace
+
+void testSpacerAlignedRowFallbackHeight()
+{
+  using namespace loka::app;
+  const VerticalAlignment alignments[] = {VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+  for (unsigned alignment = 0; alignment < 3; ++alignment)
+  {
+    SpacerRowOffers spacerOffers;
+    SpacerRowOffers boxOffers;
+    StackNode spacerRow(Row().alignVertical(alignments[alignment]).gap(4).props);
+    StackNode boxRow(Row().alignVertical(alignments[alignment]).gap(4).props);
+    BoxNode *spacer = new BoxNode(Spacer().props);
+    BoxNode *box = new BoxNode(Box().props);
+    spacerRow.addChild(new ButtonNode(Button("A").props));
+    spacerRow.addChild(spacer);
+    spacerRow.addChild(new ButtonNode(Button("BB").props));
+    boxRow.addChild(new ButtonNode(Button("A").props));
+    boxRow.addChild(box);
+    boxRow.addChild(new ButtonNode(Button("BB").props));
+    // Distinct F values discriminate fallback from a coincidental Button height.
+    for (int fallback = 7; fallback <= 40; fallback += 33)
+    {
+      const int spacerHeight =
+          layout::preferredChildHeightForRow(spacer, fallback, 10, 11, 12, 13, 14, &spacerOffers.platform);
+      const int boxHeight = layout::preferredChildHeightForRow(box, fallback, 10, 11, 12, 13, 14, &boxOffers.platform);
+      LOKA_VERIFY(spacerHeight == fallback);
+      LOKA_VERIFY(spacerHeight == boxHeight);
+    }
+    layoutSpacerRow(spacerRow, 100, spacerOffers);
+    layoutSpacerRow(boxRow, 100, boxOffers);
+    LOKA_VERIFY(spacerOffers.frames[1].height == 10);
+    for (unsigned child = 0; child < 3; ++child)
+      LOKA_VERIFY(spacerOffers.frames[child] == boxOffers.frames[child]);
+  }
+}
 
 void testRowWrappedButtonHeightOffers()
 {

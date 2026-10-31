@@ -238,6 +238,19 @@ namespace loka
       return box;
     }
 
+    /** Holds no children: appending a child is a compile error.
+        In a natural-width Row, answers no natural width and shares what the
+        sized children leave with the other children that answer none; gets zero
+        when nothing is left. In a shared Row, takes an equal share with the
+        other undeclared children. In a vertically aligned Row's height table,
+        answers the table fallback, just like an empty Box().
+        Promises nothing inside a Column. */
+    typedef scene::NodeDefinition<BoxProps, BoxNode> SpacerDefinition;
+    inline SpacerDefinition Spacer()
+    {
+      return SpacerDefinition();
+    }
+
     inline BoxNode *createNode(const BoxProps &props)
     {
       return new BoxNode(props);

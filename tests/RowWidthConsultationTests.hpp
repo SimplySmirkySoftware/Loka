@@ -15,6 +15,11 @@ void testRowOversizedFixedBoxKeepsDeclaredSeatForSibling();
 void testRowZeroWidthRowKeepsFixedSeatLiveAndGapped();
 void testRowWidthHeuristicForwardsOnlySingleFragmentClaims();
 
+void testSpacerNaturalRowRemainderAndOverflow();
+void testSpacerSharedRowEqualShares();
+void testSpacerRowMatchesEmptyBoxFrames();
+void testSpacerAlignedRowFallbackHeight();
+
 void testRowNaturalWidthConsultation();
 void testRowSharedWidthNeverQueriesSource();
 

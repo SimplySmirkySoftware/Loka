@@ -548,6 +548,10 @@ loka_compile_pin(window_props_menu_bar_retired
   ACCEPTS pins/accepts_window_props_title.cpp
 )
 
+loka_compile_pin(spacer-refuses-children
+  REFUSES pins/refuses_spacer-refuses-children.cpp
+  ACCEPTS pins/accepts_spacer-refuses-children.cpp)
+
 loka_compile_pin(ribbon-control-accepts-only-items
   REFUSES pins/refuses_ribbon-control-accepts-only-items.cpp
   ACCEPTS pins/accepts_ribbon-control-accepts-only-items.cpp

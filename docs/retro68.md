@@ -384,6 +384,38 @@ probe imports exactly `InterfaceLib`, `Textension`, `TextEncodingConverter`, and
 `UnicodeConverter`, all strong. These are build checks, not loader or native
 startup verdicts. No release allowlist includes the Unicode acceptance target.
 
+### MLTE declarations
+
+The engine's declarations come from the repository's own header,
+`apple/toolbox/src/unicode/MacTextEditorSubset.h`, not from an SDK header.
+It declares only the routines the flavor calls, with the types and values
+those declarations need, two-byte packed, and it refuses a translation unit
+that already included the SDK's `MacTextEditor.h`. Multiversal has no MLTE
+header and lacks `OSStatus`, `FourCharCode`, `ByteCount`, `ItemCount` and
+`TextEncoding`; the subset declares those five identically to Universal
+Interfaces so one header serves both interface sets.
+
+Evidence has two legs. The compile pin `LokaToolboxMlteSubsetStandalone`
+(`tests/toolbox/unicode-abi/`) builds the header alone in every PPC build,
+so the Toolbox PPC CI job proves it under Multiversal and a local build
+proves it under Universal; the link-only import probe takes
+`TXNVersionInformation` through the header. The SDK comparison
+`tests/toolbox/unicode-abi/compare_subset.py` runs only on a machine whose
+Retro68 build has Universal Interfaces: it compiles, never runs, one layout
+and one signature translation unit against each header with the same flags,
+reads the exported layout array back from the XCOFF object, requires the
+undefined symbols of the signature object to be exactly the manifest's
+unmangled routine names, and runs three negative controls each time. Every
+file it derives from the SDK stays under `build/toolbox-unicode-abi/`; it
+accepts no output path. The claims it checks are `manifest.py`.
+
+Last comparison, 2026-10-31, Universal Interfaces shipped with the local
+Retro68 build: types 22 / constants 45 / functions 40, differences 0.
+
+To add a routine later: declare it in the header, add its line to
+`manifest.py` (and its types or constants, if new), run the comparison, and
+record the new counts here.
+
 ## Classic Toolbox Profiles
 
 Classic Mac localization should not assume that Unicode is the only normal
