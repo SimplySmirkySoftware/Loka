@@ -119,3 +119,14 @@ ToolboxTextMeasureScope::ToolboxTextMeasureScope(
     SetPort(this->measurePort_);
   }
 }
+
+bool ToolboxTextMeasureScope::queryLineMetrics(long &pitch, short &baseline) const
+{
+  if (!this->valid())
+    return false;
+  FontInfo info;
+  GetFontInfo(&info);
+  pitch = static_cast<long>(info.ascent) + info.descent + info.leading;
+  baseline = info.ascent;
+  return true;
+}

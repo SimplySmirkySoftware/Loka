@@ -24,6 +24,10 @@ class ToolboxScenePlatformController : public loka::app::scene::IPlatformControl
 public:
   // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
+  bool queryNaturalHeight(loka::app::scene::Node *, short &) const
+  {
+    return false;
+  }
   /** One registry attempt per flagged Box/Card placement, before children. */
   void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;

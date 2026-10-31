@@ -351,6 +351,7 @@ public:
 #endif
   ToolboxPendingDialogs pendingDialogs_;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
+  virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   /** Push-button measurement shared by allocation and standalone layout.
       The bool form refuses an unmeasurable label; the short form keeps the
       standalone layout's inset-only width for that case. */

@@ -13,6 +13,7 @@
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxPlatformLayoutHandlers.hpp"
 #include "ToolboxLayoutMetrics.hpp"
+#include "context/ToolboxTextContext.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/layout/BoxLayout.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -989,6 +990,95 @@ namespace
     LOKA_VERIFY(b->offer.y - a->offer.y == 15);
   }
 
+  void naturalHeightRowPin()
+  {
+    const TextStyle styles[] = {FontSize<24>(), Heading, Title, SmallLabel};
+    const VerticalAlignment alignments[] = {
+        VERTICAL_ALIGNMENT_TOP, VERTICAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_BOTTOM};
+    for (unsigned path = 0; path != 2; ++path)
+      for (unsigned style = 0; style != 4; ++style)
+        for (unsigned align = 0; align != 3; ++align)
+        {
+          Fixture f(WindowProps(), path != 0);
+          StackNode row(Row().alignVertical(alignments[align]).props);
+          GapText *text = new GapText();
+          text->props.textStyle_ = styles[style];
+          GapButton *button = new GapButton();
+          row.addChild(text);
+          row.addChild(button);
+          short height = 123;
+          LOKA_VERIFY(f.controller.queryNaturalHeight(text, height));
+          if (style == 0)
+            LOKA_VERIFY(height != 16);
+          LayoutState leaf = f.seat();
+          leaf.inputs = NODE_DIRTY_LAYOUT;
+          ToolboxTextContext context(text, &f.controller);
+          context.layout(&f.controller, leaf);
+          LOKA_VERIFY(leaf.y == height);
+          f.layout(row);
+          const int maximum = height > 16 ? height : 16;
+          const int divisor = align == 1 ? 2 : 1;
+          LOKA_VERIFY(text->offer.height == height);
+          LOKA_VERIFY(button->offer.height == 16);
+          LOKA_VERIFY(text->offer.y == (align == 0 ? 0 : (maximum - height) / divisor));
+          LOKA_VERIFY(button->offer.y == (align == 0 ? 0 : (maximum - 16) / divisor));
+        }
+  }
+
+  void naturalHeightFactsPin()
+  {
+    using namespace loka::core;
+    Fixture f;
+    MutableState<String> value(String::Literal("Title"));
+    MutableState<TextStyle> style((TextStyle()));
+    TextProps props(&value);
+    props.textStyleState_ = &style;
+    TextNode text(props);
+    ToolboxTextContext context(&text, &f.controller);
+    const TextStyle styles[] = {FontSize<24>(), Heading, Title, SmallLabel};
+    for (unsigned empty = 0; empty != 2; ++empty)
+    {
+      value.set(String::Literal(empty ? "" : "Title"));
+      for (unsigned i = 0; i != 4; ++i)
+      {
+        style.set(styles[i]);
+        short height = 123, repeated = 0;
+        LOKA_VERIFY(f.controller.queryNaturalHeight(&text, height));
+        LOKA_VERIFY(f.controller.queryNaturalHeight(&text, repeated));
+        LOKA_VERIFY(repeated == height);
+        LayoutState leaf = f.seat();
+        leaf.inputs = NODE_DIRTY_LAYOUT;
+        context.layout(&f.controller, leaf);
+        LOKA_VERIFY(leaf.y == height);
+        // The host shim returns size + 3 descent + 2 leading.
+        LOKA_VERIFY(height == (i == 0 ? 29 : i == 1 ? 17 : i == 2 ? 23 : 14));
+      }
+    }
+    short height = 123;
+    style.set(Bold);
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(height == 123);
+    style.set(Title);
+    text.props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_WORD);
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(height == 123);
+    text.props.blockStyle_ = BlockStyle();
+    value.set(String::Literal("a\nb"));
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(height == 123);
+    value.set(String::Literal("a\rb"));
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(height == 123);
+    value.set(String::Literal("Title"));
+    ToolboxScenePlatformController portless(0);
+    LOKA_VERIFY(!portless.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(height == 123);
+    text.props.text_ = 0;
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(!f.controller.queryNaturalHeight(0, height));
+    LOKA_VERIFY(height == 123);
+  }
+
   void rowPin()
   {
     Fixture f;
@@ -1316,7 +1406,11 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *mode = argv[1];
-  if (!std::strcmp(mode, "column"))
+  if (!std::strcmp(mode, "height-row"))
+    naturalHeightRowPin();
+  else if (!std::strcmp(mode, "height-facts"))
+    naturalHeightFactsPin();
+  else if (!std::strcmp(mode, "column"))
     columnPin();
   else if (!std::strcmp(mode, "siblings"))
     siblingsPin();

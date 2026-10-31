@@ -88,6 +88,8 @@ public:
   short measure(const loka::core::String &value) const;
   /** Refuses absent ports and failed conversion; zero width can be success. */
   bool measure(const loka::core::String &value, short &width) const;
+  /** One-line pitch and baseline for the selected font; no layout state is read. */
+  bool queryLineMetrics(long &pitch, short &baseline) const;
   bool valid() const { return this->measurePort_ != 0; }
   /** Select against the original port, never the preceding run. */
   void select(const ToolboxTextFontDescriptor &descriptor) const;

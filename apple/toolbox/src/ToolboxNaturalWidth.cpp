@@ -4,6 +4,8 @@
 #include "app/nodes/Text.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "platform/StringUTF8.hpp"
+#include "core/StringAccess.hpp"
+#include "platform/String.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 #include <climits>
 
@@ -65,5 +67,54 @@ bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *c
   if (!scope.measure(value, measured) || measured <= 0)
     return false;
   width = measured;
+  return true;
+}
+
+namespace
+{
+  /** CR/LF check on the borrowed UTF-8 bytes; copies only when the String cannot lend them.
+      Measured on maciix (Toolbar rally 1, page 1c §10): the copy cost about 0.1 ms per query. */
+  bool QuerySingleLine(const loka::core::String &value, bool &singleLine)
+  {
+    loka::platform::Utf8View view = {0, 0};
+    std::string scratch;
+    const loka::core::Managed<loka::platform::String> &handle = loka::core::StringAccess::handle(value);
+    if (handle.isValid() && !handle->queryUtf8(view))
+    {
+      if (!loka::platform::CollectUtf8(value, scratch))
+        return false;
+      view.bytes = scratch.data();
+      view.length = scratch.size();
+    }
+    singleLine = true;
+    for (std::size_t i = 0; i < view.length; ++i)
+      if (view.bytes[i] == '\r' || view.bytes[i] == '\n')
+      {
+        singleLine = false;
+        break;
+      }
+    return true;
+  }
+} // namespace
+
+bool ToolboxScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+{
+  loka::app::TextNode *text = child ? child->asTextNode() : 0;
+  if (!text || !text->props.text_)
+    return false;
+  if (text->props.blockStyle_.hasWrap_ && text->props.blockStyle_.wrap_ != loka::app::TEXT_WRAP_NONE)
+    return false;
+  const loka::app::TextStyle style = text->props.resolvedTextStyle();
+  if (!style.size_.isSet())
+    return false;
+  bool singleLine = false;
+  if (!QuerySingleLine(text->props.text_->get(), singleLine) || !singleLine)
+    return false;
+  ToolboxTextMeasureScope scope(*this, ToolboxTextFontDescriptor(style));
+  long pitch = 0;
+  short baseline = 0;
+  if (!scope.queryLineMetrics(pitch, baseline) || pitch < 1 || pitch > SHRT_MAX)
+    return false;
+  height = static_cast<short>(pitch);
   return true;
 }

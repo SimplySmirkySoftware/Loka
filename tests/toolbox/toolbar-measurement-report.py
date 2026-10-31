@@ -57,15 +57,15 @@ def rows(path):
     summaries = records('toolbar_row_summary')
     samples = records('toolbar_row')
     inputs = records('toolbar_row_inputs')
-    names = {'k1', 'k2', 'k4', 'fit', 'floor', 'b-equals-s'}
-    if (summaries != [{'complete': '1', 'cases': '6'}] or len(samples) != 6
-            or {s['case'] for s in samples} != names or len(inputs) != 6
+    names = {'k1', 'k2', 'k4', 'fit', 'floor', 'b-equals-s', 'aligned-title'}
+    if (summaries != [{'complete': '1', 'cases': '7'}] or len(samples) != 7
+            or {s['case'] for s in samples} != names or len(inputs) != 7
             or {s['case'] for s in inputs} != names):
         raise ValueError('incomplete Row measurement')
     for sample in samples:
         if (int(sample['repetitions']) < 30 or int(sample['median_us']) < 0
                 or int(sample['maximum_us']) < int(sample['median_us'])
-                or (sample['case'] != 'b-equals-s' and sample['offer'] != sample['occupied'])
+                or (sample['case'] not in ('b-equals-s', 'aligned-title') and sample['offer'] != sample['occupied'])
                 or (sample['case'] == 'b-equals-s' and (sample['offer'], sample['occupied']) != ('27', '28'))):
             raise ValueError('invalid one-pass Row statistics')
     for row in inputs:
@@ -77,13 +77,25 @@ def rows(path):
             raise ValueError('invalid scan count')
         if row['case'] == 'k4' and scans < 2:
             raise ValueError('k4 did not exercise multiple scans')
+    heights = records('toolbar_row_height')
+    if len(heights) != 1 or heights[0]['case'] != 'aligned-title':
+        raise ValueError('missing Title height comparison')
+    height = heights[0]
+    answered = height['answered'] == '1'
+    equal = answered and int(height['query']) == int(height['leaf'])
+    if (height['answered'] not in ('0', '1') or int(height['leaf']) <= 0
+            or height['equal'] != str(int(equal)) or (answered and not equal)
+            or (not answered and height['query'] != '-1')):
+        raise ValueError('invalid Title height comparison')
+    print('toolbar_row_height ' + ' '.join(f'{key}={value}' for key, value in height.items()))
     samples = {s['case']: s for s in samples}
+    print('toolbar_row case=aligned-title ' + ' '.join(f'{key}={value}' for key, value in samples['aligned-title'].items() if key != 'case'))
     for name in ('k2', 'k4'):
         row = samples[name]
         print('toolbar_row_delta case=' + name, end=' ')
         print(' '.join(f'{stat}_over_{base}_us=' + str(int(row[stat + '_us']) - int(samples[base][stat + '_us']))
                        for base in ('fit', 'k1') for stat in ('median', 'maximum')))
-    print('toolbar_row_summary complete=1 cases=6 (cost only; no heaviness verdict)')
+    print('toolbar_row_summary complete=1 cases=7 (cost only; no heaviness verdict)')
 
 
 def provenance(build, binary, destination):

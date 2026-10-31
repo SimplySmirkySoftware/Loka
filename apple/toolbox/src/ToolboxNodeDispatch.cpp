@@ -144,6 +144,11 @@ namespace
       return this->controller_ && this->controller_->queryNaturalWidth(child, width);
     }
 
+    virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const
+    {
+      return this->controller_ && this->controller_->queryNaturalHeight(child, height);
+    }
+
     virtual int layoutChild(loka::app::scene::Node *child, const loka::app::scene::LayoutState &state)
     {
       loka::app::scene::LayoutState childState = state;
