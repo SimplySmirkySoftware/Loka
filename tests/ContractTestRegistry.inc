@@ -1578,3 +1578,12 @@ LOKA_TEST(testWebURLAcceptedAndPreserved)
 LOKA_TEST(testWebURLRefusalPreservesOutput)
 LOKA_TEST(testWebURLLengthBoundary)
 LOKA_TEST(testWebURLNoneAndEquality)
+
+LOKA_TEST(testItalicOrderAndMergeTable)
+LOKA_TEST(testNullItalicPaintRecording)
+
+LOKA_TEST(testTextToggleValueContract)
+
+LOKA_TEST(testUnderlineStyleContract)
+LOKA_TEST(testNullUnderlinePaintRecording)
+LOKA_TEST(testNullUnderlineParkedReattach)

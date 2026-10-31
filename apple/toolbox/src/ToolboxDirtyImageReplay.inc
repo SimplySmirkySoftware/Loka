@@ -11,6 +11,8 @@ void RenderDirtyImageViews(loka::app::scene::Node *node,
   if (loka::app::ImageViewNode *image = node->asImageViewNode())
   {
     ToolboxImageViewContext *ctx = static_cast<ToolboxImageViewContext *>(image->getContext());
+    if (!ctx)
+      LOKA_PAINT_REFUSE(ToolboxPaintRefusals(controller), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     Rect intersection;
     if (ctx && SectRect(&ctx->rect(), &dirtyRect, &intersection)
         && SectRect(&intersection, &ctx->paintRect(), &intersection))

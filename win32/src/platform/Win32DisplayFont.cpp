@@ -216,7 +216,8 @@ namespace loka
     {
       const int family = style.family() == loka::app::TEXT_FAMILY_MONOSPACE ? 1 : 0;
       const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
-      const int italic = style.hasItalic_ && style.italic_ ? 1 : 0;
+      bool on = false;
+      const int italic = style.queryItalic(on) && on ? 1 : 0;
       loka::app::TextSizeRole role;
       if (style.size_.queryRole(role))
         return this->fonts_[kRoleRowBase + role][bold][italic][family];

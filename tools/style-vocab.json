@@ -39,7 +39,7 @@
     "RIGHT": 2
   },
   "fields": {
-    "TextStyle": ["fontSize", "weight", "italic", "color", "family"],
+    "TextStyle": ["fontSize", "weight", "italic", "underline", "color", "family"],
     "BlockStyle": ["wrap", "truncation", "align"]
   }
 }

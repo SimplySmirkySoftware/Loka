@@ -188,34 +188,7 @@ namespace
     return false;
   }
 
-
-  void RenderDirtyRectSurfaces(loka::app::scene::Node *node,
-                               ToolboxScenePlatformController *controller,
-                               const Rect &dirtyRect)
-  {
-    if (!node)
-    {
-      return;
-    }
-    if (loka::app::RectSurfaceNode *surface = node->asRectSurfaceNode())
-    {
-      ToolboxRectSurfaceContext *ctx = static_cast<ToolboxRectSurfaceContext *>(surface->getContext());
-      if (ctx)
-      {
-        ctx->renderDirty(dirtyRect);
-      }
-      return;
-    }
-    if (loka::app::scene::INestable *nestable = node->asNestable())
-    {
-      loka::dsl::CompositionCursor<loka::app::scene::Node> it(nestable->childrenHead(), nestable->childrenCount());
-      for (loka::app::scene::Node *child = it.next(); child; child = it.next())
-      {
-        RenderDirtyRectSurfaces(child, controller, dirtyRect);
-      }
-    }
-    (void)controller;
-  }
+#include "ToolboxDirtyRectReplay.inc"
 
 #include "ToolboxDirtyImageReplay.inc"
 

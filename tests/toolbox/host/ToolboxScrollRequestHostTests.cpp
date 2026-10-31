@@ -236,9 +236,11 @@ namespace
     Fixture f;
     if (!std::strcmp(kind, "creation"))
     {
+      f.controller.observation_.reset();
       toolbox_host::refuseControls = 1;
       f.post(0, 40);
       f.visit();
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       f.result(SCROLL_UNAVAILABLE);
       LOKA_VERIFY(f.storage.viewport.get().x == 0 && f.storage.viewport.get().y == 0);
       LOKA_VERIFY(f.writes == 1); // The layout still publishes dimensions.

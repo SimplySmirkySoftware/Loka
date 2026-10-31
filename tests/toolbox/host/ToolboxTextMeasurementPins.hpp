@@ -424,10 +424,12 @@ namespace
       const char *purposes[] = {"Lines", "Table", "ControlBlock"};
       for (int failure = 0; failure != 3; ++failure)
       {
+        controller.observation_.reset();
         loka::core::testing::failLokaAllocRaw(owners[failure], purposes[failure], 1);
         seat = Seat(4);
         seat.lineHeight = static_cast<short>(15 + failure);
         LOKA_VERIFY(node->layout(&controller, seat) == 0);
+        LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_MEASUREMENT);
         toolbox_host::draws.clear();
         context.repaint();
         LOKA_VERIFY(toolbox_host::draws.empty());

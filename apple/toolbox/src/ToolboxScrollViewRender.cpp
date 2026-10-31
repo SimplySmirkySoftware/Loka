@@ -12,9 +12,16 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
       break;
     }
   }
-  if (!binding || !binding->usedThisFrame || !this->scrollViewClipRgn_ || this->projectionParentScopes_.insideViewport()
-      || this->projectionParentScopes_.insideUnit())
+  if (this->projectionParentScopes_.insideViewport() || this->projectionParentScopes_.insideUnit())
+    return;
+  if (!binding || !binding->usedThisFrame)
   {
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return;
+  }
+  if (!this->scrollViewClipRgn_)
+  {
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     return;
   }
   Rect viewportRect = binding->contentRect;
@@ -31,12 +38,17 @@ void ToolboxScenePlatformController::renderScrollView(loka::app::ScrollViewNode 
   {
     ToolboxPaintClip clip(viewportRect, ToolboxPaintClip::INTERSECT);
     if (!clip.isActive())
+    {
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       return;
+    }
     loka::app::scene::ProjectionViewportScopeGuard scopeGuard(this->projectionParentScopes_, renderScope);
     if (scopeGuard.isActive())
     {
       RenderChildren(scrollView, this);
     }
+    else
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   }
   this->reachNativeBar(binding->barId[loka::app::SCROLL_BAR_VERTICAL]);
   this->drawScrollBarControl(binding->barId[loka::app::SCROLL_BAR_VERTICAL]);

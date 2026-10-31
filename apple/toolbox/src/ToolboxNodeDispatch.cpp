@@ -281,7 +281,11 @@ namespace
         context->setPlacement(ToolboxClipPlacement(rect));
       }
       else
+      {
+        if (width > 0 && height > 0)
+          LOKA_PAINT_REFUSE(*controller, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         context->setPlacement(ToolboxClipPlacement());
+      }
     }
     return width;
   }

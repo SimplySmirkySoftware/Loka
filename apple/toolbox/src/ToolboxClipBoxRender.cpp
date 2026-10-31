@@ -26,6 +26,10 @@ void ToolboxScenePlatformController::renderClipBox(loka::app::scene::Node *node)
       RenderChildren(node->asNestable(), this);
       return;
     }
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   }
+  else if (!context)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+  // An absent placement is empty input or a failure already reported during layout.
   RenderChildren(node->asNestable(), this);
 }

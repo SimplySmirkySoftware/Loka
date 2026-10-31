@@ -79,6 +79,8 @@ ToolboxRibbonGroupEdgeContext::queryPaintDamage(const loka::app::scene::PaintQue
 void ToolboxRibbonGroupEdgeContext::render(loka::app::scene::IPlatformController *)
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (EmptyRect(&this->paintRect_) || (clip.isActive() && !clip.touches(this->paintRect_)))
     return;
   loka::toolbox::ToolboxApplyWindowGround();

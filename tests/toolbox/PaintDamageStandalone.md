@@ -265,3 +265,19 @@ The subsequent `viewport-content-dirty-refused` arm writes the visible Text and 
 with those unsupported controls present. Removing the successful-leaf
 `noteContentInputs()` call turns this arm red (delegator verifies in MAME).
 The tracked audit is regenerated only from the delegator's green MAME run.
+
+The selected moving snapshot now reports `eligibility_in=clean|refused` from
+its matching entry field, and `collecting_first=<reason> site=<file:line|->`
+from the first between-pass refusal. The adjacent `paint_result` line reports
+the outgoing eligibility, `first=<reason>`, and `site`. Its derived `rule` is
+1 for a recorded refusal, 2 for an unfinished render, 3 for a finished covering
+paint, and 4 for a finished noncovering paint. `coverage` is `window` for rule 3,
+`not_window` for rule 4, and `-` for rules 1–2 because those snapshots do not
+retain entry coverage. Site literals exist only in diagnostic builds; a missing
+site prints `-`. These lines describe the same selected snapshot, not a history
+of every pass. Every render exit publishes `lastPresentObservation`, including
+early returns; host tests read that copy directly. A window-shell failure after
+render (for example, allocating the grow-box clip) can lower the live eligibility
+after a clean published result, so the next admission can enter refused.
+The tracked target audit requires delegator capture; Linux does not establish its
+new values.
