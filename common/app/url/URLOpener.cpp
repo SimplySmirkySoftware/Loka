@@ -43,10 +43,14 @@ namespace loka
     {
       if (this->phase_ != SEALED)
         return false;
-      core::StateTrackerGuard guard(&this->tracker_);
-      this->outcome_.set(this->sealed_);
-      this->phase_ = IDLE;
+      const URLOpenOutcome delivered = this->sealed_;
       this->sealed_ = URLOpenOutcome::None();
+      this->phase_ = DELIVERING;
+      {
+        core::StateTrackerGuard guard(&this->tracker_);
+        this->outcome_.set(delivered);
+      }
+      this->phase_ = IDLE;
       return true;
     }
   } // namespace app

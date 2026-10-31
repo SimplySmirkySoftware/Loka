@@ -85,12 +85,13 @@ namespace loka
       friend struct testing::URLOpenerAccess;
       URLOpenerBase(const URLOpenerBase &);
       URLOpenerBase &operator=(const URLOpenerBase &);
-      /** Only these two doors transition IDLE -> LAUNCHING -> SEALED -> IDLE.
-          Launch removes a stack copy before calling open synchronously; the
-          callback and user pointer are borrowed only for that call. */
+      /** Only these two doors transition IDLE -> LAUNCHING -> SEALED ->
+          DELIVERING -> IDLE. Launch removes a stack copy before calling open
+          synchronously; the callback and user pointer are borrowed only for
+          that call. */
       bool launchNext(URLOpenKind (*open)(const WebURL &, void *), void *user);
       /** Joins the active turn. Under Operation::Regime a turn is required.
-          Remains SEALED until set's synchronous callbacks return. */
+          Stays DELIVERING, refusing both doors, until set's callbacks return. */
       bool deliverSealed();
       scene::RequestRing<WebURL> ring_;
       core::PushStateTracker tracker_;
@@ -99,7 +100,8 @@ namespace loka
       {
         IDLE,
         LAUNCHING,
-        SEALED
+        SEALED,
+        DELIVERING
       };
       Phase phase_;
       URLOpenOutcome sealed_;

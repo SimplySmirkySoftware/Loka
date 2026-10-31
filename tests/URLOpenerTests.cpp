@@ -71,6 +71,9 @@ namespace
       Opening nested(self.second, URL_OPENED);
       LOKA_VERIFY(!Access::launchNext(self.owner, &Opening::open, &nested));
       LOKA_VERIFY(nested.calls == 0);
+      // A nested delivery would unlock the opener while this notification runs.
+      LOKA_VERIFY(!Access::deliverSealed(self.owner));
+      LOKA_VERIFY(self.notifications == 1);
       LOKA_VERIFY(self.owner.pending() == 1);
     }
   };
