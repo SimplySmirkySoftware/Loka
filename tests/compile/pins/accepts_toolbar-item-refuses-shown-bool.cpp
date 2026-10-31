@@ -1,0 +1,11 @@
+#include "app/nodes/controls/Toolbar.hpp"
+#include "app/nodes/controls/Card.hpp"
+#include "app/style/StyleVocab.hpp"
+
+void toolbarDeclarationPin()
+{
+  using namespace loka::app;
+  bool value = true;
+  loka::core::MutableState<bool> condition(value);
+  ToolbarItem("x").shown(condition);
+}
