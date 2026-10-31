@@ -15,6 +15,68 @@ namespace
 {
   using loka::core::String;
 
+  // Frozen from 108c68de: keep independent of the production unit decoder.
+  bool DecodeScalar(const char *utf8, std::size_t remaining,
+                    unsigned long &scalar, std::size_t &length)
+  {
+    const unsigned char first = static_cast<unsigned char>(utf8[0]);
+    unsigned long minimum = 0;
+    if (first < 0x80) { scalar = first; length = 1; }
+    else if ((first & 0xE0) == 0xC0) { scalar = first & 0x1F; length = 2; minimum = 0x80; }
+    else if ((first & 0xF0) == 0xE0) { scalar = first & 0x0F; length = 3; minimum = 0x800; }
+    else if ((first & 0xF8) == 0xF0) { scalar = first & 0x07; length = 4; minimum = 0x10000; }
+    else return false;
+    if (length > remaining)
+      return false;
+    for (std::size_t i = 1; i < length; ++i)
+    {
+      const unsigned char next = static_cast<unsigned char>(utf8[i]);
+      if ((next & 0xC0) != 0x80)
+        return false;
+      scalar = (scalar << 6) | (next & 0x3F);
+    }
+    return scalar >= minimum && scalar <= 0x10FFFF
+        && !(scalar >= 0xD800 && scalar <= 0xDFFF);
+  }
+ToolboxTextUnit ReferenceNextTextUnit(const char *input, std::size_t remaining, bool roman)
+{
+  assert(input && remaining);
+  ToolboxTextUnit unit = { '?', 1, '?' };
+  unsigned long scalar = 0;
+  std::size_t length = 1;
+  if (DecodeScalar(input, remaining, scalar, length))
+  {
+    unit.scalar = scalar;
+    unit.consumed = length;
+    if (scalar < 0x80)
+      unit.native = static_cast<unsigned char>(scalar);
+    else if (roman)
+      ToolboxMacRomanEncode(scalar, unit.native);
+  }
+  return unit;
+}
+
+bool ReferenceEncodePascal(const loka::core::String &value, Str255 out)
+{
+  out[0] = 0;
+  const bool roman = GetScriptManagerVariable(smSysScript) == smRoman;
+  std::string utf8;
+  if (!loka::platform::CollectUtf8(value, utf8))
+    return false;
+  // Stream straight into the capped output: building a full projection here
+  // would add an allocation refusal that no short label had before (T1a).
+  std::size_t count = 0;
+  for (std::size_t input = 0; input < utf8.size() && count < 255;)
+  {
+    const ToolboxTextUnit unit = ReferenceNextTextUnit(utf8.data() + input, utf8.size() - input, roman);
+    out[++count] = unit.native;
+    input += unit.consumed;
+  }
+  out[0] = static_cast<unsigned char>(count);
+  return true;
+}
+
+
   void expect(const std::string &source, const std::string &expected)
   {
     Str255 out;
@@ -209,6 +271,63 @@ namespace
     loka::core::testing::allowLokaAllocRaw();
   }
 
+
+  class AppendOnlyString : public loka::platform::String
+  {
+  public:
+    virtual bool appendUtf8(std::string &out) const { out += "fallback\xC3\xA9"; return true; }
+  };
+
+  class EmptyViewString : public loka::platform::String
+  {
+  public:
+    virtual bool queryUtf8(loka::platform::Utf8View &out) const
+    { out.bytes = 0; out.length = 0; return true; }
+    virtual bool appendUtf8(std::string &) const { return true; }
+  };
+
+  void reference()
+  {
+    const String inputs[] = {
+      String(loka::core::Managed<loka::platform::String>::Wrap(new AppendOnlyString())),
+      String(), String(loka::core::Managed<loka::platform::String>::Wrap(new EmptyViewString())),
+      String(std::string("A\0\xC0\r\xE2\n", 6)),
+      String("\xC3\xA9\xE6\xBC\xA2"), String(std::string(256, 'x')),
+      String(std::string(254, 'x') + "\xC3\xA9\xE6\xBC\xA2"),
+      String(loka::core::Managed<loka::platform::String>::Wrap(new RefusingString()))
+    };
+    const short scripts[] = {smRoman, 1, 7};
+    for (unsigned script = 0; script < 3; ++script)
+    {
+      toolbox_host::systemScript = scripts[script];
+      for (unsigned i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i)
+      {
+        Str255 expected, actual;
+        const unsigned reads = toolbox_host::scriptReads;
+        const bool success = ReferenceEncodePascal(inputs[i], expected);
+        LOKA_VERIFY(toolbox_host::scriptReads == reads + 1);
+        LOKA_VERIFY(ToolboxEncodePascal(inputs[i], actual) == success);
+        LOKA_VERIFY(toolbox_host::scriptReads == reads + 2);
+        LOKA_VERIFY(actual[0] == expected[0]);
+        LOKA_VERIFY(std::memcmp(actual, expected, expected[0] + 1) == 0);
+      }
+    }
+    toolbox_host::systemScript = smRoman;
+  }
+
+  void asciiFields()
+  {
+    for (unsigned roman = 0; roman < 2; ++roman)
+      for (unsigned byte = 0; byte < 128; ++byte)
+      {
+        const char input = static_cast<char>(byte);
+        const ToolboxTextUnit unit = ToolboxNextTextUnit(&input, 1, roman != 0);
+        LOKA_VERIFY(unit.scalar == byte);
+        LOKA_VERIFY(unit.consumed == 1);
+        LOKA_VERIFY(unit.native == byte);
+      }
+  }
+
   void counted()
   {
     const std::string input = std::string("\xC0\xAF" "A\n\x80" "B\0\r\n\t", 10) + "\xC3\xA9";
@@ -321,6 +440,8 @@ int main(int argc, char **argv)
   else if (std::strcmp(argv[1], "truncation") == 0) truncation();
   else if (std::strcmp(argv[1], "script") == 0) script();
   else if (std::strcmp(argv[1], "failure") == 0) failure();
+  else if (std::strcmp(argv[1], "reference") == 0) reference();
+  else if (std::strcmp(argv[1], "ascii-fields") == 0) asciiFields();
   else if (std::strcmp(argv[1], "counted") == 0) counted();
   else if (std::strcmp(argv[1], "decode") == 0) decode();
   else if (std::strcmp(argv[1], "host-stubs") == 0) hostStubs();

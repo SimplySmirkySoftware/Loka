@@ -83,6 +83,36 @@ namespace loka { namespace testing {
 
 namespace
 {
+
+  void singleLinePins()
+  {
+    ToolboxWindow window;
+    ToolboxScenePlatformController controller(&window);
+    MutableState<String> value(String::Literal("Title"));
+    TextProps props(&value);
+    props.textStyle_ = FontSize<12>();
+    props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_NONE);
+    TextNode text(props);
+    short width = 123, height = 123;
+    // Positive control: host glyph advance is size / 3, pitch is size + 5.
+    LOKA_VERIFY(controller.queryNaturalWidth(&text, width));
+    LOKA_VERIFY(controller.queryNaturalHeight(&text, height));
+    LOKA_VERIFY(width == 20 && height == 17);
+    const std::string prefixes[] = {
+      std::string(256, 'x'), std::string(256, 'x') + std::string("\0", 1),
+      std::string(256, 'x') + "\xE2"
+    };
+    for (unsigned i = 0; i < 3; ++i)
+      for (unsigned lf = 0; lf < 2; ++lf)
+      {
+        value.set(String(prefixes[i] + (lf ? '\n' : '\r') + "\x80"));
+        width = height = 123;
+        LOKA_VERIFY(!controller.queryNaturalWidth(&text, width));
+        LOKA_VERIFY(!controller.queryNaturalHeight(&text, height));
+        LOKA_VERIFY(width == 123 && height == 123);
+      }
+  }
+
   void naturalImagePins()
   {
     ToolboxWindow window;
@@ -303,6 +333,11 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *mode = argv[1];
+  if (std::strcmp(mode, "single-line") == 0)
+  {
+    singleLinePins();
+    return 0;
+  }
   if (std::strcmp(mode, "natural-image") == 0)
   {
     naturalImagePins();
