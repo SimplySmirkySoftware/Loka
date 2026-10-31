@@ -213,6 +213,20 @@ int main(int argc, char **argv)
     Access::unmount(scene);
     return 0;
   }
+  if (std::strcmp(mode, "button-conversion") == 0)
+  {
+    LayoutState placement = Seat();
+    context->layout(&controller, placement);
+    controller.observation_.reset();
+    const std::size_t controls = controller.buttonControls_.size();
+    loka::testing::failToolboxButtonDrawConversions(1);
+    // The owner's direct fallback painter has no native acquisition in this call.
+    static_cast<ToolboxButtonContext *>(context)->draw(0);
+    LOKA_VERIFY(controller.buttonControls_.size() == controls);
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
+    Access::unmount(scene);
+    return 0;
+  }
   if (std::strcmp(mode, "cell-encoding") == 0)
   {
     { StateTrackerGuard guard(root.tracker()); root.text.set(String::Literal("Open\xE2\x80\xA6 \xC3\xA9")); }
@@ -388,9 +402,11 @@ int main(int argc, char **argv)
     Draw(*context, controller, mode, control, installedLabel);
     ExactEmpty(*context, query);
   }
+  controller.observation_.reset();
   toolbox_host::failRegions = 2;
   Draw(*context, controller, mode, control, installedLabel);
   LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
+  LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   toolbox_host::failRegions = 0;
   Draw(*context, controller, mode, control, installedLabel);
   ExactEmpty(*context, query);

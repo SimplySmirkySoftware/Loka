@@ -80,7 +80,9 @@ namespace
     }
   }
 
-  static bool DrawPictBytes(const loka::toolbox::ToolboxPictBytesPayload *payload, const Rect &dstRect)
+  static bool DrawPictBytes(const loka::toolbox::ToolboxPictBytesPayload *payload,
+                            const Rect &dstRect,
+                            ToolboxPaintRefusal &failure)
   {
     if (!payload)
     {
@@ -97,6 +99,7 @@ namespace
     PicHandle picHandle = (PicHandle)NewHandle(static_cast<Size>(headerSize));
     if (!picHandle || !*picHandle)
     {
+      failure = TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION;
       return false;
     }
 
@@ -344,6 +347,8 @@ void ToolboxImageViewContext::draw()
   if (EmptyRect(&this->paintRect_))
     return;
   ToolboxPaintClip clip(this->paintRect_, ToolboxPaintClip::INTERSECT);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   // Like Text, region refusal still draws under the caller's ambient clip.
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
@@ -400,11 +405,15 @@ void ToolboxImageViewContext::draw()
       // Same skip as above: the streamed picture draws exactly dstRect.
       return;
     }
-    if (DrawPictBytes(payload, dstRect))
+    ToolboxPaintRefusal failure = TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW;
+    if (DrawPictBytes(payload, dstRect, failure))
     {
       return;
     }
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), failure);
   }
+  else
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
 
   MoveTo(rect_.left, rect_.top);
   LineTo(rect_.right, rect_.bottom);

@@ -143,6 +143,8 @@ void ToolboxScenePlatformController::retireEditTextBinding(
     if (this->window_ && this->window_->window())
     {
       ToolboxPortScope port(this->window_->window());
+      if (!this->paintSuppressClipRgn_)
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
       TEDeactivate(binding.te);
     }
@@ -200,10 +202,16 @@ void ToolboxScenePlatformController::syncEditTextFromState(EditTextControlBindin
   if (binding.installed.holds(source)) return;
   ToolboxNativeText candidate;
   // Pre-install refusals preserve both the native value and its certificate (#1026).
-  if (!candidate.build(source) || candidate.size() > 32767) return;
+  if (!candidate.build(source) || candidate.size() > 32767)
+  {
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
+    return;
+  }
   bool verified = false;
   {
     ToolboxEditDoor door(this->window_->window(), binding.placement);
+    if (door.clipAllocationRefused(binding.placement))
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     TESetText(candidate.size() ? static_cast<const void *>(candidate.data()) : "",
               static_cast<long>(candidate.size()),
               binding.te);
@@ -222,6 +230,8 @@ void ToolboxScenePlatformController::syncEditTextFromState(EditTextControlBindin
       TESetSelect(static_cast<short>(candidate.size()), static_cast<short>(candidate.size()), binding.te);
     }
   }
+  if (!verified)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   if (verified)
     binding.installed.commit(source);
   else

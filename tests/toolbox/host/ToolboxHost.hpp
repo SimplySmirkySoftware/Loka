@@ -208,6 +208,7 @@ public:
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
   void drawForFlush();
+  void drawGrowBox();
 
 private:
   void drawWhole(const Rect &evidence);
@@ -782,6 +783,25 @@ public:
     }
   } frostCache_;
   /** Window requests: O(1) per request, before request coalescing; no rows. */
+  virtual void noteMissingRenderContext();
+  bool paintInProgress() const
+  {
+    return this->observation_.paintInProgress();
+  }
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    this->observation_.notePaintRefusal(reason, site);
+  }
+  void noteWindowDraw()
+  {
+    ++this->debugStats_.drawCalls;
+    ++this->debugStats_.totalDrawCalls;
+  }
+  void noteWindowDirtyDraw()
+  {
+    ++this->debugStats_.drawDirtyCalls;
+    ++this->debugStats_.totalDrawDirtyCalls;
+  }
   void notePresentReason(ToolboxFullDrawReason reason)
   {
     this->observation_.noteReason(reason);

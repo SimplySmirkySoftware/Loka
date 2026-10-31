@@ -90,7 +90,7 @@ class Wiring(unittest.TestCase):
 
     def test_native_and_mutations(self):
         files = [ROOT / 'apple/toolbox/src' / name for name in (
-            'ToolboxFullDrawPresenter.hpp', 'ToolboxWindow.cpp', 'ToolboxRender.cpp', 'ToolboxDrawMeasurement.hpp')]
+            'ToolboxFullDrawPresenter.hpp', 'ToolboxWindowPaint.cpp', 'ToolboxRender.cpp', 'ToolboxDrawMeasurement.hpp')]
         source = [p.read_text() for p in files]
         check(*source)
         for index, before, after in (

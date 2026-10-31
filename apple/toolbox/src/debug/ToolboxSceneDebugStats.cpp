@@ -59,8 +59,14 @@ namespace
 } // namespace
 
 ToolboxSceneDebugStats::ToolboxSceneDebugStats()
-    : cursorNativeApplies(0), cursorOuterEntries(0), cursorOuterExits(0),
-      cursorDepth(0), cursorLastApplied(0), changeSequence(0),
+    : lastPresentEntryEligibility(TOOLBOX_PAINT_REFUSED),
+      lastMovedEntryEligibility(TOOLBOX_PAINT_REFUSED),
+      cursorNativeApplies(0),
+      cursorOuterEntries(0),
+      cursorOuterExits(0),
+      cursorDepth(0),
+      cursorLastApplied(0),
+      changeSequence(0),
       totalChanges(0),
       lastFlags(loka::app::scene::NODE_DIRTY_NONE),
       lastFullRebuild(false),

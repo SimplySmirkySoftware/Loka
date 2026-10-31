@@ -1,4 +1,5 @@
 #include "ToolboxHost.hpp"
+#include "ToolboxInputDoor.hpp"
 #include "ToolboxNativeImage.hpp"
 #include "context/ToolboxImageViewContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
@@ -77,8 +78,20 @@ namespace
   }
 } // namespace
 
+namespace loka
+{
+  namespace testing
+  {
+    unsigned refuseImageDrawHandles = 0;
+  }
+} // namespace loka
 char **NewHandle(Size size)
 {
+  if (loka::testing::refuseImageDrawHandles)
+  {
+    --loka::testing::refuseImageDrawHandles;
+    return 0;
+  }
   char **handle = new char *;
   *handle = new char[size];
   return handle;
@@ -110,8 +123,8 @@ int main(int argc, char **argv)
   const Rect frame = {10, 10, 30, 30};
   const Rect half = {10, 10, 20, 30};
   window.port.native.clip = ambient;
-  MutableState<Image> image(picture(mode == "bytes-cover"));
-  if (mode == "no-image")
+  MutableState<Image> image(picture(mode == "bytes-cover" || mode == "paint-handle-refused" || mode == "paint-valid"));
+  if (mode == "no-image" || mode == "paint-empty")
     image.set(Image());
   loka::toolbox::ToolboxNativeImage unknown = {
       loka::toolbox::kToolboxNativeImageMagic, loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_UNKNOWN, 0};
@@ -122,7 +135,7 @@ int main(int argc, char **argv)
       ImageViewAttr().fit(mode == "pict-cover" || mode == "bytes-cover" || mode == "refusal" ? IMAGE_FIT_COVER
                           : mode == "none"                                                   ? IMAGE_FIT_NONE
                                                                                              : IMAGE_FIT_STRETCH));
-  if (mode == "no-state")
+  if (mode == "no-state" || mode == "paint-no-state")
     props.image(0);
   ImageViewNode node(props);
   ToolboxImageViewContext &context = *new ToolboxImageViewContext(&node, &controller);
@@ -135,6 +148,28 @@ int main(int argc, char **argv)
     SetRect(&projection, 50, 50, 60, 60);
   place(context, controller, projection);
   clearDrawing();
+  if (mode.find("paint-") == 0)
+  {
+    controller.rootNode_ = &node;
+    controller.renderContext = &context;
+    const bool refused = mode == "paint-handle-refused";
+    // Refuse only draw-time acquisition, after the valid payload exists.
+    loka::testing::refuseImageDrawHandles = refused ? 1 : 0;
+    {
+      ToolboxErasedPass::Guard erased(controller.erasedPass(), window.port.portRect);
+      ToolboxPortErasePresenter presenter(window.port.portRect);
+      ToolboxInputDoor::render(controller, &presenter);
+    }
+    LOKA_VERIFY(loka::testing::refuseImageDrawHandles == 0);
+    const ToolboxPresentObservation &result = controller.debugStats_.lastPresentObservation;
+    LOKA_VERIFY(result.paintFinished());
+    LOKA_VERIFY(result.eligibility() == (refused ? TOOLBOX_PAINT_REFUSED : TOOLBOX_PAINT_CLEAN));
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (refused ? TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION : TOOLBOX_PAINT_REFUSAL_NONE));
+    controller.rootNode_ = 0;
+    controller.renderContext = 0;
+    return 0;
+  }
   if (mode == "dirty" || mode == "ambient")
   {
     const Rect dirty = mode == "dirty" ? ambient : Rect();
@@ -179,9 +214,11 @@ int main(int argc, char **argv)
     for (int attempt = 1; attempt <= 2; ++attempt)
     {
       clearDrawing();
+      controller.observation_.reset();
       toolbox_host::refuseRegionAttempt = attempt;
       context.render(&controller);
       toolbox_host::refuseRegionAttempt = 0;
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       LOKA_VERIFY(pictureClips.size() == 1);
       same(pictureClips[0], ambient);
       same(toolbox_host::currentClip(), ambient);

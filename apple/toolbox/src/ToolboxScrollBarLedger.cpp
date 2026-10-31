@@ -242,6 +242,8 @@ bool ToolboxScenePlatformController::ensureScrollBarControl(short resourceId,
   {
     return true;
   }
+  if (!this->paintSuppressClipRgn_)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   binding->ownerContext = ownerContext;
   binding->value = props.value_.state();
   binding->valueSeat = props.value_;

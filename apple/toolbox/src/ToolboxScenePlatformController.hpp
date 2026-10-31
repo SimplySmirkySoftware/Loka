@@ -528,6 +528,15 @@ public:
     ++debugStats_.totalDrawDirtyCalls;
   }
   /** Window requests: O(1) per request, before request coalescing; no rows. */
+  virtual void noteMissingRenderContext();
+  bool paintInProgress() const
+  {
+    return this->observation_.paintInProgress();
+  }
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    this->observation_.notePaintRefusal(reason, site);
+  }
   void notePresentReason(ToolboxFullDrawReason reason)
   {
     this->observation_.noteReason(reason);

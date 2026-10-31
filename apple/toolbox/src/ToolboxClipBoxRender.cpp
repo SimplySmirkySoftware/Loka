@@ -26,6 +26,9 @@ void ToolboxScenePlatformController::renderClipBox(loka::app::scene::Node *node)
       RenderChildren(node->asNestable(), this);
       return;
     }
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   }
+  else
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
   RenderChildren(node->asNestable(), this);
 }

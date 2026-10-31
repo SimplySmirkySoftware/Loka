@@ -793,3 +793,15 @@ include paths without hard-coding the location of a local Retro68 build.
 
 `.vscode/c_cpp_properties.json` remains as a starter configuration for anyone
 who explicitly re-enables the Microsoft C/C++ IntelliSense engine.
+
+### Toolbox paint eligibility
+
+`ToolboxPresentObservation` carries a window's `CLEAN`/`REFUSED` paint eligibility
+between renders. A completed whole-window erase and paint with no reported
+refusal establishes CLEAN; unfinished or noncovering renders and refused screen
+obligations establish REFUSED. Eligibility does not schedule work. The blur
+capture gate reads only refusals already reported in the current render and
+preserves existing snapshot pixels when acquisition is blocked. PaintDamage's
+`present_observe` and `paint_result` lines distinguish the selected snapshot's
+incoming eligibility from its finalized result; see
+[the diagnostic format](../tests/toolbox/PaintDamageStandalone.md).

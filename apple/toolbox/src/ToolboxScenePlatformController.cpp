@@ -204,6 +204,8 @@ namespace
       {
         ctx->renderDirty(dirtyRect);
       }
+      else
+        LOKA_PAINT_REFUSE(ToolboxPaintRefusals(controller), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
       return;
     }
     if (loka::app::scene::INestable *nestable = node->asNestable())

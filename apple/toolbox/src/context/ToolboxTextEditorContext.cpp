@@ -178,6 +178,7 @@ scene::FollowUp ToolboxTextEditorContext::project()
   if (this->status_ == EDITOR_OK)
   {
     const Rect dest = (**this->te_).destRect;
+    LOKA_PAINT_REFUSE(ToolboxRenderPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     TESetText(this->restore_, static_cast<long>(length), this->te_);
     (**this->te_).destRect = dest;
     // TESetText has no result and TE has no undo history. Do not advance the
@@ -197,6 +198,10 @@ scene::FollowUp ToolboxTextEditorContext::project()
       this->revision_ = this->source_->lines().revision().get();
     }
   }
+  if (this->status_ == EDITOR_UNAVAILABLE)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
+  else if (this->status_ != EDITOR_OK)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
   this->phase_ = completion;
   return scene::REPAINT;
 }
@@ -331,6 +336,7 @@ public:
       return scene::RequestApplication<LineCursor, EditorResult>(pending, c.status_, follow);
     const short offset = c.offsetOf(pending);
     const LineCursor clamped = c.cursorAt(offset);
+    LOKA_PAINT_REFUSE(ToolboxRenderPaintRefusals(c.controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     TESetSelect(offset, offset, c.te_);
     return scene::RequestApplication<LineCursor, EditorResult>(clamped, EDITOR_OK, scene::REPAINT);
   }
@@ -357,6 +363,7 @@ public:
         // Native apply succeeded, but the seam did not accept its caret fact.
         // Platform twin of Win32 finishTake: current text needs selection-only repair.
         const short offset = c.offsetOf(c.node_->props.cursorState()->get());
+        LOKA_PAINT_REFUSE(ToolboxRenderPaintRefusals(c.controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         TESetSelect(offset, offset, c.te_);
         follow = scene::REPAINT;
       }
@@ -454,7 +461,10 @@ void ToolboxTextEditorContext::scrollTo(LineCursor target)
                      : bottom > textRect.bottom ? textRect.bottom - bottom
                                                 : 0;
   if (delta)
+  {
+    LOKA_PAINT_REFUSE(ToolboxRenderPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     TEScroll(0, static_cast<short>(delta), this->te_);
+  }
 }
 /** The command seat borrows the entry's caret pipeline and completion owner. */
 class ToolboxTextEditorContext::CommandOperation : public scene::SeatOperation<EditorCommand, LineCursor>
@@ -634,7 +644,10 @@ void ToolboxTextEditorContext::syncPresentation()
     return;
   }
   if (metrics.offset != metrics.clamped)
+  {
+    LOKA_PAINT_REFUSE(ToolboxRenderPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     this->controller()->window_->requestInvalidateRect(this->paintRect_);
+  }
   this->controller()->presentEditorScrollBar(this->scrollBarId_,
                                              ToolboxEditorScrollBarPresentation(static_cast<short>(metrics.maximum),
                                                                                 static_cast<short>(metrics.value),
@@ -963,6 +976,8 @@ void ToolboxTextEditorContext::repaint(TEHandle te)
   if (EmptyRect(&this->paintRect_))
     return;
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   const Rect frame = this->geometry().frame;
@@ -985,6 +1000,7 @@ void ToolboxTextEditorContext::repaint(TEHandle te)
   }
   else
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     // This fallback stands in for the native editor's document ground.
     loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_DOCUMENT, frame);
     FrameRect(&frame);
@@ -995,12 +1011,18 @@ void ToolboxTextEditorContext::repaint(TEHandle te)
 }
 void ToolboxTextEditorContext::render(scene::IPlatformController *)
 {
+  ToolboxScenePlatformController *const paintOwner = this->controller();
   if (!this->controller() || !this->node_)
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(paintOwner), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
+  }
   RailOperation op(*this);
   TEHandle te = this->controller()->ensureTextEditorControl(this, this->rect_, this->lifetimeHint());
   if (te)
     this->controller()->reachEditControl(this);
+  else
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   if (te != this->te_)
   {
     this->te_ = te;
@@ -1028,6 +1050,8 @@ void ToolboxTextEditorContext::render(scene::IPlatformController *)
     this->controller()->reachNativeBar(this->scrollBarId_);
     this->controller()->drawScrollBarControl(this->scrollBarId_);
   }
+  else
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(paintOwner), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
 }
 bool RegisterToolboxTextEditorNodeHandler(scene::PlatformNodeHandlerRegistry &registry)
 {

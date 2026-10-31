@@ -69,6 +69,8 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
       if (!old->editor && !old->unicode)
       {
         ToolboxEditDoor door(this->window_->window(), old->placement);
+        if (door.clipAllocationRefused(old->placement))
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         TEDeactivate(previousTE);
       }
       else
@@ -89,6 +91,8 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
       if (!next.editor && !next.unicode)
       {
         ToolboxEditDoor door(this->window_->window(), next.placement);
+        if (door.clipAllocationRefused(next.placement))
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         TEActivate(nextTE);
       }
       else
@@ -115,6 +119,8 @@ void ToolboxScenePlatformController::idleTextEdits()
         const short caretBefore = (**editControls_[i].te).caretState;
         {
           ToolboxEditDoor door(this->window_->window(), editControls_[i].placement);
+          if (door.clipAllocationRefused(editControls_[i].placement))
+            LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
           TEIdle(editControls_[i].te);
         }
         if (caretBefore != (**editControls_[i].te).caretState)

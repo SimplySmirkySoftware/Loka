@@ -86,6 +86,8 @@ void ToolboxScenePlatformController::refreshContextProps(loka::app::scene::Node 
       // Retained props reconcile outside the walk; the setters must not paint
       // here either, or the control would paint above later drawers and again
       // at its composition position. Same scope as ensureButtonControl.
+      if (!this->paintSuppressClipRgn_)
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
       ReconcileToolboxButtonControl(binding.control,
                                     props.text_ ? props.text_->get() : loka::core::String::Literal("Button"),

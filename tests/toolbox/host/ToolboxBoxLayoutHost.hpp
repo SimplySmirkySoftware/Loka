@@ -22,6 +22,11 @@
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController
 {
 public:
+  ToolboxPresentObservation paintObservation;
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    this->paintObservation.notePaintRefusal(reason, site);
+  }
   // Deterministic answer exercises the production traversal through the registered layout handlers.
   bool queryNaturalWidth(loka::app::scene::Node *, short &width) const { width = 37; return true; }
   bool queryNaturalHeight(loka::app::scene::Node *, short &) const

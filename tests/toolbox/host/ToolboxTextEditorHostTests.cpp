@@ -838,6 +838,52 @@ static void editorLedgerRefusal()
 }
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strncmp(argv[1], "paint-", 6) == 0)
+  {
+    Fixture f;
+    const bool project = std::strcmp(argv[1], "paint-project") == 0;
+    const bool caret = std::strcmp(argv[1], "paint-caret") == 0;
+    const bool scroll = std::strcmp(argv[1], "paint-scroll") == 0;
+    f.controller.observation_.reset();
+    const int sets = toolbox_host::sets, selections = toolbox_host::selections;
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      if (project)
+      {
+        LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("changed")) == EDIT_OK);
+        f.context->onPropsApplied();
+      }
+      else if (caret)
+      {
+        post(f, LineCursor(f.lines.at(1).id, 1));
+        f.context->onPropsApplied();
+      }
+      else
+      {
+        if (scroll)
+          OffsetRect(&(**f.te()).destRect, 0, 16);
+        ToolboxTextEditorAccess::sync(*f.context);
+        f.context->onPropsApplied();
+      }
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+    }
+    const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
+    std::fprintf(stderr,
+                 "paint case=%s first=%s sets=%d selections=%d\n",
+                 argv[1],
+                 ToolboxPaintRefusalName(result.firstRefusal().reason),
+                 toolbox_host::sets - sets,
+                 toolbox_host::selections - selections);
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (project || caret || scroll ? TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET : TOOLBOX_PAINT_REFUSAL_NONE));
+    LOKA_VERIFY(result.eligibility() == (project || caret || scroll ? TOOLBOX_PAINT_REFUSED : TOOLBOX_PAINT_CLEAN));
+    if (project)
+      LOKA_VERIFY(toolbox_host::sets > sets);
+    if (caret)
+      LOKA_VERIFY(toolbox_host::selections > selections);
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "ledger-refusal") == 0)
   {
     editorLedgerRefusal();
@@ -1470,14 +1516,18 @@ int main(int argc, char **argv)
       f.context->onPropsApplied();
       LOKA_VERIFY(f.request.get().isNone());
       LOKA_VERIFY(f.cursor.state()->get() == before);
+      f.controller.observation_.reset();
       toolbox_host::failNew = 1;
       post(f, desired);
       f.context->render(&f.controller);
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       LOKA_VERIFY(f.request.get().isNone() && !f.te());
       LOKA_VERIFY(f.cursor.state()->get() == before);
+      f.controller.observation_.reset();
       toolbox_host::failSets = 1;
       post(f, desired);
       f.context->render(&f.controller);
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       LOKA_VERIFY(f.request.get().isNone());
       LOKA_VERIFY(f.cursor.state()->get() == before);
       f.context->retryProjection();

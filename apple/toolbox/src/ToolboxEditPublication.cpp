@@ -27,6 +27,8 @@ void ToolboxScenePlatformController::updateStateFromEdit(
     if (!binding.installed.holds(binding.text->get()))
     {
       ToolboxEditDoor door(this->window_->window(), binding.placement);
+      if (door.clipAllocationRefused(binding.placement))
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       TESetText(static_cast<const void *>(""), 0, binding.te);
     }
     this->addPendingDirty(context->chromeRect());

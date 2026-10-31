@@ -36,12 +36,14 @@ namespace
 
   ToolboxEditTextNodeHandler gToolboxEditTextNodeHandler;
 
-  void DrawStringAt(short x, short y, const loka::core::String &value)
+  bool DrawStringAt(short x, short y, const loka::core::String &value)
   {
     Str255 text;
-    if (!ToolboxEncodePascal(value, text)) return;
+    if (!ToolboxEncodePascal(value, text))
+      return false;
     MoveTo(x, y);
     DrawString(text);
+    return true;
   }
 } // namespace
 
@@ -116,13 +118,18 @@ void ToolboxEditTextContext::repaint(const ToolboxEditPresentation &presentation
 {
   TEHandle te = presentation.te;
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   const bool completes = ToolboxPaintCompletes(clip, this->paintRect_, this->presented_,
       this->presented_.isKnown() && this->text_ && this->text_->get().equals(this->presented_.value()));
   this->presented_.invalidate();
   if (!te || !*te || !this->text_)
+  {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     return;
+  }
   const Rect view = (**te).viewRect;
   // Own the entire field, including the one pixel between frame and text.
   loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, this->rect_);
@@ -140,19 +147,25 @@ void ToolboxEditTextContext::draw(ToolboxScenePlatformController *controller)
     const ToolboxEditPresentation presentation = controller->ensureEditTextControl(this, textRect_, text_, lifetimeHint());
     if (presentation.te)
     {
+      if (!presentation.installed.holds(this->text_->get()))
+        LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       controller->reachEditControl(this);
       this->repaint(presentation);
       return;
     }
   }
+  LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (!clip.isActive() || clip.touches(this->paintRect_))
   {
     this->presented_.invalidate();
     loka::toolbox::ToolboxPaintGround(loka::app::SURFACE_GROUND_WINDOW, this->rect_);
     FrameRect(&this->rect_);
     if (this->text_)
-      DrawStringAt(this->textX_, this->textY_, this->text_->get());
+      if (!DrawStringAt(this->textX_, this->textY_, this->text_->get()))
+        LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
   }
   if (controller && this->text_)
     controller->recordEditHit(rect_, text_, boundary_, this);

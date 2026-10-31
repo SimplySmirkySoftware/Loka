@@ -483,10 +483,12 @@ int main(int argc, char **argv)
     LOKA_VERIFY(toolbox_host::erases == 2);
 
     Pin("ToolboxAttributedTextFailedRebuildDegrades");
+    controller.observation_.reset();
     loka::core::testing::failLokaAllocRaw("ToolboxAttributedText", "Break", 1);
     seat = Seat(30);
     context->layout(&controller, seat);
     LOKA_VERIFY(!table.valid());
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     LOKA_VERIFY(!ToolboxAttributedTextContextAccess::known(*context));
     LOKA_VERIFY(context->queryPaintDamage(query).kind == PAINT_ANSWER_REFUSED);
     context->render(&controller);

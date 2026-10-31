@@ -1,14 +1,43 @@
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/layout/BoxLayout.hpp"
 #include "ToolboxPaintSuppressScope.hpp"
+void ToolboxScenePlatformController::noteMissingRenderContext()
+{
+  LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+}
+
+/** Every render exit finalizes and publishes before resetting pass-local facts.
+    O(1), no rows; one or two existing diagnostic copies per exit. */
+ToolboxPresentObservation::Interval::~Interval()
+{
+  this->observation_.assignEligibility(this->observation_.firstRefusal_.refused()    ? TOOLBOX_PAINT_REFUSED
+                                       : this->observation_.phase_ != PAINT_FINISHED ? TOOLBOX_PAINT_REFUSED
+                                       : this->coversWindow_                         ? TOOLBOX_PAINT_CLEAN
+                                                                                     : TOOLBOX_PAINT_REFUSED);
+  this->debugStats_.lastPresentObservation = this->observation_;
+  this->debugStats_.lastPresentEntryEligibility = this->entryEligibility_;
+  if (this->observation_.viewports() > 0)
+  {
+    this->debugStats_.lastMovedPresentObservation = this->observation_;
+    this->debugStats_.lastMovedEntryEligibility = this->entryEligibility_;
+  }
+  const unsigned next = this->observation_.nextReasons_;
+  this->observation_.reset();
+  this->observation_.reasons_ = next;
+}
+
 /** Included by the production controller and Linux host fixture. */
 void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
 {
   PROFILE_FUNC();
-  ToolboxPresentObservation::Interval interval(this->observation_);
+  const bool coversWindow =
+      this->window_ && this->window_->window() && this->erasedPass_.admitsCapture(this->window_->window()->portRect);
+  ToolboxPresentObservation::Interval interval(this->observation_, coversWindow, this->debugStats_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
   this->pressLedger_.begin();
+  if (!this->scrollViewClipRgn_ || !this->paintSuppressClipRgn_)
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   ++debugStats_.renderCalls;
   ++debugStats_.totalRenderCalls;
   if (!window_ || !window_->window() || !rootNode_)
@@ -109,9 +138,6 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
       ++foregroundUnits;
   }
   this->observation_.complete(foregroundUnits);
-  this->debugStats_.lastPresentObservation = this->observation_;
-  if (this->observation_.viewports() > 0)
-    this->debugStats_.lastMovedPresentObservation = this->observation_;
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
@@ -129,6 +155,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     {
       if (!buttonControls_[i].usedThisFrame && buttonControls_[i].control)
       {
+        if (!this->paintSuppressClipRgn_)
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
         HideControl(buttonControls_[i].control);
       }
@@ -137,6 +165,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     {
       if (!scrollBarLedger_.scrollBarControls_[i].usedThisFrame && scrollBarLedger_.scrollBarControls_[i].control)
       {
+        if (!this->paintSuppressClipRgn_)
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
         HideControl(scrollBarLedger_.scrollBarControls_[i].control);
       }
@@ -152,5 +182,6 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     }
   }
   this->pressLedger_.commit();
+  this->observation_.markPaintFinished();
 }
 

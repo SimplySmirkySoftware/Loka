@@ -99,6 +99,8 @@ void ToolboxScenePlatformController::applyViewportScrollRequest(loka::app::Scrol
                                                                 const loka::core::Frame &target)
 {
   {
+    if (!this->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ToolboxPaintSuppressScope suppress(this->paintSuppressClipRgn_);
     std::size_t index;
     if (rows.queryRow(loka::app::ScrollViewVisit::X, index))

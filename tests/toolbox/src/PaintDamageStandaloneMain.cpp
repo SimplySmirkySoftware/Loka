@@ -2926,7 +2926,7 @@ namespace
         std::fprintf(self->log_,
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
                      "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
-                     "refusal=%s last_refusal=%s\r",
+                     "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
                      observation.viewports(),
@@ -2941,7 +2941,27 @@ namespace
                      observation.phaseBound(),
                      ToolboxPresentVerdictName(observation.verdict()),
                      ToolboxPresentRefusalName(observation.refusal()),
-                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()));
+                     ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()),
+                     ToolboxPaintEligibilityName(stats.lastMovedEntryEligibility),
+                     ToolboxPaintRefusalName(observation.outsideRefusal().reason),
+                     observation.outsideRefusal().refused() && observation.outsideRefusal().site
+                         ? observation.outsideRefusal().site
+                         : "-");
+        const unsigned rule = observation.firstRefusal().refused()               ? 1
+                              : !observation.paintFinished()                     ? 2
+                              : observation.eligibility() == TOOLBOX_PAINT_CLEAN ? 3
+                                                                                 : 4;
+        std::fprintf(self->log_,
+                     "paint_result=%s rule=%u first=%s site=%s coverage=%s\r",
+                     ToolboxPaintEligibilityName(observation.eligibility()),
+                     rule,
+                     ToolboxPaintRefusalName(observation.firstRefusal().reason),
+                     observation.firstRefusal().refused() && observation.firstRefusal().site
+                         ? observation.firstRefusal().site
+                         : "-",
+                     rule == 3   ? "window"
+                     : rule == 4 ? "not_window"
+                                 : "-");
         // The reveal writes one vertical origin by 160: its dirty source is
         // LAYOUT, so boundary apply requests layout_dirty (global layout only
         // adds a rect request). No OS damage remains at this settled entry and
