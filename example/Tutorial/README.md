@@ -14,6 +14,7 @@ When you want to check an answer, switch the active typedef to one of:
 - `Step3Node`: conditional content with `Show(condition) << ...`
 - `Step4Node`: a growing list built with `Keyed` + `For`, with a declared capacity of 100
 - `Step5Node`: the same list inside a `ScrollView`, so you can reach all 100 rows
+- `Step6Node`: the buttons and count in a `Toolbar` band above the list
 
 ## Suggested walkthrough
 
@@ -45,6 +46,14 @@ it on its own.
 
 The Boundary owns a viewport fact and passes it to `ScrollView`; the platform
 writes the visible area and scroll position into it. No extra watch is needed.
+
+## Step 6: a toolbar band
+
+Move Add, the count and Show/Hide into a `Toolbar` band above Step 5's list.
+The label takes the remaining width and centres its text. The count stays
+visible when the map is hidden: `Show` now wraps only the `ScrollView`.
+The list still stops at 100 and scrolls to every row. See
+[Programming Guide §14: Toolbar](../../docs/ProgrammingGuide.en.md#toolbar).
 
 ## Targets
 

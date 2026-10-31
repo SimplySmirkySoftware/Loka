@@ -1765,16 +1765,16 @@ void testSettleTwoSeatProbeRetirement()
 
 namespace
 {
-  struct QueueFixture : HeadlessStateOwner
+  template <typename Queue> struct QueueFixtureBase : HeadlessStateOwner
   {
     PushStateTracker &tracker;
-    RequestQueue<LineCursor, 4> queue;
+    Queue queue;
     Reported<LineCursor> cursor;
     loka::testing::TextBufferFixture lines;
     NullScenePlatformController platform;
     TextEditorNode node;
     NullTextEditorContext *context;
-    QueueFixture()
+    QueueFixtureBase()
         : tracker(*HeadlessStateOwner::tracker()->asPushTracker()),
           node(TextEditorProps(lines, cursor)),
           context(0)
@@ -1802,6 +1802,16 @@ namespace
       LOKA_VERIFY(definition.applyPropsToNode(&this->node));
     }
   };
+  typedef QueueFixtureBase<RequestQueue<LineCursor, 4> > QueueFixture;
+  struct InspectableQueue : RequestQueueBase<LineCursor>
+  {
+    LineCursor storage[4];
+    InspectableQueue()
+        : RequestQueueBase<LineCursor>(this->storage, 4)
+    {
+    }
+  };
+  typedef QueueFixtureBase<InspectableQueue> InspectableQueueFixture;
   struct QueueReplies
   {
     RequestQueueBase<LineCursor> &queue;
@@ -1902,6 +1912,51 @@ namespace
     }
   };
 } // namespace
+void testRequestQueueVacatedPositionsHoldNone()
+{
+  InspectableQueueFixture f;
+  for (unsigned i = 0; i < 5; ++i)
+    LOKA_VERIFY(f.queue.post(f.at(i)) == POST_ACCEPTED);
+  f.context->onPropsApplied();
+  LOKA_VERIFY(f.queue.pending() == 2 && f.queue.state()->get() == f.at(2));
+  LOKA_VERIFY(f.queue.storage[0].isNone() && f.queue.storage[1].isNone());
+  LOKA_VERIFY(f.queue.storage[2] == f.at(3) && f.queue.storage[3] == f.at(4));
+}
+void testRequestQueueWrapPreservesFifo()
+{
+  QueueFixture f;
+  QueueReplies replies(f.queue);
+  for (unsigned i = 0; i < 5; ++i)
+    LOKA_VERIFY(f.queue.post(f.at(i)) == POST_ACCEPTED);
+  f.context->onPropsApplied();
+  LOKA_VERIFY(f.queue.post(f.at(5)) == POST_ACCEPTED);
+  LOKA_VERIFY(f.queue.post(f.at(6)) == POST_ACCEPTED);
+  LOKA_VERIFY(f.queue.pending() == 4);
+  for (unsigned i = 0; i < 3; ++i)
+    f.context->onPropsApplied();
+  LOKA_VERIFY(replies.values.size() == 7);
+  for (unsigned i = 0; i < 7; ++i)
+    LOKA_VERIFY(replies.values[i].requested() == f.at(i));
+  LOKA_VERIFY(f.queue.pending() == 0 && f.queue.state()->get().isNone());
+}
+void testRequestQueueClearResetsStorageAndHead()
+{
+  InspectableQueueFixture f;
+  for (unsigned i = 0; i < 4; ++i)
+    LOKA_VERIFY(f.queue.post(f.at(i)) == POST_ACCEPTED);
+  f.context->onPropsApplied();
+  LOKA_VERIFY(f.queue.pending() == 1);
+  f.apply(TextEditorProps(f.lines, f.cursor));
+  LOKA_VERIFY(f.queue.pending() == 0 && f.queue.state()->get().isNone());
+  for (unsigned i = 0; i < 4; ++i)
+    LOKA_VERIFY(f.queue.storage[i].isNone());
+  LOKA_VERIFY(f.queue.post(f.at(4)) == POST_ACCEPTED);
+  LOKA_VERIFY(f.queue.pending() == 0);
+  LOKA_VERIFY(f.queue.post(f.at(5)) == POST_ACCEPTED);
+  LOKA_VERIFY(f.queue.pending() == 1 && f.queue.storage[0] == f.at(5));
+  for (unsigned i = 1; i < 4; ++i)
+    LOKA_VERIFY(f.queue.storage[i].isNone());
+}
 void testRequestQueueFailedArmDoesNotStrandRemainder()
 {
   QueueFixture f;

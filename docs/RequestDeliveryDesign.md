@@ -315,9 +315,11 @@ Sources: [#898, PR w](https://github.com/SimplySmirkySoftware/Loka/issues/898),
 The endpoint ruling is [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892),
 implemented by [#893](https://github.com/SimplySmirkySoftware/Loka/pull/893).
 `RequestQueue<T, N>` supplies fixed ring storage to the non-virtual
-`RequestQueueBase<T>`, which owns the slot and reply handles. It is an app-owned
-endpoint with one consumer; the rail receives a `RequestBinding<T>` and never
-sees the ring. `pending()` is ring occupancy, excluding the published slot.
+`RequestQueueBase<T>`, which owns the slot and reply handles. The FIFO mechanics
+live in `RequestRing<T>`; the endpoint's policy stays in `RequestQueueBase<T>`.
+It is an app-owned endpoint with one consumer; the rail receives a
+`RequestBinding<T>` and never sees the ring. `pending()` is ring occupancy,
+excluding the published slot.
 
 `RequestBinding::consume()` snapshots the slot, commits the ring head/count,
 then publishes the next queued value directly, forcing publication even when
