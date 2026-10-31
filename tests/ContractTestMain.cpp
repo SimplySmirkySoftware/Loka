@@ -16,6 +16,7 @@
 #endif
 #include "NativeResourceRetirementTests.hpp"
 #include "RibbonTests.hpp"
+#include "ToolbarTests.hpp"
 #include "CardTests.hpp"
 #include "CardShadowTableTests.hpp"
 #include "CommandSetTests.hpp"

@@ -8,6 +8,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/AppComponentGroupTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/NativeResourceRetirementTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/RibbonTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/ToolbarTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/CardTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/CardShadowTableTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/CommandSetTests.cpp

@@ -648,10 +648,13 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxViewportSuppression_${_suppression}
       COMMAND LokaToolboxAttributedTextTests suppression-${_suppression})
   endforeach()
+  add_test(NAME testToolboxToolbarPaint COMMAND LokaToolboxAttributedTextTests toolbar)
   add_test(NAME testToolboxScrollViewX COMMAND LokaToolboxAttributedTextTests scroll-x)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
     add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
   endforeach()
+  add_test(NAME testToolboxBusyBatch COMMAND LokaToolboxAttributedTextTests busy-batch)
+  add_test(NAME testToolboxBusyBatchNested COMMAND LokaToolboxAttributedTextTests busy-batch-nested)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
