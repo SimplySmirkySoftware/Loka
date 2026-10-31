@@ -33,7 +33,10 @@ namespace loka
     enum RowUndeclaredWidth
     {
       ROW_UNDECLARED_WIDTH_SHARED = 0,
-      ROW_UNDECLARED_WIDTH_NATURAL
+      ROW_UNDECLARED_WIDTH_NATURAL,
+      /** Natural-width seats; a one-line truncating Text takes the rest (at least one unit),
+          sharing it with empty Boxes without asking the Text's own natural width. */
+      ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE
     };
 
     /** How a Column seats children that declare no height. Rows ignore this policy. */
