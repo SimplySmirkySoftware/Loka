@@ -1683,6 +1683,16 @@ Buttons use natural widths; labels take the remaining width and centre their
 text, truncating with an ellipsis when necessary. No flexible spaces are needed
 around a label: adding them shares the remaining width with the label instead.
 
+```cpp
+Toolbar()
+    << ToolbarItem("Add item", &this->addItemEvent_).enabled(this->canAdd_.state())
+    << ToolbarItem::label(this->itemSummary_.state())
+    << ToolbarItem("Show/Hide map", &this->toggleSummaryEvent_)
+```
+
+The label's width does not depend on its text, so changing the summary from
+"Items: 3" to "Items: 100 (full)" keeps every seat where it was.
+
 Use `.enabled(state)` on buttons and `.shown(*condition)` to switch between
 constant-title buttons. Hidden buttons take no seat or gap. Switching replaces
 the native control, so keyboard focus is not carried. Labels accept text styles
@@ -1690,10 +1700,10 @@ such as `+ Title`, but not block styles; their one-line alignment and truncation
 are fixed. Items and labels support `TEST_ID`.
 
 Toolbar draws nothing. Put ground, lines and padding in the application's Box
-and window. Label input must contain no CR/LF; this contract is not detected
-(#1668). Toolbox examines only the first 255 native bytes, so text beyond that
-limit may be omitted without an ellipsis. Empty spaces retain the Row's fallback
-height and can make a band taller than a small label alone.
+and window. Label input must contain no CR/LF; this is not checked.
+Toolbox examines only the first 255 native bytes, so text beyond that
+limit may be omitted without an ellipsis. An empty space is as tall as an empty
+Box, so a band holding only a small label and spaces can be taller than the label.
 
 ### Row And Column Natural Size
 

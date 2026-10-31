@@ -178,4 +178,5 @@ namespace loka
     typedef ToolbarDefinition Toolbar;
   } // namespace app
 } // namespace loka
-#endif
+
+#endif // LOKA_APP_NODES_CONTROLS_TOOLBAR_HPP

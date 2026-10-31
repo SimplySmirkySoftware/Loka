@@ -6,5 +6,5 @@ void toolbarDeclarationPin()
 {
   using namespace loka::app;
   loka::core::MutableState<loka::core::String> title(loka::core::String::Literal("x"));
-  ToolbarItem(&title);
+  ToolbarItem item(&title);
 }
