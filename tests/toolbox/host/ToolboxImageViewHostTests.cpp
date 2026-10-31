@@ -1,3 +1,4 @@
+#include "app/nodes/boundary/StdComposition.hpp"
 #include "ToolboxHost.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxNativeImage.hpp"
@@ -10,6 +11,16 @@
 namespace
 {
 #include "ToolboxDirtyImageReplay.inc"
+  class ImageObservationOwner : public loka::app::scene::BoundaryNodeFor<ImageObservationOwner>
+  {
+  public:
+    ImageObservationOwner(const loka::app::scene::BoundaryPropsFor<ImageObservationOwner> &props =
+                              loka::app::scene::BoundaryPropsFor<ImageObservationOwner>())
+        : loka::app::scene::BoundaryNodeFor<ImageObservationOwner>(props)
+    {
+    }
+    virtual void composeNode(loka::app::scene::NodeComposition &) {}
+  };
   using namespace loka::app;
   using namespace loka::app::scene;
   using namespace loka::core;
@@ -124,11 +135,11 @@ int main(int argc, char **argv)
   const Rect half = {10, 10, 20, 30};
   window.port.native.clip = ambient;
   MutableState<Image> image(picture(mode == "bytes-cover" || mode == "paint-handle-refused" || mode == "paint-valid"));
-  if (mode == "no-image" || mode == "paint-empty")
+  if (mode == "no-image" || mode == "paint-empty" || mode == "paint-arrival")
     image.set(Image());
   loka::toolbox::ToolboxNativeImage unknown = {
       loka::toolbox::kToolboxNativeImageMagic, loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_UNKNOWN, 0};
-  if (mode == "diagonal")
+  if (mode == "diagonal" || mode == "paint-unsupported")
     image.set(Image::FromNative(&unknown, 80, 40, 0, 0));
   ImageViewProps props;
   props.image(&image).size(20, 20).attr(
@@ -148,13 +159,21 @@ int main(int argc, char **argv)
     SetRect(&projection, 50, 50, 60, 60);
   place(context, controller, projection);
   clearDrawing();
+  if (mode == "missing-context")
+  {
+    ImageViewNode missing(props);
+    controller.observation_.reset();
+    RenderDirtyImageViews(&missing, &controller, ambient);
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return 0;
+  }
   if (mode.find("paint-") == 0)
   {
     controller.rootNode_ = &node;
     controller.renderContext = &context;
-    const bool refused = mode == "paint-handle-refused";
+    const bool refused = mode == "paint-handle-refused" || mode == "paint-unsupported";
     // Refuse only draw-time acquisition, after the valid payload exists.
-    loka::testing::refuseImageDrawHandles = refused ? 1 : 0;
+    loka::testing::refuseImageDrawHandles = mode == "paint-handle-refused" ? 1 : 0;
     {
       ToolboxErasedPass::Guard erased(controller.erasedPass(), window.port.portRect);
       ToolboxPortErasePresenter presenter(window.port.portRect);
@@ -165,7 +184,20 @@ int main(int argc, char **argv)
     LOKA_VERIFY(result.paintFinished());
     LOKA_VERIFY(result.eligibility() == (refused ? TOOLBOX_PAINT_REFUSED : TOOLBOX_PAINT_CLEAN));
     LOKA_VERIFY(result.firstRefusal().reason
-                == (refused ? TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION : TOOLBOX_PAINT_REFUSAL_NONE));
+                == (mode == "paint-unsupported" ? TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET
+                    : refused                   ? TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION
+                                                : TOOLBOX_PAINT_REFUSAL_NONE));
+    if (mode == "paint-arrival")
+    {
+      ImageObservationOwner owner;
+      BoundaryNode::declareBoundaryDirtySources(&node, &owner);
+      node.takeLayoutInputs();
+      image.set(picture(true));
+      LOKA_VERIFY((node.takeLayoutInputs() & NODE_DIRTY_PROPS) != 0);
+      LOKA_VERIFY(controller.observation_.eligibility() == TOOLBOX_PAINT_CLEAN);
+      LOKA_VERIFY(!controller.observation_.outsideRefusal().refused());
+      owner.clearObservedStateEntries();
+    }
     controller.rootNode_ = 0;
     controller.renderContext = 0;
     return 0;
@@ -233,10 +265,10 @@ int main(int argc, char **argv)
       LOKA_VERIFY(toolbox_host::regions == 0);
       LOKA_VERIFY(toolbox_host::paintOperations.empty());
     }
-    else if (mode == "no-image" || mode == "no-state" || mode == "diagonal")
+    else if (mode == "no-image" || mode == "no-state" || mode == "diagonal" || mode == "paint-unsupported")
     {
       LOKA_VERIFY(toolbox_host::draws.size() == 1);
-      if (mode == "diagonal")
+      if (mode == "diagonal" || mode == "paint-unsupported")
       {
         LOKA_VERIFY(lineClips.size() == 2);
         same(lineClips[0], frame);

@@ -278,9 +278,104 @@ namespace edit_door
     }
   }
 
+  void refusal(const char *mode)
+  {
+    Fixture f;
+    HostPortScope port(f.nativeWindow.window());
+    const Rect full = {0, 0, 20, 80}, visible = {0, 20, 20, 60};
+    f.controller.projectionClip = visible;
+    ensure(f, full);
+    f.controller.activateEditControl(0);
+    const bool next =
+        std::strcmp(mode, "activate") == 0 || std::strcmp(mode, "deactivate") == 0 || std::strcmp(mode, "tab") == 0;
+    if (next)
+    {
+      const Rect otherFull = {40, 0, 60, 80}, otherVisible = {40, 20, 60, 60};
+      f.controller.projectionClip = otherVisible;
+      LOKA_VERIFY(
+          f.controller.ensureEditTextControl(f.context(f.second), otherFull, f.text.state(), NATIVE_HINT_DEFAULT).te);
+    }
+    f.controller.observation_.reset();
+    const char *expected = 0;
+    RgnHandle scratch = f.controller.paintSuppressClipRgn_;
+    if (std::strcmp(mode, "retire") == 0)
+    {
+      f.controller.paintSuppressClipRgn_ = 0;
+      f.controller.retireEditTextControl(f.context(f.first), NATIVE_HINT_EAGER_RELEASE);
+      expected = "ToolboxEditTextBinding.cpp:147";
+    }
+    else if (std::strcmp(mode, "verification") == 0)
+    {
+      f.controller.editControls_[0].installed.revoke();
+      toolbox_host::failSets = 1;
+      f.controller.syncEditTextFromState(f.controller.editControls_[0]);
+      expected = "ToolboxEditTextBinding.cpp:234";
+    }
+    else if (std::strcmp(mode, "conversion") == 0)
+    {
+      RefusableText *source = new RefusableText("ab");
+      write(f, String::FromPlatform(Managed<loka::platform::String>::Wrap(source)));
+      source->refuse = true;
+      f.controller.editControls_[0].installed.revoke();
+      f.controller.observation_.reset();
+      f.controller.syncEditTextFromState(f.controller.editControls_[0]);
+      source->refuse = false;
+      expected = "ToolboxEditTextBinding.cpp:207";
+    }
+    else
+    {
+      const int attempt = std::strcmp(mode, "tab") == 0 || std::strcmp(mode, "click") == 0 ? 3
+                          : std::strcmp(mode, "activate") == 0                             ? 2
+                                                                                           : 1;
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + attempt;
+      if (std::strcmp(mode, "idle") == 0)
+      {
+        ToolboxInputDoor::idleTextEdits(f.controller);
+        expected = "ToolboxTextEditorBinding.cpp:123";
+      }
+      else if (std::strcmp(mode, "sync") == 0)
+      {
+        f.controller.editControls_[0].installed.revoke();
+        f.controller.syncEditTextFromState(f.controller.editControls_[0]);
+        expected = "ToolboxEditTextBinding.cpp:214";
+      }
+      else if (std::strcmp(mode, "tab") == 0)
+      {
+        ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD);
+        expected = "ToolboxFocus.cpp:172";
+      }
+      else if (next)
+      {
+        f.controller.activateEditControl(1);
+        expected =
+            std::strcmp(mode, "activate") == 0 ? "ToolboxTextEditorBinding.cpp:95" : "ToolboxTextEditorBinding.cpp:73";
+      }
+      else if (std::strcmp(mode, "click") == 0)
+      {
+        f.controller.publishFixturePressOrder();
+        const Point point = {5, 25};
+        ToolboxInputDoor::mouseDown(f.controller, point);
+        expected = "ToolboxPress.cpp:279";
+      }
+      else
+      {
+        ToolboxInputDoor::keyDown(f.controller, std::strcmp(mode, "navigate") == 0 ? 28 : 'x');
+        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:225" : "ToolboxFocus.cpp:257";
+      }
+      toolbox_host::refuseRegionAttempt = 0;
+    }
+    f.controller.paintSuppressClipRgn_ = scratch;
+    const ToolboxPaintRefusalRecord &record = f.controller.observation_.outsideRefusal();
+    std::fprintf(stderr, "edit expected=%s actual=%s\n", expected, record.site ? record.site : "-");
+    LOKA_VERIFY(record.refused() && record.site);
+    LOKA_VERIFY(std::strlen(record.site) >= std::strlen(expected));
+    LOKA_VERIFY(std::strcmp(record.site + std::strlen(record.site) - std::strlen(expected), expected) == 0);
+  }
   bool run(const char *mode)
   {
-    if (std::strncmp(mode, "edit-door-", 10) == 0)
+    if (std::strncmp(mode, "edit-refusal-", 13) == 0)
+      refusal(mode + 13);
+    else if (std::strncmp(mode, "edit-door-", 10) == 0)
       interval(mode + 10);
     else if (std::strcmp(mode, "edit-editor-value") == 0)
       editorValue();

@@ -838,3 +838,27 @@ namespace loka
   } // namespace win32
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned refusedAttributedDraws = 0;
+    }
+    void failToolboxAttributedDraws(unsigned count)
+    {
+      refusedAttributedDraws = count;
+    }
+    bool refuseToolboxAttributedDraw()
+    {
+      if (!refusedAttributedDraws)
+        return false;
+      --refusedAttributedDraws;
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
+#endif

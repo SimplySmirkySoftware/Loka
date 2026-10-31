@@ -1812,11 +1812,22 @@ namespace
   void paintShellDirty(bool nested)
   {
     StaticFixture f;
-    Probe direct("direct", 30);
+    class DirectRoot : public Node
+    {
+    public:
+      virtual void render(IPlatformController *) {}
+    } direct;
     if (!nested)
       f.controller.rootNode_ = &direct;
     f.window.drawForFlush();
     LOKA_VERIFY(f.controller.debugStats_.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
+    if (!nested)
+    {
+      // An offscreen hit selects direct replay without a visible leaf obligation.
+      const Rect offscreen = {1000, 1000, 1020, 1080};
+      ToolboxScenePlatformController::CellHit hit = {offscreen, 0, 0, 0, 0};
+      f.controller.installHit(hit);
+    }
     const int renders = f.controller.debugStats_.totalRenderCalls;
     toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
     f.window.drawDirty(f.window.port.portRect);
@@ -2475,8 +2486,14 @@ namespace
     }
   }
 } // namespace
+#include "ToolboxPaintRefusalPins.hpp"
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strncmp(argv[1], "Refusal", 7) == 0)
+  {
+    runRefusalPin(argv[1]);
+    return 0;
+  }
   const char *names[] = {"PaintGroundFrozen",
                          "PaintGroundLive",
                          "PaintForeground",

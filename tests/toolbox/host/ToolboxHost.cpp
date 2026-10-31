@@ -662,7 +662,11 @@ namespace
 #endif
     return false;
   }
+#ifdef LOKA_HOST_ZSTACK_UNITS
+#include "ToolboxDirtyRectReplay.inc"
+#else
   void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
+#endif
   void RenderDirtyImageViews(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
 } // namespace
 #include "ToolboxDirtyPresentation.cpp"
@@ -831,6 +835,7 @@ namespace toolbox_host
   unsigned staticCaptures = 0, staticCopies = 0, staticReleases = 0;
   unsigned bandCaptures = 0, bandCopies = 0, bandReleases = 0, bandHairlines = 0;
   bool staticEligible = true, staticCaptureSucceeds = true, staticCopySucceeds = true;
+  unsigned refuseHairlines = 0;
 } // namespace toolbox_host
 struct ToolboxBlurPixels::Image
 {

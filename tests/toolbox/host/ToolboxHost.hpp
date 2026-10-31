@@ -136,6 +136,7 @@ namespace toolbox_host
   extern unsigned staticCaptures, staticCopies, staticReleases;
   extern unsigned bandCaptures, bandCopies, bandReleases, bandHairlines;
   extern bool staticEligible, staticCaptureSucceeds, staticCopySucceeds;
+  extern unsigned refuseHairlines;
 } // namespace toolbox_host
 class ToolboxScenePlatformController;
 class ToolboxWindow : public Window
@@ -778,6 +779,11 @@ public:
     bool paintHairline(ToolboxWindow::WindowPort *, const Rect &rect, const Rect &unit)
     {
       ++toolbox_host::bandHairlines;
+      if (toolbox_host::refuseHairlines)
+      {
+        --toolbox_host::refuseHairlines;
+        return false;
+      }
       Rect line;
       return ToolboxUnitHairlineRect(rect, unit, line);
     }
@@ -965,6 +971,10 @@ namespace toolbox_host
 class ToolboxRectSurfaceContext : public loka::app::scene::NodeContext
 {
 public:
+  void renderDirty(const Rect &)
+  {
+    LOKA_VERIFY(false);
+  }
   void setBoundary(loka::app::scene::BoundaryNode *)
   {
     LOKA_VERIFY(false);

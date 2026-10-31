@@ -838,6 +838,82 @@ static void editorLedgerRefusal()
 }
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strncmp(argv[1], "debt-", 5) == 0)
+  {
+    Fixture f;
+    const std::string mode(argv[1]);
+    f.controller.observation_.reset();
+    RgnHandle scratch = f.controller.paintSuppressClipRgn_;
+    const char *site = 0;
+    if (mode == "debt-scroll-to")
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      OffsetRect(&(**f.te()).destRect, 0, 100);
+      ToolboxTextEditorAccess::scrollTo(*f.context, LineCursor(f.lines.at(0).id, 0));
+      LOKA_VERIFY(f.controller.observation_.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+      return 0;
+    }
+    if (mode == "debt-status")
+    {
+      LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("\xC3\xA9")) == EDIT_OK);
+      f.context->onPropsApplied();
+      site = "ToolboxTextEditorContext.cpp:204";
+    }
+    else if (mode == "debt-clip")
+    {
+      toolbox_host::failRegions = 2;
+      ToolboxTextEditorAccess::repaint(*f.context, f.te());
+      toolbox_host::failRegions = 0;
+      site = "ToolboxTextEditorContext.cpp:980";
+    }
+    else if (mode == "debt-unavailable")
+    {
+      ToolboxTextEditorAccess::repaint(*f.context, 0);
+      site = "ToolboxTextEditorContext.cpp:1003";
+    }
+    else if (mode == "debt-node")
+    {
+      ToolboxTextEditorAccess::renderMissingNode(*f.context, &f.controller);
+      site = "ToolboxTextEditorContext.cpp:1017";
+    }
+    else if (mode == "debt-context-change")
+    {
+      post(f, LineCursor(f.lines.at(1).id, 1));
+      f.request.state()->bind(&retireContext, &f, false);
+      ToolboxTextEditorAccess::forgetTE(*f.context);
+      f.context->render(&f.controller);
+      f.request.state()->unbind(&retireContext, &f);
+      site = "ToolboxTextEditorContext.cpp:1054";
+    }
+    else if (mode == "debt-bar-hide")
+    {
+      f.controller.paintSuppressClipRgn_ = 0;
+      f.controller.presentEditorScrollBar(ToolboxTextEditorAccess::barId(*f.context),
+                                          ToolboxEditorScrollBarPresentation());
+      site = "ToolboxEditorScrollBar.cpp:23";
+    }
+    else
+    {
+      const Rect rect = {10, 10, 70, 25};
+      if (mode == "debt-bar-acquire")
+        toolbox_host::refuseControls = 1;
+      else
+        f.controller.paintSuppressClipRgn_ = 0;
+      f.controller.ensureEditorScrollBar(
+          200, rect, f.context, ToolboxEditorScrollBarPresentation(), NATIVE_HINT_EAGER_RELEASE);
+      toolbox_host::refuseControls = 0;
+      site = mode == "debt-bar-acquire" ? "ToolboxEditorScrollBar.cpp:85" : "ToolboxEditorScrollBar.cpp:90";
+    }
+    f.controller.paintSuppressClipRgn_ = scratch;
+    const ToolboxPaintRefusalRecord &record = f.controller.observation_.outsideRefusal();
+    std::fprintf(stderr, "editor expected=%s actual=%s\n", site, record.site ? record.site : "-");
+    LOKA_VERIFY(record.refused() && record.site);
+    LOKA_VERIFY(std::strlen(record.site) >= std::strlen(site));
+    LOKA_VERIFY(std::strcmp(record.site + std::strlen(record.site) - std::strlen(site), site) == 0);
+    return 0;
+  }
   if (argc == 2 && std::strncmp(argv[1], "paint-", 6) == 0)
   {
     Fixture f;

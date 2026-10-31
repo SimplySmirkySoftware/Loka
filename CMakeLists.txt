@@ -652,6 +652,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
     add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
   endforeach()
+  add_test(NAME testToolboxAttributedPartialRefusal COMMAND LokaToolboxAttributedTextTests refusal-partial)
+  add_test(NAME testToolboxCardBandRefusal COMMAND LokaToolboxAttributedTextTests refusal-card)
+  add_test(NAME testToolboxRibbonRefusal COMMAND LokaToolboxAttributedTextTests refusal-ribbon)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
@@ -699,6 +702,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxTextEditorTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxTextEditorTests)
   set_target_properties(LokaToolboxTextEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_editor_debt scroll-to status clip unavailable node context-change bar-hide bar-acquire bar-suppress)
+    add_test(NAME testToolboxTextEditorDebt_${_editor_debt} COMMAND LokaToolboxTextEditorTests debt-${_editor_debt})
+  endforeach()
   add_test(NAME LokaToolboxTextEditorTests COMMAND LokaToolboxTextEditorTests)
   foreach(_paint_case project caret scroll unchanged)
     add_test(NAME testToolboxTextEditorPaint_${_paint_case} COMMAND LokaToolboxTextEditorTests paint-${_paint_case})
@@ -761,7 +767,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxImageViewTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxImageViewTests)
   set_target_properties(LokaToolboxImageViewTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_image_case paint-empty paint-no-state paint-handle-refused paint-valid walk dirty ambient empty clip-change scroll pict-cover bytes-cover none no-image no-state diagonal refusal)
+  foreach(_image_case paint-empty paint-no-state paint-handle-refused paint-valid paint-arrival paint-unsupported missing-context walk dirty ambient empty clip-change scroll pict-cover bytes-cover none no-image no-state diagonal refusal)
     add_test(NAME testToolboxImageView_${_image_case} COMMAND LokaToolboxImageViewTests ${_image_case})
   endforeach()
 
@@ -810,6 +816,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxFocusTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxFocusTests)
   set_target_properties(LokaToolboxFocusTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_edit_refusal retire verification conversion idle sync tab activate deactivate click navigate key)
+    add_test(NAME testToolboxEditRefusal_${_edit_refusal} COMMAND LokaToolboxFocusTests edit-refusal-${_edit_refusal})
+  endforeach()
   add_test(NAME LokaToolboxFocusTests COMMAND LokaToolboxFocusTests)
   foreach(_edit_case full-edges translation overflow resize clip-only pool visible-readers
                      door-click door-key door-delete door-tab door-idle door-deactivate
@@ -927,6 +936,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endforeach()
 
   # Clip paint pins use production dispatch, render, hit recorders and QuickDraw host calls.
+  foreach(_refusal_case ClipMissing ClipRegion ClipGuard ScrollMissing ScrollPersistent ScrollRegion UnitMissing UnitRegion UnitCopyLive UnitCopyFrozen UnitDeviceLive UnitDeviceFrozen UnitAbsentLive DefaultNode Formatter ViewportVerticalAcquire ViewportHorizontalAcquire ViewportVerticalMove ViewportHorizontalMove TailButton TailBar EnabledButton EnabledBar RetiredButton DirtyCell DirtySurface TextHitConversion TextHitRegion UnitHairlineLive UnitFrostLive LayoutParent LayoutChild LayoutRight ControlButtonAcquire ControlButtonEnsure ControlButtonProps ControlStandaloneMissing ControlStandaloneAcquire ControlStandaloneSuppress ControlViewportHide ControlViewportRequest ControlPopupMissing LayoutProjection)
+    add_test(NAME testToolboxRefusal${_refusal_case} COMMAND LokaToolboxZStackUnitTests Refusal${_refusal_case})
+  endforeach()
   get_target_property(_clip_paint_sources LokaToolboxZStackUnitTests SOURCES)
   list(REMOVE_ITEM _clip_paint_sources tests/toolbox/host/ToolboxZStackUnitHostTests.cpp)
   add_executable(LokaToolboxClipPaintTests tests/toolbox/host/ToolboxClipPaintHostTests.cpp
@@ -943,6 +955,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxClipPaint_${_clip_case} COMMAND LokaToolboxClipPaintTests ${_clip_case})
   endforeach()
 
+  foreach(_debt_case text-debt-projection text-debt-layout text-debt-measure text-debt-lines button-debt-stale button-debt-missing button-debt-suppress cell-debt-conversion popup-debt-conversion edit-debt-missing edit-debt-acquire edit-debt-stale)
+    add_test(NAME testToolboxPartialPaint_${_debt_case} COMMAND LokaToolboxPartialPaintTests ${_debt_case})
+  endforeach()
   add_executable(LokaToolboxPartialPaintTests tests/toolbox/host/ToolboxPartialPaintHostTests.cpp
     apple/toolbox/src/context/ToolboxCellContext.cpp
     apple/toolbox/src/context/ToolboxButtonContext.cpp

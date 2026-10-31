@@ -1,3 +1,4 @@
+#include "ToolboxPaintResultText.hpp"
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/style/CardShadow.hpp"
 #include "core/Profiler.hpp"
@@ -2947,21 +2948,7 @@ namespace
                      observation.outsideRefusal().refused() && observation.outsideRefusal().site
                          ? observation.outsideRefusal().site
                          : "-");
-        const unsigned rule = observation.firstRefusal().refused()               ? 1
-                              : !observation.paintFinished()                     ? 2
-                              : observation.eligibility() == TOOLBOX_PAINT_CLEAN ? 3
-                                                                                 : 4;
-        std::fprintf(self->log_,
-                     "paint_result=%s rule=%u first=%s site=%s coverage=%s\r",
-                     ToolboxPaintEligibilityName(observation.eligibility()),
-                     rule,
-                     ToolboxPaintRefusalName(observation.firstRefusal().reason),
-                     observation.firstRefusal().refused() && observation.firstRefusal().site
-                         ? observation.firstRefusal().site
-                         : "-",
-                     rule == 3   ? "window"
-                     : rule == 4 ? "not_window"
-                                 : "-");
+        std::fprintf(self->log_, "%s\r", ToolboxPaintResultText(observation).c_str());
         // The reveal writes one vertical origin by 160: its dirty source is
         // LAYOUT, so boundary apply requests layout_dirty (global layout only
         // adds a rect request). No OS damage remains at this settled entry and
