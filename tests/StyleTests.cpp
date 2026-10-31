@@ -30,7 +30,8 @@ void testTextStyleMergeAndSizeVocabulary()
 {
   using namespace loka::app;
   LOKA_VERIFY(kWarningStyle.hasWeight_ && kWarningStyle.weight_ == TEXT_WEIGHT_BOLD);
-  LOKA_VERIFY(kWarningStyle.hasItalic_ && kWarningStyle.italic_);
+  bool on = false;
+  LOKA_VERIFY(kWarningStyle.queryItalic(on) && on);
   const TextSizeValue sizes[] = {TextSizeValue(),
                                  TextSizeValue::points(-1),
                                  TextSizeValue::points(0),
@@ -99,7 +100,7 @@ void testTextStyleMergeAndSizeVocabulary()
   LOKA_VERIFY(!(Bold < rawZero));
   LOKA_VERIFY(TextStyle() + Bold == Bold);
   LOKA_VERIFY(Bold + TextStyle() == Bold);
-  LOKA_VERIFY(Italic.hasItalic_ && Italic.italic_);
+  LOKA_VERIFY(Italic.queryItalic(on) && on);
   LOKA_VERIFY(Body == FontSize<12>());
   LOKA_VERIFY(Caption == FontSize<9>());
   LOKA_VERIFY(Heading == FontSize<12>() + Bold);
@@ -380,4 +381,96 @@ void testRetainedTextFamilyRecording()
   LOKA_VERIFY(scene.flushInvalidation());
   LOKA_VERIFY(NullTextStyleAccess::family(*context) == TEXT_FAMILY_UNSET);
   SceneTestAccess::unmount(scene);
+}
+
+namespace
+{
+  loka::app::TextStyle italicCase(int index)
+  {
+    using namespace loka::app;
+    TextStyle style;
+    if (index & 1)
+      style.family(TEXT_FAMILY_MONOSPACE);
+    if (index & 2)
+      style.weight(TEXT_WEIGHT_NORMAL);
+    if (index & 4)
+      style.size_ = TextSizeValue::points(0);
+    if (index / 8)
+      style.italic(index / 8 == 2);
+    return style;
+  }
+} // namespace
+
+void testItalicOrderAndMergeTable()
+{
+  // Frozen before the fold: index = italic * 8 + zeroSize * 4 + normalWeight * 2 + family.
+  // Rank records every pair's exact old order, including presence between off and on.
+  const int rank[] = {0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23};
+  for (int i = 0; i < 24; ++i)
+    for (int j = 0; j < 24; ++j)
+    {
+      const loka::app::TextStyle left = italicCase(i), right = italicCase(j);
+      LOKA_VERIFY((left == right) == (i == j));
+      LOKA_VERIFY((left != right) == (i != j));
+      LOKA_VERIFY((left < right) == (rank[i] < rank[j]));
+      const int mergedItalic = j / 8 ? j / 8 : i / 8;
+      LOKA_VERIFY(left + right == italicCase(mergedItalic * 8 + ((i | j) & 7)));
+      for (int k = 0; k < 24; ++k)
+        LOKA_VERIFY(!(left < right) || !(right < italicCase(k)) || left < italicCase(k));
+    }
+}
+
+void testNullItalicPaintRecording()
+{
+  using namespace loka::app;
+  const TextStyle styles[] = {TextStyle(), TextStyle().italic(false), TextStyle().italic(true)};
+  for (int i = 0; i < 3; ++i)
+  {
+    NullScenePlatformController platform;
+    TextNode node((Text("italic") + styles[i]).props);
+    loka::app::scene::LayoutState state;
+    state.width = 100;
+    platform.projectLayoutForTesting(&node, state);
+    const NullTextContext *context = static_cast<NullTextContext *>(node.getContext());
+    LOKA_VERIFY(context != 0);
+    LOKA_VERIFY(loka::app::testing::NullTextStyleAccess::italic(*context) == (i == 2));
+    LOKA_VERIFY(styles[i].declaresFont() == (i != 0));
+  }
+}
+
+void testTextToggleValueContract()
+{
+  using namespace loka::app;
+  const int invalid[] = {-1, TEXT_TOGGLE_COUNT, 255, 256, 257, 258, INT_MIN, INT_MAX};
+  for (unsigned i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i)
+  {
+    const TextToggleValue refused(invalid[i]);
+    bool on = true;
+    LOKA_VERIFY(!refused.isSet());
+    LOKA_VERIFY(!refused.query(on) && on);
+    LOKA_VERIFY(refused == TextToggleValue());
+  }
+  const TextToggleValue values[] = {
+      TextToggleValue(), TextToggleValue(TEXT_TOGGLE_OFF), TextToggleValue(TEXT_TOGGLE_ON)};
+  for (int i = 0; i < 3; ++i)
+  {
+    bool on = true;
+    LOKA_VERIFY(values[i].query(on) == (i != 0));
+    LOKA_VERIFY(on == (i != 1));
+    on = false;
+    LOKA_VERIFY(values[i].query(on) == (i != 0));
+    LOKA_VERIFY(on == (i == 2));
+    LOKA_VERIFY(values[i].isOn() == (i == 2));
+    for (int j = 0; j < 3; ++j)
+    {
+      LOKA_VERIFY((values[i] == values[j]) == (i == j));
+      LOKA_VERIFY((values[i] < values[j]) == (i < j));
+      LOKA_VERIFY(values[i] + values[j] == values[j ? j : i]);
+    }
+  }
+  bool on = true;
+  LOKA_VERIFY(!TextStyle().queryItalic(on) && on);
+  LOKA_VERIFY(TextStyle().italic(false).queryItalic(on) && !on);
+  LOKA_VERIFY(TextStyle().italic(true).queryItalic(on) && on);
+  LOKA_VERIFY(sizeof(TextToggleValue) == 1);
 }

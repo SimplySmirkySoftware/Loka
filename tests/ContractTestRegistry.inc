@@ -1573,3 +1573,8 @@ LOKA_TEST(testNullNaturalHeightMatchesLeafAndPreservesFailures)
 LOKA_TEST(testRequestRingFullRefusalPreservesStorage)
 LOKA_TEST(testRequestRingAdvanceVacatesAndWraps)
 LOKA_TEST(testRequestRingClearResetsStorageAndHead)
+
+LOKA_TEST(testItalicOrderAndMergeTable)
+LOKA_TEST(testNullItalicPaintRecording)
+
+LOKA_TEST(testTextToggleValueContract)
