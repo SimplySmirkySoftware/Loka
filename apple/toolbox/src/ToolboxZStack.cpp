@@ -101,7 +101,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     const ToolboxUnitLedger::UnitSeat *seat = this->unitLedger_.find(stack, index, cursor);
     if (!seat)
     {
-      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      // Clipped out by input or a layout refusal already recorded; ledger push cannot fail quietly.
       continue;
     }
     const ToolboxUnitLedger::UnitSeat &row = *seat;

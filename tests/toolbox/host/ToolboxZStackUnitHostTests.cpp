@@ -2442,7 +2442,8 @@ namespace
       LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
       controller.observation_.reset();
       RenderNode(&stack, &controller);
-      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      // Isolate render: absent seats do not repeat the layout-owned refusal.
+      LOKA_VERIFY(!controller.observation_.outsideRefusal().refused());
       LOKA_VERIFY(upper->renders == 0);
       return;
     }

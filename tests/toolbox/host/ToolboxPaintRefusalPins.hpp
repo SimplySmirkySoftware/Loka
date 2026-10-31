@@ -82,12 +82,7 @@ namespace
     f.window.drawForFlush();
     f.controller.observation_.reset();
     const char *expected = 0;
-    if (std::strcmp(mode, "RefusalUnitMissing") == 0)
-    {
-      f.controller.unitLedger_.clear();
-      expected = "ToolboxZStack.cpp:104";
-    }
-    else if (std::strcmp(mode, "RefusalUnitRegion") == 0)
+    if (std::strcmp(mode, "RefusalUnitRegion") == 0)
     {
       toolbox_host::failRegions = 2;
       expected = "ToolboxZStack.cpp:183";
@@ -409,9 +404,60 @@ namespace
     LOKA_VERIFY(toolbox_host::failNew == (offscreen ? 1 : 0));
     toolbox_host::failNew = 0;
   }
+  void unitSeatOmission(bool refused)
+  {
+    if (refused)
+    {
+      StaticFixture f;
+      f.unit->refuse = true;
+      f.window.drawForFlush();
+      LOKA_VERIFY(!unitRow(f.controller, &f.stack, 1));
+      const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
+      LOKA_VERIFY(result.paintFinished());
+      LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
+      refusalSite(result.firstRefusal(), "ToolboxZStack.cpp:46");
+      return;
+    }
+    ZStackNode *stack = new ZStackNode(ZStackProps());
+    stack->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    Probe *omitted = new Probe("offscreen-unit", 20);
+    class LaterUnit : public Probe
+    {
+    public:
+      LaterUnit()
+          : Probe("later-unit", 200)
+      {
+      }
+      virtual void render(IPlatformController *platform)
+      {
+        LOKA_VERIFY(!static_cast<ToolboxScenePlatformController *>(platform)->observation_.refusedSoFar());
+        Probe::render(platform);
+      }
+    };
+    Probe *later = new LaterUnit;
+    ZStackNode *ground = new ZStackNode(ZStackProps());
+    ground->addChild(new Probe("ground", 600));
+    ground->addChild(omitted);
+    stack->addChild(ground);
+    stack->addChild(later);
+    toolbox_host::bandCaptures = 0;
+    toolbox_host::staticEligible = toolbox_host::staticCaptureSucceeds = toolbox_host::staticCopySucceeds = true;
+    PresentFixture f(false, 80, stack);
+    LOKA_VERIFY(!unitRow(f.controller, ground, 1));
+    LOKA_VERIFY(unitRow(f.controller, stack, 1));
+    LOKA_VERIFY(omitted->layouts > 0 && omitted->renders == 0);
+    LOKA_VERIFY(later->renders == 1);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 1);
+    const ToolboxPresentObservation &result = f.last();
+    LOKA_VERIFY(result.paintFinished());
+    LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(!result.firstRefusal().refused());
+  }
   void runRefusalPin(const char *mode)
   {
-    if (std::strcmp(mode, "RefusalEditOffscreen") == 0 || std::strcmp(mode, "RefusalEditVisibleRefused") == 0)
+    if (std::strcmp(mode, "RefusalUnitOmitted") == 0 || std::strcmp(mode, "RefusalUnitLayoutRefused") == 0)
+      unitSeatOmission(std::strcmp(mode, "RefusalUnitLayoutRefused") == 0);
+    else if (std::strcmp(mode, "RefusalEditOffscreen") == 0 || std::strcmp(mode, "RefusalEditVisibleRefused") == 0)
       editOmission(std::strcmp(mode, "RefusalEditOffscreen") == 0);
     else if (std::strstr(mode, "Control"))
       refusalControls(mode);
