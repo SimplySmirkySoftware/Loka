@@ -39,6 +39,7 @@
 #include "TextEditorTests.hpp"
 #include "RequestReasonTests.hpp"
 #include "PendingRequestsTests.hpp"
+#include "RequestRingTests.hpp"
 #include "TextDocumentFileTests.hpp"
 #include "RailMetricsTests.hpp"
 #include "SurfaceGroundTests.hpp"
