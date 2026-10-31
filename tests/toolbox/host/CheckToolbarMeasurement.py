@@ -45,9 +45,9 @@ class Wiring(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('report', ROOT / 'tests/toolbox/toolbar-measurement-report.py')
         report = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(report)
-        lines = ['toolbar_row_summary complete=1 cases=7',
+        lines = ['toolbar_row_summary complete=1 cases=8',
                  'toolbar_row_environment clock=Microseconds observed_resolution_us=1']
-        for name, k, scans in [('k1', 1, 0), ('k2', 2, 2), ('k4', 4, 2), ('fit', 4, 0), ('floor', 4, 1), ('b-equals-s', 4, 0), ('aligned-title', 6, 0)]:
+        for name, k, scans in [('k1', 1, 0), ('k2', 2, 2), ('k4', 4, 2), ('fit', 4, 0), ('floor', 4, 1), ('b-equals-s', 4, 0), ('aligned-title', 6, 0), ('aligned-title-draw', 6, 0)]:
             offer, occupied = (27, 28) if name == 'b-equals-s' else (10, 10)
             source = 'synthetic-unit' if name == 'b-equals-s' else 'toolbox'
             lines += [f'toolbar_row case={name} repetitions=31 median_us=3 maximum_us=5 offer={offer} occupied={occupied}',

@@ -17,6 +17,7 @@
 #include "StandaloneFlowRunner.hpp"
 #include "ObservedMainDefinition.hpp"
 #include "ToolboxScenePlatformController.hpp"
+#include "ToolboxInputDoor.hpp"
 #include "ToolboxWindow.hpp"
 #include "ToolboxPortScope.hpp"
 #include "context/ToolboxImageViewContext.hpp"
@@ -73,6 +74,19 @@ namespace
 {
   using namespace loka::app;
   using namespace loka::app::scene;
+
+  template <int Size> class BusyBatchTexts : public BoundaryNodeFor<BusyBatchTexts<Size> >
+  {
+  public:
+    explicit BusyBatchTexts(const BoundaryPropsFor<BusyBatchTexts<Size> > &props)
+        : BoundaryNodeFor<BusyBatchTexts<Size> >(props)
+    {
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      composition.declare(Column() << (Text("First") + FontSize<Size>()) << (Text("Second") + FontSize<Size>()));
+    }
+  };
 
   const char kPermutedButtonTitle[] = "IIIIMMMM";
   const char kMovedButtonTitle[] = "MMMMMMMM";
@@ -3497,6 +3511,44 @@ namespace
       std::fprintf(timing, "card-matrix total_ticks=%lu budget_ticks=3600\r", ticks);
     }
 
+    template <int Size> void checkBusyBatchRender(ToolboxWindow &window, const char *name, bool alreadyBusy)
+    {
+      ToolboxScenePlatformController controller(&window);
+      Scene scene((Boundary<BusyBatchTexts<Size> >()));
+      scene.mount(&controller);
+      typedef loka::dsl::testing::SceneTestAccess Access;
+      Access::updateAttached(scene, true);
+      controller.rootNode_ = Access::rootBoundary(scene);
+      {
+        BusyScope existing(alreadyBusy ? controller.cursorOwner() : 0);
+        const ToolboxSceneDebugStats before = controller.debugStatsForTesting();
+        ToolboxInputDoor::render(controller);
+        const ToolboxSceneDebugStats after = controller.debugStatsForTesting();
+        const unsigned long expected = Size == 12 || alreadyBusy ? 0 : 1;
+        this->recordArm(name,
+                        after.cursorOuterEntries == before.cursorOuterEntries + expected
+                            && after.cursorOuterExits == before.cursorOuterExits + expected,
+                        TEXT_WIDTH_WRITE);
+      }
+      Access::unmount(scene);
+    }
+
+    void checkBusyBatch(ToolboxScenePlatformController &controller, GrafPtr port)
+    {
+      const short savedSize = port->txSize;
+      WindowPtr previousFront = FrontWindow();
+      SelectWindow(controller.window_->window());
+      TextSize(12);
+      this->checkBusyBatchRender<12>(*controller.window_, "cursor-batch-no-borrow", false);
+      this->checkBusyBatchRender<18>(*controller.window_, "cursor-batch-two-texts", false);
+      this->checkBusyBatchRender<18>(*controller.window_, "cursor-batch-existing-scope", true);
+      TextSize(savedSize);
+      // Unmount queued a full invalidate; restore the real scene and consume it.
+      controller.window_->flushInvalidate();
+      if (previousFront)
+        SelectWindow(previousFront);
+    }
+
     void checkFontCursor(ToolboxScenePlatformController &controller, GrafPtr port)
     {
       // This front fixture contains Text, not EditText: hover resolves to arrow.
@@ -3667,6 +3719,7 @@ namespace
 
     void checkTextFonts(ToolboxScenePlatformController &controller, GrafPtr port)
     {
+      this->checkBusyBatch(controller, port);
       this->checkFontCursor(controller, port);
       const short portFont = port->txFont;
       const short portSize = port->txSize;

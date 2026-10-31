@@ -2,6 +2,7 @@
 #define LOKA_APP_NODES_CONTROLS_RIBBON_HPP
 
 #include "app/nodes/controls/Button.hpp"
+#include "app/nodes/controls/DeclaredWidth.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/style/StyleVocab.hpp"
 #include "app/nodes/nestable/Box.hpp"
@@ -162,7 +163,7 @@ namespace loka
       RibbonItemDefinition &width(short n)
       {
         assert(n > 0);
-        this->width_ = DeclaredWidth(n);
+        this->width_ = detail::DeclaredWidth(n);
         return *this;
       }
 
@@ -171,25 +172,7 @@ namespace loka
       friend struct RibbonControlDefinition;
       loka::core::String title_;
       loka::core::EmitterState *onClick_;
-      /** Optional fixed seat; the numeric payload is read only in FIXED mode. */
-      class DeclaredWidth
-      {
-      public:
-        DeclaredWidth() : kind_(NATURAL), value_(0) {}
-        explicit DeclaredWidth(short value) : kind_(FIXED), value_(value) {}
-        bool query(short &value) const
-        {
-          if (this->kind_ == NATURAL)
-            return false;
-          value = this->value_;
-          return true;
-        }
-      private:
-        enum Kind { NATURAL, FIXED };
-        Kind kind_;
-        short value_;
-      };
-      DeclaredWidth width_;
+      detail::DeclaredWidth width_;
     };
     typedef RibbonItemDefinition RibbonItem;
 

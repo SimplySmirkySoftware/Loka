@@ -35,6 +35,7 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   ToolboxPresentObservation::Interval interval(this->observation_, coversWindow, this->debugStats_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
+  BusyBatch batch(this->cursorOwner());
   this->pressLedger_.begin();
   if (!this->scrollViewClipRgn_ || !this->paintSuppressClipRgn_)
     LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
