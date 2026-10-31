@@ -224,34 +224,82 @@ MacTextContext::~MacTextContext()
   [(NSFont *)this->originalFont_ release];
 }
 
+void MacTextContext::presentLabel(NSString *text, const loka::app::TextStyle &resolved, bool initial)
+{
+  NSTextField *label = (NSTextField *)this->label_;
+  if (!label)
+    return;
+  const TextGeometry geometry = ResolveTextGeometry(resolved, this->controller());
+  NSFont *font = geometry.font ? geometry.font : (NSFont *)this->originalFont_;
+  NSColor *color = nil;
+  if (!loka::macos::QueryMacTextColor(resolved.color_, color))
+  {
+    // A fresh initWithFrame label already has this native default. Retained
+    // set -> unset must restore it (fresh-label equality is pinned in tests).
+    color = initial ? [label textColor] : loka::macos::MacLabelTextColor();
+  }
+  // applyStyle may lend the current native string; keep it alive across the
+  // clearing attributed write before the plain setters consume it.
+  text = [[text retain] autorelease];
+  bool underline = false;
+  resolved.queryUnderline(underline);
+  bool leftover = false;
+  if (!underline)
+  {
+    NSAttributedString *current = [label attributedStringValue];
+    const NSUInteger length = [current length];
+    // Empty values must never be indexed. Inspect this one attribute over the
+    // whole value: an underline may begin after an undecorated first run.
+    for (NSUInteger index = 0; index < length;)
+    {
+      NSRange range;
+      NSNumber *value = [current attribute:NSUnderlineStyleAttributeName atIndex:index effectiveRange:&range];
+      if ([value intValue] != 0)
+      {
+        leftover = true;
+        break;
+      }
+      index = NSMaxRange(range);
+    }
+  }
+  // Per presentation pass: one value when on, or one clearing write only when
+  // native state still carries underline. No remembered presentation flag.
+  // The cell font is set first on both paths, so applyStyle's geometry check
+  // compares against the resolved font whether or not the value is attributed.
+  [[label cell] setFont:font];
+  if (underline || leftover)
+  {
+    NSMutableAttributedString *value = [[NSMutableAttributedString alloc] initWithString:text];
+    const NSRange range = NSMakeRange(0, [value length]);
+    [value addAttribute:NSFontAttributeName value:font range:range];
+    [value addAttribute:NSForegroundColorAttributeName value:color range:range];
+    if (underline)
+      [value addAttribute:NSUnderlineStyleAttributeName
+                    value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
+                    range:range];
+    [label setAttributedStringValue:value];
+    [value release];
+  }
+  if (!underline)
+  {
+    [label setStringValue:text];
+    [label setTextColor:color];
+  }
+  [label setNeedsDisplay:YES];
+}
+
 bool MacTextContext::applyStyle(bool initial)
 {
   NSTextField *label = (NSTextField *)this->label_;
   if (!this->node_ || !label)
     return false;
-  NSColor *color = nil;
-  if (!loka::macos::QueryMacTextColor(this->node_->props.resolvedTextStyle().color_, color))
-  {
-    // A fresh initWithFrame label already has this native default. Retained
-    // set -> unset must restore it (fresh-label equality is pinned in tests).
-    if (!initial)
-      color = loka::macos::MacLabelTextColor();
-  }
-  if (color && ![[label textColor] isEqual:color])
-  {
-    [label setTextColor:color];
-    [label setNeedsDisplay:YES];
-  }
-  // The return value reports geometry changes only; color needs just display.
+  // Presentation is reconciled even when geometry is unchanged.
   NSTextFieldCell *cell = [label cell];
-  const TextGeometry geometry = ResolveTextGeometry(this->node_->props.resolvedTextStyle(), this->controller());
+  const loka::app::TextStyle resolved = this->node_->props.resolvedTextStyle();
+  const TextGeometry geometry = ResolveTextGeometry(resolved, this->controller());
   NSFont *font = geometry.font ? geometry.font : (NSFont *)this->originalFont_;
-  bool changed = false;
-  if ([cell font] != font)
-  {
-    [cell setFont:font];
-    changed = true;
-  }
+  bool changed = [cell font] != font;
+  this->presentLabel([label stringValue], resolved, initial);
   const loka::app::BlockStyle &attr = this->node_->props.blockStyle_;
   const bool wrapWord = attr.hasWrap_ && attr.wrap_ == loka::app::TEXT_WRAP_WORD;
   const bool wrapChar = attr.hasWrap_ && attr.wrap_ == loka::app::TEXT_WRAP_CHAR;
@@ -363,9 +411,9 @@ bool MacTextContext::captureBitmap(loka::core::resource::Image &out) const
 
 void MacTextContext::clearMeasurement()
 {
-  // Refusal/retirement: O(1), revoke this label's presentation and placement together.
+  // Refusal/retirement: revoke presentation and placement together.
   this->measurement_.invalidate();
-  [(NSTextField *)this->label_ setStringValue:@""];
+  this->presentLabel(@"", this->node_ ? this->node_->props.resolvedTextStyle() : loka::app::TextStyle());
   this->relayout(0, 0, 0, 0);
 }
 
@@ -390,7 +438,7 @@ short MacTextContext::layout(loka::app::scene::IPlatformController *, loka::app:
       return static_cast<short>(state.y);
     }
     // Also restores presentation after refusal without needing a new State publication.
-    [(NSTextField *)this->label_ setStringValue:string];
+    this->presentLabel(string, this->node_ ? this->node_->props.resolvedTextStyle() : loka::app::TextStyle());
     this->measurement_.commit(constraint.pt, height);
   }
   const int textHeight = this->measurement_.extent();
@@ -453,7 +501,7 @@ void MacTextContext::applyText()
   std::string utf8;
   if (loka::platform::CollectUtf8(textState_->get(), utf8))
   {
-    [label setStringValue:loka::macos::CreateNSStringFromUtf8(utf8)];
+    this->presentLabel(loka::macos::CreateNSStringFromUtf8(utf8), this->node_->props.resolvedTextStyle());
   }
   requestRelayoutIfNeeded();
   if (!didInitialApply_)

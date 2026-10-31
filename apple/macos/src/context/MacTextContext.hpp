@@ -12,6 +12,7 @@ namespace loka
   namespace app
   {
     class TextNode;
+    struct TextStyle;
     namespace scene
     {
       class PlatformNodeHandlerRegistry;
@@ -64,6 +65,8 @@ private:
   void unbindText();
   void applyText();
   void clearMeasurement();
+  /** Sole writer of the label text, font and color, including decoration removal. */
+  void presentLabel(NSString *text, const loka::app::TextStyle &resolved, bool initial = false);
   bool applyStyle(bool initial = false);
   void requestRelayoutIfNeeded();
   static void TextChangedThunk(void *userData);

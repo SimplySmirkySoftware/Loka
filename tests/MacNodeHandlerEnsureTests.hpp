@@ -4,6 +4,19 @@
 void testMacNodeHandlerEnsureContract();
 void testMacCaptureRefusalReleasesBitmapOnce();
 void testMacTextItalicTraits();
+void testMacTextUnderlineConstruction();
+void testMacTextUnderlineApplyStyle();
+void testMacTextUnderlineLayoutRecovery();
+void testMacTextUnderlineClearMeasurement();
+void testMacTextUnderlineTextState();
+void testMacTextUnderlineRemoval();
+void testMacTextUnderlineEmptyRecovery();
+void testMacTextUnderlineColorRemovalAppearance();
+void testMacTextUnderlineNeverAttributed();
+void testMacAttributedTextUnderlineRuns();
+void testMacTextUnderlineSizes();
+void testMacAttributedTextUnderlineSizes();
+void testMacTextUnderlineStyleState();
 void testMacSmallLabelUsesTheSmallSystemFont();
 
 void testMacAttributedTextWholeLineProjection();

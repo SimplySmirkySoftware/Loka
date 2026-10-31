@@ -2155,3 +2155,529 @@ void testMacTextItalicTraits()
   [pool drain];
   std::printf("==== [testMacTextItalicTraits] PASSED ====\n");
 }
+
+namespace
+{
+  class MacUnderlineNativeScope
+  {
+  protected:
+    MacUnderlineNativeScope()
+        : pool_([[NSAutoreleasePool alloc] init])
+    {
+      [NSApplication sharedApplication];
+      this->root_ = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 300)];
+    }
+    ~MacUnderlineNativeScope()
+    {
+      [this->root_ release];
+      [this->pool_ drain];
+    }
+    NSAutoreleasePool *pool_;
+    NSView *root_;
+  };
+
+  /** Native-only fixture: ensure and layout are separate so a later layout
+      cannot repair a missed construction/props/State write before inspection. */
+  class MacUnderlineFixture : private MacUnderlineNativeScope
+  {
+  public:
+    explicit MacUnderlineFixture(loka::app::scene::Node &node)
+        : controller(this->root_, loka::app::RailMetrics()),
+          node_(node)
+    {
+      state.width = 120;
+      LOKA_VERIFY(this->controller.prepareProjectedLayout(&this->node_, this->state));
+    }
+    ~MacUnderlineFixture()
+    {
+      loka::app::scene::LifecycleFactTestAccess::MarkSubtreeRetired(&this->node_);
+      loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&this->node_);
+      this->node_.setContext(0);
+    }
+    NSTextField *field() const
+    {
+      return AttributedField(this->root_);
+    }
+    void layout()
+    {
+      this->node_.layout(&this->controller, this->state);
+    }
+    MacScenePlatformController controller;
+    loka::app::scene::LayoutState state;
+
+  private:
+    loka::app::scene::Node &node_;
+    MacUnderlineFixture(const MacUnderlineFixture &);
+    MacUnderlineFixture &operator=(const MacUnderlineFixture &);
+  };
+
+  void VerifyMacUnderline(NSTextField *field, bool on, NSString *text)
+  {
+    LOKA_VERIFY([[field stringValue] isEqualToString:text]);
+    NSAttributedString *value = [field attributedStringValue];
+    for (NSUInteger i = 0; i < [value length]; ++i)
+    {
+      NSNumber *underline = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:0];
+      LOKA_VERIFY([underline intValue] == (on ? NSUnderlineStyleSingle : 0));
+      if (on)
+      {
+        LOKA_VERIFY([value attribute:NSFontAttributeName atIndex:i effectiveRange:0] != nil);
+        LOKA_VERIFY([value attribute:NSForegroundColorAttributeName atIndex:i effectiveRange:0] != nil);
+      }
+    }
+  }
+
+  // Observe the field door, not AppKit's internal cell implementation. Scoped
+  // replacement restores the native IMP even on older supported test hosts.
+  unsigned underlineAttributedWrites = 0;
+  IMP underlineOriginalWrite = 0;
+  void CountUnderlineWrite(id receiver, SEL command, NSAttributedString *value)
+  {
+    ++underlineAttributedWrites;
+    ((void (*)(id, SEL, NSAttributedString *))underlineOriginalWrite)(receiver, command, value);
+  }
+
+  class UnderlineWrites
+  {
+  public:
+    UnderlineWrites()
+        : replacement_(@selector(setAttributedStringValue:), prepare(), [NSTextField class])
+    {
+    }
+    unsigned count() const
+    {
+      return underlineAttributedWrites;
+    }
+
+  private:
+    static IMP prepare()
+    {
+      underlineAttributedWrites = 0;
+      underlineOriginalWrite =
+          method_getImplementation(class_getInstanceMethod([NSTextField class], @selector(setAttributedStringValue:)));
+      return reinterpret_cast<IMP>(&CountUnderlineWrite);
+    }
+    MacNativeRefusal replacement_;
+  };
+
+  void SetMacUnderlineStyle(loka::app::TextNode &node, const loka::app::TextStyle &style)
+  {
+    node.props.textStyle_ = style;
+    node.getContext()->onPropsApplied();
+  }
+} // namespace
+
+void testMacTextUnderlineConstruction()
+{
+  using namespace loka::app;
+  UnderlineWrites writes;
+  TextNode node((Text("initial") + Underline).props);
+  MacUnderlineFixture fixture(node);
+  VerifyMacUnderline(fixture.field(), true, @"initial");
+  // Construction's empty style write and bindText's content write both use
+  // the attributed door; neither may be masked by layout.
+  LOKA_VERIFY(writes.count() == 2);
+}
+
+void testMacTextUnderlineApplyStyle()
+{
+  using namespace loka::app;
+  TextNode node(Text("style").props);
+  MacUnderlineFixture fixture(node);
+  [fixture.field() setNeedsDisplay:NO];
+  UnderlineWrites writes;
+  SetMacUnderlineStyle(node, Underline);
+  LOKA_VERIFY(writes.count() == 1);
+  VerifyMacUnderline(fixture.field(), true, @"style");
+  LOKA_VERIFY([fixture.field() needsDisplay]);
+}
+
+void testMacTextUnderlineLayoutRecovery()
+{
+  using namespace loka::app;
+  MacRetryString *source = new MacRetryString();
+  const loka::core::String value(loka::core::Managed<loka::platform::String>::Wrap(source));
+  TextNode node((Text(value) + Underline + BlockStyle().wrap(TEXT_WRAP_WORD)).props);
+  MacUnderlineFixture fixture(node);
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), true, @"retry the same wrapped text");
+  source->available(false);
+  fixture.state.width = 90;
+  {
+    UnderlineWrites writes;
+    fixture.layout();
+    LOKA_VERIFY(fixture.state.height == 0);
+    LOKA_VERIFY([[fixture.field() stringValue] length] == 0);
+    // applyStyle plus clearMeasurement: the empty clear uses the door too.
+    LOKA_VERIFY(writes.count() == 2);
+  }
+  source->available(true);
+  {
+    UnderlineWrites writes;
+    fixture.layout();
+    LOKA_VERIFY(writes.count() == 2); // Style and layout recovery both present.
+  }
+  VerifyMacUnderline(fixture.field(), true, @"retry the same wrapped text");
+  SetMacUnderlineStyle(node, TextStyle().underline(false));
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), false, @"retry the same wrapped text");
+  SetMacUnderlineStyle(node, TextStyle());
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), false, @"retry the same wrapped text");
+  SetMacUnderlineStyle(node, Underline);
+  node.setPropsTypeId(TextProps::staticTypeId());
+  LOKA_VERIFY((Text("changed after recovery") + TextStyle().underline(false)).applyPropsToNode(&node));
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), false, @"changed after recovery");
+  LOKA_VERIFY(Text("unset after recovery").applyPropsToNode(&node));
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), false, @"unset after recovery");
+}
+
+void testMacTextUnderlineTextState()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  MutableState<String> text(String::Literal("before"));
+  TextNode node((Text(&text) + Underline).props);
+  MacUnderlineFixture fixture(node);
+  UnderlineWrites writes;
+  text.set(String::Literal("after")); // Untracked state notifies synchronously.
+  LOKA_VERIFY(writes.count() == 1);
+  VerifyMacUnderline(fixture.field(), true, @"after");
+}
+
+void testMacTextUnderlineRemoval()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  for (int changing = 0; changing < 2; ++changing)
+  {
+    MutableState<String> text(String::Literal("before"));
+    TextNode node((Text(&text) + Underline).props);
+    MacUnderlineFixture fixture(node);
+    {
+      UnderlineWrites writes;
+      SetMacUnderlineStyle(node, TextStyle().underline(false));
+      LOKA_VERIFY(writes.count() == 1); // Explicit clearing, even if plain setters happen to clear too.
+    }
+    if (changing)
+      text.set(String::Literal("after"));
+    VerifyMacUnderline(fixture.field(), false, changing ? @"after" : @"before");
+    SetMacUnderlineStyle(node, TextStyle());
+    if (changing)
+      text.set(String::Literal("unset"));
+    VerifyMacUnderline(fixture.field(), false, changing ? @"unset" : @"before");
+    // A later effective range must be inspected, not just index zero.
+    NSMutableAttributedString *mixed =
+        [[NSMutableAttributedString alloc] initWithAttributedString:[fixture.field() attributedStringValue]];
+    [mixed addAttribute:NSUnderlineStyleAttributeName
+                  value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
+                  range:NSMakeRange([mixed length] - 1, 1)];
+    [fixture.field() setAttributedStringValue:mixed];
+    [mixed release];
+    UnderlineWrites writes;
+    SetMacUnderlineStyle(node, TextStyle());
+    LOKA_VERIFY(writes.count() == 1);
+    VerifyMacUnderline(fixture.field(), false, changing ? @"unset" : @"before");
+  }
+}
+
+void testMacTextUnderlineEmptyRecovery()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  for (int refusal = 0; refusal < 2; ++refusal)
+  {
+    MutableState<String> text(String::Literal(""));
+    TextNode node((Text(&text) + Underline).props);
+    MacUnderlineFixture fixture(node);
+    if (refusal)
+    {
+      const String unreadable(Managed<loka::platform::String>::Wrap(new MacRefusedAttributedString()));
+      text.set(unreadable);
+      fixture.layout();
+      LOKA_VERIFY(fixture.state.height == 0);
+      LOKA_VERIFY([[fixture.field() stringValue] length] == 0);
+    }
+    SetMacUnderlineStyle(node, TextStyle().underline(false)); // Empty native value must not be indexed.
+    fixture.layout();
+    scene::NotifySubtreeNodeDetached(&node);
+    loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
+    scene::NotifySubtreeNodeAttached(&node);
+    loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
+    text.set(String::Literal("nonempty"));
+    fixture.layout();
+    VerifyMacUnderline(fixture.field(), false, @"nonempty");
+    SetMacUnderlineStyle(node, TextStyle());
+    VerifyMacUnderline(fixture.field(), false, @"nonempty");
+  }
+}
+
+void testMacTextUnderlineColorRemovalAppearance()
+{
+  using namespace loka::app;
+  TextNode node((Text("color") + Underline + Red).props);
+  MacUnderlineFixture fixture(node);
+  SetMacUnderlineStyle(node, Underline);
+  VerifyMacUnderline(fixture.field(), true, @"color");
+  NSTextField *fresh = [[[NSTextField alloc] initWithFrame:NSZeroRect] autorelease];
+  [fresh setBezeled:NO];
+  [fresh setDrawsBackground:NO];
+  NSColor *color = [[fixture.field() attributedStringValue] attribute:NSForegroundColorAttributeName
+                                                              atIndex:0
+                                                       effectiveRange:0];
+  LOKA_VERIFY([color isEqual:[fresh textColor]]);
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
+  if ([fixture.field() respondsToSelector:@selector(setAppearance:)])
+  {
+    // String names allow the same binary to try Dark Aqua on Tahoe and the
+    // pre-dark vibrant appearance on Mavericks without newer SDK constants.
+    const char *names[] = {"NSAppearanceNameAqua", "NSAppearanceNameVibrantDark", "NSAppearanceNameDarkAqua"};
+    for (unsigned i = 0; i < sizeof(names) / sizeof(names[0]); ++i)
+    {
+      if (i == 2 && NSAppKitVersionNumber < 1671)
+      {
+        std::printf("[skip] Dark Aqua requires macOS 10.14; Mavericks accepts unknown names\n");
+        continue;
+      }
+      NSAppearance *appearance = [NSAppearance appearanceNamed:[NSString stringWithUTF8String:names[i]]];
+      if (!appearance)
+      {
+        std::printf("[skip] unavailable appearance: %s\n", names[i]);
+        continue;
+      }
+      [fixture.field() setAppearance:appearance];
+      fixture.layout();
+      VerifyMacUnderline(fixture.field(), true, @"color");
+      color = [[fixture.field() attributedStringValue] attribute:NSForegroundColorAttributeName
+                                                         atIndex:0
+                                                  effectiveRange:0];
+      LOKA_VERIFY([color isEqual:[fresh textColor]]);
+    }
+  }
+  else
+    std::printf("[skip] appearance changes require macOS 10.9\n");
+#else
+  std::printf("[skip] appearance changes require a 10.9 SDK\n");
+#endif
+}
+
+void testMacTextUnderlineNeverAttributed()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  UnderlineWrites writes;
+  {
+    MutableState<String> text(String::Literal("plain"));
+    TextNode node(Text(&text).props);
+    MacUnderlineFixture fixture(node);
+    fixture.layout();
+    SetMacUnderlineStyle(node, Bold + Red);
+    text.set(String::Literal("changed"));
+    fixture.layout();
+    SetMacUnderlineStyle(node, TextStyle());
+    VerifyMacUnderline(fixture.field(), false, @"changed");
+  }
+  LOKA_VERIFY(writes.count() == 0);
+}
+
+void testMacAttributedTextUnderlineRuns()
+{
+  using namespace loka::app;
+  AttributedTextNode node(AttributedTextProps(Styled("A", Underline) + Styled("B", TextStyle().underline(false))
+                                              + Styled("C", TextStyle()) + Styled("D", Underline)));
+  MacUnderlineFixture fixture(node);
+  fixture.layout();
+  NSAttributedString *value = [fixture.field() attributedStringValue];
+  LOKA_VERIFY([[value string] isEqualToString:@"ABCD"]);
+  for (NSUInteger i = 0; i < 4; ++i)
+  {
+    NSNumber *attribute = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:0];
+    if (i == 0 || i == 3)
+      LOKA_VERIFY([attribute intValue] == NSUnderlineStyleSingle);
+    else
+      LOKA_VERIFY(attribute == nil);
+  }
+  node.setPropsTypeId(AttributedTextProps::staticTypeId());
+  LOKA_VERIFY(AttributedText(Styled("ABCD", TextStyle())).applyPropsToNode(&node));
+  fixture.layout();
+  VerifyMacUnderline(fixture.field(), false, @"ABCD");
+}
+
+namespace
+{
+  // Independent cells consume different inputs: displayed underlined value
+  // versus a plain geometry value. Preserve AppKit padding and line modes.
+  void VerifyMacUnderlineCellSizes(NSTextField *field, bool plainText, NSRect bounds)
+  {
+    NSAttributedString *displayed = [field attributedStringValue];
+    NSTextFieldCell *decorated = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
+    NSTextFieldCell *reference = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
+    [decorated setAttributedStringValue:displayed];
+    if (plainText)
+    {
+      [reference setStringValue:[field stringValue]];
+      [reference setFont:[field font]];
+    }
+    else
+    {
+      NSMutableAttributedString *without = [[NSMutableAttributedString alloc] initWithAttributedString:displayed];
+      [without removeAttribute:NSUnderlineStyleAttributeName range:NSMakeRange(0, [without length])];
+      [reference setAttributedStringValue:without];
+      [without release];
+    }
+    NSTextFieldCell *cells[] = {reference, decorated};
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      [cells[i] setWraps:[[field cell] wraps]];
+      [cells[i] setScrollable:[[field cell] isScrollable]];
+      [cells[i] setLineBreakMode:[[field cell] lineBreakMode]];
+      if ([cells[i] respondsToSelector:@selector(setUsesSingleLineMode:)])
+        [cells[i] setUsesSingleLineMode:[[field cell] usesSingleLineMode]];
+    }
+    const NSSize measured = [reference cellSizeForBounds:bounds];
+    const NSSize rendered = [decorated cellSizeForBounds:bounds];
+    LOKA_VERIFY(NSEqualSizes(measured, rendered));
+    LOKA_VERIFY([reference baselineOffsetFromBottom] == [decorated baselineOffsetFromBottom]);
+  }
+
+  short MacUnderlineWrapThreshold(NSTextField *field)
+  {
+    NSTextFieldCell *prefix = [[[NSTextFieldCell alloc] initTextCell:@"Underlined words"] autorelease];
+    [prefix setFont:[field font]];
+    [prefix setWraps:NO];
+    [prefix setScrollable:YES];
+    [prefix setLineBreakMode:NSLineBreakByClipping];
+    // Fixtures use identity RailMetrics. Straddle a measured word boundary,
+    // rather than assuming one fixed width is a threshold for every font.
+    return static_cast<short>(std::ceil([prefix cellSize].width));
+  }
+
+  void VerifyMacUnderlineSizes(bool plainText)
+  {
+    using namespace loka::app;
+    const TextStyle sizes[] = {TextStyle(), FontSize<12>(), Body};
+    const BlockStyle blocks[] = {BlockStyle().wrap(TEXT_WRAP_NONE),
+                                 BlockStyle().wrap(TEXT_WRAP_WORD),
+                                 BlockStyle().wrap(TEXT_WRAP_CHAR),
+                                 BlockStyle().wrap(TEXT_WRAP_NONE).truncation(TEXT_TRUNCATION_ELLIPSIS)};
+    for (unsigned size = 0; size < sizeof(sizes) / sizeof(sizes[0]); ++size)
+      for (int mono = 0; mono < 2; ++mono)
+        for (int traits = 0; traits < 4; ++traits)
+          for (unsigned block = 0; block < sizeof(blocks) / sizeof(blocks[0]); ++block)
+          {
+            const TextStyle style = sizes[size] + (mono ? Monospace : TextStyle()) + (traits & 1 ? Bold : TextStyle())
+                                    + (traits & 2 ? Italic : TextStyle()) + Underline;
+            const char *text = "Underlined words near a wrapping threshold";
+            if (plainText)
+            {
+              TextNode node((Text(text) + style + blocks[block]).props);
+              MacUnderlineFixture fixture(node);
+              fixture.layout();
+              const short threshold = MacUnderlineWrapThreshold(fixture.field());
+              for (short width = threshold - 1; width <= threshold + 1; ++width)
+              {
+                fixture.state.width = width;
+                fixture.layout();
+                VerifyMacUnderline(fixture.field(), true, @"Underlined words near a wrapping threshold");
+                const NSRect bounds =
+                    loka::macos::MacMeasurementBounds(fixture.controller.projection().projectLength(0, width));
+                VerifyMacUnderlineCellSizes(fixture.field(), true, bounds);
+                if (block == 1 || block == 2)
+                {
+                  const NSSize displayed = [[fixture.field() cell] cellSizeForBounds:bounds];
+                  NSFont *font = [fixture.field() font];
+                  int minimum = layout::FallbackControlMetrics::kTextHeight;
+                  const int fontHeight = fixture.controller.projection().measurementToLu(
+                      [font ascender] + std::fabs([font descender]) + [font leading]);
+                  if (style.declaresFont() && fontHeight > minimum)
+                    minimum = fontHeight;
+                  const int padded = fixture.controller.projection().measurementToLu(displayed.height) + 2;
+                  LOKA_VERIFY(fixture.state.height == (padded > minimum ? padded : minimum));
+                }
+                else
+                {
+                  short widthAnswer = 0;
+                  LOKA_VERIFY(fixture.controller.queryNaturalWidth(&node, widthAnswer));
+                  NSTextFieldCell *displayed = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];
+                  [displayed setAttributedStringValue:[fixture.field() attributedStringValue]];
+                  [displayed setWraps:NO];
+                  [displayed setScrollable:YES];
+                  [displayed setLineBreakMode:NSLineBreakByClipping];
+                  LOKA_VERIFY(widthAnswer
+                              == fixture.controller.projection().measurementToLu(
+                                  [displayed cellSizeForBounds:loka::macos::MacUnboundedMeasurementBounds()].width));
+                }
+              }
+            }
+            else
+            {
+              AttributedTextNode node((AttributedText(Styled(text, style)) + blocks[block]).props);
+              MacUnderlineFixture fixture(node);
+              fixture.layout();
+              const short threshold = MacUnderlineWrapThreshold(fixture.field());
+              for (short width = threshold - 1; width <= threshold + 1; ++width)
+              {
+                fixture.state.width = width;
+                fixture.layout();
+                VerifyMacUnderline(fixture.field(), true, @"Underlined words near a wrapping threshold");
+                const NSRect bounds =
+                    loka::macos::MacMeasurementBounds(fixture.controller.projection().projectLength(0, width));
+                VerifyMacUnderlineCellSizes(fixture.field(), false, bounds);
+                LOKA_VERIFY(fixture.state.height
+                            == fixture.controller.projection().measurementToLu(
+                                [[fixture.field() cell] cellSizeForBounds:bounds].height));
+              }
+            }
+          }
+  }
+} // namespace
+
+void testMacTextUnderlineSizes()
+{
+  VerifyMacUnderlineSizes(true);
+}
+
+void testMacAttributedTextUnderlineSizes()
+{
+  VerifyMacUnderlineSizes(false);
+}
+
+void testMacTextUnderlineStyleState()
+{
+  using namespace loka::app;
+  using namespace loka::core;
+  MutableState<TextStyle> style((TextStyle()));
+  TextNode node((Text("live style") + &style).props);
+  MacMeasurementOwner owner;
+  scene::BoundaryNode::declareBoundaryDirtySources(&node, &owner);
+  {
+    MacUnderlineFixture fixture(node);
+    const TextStyle changes[] = {Underline, TextStyle().underline(false), TextStyle()};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      style.set(changes[i]);
+      fixture.layout();
+      VerifyMacUnderline(fixture.field(), i == 0, @"live style");
+    }
+    owner.clearObservedStateEntries();
+  }
+}
+
+void testMacTextUnderlineClearMeasurement()
+{
+  using namespace loka::app;
+  MacRetryString *source = new MacRetryString();
+  const loka::core::String value(loka::core::Managed<loka::platform::String>::Wrap(source));
+  TextNode node((Text(value) + Underline + BlockStyle().wrap(TEXT_WRAP_WORD)).props);
+  MacUnderlineFixture fixture(node);
+  fixture.layout();
+  source->available(false);
+  fixture.state.width = 90;
+  UnderlineWrites writes;
+  fixture.layout();
+  LOKA_VERIFY(writes.count() == 2); // applyStyle and the empty clearing write.
+  LOKA_VERIFY(fixture.state.height == 0);
+  LOKA_VERIFY([[fixture.field() stringValue] length] == 0);
+}
