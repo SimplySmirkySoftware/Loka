@@ -521,6 +521,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/toolbox/host/ToolboxFileHost.cpp
     apple/toolbox/src/ToolboxFileChoice.cpp
     apple/toolbox/src/platform/ToolboxPascalText.cpp
+    apple/toolbox/src/platform/ToolboxUtf8Bytes.cpp
     apple/toolbox/src/ToolboxByteSource.cpp
     apple/toolbox/src/ToolboxString.cpp
     apple/toolbox/src/platform/ToolboxAppLocation.cpp
@@ -632,6 +633,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/context/ToolboxAttributedTextContext.cpp
     apple/toolbox/src/context/ToolboxAttributedTextTable.cpp
     apple/toolbox/src/platform/ToolboxPascalText.cpp
+    apple/toolbox/src/platform/ToolboxUtf8Bytes.cpp
     apple/toolbox/src/platform/ToolboxMacRoman.cpp
     apple/toolbox/src/context/ToolboxLayoutUtil.cpp
     apple/toolbox/src/context/ToolboxProjectedNodeContext.cpp
@@ -739,7 +741,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxPascalTextTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxPascalTextTests)
   set_target_properties(LokaToolboxPascalTextTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_pascal_case reference ascii-fields codec malformed truncation script failure hfs counted decode host-stubs)
+  foreach(_pascal_case borrowing reference ascii-fields codec malformed truncation script failure hfs counted decode host-stubs)
     add_test(NAME testToolboxPascal_${_pascal_case} COMMAND LokaToolboxPascalTextTests ${_pascal_case})
   endforeach()
 
@@ -750,6 +752,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/TestingHooks.cpp
     apple/toolbox/src/ToolboxMenuAttachment.cpp
     apple/toolbox/src/platform/ToolboxPascalText.cpp
+    apple/toolbox/src/platform/ToolboxUtf8Bytes.cpp
     apple/toolbox/src/platform/ToolboxMacRoman.cpp)
   target_include_directories(LokaToolboxMenuTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_definitions(LokaToolboxMenuTests PRIVATE LOKA_HOST_MENU_ATTACHMENT)
@@ -896,7 +899,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxControlWidthTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxControlWidthTests)
   set_target_properties(LokaToolboxControlWidthTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_control_width_case single-line natural-image spacing-text-natural spacing-group spacing-caption-wins spacing-ribbon spacing-unaligned spacing-aligned spacing-column encoding-button encoding-popup encoding-text encoding-plain encoding-wrap encoding-ellipsis column-button column-edit column-popup natural row-title natural-title equal-title clipped-title)
+  foreach(_control_width_case borrowing single-line natural-image spacing-text-natural spacing-group spacing-caption-wins spacing-ribbon spacing-unaligned spacing-aligned spacing-column encoding-button encoding-popup encoding-text encoding-plain encoding-wrap encoding-ellipsis column-button column-edit column-popup natural row-title natural-title equal-title clipped-title)
     add_test(NAME testToolboxControlWidth_${_control_width_case} COMMAND LokaToolboxControlWidthTests ${_control_width_case})
   endforeach()
 

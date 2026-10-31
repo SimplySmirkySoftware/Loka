@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_PASCAL_TEXT_HPP
 
 #include <Quickdraw.h>
+#include <cassert>
 #include "core/String.hpp"
 #include "app/layout/TextLineBreaker.hpp"
 
@@ -14,8 +15,30 @@ struct ToolboxTextUnit
   unsigned char native;
 };
 
+namespace loka
+{
+  namespace toolbox
+  {
+    namespace detail
+    {
+      ToolboxTextUnit DecodeToolboxTextUnit(const char *input, std::size_t remaining, bool roman);
+    }
+  } // namespace toolbox
+} // namespace loka
+
 /** Read one unit from a nonempty counted input; never join malformed bytes. */
-ToolboxTextUnit ToolboxNextTextUnit(const char *input, std::size_t remaining, bool roman);
+inline ToolboxTextUnit ToolboxNextTextUnit(const char *input, std::size_t remaining, bool roman)
+{
+  assert(input && remaining);
+  const unsigned char byte = static_cast<unsigned char>(input[0]);
+  // Keep all three fields aligned with DecodeScalar's ASCII branch in the .cpp.
+  if (byte < 0x80)
+  {
+    const ToolboxTextUnit unit = {byte, 1, byte};
+    return unit;
+  }
+  return loka::toolbox::detail::DecodeToolboxTextUnit(input, remaining, roman);
+}
 
 /** Owned, counted native projection. Presence certifies the complete logical
     snapshot. Geometry is deliberately outside this value. Boundary queries
@@ -45,7 +68,8 @@ private:
 };
 
 /** Capped door over the counted projection, at most 255 native bytes.
-    Collection/allocation refusal leaves out[0] zero. */
+    Collection/allocation refusal leaves out[0] zero.
+    Input bytes and out must not overlap. */
 bool ToolboxEncodePascal(const loka::core::String &value, Str255 out);
 
 /** Decode counted native bytes literally, sampling the system script once.

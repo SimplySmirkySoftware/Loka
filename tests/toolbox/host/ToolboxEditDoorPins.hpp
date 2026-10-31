@@ -342,7 +342,7 @@ namespace edit_door
       else if (std::strcmp(mode, "tab") == 0)
       {
         ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD);
-        expected = "ToolboxFocus.cpp:172";
+        expected = "ToolboxFocus.cpp:167";
       }
       else if (next)
       {
@@ -360,7 +360,7 @@ namespace edit_door
       else
       {
         ToolboxInputDoor::keyDown(f.controller, std::strcmp(mode, "navigate") == 0 ? 28 : 'x');
-        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:225" : "ToolboxFocus.cpp:257";
+        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:220" : "ToolboxFocus.cpp:252";
       }
       toolbox_host::refuseRegionAttempt = 0;
     }

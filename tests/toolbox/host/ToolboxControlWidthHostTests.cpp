@@ -14,6 +14,7 @@
 #include <cstring>
 #include "support/LifecycleFactTestAccess.hpp"
 #include "platform/String.hpp"
+#include "ToolboxUtf8TestString.hpp"
 
 void testToolboxRowSpacing(const char *mode);
 
@@ -99,9 +100,7 @@ namespace
     LOKA_VERIFY(controller.queryNaturalHeight(&text, height));
     LOKA_VERIFY(width == 20 && height == 17);
     const std::string prefixes[] = {
-      std::string(256, 'x'), std::string(256, 'x') + std::string("\0", 1),
-      std::string(256, 'x') + "\xE2"
-    };
+        std::string(256, 'x'), std::string(256, 'x') + std::string("\0", 1), std::string(256, 'x') + "\xE2"};
     for (unsigned i = 0; i < 3; ++i)
       for (unsigned lf = 0; lf < 2; ++lf)
       {
@@ -110,6 +109,33 @@ namespace
         LOKA_VERIFY(!controller.queryNaturalWidth(&text, width));
         LOKA_VERIFY(!controller.queryNaturalHeight(&text, height));
         LOKA_VERIFY(width == 123 && height == 123);
+      }
+  }
+
+  void borrowingPins()
+  {
+    ToolboxWindow window;
+    ToolboxScenePlatformController controller(&window);
+    for (unsigned lends = 0; lends < 2; ++lends)
+      for (unsigned refuses = 0; refuses < 2; ++refuses)
+      {
+        unsigned appends = 0;
+        const String source(Managed<loka::platform::String>::Wrap(
+            new ToolboxUtf8TestString("Title", lends != 0, refuses != 0, appends)));
+        TextProps props(source);
+        props.textStyle_ = FontSize<12>();
+        props.blockStyle_ = BlockStyle().wrap(TEXT_WRAP_NONE);
+        TextNode text(props);
+        short height = 123, width = 123;
+        const bool succeeds = lends || !refuses;
+        LOKA_VERIFY(controller.queryNaturalHeight(&text, height) == succeeds);
+        LOKA_VERIFY(height == (succeeds ? 17 : 123));
+        LOKA_VERIFY(appends == (lends ? 0U : 1U));
+        appends = 0;
+        LOKA_VERIFY(controller.queryNaturalWidth(&text, width) == succeeds);
+        LOKA_VERIFY(width == (succeeds ? 20 : 123));
+        // Successful width asks once for the scan and once for the encoder.
+        LOKA_VERIFY(appends == (lends ? 0U : succeeds ? 2U : 1U));
       }
   }
 
@@ -333,6 +359,11 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *mode = argv[1];
+  if (std::strcmp(mode, "borrowing") == 0)
+  {
+    borrowingPins();
+    return 0;
+  }
   if (std::strcmp(mode, "single-line") == 0)
   {
     singleLinePins();

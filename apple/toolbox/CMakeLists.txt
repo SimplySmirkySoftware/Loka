@@ -68,6 +68,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/platform/ToolboxHfsName.cpp
   src/platform/ToolboxMacRoman.cpp
   src/platform/ToolboxPascalText.cpp
+  src/platform/ToolboxUtf8Bytes.cpp
 )
 
 # These implementation cells are included by the controller so the Classic
