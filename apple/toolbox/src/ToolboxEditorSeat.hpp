@@ -7,7 +7,7 @@
 #include <cstddef>
 
 /** Borrowed editor behavior. The controller ledger owns native-handle facts;
-    focus is callback-free and called only for Unicode resource rows. */
+    native focus belongs to the controller ledger, never the seat. */
 class ToolboxEditorSeat
 {
 public:
@@ -36,7 +36,5 @@ public:
   virtual bool editVerb(loka::app::EditVerb) = 0;
   /** Unicode-row admission only; TE admission uses the captured ledger handle. */
   virtual bool hasNativeHandle() const = 0;
-  /** Unicode-row activation only. Must not call back into Loka. */
-  virtual void focus(bool) = 0;
 };
 #endif

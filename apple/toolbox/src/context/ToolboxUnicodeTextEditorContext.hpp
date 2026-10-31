@@ -18,6 +18,5 @@ public:
   virtual bool offerKeyEvent(const EventRecord &);
   virtual bool editVerb(loka::app::EditVerb);
   virtual bool hasNativeHandle() const;
-  virtual void focus(bool);
 };
 #endif

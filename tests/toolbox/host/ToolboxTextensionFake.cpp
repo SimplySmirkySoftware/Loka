@@ -171,3 +171,17 @@ void MaxApplZone()
 {
   record("maxapplzone");
 }
+
+void TXNFocus(TXNObject object, Boolean focused)
+{
+  LOKA_VERIFY(object);
+  record(focused ? "focus-on" : "focus-off");
+}
+OSStatus TXNConvertToPublicScrap()
+{
+  return record("scrap-to");
+}
+OSStatus TXNConvertFromPublicScrap()
+{
+  return record("scrap-from");
+}

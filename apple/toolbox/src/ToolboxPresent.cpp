@@ -1,5 +1,6 @@
 #include "ToolboxPendingDialogs.hpp"
 #include "ToolboxDialogPresenter.hpp"
+#include "ToolboxUnicodeStartup.hpp"
 
 /** Outer admission/render completion, shared with the host fixture. */
 void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
@@ -46,7 +47,10 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
       ToolboxDialogPresenter *dialog = controller->pendingDialogs().take();
       if (dialog)
       {
+        this->syncNativeFocusAll(NATIVE_FOCUS_SUPPRESSED);
+        loka::toolbox::UnicodeText::scrapToPublic();
         dialog->present(*this);
+        loka::toolbox::UnicodeText::scrapFromPublic();
         // One more admission only on the tick that ran a modal: it delivers the
         // sealed value so close/quit callbacks act before the next pass. Never
         // admit inside the dialog walk.

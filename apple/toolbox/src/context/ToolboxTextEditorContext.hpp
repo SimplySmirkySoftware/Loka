@@ -15,7 +15,7 @@ namespace loka
   {
     class ToolboxTextEditorAccess;
     struct ToolboxTextEditorAdmission;
-  }
+  } // namespace testing
 } // namespace loka
 
 /** Plain whole-document projection. The controller's edit ledger owns TE;
@@ -23,7 +23,8 @@ namespace loka
 class ToolboxTextEditorContext : public ToolboxProjectedNodeContext, public ToolboxEditorSeat
 {
 public:
-  ToolboxTextEditorContext(loka::app::TextEditorNode *, ToolboxScenePlatformController *,
+  ToolboxTextEditorContext(loka::app::TextEditorNode *,
+                           ToolboxScenePlatformController *,
                            const loka::app::scene::SeamKey<loka::app::TextEditorNode> &key);
   virtual ~ToolboxTextEditorContext();
   virtual void onPropsApplied();
@@ -52,7 +53,6 @@ public:
   {
     return this->te_ != 0;
   }
-  virtual void focus(bool) {}
   ToolboxTextEditorRects geometry() const;
   Rect chromeRect() const
   {

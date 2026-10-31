@@ -472,7 +472,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaUpstreamGaugePins PRIVATE LokaCommonTesting)
   add_test(NAME LokaUpstreamGaugePins COMMAND LokaUpstreamGaugePins)
 
-  add_executable(LokaToolboxIterationTests tests/toolbox/host/ToolboxIterationHostTests.cpp)
+  add_executable(LokaToolboxIterationTests tests/toolbox/host/ToolboxIterationHostTests.cpp apple/toolbox/src/ToolboxUnicodeStartup.cpp)
   target_include_directories(LokaToolboxIterationTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_options(LokaToolboxIterationTests PRIVATE -fno-exceptions -fno-rtti)
   loka_enable_warnings(LokaToolboxIterationTests)
@@ -555,6 +555,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   list(FILTER LOKA_TOOLBOX_FILE_COMMON_SOURCES EXCLUDE REGEX "/platform/GenericString\\.cpp$")
   add_executable(LokaToolboxFileChoiceTests
     tests/toolbox/host/ToolboxFileChoiceHostTests.cpp
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
     tests/toolbox/host/ToolboxFileHost.cpp
     apple/toolbox/src/ToolboxFileChoice.cpp
     apple/toolbox/src/platform/ToolboxPascalText.cpp
@@ -659,6 +660,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
     tests/toolbox/host/ToolboxHost.cpp
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
     apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp
     tests/toolbox/host/ToolboxScrollViewHost.cpp

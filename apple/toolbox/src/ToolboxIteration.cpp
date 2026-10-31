@@ -37,16 +37,24 @@ namespace
 
 void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventRecord &fetched)
 {
-  (void)gotEvent;
+  const EventRecord original = fetched;
   EventRecord record = fetched;
   loka::core::Operation turn;
   // Consume the OS foreground fact before idle work or hover can write the
   // shared cursor on the iteration that delivers a suspend event.
-  if (record.what == osEvt && IsSuspendResumeEvent(record))
+  if (original.what == osEvt && IsSuspendResumeEvent(original))
   {
-    this->activationPhase_ = IsResumeEvent(record) ? ACTIVATION_FOREGROUND : ACTIVATION_BACKGROUND;
+    this->activationPhase_ = IsResumeEvent(original) ? ACTIVATION_FOREGROUND : ACTIVATION_BACKGROUND;
     this->cursorOwner_.reconcile();
+    if (IsResumeEvent(original))
+      loka::toolbox::UnicodeText::scrapFromPublic();
+    else
+      loka::toolbox::UnicodeText::scrapToPublic();
   }
+  const NativeFocusMode mode =
+      activationPhase_ == ACTIVATION_FOREGROUND ? NATIVE_FOCUS_NORMAL : NATIVE_FOCUS_SUPPRESSED;
+  const bool activeUnicode = this->syncNativeFocusAll(mode);
+  const bool serviced = (!gotEvent || !activeUnicode) && loka::toolbox::UnicodeText::serviceEvent(record);
   // TODO: Re-enable invalidation once Classic update flow is stable.
   if (group_)
   {
@@ -63,7 +71,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   }
   if (activationPhase_ == ACTIVATION_FOREGROUND)
     this->sampleHover(false);
-  if (record.what == updateEvt)
+  if (!serviced && record.what == updateEvt)
   {
     // An OS update event arrives in every phase -- another window exposing
     // part of a background Loka window still needs that region repainted,
@@ -92,7 +100,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
       }
     }
   }
-  else if (record.what == mouseDown)
+  else if (!serviced && record.what == mouseDown)
   {
     WindowPtr target = 0;
     short part = FindWindow(record.where, &target);
@@ -187,9 +195,9 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
       }
     }
   }
-  else if (record.what == activateEvt)
+  else if (original.what == activateEvt)
   {
-    WindowPtr target = reinterpret_cast<WindowPtr>(record.message);
+    WindowPtr target = reinterpret_cast<WindowPtr>(original.message);
     if (group_)
     {
       const AppComponentGroup::Components comps = group_->getComponents();
@@ -199,10 +207,10 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
         ToolboxWindow *toolboxWindow = w ? w->asToolboxWindow() : 0;
         if (toolboxWindow && toolboxWindow->window() == target)
         {
-          // A front-window change arrives as two records: the old window
+          // A front-window change arrives as two originals: the old window
           // without activeFlag, then the new one with it. Only the second
           // names the active window.
-          if ((record.modifiers & activeFlag) != 0)
+          if ((original.modifiers & activeFlag) != 0)
             setActiveWindow(toolboxWindow);
           // The grow icon follows the window hilite state; redraw only
           // its corner through the ordinary update event.
@@ -212,7 +220,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
       }
     }
   }
-  else if (record.what == osEvt && IsSuspendResumeEvent(record))
+  else if (original.what == osEvt && IsSuspendResumeEvent(original))
   {
     ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
     if (active && active->window())
@@ -228,7 +236,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
       menuBarDrawDeferred_ = false;
     }
   }
-  else if (record.what == keyDown || record.what == autoKey)
+  else if (!serviced && (record.what == keyDown || record.what == autoKey))
   {
     ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
     char key = static_cast<char>(record.message & charCodeMask);
@@ -305,7 +313,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   }
   this->present(activationPhase_, turn);
   this->cursorOwner_.assertIdle();
-  if (record.what == nullEvent && group_)
+  if (original.what == nullEvent && group_)
   {
     const AppComponentGroup::Components comps = group_->getComponents();
     for (std::size_t i = 0; i < comps.size(); ++i)
@@ -319,4 +327,22 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
     }
   }
   loka::toolbox::QuitIfOutOfMemoryReserveSpent();
+}
+
+/** App-owned component walk: once before service and once before each modal. */
+bool ToolboxApp::syncNativeFocusAll(NativeFocusMode mode)
+{
+  bool active = false;
+  if (!this->group_)
+    return false;
+  const AppComponentGroup::Components components = this->group_->getComponents();
+  for (std::size_t i = 0; i < components.size(); ++i)
+  {
+    Window *window = components[i]->asWindow();
+    ToolboxWindow *toolbox = window ? window->asToolboxWindow() : 0;
+    ToolboxScenePlatformController *controller = toolbox ? toolbox->scenePlatformController() : 0;
+    if (controller && ToolboxInputDoor::syncNativeFocus(*controller, mode))
+      active = true;
+  }
+  return active;
 }

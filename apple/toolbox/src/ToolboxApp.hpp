@@ -10,6 +10,7 @@
 #include "ToolboxBusy.hpp"
 #include "ToolboxMenuAttachment.hpp"
 #include "ToolboxTwoByteKey.hpp"
+#include "ToolboxNativeFocusMode.hpp"
 class ToolboxIdleClock;
 struct EventRecord;
 class ToolboxApp;
@@ -19,8 +20,18 @@ class ToolboxSceneDebugStats;
 class CursorOwner : public ToolboxBusyOwner
 {
 public:
-  enum HoverCursor { HOVER_ARROW, HOVER_IBEAM };
-  enum AppliedCursor { UNKNOWN, ARROW, IBEAM, WATCH };
+  enum HoverCursor
+  {
+    HOVER_ARROW,
+    HOVER_IBEAM
+  };
+  enum AppliedCursor
+  {
+    UNKNOWN,
+    ARROW,
+    IBEAM,
+    WATCH
+  };
 
   explicit CursorOwner(ToolboxApp &app);
   /** Load optional resources once, after Toolbox initialization. */
@@ -39,9 +50,17 @@ private:
   class CachedCursor
   {
   public:
-    CachedCursor() : value_(), available_(false) {}
+    CachedCursor()
+        : value_(),
+          available_(false)
+    {
+    }
     void load(short resourceId);
-    const Cursor *get() const { return this->available_ ? &this->value_ : 0; }
+    const Cursor *get() const
+    {
+      return this->available_ ? &this->value_ : 0;
+    }
+
   private:
     Cursor value_;
     bool available_;
@@ -78,12 +97,18 @@ protected:
   friend class ToolboxPlatformContext;
 
 public:
-  CursorOwner &cursorOwner() { return this->cursorOwner_; }
+  CursorOwner &cursorOwner()
+  {
+    return this->cursorOwner_;
+  }
   virtual void run();
   virtual void quit();
   void handleMenuSelection(short menuId, short item);
   virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
-  ToolboxMenuAttachment &menuAttachment() { return this->menuAttachment_; }
+  ToolboxMenuAttachment &menuAttachment()
+  {
+    return this->menuAttachment_;
+  }
 
   /** Called by projection or live bindings after updating app-owned menu
       data. Foreground: redraws the menu bar immediately. Background: the
@@ -99,6 +124,7 @@ protected:
 private:
   friend class CursorOwner;
   void sampleHover(bool force);
+  bool syncNativeFocusAll(NativeFocusMode mode);
   void iterate(ToolboxIdleClock &clock, bool gotEvent, const EventRecord &fetched);
   /** Applies recorded scene changes and, while foreground, paints each window
       once at the run-loop tick's presentation boundary. */

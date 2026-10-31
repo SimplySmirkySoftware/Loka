@@ -76,7 +76,7 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
         TEDeactivate(previousTE);
     }
     else
-      old->editor->focus(false);
+      this->unicodeEditors_.focus(oldUnicode, false);
     this->invalidateUnitOverlap(old->placement.visible());
   }
   this->editControls_.clearFocus();
@@ -98,7 +98,7 @@ void ToolboxScenePlatformController::activateEditControl(std::size_t index)
         TEActivate(nextTE);
     }
     else
-      this->editControls_[index].editor->focus(true);
+      this->syncNativeFocus(NATIVE_FOCUS_NORMAL);
     this->invalidateUnitOverlap(this->editControls_[index].placement.visible());
   }
   SetPort(previousPort);
@@ -108,11 +108,17 @@ void ToolboxScenePlatformController::idleTextEdits()
 {
   for (size_t i = 0; i < editControls_.size(); ++i)
   {
-    if (editControls_[i].editor) editControls_[i].editor->retryProjection();
+    if (editControls_[i].editor)
+      editControls_[i].editor->retryProjection();
     if (&editControls_[i] == editControls_.focused() && (editControls_[i].te || editControls_[i].unicode))
     {
       if (editControls_[i].editor)
-        editControls_[i].editor->idleTick();
+      {
+        this->syncNativeFocus(NATIVE_FOCUS_NORMAL);
+        EditTextControlBinding *focused = this->editControls_.focused();
+        if (focused && focused->editor)
+          focused->editor->idleTick();
+      }
       else
       {
         const short caretBefore = (**editControls_[i].te).caretState;

@@ -1,3 +1,4 @@
+#include "ToolboxNativeFocusMode.hpp"
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #include "ToolboxPresentObservation.hpp"
@@ -57,7 +58,7 @@ namespace loka
   {
     struct ScrollBarProps;
     class ScrollViewNode;
-  }
+  } // namespace app
 } // namespace loka
 
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
@@ -89,13 +90,21 @@ public:
   bool measurePushButtonNaturalWidth(const loka::core::String &label, short &width) const;
   short measurePushButtonNaturalWidth(const loka::core::String &label) const;
   loka::app::DialogResultTransport *dialogResults()
-  { return this->window_ ? &this->window_->dialogResults() : 0; }
-  ToolboxPendingDialogs &pendingDialogs() { return this->pendingDialogs_; }
+  {
+    return this->window_ ? &this->window_->dialogResults() : 0;
+  }
+  ToolboxPendingDialogs &pendingDialogs()
+  {
+    return this->pendingDialogs_;
+  }
   void registerCompositionReplay(ToolboxCompositionReplay::Registration &registration)
   {
     registration.attach(this->compositionReplay_);
   }
-  loka::app::TextShaping textShaping() const { return this->textShaping_; }
+  loka::app::TextShaping textShaping() const
+  {
+    return this->textShaping_;
+  }
   explicit ToolboxScenePlatformController(ToolboxWindow *window);
   virtual ~ToolboxScenePlatformController();
 
@@ -149,9 +158,7 @@ public:
                      bool needsRelayoutOnChange,
                      short visibleWidth,
                      ToolboxTextContext *context);
-  void recordPopupHit(const Rect &rect,
-                      loka::core::State<bool> *enabled,
-                      ToolboxPopupMenuContext *context);
+  void recordPopupHit(const Rect &rect, loka::core::State<bool> *enabled, ToolboxPopupMenuContext *context);
   void applyPopupSelectionChange(const Rect &rect,
                                  loka::app::scene::BoundaryNode *boundary,
                                  loka::core::State<int> *selectedIndex,
@@ -202,9 +209,8 @@ public:
                                                      int requestedOffset,
                                                      const ToolboxScrollViewMetrics &horizontal,
                                                      bool horizontalBar);
-  void destroyViewportScrollBarControl(
-      loka::app::ScrollViewNode *scrollView,
-      loka::app::scene::NativeLifetimeHint lifetimeHint);
+  void destroyViewportScrollBarControl(loka::app::ScrollViewNode *scrollView,
+                                       loka::app::scene::NativeLifetimeHint lifetimeHint);
   void retireNodeContext(loka::app::scene::NodeContext *context, loka::app::scene::NativeLifetimeHint lifetimeHint);
   /** Escalates recorded dirty rectangles because the projected structure
       changed since the last present. */
@@ -212,21 +218,23 @@ public:
   void drawFallbackControl(const Rect &rect);
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *context, loka::app::scene::NativeLifetimeHint hint)
-  { this->retireEditTextControl(context, hint); }
+  {
+    this->retireEditTextControl(context, hint);
+  }
   /** O(1), no rows: ensure once per draw, fallback only when no TE was acquired. */
   bool editTextInClip(const Rect &textRect, Rect &controlRect) const;
   /** O(1), no rows: the editor ensure and its missing-TE report share this query. */
   bool textEditorInClip(const Rect &hit, const Rect &text, Rect &visible, Rect &clipped) const;
-  ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *ownerContext,
-                                 const Rect &rect,
-                                 loka::core::State<loka::core::String> *text,
-                                 loka::app::scene::NativeLifetimeHint lifetimeHint = loka::app::scene::NATIVE_HINT_DEFAULT);
+  ToolboxEditPresentation
+  ensureEditTextControl(ToolboxEditTextContext *ownerContext,
+                        const Rect &rect,
+                        loka::core::State<loka::core::String> *text,
+                        loka::app::scene::NativeLifetimeHint lifetimeHint = loka::app::scene::NATIVE_HINT_DEFAULT);
   bool isPointInEdit(const Point &point) const;
   short allocateControlId();
   /** Measures against this controller's window port and restores ambient QuickDraw state. */
-  short measureTextWidth(
-      const loka::core::String &value,
-      const ToolboxTextFontDescriptor &descriptor = ToolboxTextFontDescriptor()) const;
+  short measureTextWidth(const loka::core::String &value,
+                         const ToolboxTextFontDescriptor &descriptor = ToolboxTextFontDescriptor()) const;
   void beginClip(const Rect &rect);
   void endClip();
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry()
@@ -252,8 +260,7 @@ public:
   bool applyScrollViewRequest(loka::app::ScrollViewNode &node,
                               const ToolboxScrollViewLayoutResult &result,
                               const loka::core::Frame &target);
-  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *surface,
-                               const loka::core::Frame &extent)
+  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *surface, const loka::core::Frame &extent)
   {
     this->rectSurfaceExtentLedger_.record(surface, extent);
   }
@@ -281,10 +288,10 @@ private:
   friend class ToolboxTextMeasureScope;
   template <typename Controller>
   friend void ReconcileToolboxTextSubscription(Controller &,
-      loka::core::State<loka::core::String> *, loka::core::State<loka::core::String> *);
+                                               loka::core::State<loka::core::String> *,
+                                               loka::core::State<loka::core::String> *);
   friend bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller);
-  template <typename Sink, typename StateType>
-  friend class ToolboxEnabledStateBindingPath;
+  template <typename Sink, typename StateType> friend class ToolboxEnabledStateBindingPath;
   friend class ToolboxTextContext;
   friend class ToolboxCellContext;
   friend class ToolboxButtonContext;
@@ -343,6 +350,7 @@ private:
   ToolboxEditTextContext *fallbackFocusContext() const;
   loka::app::scene::FocusLink fallbackFocus_;
   const loka::app::TextShaping textShaping_;
+
 public:
   ToolboxWindow *window_;
 
@@ -372,8 +380,7 @@ public:
   ToolboxUnicodeEditorLedger unicodeEditors_;
   std::vector<loka::core::State<loka::core::String> *> boundTextStates_;
   std::vector<TextBinding *> textBindings_;
-  ToolboxEnabledStateBindingPath<ToolboxScenePlatformController,
-                                 loka::core::State<bool> > enabledStateBindingPath_;
+  ToolboxEnabledStateBindingPath<ToolboxScenePlatformController, loka::core::State<bool> > enabledStateBindingPath_;
   bool inBatchUpdate_;
   bool pendingFullInvalidate_;
   loka::app::scene::NodeDirtyFlags pendingInvalidateFlags_;
@@ -407,8 +414,7 @@ public:
   bool hasLiveBinding(loka::core::State<loka::core::String> *text) const;
   bool hasLiveBinding(loka::core::State<bool> *enabled) const;
   void handleTextChanged(loka::core::State<loka::core::String> *text);
-  bool applyEnabledChangeForKind(ToolboxEnabledControlKind kind,
-                                 loka::core::State<bool> *enabled);
+  bool applyEnabledChangeForKind(ToolboxEnabledControlKind kind, loka::core::State<bool> *enabled);
   void refreshPopupEnabled(PopupHit &binding);
   void requestControlRepaint(const Rect &rect);
   void refreshButtonEnabled(ButtonControlBinding &binding);

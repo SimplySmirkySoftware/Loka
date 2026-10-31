@@ -1,12 +1,16 @@
 #ifndef LOKA_TOOLBOX_UNICODE_STARTUP_HPP
 #define LOKA_TOOLBOX_UNICODE_STARTUP_HPP
 #include <Types.h>
+struct EventRecord;
 namespace loka
 {
   namespace toolbox
   {
     namespace UnicodeText
     {
+      bool serviceEvent(EventRecord &record);
+      void scrapToPublic();
+      void scrapFromPublic();
       /** Single-run MLTE session; normal teardown must finish before destruction. */
       class Session
       {

@@ -36,4 +36,3 @@ bool ToolboxUnicodeTextEditorContext::hasNativeHandle() const
 {
   return false;
 }
-void ToolboxUnicodeTextEditorContext::focus(bool) {}

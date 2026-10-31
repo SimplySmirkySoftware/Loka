@@ -8,6 +8,8 @@
 #include "ToolboxTabKey.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxIdleClock.hpp"
+#include "ToolboxNativeFocusMode.hpp"
+#include "ToolboxUnicodeStartup.hpp"
 
 namespace iteration_host
 {
@@ -189,6 +191,14 @@ public:
     note("update-evidence");
   }
 };
+class ToolboxInputDoor
+{
+public:
+  static bool syncNativeFocus(ToolboxScenePlatformController &, NativeFocusMode)
+  {
+    return false;
+  }
+};
 class ToolboxWindow : public Window
 {
   NativeWindow native_;
@@ -355,6 +365,7 @@ public:
     note("present");
   }
   void iterate(ToolboxIdleClock &, bool, const EventRecord &);
+  bool syncNativeFocusAll(NativeFocusMode);
 };
 #include "ToolboxIteration.cpp"
 #endif

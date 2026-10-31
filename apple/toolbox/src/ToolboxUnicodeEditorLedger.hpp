@@ -55,6 +55,8 @@ public:
   void drain();
   /** Draw under the caller's established port and clip, without an update bracket. */
   void draw(ToolboxUnicodeEditorResource *);
+  /** Resolved live resource only; native focus never calls back into Loka. */
+  void focus(ToolboxUnicodeEditorResource *, bool);
 
 private:
   ToolboxUnicodeEditorLedger(const ToolboxUnicodeEditorLedger &);
