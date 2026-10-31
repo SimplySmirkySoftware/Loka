@@ -450,6 +450,14 @@ int main(int argc, char **argv)
   LOKA_VERIFY(smallLabel.font(0) == 3 && smallLabel.font(4) == 3);
   LOKA_VERIFY(smallLabel.size(12) == 9 && smallLabel.size(24) == 9);
   LOKA_VERIFY(smallLabel.face(bold | italic) == (bold | italic));
+  Pin("ToolboxUnderlineFaceOnOffUnset");
+  LOKA_VERIFY(ToolboxTextFontDescriptor(Underline).face(bold | italic) == (bold | italic | underline));
+  LOKA_VERIFY(ToolboxTextFontDescriptor(TextStyle().underline(false)).face(bold | italic | underline)
+              == (bold | italic));
+  LOKA_VERIFY(ToolboxTextFontDescriptor().face(bold | italic) == (bold | italic));
+  LOKA_VERIFY(ToolboxTextFontDescriptor().face(bold | italic | underline) == (bold | italic | underline));
+  LOKA_VERIFY(ToolboxTextFontDescriptor(TextStyle().italic(false)).face(italic | underline) == underline);
+
   LOKA_VERIFY(ToolboxTextFontDescriptor(TextStyle(TextSizeValue::points(11))).size(12) == 10);
   LOKA_VERIFY(ToolboxTextFontDescriptor().size(17) == 17);
   LOKA_VERIFY(ToolboxTextFontDescriptor().font(4) == 4);
@@ -721,6 +729,21 @@ int main(int argc, char **argv)
       LOKA_VERIFY(toolbox_host::draws[0].x == 3 + a);
       LOKA_VERIFY(toolbox_host::draws[1].x == 13 + a);
     }
+  }
+  Pin("ToolboxAttributedTextUnderlineBoundaryMetrics");
+  {
+    ToolboxAttributedTextTable projected;
+    toolbox_host::reset();
+    LOKA_VERIFY(projected.build(
+        Styled("a", TextStyle()) + Styled("b", TextStyle().underline(false)), BlockStyle(), 40, controller));
+    LOKA_VERIFY(toolbox_host::metrics == 1);
+    toolbox_host::reset();
+    LOKA_VERIFY(projected.build(Styled("a", TextStyle()) + Styled("b", Underline), BlockStyle(), 40, controller));
+    LOKA_VERIFY(toolbox_host::metrics == 2);
+    LOKA_VERIFY(toolbox_host::measures == 2);
+    LOKA_VERIFY(projected.draw(0, 0, controller, BlockStyle(), 40));
+    LOKA_VERIFY(toolbox_host::draws.size() == 2);
+    LOKA_VERIFY(toolbox_host::draws[0].face == 0 && toolbox_host::draws[1].face == underline);
   }
   Pin("ToolboxAttributedTextDistinctResolvedMetricsAndEmptyLines");
   loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 0);

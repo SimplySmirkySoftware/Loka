@@ -38,6 +38,8 @@ public:
     bool on = false;
     if (this->style_.queryItalic(on))
       portFace = static_cast<Style>((portFace & ~italic) | (on ? italic : 0));
+    if (this->style_.queryUnderline(on))
+      portFace = static_cast<Style>((portFace & ~underline) | (on ? underline : 0));
     return portFace;
   }
 
