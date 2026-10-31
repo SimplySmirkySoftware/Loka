@@ -895,24 +895,24 @@ int main(int argc, char **argv)
     {
       LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("\xC3\xA9")) == EDIT_OK);
       f.context->onPropsApplied();
-      site = "ToolboxTextEditorContext.cpp:204";
+      site = "ToolboxTextEditorContext.cpp:205";
     }
     else if (mode == "debt-clip")
     {
       toolbox_host::failRegions = 2;
       ToolboxTextEditorAccess::repaint(*f.context, f.te());
       toolbox_host::failRegions = 0;
-      site = "ToolboxTextEditorContext.cpp:980";
+      site = "ToolboxTextEditorContext.cpp:975";
     }
     else if (mode == "debt-unavailable")
     {
       ToolboxTextEditorAccess::repaint(*f.context, 0);
-      site = "ToolboxTextEditorContext.cpp:1003";
+      site = "ToolboxTextEditorContext.cpp:998";
     }
     else if (mode == "debt-node")
     {
       ToolboxTextEditorAccess::renderMissingNode(*f.context, &f.controller);
-      site = "ToolboxTextEditorContext.cpp:1017";
+      site = "ToolboxTextEditorContext.cpp:1012";
     }
     else if (mode == "debt-context-change")
     {
@@ -921,7 +921,7 @@ int main(int argc, char **argv)
       ToolboxTextEditorAccess::forgetTE(*f.context);
       f.context->render(&f.controller);
       f.request.state()->unbind(&retireContext, &f);
-      site = "ToolboxTextEditorContext.cpp:1059";
+      site = "ToolboxTextEditorContext.cpp:1054";
     }
     else if (mode == "debt-bar-hide")
     {
