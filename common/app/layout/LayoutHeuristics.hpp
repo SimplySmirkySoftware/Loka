@@ -187,6 +187,9 @@ namespace loka
 
       /** Answers the maximum offer-independent width within the parent's composed child count,
           treating children as vertically stacked ScrollView content and recursing into Columns.
+          ScrollView calls once per range pass. LABELS_SHARE Rows classify each live seat once:
+          labels count one without width consultation, empty Boxes count known zero, and other
+          undeclared seats are measured once. Empty Rows and refused measurements decline.
           NATURAL Rows count fully shrunk seats after checking the unshrunk sum for saturation.
           Frames count content overflow plus insets, at least their minimum width;
           rail spacing is forwarded unchanged; each Row resolves its own gap, and a null parent or
@@ -202,6 +205,9 @@ namespace loka
           adds up to k constructor scans, k being the number of shrinkable seats; each scan consults
           every single-line ELLIPSIS Text seat once, including one whose answer is declined, because
           nothing is remembered between scans. SHARED rows never consult them.
+          Row layout constructs one consultation per pass. LABELS_SHARE classifies each live
+          child once in construction and once in next; labels and empty Boxes are never measured,
+          other undeclared seats at most twice. Labels reserve one before sharing the remainder.
           The resolved gap allocates this Row; rail spacing resolves named values in nested Rows.
           Private recursive natural measurement walks each Stack's subtree without caching to find
           the smallest seating width, independently of ScrollView's offer-bound overflow rule. */
@@ -219,7 +225,7 @@ namespace loka
         RowChildWidth next(loka::app::scene::Node *child);
 
       private:
-        int preferredWidth(loka::app::scene::Node *child) const;
+        const RowUndeclaredWidth policy_;
         const INaturalSizeSource *source_;
         const RailSpacing spacing_;
         RowWidthDivision flex_;

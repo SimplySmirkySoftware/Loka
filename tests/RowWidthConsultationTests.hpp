@@ -58,4 +58,10 @@ void testRowSingleLiveLeafWidthShapes();
 
 void testSingleLiveLeafStopsAtSecondSeat();
 
+void testRowLabelsShareTables();
+void testRowLabelsShareWrapperFacts();
+void testMountedNullLabelsShareStateAndFloor();
+void testRowLabelsShareFloorsAndCandidates();
+void testRowLabelsShareNestedAndRange();
+
 #endif // LOKA_TESTS_ROW_WIDTH_CONSULTATION_TESTS_HPP

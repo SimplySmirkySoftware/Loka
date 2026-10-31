@@ -12,15 +12,13 @@ namespace loka
   {
     /** A synchronous pass; node construction, painting and reporting are outside
         its clock bracket. The caller owns the Row and the measurement port. */
-    inline int MeasureToolbarRowPass(app::StackNode &row, int offer, const app::layout::INaturalSizeSource &source)
+    inline int MeasureToolbarRowPass(app::StackNode &row,
+                                     int offer,
+                                     const app::layout::INaturalSizeSource &source,
+                                     app::RowUndeclaredWidth policy = app::ROW_UNDECLARED_WIDTH_NATURAL)
     {
-      app::layout::RowWidthConsultation widths(row.childrenHead(),
-                                               row.childrenCount(),
-                                               offer,
-                                               8,
-                                               ToolboxLayoutMetrics::spacing(),
-                                               app::ROW_UNDECLARED_WIDTH_NATURAL,
-                                               &source);
+      app::layout::RowWidthConsultation widths(
+          row.childrenHead(), row.childrenCount(), offer, 8, ToolboxLayoutMetrics::spacing(), policy, &source);
       dsl::CompositionCursor<app::scene::Node> seats(row.childrenHead(), row.childrenCount());
       int total = 0;
       for (app::scene::Node *seat = seats.next(); seat; seat = seats.next())
@@ -47,14 +45,15 @@ namespace loka
                                       const app::layout::INaturalSizeSource &source,
                                       Clock &clock,
                                       std::FILE *out,
-                                      const char *name)
+                                      const char *name,
+                                      app::RowUndeclaredWidth policy = app::ROW_UNDECLARED_WIDTH_NATURAL)
     {
       unsigned long samples[31];
       int total = 0;
       for (unsigned i = 0; i != 31; ++i)
       {
         const unsigned long start = clock.now();
-        total = MeasureToolbarRowPass(row, offer, source);
+        total = MeasureToolbarRowPass(row, offer, source, policy);
         samples[i] = clock.now() - start;
       }
       std::sort(samples, samples + 31);
