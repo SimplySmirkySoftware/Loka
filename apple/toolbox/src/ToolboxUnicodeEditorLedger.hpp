@@ -57,6 +57,8 @@ public:
   void draw(ToolboxUnicodeEditorResource *);
   /** Resolved live resource only; native focus never calls back into Loka. */
   void focus(ToolboxUnicodeEditorResource *, bool);
+  void idle(ToolboxUnicodeEditorResource *);
+  void place(ToolboxUnicodeEditorResource *, const loka::core::Frame &);
 
 private:
   ToolboxUnicodeEditorLedger(const ToolboxUnicodeEditorLedger &);

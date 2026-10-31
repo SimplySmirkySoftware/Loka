@@ -1,3 +1,4 @@
+#include "unicode/ToolboxUnicodeEditorOptions.hpp"
 /** Own-authored lifetime observation vehicle. This proves nothing about production
  * handler selection, ensure, placement, clip, focus, input, or fatal-stack safety.
  * No object is focused: every event is offered to TXNTSMCheck before dispatch.
@@ -9,7 +10,7 @@
 #include "ToolboxOutOfMemory.hpp"
 #include "ToolboxPlatformContext.hpp"
 #include "ToolboxWindow.hpp"
-#include "context/ToolboxUnicodeTextEditorContext.hpp"
+#include "app/scene/projection/NativeNodeContext.hpp"
 #include "unicode/MacTextEditorSubset.h"
 #include <Fonts.h>
 #include <Menus.h>
@@ -72,21 +73,21 @@ namespace
     char text_[2048];
     std::size_t length_;
   };
-  unsigned
-  live(ToolboxUnicodeEditorLedger &ledger, ToolboxUnicodeTextEditorContext &a, ToolboxUnicodeTextEditorContext &b)
+  unsigned live(ToolboxUnicodeEditorLedger &ledger,
+                loka::app::scene::NativeNodeContext &a,
+                loka::app::scene::NativeNodeContext &b)
   {
     return (ledger.find(&a) ? 1u : 0u) + (ledger.find(&b) ? 1u : 0u);
   }
   bool install(ToolboxUnicodeEditorLedger &ledger,
                ToolboxWindow &window,
-               ToolboxUnicodeTextEditorContext &context,
+               loka::app::scene::NativeNodeContext &context,
                const loka::core::Frame &frame)
   {
     ToolboxUnicodeEditorLedger::Prepared p(&context);
     if (!p.resource())
       return false;
-    const unsigned long options = kTXNReadOnlyMask | kTXNWantVScrollBarMask | kTXNAlwaysWrapAtViewEdgeMask
-                                  | kTXNDontDrawCaretWhenInactiveMask | kTXNDoNotInstallDragProcsMask;
+    const unsigned long options = ToolboxUnicodeEditorOptions();
     if (!ledger.install(p.resource(), &window, frame, options))
       return false;
     ledger.link(p.release());
@@ -118,7 +119,7 @@ int main()
         return 1;
       }
       SetPort(window.window());
-      ToolboxUnicodeTextEditorContext a, b;
+      loka::app::scene::NativeNodeContext a, b;
       ToolboxUnicodeEditorLedger ledger;
       const bool first = install(ledger, window, a, loka::core::Frame(12, 170, 490, 85));
       log.record("install top", first ? "0" : "unavailable", live(ledger, a, b), 0);

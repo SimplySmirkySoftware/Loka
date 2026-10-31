@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include "support/TestVerify.hpp"
 
+using namespace iteration_fixture;
+
 static void expect(ToolboxApp &app, ToolboxIdleClock &clock, EventRecord event, const char *expected)
 {
   iteration_host::trace.clear();

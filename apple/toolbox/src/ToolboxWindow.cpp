@@ -611,3 +611,5 @@ void ToolboxWindow::teardownScene()
     scenePlatformController_ = 0;
   }
 }
+
+#include "ToolboxWindowEditCommand.cpp"

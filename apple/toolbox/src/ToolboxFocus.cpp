@@ -204,6 +204,10 @@ bool ToolboxScenePlatformController::offerKeyEvent(const EventRecord &event)
   EditTextControlBinding *row = this->editControls_.focused();
   if (!row || !row->unicode || ParkedContext(row->ownerContext))
     return false;
+  ToolboxTabDirection direction;
+  // Tab belongs to the window's traversal path; direction is decoded there.
+  if (QueryToolboxTabKey(static_cast<unsigned char>(event.message), false, direction))
+    return false;
   return this->syncNativeFocus(NATIVE_FOCUS_NORMAL) && row->editor->offerKeyEvent(event);
 }
 
@@ -387,4 +391,10 @@ void ToolboxScenePlatformController::recordEditHit(const Rect &rect,
   this->hitLedger_.editHits_.push_back(hit);
   this->pressLedger_.append(PressRow::EDIT_HIT, this->hitLedger_.editHits_.size() - 1);
   this->bindTextState(text);
+}
+
+bool ToolboxScenePlatformController::handleEditCommand(loka::app::EditVerb verb)
+{
+  EditTextControlBinding *row = this->editControls_.focused();
+  return row && row->unicode && !ParkedContext(row->ownerContext) && row->editor->editVerb(verb);
 }

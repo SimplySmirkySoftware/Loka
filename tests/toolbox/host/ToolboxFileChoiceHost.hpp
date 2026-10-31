@@ -1,3 +1,4 @@
+#include "app/EditVerb.hpp"
 #ifndef LOKA_TEST_TOOLBOX_FILE_CHOICE_HOST_HPP
 #define LOKA_TEST_TOOLBOX_FILE_CHOICE_HOST_HPP
 // Native neighbors only: production dialog, input door and present are tested.
@@ -70,6 +71,10 @@ public:
     return false;
   }
   bool offerKeyEvent(const EventRecord &)
+  {
+    return false;
+  }
+  bool handleEditCommand(loka::app::EditVerb)
   {
     return false;
   }

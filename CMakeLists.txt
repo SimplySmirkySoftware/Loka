@@ -496,8 +496,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/toolbox/host/ToolboxUnicodeLedgerHostTests.cpp
     tests/toolbox/host/ToolboxTextensionFake.cpp
     tests/TestingHooks.cpp
-    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
-    apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp)
+    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp)
   target_sources(LokaToolboxUnicodeLedgerTests PRIVATE
     tests/toolbox/host/ToolboxUnicodeTeardownHostTests.cpp
     tests/platform/null/NullPlatformContext.cpp
@@ -770,6 +769,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME testToolboxTextEditorFrameInset COMMAND LokaToolboxTextEditorTests frame-inset)
   add_test(NAME testToolboxTextEditorPreContextRequest COMMAND LokaToolboxTextEditorTests pre-context-request)
   add_test(NAME testToolboxTextEditorPreContextRefused COMMAND LokaToolboxTextEditorTests pre-context-refused)
+
+  add_executable(LokaToolboxUnicodeEditorTests tests/toolbox/host/ToolboxUnicodeEditorHostTests.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp
+    ${_editor_host_sources})
+  target_include_directories(LokaToolboxUnicodeEditorTests PRIVATE tests/toolbox/host tests/toolbox/host/unicode tests/toolbox/host/startup tests apple/toolbox/src)
+  target_compile_options(LokaToolboxUnicodeEditorTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp -Wno-multichar)
+  target_compile_definitions(LokaToolboxUnicodeEditorTests PRIVATE LOKA_HOST_EDITOR_SCROLL LOKA_HOST_ZSTACK_UNITS LOKA_HOST_UNICODE_EDITOR LOKA_TOOLBOX_UNICODE=1)
+  target_link_libraries(LokaToolboxUnicodeEditorTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxUnicodeEditorTests)
+  set_target_properties(LokaToolboxUnicodeEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxUnicodeEditorTests COMMAND LokaToolboxUnicodeEditorTests)
 
   add_executable(LokaToolboxPascalTextTests tests/toolbox/host/ToolboxPascalTextHostTests.cpp
     apple/toolbox/src/platform/ToolboxHfsName.cpp ${_editor_host_sources})

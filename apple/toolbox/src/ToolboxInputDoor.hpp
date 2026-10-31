@@ -11,6 +11,10 @@ class ToolboxInputDoor
   typedef loka::app::scene::detail::InputInvocation Invocation;
 
 public:
+  static bool editCommand(ToolboxScenePlatformController &c, loka::app::EditVerb verb)
+  {
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleEditCommand, verb);
+  }
   static bool syncNativeFocus(ToolboxScenePlatformController &c, NativeFocusMode mode)
   {
     return Invocation(c).operator()(c, &ToolboxScenePlatformController::syncNativeFocus, mode);

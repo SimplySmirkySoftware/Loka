@@ -34,6 +34,7 @@ private:
 class ToolboxWindow : public Window
 {
 public:
+  virtual bool handleEditCommand(loka::app::EditVerb);
   ToolboxWindow(PlatformContext *context, const WindowProps &props);
   virtual ~ToolboxWindow();
   virtual ToolboxWindow *asToolboxWindow()

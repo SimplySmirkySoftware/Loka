@@ -10,4 +10,5 @@ struct ProcessInfoRec
 };
 OSErr GetCurrentProcess(ProcessSerialNumber *);
 OSErr GetProcessInformation(const ProcessSerialNumber *, ProcessInfoRec *);
+void ExitToShell();
 #endif

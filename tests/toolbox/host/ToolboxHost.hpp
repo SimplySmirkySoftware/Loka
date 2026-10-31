@@ -4,6 +4,7 @@
 #include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "context/ToolboxUnicodeTextEditorContext.hpp"
 #include "ToolboxPresentObservation.hpp"
 #include "ToolboxFullDrawReason.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
@@ -230,6 +231,7 @@ class ToolboxWindow : public Window
   loka::core::MutableState<bool> visible_;
 
 public:
+  virtual bool handleEditCommand(loka::app::EditVerb);
   struct WindowPort : GrafPort
   {
     Rect portRect;
@@ -268,7 +270,7 @@ public:
     port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
   }
-  bool queryPortRect(Rect &out) const
+  virtual bool queryPortRect(Rect &out) const
   {
     out = this->port.portRect;
     return true;
@@ -861,6 +863,8 @@ public:
   void reachNativeBar(short id);
   void reachEditControl(loka::app::scene::NodeContext *context);
   void reachPopupHit(ToolboxPopupMenuContext *context);
+  ToolboxUnicodeEditorResource *
+  ensureUnicodeTextEditorControl(ToolboxUnicodeTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   void flushTE();
