@@ -372,8 +372,8 @@ bool Win32TextContext::applyStyle()
   }
   HFONT font = ResolveTextFont(this->node_, this->controller());
   if (!font)
-    font = this->controller()->fallbackFont(
-        this->node_ ? this->node_->props.resolvedTextStyle() : loka::app::TextStyle());
+    font =
+        this->controller()->fallbackFont(this->node_ ? this->node_->props.resolvedTextStyle() : loka::app::TextStyle());
   // WM_GETFONT is the native truth; no cached handle can outlive a DPI table.
   if (font && reinterpret_cast<HFONT>(SendMessageW(this->hwnd(), WM_GETFONT, 0, 0)) != font)
   {
