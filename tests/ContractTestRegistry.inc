@@ -1578,3 +1578,7 @@ LOKA_TEST(testItalicOrderAndMergeTable)
 LOKA_TEST(testNullItalicPaintRecording)
 
 LOKA_TEST(testTextToggleValueContract)
+
+LOKA_TEST(testUnderlineStyleContract)
+LOKA_TEST(testNullUnderlinePaintRecording)
+LOKA_TEST(testNullUnderlineParkedReattach)

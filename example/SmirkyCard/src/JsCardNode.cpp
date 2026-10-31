@@ -1202,8 +1202,9 @@ namespace smirkycard
       const bool family = length == 6 && !memcmp(name, "family", 6);
       const bool color = length == 5 && !memcmp(name, "color", 5);
       const bool italic = length == 6 && !memcmp(name, "italic", 6);
+      const bool underline = length == 9 && !memcmp(name, "underline", 9);
       JS_FreeCString(ctx, name);
-      if (!size && !weight && !italic && !color && !family)
+      if (!size && !weight && !italic && !underline && !color && !family)
       {
         JS_ThrowTypeError(ctx, "Unknown Text style key");
         return false;
@@ -1224,6 +1225,12 @@ namespace smirkycard
         accepted = JS_IsBool(value);
         if (accepted)
           result.italic(JS_ToBool(ctx, value) != 0);
+      }
+      else if (underline)
+      {
+        accepted = JS_IsBool(value);
+        if (accepted)
+          result.underline(JS_ToBool(ctx, value) != 0);
       }
       else if (JS_IsString(value))
       {
