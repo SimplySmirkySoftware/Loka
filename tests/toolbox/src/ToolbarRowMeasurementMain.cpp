@@ -72,6 +72,33 @@ namespace
     return !answered || answer == leaf.y - offer.y;
   }
 
+  /** Include full layout, paint and cursor return in each independent draw. */
+  template <class Clock>
+  bool MeasureAlignedTitleDraw(ToolboxWindow &window, Clock &clock, std::FILE *out)
+  {
+    app::scene::Node *title = 0;
+    dsl::FlowError error;
+    if (dsl::testing::LookupNodeById<app::scene::Node>(
+            window.scene(), "aligned-title-label", title, error) != dsl::FLOW_STEP_SUCCEEDED)
+      return false;
+    unsigned long samples[31];
+    for (unsigned i = 0; i != 31; ++i)
+    {
+      // drawForFlush always walks layout and paints; prevent Title leaf reuse too.
+      title->requeueLayoutInputs(app::scene::NODE_DIRTY_LAYOUT);
+      const unsigned long start = clock.now();
+      window.drawForFlush();
+      samples[i] = clock.now() - start;
+    }
+    std::sort(samples, samples + 31);
+    std::fprintf(out, "toolbar_row_inputs case=aligned-title-draw k=6 scans=0 source=toolbox clock=Microseconds\n");
+    std::fprintf(out,
+                 "toolbar_row case=aligned-title-draw repetitions=31 median_us=%lu maximum_us=%lu\n",
+                 samples[15],
+                 samples[30]);
+    return true;
+  }
+
   /** The App owns the window; the synchronous idle callback owns its report. */
   class RowMeasurementApp : public AppConfigurable
   {
@@ -147,8 +174,9 @@ namespace
                        port.bottom - port.top);
           const bool ok = environmentKnown && resolution != ~0UL
                           && testing::RunToolbarRows(*window->scene(), *controller, self, out)
-                          && MeasureAlignedTitle(*window->scene(), *controller, self, out);
-          std::fprintf(out, "toolbar_row_summary complete=%d cases=7\n", ok);
+                          && MeasureAlignedTitle(*window->scene(), *controller, self, out)
+                          && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out);
+          std::fprintf(out, "toolbar_row_summary complete=%d cases=8\n", ok);
           std::fclose(out);
         }
       }
