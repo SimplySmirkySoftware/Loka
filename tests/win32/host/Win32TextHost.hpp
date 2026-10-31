@@ -37,7 +37,8 @@ public:
     if (this->displayFont_.get())
     {
       const loka::win32::Win32FontResolution &font = this->displayFont_.find(style);
-      return font.font() ? font.font() : this->displayFont_.get();
+      bool on = false;
+      return font.font() ? font.font() : this->displayFont_.get(style.queryUnderline(on) && on);
     }
     bool on = false;
     return style.queryItalic(on) && on ? &this->large_ : &this->small_;
