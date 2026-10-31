@@ -1567,3 +1567,8 @@ LOKA_TEST(testSingleLiveLeafStopsAtSecondSeat)
 LOKA_TEST(testNullNaturalHeightAlignedRow)
 LOKA_TEST(testNullNaturalHeightDeclinesAndSourceRouting)
 LOKA_TEST(testNullNaturalHeightMatchesLeafAndPreservesFailures)
+
+LOKA_TEST(testWebURLAcceptedAndPreserved)
+LOKA_TEST(testWebURLRefusalPreservesOutput)
+LOKA_TEST(testWebURLLengthBoundary)
+LOKA_TEST(testWebURLNoneAndEquality)
