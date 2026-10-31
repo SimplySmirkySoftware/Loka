@@ -1567,3 +1567,8 @@ LOKA_TEST(testSingleLiveLeafStopsAtSecondSeat)
 LOKA_TEST(testNullNaturalHeightAlignedRow)
 LOKA_TEST(testNullNaturalHeightDeclinesAndSourceRouting)
 LOKA_TEST(testNullNaturalHeightMatchesLeafAndPreservesFailures)
+
+LOKA_TEST(testItalicOrderAndMergeTable)
+LOKA_TEST(testNullItalicPaintRecording)
+
+LOKA_TEST(testTextToggleValueContract)

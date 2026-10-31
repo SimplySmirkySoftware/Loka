@@ -8,6 +8,11 @@ namespace loka
 {
   namespace app
   {
+    // Page 1: preserve Classic Segment size on every ABI, including C++98 builds.
+    typedef char TextStyleSizePin[sizeof(TextStyle) == 16 ? 1 : -1];
+    // Page 1: one byte per toggle keeps the Classic Segment size budget.
+    typedef char TextToggleValueSizePin[sizeof(TextToggleValue) == 1 ? 1 : -1];
+
     int detail::SnapTextSizePoints(int logicalUnits)
     {
       int selected = detail::StyleVocabularySizes[0];

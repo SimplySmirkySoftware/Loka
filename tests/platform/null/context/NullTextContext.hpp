@@ -97,6 +97,10 @@ namespace loka
       /** Captured family from the last placement/presentation, not a props reread. */
       struct NullTextStyleAccess
       {
+        static bool italic(const NullTextContext &context)
+        {
+          return context.placedStyle_.italic;
+        }
         static TextFamily family(const NullTextContext &context)
         {
           return context.placedStyle_.family.family();
