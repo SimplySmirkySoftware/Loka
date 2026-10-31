@@ -277,6 +277,14 @@ void MacTextContext::presentLabel(NSString *text, const loka::app::TextStyle &re
       [value addAttribute:NSUnderlineStyleAttributeName
                     value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
                     range:range];
+    // Twin of the cell's line-break mode and alignment: an attributed value
+    // without a paragraph style lays out with AppKit's defaults (word wrap),
+    // not the cell's, and would no longer match the measuring cell.
+    NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
+    [paragraph setLineBreakMode:[[label cell] lineBreakMode]];
+    [paragraph setAlignment:[label alignment]];
+    [value addAttribute:NSParagraphStyleAttributeName value:paragraph range:range];
+    [paragraph release];
     [label setAttributedStringValue:value];
     [value release];
   }
@@ -299,7 +307,6 @@ bool MacTextContext::applyStyle(bool initial)
   const TextGeometry geometry = ResolveTextGeometry(resolved, this->controller());
   NSFont *font = geometry.font ? geometry.font : (NSFont *)this->originalFont_;
   bool changed = [cell font] != font;
-  this->presentLabel([label stringValue], resolved, initial);
   const loka::app::BlockStyle &attr = this->node_->props.blockStyle_;
   const bool wrapWord = attr.hasWrap_ && attr.wrap_ == loka::app::TEXT_WRAP_WORD;
   const bool wrapChar = attr.hasWrap_ && attr.wrap_ == loka::app::TEXT_WRAP_CHAR;
@@ -340,6 +347,9 @@ bool MacTextContext::applyStyle(bool initial)
       changed = true;
     }
   }
+  // After the cell's wrapping and alignment are current, so an attributed
+  // value copies the settings this pass applied.
+  this->presentLabel([label stringValue], resolved, initial);
   return changed;
 }
 

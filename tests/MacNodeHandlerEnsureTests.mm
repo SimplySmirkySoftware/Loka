@@ -2166,14 +2166,25 @@ namespace
     {
       [NSApplication sharedApplication];
       this->root_ = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 400, 300)];
+      // A windowless view does not report needsDisplay; host it like MacTextColorTests.
+      this->window_ = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 400, 300)
+                                                  styleMask:0
+                                                    backing:NSBackingStoreBuffered
+                                                      defer:NO];
+      [this->window_ setReleasedWhenClosed:NO];
+      [this->window_ setContentView:this->root_];
     }
     ~MacUnderlineNativeScope()
     {
+      [this->window_ setContentView:nil];
+      [this->window_ close];
+      [this->window_ release];
       [this->root_ release];
       [this->pool_ drain];
     }
     NSAutoreleasePool *pool_;
     NSView *root_;
+    NSWindow *window_;
   };
 
   /** Native-only fixture: ensure and layout are separate so a later layout
