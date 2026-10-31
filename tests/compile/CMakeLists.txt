@@ -678,3 +678,47 @@ loka_compile_pin(scrollview-visit-arity
   REFUSES pins/refuses_scrollview_visit_arity.cpp
   ACCEPTS pins/accepts_scrollview_visit_arity.cpp
 )
+
+loka_compile_pin(toolbar-accepts-only-items
+  REFUSES pins/refuses_toolbar-accepts-only-items.cpp
+  ACCEPTS pins/accepts_toolbar-accepts-only-items.cpp)
+
+loka_compile_pin(toolbar-refuses-card
+  REFUSES pins/refuses_toolbar-refuses-card.cpp
+  ACCEPTS pins/accepts_toolbar-refuses-card.cpp)
+
+loka_compile_pin(toolbar-refuses-text
+  REFUSES pins/refuses_toolbar-refuses-text.cpp
+  ACCEPTS pins/accepts_toolbar-refuses-text.cpp)
+
+loka_compile_pin(toolbar-item-is-not-a-node
+  REFUSES pins/refuses_toolbar-item-is-not-a-node.cpp
+  ACCEPTS pins/accepts_toolbar-item-is-not-a-node.cpp)
+
+loka_compile_pin(toolbar-space-is-not-a-node
+  REFUSES pins/refuses_toolbar-space-is-not-a-node.cpp
+  ACCEPTS pins/accepts_toolbar-space-is-not-a-node.cpp)
+
+loka_compile_pin(toolbar-label-is-not-a-node
+  REFUSES pins/refuses_toolbar-label-is-not-a-node.cpp
+  ACCEPTS pins/accepts_toolbar-label-is-not-a-node.cpp)
+
+loka_compile_pin(toolbar-space-has-no-onclick
+  REFUSES pins/refuses_toolbar-space-has-no-onclick.cpp
+  ACCEPTS pins/accepts_toolbar-space-has-no-onclick.cpp)
+
+loka_compile_pin(toolbar-label-refuses-block-style
+  REFUSES pins/refuses_toolbar-label-refuses-block-style.cpp
+  ACCEPTS pins/accepts_toolbar-label-refuses-block-style.cpp)
+
+loka_compile_pin(toolbar-label-refuses-block-style-after-title
+  REFUSES pins/refuses_toolbar-label-refuses-block-style-after-title.cpp
+  ACCEPTS pins/accepts_toolbar-label-refuses-block-style-after-title.cpp)
+
+loka_compile_pin(toolbar-item-refuses-live-title
+  REFUSES pins/refuses_toolbar-item-refuses-live-title.cpp
+  ACCEPTS pins/accepts_toolbar-item-refuses-live-title.cpp)
+
+loka_compile_pin(toolbar-item-refuses-shown-bool
+  REFUSES pins/refuses_toolbar-item-refuses-shown-bool.cpp
+  ACCEPTS pins/accepts_toolbar-item-refuses-shown-bool.cpp)

@@ -1673,6 +1673,28 @@ photo.arm(FOLD_COLLAPSED, Card().clipChildren() << ImageView().image(this->photo
     .otherwise(Card() << ImageView().image(this->photo_.state()));
 ```
 
+### Toolbar
+
+`Toolbar` is a closed Row with three item kinds: constant-title buttons
+(`ToolbarItem("Add", emitter)`), empty seats (`ToolbarItem::flexibleSpace()`
+or `ToolbarItem::fixedSpace(width)`), and labels (`ToolbarItem::label(title)`).
+The title of a label may be a constant or a borrowed `State<String>*`.
+Buttons use natural widths; labels take the remaining width and centre their
+text, truncating with an ellipsis when necessary. No flexible spaces are needed
+around a label: adding them shares the remaining width with the label instead.
+
+Use `.enabled(state)` on buttons and `.shown(*condition)` to switch between
+constant-title buttons. Hidden buttons take no seat or gap. Switching replaces
+the native control, so keyboard focus is not carried. Labels accept text styles
+such as `+ Title`, but not block styles; their one-line alignment and truncation
+are fixed. Items and labels support `TEST_ID`.
+
+Toolbar draws nothing. Put ground, lines and padding in the application's Box
+and window. Label input must contain no CR/LF; this contract is not detected
+(#1668). Toolbox examines only the first 255 native bytes, so text beyond that
+limit may be omitted without an ellipsis. Empty spaces retain the Row's fallback
+height and can make a band taller than a small label alone.
+
 ### Row And Column Natural Size
 
 - `Row().naturalWidth()` seats undeclared-width children at their natural width
