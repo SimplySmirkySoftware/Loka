@@ -141,6 +141,7 @@ NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
       weight(loka::app::TEXT_WEIGHT_NORMAL),
       color(loka::app::TEXT_COLOR_UNSET),
       italic(false),
+      underline(loka::app::TEXT_TOGGLE_OFF),
       wrap(loka::app::TEXT_WRAP_NONE),
       truncation(loka::app::TEXT_TRUNCATION_NONE),
       align(loka::app::TEXT_ALIGN_LEFT)
@@ -154,6 +155,9 @@ NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
   bool on = false;
   if (textStyle.queryItalic(on))
     italic = on;
+  on = false;
+  textStyle.queryUnderline(on);
+  this->underline = loka::app::TextToggleValue(on ? loka::app::TEXT_TOGGLE_ON : loka::app::TEXT_TOGGLE_OFF);
   if (props.blockStyle_.hasWrap_)
     wrap = props.blockStyle_.wrap_;
   if (props.blockStyle_.hasTruncation_)

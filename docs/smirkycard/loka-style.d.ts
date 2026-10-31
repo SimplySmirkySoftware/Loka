@@ -13,6 +13,7 @@ export interface TextStyle {
   size?: number | TextSizeRole;
   weight?: TextWeight;
   italic?: boolean;
+  underline?: boolean;
   color?: TextColor;
   family?: TextFamily;
 }

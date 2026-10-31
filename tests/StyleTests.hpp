@@ -1,6 +1,9 @@
 #ifndef LOKA_TESTS_STYLE_TESTS_HPP
 #define LOKA_TESTS_STYLE_TESTS_HPP
 
+void testNullUnderlineParkedReattach();
+void testUnderlineStyleContract();
+void testNullUnderlinePaintRecording();
 void testTextToggleValueContract();
 void testItalicOrderAndMergeTable();
 void testNullItalicPaintRecording();
