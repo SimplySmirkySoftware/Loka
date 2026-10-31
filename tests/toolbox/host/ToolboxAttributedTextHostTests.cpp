@@ -462,6 +462,8 @@ int main(int argc, char **argv)
     context.render(&controller);
     toolbox_host::failRegions = 0;
     LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "busy-batch")
   {
     BusyBatchPins(false);
