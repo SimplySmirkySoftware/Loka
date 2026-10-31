@@ -2402,9 +2402,9 @@ void testMacTextUnderlineEmptyRecovery()
     }
     SetMacUnderlineStyle(node, TextStyle().underline(false)); // Empty native value must not be indexed.
     fixture.layout();
-    scene::NotifySubtreeNodeDetached(&node);
+    loka::app::scene::NotifySubtreeNodeDetached(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
-    scene::NotifySubtreeNodeAttached(&node);
+    loka::app::scene::NotifySubtreeNodeAttached(&node);
     loka::app::scene::LifecycleFactTestAccess::DeliverFacts(&node);
     text.set(String::Literal("nonempty"));
     fixture.layout();
@@ -2539,7 +2539,8 @@ namespace
     const NSSize measured = [reference cellSizeForBounds:bounds];
     const NSSize rendered = [decorated cellSizeForBounds:bounds];
     LOKA_VERIFY(NSEqualSizes(measured, rendered));
-    LOKA_VERIFY([reference baselineOffsetFromBottom] == [decorated baselineOffsetFromBottom]);
+    // Same font and same title rect: the text origin, and so the baseline, is unchanged.
+    LOKA_VERIFY(NSEqualRects([reference titleRectForBounds:bounds], [decorated titleRectForBounds:bounds]));
   }
 
   short MacUnderlineWrapThreshold(NSTextField *field)
@@ -2651,7 +2652,7 @@ void testMacTextUnderlineStyleState()
   MutableState<TextStyle> style((TextStyle()));
   TextNode node((Text("live style") + &style).props);
   MacMeasurementOwner owner;
-  scene::BoundaryNode::declareBoundaryDirtySources(&node, &owner);
+  loka::app::scene::BoundaryNode::declareBoundaryDirtySources(&node, &owner);
   {
     MacUnderlineFixture fixture(node);
     const TextStyle changes[] = {Underline, TextStyle().underline(false), TextStyle()};
