@@ -75,8 +75,16 @@ namespace
 } // namespace
 
 CursorOwner::CursorOwner(ToolboxApp &app)
-    : app_(app), hoverCursor_(HOVER_ARROW), busyDepth_(0), batchPhase_(BATCH_NONE), lastApplied_(UNKNOWN),
-      nativeApplies_(0), outerEntries_(0), outerExits_(0), iBeam_(), watch_()
+    : app_(app),
+      hoverCursor_(HOVER_ARROW),
+      busyDepth_(0),
+      batchPhase_(BATCH_NONE),
+      lastApplied_(UNKNOWN),
+      nativeApplies_(0),
+      outerEntries_(0),
+      outerExits_(0),
+      iBeam_(),
+      watch_()
 {
 }
 

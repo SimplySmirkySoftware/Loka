@@ -50,7 +50,12 @@ private:
   virtual void exitBusy();
   virtual bool openBatch();
   virtual void closeBatch();
-  enum BatchPhase { BATCH_NONE, BATCH_OPEN, BATCH_HELD };
+  enum BatchPhase
+  {
+    BATCH_NONE,
+    BATCH_OPEN,
+    BATCH_HELD
+  };
   ToolboxApp &app_;
   HoverCursor hoverCursor_;
   short busyDepth_;

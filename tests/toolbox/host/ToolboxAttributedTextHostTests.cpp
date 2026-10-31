@@ -351,8 +351,12 @@ namespace
   class BusyMeasurements : public ToolboxFullDrawPresenter
   {
     ToolboxScenePlatformController &controller_;
+
   public:
-    explicit BusyMeasurements(ToolboxScenePlatformController &controller) : controller_(controller) {}
+    explicit BusyMeasurements(ToolboxScenePlatformController &controller)
+        : controller_(controller)
+    {
+    }
     virtual void eraseBeforePaint()
     {
       TextNode first((Text("First") + FontSize<18>()).props);
@@ -369,9 +373,13 @@ namespace
   {
     ToolboxScenePlatformController &inner_;
     BusyMeasurements &measurements_;
+
   public:
     NestedBusyRender(ToolboxScenePlatformController &inner, BusyMeasurements &measurements)
-        : inner_(inner), measurements_(measurements) {}
+        : inner_(inner),
+          measurements_(measurements)
+    {
+    }
     virtual void eraseBeforePaint()
     {
       ToolboxInputDoor::render(this->inner_, &this->measurements_);
@@ -408,12 +416,20 @@ namespace
     LOKA_VERIFY(owner.depth == 0);
     outer.rootNode_ = inner.rootNode_ = 0;
   }
-}
+} // namespace
 
 int main(int argc, char **argv)
 {
-  if (argc > 1 && std::string(argv[1]) == "busy-batch") { BusyBatchPins(false); return 0; }
-  if (argc > 1 && std::string(argv[1]) == "busy-batch-nested") { BusyBatchPins(true); return 0; }
+  if (argc > 1 && std::string(argv[1]) == "busy-batch")
+  {
+    BusyBatchPins(false);
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "busy-batch-nested")
+  {
+    BusyBatchPins(true);
+    return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")
   {
     PlainEllipsisPins(false);

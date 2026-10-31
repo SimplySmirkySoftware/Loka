@@ -89,12 +89,24 @@ class ToolboxTextEditorContext;
 struct CursorOwner
 {
   int depth, entries, outerEntries, outerExits;
-  CursorOwner() : depth(0), entries(0), outerEntries(0), outerExits(0), phase_(BATCH_NONE) {}
+  CursorOwner()
+      : depth(0),
+        entries(0),
+        outerEntries(0),
+        outerExits(0),
+        phase_(BATCH_NONE)
+  {
+  }
 
 private:
   friend class BusyScope;
   friend class BusyBatch;
-  enum BatchPhase { BATCH_NONE, BATCH_OPEN, BATCH_HELD };
+  enum BatchPhase
+  {
+    BATCH_NONE,
+    BATCH_OPEN,
+    BATCH_HELD
+  };
   BatchPhase phase_;
   bool openBatch()
   {
@@ -138,7 +150,8 @@ private:
 class BusyScope
 {
 public:
-  explicit BusyScope(CursorOwner *owner) : owner_(owner)
+  explicit BusyScope(CursorOwner *owner)
+      : owner_(owner)
   {
     if (this->owner_)
       this->owner_->enterBusy();
@@ -148,6 +161,7 @@ public:
     if (this->owner_)
       this->owner_->exitBusy();
   }
+
 private:
   BusyScope(const BusyScope &);
   BusyScope &operator=(const BusyScope &);
@@ -156,7 +170,8 @@ private:
 class BusyBatch
 {
 public:
-  explicit BusyBatch(CursorOwner *owner) : owner_(owner)
+  explicit BusyBatch(CursorOwner *owner)
+      : owner_(owner)
   {
     if (this->owner_ && !this->owner_->openBatch())
       this->owner_ = 0;
@@ -166,6 +181,7 @@ public:
     if (this->owner_)
       this->owner_->closeBatch();
   }
+
 private:
   BusyBatch(const BusyBatch &);
   BusyBatch &operator=(const BusyBatch &);

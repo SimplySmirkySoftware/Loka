@@ -73,13 +73,12 @@ namespace
   }
 
   /** Include full layout, paint and cursor return in each independent draw. */
-  template <class Clock>
-  bool MeasureAlignedTitleDraw(ToolboxWindow &window, Clock &clock, std::FILE *out)
+  template <class Clock> bool MeasureAlignedTitleDraw(ToolboxWindow &window, Clock &clock, std::FILE *out)
   {
     app::scene::Node *title = 0;
     dsl::FlowError error;
-    if (dsl::testing::LookupNodeById<app::scene::Node>(
-            window.scene(), "aligned-title-label", title, error) != dsl::FLOW_STEP_SUCCEEDED)
+    if (dsl::testing::LookupNodeById<app::scene::Node>(window.scene(), "aligned-title-label", title, error)
+        != dsl::FLOW_STEP_SUCCEEDED)
       return false;
     unsigned long samples[31];
     for (unsigned i = 0; i != 31; ++i)

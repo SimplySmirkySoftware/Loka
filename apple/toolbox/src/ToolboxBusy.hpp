@@ -49,7 +49,8 @@ private:
 class BusyBatch
 {
 public:
-  explicit BusyBatch(ToolboxBusyOwner *owner) : owner_(owner)
+  explicit BusyBatch(ToolboxBusyOwner *owner)
+      : owner_(owner)
   {
     if (this->owner_ && !this->owner_->openBatch())
       this->owner_ = 0;
