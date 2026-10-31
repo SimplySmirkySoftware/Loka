@@ -453,9 +453,69 @@ namespace
     LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
     LOKA_VERIFY(!result.firstRefusal().refused());
   }
+  void clipPlacementOmission(bool refused)
+  {
+    class PlacementProbe : public Probe
+    {
+    public:
+      BoxNode box;
+      PlacementProbe()
+          : Probe("clip-placement", 20),
+            box(Box().size(80, 20).clipChildren().props)
+      {
+      }
+      virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+      {
+        ToolboxScenePlatformController &c = *static_cast<ToolboxScenePlatformController *>(platform);
+        const unsigned depth = c.projectionParentScopes_.activeDepth();
+        while (c.projectionParentScopes_.pushClip(c.projectionParentScopes_.current()))
+        {
+        }
+        const short width = LayoutNode(&box, state, &c, 0);
+        while (c.projectionParentScopes_.activeDepth() > depth)
+          c.projectionParentScopes_.pop();
+        return width;
+      }
+      virtual void render(IPlatformController *platform)
+      {
+        static_cast<ToolboxScenePlatformController *>(platform)->renderClipBox(&box);
+      }
+    } failed;
+    BoxNode empty(Box().clipChildren().props);
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController c(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(c));
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(c.gapLayoutRegistry));
+    c.rootNode_ = refused ? static_cast<Node *>(&failed) : static_cast<Node *>(&empty);
+    window.scenePlatformController_ = &c;
+    window.drawForFlush();
+    BoxNode &box = refused ? failed.box : empty;
+    Rect rect;
+    const ToolboxClipBoxContext *context = static_cast<ToolboxClipBoxContext *>(box.getContext());
+    LOKA_VERIFY(context);
+    LOKA_VERIFY(!context->placement().query(rect));
+    const ToolboxPresentObservation &result = c.debugStats_.lastPresentObservation;
+    LOKA_VERIFY(result.paintFinished());
+    if (refused)
+    {
+      LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
+      LOKA_VERIFY(result.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      refusalSite(result.firstRefusal(), "ToolboxNodeDispatch.cpp:286");
+    }
+    else
+    {
+      LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
+      LOKA_VERIFY(!result.firstRefusal().refused());
+    }
+    c.rootNode_ = 0;
+    window.scenePlatformController_ = 0;
+  }
   void runRefusalPin(const char *mode)
   {
-    if (std::strcmp(mode, "RefusalUnitOmitted") == 0 || std::strcmp(mode, "RefusalUnitLayoutRefused") == 0)
+    if (std::strcmp(mode, "RefusalClipEmpty") == 0 || std::strcmp(mode, "RefusalClipPlacement") == 0)
+      clipPlacementOmission(std::strcmp(mode, "RefusalClipPlacement") == 0);
+    else if (std::strcmp(mode, "RefusalUnitOmitted") == 0 || std::strcmp(mode, "RefusalUnitLayoutRefused") == 0)
       unitSeatOmission(std::strcmp(mode, "RefusalUnitLayoutRefused") == 0);
     else if (std::strcmp(mode, "RefusalEditOffscreen") == 0 || std::strcmp(mode, "RefusalEditVisibleRefused") == 0)
       editOmission(std::strcmp(mode, "RefusalEditOffscreen") == 0);
