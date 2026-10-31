@@ -1574,6 +1574,11 @@ LOKA_TEST(testRequestRingFullRefusalPreservesStorage)
 LOKA_TEST(testRequestRingAdvanceVacatesAndWraps)
 LOKA_TEST(testRequestRingClearResetsStorageAndHead)
 
+LOKA_TEST(testWebURLAcceptedAndPreserved)
+LOKA_TEST(testWebURLRefusalPreservesOutput)
+LOKA_TEST(testWebURLLengthBoundary)
+LOKA_TEST(testWebURLNoneAndEquality)
+
 LOKA_TEST(testItalicOrderAndMergeTable)
 LOKA_TEST(testNullItalicPaintRecording)
 
