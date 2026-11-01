@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_TOOLBOX_SCENE_PLATFORM_CONTROLLER_HPP
+#include "ToolboxNativeFocusMode.hpp"
 #include "ToolboxPresentObservation.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
@@ -50,6 +51,7 @@ class ToolboxPopupMenuContext;
 class ToolboxCellContext;
 class ToolboxEditTextContext;
 class ToolboxTextEditorContext;
+class ToolboxUnicodeTextEditorContext;
 
 namespace loka
 {
@@ -210,6 +212,8 @@ public:
       changed since the last present. */
   void requestStructurePresent();
   void drawFallbackControl(const Rect &rect);
+  ToolboxUnicodeEditorResource *
+  ensureUnicodeTextEditorControl(ToolboxUnicodeTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *context, loka::app::scene::NativeLifetimeHint hint)
   { this->retireEditTextControl(context, hint); }
@@ -292,6 +296,7 @@ private:
   friend class ToolboxPopupMenuContext;
   friend class ToolboxEditTextContext;
   friend class ToolboxTextEditorContext;
+  friend class ToolboxUnicodeTextEditorContext;
   friend class ToolboxRectSurfaceContext;
 
   typedef ToolboxHitLedger::ButtonHit ButtonHit;
@@ -343,6 +348,7 @@ private:
   ToolboxEditTextContext *fallbackFocusContext() const;
   loka::app::scene::FocusLink fallbackFocus_;
   const loka::app::TextShaping textShaping_;
+
 public:
   ToolboxWindow *window_;
 

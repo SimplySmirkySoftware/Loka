@@ -171,12 +171,34 @@ bool ToolboxScenePlatformController::handleTabKey(ToolboxTabDirection direction)
   return true;
 }
 
+/** B1/B1'/B2/B4: one focused row, no search and no copied App phase. */
+bool ToolboxScenePlatformController::syncNativeFocus(NativeFocusMode mode)
+{
+  EditTextControlBinding *row = this->editControls_.focused();
+  if (!row || !row->unicode)
+    return false;
+  const bool eligible = mode == NATIVE_FOCUS_NORMAL && this->window_ && this->window_->isHilited()
+                        && row->editor->hasNativeHandle() && !ParkedContext(row->ownerContext);
+  this->unicodeEditors_.focus(row->unicode, eligible);
+  return eligible;
+}
+void ToolboxScenePlatformController::releaseNativeFocus(loka::app::scene::NodeContext *context)
+{
+  EditTextControlBinding *row = this->editControls_.focused();
+  if (row && row->ownerContext == context)
+    this->unicodeEditors_.focus(row->unicode, false);
+}
+
 bool ToolboxScenePlatformController::offerKeyEvent(const EventRecord &event)
 {
   EditTextControlBinding *row = this->editControls_.focused();
   if (!row || !row->unicode || ParkedContext(row->ownerContext))
     return false;
-  return row->editor->offerKeyEvent(event);
+  ToolboxTabDirection direction;
+  // Tab belongs to the window's traversal path; direction is decoded there.
+  if (QueryToolboxTabKey(static_cast<unsigned char>(event.message), false, direction))
+    return false;
+  return this->syncNativeFocus(NATIVE_FOCUS_NORMAL) && row->editor->offerKeyEvent(event);
 }
 
 bool ToolboxScenePlatformController::handleScrollKey(ToolboxScrollKey key)
@@ -210,22 +232,26 @@ bool ToolboxScenePlatformController::handleKeyDown(char key)
     const ToolboxEditKey kind = OrdinaryEditKey(key);
     switch (kind)
     {
-      case EDIT_KEY_CONSUME: return true;
-      case EDIT_KEY_REFUSE_HIGH: SysBeep(1); return true;
-      case EDIT_KEY_NAVIGATE:
+    case EDIT_KEY_CONSUME:
+      return true;
+    case EDIT_KEY_REFUSE_HIGH:
+      SysBeep(1);
+      return true;
+    case EDIT_KEY_NAVIGATE:
+    {
       {
-        {
-          ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
-          if (door.clipAllocationRefused(focusedEdit->placement))
-            LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
-          TEKey(key, focusedEdit->te);
-        }
-        this->invalidateUnitOverlap(focusedEdit->placement.visible());
-        return true;
+        ToolboxEditDoor door(this->window_->window(), focusedEdit->placement);
+        if (door.clipAllocationRefused(focusedEdit->placement))
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+        TEKey(key, focusedEdit->te);
       }
-      case EDIT_KEY_DELETE_BACKWARD:
-      case EDIT_KEY_DELETE_FORWARD:
-      case EDIT_KEY_INSERT: break;
+      this->invalidateUnitOverlap(focusedEdit->placement.visible());
+      return true;
+    }
+    case EDIT_KEY_DELETE_BACKWARD:
+    case EDIT_KEY_DELETE_FORWARD:
+    case EDIT_KEY_INSERT:
+      break;
     }
     if (!focusedEdit->text) return true;
     this->beginBatchUpdate();
@@ -340,4 +366,10 @@ void ToolboxScenePlatformController::recordEditHit(const Rect &rect,
   this->hitLedger_.editHits_.push_back(hit);
   this->pressLedger_.append(PressRow::EDIT_HIT, this->hitLedger_.editHits_.size() - 1);
   this->bindTextState(text);
+}
+
+bool ToolboxScenePlatformController::handleEditCommand(loka::app::EditVerb verb)
+{
+  EditTextControlBinding *row = this->editControls_.focused();
+  return row && row->unicode && !ParkedContext(row->ownerContext) && row->editor->editVerb(verb);
 }

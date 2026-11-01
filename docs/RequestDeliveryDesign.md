@@ -138,7 +138,10 @@ delegates/deferred selectors, window resize/move and each pending relayout step
 use `MacInputDoor`; its pins (`tests/MacInputDoorTests.mm`) are runtime-verified
 on the macOS rig as recorded in the #977 macOS PR. Toolbox controller mouse/key
 operations (including tracking and commit), render/layout, dirty-render
-fallbacks and idle TextEditor retries use `ToolboxInputDoor`. Its Linux host
+fallbacks and idle TextEditor retries use `ToolboxInputDoor`.
+The same door carries `syncNativeFocus(controller, mode)` at service/modal
+boundaries and `releaseNativeFocus(controller, context)` at park/presentation
+invalidation. `editCommand(controller, verb)` offers Edit verbs to the focused Unicode seat, consuming its staging refusal before the app binding. These entries borrow without pumping and inspect only the focused row. Its Linux host
 pins (`tests/toolbox/host/ToolboxInputDoorHostTests.cpp`) exercise production
 operation bodies with substituted OS calls and geometry traversal; they do
 not establish native Classic timing or layout accuracy. Toolbox evidence and

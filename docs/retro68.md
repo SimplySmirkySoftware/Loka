@@ -373,7 +373,7 @@ public-header includes when the only need is a tiny standard-library operation.
 
 | Flavor | Requirement | Build evidence | Runtime verification | Editor support |
 |---|---|---|---|---|
-| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | Production editors retain TextEdit; MLTE session and resource lifetime are exercised separately. |
+| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | Production Unicode TextEditors install empty read-only MLTE presentations and refuse input and Edit verbs; text projection is staged for a later change. |
 
 The source contracts live in `apple/toolbox/CMakeLists.txt` and
 `apple/toolbox/src/ToolboxUnicodeStartup.cpp`; host tests pin the requirement
@@ -814,3 +814,7 @@ preserves existing snapshot pixels when acquisition is blocked. PaintDamage's
 `present_observe` and `paint_result` lines distinguish the selected snapshot's
 incoming eligibility from its finalized result; see
 [the diagnostic format](../tests/toolbox/PaintDamageStandalone.md).
+
+The Unicode loop handles original suspend/resume facts and scrap conversion, aligns native focus, then offers eligible events to TSM before idle and guarded dispatch.
+Native focus follows service, retry, input, modal, logical focus, park, retire, and presentation-lapse boundaries; the controller ledger owns every object.
+The acceptance app draws empty read-only editors through update, flush, and dirty replay; hidden or partially clipped seats refuse installation and input settles unavailable once.

@@ -5,6 +5,17 @@
 #include <vector>
 namespace TextensionFake
 {
+  struct Call
+  {
+    std::string name;
+    TXNObject object;
+    long argument;
+    Rect frame;
+  };
+  const std::vector<Call> &events();
+  void clearCalls();
+  void service(bool consumed, bool rewrite);
+
   struct Draw
   {
     TXNObject object;

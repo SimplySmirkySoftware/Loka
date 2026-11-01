@@ -1,3 +1,4 @@
+#include "app/EditVerb.hpp"
 #ifndef LOKA_TEST_TOOLBOX_FILE_CHOICE_HOST_HPP
 #define LOKA_TEST_TOOLBOX_FILE_CHOICE_HOST_HPP
 // Native neighbors only: production dialog, input door and present are tested.
@@ -8,6 +9,7 @@
 #include "Quickdraw.h"
 #include <Dialogs.h>
 #include "ToolboxScrollKey.hpp"
+#include "ToolboxNativeFocusMode.hpp"
 #include "ToolboxTabKey.hpp"
 #include "ToolboxPendingDialogs.hpp"
 #include "app/core/DialogResultTransport.hpp"
@@ -49,7 +51,14 @@ public:
   {
     return false;
   }
-  bool handleKeyDown(char) { return false; }
+  bool handleEditCommand(loka::app::EditVerb)
+  {
+    return false;
+  }
+  bool handleKeyDown(char)
+  {
+    return false;
+  }
   bool handleTabKey(ToolboxTabDirection)
   {
     return false;
@@ -58,6 +67,11 @@ public:
   {
     return false;
   }
+  bool syncNativeFocus(NativeFocusMode)
+  {
+    return false;
+  }
+  void releaseNativeFocus(loka::app::scene::NodeContext *) {}
   void idleTextEdits() {}
   void onChange(loka::app::scene::Node *, loka::app::scene::NodeDirtyFlags, bool) {}
   void synchronize() {}
@@ -88,7 +102,15 @@ public:
   CursorOwner cursorOwner_;
   CursorOwner &cursorOwner() { return this->cursorOwner_; }
   bool running_;
-  ToolboxApp(Window &first, Window *second = 0) : WindowAdmissionTestApp(first, second), running_(true) {}
+  ToolboxApp(Window &first, Window *second = 0)
+      : WindowAdmissionTestApp(first, second),
+        running_(true)
+  {
+  }
+  bool syncNativeFocusAll(NativeFocusMode)
+  {
+    return false;
+  }
   void present(ActivationPhase, loka::core::Operation &);
   void addComponent(AppComponent *component) { this->group_->adopt(component); }
   void noGroupTick()

@@ -11,6 +11,18 @@ class ToolboxInputDoor
   typedef loka::app::scene::detail::InputInvocation Invocation;
 
 public:
+  static bool editCommand(ToolboxScenePlatformController &c, loka::app::EditVerb verb)
+  {
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleEditCommand, verb);
+  }
+  static bool syncNativeFocus(ToolboxScenePlatformController &c, NativeFocusMode mode)
+  {
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::syncNativeFocus, mode);
+  }
+  static void releaseNativeFocus(ToolboxScenePlatformController &c, loka::app::scene::NodeContext *context)
+  {
+    Invocation(c).operator()(c, &ToolboxScenePlatformController::releaseNativeFocus, context);
+  }
   static bool mouseDown(ToolboxScenePlatformController &c, const Point &point, const EventRecord &event = EventRecord())
   {
     return Invocation(c).operator()<ToolboxScenePlatformController, bool, const Point &, const EventRecord &>(

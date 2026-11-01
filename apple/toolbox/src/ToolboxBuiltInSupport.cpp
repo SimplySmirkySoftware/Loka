@@ -6,6 +6,7 @@
 #include "context/ToolboxConfirmDialogContext.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
+#include "context/ToolboxUnicodeTextEditorContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "context/ToolboxAttributedTextContext.hpp"
@@ -55,7 +56,11 @@ bool RegisterToolboxBuiltInSupport(ToolboxScenePlatformController &controller)
   if ((capabilities & ToolboxWindowContext::CAP_TEXT_EDIT) != 0)
   {
     ok = RegisterToolboxEditTextNodeHandler(controller.nodeHandlerRegistry_) && ok;
+#if LOKA_TOOLBOX_UNICODE
+    ok = RegisterToolboxUnicodeTextEditorNodeHandler(controller.nodeHandlerRegistry_) && ok;
+#else
     ok = RegisterToolboxTextEditorNodeHandler(controller.nodeHandlerRegistry_) && ok;
+#endif
   }
   else
   {

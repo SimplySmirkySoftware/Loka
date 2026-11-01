@@ -331,7 +331,7 @@ namespace edit_door
       if (std::strcmp(mode, "idle") == 0)
       {
         ToolboxInputDoor::idleTextEdits(f.controller);
-        expected = "ToolboxTextEditorBinding.cpp:122";
+        expected = "ToolboxTextEditorBinding.cpp:127";
       }
       else if (std::strcmp(mode, "sync") == 0)
       {
@@ -355,12 +355,12 @@ namespace edit_door
         f.controller.publishFixturePressOrder();
         const Point point = {5, 25};
         ToolboxInputDoor::mouseDown(f.controller, point);
-        expected = "ToolboxPress.cpp:279";
+        expected = "ToolboxPress.cpp:282";
       }
       else
       {
         ToolboxInputDoor::keyDown(f.controller, std::strcmp(mode, "navigate") == 0 ? 28 : 'x');
-        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:220" : "ToolboxFocus.cpp:252";
+        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:245" : "ToolboxFocus.cpp:278";
       }
       toolbox_host::refuseRegionAttempt = 0;
     }
