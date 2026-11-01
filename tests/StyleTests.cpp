@@ -27,6 +27,61 @@ namespace
   const loka::app::TextStyle kWarningStyle = loka::app::Bold + loka::app::Italic;
 }
 
+void testTextStyleWeightMerge()
+{
+  using namespace loka::app;
+  const TextStyle normal = TextStyle().weight(TEXT_WEIGHT_NORMAL);
+  LOKA_VERIFY(TextStyle() + Bold == Bold);
+  LOKA_VERIFY(Bold + TextStyle() == Bold);
+  LOKA_VERIFY(Bold + normal == normal);
+  LOKA_VERIFY(normal + Bold == Bold);
+}
+
+void testTextStyleWeightEquality()
+{
+  using namespace loka::app;
+  LOKA_VERIFY(TextStyle() != TextStyle().weight(TEXT_WEIGHT_NORMAL));
+  LOKA_VERIFY(TextStyle().weight(TEXT_WEIGHT_BOLD) == Bold);
+  LOKA_VERIFY(TextStyle().weight(TEXT_WEIGHT_NORMAL) != Bold);
+}
+
+void testTextStyleWeightOrdering()
+{
+  using namespace loka::app;
+  const TextStyle unset;
+  const TextStyle normal = TextStyle().weight(TEXT_WEIGHT_NORMAL);
+  LOKA_VERIFY(unset < normal);
+  LOKA_VERIFY(!(normal < unset));
+  LOKA_VERIFY(normal < Bold);
+  LOKA_VERIFY(unset < Bold);
+  const TextStyle unsetItalic = TextStyle().italic();
+  const TextStyle normalPlain = normal + TextStyle().italic(false);
+  LOKA_VERIFY(normalPlain < unsetItalic);
+  LOKA_VERIFY(!(unsetItalic < normalPlain));
+}
+
+void testTextStyleWeightDeclaresFont()
+{
+  using namespace loka::app;
+  LOKA_VERIFY(!TextStyle().declaresFont());
+  LOKA_VERIFY(!TextStyle().color(TEXT_COLOR_RED).declaresFont());
+  LOKA_VERIFY(TextStyle().weight(TEXT_WEIGHT_NORMAL).declaresFont());
+  LOKA_VERIFY(Bold.declaresFont());
+}
+
+void testTextStyleWeightReadingPresence()
+{
+  using namespace loka::app;
+  const TextStyle styles[] = {
+      TextStyle(), TextStyle().weight(TEXT_WEIGHT_NORMAL), Bold, Bold + TextStyle().weight(TEXT_WEIGHT_NORMAL)};
+  for (int i = 0; i < 4; ++i)
+  {
+    const NullTextPaintStyle projected((Text("x") + styles[i]).props);
+    LOKA_VERIFY(projected.weight == (i == 2 ? TEXT_WEIGHT_BOLD : TEXT_WEIGHT_NORMAL));
+    LOKA_VERIFY(styles[i].declaresFont() == (i != 0));
+  }
+}
+
 void testTextStyleMergeAndSizeVocabulary()
 {
   using namespace loka::app;
