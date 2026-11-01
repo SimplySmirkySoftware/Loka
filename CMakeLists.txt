@@ -805,6 +805,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     testUnicodeEditorSameCountReplacement
     testUnicodeEditorNoDiffKeepsCommitted
     testUnicodeEditorNormalization
+    testUnicodeEditorNormalizationFailureCaret
     testUnicodeEditorRepairSelectionFailure
     testUnicodeEditorRepairRecovery
     testUnicodeEditorBufferLifetime

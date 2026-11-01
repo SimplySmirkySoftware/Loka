@@ -545,7 +545,14 @@ EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,
           this->projection_.publish(stamp);
         }
         if (captured.normalized && this->project() != EDITOR_OK)
-          this->repair(before);
+        {
+          // The edit is already committed and published: recover to its caret.
+          // The pre-edit selection would now span the new text.
+          Selection caret;
+          caret.start = caret.end =
+              this->offsetOf(this->node_->props.cursorState()->get(), this->projection_.committed());
+          this->repair(caret);
+        }
       }
     }
     this->phase_ = IDLE;

@@ -875,6 +875,23 @@ static void testUnicodeEditorNormalization()
     LOKA_VERIFY(count("set-data") == 1 && count("new") == 0);
   }
 }
+// An accepted CRLF edit whose normalization re-projection fails is repaired to
+// the committed caret, never to the pre-edit selection over the new text.
+static void testUnicodeEditorNormalizationFailureCaret()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  TXNSelectAll(TextensionFake::latest());
+  TextensionFake::clearCalls();
+  TextensionFake::failNth("set-data", 1, -1);
+  keyInput(f, nativeText("a\r\nb"));
+  LOKA_VERIFY(logicalText(f) == "a\rb");
+  LOKA_VERIFY(count("new") == 1);
+  LOKA_VERIFY(f.context->hasNativeHandle());
+  keyInput(f, nativeText("X"));
+  LOKA_VERIFY(logicalText(f) == "a\rbX");
+}
 static void testUnicodeEditorRepairSelectionFailure()
 {
   TextensionFake::reset();
@@ -1393,6 +1410,7 @@ int main(int argc, char **argv)
   RUN(testUnicodeEditorSameCountReplacement);
   RUN(testUnicodeEditorNoDiffKeepsCommitted);
   RUN(testUnicodeEditorNormalization);
+  RUN(testUnicodeEditorNormalizationFailureCaret);
   RUN(testUnicodeEditorRepairSelectionFailure);
   RUN(testUnicodeEditorRepairRecovery);
   RUN(testUnicodeEditorBufferLifetime);
