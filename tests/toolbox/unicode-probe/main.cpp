@@ -13,6 +13,7 @@
 #include <Memory.h>
 #include <Menus.h>
 #include <Quickdraw.h>
+#include <StandardFile.h>
 #include <TextEdit.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -24,6 +25,11 @@ namespace
   TXNObject gTxn = 0;
   TXNFrameID gFrame = 0;
   WindowPtr gWindow = 0;
+  // P2 / P3 (page 2e): a second window with its own object, so a click on
+  // another window of the same application reaches TXNFocus(false) here.
+  TXNObject gTxn2 = 0;
+  TXNFrameID gFrame2 = 0;
+  WindowPtr gWindow2 = 0;
   bool gQuit = false;
   ByteCount gLastSize = 0;
   ItemCount gLastChange = 0;
@@ -43,7 +49,8 @@ namespace
     kEditCopy = 2,
     kEditPaste = 3,
     kEditSelectAll = 4,
-    kEditDump = 6
+    kEditDump = 6,
+    kEditModal = 7
   };
 
   void logf(const char *fmt, ...)
@@ -58,15 +65,15 @@ namespace
   }
 
   // Hex of the first `limit` UTF-16 units of the buffer, plus size and line count.
-  void dumpBuffer(const char *tag, int limit)
+  void dumpObject(const char *tag, int limit, TXNObject obj)
   {
-    const ByteCount size = TXNDataSize(gTxn);
+    const ByteCount size = TXNDataSize(obj);
     ItemCount lines = 0;
-    const OSStatus lineStatus = TXNGetLineCount(gTxn, &lines);
+    const OSStatus lineStatus = TXNGetLineCount(obj, &lines);
     TXNOffset selStart = 0, selEnd = 0;
-    TXNGetSelection(gTxn, &selStart, &selEnd);
+    TXNGetSelection(obj, &selStart, &selEnd);
     Handle h = 0;
-    const OSStatus getStatus = TXNGetData(gTxn, kTXNStartOffset, kTXNEndOffset, &h);
+    const OSStatus getStatus = TXNGetData(obj, kTXNStartOffset, kTXNEndOffset, &h);
     logf("%s size=%lu lines=%lu(st=%ld) sel=%lu..%lu get=%ld hsize=%ld change=%lu",
          tag,
          (unsigned long)size,
@@ -76,7 +83,7 @@ namespace
          (unsigned long)selEnd,
          (long)getStatus,
          h ? (long)GetHandleSize(h) : -1L,
-         (unsigned long)TXNGetChangeCount(gTxn));
+         (unsigned long)TXNGetChangeCount(obj));
     if (h)
     {
       const long bytes = GetHandleSize(h);
@@ -94,6 +101,35 @@ namespace
       HUnlock(h);
       DisposeHandle(h);
     }
+  }
+
+  void dumpBuffer(const char *tag, int limit)
+  {
+    dumpObject(tag, limit, gTxn);
+  }
+
+  // P2 / P3: read the first object immediately before and after TXNFocus(false),
+  // then once more after one TXNIdle, so a commit or a discard of a pending
+  // Kotoeri composition shows as a size / change-count step at a named point.
+  void probeFocusOff(const char *why)
+  {
+    char tag[64];
+    sprintf(tag, "P-PRE %s", why);
+    dumpBuffer(tag, 32);
+    TXNFocus(gTxn, false);
+    sprintf(tag, "P-FOCUSOFF %s", why);
+    dumpBuffer(tag, 32);
+    TXNIdle(gTxn);
+    sprintf(tag, "P-IDLE %s", why);
+    dumpBuffer(tag, 32);
+  }
+
+  void probeFocusOn(const char *why)
+  {
+    TXNFocus(gTxn, true);
+    char tag[64];
+    sprintf(tag, "P-FOCUSON %s", why);
+    dumpBuffer(tag, 32);
   }
 
   void heapLine(const char *tag)
@@ -191,7 +227,7 @@ namespace
   {
     SetPort(gWindow);
     MoveTo(8, 14);
-    DrawString("\pK1: A Return B   K2: paste from SimpleText   K3: Kotoeri; Cmd-D dump; Cmd-Q quit");
+    DrawString("\pP2: compose, click win2 / other app.  P3: compose, Cmd-M modal / close box.  Cmd-D dump");
   }
 
   void doMenu(long choice)
@@ -220,6 +256,15 @@ namespace
       case kEditDump:
         dumpBuffer("DUMP", 96);
         break;
+      case kEditModal:
+      {
+        probeFocusOff("MODAL");
+        StandardFileReply reply;
+        StandardGetFile(0, -1, 0, &reply);
+        dumpBuffer("P-POST-MODAL", 32);
+        probeFocusOn("MODAL");
+        break;
+      }
       }
       if (st != noErr)
         logf("edit item %d status=%ld", (int)item, (long)st);
@@ -236,7 +281,7 @@ namespace
     AppendMenu(file, "\pQuit/Q");
     InsertMenu(file, 0);
     MenuHandle edit = NewMenu(kMenuEdit, "\pEdit");
-    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D");
+    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D;Modal/M");
     InsertMenu(edit, 0);
     DrawMenuBar();
   }
@@ -247,6 +292,8 @@ namespace
     {
     case nullEvent:
       TXNIdle(gTxn);
+      if (gTxn2)
+        TXNIdle(gTxn2);
       {
         const ByteCount size = TXNDataSize(gTxn);
         const ItemCount change = TXNGetChangeCount(gTxn);
@@ -274,15 +321,22 @@ namespace
         doMenu(MenuSelect(ev.where));
         break;
       case inContent:
-        if (w == gWindow)
+        if (w != FrontWindow())
+          SelectWindow(w);
+        else if (w == gWindow)
           TXNClick(gTxn, &ev);
+        else if (w == gWindow2 && gTxn2)
+          TXNClick(gTxn2, &ev);
         break;
       case inDrag:
         DragWindow(w, ev.where, &qd.screenBits.bounds);
         break;
       case inGoAway:
-        if (TrackGoAway(w, ev.where))
+        if (TrackGoAway(w, ev.where) && w == gWindow)
+        {
+          probeFocusOff("CLOSE");
           gQuit = true;
+        }
         break;
       case inSysWindow:
         SystemClick(&ev, w);
@@ -298,13 +352,28 @@ namespace
         drawInstructions();
         EndUpdate(gWindow);
       }
+      else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
+      {
+        BeginUpdate(gWindow2);
+        TXNUpdate(gTxn2);
+        EndUpdate(gWindow2);
+      }
       break;
     case activateEvt:
       if ((WindowPtr)ev.message == gWindow)
       {
         const bool active = (ev.modifiers & activeFlag) != 0;
-        TXNFocus(gTxn, active);
+        if (active)
+          probeFocusOn("ACTIVATE");
+        else
+          probeFocusOff("DEACTIVATE");
         TXNActivate(gTxn, gFrame, active);
+      }
+      else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
+      {
+        const bool active = (ev.modifiers & activeFlag) != 0;
+        TXNFocus(gTxn2, active);
+        TXNActivate(gTxn2, gFrame2, active);
       }
       break;
     case osEvt:
@@ -316,7 +385,10 @@ namespace
         const OSStatus convertStatus = resumed ? TXNConvertFromPublicScrap() : TXNConvertToPublicScrap();
         logf("%s convert=%ld pastable=%d", resumed ? "RESUME from-public" : "SUSPEND to-public",
              (long)convertStatus, (int)TXNIsScrapPastable());
-        TXNFocus(gTxn, resumed);
+        if (resumed)
+          probeFocusOn("RESUME");
+        else
+          probeFocusOff("SUSPEND");
         TXNActivate(gTxn, gFrame, resumed);
       }
       break;
@@ -386,11 +458,26 @@ int main()
   TXNFocus(gTxn, true);
   TXNActivate(gTxn, gFrame, true);
 
+  Rect bounds2;
+  SetRect(&bounds2, 330, 330, 630, 470);
+  gWindow2 = NewCWindow(0, &bounds2, "\pwin2", true, documentProc, (WindowPtr)-1L, true, 0);
+  Rect frame2;
+  SetRect(&frame2, 4, 4, 280, 120);
+  const OSStatus new2 = TXNNewObject(0, gWindow2, &frame2, kTXNAlwaysWrapAtViewEdgeMask,
+                                     kTXNTextEditStyleFrameType, kTXNUnicodeTextFile, kTXNUnicodeEncoding,
+                                     &gTxn2, &gFrame2, 0);
+  logf("TXNNewObject(win2)=%ld", (long)new2);
+  if (new2 == noErr && gTxn2)
+    TXNSetTXNObjectControls(gTxn2, false, 1, &tag, &data);
+  else
+    gTxn2 = 0;
+  SelectWindow(gWindow);
+
   automaticCases();
   gLastSize = TXNDataSize(gTxn);
   gLastChange = TXNGetChangeCount(gTxn);
-  logf("INTERACTIVE K1: type A Return B; K2: paste from SimpleText; K3: Kotoeri commit + one escape; Cmd-D = dump; "
-       "Cmd-Q = quit");
+  logf("INTERACTIVE P2: compose (Kotoeri), click win2 / click another app; P3: compose, Cmd-M modal, close box; "
+       "Cmd-D = dump; Cmd-Q = quit");
   drawInstructions();
 
   while (!gQuit)
@@ -401,6 +488,8 @@ int main()
   }
   dumpBuffer("END", 96);
   heapLine("end");
+  if (gTxn2)
+    TXNDeleteObject(gTxn2);
   TXNDeleteObject(gTxn);
   TXNTerminateTextension();
   if (gLog)
