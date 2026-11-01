@@ -2143,12 +2143,22 @@ void testMacTextItalicTraits()
   {
     MacScenePlatformController controller((void *)root, loka::macos::DefaultRailMetrics());
     const TextStyle styles[] = {TextStyle(), TextStyle().italic(false), TextStyle().italic(true)};
+    NSFontManager *manager = [NSFontManager sharedFontManager];
+    NSFont *plain = nil;
     for (int i = 0; i < 3; ++i)
     {
       const TextDefinitionWithAttr text = Text("italic") + styles[i];
       NSFont *font = (NSFont *)controller.textFont(text.props.resolvedTextStyle());
       LOKA_VERIFY(font != nil);
-      LOKA_VERIFY((([[NSFontManager sharedFontManager] traitsOfFont:font] & NSItalicFontMask) != 0) == (i == 2));
+      plain = i == 0 ? font : plain;
+      // The italic slot holds what the OS offers for the plain font: 10.9's
+      // Lucida Grande has no italic face, so the trait branch is skipped there.
+      NSFont *offered = i == 2 ? [manager convertFont:plain toHaveTrait:NSItalicFontMask] : nil;
+      const bool expectItalic = offered && ([manager traitsOfFont:offered] & NSItalicFontMask) != 0;
+      if (i == 2 && !expectItalic)
+        std::printf("[skip] italic trait: %s has no italic face here\n", [[plain fontName] UTF8String]);
+      LOKA_VERIFY((([manager traitsOfFont:font] & NSItalicFontMask) != 0) == expectItalic);
+      LOKA_VERIFY(i < 2 || [font isEqual:(offered ? offered : plain)]);
     }
   }
   [root release];
