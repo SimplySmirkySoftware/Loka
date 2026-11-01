@@ -156,6 +156,7 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacRelayoutDisplayTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacGroundTests.mm
     ${PROJECT_SOURCE_DIR}/tests/MacTextColorTests.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacTextVersionTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacGround.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacDisplayAppearance.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/platform/MacAppLocation.mm

@@ -306,3 +306,8 @@ LOKA_TEST(testMacScrollRequestDeferredMount)
 LOKA_TEST(testMacScrollRequestPendingLayoutOuterBorrow)
 
 LOKA_TEST(testMacTextItalicTraits)
+
+LOKA_TEST(testMacTextVersionMigration)
+LOKA_TEST(testMacTextVersionD1)
+LOKA_TEST(testMacTextVersionD2)
+LOKA_TEST(testMacTextVersionD3)
