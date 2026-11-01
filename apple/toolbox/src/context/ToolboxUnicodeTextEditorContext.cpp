@@ -499,7 +499,11 @@ EditorResult ToolboxUnicodeTextEditorContext::readBack(const Selection &before, 
   if (!op.hasSameContext())
     return result;
   captured.accepted = result == EDITOR_OK;
-  captured.structure = diff.before() != diff.after();
+  // The document's replace is UPDATE(first) + REMOVE x (before - 1) + INSERT x
+  // (after - 1) (TextEditorDocument.cpp ReplaceOpCursor), so the list's structure
+  // revision advances whenever more than one row is touched on either side,
+  // including a same-count replacement; the content revision always advances.
+  captured.structure = diff.before() > 1 || diff.after() > 1;
   return result;
 }
 EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,

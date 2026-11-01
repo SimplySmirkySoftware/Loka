@@ -42,9 +42,12 @@ resource 'SIZE' (-1) {
 	1024 * 1024,
 	1024 * 1024
 #elif LOKA_TOOLBOX_UNICODE
-	/* Provisional MLTE partition; replace with measured peaks in PR 2b-2. */
-	12 * 1024 * 1024,	/* preferred */
-	8 * 1024 * 1024	/* minimum */
+	/* Provisional MLTE partition; replace with measured peaks in PR 2b-2.
+	   The 4 MiB document profile reserves its committed and candidate
+	   snapshots (8 MiB) at attach, before the row arrays, the MLTE object
+	   and the code; the minimum must leave room for all of them. */
+	24 * 1024 * 1024,	/* preferred */
+	16 * 1024 * 1024	/* minimum */
 #elif LOKA_CLASSIC_68K
 	704 * 1024,	/* preferred */
 	480 * 1024	/* minimum */

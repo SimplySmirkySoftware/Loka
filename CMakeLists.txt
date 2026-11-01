@@ -802,6 +802,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     testUnicodeEditorNewObjectProjection
     testUnicodeEditorReadBackRefusals
     testUnicodeEditorAcceptedEdits
+    testUnicodeEditorSameCountReplacement
     testUnicodeEditorNoDiffKeepsCommitted
     testUnicodeEditorNormalization
     testUnicodeEditorRepairSelectionFailure

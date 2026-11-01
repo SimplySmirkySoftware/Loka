@@ -822,6 +822,28 @@ static void testUnicodeEditorAcceptedEdits()
   LOKA_VERIFY(logicalText(f) == "\xF0\x9F\x98\x80");
   LOKA_VERIFY(f.cursor.state()->get().column == 4);
 }
+// A same-count multi-line replacement is REMOVE + INSERT in the document (its
+// structure revision advances although the line count does not); it is still
+// this door's own commit, so no re-projection may follow and native undo stays.
+static void testUnicodeEditorSameCountReplacement()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  TXNSelectAll(TextensionFake::latest());
+  keyInput(f, nativeText("a\rb"));
+  LOKA_VERIFY(logicalText(f) == "a\rb");
+  TXNSelectAll(TextensionFake::latest());
+  TextensionFake::clearCalls();
+  const ListRevision before = f.lines.revision().get();
+  keyInput(f, nativeText("c\rd"));
+  LOKA_VERIFY(logicalText(f) == "c\rd");
+  LOKA_VERIFY(f.lines.revision().get().structure == before.structure + 1);
+  LOKA_VERIFY(count("set-data") == 0 && count("new") == 0);
+  LOKA_VERIFY(f.context->editVerb(EDIT_UNDO));
+  LOKA_VERIFY(logicalText(f) == "a\rb");
+  LOKA_VERIFY(count("set-data") == 0 && count("new") == 0);
+}
 static void testUnicodeEditorNoDiffKeepsCommitted()
 {
   TextensionFake::reset();
@@ -1368,6 +1390,7 @@ int main(int argc, char **argv)
   RUN(testUnicodeEditorNewObjectProjection);
   RUN(testUnicodeEditorReadBackRefusals);
   RUN(testUnicodeEditorAcceptedEdits);
+  RUN(testUnicodeEditorSameCountReplacement);
   RUN(testUnicodeEditorNoDiffKeepsCommitted);
   RUN(testUnicodeEditorNormalization);
   RUN(testUnicodeEditorRepairSelectionFailure);
