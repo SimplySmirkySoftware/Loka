@@ -814,3 +814,14 @@ preserves existing snapshot pixels when acquisition is blocked. PaintDamage's
 `present_observe` and `paint_result` lines distinguish the selected snapshot's
 incoming eligibility from its finalized result; see
 [the diagnostic format](../tests/toolbox/PaintDamageStandalone.md).
+
+Placement validity records whether a leaf completed layout. Each admitted leaf
+compares its full spatial descriptor before overwriting its own placement;
+this is separate from content-input and paint-history checks. The viewport
+ledger distinguishes **placed** layout facts from the **presented** certificate
+written at CLEAN render settlement. Its `copyDomain` is the content rectangle
+intersected with the port; missing port evidence stays absent. At the next move,
+`baseline=none|stale|valid` describes that certificate against the new layout.
+Copy admission requires both CLEAN eligibility and a valid baseline; this
+observation still always selects erase. `present_observe` also reports
+`not_translated` and `enclosing_clip` from shipping observation values.

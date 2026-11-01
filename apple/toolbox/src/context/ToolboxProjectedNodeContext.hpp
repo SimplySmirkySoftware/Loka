@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_PROJECTED_NODE_CONTEXT_HPP
 
 #include "app/scene/projection/NativeNodeContext.hpp"
+#include "context/ToolboxLeafPlacement.hpp"
 
 class ToolboxScenePlatformController;
 
@@ -9,7 +10,10 @@ class ToolboxScenePlatformController;
     "which window/root am I in" tag used when recording hits and text runs
     into the controller ledgers. The wall
     (ToolboxScenePlatformController::prepareProjectedLayout) re-applies it on
-    every projection sweep, so cells never touch it. */
+    every projection sweep, so cells never touch it.
+    Successful leaf layout compares the still-old fields, writes its own fields,
+    then completes placement. Admission requires both the classifier and validity:
+    a kind that never completes stays refused. ClipBox uses the same validity value. */
 class ToolboxProjectedNodeContext : public loka::app::scene::NativeNodeContext,
                                     public loka::app::scene::IBoundaryTaggedContext
 {
@@ -46,6 +50,17 @@ public:
   virtual void onFactChanged(loka::app::scene::NodeLifecycleFact previous, loka::app::scene::NodeLifecycleFact next);
 
 protected:
+  /** Once per successful leaf layout visit; O(1), reads only this context's geometry. */
+  void comparePlacement(const ToolboxLeafGeometry &previous, const ToolboxLeafGeometry &next);
+  void completePlacement()
+  {
+    this->validity_.complete();
+  }
+  /** Placement-changing failure or non-attached fact; O(1), no rows. */
+  void invalidatePlacement()
+  {
+    this->validity_.invalidate();
+  }
   virtual void retireNativeProjection() {}
   ToolboxScenePlatformController *controller() const
   {
@@ -56,6 +71,7 @@ protected:
 
 private:
   ToolboxScenePlatformController *controller_;
+  ToolboxPlacementValidity validity_;
 };
 
 #endif // LOKA_TOOLBOX_PROJECTED_NODE_CONTEXT_HPP

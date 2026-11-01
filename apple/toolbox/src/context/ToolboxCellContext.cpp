@@ -142,6 +142,7 @@ short ToolboxCellContext::layout(loka::app::scene::IPlatformController *controll
 {
   if (!node_)
   {
+    this->invalidatePlacement();
     return 0;
   }
   this->widthFromText_ = state.width <= 0;

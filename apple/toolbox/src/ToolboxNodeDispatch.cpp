@@ -66,9 +66,6 @@ namespace
     case NODE_KIND_UNKNOWN:
       // Transparent components paint nothing; custom leaves may read undeclared state.
       return !node.asProjectedLayoutNode() && !node.asCanvasNode();
-    case NODE_KIND_BOX:
-      // Child clipping can change without leaf inputs.
-      return node.asBoxNode()->props.childClip_ != layout::CHILD_CLIP_OWN_RECT;
     case NODE_KIND_IMAGE_VIEW:
     {
       // COVER PICTs have no trustworthy native clip until #1560.
@@ -76,14 +73,17 @@ namespace
       return !(props.hasAttr_ && props.attr_.hasFitValue_ && props.attr_.fitValue_ == IMAGE_FIT_COVER);
     }
     case NODE_KIND_STACK:
-    case NODE_KIND_CELL:
+    case NODE_KIND_BOX:
     case NODE_KIND_CARD:
     case NODE_KIND_CARD_BAND:
     case NODE_KIND_TEXT:
     case NODE_KIND_ATTRIBUTED_TEXT:
     case NODE_KIND_BUTTON:
-    case NODE_KIND_SCROLL_BAR:
       return true;
+    case NODE_KIND_CELL:
+    case NODE_KIND_SCROLL_BAR:
+      // No placement door / native and fallback drawing not audited.
+      return false;
     case NODE_KIND_SCROLL_VIEW:
       // Nested viewport.
       return false;
@@ -278,13 +278,17 @@ namespace
       {
         rect.right = ClipFarEdge(rect.left, width);
         rect.bottom = ClipFarEdge(rect.top, height);
-        context->setPlacement(ToolboxClipPlacement(rect));
+        context->setPlacement(ToolboxClipPlacement(rect), controller->activeViewportContent_);
       }
       else
       {
-        if (width > 0 && height > 0)
+        if (!flagged || width <= 0 || height <= 0)
+          context->setPlacement(ToolboxClipPlacement(), controller->activeViewportContent_);
+        else
+        {
           LOKA_PAINT_REFUSE(*controller, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
-        context->setPlacement(ToolboxClipPlacement());
+          context->refusePlacement();
+        }
       }
     }
     return width;

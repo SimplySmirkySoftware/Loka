@@ -11,7 +11,7 @@
 #include "ToolboxTabKey.hpp"
 #include "ToolboxPendingDialogs.hpp"
 #include "app/core/DialogResultTransport.hpp"
-struct Point { short v, h; };
+
 class CursorOwner
 {
 public:

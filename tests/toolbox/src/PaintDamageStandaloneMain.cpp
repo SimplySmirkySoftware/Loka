@@ -2147,6 +2147,13 @@ namespace
           const bool newWhite = GetPixel(kRootX + 20, kScrollSurfaceY + 8) == 0;
           self->recordArm("viewport-scroll-replay-setup",
                           scrolled && foundText && oldBlack && newWhite, WRITE);
+          const ToolboxPresentObservation &placement = controller->debugStatsForTesting().lastMovedPresentObservation;
+          std::fprintf(self->log_,
+                       "viewport_placement not_translated=%u baseline=%s enclosing_clip=%d\r",
+                       placement.notTranslated(),
+                       ToolboxBaselineStatusName(placement.baseline()),
+                       placement.enclosingClip() ? 1 : 0);
+          self->recordArm("viewport-placement-translated", placement.notTranslated() == 0, WRITE);
         }
         self->initial_ = controller->debugStatsForTesting();
         node->advance();
@@ -2941,7 +2948,8 @@ namespace
         std::fprintf(self->log_,
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
                      "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
-                     "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s\r",
+                     "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s "
+                     "not_translated=%u baseline=%s enclosing_clip=%d\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
                      observation.viewports(),
@@ -2961,7 +2969,10 @@ namespace
                      ToolboxPaintRefusalName(observation.outsideRefusal().reason),
                      observation.outsideRefusal().refused() && observation.outsideRefusal().site
                          ? observation.outsideRefusal().site
-                         : "-");
+                         : "-",
+                     observation.notTranslated(),
+                     ToolboxBaselineStatusName(observation.baseline()),
+                     observation.enclosingClip() ? 1 : 0);
         std::fprintf(self->log_, "%s\r", ToolboxPaintResultText(observation).c_str());
         // Measured on MAME maciix, 2026-10-31: the preceding composition
         // replay did not cover the window (rule 4). No covering pass intervenes,
@@ -3016,12 +3027,16 @@ namespace
       {
         const ToolboxPresentObservation &observation = stats.lastMovedPresentObservation;
         std::fprintf(self->log_,
-                     "present_content refusal=%s content_inputs=%u dy=%d eligibility_in=%s %s\r",
+                     "present_content refusal=%s content_inputs=%u dy=%d eligibility_in=%s %s "
+                     "not_translated=%u baseline=%s enclosing_clip=%d\r",
                      ToolboxPresentRefusalName(observation.refusal()),
                      observation.contentInputs(),
                      observation.dy(),
                      ToolboxPaintEligibilityName(stats.lastMovedEntryEligibility),
-                     ToolboxPaintResultText(observation).c_str());
+                     ToolboxPaintResultText(observation).c_str(),
+                     observation.notTranslated(),
+                     ToolboxBaselineStatusName(observation.baseline()),
+                     observation.enclosingClip() ? 1 : 0);
         self->recordArm("viewport-content-dirty-refused",
                         observation.contentInputs() >= 1 && observation.refusal() == TOOLBOX_PRESENT_CONTENT_INPUTS
                             && observation.dy() == 160 && stats.lastMovedEntryEligibility == TOOLBOX_PAINT_CLEAN,

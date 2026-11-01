@@ -254,7 +254,8 @@ paint/clip contract is not admitted), `walk_reasons` (full requests arriving
 during layout), and `phase_bound` (successful visited CardBand leaves whose
 8x8 shadow stencil is anchored to window coordinates). A phase-bound move
 whose vertical delta is not a multiple of 8 reports `dither_phase`, after
-`unsupported_kind` and before damage refusal. The Offscreen column has no
+`unsupported_kind`, `not_translated`, `no_presented_baseline`, and
+`enclosing_clip`, and before damage refusal. The Offscreen column has no
 CardBand and its reveal is 160 = 8 × 20, so neither arm changes.
 Counts cover visited nodes only: band windows may skip rows,
 and only a successfully moved viewport contributes its local counts. They are
@@ -281,3 +282,12 @@ render (for example, allocating the grow-box clip) can lower the live eligibilit
 after a clean published result, so the next admission can enter refused.
 The tracked target audit requires delegator capture; Linux does not establish its
 new values.
+
+Placement observation appends `not_translated=<n> baseline=none|stale|valid
+enclosing_clip=0|1` to `present_observe`. Full leaf rectangles and anchors are
+compared before layout writes; paint clipping does not change that comparison.
+The baseline is the first moved viewport's evaluation of its last CLEAN
+certificate, including the port intersection (`copyDomain`). REFUSED settlement
+clears every certificate. An enclosing ClipBox is observed separately. These
+values run in shipping builds; formatting alone is diagnostic.
+The updated target measurements and audit remain pending the delegator's run.

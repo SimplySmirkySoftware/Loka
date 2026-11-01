@@ -3,6 +3,7 @@
 
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include <Quickdraw.h>
+#include "ToolboxPresentObservation.hpp"
 
 /** Completed latest placement: a window-coordinate rectangle, or no clip. */
 class ToolboxClipPlacement
@@ -44,14 +45,41 @@ public:
   {
     return this->placement_;
   }
-  /** Replace the latest placement, including none after an unflagged or refused placement. */
-  void setPlacement(const ToolboxClipPlacement &placement)
+  /** Dispatch completes once per clip visit: compare, write, complete. O(1), own fields only. */
+  void setPlacement(const ToolboxClipPlacement &placement, ToolboxViewportContentObservation *content = 0)
   {
+    if (content)
+    {
+      Rect previous, next;
+      const bool had = this->placement_.query(previous);
+      const bool has = placement.query(next);
+      bool translated = this->validity_.present() && content->motion().hasPrevious;
+      if (translated && had && has)
+      {
+        const Point delta = content->motion().pixelDelta;
+        const ToolboxLeafGeometry before = {previous, {previous.top, previous.left}, 0};
+        const ToolboxLeafGeometry after = {next, {next.top, next.left}, 0};
+        translated = before.translated(delta).equals(after);
+      }
+      else
+        translated = translated && !had && !has;
+      if (!translated)
+        content->noteNotTranslated();
+    }
     this->placement_ = placement;
+    this->validity_.complete();
+  }
+  /** A refused visit draws none as before, but provides no comparison baseline. O(1). */
+  void refusePlacement()
+  {
+    this->placement_ = ToolboxClipPlacement();
+    this->validity_.invalidate();
   }
 
 private:
   ToolboxClipPlacement placement_;
+  /** Same value as the projected base; ClipBox is not a projected context. */
+  ToolboxPlacementValidity validity_;
 };
 
 bool IsToolboxClipBoxType(const void *key);
