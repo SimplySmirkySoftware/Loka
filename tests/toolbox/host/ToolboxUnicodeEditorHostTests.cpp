@@ -170,7 +170,7 @@ static void placement()
     Fixture f;
     f.layout(0, 0, 200, 80);
     f.render();
-    LOKA_VERIFY(f.context->hasNativeHandle()); // window-edge frame extends one pixel past the port
+    LOKA_VERIFY(f.context->hasNativeHandle()); // window-edge seat: the frame stays inside the port
     TextensionFake::clearCalls();
     f.render();
     LOKA_VERIFY(count("bounds") == 0 && count("new") == 0);
@@ -180,6 +180,36 @@ static void placement()
     f.render();
     LOKA_VERIFY(count("bounds") == 1);
   }
+}
+/** A seat on a port edge yields a frame one pixel inside that edge; an interior
+    seat keeps the TE geometry. Textension shows no caret and no active bar for
+    a frame that spans the port's width (Mac OS 9.2). */
+static Rect lastBounds()
+{
+  const std::vector<TextensionFake::Call> &events = TextensionFake::events();
+  for (std::size_t i = events.size(); i != 0; --i)
+    if (events[i - 1].name == "bounds")
+      return events[i - 1].frame;
+  LOKA_VERIFY(!"a bounds call was recorded");
+  return Rect();
+}
+static void edgeInset()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.layout(0, 0, 360, 80); // the fixture port is 360 x 260
+  f.render();
+  LOKA_VERIFY(f.context->hasNativeHandle());
+  const Rect edge = TextensionFake::creations().back().frame;
+  LOKA_VERIFY(edge.top == 1 && edge.left == 1 && edge.bottom == 80 && edge.right == 359);
+  f.layout(10, 20, 200, 80);
+  f.render();
+  const Rect interior = lastBounds();
+  LOKA_VERIFY(interior.top == 20 && interior.left == 10 && interior.bottom == 100 && interior.right == 210);
+  f.layout(0, 180, 360, 80); // bottom edge, right edge, size box
+  f.render();
+  const Rect bottom = lastBounds();
+  LOKA_VERIFY(bottom.top == 180 && bottom.left == 1 && bottom.right == 359 && bottom.bottom == 246);
 }
 static void sizeBox()
 {
@@ -663,6 +693,7 @@ int main(int argc, char **argv)
   name()
   RUN(allocation);
   RUN(placement);
+  RUN(edgeInset);
   RUN(input);
   RUN(park);
   RUN(loop);
