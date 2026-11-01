@@ -474,15 +474,45 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
   add_executable(LokaToolboxUnicodeStartupTests
     tests/toolbox/host/ToolboxUnicodeStartupHostTests.cpp
-    apple/toolbox/src/ToolboxUnicodeStartup.cpp)
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp)
   target_include_directories(LokaToolboxUnicodeStartupTests PRIVATE
-    tests/toolbox/host/startup tests/toolbox/host/oom apple/toolbox/src tests)
+    tests/toolbox/host/unicode tests/toolbox/host/startup tests/toolbox/host tests/toolbox/host/oom apple/toolbox/src tests)
   target_compile_definitions(LokaToolboxUnicodeStartupTests PRIVATE LOKA_TOOLBOX_UNICODE=1)
-  target_compile_options(LokaToolboxUnicodeStartupTests PRIVATE -fno-exceptions -fno-rtti)
+  target_compile_options(LokaToolboxUnicodeStartupTests PRIVATE -fno-exceptions -fno-rtti -Wno-multichar)
   loka_enable_warnings(LokaToolboxUnicodeStartupTests)
   set_target_properties(LokaToolboxUnicodeStartupTests PROPERTIES
     CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxUnicodeStartupTests COMMAND LokaToolboxUnicodeStartupTests)
+
+  add_executable(LokaToolboxUnicodeLedgerTests
+    tests/toolbox/host/ToolboxUnicodeLedgerHostTests.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp
+    tests/TestingHooks.cpp
+    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
+    apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp)
+  target_sources(LokaToolboxUnicodeLedgerTests PRIVATE
+    tests/toolbox/host/ToolboxUnicodeTeardownHostTests.cpp
+    tests/platform/null/NullPlatformContext.cpp
+    tests/platform/null/NullScenePlatformController.cpp
+    tests/platform/null/context/NullButtonContext.cpp
+    tests/platform/null/context/NullEditTextContext.cpp
+    tests/platform/null/context/NullTextEditorContext.cpp
+    tests/platform/null/context/NullScrollBarContext.cpp
+    tests/platform/null/context/NullTextMetrics.cpp
+    tests/platform/null/context/NullAttributedTextContext.cpp
+    tests/platform/null/context/NullTextContext.cpp
+    tests/platform/null/context/NullRectSurfaceContext.cpp)
+  target_include_directories(LokaToolboxUnicodeLedgerTests PRIVATE
+    tests/toolbox/host/unicode tests/toolbox/host/startup tests/toolbox/host
+    tests/toolbox/host/oom apple/toolbox/src tests)
+  target_compile_definitions(LokaToolboxUnicodeLedgerTests PRIVATE LOKA_TOOLBOX_UNICODE=1)
+  target_compile_options(LokaToolboxUnicodeLedgerTests PRIVATE -fno-exceptions -fno-rtti -Wno-multichar
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxUnicodeHost.hpp)
+  target_link_libraries(LokaToolboxUnicodeLedgerTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxUnicodeLedgerTests)
+  set_target_properties(LokaToolboxUnicodeLedgerTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxUnicodeLedgerTests COMMAND LokaToolboxUnicodeLedgerTests)
 
   add_executable(LokaToolboxOutOfMemoryTests
     tests/toolbox/host/ToolboxOutOfMemoryHostTests.cpp

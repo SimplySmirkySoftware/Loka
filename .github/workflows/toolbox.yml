@@ -264,7 +264,9 @@ jobs:
               python3 tools/ci/check_pef_imports.py \
                 "$build_dir/example/SimpleText/LokaSimpleTextPPC.pef" InterfaceLib
               python3 tools/ci/check_pef_imports.py \
-                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.pef" InterfaceLib
+                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.pef" InterfaceLib Textension
+              python3 tools/ci/check_pef_imports.py \
+                "$build_dir/tests/toolbox/unicode-lifecycle/LokaToolboxUnicodeLifecycle.pef" InterfaceLib Textension
               python3 tools/ci/check_toolbox_startup_wiring.py \
                 --nm /Retro68-build/toolchain/bin/powerpc-apple-macos-nm \
                 "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.xcoff" \
