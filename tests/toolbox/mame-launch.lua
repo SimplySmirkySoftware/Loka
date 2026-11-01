@@ -323,6 +323,8 @@ local function editorBarTransport()
                     and mem:read_u8(control + 16) ~= 0 and (maximum > 0) == active then
                     -- GrafPort.portBits.bounds is in local coordinates; negate its
                     -- origin to convert the audited local point to screen coordinates.
+                    -- This point is just above the down arrow; adding 16 gives
+                    -- bottom - 8, the centre of its 16-pixel square.
                     return left + 8 - signed(window + 10), bottom - 24 - signed(window + 8),
                         top - signed(window + 8), signed(control + 18), maximum
                 end
@@ -342,6 +344,45 @@ local function editorBarTransport()
         error("editor bar did not reach requested presentation")
     end
     return mem, barPoint, awaitBar
+end
+
+if os.getenv("LOKA_SCENARIO_CELL") == "smirkycard/laptop-arrow" then
+    local inputOk, inputError = pcall(function()
+        local mem, barPoint, awaitBar = editorBarTransport()
+        local _, _, _, _, maximum = awaitBar(true, 0)
+        assert(maximum > 0, "Tall list must have a scroll range")
+        -- The first layout exposes a bar while thirteen pictures load for
+        -- roughly 30 seconds. Wait for five consecutive stable one-second
+        -- samples so the single click acts on the completed list's range.
+        local stableSeconds = 0
+        for _ = 1, 90 do
+            emu.wait(1)
+            local x, _, _, _, currentMaximum = barPoint(true)
+            if x and currentMaximum == maximum then
+                stableSeconds = stableSeconds + 1
+            else
+                stableSeconds = 0
+            end
+            maximum = currentMaximum
+            if stableSeconds == 5 then break end
+        end
+        if stableSeconds < 5 then
+            say("laptop-arrow range did not settle within 90 seconds")
+            return
+        end
+        local x, y = barPoint(true)
+        assert(x, "Tall list bar disappeared")
+        y = y + 16 -- bottom - 8: centre of the down arrow, not the page track.
+        mem:write_u16(0x828, y); mem:write_u16(0x82A, x)
+        mem:write_u16(0x82C, y); mem:write_u16(0x82E, x)
+        mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+        emu.wait(0.2)
+        local button = field(":macadb:MOUSE0", "Mouse Button 0")
+        button:set_value(1); emu.wait(0.1); button:clear_value(); emu.wait(1)
+        local _, _, _, value = awaitBar(true)
+        assert(value > 0, "Tall list arrow did not advance")
+    end)
+    if not inputOk then say("laptop-arrow input failed: " .. tostring(inputError)) end
 end
 
 if os.getenv("LOKA_SCENARIO_CELL") == "smirkbench/text-editor-keys" then

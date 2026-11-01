@@ -213,7 +213,7 @@ rectangles; it cannot establish the real Control Manager's invalidation behavior
 Runtime red/green verification and the tracked-log update are pending the
 #1574 delegator's MAME run. Rebuild with the helper's validation removed for
 the red run, then restore it for green. Do not generate expected audit lines
-from the source: capture the real run. The 38-cell scenario bundle is expected
+from the source: capture the real run. The 39-cell scenario bundle is expected
 to remain byte-identical.
 
 ## Full-draw scroll observation (#1043 B2)
