@@ -50,7 +50,8 @@ namespace
     kEditPaste = 3,
     kEditSelectAll = 4,
     kEditDump = 6,
-    kEditModal = 7
+    kEditModal = 7,
+    kEditGetFile = 8
   };
 
   void logf(const char *fmt, ...)
@@ -227,7 +228,7 @@ namespace
   {
     SetPort(gWindow);
     MoveTo(8, 14);
-    DrawString("\pP2: compose, click win2 / other app.  P3: compose, Cmd-M modal / close box.  Cmd-D dump");
+    DrawString("\pP2: compose, click win2 / other app.  P3: Cmd-M dialog / Cmd-G getfile / close box");
   }
 
   void doMenu(long choice)
@@ -258,6 +259,31 @@ namespace
         break;
       case kEditModal:
       {
+        // The Loka confirm dialog's shape: NewDialog with a built item list and
+        // ModalDialog, no text field, no TSMTE document.
+        probeFocusOff("DIALOG");
+        unsigned char items[64];
+        unsigned char *o = items;
+        *o++ = 0; *o++ = 0; // one item (count minus one)
+        *o++ = 0; *o++ = 0; *o++ = 0; *o++ = 0; // item handle placeholder
+        const Rect ok = {60, 120, 80, 200};
+        memcpy(o, &ok, 8); o += 8;
+        *o++ = ctrlItem + btnCtrl;
+        *o++ = 2; *o++ = 'O'; *o++ = 'K';
+        Handle h = NewHandle(o - items);
+        memcpy(*h, items, o - items);
+        Rect b;
+        SetRect(&b, 160, 140, 480, 240);
+        DialogPtr d = NewDialog(0, &b, "\p", true, dBoxProc, (WindowPtr)-1L, false, 0, h);
+        short item = 0;
+        do { ModalDialog(0, &item); } while (item != 1);
+        DisposeDialog(d);
+        dumpBuffer("P-POST-DIALOG", 32);
+        probeFocusOn("DIALOG");
+        break;
+      }
+      case kEditGetFile:
+      {
         probeFocusOff("MODAL");
         StandardFileReply reply;
         StandardGetFile(0, -1, 0, &reply);
@@ -281,7 +307,7 @@ namespace
     AppendMenu(file, "\pQuit/Q");
     InsertMenu(file, 0);
     MenuHandle edit = NewMenu(kMenuEdit, "\pEdit");
-    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D;Modal/M");
+    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D;Modal/M;GetFile/G");
     InsertMenu(edit, 0);
     DrawMenuBar();
   }
