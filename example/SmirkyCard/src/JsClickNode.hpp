@@ -58,7 +58,7 @@ namespace smirkycard
     loka::core::String testId;
   };
 
-  /** Like MineCellNode, one component owns one click binding. Detach withdraws
+  /** Like JsToolbarNode, one component owns its click bindings. Detach withdraws
       the binding before the ancestor card releases its handler records.
       Destruction never dereferences the borrowed record. */
   class JsClickNode : public loka::app::scene::ComponentNodeWithProps<JsClickProps>

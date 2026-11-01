@@ -19,6 +19,7 @@ namespace loka
 namespace smirkycard
 {
   class JsCardNode;
+  struct JsToolbarRow;
 
   /** Read a plain style dictionary; leave out unchanged and throw on refusal. */
   bool readTextStyle(JSContext *context, JSValueConst dict, loka::app::TextStyle &out);
@@ -32,6 +33,7 @@ namespace smirkycard
   struct IJsNodeLowering
   {
     const char *name;
+    const char *parent;
     int kind;
     virtual ~IJsNodeLowering() {}
     virtual JSValue build(JSContext *context, int argc, JSValueConst *argv) = 0;
@@ -61,6 +63,8 @@ namespace smirkycard
     bool registerGlobal(const IJsGlobal &global);
     IJsNodeLowering *lookup(int kind) const;
     bool install(JSContext *context) const;
+    /** Validate descriptor facts at build and lower; seat provenance is card-owned. */
+    static bool readToolbarDescriptor(JSContext *context, JSValueConst tree, JsToolbarRow &row);
 
   private:
     struct LoweringEntry;

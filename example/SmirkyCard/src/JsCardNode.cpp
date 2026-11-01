@@ -5,6 +5,8 @@
 
 #include "CardNodes.hpp"
 #include "JsClickNode.hpp"
+#include "JsToolbarNode.hpp"
+#include <climits>
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "JsOwnProperties.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -1091,18 +1093,82 @@ namespace smirkycard
   }
   namespace
   {
-    bool treeString(JSContext *ctx, JSValueConst tree, const char *name, loka::core::String &out)
+    // Descriptor payloads are data, not getters that can change between validation and use.
+    JSValue toolbarValue(JSContext *ctx, JSValueConst tree, const char *name)
     {
-      JSValue value = JS_GetPropertyStr(ctx, tree, name);
+      JSAtom atom = JS_NewAtom(ctx, name);
+      if (atom == JS_ATOM_NULL)
+        return JS_EXCEPTION;
+      JSPropertyDescriptor property;
+      const int found = JS_GetOwnProperty(ctx, &property, tree, atom);
+      JS_FreeAtom(ctx, atom);
+      if (found <= 0)
+        return found < 0 ? JS_EXCEPTION : JS_UNDEFINED;
+      const bool accessor = !JS_IsUndefined(property.getter) || !JS_IsUndefined(property.setter);
+      JS_FreeValue(ctx, property.getter);
+      JS_FreeValue(ctx, property.setter);
+      if (accessor)
+      {
+        JS_FreeValue(ctx, property.value);
+        return JS_ThrowTypeError(ctx, "Toolbar descriptor requires data properties");
+      }
+      return property.value;
+    }
+    JSValue snapshotToolbarDescriptor(JSContext *ctx, JSValueConst tree)
+    {
+      if (!requirePlainObject(ctx, tree, "Toolbar descriptor"))
+        return JS_EXCEPTION;
+      JsOwnProperties names(ctx);
+      if (!names.read(tree, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return JS_EXCEPTION;
+      JSValue copy = JS_NewObjectProto(ctx, JS_NULL);
+      if (JS_IsException(copy))
+        return copy;
+      for (uint32_t i = 0; i < names.count(); ++i)
+      {
+        JSPropertyDescriptor property;
+        const int found = JS_GetOwnProperty(ctx, &property, tree, names.atom(i));
+        if (found <= 0)
+        {
+          JS_FreeValue(ctx, copy);
+          return JS_EXCEPTION;
+        }
+        const bool accessor = !JS_IsUndefined(property.getter) || !JS_IsUndefined(property.setter);
+        JS_FreeValue(ctx, property.getter);
+        JS_FreeValue(ctx, property.setter);
+        if (accessor)
+        {
+          JS_FreeValue(ctx, property.value);
+          JS_FreeValue(ctx, copy);
+          return JS_ThrowTypeError(ctx, "Toolbar descriptor requires data properties");
+        }
+        if (JS_DefinePropertyValue(ctx, copy, names.atom(i), property.value, JS_PROP_ENUMERABLE) < 0)
+        {
+          JS_FreeValue(ctx, copy);
+          return JS_EXCEPTION;
+        }
+      }
+      return copy;
+    }
+    bool treeString(JSContext *ctx,
+                    JSValueConst tree,
+                    const char *name,
+                    loka::core::String &out,
+                    bool rejectNul = false,
+                    bool own = false)
+    {
+      JSValue value = own ? toolbarValue(ctx, tree, name) : JS_GetPropertyStr(ctx, tree, name);
       size_t length = 0;
       const char *text = JS_IsString(value) ? JS_ToCStringLen(ctx, &length, value) : 0;
+      const bool accepted = text && (!rejectNul || strlen(text) == length);
       if (text)
       {
-        out = loka::core::String::Utf8(text, length);
+        if (accepted)
+          out = loka::core::String::Utf8(text, length);
         JS_FreeCString(ctx, text);
       }
       JS_FreeValue(ctx, value);
-      return text != 0;
+      return accepted;
     }
   } // namespace
   loka::app::scene::NodeDefinitionBase *JsCardNode::lower(JSContext *ctx, JSValueConst tree, int depth)
@@ -1530,6 +1596,168 @@ namespace smirkycard
     if (hasFit)
       props.attr(loka::app::ImageViewAttr().fit(static_cast<loka::app::ImageFit>(f)));
     return new (std::nothrow) loka::app::ImageView(props);
+  }
+  bool JsCardBindingRegistry::readToolbarDescriptor(JSContext *ctx, JSValueConst tree, JsToolbarRow &row)
+  {
+    ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
+    if (!runtime || !requirePlainObject(ctx, tree, "Toolbar descriptor"))
+      return false;
+    JSValue kindValue = toolbarValue(ctx, tree, "kind");
+    int32_t kind = 0;
+    bool ok = JS_IsNumber(kindValue) && JS_ToInt32(ctx, &kind, kindValue) == 0;
+    JS_FreeValue(ctx, kindValue);
+    IJsNodeLowering *lowering = ok ? runtime->registry_.lookup(kind) : 0;
+    if (!lowering)
+      ok = false;
+    else if (!strcmp(lowering->name, "ToolbarItem"))
+      row.kind = JsToolbarRow::BUTTON;
+    else if (!strcmp(lowering->name, "label"))
+      row.kind = JsToolbarRow::LABEL;
+    else if (!strcmp(lowering->name, "flexibleSpace"))
+      row.kind = JsToolbarRow::FLEXIBLE_SPACE;
+    else if (!strcmp(lowering->name, "fixedSpace"))
+      row.kind = JsToolbarRow::FIXED_SPACE;
+    else
+      ok = false;
+    if (!ok)
+    {
+      JS_ThrowTypeError(ctx, "Toolbar requires ToolbarItem descriptors");
+      return false;
+    }
+    JsOwnProperties keys(ctx);
+    if (!keys.read(tree, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+      return false;
+    for (uint32_t i = 0; i < keys.count(); ++i)
+    {
+      JSValue key = JS_AtomToValue(ctx, keys.atom(i));
+      size_t length = 0;
+      const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
+      JS_FreeValue(ctx, key);
+      const bool text = row.kind == JsToolbarRow::BUTTON || row.kind == JsToolbarRow::LABEL;
+      const bool known =
+          name && strlen(name) == length
+          && (!strcmp(name, "kind")
+              || (text && (!strcmp(name, "label") || !strcmp(name, "testId") || !strcmp(name, "TEST_ID")))
+              || (row.kind == JsToolbarRow::BUTTON
+                  && (!strcmp(name, "handler") || !strcmp(name, "enabled") || !strcmp(name, "enabledSeat")))
+              || (row.kind == JsToolbarRow::LABEL && !strcmp(name, "style"))
+              || (row.kind == JsToolbarRow::FIXED_SPACE && !strcmp(name, "width")));
+      if (name)
+        JS_FreeCString(ctx, name);
+      if (!known)
+      {
+        JS_ThrowTypeError(ctx, "Unknown ToolbarItem field");
+        return false;
+      }
+    }
+    if (row.kind == JsToolbarRow::BUTTON || row.kind == JsToolbarRow::LABEL)
+    {
+      JSValue label = toolbarValue(ctx, tree, "label");
+      const bool literal = JS_IsString(label);
+      ok = literal || (row.kind == JsToolbarRow::LABEL && JS_IsObject(label));
+      JS_FreeValue(ctx, label);
+      if (literal)
+        ok = treeString(ctx, tree, "label", row.label, true, true);
+      JSValue id = toolbarValue(ctx, tree, "testId");
+      ok = ok && (JS_IsUndefined(id) || JS_IsString(id));
+      JS_FreeValue(ctx, id);
+      treeString(ctx, tree, "testId", row.testId, false, true);
+    }
+    switch (row.kind)
+    {
+    case JsToolbarRow::BUTTON:
+    {
+      JSValue handler = toolbarValue(ctx, tree, "handler");
+      ok = ok && JS_IsFunction(ctx, handler);
+      JS_FreeValue(ctx, handler);
+      break;
+    }
+    case JsToolbarRow::LABEL:
+    {
+      JSValue style = toolbarValue(ctx, tree, "style");
+      ok = ok && (JS_IsUndefined(style) || readTextStyle(ctx, style, row.style));
+      JS_FreeValue(ctx, style);
+      break;
+    }
+    case JsToolbarRow::FLEXIBLE_SPACE:
+      break;
+    case JsToolbarRow::FIXED_SPACE:
+    {
+      JSValue width = toolbarValue(ctx, tree, "width");
+      double value = 0;
+      ok = JS_IsNumber(width) && JS_ToFloat64(ctx, &value, width) == 0 && value >= 1 && value <= SHRT_MAX
+           && value == static_cast<short>(value);
+      JS_FreeValue(ctx, width);
+      if (ok)
+        row.width = static_cast<short>(value);
+      break;
+    }
+    }
+    if (!ok)
+      JS_ThrowTypeError(ctx, "Invalid ToolbarItem payload");
+    return ok;
+  }
+
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerToolbar(JSContext *ctx, JSValueConst tree, int depth)
+  {
+    JSValue children = toolbarValue(ctx, tree, "children");
+    int64_t length = 0;
+    bool ok = JS_IsArray(children) && JS_GetLength(ctx, children, &length) == 0 && length >= 0
+              && length <= kMaximumTreeChildren && (!length || depth + 1 <= kMaximumTreeDepth);
+    JsToolbarProps toolbar;
+    unsigned buttons = 0;
+    for (int64_t i = 0; ok && i < length; ++i)
+    {
+      JSValue original = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
+      // Style getters may mutate the source descriptor. Hold its data properties
+      // once so validation and seat/handler admission consume the same facts.
+      JSValue child = snapshotToolbarDescriptor(ctx, original);
+      JS_FreeValue(ctx, original);
+      JsToolbarRow &row = toolbar.rows[toolbar.count];
+      ok = !JS_IsException(child) && JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
+      if (ok && row.kind == JsToolbarRow::LABEL)
+      {
+        JSValue value = toolbarValue(ctx, child, "label");
+        if (!JS_IsString(value))
+        {
+          JsSeatRecord *seat = this->findSeat(ctx, value);
+          ok = seat && seat->kind == JsSeatRecord::STRING;
+          if (ok)
+            row.text = seat->string.state();
+        }
+        JS_FreeValue(ctx, value);
+      }
+      if (ok && row.kind == JsToolbarRow::BUTTON)
+      {
+        ok = ++buttons <= JS_TOOLBAR_SLOT_COUNT;
+        JSValue enabled = toolbarValue(ctx, child, "enabledSeat");
+        if (ok && !JS_IsUndefined(enabled))
+        {
+          JsSeatRecord *seat = this->findSeat(ctx, enabled);
+          ok = seat && seat->kind == JsSeatRecord::BOOLEAN;
+          if (ok)
+            row.enabled = seat->boolean.state();
+        }
+        JS_FreeValue(ctx, enabled);
+        JSValue handler = toolbarValue(ctx, child, "handler");
+        if (ok && JS_IsFunction(ctx, handler))
+          row.handler = this->addHandler(ctx, handler);
+        ok = ok && row.handler;
+        JS_FreeValue(ctx, handler);
+      }
+      JS_FreeValue(ctx, child);
+      if (ok)
+        ++toolbar.count;
+    }
+    JS_FreeValue(ctx, children);
+    if (!ok)
+    {
+      JS_FreeValue(ctx, JS_GetException(ctx));
+      if (!this->failed_)
+        this->fail("JavaScript Toolbar has invalid descriptors, seats, count or depth.");
+      return 0;
+    }
+    return loka::app::scene::Component(toolbar).clone();
   }
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerClickable(JSContext *ctx, JSValueConst tree, bool cell)
   {
