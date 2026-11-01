@@ -7,13 +7,14 @@ void ToolboxScenePlatformController::noteMissingRenderContext()
 }
 
 /** Every render exit finalizes and publishes before resetting pass-local facts.
-    O(1), no rows; one or two existing diagnostic copies per exit. */
+    The ledger settles its own V rows, O(V); publication makes one or two copies. */
 ToolboxPresentObservation::Interval::~Interval()
 {
   this->observation_.assignEligibility(this->observation_.firstRefusal_.refused()    ? TOOLBOX_PAINT_REFUSED
                                        : this->observation_.phase_ != PAINT_FINISHED ? TOOLBOX_PAINT_REFUSED
                                        : this->coversWindow_                         ? TOOLBOX_PAINT_CLEAN
                                                                                      : TOOLBOX_PAINT_REFUSED);
+  this->ledger_.settlePresented(this->observation_.eligibility_);
   this->debugStats_.lastPresentObservation = this->observation_;
   this->debugStats_.lastPresentEntryEligibility = this->entryEligibility_;
   if (this->observation_.viewports() > 0)
@@ -32,7 +33,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   PROFILE_FUNC();
   const bool coversWindow =
       this->window_ && this->window_->window() && this->erasedPass_.admitsCapture(this->window_->window()->portRect);
-  ToolboxPresentObservation::Interval interval(this->observation_, coversWindow, this->debugStats_);
+  ToolboxPresentObservation::Interval interval(
+      this->observation_, coversWindow, this->debugStats_, this->scrollBarLedger_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::LayoutScope bandLayout(this->bandBlur_);
   BusyBatch batch(this->cursorOwner());

@@ -41,12 +41,14 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
   const int childWidth = ToolboxScrollViewChildWidth(seat, edges);
   loka::core::Managed<loka::app::layout::StackSpans> spans;
   bool previouslyPlaced = false;
+  loka::core::Frame oldOrigin;
   for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
   {
     ViewportScrollBarBinding &binding = this->scrollBarLedger_.viewportScrollBars_[i];
     if (binding.scrollView != scrollView)
       continue;
     previouslyPlaced = true;
+    oldOrigin = binding.placedOrigin;
     spans = binding.spans;
     // A resized port can change contact while the stored seat stays fixed.
     if (spans.isValid()
@@ -65,6 +67,7 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
     if (spans.isValid()) spans->invalidate();
     return ToolboxScrollViewLayoutResult();
   }
+  const bool enclosingClip = this->projectionParentScopes_.currentIsClip();
   if (!this->scrollViewClipRgn_)
   {
     // NewRgn can refuse under Classic low memory. Without the clip region the
@@ -121,6 +124,13 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
 
   const Rect contentRect =
       ToolboxScrollViewContentRect(ToolboxScrollViewFrameRect(viewportRect, horizontalBar, edges), horizontalBar);
+  Rect domain = Rect();
+  ToolboxOptionalRect copyDomain;
+  if (hasPort)
+  {
+    SectRect(&contentRect, &port, &domain);
+    copyDomain = ToolboxOptionalRect(domain);
+  }
   Rect clippedViewport = contentRect;
   if (this->projectionParentScopes_.currentIsClip())
     this->intersectWithProjectionClip(contentRect, clippedViewport);
@@ -169,7 +179,9 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
     range = &band;
   }
 
-  ToolboxViewportContentObservation contentObservation;
+  const ToolboxExpectedMotion motion(previouslyPlaced ? &oldOrigin : 0,
+                                     loka::core::Frame(horizontal.clampedOffset, translation, 0, 0));
+  ToolboxViewportContentObservation contentObservation(motion, enclosingClip);
   const short seatY = state.y;
   int contentHeight = 0;
   bool shortRangeRefused = false;
@@ -255,11 +267,16 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
           const int dx = horizontal.clampedOffset - row.placedOrigin.x;
           const int dy = translation - row.placedOrigin.y;
           if (dx != 0 || dy != 0)
-            this->observation_.noteViewportMove(contentRect, dx, dy, contentObservation);
+            this->observation_.noteViewportMove(contentRect,
+                                                dx,
+                                                dy,
+                                                contentObservation.complete(),
+                                                row.presented.evaluate(oldOrigin, contentRect, copyDomain));
         }
         row.placedOrigin = loka::core::Frame(horizontal.clampedOffset, translation, 0, 0);
         row.spans = spans;
         row.contentRect = contentRect;
+        row.copyDomain = copyDomain;
         break;
       }
     // Publish only after successful layout and after the scope has popped.

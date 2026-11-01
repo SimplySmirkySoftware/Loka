@@ -245,7 +245,7 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         registry = os.path.join(PROJECT_DIR, "tests", "scenarios", "scenarios.txt")
         with open(registry, "r", encoding="utf-8") as handle:
             entries = [line.split() for line in handle.read().splitlines()]
-        self.assertEqual(len(entries), 38)
+        self.assertEqual(len(entries), 39)
         self.assertEqual(len(entries), len({tuple(entry) for entry in entries}))
         self.assertEqual(
             [entry for entry in entries if entry[0] == "simpleviewer"],
@@ -254,7 +254,7 @@ class ExpectedAuditPinsTest(unittest.TestCase):
         )
         self.assertEqual(
             [entry[1] for entry in entries if entry[0] == "smirkycard"],
-            ["startup", "laptop-carousel", "laptop-detail"],
+            ["startup", "laptop-carousel", "laptop-detail", "laptop-arrow"],
         )
         registered_audits = set()
         for entry in entries:

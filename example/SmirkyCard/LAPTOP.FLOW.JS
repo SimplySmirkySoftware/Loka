@@ -54,7 +54,11 @@ scenario('first', function (c) {
       picture('MBP2023', 'mbp2023');
       picture('NEO', 'neo');
     }).named('pictures-loaded');
-  if (cell === 'startup') { c.run(flow); return; }
+  if (cell === 'startup' || cell === 'laptop-arrow')
+  {
+    c.run(flow);
+    return;
+  }
   if (cell === 'laptop-carousel') {
     c.run(flow.step(function () {
       c.test.click('Laptop.Presentation');

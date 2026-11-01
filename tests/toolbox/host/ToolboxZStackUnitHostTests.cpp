@@ -1,7 +1,13 @@
 #include "support/TextBufferFixture.hpp"
+#include "support/LokaAllocFailure.hpp"
+#include "app/layout/ColumnLayout.hpp"
 #include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxHost.hpp"
+#include "context/ToolboxTextContext.hpp"
+#include "context/ToolboxCardBandContext.hpp"
+#include "context/ToolboxAttributedTextContext.hpp"
+#include "context/ToolboxClipBoxContext.hpp"
 #include "ToolboxNodeDispatch.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxDirtyReplay.hpp"
@@ -22,6 +28,28 @@
 #include "ToolboxBuiltInSupport.hpp"
 #include "toolbox/ToolboxTextEditorAccess.hpp"
 
+namespace loka
+{
+  namespace testing
+  {
+    class ToolboxTextContextAccess
+    {
+    public:
+      static Rect rect(const ToolboxTextContext &c)
+      {
+        return c.rect_;
+      }
+      static Rect paintRect(const ToolboxTextContext &c)
+      {
+        return c.paintRect_;
+      }
+      static short baseline(const ToolboxTextContext &c)
+      {
+        return c.textY_;
+      }
+    };
+  } // namespace testing
+} // namespace loka
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::core;
@@ -1184,7 +1212,8 @@ namespace
     NodeState<Frame> viewportState;
     ZStackNode stack;
     ScrollViewNode &viewport;
-    PresentFixture(bool foreground = false, int initialOrigin = 0, Node *content = 0)
+    PresentFixture(
+        bool foreground = false, int initialOrigin = 0, Node *content = 0, bool enclosed = false, int fixedHeight = 0)
         : port(window.window()),
           controller(&window),
           origin(Frame(0, initialOrigin, 0, 0)),
@@ -1201,10 +1230,18 @@ namespace
         content = box;
       }
       this->viewport.addChild(content);
-      this->stack.addChild(&this->viewport);
+      Node *root = &this->viewport;
+      if (enclosed || fixedHeight)
+      {
+        BoxNode *wrapper =
+            new BoxNode((enclosed ? Box().size(300, fixedHeight).clipChildren() : Box().size(300, fixedHeight)).props);
+        wrapper->addChild(root);
+        root = wrapper;
+      }
+      this->stack.addChild(root);
       if (foreground)
         this->stack.addChild(new Probe("observation-foreground", 80));
-      this->controller.rootNode_ = foreground ? static_cast<Node *>(&this->stack) : &this->viewport;
+      this->controller.rootNode_ = foreground ? static_cast<Node *>(&this->stack) : root;
       this->window.scenePlatformController_ = &this->controller;
       this->window.requestInvalidate();
       this->window.flushInvalidate();
@@ -1252,6 +1289,28 @@ namespace
   };
   void presentUnsupportedKind()
   {
+    for (int kind = 0; kind < 2; ++kind)
+    {
+      MutableState<int> barValue(0);
+      NodeState<int> barState(&barValue, 0);
+      BoxNode *box = new BoxNode(Box().size(180, 600).props);
+      box->addChild(kind == 0 ? static_cast<Node *>(new CellNode(CellProps().text("cell")))
+                              : static_cast<Node *>(new ScrollBarNode(ScrollBarProps(barState).range(0, 100))));
+      PresentFixture refused(false, 0, box);
+      refused.scroll(16);
+      std::fprintf(stderr,
+                   "[pin] refused kind=%d refusal=%s content=%u unsupported=%u eligibility=%s\n",
+                   kind,
+                   ToolboxPresentRefusalName(refused.last().refusal()),
+                   refused.last().contentInputs(),
+                   refused.last().unsupportedKinds(),
+                   ToolboxPaintEligibilityName(refused.last().eligibility()));
+      LOKA_VERIFY(refused.last().unsupportedKinds() == 1);
+      // The standalone-bar host seam refuses native acquisition. Pin its
+      // earlier paint refusal as well as the raw classifier fact above.
+      LOKA_VERIFY(refused.last().refusal()
+                  == (kind == 0 ? TOOLBOX_PRESENT_UNSUPPORTED_KIND : TOOLBOX_PRESENT_PAINT_REFUSED));
+    }
     PresentFixture leaf(false, 0, new UnknownPresentLeaf());
     leaf.scroll(17);
     LOKA_VERIFY(leaf.last().unsupportedKinds() >= 1);
@@ -1273,7 +1332,7 @@ namespace
     LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 200)));
     ProjectionParentScope viewport(window.window(), 0, -1000, Frame(0, 0, 300, 200));
     ProjectionViewportScopeGuard viewportScope(controller.projectionParentScopes_, viewport);
-    ToolboxViewportContentObservation content;
+    ToolboxViewportContentObservation content(ToolboxExpectedMotion(0, Frame()), false);
     {
       ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, content);
       UnknownPresentLeaf leaf;
@@ -1282,7 +1341,7 @@ namespace
       LayoutState state = seat();
       state.y = SHRT_MAX - 100;
       LayoutNode(&leaf, state, &controller, 0);
-      LOKA_VERIFY(content.contentInputs() == 0 && content.unsupportedKinds() == 0);
+      LOKA_VERIFY(content.complete().contentInputs == 0 && content.complete().unsupportedKinds == 0);
       LOKA_VERIFY(Node::LayoutInputsCheckpoint(leaf).inputs() == NODE_DIRTY_PROPS);
     }
     LOKA_VERIFY(controller.activeViewportContent_ == 0);
@@ -1293,8 +1352,9 @@ namespace
     box->addChild(new TextNode(TextProps("clipped")));
     PresentFixture f(false, 0, box);
     f.scroll(17);
-    LOKA_VERIFY(f.last().unsupportedKinds() == 1);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    LOKA_VERIFY(f.last().unsupportedKinds() == 0);
+    LOKA_VERIFY(f.last().notTranslated() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
   }
   void presentCardBandPhase()
   {
@@ -1322,6 +1382,7 @@ namespace
     NodeState<String> text;
     NodeState<TextStyle> style;
     NodeState<int> width;
+    NodeState<bool> shown;
     NodeState<Frame> stationaryViewport;
     Request<ScrollTarget> request;
     explicit PresentLiveNode(const PresentLiveProps &props)
@@ -1331,6 +1392,8 @@ namespace
       this->state(this->text, String("before"));
       this->state(this->style, TextStyle());
       this->state(this->width, 180);
+      if (Mode == 3)
+        this->state(this->shown, true);
       this->state(this->stationaryViewport, Frame());
       this->state(this->request, ScrollTarget::None());
     }
@@ -1340,7 +1403,10 @@ namespace
     }
     virtual void composeNode(NodeComposition &c)
     {
-      if (Mode == 1)
+      if (Mode == 3)
+        c.declare(ScrollView(this->viewport)
+                  << (Box().size(180, 600) << (Show(*this->shown.state()) << Text("shown"))));
+      else if (Mode == 1)
         c.declare(
             Column().gap(0) << (Box().size(180, 100)
                                 << (ScrollView(this->stationaryViewport)
@@ -1843,15 +1909,16 @@ namespace
   {
     ToolboxPresentObservation observation;
     ToolboxSceneDebugStats stats;
+    ToolboxScrollBarLedger ledger(1);
     LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_REFUSED);
     const Rect viewport = {0, 0, 100, 100};
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
-    observation.noteViewportMove(viewport, 0, 8, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 8, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
     observation.reset();
     {
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
       observation.complete(0);
       observation.markPaintFinished();
     }
@@ -1860,7 +1927,7 @@ namespace
     LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_CLEAN);
     unsigned expectedSiteLine = 0;
     {
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
       observation.complete(0);
       expectedSiteLine = __LINE__ + 1;
       LOKA_PAINT_REFUSE(observation, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
@@ -1884,14 +1951,14 @@ namespace
     LOKA_VERIFY(observation.reasons() == (1U << TOOLBOX_FULL_DRAW_CHILD_DIRTY));
     LOKA_VERIFY(!observation.firstRefusal().refused());
     {
-      ToolboxPresentObservation::Interval interval(observation, false, stats);
+      ToolboxPresentObservation::Interval interval(observation, false, stats, ledger);
       observation.complete(0);
       observation.markPaintFinished();
     }
     LOKA_VERIFY(stats.lastPresentObservation.paintFinished());
     LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
     {
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
       observation.complete(0);
       observation.markPaintFinished();
     }
@@ -1899,7 +1966,7 @@ namespace
     LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_CLEAN);
     LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_REFUSED);
     {
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
     }
     LOKA_VERIFY(!stats.lastPresentObservation.paintFinished());
     LOKA_VERIFY(!stats.lastPresentObservation.firstRefusal().refused());
@@ -1908,14 +1975,724 @@ namespace
     LOKA_VERIFY(stats.lastPresentObservation.eligibility() == TOOLBOX_PAINT_REFUSED);
   }
 
+  template <class Context> void translatedLeafPin(Context &context, PresentController &controller)
+  {
+    LayoutState initial = seat();
+    initial.x = 20;
+    initial.y = 100;
+    initial.width = 60;
+    initial.height = 20;
+    const Frame origin(0, 0, 0, 0);
+    ToolboxViewportContentObservation first(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, first);
+      context.layout(&controller, initial);
+    }
+    LOKA_VERIFY(first.complete().notTranslated == 1);
+    ToolboxViewportContentObservation moved(ToolboxExpectedMotion(&origin, Frame(0, 16, 0, 0)), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, moved);
+      LayoutState next = seat();
+      next.x = 20;
+      next.y = 84;
+      next.width = 60;
+      next.height = 20;
+      context.layout(&controller, next);
+    }
+    LOKA_VERIFY(moved.complete().notTranslated == 0);
+    ToolboxViewportContentObservation resized(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, resized);
+      LayoutState next = seat();
+      next.x = 20;
+      next.y = 84;
+      next.width = 61;
+      next.height = 20;
+      context.layout(&controller, next);
+    }
+    LOKA_VERIFY(resized.complete().notTranslated == 1);
+  }
+  LayoutState resumeSeat(short y = 100)
+  {
+    LayoutState state = seat();
+    state.x = 20;
+    state.y = y;
+    state.width = 60;
+    state.height = 20;
+    return state;
+  }
+  template <class Context> unsigned resumeMove(Context &context, PresentController &controller)
+  {
+    const Frame origin(0, 0, 0, 0);
+    ToolboxViewportContentObservation content(ToolboxExpectedMotion(&origin, Frame(0, 16, 0, 0)), false);
+    ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, content);
+    LayoutState state = resumeSeat(84);
+    context.layout(&controller, state);
+    return content.complete().notTranslated;
+  }
+  void resumeTextInvalidation(const char *mode)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    MutableState<String> value(String("before"));
+    TextNode node((TextProps(&value)));
+    ToolboxTextContext context(&node, &controller);
+    LayoutState state = resumeSeat();
+    context.layout(&controller, state);
+    const Rect before = loka::testing::ToolboxTextContextAccess::rect(context);
+    if (!std::strcmp(mode, "ResumeTextClear"))
+    {
+      controller.window_ = 0;
+      context.repaint();
+      controller.window_ = &window;
+      const Rect cleared = loka::testing::ToolboxTextContextAccess::rect(context);
+      LOKA_VERIFY(EmptyRect(&cleared));
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_MEASUREMENT);
+    }
+    else if (!std::strcmp(mode, "ResumeTextProjection"))
+    {
+      value.set(String(std::string(300, 'x')));
+      loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 1);
+      context.repaint();
+      loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 0);
+      const Rect retained = loka::testing::ToolboxTextContextAccess::rect(context);
+      LOKA_VERIFY(EqualRect(&before, &retained));
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    }
+    else
+      context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+    const unsigned mismatches = resumeMove(context, controller);
+    std::fprintf(stderr, "[pin] %s not_translated=%u\n", mode, mismatches);
+    LOKA_VERIFY(mismatches == 1);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+  void resumeAttributedInvalidation(const char *mode)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    AttributedTextNode node(AttributedTextProps(Styled(String(std::string(300, 'x')), TextStyle())));
+    ToolboxAttributedTextContext context(&node, &controller);
+    LayoutState state = resumeSeat();
+    context.layout(&controller, state);
+    if (!std::strcmp(mode, "ResumeAttributedMissing"))
+    {
+      State<AttributedString> *text = node.props.text_;
+      node.props.text_ = 0;
+      state = resumeSeat();
+      LOKA_VERIFY(context.layout(&controller, state) == 0);
+      node.props.text_ = text;
+    }
+    else if (!std::strcmp(mode, "ResumeAttributedFailure"))
+    {
+      state = resumeSeat();
+      state.inputs = NODE_DIRTY_PROPS;
+      loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 1);
+      LOKA_VERIFY(context.layout(&controller, state) == 0);
+      loka::core::testing::failLokaAllocRaw("TextLineBreaker", "Table", 0);
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    }
+    else
+      context.onPropsApplied();
+    const unsigned mismatches = resumeMove(context, controller);
+    std::fprintf(stderr, "[pin] %s not_translated=%u\n", mode, mismatches);
+    LOKA_VERIFY(mismatches == 1);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+  void resumeButtonInvalidation()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    ButtonNode node(Button("button").props);
+    ToolboxButtonContext context(&node, &controller);
+    LayoutState state = resumeSeat();
+    context.layout(&controller, state);
+    controller.setButtonNodeForTesting(context, 0);
+    state = resumeSeat();
+    LOKA_VERIFY(context.layout(&controller, state) == 0);
+    controller.setButtonNodeForTesting(context, &node);
+    LOKA_VERIFY(resumeMove(context, controller) == 1);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+  void resumeTextEdge()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    LOKA_VERIFY(controller.projectionParentScopes_.resetRoot(window.window(), Frame(0, 0, 300, 102)));
+    ProjectionParentScope clip(window.window(), 0, 0, Frame(0, 0, 300, 102));
+    ProjectionClipScopeGuard guard(controller.projectionParentScopes_, clip);
+    LOKA_VERIFY(guard.isActive());
+    TextNode node(TextProps("crossing"));
+    ToolboxTextContext context(&node, &controller);
+    LayoutState state = resumeSeat();
+    context.layout(&controller, state);
+    const Rect before = loka::testing::ToolboxTextContextAccess::rect(context);
+    const Rect clipped = loka::testing::ToolboxTextContextAccess::paintRect(context);
+    std::fprintf(stderr, "[pin] edge full=%d,%d paint=%d,%d\n", before.top, before.bottom, clipped.top, clipped.bottom);
+    LOKA_VERIFY(before.top == 100 && before.bottom > 102 && clipped.bottom == 102);
+    LOKA_VERIFY(resumeMove(context, controller) == 0);
+    const Rect after = loka::testing::ToolboxTextContextAccess::rect(context);
+    LOKA_VERIFY(after.top == before.top - 16 && after.bottom == before.bottom - 16);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+  ToolboxBaselineStatus resumeCertificate(ToolboxScrollBarLedger::ViewportScrollBarBinding &row)
+  {
+    return row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain);
+  }
+  void resumeEnclosingClip()
+  {
+    for (unsigned clipped = 0; clipped != 2; ++clipped)
+    {
+      PresentFixture f(false, 0, 0, clipped != 0, 200);
+      f.scroll(16);
+      LOKA_VERIFY(f.lastMoved().enclosingClip() == (clipped != 0));
+      LOKA_VERIFY(f.lastMoved().notTranslated() == 0);
+      LOKA_VERIFY(f.lastMoved().baseline() == TOOLBOX_BASELINE_VALID);
+      LOKA_VERIFY(f.lastMoved().refusal()
+                  == (clipped ? TOOLBOX_PRESENT_ENCLOSING_CLIP : TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY));
+    }
+  }
+  void resumePortCertificate(bool absent)
+  {
+    PresentFixture f(false, 0, 0, false, 400);
+    f.window.port.portRect.bottom = 300;
+    f.window.answersPort = !absent;
+    f.scroll(0);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+    const Rect content = f.controller.viewportScroll().contentRect;
+    Rect domain;
+    LOKA_VERIFY(f.controller.viewportScroll().copyDomain.query(domain) == !absent);
+    if (!absent)
+      LOKA_VERIFY(domain.bottom == 300 && content.bottom > 320);
+    LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll())
+                == (absent ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID));
+    if (!absent)
+      f.window.port.portRect.bottom = 320;
+    f.scroll(16);
+    LOKA_VERIFY(EqualRect(&content, &f.controller.viewportScroll().contentRect));
+    LOKA_VERIFY(f.lastMoved().baseline() == (absent ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_STALE));
+    LOKA_VERIFY(f.lastMoved().refusal() == TOOLBOX_PRESENT_NO_PRESENTED_BASELINE);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll())
+                == (absent ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID));
+  }
+  class ResumePaintText : public TextNode
+  {
+  public:
+    bool refusePaint;
+    explicit ResumePaintText()
+        : TextNode(TextProps("content")),
+          refusePaint(false)
+    {
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      TextNode::render(platform);
+      if (this->refusePaint)
+        LOKA_PAINT_REFUSE(*static_cast<ToolboxScenePlatformController *>(platform), TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    }
+  };
+  void resumeCertificateABC()
+  {
+    BoxNode *box = new BoxNode(Box().size(180, 600).props);
+    ResumePaintText *text = new ResumePaintText;
+    box->addChild(text);
+    PresentFixture f(false, 0, box);
+    LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll()) == TOOLBOX_BASELINE_VALID);
+    text->refusePaint = true;
+    f.scroll(16);
+    LOKA_VERIFY(f.lastMoved().baseline() == TOOLBOX_BASELINE_VALID);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll()) == TOOLBOX_BASELINE_NONE);
+    text->refusePaint = false;
+    f.scroll(32);
+    LOKA_VERIFY(f.lastMoved().baseline() == TOOLBOX_BASELINE_NONE);
+    LOKA_VERIFY(f.lastMoved().refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
+    LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll()) == TOOLBOX_BASELINE_VALID);
+  }
+  void resumeSiblings(bool paintFailure)
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    MutableState<Frame> origins[2];
+    NodeState<Frame> states[2] = {NodeState<Frame>(&origins[0], 0), NodeState<Frame>(&origins[1], 0)};
+    StackNode column(Column().gap(0).props);
+    Probe *probe = 0;
+    ResumePaintText *text = 0;
+    for (unsigned i = 0; i != 2; ++i)
+    {
+      BoxNode *box = new BoxNode(Box().size(180, 100).props);
+      ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(states[i]));
+      BoxNode *content = new BoxNode(Box().size(180, 600).props);
+      if (i && !paintFailure)
+      {
+        probe = new Probe("short range", 600);
+        content->addChild(probe);
+      }
+      else
+      {
+        ResumePaintText *child = new ResumePaintText;
+        content->addChild(child);
+        if (i)
+          text = child;
+      }
+      scroll->addChild(content);
+      box->addChild(scroll);
+      column.addChild(box);
+    }
+    controller.rootNode_ = &column;
+    window.scenePlatformController_ = &controller;
+    window.requestInvalidate();
+    window.flushInvalidate();
+    LOKA_VERIFY(resumeCertificate(controller.viewportScroll(0)) == TOOLBOX_BASELINE_VALID);
+    LOKA_VERIFY(resumeCertificate(controller.viewportScroll(1)) == TOOLBOX_BASELINE_VALID);
+    if (probe)
+      probe->refuse = true;
+    if (text)
+      text->refusePaint = true;
+    origins[0].set(Frame(0, 16, 0, 0));
+    origins[1].set(Frame(0, 16, 0, 0));
+    window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    window.flushInvalidate();
+    const ToolboxPresentObservation &last = controller.debugStatsForTesting().lastPresentObservation;
+    std::fprintf(stderr,
+                 "[pin] sibling paint=%u eligibility=%u used=%u,%u certificates=%u,%u baseline=%u\n",
+                 paintFailure,
+                 last.eligibility(),
+                 controller.viewportScroll(0).usedThisFrame,
+                 controller.viewportScroll(1).usedThisFrame,
+                 resumeCertificate(controller.viewportScroll(0)),
+                 resumeCertificate(controller.viewportScroll(1)),
+                 last.baseline());
+    // A refused layout has no render obligation receipt; renderScrollView refuses the pass.
+    LOKA_VERIFY(last.eligibility() == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(last.firstRefusal().reason
+                == (paintFailure ? TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW : TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET));
+    LOKA_VERIFY(controller.viewportScroll(0).usedThisFrame);
+    LOKA_VERIFY(controller.viewportScroll(1).usedThisFrame == paintFailure);
+    LOKA_VERIFY(resumeCertificate(controller.viewportScroll(0)) == TOOLBOX_BASELINE_NONE);
+    LOKA_VERIFY(resumeCertificate(controller.viewportScroll(1)) == TOOLBOX_BASELINE_NONE);
+    LOKA_VERIFY(last.baseline() == TOOLBOX_BASELINE_VALID);
+    controller.rootNode_ = 0;
+    window.scenePlatformController_ = 0;
+    controller.clearControls();
+  }
+  /** Run the real ColumnLayout repair/band walk with real Text placement doors.
+      The callback adds one unannounced extent unit to trigger height repair. */
+  struct ResumeColumn
+  {
+    ToolboxWindow window;
+    HostPortScope port;
+    PresentController controller;
+    StackNode column;
+    loka::app::layout::StackSpans spans;
+    unsigned firstVisits;
+    unsigned firstMismatch[4];
+    bool grow;
+    ResumeColumn()
+        : port(window.window()),
+          controller(&window),
+          column(Column().gap(0).props),
+          firstVisits(0),
+          grow(false)
+    {
+      for (unsigned i = 0; i != 2; ++i)
+      {
+        TextNode *text = new TextNode(TextProps("band leaf"));
+        text->setContext(new ToolboxTextContext(text, &controller));
+        column.addChild(text);
+      }
+      LayoutState state = resumeSeat();
+      loka::app::layout::computeColumnLayoutResultY(&column, state, this, visit, 0, 0, 0, &spans);
+      LOKA_VERIFY(spans.valid());
+    }
+    ~ResumeColumn()
+    {
+      controller.releaseNodeContexts(&column);
+    }
+    static int visit(void *opaque, Node *node, const LayoutState &seat)
+    {
+      ResumeColumn &self = *static_cast<ResumeColumn *>(opaque);
+      ToolboxViewportContentObservation *content = self.controller.activeViewportContent_;
+      const unsigned before = content ? content->complete().notTranslated : 0;
+      LayoutState state = seat;
+      node->getContext()->layout(&self.controller, state);
+      if (node == self.column.childrenHead())
+      {
+        if (content)
+        {
+          LOKA_VERIFY(self.firstVisits < 4);
+          self.firstMismatch[self.firstVisits++] = content->complete().notTranslated - before;
+        }
+        if (self.grow)
+          ++state.y;
+      }
+      return state.y;
+    }
+    unsigned move(int oldY, int newY, unsigned first, unsigned count)
+    {
+      firstVisits = 0;
+      const Frame oldOrigin(0, oldY, 0, 0);
+      ToolboxViewportContentObservation content(ToolboxExpectedMotion(&oldOrigin, Frame(0, newY, 0, 0)), false);
+      ToolboxViewportContentObservation::Scope observation(controller.activeViewportContent_, content);
+      LayoutState state = resumeSeat(static_cast<short>(100 - newY));
+      loka::app::layout::LazyWindow range;
+      range.first = first;
+      range.count = count;
+      loka::app::layout::computeColumnLayoutResultY(&column, state, this, visit, 0, 0, &range, &spans);
+      return content.complete().notTranslated;
+    }
+  };
+  class ResumeBandText : public TextNode
+  {
+  public:
+    unsigned visits, mismatches;
+    ResumeBandText()
+        : TextNode(TextProps("leaving band")),
+          visits(0),
+          mismatches(0)
+    {
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxViewportContentObservation *content =
+          static_cast<ToolboxScenePlatformController *>(platform)->activeViewportContent_;
+      LOKA_VERIFY(content);
+      const unsigned before = content->complete().notTranslated;
+      const short result = TextNode::layoutProjected(platform, state);
+      ++this->visits;
+      this->mismatches += content->complete().notTranslated - before;
+      return result;
+    }
+  };
+  void resumeViewportBandRevisit()
+  {
+    StackNode *column = new StackNode(Column().gap(36).props);
+    ResumeBandText *leaf = new ResumeBandText;
+    for (unsigned i = 0; i != 20; ++i)
+    {
+      column->addChild(i ? new TextNode(TextProps("band sibling")) : leaf);
+    }
+    PresentFixture f(false, 0, column, false, 100);
+    ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(leaf->getContext());
+    const Rect initial = loka::testing::ToolboxTextContextAccess::rect(context);
+    const int origins[] = {120, 240, 120, 0};
+    const unsigned mismatches[] = {0, 2, 0, 0};
+    Rect leaving;
+    for (unsigned i = 0; i != 4; ++i)
+    {
+      leaf->visits = leaf->mismatches = 0;
+      f.viewport.requeueLayoutInputs(NODE_DIRTY_LAYOUT);
+      f.scroll(origins[i]);
+      LOKA_VERIFY(f.controller.scrollSpans() && f.controller.scrollSpans()->valid());
+      const Rect placed = loka::testing::ToolboxTextContextAccess::rect(context);
+      std::fprintf(stderr,
+                   "[pin] viewport band origin=%d placedTop=%d not_translated=%u\n",
+                   origins[i],
+                   placed.top,
+                   f.lastMoved().notTranslated());
+      LOKA_VERIFY(f.lastMoved().notTranslated() == mismatches[i]);
+      LOKA_VERIFY(f.lastMoved().refusal()
+                  == (mismatches[i] ? TOOLBOX_PRESENT_NOT_TRANSLATED : TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY));
+      LOKA_VERIFY(leaf->mismatches == 0);
+      LOKA_VERIFY(leaf->visits == ((i == 0 || i == 3) ? 1u : 0u));
+      if (i == 0)
+      {
+        leaving = placed;
+        LOKA_VERIFY(placed.top == initial.top - 120);
+      }
+      else if (i < 3)
+        LOKA_VERIFY(EqualRect(&placed, &leaving));
+      else
+        LOKA_VERIFY(EqualRect(&placed, &initial));
+    }
+  }
+  void resumeColumn(bool repair)
+  {
+    ResumeColumn f;
+    if (repair)
+    {
+      f.grow = true;
+      const unsigned mismatches = f.move(0, 16, 0, 1);
+      std::fprintf(stderr,
+                   "[pin] height repair first visits=%u mismatch=%u,%u total=%u\n",
+                   f.firstVisits,
+                   f.firstMismatch[0],
+                   f.firstMismatch[1],
+                   mismatches);
+      LOKA_VERIFY(f.firstVisits == 2 && f.firstMismatch[0] == 0 && f.firstMismatch[1] == 1);
+      LOKA_VERIFY(mismatches == 2); // The following leaf also moved by the repaired extra unit.
+    }
+    else
+    {
+      LOKA_VERIFY(f.move(0, 40, 0, 1) == 0);
+      f.move(40, 80, 1, 1);
+      LOKA_VERIFY(f.firstVisits == 0);
+      LOKA_VERIFY(f.move(80, 40, 0, 1) == 1);
+      LOKA_VERIFY(f.firstVisits == 1 && f.firstMismatch[0] == 1);
+      LOKA_VERIFY(f.move(40, 0, 0, 1) == 0);
+      LOKA_VERIFY(f.firstVisits == 1 && f.firstMismatch[0] == 0);
+    }
+  }
+  void resumeShow()
+  {
+    PresentLiveFixture<3> f;
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->shown.set(false);
+    }
+    f.draw();
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->shown.set(true);
+      f.root->viewport.set(Frame(0, 16, 0, 0));
+    }
+    f.draw();
+    std::fprintf(stderr,
+                 "[pin] Show reveal not_translated=%u baseline=%s refusal=%s\n",
+                 f.last().notTranslated(),
+                 ToolboxBaselineStatusName(f.last().baseline()),
+                 ToolboxPresentRefusalName(f.last().refusal()));
+    LOKA_VERIFY(f.last().notTranslated() >= 1);
+  }
+  void runResumePins(const char *mode)
+  {
+    if (!std::strcmp(mode, "ResumeTextClear") || !std::strcmp(mode, "ResumeTextProjection")
+        || !std::strcmp(mode, "ResumeBaseDetach"))
+      resumeTextInvalidation(mode);
+    else if (!std::strncmp(mode, "ResumeAttributed", 16))
+      resumeAttributedInvalidation(mode);
+    else if (!std::strcmp(mode, "ResumeButtonNull"))
+      resumeButtonInvalidation();
+    else if (!std::strcmp(mode, "ResumeTextEdge"))
+      resumeTextEdge();
+    else if (!std::strcmp(mode, "ResumeEnclosing"))
+      resumeEnclosingClip();
+    else if (!std::strcmp(mode, "ResumePortAbsent"))
+      resumePortCertificate(true);
+    else if (!std::strcmp(mode, "ResumePortResize"))
+      resumePortCertificate(false);
+    else if (!std::strcmp(mode, "ResumeCertificateABC"))
+      resumeCertificateABC();
+    else if (!std::strcmp(mode, "ResumeSiblingShortRange"))
+      resumeSiblings(false);
+    else if (!std::strcmp(mode, "ResumeSiblingPaint"))
+      resumeSiblings(true);
+    else if (!std::strcmp(mode, "ResumeColumnRepair"))
+      resumeColumn(true);
+    else if (!std::strcmp(mode, "ResumeViewportBandRevisit"))
+      resumeViewportBandRevisit();
+    else if (!std::strcmp(mode, "ResumeBandRevisit"))
+      resumeColumn(false);
+    else if (!std::strcmp(mode, "ResumeShow"))
+      resumeShow();
+    else
+      LOKA_VERIFY(false && "unknown resume pin");
+  }
+
+  void actualLeafPlacementPins()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    PresentController controller(&window);
+    TextNode text(TextProps("text"));
+    ToolboxTextContext textContext(&text, &controller);
+    translatedLeafPin(textContext, controller);
+    const Rect textRect = loka::testing::ToolboxTextContextAccess::rect(textContext);
+    textContext.updateRect(textRect, textRect.left, loka::testing::ToolboxTextContextAccess::baseline(textContext) + 1);
+    const Frame origin(0, 0, 0, 0);
+    ToolboxViewportContentObservation anchor(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, anchor);
+      LayoutState next = seat();
+      next.x = 20;
+      next.y = 84;
+      next.width = 61;
+      next.height = 20;
+      textContext.layout(&controller, next);
+    }
+    LOKA_VERIFY(anchor.complete().notTranslated == 1);
+    LayoutState naturalText = seat();
+    naturalText.x = 20;
+    naturalText.y = 100;
+    naturalText.width = 0;
+    textContext.layout(&controller, naturalText);
+    ToolboxTextContext fresh(&text, &controller);
+    const Rect naturalRect = loka::testing::ToolboxTextContextAccess::rect(textContext);
+    fresh.updateRect(naturalRect, naturalRect.left, loka::testing::ToolboxTextContextAccess::baseline(textContext));
+    ToolboxViewportContentObservation firstEqual(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, firstEqual);
+      LayoutState next = seat();
+      next.x = 20;
+      next.y = 100;
+      next.width = 0;
+      fresh.layout(&controller, next);
+    }
+    LOKA_VERIFY(firstEqual.complete().notTranslated == 1);
+    fresh.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    textContext.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    ButtonNode button(Button("button").props);
+    ToolboxButtonContext buttonContext(&button, &controller);
+    translatedLeafPin(buttonContext, controller);
+    buttonContext.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    CardBandNode band((CardBandProps(CARD_BAND_TOP)));
+    ToolboxCardBandContext bandContext(&band, &controller);
+    translatedLeafPin(bandContext, controller);
+    bandContext.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    AttributedTextNode attributed(AttributedTextProps(Styled(String(std::string(300, 'x')), TextStyle())));
+    ToolboxAttributedTextContext attributedContext(&attributed, &controller);
+    translatedLeafPin(attributedContext, controller);
+    LayoutState intrinsic = seat();
+    intrinsic.x = 20;
+    intrinsic.y = 84;
+    intrinsic.width = 0;
+    const short natural = attributedContext.layout(&controller, intrinsic);
+    LOKA_VERIFY(natural > 0);
+    ToolboxViewportContentObservation constraint(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, constraint);
+      LayoutState constrained = seat();
+      constrained.x = 20;
+      constrained.y = 84;
+      constrained.width = natural;
+      LOKA_VERIFY(attributedContext.layout(&controller, constrained) == natural);
+    }
+    LOKA_VERIFY(constraint.complete().notTranslated == 1);
+    attributedContext.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+
+  void placementObservationPins()
+  {
+    std::fprintf(stderr,
+                 "[pin] sizes row=%lu projected=%lu text=%lu\n",
+                 static_cast<unsigned long>(sizeof(ToolboxScrollBarLedger::ViewportScrollBarBinding)),
+                 static_cast<unsigned long>(sizeof(ToolboxProjectedNodeContext)),
+                 static_cast<unsigned long>(sizeof(ToolboxTextContext)));
+    const Frame oldOrigin(0, 0, 0, 0);
+    const ToolboxExpectedMotion motion(&oldOrigin, Frame(0, 16, 0, 0));
+    const ToolboxLeafGeometry before = {{100, 20, 120, 80}, {116, 20}, 60};
+    const ToolboxLeafGeometry after = {{84, 20, 104, 80}, {100, 20}, 60};
+    LOKA_VERIFY(motion.pixelDelta.v == -16 && motion.pixelDelta.h == 0);
+    LOKA_VERIFY(before.translated(motion.pixelDelta).equals(after));
+    ToolboxLeafGeometry anchorOnly = after;
+    ++anchorOnly.anchor.v;
+    LOKA_VERIFY(!before.translated(motion.pixelDelta).equals(anchorOnly));
+    ToolboxPlacementValidity validity;
+    LOKA_VERIFY(!validity.present());
+    validity.complete();
+    LOKA_VERIFY(validity.present());
+    validity.invalidate();
+    LOKA_VERIFY(!validity.present());
+
+    PresentFixture translated;
+    translated.scroll(16);
+    LOKA_VERIFY(translated.last().notTranslated() == 0);
+    LOKA_VERIFY(translated.last().baseline() == TOOLBOX_BASELINE_VALID);
+    LOKA_VERIFY(!translated.last().enclosingClip());
+    LOKA_VERIFY(translated.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    {
+      ToolboxPresentObservation::Interval failed(translated.controller.observation_,
+                                                 true,
+                                                 translated.controller.debugStats_,
+                                                 translated.controller.scrollBarLedger_);
+      translated.controller.observation_.complete(0);
+      LOKA_PAINT_REFUSE(translated.controller.observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+      translated.controller.observation_.markPaintFinished();
+    }
+    translated.scroll(32);
+    LOKA_VERIFY(translated.last().baseline() == TOOLBOX_BASELINE_NONE);
+    LOKA_VERIFY(translated.last().refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
+    translated.scroll(48);
+    LOKA_VERIFY(translated.last().baseline() == TOOLBOX_BASELINE_VALID);
+    LOKA_VERIFY(translated.last().notTranslated() == 0);
+
+    ToolboxScrollBarLedger::ViewportScrollBarBinding &row = translated.controller.viewportScroll();
+    LOKA_VERIFY(row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain) == TOOLBOX_BASELINE_VALID);
+    LOKA_PAINT_REFUSE(translated.controller.observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+    LOKA_VERIFY(row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain) == TOOLBOX_BASELINE_VALID);
+    row.usedThisFrame = false;
+    translated.controller.scrollBarLedger_.settlePresented(TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain) == TOOLBOX_BASELINE_NONE);
+    row.usedThisFrame = true;
+    row.copyDomain = ToolboxOptionalRect();
+    translated.controller.scrollBarLedger_.settlePresented(TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain) == TOOLBOX_BASELINE_NONE);
+
+    const Rect content = {0, 0, 400, 200};
+    const Rect domain = {0, 0, 300, 200};
+    const Rect resized = {0, 0, 320, 200};
+    const ToolboxViewportCertificate certificate(oldOrigin, content, domain);
+    LOKA_VERIFY(certificate.evaluate(oldOrigin, content, ToolboxOptionalRect(domain)) == TOOLBOX_BASELINE_VALID);
+    LOKA_VERIFY(certificate.evaluate(oldOrigin, content, ToolboxOptionalRect(resized)) == TOOLBOX_BASELINE_STALE);
+    LOKA_VERIFY(certificate.evaluate(oldOrigin, resized, ToolboxOptionalRect(domain)) == TOOLBOX_BASELINE_STALE);
+    LOKA_VERIFY(certificate.evaluate(Frame(0, 16, 0, 0), content, ToolboxOptionalRect(domain))
+                == TOOLBOX_BASELINE_STALE);
+    LOKA_VERIFY(certificate.evaluate(oldOrigin, content, ToolboxOptionalRect()) == TOOLBOX_BASELINE_STALE);
+    LOKA_VERIFY(ToolboxViewportCertificate().evaluate(oldOrigin, content, ToolboxOptionalRect(domain))
+                == TOOLBOX_BASELINE_NONE);
+
+    ToolboxClipBoxContext clip;
+    clip.setPlacement(ToolboxClipPlacement(before.rect));
+    ToolboxViewportContentObservation clipping(motion, false);
+    clip.setPlacement(ToolboxClipPlacement(after.rect), &clipping);
+    LOKA_VERIFY(clipping.complete().notTranslated == 0);
+    clip.refusePlacement();
+    clip.setPlacement(ToolboxClipPlacement(after.rect), &clipping);
+    LOKA_VERIFY(clipping.complete().notTranslated == 1);
+    clip.setPlacement(ToolboxClipPlacement());
+    ToolboxViewportContentObservation emptyClip(motion, false);
+    clip.setPlacement(ToolboxClipPlacement(), &emptyClip);
+    LOKA_VERIFY(emptyClip.complete().notTranslated == 0);
+
+    ToolboxPresentObservation observation;
+    ToolboxSceneDebugStats stats;
+    ToolboxScrollBarLedger ledger(1);
+    {
+      ToolboxPresentObservation::Interval warm(observation, true, stats, ledger);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
+    for (unsigned gate = 0; gate < 4; ++gate)
+    {
+      observation.reset();
+      observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      ToolboxViewportContentObservation contentObservation(motion, true);
+      if (gate == 0)
+        contentObservation.noteUnsupportedKind();
+      if (gate < 2)
+        contentObservation.noteNotTranslated();
+      observation.noteViewportMove(
+          content, 0, 16, contentObservation.complete(), gate < 3 ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID);
+      observation.complete(0);
+      LOKA_VERIFY(observation.notTranslated() == (gate < 2 ? 1U : 0U));
+      LOKA_VERIFY(observation.enclosingClip());
+      LOKA_VERIFY(observation.baseline() == (gate < 3 ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID));
+      LOKA_VERIFY(observation.refusal()
+                  == (gate == 0   ? TOOLBOX_PRESENT_UNSUPPORTED_KIND
+                      : gate == 1 ? TOOLBOX_PRESENT_NOT_TRANSLATED
+                      : gate == 2 ? TOOLBOX_PRESENT_NO_PRESENTED_BASELINE
+                                  : TOOLBOX_PRESENT_ENCLOSING_CLIP));
+    }
+  }
+
   void presentOrder()
   {
+    actualLeafPlacementPins();
+    placementObservationPins();
     const Rect viewport = {10, 10, 100, 100};
     const Rect outside = {0, 0, 200, 200};
     ToolboxPresentObservation observation;
     ToolboxSceneDebugStats warmStats;
+    ToolboxScrollBarLedger ledger(1);
     {
-      ToolboxPresentObservation::Interval warm(observation, true, warmStats);
+      ToolboxPresentObservation::Interval warm(observation, true, warmStats, ledger);
       observation.complete(0);
       observation.markPaintFinished();
     }
@@ -1924,21 +2701,21 @@ namespace
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentObservation());
-    observation.noteViewportMove(viewport, 0, 4, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, 0, 4, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.viewports() == 1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteDamage(outside);
     observation.complete(1);
@@ -1946,7 +2723,7 @@ namespace
     observation.reset();
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
     observation.reset();
@@ -1954,14 +2731,14 @@ namespace
     observation.complete(0);
     // No movement precedes the reason gate, even for an admitted input reason.
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
     observation.reset();
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
     observation.noteReason(TOOLBOX_FULL_DRAW_TEXT_RELAYOUT);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentObservation());
+    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     // Each later refusal remains present while the earlier one wins.
@@ -1970,8 +2747,9 @@ namespace
       observation.reset();
       observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
       ToolboxSceneDebugStats stats;
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
-      ToolboxViewportContentObservation content;
+      ToolboxScrollBarLedger ledger(1);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
+      ToolboxViewportContentObservation content(ToolboxExpectedMotion(0, Frame()), false);
       if (gate == 0)
         content.noteContentInputs();
       if (gate < 2)
@@ -1979,7 +2757,7 @@ namespace
       if (gate < 3)
         content.noteUnsupportedKind();
       content.notePhaseBound();
-      observation.noteViewportMove(viewport, 0, 3, content);
+      observation.noteViewportMove(viewport, 0, 3, content.complete(), TOOLBOX_BASELINE_VALID);
       observation.noteDamage(outside);
       observation.complete(1);
       LOKA_VERIFY(observation.refusal()
@@ -1997,7 +2775,8 @@ namespace
     observation.reset();
     {
       ToolboxSceneDebugStats stats;
-      ToolboxPresentObservation::Interval interval(observation, true, stats);
+      ToolboxScrollBarLedger ledger(1);
+      ToolboxPresentObservation::Interval interval(observation, true, stats, ledger);
       observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
       observation.complete(0);
       observation.noteReason(TOOLBOX_FULL_DRAW_CHILD_DIRTY);
@@ -2490,6 +3269,11 @@ namespace
 #include "ToolboxPaintRefusalPins.hpp"
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strncmp(argv[1], "Resume", 6))
+  {
+    runResumePins(argv[1]);
+    return 0;
+  }
   if (argc == 2 && std::strncmp(argv[1], "Refusal", 7) == 0)
   {
     runRefusalPin(argv[1]);

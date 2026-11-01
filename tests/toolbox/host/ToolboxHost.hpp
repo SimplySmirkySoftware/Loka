@@ -237,6 +237,7 @@ public:
   void *flushData;
   /** False models a window with no grow box: the size box query declines. */
   bool answersSizeBox;
+  bool answersPort;
   ToolboxScenePlatformController *scenePlatformController_;
   void idleControls(ActivationPhase);
   explicit ToolboxWindow(const WindowProps &props = WindowProps())
@@ -245,6 +246,7 @@ public:
         onFlush(0),
         flushData(0),
         answersSizeBox(true),
+        answersPort(true),
         scenePlatformController_(0)
   {
 #ifdef LOKA_HOST_ZSTACK_UNITS
@@ -267,6 +269,8 @@ public:
   }
   virtual bool queryPortRect(Rect &out) const
   {
+    if (!this->answersPort)
+      return false;
     out = this->port.portRect;
     return true;
   }
@@ -516,9 +520,9 @@ public:
         return this->scrollControls()[i].maximum;
     return 0;
   }
-  ToolboxScrollBarLedger::ViewportScrollBarBinding &viewportScroll()
+  ToolboxScrollBarLedger::ViewportScrollBarBinding &viewportScroll(unsigned index = 0)
   {
-    return this->scrollBarLedger_.viewportScrollBars_[0];
+    return this->scrollBarLedger_.viewportScrollBars_[index];
   }
   ToolboxScrollBarLedger::ScrollBarControlBinding &scrollControl(unsigned index)
   {
@@ -529,6 +533,12 @@ public:
   void invalidateUnitOverlap(const Rect &);
   short layoutZStack(loka::app::ZStackNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void renderZStack(loka::app::ZStackNode *);
+#ifdef LOKA_HOST_CONTROL_WIDTH
+  static void setButtonNodeForTesting(ToolboxButtonContext &context, loka::app::ButtonNode *node)
+  {
+    context.node_ = node;
+  }
+#endif
   ToolboxScrollViewLayoutResult
   layoutScrollView(loka::app::ScrollViewNode *, loka::app::scene::LayoutState &, loka::app::scene::BoundaryNode *);
   void requestStructurePresent();
