@@ -99,6 +99,10 @@ public:
   {
     return window_;
   }
+  /** True while the native window is drawn active (WindowRecord::hilited).
+      Read through WindowPeek, as the chrome reads the region fields:
+      IsWindowHilited is a Carbon accessor the Multiversal Interfaces lack. */
+  bool isHilited() const;
   /** Answers port coordinates only while the native window exists. */
   bool queryPortRect(Rect &out) const
   {

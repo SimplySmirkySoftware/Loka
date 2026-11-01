@@ -211,10 +211,6 @@ inline GrafPtr FrontWindow()
 {
   return toolbox_host::frontWindow;
 }
-inline bool IsWindowHilited(GrafPtr window)
-{
-  return window == FrontWindow();
-}
 #include "ToolboxPendingDialogs.hpp"
 #include "ToolboxDialogPresenter.hpp"
 namespace toolbox_host
@@ -321,6 +317,11 @@ public:
   WindowPort *window()
   {
     return &port;
+  }
+  /** Mirrors the production door: hilited means this port is the front window. */
+  bool isHilited() const
+  {
+    return toolbox_host::frontWindow == &this->port;
   }
   ToolboxWindowContext *context()
   {

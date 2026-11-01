@@ -177,11 +177,7 @@ bool ToolboxScenePlatformController::syncNativeFocus(NativeFocusMode mode)
   EditTextControlBinding *row = this->editControls_.focused();
   if (!row || !row->unicode)
     return false;
-  // WindowRecord::hilited through WindowPeek, as ToolboxWindowChrome reads the
-  // region fields: IsWindowHilited is a Carbon accessor the Multiversal
-  // Interfaces the CI builds with do not declare.
-  const bool eligible = mode == NATIVE_FOCUS_NORMAL && this->window_
-                        && reinterpret_cast<WindowPeek>(this->window_->window())->hilited
+  const bool eligible = mode == NATIVE_FOCUS_NORMAL && this->window_ && this->window_->isHilited()
                         && row->editor->hasNativeHandle() && !ParkedContext(row->ownerContext);
   this->unicodeEditors_.focus(row->unicode, eligible);
   return eligible;
