@@ -268,6 +268,7 @@ short ToolboxButtonContext::layout(loka::app::scene::IPlatformController *contro
   (void)controller;
   if (!node_)
   {
+    this->invalidatePlacement();
     return 0;
   }
   this->captureProps();
@@ -280,7 +281,12 @@ short ToolboxButtonContext::layout(loka::app::scene::IPlatformController *contro
   rect.right = static_cast<short>(state.x + width);
   rect.bottom = static_cast<short>(state.y + state.lineHeight - ToolboxLayoutMetrics::kControlAscentInset
                                    + ToolboxLayoutMetrics::kControlDescent);
+  const ToolboxLeafGeometry previous = {
+      this->rect_, {this->rect_.top, this->rect_.left}, static_cast<short>(this->rect_.right - this->rect_.left)};
+  const ToolboxLeafGeometry next = {rect, {rect.top, rect.left}, width};
+  this->comparePlacement(previous, next);
   updateRect(rect);
+  this->completePlacement();
   // Advance by the painted box, as the other rails do: y is the top edge.
   state.y = static_cast<short>(rect.bottom);
   return width;

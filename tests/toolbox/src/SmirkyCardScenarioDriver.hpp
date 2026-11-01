@@ -24,8 +24,10 @@ private:
   smirkycard::ScriptRuntime runtime_;
   App *app_;
   double lingerRemaining_;
+  double arrowWaitRemaining_;
   enum Phase
   {
+    WAITING_ARROW,
     RUNNING,
     LINGERING
   };

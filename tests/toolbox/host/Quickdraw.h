@@ -21,6 +21,10 @@ enum
   patCopy = 8,
   patOr = 9
 };
+struct Point
+{
+  short v, h;
+};
 struct Rect
 {
   short top, left, bottom, right;

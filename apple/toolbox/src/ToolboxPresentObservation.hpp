@@ -3,6 +3,9 @@
 
 #include "ToolboxFullDrawReason.hpp"
 #include "ToolboxPaintRefusal.hpp"
+#include "context/ToolboxLeafPlacement.hpp"
+
+class ToolboxScrollBarLedger;
 
 class ToolboxSceneDebugStats;
 #include <Quickdraw.h>
@@ -27,6 +30,9 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_CONTENT_INPUTS,
   TOOLBOX_PRESENT_REQUESTS_DURING_WALK,
   TOOLBOX_PRESENT_UNSUPPORTED_KIND,
+  TOOLBOX_PRESENT_NOT_TRANSLATED,
+  TOOLBOX_PRESENT_NO_PRESENTED_BASELINE,
+  TOOLBOX_PRESENT_ENCLOSING_CLIP,
   TOOLBOX_PRESENT_DITHER_PHASE,
   TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT,
   TOOLBOX_PRESENT_FOREGROUND_UNITS,
@@ -66,6 +72,12 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
     return "requests_during_walk";
   case TOOLBOX_PRESENT_UNSUPPORTED_KIND:
     return "unsupported_kind";
+  case TOOLBOX_PRESENT_NOT_TRANSLATED:
+    return "not_translated";
+  case TOOLBOX_PRESENT_NO_PRESENTED_BASELINE:
+    return "no_presented_baseline";
+  case TOOLBOX_PRESENT_ENCLOSING_CLIP:
+    return "enclosing_clip";
   case TOOLBOX_PRESENT_DITHER_PHASE:
     return "dither_phase";
   case TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT:
@@ -80,6 +92,34 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
   return "unknown";
 }
 
+/** Layout's evaluation of the last CLEAN presented certificate. */
+enum ToolboxBaselineStatus
+{
+  TOOLBOX_BASELINE_NONE,
+  TOOLBOX_BASELINE_STALE,
+  TOOLBOX_BASELINE_VALID
+};
+inline const char *ToolboxBaselineStatusName(ToolboxBaselineStatus status)
+{
+  switch (status)
+  {
+  case TOOLBOX_BASELINE_NONE:
+    return "none";
+  case TOOLBOX_BASELINE_STALE:
+    return "stale";
+  case TOOLBOX_BASELINE_VALID:
+    return "valid";
+  }
+  return "unknown";
+}
+
+/** Completed content facts passed by value from child layout to move observation. */
+struct ToolboxViewportContentResult
+{
+  unsigned contentInputs, unsupportedKinds, phaseBound, notTranslated;
+  bool enclosingClip;
+};
+
 /** Counts visited nodes only; band windows may skip rows. Pre-layout inputs
     contribute only after successful projected layout. Diagnostics, verdict erase:
     zero counts are not a content-invariance proof (window-anchored raster phase,
@@ -87,10 +127,13 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
 class ToolboxViewportContentObservation
 {
 public:
-  ToolboxViewportContentObservation()
+  ToolboxViewportContentObservation(const ToolboxExpectedMotion &motion, bool enclosingClip)
       : contentInputs_(0),
         unsupportedKinds_(0),
-        phaseBound_(0)
+        phaseBound_(0),
+        notTranslated_(0),
+        motion_(motion),
+        enclosingClip_(enclosingClip)
   {
   }
   /** Dispatch calls once per successful dirty leaf visit; O(1), walks nothing. */
@@ -110,20 +153,21 @@ public:
   {
     ++this->phaseBound_;
   }
-  /** Completed window-anchored raster visits; O(1), walks nothing. */
-  unsigned phaseBound() const
+  /** Completed layout facts, O(1), no rows. */
+  ToolboxViewportContentResult complete() const
   {
-    return this->phaseBound_;
+    const ToolboxViewportContentResult result = {
+        this->contentInputs_, this->unsupportedKinds_, this->phaseBound_, this->notTranslated_, this->enclosingClip_};
+    return result;
   }
-  /** Completed visit count; O(1), walks nothing. */
-  unsigned contentInputs() const
+  /** Each placement compare reports at most once per visit; O(1), no rows. */
+  void noteNotTranslated()
   {
-    return this->contentInputs_;
+    ++this->notTranslated_;
   }
-  /** Completed visit count; O(1), walks nothing. */
-  unsigned unsupportedKinds() const
+  const ToolboxExpectedMotion &motion() const
   {
-    return this->unsupportedKinds_;
+    return this->motion_;
   }
 
   /** Borrows the layoutScrollView local only during child layout. O(1), no walk. */
@@ -148,7 +192,9 @@ public:
   };
 
 private:
-  unsigned contentInputs_, unsupportedKinds_, phaseBound_;
+  unsigned contentInputs_, unsupportedKinds_, phaseBound_, notTranslated_;
+  const ToolboxExpectedMotion motion_;
+  const bool enclosingClip_;
 };
 
 /** Controller-owned interval facts; completed copies contain no borrowed identities. */
@@ -167,11 +213,15 @@ public:
   class Interval
   {
   public:
-    Interval(ToolboxPresentObservation &observation, bool coversWindow, ToolboxSceneDebugStats &stats)
+    Interval(ToolboxPresentObservation &observation,
+             bool coversWindow,
+             ToolboxSceneDebugStats &stats,
+             ToolboxScrollBarLedger &ledger)
         : observation_(observation),
           coversWindow_(coversWindow),
           entryEligibility_(observation.eligibility_),
-          debugStats_(stats)
+          debugStats_(stats),
+          ledger_(ledger)
     {
       this->observation_.phase_ = WALKING;
     }
@@ -184,6 +234,7 @@ public:
     const bool coversWindow_;
     const ToolboxPaintEligibility entryEligibility_;
     ToolboxSceneDebugStats &debugStats_;
+    ToolboxScrollBarLedger &ledger_;
   };
 
   /** O(1) per full request, walks nothing; completed intervals defer new causes.
@@ -204,7 +255,11 @@ public:
     this->damage_ = damage;
   }
   /** layoutScrollView calls once per successful move; O(1) merge, walks nothing. */
-  void noteViewportMove(const Rect &contentRect, int dx, int dy, const ToolboxViewportContentObservation &content)
+  void noteViewportMove(const Rect &contentRect,
+                        int dx,
+                        int dy,
+                        const ToolboxViewportContentResult &content,
+                        ToolboxBaselineStatus baseline)
   {
     if (dx == 0 && dy == 0)
       return;
@@ -212,10 +267,13 @@ public:
     {
       this->viewport_ = contentRect;
       this->dy_ = dy;
+      this->baseline_ = baseline;
     }
-    this->contentInputs_ += content.contentInputs();
-    this->unsupportedKinds_ += content.unsupportedKinds();
-    this->phaseBound_ += content.phaseBound();
+    this->contentInputs_ += content.contentInputs;
+    this->unsupportedKinds_ += content.unsupportedKinds;
+    this->phaseBound_ += content.phaseBound;
+    this->notTranslated_ += content.notTranslated;
+    this->enclosingClip_ = this->enclosingClip_ || content.enclosingClip;
     ++this->viewports_;
     this->horizontal_ = this->horizontal_ || dx != 0;
   }
@@ -243,6 +301,12 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_REQUESTS_DURING_WALK;
     else if (this->unsupportedKinds_)
       this->refusal_ = TOOLBOX_PRESENT_UNSUPPORTED_KIND;
+    else if (this->notTranslated_)
+      this->refusal_ = TOOLBOX_PRESENT_NOT_TRANSLATED;
+    else if (this->baseline_ != TOOLBOX_BASELINE_VALID)
+      this->refusal_ = TOOLBOX_PRESENT_NO_PRESENTED_BASELINE;
+    else if (this->enclosingClip_)
+      this->refusal_ = TOOLBOX_PRESENT_ENCLOSING_CLIP;
     else if (this->phaseBound_ > 0 && (this->dy_ & 7) != 0)
       this->refusal_ = TOOLBOX_PRESENT_DITHER_PHASE;
     else if (this->damage_.left < this->damage_.right && this->damage_.top < this->damage_.bottom
@@ -258,7 +322,9 @@ public:
   void reset()
   {
     this->reasons_ = this->nextReasons_ = this->walkReasons_ = 0;
-    this->contentInputs_ = this->unsupportedKinds_ = this->phaseBound_ = 0;
+    this->contentInputs_ = this->unsupportedKinds_ = this->phaseBound_ = this->notTranslated_ = 0;
+    this->baseline_ = TOOLBOX_BASELINE_NONE;
+    this->enclosingClip_ = false;
     this->damage_ = this->viewport_ = Rect();
     this->dy_ = 0;
     this->viewports_ = this->foregroundUnits_ = 0;
@@ -313,6 +379,19 @@ public:
   const ToolboxPaintRefusalRecord &outsideRefusal() const
   {
     return this->outsideRefusal_;
+  }
+
+  unsigned notTranslated() const
+  {
+    return this->notTranslated_;
+  }
+  ToolboxBaselineStatus baseline() const
+  {
+    return this->baseline_;
+  }
+  bool enclosingClip() const
+  {
+    return this->enclosingClip_;
   }
 
   /** Merged successful moved-viewport visits; O(1), no walk. */
@@ -407,7 +486,9 @@ private:
   ToolboxPaintEligibility eligibility_;
   ToolboxPaintRefusalRecord firstRefusal_, outsideRefusal_;
   unsigned reasons_, nextReasons_, walkReasons_;
-  unsigned contentInputs_, unsupportedKinds_, phaseBound_;
+  unsigned contentInputs_, unsupportedKinds_, phaseBound_, notTranslated_;
+  ToolboxBaselineStatus baseline_;
+  bool enclosingClip_;
   Rect damage_, viewport_;
   int dy_;
   unsigned viewports_, foregroundUnits_;

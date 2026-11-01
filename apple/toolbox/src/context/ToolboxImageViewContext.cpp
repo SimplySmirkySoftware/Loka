@@ -311,10 +311,19 @@ short ToolboxImageViewContext::layout(loka::app::scene::IPlatformController *, l
       }
     }
   }
+  const short rectWidth = std::max<short>(0, static_cast<short>(width));
+  const short rectHeight = std::max<short>(0, static_cast<short>(height));
+  const Rect rect = {
+      state.y, state.x, static_cast<short>(state.y + rectHeight), static_cast<short>(state.x + rectWidth)};
+  const ToolboxLeafGeometry previous = {
+      this->rect_, {this->rect_.top, this->rect_.left}, static_cast<short>(this->rect_.right - this->rect_.left)};
+  const ToolboxLeafGeometry next = {rect, {rect.top, rect.left}, rectWidth};
+  this->comparePlacement(previous, next);
   updateRect(state.x, state.y, static_cast<short>(width), static_cast<short>(height));
   this->paintRect_ = this->rect_;
   if (this->controller() && !this->controller()->intersectWithProjectionClip(this->rect_, this->paintRect_))
     SetRect(&this->paintRect_, 0, 0, 0, 0);
+  this->completePlacement();
   // ImageView has no presented fact: its inherited unsupported paint answer
   // remains conservative across frame and clip changes.
   state.y = static_cast<short>(state.y + static_cast<short>(height));

@@ -4,6 +4,12 @@
 #include "ToolboxNativeImage.hpp"
 #include "context/ToolboxImageViewContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
+#ifdef LOKA_HOST_GAP_DISPATCH
+#include "ToolboxNodeDispatch.hpp"
+#include "ToolboxPlatformLayoutHandlers.hpp"
+#include "context/ToolboxClipBoxContext.hpp"
+#include "app/nodes/nestable/Box.hpp"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -123,10 +129,74 @@ void LineTo(short x, short y)
   MoveTo(x, y);
 }
 
+#ifdef LOKA_HOST_GAP_DISPATCH
+namespace
+{
+  class ClipImageController : public ToolboxScenePlatformController
+  {
+  public:
+    explicit ClipImageController(ToolboxWindow *window)
+        : ToolboxScenePlatformController(window)
+    {
+    }
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      if (!this->projectLayoutState(state))
+        return false;
+      return this->nodeHandlerRegistry_.find(node)->ensureContext(node, this, state) != 0;
+    }
+  };
+  void clippedImagePlacement()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ClipImageController controller(&window);
+    LOKA_VERIFY(RegisterToolboxImageViewNodeHandler(controller.nodeHandlerRegistry_));
+    LOKA_VERIFY(RegisterToolboxClipBoxNodeHandlers(controller.nodeHandlerRegistry_));
+    LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(controller.gapLayoutRegistry));
+    MutableState<Frame> origin((Frame()));
+    NodeState<Frame> viewport(&origin, 0);
+    ScrollViewNode scroll((ScrollViewProps(viewport)));
+    BoxNode *box = new BoxNode(Box().size(60, 600).clipChildren().props);
+    ImageViewProps props;
+    props.size(20, 20);
+    ImageViewNode *image = new ImageViewNode(props);
+    box->addChild(image);
+    scroll.addChild(box);
+    LayoutState state = seat();
+    state.width = 100;
+    state.height = 100;
+    LayoutNode(&scroll, state, &controller, 0);
+    Rect clip;
+    LOKA_VERIFY(static_cast<ToolboxClipBoxContext *>(box->getContext())->placement().query(clip));
+    LOKA_VERIFY(image->getContext());
+    image->props.size(21, 20);
+    origin.set(Frame(0, 16, 0, 0));
+    controller.observation_.reset();
+    state = seat();
+    state.width = 100;
+    state.height = 100;
+    LayoutNode(&scroll, state, &controller, 0);
+    LOKA_VERIFY(controller.observation_.viewports() == 1);
+    LOKA_VERIFY(controller.observation_.unsupportedKinds() == 0);
+    LOKA_VERIFY(controller.observation_.notTranslated() == 1);
+    controller.clearControls();
+    controller.releaseNodeContexts(&scroll);
+  }
+} // namespace
+#endif
+
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const std::string mode(argv[1]);
+#ifdef LOKA_HOST_GAP_DISPATCH
+  if (mode == "clip-placement")
+  {
+    clippedImagePlacement();
+    return 0;
+  }
+#endif
   ToolboxWindow window;
   HostPortScope port(window.window());
   ToolboxScenePlatformController controller(&window);
@@ -285,5 +355,22 @@ int main(int argc, char **argv)
     }
   }
   same(toolbox_host::currentClip(), ambient);
+  if (mode == "none")
+  {
+    const Frame origin(0, 0, 0, 0);
+    ToolboxViewportContentObservation moved(ToolboxExpectedMotion(&origin, Frame(0, 16, 0, 0)), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, moved);
+      place(context, controller, viewport, 16);
+    }
+    LOKA_VERIFY(moved.complete().notTranslated == 0);
+    node.props.size(21, 20);
+    ToolboxViewportContentObservation resized(ToolboxExpectedMotion(&origin, origin), false);
+    {
+      ToolboxViewportContentObservation::Scope scope(controller.activeViewportContent_, resized);
+      place(context, controller, viewport, 16);
+    }
+    LOKA_VERIFY(resized.complete().notTranslated == 1);
+  }
   std::printf("PASS testToolboxImageView_%s\n", argv[1]);
 }

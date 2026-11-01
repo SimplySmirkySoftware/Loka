@@ -59,10 +59,18 @@ void ToolboxCardBandContext::onFactChanged(loka::app::scene::NodeLifecycleFact p
 
 short ToolboxCardBandContext::layout(loka::app::scene::IPlatformController *, loka::app::scene::LayoutState &state)
 {
-  SetRect(&this->rect_, state.x, state.y, state.x + state.width, state.y + state.height);
-  this->paintRect_ = this->rect_;
-  if (this->controller() && !this->controller()->intersectWithProjectionClip(this->rect_, this->paintRect_))
-    SetRect(&this->paintRect_, 0, 0, 0, 0);
+  Rect rect;
+  SetRect(&rect, state.x, state.y, state.x + state.width, state.y + state.height);
+  Rect paintRect = rect;
+  if (this->controller() && !this->controller()->intersectWithProjectionClip(rect, paintRect))
+    SetRect(&paintRect, 0, 0, 0, 0);
+  const ToolboxLeafGeometry previous = {
+      this->rect_, {this->rect_.top, this->rect_.left}, static_cast<short>(this->rect_.right - this->rect_.left)};
+  const ToolboxLeafGeometry next = {rect, {rect.top, rect.left}, state.width};
+  this->comparePlacement(previous, next);
+  this->rect_ = rect;
+  this->paintRect_ = paintRect;
+  this->completePlacement();
   state.y += state.height;
   return state.width;
 }

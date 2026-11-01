@@ -860,7 +860,8 @@ int main(int argc, char **argv)
     f.controller.observation_.reset();
     toolbox_host::failNew = 1;
     {
-      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      ToolboxPresentObservation::Interval interval(
+          f.controller.observation_, true, f.controller.debugStats_, f.controller.scrollBarLedger_);
       context->render(&f.controller);
       f.controller.observation_.complete(0);
       f.controller.observation_.markPaintFinished();
@@ -883,7 +884,8 @@ int main(int argc, char **argv)
     const char *site = 0;
     if (mode == "debt-scroll-to")
     {
-      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      ToolboxPresentObservation::Interval interval(
+          f.controller.observation_, true, f.controller.debugStats_, f.controller.scrollBarLedger_);
       OffsetRect(&(**f.te()).destRect, 0, 100);
       ToolboxTextEditorAccess::scrollTo(*f.context, LineCursor(f.lines.at(0).id, 0));
       LOKA_VERIFY(f.controller.observation_.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
@@ -959,7 +961,8 @@ int main(int argc, char **argv)
     f.controller.observation_.reset();
     const int sets = toolbox_host::sets, selections = toolbox_host::selections;
     {
-      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      ToolboxPresentObservation::Interval interval(
+          f.controller.observation_, true, f.controller.debugStats_, f.controller.scrollBarLedger_);
       if (project)
       {
         LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("changed")) == EDIT_OK);
