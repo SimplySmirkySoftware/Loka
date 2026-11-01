@@ -1,5 +1,7 @@
 #include "JsCardBindingRegistry.hpp"
 #include "CardNodes.hpp"
+#include "JsToolbarNode.hpp"
+#include <climits>
 #include "SmirkyMarkup.hpp"
 #include "JsOwnProperties.hpp"
 #include "app/nodes/ImageView.hpp"
@@ -59,8 +61,17 @@ namespace smirkycard
     if (!lowering || !lowering->name || lowering->kind)
       return false;
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
-      if (entry->value_->kind == nextKind_ || !strcmp(entry->value_->name, lowering->name))
+    {
+      const char *parent = entry->value_->parent;
+      const bool sameParent =
+          parent && lowering->parent ? !strcmp(parent, lowering->parent) : parent == lowering->parent;
+      if (entry->value_->kind == nextKind_ || (sameParent && !strcmp(entry->value_->name, lowering->name)))
         return false;
+    }
+    if (!lowering->parent)
+      for (GlobalEntry *entry = globals_; entry; entry = entry->next_)
+        if (!strcmp(entry->value_.name, lowering->name))
+          return false;
     LoweringEntry *entry = new (std::nothrow) LoweringEntry(lowering);
     if (!entry)
       return false;
@@ -77,7 +88,7 @@ namespace smirkycard
       if (!strcmp(entry->value_.name, global.name))
         return false;
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
-      if (!strcmp(entry->value_->name, global.name))
+      if (!entry->value_->parent && !strcmp(entry->value_->name, global.name))
         return false;
     GlobalEntry *entry = new (std::nothrow) GlobalEntry(global);
     if (!entry)
@@ -96,21 +107,44 @@ namespace smirkycard
   bool JsCardBindingRegistry::install(JSContext *context) const
   {
     JSValue global = JS_GetGlobalObject(context);
-    for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
-      JS_SetPropertyStr(context,
-                        global,
-                        entry->value_->name,
-                        JS_NewCFunctionMagic(context,
-                                             &JsCardBindingRegistry::build,
-                                             entry->value_->name,
-                                             1,
-                                             JS_CFUNC_generic_magic,
-                                             entry->value_->kind));
-    for (GlobalEntry *entry = globals_; entry; entry = entry->next_)
-      JS_SetPropertyStr(context,
-                        global,
-                        entry->value_.name,
-                        JS_NewCFunction(context, entry->value_.fn, entry->value_.name, entry->value_.length));
+    if (JS_IsException(global))
+      return false;
+    for (int pass = 0; pass < 2; ++pass)
+    {
+      for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
+      {
+        const IJsNodeLowering &lowering = *entry->value_;
+        if ((lowering.parent != 0) != (pass == 1))
+          continue;
+        JSValue target =
+            lowering.parent ? JS_GetPropertyStr(context, global, lowering.parent) : JS_DupValue(context, global);
+        if (JS_IsException(target) || (lowering.parent && !JS_IsFunction(context, target)))
+        {
+          JS_FreeValue(context, target);
+          JS_FreeValue(context, global);
+          return false;
+        }
+        JSValue fn = JS_NewCFunctionMagic(
+            context, &JsCardBindingRegistry::build, lowering.name, 1, JS_CFUNC_generic_magic, lowering.kind);
+        const bool ok = !JS_IsException(fn) && JS_SetPropertyStr(context, target, lowering.name, fn) >= 0;
+        JS_FreeValue(context, target);
+        if (!ok)
+        {
+          JS_FreeValue(context, global);
+          return false;
+        }
+      }
+      if (pass == 0)
+        for (GlobalEntry *entry = globals_; entry; entry = entry->next_)
+        {
+          JSValue fn = JS_NewCFunction(context, entry->value_.fn, entry->value_.name, entry->value_.length);
+          if (JS_IsException(fn) || JS_SetPropertyStr(context, global, entry->value_.name, fn) < 0)
+          {
+            JS_FreeValue(context, global);
+            return false;
+          }
+        }
+    }
     JS_FreeValue(context, global);
     return true;
   }
@@ -122,6 +156,11 @@ namespace smirkycard
   }
   namespace
   {
+    bool installDescriptorFunction(JSContext *ctx, JSValueConst tree, const char *name, JSCFunction *function)
+    {
+      JSValue value = JS_NewCFunction(ctx, function, name, 1);
+      return !JS_IsException(value) && JS_SetPropertyStr(ctx, tree, name, value) >= 0;
+    }
     JSValue newTree(JSContext *ctx, int kind)
     {
       JSValue node = JS_NewObject(ctx);
@@ -238,7 +277,7 @@ namespace smirkycard
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
-        JSValue children = collectChildren(ctx, name, argc, argv, 16, false);
+        JSValue children = collectChildren(ctx, name, argc, argv, kMaximumTreeChildren, false);
         if (JS_IsException(children))
           return children;
         JSValue tree = newTree(ctx, kind);
@@ -293,7 +332,8 @@ namespace smirkycard
           node.fail("JavaScript stack allocation refused.");
           return 0;
         }
-        if (!lowerChildren(node, ctx, tree, depth, *nest, 16, false, "JavaScript stack has invalid children."))
+        if (!lowerChildren(
+                node, ctx, tree, depth, *nest, kMaximumTreeChildren, false, "JavaScript stack has invalid children."))
         {
           delete stack;
           return 0;
@@ -1140,6 +1180,141 @@ namespace smirkycard
         return node.lowerImageView(ctx, tree);
       }
     };
+    class ToolbarDescriptorLowering : public IJsNodeLowering
+    {
+    public:
+      explicit ToolbarDescriptorLowering(JsToolbarRowKind value)
+          : rowKind_(value)
+      {
+        kind = 0;
+        parent = value == JS_TOOLBAR_ROW_BUTTON ? 0 : "ToolbarItem";
+        switch (value)
+        {
+        case JS_TOOLBAR_ROW_BUTTON:
+          name = "ToolbarItem";
+          break;
+        case JS_TOOLBAR_ROW_LABEL:
+          name = "label";
+          break;
+        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
+          name = "flexibleSpace";
+          break;
+        case JS_TOOLBAR_ROW_FIXED_SPACE:
+          name = "fixedSpace";
+          break;
+        }
+      }
+      virtual bool queryToolbarRowKind(JsToolbarRowKind &out) const
+      {
+        out = this->rowKind_;
+        return true;
+      }
+      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      {
+        const bool arity = (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON && argc == 2)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_LABEL && argc >= 1 && argc <= 2)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_FLEXIBLE_SPACE && argc == 0)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_FIXED_SPACE && argc == 1);
+        if (!arity)
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
+        JSValue tree = JS_NewObject(ctx);
+        if (JS_IsException(tree))
+          return tree;
+        bool ok = JS_SetPropertyStr(ctx, tree, "kind", JS_NewInt32(ctx, this->kind)) >= 0;
+        switch (this->rowKind_)
+        {
+        case JS_TOOLBAR_ROW_BUTTON:
+          ok = ok && JS_SetPropertyStr(ctx, tree, "handler", JS_DupValue(ctx, argv[1])) >= 0
+               && installDescriptorFunction(ctx, tree, "enabled", &ScriptRuntime::enabled);
+          // Button and label share the text and test-id descriptor doors.
+          break;
+        case JS_TOOLBAR_ROW_LABEL:
+          if (argc == 2)
+            ok = ok && JS_SetPropertyStr(ctx, tree, "style", JS_DupValue(ctx, argv[1])) >= 0;
+          break;
+        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
+          break;
+        case JS_TOOLBAR_ROW_FIXED_SPACE:
+          ok = ok && JS_SetPropertyStr(ctx, tree, "width", JS_DupValue(ctx, argv[0])) >= 0;
+          break;
+        }
+        if (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON || this->rowKind_ == JS_TOOLBAR_ROW_LABEL)
+          ok = ok && JS_SetPropertyStr(ctx, tree, "label", JS_DupValue(ctx, argv[0])) >= 0
+               && installDescriptorFunction(ctx, tree, "TEST_ID", &ScriptRuntime::testId);
+        JsToolbarRow row;
+        ok = ok && JsCardBindingRegistry::readToolbarDescriptor(ctx, tree, row) && JS_FreezeObject(ctx, tree) >= 0;
+        if (!ok)
+        {
+          JS_FreeValue(ctx, tree);
+          return JS_EXCEPTION;
+        }
+        return tree;
+      }
+      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *, JSValueConst, int)
+      {
+        node.fail("ToolbarItem descriptors require a Toolbar.");
+        return 0;
+      }
+
+    private:
+      const JsToolbarRowKind rowKind_;
+    };
+
+    class ToolbarLowering : public IJsNodeLowering
+    {
+    public:
+      ToolbarLowering()
+      {
+        name = "Toolbar";
+        kind = 0;
+      }
+      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      {
+        JSValue children = collectChildren(ctx, name, argc, argv, kMaximumTreeChildren, false);
+        if (JS_IsException(children))
+        {
+          JS_FreeValue(ctx, JS_GetException(ctx));
+          return JS_ThrowTypeError(ctx, "Toolbar accepts at most 16 descriptors");
+        }
+        int64_t count = 0;
+        bool ok = JS_GetLength(ctx, children, &count) == 0;
+        unsigned buttons = 0;
+        for (int64_t i = 0; ok && i < count; ++i)
+        {
+          JSValue child = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
+          JsToolbarRow row;
+          ok = JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
+          JS_FreeValue(ctx, child);
+          if (ok && row.kind == JS_TOOLBAR_ROW_BUTTON && ++buttons > JS_TOOLBAR_SLOT_COUNT)
+          {
+            JS_ThrowTypeError(ctx, "Toolbar accepts at most eight buttons");
+            ok = false;
+          }
+        }
+        if (!ok)
+        {
+          JS_FreeValue(ctx, children);
+          return JS_EXCEPTION;
+        }
+        JSValue tree = newTree(ctx, this->kind);
+        if (JS_IsException(tree))
+        {
+          JS_FreeValue(ctx, children);
+          return tree;
+        }
+        if (JS_SetPropertyStr(ctx, tree, "children", children) < 0 || JS_FreezeObject(ctx, tree) < 0)
+        {
+          JS_FreeValue(ctx, tree);
+          return JS_EXCEPTION;
+        }
+        return tree;
+      }
+      virtual loka::app::scene::NodeDefinitionBase *
+      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
+      {
+        return node.lowerToolbar(ctx, tree, depth);
+      }
+    };
     class ClickableLowering : public IJsNodeLowering
     {
     public:
@@ -1189,6 +1364,11 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) StackLowering("ZStack", StackLowering::STACK_DEPTH))
            && registry.registerLowering(new (std::nothrow) BoxLowering(kBoxGlobal))
            && registry.registerLowering(new (std::nothrow) BoxLowering(kClipBoxGlobal))
+           && registry.registerLowering(new (std::nothrow) ToolbarLowering())
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_BUTTON))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_LABEL))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FLEXIBLE_SPACE))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FIXED_SPACE))
            && registry.registerGlobal(card);
   }
 } // namespace smirkycard

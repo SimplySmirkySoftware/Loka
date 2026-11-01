@@ -19,6 +19,7 @@ namespace loka
 namespace smirkycard
 {
   class JsCardNode;
+  struct JsToolbarRow;
 
   /** Read a plain style dictionary; leave out unchanged and throw on refusal. */
   bool readTextStyle(JSContext *context, JSValueConst dict, loka::app::TextStyle &out);
@@ -29,11 +30,35 @@ namespace smirkycard
   /** Require an ordinary or null-prototype dictionary, as used by style readers. */
   bool requirePlainObject(JSContext *context, JSValueConst dict, const char *label);
 
+  /** Descriptor identity, independent of the JavaScript publication name. */
+  enum JsToolbarRowKind
+  {
+    JS_TOOLBAR_ROW_BUTTON,
+    JS_TOOLBAR_ROW_LABEL,
+    JS_TOOLBAR_ROW_FLEXIBLE_SPACE,
+    JS_TOOLBAR_ROW_FIXED_SPACE
+  };
+
   struct IJsNodeLowering
   {
+    IJsNodeLowering()
+        : name(0),
+          parent(0),
+          kind(0)
+    {
+    }
+    /** JavaScript function name: a global when parent is null, otherwise a
+        property on the global function named by parent. */
     const char *name;
+    const char *parent;
     int kind;
     virtual ~IJsNodeLowering() {}
+    /** Report descriptor identity when this lowering is a Toolbar item factory. */
+    virtual bool queryToolbarRowKind(JsToolbarRowKind &out) const
+    {
+      (void)out;
+      return false;
+    }
     virtual JSValue build(JSContext *context, int argc, JSValueConst *argv) = 0;
     virtual loka::app::scene::NodeDefinitionBase *
     lower(JsCardNode &node, JSContext *context, JSValueConst tree, int depth) = 0;
@@ -61,6 +86,8 @@ namespace smirkycard
     bool registerGlobal(const IJsGlobal &global);
     IJsNodeLowering *lookup(int kind) const;
     bool install(JSContext *context) const;
+    /** Validate descriptor facts at build and lower; seat provenance is card-owned. */
+    static bool readToolbarDescriptor(JSContext *context, JSValueConst tree, JsToolbarRow &row);
 
   private:
     struct LoweringEntry;
