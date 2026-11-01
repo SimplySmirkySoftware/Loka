@@ -27,9 +27,8 @@ private:
   double arrowWaitRemaining_;
   enum Phase
   {
-    RUNNING,
-    RUNNING_ARROW,
     WAITING_ARROW,
+    RUNNING,
     LINGERING
   };
   Phase phase_;

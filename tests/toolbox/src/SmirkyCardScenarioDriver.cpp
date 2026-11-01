@@ -52,8 +52,8 @@ SmirkyCardScenarioAppConfig::SmirkyCardScenarioAppConfig(PlatformContext *contex
       runtime_(context),
       app_(0),
       lingerRemaining_(settings.hasLingerSeconds ? settings.lingerSeconds : 0.0),
-      arrowWaitRemaining_(60.0),
-      phase_(settings.scenario == "laptop-arrow" ? RUNNING_ARROW : RUNNING)
+      arrowWaitRemaining_(100.0),
+      phase_(settings.scenario == "laptop-arrow" ? WAITING_ARROW : RUNNING)
 {
   const std::string companion = "globalThis.LAPTOP_CELL = \"" + settings.scenario + "\";\n" + CompanionSource();
   loka::core::String error;
@@ -97,10 +97,10 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
     this->arrowWaitRemaining_ -= elapsedSeconds;
     if (this->arrowWaitRemaining_ <= 0.0)
     {
+      // The flow still runs so the terminal record stays last; the tracked
+      // audit carries "arrow value=", so this line fails the comparison.
       this->audit_.recordLog("arrow timeout");
-      (void)this->completionPublisher_.publish(window);
-      this->phase_ = LINGERING;
-      return;
+      this->phase_ = RUNNING;
     }
   }
   if (!window || !window->scene())
@@ -118,6 +118,19 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
       if (scene->hasPendingInvalidation() || controller->hasPendingSync()
           || window->asToolboxWindow()->hasPendingInvalidate())
         return;
+      if (this->phase_ == WAITING_ARROW)
+      {
+        // The gesture precedes the JS flow: its log line lands before every
+        // step record and the flow's terminal record remains the last line.
+        const short value = TallListArrowValue(window);
+        if (value <= 0)
+          return;
+        char line[40];
+        std::sprintf(line, "arrow value=%d", value);
+        this->audit_.recordLog(line);
+        this->phase_ = RUNNING;
+        return;
+      }
       if (!this->audit_.finished() && !this->audit_.failed())
       {
         this->clock_.advanceTo(this->clock_.currentTick() + 1);
@@ -125,17 +138,6 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         return; // The terminal step may have changed the presentation; capture on the next settled idle.
       }
     }
-  }
-  if (this->phase_ == RUNNING_ARROW)
-    this->phase_ = WAITING_ARROW;
-  if (this->phase_ == WAITING_ARROW && !this->audit_.failed())
-  {
-    const short value = TallListArrowValue(window);
-    if (value <= 0)
-      return;
-    char line[40];
-    std::sprintf(line, "arrow value=%d", value);
-    this->audit_.recordLog(line);
   }
   (void)this->completionPublisher_.publish(window);
   this->phase_ = LINGERING;

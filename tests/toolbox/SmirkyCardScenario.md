@@ -15,7 +15,12 @@ Verification: `checkLaptopScenario`, `ScenarioToolsTest.py`, and
 | laptop-detail | PowerBook 180c detail pane |
 | laptop-arrow | Tall list after one vertical scroll-bar down-arrow click |
 
-The `laptop-arrow` cell runs the startup flow, waits for settled presentation, and clicks the Tall list down arrow once before capture.
+The `laptop-arrow` cell waits, with the presentation settled, until the native
+Tall list bar has advanced (mame-launch.lua clicks its down arrow once after
+the bar's range has been stable for five seconds), logs `arrow value=<n>`, and
+only then runs the startup flow, so the flow's terminal record stays the last
+audit line. A 100 s wait logs `arrow timeout` instead and the tracked audit then
+fails the comparison.
 
 The vehicle is built only when the Retro68 build is configured with
 `-DLOKA_BUILD_SMIRKYCARD=ON` (SmirkyCard is opt-in; CI builds it in its own
