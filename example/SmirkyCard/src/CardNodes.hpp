@@ -15,6 +15,10 @@ namespace smirkycard
 {
   /** Inclusive tree depth shared by lowering and nested ScrollView validation. */
   extern const int kMaximumTreeDepth;
+  enum
+  {
+    kMaximumTreeChildren = 16
+  };
 
   class JsCardNode;
   class CardScene : public loka::app::scene::Scene
@@ -78,6 +82,7 @@ namespace smirkycard
     bool setComposeTree(JSContext *context, JSValueConst tree);
     loka::app::scene::NodeDefinitionBase *lowerText(JSContext *context, JSValueConst tree);
     loka::app::scene::NodeDefinitionBase *lowerEditText(JSContext *context, JSValueConst tree);
+    loka::app::scene::NodeDefinitionBase *lowerToolbar(JSContext *context, JSValueConst tree, int depth);
     loka::app::scene::NodeDefinitionBase *lowerClickable(JSContext *context, JSValueConst tree, bool cell);
     loka::app::scene::NodeDefinitionBase *lowerShow(JSContext *context, JSValueConst tree, int depth);
     loka::app::scene::NodeDefinitionBase *lowerOpenFileDialog(JSContext *context, JSValueConst tree);
@@ -95,6 +100,7 @@ namespace smirkycard
     friend struct IJsNodeLowering;
     friend class ScriptRuntime;
     friend class JsClickNode;
+    friend class JsToolbarNode;
     friend class CardFlow;
 #ifdef TEST_BUILD
     friend class testing::CardFlowAccess;
