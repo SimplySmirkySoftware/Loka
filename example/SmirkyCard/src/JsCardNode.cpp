@@ -1607,18 +1607,7 @@ namespace smirkycard
     bool ok = JS_IsNumber(kindValue) && JS_ToInt32(ctx, &kind, kindValue) == 0;
     JS_FreeValue(ctx, kindValue);
     IJsNodeLowering *lowering = ok ? runtime->registry_.lookup(kind) : 0;
-    if (!lowering)
-      ok = false;
-    else if (!strcmp(lowering->name, "ToolbarItem"))
-      row.kind = JsToolbarRow::BUTTON;
-    else if (!strcmp(lowering->name, "label"))
-      row.kind = JsToolbarRow::LABEL;
-    else if (!strcmp(lowering->name, "flexibleSpace"))
-      row.kind = JsToolbarRow::FLEXIBLE_SPACE;
-    else if (!strcmp(lowering->name, "fixedSpace"))
-      row.kind = JsToolbarRow::FIXED_SPACE;
-    else
-      ok = false;
+    ok = lowering && lowering->queryToolbarRowKind(row.kind);
     if (!ok)
     {
       JS_ThrowTypeError(ctx, "Toolbar requires ToolbarItem descriptors");
@@ -1633,15 +1622,15 @@ namespace smirkycard
       size_t length = 0;
       const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
       JS_FreeValue(ctx, key);
-      const bool text = row.kind == JsToolbarRow::BUTTON || row.kind == JsToolbarRow::LABEL;
+      const bool text = row.kind == JS_TOOLBAR_ROW_BUTTON || row.kind == JS_TOOLBAR_ROW_LABEL;
       const bool known =
           name && strlen(name) == length
           && (!strcmp(name, "kind")
               || (text && (!strcmp(name, "label") || !strcmp(name, "testId") || !strcmp(name, "TEST_ID")))
-              || (row.kind == JsToolbarRow::BUTTON
+              || (row.kind == JS_TOOLBAR_ROW_BUTTON
                   && (!strcmp(name, "handler") || !strcmp(name, "enabled") || !strcmp(name, "enabledSeat")))
-              || (row.kind == JsToolbarRow::LABEL && !strcmp(name, "style"))
-              || (row.kind == JsToolbarRow::FIXED_SPACE && !strcmp(name, "width")));
+              || (row.kind == JS_TOOLBAR_ROW_LABEL && !strcmp(name, "style"))
+              || (row.kind == JS_TOOLBAR_ROW_FIXED_SPACE && !strcmp(name, "width")));
       if (name)
         JS_FreeCString(ctx, name);
       if (!known)
@@ -1650,11 +1639,11 @@ namespace smirkycard
         return false;
       }
     }
-    if (row.kind == JsToolbarRow::BUTTON || row.kind == JsToolbarRow::LABEL)
+    if (row.kind == JS_TOOLBAR_ROW_BUTTON || row.kind == JS_TOOLBAR_ROW_LABEL)
     {
       JSValue label = toolbarValue(ctx, tree, "label");
       const bool literal = JS_IsString(label);
-      ok = literal || (row.kind == JsToolbarRow::LABEL && JS_IsObject(label));
+      ok = literal || (row.kind == JS_TOOLBAR_ROW_LABEL && JS_IsObject(label));
       JS_FreeValue(ctx, label);
       if (literal)
         ok = treeString(ctx, tree, "label", row.label, true, true);
@@ -1665,23 +1654,23 @@ namespace smirkycard
     }
     switch (row.kind)
     {
-    case JsToolbarRow::BUTTON:
+    case JS_TOOLBAR_ROW_BUTTON:
     {
       JSValue handler = toolbarValue(ctx, tree, "handler");
       ok = ok && JS_IsFunction(ctx, handler);
       JS_FreeValue(ctx, handler);
       break;
     }
-    case JsToolbarRow::LABEL:
+    case JS_TOOLBAR_ROW_LABEL:
     {
       JSValue style = toolbarValue(ctx, tree, "style");
       ok = ok && (JS_IsUndefined(style) || readTextStyle(ctx, style, row.style));
       JS_FreeValue(ctx, style);
       break;
     }
-    case JsToolbarRow::FLEXIBLE_SPACE:
+    case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
       break;
-    case JsToolbarRow::FIXED_SPACE:
+    case JS_TOOLBAR_ROW_FIXED_SPACE:
     {
       JSValue width = toolbarValue(ctx, tree, "width");
       double value = 0;
@@ -1715,7 +1704,7 @@ namespace smirkycard
       JS_FreeValue(ctx, original);
       JsToolbarRow &row = toolbar.rows[toolbar.count];
       ok = !JS_IsException(child) && JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
-      if (ok && row.kind == JsToolbarRow::LABEL)
+      if (ok && row.kind == JS_TOOLBAR_ROW_LABEL)
       {
         JSValue value = toolbarValue(ctx, child, "label");
         if (!JS_IsString(value))
@@ -1727,7 +1716,7 @@ namespace smirkycard
         }
         JS_FreeValue(ctx, value);
       }
-      if (ok && row.kind == JsToolbarRow::BUTTON)
+      if (ok && row.kind == JS_TOOLBAR_ROW_BUTTON)
       {
         ok = ++buttons <= JS_TOOLBAR_SLOT_COUNT;
         JSValue enabled = toolbarValue(ctx, child, "enabledSeat");

@@ -199,6 +199,7 @@ namespace
   public:
     explicit TestLowering(const char *value, const char *parentName = 0)
     {
+      LOKA_VERIFY(this->name == 0 && this->parent == 0 && this->kind == 0);
       name = value;
       parent = parentName;
       kind = 0;
@@ -1362,9 +1363,52 @@ namespace
            + "}});";
   }
 
+  JSValue registryGlobal(JSContext *, JSValueConst, int, JSValueConst *)
+  {
+    return JS_UNDEFINED;
+  }
+
+  void checkRegistryPublicationNames()
+  {
+    smirkycard::JsCardBindingRegistry registry;
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label", "First")));
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label", "Second")));
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label")));
+    // Equal parent text must collide even when stored at a different address.
+    const char sameParent[] = {'F', 'i', 'r', 's', 't', 0};
+    TestLowering *duplicate = new TestLowering("label", sameParent);
+    LOKA_VERIFY(!registry.registerLowering(duplicate));
+    delete duplicate;
+    duplicate = new TestLowering("label");
+    LOKA_VERIFY(!registry.registerLowering(duplicate));
+    delete duplicate;
+    const smirkycard::IJsGlobal occupied = {"label", &registryGlobal, 0};
+    LOKA_VERIFY(!registry.registerGlobal(occupied));
+
+    for (unsigned globalFirst = 0; globalFirst < 2; ++globalFirst)
+    {
+      smirkycard::JsCardBindingRegistry mixed;
+      const smirkycard::IJsGlobal global = {"property", &registryGlobal, 0};
+      if (globalFirst)
+        LOKA_VERIFY(mixed.registerGlobal(global));
+      TestLowering *property = new TestLowering("property", "Parent");
+      LOKA_VERIFY(mixed.registerLowering(property));
+      if (!globalFirst)
+        LOKA_VERIFY(mixed.registerGlobal(global));
+      LOKA_VERIFY(!mixed.registerGlobal(global));
+      TestLowering *globalCollision = new TestLowering("property");
+      LOKA_VERIFY(!mixed.registerLowering(globalCollision));
+      delete globalCollision;
+      smirkycard::JsToolbarRowKind kind = smirkycard::JS_TOOLBAR_ROW_LABEL;
+      LOKA_VERIFY(!property->queryToolbarRowKind(kind));
+      LOKA_VERIFY(kind == smirkycard::JS_TOOLBAR_ROW_LABEL);
+    }
+  }
+
   void checkToolbarRegistry()
   {
     checkRegistry();
+    checkRegistryPublicationNames();
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
     const char *probe = "[typeof Toolbar,typeof ToolbarItem,typeof label,typeof flexibleSpace,typeof fixedSpace,"
@@ -1644,7 +1688,7 @@ namespace
         changed.count = 2;
         break;
       case 1:
-        changed.rows[0].kind = JsToolbarRow::BUTTON;
+        changed.rows[0].kind = JS_TOOLBAR_ROW_BUTTON;
         break;
       case 2:
         changed.rows[0].label = loka::core::String::Literal("x");

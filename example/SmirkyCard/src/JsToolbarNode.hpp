@@ -25,22 +25,15 @@ namespace smirkycard
   /** One completed row; all pointers borrow card-owned records or read-only seats. */
   struct JsToolbarRow
   {
-    enum Kind
-    {
-      BUTTON,
-      LABEL,
-      FLEXIBLE_SPACE,
-      FIXED_SPACE
-    };
     JsToolbarRow()
-        : kind(FLEXIBLE_SPACE),
+        : kind(JS_TOOLBAR_ROW_FLEXIBLE_SPACE),
           text(0),
           enabled(0),
           handler(0),
           width(0)
     {
     }
-    Kind kind;
+    JsToolbarRowKind kind;
     loka::core::String label;
     loka::core::State<loka::core::String> *text;
     loka::core::State<bool> *enabled;
@@ -102,7 +95,7 @@ namespace smirkycard
     {
       unsigned seen = 0;
       for (unsigned i = 0; i < this->count; ++i)
-        if (this->rows[i].kind == JsToolbarRow::BUTTON && seen++ == static_cast<unsigned>(slot))
+        if (this->rows[i].kind == JS_TOOLBAR_ROW_BUTTON && seen++ == static_cast<unsigned>(slot))
           return &this->rows[i];
       return 0;
     }
@@ -141,7 +134,7 @@ namespace smirkycard
         const std::string testId(static_cast<const char *>(id.data()), id.length());
         switch (row.kind)
         {
-        case JsToolbarRow::BUTTON:
+        case JS_TOOLBAR_ROW_BUTTON:
           for (int k = 0; k < JS_TOOLBAR_SLOT_COUNT; ++k)
           {
             const JsToolbarSlot slot = static_cast<JsToolbarSlot>(k);
@@ -151,15 +144,15 @@ namespace smirkycard
                              .testId(testId.c_str());
           }
           break;
-        case JsToolbarRow::LABEL:
+        case JS_TOOLBAR_ROW_LABEL:
           toolbar << (row.text ? loka::app::ToolbarItem::label(row.text) + row.style
                                : loka::app::ToolbarItem::label(label.c_str()) + row.style)
                          .testId(testId.c_str());
           break;
-        case JsToolbarRow::FLEXIBLE_SPACE:
+        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
           toolbar << loka::app::ToolbarItem::flexibleSpace();
           break;
-        case JsToolbarRow::FIXED_SPACE:
+        case JS_TOOLBAR_ROW_FIXED_SPACE:
           toolbar << loka::app::ToolbarItem::fixedSpace(row.width);
           break;
         }

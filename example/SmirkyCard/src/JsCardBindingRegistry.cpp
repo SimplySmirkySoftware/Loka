@@ -61,8 +61,17 @@ namespace smirkycard
     if (!lowering || !lowering->name || lowering->kind)
       return false;
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
-      if (entry->value_->kind == nextKind_ || !strcmp(entry->value_->name, lowering->name))
+    {
+      const char *parent = entry->value_->parent;
+      const bool sameParent =
+          parent && lowering->parent ? !strcmp(parent, lowering->parent) : parent == lowering->parent;
+      if (entry->value_->kind == nextKind_ || (sameParent && !strcmp(entry->value_->name, lowering->name)))
         return false;
+    }
+    if (!lowering->parent)
+      for (GlobalEntry *entry = globals_; entry; entry = entry->next_)
+        if (!strcmp(entry->value_.name, lowering->name))
+          return false;
     LoweringEntry *entry = new (std::nothrow) LoweringEntry(lowering);
     if (!entry)
       return false;
@@ -79,7 +88,7 @@ namespace smirkycard
       if (!strcmp(entry->value_.name, global.name))
         return false;
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
-      if (!strcmp(entry->value_->name, global.name))
+      if (!entry->value_->parent && !strcmp(entry->value_->name, global.name))
         return false;
     GlobalEntry *entry = new (std::nothrow) GlobalEntry(global);
     if (!entry)
@@ -264,7 +273,6 @@ namespace smirkycard
           : axis_(axis)
       {
         name = n;
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -351,7 +359,6 @@ namespace smirkycard
       GridLowering()
       {
         name = "Grid";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -415,7 +422,6 @@ namespace smirkycard
       TextLowering()
       {
         name = "Text";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -473,7 +479,6 @@ namespace smirkycard
       MarkupLowering()
       {
         name = "Markup";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -531,7 +536,6 @@ namespace smirkycard
       EditTextLowering()
       {
         name = "EditText";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -568,7 +572,6 @@ namespace smirkycard
       ShowLowering()
       {
         this->name = "Show";
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -594,7 +597,6 @@ namespace smirkycard
       OpenFileDialogLowering()
       {
         this->name = "OpenFileDialog";
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -765,7 +767,6 @@ namespace smirkycard
       ScrollViewLowering()
       {
         this->name = "ScrollView";
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -842,7 +843,6 @@ namespace smirkycard
       CardLowering()
       {
         this->name = "Card";
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -1012,7 +1012,6 @@ namespace smirkycard
           : global_(global)
       {
         this->name = global.name;
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -1157,7 +1156,6 @@ namespace smirkycard
       ImageViewLowering()
       {
         this->name = "ImageView";
-        this->parent = 0;
         this->kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -1185,33 +1183,38 @@ namespace smirkycard
     class ToolbarDescriptorLowering : public IJsNodeLowering
     {
     public:
-      explicit ToolbarDescriptorLowering(JsToolbarRow::Kind value)
+      explicit ToolbarDescriptorLowering(JsToolbarRowKind value)
           : rowKind_(value)
       {
         kind = 0;
-        parent = value == JsToolbarRow::BUTTON ? 0 : "ToolbarItem";
+        parent = value == JS_TOOLBAR_ROW_BUTTON ? 0 : "ToolbarItem";
         switch (value)
         {
-        case JsToolbarRow::BUTTON:
+        case JS_TOOLBAR_ROW_BUTTON:
           name = "ToolbarItem";
           break;
-        case JsToolbarRow::LABEL:
+        case JS_TOOLBAR_ROW_LABEL:
           name = "label";
           break;
-        case JsToolbarRow::FLEXIBLE_SPACE:
+        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
           name = "flexibleSpace";
           break;
-        case JsToolbarRow::FIXED_SPACE:
+        case JS_TOOLBAR_ROW_FIXED_SPACE:
           name = "fixedSpace";
           break;
         }
       }
+      virtual bool queryToolbarRowKind(JsToolbarRowKind &out) const
+      {
+        out = this->rowKind_;
+        return true;
+      }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
-        const bool arity = (this->rowKind_ == JsToolbarRow::BUTTON && argc == 2)
-                           || (this->rowKind_ == JsToolbarRow::LABEL && argc >= 1 && argc <= 2)
-                           || (this->rowKind_ == JsToolbarRow::FLEXIBLE_SPACE && argc == 0)
-                           || (this->rowKind_ == JsToolbarRow::FIXED_SPACE && argc == 1);
+        const bool arity = (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON && argc == 2)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_LABEL && argc >= 1 && argc <= 2)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_FLEXIBLE_SPACE && argc == 0)
+                           || (this->rowKind_ == JS_TOOLBAR_ROW_FIXED_SPACE && argc == 1);
         if (!arity)
           return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
         JSValue tree = JS_NewObject(ctx);
@@ -1220,22 +1223,22 @@ namespace smirkycard
         bool ok = JS_SetPropertyStr(ctx, tree, "kind", JS_NewInt32(ctx, this->kind)) >= 0;
         switch (this->rowKind_)
         {
-        case JsToolbarRow::BUTTON:
+        case JS_TOOLBAR_ROW_BUTTON:
           ok = ok && JS_SetPropertyStr(ctx, tree, "handler", JS_DupValue(ctx, argv[1])) >= 0
                && installDescriptorFunction(ctx, tree, "enabled", &ScriptRuntime::enabled);
           // Button and label share the text and test-id descriptor doors.
           break;
-        case JsToolbarRow::LABEL:
+        case JS_TOOLBAR_ROW_LABEL:
           if (argc == 2)
             ok = ok && JS_SetPropertyStr(ctx, tree, "style", JS_DupValue(ctx, argv[1])) >= 0;
           break;
-        case JsToolbarRow::FLEXIBLE_SPACE:
+        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
           break;
-        case JsToolbarRow::FIXED_SPACE:
+        case JS_TOOLBAR_ROW_FIXED_SPACE:
           ok = ok && JS_SetPropertyStr(ctx, tree, "width", JS_DupValue(ctx, argv[0])) >= 0;
           break;
         }
-        if (this->rowKind_ == JsToolbarRow::BUTTON || this->rowKind_ == JsToolbarRow::LABEL)
+        if (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON || this->rowKind_ == JS_TOOLBAR_ROW_LABEL)
           ok = ok && JS_SetPropertyStr(ctx, tree, "label", JS_DupValue(ctx, argv[0])) >= 0
                && installDescriptorFunction(ctx, tree, "TEST_ID", &ScriptRuntime::testId);
         JsToolbarRow row;
@@ -1254,7 +1257,7 @@ namespace smirkycard
       }
 
     private:
-      const JsToolbarRow::Kind rowKind_;
+      const JsToolbarRowKind rowKind_;
     };
 
     class ToolbarLowering : public IJsNodeLowering
@@ -1263,7 +1266,6 @@ namespace smirkycard
       ToolbarLowering()
       {
         name = "Toolbar";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -1283,7 +1285,7 @@ namespace smirkycard
           JsToolbarRow row;
           ok = JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
           JS_FreeValue(ctx, child);
-          if (ok && row.kind == JsToolbarRow::BUTTON && ++buttons > JS_TOOLBAR_SLOT_COUNT)
+          if (ok && row.kind == JS_TOOLBAR_ROW_BUTTON && ++buttons > JS_TOOLBAR_SLOT_COUNT)
           {
             JS_ThrowTypeError(ctx, "Toolbar accepts at most eight buttons");
             ok = false;
@@ -1320,7 +1322,6 @@ namespace smirkycard
           : cell_(cell)
       {
         name = cell ? "Cell" : "Button";
-        parent = 0;
         kind = 0;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
@@ -1364,10 +1365,10 @@ namespace smirkycard
            && registry.registerLowering(new (std::nothrow) BoxLowering(kBoxGlobal))
            && registry.registerLowering(new (std::nothrow) BoxLowering(kClipBoxGlobal))
            && registry.registerLowering(new (std::nothrow) ToolbarLowering())
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JsToolbarRow::BUTTON))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JsToolbarRow::LABEL))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JsToolbarRow::FLEXIBLE_SPACE))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JsToolbarRow::FIXED_SPACE))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_BUTTON))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_LABEL))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FLEXIBLE_SPACE))
+           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FIXED_SPACE))
            && registry.registerGlobal(card);
   }
 } // namespace smirkycard
