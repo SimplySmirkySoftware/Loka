@@ -82,18 +82,6 @@ void testTextStyleWeightReadingPresence()
   }
 }
 
-void testTextStyleWeightRefusesOutOfRange()
-{
-  using namespace loka::app;
-  const TextStyle invalid = TextStyle().weight(static_cast<TextWeight>(7));
-  TextWeight out = TEXT_WEIGHT_BOLD;
-  LOKA_VERIFY(!invalid.queryWeight(out));
-  LOKA_VERIFY(out == TEXT_WEIGHT_BOLD);
-  LOKA_VERIFY(!invalid.declaresFont());
-  LOKA_VERIFY(!TextStyle().queryWeight(out));
-  LOKA_VERIFY(out == TEXT_WEIGHT_BOLD);
-}
-
 void testTextStyleMergeAndSizeVocabulary()
 {
   using namespace loka::app;

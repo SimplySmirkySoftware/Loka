@@ -7,8 +7,11 @@ namespace loka
 {
   namespace app
   {
-    /** Optional font weight in one byte. Invalid input is refused as unset,
-        including in release builds. Unset is transparent in merges. */
+    /** Optional font weight in one byte. Unset is transparent in merges.
+        Only TextWeight enumerators are valid input. An integer outside the enum's
+        range is already invalid where the caller converts it (UBSan reports the
+        load), so no refusal is promised here, unlike the int-taking toggle and
+        family values. */
     class TextWeightValue
     {
     public:
