@@ -1,6 +1,7 @@
 #include "platform/ToolboxPascalText.hpp"
 #include "platform/ToolboxMacRoman.hpp"
 #include "platform/StringUTF8.hpp"
+#include "platform/ToolboxUtf8Bytes.hpp"
 #include <Script.h>
 #include <cstring>
 
@@ -31,6 +32,7 @@ namespace
   {
     const unsigned char first = static_cast<unsigned char>(utf8[0]);
     unsigned long minimum = 0;
+    // ToolboxNextTextUnit's inline ASCII pre-check mirrors this branch.
     if (first < 0x80) { scalar = first; length = 1; }
     else if ((first & 0xE0) == 0xC0) { scalar = first & 0x1F; length = 2; minimum = 0x80; }
     else if ((first & 0xF0) == 0xE0) { scalar = first & 0x0F; length = 3; minimum = 0x800; }
@@ -50,7 +52,7 @@ namespace
   }
 }
 
-ToolboxTextUnit ToolboxNextTextUnit(const char *input, std::size_t remaining, bool roman)
+ToolboxTextUnit loka::toolbox::detail::DecodeToolboxTextUnit(const char *input, std::size_t remaining, bool roman)
 {
   assert(input && remaining);
   ToolboxTextUnit unit = { '?', 1, '?' };
@@ -135,15 +137,15 @@ bool ToolboxEncodePascal(const loka::core::String &value, Str255 out)
 {
   out[0] = 0;
   const bool roman = GetScriptManagerVariable(smSysScript) == smRoman;
-  std::string utf8;
-  if (!loka::platform::CollectUtf8(value, utf8))
+  const ToolboxUtf8Bytes utf8(value);
+  if (!utf8.valid())
     return false;
   // Stream straight into the capped output: building a full projection here
   // would add an allocation refusal that no short label had before (T1a).
   std::size_t count = 0;
-  for (std::size_t input = 0; input < utf8.size() && count < 255;)
+  for (std::size_t input = 0; input < utf8.length() && count < 255;)
   {
-    const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.data() + input, utf8.size() - input, roman);
+    const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.bytes() + input, utf8.length() - input, roman);
     out[++count] = unit.native;
     input += unit.consumed;
   }

@@ -3,9 +3,7 @@
 #include "app/nodes/controls/Button.hpp"
 #include "app/nodes/Text.hpp"
 #include "app/nodes/ImageView.hpp"
-#include "platform/StringUTF8.hpp"
-#include "core/StringAccess.hpp"
-#include "platform/String.hpp"
+#include "platform/ToolboxUtf8Bytes.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 #include <climits>
 
@@ -32,6 +30,26 @@ short ToolboxScenePlatformController::measurePushButtonNaturalWidth(const loka::
   return static_cast<short>(2 * ToolboxLayoutMetrics::kPushButtonTitleInset);
 }
 
+namespace
+{
+  /** CR/LF check on the borrowed UTF-8 bytes; copies only when the String cannot lend them.
+      Measured on maciix (Toolbar rally 1, page 1c §10): the copy cost about 0.1 ms per query. */
+  bool QuerySingleLine(const loka::core::String &value, bool &singleLine)
+  {
+    const ToolboxUtf8Bytes view(value);
+    if (!view.valid())
+      return false;
+    singleLine = true;
+    for (std::size_t i = 0; i < view.length(); ++i)
+      if (view.bytes()[i] == '\r' || view.bytes()[i] == '\n')
+      {
+        singleLine = false;
+        break;
+      }
+    return true;
+  }
+} // namespace
+
 bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *child, short &width) const
 {
   if (loka::app::ImageViewNode *image = child ? child->asImageViewNode() : 0)
@@ -57,8 +75,8 @@ bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *c
     return false;
   const loka::core::String value = text->props.text_->get();
   // One line only: a line break declines, so multi-line Text keeps a shared seat.
-  std::string utf8;
-  if (!loka::platform::CollectUtf8(value, utf8) || utf8.find_first_of("\r\n") != std::string::npos)
+  bool singleLine = false;
+  if (!QuerySingleLine(value, singleLine) || !singleLine)
     return false;
   // The Text context measures through this same scope and descriptor, so the
   // answer is the width it lays the string out at.
@@ -69,33 +87,6 @@ bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *c
   width = measured;
   return true;
 }
-
-namespace
-{
-  /** CR/LF check on the borrowed UTF-8 bytes; copies only when the String cannot lend them.
-      Measured on maciix (Toolbar rally 1, page 1c §10): the copy cost about 0.1 ms per query. */
-  bool QuerySingleLine(const loka::core::String &value, bool &singleLine)
-  {
-    loka::platform::Utf8View view = {0, 0};
-    std::string scratch;
-    const loka::core::Managed<loka::platform::String> &handle = loka::core::StringAccess::handle(value);
-    if (handle.isValid() && !handle->queryUtf8(view))
-    {
-      if (!loka::platform::CollectUtf8(value, scratch))
-        return false;
-      view.bytes = scratch.data();
-      view.length = scratch.size();
-    }
-    singleLine = true;
-    for (std::size_t i = 0; i < view.length; ++i)
-      if (view.bytes[i] == '\r' || view.bytes[i] == '\n')
-      {
-        singleLine = false;
-        break;
-      }
-    return true;
-  }
-} // namespace
 
 bool ToolboxScenePlatformController::queryNaturalHeight(loka::app::scene::Node *child, short &height) const
 {
