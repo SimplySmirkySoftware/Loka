@@ -102,7 +102,6 @@ card('first', class {
     // Each pane has its own Show seat to stay within the tree depth limit;
     // the handlers keep those seats consistent.
     this.wide = false;
-    this.browse = c.state(true);
     this.detail = c.state(false);
     this.carouselShown = c.state(false);
     this.listShown = c.state(true);
@@ -115,7 +114,6 @@ card('first', class {
         this.wideList.set(!narrow);
       }));
     this.toolbarTitle = c.state('SmirkyTracker');
-    this.presentationLabel = c.state('Wide');
     // Seats materialize after the constructor, so the first machine's values
     // are initial values here; select() writes the same seats later.
     const first = MACHINES[0];
@@ -143,7 +141,6 @@ card('first', class {
   open(i) {
     this.select(i);
     this.toolbarTitle.set(MACHINES[this.index].name);
-    this.browse.set(false);
     this.carouselShown.set(false);
     this.listShown.set(false);
     this.detail.set(true);
@@ -158,12 +155,10 @@ card('first', class {
   showBrowse() {
     this.carouselShown.set(this.wide);
     this.listShown.set(!this.wide);
-    this.browse.set(true);
   }
 
   togglePresentation() {
     this.wide = !this.wide;
-    this.presentationLabel.set(this.wide ? 'Tall' : 'Wide');
     this.showBrowse();
   }
 
@@ -180,16 +175,15 @@ card('first', class {
       Button(label, () => this.open(i)).TEST_ID(testId)));
   }
 
-  toolbar() {
-    // Three short buttons share the left half; the title keeps its half
-    // of the full 420 px Classic client width. Main replaces the longer ./MAIN.JS label.
-    return Box(Row(
-      Row(
-        Show(this.detail, Button('< Back', () => this.back()).TEST_ID('Laptop.Back')),
-        Show(this.browse, Button(this.presentationLabel, () => this.togglePresentation()).TEST_ID('Laptop.Presentation')),
-        Button('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
-        Button('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
-      Text(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title')), {height: BAR, padding: BAR_INSET});
+  toolbar(lead) {
+    // Each pane supplies its constant lead; the title shares the space left
+    // by the three natural-width buttons in the 420 px Classic client.
+    return Box(Toolbar(
+      lead,
+      ToolbarItem.label(this.toolbarTitle, TITLE).TEST_ID('Laptop.Title'),
+      ToolbarItem('Main', () => this.c.open('./MAIN.JS')).TEST_ID('SmirkyCard.OpenMain'),
+      ToolbarItem('About', () => this.aboutShown.set(true)).TEST_ID('Laptop.About')),
+      {height: BAR, padding: BAR_INSET});
   }
 
   carousel() {
@@ -202,7 +196,7 @@ card('first', class {
         Button('<', () => this.select(this.index - 1)).TEST_ID('Laptop.Prev'),
         Button('>', () => this.select(this.index + 1)).TEST_ID('Laptop.Next')),
       ScrollView(Row(...MACHINES.map((m, i) =>
-        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id, false))).naturalWidth())), {padding: 'standard'}), this.toolbar()).expBlurUnit();
+        this.machineCard(i, 110, 70, m.short, 'Laptop.Wide.' + m.id, false))).naturalWidth())), {padding: 'standard'}), this.toolbar(ToolbarItem('Tall', () => this.togglePresentation()).TEST_ID('Laptop.Presentation'))).expBlurUnit();
   }
 
   list() {
@@ -224,7 +218,7 @@ card('first', class {
     }
     return ZStack(
       ScrollView(VStack(...rows).naturalHeight(), {viewport: this.viewport, insets: {top: BAR}}),
-      this.toolbar()).expBlurUnit();
+      this.toolbar(ToolbarItem('Wide', () => this.togglePresentation()).TEST_ID('Laptop.Presentation'))).expBlurUnit();
   }
 
   detailPage() {
@@ -234,7 +228,7 @@ card('first', class {
       Text(this.dYear, LABEL).TEST_ID('Laptop.Detail.Year'),
       Text(this.dBlurb, undefined, {wrap: 'word'}).TEST_ID('Laptop.Detail.Blurb'),
       ...this.dSpecs.map((s, j) => Text(s).TEST_ID('Laptop.Detail.' + SPECS[j][1]))), {padding: 'standard'}), {insets: {top: BAR}}),
-      this.toolbar()).expBlurUnit();
+      this.toolbar(ToolbarItem('< Back', () => this.back()).TEST_ID('Laptop.Back'))).expBlurUnit();
   }
 
   about() {
