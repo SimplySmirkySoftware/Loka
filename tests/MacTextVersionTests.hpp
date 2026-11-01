@@ -20,4 +20,11 @@ void testMacTextVersionReconciliation();
 void testMacTextVersionSizeEdges();
 void testMacTextVersionDynamicColour();
 void testMacTextVersionNaturalWidth();
+void testMacTextUnderlineRuns();
+void testMacTextUnderlineTransitions();
+void testMacTextUnderlineSizes();
+void testMacTextUnderlinePixels();
+void testMacTextUnderlineNoRelayoutAndEmpty();
+void testMacTextUnderlineReconciliation();
+void testMacTextUnderlineColourAppearanceAttach();
 #endif
