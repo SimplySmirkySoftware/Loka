@@ -132,13 +132,14 @@ namespace
   {
     ToolboxPresentObservation observation;
     ToolboxSceneDebugStats stats;
+    ToolboxScrollBarLedger ledger(1);
     {
-      ToolboxPresentObservation::Interval interval(observation, false, stats);
+      ToolboxPresentObservation::Interval interval(observation, false, stats, ledger);
     }
     LOKA_VERIFY(ToolboxPaintResultText(stats.lastPresentObservation)
                 == "paint_result=refused rule=2 first=none site=- coverage=-");
     {
-      ToolboxPresentObservation::Interval interval(observation, false, stats);
+      ToolboxPresentObservation::Interval interval(observation, false, stats, ledger);
       observation.complete(0);
       observation.markPaintFinished();
     }
@@ -202,7 +203,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:160" : "ToolboxRender.cpp:170");
+                    button ? "ToolboxRender.cpp:162" : "ToolboxRender.cpp:172");
         return;
       }
       c.paintSuppressClipRgn_ = 0;
@@ -501,7 +502,7 @@ namespace
     {
       LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
       LOKA_VERIFY(result.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
-      refusalSite(result.firstRefusal(), "ToolboxNodeDispatch.cpp:286");
+      refusalSite(result.firstRefusal(), "ToolboxNodeDispatch.cpp:289");
     }
     else
     {

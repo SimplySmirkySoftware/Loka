@@ -11,6 +11,7 @@
 #include "app/scene/state/WriteSeat.hpp"
 #include "ToolboxEditorScrollBar.hpp"
 #include "ToolboxNativePlacement.hpp"
+#include "ToolboxViewportCertificate.hpp"
 #include <Quickdraw.h>
 #include <Controls.h>
 #include <cstddef>
@@ -69,6 +70,8 @@ public:
     Rect contentRect;
     /** Content origin placed by the last successful layout; layout alone compares and replaces it. */
     loka::core::Frame placedOrigin;
+    ToolboxOptionalRect copyDomain;
+    ToolboxViewportCertificate presented;
   };
 
   explicit ToolboxScrollBarLedger(std::size_t bucketDepth)
@@ -76,6 +79,20 @@ public:
         viewportScrollBars_(),
         scrollBarBucket_(bucketDepth)
   {
+  }
+
+  /** Interval calls once per render attempt, O(V) over this ledger's own rows.
+      This is the only writer of presented certificates. */
+  void settlePresented(ToolboxPaintEligibility eligibility)
+  {
+    for (std::size_t i = 0; i < this->viewportScrollBars_.size(); ++i)
+    {
+      ViewportScrollBarBinding &row = this->viewportScrollBars_[i];
+      Rect domain;
+      row.presented = eligibility == TOOLBOX_PAINT_CLEAN && row.usedThisFrame && row.copyDomain.query(domain)
+                          ? ToolboxViewportCertificate(row.placedOrigin, row.contentRect, domain)
+                          : ToolboxViewportCertificate();
+    }
   }
 
 private:

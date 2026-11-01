@@ -144,7 +144,22 @@ namespace
         kind == 0 ? static_cast<NestableNode *>(new BoxNode(bp)) : static_cast<NestableNode *>(new CardNode(cp));
     Ink *ink = new Ink();
     box->addChild(ink);
+    if (!flagged)
+    {
+      if (kind == 0)
+        static_cast<BoxNode *>(box)->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
+      else
+        static_cast<CardNode *>(box)->props.childClip_ = layout::CHILD_CLIP_OWN_RECT;
+      f.layout(*box);
+      LOKA_VERIFY(box->getContext());
+      if (kind == 0)
+        static_cast<BoxNode *>(box)->props.childClip_ = layout::CHILD_CLIP_NONE;
+      else
+        static_cast<CardNode *>(box)->props.childClip_ = layout::CHILD_CLIP_NONE;
+      f.controller.observation_.reset();
+    }
     f.layout(*box);
+    LOKA_VERIFY(!f.controller.observation_.outsideRefusal().refused());
     // Move only the box's next placement; the paint reads the latest fact.
     LayoutState next = f.seat();
     next.x = 35;
@@ -290,6 +305,16 @@ namespace
       for (unsigned i = 0; i != 6; ++i)
         LOKA_VERIFY(
             f.controller.projectionParentScopes_.pushClip(ProjectionParentScope(0, 0, 0, Frame(0, 0, 300, 300))));
+    if (push)
+    {
+      // Exercise the layout guard refusal and its next comparison in the same
+      // fixture as the broad fallback drawing below.
+      f.layout(box);
+      Rect refused;
+      LOKA_VERIFY(!static_cast<ToolboxClipBoxContext *>(box.getContext())->placement().query(refused));
+      buttonSeat = f.seat();
+      LayoutNode(button, buttonSeat, &f.controller, 0);
+    }
     if (!std::strcmp(mode, "region"))
       toolbox_host::failRegions = 1;
     RenderNode(&box, &f.controller);
@@ -312,6 +337,14 @@ namespace
     if (push)
       for (unsigned i = 0; i != 6; ++i)
         LOKA_VERIFY(f.controller.projectionParentScopes_.pop());
+    if (push)
+    {
+      const Frame origin;
+      ToolboxViewportContentObservation next(ToolboxExpectedMotion(&origin, origin), false);
+      ToolboxViewportContentObservation::Scope observation(f.controller.activeViewportContent_, next);
+      f.layout(box);
+      LOKA_VERIFY(next.complete().notTranslated >= 1);
+    }
     equal(toolbox_host::currentClip(), broad);
     f.controller.clearControls();
     f.controller.releaseNodeContexts(&box);

@@ -2,10 +2,7 @@
 #define LOKA_HOST_TEXT_EDIT_H
 #include "Quickdraw.h"
 #include <string>
-struct Point
-{
-  short v, h;
-};
+
 typedef char **Handle;
 typedef Handle CharsHandle;
 /** One scripted native completion, including selection-drag auto-scroll. */
