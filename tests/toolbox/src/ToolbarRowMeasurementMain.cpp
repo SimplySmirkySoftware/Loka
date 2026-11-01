@@ -12,6 +12,11 @@
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileIO.hpp"
 #include <Gestalt.h>
+#ifndef TOOLBAR_ROWS_LAPTOP
+#error TOOLBAR_ROWS_LAPTOP must select the measurement vehicle
+#elif TOOLBAR_ROWS_LAPTOP != 0 && TOOLBAR_ROWS_LAPTOP != 1
+#error TOOLBAR_ROWS_LAPTOP must be 0 or 1
+#endif
 #ifndef TEST_BUILD
 #error Row measurement is test-only
 #endif
@@ -72,6 +77,7 @@ namespace
     return !answered || answer == leaf.y - offer.y;
   }
 
+#if TOOLBAR_ROWS_LAPTOP == 1
   /** One complete band layout per bracket, matching the aligned-title probe.
       The vehicle owns eight bands; lookup and report IO are outside timing. */
   template <class Clock>
@@ -111,9 +117,10 @@ namespace
                    samples[30],
                    occupied);
     }
-    std::fprintf(out, "laptop_band_summary complete=1 cases=8\n");
     return true;
   }
+
+#endif
 
   /** Include full layout, paint and cursor return in each independent draw. */
   template <class Clock> bool MeasureAlignedTitleDraw(ToolboxWindow &window, Clock &clock, std::FILE *out)
@@ -164,8 +171,13 @@ namespace
     {
       c << WindowDef(WindowProps()
                          .frame(1, 41, 636, 400)
+#if TOOLBAR_ROWS_LAPTOP == 1
+                         .title("Toolbar LAPTOP band cost")
+                         .scene(app::scene::Boundary<testing::LaptopBands>())
+#else
                          .title("Toolbar Row cost")
                          .scene(app::scene::Boundary<testing::ToolbarRows>())
+#endif
                          .visible(true)
                          .idlePolicy(app::IdlePolicy::everyTick())
                          .onIdle(&OnIdle, this));
@@ -214,12 +226,17 @@ namespace
                        depth,
                        port.right - port.left,
                        port.bottom - port.top);
+#if TOOLBAR_ROWS_LAPTOP == 1
+          const bool ok =
+              environmentKnown && resolution != ~0UL && MeasureLaptopBands(*window->scene(), *controller, self, out);
+          std::fprintf(out, "laptop_band_summary complete=%d cases=8\n", ok);
+#else
           const bool ok = environmentKnown && resolution != ~0UL
                           && testing::RunToolbarRows(*window->scene(), *controller, self, out)
                           && MeasureAlignedTitle(*window->scene(), *controller, self, out)
-                          && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out)
-                          && MeasureLaptopBands(*window->scene(), *controller, self, out);
+                          && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out);
           std::fprintf(out, "toolbar_row_summary complete=%d cases=8\n", ok);
+#endif
           std::fclose(out);
         }
       }

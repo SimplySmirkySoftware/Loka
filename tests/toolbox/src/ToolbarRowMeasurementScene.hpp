@@ -56,17 +56,29 @@ namespace loka
       }
       virtual void composeNode(app::scene::NodeComposition &c)
       {
-        app::ColumnDefinition rows =
-            app::Column()
-            << (app::Box().width(1) << ToolbarMeasuredRow(1).TEST_ID("k1"))
-            << (app::Box().width(20) << ToolbarMeasuredRow(2).TEST_ID("k2"))
-            << (app::Box().width(180) << ToolbarMeasuredRow(4).TEST_ID("k4"))
-            << (app::Box().width(600) << ToolbarMeasuredRow(4).TEST_ID("fit"))
-            << (app::Box().width(28) << ToolbarMeasuredRow(4).TEST_ID("floor"))
-            << (app::Row().naturalWidth().alignVertical(app::VERTICAL_ALIGNMENT_CENTER).TEST_ID("aligned-title")
-                << app::Button("Back") << (app::Show(*this->shown_.state()) << app::Button("More")) << app::Box()
-                << (app::Text("Title").TEST_ID("aligned-title-label") + app::Title) << app::Box()
-                << app::Button("Done"));
+        c.declare(app::Column()
+                  << (app::Box().width(1) << ToolbarMeasuredRow(1).TEST_ID("k1"))
+                  << (app::Box().width(20) << ToolbarMeasuredRow(2).TEST_ID("k2"))
+                  << (app::Box().width(180) << ToolbarMeasuredRow(4).TEST_ID("k4"))
+                  << (app::Box().width(600) << ToolbarMeasuredRow(4).TEST_ID("fit"))
+                  << (app::Box().width(28) << ToolbarMeasuredRow(4).TEST_ID("floor"))
+                  << (app::Row().naturalWidth().alignVertical(app::VERTICAL_ALIGNMENT_CENTER).TEST_ID("aligned-title")
+                      << app::Button("Back") << (app::Show(*this->shown_.state()) << app::Button("More")) << app::Box()
+                      << (app::Text("Title").TEST_ID("aligned-title-label") + app::Title) << app::Box()
+                      << app::Button("Done")));
+      }
+    };
+    /** A separate window keeps the existing Row vehicle identical to main. */
+    class LaptopBands : public app::scene::BoundaryNodeFor<LaptopBands>
+    {
+    public:
+      explicit LaptopBands(const app::scene::BoundaryPropsFor<LaptopBands> &props)
+          : app::scene::BoundaryNodeFor<LaptopBands>(props)
+      {
+      }
+      virtual void composeNode(app::scene::NodeComposition &c)
+      {
+        app::ColumnDefinition rows = app::Column();
         for (unsigned i = 0; i != 8; ++i)
           rows << LaptopMeasuredBand(
                       i >= 4, i % 4 < 2 ? "Wide" : "< Back", i % 2 ? "PowerBook G4 Titanium" : "SmirkyTracker")
