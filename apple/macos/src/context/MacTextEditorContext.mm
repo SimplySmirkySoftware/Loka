@@ -196,6 +196,7 @@ namespace
   };
 
   /** Immutable borrowed row from a successful NativeLines scan; no retained mapping or encoding buffer. */
+  // common/core/TextUnits.hpp is the formula home; delegation is a follow-up.
   class NativeRow
   {
   public:
