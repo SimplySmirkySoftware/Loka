@@ -1,5 +1,5 @@
 // SIZE partition override for the Retro68/Classic build.
-// SimpleText opens one document of at most 256 rows and 8 KiB.
+// TE SimpleText clamps its document profile to 256 rows and 8 KiB.
 // Measured need (after #1107, MAME maciix, 2026-10-10): 429.0K = peak live heap
 // 404884 B + stack/A5/zone 34460 B, under the workload in
 // tests/toolbox/measure-example-heaps.sh (rerun it after a size-relevant change):
@@ -41,6 +41,10 @@ resource 'SIZE' (-1) {
 #if TARGET_API_MAC_CARBON
 	1024 * 1024,
 	1024 * 1024
+#elif LOKA_TOOLBOX_UNICODE
+	/* Provisional MLTE partition; replace with measured peaks in PR 2b-2. */
+	12 * 1024 * 1024,	/* preferred */
+	8 * 1024 * 1024	/* minimum */
 #elif LOKA_CLASSIC_68K
 	704 * 1024,	/* preferred */
 	480 * 1024	/* minimum */

@@ -5,6 +5,29 @@
 #include <Gestalt.h>
 #include <Memory.h>
 #include <Processes.h>
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+#include <cstdio>
+#endif
+namespace
+{
+  enum ScrapSync
+  {
+    UNKNOWN,
+    IMPORTED,
+    PRIVATE
+  };
+  ScrapSync scrapSync = UNKNOWN;
+  void noteScrapFailure(const char *operation, OSStatus status)
+  {
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+    if (status != noErr)
+      std::fprintf(stderr, "[unicode-scrap] %s failed: %ld\n", operation, static_cast<long>(status));
+#else
+    (void)operation;
+    (void)status;
+#endif
+  }
+} // namespace
 namespace loka
 {
   namespace toolbox
@@ -15,17 +38,25 @@ namespace loka
     }
     void UnicodeText::scrapToPublic()
     {
-      if (TXNConvertToPublicScrap() != noErr)
-      {
-        // diagnostic: no Toolbox status-log seam; clipboard contents are unknown.
-      }
+      noteScrapFailure("to-public", TXNConvertToPublicScrap());
     }
     void UnicodeText::scrapFromPublic()
     {
-      if (TXNConvertFromPublicScrap() != noErr)
-      {
-        // diagnostic: no Toolbox status-log seam; clipboard contents are unknown.
-      }
+      const OSStatus status = TXNConvertFromPublicScrap();
+      scrapSync = status == noErr ? IMPORTED : UNKNOWN;
+      noteScrapFailure("from-public", status);
+    }
+    void UnicodeText::noteNativeScrap(long status)
+    {
+      scrapSync = status == noErr ? PRIVATE : UNKNOWN;
+      noteScrapFailure("native-copy/cut", status);
+    }
+    bool UnicodeText::scrapReady()
+    {
+      if (scrapSync != UNKNOWN)
+        return true;
+      UnicodeText::scrapFromPublic();
+      return scrapSync == IMPORTED;
     }
     UnicodeText::Session::Session()
     {
@@ -34,6 +65,7 @@ namespace loka
       // unexpanded (FreeMem 1280 bytes on Mac OS 9.2.1) TXNNewObject answers
       // memFullErr. Loka's own accounting already covers both shapes
       // (queryLargestContiguousAllocation), so the TE rail stays as it is.
+      scrapSync = UNKNOWN;
       MaxApplZone();
       if (TXNInitTextension(0, 0, 0) != noErr)
       {
@@ -74,6 +106,11 @@ namespace loka
     }
     void UnicodeText::scrapToPublic() {}
     void UnicodeText::scrapFromPublic() {}
+    void UnicodeText::noteNativeScrap(long) {}
+    bool UnicodeText::scrapReady()
+    {
+      return true;
+    }
     UnicodeText::Session::Session() {}
     UnicodeText::Session::~Session() {}
   } // namespace toolbox

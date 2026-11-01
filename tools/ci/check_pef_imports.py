@@ -10,7 +10,7 @@ import struct
 import sys
 
 
-def imports(data):
+def imports(data, symbol_sets=None):
     def bounds(offset, size, limit=len(data)):
         if offset < 0 or size < 0 or offset > limit or size > limit - offset:
             raise ValueError("truncated or malformed bounds")
@@ -67,6 +67,7 @@ def imports(data):
 
     names = set()
     ranges = []
+    owners = []
     for i in range(libraries):
         offset, _, _, count, first, options, _, _ = struct.unpack_from(
             ">5IBBH", loader, 56 + 24 * i)
@@ -78,6 +79,7 @@ def imports(data):
             raise ValueError("weak library: " + library)
         bounds(first, count, symbols)
         ranges.append((first, first + count))
+        owners.append((library, first, first + count))
     end = 0
     for first, last in sorted(ranges):
         if first != end:
@@ -89,17 +91,29 @@ def imports(data):
         symbol = struct.unpack_from(">I", loader, symbol_start + 4 * i)[0]
         if symbol & 0x80000000:
             raise ValueError("weak imported symbol")
-        name(symbol & 0x00FFFFFF)
+        symbol_name = name(symbol & 0x00FFFFFF)
+        if symbol_sets is not None:
+            for library, first, last in owners:
+                if first <= i < last:
+                    symbol_sets.setdefault(library, set()).add(symbol_name)
+                    break
     return names
 
 
-def check(path, expected):
+def check(path, expected, textension_symbols=None):
     if path.suffix != ".pef":
         raise ValueError("input must be .pef, not .bin")
-    actual = imports(path.read_bytes())
+    symbols = {}
+    actual = imports(path.read_bytes(), symbols)
     if actual != set(expected):
         raise ValueError(f"imports mismatch: missing={sorted(set(expected) - actual)}, "
                          f"extra={sorted(actual - set(expected))}")
+    if textension_symbols is not None:
+        actual_symbols = symbols.get("Textension", set())
+        expected_symbols = set(textension_symbols)
+        if actual_symbols != expected_symbols:
+            raise ValueError(f"Textension symbols mismatch: missing={sorted(expected_symbols - actual_symbols)}, "
+                             f"extra={sorted(actual_symbols - expected_symbols)}")
     return actual
 
 
@@ -107,9 +121,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pef", type=Path)
     parser.add_argument("libraries", nargs="+")
+    parser.add_argument("--textension-symbols", nargs="+", help="exact strong Textension symbol set")
     args = parser.parse_args()
     try:
-        print(f"{args.pef}: strong imports {', '.join(sorted(check(args.pef, args.libraries)))}")
+        print(f"{args.pef}: strong imports {', '.join(sorted(check(args.pef, args.libraries, args.textension_symbols)))}")
     except (OSError, ValueError) as error:
         print(str(error), file=sys.stderr)
         return 1

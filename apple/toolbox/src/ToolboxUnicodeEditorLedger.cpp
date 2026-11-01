@@ -97,6 +97,27 @@ bool ToolboxUnicodeEditorLedger::install(ToolboxUnicodeEditorResource *prepared,
   prepared->frame = frameID;
   return true;
 }
+OpaqueTXNObject *ToolboxUnicodeEditorLedger::object(ToolboxUnicodeEditorResource *resource) const
+{
+  return resource ? resource->object : 0;
+}
+bool ToolboxUnicodeEditorLedger::replace(ToolboxUnicodeEditorResource *resource,
+                                         Prepared &fresh,
+                                         ToolboxWindow *window,
+                                         const loka::core::Frame &frame,
+                                         unsigned long options)
+{
+  if (!resource || !fresh.resource() || !this->install(fresh.resource(), window, frame, options))
+    return false;
+  const TXNObject oldObject = resource->object;
+  const TXNFrameID oldFrame = resource->frame;
+  resource->object = fresh.resource()->object;
+  resource->frame = fresh.resource()->frame;
+  fresh.resource()->object = oldObject;
+  fresh.resource()->frame = oldFrame;
+  this->retire(fresh.release());
+  return true;
+}
 void ToolboxUnicodeEditorLedger::link(ToolboxUnicodeEditorResource *resource)
 {
   assert(resource && resource->object && !this->find(resource->context));
@@ -177,6 +198,15 @@ bool ToolboxUnicodeEditorLedger::install(ToolboxUnicodeEditorResource *,
                                          ToolboxWindow *,
                                          const loka::core::Frame &,
                                          unsigned long)
+{
+  return false;
+}
+OpaqueTXNObject *ToolboxUnicodeEditorLedger::object(ToolboxUnicodeEditorResource *) const
+{
+  return 0;
+}
+bool ToolboxUnicodeEditorLedger::replace(
+    ToolboxUnicodeEditorResource *, Prepared &, ToolboxWindow *, const loka::core::Frame &, unsigned long)
 {
   return false;
 }

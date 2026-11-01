@@ -39,6 +39,16 @@ class PefTests(unittest.TestCase):
         names = ("InterfaceLib", "Textension", "TextEncodingConverter", "UnicodeConverter")
         self.assertEqual(pef.imports(fixture(names)), set(names))
 
+    def test_textension_symbols(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "body.pef"
+            path.write_bytes(fixture(("InterfaceLib", "Textension")))
+            self.assertEqual(pef.check(path, ["InterfaceLib", "Textension"], ["symbol"]),
+                             {"InterfaceLib", "Textension"})
+            for expected in ([], ["TXNSetData"], ["symbol", "TXNGetData"]):
+                with self.subTest(expected=expected), self.assertRaisesRegex(ValueError, "Textension symbols mismatch"):
+                    pef.check(path, ["InterfaceLib", "Textension"], expected)
+
     def test_missing_extra(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "app.pef"

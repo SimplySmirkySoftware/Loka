@@ -772,6 +772,21 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME testToolboxTextEditorPreContextRequest COMMAND LokaToolboxTextEditorTests pre-context-request)
   add_test(NAME testToolboxTextEditorPreContextRefused COMMAND LokaToolboxTextEditorTests pre-context-refused)
 
+  foreach(_capacity_flavor TE Unicode)
+    add_executable(LokaToolbox${_capacity_flavor}CapacityTests tests/toolbox/host/ToolboxTextCapacityHostTests.cpp)
+    target_include_directories(LokaToolbox${_capacity_flavor}CapacityTests PRIVATE tests apple/toolbox/src common)
+    loka_enable_warnings(LokaToolbox${_capacity_flavor}CapacityTests)
+    set_target_properties(LokaToolbox${_capacity_flavor}CapacityTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+    if(_capacity_flavor STREQUAL "Unicode")
+      target_compile_definitions(LokaToolbox${_capacity_flavor}CapacityTests PRIVATE LOKA_TOOLBOX_UNICODE=1
+        EXPECTED_LINES=65535 EXPECTED_BYTES=1073741823 EXPECTED_PROFILE_LINES=32768 EXPECTED_PROFILE_BYTES=4194304)
+    else()
+      target_compile_definitions(LokaToolbox${_capacity_flavor}CapacityTests PRIVATE
+        EXPECTED_LINES=256 EXPECTED_BYTES=8192 EXPECTED_PROFILE_LINES=256 EXPECTED_PROFILE_BYTES=8192)
+    endif()
+    add_test(NAME testToolbox${_capacity_flavor}CapacityClamp COMMAND LokaToolbox${_capacity_flavor}CapacityTests)
+  endforeach()
+
   add_executable(LokaToolboxUnicodeEditorTests tests/toolbox/host/ToolboxUnicodeEditorHostTests.cpp
     tests/toolbox/host/ToolboxTextensionFake.cpp apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp
     ${_editor_host_sources})
@@ -782,6 +797,41 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   loka_enable_warnings(LokaToolboxUnicodeEditorTests)
   set_target_properties(LokaToolboxUnicodeEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxUnicodeEditorTests COMMAND LokaToolboxUnicodeEditorTests)
+  foreach(_unicode_body_pin
+    testUnicodeEditorProjectionAtomicity
+    testUnicodeEditorNewObjectProjection
+    testUnicodeEditorReadBackRefusals
+    testUnicodeEditorAcceptedEdits
+    testUnicodeEditorNoDiffKeepsCommitted
+    testUnicodeEditorNormalization
+    testUnicodeEditorRepairSelectionFailure
+    testUnicodeEditorRepairRecovery
+    testUnicodeEditorBufferLifetime
+    testUnicodeEditorStaleRevision
+    testUnicodeEditorCaretRequest
+    testUnicodeEditorCopySelectAllKeepCommitted
+    testUnicodeEditorUndo
+    testUnicodeEditorPasteStartup
+    testUnicodeEditorPasteResumeFailure
+    testUnicodeEditorPastePrivate
+    testUnicodeEditorCutFailure
+    testUnicodeEditorPasteNormalization
+    testUnicodeEditorOutsideDoor
+    testUnicodeEditorPrepareApplyRecheck
+    testUnicodeEditorCommandUnavailable
+    testUnicodeEditorCapacity
+    testUnicodeEditorByteDoorsUnreachable
+    testUnicodeEditorChangedRowIdentity
+    testUnicodeEditorEmptyBody
+    testUnicodeEditorOwnerReplacement
+    testUnicodeEditorPasteUnavailable
+    testUnicodeEditorNormalizationFailureRepair
+    testUnicodeEditorSnapshotCapacityRefusal
+    testUnicodeEditorPreparationAtomicity
+    testUnicodeEditorScrollKeysUseNativeDoor
+  )
+    add_test(NAME ${_unicode_body_pin} COMMAND LokaToolboxUnicodeEditorTests ${_unicode_body_pin})
+  endforeach()
 
   add_executable(LokaToolboxPascalTextTests tests/toolbox/host/ToolboxPascalTextHostTests.cpp
     apple/toolbox/src/platform/ToolboxHfsName.cpp ${_editor_host_sources})
