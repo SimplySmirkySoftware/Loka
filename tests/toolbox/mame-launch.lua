@@ -381,6 +381,12 @@ if os.getenv("LOKA_SCENARIO_CELL") == "smirkycard/laptop-arrow" then
         button:set_value(1); emu.wait(0.1); button:clear_value(); emu.wait(1)
         local _, _, _, value = awaitBar(true)
         assert(value > 0, "Tall list arrow did not advance")
+        -- Park the cursor at the screen origin before the capture, as the
+        -- editor gesture cells do: the arrow sits inside the captured window.
+        mem:write_u16(0x828, 0); mem:write_u16(0x82A, 0)
+        mem:write_u16(0x82C, 0); mem:write_u16(0x82E, 0)
+        mem:write_u8(0x8CE, mem:read_u8(0x8CF))
+        emu.wait(0.5)
     end)
     if not inputOk then say("laptop-arrow input failed: " .. tostring(inputError)) end
 end
