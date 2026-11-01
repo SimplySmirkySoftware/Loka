@@ -10,7 +10,7 @@ import sys
 root = Path(sys.argv[1])
 app = (root / "apple/toolbox/src/ToolboxApp.cpp").read_text()
 checks = [
-    re.search(r"InitDialogs\(0\);\s*#if LOKA_TOOLBOX_UNICODE\s*loka::toolbox::RequireUnicodeSystem\(\);\s*#endif\s*loka::toolbox::ArmOutOfMemoryReserve\(\);", app),
+    re.search(r"InitDialogs\(0\);\s*#if LOKA_TOOLBOX_UNICODE\s*loka::toolbox::RequireUnicodeSystem\(\);\s*#endif\s*loka::toolbox::UnicodeText::Session \w+;\s*loka::toolbox::ArmOutOfMemoryReserve\(\);", app),
     re.search(r"bool ToolboxApp::windowAdopted\(Window \*window\)\s*\{[\s\S]*?"
               r"toolboxWindow->setApp\(this\);\s*toolboxWindow->open\(\);\s*"
               r"toolboxWindow->ensureSceneMounted\(\);\s*"
@@ -38,6 +38,8 @@ body_end = body_start + 1
 while depth:
     depth += (app[body_end] == "{") - (app[body_end] == "}")
     body_end += 1
+checks.append(re.search(r"\{\s*loka::core::Operation::Regime \w+;\s*while \(running_\)", app))
+checks.append(re.match(r"\s*\}\s*(?://[^\n]*\n\s*)*this->retireComponents\(\);", app[body_end:]))
 loop = app[body_start + 1:body_end - 1]
 checks.append(re.search(r"this->present\([^;]+;[\s\S]*"
                         r"loka::toolbox::QuitIfOutOfMemoryReserveSpent\(\);\s*$", loop))

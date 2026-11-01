@@ -192,7 +192,7 @@ struct PAINTSTRUCT { int unused; };
 struct LOGFONTW
 {
   int lfHeight, lfWidth, lfWeight;
-  unsigned char lfItalic, lfPitchAndFamily;
+  unsigned char lfItalic, lfUnderline, lfPitchAndFamily;
   wchar_t lfFaceName[LF_FACESIZE];
 };
 wchar_t *lstrcpynW(wchar_t *, const wchar_t *, int);

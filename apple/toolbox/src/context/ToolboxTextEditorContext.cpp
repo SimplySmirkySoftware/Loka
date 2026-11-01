@@ -1,3 +1,4 @@
+#include "ToolboxEditorFrame.hpp"
 #include "app/nodes/controls/TextEditorRequests.hpp"
 #include "../ToolboxTextCapacity.hpp"
 #include "ToolboxPaintGround.hpp"
@@ -955,13 +956,7 @@ scene::PaintAnswer ToolboxTextEditorContext::queryPaintDamage(const scene::Paint
 }
 short ToolboxTextEditorContext::layout(scene::IPlatformController *, scene::LayoutState &state)
 {
-  Rect rect;
-  const long right = static_cast<long>(state.x) + state.width;
-  const long bottom = static_cast<long>(state.y) + (state.height > 0 ? state.height : 80);
-  if (EditorShort(right) && EditorShort(bottom))
-    SetRect(&rect, state.x, state.y, static_cast<short>(right), static_cast<short>(bottom));
-  else
-    SetRect(&rect, state.x, state.y, state.x, state.y);
+  const Rect rect = ToolboxEditorFrame(state.x, state.y, state.width, state.height > 0 ? state.height : 80);
   this->updateRect(rect);
   // Without a TextEdit record, render's attach settle later in this pass
   // delivers the request (or refuses it when creation fails); settling here
