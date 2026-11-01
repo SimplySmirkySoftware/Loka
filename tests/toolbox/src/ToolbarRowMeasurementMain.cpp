@@ -72,6 +72,49 @@ namespace
     return !answered || answer == leaf.y - offer.y;
   }
 
+  /** One complete band layout per bracket, matching the aligned-title probe.
+      The vehicle owns eight bands; lookup and report IO are outside timing. */
+  template <class Clock>
+  bool
+  MeasureLaptopBands(app::scene::Scene &scene, ToolboxScenePlatformController &controller, Clock &clock, std::FILE *out)
+  {
+    for (unsigned variant = 0; variant != 8; ++variant)
+    {
+      app::scene::Node *band = 0;
+      dsl::FlowError error;
+      if (dsl::testing::LookupNodeById<app::scene::Node>(&scene, testing::LaptopBandId(variant), band, error)
+          != dsl::FLOW_STEP_SUCCEEDED)
+        return false;
+      app::scene::LayoutState offer;
+      offer.width = 420;
+      offer.height = 30;
+      offer.lineHeight = ToolboxLayoutMetrics::kDefaultLineHeight;
+      offer.spacing = ToolboxLayoutMetrics::kDefaultGap;
+      offer.inputs = app::scene::NODE_DIRTY_LAYOUT;
+      unsigned long samples[31];
+      int occupied = 0;
+      for (unsigned i = 0; i != 31; ++i)
+      {
+        app::scene::LayoutState state = offer;
+        const unsigned long start = clock.now();
+        occupied = LayoutNode(band, state, &controller, 0);
+        samples[i] = clock.now() - start;
+      }
+      std::sort(samples, samples + 31);
+      std::fprintf(out,
+                   "laptop_band case=laptop-band-%s lead='%s' title='%s' repetitions=31 median_us=%lu "
+                   "maximum_us=%lu offer=420 occupied=%d font=Chicago-12 title_font=18-bold source=toolbox\n",
+                   variant < 4 ? "row" : "toolbar",
+                   variant % 4 < 2 ? "Wide" : "< Back",
+                   variant % 2 ? "PowerBook G4 Titanium" : "SmirkyTracker",
+                   samples[15],
+                   samples[30],
+                   occupied);
+    }
+    std::fprintf(out, "laptop_band_summary complete=1 cases=8\n");
+    return true;
+  }
+
   /** Include full layout, paint and cursor return in each independent draw. */
   template <class Clock> bool MeasureAlignedTitleDraw(ToolboxWindow &window, Clock &clock, std::FILE *out)
   {
@@ -174,7 +217,8 @@ namespace
           const bool ok = environmentKnown && resolution != ~0UL
                           && testing::RunToolbarRows(*window->scene(), *controller, self, out)
                           && MeasureAlignedTitle(*window->scene(), *controller, self, out)
-                          && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out);
+                          && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out)
+                          && MeasureLaptopBands(*window->scene(), *controller, self, out);
           std::fprintf(out, "toolbar_row_summary complete=%d cases=8\n", ok);
           std::fclose(out);
         }
