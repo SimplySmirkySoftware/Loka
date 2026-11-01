@@ -838,6 +838,164 @@ static void editorLedgerRefusal()
 }
 int main(int argc, char **argv)
 {
+  if (argc == 2 && (std::strcmp(argv[1], "clip-omission") == 0 || std::strcmp(argv[1], "clip-visible-refused") == 0))
+  {
+    const bool offscreen = std::strcmp(argv[1], "clip-omission") == 0;
+    Fixture f;
+    HostPortScope port(f.window.window());
+    TextEditorNode node(TextEditorProps(f.lines, f.cursor));
+    NotifySubtreeNodeAttached(&node);
+    LayoutState state;
+    state.x = 10;
+    state.y = offscreen ? 400 : 20;
+    state.width = 180;
+    state.height = 80;
+    SetRect(&f.controller.projectionClip, 0, 0, 200, 200);
+    IPlatformNodeHandler *handler = f.controller.nodeHandlerRegistry_.find(&node);
+    LOKA_VERIFY(handler);
+    ToolboxTextEditorContext *context =
+        static_cast<ToolboxTextEditorContext *>(handler->ensureContext(&node, &f.controller, state));
+    LOKA_VERIFY(context);
+    context->layout(&f.controller, state);
+    f.controller.observation_.reset();
+    toolbox_host::failNew = 1;
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      context->render(&f.controller);
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+    }
+    const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
+    LOKA_VERIFY(result.eligibility() == (offscreen ? TOOLBOX_PAINT_CLEAN : TOOLBOX_PAINT_REFUSED));
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (offscreen ? TOOLBOX_PAINT_REFUSAL_NONE : TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION));
+    LOKA_VERIFY(toolbox_host::failNew == (offscreen ? 1 : 0));
+    toolbox_host::failNew = 0;
+    context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+    return 0;
+  }
+  if (argc == 2 && std::strncmp(argv[1], "debt-", 5) == 0)
+  {
+    Fixture f;
+    const std::string mode(argv[1]);
+    f.controller.observation_.reset();
+    RgnHandle scratch = f.controller.paintSuppressClipRgn_;
+    const char *site = 0;
+    if (mode == "debt-scroll-to")
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      OffsetRect(&(**f.te()).destRect, 0, 100);
+      ToolboxTextEditorAccess::scrollTo(*f.context, LineCursor(f.lines.at(0).id, 0));
+      LOKA_VERIFY(f.controller.observation_.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+      return 0;
+    }
+    if (mode == "debt-status")
+    {
+      LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("\xC3\xA9")) == EDIT_OK);
+      f.context->onPropsApplied();
+      site = "ToolboxTextEditorContext.cpp:205";
+    }
+    else if (mode == "debt-clip")
+    {
+      toolbox_host::failRegions = 2;
+      ToolboxTextEditorAccess::repaint(*f.context, f.te());
+      toolbox_host::failRegions = 0;
+      site = "ToolboxTextEditorContext.cpp:975";
+    }
+    else if (mode == "debt-unavailable")
+    {
+      ToolboxTextEditorAccess::repaint(*f.context, 0);
+      site = "ToolboxTextEditorContext.cpp:998";
+    }
+    else if (mode == "debt-node")
+    {
+      ToolboxTextEditorAccess::renderMissingNode(*f.context, &f.controller);
+      site = "ToolboxTextEditorContext.cpp:1012";
+    }
+    else if (mode == "debt-context-change")
+    {
+      post(f, LineCursor(f.lines.at(1).id, 1));
+      f.request.state()->bind(&retireContext, &f, false);
+      ToolboxTextEditorAccess::forgetTE(*f.context);
+      f.context->render(&f.controller);
+      f.request.state()->unbind(&retireContext, &f);
+      site = "ToolboxTextEditorContext.cpp:1054";
+    }
+    else if (mode == "debt-bar-hide")
+    {
+      f.controller.paintSuppressClipRgn_ = 0;
+      f.controller.presentEditorScrollBar(ToolboxTextEditorAccess::barId(*f.context),
+                                          ToolboxEditorScrollBarPresentation());
+      site = "ToolboxEditorScrollBar.cpp:23";
+    }
+    else
+    {
+      const Rect rect = {10, 10, 70, 25};
+      if (mode == "debt-bar-acquire")
+        toolbox_host::refuseControls = 1;
+      else
+        f.controller.paintSuppressClipRgn_ = 0;
+      f.controller.ensureEditorScrollBar(
+          200, rect, f.context, ToolboxEditorScrollBarPresentation(), NATIVE_HINT_EAGER_RELEASE);
+      toolbox_host::refuseControls = 0;
+      site = mode == "debt-bar-acquire" ? "ToolboxEditorScrollBar.cpp:85" : "ToolboxEditorScrollBar.cpp:90";
+    }
+    f.controller.paintSuppressClipRgn_ = scratch;
+    const ToolboxPaintRefusalRecord &record = f.controller.observation_.outsideRefusal();
+    std::fprintf(stderr, "editor expected=%s actual=%s\n", site, record.site ? record.site : "-");
+    LOKA_VERIFY(record.refused() && record.site);
+    LOKA_VERIFY(std::strlen(record.site) >= std::strlen(site));
+    LOKA_VERIFY(std::strcmp(record.site + std::strlen(record.site) - std::strlen(site), site) == 0);
+    return 0;
+  }
+  if (argc == 2 && std::strncmp(argv[1], "paint-", 6) == 0)
+  {
+    Fixture f;
+    const bool project = std::strcmp(argv[1], "paint-project") == 0;
+    const bool caret = std::strcmp(argv[1], "paint-caret") == 0;
+    const bool scroll = std::strcmp(argv[1], "paint-scroll") == 0;
+    f.controller.observation_.reset();
+    const int sets = toolbox_host::sets, selections = toolbox_host::selections;
+    {
+      ToolboxPresentObservation::Interval interval(f.controller.observation_, true, f.controller.debugStats_);
+      if (project)
+      {
+        LOKA_VERIFY(f.lines.update(f.lines.at(0).id, String("changed")) == EDIT_OK);
+        f.context->onPropsApplied();
+      }
+      else if (caret)
+      {
+        post(f, LineCursor(f.lines.at(1).id, 1));
+        f.context->onPropsApplied();
+      }
+      else
+      {
+        if (scroll)
+          OffsetRect(&(**f.te()).destRect, 0, 16);
+        ToolboxTextEditorAccess::sync(*f.context);
+        f.context->onPropsApplied();
+      }
+      f.controller.observation_.complete(0);
+      f.controller.observation_.markPaintFinished();
+    }
+    const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
+    std::fprintf(stderr,
+                 "paint case=%s first=%s sets=%d selections=%d\n",
+                 argv[1],
+                 ToolboxPaintRefusalName(result.firstRefusal().reason),
+                 toolbox_host::sets - sets,
+                 toolbox_host::selections - selections);
+    LOKA_VERIFY(result.firstRefusal().reason
+                == (project || caret || scroll ? TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET : TOOLBOX_PAINT_REFUSAL_NONE));
+    LOKA_VERIFY(result.eligibility() == (project || caret || scroll ? TOOLBOX_PAINT_REFUSED : TOOLBOX_PAINT_CLEAN));
+    if (project)
+      LOKA_VERIFY(toolbox_host::sets > sets);
+    if (caret)
+      LOKA_VERIFY(toolbox_host::selections > selections);
+    return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "ledger-refusal") == 0)
   {
     editorLedgerRefusal();
@@ -1470,14 +1628,18 @@ int main(int argc, char **argv)
       f.context->onPropsApplied();
       LOKA_VERIFY(f.request.get().isNone());
       LOKA_VERIFY(f.cursor.state()->get() == before);
+      f.controller.observation_.reset();
       toolbox_host::failNew = 1;
       post(f, desired);
       f.context->render(&f.controller);
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       LOKA_VERIFY(f.request.get().isNone() && !f.te());
       LOKA_VERIFY(f.cursor.state()->get() == before);
+      f.controller.observation_.reset();
       toolbox_host::failSets = 1;
       post(f, desired);
       f.context->render(&f.controller);
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
       LOKA_VERIFY(f.request.get().isNone());
       LOKA_VERIFY(f.cursor.state()->get() == before);
       f.context->retryProjection();

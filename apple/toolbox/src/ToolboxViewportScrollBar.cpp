@@ -91,10 +91,14 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                    native,
                                    &movedFrom))
   {
+    if (native && !this->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ApplyViewportScrollBarValue(native, metrics);
     if (native && !EmptyRect(&movedFrom))
       this->validateOwnControlMove(movedFrom, native->placement.full());
   }
+  else
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   if (native)
     y = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   // A refused or empty vertical binding must not skip horizontal handling.
@@ -112,10 +116,14 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
                                      native,
                                      &movedFrom))
     {
+      if (native && !this->paintSuppressClipRgn_)
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       ApplyViewportScrollBarValue(native, horizontal);
       if (native && !EmptyRect(&movedFrom))
         this->validateOwnControlMove(movedFrom, native->placement.full());
     }
+    else
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
     if (native)
       x = static_cast<std::size_t>(native - &this->scrollBarLedger_.scrollBarControls_[0]);
   }
@@ -133,6 +141,8 @@ ToolboxScenePlatformController::ensureViewportScrollBarControl(const Rect &viewp
           && ((!verticalPresent && row.resourceId == binding->barId[loka::app::SCROLL_BAR_VERTICAL])
               || (!horizontalBar && row.resourceId == binding->barId[loka::app::SCROLL_BAR_HORIZONTAL])))
       {
+        if (!this->paintSuppressClipRgn_)
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         HideControl(row.control);
       }
     }

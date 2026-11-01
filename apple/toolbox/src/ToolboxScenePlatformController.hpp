@@ -213,6 +213,10 @@ public:
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *context, loka::app::scene::NativeLifetimeHint hint)
   { this->retireEditTextControl(context, hint); }
+  /** O(1), no rows: ensure once per draw, fallback only when no TE was acquired. */
+  bool editTextInClip(const Rect &textRect, Rect &controlRect) const;
+  /** O(1), no rows: the editor ensure and its missing-TE report share this query. */
+  bool textEditorInClip(const Rect &hit, const Rect &text, Rect &visible, Rect &clipped) const;
   ToolboxEditPresentation ensureEditTextControl(ToolboxEditTextContext *ownerContext,
                                  const Rect &rect,
                                  loka::core::State<loka::core::String> *text,
@@ -528,6 +532,15 @@ public:
     ++debugStats_.totalDrawDirtyCalls;
   }
   /** Window requests: O(1) per request, before request coalescing; no rows. */
+  virtual void noteMissingRenderContext();
+  bool paintInProgress() const
+  {
+    return this->observation_.paintInProgress();
+  }
+  void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
+  {
+    this->observation_.notePaintRefusal(reason, site);
+  }
   void notePresentReason(ToolboxFullDrawReason reason)
   {
     this->observation_.noteReason(reason);

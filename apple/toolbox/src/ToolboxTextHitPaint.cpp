@@ -49,9 +49,13 @@ void ToolboxScenePlatformController::redrawTextHit(TextHit &hit)
         MoveTo(hit.x, hit.y);
         DrawString(text);
       }
+      else
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
       // A refused paint must retain the old presented extent for the retry.
       hit.lastMeasuredWidth = measuredWidth;
     }
+    else if (!EmptyRect(&dirtyRect))
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   }
   SetPort(oldPort);
 }

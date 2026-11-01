@@ -1,6 +1,7 @@
 #include "app/nodes/nestable/ZStack.hpp"
 #include "app/layout/ZStackLayout.hpp"
 #include "ToolboxPaintGround.hpp"
+#include "ToolboxUnitHairline.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 
 /** Shared by the rail and host. Deliberate Win32/macOS twin: full seats,
@@ -27,24 +28,39 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
       const loka::app::scene::ProjectionParentScope &parent = this->projectionParentScopes_.current();
       loka::app::scene::ProjectionParentScope frame;
       if (parent.hasShortRangeRefusal() || !parent.deriveScrolled(parent.nativeParent, 0, 0, parent.clipRect, frame))
+      {
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         continue;
+      }
       loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
       if (!guard.isActive())
+      {
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
         continue;
+      }
       // Call the arm directly: the generic traversal swallows narrowing refusal.
       width = LayoutNode(child, childState, this, boundary);
       if (this->refuseNarrowingInScrollScope(childState.y)
           || this->projectionParentScopes_.current().hasShortRangeRefusal())
+      {
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         continue;
+      }
       loka::app::scene::LayoutState projected = state;
       if (!this->projectLayoutState(projected))
+      {
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         continue;
+      }
       const int right = static_cast<int>(projected.x) + state.width;
       const int bandBottom =
           loka::app::layout::zStackUnitBottom(stack->props.unitGround, index, state.y, childState.y, maxY);
       const int bottom = static_cast<int>(projected.y) + bandBottom - state.y;
       if (this->refuseNarrowingInScrollScope(right) || this->refuseNarrowingInScrollScope(bottom))
+      {
+        LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
         continue;
+      }
       Rect rect = {projected.y, projected.x, static_cast<short>(bottom), static_cast<short>(right)};
       Rect clipped;
       if (this->intersectWithProjectionClip(rect, clipped))
@@ -84,15 +100,24 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     }
     const ToolboxUnitLedger::UnitSeat *seat = this->unitLedger_.find(stack, index, cursor);
     if (!seat)
+    {
+      // Clipped out by input or a layout refusal already recorded; ledger push cannot fail quietly.
       continue;
+    }
     const ToolboxUnitLedger::UnitSeat &row = *seat;
     const loka::app::scene::ProjectionParentScope &parent = this->projectionParentScopes_.current();
     loka::app::scene::ProjectionParentScope frame;
     if (!parent.deriveScrolled(parent.nativeParent, 0, 0, parent.clipRect, frame))
+    {
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
       continue;
+    }
     loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
     if (!guard.isActive())
+    {
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
       continue;
+    }
     // Milk requires an erased walk. Static blur keeps ground until capture;
     // a READY snapshot can paint during any walk without reading the backdrop.
     bool painted = false;
@@ -104,24 +129,48 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
         break;
       case loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR:
       {
-        const ToolboxBlurPaint result = this->bandBlur_.paint(this->window_->window(), row, this->erasedPass_);
+        const ToolboxBlurPaint result =
+            this->bandBlur_.paint(this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar());
         switch (result)
         {
         case BLUR_PICTURE:
           painted = true;
-          this->frostCache_.paintHairline(this->window_->window(), row.rect, row.unit);
+          {
+            Rect hairline;
+            if (ToolboxUnitHairlineRect(row.rect, row.unit, hairline)
+                && !this->frostCache_.paintHairline(this->window_->window(), row.rect, row.unit))
+              LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+          }
           break;
         case BLUR_ABSENT:
-          painted = this->erasedPass_.isOpen() && this->frostCache_.paint(this->window_->window(), row.rect, row.unit);
+          if (this->erasedPass_.isOpen())
+          {
+            painted = this->frostCache_.paint(this->window_->window(), row.rect, row.unit);
+            if (!painted)
+              LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+          }
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
+          break;
+        case BLUR_PARTIAL:
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
           break;
         case BLUR_GROUND:
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
           break;
         }
         break;
       }
       case loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR:
-        painted = this->staticBlur_.paint(this->window_->window(), row, this->erasedPass_) == BLUR_PICTURE;
+      {
+        const ToolboxBlurPaint result = this->staticBlur_.paint(
+            this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar());
+        painted = result == BLUR_PICTURE;
+        if (result == BLUR_PARTIAL)
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+        else if (!painted)
+          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
         break;
+      }
       }
     }
     if (!painted)
@@ -130,6 +179,8 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
     ToolboxPaintClip clip(row.rect, ToolboxPaintClip::INTERSECT);
     if (clip.isActive())
       RenderNode(child, this);
+    else
+      LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   }
 }
 

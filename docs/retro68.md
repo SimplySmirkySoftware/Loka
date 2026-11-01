@@ -373,16 +373,25 @@ public-header includes when the only need is a tiny standard-library operation.
 
 | Flavor | Requirement | Build evidence | Runtime verification | Editor support |
 |---|---|---|---|---|
-| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | PR 0 retains TextEdit. MLTE support is future work. |
+| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | Production editors retain TextEdit; MLTE session and resource lifetime are exercised separately. |
 
 The source contracts live in `apple/toolbox/CMakeLists.txt` and
 `apple/toolbox/src/ToolboxUnicodeStartup.cpp`; host tests pin the requirement
 predicate and refusal sequence. `tests/toolbox/cmake-pins` pins core exclusivity
-and 68k selection refusal. The no-API Unicode SimpleText application and TE
-SimpleText application each import exactly `InterfaceLib`; the separate link-only
+and 68k selection refusal. The Unicode SimpleText application imports `InterfaceLib` and `Textension`; TE
+SimpleText imports only `InterfaceLib`; the separate link-only
 probe imports exactly `InterfaceLib`, `Textension`, `TextEncodingConverter`, and
 `UnicodeConverter`, all strong. These are build checks, not loader or native
 startup verdicts. No release allowlist includes the Unicode acceptance target.
+
+`UnicodeText::Session` initializes MLTE before the OOM reserve and terminates it
+only after normal window teardown, outside the Operation Regime. Sudden termination
+remains a no-op for MLTE. The ledger owns committed objects; its stack `Prepared`
+owner lends a wrapper to install and releases it only into allocation-free `link`.
+The standalone `tests/toolbox/unicode-lifecycle/` probe exercises two fixed seats,
+draw, retirement, and the two OOM experiments. It records `LIFE.TXT`; its imports
+are `InterfaceLib` and `Textension`. Native lifecycle observations remain pending;
+the host fake does not establish MLTE/TSM behavior on Classic hardware.
 
 ### MLTE declarations
 
@@ -793,3 +802,15 @@ include paths without hard-coding the location of a local Retro68 build.
 
 `.vscode/c_cpp_properties.json` remains as a starter configuration for anyone
 who explicitly re-enables the Microsoft C/C++ IntelliSense engine.
+
+### Toolbox paint eligibility
+
+`ToolboxPresentObservation` carries a window's `CLEAN`/`REFUSED` paint eligibility
+between renders. A completed whole-window erase and paint with no reported
+refusal establishes CLEAN; unfinished or noncovering renders and refused screen
+obligations establish REFUSED. Eligibility does not schedule work. The blur
+capture gate reads only refusals already reported in the current render and
+preserves existing snapshot pixels when acquisition is blocked. PaintDamage's
+`present_observe` and `paint_result` lines distinguish the selected snapshot's
+incoming eligibility from its finalized result; see
+[the diagnostic format](../tests/toolbox/PaintDamageStandalone.md).

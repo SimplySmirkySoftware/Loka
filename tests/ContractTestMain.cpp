@@ -161,6 +161,8 @@
 #include "ToolboxScrollViewContractTests.hpp"
 #include "NullTextLayoutTests.hpp"
 #include "StyleTests.hpp"
+#include "WebURLTests.hpp"
+#include "URLOpenerTests.hpp"
 #include "TextFamilyTests.hpp"
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.

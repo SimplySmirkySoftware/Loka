@@ -122,6 +122,10 @@ namespace loka
             Controllers without layout have no work to schedule. */
         virtual void requestRelayout() {}
 
+        /** The default Node render could not discharge its screen obligation.
+            Rails with paint-result accounting report it here; O(1), no rows. */
+        virtual void noteMissingRenderContext() {}
+
         /** False cannot answer; true with null means native focus is absent. */
         virtual bool readNativeFocus(NodeContext *&out)
         {

@@ -303,6 +303,10 @@ bool ToolboxAttributedTextTable::draw(short x,
                                       const BlockStyle &block,
                                       short availableWidth) const
 {
+#ifdef TEST_BUILD
+  if (loka::testing::refuseToolboxAttributedDraw())
+    return false;
+#endif
   if (!this->valid())
     return false;
   ToolboxTextMeasureScope measure(controller, this->fonts_.size() ? &this->fonts_[0] : 0, this->fonts_.size());

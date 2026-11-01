@@ -38,7 +38,8 @@ enum ToolboxBlurPaint
 {
   BLUR_PICTURE,
   BLUR_ABSENT,
-  BLUR_GROUND
+  BLUR_GROUND,
+  BLUR_PARTIAL
 };
 
 /** One controller-owned picture; kind fixes selection and capture policy.
@@ -103,20 +104,21 @@ public:
   };
   /** Once per first-unit paint, after ground and unit-scope admission. O(w*h)
       plus grid work only for this owner's capture; FROZEN READY never recaptures. */
-  ToolboxBlurPaint paint(GrafPtr window, const ToolboxUnitLedger::UnitSeat &row, const ToolboxErasedPass &pass)
+  ToolboxBlurPaint
+  paint(GrafPtr window, const ToolboxUnitLedger::UnitSeat &row, const ToolboxErasedPass &pass, bool acquire)
   {
     if (!this->matches(row))
       return BLUR_ABSENT;
     if (!ToolboxBlurPixels::eligible(window, row.rect))
       return BLUR_GROUND;
-    if (this->capture_ != CAPTURE_DISABLED && (K == TOOLBOX_BLUR_LIVE || !this->pixels_.hasPixels())
+    if (acquire && this->capture_ != CAPTURE_DISABLED && (K == TOOLBOX_BLUR_LIVE || !this->pixels_.hasPixels())
         && pass.admitsCapture(row.rect))
     {
       if (!this->pixels_.capture(window, row.rect, K == TOOLBOX_BLUR_FROZEN ? 8 : 4))
         this->capture_ = CAPTURE_DISABLED;
     }
     if (this->pixels_.hasPixels())
-      return this->pixels_.paint(window, row.rect) ? BLUR_PICTURE : BLUR_GROUND;
+      return this->pixels_.paint(window, row.rect) ? BLUR_PICTURE : BLUR_PARTIAL;
     return BLUR_ABSENT;
   }
 

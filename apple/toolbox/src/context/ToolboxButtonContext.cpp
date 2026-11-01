@@ -35,15 +35,20 @@ namespace
 
   ToolboxButtonNodeHandler gToolboxButtonNodeHandler;
 
-  void DrawStringAt(short x, short y, const loka::core::String &value)
+  bool DrawStringAt(short x, short y, const loka::core::String &value)
   {
+#ifdef TEST_BUILD
+    if (loka::testing::consumeToolboxButtonDrawConversionRefusal())
+      return false;
+#endif
     Str255 text;
     if (!ToolboxEncodePascal(value, text))
     {
-      return;
+      return false;
     }
     MoveTo(x, y);
     DrawString(text);
+    return true;
   }
 } // namespace
 
@@ -143,6 +148,8 @@ void ToolboxButtonContext::updateRect(const Rect &rect)
 void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   const bool paints = !clip.isActive() || clip.touches(this->paintRect_);
   const ToolboxButtonPaintValue current(this->label_, !this->enabled_ || this->enabled_->get());
   const bool completes = ToolboxPaintCompletes(clip, this->paintRect_, this->presented_,
@@ -173,6 +180,7 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
         this->presented_.commit(current, ToolboxPaintScope());
       return;
     }
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
     // Reconciliation can refuse after acquiring a live handle. Preserve its
     // installed face rather than leaving a visible control undrawn.
     if (binding)
@@ -185,7 +193,10 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
   if (paints)
   {
     FrameRect(&rect_);
-    DrawStringAt(static_cast<short>(rect_.left + 4), static_cast<short>(rect_.bottom - ToolboxLayoutMetrics::kControlDescent), label_);
+    if (!DrawStringAt(static_cast<short>(rect_.left + 4),
+                      static_cast<short>(rect_.bottom - ToolboxLayoutMetrics::kControlDescent),
+                      label_))
+      LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_TEXT_CONVERSION);
   }
   if (controller)
   {
@@ -216,10 +227,13 @@ bool ReconcileToolboxButtonControl(ControlRef control, const loka::core::String 
 void ToolboxButtonContext::repaint(ControlRef control, std::string &installedLabel)
 {
   ToolboxPaintClip clip(this->paintRect_);
+  if (!clip.isActive())
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
   if (clip.isActive() && !clip.touches(this->paintRect_))
     return;
   if (!this->node_ || !control)
   {
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
     this->presented_.invalidate();
     return;
   }
@@ -231,10 +245,14 @@ void ToolboxButtonContext::repaint(ControlRef control, std::string &installedLab
   this->presented_.invalidate();
   bool submitted;
   {
+    if (!this->controller()->paintSuppressClipRgn_)
+      LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
     ToolboxPaintSuppressScope suppress(this->controller()->paintSuppressClipRgn_);
     submitted = ReconcileToolboxButtonControl(control, label, this->node_->props.enabled_, installedLabel);
   }
   this->controller()->drawControl(control);
+  if (!submitted)
+    LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_NATIVE_ACQUISITION);
   if (submitted && completes)
     this->presented_.commit(current, ToolboxPaintScope());
 }

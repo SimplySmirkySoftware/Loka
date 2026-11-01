@@ -19,6 +19,28 @@ namespace loka
   {
     namespace
     {
+      unsigned buttonDrawConversionRefusals = 0;
+    }
+    void failToolboxButtonDrawConversions(unsigned count)
+    {
+      buttonDrawConversionRefusals = count;
+    }
+    bool consumeToolboxButtonDrawConversionRefusal()
+    {
+      if (!buttonDrawConversionRefusals)
+        return false;
+      --buttonDrawConversionRefusals;
+      return true;
+    }
+  } // namespace testing
+} // namespace loka
+
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
       unsigned macStackUnitViewFailures = 0;
       unsigned macPhotoCaptureFailures = 0;
       unsigned macCardBitmapFailures = 0;
@@ -814,5 +836,29 @@ namespace loka
       }
     } // namespace testing
   } // namespace win32
+} // namespace loka
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace testing
+  {
+    namespace
+    {
+      unsigned refusedAttributedDraws = 0;
+    }
+    void failToolboxAttributedDraws(unsigned count)
+    {
+      refusedAttributedDraws = count;
+    }
+    bool refuseToolboxAttributedDraw()
+    {
+      if (!refusedAttributedDraws)
+        return false;
+      --refusedAttributedDraws;
+      return true;
+    }
+  } // namespace testing
 } // namespace loka
 #endif

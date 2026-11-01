@@ -31,6 +31,7 @@ namespace native_door
       const Rect foreign = draw && empty ? clip : disjoint;
       ClipRect(&foreign);
       control->calls.clear();
+      f.controller.observation_.reset();
       if (refused)
         toolbox_host::failRegions = 1;
       if (replay)
@@ -47,6 +48,8 @@ namespace native_door
         LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, f.point));
       }
       LOKA_VERIFY(toolbox_host::failRegions == 0);
+      LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason
+                  == (refused ? TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION : TOOLBOX_PAINT_REFUSAL_NONE));
       GrafPtr current;
       GetPort(&current);
       LOKA_VERIFY(current == other.window());

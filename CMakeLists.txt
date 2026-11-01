@@ -474,15 +474,45 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
 
   add_executable(LokaToolboxUnicodeStartupTests
     tests/toolbox/host/ToolboxUnicodeStartupHostTests.cpp
-    apple/toolbox/src/ToolboxUnicodeStartup.cpp)
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp)
   target_include_directories(LokaToolboxUnicodeStartupTests PRIVATE
-    tests/toolbox/host/startup tests/toolbox/host/oom apple/toolbox/src tests)
+    tests/toolbox/host/unicode tests/toolbox/host/startup tests/toolbox/host tests/toolbox/host/oom apple/toolbox/src tests)
   target_compile_definitions(LokaToolboxUnicodeStartupTests PRIVATE LOKA_TOOLBOX_UNICODE=1)
-  target_compile_options(LokaToolboxUnicodeStartupTests PRIVATE -fno-exceptions -fno-rtti)
+  target_compile_options(LokaToolboxUnicodeStartupTests PRIVATE -fno-exceptions -fno-rtti -Wno-multichar)
   loka_enable_warnings(LokaToolboxUnicodeStartupTests)
   set_target_properties(LokaToolboxUnicodeStartupTests PROPERTIES
     CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME LokaToolboxUnicodeStartupTests COMMAND LokaToolboxUnicodeStartupTests)
+
+  add_executable(LokaToolboxUnicodeLedgerTests
+    tests/toolbox/host/ToolboxUnicodeLedgerHostTests.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp
+    tests/TestingHooks.cpp
+    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
+    apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp)
+  target_sources(LokaToolboxUnicodeLedgerTests PRIVATE
+    tests/toolbox/host/ToolboxUnicodeTeardownHostTests.cpp
+    tests/platform/null/NullPlatformContext.cpp
+    tests/platform/null/NullScenePlatformController.cpp
+    tests/platform/null/context/NullButtonContext.cpp
+    tests/platform/null/context/NullEditTextContext.cpp
+    tests/platform/null/context/NullTextEditorContext.cpp
+    tests/platform/null/context/NullScrollBarContext.cpp
+    tests/platform/null/context/NullTextMetrics.cpp
+    tests/platform/null/context/NullAttributedTextContext.cpp
+    tests/platform/null/context/NullTextContext.cpp
+    tests/platform/null/context/NullRectSurfaceContext.cpp)
+  target_include_directories(LokaToolboxUnicodeLedgerTests PRIVATE
+    tests/toolbox/host/unicode tests/toolbox/host/startup tests/toolbox/host
+    tests/toolbox/host/oom apple/toolbox/src tests)
+  target_compile_definitions(LokaToolboxUnicodeLedgerTests PRIVATE LOKA_TOOLBOX_UNICODE=1)
+  target_compile_options(LokaToolboxUnicodeLedgerTests PRIVATE -fno-exceptions -fno-rtti -Wno-multichar
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxUnicodeHost.hpp)
+  target_link_libraries(LokaToolboxUnicodeLedgerTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxUnicodeLedgerTests)
+  set_target_properties(LokaToolboxUnicodeLedgerTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxUnicodeLedgerTests COMMAND LokaToolboxUnicodeLedgerTests)
 
   add_executable(LokaToolboxOutOfMemoryTests
     tests/toolbox/host/ToolboxOutOfMemoryHostTests.cpp
@@ -611,7 +641,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxRectSurfaceTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxRectSurfaceTests)
   set_target_properties(LokaToolboxRectSurfaceTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_surface_case bottom right spacing limit normal scroll-bottom sprite-overflow sprite-normal sprite-outside sprite-negative dirty-current dirty-history region)
+  foreach(_surface_case bottom right spacing limit normal scroll-bottom sprite-overflow sprite-normal sprite-outside sprite-negative dirty-current dirty-history region paint-missing paint-dirty-missing paint-disjoint paint-fallback paint-query paint-clip paint-repair)
     add_test(NAME testToolboxRectSurface_${_surface_case} COMMAND LokaToolboxRectSurfaceTests ${_surface_case})
   endforeach()
 
@@ -653,6 +683,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)
     add_test(NAME testToolboxText_${_ellipsis_case} COMMAND LokaToolboxAttributedTextTests ${_ellipsis_case})
   endforeach()
+  add_test(NAME testToolboxAttributedPartialRefusal COMMAND LokaToolboxAttributedTextTests refusal-partial)
+  add_test(NAME testToolboxCardBandRefusal COMMAND LokaToolboxAttributedTextTests refusal-card)
+  add_test(NAME testToolboxRibbonRefusal COMMAND LokaToolboxAttributedTextTests refusal-ribbon)
   add_test(NAME testToolboxBusyBatch COMMAND LokaToolboxAttributedTextTests busy-batch)
   add_test(NAME testToolboxBusyBatchNested COMMAND LokaToolboxAttributedTextTests busy-batch-nested)
   add_test(NAME testToolboxAttributedInk COMMAND LokaToolboxAttributedTextTests ink)
@@ -702,7 +735,15 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxTextEditorTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxTextEditorTests)
   set_target_properties(LokaToolboxTextEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME testToolboxTextEditorClipOmission COMMAND LokaToolboxTextEditorTests clip-omission)
+  add_test(NAME testToolboxTextEditorClipVisibleRefused COMMAND LokaToolboxTextEditorTests clip-visible-refused)
+  foreach(_editor_debt scroll-to status clip unavailable node context-change bar-hide bar-acquire bar-suppress)
+    add_test(NAME testToolboxTextEditorDebt_${_editor_debt} COMMAND LokaToolboxTextEditorTests debt-${_editor_debt})
+  endforeach()
   add_test(NAME LokaToolboxTextEditorTests COMMAND LokaToolboxTextEditorTests)
+  foreach(_paint_case project caret scroll unchanged)
+    add_test(NAME testToolboxTextEditorPaint_${_paint_case} COMMAND LokaToolboxTextEditorTests paint-${_paint_case})
+  endforeach()
   add_test(NAME testToolboxEditorLedgerCharacter COMMAND LokaToolboxTextEditorTests ledger-character)
   add_test(NAME testToolboxEditorLedgerRefusal COMMAND LokaToolboxTextEditorTests ledger-refusal)
   foreach(_bar_case creation geometry replay-retained replay-composition metrics terminal refusal placement port-idle gesture inactive clipped-hit bulk retained unused)
@@ -761,7 +802,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxImageViewTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxImageViewTests)
   set_target_properties(LokaToolboxImageViewTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_image_case walk dirty ambient empty clip-change scroll pict-cover bytes-cover none no-image no-state diagonal refusal)
+  foreach(_image_case paint-empty paint-no-state paint-handle-refused paint-valid paint-arrival paint-unsupported missing-context walk dirty ambient empty clip-change scroll pict-cover bytes-cover none no-image no-state diagonal refusal)
     add_test(NAME testToolboxImageView_${_image_case} COMMAND LokaToolboxImageViewTests ${_image_case})
   endforeach()
 
@@ -810,6 +851,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxFocusTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxFocusTests)
   set_target_properties(LokaToolboxFocusTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(_edit_refusal retire verification conversion idle sync tab activate deactivate click navigate key)
+    add_test(NAME testToolboxEditRefusal_${_edit_refusal} COMMAND LokaToolboxFocusTests edit-refusal-${_edit_refusal})
+  endforeach()
   add_test(NAME LokaToolboxFocusTests COMMAND LokaToolboxFocusTests)
   foreach(_edit_case full-edges translation overflow resize clip-only pool visible-readers
                      door-click door-key door-delete door-tab door-idle door-deactivate
@@ -922,11 +966,14 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxZStackUnitTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxZStackUnitTests)
   set_target_properties(LokaToolboxZStackUnitTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_order_case NativePlacement PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ViewportInputReason ViewportInputFollowUp PresentRefusedVisit PresentSiblingViewport PresentLatePublication PresentContentInputs PresentUnsupportedKind PresentContainerInputNotCounted PresentCardBandPhase PresentClipBoxRefused ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
+  foreach(_order_case PaintGroundFrozen PaintGroundLive PaintForeground PaintConstructorRegion PaintShellGrow PaintShellDirtyDirect PaintShellDirtyNested PaintEligibility PaintNullRoot PaintOversizedPort PaintCaptureFrozen PaintCaptureLive NativePlacement PresentReasons PresentMove PresentForeground PresentUpdateDamage PresentFlushDamage PresentReset PresentOrder ViewportInputReason ViewportInputFollowUp PresentRefusedVisit PresentSiblingViewport PresentLatePublication PresentContentInputs PresentUnsupportedKind PresentContainerInputNotCounted PresentCardBandPhase PresentClipBoxRefused ClipFrameProjection BandGeometry BandLifetime BandDelivery BandSelection StaticNoRequests StaticRefusedReplay StaticCopyFailure FlushFirstCapture StaticOpportunities ErasedAdmissionMatrix StaticFirstUnit StaticAdmission StaticExternalDraw StaticFailure StaticIneligible StaticMissingRow StaticChangedRect StaticChangedGround StaticAbortedLayout FrostErasedPassAdmission HeightOnlyBoxUnit WidthOnlyBoxDispatch TextDirtyClipStaysBelowUnit IdleRepairOnlyToggledOverlaps LaterChildGetsUnitRow UnitErasesGroundBeforeChild UnitClipsChild RefusedChildHasNoRowAndNoRender NestedZStackInUnitLaysOutNothing ScrollViewRefusedInsideUnit UnitInsideViewportRowIsProjected DirtyTouchingUnitTakesCompositionReplay LedgerRebuiltEachPass UnitFrameInheritsParentClip RetiredGroundHideSuppressed)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxZStackUnitTests ${_order_case})
   endforeach()
 
   # Clip paint pins use production dispatch, render, hit recorders and QuickDraw host calls.
+  foreach(_refusal_case EditOffscreen EditVisibleRefused ClipEmpty ClipPlacement ClipMissing ClipRegion ClipGuard ScrollMissing ScrollPersistent ScrollRegion UnitOmitted UnitLayoutRefused UnitRegion UnitCopyLive UnitCopyFrozen UnitDeviceLive UnitDeviceFrozen UnitAbsentLive DefaultNode Formatter ViewportVerticalAcquire ViewportHorizontalAcquire ViewportVerticalMove ViewportHorizontalMove TailButton TailBar EnabledButton EnabledBar RetiredButton DirtyCell DirtySurface TextHitConversion TextHitRegion UnitHairlineLive UnitFrostLive LayoutParent LayoutChild LayoutRight ControlButtonAcquire ControlButtonEnsure ControlButtonProps ControlStandaloneMissing ControlStandaloneAcquire ControlStandaloneSuppress ControlViewportHide ControlViewportRequest ControlPopupMissing LayoutProjection)
+    add_test(NAME testToolboxRefusal${_refusal_case} COMMAND LokaToolboxZStackUnitTests Refusal${_refusal_case})
+  endforeach()
   get_target_property(_clip_paint_sources LokaToolboxZStackUnitTests SOURCES)
   list(REMOVE_ITEM _clip_paint_sources tests/toolbox/host/ToolboxZStackUnitHostTests.cpp)
   add_executable(LokaToolboxClipPaintTests tests/toolbox/host/ToolboxClipPaintHostTests.cpp
@@ -943,6 +990,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxClipPaint_${_clip_case} COMMAND LokaToolboxClipPaintTests ${_clip_case})
   endforeach()
 
+  foreach(_debt_case text-debt-projection text-debt-layout text-debt-measure text-debt-lines button-debt-stale button-debt-missing button-debt-suppress cell-debt-conversion popup-debt-conversion edit-debt-missing edit-debt-acquire edit-debt-stale)
+    add_test(NAME testToolboxPartialPaint_${_debt_case} COMMAND LokaToolboxPartialPaintTests ${_debt_case})
+  endforeach()
   add_executable(LokaToolboxPartialPaintTests tests/toolbox/host/ToolboxPartialPaintHostTests.cpp
     apple/toolbox/src/context/ToolboxCellContext.cpp
     apple/toolbox/src/context/ToolboxButtonContext.cpp
@@ -956,7 +1006,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   set_target_properties(LokaToolboxPartialPaintTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME testToolboxEdit_fallback-frame COMMAND LokaToolboxPartialPaintTests edit-fallback-frame)
   add_test(NAME testToolboxPlainInk COMMAND LokaToolboxPartialPaintTests text-ink)
-  foreach(_partial_paint_case cell-encoding cell text text-repaint button button-repaint popup popup-repaint attributed edit edit-refused)
+  foreach(_partial_paint_case button-conversion cell-encoding cell text text-repaint button button-repaint popup popup-repaint attributed edit edit-refused)
     add_test(NAME testToolboxPartialPaint_${_partial_paint_case} COMMAND LokaToolboxPartialPaintTests ${_partial_paint_case})
   endforeach()
 
