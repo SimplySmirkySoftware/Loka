@@ -360,7 +360,7 @@ namespace edit_door
       else
       {
         ToolboxInputDoor::keyDown(f.controller, std::strcmp(mode, "navigate") == 0 ? 28 : 'x');
-        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:250" : "ToolboxFocus.cpp:283";
+        expected = std::strcmp(mode, "navigate") == 0 ? "ToolboxFocus.cpp:245" : "ToolboxFocus.cpp:278";
       }
       toolbox_host::refuseRegionAttempt = 0;
     }
