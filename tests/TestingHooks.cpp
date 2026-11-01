@@ -814,7 +814,7 @@ namespace loka
       namespace
       {
         const wchar_t *const *nextMonospaceCandidates = 0;
-        unsigned displayFontSlotsUntilFailure = 0;
+        unsigned displayFontCreationsUntilFailure = 0;
       } // namespace
       void useMonospaceCandidatesForNextBuild(const wchar_t *const *faces)
       {
@@ -826,13 +826,13 @@ namespace loka
         nextMonospaceCandidates = 0;
         return faces;
       }
-      void failDisplayFontCreation(unsigned successfulSlotsBeforeFailure)
+      void failDisplayFontCreation(unsigned successfulFontsBeforeFailure)
       {
-        displayFontSlotsUntilFailure = successfulSlotsBeforeFailure + 1;
+        displayFontCreationsUntilFailure = successfulFontsBeforeFailure + 1;
       }
       bool refuseDisplayFontCreation()
       {
-        return displayFontSlotsUntilFailure && --displayFontSlotsUntilFailure == 0;
+        return displayFontCreationsUntilFailure && --displayFontCreationsUntilFailure == 0;
       }
     } // namespace testing
   } // namespace win32

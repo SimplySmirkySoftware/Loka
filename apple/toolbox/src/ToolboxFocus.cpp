@@ -3,8 +3,7 @@
 #include "ToolboxPortScope.hpp"
 #include "platform/ToolboxPascalText.hpp"
 #include "platform/ToolboxMacRoman.hpp"
-#include "core/StringAccess.hpp"
-#include "platform/String.hpp"
+#include "platform/ToolboxUtf8Bytes.hpp"
 #include <Script.h>
 #include <Sound.h>
 
@@ -42,15 +41,9 @@ namespace
       Collect before borrowing the movable handle; the walk itself cannot allocate. */
   bool EditRoundTrips(TEHandle te, const loka::core::String &source)
   {
-    loka::platform::Utf8View utf8 = {0, 0};
-    std::string scratch;
-    const loka::core::Managed<loka::platform::String> &value = loka::core::StringAccess::handle(source);
-    if (value.isValid() && !value->queryUtf8(utf8))
-    {
-      if (!loka::platform::CollectUtf8(source, scratch)) return false;
-      utf8.bytes = scratch.data();
-      utf8.length = scratch.size();
-    }
+    const ToolboxUtf8Bytes utf8(source);
+    if (!utf8.valid())
+      return false;
     CharsHandle handle = TEGetText(te);
     if (!handle || !*handle || (**te).teLength < 0) return false;
     const unsigned char *native = reinterpret_cast<const unsigned char *>(*handle);
@@ -59,14 +52,16 @@ namespace
     {
       unsigned long scalar = native[i];
       ToolboxMacRomanDecode(native[i], scalar);
-      if (offset == utf8.length) return false;
-      const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.bytes + offset, utf8.length - offset, false);
+      if (offset == utf8.length())
+        return false;
+      const ToolboxTextUnit unit = ToolboxNextTextUnit(utf8.bytes() + offset, utf8.length() - offset, false);
       // The strict reader recovers malformed input as '?'; only the literal
       // ASCII '?' can round trip to that scalar.
-      if (unit.scalar != scalar || (unit.scalar == '?' && utf8.bytes[offset] != '?')) return false;
+      if (unit.scalar != scalar || (unit.scalar == '?' && utf8.bytes()[offset] != '?'))
+        return false;
       offset += unit.consumed;
     }
-    return offset == utf8.length;
+    return offset == utf8.length();
   }
 }
 

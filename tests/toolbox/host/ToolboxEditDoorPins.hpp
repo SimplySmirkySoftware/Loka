@@ -342,7 +342,7 @@ namespace edit_door
       else if (std::strcmp(mode, "tab") == 0)
       {
         ToolboxInputDoor::tabKey(f.controller, TAB_FORWARD);
-        expected = "ToolboxFocus.cpp:172";
+        expected = "ToolboxFocus.cpp:167";
       }
       else if (next)
       {

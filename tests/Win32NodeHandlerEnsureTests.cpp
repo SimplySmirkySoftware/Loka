@@ -21,6 +21,7 @@
 #include <cassert>
 #include <climits>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <windows.h>
@@ -3103,6 +3104,9 @@ namespace
             HFONT font = controller.textFont(style).font();
             if (font)
               handles.push_back(font);
+            font = controller.textFont(style + Underline).font();
+            if (font)
+              handles.push_back(font);
           }
     return handles;
   }
@@ -3269,6 +3273,347 @@ void testWin32TextFamilyGeometry()
         LOKA_VERIFY(layoutFontText(controller, text) == height);
       }
     }
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+namespace
+{
+  TEXTMETRICW underlineMetrics(HDC dc, HFONT font, bool underline)
+  {
+    LOGFONTW descriptor;
+    LOKA_VERIFY(font && GetObjectW(font, static_cast<int>(sizeof(descriptor)), &descriptor));
+    LOKA_VERIFY((descriptor.lfUnderline != 0) == underline);
+    HGDIOBJ previous = SelectObject(dc, font);
+    LOKA_VERIFY(previous && previous != HGDI_ERROR);
+    TEXTMETRICW metrics;
+    LOKA_VERIFY(GetTextMetricsW(dc, &metrics));
+    SelectObject(dc, previous);
+    return metrics;
+  }
+
+  void compareUnderlineTables(const Win32AttributedTextTable &plain, const Win32AttributedTextTable &underlined)
+  {
+    LOKA_VERIFY(plain.valid() && underlined.valid());
+    LOKA_VERIFY(plain.width() == underlined.width() && plain.height() == underlined.height());
+    LOKA_VERIFY(plain.lines().lineCount() == underlined.lines().lineCount());
+    std::wstring plainLines, underlineLines;
+    LOKA_VERIFY(plain.joinLines(plainLines) && underlined.joinLines(underlineLines));
+    // This also compares the actual wrap and ellipsis decisions, not just size.
+    LOKA_VERIFY(plainLines == underlineLines);
+    for (std::size_t i = 0; i < plain.lines().lineCount(); ++i)
+    {
+      const loka::app::TextLineRecord &a = plain.lines().line(i);
+      const loka::app::TextLineRecord &b = underlined.lines().line(i);
+      LOKA_VERIFY(a.width == b.width && a.fragmentCount == b.fragmentCount);
+      LOKA_VERIFY(a.metrics.ascent == b.metrics.ascent);
+      LOKA_VERIFY(a.metrics.descent == b.metrics.descent && a.metrics.leading == b.metrics.leading);
+    }
+  }
+} // namespace
+
+void testWin32UnderlineFontMetrics()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  const int dpis[] = {96, 120, 144, 192};
+  for (int d = 0; d < 4; ++d)
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(dpis[d], RailMetrics()));
+    HDC dc = GetDC(root);
+    LOKA_VERIFY(dc);
+    for (int row = 0; row < detail::kStyleVocabularySizeCount + TEXT_SIZE_ROLE_COUNT + 1; ++row)
+      for (int bold = 0; bold < 2; ++bold)
+        for (int italic = 0; italic < 2; ++italic)
+          for (int family = 0; family < 2; ++family)
+          {
+            TextStyle style;
+            if (row < detail::kStyleVocabularySizeCount)
+              style = SizeOf(detail::StyleVocabularySizes[row]);
+            else if (row < detail::kStyleVocabularySizeCount + TEXT_SIZE_ROLE_COUNT)
+              style = SmallLabel;
+            if (bold)
+              style = style + Bold;
+            if (italic)
+              style = style + Italic;
+            if (family)
+              style = style + Monospace;
+            const HFONT plain = controller.textFont(style).font();
+            const HFONT twin = controller.textFont(style + Underline).font();
+            if (!plain)
+            {
+              LOKA_VERIFY(family && !twin);
+              std::printf("[skip] underline metrics: monospace row %d at %d dpi unavailable\n", row, dpis[d]);
+              continue;
+            }
+            LOKA_VERIFY(twin && twin != plain);
+            LOKA_VERIFY(controller.textFont(style + TextStyle().underline(false)).font() == plain);
+            const TEXTMETRICW a = underlineMetrics(dc, plain, false);
+            const TEXTMETRICW b = underlineMetrics(dc, twin, true);
+            LOKA_VERIFY(a.tmHeight == b.tmHeight && a.tmAscent == b.tmAscent);
+            LOKA_VERIFY(a.tmDescent == b.tmDescent && a.tmExternalLeading == b.tmExternalLeading);
+            LOGFONTW plainDescriptor, twinDescriptor;
+            ZeroMemory(&plainDescriptor, sizeof(plainDescriptor));
+            ZeroMemory(&twinDescriptor, sizeof(twinDescriptor));
+            LOKA_VERIFY(GetObjectW(plain, static_cast<int>(sizeof(plainDescriptor)), &plainDescriptor));
+            LOKA_VERIFY(GetObjectW(twin, static_cast<int>(sizeof(twinDescriptor)), &twinDescriptor));
+            twinDescriptor.lfUnderline = FALSE;
+            LOKA_VERIFY(std::memcmp(&plainDescriptor, &twinDescriptor, sizeof(plainDescriptor)) == 0);
+            LOKA_VERIFY(measureSpan(root, plain, L"iiii WWWW sample", 16)
+                        == measureSpan(root, twin, L"iiii WWWW sample", 16));
+            const int threshold = measureSpan(root, plain, L"iiii WWWW", 9);
+            for (int delta = -1; delta <= 1; ++delta)
+              for (int mode = 0; mode < 3; ++mode)
+              {
+                const BlockStyle block = BlockStyle()
+                                             .wrap(mode == 0 ? TEXT_WRAP_WORD : TEXT_WRAP_NONE)
+                                             .truncation(mode == 2 ? TEXT_TRUNCATION_ELLIPSIS : TEXT_TRUNCATION_CLIP);
+                Win32AttributedTextTable p, u;
+                // Fixed two-segment partition: opposite italic values keep
+                // the boundary present on both sides of the comparison.
+                const TextStyle other = style + TextStyle().italic(!italic);
+                LOKA_VERIFY(p.build(
+                    Styled("iiii ", style) + Styled("WWWW sample", other), block, threshold + delta, dc, controller));
+                LOKA_VERIFY(u.build(Styled("iiii ", style + Underline) + Styled("WWWW sample", other + Underline),
+                                    block,
+                                    threshold + delta,
+                                    dc,
+                                    controller));
+                LOKA_VERIFY(AttributedAccess::fontCount(u) == 2);
+                underlineMetrics(dc, AttributedAccess::font(u, 0), true);
+                underlineMetrics(dc, AttributedAccess::font(u, 1), true);
+                compareUnderlineTables(p, u);
+              }
+          }
+    ReleaseDC(root, dc);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32UnderlineTextProjection()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  HWND root = attributedHost();
+  const int dpis[] = {96, 120, 144, 192};
+  for (int d = 0; d < 4; ++d)
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(dpis[d], RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    const TextStyle styles[] = {TextStyle(), FontSize<24>() + Bold + Italic, SmallLabel, Monospace};
+    for (int i = 0; i < 4; ++i)
+      for (int mode = 0; mode < 4; ++mode)
+      {
+        TextProps props("iiii WWWW sample words for wrapping");
+        props.textStyle_ = styles[i];
+        if (mode)
+          props.blockStyle_ = BlockStyle()
+                                  .wrap(mode == 1 ? TEXT_WRAP_WORD : TEXT_WRAP_NONE)
+                                  .truncation(mode == 3 ? TEXT_TRUNCATION_ELLIPSIS : TEXT_TRUNCATION_CLIP);
+        TextNode plain(props);
+        props.textStyle_ = styles[i] + Underline;
+        TextNode underlined(props);
+        HWND p = projectFontText(controller, root, plain);
+        HWND u = projectFontText(controller, root, underlined);
+        const int height = layoutFontText(controller, underlined);
+        LOKA_VERIFY(height == layoutFontText(controller, plain));
+        LOGFONTW descriptor;
+        const HFONT drawn = readFont(u, descriptor);
+        LOKA_VERIFY(descriptor.lfUnderline != 0);
+        LOKA_VERIFY(drawn == controller.fallbackFont(styles[i] + Underline));
+        const HFONT plainFont = readFont(p, descriptor);
+        LOKA_VERIFY(descriptor.lfUnderline == 0);
+        LOKA_VERIFY(plainFont == controller.fallbackFont(styles[i]));
+        if (i == 0)
+        {
+          LOKA_VERIFY(plainFont == controller.displayFont());
+          if (mode == 0)
+            LOKA_VERIFY(height == 20);
+        }
+        short plainWidth = 0, underlineWidth = 0;
+        LOKA_VERIFY(Win32TextContext::queryNaturalWidth(&plain, &controller, plainWidth));
+        LOKA_VERIFY(Win32TextContext::queryNaturalWidth(&underlined, &controller, underlineWidth));
+        LOKA_VERIFY(plainWidth == underlineWidth);
+        RECT natural = {0, 0, 0, 0};
+        LOKA_VERIFY(Win32TextContext::measureTextRect(u, drawn, L"iiii WWWW sample words for wrapping", natural));
+        LOKA_VERIFY(underlineWidth == controller.displayScale().measurementToLu(natural.right - natural.left));
+        wchar_t plainText[256], underlineText[256];
+        LOKA_VERIFY(GetWindowTextW(p, plainText, 256) > 0);
+        LOKA_VERIFY(GetWindowTextW(u, underlineText, 256) > 0);
+        LOKA_VERIFY(lstrcmpW(plainText, underlineText) == 0);
+        // Measure the actual displayed twin, including the line-building path's
+        // final-height exception, padding and the undeclared minimum.
+        HDC dc = GetDC(u);
+        LOKA_VERIFY(dc);
+        const TEXTMETRICW metrics = underlineMetrics(dc, drawn, true);
+        ReleaseDC(u, dc);
+        int expected = styles[i].declaresFont()
+                           ? controller.displayScale().measurementToLu(metrics.tmHeight + metrics.tmExternalLeading)
+                           : 20;
+        if (expected < 20)
+          expected = 20;
+        if (mode == 1)
+        {
+          RECT drawnRect = {0, 0, 160, 0};
+          LOKA_VERIFY(Win32TextContext::measureTextRect(u, drawn, underlineText, drawnRect));
+          const int padded = controller.displayScale().measurementToLu(drawnRect.bottom - drawnRect.top) + 8;
+          if (padded > expected)
+            expected = padded;
+        }
+        LOKA_VERIFY(height == expected);
+      }
+    loka::core::MutableState<TextStyle> live((TextStyle()));
+    TextProps props("unchanged");
+    props.textStyleState_ = &live;
+    TextNode node(props);
+    HWND child = projectFontText(controller, root, node);
+    const TextStyle changes[] = {Underline, TextStyle().underline(false), TextStyle()};
+    for (int i = 0; i < 3; ++i)
+    {
+      live.set(changes[i]);
+      layoutFontText(controller, node);
+      LOGFONTW descriptor;
+      readFont(child, descriptor);
+      LOKA_VERIFY((descriptor.lfUnderline != 0) == (i == 0));
+    }
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32UnderlineEmptyFamilyFallback()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  {
+    static const wchar_t *const absent[] = {L"Loka missing underline face", 0};
+    loka::win32::testing::useMonospaceCandidatesForNextBuild(absent);
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    LOKA_VERIFY(!controller.textFont(Monospace).font());
+    LOKA_VERIFY(!controller.textFont(Monospace + Underline).font());
+    LOKA_VERIFY(controller.textFont(Monospace + Underline).family() == TEXT_FAMILY_MONOSPACE);
+    TextProps props("fallback");
+    props.textStyle_ = Monospace + Underline;
+    TextNode node(props);
+    HWND child = projectFontText(controller, root, node);
+    LOGFONTW descriptor;
+    LOKA_VERIFY(readFont(child, descriptor) == controller.textFont(Underline).font());
+    LOKA_VERIFY(descriptor.lfUnderline != 0);
+    LOKA_VERIFY(controller.fallbackFont(Monospace) == controller.displayFont());
+    HDC dc = GetDC(root);
+    LOKA_VERIFY(dc);
+    Win32AttributedTextTable table;
+    LOKA_VERIFY(table.build(Styled("fallback", Monospace + Underline), BlockStyle(), 160, dc, controller));
+    underlineMetrics(dc, AttributedAccess::font(table, 0), true);
+    ReleaseDC(root, dc);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32UnderlineDpiReplacement()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    TextProps props("declared font");
+    props.textStyle_ = FontSize<24>() + Underline;
+    TextNode declared(props);
+    props.textStyle_ = Underline;
+    TextNode only(props);
+    HWND declaredWindow = projectFontText(controller, root, declared);
+    HWND onlyWindow = projectFontText(controller, root, only);
+    Win32TextContext *onlyContext = static_cast<Win32TextContext *>(only.getContext());
+    AttributedTextNode attributed(AttributedTextProps(Styled("parked", Underline + Bold)));
+    LayoutState seat = attributedSeat(160);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&attributed, seat));
+    Win32AttributedTextContext *context = static_cast<Win32AttributedTextContext *>(attributed.getContext());
+    const Win32AttributedTextTable &cache = AttributedAccess::table(*context);
+    loka::app::testing::TextEditorStateOwner editorState;
+    loka::testing::TextBufferFixture lines;
+    LOKA_VERIFY(lines.attach(&editorState.tracker, 8, 1024) == TextBuffer::ATTACH_OK);
+    TextEditorNode editor(TextEditorProps(lines, editorState.cursor));
+    seat = attributedSeat(160);
+    LOKA_VERIFY(controller.prepareProjectedLayout(&editor, seat));
+    HWND edit = static_cast<Win32TextEditorContext *>(editor.getContext())->hwnd();
+    const int dpis[] = {144, 192, 96};
+    for (int step = 0; step < 3; ++step)
+    {
+      layoutFontText(controller, only);
+      seat = attributedSeat(160);
+      context->layout(&controller, seat);
+      LOKA_VERIFY(cache.valid());
+      onlyContext->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+      context->onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_DETACHED_RETAINED);
+      const std::vector<HFONT> old = captureFontTable(controller);
+      controller.updateDisplayScale(loka::win32::Win32DisplayScale(dpis[step]));
+      LOKA_VERIFY(!cache.valid() && AttributedAccess::fontCount(cache) == 0);
+      LOKA_VERIFY(!loka::testing::Win32TextFamilyAccess::hasMeasurement(*onlyContext));
+      EnumChildWindows(root, VerifyNoOldFont, reinterpret_cast<LPARAM>(&old));
+      LOGFONTW descriptor;
+      LOKA_VERIFY(readFont(declaredWindow, descriptor) == controller.fallbackFont(FontSize<24>() + Underline));
+      LOKA_VERIFY(descriptor.lfUnderline != 0);
+      LOKA_VERIFY(readFont(onlyWindow, descriptor) == controller.fallbackFont(Underline));
+      LOKA_VERIFY(descriptor.lfUnderline != 0);
+      LOKA_VERIFY(readFont(edit, descriptor) == controller.fallbackFont(Monospace));
+      LOKA_VERIFY(descriptor.lfUnderline == 0);
+      onlyContext->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+      context->onFactChanged(NODE_FACT_DETACHED_RETAINED, NODE_FACT_ATTACHED);
+      seat = attributedSeat(160);
+      context->layout(&controller, seat);
+      LOKA_VERIFY(cache.valid());
+      LOKA_VERIFY(AttributedAccess::font(cache, 0) == controller.fallbackFont(Underline + Bold));
+    }
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32UnderlineReplacementFailure()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  {
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    RegisterWin32BuiltInSupport(controller);
+    TextProps props("keep installed twin");
+    props.textStyle_ = Underline;
+    TextNode node(props);
+    HWND child = projectFontText(controller, root, node);
+    const std::vector<HFONT> old = captureFontTable(controller);
+    LOGFONTW descriptor;
+    const HFONT installed = readFont(child, descriptor);
+    LOKA_VERIFY(descriptor.lfUnderline != 0);
+    // One successful system plain creation, then refuse its underline twin.
+    loka::win32::testing::failDisplayFontCreation(1);
+    controller.updateDisplayScale(loka::win32::Win32DisplayScale(144));
+    LOKA_VERIFY(captureFontTable(controller) == old);
+    LOKA_VERIFY(readFont(child, descriptor) == installed && descriptor.lfUnderline != 0);
+    loka::dsl::testing::Win32ScenePlatformTestAccess::performLayout(controller, 320, 240);
+    EnumChildWindows(root, VerifyNoOldFont, reinterpret_cast<LPARAM>(&old));
+    LOKA_VERIFY(readFont(child, descriptor) == controller.fallbackFont(Underline));
+    LOKA_VERIFY(descriptor.lfUnderline != 0);
+  }
+  LOKA_VERIFY(DestroyWindow(root));
+}
+
+void testWin32UnderlineInitialFailure()
+{
+  using namespace loka::app;
+  HWND root = attributedHost();
+  {
+    loka::win32::testing::failDisplayFontCreation(1);
+    Win32ScenePlatformController controller(root, loka::win32::Win32DisplayScale(96, RailMetrics()));
+    LOKA_VERIFY(!controller.displayFont());
+    LOKA_VERIFY(!controller.textFont(Underline).font());
+    // No eager retry: only the next layout's ensureDisplayFont builds again.
+    loka::dsl::testing::Win32ScenePlatformTestAccess::performLayout(controller, 320, 240);
+    LOKA_VERIFY(controller.displayFont());
+    HDC dc = GetDC(root);
+    LOKA_VERIFY(dc);
+    underlineMetrics(dc, controller.fallbackFont(Underline), true);
+    ReleaseDC(root, dc);
   }
   LOKA_VERIFY(DestroyWindow(root));
 }

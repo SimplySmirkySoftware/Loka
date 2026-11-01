@@ -221,7 +221,8 @@ public:
   static HFONT fallbackFont(const loka::win32::Win32DisplayFont &fonts, const loka::app::TextStyle &style)
   {
     const loka::win32::Win32FontResolution &resolved = fonts.find(style);
-    return resolved.font() ? resolved.font() : fonts.get();
+    bool on = false;
+    return resolved.font() ? resolved.font() : fonts.get(style.queryUnderline(on) && on);
   }
   HFONT fallbackFont(const loka::app::TextStyle &style) const
   {

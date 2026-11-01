@@ -3,6 +3,13 @@
 
 void testWin32NodeHandlerEnsureContract();
 void testWin32TextFontTable();
+void testWin32UnderlineFontMetrics();
+void testWin32UnderlineTextProjection();
+void testWin32UnderlineEmptyFamilyFallback();
+void testWin32UnderlineDpiReplacement();
+void testWin32UnderlineReplacementFailure();
+void testWin32UnderlineInitialFailure();
+
 void testWin32PlainTextWrappedLines();
 void testWin32PlainTextWrapWidthAtPlacement();
 
