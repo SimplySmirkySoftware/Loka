@@ -9,6 +9,7 @@
 #include "JsCardBindingRegistry.hpp"
 #include "SmirkyMarkup.hpp"
 #include "JsClickNode.hpp"
+#include "JsToolbarNode.hpp"
 #include "app/nodes/controls/Cell.hpp"
 #include "app/nodes/nestable/Grid.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
@@ -56,6 +57,14 @@ namespace smirkycard
 {
   namespace testing
   {
+    class JsToolbarAccess
+    {
+    public:
+      static loka::core::EmitterState *emitter(JsToolbarNode &node, JsToolbarSlot slot)
+      {
+        return node.slots_.emitter(slot);
+      }
+    };
     const char *machineCpuClassName(loka::platform::CpuClass cpuClass);
 
     /** Test-only setup of the runtime issuer; production never calls into this TU. */
@@ -188,9 +197,11 @@ namespace
   class TestLowering : public smirkycard::IJsNodeLowering
   {
   public:
-    explicit TestLowering(const char *value)
+    explicit TestLowering(const char *value, const char *parentName = 0)
     {
+      LOKA_VERIFY(this->name == 0 && this->parent == 0 && this->kind == 0);
       name = value;
+      parent = parentName;
       kind = 0;
     }
     virtual JSValue build(JSContext *, int, JSValueConst *)
@@ -214,6 +225,15 @@ namespace
     duplicateKind->kind = 9;
     LOKA_VERIFY(!registry.registerLowering(duplicateKind));
     delete duplicateKind;
+    // Missing parents refuse engine installation without a production failure hook.
+    smirkycard::JsCardBindingRegistry broken;
+    TestLowering *orphan = new TestLowering("orphan", "missing");
+    LOKA_VERIFY(broken.registerLowering(orphan));
+    JSRuntime *js = JS_NewRuntime();
+    JSContext *ctx = JS_NewContext(js);
+    LOKA_VERIFY(!broken.install(ctx));
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(js);
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
     LOKA_VERIFY(runtime.evaluateToString(
@@ -1337,6 +1357,595 @@ namespace
                 && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
   }
 
+  std::string toolbarCard(const std::string &body)
+  {
+    return "card('first',class{constructor(c){this.c=c;this.s=c.state('short');this.b=c.state(false)}compose(){" + body
+           + "}});";
+  }
+
+  JSValue registryGlobal(JSContext *, JSValueConst, int, JSValueConst *)
+  {
+    return JS_UNDEFINED;
+  }
+
+  void checkRegistryPublicationNames()
+  {
+    smirkycard::JsCardBindingRegistry registry;
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label", "First")));
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label", "Second")));
+    LOKA_VERIFY(registry.registerLowering(new TestLowering("label")));
+    // Equal parent text must collide even when stored at a different address.
+    const char sameParent[] = {'F', 'i', 'r', 's', 't', 0};
+    TestLowering *duplicate = new TestLowering("label", sameParent);
+    LOKA_VERIFY(!registry.registerLowering(duplicate));
+    delete duplicate;
+    duplicate = new TestLowering("label");
+    LOKA_VERIFY(!registry.registerLowering(duplicate));
+    delete duplicate;
+    const smirkycard::IJsGlobal occupied = {"label", &registryGlobal, 0};
+    LOKA_VERIFY(!registry.registerGlobal(occupied));
+
+    for (unsigned globalFirst = 0; globalFirst < 2; ++globalFirst)
+    {
+      smirkycard::JsCardBindingRegistry mixed;
+      const smirkycard::IJsGlobal global = {"property", &registryGlobal, 0};
+      if (globalFirst)
+        LOKA_VERIFY(mixed.registerGlobal(global));
+      TestLowering *property = new TestLowering("property", "Parent");
+      LOKA_VERIFY(mixed.registerLowering(property));
+      if (!globalFirst)
+        LOKA_VERIFY(mixed.registerGlobal(global));
+      LOKA_VERIFY(!mixed.registerGlobal(global));
+      TestLowering *globalCollision = new TestLowering("property");
+      LOKA_VERIFY(!mixed.registerLowering(globalCollision));
+      delete globalCollision;
+      smirkycard::JsToolbarRowKind kind = smirkycard::JS_TOOLBAR_ROW_LABEL;
+      LOKA_VERIFY(!property->queryToolbarRowKind(kind));
+      LOKA_VERIFY(kind == smirkycard::JS_TOOLBAR_ROW_LABEL);
+    }
+  }
+
+  void checkToolbarRegistry()
+  {
+    checkRegistry();
+    checkRegistryPublicationNames();
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String result, error;
+    const char *probe = "[typeof Toolbar,typeof ToolbarItem,typeof label,typeof flexibleSpace,typeof fixedSpace,"
+                        "typeof ToolbarItem('x',()=>{}).naturalWidth,typeof ToolbarItem.label('x').enabled,"
+                        "new Set([ToolbarItem('x',()=>{}).kind,ToolbarItem.label('x').kind,"
+                        "ToolbarItem.flexibleSpace().kind,ToolbarItem.fixedSpace(1).kind]).size].join(',')";
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Utf8(probe, std::strlen(probe)), result, error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal(
+                    "function,function,undefined,undefined,undefined,undefined,undefined,4"))
+                == 0);
+  }
+
+  void checkToolbarRefusals()
+  {
+    const char *build[] = {"ToolbarItem()",
+                           "ToolbarItem(3,()=>{})",
+                           "ToolbarItem(this.s,()=>{})",
+                           "ToolbarItem('x',3)",
+                           "ToolbarItem('A\\u0000B',()=>{})",
+                           "ToolbarItem('\\u0000A',()=>{})",
+                           "ToolbarItem.label('A\\u0000B')",
+                           "ToolbarItem.label('\\u0000A')",
+                           "ToolbarItem.label('x',{}, {})",
+                           "ToolbarItem.label('x',{wrap:'none'})",
+                           "ToolbarItem.label('x',{align:'center'})",
+                           "ToolbarItem.label(3)",
+                           "ToolbarItem.fixedSpace(0)",
+                           "ToolbarItem.fixedSpace(NaN)",
+                           "ToolbarItem.fixedSpace(32768)",
+                           "ToolbarItem.fixedSpace(1.5)",
+                           "ToolbarItem.fixedSpace(Infinity)",
+                           "ToolbarItem.flexibleSpace(1)",
+                           "Toolbar(Button('x',()=>{}))",
+                           "Toolbar(Text('x'))",
+                           "Toolbar(Row())",
+                           "Toolbar(Array.from({length:17},()=>ToolbarItem.label('x')))",
+                           "Toolbar(Array.from({length:9},()=>ToolbarItem('x',()=>{})))"};
+    for (unsigned i = 0; i < sizeof(build) / sizeof(build[0]); ++i)
+    {
+      const std::string source = toolbarCard(std::string("return ") + build[i]);
+      checkComposeRefusal(source.c_str(), "TypeError");
+    }
+    const char *standalone[] = {"ToolbarItem('x',()=>{})",
+                                "ToolbarItem.label('x')",
+                                "ToolbarItem.flexibleSpace()",
+                                "ToolbarItem.fixedSpace(1)"};
+    for (unsigned i = 0; i < sizeof(standalone) / sizeof(standalone[0]); ++i)
+      checkComposeRefusal(toolbarCard(std::string("return ") + standalone[i]).c_str(), "require a Toolbar");
+  }
+
+  void checkToolbarForgedChildKind()
+  {
+    // Bypass every helper guard with hand-built descriptors retaining only registered kinds.
+    const char *forged[] = {"{kind:Button('x',()=>{}).kind,label:'x',handler:()=>{}}",
+                            "Button('x',()=>{})",
+                            "Text('x')",
+                            "Row()",
+                            "{kind:ToolbarItem.fixedSpace(1).kind,width:0}",
+                            "{kind:ToolbarItem.fixedSpace(1).kind,width:NaN}",
+                            "{kind:ToolbarItem.fixedSpace(1).kind,width:32768}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:3,handler:()=>{}}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:3}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'A\\u0000B',handler:()=>{}}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'\\u0000A',handler:()=>{}}",
+                            "{kind:ToolbarItem.label('x').kind,label:'A\\u0000B'}",
+                            "{kind:ToolbarItem.label('x').kind,label:'\\u0000A'}",
+                            "{kind:ToolbarItem.label('x').kind,label:'x',style:{wrap:'none'}}",
+                            "{kind:ToolbarItem.label('x').kind,label:this.b}",
+                            "{kind:ToolbarItem.label('x').kind,label:{}}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:this.s}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:{}}",
+                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},shown:this.b}"};
+    for (unsigned i = 0; i < sizeof(forged) / sizeof(forged[0]); ++i)
+      checkComposeRefusal(toolbarCard(std::string("return {kind:Toolbar().kind,children:[") + forged[i] + "]}").c_str(),
+                          "Toolbar",
+                          true);
+    checkComposeRefusal(
+        toolbarCard("return {kind:Toolbar().kind,children:Array.from({length:17},()=>ToolbarItem.label('x'))}").c_str(),
+        "Toolbar",
+        true);
+    checkComposeRefusal(
+        toolbarCard("return {kind:Toolbar().kind,children:Array.from({length:9},()=>ToolbarItem('x',()=>{}))}").c_str(),
+        "Toolbar",
+        true);
+    checkComposeRefusal(
+        toolbarCard("let t=Toolbar(ToolbarItem.label('x'));for(let i=0;i<11;++i)t=Row(t);return t").c_str(),
+        "Toolbar",
+        true);
+  }
+
+  void checkToolbarShape(const char *expression, unsigned rows)
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(
+        runtime.loadBuiltin(toolbarCard(std::string("return (") + expression + ").TEST_ID('Band')").c_str(), error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *band = windowNode(window, "Band");
+    LOKA_VERIFY(band && band->asNestable());
+    loka::app::scene::Node *child = band->asNestable()->childrenHead();
+    LOKA_VERIFY(child && child->asStackNode());
+    loka::app::StackNode *row = child->asStackNode();
+    LOKA_VERIFY(row->props.rowUndeclaredWidth_ == loka::app::ROW_UNDECLARED_WIDTH_NATURAL_LABELS_SHARE);
+    LOKA_VERIFY(row->childrenCount() == rows);
+    LOKA_VERIFY(row->props.axis_ == loka::app::STACK_AXIS_ROW);
+    LOKA_VERIFY(row->props.gap_ == loka::app::layout::LayoutGap::of(8));
+    LOKA_VERIFY(row->props.hasVerticalAlignment_
+                && row->props.verticalAlignment_ == loka::app::VERTICAL_ALIGNMENT_CENTER);
+  }
+
+  void checkToolbarInterleavedEightHandlers()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error, result;
+    const std::string source =
+        toolbarCard("globalThis.hits=Array(8).fill(0);return Toolbar(Array.from({length:8},(_,i)=>["
+                    "ToolbarItem('B'+i,()=>++hits[i]).TEST_ID('B'+i),"
+                    "i%3===0?ToolbarItem.label('L'+i):i%3===1?ToolbarItem.flexibleSpace():ToolbarItem.fixedSpace(3)])."
+                    "flat()).TEST_ID('Band')");
+    LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    for (int i = 0; i < 8; ++i)
+    {
+      char id[8];
+      std::sprintf(id, "B%d", i);
+      loka::app::scene::Node *button = windowNode(window, id);
+      LOKA_VERIFY(button && button->asButtonNode());
+      button->asButtonNode()->props.getOnClick()->emit();
+      LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("hits.join(',')"), result, error));
+      std::string expected;
+      for (int j = 0; j < 8; ++j)
+      {
+        if (j)
+          expected += ',';
+        expected += j <= i ? '1' : '0';
+      }
+      LOKA_VERIFY(result.compare(loka::core::String::Utf8(expected.c_str(), expected.size())) == 0);
+    }
+  }
+
+  class ToolbarLabelPlatform : public NullScenePlatformController
+  {
+  public:
+    loka::app::scene::LayoutState label;
+    virtual bool prepareProjectedLayout(loka::app::scene::Node *node, loka::app::scene::LayoutState &state)
+    {
+      if (node->testId() == "Label")
+        this->label = state;
+      return NullScenePlatformController::prepareProjectedLayout(node, state);
+    }
+  };
+  void checkToolbarLiveAndDetached()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error, result;
+    LOKA_VERIFY(runtime.loadBuiltin(
+        toolbarCard("globalThis.hits=0;return VStack(Button('flip',()=>this.b.set(!this.b.get())).TEST_ID('Flip'),"
+                    "Button('long',()=>this.s.set('a much longer label')).TEST_ID('Long'),"
+                    "Button('short',()=>this.s.set('short')).TEST_ID('Short'),"
+                    "Toolbar(ToolbarItem('go',()=>++hits).enabled(this.b).TEST_ID('Go'),"
+                    "ToolbarItem.label(this.s).TEST_ID('Label')).TEST_ID('Band'))")
+            .c_str(),
+        error));
+    NullPlatformContext context;
+    ToolbarLabelPlatform platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::ButtonNode *go = windowNode(window, "Go")->asButtonNode();
+    LOKA_VERIFY(go->props.getEnabled() && !go->props.getEnabled()->get());
+    loka::app::scene::Scene *out = 0;
+    loka::dsl::FlowError flowError;
+    LOKA_VERIFY(loka::dsl::testing::ClickButton("Go", loka::dsl::testing::CLICK_DISABLED_FAILS)
+                    .run(window.scene(), out, flowError)
+                != loka::dsl::FLOW_STEP_SUCCEEDED);
+    windowNode(window, "Flip")->asButtonNode()->props.getOnClick()->emit();
+    LOKA_VERIFY(go->props.getEnabled()->get());
+    go->props.getOnClick()->emit();
+    loka::app::scene::LayoutState offer;
+    offer.width = 300;
+    offer.height = 120;
+    offer.lineHeight = 20;
+    loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
+    platform.projectLayoutForTesting(root, offer);
+    const loka::app::scene::LayoutState initial = platform.label;
+    LOKA_VERIFY(initial.width > 0 && initial.height > 0);
+    LOKA_VERIFY(textValue(windowNode(window, "Label")->asTextNode()) == "short");
+    windowNode(window, "Long")->asButtonNode()->props.getOnClick()->emit();
+    LOKA_VERIFY(textValue(windowNode(window, "Label")->asTextNode()) == "a much longer label");
+    platform.projectLayoutForTesting(root, offer);
+    LOKA_VERIFY(platform.label.width == initial.width && platform.label.height == initial.height);
+    windowNode(window, "Short")->asButtonNode()->props.getOnClick()->emit();
+    LOKA_VERIFY(textValue(windowNode(window, "Label")->asTextNode()) == "short");
+    platform.projectLayoutForTesting(root, offer);
+    LOKA_VERIFY(platform.label.width == initial.width && platform.label.height == initial.height);
+    // Detach without reclamation: the card and endpoint storage both remain alive.
+    loka::core::EmitterState *emitter = go->props.getOnClick();
+    loka::dsl::testing::SceneTestAccess::notifyComposeEvent(*window.scene(), loka::app::scene::COMPOSE_EVENT_DETACH);
+    emitter->emit();
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("hits"), result, error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("1")) == 0);
+  }
+
+  void checkToolbarDetachedEmitter()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error, result;
+    LOKA_VERIFY(runtime.loadBuiltin(
+        toolbarCard("globalThis.hits=0;return VStack(Button('flip',()=>this.b.set(!this.b.get())).TEST_ID('Flip'),"
+                    "Show(this.b,Toolbar(ToolbarItem('go',()=>++hits).TEST_ID('Go')).TEST_ID('Band')))")
+            .c_str(),
+        error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::core::EmitterState *flip = windowNode(window, "Flip")->asButtonNode()->props.getOnClick();
+    flip->emit();
+    admission.flush();
+    smirkycard::JsToolbarNode *band = static_cast<smirkycard::JsToolbarNode *>(windowNode(window, "Band"));
+    LOKA_VERIFY(band);
+    loka::core::EmitterState *slot =
+        smirkycard::testing::JsToolbarAccess::emitter(*band, smirkycard::JS_TOOLBAR_SLOT_0);
+    slot->emit();
+    flip->emit();
+    admission.flush();
+    // Show parks this arm (no destroyOnDetach): storage survives while the card stays Live,
+    // and the slot's only producer, the band's own Button, has left the tree.
+    LOKA_VERIFY(!windowNode(window, "Go"));
+    // Characterization (#1704): parking delivers DETACHED_RETAINED but no compose DETACH,
+    // so the token callbacks stay bound and a direct emission still reaches the handler.
+    // This node adds no parking cleanup of its own; the expectation flips with #1704.
+    slot->emit();
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("hits"), result, error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("2")) == 0);
+    flip->emit();
+    admission.flush();
+    LOKA_VERIFY(windowNode(window, "Band") == band);
+    // Re-entry releases and re-declares the bindings: one emission runs the handler once.
+    slot->emit();
+    smirkycard::testing::JsToolbarAccess::emitter(*band, smirkycard::JS_TOOLBAR_SLOT_7)->emit();
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("hits"), result, error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("3")) == 0);
+  }
+
+  void checkToolbarIdentity()
+  {
+    using namespace smirkycard;
+    JsToolbarProps base;
+    base.count = 1;
+    loka::core::MutableState<loka::core::String> text(loka::core::String::Literal("x"));
+    loka::core::MutableState<bool> enabled(false);
+    JsHandlerRecord *handler = reinterpret_cast<JsHandlerRecord *>(&text);
+    for (unsigned field = 0; field < 17; ++field)
+    {
+      JsToolbarProps changed(base);
+      switch (field)
+      {
+      case 0:
+        changed.count = 2;
+        break;
+      case 1:
+        changed.rows[0].kind = JS_TOOLBAR_ROW_BUTTON;
+        break;
+      case 2:
+        changed.rows[0].label = loka::core::String::Literal("x");
+        break;
+      case 3:
+        changed.rows[0].text = &text;
+        break;
+      case 4:
+        changed.rows[0].enabled = &enabled;
+        break;
+      case 5:
+        changed.rows[0].handler = handler;
+        break;
+      case 6:
+        changed.rows[0].width = 1;
+        break;
+      case 7:
+        changed.rows[0].testId = loka::core::String::Literal("x");
+        break;
+      case 8:
+        changed.rows[0].style = loka::app::SizeOf(12);
+        break;
+      case 9:
+        changed.rows[0].style.weight(loka::app::TEXT_WEIGHT_BOLD);
+        break;
+      case 10:
+        changed.rows[0].style.weight(loka::app::TEXT_WEIGHT_NORMAL);
+        break;
+      case 11:
+        changed.rows[0].style.italic(true);
+        break;
+      case 12:
+        changed.rows[0].style.italic(false);
+        break;
+      case 13:
+        changed.rows[0].style.underline(true);
+        break;
+      case 14:
+        changed.rows[0].style.underline(false);
+        break;
+      case 15:
+        changed.rows[0].style.color(loka::app::TEXT_COLOR_BLACK);
+        break;
+      case 16:
+        changed.rows[0].style.family(loka::app::TEXT_FAMILY_MONOSPACE);
+        break;
+      }
+      LOKA_VERIFY((base < changed) != (changed < base));
+      loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> clone(loka::app::scene::Component(changed).clone());
+      LOKA_VERIFY(clone.get() && !(*clone->propsBase() < changed) && !(changed < *clone->propsBase()));
+      LOKA_VERIFY((base < *clone->propsBase()) != (*clone->propsBase() < base));
+    }
+    JsToolbarProps unused(base);
+    unused.rows[1].width = 7;
+    LOKA_VERIFY(!(base < unused) && !(unused < base));
+    base.rows[0].text = &text;
+    JsToolbarProps same(base);
+    text.set(loka::core::String::Literal("different live value"));
+    LOKA_VERIFY(!(base < same) && !(same < base));
+    std::printf("Toolbar host costs: row=%lu props=%lu node=%lu; definition copies all %u rows\n",
+                static_cast<unsigned long>(sizeof(JsToolbarRow)),
+                static_cast<unsigned long>(sizeof(JsToolbarProps)),
+                static_cast<unsigned long>(sizeof(JsToolbarNode)),
+                static_cast<unsigned>(kMaximumTreeChildren));
+  }
+
+  void checkToolbarBudgetsAndDepth()
+  {
+    for (int count = 128; count <= 129; ++count)
+    {
+      const std::string source =
+          toolbarCard("const pane=(n)=>VStack(Array.from({length:n},(_,i)=>i%3===0?Toolbar(ToolbarItem('x',()=>{})):"
+                      "i%3===1?Button('x',()=>{}):Cell('x',()=>{})));return VStack("
+                      "Array.from({length:8},()=>Show(this.b,pane(15))),pane("
+                      + std::string(count == 128 ? "8" : "9") + ")).TEST_ID('Budget')");
+      if (count == 129)
+      {
+        checkComposeRefusal(source.c_str(), "kCardClickableBudget");
+        continue;
+      }
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      LOKA_VERIFY(windowNode(window, "Budget") && !windowNode(window, "SmirkyCard.Status"));
+    }
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(
+        toolbarCard("let t=Toolbar(ToolbarItem.label('x').TEST_ID('Depth11'));for(let i=0;i<10;++i)t=Row(t);return t")
+            .c_str(),
+        error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    LOKA_VERIFY(windowNode(window, "Depth11"));
+  }
+  void checkToolbarForeignSeat()
+  {
+    for (unsigned kind = 0; kind < 2; ++kind)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      const std::string source =
+          std::string("card('first',class{constructor(c){globalThis.foreign=c.state(") + (kind ? "true" : "'x'")
+          + ")}compose(){return Text('owner')}});"
+            "card('second',class{compose(){return {kind:Toolbar().kind,children:["
+          + (kind ? "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:foreign}"
+                  : "{kind:ToolbarItem.label('x').kind,label:foreign}")
+          + "]}}});";
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow first(&context, props, &platform);
+      WindowAdmissionTestApp admission(first);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*first.scene(), true);
+      NullScenePlatformController secondPlatform;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_SECOND, runtime));
+      NullWindow second(&context, props, &secondPlatform);
+      WindowAdmissionTestApp secondAdmission(second);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*second.scene(), true);
+      loka::app::scene::Node *status = windowNode(second, "SmirkyCard.Status");
+      LOKA_VERIFY(status && textValue(status->asTextNode()).find("Toolbar") != std::string::npos);
+    }
+  }
+
+  void checkToolbarAllocationFailure()
+  {
+    using namespace loka::core::testing;
+    for (int failure = 1; failure <= 8; ++failure)
+    {
+      failLokaAllocRaw("JsCardNode", "Handler", failure);
+      checkComposeRefusal(toolbarCard("return Toolbar(Array.from({length:8},()=>ToolbarItem('x',()=>{})))").c_str(),
+                          "Could not allocate");
+      LOKA_VERIFY(lokaAllocRawLive() == 0);
+      allowLokaAllocRaw();
+    }
+  }
+  void checkToolbarCapturedLabel()
+  {
+    const char *bodies[] = {"const d={kind:ToolbarItem.label('x').kind,label:this.s,testId:'Label',style:{get "
+                            "size(){d.label='changed';return 12}}};return {kind:Toolbar().kind,children:[d]}",
+                            "this.s.set('A\\u0000B');return Toolbar(ToolbarItem.label(this.s).TEST_ID('Label'))"};
+    // The NUL seat must be declared in the constructor: writes here use the normal handler door below.
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error;
+      std::string source = toolbarCard(bodies[i]);
+      if (i == 1)
+      {
+        source = toolbarCard("return Toolbar(ToolbarItem.label(this.s).TEST_ID('Label'))");
+        source.replace(source.find("c.state('short')"), std::strlen("c.state('short')"), "c.state('A\\u0000B')");
+      }
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      loka::app::scene::Node *label = windowNode(window, "Label");
+      LOKA_VERIFY(label && label->asTextNode());
+      const std::string expected = i ? std::string("A\0B", 3) : std::string("short");
+      LOKA_VERIFY(textValue(label->asTextNode()) == expected);
+    }
+  }
+
+  void checkToolbarRetirement()
+  {
+    const char *directory = "_smirkycard_toolbar_fixture";
+    const char *path = "_smirkycard_toolbar_fixture/MAIN.JS";
+    std::remove(path);
+    removeDirectory(directory);
+    LOKA_VERIFY(makeDirectory(directory));
+    for (unsigned reload = 0; reload < 2; ++reload)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String error, result;
+      const std::string source =
+          std::string("globalThis.hits=0;card('first',class{constructor(c){this.c=c}compose(){return Toolbar(")
+          + "ToolbarItem('go',()=>{++hits;this.c." + (reload ? "reload()" : "go('second')")
+          + "}).TEST_ID('Go'),ToolbarItem('stay',()=>++hits).TEST_ID('Stay'))}});"
+            "card('second',class{compose(){return Text('second').TEST_ID('Second')}});";
+      LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+      NullPlatformContext context;
+      if (reload)
+      {
+        writeMain(path, source.c_str());
+        context.setApplicationDirectory(loka::core::String::Literal(directory));
+        runtime.loadMain(&context);
+        LOKA_VERIFY(runtime.mainSource() == smirkycard::ScriptRuntime::MAIN_SOURCE_FILE);
+      }
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      loka::core::EmitterState *go = windowNode(window, "Go")->asButtonNode()->props.getOnClick();
+      loka::core::EmitterState *stay = windowNode(window, "Stay")->asButtonNode()->props.getOnClick();
+      JSContext *oldContext = runtime.context();
+      stay->emit();
+      go->emit();
+      // Pending navigation/reload revokes delivery before records or endpoint storage retire.
+      stay->emit();
+      go->emit();
+      JSValue global = JS_GetGlobalObject(oldContext);
+      JSValue hits = JS_GetPropertyStr(oldContext, global, "hits");
+      int32_t count = 0;
+      LOKA_VERIFY(JS_ToInt32(oldContext, &count, hits) == 0);
+      LOKA_VERIFY(count == 2);
+      JS_FreeValue(oldContext, hits);
+      JS_FreeValue(oldContext, global);
+      loka::dsl::testing::SceneTestAccess::notifyComposeEvent(*window.scene(), loka::app::scene::COMPOSE_EVENT_DETACH);
+      stay->emit();
+      go->emit();
+      admission.flush();
+      if (!reload)
+        LOKA_VERIFY(windowNode(window, "Second"));
+      admission.flush();
+      LOKA_VERIFY(!window.sceneManager()->hasRetiredScenes());
+    }
+    std::remove(path);
+    removeDirectory(directory);
+  }
+  void checkToolbar()
+  {
+    checkToolbarRegistry();
+    checkToolbarRefusals();
+    checkToolbarForgedChildKind();
+    checkToolbarShape("Toolbar()", 0);
+    checkToolbarShape("Toolbar(ToolbarItem.label('constant'),ToolbarItem.label(this.s))", 2);
+    checkToolbarShape("Toolbar(Array.from({length:16},()=>ToolbarItem.label('x')))", 16);
+    checkToolbarInterleavedEightHandlers();
+    checkToolbarLiveAndDetached();
+    checkToolbarDetachedEmitter();
+    checkToolbarIdentity();
+    checkToolbarBudgetsAndDepth();
+    checkToolbarForeignSeat();
+    checkToolbarAllocationFailure();
+    checkToolbarCapturedLabel();
+    checkToolbarRetirement();
+  }
   void checkGridShape(int rows, int cols, bool clickable)
   {
     smirkycard::ScriptRuntime runtime;
@@ -5459,6 +6068,36 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar-registry"))
+  {
+    checkToolbarRegistry();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar-handlers"))
+  {
+    checkToolbarInterleavedEightHandlers();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar-live"))
+  {
+    checkToolbarLiveAndDetached();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar-detached"))
+  {
+    checkToolbarDetachedEmitter();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar-forged"))
+  {
+    checkToolbarForgedChildKind();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--toolbar"))
+  {
+    checkToolbar();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--main-result"))
   {
     checkMainResultMeasurementCompanion();
@@ -5668,6 +6307,7 @@ int main(int argc, char **argv)
   checkMines();
   testScriptAllocatorAlignsTwoByteAlignedBase();
   testScriptContextIsPointerTagAligned();
+  checkToolbar();
   checkRegistry();
   checkCounterAndRefusals();
   checkTextStyle();

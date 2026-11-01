@@ -16,3 +16,6 @@ private:
   bool handleScrollKey(ToolboxScrollKey key);
   bool handleTabKey(ToolboxTabDirection direction);
   void idleTextEdits();
+  bool syncNativeFocus(NativeFocusMode);
+  void releaseNativeFocus(loka::app::scene::NodeContext *);
+  bool handleEditCommand(loka::app::EditVerb);

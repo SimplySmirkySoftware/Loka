@@ -2,7 +2,7 @@
 #include "ToolboxUnicodeEditorLedger.hpp"
 #include "ToolboxEditorFrame.hpp"
 #include "ToolboxTextensionFake.hpp"
-#include "context/ToolboxUnicodeTextEditorContext.hpp"
+#include "app/scene/projection/NativeNodeContext.hpp"
 #include "core/Frame.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include "support/TestVerify.hpp"
@@ -43,7 +43,7 @@ static void atomicity()
 {
   using namespace loka::core::testing;
   ToolboxWindow window;
-  ToolboxUnicodeTextEditorContext context;
+  loka::app::scene::NativeNodeContext context;
   TextensionFake::reset();
   failLokaAllocRaw("ToolboxUnicodeEditorLedger", "Resource", 1);
   {
@@ -80,7 +80,7 @@ static void lifecycle()
   TextensionFake::reset();
   ToolboxWindow window, secondWindow;
   ToolboxUnicodeEditorLedger ledger, second;
-  ToolboxUnicodeTextEditorContext a, b, c;
+  loka::app::scene::NativeNodeContext a, b, c;
   install(ledger, window, &a);
   install(ledger, window, &b);
   install(second, secondWindow, &c);
@@ -117,7 +117,7 @@ static void destructorDeath(bool retired)
   if (!child)
   {
     ToolboxWindow window;
-    ToolboxUnicodeTextEditorContext context;
+    loka::app::scene::NativeNodeContext context;
     {
       ToolboxUnicodeEditorLedger ledger;
       install(ledger, window, &context);
@@ -149,7 +149,4 @@ int main()
   lifecycle();
   destructorDeath(false);
   destructorDeath(true);
-  ToolboxUnicodeTextEditorContext context;
-  LOKA_VERIFY(!context.hasNativeHandle());
-  LOKA_VERIFY(context.key('a') == loka::app::EDITOR_UNAVAILABLE);
 }

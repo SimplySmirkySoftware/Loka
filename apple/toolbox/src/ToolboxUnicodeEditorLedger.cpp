@@ -126,6 +126,7 @@ void ToolboxUnicodeEditorLedger::retire(ToolboxUnicodeEditorResource *resource)
 {
   if (!resource)
     return;
+  this->focus(resource, false);
   resource->next = this->retired_;
   this->retired_ = resource;
 }
@@ -143,6 +144,21 @@ void ToolboxUnicodeEditorLedger::drain()
     DisposeWrapper(resource);
   }
   assert(!this->retired_);
+}
+void ToolboxUnicodeEditorLedger::idle(ToolboxUnicodeEditorResource *resource)
+{
+  if (resource)
+    TXNIdle(resource->object);
+}
+void ToolboxUnicodeEditorLedger::place(ToolboxUnicodeEditorResource *resource, const loka::core::Frame &frame)
+{
+  assert(resource && resource->object);
+  TXNSetFrameBounds(resource->object, frame.y, frame.x, frame.y + frame.height, frame.x + frame.width, resource->frame);
+}
+void ToolboxUnicodeEditorLedger::focus(ToolboxUnicodeEditorResource *resource, bool focused)
+{
+  if (resource)
+    TXNFocus(resource->object, focused);
 }
 void ToolboxUnicodeEditorLedger::draw(ToolboxUnicodeEditorResource *resource)
 {
@@ -184,6 +200,9 @@ ToolboxUnicodeEditorLedger::Prepared::Prepared(loka::app::scene::NodeContext *)
 {
 }
 ToolboxUnicodeEditorLedger::Prepared::~Prepared() {}
+void ToolboxUnicodeEditorLedger::idle(ToolboxUnicodeEditorResource *) {}
+void ToolboxUnicodeEditorLedger::place(ToolboxUnicodeEditorResource *, const loka::core::Frame &) {}
+void ToolboxUnicodeEditorLedger::focus(ToolboxUnicodeEditorResource *, bool) {}
 void ToolboxUnicodeEditorLedger::draw(ToolboxUnicodeEditorResource *) {}
 #endif
 ToolboxUnicodeEditorResource *ToolboxUnicodeEditorLedger::Prepared::release()

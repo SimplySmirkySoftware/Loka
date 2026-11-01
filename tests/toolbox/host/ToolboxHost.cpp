@@ -1,3 +1,6 @@
+#ifdef LOKA_HOST_UNICODE_EDITOR
+#include "ToolboxTextensionFake.hpp"
+#endif
 #include "ToolboxUpdateEvidence.hpp"
 #include "ToolboxHost.hpp"
 #include "Script.h"
@@ -662,7 +665,7 @@ namespace
 #endif
     return false;
   }
-#ifdef LOKA_HOST_ZSTACK_UNITS
+#if defined(LOKA_HOST_ZSTACK_UNITS) && !defined(LOKA_HOST_UNICODE_EDITOR)
 #include "ToolboxDirtyRectReplay.inc"
 #else
   void RenderDirtyRectSurfaces(loka::app::scene::Node *, ToolboxScenePlatformController *, const Rect &) {}
@@ -913,10 +916,18 @@ void ToolboxWindow::requestInvalidateRect(const Rect &rect)
 // Deliberate production/host twin: the OS consumes evidence at BeginUpdate.
 static void BeginUpdate(ToolboxWindow::WindowPort *window)
 {
+#ifdef LOKA_HOST_UNICODE_EDITOR
+  TextensionFake::beginUpdate();
+#endif
   if (window->updateRgn && *window->updateRgn)
     (**window->updateRgn).rgnBBox = Rect();
 }
-static void EndUpdate(ToolboxWindow::WindowPort *) {}
+static void EndUpdate(ToolboxWindow::WindowPort *)
+{
+#ifdef LOKA_HOST_UNICODE_EDITOR
+  TextensionFake::endUpdate();
+#endif
+}
 void ToolboxWindow::drawForUpdate()
 {
   if (this->scenePlatformController_)
@@ -962,3 +973,5 @@ void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
     this->scenePlatformController_->noteWindowFullRequest(ToolboxFullDrawReasonName(reason));
 }
 #endif
+
+#include "ToolboxWindowEditCommand.cpp"

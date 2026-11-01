@@ -52,7 +52,6 @@ public:
   {
     return this->te_ != 0;
   }
-  virtual void focus(bool) {}
   ToolboxTextEditorRects geometry() const;
   Rect chromeRect() const
   {

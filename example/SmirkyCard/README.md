@@ -550,3 +550,32 @@ LOKA_TAB_COUNT=2 \
   build/retro68/68k/Release/example/SmirkyCard/LokaLaptopStandaloneFlow68K.bin \
   "${pictures[@]}" --expect example/SmirkyCard/tests/LAPTOP.audit
 ```
+
+### Toolbar
+
+`Toolbar(...children)` accepts up to 16 item descriptors, including at most
+8 buttons per toolbar. Arrays of descriptors work like Row's children.
+
+```js
+Toolbar(
+  ToolbarItem('Save', () => this.save()).enabled(this.canSave).TEST_ID('Save'),
+  ToolbarItem.label(this.title, {weight: 'bold'}).TEST_ID('Title'),
+  ToolbarItem.flexibleSpace(),
+  ToolbarItem.fixedSpace(12)
+).TEST_ID('Toolbar')
+```
+
+`ToolbarItem(title, handler)` takes a constant string title and a function.
+Titles and constant labels containing NUL are refused. Labels accept a string
+or an own-card String seat, and an optional Text character-style dictionary;
+paragraph keys (`align`, `wrap`, `truncation`) and a third argument are refused.
+The C++ Toolbar supplies centred, one-line, ellipsised labels. Fixed space
+widths must be positive integers no greater than 32767. Button `.enabled`
+borrows an own-card Bool seat. Toolbar buttons share the card's 128-clickable
+budget with Button and Cell, including descriptors in hidden panes.
+
+Items are descriptors usable only inside Toolbar, with `.TEST_ID` on buttons
+and labels and `.enabled` on buttons. They have no generic tree modifiers.
+There is no JavaScript `ToolbarItem.shown` in v1: swap the whole band with
+`Show`, as LAPTOP does. Rows and handler/seat identities remain fixed for the
+band's structural lifetime; replace the enclosing branch for structural changes.

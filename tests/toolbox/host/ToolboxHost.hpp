@@ -1,8 +1,10 @@
+#include "ToolboxNativeFocusMode.hpp"
 #include "debug/ToolboxSceneDebugStats.hpp"
 #include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxScrollViewVisit.hpp"
 #ifndef LOKA_TEST_TOOLBOX_HOST_HPP
 #define LOKA_TEST_TOOLBOX_HOST_HPP
+#include "context/ToolboxUnicodeTextEditorContext.hpp"
 #include "ToolboxPresentObservation.hpp"
 #include "ToolboxFullDrawReason.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
@@ -200,8 +202,15 @@ public:
     return CAP_TEXT_EDIT;
   }
 };
-namespace toolbox_host { extern GrafPtr frontWindow; extern int textHits; }
-inline GrafPtr FrontWindow() { return toolbox_host::frontWindow; }
+namespace toolbox_host
+{
+  extern GrafPtr frontWindow;
+  extern int textHits;
+} // namespace toolbox_host
+inline GrafPtr FrontWindow()
+{
+  return toolbox_host::frontWindow;
+}
 #include "ToolboxPendingDialogs.hpp"
 #include "ToolboxDialogPresenter.hpp"
 namespace toolbox_host
@@ -217,6 +226,7 @@ class ToolboxWindow : public Window
   loka::core::PushStateTracker tracker_;
   loka::core::MutableState<bool> visible_;
 public:
+  virtual bool handleEditCommand(loka::app::EditVerb);
   struct WindowPort : GrafPort
   {
     Rect portRect;
@@ -257,7 +267,7 @@ public:
     port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
   }
-  bool queryPortRect(Rect &out) const
+  virtual bool queryPortRect(Rect &out) const
   {
     if (!this->answersPort)
       return false;
@@ -311,6 +321,11 @@ public:
   WindowPort *window()
   {
     return &port;
+  }
+  /** Mirrors the production door: hilited means this port is the front window. */
+  bool isHilited() const
+  {
+    return toolbox_host::frontWindow == &this->port;
   }
   ToolboxWindowContext *context()
   {
@@ -768,6 +783,8 @@ public:
   void reachNativeBar(short id);
   void reachEditControl(loka::app::scene::NodeContext *context);
   void reachPopupHit(ToolboxPopupMenuContext *context);
+  ToolboxUnicodeEditorResource *
+  ensureUnicodeTextEditorControl(ToolboxUnicodeTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   TEHandle ensureTextEditorControl(ToolboxTextEditorContext *, const Rect &, loka::app::scene::NativeLifetimeHint);
   void retireTextEditorControl(loka::app::scene::NodeContext *, loka::app::scene::NativeLifetimeHint);
   void flushTE();

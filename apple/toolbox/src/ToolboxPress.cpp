@@ -270,7 +270,10 @@ bool ToolboxScenePlatformController::dispatchPress(const ResolvedPress &press,
     ToolboxEditorSeat *editor = this->editControls_[index].editor;
     this->activateEditControl(index);
     if (editor)
-      editor->click(point, event);
+    {
+      if (!this->editControls_[index].unicode || this->syncNativeFocus(NATIVE_FOCUS_NORMAL))
+        editor->click(point, event);
+    }
     else
     {
       {

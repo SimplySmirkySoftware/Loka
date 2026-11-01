@@ -9,6 +9,24 @@ namespace loka
 {
   namespace toolbox
   {
+    bool UnicodeText::serviceEvent(EventRecord &record)
+    {
+      return TXNTSMCheck(0, &record);
+    }
+    void UnicodeText::scrapToPublic()
+    {
+      if (TXNConvertToPublicScrap() != noErr)
+      {
+        // diagnostic: no Toolbox status-log seam; clipboard contents are unknown.
+      }
+    }
+    void UnicodeText::scrapFromPublic()
+    {
+      if (TXNConvertFromPublicScrap() != noErr)
+      {
+        // diagnostic: no Toolbox status-log seam; clipboard contents are unknown.
+      }
+    }
     UnicodeText::Session::Session()
     {
       // Textension sizes its allocations against the zone as it stands, not
@@ -50,6 +68,12 @@ namespace loka
 {
   namespace toolbox
   {
+    bool UnicodeText::serviceEvent(EventRecord &)
+    {
+      return false;
+    }
+    void UnicodeText::scrapToPublic() {}
+    void UnicodeText::scrapFromPublic() {}
     UnicodeText::Session::Session() {}
     UnicodeText::Session::~Session() {}
   } // namespace toolbox

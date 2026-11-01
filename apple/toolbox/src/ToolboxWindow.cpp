@@ -351,6 +351,11 @@ void ToolboxWindow::handleGrow(const Point &globalPoint)
   this->storeCurrentNativeContentFrame();
 }
 
+bool ToolboxWindow::isHilited() const
+{
+  return window_ && reinterpret_cast<WindowPeek>(window_)->hilited;
+}
+
 void ToolboxWindow::invalidateGrowIcon()
 {
   if (!window_)
@@ -611,3 +616,5 @@ void ToolboxWindow::teardownScene()
     scenePlatformController_ = 0;
   }
 }
+
+#include "ToolboxWindowEditCommand.cpp"

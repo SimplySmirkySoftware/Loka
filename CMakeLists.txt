@@ -472,6 +472,13 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaUpstreamGaugePins PRIVATE LokaCommonTesting)
   add_test(NAME LokaUpstreamGaugePins COMMAND LokaUpstreamGaugePins)
 
+  add_executable(LokaToolboxIterationTests tests/toolbox/host/ToolboxIterationHostTests.cpp apple/toolbox/src/ToolboxUnicodeStartup.cpp)
+  target_include_directories(LokaToolboxIterationTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_options(LokaToolboxIterationTests PRIVATE -fno-exceptions -fno-rtti)
+  loka_enable_warnings(LokaToolboxIterationTests)
+  set_target_properties(LokaToolboxIterationTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxIterationTests COMMAND LokaToolboxIterationTests)
+
   add_executable(LokaToolboxUnicodeStartupTests
     tests/toolbox/host/ToolboxUnicodeStartupHostTests.cpp
     apple/toolbox/src/ToolboxUnicodeStartup.cpp
@@ -489,8 +496,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     tests/toolbox/host/ToolboxUnicodeLedgerHostTests.cpp
     tests/toolbox/host/ToolboxTextensionFake.cpp
     tests/TestingHooks.cpp
-    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
-    apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp)
+    apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp)
   target_sources(LokaToolboxUnicodeLedgerTests PRIVATE
     tests/toolbox/host/ToolboxUnicodeTeardownHostTests.cpp
     tests/platform/null/NullPlatformContext.cpp
@@ -548,6 +554,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   list(FILTER LOKA_TOOLBOX_FILE_COMMON_SOURCES EXCLUDE REGEX "/platform/GenericString\\.cpp$")
   add_executable(LokaToolboxFileChoiceTests
     tests/toolbox/host/ToolboxFileChoiceHostTests.cpp
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
     tests/toolbox/host/ToolboxFileHost.cpp
     apple/toolbox/src/ToolboxFileChoice.cpp
     apple/toolbox/src/platform/ToolboxPascalText.cpp
@@ -653,6 +660,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/context/ToolboxClipBoxContext.cpp
     tests/toolbox/host/ToolboxAttributedTextHostTests.cpp
     tests/toolbox/host/ToolboxHost.cpp
+    apple/toolbox/src/ToolboxUnicodeStartup.cpp
     apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp
     tests/toolbox/host/ToolboxScrollViewHost.cpp
@@ -763,6 +771,17 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME testToolboxTextEditorFrameInset COMMAND LokaToolboxTextEditorTests frame-inset)
   add_test(NAME testToolboxTextEditorPreContextRequest COMMAND LokaToolboxTextEditorTests pre-context-request)
   add_test(NAME testToolboxTextEditorPreContextRefused COMMAND LokaToolboxTextEditorTests pre-context-refused)
+
+  add_executable(LokaToolboxUnicodeEditorTests tests/toolbox/host/ToolboxUnicodeEditorHostTests.cpp
+    tests/toolbox/host/ToolboxTextensionFake.cpp apple/toolbox/src/context/ToolboxUnicodeTextEditorContext.cpp
+    ${_editor_host_sources})
+  target_include_directories(LokaToolboxUnicodeEditorTests PRIVATE tests/toolbox/host tests/toolbox/host/unicode tests/toolbox/host/startup tests apple/toolbox/src)
+  target_compile_options(LokaToolboxUnicodeEditorTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp -Wno-multichar)
+  target_compile_definitions(LokaToolboxUnicodeEditorTests PRIVATE LOKA_HOST_EDITOR_SCROLL LOKA_HOST_ZSTACK_UNITS LOKA_HOST_UNICODE_EDITOR LOKA_TOOLBOX_UNICODE=1)
+  target_link_libraries(LokaToolboxUnicodeEditorTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxUnicodeEditorTests)
+  set_target_properties(LokaToolboxUnicodeEditorTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME LokaToolboxUnicodeEditorTests COMMAND LokaToolboxUnicodeEditorTests)
 
   add_executable(LokaToolboxPascalTextTests tests/toolbox/host/ToolboxPascalTextHostTests.cpp
     apple/toolbox/src/platform/ToolboxHfsName.cpp ${_editor_host_sources})

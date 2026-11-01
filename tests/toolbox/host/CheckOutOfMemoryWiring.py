@@ -1,6 +1,6 @@
 """Structural pin for initial-mount, turn-end and allocation wiring; the host does not run ToolboxApp::run.
 
-The real event-loop/bootstrap fixture is absent. Runtime path acceptance remains
+The iteration has a host trace fixture; bootstrap runtime acceptance remains
 on MAME; this check only detects removal/movement of the fatal calls.
 """
 from pathlib import Path
@@ -31,16 +31,20 @@ checks.append(re.search(r"if \(window && !this->windowAdopted\(window\)\)\s*"
                         r"this->bootstrapWindowless\(\);\s*\}\s*"
                         r"projectInitialVisibilityChunks\(\);\s*this->projectMenuSources\(\);", core))
 # Match the complete loop by braces, then require the check at its tail.
-loop_start = app.index("while (running_)")
-body_start = app.index("{", loop_start)
-depth = 1
-body_end = body_start + 1
-while depth:
-    depth += (app[body_end] == "{") - (app[body_end] == "}")
-    body_end += 1
+def body_at(source, marker):
+    start = source.index("{", source.index(marker))
+    depth, end = 1, start + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[start + 1:end - 1], end
+
+loop, body_end = body_at(app, "while (running_)")
 checks.append(re.search(r"\{\s*loka::core::Operation::Regime \w+;\s*while \(running_\)", app))
 checks.append(re.match(r"\s*\}\s*(?://[^\n]*\n\s*)*this->retireComponents\(\);", app[body_end:]))
-loop = app[body_start + 1:body_end - 1]
+checks.append(re.search(r"WaitNextEvent\([^;]+;\s*this->iterate\(clock, gotEvent, record\);\s*$", loop))
+iteration = (root / "apple/toolbox/src/ToolboxIteration.cpp").read_text()
+loop, _ = body_at(iteration, "void ToolboxApp::iterate")
 checks.append(re.search(r"this->present\([^;]+;[\s\S]*"
                         r"loka::toolbox::QuitIfOutOfMemoryReserveSpent\(\);\s*$", loop))
 checks.append(loop.count("QuitIfOutOfMemoryReserveSpent();") == 1)
