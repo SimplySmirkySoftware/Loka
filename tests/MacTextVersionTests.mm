@@ -8,6 +8,7 @@
 #include "support/LifecycleFactTestAccess.hpp"
 #include "support/MacNativeRefusal.hpp"
 #include "core/util/StateTrackerGuard.hpp"
+#include "platform/String.hpp"
 #include "platform/StringUTF8.hpp"
 #include <AppKit/AppKit.h>
 #include <cmath>
@@ -611,12 +612,20 @@ void testMacTextVersionPropsSchedule()
     LOKA_VERIFY(node);
     for (int detached = 0; detached < 2; ++detached)
     {
+      // Retained detach of the Text itself (a Scene-level detach discards the
+      // composition and with it the owner this loop holds).
       if (detached)
-        SceneAccess::updateAttached(scene, false);
+      {
+        NotifySubtreeNodeDetached(node);
+        LifecycleFactTestAccess::DeliverFacts(node);
+      }
       owner->change(String::Literal(
           detached ? "short" : "long words repeated long words repeated long words repeated long words repeated"));
       if (detached)
-        SceneAccess::updateAttached(scene, true);
+      {
+        NotifySubtreeNodeAttached(node);
+        LifecycleFactTestAccess::DeliverFacts(node);
+      }
       if (scene.hasPendingInvalidation())
         SceneAccess::flushInvalidation(scene);
       MacScenePlatformController::flushPendingRelayouts();
