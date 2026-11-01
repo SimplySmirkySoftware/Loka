@@ -73,7 +73,16 @@ namespace
     CandidateDC &operator=(const CandidateDC &);
   };
 
-  HFONT CreateMonospaceFont(LOGFONTW descriptor, HDC dc, const wchar_t *const *faces)
+  HFONT CreateDisplayFont(const LOGFONTW &descriptor)
+  {
+#ifdef TEST_BUILD
+    if (loka::win32::testing::refuseDisplayFontCreation())
+      return 0;
+#endif
+    return CreateFontIndirectW(&descriptor);
+  }
+
+  HFONT CreateMonospaceFont(LOGFONTW &descriptor, HDC dc, const wchar_t *const *faces)
   {
     descriptor.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
     for (int candidate = 0; candidate < 3 && faces[candidate]; ++candidate)
@@ -140,21 +149,19 @@ namespace loka
 
     void Win32DisplayFont::initializeEmptyFamilies()
     {
-      for (int row = 0; row < kFontRowCount; ++row)
-        for (int bold = 0; bold < 2; ++bold)
-          for (int italic = 0; italic < 2; ++italic)
-            this->fonts_[row][bold][italic][1] = Win32FontResolution(0, loka::app::TEXT_FAMILY_MONOSPACE);
+      for (int slot = 0; slot < kSlotCount; ++slot)
+        for (int underline = 0; underline < 2; ++underline)
+          this->fonts_[slot].members[underline] =
+              Win32FontResolution(0, slot % 2 ? loka::app::TEXT_FAMILY_MONOSPACE : loka::app::TEXT_FAMILY_SYSTEM);
     }
 
     Win32DisplayFont::~Win32DisplayFont()
     {
       // Also releases every successful allocation in a refused partial build.
-      for (int row = 0; row < kFontRowCount; ++row)
-        for (int bold = 0; bold < 2; ++bold)
-          for (int italic = 0; italic < 2; ++italic)
-            for (int family = 0; family < 2; ++family)
-              if (this->fonts_[row][bold][italic][family].font())
-                DeleteObject(this->fonts_[row][bold][italic][family].font());
+      for (int slot = 0; slot < kSlotCount; ++slot)
+        for (int underline = 0; underline < 2; ++underline)
+          if (this->fonts_[slot].members[underline].font())
+            DeleteObject(this->fonts_[slot].members[underline].font());
     }
 
     bool Win32DisplayFont::create(const Win32DisplayScale &scale)
@@ -177,36 +184,50 @@ namespace loka
       if (!ReadMessageFont(scale, base))
         return false;
       Win32DisplayFont candidate;
-      for (int row = 0; row < kFontRowCount; ++row)
-        for (int bold = 0; bold < 2; ++bold)
-          for (int italic = 0; italic < 2; ++italic)
-          {
-            LOGFONTW descriptor = base;
-            // The shared native message-font row also serves fixed controls.
-            if (row != kDefaultSizeRow)
-            {
-              const int logicalUnits = row < kRoleRowBase
-                                           ? loka::app::detail::StyleVocabularySizes[row]
-                                           : RoleLogicalUnits(static_cast<loka::app::TextSizeRole>(row - kRoleRowBase));
-              const int height = scale.fontHeightToNative(logicalUnits);
-              if (height < 0)
-                return false;
-              descriptor.lfHeight = -height;
-            }
-            if (bold)
-              descriptor.lfWeight = FW_BOLD;
-            if (italic)
-              descriptor.lfItalic = TRUE;
-#ifdef TEST_BUILD
-            if (testing::refuseDisplayFontCreation())
-              return false;
-#endif
-            candidate.fonts_[row][bold][italic][0] = Win32FontResolution(CreateFontIndirectW(&descriptor));
-            if (!candidate.fonts_[row][bold][italic][0].font())
-              return false;
-            candidate.fonts_[row][bold][italic][1] =
-                Win32FontResolution(CreateMonospaceFont(descriptor, dc.get(), faces), loka::app::TEXT_FAMILY_MONOSPACE);
-          }
+      for (int slot = 0; slot < kSlotCount; ++slot)
+      {
+        // Inverse of slotIndex: one address convention for all table walks.
+        const int row = slot / 8;
+        const int bold = (slot / 4) % 2;
+        const int italic = (slot / 2) % 2;
+        const loka::app::TextFamily family =
+            slot % 2 ? loka::app::TEXT_FAMILY_MONOSPACE : loka::app::TEXT_FAMILY_SYSTEM;
+        LOGFONTW descriptor = base;
+        if (row != kDefaultSizeRow)
+        {
+          const int logicalUnits = row < kRoleRowBase
+                                       ? loka::app::detail::StyleVocabularySizes[row]
+                                       : RoleLogicalUnits(static_cast<loka::app::TextSizeRole>(row - kRoleRowBase));
+          const int height = scale.fontHeightToNative(logicalUnits);
+          if (height < 0)
+            return false;
+          descriptor.lfHeight = -height;
+        }
+        if (bold)
+          descriptor.lfWeight = FW_BOLD;
+        if (italic)
+          descriptor.lfItalic = TRUE;
+        descriptor.lfUnderline = FALSE;
+        if (family == loka::app::TEXT_FAMILY_SYSTEM)
+        {
+          candidate.fonts_[slot].members[0] = Win32FontResolution(CreateDisplayFont(descriptor), family);
+          if (!candidate.fonts_[slot].members[0].font())
+            return false;
+        }
+        else
+        {
+          candidate.fonts_[slot].members[0] =
+              Win32FontResolution(CreateMonospaceFont(descriptor, dc.get(), faces), family);
+          if (!candidate.fonts_[slot].members[0].font())
+            continue;
+        }
+        // Monospace returns the descriptor of its verified candidate. The twin
+        // uses that exact face without repeating candidate selection.
+        descriptor.lfUnderline = TRUE;
+        candidate.fonts_[slot].members[1] = Win32FontResolution(CreateDisplayFont(descriptor), family);
+        if (!candidate.fonts_[slot].members[1].font())
+          return false;
+      }
       candidate.scale_ = scale;
       this->swap(candidate);
       return true;
@@ -218,27 +239,26 @@ namespace loka
       const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
       bool on = false;
       const int italic = style.queryItalic(on) && on ? 1 : 0;
+      const bool underline = style.queryUnderline(on) && on;
       loka::app::TextSizeRole role;
       if (style.size_.queryRole(role))
-        return this->fonts_[kRoleRowBase + role][bold][italic][family];
+        return this->fonts_[slotIndex(kRoleRowBase + role, bold, italic, family)].member(underline);
       int logicalUnits = 0;
       if (!style.size_.queryPoints(logicalUnits))
-        return this->fonts_[kDefaultSizeRow][bold][italic][family];
+        return this->fonts_[slotIndex(kDefaultSizeRow, bold, italic, family)].member(underline);
       loka::app::SizeOf(logicalUnits).size_.queryPoints(logicalUnits);
       for (int row = 0; row < kSizeCount; ++row)
         if (loka::app::detail::StyleVocabularySizes[row] == logicalUnits)
-          return this->fonts_[row][bold][italic][family];
-      return this->fonts_[kDefaultSizeRow][bold][italic][family];
+          return this->fonts_[slotIndex(row, bold, italic, family)].member(underline);
+      return this->fonts_[slotIndex(kDefaultSizeRow, bold, italic, family)].member(underline);
     }
 
     HFONT Win32DisplayFont::replacementFor(HFONT font, const Win32DisplayFont &replacement) const
     {
-      for (int row = 0; row < kFontRowCount; ++row)
-        for (int bold = 0; bold < 2; ++bold)
-          for (int italic = 0; italic < 2; ++italic)
-            for (int family = 0; family < 2; ++family)
-              if (font && this->fonts_[row][bold][italic][family].font() == font)
-                return replacement.fonts_[row][bold][italic][family].font();
+      for (int slot = 0; slot < kSlotCount; ++slot)
+        for (int underline = 0; underline < 2; ++underline)
+          if (font && this->fonts_[slot].members[underline].font() == font)
+            return replacement.fonts_[slot].members[underline].font();
       return replacement.get();
     }
 
@@ -249,15 +269,12 @@ namespace loka
 
     void Win32DisplayFont::swap(Win32DisplayFont &other)
     {
-      for (int row = 0; row < kFontRowCount; ++row)
-        for (int bold = 0; bold < 2; ++bold)
-          for (int italic = 0; italic < 2; ++italic)
-            for (int family = 0; family < 2; ++family)
-            {
-              Win32FontResolution temporary = this->fonts_[row][bold][italic][family];
-              this->fonts_[row][bold][italic][family] = other.fonts_[row][bold][italic][family];
-              other.fonts_[row][bold][italic][family] = temporary;
-            }
+      for (int slot = 0; slot < kSlotCount; ++slot)
+      {
+        FontPair temporary = this->fonts_[slot];
+        this->fonts_[slot] = other.fonts_[slot];
+        other.fonts_[slot] = temporary;
+      }
       Win32DisplayScale temporaryScale = this->scale_;
       this->scale_ = other.scale_;
       other.scale_ = temporaryScale;

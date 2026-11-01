@@ -15,7 +15,9 @@ namespace loka
       /** Borrow a null-terminated list (at most three faces) for the next build. */
       void useMonospaceCandidatesForNextBuild(const wchar_t *const *faces);
       const wchar_t *const *takeMonospaceCandidates();
-      void failDisplayFontCreation(unsigned successfulSlotsBeforeFailure);
+      /** Count system-plain and twin creation gates; monospace candidate probes
+          do not consume the count. Refusal is one-shot. */
+      void failDisplayFontCreation(unsigned successfulFontsBeforeFailure);
       bool refuseDisplayFontCreation();
     } // namespace testing
 #endif
@@ -55,9 +57,9 @@ namespace loka
       bool create(const Win32DisplayScale &scale);
       bool matches(const Win32DisplayScale &scale) const;
       void swap(Win32DisplayFont &other);
-      HFONT get() const
+      HFONT get(bool underline = false) const
       {
-        return this->fonts_[kDefaultSizeRow][0][0][0].font();
+        return this->fonts_[slotIndex(kDefaultSizeRow, 0, 0, 0)].member(underline).font();
       }
 
       const Win32FontResolution &find(const loka::app::TextStyle &style) const;
@@ -72,9 +74,24 @@ namespace loka
         kSizeCount = loka::app::detail::kStyleVocabularySizeCount,
         kRoleRowBase = kSizeCount,
         kDefaultSizeRow = kRoleRowBase + loka::app::TEXT_SIZE_ROLE_COUNT,
-        kFontRowCount = kDefaultSizeRow + 1
+        kFontRowCount = kDefaultSizeRow + 1,
+        kSlotCount = kFontRowCount * 8
       };
-      Win32FontResolution fonts_[kFontRowCount][2][2][2];
+      /** Both members belong to the table, including a refused partial build. */
+      struct FontPair
+      {
+        Win32FontResolution members[2];
+        const Win32FontResolution &member(bool underline) const
+        {
+          return this->members[underline ? 1 : 0];
+        }
+      };
+      /** Family is the fastest axis; every table walk uses this ordering. */
+      static int slotIndex(int row, int bold, int italic, int family)
+      {
+        return ((row * 2 + bold) * 2 + italic) * 2 + family;
+      }
+      FontPair fonts_[kSlotCount];
       Win32DisplayScale scale_;
 
       void initializeEmptyFamilies();

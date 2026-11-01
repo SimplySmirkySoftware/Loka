@@ -37,7 +37,8 @@ namespace
     if (text && text->queryFontStyle(style))
     {
       const loka::win32::Win32FontResolution &font = fonts.next.find(style);
-      applied = font.font() ? font.font() : fonts.next.get();
+      bool on = false;
+      applied = font.font() ? font.font() : fonts.next.get(style.queryUnderline(on) && on);
     }
     else
     {
