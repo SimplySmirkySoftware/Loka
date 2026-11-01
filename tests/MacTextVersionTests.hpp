@@ -1,0 +1,23 @@
+#ifndef LOKA_MAC_TEXT_VERSION_TESTS_HPP
+#define LOKA_MAC_TEXT_VERSION_TESTS_HPP
+void testMacTextVersionMigration();
+void testMacTextVersionD1();
+void testMacTextVersionD2();
+void testMacTextVersionD3();
+void testMacTextVersionOneVersion();
+void testMacTextVersionOrdering();
+void testMacTextVersionNoStaleMeasure();
+void testMacTextVersionRelayout();
+void testMacTextVersionPropsSchedule();
+void testMacTextVersionNonWrappingUpdates();
+void testMacTextVersionLayoutFirstNoRelayout();
+void testMacTextVersionShapeChanges();
+void testMacTextVersionRefusalRecovery();
+void testMacTextVersionRetirePendingCallback();
+void testMacTextVersionPoolLifetime();
+void testMacTextVersionEmptyColourLifetime();
+void testMacTextVersionReconciliation();
+void testMacTextVersionSizeEdges();
+void testMacTextVersionDynamicColour();
+void testMacTextVersionNaturalWidth();
+#endif

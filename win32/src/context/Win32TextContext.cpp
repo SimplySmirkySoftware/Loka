@@ -387,6 +387,8 @@ bool Win32TextContext::applyStyle()
 
 void Win32TextContext::onPropsApplied()
 {
+  // Platform twin: MacTextContext::onPropsApplied uses the same literal/live
+  // source decision, with deferred binding delivery on macOS.
   this->measurement_.invalidate();
   if (!this->node_)
   {
