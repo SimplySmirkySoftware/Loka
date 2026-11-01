@@ -722,3 +722,13 @@ loka_compile_pin(toolbar-item-refuses-live-title
 loka_compile_pin(toolbar-item-refuses-shown-bool
   REFUSES pins/refuses_toolbar-item-refuses-shown-bool.cpp
   ACCEPTS pins/accepts_toolbar-item-refuses-shown-bool.cpp)
+
+loka_compile_pin(url-opener-zero
+  REFUSES pins/refuses_url_opener_zero.cpp
+  ACCEPTS pins/accepts_url_opener_zero.cpp
+)
+
+loka_compile_pin(url-opener-overflow
+  REFUSES pins/refuses_url_opener_overflow.cpp
+  ACCEPTS pins/accepts_url_opener_overflow.cpp
+)
