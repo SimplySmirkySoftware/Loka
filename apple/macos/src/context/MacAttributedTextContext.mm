@@ -156,6 +156,12 @@ bool MacAttributedTextContext::Projection::build(const loka::app::AttributedStri
     const NSUInteger length = [run length];
     [result addAttribute:NSFontAttributeName value:font range:NSMakeRange(offset, length)];
     [result addAttribute:NSForegroundColorAttributeName value:color range:NSMakeRange(offset, length)];
+    bool on = false;
+    // Same attribute as TextDraft in MacTextContext.mm; two builders for two node kinds (page 1c O-P4).
+    if (style.queryUnderline(on) && on)
+      [result addAttribute:NSUnderlineStyleAttributeName
+                     value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
+                     range:NSMakeRange(offset, length)];
     offset += length;
   }
   NSTextFieldCell *measure = [[[NSTextFieldCell alloc] initTextCell:@""] autorelease];

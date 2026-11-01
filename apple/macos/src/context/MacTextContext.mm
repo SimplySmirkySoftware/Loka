@@ -188,6 +188,20 @@ namespace
       this->value_ = [[this->cell() attributedStringValue] copy];
       return this->value_;
     }
+    NSAttributedString *underlineValue()
+    {
+      assert(this->value_);
+      NSMutableAttributedString *value = [this->value_ mutableCopy];
+      if (!value)
+        return nil;
+      // Same attribute as MacAttributedTextContext; two builders for two node kinds (page 1c O-P4).
+      [value addAttribute:NSUnderlineStyleAttributeName
+                    value:[NSNumber numberWithInt:NSUnderlineStyleSingle]
+                    range:NSMakeRange(0, [value length])];
+      [this->value_ release];
+      this->value_ = value;
+      return this->value_;
+    }
 
   private:
     NSAutoreleasePool *pool_;
@@ -271,6 +285,13 @@ namespace
     NSAttributedString *value = draft.copyValue();
     if (!value)
       return MacTextVersion();
+    bool on = false;
+    if (style.queryUnderline(on) && on)
+    {
+      value = draft.underlineValue();
+      if (!value)
+        return MacTextVersion();
+    }
     MacTextVersion::Measure measure;
     int height = geometry.minimumHeight;
     if (naturalSize || (constraint && wraps && !utf8.empty() && constraint->pt > 0))
