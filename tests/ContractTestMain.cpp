@@ -13,6 +13,7 @@
 #include "MacZStackUnitTests.hpp"
 #include "MacClipBoxTests.hpp"
 #include "MacTextColorTests.hpp"
+#include "MacTextVersionTests.hpp"
 #endif
 #include "NativeResourceRetirementTests.hpp"
 #include "RibbonTests.hpp"
