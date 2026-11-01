@@ -8,9 +8,33 @@
 #include "app/core/WindowDefinition.hpp"
 #include "core/util/ScopedPtr.hpp"
 #include <cassert>
+#include <cstdio>
+#include <Controls.h>
+#include <Resources.h>
 
 namespace
 {
+  /** Settled arrow cell polls once per idle; walks this window's native controls. */
+  short TallListArrowValue(Window *window)
+  {
+    ToolboxWindow *native = window ? window->asToolboxWindow() : 0;
+    if (!native || !native->window())
+      return 0;
+    ControlHandle control =
+        reinterpret_cast<ControlHandle>(reinterpret_cast<WindowPeek>(native->window())->controlList);
+    for (; control; control = (**control).nextControl)
+    {
+      const Rect &rect = (**control).contrlRect;
+      short resourceId = 0;
+      ResType type = 0;
+      Str255 name;
+      GetResInfo((**control).contrlDefProc, &resourceId, &type, name);
+      if (resourceId == 1 /* Classic scrollBarProc (16) uses CDEF 1. */ && type == 'CDEF' && (**control).contrlVis
+          && rect.right - rect.left == 16 && rect.bottom - rect.top > 48 && GetControlMaximum(control) > 0)
+        return GetControlValue(control);
+    }
+    return 0;
+  }
   const char *CardSource()
   {
 #include "ScenarioCard.inc"
@@ -28,7 +52,8 @@ SmirkyCardScenarioAppConfig::SmirkyCardScenarioAppConfig(PlatformContext *contex
       runtime_(context),
       app_(0),
       lingerRemaining_(settings.hasLingerSeconds ? settings.lingerSeconds : 0.0),
-      phase_(RUNNING)
+      arrowWaitRemaining_(100.0),
+      phase_(settings.scenario == "laptop-arrow" ? WAITING_ARROW : RUNNING)
 {
   const std::string companion = "globalThis.LAPTOP_CELL = \"" + settings.scenario + "\";\n" + CompanionSource();
   loka::core::String error;
@@ -67,6 +92,17 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
       this->app_->quit();
     return;
   }
+  if (this->phase_ == WAITING_ARROW)
+  {
+    this->arrowWaitRemaining_ -= elapsedSeconds;
+    if (this->arrowWaitRemaining_ <= 0.0)
+    {
+      // The flow still runs so the terminal record stays last; the tracked
+      // audit carries "arrow value=", so this line fails the comparison.
+      this->audit_.recordLog("arrow timeout");
+      this->phase_ = RUNNING;
+    }
+  }
   if (!window || !window->scene())
     this->audit_.recordTerminal(loka::dsl::testing::SCENARIO_AUDIT_FAILED);
   else
@@ -82,6 +118,19 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
       if (scene->hasPendingInvalidation() || controller->hasPendingSync()
           || window->asToolboxWindow()->hasPendingInvalidate())
         return;
+      if (this->phase_ == WAITING_ARROW)
+      {
+        // The gesture precedes the JS flow: its log line lands before every
+        // step record and the flow's terminal record remains the last line.
+        const short value = TallListArrowValue(window);
+        if (value <= 0)
+          return;
+        char line[40];
+        std::sprintf(line, "arrow value=%d", value);
+        this->audit_.recordLog(line);
+        this->phase_ = RUNNING;
+        return;
+      }
       if (!this->audit_.finished() && !this->audit_.failed())
       {
         this->clock_.advanceTo(this->clock_.currentTick() + 1);
@@ -100,7 +149,7 @@ int RunSmirkyCardScenarioApplication()
   dsl::SnapTestConfig::Settings settings;
   if (!dsl::SnapTestConfig::load("LokaTest.cfg", settings) || !settings.hasScenario
       || (settings.scenario != "startup" && settings.scenario != "laptop-carousel"
-          && settings.scenario != "laptop-detail"))
+          && settings.scenario != "laptop-detail" && settings.scenario != "laptop-arrow"))
   {
     (void)toolbox_tests::WriteScenarioErrorAudit(settings.hasScenario ? settings.scenario.c_str() : "startup",
                                                  dsl::SnapRecord());

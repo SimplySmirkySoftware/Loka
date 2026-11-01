@@ -57,6 +57,7 @@ void ToolboxAttributedTextContext::retireNativeProjection()
 
 void ToolboxAttributedTextContext::onPropsApplied()
 {
+  this->invalidatePlacement();
   this->table_.invalidateGeometry();
 }
 
@@ -81,6 +82,7 @@ bool ToolboxAttributedTextContext::reconcileProjection(short width, bool rebuild
   if (!this->controller() || !this->node_ || !this->node_->props.text_)
   {
     this->table_.clear();
+    this->invalidatePlacement();
     this->presented_.invalidate();
     return false;
   }
@@ -107,9 +109,13 @@ short ToolboxAttributedTextContext::layout(loka::app::scene::IPlatformController
   if (!toolbox || !this->node_ || !this->node_->props.text_)
   {
     this->table_.clear();
+    this->invalidatePlacement();
     this->presented_.invalidate();
     return 0;
   }
+  short previousConstraint = 0;
+  if (!this->table_.queryConstraint(previousConstraint))
+    this->invalidatePlacement();
   assert(toolbox->textShaping() == loka::app::PER_RUN);
   const loka::app::AttributedString &value = this->node_->props.text_->get();
   // The builder reads width, not lineHeight. Ambient fonts follow the frozen
@@ -119,6 +125,7 @@ short ToolboxAttributedTextContext::layout(loka::app::scene::IPlatformController
   if (!this->reconcileProjection(state.width, !reused))
   {
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    this->invalidatePlacement();
     controller->refuseTextMeasurement(this->node_, state);
     this->presented_.invalidate();
     return 0;
@@ -137,8 +144,16 @@ short ToolboxAttributedTextContext::layout(loka::app::scene::IPlatformController
   // equal-value rebuilds unknown; a moved placement does the same here.
   if (!EqualRect(&this->rect_, &rect) || !EqualRect(&this->paintRect_, &paintRect))
     this->presented_.invalidate();
+  const ToolboxLeafGeometry previous = {this->rect_, {this->rect_.top, this->rect_.left}, previousConstraint};
+  short nextConstraint = 0;
+  const bool hasConstraint = this->table_.queryConstraint(nextConstraint);
+  assert(hasConstraint && "successful projection has a completed constraint");
+  (void)hasConstraint;
+  const ToolboxLeafGeometry next = {rect, {rect.top, rect.left}, nextConstraint};
+  this->comparePlacement(previous, next);
   this->rect_ = rect;
   this->paintRect_ = paintRect;
+  this->completePlacement();
   state.y = Coordinate(this->rect_.bottom);
   return width;
 }

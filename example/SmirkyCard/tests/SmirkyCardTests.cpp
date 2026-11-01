@@ -5819,8 +5819,8 @@ namespace
     const std::string companion = "globalThis.LAPTOP_PICTURE_SIZE = {width: 2, height: 3};\n"
                                   "globalThis.LAPTOP_NARROW_LIST = true;\n"
                                   + readCardSource("LAPTOP.FLOW.JS");
-    const char *cells[] = {0, "startup", "laptop-carousel", "laptop-detail", "unknown"};
-    for (unsigned cell = 0; cell < 5; ++cell)
+    const char *cells[] = {0, "startup", "laptop-carousel", "laptop-detail", "laptop-arrow", "unknown"};
+    for (unsigned cell = 0; cell < sizeof(cells) / sizeof(cells[0]); ++cell)
     {
       const std::string selected =
           cells[cell] ? std::string("globalThis.LAPTOP_CELL = \"") + cells[cell] + "\";\n" + companion : companion;
@@ -5836,7 +5836,7 @@ namespace
       }
       h.ticks(40);
       LOKA_VERIFY(h.terminalCount == 1);
-      if (cell == 4)
+      if (cell == 5)
       {
         LOKA_VERIFY(h.terminal == loka::dsl::testing::SCENARIO_AUDIT_FAILED);
         continue;
@@ -5863,9 +5863,19 @@ namespace
       std::string::size_type position = 0;
       while ((position = audit.find("%202x3\n", position)) != std::string::npos)
         audit.replace(position, 7, "%20320x200\n");
-      const std::string expected =
-          cell ? std::string("../../tests/scenarios/expected/smirkycard/") + cells[cell] + ".audit"
-               : "tests/LAPTOP.audit";
+      // Null verifies the identical JS startup flow. Only the native driver
+      // appends the arrow observation; its target audit is captured in MAME.
+      const bool arrow = cell && std::strcmp(cells[cell], "laptop-arrow") == 0;
+      if (arrow)
+      {
+        const std::string header = "scenario=laptop-arrow";
+        const std::string::size_type at = audit.find(header);
+        LOKA_VERIFY(at != std::string::npos);
+        audit.replace(at, header.size(), "scenario=startup");
+      }
+      const std::string expected = cell ? std::string("../../tests/scenarios/expected/smirkycard/")
+                                              + (arrow ? "startup" : cells[cell]) + ".audit"
+                                        : "tests/LAPTOP.audit";
       LOKA_VERIFY(audit == readCardSource(expected.c_str()));
       if (cell == 1)
       {

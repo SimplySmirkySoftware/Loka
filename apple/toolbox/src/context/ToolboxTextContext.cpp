@@ -304,6 +304,7 @@ void ToolboxTextContext::onFactChanged(loka::app::scene::NodeLifecycleFact previ
 
 void ToolboxTextContext::clearMeasurement()
 {
+  this->invalidatePlacement();
   this->projection_.clear();
   this->measurement_ = loka::app::MeasurementResult<Constraint, Extent>();
   this->presented_.invalidate();
@@ -350,6 +351,7 @@ bool ToolboxTextContext::reconcileProjection()
     // non-wrapped text-change and redrawTextHit paths only measure and
     // repaint, so a later successful build must still have a rect to paint.
     this->projection_.clear();
+    this->invalidatePlacement();
     this->presented_.invalidate();
     return false;
   }
@@ -501,14 +503,20 @@ short ToolboxTextContext::layout(loka::app::scene::IPlatformController *controll
     this->measurement_.commit(constraint, extent);
   }
   const Extent &geometry = this->measurement_.extent();
-  this->maxWidth_ = state.width > 0 ? state.width : 0;
-  const short width = this->maxWidth_ > 0 ? this->maxWidth_ : geometry.measuredWidth;
+  const short nextMaxWidth = state.width > 0 ? state.width : 0;
+  const short width = nextMaxWidth > 0 ? nextMaxWidth : geometry.measuredWidth;
   Rect rect;
   rect.left = state.x;
   rect.top = state.y;
   rect.right = static_cast<short>(state.x + width);
   rect.bottom = static_cast<short>(state.y + geometry.height);
-  updateRect(rect, state.x, static_cast<short>(state.y + geometry.baselineOffset));
+  const short baselineY = static_cast<short>(state.y + geometry.baselineOffset);
+  const ToolboxLeafGeometry previous = {this->rect_, {this->textY_, this->textX_}, this->maxWidth_};
+  const ToolboxLeafGeometry next = {rect, {baselineY, state.x}, nextMaxWidth};
+  this->comparePlacement(previous, next);
+  this->maxWidth_ = nextMaxWidth;
+  updateRect(rect, state.x, baselineY);
+  this->completePlacement();
   // Advance by the painted box, as the other rails do: y is the top edge.
   state.y = static_cast<short>(rect.bottom);
   return width;
