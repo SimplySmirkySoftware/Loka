@@ -14,6 +14,7 @@ void testTextStyleWeightEquality();
 void testTextStyleWeightOrdering();
 void testTextStyleWeightDeclaresFont();
 void testTextStyleWeightReadingPresence();
+void testTextStyleWeightRefusesOutOfRange();
 void testTextPropsDeclaredStyleGuardsNativeLabelConfiguration();
 void testBlockStyleNamedAlignmentsEqualTheirDeclarations();
 void testSizeOfSnapsToNearestVocabularySizeWithTiesDown();

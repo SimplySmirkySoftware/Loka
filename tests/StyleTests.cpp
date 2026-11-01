@@ -82,10 +82,23 @@ void testTextStyleWeightReadingPresence()
   }
 }
 
+void testTextStyleWeightRefusesOutOfRange()
+{
+  using namespace loka::app;
+  const TextStyle invalid = TextStyle().weight(static_cast<TextWeight>(7));
+  TextWeight out = TEXT_WEIGHT_BOLD;
+  LOKA_VERIFY(!invalid.queryWeight(out));
+  LOKA_VERIFY(out == TEXT_WEIGHT_BOLD);
+  LOKA_VERIFY(!invalid.declaresFont());
+  LOKA_VERIFY(!TextStyle().queryWeight(out));
+  LOKA_VERIFY(out == TEXT_WEIGHT_BOLD);
+}
+
 void testTextStyleMergeAndSizeVocabulary()
 {
   using namespace loka::app;
-  LOKA_VERIFY(kWarningStyle.hasWeight_ && kWarningStyle.weight_ == TEXT_WEIGHT_BOLD);
+  TextWeight weight = TEXT_WEIGHT_NORMAL;
+  LOKA_VERIFY(kWarningStyle.queryWeight(weight) && weight == TEXT_WEIGHT_BOLD);
   bool on = false;
   LOKA_VERIFY(kWarningStyle.queryItalic(on) && on);
   const TextSizeValue sizes[] = {TextSizeValue(),
@@ -111,10 +124,12 @@ void testTextStyleMergeAndSizeVocabulary()
   }
   LOKA_VERIFY(sizeof(TextSizeValue) == 4);
   LOKA_VERIFY(sizeof(TextFamilyValue) == 1);
-  LOKA_VERIFY(sizeof(TextStyle) == 16);
+  LOKA_VERIFY(sizeof(TextWeightValue) == 1);
+  LOKA_VERIFY(sizeof(TextStyle) == 12);
 #if __cplusplus >= 201103L
+  static_assert(sizeof(TextWeightValue) == 1, "TextWeightValue must remain one byte");
   static_assert(sizeof(TextFamilyValue) == 1, "TextFamilyValue must remain one byte");
-  static_assert(sizeof(TextStyle) == 16, "TextStyle must remain sixteen bytes");
+  static_assert(sizeof(TextStyle) == 12, "TextStyle must remain twelve bytes");
 #endif
   TextSizeRole role = TEXT_SIZE_ROLE_COUNT;
   LOKA_VERIFY(!sizes[0].queryRole(role) && role == TEXT_SIZE_ROLE_COUNT);
@@ -133,7 +148,7 @@ void testTextStyleMergeAndSizeVocabulary()
   LOKA_VERIFY(boldLarge == largeBold);
   int points = 0;
   LOKA_VERIFY(boldLarge.size_.queryPoints(points) && points == 24);
-  LOKA_VERIFY(boldLarge.hasWeight_ && boldLarge.weight_ == TEXT_WEIGHT_BOLD);
+  LOKA_VERIFY(boldLarge.queryWeight(weight) && weight == TEXT_WEIGHT_BOLD);
 
   const TextStyle replaced = FontSize<12>() + FontSize<24>();
   LOKA_VERIFY(replaced.size_.queryPoints(points) && points == 24);
@@ -284,7 +299,8 @@ void testTextColorVocabularyAndMerge()
   LOKA_VERIFY(Red + TextStyle() == Red);
   const TextStyle warning = Bold + Red;
   LOKA_VERIFY((warning + Primary).color_ == TEXT_COLOR_PRIMARY);
-  LOKA_VERIFY((warning + Primary).weight_ == TEXT_WEIGHT_BOLD);
+  TextWeight weight = TEXT_WEIGHT_NORMAL;
+  LOKA_VERIFY((warning + Primary).queryWeight(weight) && weight == TEXT_WEIGHT_BOLD);
   LOKA_VERIFY(Red != Blue);
   LOKA_VERIFY(Red < Blue);
   LOKA_VERIFY(!(Blue < Red));
@@ -540,7 +556,8 @@ void testUnderlineStyleContract()
   LOKA_VERIFY(values[1].queryUnderline(on) && !on);
   LOKA_VERIFY(values[2].queryUnderline(on) && on);
   LOKA_VERIFY((Underline + Bold).queryUnderline(on) && on);
-  LOKA_VERIFY((Underline + Bold).hasWeight_ && (Underline + Bold).weight_ == TEXT_WEIGHT_BOLD);
+  TextWeight weight = TEXT_WEIGHT_NORMAL;
+  LOKA_VERIFY((Underline + Bold).queryWeight(weight) && weight == TEXT_WEIGHT_BOLD);
   LOKA_VERIFY(!Underline.declaresFont());
   LOKA_VERIFY(!(Text("same") + Underline).props.hasDeclaredLayoutStyle());
   for (int i = 0; i < 3; ++i)

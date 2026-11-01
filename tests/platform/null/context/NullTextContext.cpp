@@ -150,8 +150,9 @@ NullTextPaintStyle::NullTextPaintStyle(const loka::app::TextProps &props)
   this->color = textStyle.color_;
   this->family = textStyle.family_;
   this->fontSize = loka::app::SyntheticTextSize(textStyle.size_);
-  if (textStyle.hasWeight_)
-    weight = textStyle.weight_;
+  loka::app::TextWeight declaredWeight = loka::app::TEXT_WEIGHT_NORMAL;
+  if (textStyle.queryWeight(declaredWeight))
+    weight = declaredWeight;
   bool on = false;
   if (textStyle.queryItalic(on))
     italic = on;

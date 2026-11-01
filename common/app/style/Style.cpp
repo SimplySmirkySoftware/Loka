@@ -8,10 +8,13 @@ namespace loka
 {
   namespace app
   {
-    // Page 1: preserve Classic Segment size on every ABI, including C++98 builds.
-    typedef char TextStyleSizePin[sizeof(TextStyle) == 16 ? 1 : -1];
+    // One byte per optional axis keeps Classic Segment size identical on every ABI,
+    // including PowerPC Darwin where bool is four bytes.
+    typedef char TextStyleSizePin[sizeof(TextStyle) == 12 ? 1 : -1];
     // Page 1: one byte per toggle keeps the Classic Segment size budget.
     typedef char TextToggleValueSizePin[sizeof(TextToggleValue) == 1 ? 1 : -1];
+
+    typedef char TextWeightValueSizePin[sizeof(TextWeightValue) == 1 ? 1 : -1];
 
     int detail::SnapTextSizePoints(int logicalUnits)
     {
