@@ -1,5 +1,8 @@
 #include "EditMenuTests.hpp"
 #include "TextUtf8Tests.hpp"
+#include "TextUnitsTests.hpp"
+// The shared source list is unchanged; each runner compiles these pins once.
+#include "TextUnitsTests.cpp"
 #include "ColumnNaturalHeightTests.hpp"
 #include "StackBlurTests.hpp"
 #include "ContainerGapTests.hpp"

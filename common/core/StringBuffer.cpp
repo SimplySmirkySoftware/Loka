@@ -1,7 +1,8 @@
 #include "core/StringBuffer.hpp"
-#include "core/Utf8Decode.hpp"
+#include "core/TextUnits.hpp"
 
 #include <cstring>
+#include <climits>
 
 #include "platform/String.hpp"
 
@@ -19,17 +20,25 @@ namespace loka
           units = utf8.size();
           return true;
         }
+        if (encoding == StringEncodingUtf16)
+        {
+          const int count = Utf16UnitsAt(utf8.data(), utf8.size(), utf8.size());
+          if (count < 0)
+          {
+            // Preserve the completed-prefix count on malformed input too.
+            const std::size_t prefix = Utf8BytesFloor(utf8.data(), utf8.size(), INT_MAX);
+            units = static_cast<std::size_t>(Utf16UnitsAt(utf8.data(), utf8.size(), prefix));
+            return false;
+          }
+          units = static_cast<std::size_t>(count);
+          return true;
+        }
         std::size_t index = 0;
         while (index < utf8.size())
         {
           unsigned int codepoint = 0;
           if (!detail::DecodeUtf8Codepoint(utf8.data(), utf8.size(), index, codepoint))
             return false;
-          if (encoding == StringEncodingUtf16)
-          {
-            units += (codepoint <= 0xFFFF) ? 1 : 2;
-            continue;
-          }
           units += 1;
         }
         return true;
@@ -37,23 +46,8 @@ namespace loka
 
       bool fillUtf16FromUtf8(const std::string &utf8, std::vector<StringBuffer::Utf16Unit> &out)
       {
-        std::size_t index = 0;
-        std::size_t outIndex = 0;
-        while (index < utf8.size())
-        {
-          unsigned int codepoint = 0;
-          if (!detail::DecodeUtf8Codepoint(utf8.data(), utf8.size(), index, codepoint))
-            return false;
-          if (codepoint <= 0xFFFF)
-          {
-            out[outIndex++] = static_cast<StringBuffer::Utf16Unit>(codepoint);
-            continue;
-          }
-          codepoint -= 0x10000;
-          out[outIndex++] = static_cast<StringBuffer::Utf16Unit>(0xD800 | (codepoint >> 10));
-          out[outIndex++] = static_cast<StringBuffer::Utf16Unit>(0xDC00 | (codepoint & 0x3FF));
-        }
-        return true;
+        std::size_t written = 0;
+        return Utf8ToUtf16(utf8.data(), utf8.size(), out.empty() ? 0 : &out[0], out.size(), written);
       }
 
       bool fillUtf32FromUtf8(const std::string &utf8, std::vector<StringBuffer::Utf32Unit> &out)
