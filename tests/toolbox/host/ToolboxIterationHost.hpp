@@ -30,12 +30,12 @@ namespace iteration_fixture
   };
   typedef NativeWindow *WindowPtr;
   typedef char *Ptr;
+  using ::autoKey;
+  using ::keyDown;
+  using ::nullEvent;
   enum
   {
-    nullEvent = 0,
     mouseDown = 1,
-    keyDown = 3,
-    autoKey = 5,
     updateEvt = 6,
     activateEvt = 8,
     osEvt = 15,
@@ -188,10 +188,12 @@ namespace iteration_fixture
     void *data;
     bool (*sync)(void *, NativeFocusMode);
     void (*idle)(void *);
+    bool (*offer)(void *, const EventRecord &);
     ToolboxScenePlatformController()
         : data(0),
           sync(0),
-          idle(0)
+          idle(0),
+          offer(0)
     {
     }
     void noteWindowUpdateEvtDraw()
@@ -251,10 +253,10 @@ namespace iteration_fixture
     {
       note("grow-damage");
     }
-    bool offerKeyEvent(const EventRecord &)
+    bool offerKeyEvent(const EventRecord &event)
     {
       note("offer-key");
-      return false;
+      return this->controller_.offer ? this->controller_.offer(this->controller_.data, event) : false;
     }
     bool handleScrollKey(ToolboxScrollKey)
     {

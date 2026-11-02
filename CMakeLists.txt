@@ -819,6 +819,14 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     testUnicodeEditorCutFailure
     testUnicodeEditorPasteNormalization
     testUnicodeEditorOutsideDoor
+    testUnicodeEditorServiceKeyCommit
+    testUnicodeEditorServiceKeyNoDiff
+    testUnicodeEditorServiceKeySameSize
+    testUnicodeEditorServiceKeyRefusals
+    testUnicodeEditorServiceKeyRouting
+    testUnicodeEditorServiceKeyPredicate
+    testUnicodeEditorServiceKeyDispatch
+    testUnicodeEditorServiceKeyCompletion
     testUnicodeEditorPrepareApplyRecheck
     testUnicodeEditorCommandUnavailable
     testUnicodeEditorCapacity

@@ -30,7 +30,9 @@ public:
   virtual void repaintNative() = 0;
   /** Deliver local coordinates and the original native event. */
   virtual loka::app::EditorResult click(const Point &, const EventRecord &) = 0;
-  /** Offer a non-Command native key; false leaves legacy handling in place. */
+  /** Offer a non-Command native key: keyDown / autoKey, or a key the Text
+      Services Manager consumed and left in a null event (its body change is
+      already in the native object); false leaves legacy handling in place. */
   virtual bool offerKeyEvent(const EventRecord &) = 0;
   /** Offer an Edit command; false means this seat did not handle it. */
   virtual bool editVerb(loka::app::EditVerb) = 0;

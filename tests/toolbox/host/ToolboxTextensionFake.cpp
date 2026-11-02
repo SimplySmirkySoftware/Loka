@@ -428,7 +428,10 @@ Boolean TXNTSMCheck(TXNObject object, EventRecord *event)
   if (TextensionFake::afterService)
     TextensionFake::afterService();
   if (consumedEvent && rewriteEvent)
+  {
     event->what = 0;
+    event->message = 0;
+  }
   return consumedEvent;
 }
 void MaxApplZone()

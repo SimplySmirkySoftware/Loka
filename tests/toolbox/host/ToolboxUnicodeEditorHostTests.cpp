@@ -367,6 +367,7 @@ static void loop()
   app.iterate(clock, true, event);
   LOKA_VERIFY(count("scrap-from") == 1);
   event.what = it::nullEvent;
+  event.message = 0;
   TextensionFake::clearCalls();
   app.iterate(clock, false, event);
   LOKA_VERIFY(count("tsm") == 1);
@@ -418,6 +419,7 @@ static void boundaries()
   LOKA_VERIFY(count("tsm") == 0 && count("draw") == 0 && count("new") == 0 && count("bounds") == 0);
   LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 0);
   event.what = it::nullEvent;
+  event.message = 0;
   TextensionFake::clearCalls();
   app.iterate(clock, false, event);
   LOKA_VERIFY(count("tsm") == 1);
@@ -1127,6 +1129,8 @@ static void testUnicodeEditorOutsideDoor()
     std::fclose(log);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
     LOKA_VERIFY(length && std::strstr(diagnostic, "[unicode-outside-door]"));
+    LOKA_VERIFY(std::strstr(diagnostic, "delta=34 samples=")); // 42 native bytes minus the projected 8
+
     LOKA_VERIFY(!std::strstr(std::strchr(diagnostic, '\n') + 1, "[unicode-outside-door]"));
 #else
     LOKA_VERIFY(length == 0);
@@ -1397,6 +1401,247 @@ static void testUnicodeEditorScrollKeysUseNativeDoor()
     LOKA_VERIFY(logicalText(f) == "test" && f.cursor.state()->get().column == static_cast<int>(i));
   }
 }
+static EventRecord serviceKey()
+{
+  EventRecord event = {it::nullEvent, 0x0002240dUL, 0, {30, 30}, 0};
+  return event;
+}
+static void serviceKeyRequest(Fixture &f, int column = 0)
+{
+  StateTrackerGuard guard(f.tracker());
+  f.request.set(LineCursor(f.lines.at(0).id, column));
+}
+static bool offer(void *data, const EventRecord &event)
+{
+  return ToolboxInputDoor::offerKeyEvent(*static_cast<ToolboxScenePlatformController *>(data), event);
+}
+static bool offerServiceKey(void *data, const EventRecord &event)
+{
+  LOKA_VERIFY(event.what == it::nullEvent && event.message == 0x0002240dUL);
+  return offer(data, event);
+}
+/** The iteration fixture borrows the real controller for focus, idle and input. */
+struct ServiceKeyIteration
+{
+  it::ToolboxWindow window;
+  it::AppComponentGroup group;
+  it::ToolboxApp app;
+  ToolboxIdleClock clock;
+  explicit ServiceKeyIteration(Fixture &f)
+      : app(group),
+        clock(0)
+  {
+    window.scenePlatformController()->data = &f.controller;
+    window.scenePlatformController()->sync = sync;
+    window.scenePlatformController()->idle = idle;
+    window.scenePlatformController()->offer = offer;
+    group.components.push_back(&window);
+    app.active_ = &window;
+    it::iteration_host::front = window.window();
+  }
+  void run(const EventRecord &event, bool gotEvent = false)
+  {
+    it::iteration_host::trace.clear();
+    app.iterate(clock, gotEvent, event);
+  }
+};
+static void testUnicodeEditorServiceKeyCommit()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  std::vector<unsigned short> text = nativeText("test");
+  const unsigned short kana[] = {0x306b, 0x307b, 0x3093, 0x3054};
+  text.insert(text.end(), kana, kana + 4);
+  TextensionFake::injectChange(text);
+  TextensionFake::nextKey(nativeText("wrong")); // mutation control: a null event must never type this
+  unsigned publishes = 0;
+  const_cast<State<ListRevision> &>(f.lines.revision()).bind(emitted, &publishes, false);
+  const ListRevision before = f.lines.revision().get();
+  TextensionFake::clearCalls();
+  serviceKeyRequest(f); // make the otherwise empty settle observable
+  loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(count("key") == 0);
+  LOKA_VERIFY(logicalText(f) == "test\xE3\x81\xAB\xE3\x81\xBB\xE3\x82\x93\xE3\x81\x94");
+  LOKA_VERIFY(f.lines.revision().get().content == before.content + 1 && publishes == 1);
+  LOKA_VERIFY(count("get-data") == 1 && count("set-data") == 0 && count("new") == 0);
+  LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+  // A second no-diff completion proves IDLE was restored and the committed stamp is current.
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  f.render();
+  LOKA_VERIFY(count("get-data") == 2 && publishes == 1 && count("set-data") == 0);
+  const_cast<State<ListRevision> &>(f.lines.revision()).unbind(emitted, &publishes);
+}
+static void testUnicodeEditorServiceKeyNoDiff()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  const ListRevision before = f.lines.revision().get();
+  TextensionFake::clearCalls();
+  serviceKeyRequest(f); // make the otherwise empty settle observable
+  loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(count("key") == 0 && count("get-data") == 1);
+  LOKA_VERIFY(logicalText(f) == "test" && f.lines.revision().get() == before);
+  LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+  f.render();
+  LOKA_VERIFY(count("set-data") == 0); // unchanged committed stamp still matches the owner
+  keyInput(f, nativeText("x"));
+  LOKA_VERIFY(count("key") == 1 && count("get-data") == 2);
+  LOKA_VERIFY(logicalText(f) == "xtest" && f.lines.revision().get().content == before.content + 1);
+}
+static void testUnicodeEditorServiceKeySameSize()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  LOKA_VERIFY(f.context->editVerb(EDIT_SELECT_ALL));
+  TXNOffset start = 0, end = 0;
+  TXNGetSelection(TextensionFake::latest(), &start, &end);
+  const ByteCount size = TXNDataSize(TextensionFake::latest());
+  TextensionFake::injectChange(nativeText("body"));
+  TXNOffset afterStart = 0, afterEnd = 0;
+  TXNGetSelection(TextensionFake::latest(), &afterStart, &afterEnd);
+  LOKA_VERIFY(TXNDataSize(TextensionFake::latest()) == size && start == afterStart && end == afterEnd);
+  const ListRevision before = f.lines.revision().get();
+  unsigned publishes = 0;
+  const_cast<State<ListRevision> &>(f.lines.revision()).bind(emitted, &publishes, false);
+  TextensionFake::clearCalls();
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(logicalText(f) == "body");
+  LOKA_VERIFY(f.lines.revision().get().content == before.content + 1 && publishes == 1);
+  LOKA_VERIFY(count("get-data") == 1 && count("key") == 0 && count("set-data") == 0);
+  const_cast<State<ListRevision> &>(f.lines.revision()).unbind(emitted, &publishes);
+}
+static void testUnicodeEditorServiceKeyRefusals()
+{
+  for (unsigned kind = 0; kind != 2; ++kind)
+  {
+    TextensionFake::reset();
+    Fixture f;
+    f.render();
+    const ListRevision before = f.lines.revision().get();
+    TextensionFake::injectChange(std::vector<unsigned short>(kind ? 1 : 9000, kind ? 0xD800 : 'x'));
+    TXNObject old = TextensionFake::latest();
+    TextensionFake::clearCalls();
+    serviceKeyRequest(f); // make the otherwise empty settle observable
+    loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+    LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+    LOKA_VERIFY(logicalText(f) == "test" && f.lines.revision().get() == before);
+    LOKA_VERIFY(count("key") == 0 && count("new") == 1 && count("set-data") == 1);
+    LOKA_VERIFY(TextensionFake::latest() != old
+                && TextensionFake::body(TextensionFake::latest()) == nativeText("test"));
+    LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+    f.controller.flushRetiredNativeHandles();
+    LOKA_VERIFY(count("delete") == 1);
+  }
+}
+static void testUnicodeEditorServiceKeyRouting()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  f.focus();
+  ServiceKeyIteration loop(f);
+  EventRecord event = {it::keyDown, 'x', 0, {30, 30}, 0};
+  TextensionFake::clearCalls();
+  loop.run(event, true);
+  LOKA_VERIFY(count("key") == 1 && count("get-data") == 1 && logicalText(f) == "xtest");
+  for (unsigned kind = 0; kind != 3; ++kind)
+  {
+    event = serviceKey();
+    if (kind == 0)
+      event.message = 9; // null-event Tab is refused without traversal fallback
+    if (kind == 1)
+      NotifySubtreeNodeDetached(&f.node);
+    ToolboxScenePlatformController::EditTextControlBinding *row = f.controller.editControls_.focused();
+    LOKA_VERIFY(row);
+    ToolboxUnicodeEditorResource *unicode = row->unicode;
+    if (kind == 2)
+      row->unicode = 0; // the TE discriminator: no Unicode seat
+    TextensionFake::clearCalls();
+    loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+    loop.run(event);
+    row->unicode = unicode;
+    LOKA_VERIFY(std::count(it::iteration_host::trace.begin(), it::iteration_host::trace.end(), "offer-key") == 1);
+    LOKA_VERIFY(!traceHas("tab-key") && !traceHas("scroll-key") && !traceHas("key") && !traceHas("app-key")
+                && !traceHas("menu-key"));
+    LOKA_VERIFY(count("key") == 0 && count("get-data") == 0);
+    LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 0);
+    if (kind == 1)
+      NotifySubtreeNodeAttached(&f.node);
+  }
+}
+static void testUnicodeEditorServiceKeyPredicate()
+{
+  const unsigned short kinds[] = {it::nullEvent, it::keyDown};
+  const unsigned long messages[] = {0, 0x0002240dUL};
+  for (unsigned kind = 0; kind != 2; ++kind)
+    for (unsigned message = 0; message != 2; ++message)
+    {
+      EventRecord event = {kinds[kind], messages[message], 0, {0, 0}, 0};
+      LOKA_VERIFY(it::ToolboxIsTextServiceKey(event) == (kind == 0 && message == 1));
+    }
+}
+static void testUnicodeEditorServiceKeyDispatch()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  f.focus();
+  ServiceKeyIteration loop(f);
+  loop.window.scenePlatformController()->offer = offerServiceKey;
+  for (unsigned consumed = 0; consumed != 2; ++consumed)
+  {
+    TextensionFake::service(consumed != 0, consumed != 0);
+    TextensionFake::clearCalls();
+    serviceKeyRequest(f); // make the otherwise empty settle observable
+    loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+    loop.run(serviceKey());
+    LOKA_VERIFY(std::count(it::iteration_host::trace.begin(), it::iteration_host::trace.end(), "offer-key") == 1);
+    LOKA_VERIFY(count("tsm") == 1 && count("get-data") == 1 && count("key") == 0);
+    LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+  }
+  EventRecord event = {it::keyDown, 'x', 0, {30, 30}, 0};
+  // Force service on a gotEvent entry, just as the existing loop pin does.
+  loop.window.scenePlatformController()->sync = 0;
+  TextensionFake::service(true, false);
+  TextensionFake::clearCalls();
+  loop.run(event, true);
+  LOKA_VERIFY(!traceHas("offer-key") && count("get-data") == 0 && count("key") == 0);
+  TextensionFake::service(false, false);
+}
+static void testUnicodeEditorServiceKeyCompletion()
+{
+  TextensionFake::reset();
+  Fixture f;
+  f.render();
+  unsigned writes = 0;
+  f.cursor.state()->bind(emitted, &writes, false);
+  LOKA_VERIFY(TXNSetSelection(TextensionFake::latest(), 2, 2) == noErr);
+  serviceKeyRequest(f, 2);
+  loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(f.cursor.state()->get() == LineCursor(f.lines.at(0).id, 2) && writes == 1);
+  LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+  writes = 0;
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(writes == 0);
+  {
+    StateTrackerGuard guard(f.tracker());
+    f.request.set(LineCursor(f.lines.at(0).id, 3));
+  }
+  loka::app::testing::SettleTrace<LineCursor>::instance().clear();
+  LOKA_VERIFY(f.context->offerKeyEvent(serviceKey()));
+  LOKA_VERIFY(f.request.get().isNone() && f.cursor.state()->get().column == 3 && writes == 1);
+  LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().size() == 1);
+  LOKA_VERIFY(loka::app::testing::SettleTrace<LineCursor>::instance().at(0).count == 1);
+  LOKA_VERIFY(logicalText(f) == "test");
+  f.cursor.state()->unbind(emitted, &writes);
+}
+
 int main(int argc, char **argv)
 {
   const char *which = argc > 1 ? argv[1] : "all";
@@ -1424,6 +1669,14 @@ int main(int argc, char **argv)
   RUN(testUnicodeEditorCutFailure);
   RUN(testUnicodeEditorPasteNormalization);
   RUN(testUnicodeEditorOutsideDoor);
+  RUN(testUnicodeEditorServiceKeyCommit);
+  RUN(testUnicodeEditorServiceKeyNoDiff);
+  RUN(testUnicodeEditorServiceKeySameSize);
+  RUN(testUnicodeEditorServiceKeyRefusals);
+  RUN(testUnicodeEditorServiceKeyRouting);
+  RUN(testUnicodeEditorServiceKeyPredicate);
+  RUN(testUnicodeEditorServiceKeyDispatch);
+  RUN(testUnicodeEditorServiceKeyCompletion);
   RUN(testUnicodeEditorPrepareApplyRecheck);
   RUN(testUnicodeEditorCommandUnavailable);
   RUN(testUnicodeEditorCapacity);
