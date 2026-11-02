@@ -15,6 +15,7 @@
 #include <Quickdraw.h>
 #include <StandardFile.h>
 #include <TextEdit.h>
+#include <Timer.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -484,17 +485,82 @@ int main()
   TXNFocus(gTxn, true);
   TXNActivate(gTxn, gFrame, true);
 
-  Rect bounds2;
-  SetRect(&bounds2, 330, 330, 630, 470);
-  gWindow2 = NewCWindow(0, &bounds2, "\pwin2", true, documentProc, (WindowPtr)-1L, true, 0);
+  // NULL-WINDOW PROBE (text-body-native-owned page 1 v0.3 §4 probe 1):
+  // create an object with no window, fill it, extract it, time extraction,
+  // then attach it to a window once and try to attach it again.
   Rect frame2;
   SetRect(&frame2, 4, 4, 280, 120);
-  const OSStatus new2 = TXNNewObject(0, gWindow2, &frame2, kTXNAlwaysWrapAtViewEdgeMask,
+  const OSStatus new2 = TXNNewObject(0, 0, &frame2, kTXNAlwaysWrapAtViewEdgeMask,
                                      kTXNTextEditStyleFrameType, kTXNUnicodeTextFile, kTXNUnicodeEncoding,
                                      &gTxn2, &gFrame2, 0);
-  logf("TXNNewObject(win2)=%ld", (long)new2);
+  logf("NULLWIN TXNNewObject(window=NULL)=%ld obj=%p attached=%d", (long)new2, (void *)gTxn2,
+       gTxn2 ? (int)TXNIsObjectAttachedToWindow(gTxn2) : -1);
+  heapLine("nullwin-new");
   if (new2 == noErr && gTxn2)
+  {
+    const unsigned long sizes[2] = {1048576UL, 4194303UL};
+    for (int k = 0; k < 2; ++k)
+    {
+      const unsigned long n = sizes[k];
+      Handle h = NewHandle((Size)(n * 2));
+      if (!h)
+      {
+        logf("NULLWIN units=%lu NewHandle failed", n);
+        continue;
+      }
+      HLock(h);
+      UniChar *u = (UniChar *)*h;
+      for (unsigned long i = 0; i < n; ++i)
+        u[i] = (i % 128 == 127) ? 0x000D : (UniChar)('a' + (i % 26));
+      UnsignedWide t0, t1, t2;
+      Microseconds(&t0);
+      const OSStatus set = TXNSetData(gTxn2, kTXNUnicodeTextData, u, (ByteCount)(n * 2), kTXNStartOffset, kTXNEndOffset);
+      Microseconds(&t1);
+      HUnlock(h);
+      DisposeHandle(h);
+      TXNActionKey key = 0;
+      const Boolean can = TXNCanUndo(gTxn2, &key);
+      logf("NULLWIN units=%lu TXNSetData=%ld us=%lu size=%lu canUndo=%d key=%lu chg=%lu", n, (long)set,
+           (unsigned long)(t1.lo - t0.lo), (unsigned long)TXNDataSize(gTxn2), (int)can, (unsigned long)key,
+           (unsigned long)TXNGetChangeCount(gTxn2));
+      heapLine("nullwin-set");
+      Handle out = 0;
+      Microseconds(&t1);
+      const OSStatus get = TXNGetData(gTxn2, kTXNStartOffset, kTXNEndOffset, &out);
+      Microseconds(&t2);
+      const long outSize = out ? GetHandleSize(out) : -1;
+      int ok = 0;
+      if (out && outSize == (long)(n * 2))
+      {
+        const UniChar *o = (const UniChar *)*out;
+        ok = o[0] == 'a' && o[127] == 0x000D && o[n - 1] == ((n - 1) % 128 == 127 ? 0x000D : (UniChar)('a' + ((n - 1) % 26)));
+      }
+      logf("NULLWIN units=%lu TXNGetData=%ld us=%lu handleSize=%ld contentOk=%d handleZoneApp=%d", n, (long)get,
+           (unsigned long)(t2.lo - t1.lo), outSize, ok, out ? (int)(HandleZone(out) == ApplicationZone()) : -1);
+      heapLine("nullwin-get");
+      if (out)
+        DisposeHandle(out);
+    }
+    Rect bounds2;
+    SetRect(&bounds2, 330, 330, 630, 470);
+    gWindow2 = NewCWindow(0, &bounds2, "\pwin2 (null-window object)", true, documentProc, (WindowPtr)-1L, true, 0);
+    UnsignedWide a0, a1;
+    Microseconds(&a0);
+    const OSStatus att = TXNAttachObjectToWindow(gTxn2, (GWorldPtr)gWindow2, true);
+    Microseconds(&a1);
+    Boolean specific = false;
+    const OSStatus specificStatus = TXNIsObjectAttachedToSpecificWindow(gTxn2, gWindow2, &specific);
+    logf("NULLWIN attach(win2)=%ld us=%lu attached=%d specific=%d/%ld size=%lu", (long)att, (unsigned long)(a1.lo - a0.lo),
+         (int)TXNIsObjectAttachedToWindow(gTxn2), (int)specific, (long)specificStatus,
+         (unsigned long)TXNDataSize(gTxn2));
+    const OSStatus again = TXNAttachObjectToWindow(gTxn2, (GWorldPtr)gWindow, true);
+    logf("NULLWIN attach-again(win1)=%ld", (long)again);
+    TXNSetFrameBounds(gTxn2, 4, 4, 120, 280, gFrame2);
     TXNSetTXNObjectControls(gTxn2, false, 1, &tag, &data);
+    SetPort(gWindow2);
+    InvalRect(&gWindow2->portRect);
+    heapLine("nullwin-attached");
+  }
   else
     gTxn2 = 0;
   SelectWindow(gWindow);
