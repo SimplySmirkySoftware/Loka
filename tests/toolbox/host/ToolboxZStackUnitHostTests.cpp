@@ -1758,6 +1758,65 @@ namespace
       this->action = PAINT;
     }
   };
+  void copyOversizedCorner()
+  {
+    PresentFixture f(false, 0, 0, false, 400);
+    SetRect(&f.window.port.portRect, 0, 0, 200, 260);
+    f.window.port.native.visibleRegion.rgnBBox = f.window.port.portRect;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    const Rect viewport = f.controller.viewportScroll().rect;
+    LOKA_VERIFY(viewport.right - viewport.left == 300 && viewport.bottom - viewport.top == 400);
+    toolbox_host::repairUnions.clear();
+    toolbox_host::scrollRects.clear();
+    f.scroll(16);
+    LOKA_VERIFY(f.last().verdict() == TOOLBOX_PRESENT_COPY);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().lastMovedPresentObservation.executed() == TOOLBOX_PRESENT_COPIED);
+    LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+    const Rect corner = ToolboxWindowSizeBoxRect(f.window.port.portRect);
+    Rect moved = corner;
+    OffsetRect(&moved, 0, -16);
+    bool originalSeen = false, movedSeen = false;
+    for (std::size_t i = 0; i < toolbox_host::repairUnions.size(); ++i)
+    {
+      originalSeen = originalSeen || EqualRect(&toolbox_host::repairUnions[i], &corner);
+      movedSeen = movedSeen || EqualRect(&toolbox_host::repairUnions[i], &moved);
+    }
+    LOKA_VERIFY(originalSeen && movedSeen);
+    LOKA_VERIFY(ToolboxErasedEvidence::contains(toolbox_host::scrollRects[0], corner));
+  }
+  void viewportBarRepair()
+  {
+    PresentFixture f;
+    const Rect content = f.controller.viewportScroll().contentRect;
+    const ToolboxViewportBarRepair bars = f.controller.scrollBarLedger_.queryBarRepair(content);
+    Rect vertical;
+    LOKA_VERIFY(!bars.refused() && !bars.horizontalUsed() && bars.queryVertical(vertical));
+    LOKA_VERIFY(EqualRect(&vertical, &f.controller.scrollControl(0).placement.full()));
+    f.controller.scrollControl(0).usedThisFrame = false;
+    LOKA_VERIFY(f.controller.scrollBarLedger_.queryBarRepair(content).refused());
+    LOKA_VERIFY(!f.controller.scrollBarLedger_.queryBarRepair(content).queryVertical(vertical));
+    f.controller.scrollControl(0).usedThisFrame = true;
+    ControlRef installed = f.controller.scrollControl(0).control;
+    f.controller.scrollControl(0).control = 0;
+    LOKA_VERIFY(f.controller.scrollBarLedger_.queryBarRepair(content).refused());
+    LOKA_VERIFY(!bars.refused() && bars.queryVertical(vertical)); // Completed value remains independent.
+    f.controller.scrollControl(0).control = installed;
+    f.controller.viewportScroll().usedThisFrame = false;
+    LOKA_VERIFY(f.controller.scrollBarLedger_.queryBarRepair(content).refused());
+    BoxNode *wide = new BoxNode(Box().size(500, 600).props);
+    wide->addChild(new TextNode(TextProps("wide")));
+    PresentFixture horizontal(false, 0, wide);
+    const ToolboxViewportBarRepair both =
+        horizontal.controller.scrollBarLedger_.queryBarRepair(horizontal.controller.viewportScroll().contentRect);
+    LOKA_VERIFY(both.horizontalUsed() && both.refused() && both.queryVertical(vertical));
+    PresentLiveFixture<1> duplicate;
+    const Rect original = duplicate.controller.viewportScroll(1).contentRect;
+    const Rect same = duplicate.controller.viewportScroll(0).contentRect;
+    duplicate.controller.viewportScroll(1).contentRect = same;
+    LOKA_VERIFY(duplicate.controller.scrollBarLedger_.queryBarRepair(same).refused());
+    duplicate.controller.viewportScroll(1).contentRect = original;
+  }
   void presentCopy(const char *which)
   {
     BoxNode *content = new BoxNode(Box().size(180, 600).props);
@@ -1859,6 +1918,10 @@ namespace
   }
   void repairBudget()
   {
+    // 1600 exposed + 450 corner pair + 3000 damage exceeds half of 10000.
+    // Counting only the original corner would incorrectly admit 4825 pixels.
+    const Rect domain = {0, 0, 100, 100}, damageLimit = {0, 0, 30, 50};
+    LOKA_VERIFY(ToolboxForegroundRepair().tooLarge(domain, 16, damageLimit));
     PresentFixture f;
     const Rect damage = f.controller.viewportScroll().contentRect;
     Region region = {10, damage};
@@ -4165,6 +4228,8 @@ int main(int argc, char **argv)
                          "CopyGrowFailure",
                          "RepairBudget",
                          "ButtonRepairRequest",
+                         "CopyOversizedCorner",
+                         "ViewportBarRepair",
                          "CopySuccess",
                          "CopyAllocation",
                          "CopyVisibility",
@@ -4341,6 +4406,10 @@ int main(int argc, char **argv)
     repairBudget();
   else if (std::strcmp(argv[1], "ButtonRepairRequest") == 0)
     buttonRepairRequest();
+  else if (std::strcmp(argv[1], "CopyOversizedCorner") == 0)
+    copyOversizedCorner();
+  else if (std::strcmp(argv[1], "ViewportBarRepair") == 0)
+    viewportBarRepair();
   else if (std::strncmp(argv[1], "Copy", 4) == 0)
     presentCopy(argv[1]);
   else if (std::strcmp(argv[1], "RegionEvidence") == 0)

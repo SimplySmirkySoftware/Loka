@@ -293,6 +293,8 @@ public:
       return true;
     add(sum, height > limit / width ? limit : height * width, limit);
     add(sum, area(this->bar_), limit);
+    // Both the original grow icon and its translated pixels need repair.
+    add(sum, area(ToolboxWindowSizeBoxRect(domain)), limit);
     add(sum, area(ToolboxWindowSizeBoxRect(domain)), limit);
     add(sum, area(damage), limit);
     add(sum, area(damage), limit);

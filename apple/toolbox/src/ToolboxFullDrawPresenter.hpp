@@ -105,7 +105,7 @@ public:
       if (!this->addPair(plan.repair.unit(i), plan.dv))
         return this->erase();
     if (!this->addPair(plan.damage, plan.dv) || !this->add(plan.repair.bar())
-        || !this->add(ToolboxWindowSizeBoxRect(this->port_)))
+        || !this->addPair(ToolboxWindowSizeBoxRect(this->port_), plan.dv))
       return this->erase();
     ScrollRect(&plan.copyDomain, 0, static_cast<short>(plan.dv), this->exposed_);
     if (!ToolboxRegionOK(this->exposed_))

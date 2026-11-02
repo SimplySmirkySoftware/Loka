@@ -171,22 +171,9 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
         repairRefused = true;
       ++foregroundUnits;
     }
-    for (std::size_t i = 0; i < this->scrollBarLedger_.viewportScrollBars_.size(); ++i)
-    {
-      const ViewportScrollBarBinding &viewport = this->scrollBarLedger_.viewportScrollBars_[i];
-      if (!viewport.usedThisFrame || !EqualRect(&viewport.contentRect, &this->observation_.viewport()))
-        continue;
-      for (std::size_t j = 0; j < this->scrollBarLedger_.scrollBarControls_.size(); ++j)
-      {
-        const ScrollBarControlBinding &control = this->scrollBarLedger_.scrollBarControls_[j];
-        if (!control.usedThisFrame)
-          continue;
-        if (control.resourceId == viewport.barId[loka::app::SCROLL_BAR_HORIZONTAL])
-          repairRefused = true;
-        if (control.resourceId == viewport.barId[loka::app::SCROLL_BAR_VERTICAL])
-          bar = control.placement.full();
-      }
-    }
+    const ToolboxViewportBarRepair bars = this->scrollBarLedger_.queryBarRepair(this->observation_.viewport());
+    bars.queryVertical(bar);
+    repairRefused = repairRefused || bars.refused();
   }
   inputs.repair = ToolboxForegroundRepair(units, foregroundUnits, bar, repairRefused);
   this->observation_.complete(foregroundUnits, inputs);

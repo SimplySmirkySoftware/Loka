@@ -203,7 +203,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:213" : "ToolboxRender.cpp:223");
+                    button ? "ToolboxRender.cpp:200" : "ToolboxRender.cpp:210");
         return;
       }
       c.paintSuppressClipRgn_ = 0;

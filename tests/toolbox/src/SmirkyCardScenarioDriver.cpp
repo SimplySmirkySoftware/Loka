@@ -125,15 +125,24 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         const short value = TallListArrowValue(window);
         if (value <= 0)
           return;
-        char line[160];
+        char line[320];
         std::sprintf(line, "arrow value=%d", value);
         this->audit_.recordLog(line);
         const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
         std::sprintf(line,
-                     "arrow attempt=%lu executed=%s full_draws=%lu",
+                     "arrow attempt=%lu executed=%s full_draws=%lu candidate=%s refusal=%s paint_first=%s "
+                     "rect_requests=%d used_viewports=%u outside_not_translated=%u outside_kinds=%u unit_changed=%d",
                      stats.lastMovedPresentObservation.renderCalls(),
                      ToolboxPresentExecutedName(stats.lastMovedPresentObservation.executed()),
-                     stats.lastMovedPresentObservation.totalRenderCalls());
+                     stats.lastMovedPresentObservation.totalRenderCalls(),
+                     ToolboxPresentVerdictName(stats.lastMovedPresentObservation.verdict()),
+                     ToolboxPresentRefusalName(stats.lastMovedPresentObservation.refusal()),
+                     ToolboxPaintRefusalName(stats.lastPresentObservation.firstRefusal().reason),
+                     stats.lastMovedPresentObservation.rectRequests() ? 1 : 0,
+                     stats.lastMovedPresentObservation.usedViewports(),
+                     stats.lastMovedPresentObservation.outsideNotTranslated(),
+                     stats.lastMovedPresentObservation.outsideKinds(),
+                     stats.lastMovedPresentObservation.unitChanged() ? 1 : 0);
         this->audit_.recordLog(line);
         this->phase_ = RUNNING_ARROW;
         return;
