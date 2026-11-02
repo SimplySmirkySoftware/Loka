@@ -36,9 +36,6 @@ namespace
     }
   };
   Handler handler;
-#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-  static ByteCount lastNativeSize = 0;
-#endif
 }
 ToolboxUnicodeTextEditorContext::ToolboxUnicodeTextEditorContext(TextEditorNode *node,
                                                                  ToolboxScenePlatformController *controller,
@@ -52,6 +49,10 @@ ToolboxUnicodeTextEditorContext::ToolboxUnicodeTextEditorContext(TextEditorNode 
       phase_(IDLE),
       status_(EDITOR_UNAVAILABLE),
       projection_()
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+      ,
+      lastNativeSize_(0)
+#endif
 {
 }
 ToolboxUnicodeTextEditorContext::~ToolboxUnicodeTextEditorContext()
@@ -209,7 +210,7 @@ EditorResult ToolboxUnicodeTextEditorContext::project()
           staged.changes = TXNGetChangeCount(object);
           preparation.publish(staged);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-          lastNativeSize = TXNDataSize(object);
+          this->lastNativeSize_ = TXNDataSize(object);
 #endif
         }
       }
@@ -568,7 +569,7 @@ EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,
   this->settle(scene::SETTLE_INPUT, op);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
   if (result == EDITOR_OK && op.hasSameContext() && this->unicode_)
-    lastNativeSize = TXNDataSize(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)));
+    this->lastNativeSize_ = TXNDataSize(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)));
 #endif
   return result;
 }
@@ -741,14 +742,14 @@ void ToolboxUnicodeTextEditorContext::idleTick()
     static unsigned long outsideDoorSamples = 0;
     TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
     const ByteCount size = TXNDataSize(object);
-    if (this->phase_ == IDLE && size != lastNativeSize)
+    if (this->phase_ == IDLE && size != this->lastNativeSize_)
     {
       std::fprintf(stderr,
                    "[unicode-outside-door] object=%p delta=%ld samples=%lu\n",
                    static_cast<void *>(object),
-                   static_cast<long>(size) - static_cast<long>(lastNativeSize),
+                   static_cast<long>(size) - static_cast<long>(this->lastNativeSize_),
                    ++outsideDoorSamples);
-      lastNativeSize = size;
+      this->lastNativeSize_ = size;
     }
 #endif
   }

@@ -91,6 +91,10 @@ private:
   Phase phase_;
   loka::app::EditorResult status_;
   ToolboxUnicodeProjection projection_;
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+  // Diagnostic only: this editor's last sampled native size (door completion / idle).
+  unsigned long lastNativeSize_; // ByteCount, kept include-free
+#endif
 };
 bool RegisterToolboxUnicodeTextEditorNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);
 #endif
