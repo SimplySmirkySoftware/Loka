@@ -10,7 +10,7 @@
 #include "ToolboxWindowGeometry.hpp"
 #include <Windows.h>
 #include <Events.h>
-#include <vector>
+#include "ToolboxPresentBatch.hpp"
 
 class App;
 class ToolboxApp;
@@ -138,9 +138,8 @@ private:
   WindowPtr window_;
   ToolboxScenePlatformController *scenePlatformController_;
   ToolboxWindowContext *context_;
-  bool needsInvalidate_;
+  ToolboxPresentBatch next_;
   bool pendingDebugDump_;
-  std::vector<Rect> pendingInvalidateRects_;
   ToolboxWindowChrome chrome_;
 
   virtual bool mountReplacementScene(loka::app::scene::Scene *next);
