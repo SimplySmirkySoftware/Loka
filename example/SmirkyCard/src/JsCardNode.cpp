@@ -1179,6 +1179,11 @@ namespace smirkycard
       fail(depth > kMaximumTreeDepth ? "JavaScript tree exceeds depth 11." : "JavaScript tree has an invalid node.");
       return 0;
     }
+    if (JsCardBindingRegistry::isTreePrototype(ctx, tree))
+    {
+      fail("JavaScript tree has an invalid node.");
+      return 0;
+    }
     JSValue kindValue = JS_GetPropertyStr(ctx, tree, "kind");
     int32_t kind = 0;
     int converted = JS_ToInt32(ctx, &kind, kindValue);

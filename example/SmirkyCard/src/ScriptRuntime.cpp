@@ -22,37 +22,6 @@ namespace smirkycard
   {
 #include "BuiltinMainJs.inc"
   }
-  namespace
-  {
-    JSValue copyTreeWithId(JSContext *ctx, JSValueConst source, JSValueConst id)
-    {
-      // Every modifier copies the whole node, including the other modifiers'
-      // results ("testId", "enabledSeat", "rowWidth") and the modifier functions
-      // themselves, so modifiers chain in either order.
-      JsOwnProperties names(ctx);
-      if (!names.read(source, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK | JS_GPN_ENUM_ONLY))
-        return JS_EXCEPTION;
-      JSValue copy = JS_NewObject(ctx);
-      if (JS_IsException(copy))
-        return copy;
-      for (uint32_t i = 0; i < names.count(); ++i)
-      {
-        JSValue value = JS_GetProperty(ctx, source, names.atom(i));
-        if (JS_IsException(value) || JS_DefinePropertyValue(ctx, copy, names.atom(i), value, JS_PROP_C_W_E) < 0)
-        {
-          JS_FreeValue(ctx, copy);
-          return JS_EXCEPTION;
-        }
-      }
-      if (JS_SetPropertyStr(ctx, copy, "TEST_ID", JS_NewCFunction(ctx, &ScriptRuntime::testId, "TEST_ID", 1)) < 0
-          || (!JS_IsUndefined(id) && JS_SetPropertyStr(ctx, copy, "testId", JS_DupValue(ctx, id)) < 0))
-      {
-        JS_FreeValue(ctx, copy);
-        return JS_EXCEPTION;
-      }
-      return copy;
-    }
-  } // namespace
   JsEngine::JsEngine(ScriptRuntime &runtime, const JsCardBindingRegistry &registry, const std::string &sourceName)
       : runtime_(&runtime),
         sourceName_(sourceName),
@@ -358,7 +327,7 @@ namespace smirkycard
   {
     if (argc != 1 || !JS_IsString(argv[0]))
       return JS_ThrowTypeError(ctx, "TEST_ID(id) requires a string");
-    JSValue copy = copyTreeWithId(ctx, thisValue, argv[0]);
+    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, argv[0]);
     if (JS_IsException(copy))
       return copy;
     if (JS_FreezeObject(ctx, copy) < 0)
@@ -392,7 +361,7 @@ namespace smirkycard
     // return the unclaimed tree.
     if (ownTreePolicy(ctx, thisValue, property))
       return JS_DupValue(ctx, thisValue);
-    JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
+    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
       return copy;
     if ((replacedProperty && JS_SetPropertyStr(ctx, copy, replacedProperty, JS_NewInt32(ctx, 0)) < 0)
@@ -423,7 +392,7 @@ namespace smirkycard
   {
     if (argc != 1)
       return JS_ThrowTypeError(ctx, "enabled(seat) requires one seat");
-    JSValue copy = copyTreeWithId(ctx, thisValue, JS_UNDEFINED);
+    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, JS_UNDEFINED);
     if (JS_IsException(copy))
       return copy;
     if (JS_SetPropertyStr(ctx, copy, "enabledSeat", JS_DupValue(ctx, argv[0])) < 0 || JS_FreezeObject(ctx, copy) < 0)

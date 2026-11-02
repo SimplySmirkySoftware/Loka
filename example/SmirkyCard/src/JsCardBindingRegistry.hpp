@@ -86,10 +86,20 @@ namespace smirkycard
     bool registerGlobal(const IJsGlobal &global);
     IJsNodeLowering *lookup(int kind) const;
     bool install(JSContext *context) const;
+    /** Create a tree with the context-owned helper prototype. */
+    static JSValue newTree(JSContext *context, int kind);
     /** Validate descriptor facts at build and lower; seat provenance is card-owned. */
     static bool readToolbarDescriptor(JSContext *context, JSValueConst tree, JsToolbarRow &row);
 
   private:
+    friend class JsCardNode;
+    friend class ScriptRuntime;
+    /** Copy enumerable facts, preserving the receiver's tree/plain class path. */
+    static JSValue copyTree(JSContext *context, JSValueConst source, JSValueConst id);
+    static JSClassID treeClassId_;
+    static bool installTreeClass(JSContext *context);
+    static bool isTree(JSValueConst value);
+    static bool isTreePrototype(JSContext *context, JSValueConst value);
     struct LoweringEntry;
     struct GlobalEntry;
     LoweringEntry *lowerings_;
