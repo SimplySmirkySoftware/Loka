@@ -39,6 +39,11 @@ public:
   loka::app::scene::PlatformLayoutHandlerRegistry registry;
   loka::app::scene::PlatformLayoutHandlerRegistry *layoutHandlerRegistry() { return &this->registry; }
   ToolboxViewportContentObservation *activeViewportContent_;
+  ToolboxViewportContentObservation *outerViewportContent_;
+  bool refusePublicationLayout()
+  {
+    return false;
+  }
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   // Mirror ToolboxScenePlatformController::refuseNarrowingInScrollScope;
   // dispatch and Box layout below are the unmodified production bodies.
@@ -59,7 +64,8 @@ public:
   unsigned extentRecords;
 #endif
   ToolboxScenePlatformController()
-      : activeViewportContent_(0)
+      : activeViewportContent_(0),
+        outerViewportContent_(0)
 #ifdef LOKA_HOST_RECT_SURFACE
         ,
         extentRecords(0)

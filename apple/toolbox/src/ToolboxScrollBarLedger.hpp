@@ -81,6 +81,16 @@ public:
   {
   }
 
+  /** Controller after publication, once per layout; O(V), this ledger's rows. */
+  unsigned usedViewportCount() const
+  {
+    unsigned count = 0;
+    for (std::size_t i = 0; i < this->viewportScrollBars_.size(); ++i)
+      if (this->viewportScrollBars_[i].usedThisFrame)
+        ++count;
+    return count;
+  }
+
   /** Interval calls once per render attempt, O(V) over this ledger's own rows.
       This is the only writer of presented certificates. */
   void settlePresented(ToolboxPaintEligibility eligibility)

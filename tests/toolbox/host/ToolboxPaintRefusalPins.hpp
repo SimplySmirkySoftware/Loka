@@ -85,35 +85,35 @@ namespace
     if (std::strcmp(mode, "RefusalUnitRegion") == 0)
     {
       toolbox_host::failRegions = 2;
-      expected = "ToolboxZStack.cpp:183";
+      expected = "ToolboxZStack.cpp:196";
     }
     else if (std::strstr(mode, "Copy"))
     {
       toolbox_host::staticCopySucceeds = false;
-      expected = live ? "ToolboxZStack.cpp:155" : "ToolboxZStack.cpp:169";
+      expected = live ? "ToolboxZStack.cpp:168" : "ToolboxZStack.cpp:182";
     }
     else if (std::strstr(mode, "Device"))
     {
       toolbox_host::staticEligible = false;
-      expected = live ? "ToolboxZStack.cpp:158" : "ToolboxZStack.cpp:171";
+      expected = live ? "ToolboxZStack.cpp:171" : "ToolboxZStack.cpp:184";
     }
     else if (std::strstr(mode, "Hairline"))
     {
       toolbox_host::refuseHairlines = 1;
-      expected = "ToolboxZStack.cpp:142";
+      expected = "ToolboxZStack.cpp:155";
     }
     else if (std::strstr(mode, "Frost"))
     {
       f.controller.bandBlur_.clear();
       ToolboxErasedPass::Guard erased(f.controller.erasedPass(), f.window.port.portRect);
       f.controller.renderZStack(&f.stack);
-      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:150");
+      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:163");
       return;
     }
     else if (std::strstr(mode, "Absent"))
     {
       f.controller.bandBlur_.clear();
-      expected = "ToolboxZStack.cpp:152";
+      expected = "ToolboxZStack.cpp:165";
     }
     f.controller.renderZStack(&f.stack);
     toolbox_host::failRegions = 0;
@@ -203,7 +203,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:162" : "ToolboxRender.cpp:172");
+                    button ? "ToolboxRender.cpp:181" : "ToolboxRender.cpp:191");
         return;
       }
       c.paintSuppressClipRgn_ = 0;
@@ -303,10 +303,10 @@ namespace
       state.x = SHRT_MAX;
     c.layoutZStack(&stack, state, 0);
     refusalSite(c.observation_.outsideRefusal(),
-                ground->refuse                                      ? "ToolboxZStack.cpp:32"
-                : child->refuse                                     ? "ToolboxZStack.cpp:46"
-                : std::strcmp(mode, "RefusalLayoutProjection") == 0 ? "ToolboxZStack.cpp:52"
-                                                                    : "ToolboxZStack.cpp:61");
+                ground->refuse                                      ? "ToolboxZStack.cpp:40"
+                : child->refuse                                     ? "ToolboxZStack.cpp:56"
+                : std::strcmp(mode, "RefusalLayoutProjection") == 0 ? "ToolboxZStack.cpp:63"
+                                                                    : "ToolboxZStack.cpp:73");
   }
   void refusalControls(const char *mode)
   {
@@ -416,7 +416,7 @@ namespace
       const ToolboxPresentObservation &result = f.controller.debugStats_.lastPresentObservation;
       LOKA_VERIFY(result.paintFinished());
       LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
-      refusalSite(result.firstRefusal(), "ToolboxZStack.cpp:46");
+      refusalSite(result.firstRefusal(), "ToolboxZStack.cpp:56");
       return;
     }
     ZStackNode *stack = new ZStackNode(ZStackProps());
@@ -502,7 +502,7 @@ namespace
     {
       LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
       LOKA_VERIFY(result.firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
-      refusalSite(result.firstRefusal(), "ToolboxNodeDispatch.cpp:289");
+      refusalSite(result.firstRefusal(), "ToolboxNodeDispatch.cpp:306");
     }
     else
     {

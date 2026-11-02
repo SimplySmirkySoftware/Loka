@@ -280,8 +280,13 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
         break;
       }
     // Publish only after successful layout and after the scope has popped.
-    scrollView->publishViewport(
-        horizontal.clampedOffset, rows.verticalOffset(), childWidth, contentRect.bottom - contentRect.top);
+    {
+      // Watchers run synchronously here, inside the outer layout traversal.
+      // Keep its content observer installed but close its layout admission door.
+      ToolboxViewportContentObservation::Scope publication(this->outerViewportContent_, 0);
+      scrollView->publishViewport(
+          horizontal.clampedOffset, rows.verticalOffset(), childWidth, contentRect.bottom - contentRect.top);
+    }
   }
 
   if (state.height > 0)

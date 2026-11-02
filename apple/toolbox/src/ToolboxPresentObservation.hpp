@@ -2,6 +2,8 @@
 #define LOKA_TOOLBOX_PRESENT_OBSERVATION_HPP
 
 #include "ToolboxFullDrawReason.hpp"
+#include "ToolboxPresentBatch.hpp"
+#include "ToolboxUnitLedger.hpp"
 #include "ToolboxPaintRefusal.hpp"
 #include "context/ToolboxLeafPlacement.hpp"
 
@@ -36,6 +38,8 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_DITHER_PHASE,
   TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT,
   TOOLBOX_PRESENT_FOREGROUND_UNITS,
+  TOOLBOX_PRESENT_RECT_REQUESTS,
+  TOOLBOX_PRESENT_OUTSIDE_CHANGED,
   TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
   TOOLBOX_PRESENT_REFUSAL_COUNT
 };
@@ -59,7 +63,7 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
   case TOOLBOX_PRESENT_NO_VIEWPORT_MOVED:
     return "no_viewport_moved";
   case TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED:
-    return "several_viewports_moved";
+    return "several_viewports";
   case TOOLBOX_PRESENT_HORIZONTAL_MOVE:
     return "horizontal_move";
   case TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT:
@@ -84,6 +88,10 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
     return "damage_outside_viewport";
   case TOOLBOX_PRESENT_FOREGROUND_UNITS:
     return "foreground_units";
+  case TOOLBOX_PRESENT_RECT_REQUESTS:
+    return "rect_requests";
+  case TOOLBOX_PRESENT_OUTSIDE_CHANGED:
+    return "outside_changed";
   case TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY:
     return "no_suppression_capability";
   case TOOLBOX_PRESENT_REFUSAL_COUNT:
@@ -175,26 +183,49 @@ public:
   {
   public:
     Scope(ToolboxViewportContentObservation *&active, ToolboxViewportContentObservation &value)
-        : active_(active)
+        : active_(active),
+          previous_(active)
     {
-      assert(!this->active_ && "nested viewports refuse before child layout");
       this->active_ = &value;
+    }
+    /** Null temporarily suspends traversal admission during synchronous publication. */
+    Scope(ToolboxViewportContentObservation *&active, ToolboxViewportContentObservation *value)
+        : active_(active),
+          previous_(active)
+    {
+      this->active_ = value;
     }
     ~Scope()
     {
-      this->active_ = 0;
+      this->active_ = this->previous_;
     }
 
   private:
     Scope(const Scope &);
     Scope &operator=(const Scope &);
     ToolboxViewportContentObservation *&active_;
+    ToolboxViewportContentObservation *previous_;
   };
 
 private:
   unsigned contentInputs_, unsupportedKinds_, phaseBound_, notTranslated_;
   const ToolboxExpectedMotion motion_;
   const bool enclosingClip_;
+};
+
+/** Completed admission inputs, built after extent publication. */
+struct ToolboxPresentInputs
+{
+  unsigned usedViewports;
+  ToolboxViewportContentResult outside;
+  ToolboxUnitComparison units;
+  ToolboxPresentInputs()
+      : usedViewports(0),
+        units()
+  {
+    const ToolboxViewportContentResult empty = {0, 0, 0, 0, false};
+    this->outside = empty;
+  }
 };
 
 /** Controller-owned interval facts; completed copies contain no borrowed identities. */
@@ -249,6 +280,41 @@ public:
     else
       this->reasons_ |= 1U << reason;
   }
+  /** Window sealed attempt, once before render; reset with the interval, O(1). */
+  void noteRequestSummary(ToolboxPresentBatch::Summary summary)
+  {
+    this->summary_ = summary;
+  }
+  /** Window rect door, once per request; only WALKING belongs to this interval. */
+  void noteRectRequest()
+  {
+    if (this->phase_ == WALKING)
+      this->walkRectRequested_ = true;
+  }
+  bool rectRequests() const
+  {
+    return this->summary_ == ToolboxPresentBatch::FULL_WITH_RECTS || this->walkRectRequested_;
+  }
+  unsigned usedViewports() const
+  {
+    return this->inputs_.usedViewports;
+  }
+  unsigned outsideNotTranslated() const
+  {
+    return this->inputs_.outside.notTranslated;
+  }
+  unsigned outsideInputs() const
+  {
+    return this->inputs_.outside.contentInputs;
+  }
+  unsigned outsideKinds() const
+  {
+    return this->inputs_.outside.unsupportedKinds;
+  }
+  bool unitChanged() const
+  {
+    return this->inputs_.units.changed();
+  }
   /** O(1) at either window draw entry, before BeginUpdate or validation. */
   void noteDamage(const Rect &damage)
   {
@@ -279,15 +345,14 @@ public:
   }
   /** O(1) after full layout; admits nonempty layout_dirty/viewport_input reasons.
       The controller supplies its ledger overlap count. */
-  void complete(unsigned foregroundUnits)
+  void complete(unsigned foregroundUnits, const ToolboxPresentInputs &inputs = ToolboxPresentInputs())
   {
+    this->inputs_ = inputs;
     this->foregroundUnits_ = foregroundUnits;
     this->phase_ = COMPLETED;
     this->verdict_ = TOOLBOX_PRESENT_ERASE_ALL;
     if (!this->viewports_)
       this->refusal_ = TOOLBOX_PRESENT_NO_VIEWPORT_MOVED;
-    else if (this->viewports_ > 1)
-      this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
     else if (this->horizontal_)
       this->refusal_ = TOOLBOX_PRESENT_HORIZONTAL_MOVE;
     else if (!this->reasons_
@@ -315,12 +380,21 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT;
     else if (this->foregroundUnits_)
       this->refusal_ = TOOLBOX_PRESENT_FOREGROUND_UNITS;
+    else if (this->rectRequests())
+      this->refusal_ = TOOLBOX_PRESENT_RECT_REQUESTS;
+    else if (this->inputs_.usedViewports >= 2)
+      this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
+    else if (this->outsideNotTranslated() || this->outsideInputs() || this->outsideKinds() || this->unitChanged())
+      this->refusal_ = TOOLBOX_PRESENT_OUTSIDE_CHANGED;
     else
       this->refusal_ = TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY;
   }
   /** O(1) at interval exit or explicit diagnostic reset; no owned resources. */
   void reset()
   {
+    this->summary_ = ToolboxPresentBatch::RECTS_ONLY;
+    this->walkRectRequested_ = false;
+    this->inputs_ = ToolboxPresentInputs();
     this->reasons_ = this->nextReasons_ = this->walkReasons_ = 0;
     this->contentInputs_ = this->unsupportedKinds_ = this->phaseBound_ = this->notTranslated_ = 0;
     this->baseline_ = TOOLBOX_BASELINE_NONE;
@@ -483,6 +557,9 @@ private:
   {
     this->eligibility_ = value;
   }
+  ToolboxPresentBatch::Summary summary_;
+  bool walkRectRequested_;
+  ToolboxPresentInputs inputs_;
   ToolboxPaintEligibility eligibility_;
   ToolboxPaintRefusalRecord firstRefusal_, outsideRefusal_;
   unsigned reasons_, nextReasons_, walkReasons_;

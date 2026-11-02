@@ -11,8 +11,16 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
                                                    loka::app::scene::LayoutState &state,
                                                    loka::app::scene::BoundaryNode *boundary)
 {
+  const loka::app::scene::Node::LayoutInputsCheckpoint inputs(*stack);
   if (this->projectionParentScopes_.insideUnit())
+  {
+    inputs.requeue();
     return 0;
+  }
+  stack->takeLayoutInputs();
+  if (this->activeViewportContent_ && this->activeViewportContent_ == this->outerViewportContent_
+      && inputs.inputs() != loka::app::scene::NODE_DIRTY_NONE)
+    this->activeViewportContent_->noteContentInputs();
   short maxY = state.y;
   short maxWidth = 0;
   unsigned index = 0;
@@ -30,12 +38,14 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
       if (parent.hasShortRangeRefusal() || !parent.deriveScrolled(parent.nativeParent, 0, 0, parent.clipRect, frame))
       {
         LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+        inputs.requeue();
         continue;
       }
       loka::app::scene::ProjectionUnitScopeGuard guard(this->projectionParentScopes_, frame);
       if (!guard.isActive())
       {
         LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+        inputs.requeue();
         continue;
       }
       // Call the arm directly: the generic traversal swallows narrowing refusal.
@@ -44,12 +54,14 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
           || this->projectionParentScopes_.current().hasShortRangeRefusal())
       {
         LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+        inputs.requeue();
         continue;
       }
       loka::app::scene::LayoutState projected = state;
       if (!this->projectLayoutState(projected))
       {
         LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+        inputs.requeue();
         continue;
       }
       const int right = static_cast<int>(projected.x) + state.width;
@@ -59,6 +71,7 @@ short ToolboxScenePlatformController::layoutZStack(loka::app::ZStackNode *stack,
       if (this->refuseNarrowingInScrollScope(right) || this->refuseNarrowingInScrollScope(bottom))
       {
         LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+        inputs.requeue();
         continue;
       }
       Rect rect = {projected.y, projected.x, static_cast<short>(bottom), static_cast<short>(right)};

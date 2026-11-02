@@ -31,6 +31,14 @@ ToolboxPresentObservation::Interval::~Interval()
 void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
 {
   PROFILE_FUNC();
+  if (this->observation_.paintInProgress() || this->inBatchUpdate_)
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(false && "render must not re-enter an open paint interval");
+#endif
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return;
+  }
   const bool coversWindow =
       this->window_ && this->window_->window() && this->erasedPass_.admitsCapture(this->window_->window()->portRect);
   ToolboxPresentObservation::Interval interval(
@@ -124,13 +132,25 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   if (presenter)
     presenter->beginLayoutForTesting();
 #endif
-  LayoutNode(rootNode_, state, this, 0);
+  const loka::core::Frame zero;
+  const ToolboxExpectedMotion stationary(&zero, zero);
+  ToolboxViewportContentObservation outer(stationary, false);
+  {
+    ToolboxViewportContentObservation::Scope outerIdentity(this->outerViewportContent_, outer);
+    ToolboxViewportContentObservation::Scope contentScope(this->activeViewportContent_, outer);
+    LayoutNode(rootNode_, state, this, 0);
+  }
 #ifdef TEST_BUILD
   if (presenter)
     presenter->endLayoutForTesting();
 #endif
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
+  this->rectSurfaceExtentLedger_.flush();
+  ToolboxPresentInputs inputs;
+  inputs.outside = outer.complete();
+  inputs.units = this->unitLedger_.compareFinalRows();
+  inputs.usedViewports = this->scrollBarLedger_.usedViewportCount();
   // Once per full layout, the unit ledger visits its own rows with one cursor.
   unsigned foregroundUnits = 0;
   if (this->observation_.viewports())
@@ -140,11 +160,10 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     while (this->unitLedger_.nextOverlap(this->observation_.viewport(), cursor, overlap))
       ++foregroundUnits;
   }
-  this->observation_.complete(foregroundUnits);
+  this->observation_.complete(foregroundUnits, inputs);
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
-  this->rectSurfaceExtentLedger_.flush();
   if (presenter)
     presenter->eraseBeforePaint();
   RenderNode(rootNode_, this);

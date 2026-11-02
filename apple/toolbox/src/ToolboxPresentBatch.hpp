@@ -14,15 +14,24 @@
 class ToolboxPresentBatch
 {
 public:
+  enum Summary
+  {
+    RECTS_ONLY,
+    FULL_ONLY,
+    FULL_WITH_RECTS
+  };
   ToolboxPresentBatch()
       : rects_(),
-        full_(false)
+        summary_(RECTS_ONLY)
   {
   }
   void add(const Rect &rect)
   {
-    if (this->full_)
+    if (this->full())
+    {
+      this->summary_ = FULL_WITH_RECTS;
       return;
+    }
     for (std::size_t i = 0; i < this->rects_.size(); ++i)
     {
       Rect &pending = this->rects_[i];
@@ -53,16 +62,25 @@ public:
   }
   void addFull()
   {
-    this->full_ = true;
+    if (this->summary_ == RECTS_ONLY)
+      this->summary_ = this->rects_.empty() ? FULL_ONLY : FULL_WITH_RECTS;
     this->rects_.clear();
   }
   bool empty() const
   {
-    return !this->full_ && this->rects_.empty();
+    return this->summary_ == RECTS_ONLY && this->rects_.empty();
   }
   bool full() const
   {
-    return this->full_;
+    return this->summary_ != RECTS_ONLY;
+  }
+  bool rectRequested() const
+  {
+    return this->summary_ == FULL_WITH_RECTS || (this->summary_ == RECTS_ONLY && !this->rects_.empty());
+  }
+  Summary summary() const
+  {
+    return this->summary_;
   }
   const std::vector<Rect> &rects() const
   {
@@ -71,17 +89,17 @@ public:
   void swap(ToolboxPresentBatch &other)
   {
     std::swap(this->rects_, other.rects_);
-    std::swap(this->full_, other.full_);
+    std::swap(this->summary_, other.summary_);
   }
   void clear()
   {
     this->rects_.clear();
-    this->full_ = false;
+    this->summary_ = RECTS_ONLY;
   }
 
 private:
   std::vector<Rect> rects_;
-  bool full_;
+  Summary summary_;
 };
 
 #endif // LOKA_TOOLBOX_PRESENT_BATCH_HPP
