@@ -17,6 +17,15 @@ namespace
     return script != smRoman && CharacterByteType(reinterpret_cast<Ptr>(&byte), 0, script) == smFirstByte;
   }
 
+  /** OS 9 TSM 1.5 passes keyDown to the input method inside WaitNextEvent and
+      returns the consumed key as a null event whose message still holds the key.
+      Its body change is already in the focused MLTE object. This is an observed
+      hint, not an OS guarantee. */
+  bool ToolboxIsTextServiceKey(const EventRecord &record)
+  {
+    return record.what == nullEvent && record.message != 0;
+  }
+
   bool ToolboxIsTrailByte(unsigned char lead, unsigned char byte, short script)
   {
     unsigned char pair[] = {lead, byte};
@@ -304,6 +313,14 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
         HiliteMenu(0);
       }
     }
+  }
+  else if (ToolboxIsTextServiceKey(original))
+  {
+    // Use the arrival record: serviceEvent may have rewritten record.
+    // Do not gate on serviced: the consumed key's body change is already native.
+    ToolboxWindow *active = activeWindow() ? activeWindow()->asToolboxWindow() : 0;
+    if (active)
+      active->offerKeyEvent(original);
   }
   double elapsedSeconds = clock.elapsedSeconds(TickCount());
   double dispatchElapsedSeconds = 0.0;

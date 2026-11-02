@@ -49,6 +49,10 @@ ToolboxUnicodeTextEditorContext::ToolboxUnicodeTextEditorContext(TextEditorNode 
       phase_(IDLE),
       status_(EDITOR_UNAVAILABLE),
       projection_()
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+      ,
+      lastNativeSize_(0)
+#endif
 {
 }
 ToolboxUnicodeTextEditorContext::~ToolboxUnicodeTextEditorContext()
@@ -205,6 +209,9 @@ EditorResult ToolboxUnicodeTextEditorContext::project()
         {
           staged.changes = TXNGetChangeCount(object);
           preparation.publish(staged);
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+          this->sampleNativeSize(false);
+#endif
         }
       }
     }
@@ -560,6 +567,10 @@ EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,
   if (result == EDITOR_NON_ASCII)
     SysBeep(1);
   this->settle(scene::SETTLE_INPUT, op);
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+  if (result == EDITOR_OK && op.hasSameContext())
+    this->sampleNativeSize(false);
+#endif
   return result;
 }
 EditorResult ToolboxUnicodeTextEditorContext::beginInput()
@@ -626,7 +637,10 @@ bool ToolboxUnicodeTextEditorContext::offerKeyEvent(const EventRecord &record)
   }
   const Selection before = this->selection();
   Captured captured(this->projection_.stamp());
-  TXNKeyDown(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)), &record);
+  // A consumed key's text is already native: whole-document read-back finds it;
+  // a consumed key that changed nothing completes like an arrow key.
+  if (record.what == keyDown || record.what == autoKey)
+    TXNKeyDown(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)), &record);
   if (!op.hasSameContext())
     return true;
   const EditorResult result = this->readBack(before, captured, op);
@@ -724,19 +738,28 @@ void ToolboxUnicodeTextEditorContext::idleTick()
   {
     this->controller()->unicodeEditors_.idle(this->unicode_);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-    // Best-effort focused-row sample only; this is not an input/settle door.
-    static unsigned long outsideDoorSamples = 0;
-    TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
-    const ItemCount changes = TXNGetChangeCount(object);
-    if (this->phase_ == IDLE && changes != this->projection_.stamp().changes)
-      std::fprintf(stderr,
-                   "[unicode-outside-door] object=%p delta=%lu samples=%lu\n",
-                   static_cast<void *>(object),
-                   static_cast<unsigned long>(changes - this->projection_.stamp().changes),
-                   ++outsideDoorSamples);
+    this->sampleNativeSize(true);
 #endif
   }
 }
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+void ToolboxUnicodeTextEditorContext::sampleNativeSize(bool fromIdle)
+{
+  if (!this->unicode_)
+    return;
+  // Best-effort focused-row sample only; this is not an input/settle door.
+  static unsigned long outsideDoorSamples = 0;
+  TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
+  const ByteCount size = TXNDataSize(object);
+  if (fromIdle && this->phase_ == IDLE && size != this->lastNativeSize_)
+    std::fprintf(stderr,
+                 "[unicode-outside-door] object=%p delta=%ld samples=%lu\n",
+                 static_cast<void *>(object),
+                 static_cast<long>(size) - static_cast<long>(this->lastNativeSize_),
+                 ++outsideDoorSamples);
+  this->lastNativeSize_ = size;
+}
+#endif
 Rect ToolboxUnicodeTextEditorContext::chromeRect() const
 {
   Rect port = Rect(), sizeBox = Rect();

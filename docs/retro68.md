@@ -384,19 +384,18 @@ probe imports exactly `InterfaceLib`, `Textension`, `TextEncodingConverter`, and
 `UnicodeConverter`, all strong. These are build checks, not loader or native
 startup verdicts. No release allowlist includes the Unicode acceptance target.
 
-With OS 9 Kotoeri and MLTE 1.3, the text confirmed with Return reaches the
-native body outside Loka's input doors (the Text Services Manager delivers it
-in a later iteration), so the document model receives it at the next key or
-click in the editor. Save or close immediately after confirming loses the
-last confirmed text; type or click once first. A composition still pending in
-the bottom-line input window survives a modal dialog (Save, Open, close
-confirmation) and can be confirmed afterwards; in a standalone MLTE probe the
-same situation committed two `'a'` characters per kana, which Loka's loop did
-not reproduce. Until the next door Save and confirmation read the last
-committed model; owner projection can overwrite the pending native change,
-and retirement can discard it permanently. The diagnostic idle counter is a
-best-effort sample, not a mechanism for committing changes outside input
-doors; that mechanism is a separate design (the rally's page 2e).
+With OS 9 Kotoeri and MLTE 1.3, the Text Services Manager delivers a
+composition's keys inside `WaitNextEvent` and returns them to the application
+as null events carrying the key. Loka offers such a key to the focused Unicode
+editor's input door, so text confirmed with Return (or space conversion then
+Return) reaches the document model in the same iteration and an immediate Save
+contains it. A confirmation the input method makes without a key (mouse, Tab,
+another input method, a background window) still reaches the model at the next
+key or click in the editor, and a Save or close before that loses it. Owner
+projection can overwrite that native change, and retirement can discard it
+permanently. A composition still pending in the bottom-line input window when
+the window is closed is lost (confirm with Return first). The diagnostic idle
+sample is best-effort and is not a mechanism for committing changes.
 
 `UnicodeText::Session` initializes MLTE before the OOM reserve and terminates it
 only after normal window teardown, outside the Operation Regime. Sudden termination
