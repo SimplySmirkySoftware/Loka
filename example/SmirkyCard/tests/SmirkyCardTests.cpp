@@ -1358,6 +1358,209 @@ namespace
                 && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
   }
 
+  void checkTreeHelperIdentity()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String result, error;
+    LOKA_VERIFY(runtime.evaluateToString(
+        loka::core::String::Literal(
+            "(()=>{const d=Text('a'),p=Object.getPrototypeOf(d);"
+            "const names=['TEST_ID','naturalWidth','naturalHeight','expStaticBlurUnit','expBlurUnit'];"
+            "const trees=[d,Text('b'),d.TEST_ID('x'),Row().naturalWidth().TEST_ID('r'),"
+            "VStack().naturalHeight().TEST_ID('v'),ZStack().expStaticBlurUnit().expBlurUnit(),"
+            "ZStack().expBlurUnit().expStaticBlurUnit(),Button('',()=>{}).enabled({}).TEST_ID('b')];"
+            "if(Object.getPrototypeOf(p)!==Object.prototype||!Object.isFrozen(p))return false;"
+            "if(Object.prototype.toString.call(d)!=='[object Object]')return false;"
+            "if(!names.every((n,i)=>Object.isFrozen(p[n])&&p[n].length===(i===0?1:0)))return false;"
+            "if(!names.every(n=>{const x=Object.getOwnPropertyDescriptor(p,n);"
+            "return !x.writable&&!x.enumerable&&!x.configurable}))return false;"
+            "if(!trees.every(t=>Object.getPrototypeOf(t)===p&&names.every(n=>"
+            "t[n]===p[n]&&t[n]===t[n]&&!Object.getOwnPropertyNames(t).includes(n))))return false;"
+            "if(Object.getOwnPropertyNames(d).sort().join(',')!=='kind,text')return false;"
+            "for(const t of [d,Object.assign({},d),{...d}]){"
+            "if(names.some(n=>Object.keys(t).includes(n)||Object.hasOwn(t,n)))return false;"
+            "for(const k in t)if(names.includes(k))return false;}"
+            "const receivers=[{},Object.create(d),p,{kind:d.kind,text:'forged'}];"
+            "return receivers.every(x=>{const c=d.TEST_ID.call(x,'x');"
+            "return "
+            "Object.getPrototypeOf(c)===Object.prototype&&Object.hasOwn(c,'TEST_ID')&&c.TEST_ID===p.TEST_ID});})()"),
+        result,
+        error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
+  }
+
+  void checkTreeHelperEngines()
+  {
+    smirkycard::ScriptRuntime first, second;
+    JSContext *contexts[] = {first.context(), second.context()};
+    JSValue methods[2];
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      const char *source = "Text('')";
+      JSValue tree = JS_Eval(contexts[i], source, std::strlen(source), "tree-engine", JS_EVAL_TYPE_GLOBAL);
+      LOKA_VERIFY(!JS_IsException(tree));
+      JSValue proto = JS_GetClassProto(contexts[i], JS_GetClassID(tree));
+      methods[i] = JS_GetPropertyStr(contexts[i], proto, "TEST_ID");
+      LOKA_VERIFY(JS_IsFunction(contexts[i], methods[i]));
+      JS_FreeValue(contexts[i], proto);
+      JS_FreeValue(contexts[i], tree);
+    }
+    LOKA_VERIFY(JS_VALUE_GET_PTR(methods[0]) != JS_VALUE_GET_PTR(methods[1]));
+    for (unsigned i = 0; i < 2; ++i)
+      JS_FreeValue(contexts[i], methods[i]);
+  }
+
+  void checkTreeInstallFailureSweep()
+  {
+    // Learn the class through the existing C API, without a production getter.
+    smirkycard::ScriptRuntime warm;
+    const char *source = "Text('')";
+    JSValue tree = JS_Eval(warm.context(), source, std::strlen(source), "tree-class", JS_EVAL_TYPE_GLOBAL);
+    LOKA_VERIFY(!JS_IsException(tree));
+    const JSClassID treeClass = JS_GetClassID(tree);
+    JS_FreeValue(warm.context(), tree);
+    smirkycard::JsCardBindingRegistry registry;
+    LOKA_VERIFY(smirkycard::RegisterSmirkyCardBindings(registry));
+    unsigned failures[3] = {0, 0, 0};
+    bool installed = false;
+    // One-byte steps cross every budget threshold; each attempt gets a fresh context.
+    for (size_t extra = 0; extra < 65536 && !installed; ++extra)
+    {
+      JSRuntime *js = JS_NewRuntime();
+      LOKA_VERIFY(js);
+      JSContext *ctx = JS_NewContext(js);
+      LOKA_VERIFY(ctx);
+      JSMemoryUsage usage;
+      JS_ComputeMemoryUsage(js, &usage);
+      JS_SetMemoryLimit(js, static_cast<size_t>(usage.malloc_size) + extra);
+      installed = registry.install(ctx);
+      const bool registered = JS_IsRegisteredClass(js, treeClass);
+      JSValue proto = registered ? JS_GetClassProto(ctx, treeClass) : JS_UNDEFINED;
+      if (!installed)
+        ++failures[!registered ? 0 : JS_IsObject(proto) ? 2 : 1];
+      else
+      {
+        // Property lookup of an existing data property does not allocate.
+        JSValue a = JS_GetPropertyStr(ctx, proto, "TEST_ID");
+        JSValue b = JS_GetPropertyStr(ctx, proto, "TEST_ID");
+        LOKA_VERIFY(JS_IsFunction(ctx, a) && JS_VALUE_GET_PTR(a) == JS_VALUE_GET_PTR(b));
+        JS_FreeValue(ctx, a);
+        JS_FreeValue(ctx, b);
+        std::printf("tree-install sweep: success N=%lu; failures class=%u, prototype/methods/freezes=%u, builders=%u\n",
+                    static_cast<unsigned long>(extra),
+                    failures[0],
+                    failures[1],
+                    failures[2]);
+      }
+      JS_FreeValue(ctx, proto);
+      JS_FreeContext(ctx);
+      JS_FreeRuntime(js);
+    }
+    LOKA_VERIFY(installed && failures[0] && failures[1] && failures[2]);
+  }
+
+  void checkTreeCopyPaths()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String result, error;
+    LOKA_VERIFY(runtime.evaluateToString(
+        loka::core::String::Literal(
+            "(()=>{const d=Text('a'), p=Object.prototype;"
+            "const copies=[d.TEST_ID('x'),Row().naturalWidth(),VStack().naturalHeight(),"
+            "ZStack().expStaticBlurUnit(),ZStack().expBlurUnit(),Button('',()=>{}).enabled({})];"
+            // Tree copies keep their class; plain descriptor copies keep their own TEST_ID.
+            "if(!copies.every(c=>Object.getPrototypeOf(c)===Object.getPrototypeOf(d)&&!Object.hasOwn(c,'TEST_ID')))"
+            "return false;"
+            "const a=ToolbarItem('',()=>{}),b=ToolbarItem.label('x'),"
+            "f=ToolbarItem.flexibleSpace(),s=ToolbarItem.fixedSpace(2);"
+            "if(Object.getOwnPropertyNames(a).sort().join(',')!=='TEST_ID,enabled,handler,kind,label')return false;"
+            "if(Object.getOwnPropertyNames(b).sort().join(',')!=='TEST_ID,kind,label')return false;"
+            "if(Object.getOwnPropertyNames(f).sort().join(',')!=='kind')return false;"
+            "if(Object.getOwnPropertyNames(s).sort().join(',')!=='kind,width')return false;"
+            "const items=[a.enabled({}).TEST_ID('x'),a.TEST_ID('x').enabled({}),b.TEST_ID('l'),"
+            "f,s];"
+            "if(!items.slice(0,3).every(c=>Object.getPrototypeOf(c)===p&&Object.hasOwn(c,'TEST_ID')))return false;"
+            "if(Toolbar(...items.slice(2)).children.length!==3)return false;"
+            "const plain=d.TEST_ID.call(Object.create({inherited:1}),'plain');"
+            "return Object.getPrototypeOf(plain)===p&&Object.hasOwn(plain,'TEST_ID')&&"
+            "Object.hasOwn(Button('',()=>{}),'enabled')&&typeof Text('').enabled==='undefined';})()"),
+        result,
+        error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
+    // Both orders must also survive lower's descriptor and seat validation.
+    LOKA_VERIFY(runtime.loadBuiltin(
+        "card('first',class{constructor(c){this.b=c.state(true)}compose(){return Toolbar("
+        "ToolbarItem('a',()=>{}).enabled(this.b).TEST_ID('A'),"
+        "ToolbarItem('b',()=>{}).TEST_ID('B').enabled(this.b),ToolbarItem.label('l').TEST_ID('L'))}});",
+        error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
+    LOKA_VERIFY(find(root, "A") && find(root, "B") && find(root, "L"));
+    LOKA_VERIFY(!find(root, "SmirkyCard.Status"));
+  }
+
+  void checkTreeHelperMessages()
+  {
+    // Trees are not plain options, insets, styles, or Toolbar descriptors.
+    const char *expressions[] = {"Text('',Text(''))",
+                                 "Text('',{},Text(''))",
+                                 "ScrollView(Text(''),Text(''))",
+                                 "ScrollView(Text(''),{insets:Text('')})",
+                                 "Box(Text(''),Text(''))",
+                                 "ClipBox(Text(''),Text(''))",
+                                 "ImageView({},Text(''))",
+                                 "Toolbar(Text(''))"};
+    const char *messages[] = {"Text style requires a plain object",
+                              "Block style requires a plain object",
+                              "ScrollView options requires a plain object",
+                              "ScrollView insets requires a plain object",
+                              "Box options requires a plain object",
+                              "ClipBox options requires a plain object",
+                              "ImageView options requires a plain object",
+                              "Toolbar descriptor requires a plain object"};
+    for (unsigned i = 0; i < sizeof(expressions) / sizeof(expressions[0]); ++i)
+    {
+      const std::string source = std::string("card('first',class{compose(){return ") + expressions[i] + "}});";
+      checkComposeRefusal(source.c_str(), messages[i]);
+    }
+  }
+
+  void checkTreePrototypeRefusal()
+  {
+    for (int polluted = 0; polluted < 2; ++polluted)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String result, error;
+      LOKA_VERIFY(
+          runtime.loadBuiltin(polluted ? "card('first',class{compose(){const d=Text('');Object.prototype.kind=d.kind;"
+                                         "Object.prototype.text='x';return Object.getPrototypeOf(d)}});"
+                                       : "card('first',class{compose(){return Object.getPrototypeOf(Text(''))}});",
+                              error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      // Restore inside JS even if the new identity guard never reads inherited kind.
+      LOKA_VERIFY(runtime.evaluateToString(
+          loka::core::String::Literal("delete Object.prototype.kind;delete Object.prototype.text;true"),
+          result,
+          error));
+      loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
+      loka::app::scene::Node *status = find(root, "SmirkyCard.Status");
+      LOKA_VERIFY(status && status->asTextNode()
+                  && textValue(status->asTextNode()).find("JavaScript tree has an invalid node.") != std::string::npos);
+    }
+  }
+
   std::string toolbarCard(const std::string &body)
   {
     return "card('first',class{constructor(c){this.c=c;this.s=c.state('short');this.b=c.state(false)}compose(){" + body
@@ -6125,6 +6328,21 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--tree-install-sweep"))
+  {
+    checkTreeInstallFailureSweep();
+    return 0;
+  }
+  if (argc == 2 && !std::strcmp(argv[1], "--tree-helpers"))
+  {
+    checkTreePropertyCopy();
+    checkTreeHelperIdentity();
+    checkTreeHelperEngines();
+    checkTreeCopyPaths();
+    checkTreeHelperMessages();
+    checkTreePrototypeRefusal();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--toolbar-registry"))
   {
     checkToolbarRegistry();
@@ -6374,6 +6592,12 @@ int main(int argc, char **argv)
   checkBlockStyle();
   checkMarkupAllocationRefusal();
   checkTreePropertyCopy();
+  checkTreeHelperIdentity();
+  checkTreeHelperEngines();
+  checkTreeInstallFailureSweep();
+  checkTreeCopyPaths();
+  checkTreeHelperMessages();
+  checkTreePrototypeRefusal();
   checkTextStyleRefusals();
   checkChangedTextStyleRefusal();
   printRecordCosts();

@@ -188,6 +188,8 @@ String or a live String seat. The latter renders Loka's native clickable text
 Cell, as used by the C++ MineSweeper. A handler runs with the card as `this`;
 seat writes update the label without composing the card again.
 Only Button has `.enabled(boolSeat)`. Both support `.TEST_ID('name')`.
+Tree helpers inherit their methods from one frozen prototype per engine; a tree's
+own properties are `kind` and its content.
 
 `Grid(rows, cols, children)` lowers to Loka's native Grid, with equal-sized
 cells in row-major order. Both dimensions must be numeric integers in 1..16.

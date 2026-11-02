@@ -4,6 +4,7 @@
 #include <climits>
 #include "SmirkyMarkup.hpp"
 #include "JsOwnProperties.hpp"
+#include "JsNativeClass.hpp"
 #include "app/nodes/ImageView.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/ScrollView.hpp"
@@ -106,6 +107,8 @@ namespace smirkycard
   }
   bool JsCardBindingRegistry::install(JSContext *context) const
   {
+    if (!installTreeClass(context))
+      return false;
     JSValue global = JS_GetGlobalObject(context);
     if (JS_IsException(global))
       return false;
@@ -154,28 +157,112 @@ namespace smirkycard
     IJsNodeLowering *lowering = runtime ? runtime->registry_.lookup(magic) : 0;
     return lowering ? lowering->build(context, argc, argv) : JS_ThrowTypeError(context, "unknown tree helper");
   }
+  JSClassID JsCardBindingRegistry::treeClassId_ = 0;
+
+  bool JsCardBindingRegistry::installTreeClass(JSContext *ctx)
+  {
+    JSClassDef definition = {};
+    definition.class_name = "SmirkyTree";
+    if (!RegisterJsNativeClass(JS_GetRuntime(ctx), treeClassId_, definition))
+      return false;
+    JSValue proto = JS_NewObject(ctx);
+    if (JS_IsException(proto))
+      return false;
+    const IJsGlobal methods[] = {{"TEST_ID", &ScriptRuntime::testId, 1},
+                                 {"naturalWidth", &ScriptRuntime::naturalWidth, 0},
+                                 {"naturalHeight", &ScriptRuntime::naturalHeight, 0},
+                                 {"expStaticBlurUnit", &ScriptRuntime::expStaticBlurUnit, 0},
+                                 {"expBlurUnit", &ScriptRuntime::expBlurUnit, 0}};
+    for (unsigned i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i)
+    {
+      const IJsGlobal &method = methods[i];
+      JSValue function = JS_NewCFunction(ctx, method.fn, method.name, method.length);
+      if (JS_IsException(function) || JS_FreezeObject(ctx, function) < 0)
+      {
+        JS_FreeValue(ctx, function);
+        JS_FreeValue(ctx, proto);
+        return false;
+      }
+      if (JS_DefinePropertyValueStr(ctx, proto, method.name, function, 0) < 0)
+      {
+        JS_FreeValue(ctx, proto);
+        return false;
+      }
+    }
+    if (JS_FreezeObject(ctx, proto) < 0)
+    {
+      JS_FreeValue(ctx, proto);
+      return false;
+    }
+    // The context's class-proto table takes ownership; this API cannot fail.
+    JS_SetClassProto(ctx, treeClassId_, proto);
+    return true;
+  }
+
+  bool JsCardBindingRegistry::isTree(JSValueConst value)
+  {
+    return JS_GetClassID(value) == treeClassId_;
+  }
+
+  bool JsCardBindingRegistry::isTreePrototype(JSContext *ctx, JSValueConst value)
+  {
+    JSValue proto = JS_GetClassProto(ctx, treeClassId_);
+    const bool same = JS_IsObject(proto) && JS_VALUE_GET_PTR(value) == JS_VALUE_GET_PTR(proto);
+    JS_FreeValue(ctx, proto);
+    return same;
+  }
+
+  JSValue JsCardBindingRegistry::newTree(JSContext *ctx, int kind)
+  {
+    JSValue node = JS_NewObjectClass(ctx, treeClassId_);
+    JS_DefinePropertyValueStr(ctx, node, "kind", JS_NewInt32(ctx, kind), JS_PROP_ENUMERABLE);
+    return node;
+  }
+
+  JSValue JsCardBindingRegistry::copyTree(JSContext *ctx, JSValueConst source, JSValueConst id)
+  {
+    const bool tree = isTree(source);
+    // Every modifier copies the whole node, including the other modifiers'
+    // results ("testId", "enabledSeat", "rowWidth"), so modifiers chain in either order.
+    JsOwnProperties names(ctx);
+    if (!names.read(source, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK | JS_GPN_ENUM_ONLY))
+      return JS_EXCEPTION;
+    JSValue copy = tree ? JS_NewObjectClass(ctx, treeClassId_) : JS_NewObject(ctx);
+    if (JS_IsException(copy))
+      return copy;
+    for (uint32_t i = 0; i < names.count(); ++i)
+    {
+      JSValue value = JS_GetProperty(ctx, source, names.atom(i));
+      if (JS_IsException(value) || JS_DefinePropertyValue(ctx, copy, names.atom(i), value, JS_PROP_C_W_E) < 0)
+      {
+        JS_FreeValue(ctx, copy);
+        return JS_EXCEPTION;
+      }
+    }
+    if (!tree)
+    {
+      JSValue proto = JS_GetClassProto(ctx, treeClassId_);
+      JSValue function = JS_GetPropertyStr(ctx, proto, "TEST_ID");
+      JS_FreeValue(ctx, proto);
+      if (JS_IsException(function) || JS_SetPropertyStr(ctx, copy, "TEST_ID", function) < 0)
+      {
+        JS_FreeValue(ctx, copy);
+        return JS_EXCEPTION;
+      }
+    }
+    if (!JS_IsUndefined(id) && JS_SetPropertyStr(ctx, copy, "testId", JS_DupValue(ctx, id)) < 0)
+    {
+      JS_FreeValue(ctx, copy);
+      return JS_EXCEPTION;
+    }
+    return copy;
+  }
   namespace
   {
     bool installDescriptorFunction(JSContext *ctx, JSValueConst tree, const char *name, JSCFunction *function)
     {
       JSValue value = JS_NewCFunction(ctx, function, name, 1);
       return !JS_IsException(value) && JS_SetPropertyStr(ctx, tree, name, value) >= 0;
-    }
-    JSValue newTree(JSContext *ctx, int kind)
-    {
-      JSValue node = JS_NewObject(ctx);
-      JS_DefinePropertyValueStr(ctx, node, "kind", JS_NewInt32(ctx, kind), JS_PROP_ENUMERABLE);
-      JS_SetPropertyStr(ctx, node, "TEST_ID", JS_NewCFunction(ctx, &ScriptRuntime::testId, "TEST_ID", 1));
-      JS_SetPropertyStr(
-          ctx, node, "naturalWidth", JS_NewCFunction(ctx, &ScriptRuntime::naturalWidth, "naturalWidth", 0));
-      JS_SetPropertyStr(
-          ctx, node, "naturalHeight", JS_NewCFunction(ctx, &ScriptRuntime::naturalHeight, "naturalHeight", 0));
-      JS_SetPropertyStr(ctx,
-                        node,
-                        "expStaticBlurUnit",
-                        JS_NewCFunction(ctx, &ScriptRuntime::expStaticBlurUnit, "expStaticBlurUnit", 0));
-      JS_SetPropertyStr(ctx, node, "expBlurUnit", JS_NewCFunction(ctx, &ScriptRuntime::expBlurUnit, "expBlurUnit", 0));
-      return node;
     }
     JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
     {
@@ -280,7 +367,7 @@ namespace smirkycard
         JSValue children = collectChildren(ctx, name, argc, argv, kMaximumTreeChildren, false);
         if (JS_IsException(children))
           return children;
-        JSValue tree = newTree(ctx, kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
         if (JS_IsException(tree))
         {
           JS_FreeValue(ctx, children);
@@ -371,7 +458,7 @@ namespace smirkycard
         JSValue children = collectChildren(ctx, name, 1, argv + 2, rows * cols, true);
         if (JS_IsException(children))
           return children;
-        JSValue tree = newTree(ctx, kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
         if (JS_IsException(tree))
         {
           JS_FreeValue(ctx, children);
@@ -434,7 +521,7 @@ namespace smirkycard
         loka::app::BlockStyle block;
         if (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], block))
           return JS_EXCEPTION;
-        JSValue n = newTree(ctx, kind);
+        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
         if (JS_IsException(n))
           return n;
         if (JS_SetPropertyStr(ctx, n, "text", JS_DupValue(ctx, argv[0])) < 0
@@ -492,7 +579,7 @@ namespace smirkycard
         loka::app::BlockStyle block;
         if (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], block))
           return JS_EXCEPTION;
-        JSValue n = newTree(ctx, kind);
+        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
         if (JS_IsException(n))
           return n;
         if (JS_SetPropertyStr(ctx, n, "markup", JS_DupValue(ctx, argv[0])) < 0
@@ -542,7 +629,7 @@ namespace smirkycard
       {
         if (argc != 1)
           return JS_ThrowTypeError(ctx, "EditText(seat) requires one seat");
-        JSValue n = newTree(ctx, kind);
+        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
         JS_SetPropertyStr(ctx, n, "seat", JS_DupValue(ctx, argv[0]));
         JS_FreezeObject(ctx, n);
         return n;
@@ -554,7 +641,7 @@ namespace smirkycard
     };
     JSValue seatTree(JSContext *ctx, int kind, JSValueConst seat, JSValueConst child = JS_UNDEFINED)
     {
-      JSValue tree = newTree(ctx, kind);
+      JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
       if (JS_IsException(tree))
         return tree;
       if (JS_SetPropertyStr(ctx, tree, "seat", JS_DupValue(ctx, seat)) < 0
@@ -619,7 +706,7 @@ namespace smirkycard
       JS_FreeValue(ctx, childKind);
       if (!valid)
         return JS_ThrowTypeError(ctx, "%s(child) requires one tree", name);
-      JSValue tree = newTree(ctx, kind);
+      JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
       if (JS_IsException(tree))
         return tree;
       if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0 || JS_FreezeObject(ctx, tree) < 0)
@@ -779,7 +866,7 @@ namespace smirkycard
         if (!valid)
           return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
         int top = 0, bottom = 0;
-        JSValue tree = newTree(ctx, this->kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
         if (JS_IsException(tree))
           return tree;
         if (argc == 2 && !readScrollOptions(ctx, argv[1], tree, top, bottom))
@@ -1025,7 +1112,7 @@ namespace smirkycard
         if (!valid)
           return JS_ThrowTypeError(
               ctx, "%s(child, options?) requires one tree and an optional options object", this->name);
-        JSValue tree = newTree(ctx, this->kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
         if (JS_IsException(tree))
           return tree;
         if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
@@ -1164,7 +1251,7 @@ namespace smirkycard
           return JS_ThrowTypeError(ctx, "ImageView(imageSeat, options?) requires a seat and optional options");
         if (argc == 1)
           return seatTree(ctx, this->kind, argv[0]);
-        JSValue tree = newTree(ctx, this->kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
         if (JS_IsException(tree))
           return tree;
         if (JS_SetPropertyStr(ctx, tree, "seat", JS_DupValue(ctx, argv[0])) < 0 || !copyImageOptions(ctx, argv[1], tree)
@@ -1296,7 +1383,7 @@ namespace smirkycard
           JS_FreeValue(ctx, children);
           return JS_EXCEPTION;
         }
-        JSValue tree = newTree(ctx, this->kind);
+        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
         if (JS_IsException(tree))
         {
           JS_FreeValue(ctx, children);
@@ -1328,7 +1415,7 @@ namespace smirkycard
       {
         if (argc != 2 || !JS_IsFunction(ctx, argv[1]))
           return JS_ThrowTypeError(ctx, "%s(label, handler) requires a label and function", name);
-        JSValue n = newTree(ctx, kind);
+        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
         JS_SetPropertyStr(ctx, n, "label", JS_DupValue(ctx, argv[0]));
         JS_SetPropertyStr(ctx, n, "handler", JS_DupValue(ctx, argv[1]));
         if (!this->cell_)
