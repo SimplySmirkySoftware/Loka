@@ -1358,6 +1358,96 @@ namespace
                 && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
   }
 
+  void checkTreeCopyPaths()
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String result, error;
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal(
+        "(()=>{const d=Text('a'), p=Object.prototype;"
+        "const copies=[d.TEST_ID('x'),Row().naturalWidth(),VStack().naturalHeight(),"
+        "ZStack().expStaticBlurUnit(),ZStack().expBlurUnit(),Button('',()=>{}).enabled({})];"
+        // Commit 2 rewrites the tree copy's prototype and own TEST_ID expectations.
+        "if(!copies.every(c=>Object.getPrototypeOf(c)===p&&Object.hasOwn(c,'TEST_ID')))return false;"
+        "const a=ToolbarItem('',()=>{}),b=ToolbarItem.label('x'),"
+        "f=ToolbarItem.flexibleSpace(),s=ToolbarItem.fixedSpace(2);"
+        "if(Object.getOwnPropertyNames(a).sort().join(',')!=='TEST_ID,enabled,handler,kind,label')return false;"
+        "if(Object.getOwnPropertyNames(b).sort().join(',')!=='TEST_ID,kind,label')return false;"
+        "if(Object.getOwnPropertyNames(f).sort().join(',')!=='kind')return false;"
+        "if(Object.getOwnPropertyNames(s).sort().join(',')!=='kind,width')return false;"
+        "const items=[a.enabled({}).TEST_ID('x'),a.TEST_ID('x').enabled({}),b.TEST_ID('l'),"
+        "f,s];"
+        "if(!items.slice(0,3).every(c=>Object.getPrototypeOf(c)===p&&Object.hasOwn(c,'TEST_ID')))return false;"
+        "if(Toolbar(...items.slice(2)).children.length!==3)return false;"
+        "const plain=d.TEST_ID.call(Object.create({inherited:1}),'plain');"
+        "return Object.getPrototypeOf(plain)===p&&Object.hasOwn(plain,'TEST_ID')&&"
+        "Object.hasOwn(Button('',()=>{}),'enabled')&&typeof Text('').enabled==='undefined';})()"),
+        result, error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
+    // Both orders must also survive lower's descriptor and seat validation.
+    LOKA_VERIFY(runtime.loadBuiltin(
+        "card('first',class{constructor(c){this.b=c.state(true)}compose(){return Toolbar("
+        "ToolbarItem('a',()=>{}).enabled(this.b).TEST_ID('A'),"
+        "ToolbarItem('b',()=>{}).TEST_ID('B').enabled(this.b),ToolbarItem.label('l').TEST_ID('L'))}});", error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
+    LOKA_VERIFY(find(root, "A") && find(root, "B") && find(root, "L"));
+    LOKA_VERIFY(!find(root, "SmirkyCard.Status"));
+  }
+
+  void checkTreeHelperMessages()
+  {
+    // Commit 2 rewrites these refusals when trees cease to be plain dictionaries.
+    const char *expressions[] = {"Text('',Text(''))", "Text('',{},Text(''))",
+      "ScrollView(Text(''),Text(''))", "ScrollView(Text(''),{insets:Text('')})",
+      "Box(Text(''),Text(''))", "ClipBox(Text(''),Text(''))", "ImageView({},Text(''))", "Toolbar(Text(''))"};
+    const char *messages[] = {"Unknown Text style key", "Unknown Block style key",
+      "ScrollView options accept only insets and viewport", "ScrollView insets accept only top and bottom",
+      "Box options accept only width, height and padding", "ClipBox options accept only width, height and padding",
+      "Unknown ImageView options key", "Toolbar requires ToolbarItem descriptors"};
+    for (unsigned i = 0; i < sizeof(expressions) / sizeof(expressions[0]); ++i)
+    {
+      const std::string source = std::string("card('first',class{compose(){return ") + expressions[i] + "}});";
+      checkComposeRefusal(source.c_str(), messages[i]);
+    }
+  }
+
+  void checkTreePrototypeRefusal()
+  {
+    for (int polluted = 0; polluted < 2; ++polluted)
+    {
+      smirkycard::ScriptRuntime runtime;
+      loka::core::String result, error;
+      LOKA_VERIFY(runtime.loadBuiltin(polluted
+        ? "card('first',class{compose(){const d=Text('');Object.prototype.kind=d.kind;"
+          "Object.prototype.text='x';return Object.getPrototypeOf(d)}});"
+        : "card('first',class{compose(){return Object.getPrototypeOf(Text(''))}});", error));
+      NullPlatformContext context;
+      NullScenePlatformController platform;
+      WindowProps props;
+      props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+      NullWindow window(&context, props, &platform);
+      WindowAdmissionTestApp admission(window);
+      loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+      // Restore inside JS even if the new identity guard never reads inherited kind.
+      LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal(
+        "delete Object.prototype.kind;delete Object.prototype.text;true"), result, error));
+      loka::app::scene::Node *root = loka::dsl::testing::SceneTestAccess::rootNode(*window.scene());
+      loka::app::scene::Node *status = find(root, "SmirkyCard.Status");
+      // Commit 2 rewrites both cases to the invalid-node refusal.
+      if (polluted)
+        LOKA_VERIFY(!status);
+      else
+        LOKA_VERIFY(status && status->asTextNode()
+                    && textValue(status->asTextNode()).find("unknown kind") != std::string::npos);
+    }
+  }
+
   std::string toolbarCard(const std::string &body)
   {
     return "card('first',class{constructor(c){this.c=c;this.s=c.state('short');this.b=c.state(false)}compose(){" + body
@@ -6125,6 +6215,14 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--tree-helpers"))
+  {
+    checkTreePropertyCopy();
+    checkTreeCopyPaths();
+    checkTreeHelperMessages();
+    checkTreePrototypeRefusal();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--toolbar-registry"))
   {
     checkToolbarRegistry();
@@ -6374,6 +6472,9 @@ int main(int argc, char **argv)
   checkBlockStyle();
   checkMarkupAllocationRefusal();
   checkTreePropertyCopy();
+  checkTreeCopyPaths();
+  checkTreeHelperMessages();
+  checkTreePrototypeRefusal();
   checkTextStyleRefusals();
   checkChangedTextStyleRefusal();
   printRecordCosts();
