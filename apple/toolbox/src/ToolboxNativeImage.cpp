@@ -108,6 +108,9 @@ namespace loka
         payload->pictureEnd = pictureEnd - pictureOffset;
       }
 
+      payload->admission = ScanToolboxPictAdmission(payload->blob.data() + payload->pictureOffset,
+                                                    payload->pictureEnd - payload->pictureOffset);
+
       ToolboxNativeImage *native = loka::core::LokaNew<ToolboxNativeImage>(NativeImageSite());
       if (!native)
       {
@@ -119,20 +122,6 @@ namespace loka
       native->payload = payload;
 
       return loka::core::resource::Image::FromNative(native, width, height, &ReleaseToolboxNativeImage, 0);
-    }
-
-    const ToolboxNativeImage *TryGetToolboxNativeImage(const loka::core::resource::Image &image)
-    {
-      if (!image.isValid())
-      {
-        return 0;
-      }
-      const ToolboxNativeImage *native = static_cast<const ToolboxNativeImage *>(image.nativeHandle());
-      if (!native || native->magic != kToolboxNativeImageMagic)
-      {
-        return 0;
-      }
-      return native;
     }
   } // namespace toolbox
 } // namespace loka

@@ -2,6 +2,7 @@
 #include "ToolboxHost.hpp"
 #include "ToolboxInputDoor.hpp"
 #include "ToolboxNativeImage.hpp"
+#include "support/PictAdmissionFixture.hpp"
 #include "context/ToolboxImageViewContext.hpp"
 #include "context/ToolboxPaintSupport.hpp"
 #ifdef LOKA_HOST_GAP_DISPATCH
@@ -146,7 +147,7 @@ namespace
       return this->nodeHandlerRegistry_.find(node)->ensureContext(node, this, state) != 0;
     }
   };
-  void clippedImagePlacement()
+  void clippedImagePlacement(const std::string &mode)
   {
     ToolboxWindow window;
     HostPortScope port(window.window());
@@ -158,8 +159,42 @@ namespace
     NodeState<Frame> viewport(&origin, 0);
     ScrollViewNode scroll((ScrollViewProps(viewport)));
     BoxNode *box = new BoxNode(Box().size(60, 600).clipChildren().props);
+    MutableState<Image> imageState;
+    if (mode != "clip-placement")
+    {
+      if (mode == "admission-raw")
+        imageState.set(picture(false));
+      else if (mode != "admission-empty")
+      {
+        pict_fixture::Bytes bytes = pict_fixture::picture();
+        if (mode == "admission-color")
+          pict_fixture::putWord(bytes, 13, 0x8008);
+        Blob blob = Blob::Create();
+        // A nonzero range tests the installed snapshot/rebase as well as sharing.
+        bytes.insert(bytes.begin(), 7, 0xA5);
+        const std::size_t end = bytes.size();
+        bytes.insert(bytes.end(), 13, 0xA5);
+        LOKA_VERIFY(blob.tryAssign(&bytes[0], bytes.size()));
+        if (mode != "admission-snapshot")
+          blob.sealBytes();
+        imageState.set(loka::toolbox::MakeImageFromPictBlob(blob, 7, end, 16, 1));
+        LOKA_VERIFY(imageState.get().isValid());
+        const loka::toolbox::ToolboxPictBytesPayload *payload =
+            static_cast<const loka::toolbox::ToolboxPictBytesPayload *>(
+                loka::toolbox::TryGetToolboxNativeImage(imageState.get())->payload);
+        LOKA_VERIFY(payload->admission.admitsTranslation() == (mode != "admission-color"));
+        if (mode == "admission-snapshot")
+        {
+          blob.mutableData()[7 + 12] = 0xA1;
+          LOKA_VERIFY(payload->pictureOffset == 0);
+          LOKA_VERIFY(payload->admission.admitsTranslation());
+        }
+      }
+    }
     ImageViewProps props;
-    props.size(20, 20);
+    props.image(&imageState).size(20, 20);
+    if (mode == "admission-cover")
+      props.attr(ImageViewAttr().fit(IMAGE_FIT_COVER));
     ImageViewNode *image = new ImageViewNode(props);
     box->addChild(image);
     scroll.addChild(box);
@@ -170,16 +205,33 @@ namespace
     Rect clip;
     LOKA_VERIFY(static_cast<ToolboxClipBoxContext *>(box->getContext())->placement().query(clip));
     LOKA_VERIFY(image->getContext());
-    image->props.size(21, 20);
+    if (mode == "clip-placement")
+      image->props.size(21, 20);
     origin.set(Frame(0, 16, 0, 0));
+    if (mode != "clip-placement")
+    {
+      // Seed the prior completed-pass fact; this pin exercises layout admission.
+      ToolboxPresentObservation::Interval previous(
+          controller.observation_, true, controller.debugStats_, controller.scrollBarLedger_);
+      controller.observation_.complete(0);
+      controller.observation_.markPaintFinished();
+    }
     controller.observation_.reset();
+    controller.observation_.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
     state = seat();
     state.width = 100;
     state.height = 100;
     LayoutNode(&scroll, state, &controller, 0);
     LOKA_VERIFY(controller.observation_.viewports() == 1);
-    LOKA_VERIFY(controller.observation_.unsupportedKinds() == 0);
-    LOKA_VERIFY(controller.observation_.notTranslated() == 1);
+    const bool refused = mode == "admission-raw" || mode == "admission-color" || mode == "admission-cover";
+    LOKA_VERIFY(controller.observation_.unsupportedKinds() == (refused ? 1U : 0U));
+    if (mode == "clip-placement")
+      LOKA_VERIFY(controller.observation_.notTranslated() == 1);
+    else if (refused)
+    {
+      controller.observation_.complete(0);
+      LOKA_VERIFY(controller.observation_.refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    }
     controller.clearControls();
     controller.releaseNodeContexts(&scroll);
   }
@@ -191,9 +243,9 @@ int main(int argc, char **argv)
   LOKA_VERIFY(argc == 2);
   const std::string mode(argv[1]);
 #ifdef LOKA_HOST_GAP_DISPATCH
-  if (mode == "clip-placement")
+  if (mode == "clip-placement" || mode.find("admission-") == 0)
   {
-    clippedImagePlacement();
+    clippedImagePlacement(mode);
     return 0;
   }
 #endif
