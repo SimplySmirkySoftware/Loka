@@ -260,6 +260,129 @@ namespace
                   == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
     }
   };
+  /** A render-time writer exercises the real window request doors. */
+  class RequestingProbe : public Probe
+  {
+  public:
+    enum Request
+    {
+      NONE,
+      RECT_ONCE,
+      FULL_ONCE,
+      RECT_ALWAYS
+    };
+    Request request;
+    explicit RequestingProbe()
+        : Probe("requesting", 70),
+          request(NONE)
+    {
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      Probe::render(platform);
+      ToolboxWindow *window = static_cast<ToolboxScenePlatformController *>(platform)->window_;
+      const Request current = this->request;
+      if (current != RECT_ALWAYS)
+        this->request = NONE;
+      const Rect rect = {20, 10, 40, 40};
+      if (current == RECT_ONCE || current == RECT_ALWAYS)
+        window->requestInvalidateRect(rect);
+      else if (current == FULL_ONCE)
+        window->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    }
+  };
+  void presentBatchRequests()
+  {
+    std::fprintf(stderr,
+                 "[pin] sizeof(ToolboxPresentBatch)=%lu bool+vector=%lu\n",
+                 static_cast<unsigned long>(sizeof(ToolboxPresentBatch)),
+                 static_cast<unsigned long>(sizeof(bool) + sizeof(std::vector<Rect>)));
+    RequestingProbe *writer = new RequestingProbe;
+    StaticFixture f(writer);
+    f.ready();
+    f.controller.resetDebugStats();
+    writer->request = RequestingProbe::RECT_ONCE;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 1);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowRectRequestCount == 1);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == 1);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 1);
+
+    f.controller.resetDebugStats();
+    writer->request = RequestingProbe::FULL_ONCE;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFullRequestCount == 2);
+    LOKA_VERIFY(std::strcmp(f.controller.debugStatsForTesting().windowFullRequestSource, "layout_dirty") == 0);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 2);
+
+    const Rect first = {20, 10, 40, 40};
+    const Rect second = {50, 10, 60, 40};
+    f.controller.resetDebugStats();
+    writer->request = RequestingProbe::RECT_ONCE;
+    f.window.requestInvalidateRect(first);
+    f.window.requestInvalidateRect(second);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == 2);
+    LOKA_VERIFY(f.window.hasPendingInvalidate());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == 3);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowRectRequestCount == 3);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+
+    for (unsigned order = 0; order != 2; ++order)
+    {
+      f.controller.resetDebugStats();
+      if (order == 0)
+        f.window.requestInvalidateRect(first);
+      f.window.requestInvalidate();
+      if (order == 1)
+        f.window.requestInvalidateRect(first);
+      LOKA_VERIFY(f.window.next_.full());
+      LOKA_VERIFY(f.window.next_.rects().empty());
+      f.window.flushInvalidate();
+      LOKA_VERIFY(!f.window.hasPendingInvalidate());
+      LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 1);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == 0);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().windowRectRequestCount == 1);
+    }
+    f.controller.resetDebugStats();
+    f.window.requestInvalidateRect(first);
+    f.update();
+    LOKA_VERIFY(f.window.hasPendingInvalidate());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == 1);
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+
+    // A writer must request only on change: self-requests stay bounded per present.
+    writer->request = RequestingProbe::RECT_ALWAYS;
+    f.controller.resetDebugStats();
+    f.window.requestInvalidateRect(first);
+    for (int present = 1; present <= 3; ++present)
+    {
+      f.window.flushInvalidate();
+      LOKA_VERIFY(f.window.hasPendingInvalidate());
+      LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushDirtyCount == present);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().windowRectRequestCount == present + 1);
+    }
+    writer->request = RequestingProbe::NONE;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    // Destruction of a non-empty batch must never paint.
+    const unsigned draws = writer->renders;
+    {
+      ToolboxWindow dying;
+      dying.requestInvalidateRect(first);
+    }
+    LOKA_VERIFY(writer->renders == draws);
+  }
   void flushFirstCapture();
   void staticNoRequests()
   {
@@ -281,7 +404,7 @@ namespace
                   before,
                   toolbox_host::invalidations,
                   toolbox_host::staticCaptures,
-                  static_cast<unsigned long>(f.window.pendingInvalidateRects_.size()));
+                  static_cast<unsigned long>(f.window.next_.rects().size()));
       std::fflush(stdout);
       LOKA_VERIFY(toolbox_host::invalidations == before);
       LOKA_VERIFY(!f.window.hasPendingInvalidate());
@@ -319,7 +442,7 @@ namespace
     --small.right;
     ToolboxRenderDirtyInCompositionOrder(f.controller, small);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
-    LOKA_VERIFY(f.window.pendingInvalidateRects_.empty());
+    LOKA_VERIFY(f.window.next_.rects().empty());
     const unsigned before = toolbox_host::invalidations;
     f.window.flushInvalidate();
     LOKA_VERIFY(toolbox_host::invalidations == before);
@@ -1434,11 +1557,29 @@ namespace
       }
     }
   };
-  template <int Mode> struct PresentLiveFixture
+  /** Mirror production context-admission notification; the host base omits it. */
+  class MaterializingController : public PresentController
+  {
+  public:
+    explicit MaterializingController(ToolboxWindow *window)
+        : PresentController(window)
+    {
+    }
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      NodeContext *previous = node ? node->getContext() : 0;
+      if (!PresentController::prepareProjectedLayout(node, state))
+        return false;
+      if (node->getContext() != previous)
+        this->requestStructurePresent();
+      return true;
+    }
+  };
+  template <int Mode, class Controller = PresentController> struct PresentLiveFixture
   {
     ToolboxWindow window;
     HostPortScope port;
-    PresentController controller;
+    Controller controller;
     Scene scene;
     PresentLiveNode<Mode> *root;
     PresentLiveFixture()
@@ -1472,9 +1613,36 @@ namespace
       return this->controller.debugStatsForTesting().lastMovedPresentObservation;
     }
   };
+  void presentBatchMaterialization()
+  {
+    PresentLiveFixture<3, MaterializingController> f;
+    // The ScrollView's Show arm creates contexts during the first layout.
+    // Accept one coalesced follow-up full draw for that creation wave.
+    LOKA_VERIFY(f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 1);
+    LOKA_VERIFY(std::strcmp(f.controller.debugStatsForTesting().windowFullRequestSource, "structure-swap") == 0);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 2);
+    PresentLiveFixture<0> later;
+    later.window.flushInvalidate();
+    LOKA_VERIFY(!later.window.hasPendingInvalidate());
+    {
+      StateTrackerGuard transaction(later.root->tracker());
+      later.root->width.set(170);
+    }
+    // #1513: a later layout publication is a new attempt, never part of sealed.
+    loka::dsl::testing::SceneTestAccess::flushInvalidation(later.scene);
+    LOKA_VERIFY(later.window.hasPendingInvalidate());
+    later.window.flushInvalidate();
+    LOKA_VERIFY(!later.window.hasPendingInvalidate());
+  }
   void viewportInput(const char *which)
   {
     PresentLiveFixture<0> f;
+    // Drain the first layout creation wave: it belongs to the previous present.
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
     f.controller.resetDebugStats();
     const ToolboxSceneDebugStats before = f.controller.debugStatsForTesting();
     ControlRef bar = f.controller.scrollControl(0).control;
@@ -1483,7 +1651,7 @@ namespace
     const Point point = {static_cast<short>(bar->rect.top + 4), static_cast<short>(bar->rect.left + 3)};
     LOKA_VERIFY(!ToolboxInputDoor::mouseDown(f.controller, point));
     LOKA_VERIFY(f.controller.debugStats_.windowRectRequestCount == before.windowRectRequestCount);
-    const bool fullPending = f.window.needsInvalidate_;
+    const bool fullPending = f.window.next_.full();
     const char *firstRequest = f.controller.debugStatsForTesting().windowFullRequestSource;
     const bool followUp = std::strcmp(which, "ViewportInputFollowUp") == 0;
     if (followUp)
@@ -3320,6 +3488,8 @@ int main(int argc, char **argv)
                          "StaticNoRequests",
                          "StaticCopyFailure",
                          "StaticRefusedReplay",
+                         "PresentBatchRequests",
+                         "PresentBatchMaterialization",
                          "FlushFirstCapture",
                          "StaticOpportunities",
                          "ErasedAdmissionMatrix",
@@ -3427,6 +3597,10 @@ int main(int argc, char **argv)
     staticCopyFailure();
   else if (std::strcmp(argv[1], "StaticFirstUnit") == 0)
     staticFirstUnit();
+  else if (std::strcmp(argv[1], "PresentBatchMaterialization") == 0)
+    presentBatchMaterialization();
+  else if (std::strcmp(argv[1], "PresentBatchRequests") == 0)
+    presentBatchRequests();
   else if (std::strcmp(argv[1], "FlushFirstCapture") == 0)
     flushFirstCapture();
   else if (std::strcmp(argv[1], "StaticOpportunities") == 0)
