@@ -569,7 +569,8 @@ EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,
   this->settle(scene::SETTLE_INPUT, op);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
   if (result == EDITOR_OK && op.hasSameContext() && this->unicode_)
-    this->lastNativeSize_ = TXNDataSize(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)));
+    this->lastNativeSize_ =
+        TXNDataSize(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)));
 #endif
   return result;
 }
