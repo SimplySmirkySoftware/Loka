@@ -212,6 +212,11 @@ EditorResult ToolboxUnicodeTextEditorContext::project()
           staged.changes = TXNGetChangeCount(object);
           preparation.publish(staged);
           loka::toolbox::probe::HeapSample("a-project", static_cast<long>(count * 2));
+          {
+            TXNActionKey action = 0;
+            const Boolean can = TXNCanUndo(object, &action);
+            loka::toolbox::probe::HeapSample(can ? "a-project-canundo" : "a-project-noundo", static_cast<long>(action));
+          }
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
           this->sampleNativeSize(false);
 #endif
@@ -672,6 +677,11 @@ bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
   switch (verb)
   {
   case EDIT_UNDO:
+    {
+      TXNActionKey action = 0;
+      const Boolean can = TXNCanUndo(object, &action);
+      loka::toolbox::probe::HeapSample(can ? "d-before-canundo" : "d-before-noundo", static_cast<long>(action));
+    }
     TXNUndo(object);
     if (!op.hasSameContext())
       return true;
