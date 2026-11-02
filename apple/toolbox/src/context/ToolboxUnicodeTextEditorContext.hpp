@@ -92,8 +92,11 @@ private:
   loka::app::EditorResult status_;
   ToolboxUnicodeProjection projection_;
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-  // Diagnostic only: this editor's last sampled native size (door completion / idle).
-  unsigned long lastNativeSize_; // ByteCount, kept include-free
+  /** Diagnostic only. The one write door of lastNativeSize_: samples this
+      editor's native size; from idle it first reports a change that no door
+      explained ([unicode-outside-door]). Not an input or settle door. */
+  void sampleNativeSize(bool fromIdle);
+  unsigned long lastNativeSize_; // ByteCount, kept include-free; written only by sampleNativeSize
 #endif
 };
 bool RegisterToolboxUnicodeTextEditorNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);

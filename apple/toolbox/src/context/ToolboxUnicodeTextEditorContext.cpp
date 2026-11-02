@@ -210,7 +210,7 @@ EditorResult ToolboxUnicodeTextEditorContext::project()
           staged.changes = TXNGetChangeCount(object);
           preparation.publish(staged);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-          this->lastNativeSize_ = TXNDataSize(object);
+          this->sampleNativeSize(false);
 #endif
         }
       }
@@ -568,9 +568,8 @@ EditorResult ToolboxUnicodeTextEditorContext::finishInput(EditorResult result,
     SysBeep(1);
   this->settle(scene::SETTLE_INPUT, op);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-  if (result == EDITOR_OK && op.hasSameContext() && this->unicode_)
-    this->lastNativeSize_ =
-        TXNDataSize(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)));
+  if (result == EDITOR_OK && op.hasSameContext())
+    this->sampleNativeSize(false);
 #endif
   return result;
 }
@@ -739,22 +738,28 @@ void ToolboxUnicodeTextEditorContext::idleTick()
   {
     this->controller()->unicodeEditors_.idle(this->unicode_);
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
-    // Best-effort focused-row sample only; this is not an input/settle door.
-    static unsigned long outsideDoorSamples = 0;
-    TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
-    const ByteCount size = TXNDataSize(object);
-    if (this->phase_ == IDLE && size != this->lastNativeSize_)
-    {
-      std::fprintf(stderr,
-                   "[unicode-outside-door] object=%p delta=%ld samples=%lu\n",
-                   static_cast<void *>(object),
-                   static_cast<long>(size) - static_cast<long>(this->lastNativeSize_),
-                   ++outsideDoorSamples);
-      this->lastNativeSize_ = size;
-    }
+    this->sampleNativeSize(true);
 #endif
   }
 }
+#if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
+void ToolboxUnicodeTextEditorContext::sampleNativeSize(bool fromIdle)
+{
+  if (!this->unicode_)
+    return;
+  // Best-effort focused-row sample only; this is not an input/settle door.
+  static unsigned long outsideDoorSamples = 0;
+  TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
+  const ByteCount size = TXNDataSize(object);
+  if (fromIdle && this->phase_ == IDLE && size != this->lastNativeSize_)
+    std::fprintf(stderr,
+                 "[unicode-outside-door] object=%p delta=%ld samples=%lu\n",
+                 static_cast<void *>(object),
+                 static_cast<long>(size) - static_cast<long>(this->lastNativeSize_),
+                 ++outsideDoorSamples);
+  this->lastNativeSize_ = size;
+}
+#endif
 Rect ToolboxUnicodeTextEditorContext::chromeRect() const
 {
   Rect port = Rect(), sizeBox = Rect();
