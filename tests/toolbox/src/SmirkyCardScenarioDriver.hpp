@@ -29,6 +29,7 @@ private:
   {
     WAITING_ARROW,
     RUNNING,
+    RUNNING_ARROW,
     LINGERING
   };
   Phase phase_;

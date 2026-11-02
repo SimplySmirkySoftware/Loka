@@ -203,7 +203,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:181" : "ToolboxRender.cpp:191");
+                    button ? "ToolboxRender.cpp:213" : "ToolboxRender.cpp:223");
         return;
       }
       c.paintSuppressClipRgn_ = 0;
@@ -338,7 +338,7 @@ namespace
       toolbox_host::refuseControls = 0;
       expected = std::strstr(mode, "Props")     ? "ToolboxContextProps.cpp:90"
                  : std::strstr(mode, "Acquire") ? "ToolboxButtonContext.cpp:183"
-                                                : "ToolboxButtonControl.cpp:101";
+                                                : "ToolboxButtonControl.cpp:102";
       refusalSite(c.observation_.outsideRefusal(), expected);
       return;
     }

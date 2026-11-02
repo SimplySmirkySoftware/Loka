@@ -53,6 +53,14 @@ namespace loka
 using namespace loka::app;
 using namespace loka::app::scene;
 using namespace loka::core;
+class ToolboxErasedPassInspection
+{
+public:
+  static ToolboxErasedEvidence::Kind kind(const ToolboxErasedPass &pass)
+  {
+    return pass.descriptor_ ? pass.descriptor_->erased.kind() : ToolboxErasedEvidence::NONE;
+  }
+};
 class ToolboxBlurSnapshotInspection
 {
 public:
@@ -1538,7 +1546,7 @@ namespace
     PresentFixture transparent(false, 0, component);
     transparent.scroll(17);
     LOKA_VERIFY(transparent.last().unsupportedKinds() == 0);
-    LOKA_VERIFY(transparent.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(transparent.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   void presentRefusedVisit()
   {
@@ -1570,7 +1578,7 @@ namespace
     f.scroll(17);
     LOKA_VERIFY(f.last().unsupportedKinds() == 0);
     LOKA_VERIFY(f.last().notTranslated() == 0);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   void presentCardBandPhase()
   {
@@ -1585,7 +1593,7 @@ namespace
     f.scroll(33);
     LOKA_VERIFY(f.last().dy() == 16);
     LOKA_VERIFY(f.last().phaseBound() >= 1);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   template <int Mode> class PresentLiveNode;
   template <int Mode>
@@ -1717,6 +1725,221 @@ namespace
       return this->controller.debugStatsForTesting().lastMovedPresentObservation;
     }
   };
+  class CopyPaintProbe : public TextNode
+  {
+  public:
+    enum Action
+    {
+      PAINT,
+      REFUSE,
+      FAIL_GROW
+    };
+    Action action;
+    unsigned paints;
+    ToolboxErasedEvidence::Kind erasedKind;
+    CopyPaintProbe()
+        : TextNode(TextProps("copy probe")),
+          action(PAINT),
+          paints(0),
+          erasedKind(ToolboxErasedEvidence::NONE)
+    {
+    }
+    virtual void render(IPlatformController *controller)
+    {
+      ++this->paints;
+      this->erasedKind =
+          ToolboxErasedPassInspection::kind(static_cast<ToolboxScenePlatformController *>(controller)->erasedPass());
+      TextNode::render(controller);
+      if (this->action == REFUSE)
+        LOKA_PAINT_REFUSE(*static_cast<ToolboxScenePlatformController *>(controller),
+                          TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
+      if (this->action == FAIL_GROW)
+        toolbox_host::refuseRegionAttempt = toolbox_host::regions + 2;
+      this->action = PAINT;
+    }
+  };
+  void presentCopy(const char *which)
+  {
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    CopyPaintProbe *probe = new CopyPaintProbe;
+    content->addChild(probe);
+    PresentFixture f(false, 0, content);
+    f.window.flushInvalidate();
+    toolbox_host::scrollRects.clear();
+    toolbox_host::scrollOffsets.clear();
+    toolbox_host::repairUnions.clear();
+    const bool allocation = std::strcmp(which, "CopyAllocation") == 0;
+    const bool visibility = std::strcmp(which, "CopyVisibility") == 0;
+    const bool exposed = std::strcmp(which, "CopyExposedRecovery") == 0;
+    const bool clip = std::strcmp(which, "CopyClipFailure") == 0;
+    const bool refuse = std::strcmp(which, "CopyPaintRefusal") == 0;
+    const bool grow = std::strcmp(which, "CopyGrowFailure") == 0;
+    if (refuse)
+      probe->action = CopyPaintProbe::REFUSE;
+    if (grow)
+      probe->action = CopyPaintProbe::FAIL_GROW;
+    const unsigned paints = probe->paints;
+    const bool update = std::strcmp(which, "CopyUpdate") == 0;
+    if (visibility)
+      f.window.port.native.visibleRegion.rgnBBox = Rect();
+    f.origin.set(Frame(0, 16, 0, 0));
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    if (allocation)
+      toolbox_host::refuseRegionAttempt = toolbox_host::regions + 3;
+    toolbox_host::refuseExposedUnion = exposed;
+    toolbox_host::refuseCopiedClip = clip;
+    if (update)
+      f.window.drawForUpdate();
+    else
+      f.window.flushInvalidate();
+    toolbox_host::refuseRegionAttempt = 0;
+    toolbox_host::refuseCopiedClip = false;
+    toolbox_host::refuseExposedUnion = false;
+    const ToolboxPresentResult &result = f.controller.debugStatsForTesting().lastMovedPresentObservation;
+    LOKA_VERIFY(result.verdict() == TOOLBOX_PRESENT_COPY);
+    LOKA_VERIFY(result.refusal() == TOOLBOX_PRESENT_ADMITTED);
+    if (allocation || visibility || update)
+    {
+      LOKA_VERIFY(result.executed() == TOOLBOX_PRESENT_ERASED);
+      LOKA_VERIFY(toolbox_host::scrollRects.empty());
+    }
+    else
+    {
+      LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+      LOKA_VERIFY(EqualRect(&toolbox_host::scrollRects[0], &result.copyDomain()));
+      LOKA_VERIFY(toolbox_host::scrollOffsets[0].h == 0 && toolbox_host::scrollOffsets[0].v == -16);
+      LOKA_VERIFY(result.executed()
+                  == (clip      ? TOOLBOX_PRESENT_COPY_FAILED
+                      : exposed ? TOOLBOX_PRESENT_ERASED
+                                : TOOLBOX_PRESENT_COPIED));
+    }
+    if (result.executed() == TOOLBOX_PRESENT_COPIED)
+      LOKA_VERIFY(probe->erasedKind == ToolboxErasedEvidence::REGION);
+    if (clip || refuse || grow)
+    {
+      LOKA_VERIFY(f.controller.observation().eligibility() == TOOLBOX_PAINT_REFUSED);
+      if (grow)
+        LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
+      else
+        LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_REFUSED);
+      if (clip)
+        LOKA_VERIFY(probe->paints == paints);
+      LOKA_VERIFY(f.window.hasPendingInvalidate());
+      LOKA_VERIFY(std::strcmp(f.controller.debugStatsForTesting().windowFullRequestSource, "present_failed") == 0);
+      f.window.flushInvalidate();
+      LOKA_VERIFY(f.controller.observation().eligibility() == TOOLBOX_PAINT_CLEAN);
+      LOKA_VERIFY(f.controller.debugStatsForTesting().lastPresentObservation.executed() == TOOLBOX_PRESENT_ERASED);
+    }
+    else if (!update)
+      LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
+    if (!allocation && !visibility && !update && !exposed && !clip)
+    {
+      const Rect corner = ToolboxWindowSizeBoxRect(f.window.port.portRect);
+      bool erasedCorner = false;
+      for (std::size_t i = 0; i < toolbox_host::repairUnions.size(); ++i)
+        if (EqualRect(&toolbox_host::repairUnions[i], &corner))
+          erasedCorner = true;
+      LOKA_VERIFY(erasedCorner);
+      if (!refuse && !grow)
+      {
+        const ToolboxScrollBarLedger::ViewportScrollBarBinding &row = f.controller.viewportScroll();
+        LOKA_VERIFY(row.presented.evaluate(row.placedOrigin, row.contentRect, row.copyDomain)
+                    == TOOLBOX_BASELINE_VALID);
+        const unsigned long copiedAt = result.totalRenderCalls();
+        LOKA_VERIFY(copiedAt == static_cast<unsigned long>(f.controller.debugStatsForTesting().totalRenderCalls));
+        f.window.requestInvalidate();
+        f.window.flushInvalidate();
+        const ToolboxSceneDebugStats &after = f.controller.debugStatsForTesting();
+        LOKA_VERIFY(after.lastMovedPresentObservation.executed() == TOOLBOX_PRESENT_COPIED);
+        LOKA_VERIFY(after.lastMovedPresentObservation.totalRenderCalls() == copiedAt);
+        LOKA_VERIFY(static_cast<unsigned long>(after.totalRenderCalls) == copiedAt + 1);
+        LOKA_VERIFY(after.lastPresentObservation.executed() == TOOLBOX_PRESENT_ERASED);
+      }
+    }
+  }
+  void repairBudget()
+  {
+    PresentFixture f;
+    const Rect damage = f.controller.viewportScroll().contentRect;
+    Region region = {10, damage};
+    Region *pointer = &region;
+    f.window.port.updateRgn = &pointer;
+    f.scroll(16);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_REPAIR_TOO_LARGE);
+    f.window.port.updateRgn = 0;
+  }
+  void buttonRepairRequest()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    ButtonNode node(Button("before").props);
+    ToolboxButtonContext context(&node, &controller);
+    LayoutState state = seat();
+    context.layout(&controller, state);
+    context.render(&controller);
+    toolbox_host::invalidatedRects.clear();
+    State<String> next(String("after"));
+    node.props.text_ = &next;
+    context.onPropsApplied();
+    toolbox_host::invalidatedRects.clear();
+    const Rect full = window.port.portRect;
+    ClipRect(&full);
+    context.render(&controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.empty());
+    State<String> last(String("outside"));
+    node.props.text_ = &last;
+    context.onPropsApplied();
+    toolbox_host::invalidatedRects.clear();
+    const Rect disjoint = {200, 200, 220, 220};
+    ClipRect(&disjoint);
+    context.render(&controller);
+    LOKA_VERIFY(toolbox_host::invalidatedRects.size() == 1);
+    const Rect own = {20, 10, 40, 110};
+    LOKA_VERIFY(toolbox_host::invalidatedRects[0].left == own.left);
+    LOKA_VERIFY(toolbox_host::invalidatedRects[0].top == own.top);
+    context.onFactChanged(NODE_FACT_ATTACHED, NODE_FACT_RETIRED);
+  }
+  void regionEvidence()
+  {
+    const Rect shown = {0, 0, 100, 100}, repair = {10, 10, 30, 30};
+    const Rect inside = {12, 12, 20, 20}, outside = {40, 40, 50, 50};
+    RgnHandle region = NewRgn(), scratch = NewRgn();
+    LOKA_VERIFY(region && scratch);
+    RectRgn(region, &repair);
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxErasedPass pass;
+    ZStackNode stack((ZStackProps()));
+    const ToolboxUnitLedger::UnitSeat frozenRow = {&stack, 1, inside, inside};
+    const ToolboxUnitLedger::UnitSeat liveRow = {&stack, 1, outside, outside};
+    const ToolboxUnitLedger::FirstBlurUnits selection = {&frozenRow, &liveRow};
+    ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> frozen;
+    ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> live;
+    frozen.reconcile(selection);
+    live.reconcile(selection);
+    {
+      ToolboxErasedPass::Guard guard(pass, shown);
+      guard.noteErased(shown);
+      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true) == BLUR_PICTURE);
+    }
+    const unsigned captures = toolbox_host::bandCaptures;
+    const unsigned frozenCaptures = toolbox_host::staticCaptures;
+    {
+      ToolboxErasedPass::Guard guard(pass, shown);
+      guard.noteErased(region, scratch);
+      LOKA_VERIFY(pass.dischargesDamage(outside));
+      LOKA_VERIFY(pass.admitsCapture(inside));
+      LOKA_VERIFY(!pass.admitsCapture(outside));
+      LOKA_VERIFY(frozen.paint(window.window(), frozenRow, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(toolbox_host::staticCaptures == frozenCaptures + 1);
+      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(toolbox_host::bandCaptures == captures);
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(live) == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::READY);
+    }
+    DisposeRgn(scratch);
+    DisposeRgn(region);
+  }
   void presentBatchMaterialization()
   {
     PresentLiveFixture<3, MaterializingController> f;
@@ -1893,8 +2116,8 @@ namespace
     // Native-control paint suppression is the remaining unproved capability.
     LOKA_VERIFY(f.last().dy() == 17);
     LOKA_VERIFY(f.last().viewports() == 1);
-    LOKA_VERIFY(f.last().verdict() == TOOLBOX_PRESENT_ERASE_ALL);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().verdict() == TOOLBOX_PRESENT_COPY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
     // #1513 republishes the viewport and can present a second, unmoved full layout.
     f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     f.window.flushInvalidate();
@@ -1925,7 +2148,7 @@ namespace
     {
       BoxNode *box = new BoxNode(Box().size(180, 100).props);
       ScrollViewNode *scroll = new ScrollViewNode(ScrollViewProps(i ? secondState : firstState));
-      BoxNode *content = new BoxNode(Box().size(180, 600).props);
+      BoxNode *content = new BoxNode(Box().size(150, 600).props);
       content->addChild(new TextNode(TextProps("sibling content")));
       scroll->addChild(content);
       box->addChild(scroll);
@@ -2028,7 +2251,7 @@ namespace
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
     f.scroll(48);
     LOKA_VERIFY(!f.last().rectRequests());
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   struct ExtentWatcher
   {
@@ -2209,7 +2432,7 @@ namespace
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
     f.scroll(32);
     LOKA_VERIFY(f.last().outsideInputs() == 0 && f.last().outsideNotTranslated() == 0);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   void presentOutsideEdit()
   {
@@ -2231,7 +2454,7 @@ namespace
     f.scroll(16);
     LOKA_VERIFY(f.last().outsideInputs() == 0 && f.last().outsideKinds() == 0);
     LOKA_VERIFY(f.last().outsideNotTranslated() == 0 && !f.last().unitChanged());
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
   }
   void presentOutsideUnit(bool ground)
   {
@@ -2324,7 +2547,7 @@ namespace
     ToolboxPresentObservation observation;
     observation.noteReason(TOOLBOX_FULL_DRAW_STRUCTURE_SWAP);
     const ToolboxViewportContentResult content = {0, 0, 0, 0, false};
-    observation.noteViewportMove(rect, 0, 16, content, TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(rect, rect, 0, 16, content, TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     replacement->~ZStackNode();
@@ -2336,7 +2559,7 @@ namespace
     f.scroll(17);
     LOKA_VERIFY(f.last().dy() == 17 && f.last().viewports() == 1);
     LOKA_VERIFY(f.last().foregroundUnits() >= 1);
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_FOREGROUND_UNITS);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
   }
   void presentDamage(bool flush)
   {
@@ -2563,7 +2786,7 @@ namespace
     LOKA_VERIFY(observation.eligibility() == TOOLBOX_PAINT_REFUSED);
     const Rect viewport = {0, 0, 100, 100};
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
-    observation.noteViewportMove(viewport, 0, 8, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 8, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
     observation.reset();
@@ -2801,8 +3024,7 @@ namespace
       LOKA_VERIFY(f.lastMoved().enclosingClip() == (clipped != 0));
       LOKA_VERIFY(f.lastMoved().notTranslated() == 0);
       LOKA_VERIFY(f.lastMoved().baseline() == TOOLBOX_BASELINE_VALID);
-      LOKA_VERIFY(f.lastMoved().refusal()
-                  == (clipped ? TOOLBOX_PRESENT_ENCLOSING_CLIP : TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY));
+      LOKA_VERIFY(f.lastMoved().refusal() == (clipped ? TOOLBOX_PRESENT_ENCLOSING_CLIP : TOOLBOX_PRESENT_ADMITTED));
     }
   }
   void resumePortCertificate(bool absent)
@@ -2860,7 +3082,7 @@ namespace
     text->refusePaint = false;
     f.scroll(32);
     LOKA_VERIFY(f.lastMoved().baseline() == TOOLBOX_BASELINE_NONE);
-    LOKA_VERIFY(f.lastMoved().refusal() == TOOLBOX_PRESENT_PAINT_REFUSED);
+    LOKA_VERIFY(f.lastMoved().refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     LOKA_VERIFY(resumeCertificate(f.controller.viewportScroll()) == TOOLBOX_BASELINE_VALID);
   }
   void resumeSiblings(bool paintFailure)
@@ -3049,7 +3271,7 @@ namespace
                    f.lastMoved().notTranslated());
       LOKA_VERIFY(f.lastMoved().notTranslated() == mismatches[i]);
       LOKA_VERIFY(f.lastMoved().refusal()
-                  == (mismatches[i] ? TOOLBOX_PRESENT_NOT_TRANSLATED : TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY));
+                  == (mismatches[i] ? TOOLBOX_PRESENT_NOT_TRANSLATED : TOOLBOX_PRESENT_REPAIR_TOO_LARGE));
       LOKA_VERIFY(leaf->mismatches == 0);
       LOKA_VERIFY(leaf->visits == ((i == 0 || i == 3) ? 1u : 0u));
       if (i == 0)
@@ -3246,7 +3468,7 @@ namespace
     LOKA_VERIFY(translated.last().notTranslated() == 0);
     LOKA_VERIFY(translated.last().baseline() == TOOLBOX_BASELINE_VALID);
     LOKA_VERIFY(!translated.last().enclosingClip());
-    LOKA_VERIFY(translated.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(translated.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
     {
       ToolboxPresentObservation::Interval failed(translated.controller.observation_,
                                                  true,
@@ -3318,8 +3540,12 @@ namespace
         contentObservation.noteUnsupportedKind();
       if (gate < 2)
         contentObservation.noteNotTranslated();
-      observation.noteViewportMove(
-          content, 0, 16, contentObservation.complete(), gate < 3 ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID);
+      observation.noteViewportMove(content,
+                                   content,
+                                   0,
+                                   16,
+                                   contentObservation.complete(),
+                                   gate < 3 ? TOOLBOX_BASELINE_NONE : TOOLBOX_BASELINE_VALID);
       observation.complete(0);
       LOKA_VERIFY(observation.notTranslated() == (gate < 2 ? 1U : 0U));
       LOKA_VERIFY(observation.enclosingClip());
@@ -3351,21 +3577,21 @@ namespace
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
-    observation.noteViewportMove(viewport, 0, 4, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 4, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
     observation.reset();
-    observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.viewports() == 1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     observation.reset();
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteDamage(outside);
     observation.complete(1);
@@ -3373,7 +3599,7 @@ namespace
     observation.reset();
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
     observation.reset();
@@ -3381,14 +3607,14 @@ namespace
     observation.complete(0);
     // No movement precedes the reason gate, even for an admitted input reason.
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_VIEWPORT_MOVED);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
     observation.reset();
     observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     observation.noteReason(TOOLBOX_FULL_DRAW_VIEWPORT_INPUT);
     observation.noteReason(TOOLBOX_FULL_DRAW_TEXT_RELAYOUT);
-    observation.noteViewportMove(viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    observation.noteViewportMove(viewport, viewport, 0, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(0);
     LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
     // Each later refusal remains present while the earlier one wins.
@@ -3407,7 +3633,7 @@ namespace
       if (gate < 3)
         content.noteUnsupportedKind();
       content.notePhaseBound();
-      observation.noteViewportMove(viewport, 0, 3, content.complete(), TOOLBOX_BASELINE_VALID);
+      observation.noteViewportMove(viewport, viewport, 0, 3, content.complete(), TOOLBOX_BASELINE_VALID);
       observation.noteDamage(outside);
       observation.complete(1);
       LOKA_VERIFY(observation.refusal()
@@ -3935,6 +4161,17 @@ int main(int argc, char **argv)
                          "PresentHiddenViewport",
                          "PresentBatchSummary",
                          "PresentRectAttempts",
+                         "CopyPaintRefusal",
+                         "CopyGrowFailure",
+                         "RepairBudget",
+                         "ButtonRepairRequest",
+                         "CopySuccess",
+                         "CopyAllocation",
+                         "CopyVisibility",
+                         "CopyExposedRecovery",
+                         "CopyClipFailure",
+                         "CopyUpdate",
+                         "RegionEvidence",
                          "PresentWalkRect",
                          "PresentRenderReentry",
                          "PresentLayoutReentry",
@@ -4100,6 +4337,14 @@ int main(int argc, char **argv)
     presentBatchSummary();
   else if (std::strcmp(argv[1], "PresentRectAttempts") == 0)
     presentRectAttempts();
+  else if (std::strcmp(argv[1], "RepairBudget") == 0)
+    repairBudget();
+  else if (std::strcmp(argv[1], "ButtonRepairRequest") == 0)
+    buttonRepairRequest();
+  else if (std::strncmp(argv[1], "Copy", 4) == 0)
+    presentCopy(argv[1]);
+  else if (std::strcmp(argv[1], "RegionEvidence") == 0)
+    regionEvidence();
   else if (std::strcmp(argv[1], "PresentWalkRect") == 0)
     presentPublication(0);
   else if (std::strcmp(argv[1], "PresentRenderReentry") == 0)

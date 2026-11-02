@@ -364,7 +364,7 @@ namespace
         : controller_(controller)
     {
     }
-    virtual void eraseBeforePaint()
+    virtual ToolboxPresentExecuted eraseBeforePaint(const ToolboxPresentPlan &)
     {
       TextNode first((Text("First") + FontSize<18>()).props);
       TextNode second((Text("Second") + FontSize<18>()).props);
@@ -374,6 +374,7 @@ namespace
       a.layout(&this->controller_, state);
       state = Seat(100);
       b.layout(&this->controller_, state);
+      return TOOLBOX_PRESENT_ERASED;
     }
   };
   class NestedBusyRender : public ToolboxFullDrawPresenter
@@ -387,12 +388,13 @@ namespace
           measurements_(measurements)
     {
     }
-    virtual void eraseBeforePaint()
+    virtual ToolboxPresentExecuted eraseBeforePaint(const ToolboxPresentPlan &)
     {
       ToolboxInputDoor::render(this->inner_, &this->measurements_);
       LOKA_VERIFY(this->inner_.cursorOwner()->depth == 1);
       LOKA_VERIFY(this->inner_.cursorOwner()->outerEntries == 1);
       LOKA_VERIFY(this->inner_.cursorOwner()->outerExits == 0);
+      return TOOLBOX_PRESENT_ERASED;
     }
   };
   void BusyBatchPins(bool nested)

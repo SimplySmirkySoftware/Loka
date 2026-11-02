@@ -204,8 +204,11 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
   }
 }
 
-bool ReconcileToolboxButtonControl(ControlRef control, const loka::core::String &label,
-                                   loka::core::State<bool> *enabled, std::string &installedLabel)
+bool ReconcileToolboxButtonControl(ControlRef control,
+                                   const loka::core::String &label,
+                                   loka::core::State<bool> *enabled,
+                                   std::string &installedLabel,
+                                   bool *changed)
 {
   if (!control)
     return false;
@@ -219,8 +222,13 @@ bool ReconcileToolboxButtonControl(ControlRef control, const loka::core::String 
       return false;
     SetControlTitle(control, title);
     installedLabel = labelUtf8;
+    if (changed)
+      *changed = true;
   }
-  HiliteControl(control, enabled && !enabled->get() ? 255 : 0);
+  const short hilite = enabled && !enabled->get() ? 255 : 0;
+  if ((**control).contrlHilite != hilite && changed)
+    *changed = true;
+  HiliteControl(control, hilite);
   return true;
 }
 

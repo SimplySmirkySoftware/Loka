@@ -125,10 +125,17 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         const short value = TallListArrowValue(window);
         if (value <= 0)
           return;
-        char line[40];
+        char line[160];
         std::sprintf(line, "arrow value=%d", value);
         this->audit_.recordLog(line);
-        this->phase_ = RUNNING;
+        const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
+        std::sprintf(line,
+                     "arrow attempt=%lu executed=%s full_draws=%lu",
+                     stats.lastMovedPresentObservation.renderCalls(),
+                     ToolboxPresentExecutedName(stats.lastMovedPresentObservation.executed()),
+                     stats.lastMovedPresentObservation.totalRenderCalls());
+        this->audit_.recordLog(line);
+        this->phase_ = RUNNING_ARROW;
         return;
       }
       if (!this->audit_.finished() && !this->audit_.failed())
@@ -136,6 +143,14 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         this->clock_.advanceTo(this->clock_.currentTick() + 1);
         static_cast<smirkycard::CardScene *>(scene)->tickScenario();
         return; // The terminal step may have changed the presentation; capture on the next settled idle.
+      }
+      if (this->phase_ == RUNNING_ARROW)
+      {
+        char line[80];
+        std::sprintf(line,
+                     "capture full_draws=%lu",
+                     static_cast<unsigned long>(controller->debugStatsForTesting().totalRenderCalls));
+        this->audit_.recordLog(line);
       }
     }
   }

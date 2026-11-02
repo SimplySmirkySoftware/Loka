@@ -10,10 +10,10 @@ class ToolboxSceneDebugStats
 public:
   ToolboxSceneDebugStats();
   /** Last render exit, including early returns and passes without movement. */
-  ToolboxPresentObservation lastPresentObservation;
+  ToolboxPresentResult lastPresentObservation;
   /** Last completed full layout with movement; survives the #1513 republication pass.
       Cleared with the rest of the debug stats on explicit reset. */
-  ToolboxPresentObservation lastMovedPresentObservation;
+  ToolboxPresentResult lastMovedPresentObservation;
   ToolboxPaintEligibility lastPresentEntryEligibility;
   ToolboxPaintEligibility lastMovedEntryEligibility;
 

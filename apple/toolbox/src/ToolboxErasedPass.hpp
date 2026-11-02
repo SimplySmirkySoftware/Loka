@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_ERASED_PASS_HPP
 #include <Quickdraw.h>
 #include <cassert>
+#include "ToolboxRegionCheck.hpp"
 
 /** Completed evidence of an entry erase; NONE never admits a capture. */
 class ToolboxErasedEvidence
@@ -10,16 +11,28 @@ public:
   enum Kind
   {
     NONE,
-    RECT
+    RECT,
+    REGION
   };
   ToolboxErasedEvidence()
       : kind_(NONE),
-        rect_()
+        rect_(),
+        region_(0),
+        scratch_(0)
   {
   }
   explicit ToolboxErasedEvidence(const Rect &rect)
       : kind_(RECT),
-        rect_(rect)
+        rect_(rect),
+        region_(0),
+        scratch_(0)
+  {
+  }
+  ToolboxErasedEvidence(RgnHandle region, RgnHandle scratch)
+      : kind_(REGION),
+        rect_(),
+        region_(region),
+        scratch_(scratch)
   {
   }
   Kind kind() const
@@ -39,6 +52,16 @@ public:
       return false;
     case RECT:
       return contains(this->rect_, rect);
+    case REGION:
+      if (!ToolboxRegionOK(this->region_) || !ToolboxRegionOK(this->scratch_))
+        return false;
+      RectRgn(this->scratch_, &rect);
+      if (!ToolboxRegionOK(this->scratch_))
+        return false;
+      DiffRgn(this->scratch_, this->region_, this->scratch_);
+      if (!ToolboxRegionOK(this->scratch_))
+        return false;
+      return EmptyRgn(this->scratch_) && ToolboxRegionOK(this->scratch_);
     }
     return false;
   }
@@ -46,6 +69,7 @@ public:
 private:
   Kind kind_;
   Rect rect_;
+  RgnHandle region_, scratch_;
 };
 
 /** Entry promise and actual erase, borrowed for one non-nesting render walk. */
@@ -99,6 +123,19 @@ public:
     {
       return this->descriptor_.shown;
     }
+    /** Presenter-owned regions remain borrowed only while this guard is open. */
+    void noteErased(RgnHandle region, RgnHandle scratch)
+    {
+      if (!this->owned_)
+        return;
+      assert(this->descriptor_.erased.kind() == ToolboxErasedEvidence::NONE);
+      if (this->descriptor_.erased.kind() != ToolboxErasedEvidence::NONE)
+        return;
+#ifdef LOKA_LIFECYCLE_AUDIT
+      assert(region && ToolboxErasedEvidence::contains(this->descriptor_.shown, (**region).rgnBBox));
+#endif
+      this->descriptor_.erased = ToolboxErasedEvidence(region, scratch);
+    }
     /** Entry erasers note once. Release builds clip and preserve the first note. */
     void noteErased(const Rect &rect)
     {
@@ -122,6 +159,9 @@ public:
   };
 
 private:
+#ifdef TEST_BUILD
+  friend class ToolboxErasedPassInspection;
+#endif
   const Descriptor *descriptor_;
   ToolboxErasedPass(const ToolboxErasedPass &);
   ToolboxErasedPass &operator=(const ToolboxErasedPass &);

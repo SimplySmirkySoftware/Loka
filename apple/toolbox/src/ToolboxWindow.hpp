@@ -75,7 +75,9 @@ public:
   void drawForFlush(ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
 
 private:
-  void drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void drawWhole(const Rect &evidence,
+                 ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY,
+                 bool allowCopy = false);
 
 public:
   /** Preserves the native content position after a menu-bar rebuild without

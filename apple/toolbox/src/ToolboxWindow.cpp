@@ -463,7 +463,7 @@ void ToolboxWindow::drawForFlush(ToolboxPresentBatch::Summary summary)
     if (this->scenePlatformController_)
       this->scenePlatformController_->notePresentDamage(
           ToolboxUpdateDamage(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds));
-    this->drawWhole(this->window_->portRect, summary);
+    this->drawWhole(this->window_->portRect, summary, true);
   }
 }
 

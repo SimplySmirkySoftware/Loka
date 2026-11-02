@@ -32,12 +32,13 @@ public:
   void *renderData;
   ToolboxScenePlatformController() : transport(0), onRender(0), renderData(0) {}
   CursorOwner *cursorOwner() { return 0; }
-  void render(ToolboxFullDrawPresenter *presenter)
+  ToolboxPresentExecuted render(ToolboxFullDrawPresenter *presenter)
   {
     if (presenter)
-      presenter->eraseBeforePaint();
+      presenter->eraseBeforePaint(ToolboxPresentPlan());
     if (this->onRender)
       this->onRender(this->renderData);
+    return TOOLBOX_PRESENT_ERASED;
   }
   void renderDirty(const Rect &)
   {

@@ -51,6 +51,18 @@ void FrameRoundRect(const Rect *, short, short);
 void OffsetRect(Rect *, short, short);
 void ValidRect(const Rect *);
 void DiffRgn(RgnHandle, RgnHandle, RgnHandle);
+bool EmptyRgn(RgnHandle);
+void ScrollRect(const Rect *, short, short, RgnHandle);
+namespace toolbox_host
+{
+  extern std::vector<Rect> scrollRects, repairUnions;
+  extern std::vector<Point> scrollOffsets;
+  extern bool refuseExposedUnion, refuseCopiedClip;
+} // namespace toolbox_host
+inline short MemError()
+{
+  return 0;
+}
 void PaintRgn(RgnHandle);
 typedef char *Ptr;
 struct BitMap
@@ -65,20 +77,27 @@ struct HostControl;
 struct HostPortState
 {
   Region clipRegion;
+  Region visibleRegion;
+  Region *visibleRegionPointer;
   Region *clipRegionPointer;
   Rect &clip;
   std::vector<Rect> update;
   std::vector<HostControl *> controls;
   HostPortState()
-      : clipRegionPointer(&clipRegion),
+      : visibleRegionPointer(&visibleRegion),
+        clipRegionPointer(&clipRegion),
         clip(clipRegion.rgnBBox)
   {
-    clipRegion.rgnSize = sizeof(Region);
+    visibleRegion.rgnSize = 10;
+    visibleRegion.rgnBBox = Rect();
+    clipRegion.rgnSize = 10;
     clip.top = clip.left = -30000;
     clip.bottom = clip.right = 30000;
   }
   HostPortState(const HostPortState &other)
       : clipRegion(other.clipRegion),
+        visibleRegion(other.visibleRegion),
+        visibleRegionPointer(&visibleRegion),
         clipRegionPointer(&clipRegion),
         clip(clipRegion.rgnBBox),
         update(other.update),
@@ -119,6 +138,7 @@ struct GrafPort
   long fgColor;
   HostPortState native;
   RgnHandle clipRgn;
+  RgnHandle visRgn;
 #ifdef LOKA_HOST_IMAGE_VIEW
   QDProcsPtr grafProcs;
 #endif

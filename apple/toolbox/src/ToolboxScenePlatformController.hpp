@@ -355,6 +355,14 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+
+public:
+  const ToolboxPresentObservation &observation() const
+  {
+    return this->observation_;
+  }
+
+private:
   ToolboxPresentObservation observation_;
   friend class ToolboxBlurSnapshotInspection;
   ToolboxPressLedger pressLedger_;

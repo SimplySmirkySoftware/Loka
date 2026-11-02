@@ -3,6 +3,7 @@
 
 #include "ToolboxFullDrawReason.hpp"
 #include "ToolboxPresentBatch.hpp"
+#include "ToolboxWindowGeometry.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPaintRefusal.hpp"
 #include "context/ToolboxLeafPlacement.hpp"
@@ -14,16 +15,18 @@ class ToolboxSceneDebugStats;
 #include <string>
 #include <cassert>
 
-/** Observation never authorizes copying pixels. */
+/** Completed admission decision; execution can still fall back to erase. */
 enum ToolboxPresentVerdict
 {
   TOOLBOX_PRESENT_ERASE_ALL,
+  TOOLBOX_PRESENT_COPY,
   TOOLBOX_PRESENT_VERDICT_COUNT
 };
 
-/** First refusal, in admission order. Suppression capability is deliberately absent. */
+/** First refusal, in admission order; ADMITTED accompanies a copy candidate. */
 enum ToolboxPresentRefusal
 {
+  TOOLBOX_PRESENT_ADMITTED,
   TOOLBOX_PRESENT_NO_VIEWPORT_MOVED,
   TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED,
   TOOLBOX_PRESENT_HORIZONTAL_MOVE,
@@ -40,6 +43,7 @@ enum ToolboxPresentRefusal
   TOOLBOX_PRESENT_FOREGROUND_UNITS,
   TOOLBOX_PRESENT_RECT_REQUESTS,
   TOOLBOX_PRESENT_OUTSIDE_CHANGED,
+  TOOLBOX_PRESENT_REPAIR_TOO_LARGE,
   TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY,
   TOOLBOX_PRESENT_REFUSAL_COUNT
 };
@@ -50,6 +54,8 @@ inline const char *ToolboxPresentVerdictName(ToolboxPresentVerdict verdict)
   {
   case TOOLBOX_PRESENT_ERASE_ALL:
     return "erase";
+  case TOOLBOX_PRESENT_COPY:
+    return "copy";
   case TOOLBOX_PRESENT_VERDICT_COUNT:
     break;
   }
@@ -60,6 +66,10 @@ inline const char *ToolboxPresentRefusalName(ToolboxPresentRefusal refusal)
 {
   switch (refusal)
   {
+  case TOOLBOX_PRESENT_ADMITTED:
+    return "admitted";
+  case TOOLBOX_PRESENT_REPAIR_TOO_LARGE:
+    return "repair_too_large";
   case TOOLBOX_PRESENT_NO_VIEWPORT_MOVED:
     return "no_viewport_moved";
   case TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED:
@@ -213,14 +223,111 @@ private:
   const bool enclosingClip_;
 };
 
+/** Actual result of the synchronous presenter, independent of admission. */
+enum ToolboxPresentExecuted
+{
+  TOOLBOX_PRESENT_ERASED,
+  TOOLBOX_PRESENT_COPIED,
+  TOOLBOX_PRESENT_COPY_FAILED
+};
+inline const char *ToolboxPresentExecutedName(ToolboxPresentExecuted value)
+{
+  switch (value)
+  {
+  case TOOLBOX_PRESENT_ERASED:
+    return "erase";
+  case TOOLBOX_PRESENT_COPIED:
+    return "copy";
+  case TOOLBOX_PRESENT_COPY_FAILED:
+    return "copy_failed";
+  }
+  return "unknown";
+}
+
+/** Completed bounded repair facts; no row identities escape the controller. */
+class ToolboxForegroundRepair
+{
+public:
+  ToolboxForegroundRepair()
+      : units_(),
+        count_(0),
+        bar_()
+  {
+  }
+  ToolboxForegroundRepair(const Rect *units, unsigned count, const Rect &bar, bool refused)
+      : units_(),
+        count_(refused || count > 2 ? 3 : count),
+        bar_(bar)
+  {
+    for (unsigned i = 0; i < count && i < 2; ++i)
+      this->units_[i] = units[i];
+  }
+  bool refused() const
+  {
+    return this->count_ > 2;
+  }
+  unsigned count() const
+  {
+    return this->refused() ? 0 : this->count_;
+  }
+  const Rect &unit(unsigned i) const
+  {
+    assert(i < this->count());
+    return this->units_[i];
+  }
+  const Rect &bar() const
+  {
+    return this->bar_;
+  }
+  /** Once per admission, at most two units. Saturate before multiplying/adding. */
+  bool tooLarge(const Rect &domain, int dv, const Rect &damage) const
+  {
+    const long limit = area(domain) / 2;
+    long sum = 0;
+    for (unsigned i = 0; i < this->count(); ++i)
+      for (int n = 0; n < 2; ++n)
+        add(sum, area(this->units_[i]), limit);
+    const long height = dv < 0 ? -static_cast<long>(dv) : static_cast<long>(dv);
+    const long width = static_cast<long>(domain.right) - domain.left;
+    if (width <= 0 || limit <= 0)
+      return true;
+    add(sum, height > limit / width ? limit : height * width, limit);
+    add(sum, area(this->bar_), limit);
+    add(sum, area(ToolboxWindowSizeBoxRect(domain)), limit);
+    add(sum, area(damage), limit);
+    add(sum, area(damage), limit);
+    return sum >= limit;
+  }
+
+private:
+  static long area(const Rect &r)
+  {
+    if (r.left >= r.right || r.top >= r.bottom)
+      return 0;
+    const long w = static_cast<long>(r.right) - r.left;
+    const long h = static_cast<long>(r.bottom) - r.top;
+    return w > 2147483647L / h ? 2147483647L : w * h;
+  }
+  static void add(long &sum, long term, long limit)
+  {
+    sum = term >= limit - sum ? limit : sum + term;
+  }
+  Rect units_[2];
+  unsigned count_;
+  Rect bar_;
+};
+
 /** Completed admission inputs, built after extent publication. */
 struct ToolboxPresentInputs
 {
+  ToolboxForegroundRepair repair;
+  bool suppressionCapable;
   unsigned usedViewports;
   ToolboxViewportContentResult outside;
   ToolboxUnitComparison units;
   ToolboxPresentInputs()
-      : usedViewports(0),
+      : suppressionCapable(false),
+        usedViewports(0),
         units()
   {
     const ToolboxViewportContentResult empty = {0, 0, 0, 0, false};
@@ -252,11 +359,16 @@ public:
           coversWindow_(coversWindow),
           entryEligibility_(observation.eligibility_),
           debugStats_(stats),
-          ledger_(ledger)
+          ledger_(ledger),
+          executed_(TOOLBOX_PRESENT_ERASED)
     {
       this->observation_.phase_ = WALKING;
     }
     ~Interval();
+    void noteExecuted(ToolboxPresentExecuted value)
+    {
+      this->executed_ = value;
+    }
 
   private:
     Interval(const Interval &);
@@ -266,6 +378,7 @@ public:
     const ToolboxPaintEligibility entryEligibility_;
     ToolboxSceneDebugStats &debugStats_;
     ToolboxScrollBarLedger &ledger_;
+    ToolboxPresentExecuted executed_;
   };
 
   /** O(1) per full request, walks nothing; completed intervals defer new causes.
@@ -322,6 +435,7 @@ public:
   }
   /** layoutScrollView calls once per successful move; O(1) merge, walks nothing. */
   void noteViewportMove(const Rect &contentRect,
+                        const Rect &copyDomain,
                         int dx,
                         int dy,
                         const ToolboxViewportContentResult &content,
@@ -332,6 +446,7 @@ public:
     if (this->viewports_ == 0)
     {
       this->viewport_ = contentRect;
+      this->copyDomain_ = copyDomain;
       this->dy_ = dy;
       this->baseline_ = baseline;
     }
@@ -378,7 +493,7 @@ public:
              && (this->damage_.left < this->viewport_.left || this->damage_.top < this->viewport_.top
                  || this->damage_.right > this->viewport_.right || this->damage_.bottom > this->viewport_.bottom))
       this->refusal_ = TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT;
-    else if (this->foregroundUnits_)
+    else if (this->inputs_.repair.refused())
       this->refusal_ = TOOLBOX_PRESENT_FOREGROUND_UNITS;
     else if (this->rectRequests())
       this->refusal_ = TOOLBOX_PRESENT_RECT_REQUESTS;
@@ -386,8 +501,15 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
     else if (this->outsideNotTranslated() || this->outsideInputs() || this->outsideKinds() || this->unitChanged())
       this->refusal_ = TOOLBOX_PRESENT_OUTSIDE_CHANGED;
-    else
+    else if (this->inputs_.repair.tooLarge(this->copyDomain_, -this->dy_, this->damage_))
+      this->refusal_ = TOOLBOX_PRESENT_REPAIR_TOO_LARGE;
+    else if (!this->inputs_.suppressionCapable)
       this->refusal_ = TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY;
+    else
+    {
+      this->verdict_ = TOOLBOX_PRESENT_COPY;
+      this->refusal_ = TOOLBOX_PRESENT_ADMITTED;
+    }
   }
   /** O(1) at interval exit or explicit diagnostic reset; no owned resources. */
   void reset()
@@ -399,7 +521,7 @@ public:
     this->contentInputs_ = this->unsupportedKinds_ = this->phaseBound_ = this->notTranslated_ = 0;
     this->baseline_ = TOOLBOX_BASELINE_NONE;
     this->enclosingClip_ = false;
-    this->damage_ = this->viewport_ = Rect();
+    this->damage_ = this->viewport_ = this->copyDomain_ = Rect();
     this->dy_ = 0;
     this->viewports_ = this->foregroundUnits_ = 0;
     this->horizontal_ = false;
@@ -500,6 +622,14 @@ public:
   {
     return this->viewport_;
   }
+  const Rect &copyDomain() const
+  {
+    return this->copyDomain_;
+  }
+  const ToolboxForegroundRepair &repair() const
+  {
+    return this->inputs_.repair;
+  }
   int dy() const
   {
     return this->dy_;
@@ -566,12 +696,76 @@ private:
   unsigned contentInputs_, unsupportedKinds_, phaseBound_, notTranslated_;
   ToolboxBaselineStatus baseline_;
   bool enclosingClip_;
-  Rect damage_, viewport_;
+  Rect damage_, viewport_, copyDomain_;
   int dy_;
   unsigned viewports_, foregroundUnits_;
   bool horizontal_;
   Phase phase_;
   ToolboxPresentVerdict verdict_;
   ToolboxPresentRefusal refusal_;
+};
+/** Immutable presenter input, completed once after admission; O(1), no rows. */
+class ToolboxPresentPlan
+{
+public:
+  const ToolboxPresentVerdict verdict;
+  const Rect copyDomain;
+  const int dv;
+  const Rect damage;
+  const ToolboxForegroundRepair repair;
+  ToolboxPresentPlan()
+      : verdict(TOOLBOX_PRESENT_ERASE_ALL),
+        copyDomain(),
+        dv(0),
+        damage(),
+        repair()
+  {
+  }
+  explicit ToolboxPresentPlan(const ToolboxPresentObservation &observation)
+      : verdict(observation.verdict()),
+        copyDomain(observation.copyDomain()),
+        dv(-observation.dy()),
+        damage(observation.damage()),
+        repair(observation.repair())
+  {
+  }
+};
+/** Published diagnostic value; execution never becomes live observation state. */
+class ToolboxPresentResult : public ToolboxPresentObservation
+{
+public:
+  ToolboxPresentResult()
+      : executed_(TOOLBOX_PRESENT_ERASED),
+        renderCalls_(0),
+        totalRenderCalls_(0)
+  {
+  }
+  ToolboxPresentResult(const ToolboxPresentObservation &observation,
+                       ToolboxPresentExecuted executed,
+                       unsigned long renderCalls,
+                       unsigned long totalRenderCalls)
+      : ToolboxPresentObservation(observation),
+        executed_(executed),
+        renderCalls_(renderCalls),
+        totalRenderCalls_(totalRenderCalls)
+  {
+  }
+  ToolboxPresentExecuted executed() const
+  {
+    return this->executed_;
+  }
+
+  unsigned long renderCalls() const
+  {
+    return this->renderCalls_;
+  }
+  unsigned long totalRenderCalls() const
+  {
+    return this->totalRenderCalls_;
+  }
+
+private:
+  ToolboxPresentExecuted executed_;
+  unsigned long renderCalls_, totalRenderCalls_;
 };
 #endif

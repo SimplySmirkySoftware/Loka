@@ -46,9 +46,9 @@ public:
     return Invocation(c).operator()(c, &ToolboxScenePlatformController::handleTabKey, direction);
   }
   /** A null presenter preserves caller-owned erase ordering for dirty replay. */
-  static void render(ToolboxScenePlatformController &c, ToolboxFullDrawPresenter *presenter = 0)
+  static ToolboxPresentExecuted render(ToolboxScenePlatformController &c, ToolboxFullDrawPresenter *presenter = 0)
   {
-    Invocation(c).operator()(c, &ToolboxScenePlatformController::render, presenter);
+    return Invocation(c).operator()(c, &ToolboxScenePlatformController::render, presenter);
   }
   static void renderDirty(ToolboxScenePlatformController &c, const Rect &rect)
   {

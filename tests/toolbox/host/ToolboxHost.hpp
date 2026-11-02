@@ -266,6 +266,8 @@ public:
     port.txFace = 0;
     port.fgColor = blackColor;
     SetRect(&port.portRect, 0, 0, 360, 260);
+    port.native.visibleRegion.rgnBBox = port.portRect;
+    port.visRgn = &port.native.visibleRegionPointer;
   }
   virtual bool queryPortRect(Rect &out) const
   {
@@ -298,7 +300,9 @@ public:
   void drawGrowBox();
 
 private:
-  void drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void drawWhole(const Rect &evidence,
+                 ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY,
+                 bool allowCopy = false);
 
 public:
   void drawDirty(const Rect &);
@@ -870,6 +874,12 @@ public:
   loka::app::RectSurfaceExtentLedger rectSurfaceExtentLedger_;
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+
+public:
+  const ToolboxPresentObservation &observation() const
+  {
+    return this->observation_;
+  }
   ToolboxPresentObservation observation_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
