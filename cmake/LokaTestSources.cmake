@@ -147,8 +147,10 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/standalone/StandaloneScenarioSupport.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/example/ScrapbookUI/src/ScrapbookPackage.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/BlobRangeTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/apple/toolbox/src/ToolboxPictAdmission.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/apple/toolbox/src/PictParser.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/ToolboxPictAdmissionTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/PictParserTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/FlowDslTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ForTests.cpp
