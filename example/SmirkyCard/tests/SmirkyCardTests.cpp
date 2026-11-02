@@ -1281,7 +1281,8 @@ namespace
       LOKA_VERIFY(node && node->asTextNode());
       const TextStyle style = node->asTextNode()->props.resolvedTextStyle();
       LOKA_VERIFY(style.color_ == detail::StyleVocabularyColors[i].value);
-      LOKA_VERIFY(style.hasWeight_ && style.weight_ == TEXT_WEIGHT_BOLD);
+      TextWeight weight = TEXT_WEIGHT_NORMAL;
+      LOKA_VERIFY(style.queryWeight(weight) && weight == TEXT_WEIGHT_BOLD);
     }
   }
 
