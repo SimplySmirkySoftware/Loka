@@ -511,8 +511,10 @@ list/carousel independently of viewport width. List thumbnails are cut at the ca
 content edge by a `ClipBox`. Carousel thumbnails are not wrapped, so their
 ImageViews supply the natural width of the horizontally scrolling Row.
 
-Each page owns a `ZStack(ground, toolbar()).expBlurUnit()` with a 30-unit-high
-Box toolbar. List and detail use a direct ScrollView ground with top inset 30,
+Each page owns a `ZStack(ground, toolbar(lead)).expBlurUnit()` with a 30-unit-high,
+4-unit-padded Box holding a `Toolbar`: constant lead, live title label, Main,
+About. The lead is Tall in the carousel, Wide in the list, and < Back in detail.
+Buttons use natural widths; the 18 pt bold title shares the remaining width. List and detail use a direct ScrollView ground with top inset 30,
 so the band covers only the inset while the list scrolls under it. Carousel reserves the same
 height with an empty Box. Only the selected page's Show materializes its band
 and toolbar IDs. The outer ZStack remains static blur: opening About covers

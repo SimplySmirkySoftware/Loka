@@ -373,7 +373,7 @@ public-header includes when the only need is a tiny standard-library operation.
 
 | Flavor | Requirement | Build evidence | Runtime verification | Editor support |
 |---|---|---|---|---|
-| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | Production Unicode TextEditors install empty read-only MLTE presentations and refuse input and Edit verbs; text projection is staged for a later change. |
+| Unicode flavor: OS 9.0+, PPC | `loka_toolbox_unicode(target)` selects an exclusive core; startup refuses a failed system query or a version below 9.0, with a dialog attempt followed by exit. | `LokaSimpleTextUnicodePPC_APPL` and `LokaToolboxUnicodeImportProbe_APPL` are build-verified with Universal and Multiversal imports. The existing PPC CI job checks exact strong PEF imports and startup symbol wiring. | Not runtime-verified. The PPC startup-refusal verdict fixture is pending; pmac6100/8.1 is a [probe image](MAME_DEVELOPMENT.md), not an approved verdict fixture. | Unicode TextEditors project and edit UTF-16 MLTE bodies, commit whole-document read-back with CR normalization, support the native input and Edit doors, and replace the native object after a refused edit. SimpleText uses a 4 MiB profile; its 8 MiB minimum / 12 MiB preferred partition is provisional. |
 
 The source contracts live in `apple/toolbox/CMakeLists.txt` and
 `apple/toolbox/src/ToolboxUnicodeStartup.cpp`; host tests pin the requirement
@@ -383,6 +383,20 @@ SimpleText imports only `InterfaceLib`; the separate link-only
 probe imports exactly `InterfaceLib`, `Textension`, `TextEncodingConverter`, and
 `UnicodeConverter`, all strong. These are build checks, not loader or native
 startup verdicts. No release allowlist includes the Unicode acceptance target.
+
+With OS 9 Kotoeri and MLTE 1.3, the text confirmed with Return reaches the
+native body outside Loka's input doors (the Text Services Manager delivers it
+in a later iteration), so the document model receives it at the next key or
+click in the editor. Save or close immediately after confirming loses the
+last confirmed text; type or click once first. A composition still pending in
+the bottom-line input window survives a modal dialog (Save, Open, close
+confirmation) and can be confirmed afterwards; in a standalone MLTE probe the
+same situation committed two `'a'` characters per kana, which Loka's loop did
+not reproduce. Until the next door Save and confirmation read the last
+committed model; owner projection can overwrite the pending native change,
+and retirement can discard it permanently. The diagnostic idle counter is a
+best-effort sample, not a mechanism for committing changes outside input
+doors; that mechanism is a separate design (the rally's page 2e).
 
 `UnicodeText::Session` initializes MLTE before the OOM reserve and terminates it
 only after normal window teardown, outside the Operation Regime. Sudden termination

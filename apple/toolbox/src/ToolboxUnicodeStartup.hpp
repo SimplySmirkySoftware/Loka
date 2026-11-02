@@ -11,6 +11,9 @@ namespace loka
       bool serviceEvent(EventRecord &record);
       void scrapToPublic();
       void scrapFromPublic();
+      /** Remember the native Copy/Cut status; no conversion on a private scrap. */
+      void noteNativeScrap(long status);
+      bool scrapReady();
       /** Single-run MLTE session; normal teardown must finish before destruction. */
       class Session
       {

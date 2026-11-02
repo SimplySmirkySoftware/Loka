@@ -2,3 +2,7 @@
    68K build from a PPC one by itself (its TARGET_CPU_* conditionals describe
    the machine running Rez), so Size.r files read the target from here. */
 #define LOKA_CLASSIC_68K @LOKA_CLASSIC_68K@
+
+#ifndef LOKA_TOOLBOX_UNICODE
+#define LOKA_TOOLBOX_UNICODE 0
+#endif

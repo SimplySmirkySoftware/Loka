@@ -236,7 +236,8 @@ namespace loka
     const Win32FontResolution &Win32DisplayFont::find(const loka::app::TextStyle &style) const
     {
       const int family = style.family() == loka::app::TEXT_FAMILY_MONOSPACE ? 1 : 0;
-      const int bold = style.hasWeight_ && style.weight_ == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
+      loka::app::TextWeight weight = loka::app::TEXT_WEIGHT_NORMAL;
+      const int bold = style.queryWeight(weight) && weight == loka::app::TEXT_WEIGHT_BOLD ? 1 : 0;
       bool on = false;
       const int italic = style.queryItalic(on) && on ? 1 : 0;
       const bool underline = style.queryUnderline(on) && on;

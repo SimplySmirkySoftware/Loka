@@ -540,8 +540,10 @@ void testLokaAttrDslV1Core()
     loka::app::TextDefinitionWithAttr text =
         (loka::app::Text("Hello") + loka::app::Bold) + &dynamicTextStyle;
     assert(text.props.textStyleState_ == &dynamicTextStyle);
-    assert(text.props.textStyle_.hasWeight_);
-    assert(text.props.textStyle_.weight_ == loka::app::TEXT_WEIGHT_BOLD);
+    loka::app::TextWeight weight = loka::app::TEXT_WEIGHT_NORMAL;
+    const bool hasWeight = text.props.textStyle_.queryWeight(weight);
+    LOKA_VERIFY(hasWeight);
+    LOKA_VERIFY(weight == loka::app::TEXT_WEIGHT_BOLD);
     assert(!text.props.blockStyle_.hasWrap_);
     assert(!text.props.blockStyle_.hasTruncation_);
 
@@ -642,8 +644,10 @@ void testLokaAttrDslV1Core()
     a.weight(loka::app::TEXT_WEIGHT_BOLD);
     (void)b;
     assert(!b.size_.isSet());
-    assert(a.hasWeight_);
-    assert(a.weight_ == loka::app::TEXT_WEIGHT_BOLD);
+    loka::app::TextWeight weight = loka::app::TEXT_WEIGHT_NORMAL;
+    const bool hasWeight = a.queryWeight(weight);
+    LOKA_VERIFY(hasWeight);
+    LOKA_VERIFY(weight == loka::app::TEXT_WEIGHT_BOLD);
   }
 
   // --- MenuItem attr participates in structure equality ---

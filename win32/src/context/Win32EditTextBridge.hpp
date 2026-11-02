@@ -70,6 +70,7 @@ namespace loka
 
     /** Borrowed validated UTF-8 row shorter than INT_MAX bytes; no native reads or mapping cache.
         Deliberate twin of NativeRow in apple/macos/src/context/MacTextEditorContext.mm. */
+    // common/core/TextUnits.hpp is the formula home; delegation is a follow-up.
     class LogicalRow
     {
     public:
@@ -166,6 +167,7 @@ namespace loka
       return true;
     }
 
+    // common/core/TextUnits.hpp is the normalization formula home; delegation is a follow-up.
     inline bool TextEditorFromWide(const wchar_t *wide, std::size_t length, std::string &logical)
     {
       logical.clear();

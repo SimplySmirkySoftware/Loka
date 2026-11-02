@@ -4,6 +4,7 @@
 #include "app/style/TextSizeValue.hpp"
 #include "app/style/TextFamilyValue.hpp"
 #include "app/style/TextToggleValue.hpp"
+#include "app/style/TextWeightValue.hpp"
 #include "app/style/StyleVocab.hpp"
 
 namespace loka
@@ -15,17 +16,17 @@ namespace loka
     {
       explicit TextStyle(TextSizeValue size = TextSizeValue())
           : size_(size),
-            weight_(TEXT_WEIGHT_NORMAL),
             color_(TEXT_COLOR_UNSET),
+            weight_(),
             italic_(),
-            hasWeight_(false)
+            family_(),
+            underline_()
       {
       }
 
       TextStyle &weight(TextWeight value)
       {
-        this->weight_ = value;
-        this->hasWeight_ = true;
+        this->weight_ = TextWeightValue(value);
         return *this;
       }
 
@@ -50,13 +51,19 @@ namespace loka
       /** Whether any font axis is declared, independently of color, underline and block style. */
       bool declaresFont() const
       {
-        return this->size_.isSet() || this->hasWeight_ || this->italic_.isSet() || this->family_.isSet();
+        return this->size_.isSet() || this->weight_.isSet() || this->italic_.isSet() || this->family_.isSet();
       }
 
       TextStyle &italic(bool value = true)
       {
         this->italic_ = TextToggleValue(value ? TEXT_TOGGLE_ON : TEXT_TOGGLE_OFF);
         return *this;
+      }
+
+      /** Returns presence and writes out only when weight is declared. */
+      bool queryWeight(TextWeight &out) const
+      {
+        return this->weight_.query(out);
       }
 
       /** Returns presence and writes on only when italic is declared. */
@@ -82,11 +89,7 @@ namespace loka
         TextStyle result(*this);
         if (right.size_.isSet())
           result.size_ = right.size_;
-        if (right.hasWeight_)
-        {
-          result.weight_ = right.weight_;
-          result.hasWeight_ = true;
-        }
+        result.weight_ = this->weight_ + right.weight_;
         result.italic_ = this->italic_ + right.italic_;
         if (right.color_ != TEXT_COLOR_UNSET)
           result.color_ = right.color_;
@@ -98,7 +101,7 @@ namespace loka
       bool operator==(const TextStyle &other) const
       {
         return this->size_ == other.size_ && this->weight_ == other.weight_ && this->italic_ == other.italic_
-               && this->hasWeight_ == other.hasWeight_ && this->color_ == other.color_ && this->family_ == other.family_
+               && this->color_ == other.color_ && this->family_ == other.family_
                && this->underline_ == other.underline_;
       }
 
@@ -116,14 +119,14 @@ namespace loka
         other.size_.queryPoints(otherPoints);
         if (points != otherPoints)
           return points < otherPoints;
-        if (this->weight_ != other.weight_)
-          return this->weight_ < other.weight_;
+        if (this->weight_.orderWeight() != other.weight_.orderWeight())
+          return this->weight_.orderWeight() < other.weight_.orderWeight();
         if (this->italic_.isOn() != other.italic_.isOn())
           return this->italic_.isOn() < other.italic_.isOn();
         if (!(this->size_ == other.size_))
           return this->size_ < other.size_;
-        if (this->hasWeight_ != other.hasWeight_)
-          return this->hasWeight_ < other.hasWeight_;
+        if (this->weight_.isSet() != other.weight_.isSet())
+          return this->weight_.isSet() < other.weight_.isSet();
         if (this->italic_.isSet() != other.italic_.isSet())
           return this->italic_.isSet() < other.italic_.isSet();
         if (this->color_ != other.color_)
@@ -133,13 +136,12 @@ namespace loka
         return this->underline_ < other.underline_;
       }
 
+      // Four-byte members first, one-byte axes last: 12 B on every ABI.
       TextSizeValue size_;
-      TextWeight weight_;
-      /** Color carries its own absence in UNSET. Weight keeps a hasWeight_ flag
-          because its value domain has no distinct unset member. */
+      /** Color carries its own absence in UNSET. */
       TextColor color_;
+      TextWeightValue weight_;
       TextToggleValue italic_;
-      bool hasWeight_;
       TextFamilyValue family_;
       TextToggleValue underline_;
     };

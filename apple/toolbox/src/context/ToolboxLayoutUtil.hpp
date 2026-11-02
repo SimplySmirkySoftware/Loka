@@ -32,9 +32,10 @@ public:
 
   Style face(Style portFace) const
   {
-    if (this->style_.hasWeight_)
-      portFace = static_cast<Style>((portFace & ~bold)
-          | (this->style_.weight_ == loka::app::TEXT_WEIGHT_BOLD ? bold : 0));
+    loka::app::TextWeight weight = loka::app::TEXT_WEIGHT_NORMAL;
+    // Declared normal clears an inherited bold.
+    if (this->style_.queryWeight(weight))
+      portFace = static_cast<Style>((portFace & ~bold) | (weight == loka::app::TEXT_WEIGHT_BOLD ? bold : 0));
     bool on = false;
     if (this->style_.queryItalic(on))
       portFace = static_cast<Style>((portFace & ~italic) | (on ? italic : 0));

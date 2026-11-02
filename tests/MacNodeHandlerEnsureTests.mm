@@ -1155,6 +1155,8 @@ void testMacSmallLabelUsesTheSmallSystemFont()
     LOKA_VERIFY(smallBold != nil && smallBold != small);
     LOKA_VERIFY([smallBold pointSize] == [NSFont smallSystemFontSize]);
     LOKA_VERIFY(([[NSFontManager sharedFontManager] traitsOfFont:smallBold] & NSBoldFontMask) != 0);
+    // A declared normal weight is a declaration, not bold: it reads the plain slot.
+    LOKA_VERIFY(controller.textFont(SmallLabel + TextStyle().weight(TEXT_WEIGHT_NORMAL)) == small);
     NSFont *smallFixed = (NSFont *)controller.textFont(SmallLabel + Monospace);
     LOKA_VERIFY(smallFixed != nil && [smallFixed isFixedPitch]);
     LOKA_VERIFY([smallFixed pointSize] == [NSFont smallSystemFontSize]);

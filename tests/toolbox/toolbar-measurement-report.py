@@ -99,6 +99,38 @@ def rows(path):
     print('toolbar_row_summary complete=1 cases=8 (cost only; no heaviness verdict)')
 
 
+def laptop(path):
+    lines = Path(path).read_text().splitlines()
+    def records(prefix):
+        return [dict(item.split('=', 1) for item in shlex.split(line)[1:])
+                for line in lines if line.startswith(prefix + ' ')]
+    environments = records('toolbar_row_environment')
+    if (len(environments) != 1 or environments[0]['clock'] != 'Microseconds'
+            or int(environments[0]['observed_resolution_us']) <= 0):
+        raise ValueError('missing LAPTOP clock facts')
+    summaries = records('laptop_band_summary')
+    samples = records('laptop_band')
+    pairs = [(lead, title) for lead in ('Wide', '< Back')
+             for title in ('SmirkyTracker', 'PowerBook G4 Titanium')]
+    expected = {(f'laptop-band-{shape}', lead, title)
+                for shape in ('row', 'toolbar') for lead, title in pairs}
+    if (summaries != [{'complete': '1', 'cases': '8'}] or len(samples) != 8
+            or {(s['case'], s['lead'], s['title']) for s in samples} != expected):
+        raise ValueError('incomplete LAPTOP measurement')
+    for sample in samples:
+        if (int(sample['repetitions']) < 30 or int(sample['median_us']) < 0
+                or int(sample['maximum_us']) < int(sample['median_us']) or sample['offer'] != '420'):
+            raise ValueError('invalid one-band LAPTOP statistics')
+    for line in lines:
+        if line.startswith('laptop_band '):
+            print(line)
+    medians = {(s['case'], s['lead'], s['title']): int(s['median_us']) for s in samples}
+    for lead, title in pairs:
+        delta = medians['laptop-band-toolbar', lead, title] - medians['laptop-band-row', lead, title]
+        print(f"laptop_band_delta lead='{lead}' title='{title}' toolbar_minus_row_median_us={delta}")
+    print('laptop_band_summary complete=1 cases=8 (cost only; no heaviness verdict)')
+
+
 def provenance(build, binary, destination):
     build, binary, destination = map(Path, (build, binary, destination))
     commands = json.loads((build / 'compile_commands.json').read_text())
@@ -126,6 +158,7 @@ def provenance(build, binary, destination):
         'clock': 'Microseconds; observed resolution and empty-bracket cost in each run log',
         'screen_and_system': 'actual depth, size and Gestalt System version in each run log',
         'semantics': ('one Row consultation plus next for every seat; no drawing' if 'MeasureRows' in binary.name
+                      else 'one Box band layout per bracket; no drawing' if 'MeasureLaptopBand' in binary.name
                       else 'maximum erase-through-grow-box duration; no cost subtraction'),
     }, indent=2) + '\n')
 
@@ -135,9 +168,11 @@ if __name__ == '__main__':
             verdict(sys.argv[2])
         elif sys.argv[1] == 'rows':
             rows(sys.argv[2])
+        elif sys.argv[1] == 'laptop':
+            laptop(sys.argv[2])
         elif sys.argv[1] == 'provenance':
             provenance(*sys.argv[2:])
         else:
-            raise ValueError('expected verdict, rows or provenance')
+            raise ValueError('expected verdict, rows, laptop or provenance')
     except (ValueError, KeyError, OSError) as error:
         sys.exit(str(error))

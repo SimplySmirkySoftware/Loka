@@ -501,6 +501,13 @@ void testWin32TextFontTable()
     LOKA_VERIFY(descriptor.lfWeight == FW_BOLD);
     LOKA_VERIFY(descriptor.lfHeight == defaultDescriptor.lfHeight);
 
+    // A declared normal weight is a declaration, not bold.
+    TextProps normalProps(plainProps);
+    normalProps.textStyle_ = TextStyle().weight(TEXT_WEIGHT_NORMAL);
+    TextNode normal(normalProps);
+    readFont(projectFontText(controller, root, normal), descriptor);
+    LOKA_VERIFY(descriptor.lfWeight != FW_BOLD);
+
     TextProps italicProps(plainProps);
     italicProps.textStyle_ = Italic;
     TextNode italic(italicProps);
