@@ -27,6 +27,7 @@ template <class Controller> void ToolboxRenderDirtyInCompositionOrder(Controller
     ClipRect(&rect);
     EraseRect(&rect);
     ToolboxErasedPass::Guard erased(controller.erasedPass(), rect);
+    erased.noteErased(rect);
     ToolboxInputDoor::render(controller);
   }
   else

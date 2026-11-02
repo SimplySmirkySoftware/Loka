@@ -247,6 +247,7 @@ int main(int argc, char **argv)
     {
       ToolboxErasedPass::Guard erased(controller.erasedPass(), window.port.portRect);
       ToolboxPortErasePresenter presenter(window.port.portRect);
+      presenter.setErasedGuard(erased);
       ToolboxInputDoor::render(controller, &presenter);
     }
     LOKA_VERIFY(loka::testing::refuseImageDrawHandles == 0);
