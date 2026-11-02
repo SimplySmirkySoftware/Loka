@@ -26,6 +26,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxApp.cpp
   src/ToolboxMenuAttachment.cpp
   src/ToolboxByteSource.cpp
+  src/ToolboxPictAdmission.cpp
   src/ToolboxNativeImage.cpp
   src/PictParser.cpp
   src/ToolboxProfiler.cpp

@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_NATIVE_IMAGE_HPP
 
 #include <Quickdraw.h>
+#include "ToolboxPictAdmission.hpp"
 #include "core/resource/Blob.hpp"
 #include "core/resource/Image.hpp"
 
@@ -27,6 +28,7 @@ namespace loka
           trailing bytes -- so the end is carried rather than taken to be the
           end of the buffer. */
       std::size_t pictureEnd;
+      ToolboxPictAdmission admission;
       ToolboxPictBytesPayload()
           : blob(),
             pictureOffset(0),
@@ -54,9 +56,21 @@ namespace loka
                           int width,
                           int height);
 
-    const ToolboxNativeImage *TryGetToolboxNativeImage(const loka::core::resource::Image &image);
-
     const unsigned long kToolboxNativeImageMagic = 0x4C4F4B41UL; // 'LOKA'
+
+    inline const ToolboxNativeImage *TryGetToolboxNativeImage(const loka::core::resource::Image &image)
+    {
+      if (!image.isValid())
+      {
+        return 0;
+      }
+      const ToolboxNativeImage *native = static_cast<const ToolboxNativeImage *>(image.nativeHandle());
+      if (!native || native->magic != kToolboxNativeImageMagic)
+      {
+        return 0;
+      }
+      return native;
+    }
   } // namespace toolbox
 } // namespace loka
 

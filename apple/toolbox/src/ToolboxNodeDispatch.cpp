@@ -2,6 +2,7 @@
 #include "app/nodes/controls/Ribbon.hpp"
 #include "app/nodes/controls/Card.hpp"
 #include "ToolboxNodeDispatch.hpp"
+#include "ToolboxNativeImage.hpp"
 #include <cassert>
 #include "app/nodes/ImageView.hpp"
 #include "app/layout/StackGaps.hpp"
@@ -70,7 +71,28 @@ namespace
     {
       // COVER PICTs have no trustworthy native clip until #1560.
       const ImageViewProps &props = static_cast<ImageViewNode &>(node).props;
-      return !(props.hasAttr_ && props.attr_.hasFitValue_ && props.attr_.fitValue_ == IMAGE_FIT_COVER);
+      if (props.hasAttr_ && props.attr_.hasFitValue_ && props.attr_.fitValue_ == IMAGE_FIT_COVER)
+        return false;
+      if (!props.image_)
+        return true;
+      const loka::core::resource::Image image = props.image_->get();
+      const loka::toolbox::ToolboxNativeImage *native = loka::toolbox::TryGetToolboxNativeImage(image);
+      if (!native)
+        return true;
+      switch (native->kind)
+      {
+      case loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_PICT:
+        return false;
+      case loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_PICT_BYTES:
+      {
+        const loka::toolbox::ToolboxPictBytesPayload *payload =
+            static_cast<const loka::toolbox::ToolboxPictBytesPayload *>(native->payload);
+        return payload && payload->admission.admitsTranslation();
+      }
+      case loka::toolbox::TOOLBOX_NATIVE_IMAGE_KIND_UNKNOWN:
+        return true;
+      }
+      return true;
     }
     case NODE_KIND_STACK:
     case NODE_KIND_BOX:

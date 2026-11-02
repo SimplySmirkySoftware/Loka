@@ -153,6 +153,7 @@
 #include "StandalonePerformanceTests.hpp"
 #include "BlobRangeTests.hpp"
 #include "PictParserTests.hpp"
+#include "ToolboxPictAdmissionTests.hpp"
 #include "SceneTests.hpp"
 #include "StartupRedrawTests.hpp"
 #include "BoundaryArenaTests.hpp"
