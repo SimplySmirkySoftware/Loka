@@ -1726,6 +1726,22 @@ children that have no natural width, taking zero when nothing is left. In a
 shared Row, it takes an equal share with the other children without declared
 widths. It is as tall as an empty Box.
 
+### macOS Window Placement
+
+The primary-display work-area placement contract (#712), including native
+chrome, applies to the declared creation frame. On macOS this is the menu-bar
+display (`NSScreen screens[0]`); x is global and y is measured downward from
+that display's visible top, for creation, native read-back, and later writes.
+Later frame writes clamp to the display with the largest intersection with the
+proposed outer frame, falling back to the menu-bar display if none overlaps
+(#1713). Win32 deliberately uses the nearest monitor for that fallback.
+A native frame written back unchanged stays put when it fits fully inside its
+clamp display and its content size round-trips through layout units (#526).
+Straddling frames, sizes that do not round-trip, and negative coordinates are
+outside that guarantee: `Frame::hasPosition()` requires both axes non-negative.
+An unspecified negative axis preserves the current native origin before clamping;
+for negative y, a size change therefore preserves the bottom edge before clamping.
+
 ### Spacing: Gaps, Padding, And The Window Margin
 
 Use `gap(...)` on `VStack`, `HStack`, `Stack`, or `Box` for the space between
