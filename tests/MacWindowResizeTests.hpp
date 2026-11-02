@@ -11,4 +11,10 @@ void testMacWindowContentMarginStandard();
 void testMacWindowContentMarginOversized();
 void testMacWindowContentMarginWithoutWindow();
 
+void testMacWindowCreationUsesMenuBarDisplay();
+void testMacWindowSecondaryReadBackUsesMenuBarCoordinates();
+void testMacWindowSecondarySizeWriteStaysOnSecondary();
+void testMacWindowFrameWriteMovesAcrossDisplays();
+void testMacWindowOffscreenWriteFallsBackToMenuBarDisplay();
+
 #endif
