@@ -1728,19 +1728,22 @@ widths. It is as tall as an empty Box.
 
 ### macOS Window Placement
 
-The primary-display work-area placement contract (#712), including native
-chrome, applies to the declared creation frame. On macOS this is the menu-bar
-display (`NSScreen screens[0]`); x is global and y is measured downward from
-that display's visible top, for creation, native read-back, and later writes.
-Later frame writes clamp to the display with the largest intersection with the
-proposed outer frame, falling back to the menu-bar display if none overlaps
-(#1713). Win32 deliberately uses the nearest monitor for that fallback.
-A native frame written back unchanged stays put when it fits fully inside its
-clamp display and its content size round-trips through layout units (#526).
-Straddling frames, sizes that do not round-trip, and negative coordinates are
-outside that guarantee: `Frame::hasPosition()` requires both axes non-negative.
-An unspecified negative axis preserves the current native origin before clamping;
-for negative y, a size change therefore preserves the bottom edge before clamping.
+A declared window frame opens inside the work area of the primary display,
+native chrome included. On macOS the primary display is the one with the menu
+bar, whichever display currently has focus. Window coordinates always use that
+display: x from its left edge and y downward from the top of its visible area,
+so a window on another display reports coordinates in the same space.
+
+When the app writes a new frame later, the window is kept inside the display
+the new frame overlaps most, so an app can move a window to another display. A
+frame that overlaps no display is placed on the menu-bar display. (Windows
+picks the nearest monitor in that case.)
+
+Writing a window's reported frame back leaves the window where it is, as long
+as the window lies fully inside one display's visible area and its size has not
+been changed by the user to a value between layout units. A window on a display
+to the left of or above the menu-bar display reports a negative coordinate,
+which a frame treats as unspecified (`Frame::hasPosition()` is false).
 
 ### Spacing: Gaps, Padding, And The Window Margin
 
