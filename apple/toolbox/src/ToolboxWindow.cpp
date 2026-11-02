@@ -98,9 +98,8 @@ ToolboxWindow::ToolboxWindow(PlatformContext *context, const WindowProps &props)
       window_(0),
       scenePlatformController_(0),
       context_(0),
-      needsInvalidate_(false),
+      next_(),
       pendingDebugDump_(false),
-      pendingInvalidateRects_(),
       chrome_()
 {
   window_ = 0;
@@ -120,9 +119,8 @@ ToolboxWindow::~ToolboxWindow()
 {
   this->closeDialogResults();
   this->detachNativeStateObservers();
-  needsInvalidate_ = false;
+  this->next_.clear();
   pendingDebugDump_ = false;
-  pendingInvalidateRects_.clear();
   teardownScene();
   delete context_;
   context_ = 0;
@@ -533,7 +531,7 @@ void ToolboxWindow::flushDeferredDebugDump()
   {
     return;
   }
-  if (needsInvalidate_ || !pendingInvalidateRects_.empty())
+  if (!this->next_.empty())
   {
     return;
   }
