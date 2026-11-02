@@ -927,4 +927,10 @@ endforeach()
 loka_add_toolbox_test_application(LokaMeasureRows${LOKA_CLASSIC_TARGET_SUFFIX} LokaAppleToolboxTestCore
   src/ToolbarRowMeasurementMain.cpp ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/TutorialSize.r)
-target_compile_definitions(LokaMeasureRows${LOKA_CLASSIC_TARGET_SUFFIX} PRIVATE TEST_BUILD LOKA_DIAG=1)
+target_compile_definitions(LokaMeasureRows${LOKA_CLASSIC_TARGET_SUFFIX} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_ROWS_LAPTOP=0)
+
+# Separate LAPTOP window keeps the existing cases' window identical to main.
+loka_add_toolbox_test_application(LokaMeasureLaptopBand${LOKA_CLASSIC_TARGET_SUFFIX} LokaAppleToolboxTestCore
+  src/ToolbarRowMeasurementMain.cpp ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/TutorialSize.r)
+target_compile_definitions(LokaMeasureLaptopBand${LOKA_CLASSIC_TARGET_SUFFIX} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_ROWS_LAPTOP=1)

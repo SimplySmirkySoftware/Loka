@@ -51,6 +51,7 @@ Win32TextEditorContext::Projection::Projection()
       wide()
 {
 }
+// Platform twin: ToolboxUnicodeProjection uses bounded raw buffers and stage/publish.
 bool Win32TextEditorContext::Projection::current(const TextEditorNode &node) const
 {
   if (!this->owner || this->owner != node.props.buffer_ || this->revision != this->owner->lines().revision().get())

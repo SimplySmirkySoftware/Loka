@@ -5655,6 +5655,24 @@ namespace
     }
   };
 
+  /** The scenario lookup refuses duplicate ids as well as missing ids. */
+  void checkLaptopToolbarIds(NullWindow &window, bool detail)
+  {
+    const char *ids[] = {"Laptop.Presentation", "Laptop.Title", "Laptop.Back"};
+    for (unsigned i = 0; i != 3; ++i)
+    {
+      loka::app::scene::Node *node = 0;
+      loka::dsl::FlowError error;
+      const loka::dsl::StepRunStatus result =
+          loka::dsl::testing::LookupNodeById<loka::app::scene::Node>(window.scene(), ids[i], node, error);
+      if (i == 1 || (i == 2) == detail)
+        LOKA_VERIFY(result == loka::dsl::FLOW_STEP_SUCCEEDED && node);
+      else
+        LOKA_VERIFY(result == loka::dsl::FLOW_STEP_FAILED
+                    && error.code == loka::dsl::testing::FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND);
+    }
+  }
+
   void checkLaptopPictureChoice(NamedPicturePlatform &context, bool mono)
   {
     std::string source = readCardSource("LAPTOP.JS");
@@ -5685,9 +5703,18 @@ namespace
              " && r.children[1].child.text==='')(laptop.list().children[0].child.children[6].child)",
              "true");
     expectJs(h.runtime, "laptop.compose().staticBlurUnit===1 && laptop.aboutShown.get()===false", "true");
+    std::fputs("[pin] laptop per-pane Toolbar shape, constant leads and item order\n", stderr);
     expectJs(h.runtime,
-             "laptop.toolbar().child.children.length===2 && laptop.toolbar().child.children[0].children.length===4"
-             " && laptop.toolbar().child.children[1].testId==='Laptop.Title'",
+             "[laptop.carousel(),laptop.list(),laptop.detailPage()].every((pane,i)=>{"
+             "const band=pane.children[1].child,items=band.children;"
+             "return band.kind===Toolbar().kind && items.length===4 && "
+             "items[0].kind===ToolbarItem('x',()=>{}).kind && items[0].label===['Tall','Wide','< Back'][i] && "
+             "items[0].testId===(i===2?'Laptop.Back':'Laptop.Presentation') && "
+             "items[1].kind===ToolbarItem.label('x').kind && items[1].label===laptop.toolbarTitle && "
+             "items[1].testId==='Laptop.Title' && items[1].style.size===18 && items[1].style.weight==='bold' && "
+             "items[2].kind===items[0].kind && items[2].label==='Main' && "
+             "items[2].testId==='SmirkyCard.OpenMain' && items[3].kind===items[0].kind && "
+             "items[3].label==='About' && items[3].testId==='Laptop.About'})",
              "true");
     expectJs(h.runtime,
              "(()=>{const depths=[];function walk(t,d){"
@@ -5719,6 +5746,35 @@ namespace
     h.ticks(2);
     LOKA_VERIFY(windowNode(*h.window, "Laptop.About.Name"));
     checkLaptopBands(*h.window);
+    expectJs(h.runtime, "laptop.aboutShown.set(false)", "undefined");
+    h.ticks(2);
+    std::fputs("[pin] laptop toolbar ids and two toggles: one handler call per click\n", stderr);
+    expectJs(h.runtime, "!('presentationLabel' in laptop) && !('browse' in laptop)", "true");
+    expectJs(h.runtime,
+             "globalThis.laptopToggleCalls=0;globalThis.laptopToggle=laptop.togglePresentation;"
+             "laptop.togglePresentation=function(){++laptopToggleCalls;laptopToggle.call(this)};laptop.wide",
+             "false");
+    checkLaptopToolbarIds(*h.window, false);
+    clickCardButton(*h.window, "Laptop.Presentation");
+    h.ticks(2);
+    checkLaptopToolbarIds(*h.window, false);
+    expectJs(h.runtime,
+             "laptopToggleCalls===1 && laptop.wide && laptop.carouselShown.get() && !laptop.listShown.get()",
+             "true");
+    clickCardButton(*h.window, "Laptop.Presentation");
+    h.ticks(2);
+    checkLaptopToolbarIds(*h.window, false);
+    expectJs(h.runtime,
+             "laptopToggleCalls===2 && !laptop.wide && !laptop.carouselShown.get() && laptop.listShown.get()",
+             "true");
+    clickCardButton(*h.window,
+                    windowNode(*h.window, "Laptop.Open.macplus") ? "Laptop.Open.macplus" : "Laptop.Narrow.macplus");
+    h.ticks(2);
+    checkLaptopToolbarIds(*h.window, true);
+    clickCardButton(*h.window, "Laptop.Back");
+    h.ticks(2);
+    checkLaptopToolbarIds(*h.window, false);
+    expectJs(h.runtime, "!laptop.detail.get() && laptop.listShown.get() && laptopToggleCalls===2", "true");
     // Inspect the actual ImageView inputs, not merely the existence of thumbs.
     expectJs(
         h.runtime, "laptop.machineCard(0,150,94,'x','x',true).child.children[0].child.seat===laptop.thumbs[0]", "true");

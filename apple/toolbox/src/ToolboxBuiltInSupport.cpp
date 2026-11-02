@@ -6,7 +6,9 @@
 #include "context/ToolboxConfirmDialogContext.hpp"
 #include "app/ConfirmDialog.hpp"
 #include "context/ToolboxTextEditorContext.hpp"
+#if LOKA_TOOLBOX_UNICODE
 #include "context/ToolboxUnicodeTextEditorContext.hpp"
+#endif
 #include "app/nodes/controls/TextEditor.hpp"
 #include "ToolboxBuiltInSupport.hpp"
 #include "context/ToolboxAttributedTextContext.hpp"

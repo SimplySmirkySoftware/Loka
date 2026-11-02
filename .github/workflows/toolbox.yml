@@ -264,7 +264,8 @@ jobs:
               python3 tools/ci/check_pef_imports.py \
                 "$build_dir/example/SimpleText/LokaSimpleTextPPC.pef" InterfaceLib
               python3 tools/ci/check_pef_imports.py \
-                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.pef" InterfaceLib Textension
+                "$build_dir/example/SimpleText/LokaSimpleTextUnicodePPC.pef" InterfaceLib Textension \
+                --textension-symbols TXNClick TXNConvertFromPublicScrap TXNConvertToPublicScrap TXNCopy TXNCut TXNDataSize TXNDeleteObject TXNDraw TXNFocus TXNGetChangeCount TXNGetData TXNGetSelection TXNIdle TXNInitTextension TXNIsScrapPastable TXNKeyDown TXNNewObject TXNPaste TXNSelectAll TXNSetData TXNSetFrameBounds TXNSetSelection TXNSetTXNObjectControls TXNShowSelection TXNTSMCheck TXNTerminateTextension TXNUndo
               python3 tools/ci/check_pef_imports.py \
                 "$build_dir/tests/toolbox/unicode-lifecycle/LokaToolboxUnicodeLifecycle.pef" InterfaceLib Textension
               python3 tools/ci/check_toolbox_startup_wiring.py \

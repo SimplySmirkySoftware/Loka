@@ -129,7 +129,12 @@ endif()
 
 # Deliberate acceptance twin of the Classic target above; keep settings aligned.
 if(CMAKE_SYSTEM_NAME STREQUAL "RetroPPC")
-  add_application(LokaSimpleTextUnicodePPC ${RETRO_SOURCES})
+  # add_application shares Rez outputs by source basename. Give the Unicode
+  # partition its own resource source; C++ target definitions do not reach Rez.
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Size.r")
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/UnicodeSize.r"
+    "#define LOKA_TOOLBOX_UNICODE 1\n#include \"${CMAKE_CURRENT_SOURCE_DIR}/Size.r\"\n")
+  add_application(LokaSimpleTextUnicodePPC src/main.cpp "${CMAKE_CURRENT_BINARY_DIR}/UnicodeSize.r")
   loka_enable_warnings(LokaSimpleTextUnicodePPC)
 
   target_include_directories(LokaSimpleTextUnicodePPC PRIVATE

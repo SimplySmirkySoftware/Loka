@@ -1,5 +1,6 @@
 #ifndef LOKA_TOOLBOX_UNICODE_EDITOR_LEDGER_HPP
 #define LOKA_TOOLBOX_UNICODE_EDITOR_LEDGER_HPP
+struct OpaqueTXNObject;
 class ToolboxWindow;
 namespace loka
 {
@@ -23,7 +24,7 @@ class ToolboxUnicodeEditorLedger
 {
 public:
   /** Owns an uncommitted wrapper. A successful install must immediately release
-      into link; a refused install leaves no native object in this owner. */
+      into link or replacement retirement; a refused install leaves no native object in this owner. */
   class Prepared
   {
   public:
@@ -46,6 +47,10 @@ public:
       Borrows prepared storage; failure leaves it empty. Does not commit. */
   bool
   install(ToolboxUnicodeEditorResource *, ToolboxWindow *window, const loka::core::Frame &frame, unsigned long options);
+  /** Install, swap native identity, then retire the old object without allocation. */
+  bool replace(ToolboxUnicodeEditorResource *, Prepared &, ToolboxWindow *, const loka::core::Frame &, unsigned long);
+  /** Opaque native borrow; valid only inside the controller borrow interval. */
+  OpaqueTXNObject *object(ToolboxUnicodeEditorResource *) const;
   /** Commit ownership without allocation. */
   void link(ToolboxUnicodeEditorResource *);
   ToolboxUnicodeEditorResource *find(loka::app::scene::NodeContext *);

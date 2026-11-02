@@ -1,6 +1,7 @@
 #include "app/nodes/controls/TextEditorRequests.hpp"
 #include "support/TextAlphabetCases.hpp"
 #include "TextUtf8Tests.hpp"
+#include "support/TextEditorDiffCases.hpp"
 #include "app/nodes/controls/TextDocumentLine.hpp"
 #include "platform/null/NullPlatformContext.hpp"
 #include "support/TextBufferFixture.hpp"
@@ -192,23 +193,7 @@ void testTextEditorActions()
     LOKA_VERIFY(span.afterEnd() == spanCases[i].newEnd);
   }
   // Shared range detection runs on Linux; an absent hint preserves text-only detection.
-  const struct DiffCase
-  {
-    const char *before;
-    const char *after;
-    int first, oldCount, newCount;
-  } cases[] = {{"aQcd\rabcd\rabcd", "abxcd\rabcd\rabcd", 0, 1, 1},
-               {"a\rb", "a\rb", 2, 0, 0},
-               {"abcd", "ab\rcd", 0, 1, 2},
-               {"ab\rcd", "abcd", 0, 2, 1},
-               {"abcd", "abcd\r", 0, 1, 2},
-               {"abcd\r", "abcd", 0, 2, 1},
-               {"abcd", "\rabcd", 0, 1, 2},
-               {"\rabcd", "abcd", 0, 2, 1},
-               {"", "\r", 0, 1, 2},
-               {"a\rb\rc", "A\rb\rC", 0, 3, 3},
-               {"a\rb\rc", "a\rB\rC", 1, 2, 2},
-               {"a", "aQ\rR\rS", 0, 1, 3}};
+  using namespace text_editor_diff_cases;
   for (std::size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i)
   {
     const loka::app::TextEditorLineDiff diff = loka::app::DiffTextEditorLines(cases[i].before, cases[i].after);
