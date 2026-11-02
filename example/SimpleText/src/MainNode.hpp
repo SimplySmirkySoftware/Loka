@@ -288,7 +288,7 @@ namespace simpletext
                 ? loka::app::TextBuffer::ATTACH_RAIL_DECLINED
                 : this->buffer_.attach(this->tracker()->asPushTracker(),
                                        *rail,
-                                       loka::app::TextCapacity::of(1024, 16384).clampedTo(maximum));
+                                       loka::app::TextCapacity::of(32768, 4 * 1024 * 1024).clampedTo(maximum));
         if (result != loka::app::TextBuffer::ATTACH_OK && result != loka::app::TextBuffer::ATTACH_ALREADY_ATTACHED)
           this->error_.set(loka::core::String::Literal("Cannot allocate document."));
         else if (result == loka::app::TextBuffer::ATTACH_OK)

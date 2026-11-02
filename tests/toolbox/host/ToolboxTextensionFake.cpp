@@ -1,10 +1,23 @@
 #include "ToolboxTextensionFake.hpp"
 #include "support/TestVerify.hpp"
 #include <cstring>
+#include <algorithm>
+#include <map>
 struct OpaqueTXNObject
 {
   Rect frame;
   TXNFrameOptions options;
+  std::vector<unsigned short> units, history;
+  TXNOffset start, end;
+  ItemCount changes;
+  OpaqueTXNObject()
+      : frame(),
+        options(0),
+        start(0),
+        end(0),
+        changes(0)
+  {
+  }
 };
 namespace
 {
@@ -16,6 +29,7 @@ namespace
   std::vector<TextensionFake::Control> controlRecords;
   std::string failure;
   OSStatus failureStatus;
+  unsigned failureOrdinal = 1;
   unsigned objects, deleted, initialized, terminated, controlOrdinal, controlFailure;
   int depth;
   OSStatus record(const char *name, TXNObject object = 0, long argument = 0, const Rect &frame = Rect())
@@ -23,7 +37,7 @@ namespace
     sequence.push_back(name);
     const TextensionFake::Call call = {name, object, argument, frame};
     eventRecords.push_back(call);
-    if (failure == name)
+    if (failure == name && --failureOrdinal == 0)
     {
       failure.clear();
       return failureStatus;
@@ -31,6 +45,216 @@ namespace
     return noErr;
   }
 } // namespace
+namespace
+{
+  std::vector<unsigned short> privateScrap, publicScrap, keyUnits;
+  bool keyPending = false, replaceKeySelection = true, clickPending = false;
+  TXNOffset clickStart, clickEnd;
+  bool caretPending = false;
+  TXNOffset caretStart, caretEnd;
+  TXNObject latestObject;
+  long sizeOverride = -1, handleOverride = -1;
+  std::map<Handle, long> handleSizes;
+  void replaceUnits(TXNObject object, TXNOffset start, TXNOffset end, const std::vector<unsigned short> &units)
+  {
+    start = std::min<TXNOffset>(start, object->units.size());
+    end = std::max(start, std::min<TXNOffset>(end, object->units.size()));
+    object->history = object->units;
+    object->units.erase(object->units.begin() + start, object->units.begin() + end);
+    object->units.insert(object->units.begin() + start, units.begin(), units.end());
+    object->start = object->end = start + units.size();
+    ++object->changes;
+  }
+} // namespace
+Handle NewHandle(long size)
+{
+  Handle handle = new char *;
+  *handle = new char[size ? size : 1];
+  handleSizes[handle] = size;
+  return handle;
+}
+long GetHandleSize(Handle handle)
+{
+  return handleSizes[handle];
+}
+void DisposeHandle(Handle handle)
+{
+  if (!handle)
+    return;
+  handleSizes.erase(handle);
+  delete[] *handle;
+  delete handle;
+}
+namespace TextensionFake
+{
+  void (*afterKey)() = 0;
+  void (*afterService)() = 0;
+  void (*afterIdle)() = 0;
+  TXNObject latest()
+  {
+    return latestObject;
+  }
+  const std::vector<unsigned short> &body(TXNObject object)
+  {
+    return object->units;
+  }
+  void nextKey(const std::vector<unsigned short> &units, bool replaceSelection)
+  {
+    keyUnits = units;
+    keyPending = true;
+    replaceKeySelection = replaceSelection;
+  }
+  void nextClick(TXNOffset start, TXNOffset end)
+  {
+    clickPending = true;
+    clickStart = start;
+    clickEnd = end;
+  }
+  void nextCaret(TXNOffset start, TXNOffset end)
+  {
+    caretPending = true;
+    caretStart = start;
+    caretEnd = end;
+  }
+  void injectChange(const std::vector<unsigned short> &units)
+  {
+    latestObject->units = units;
+    ++latestObject->changes;
+  }
+  void publicText(const std::vector<unsigned short> &units)
+  {
+    publicScrap = units;
+  }
+  void lieSize(long size)
+  {
+    sizeOverride = size;
+  }
+  void lieHandle(long size)
+  {
+    handleOverride = size;
+  }
+} // namespace TextensionFake
+OSStatus TXNSetData(TXNObject object, TXNDataType type, void *data, ByteCount size, TXNOffset start, TXNOffset end)
+{
+  const OSStatus result = record("set-data", object, size);
+  if (result != noErr)
+    return result;
+  if (size & 1 || type != kTXNUnicodeTextData)
+    return -50;
+  const unsigned short *units = static_cast<const unsigned short *>(data);
+  std::vector<unsigned short> replacement;
+  if (size)
+    replacement.assign(units, units + size / 2);
+  replaceUnits(object, start, end, replacement);
+  return noErr;
+}
+OSStatus TXNGetData(TXNObject object, TXNOffset start, TXNOffset end, Handle *out)
+{
+  const OSStatus result = record("get-data", object);
+  if (result != noErr)
+    return result;
+  start = std::min<TXNOffset>(start, object->units.size());
+  end = std::max(start, std::min<TXNOffset>(end, object->units.size()));
+  const long size = (end - start) * 2;
+  *out = size ? NewHandle(size) : 0;
+  if (size)
+    std::memcpy(**out, &object->units[start], size);
+  if (handleOverride >= 0 && *out)
+  {
+    handleSizes[*out] = handleOverride;
+    handleOverride = -1;
+  }
+  return noErr;
+}
+ByteCount TXNDataSize(TXNObject object)
+{
+  const OSStatus result = record("data-size", object);
+  if (result != noErr)
+    return static_cast<ByteCount>(result);
+  if (sizeOverride >= 0)
+  {
+    const long size = sizeOverride;
+    sizeOverride = -1;
+    return size;
+  }
+  return object->units.size() * 2;
+}
+ItemCount TXNGetChangeCount(TXNObject object)
+{
+  record("changes", object);
+  return object->changes;
+}
+void TXNGetSelection(TXNObject object, TXNOffset *start, TXNOffset *end)
+{
+  record("get-selection", object);
+  *start = object->start;
+  *end = object->end;
+}
+OSStatus TXNSetSelection(TXNObject object, TXNOffset start, TXNOffset end)
+{
+  const OSStatus result = record("set-selection", object, start);
+  if (result != noErr)
+    return result;
+  object->start = std::min<TXNOffset>(start, object->units.size());
+  object->end = std::max(object->start, std::min<TXNOffset>(end, object->units.size()));
+  return noErr;
+}
+void TXNSelectAll(TXNObject object)
+{
+  record("select-all", object);
+  object->start = 0;
+  object->end = object->units.size();
+}
+void TXNShowSelection(TXNObject object, Boolean end)
+{
+  record("show-selection", object, end);
+}
+OSStatus TXNGetLineCount(TXNObject object, ItemCount *count)
+{
+  const OSStatus result = record("line-count", object);
+  *count = 1;
+  for (std::size_t i = 0; i < object->units.size(); ++i)
+    if (object->units[i] == '\r' || object->units[i] == '\n')
+      ++*count;
+  return result;
+}
+OSStatus TXNCopy(TXNObject object)
+{
+  const OSStatus result = record("copy", object);
+  if (result == noErr)
+    privateScrap.assign(object->units.begin() + object->start, object->units.begin() + object->end);
+  return result;
+}
+OSStatus TXNCut(TXNObject object)
+{
+  const OSStatus result = record("cut", object);
+  if (result == noErr)
+  {
+    privateScrap.assign(object->units.begin() + object->start, object->units.begin() + object->end);
+    replaceUnits(object, object->start, object->end, std::vector<unsigned short>());
+  }
+  return result;
+}
+OSStatus TXNPaste(TXNObject object)
+{
+  const OSStatus result = record("paste", object);
+  if (result == noErr)
+    replaceUnits(object, object->start, object->end, privateScrap);
+  return result;
+}
+void TXNUndo(TXNObject object)
+{
+  if (record("undo", object) != noErr)
+    return;
+  object->units.swap(object->history);
+  object->start = object->end = 0;
+  ++object->changes;
+}
+Boolean TXNIsScrapPastable()
+{
+  return record("pastable") == noErr && !privateScrap.empty();
+}
+
 namespace TextensionFake
 {
   const std::vector<Call> &events()
@@ -68,11 +292,25 @@ namespace TextensionFake
     failure.clear();
     deleted = initialized = terminated = controlOrdinal = controlFailure = 0;
     depth = 0;
+    keyPending = clickPending = caretPending = false;
+    afterKey = afterService = afterIdle = 0;
+    sizeOverride = handleOverride = -1;
+    latestObject = 0;
+    privateScrap.clear();
+    publicScrap.clear();
+    keyUnits.clear();
+    LOKA_VERIFY(handleSizes.empty());
   }
   void failNext(const char *name, OSStatus status)
   {
     failure = name;
+    failureOrdinal = 1;
     failureStatus = status;
+  }
+  void failNth(const char *name, unsigned ordinal, OSStatus status)
+  {
+    failNext(name, status);
+    failureOrdinal = ordinal;
   }
   void failControl(unsigned ordinal, OSStatus status)
   {
@@ -152,6 +390,7 @@ OSStatus TXNNewObject(const FSSpec *file,
   (*object)->frame = *frame;
   (*object)->options = options;
   *frameID = 1;
+  latestObject = *object;
   ++objects;
   return noErr;
 }
@@ -186,6 +425,8 @@ Boolean TXNTSMCheck(TXNObject object, EventRecord *event)
 {
   LOKA_VERIFY(!object);
   record("tsm", object, event->what);
+  if (TextensionFake::afterService)
+    TextensionFake::afterService();
   if (consumedEvent && rewriteEvent)
     event->what = 0;
   return consumedEvent;
@@ -202,25 +443,58 @@ void TXNFocus(TXNObject object, Boolean focused)
 }
 OSStatus TXNConvertToPublicScrap()
 {
-  return record("scrap-to");
+  const OSStatus status = record("scrap-to");
+  if (status == noErr)
+    publicScrap = privateScrap;
+  return status;
 }
 OSStatus TXNConvertFromPublicScrap()
 {
-  return record("scrap-from");
+  const OSStatus status = record("scrap-from");
+  if (status == noErr)
+    privateScrap = publicScrap;
+  return status;
 }
 
 void TXNIdle(TXNObject object)
 {
   LOKA_VERIFY(object);
   record("idle", object);
+  if (TextensionFake::afterIdle)
+    TextensionFake::afterIdle();
 }
 void TXNKeyDown(TXNObject object, const EventRecord *event)
 {
-  record("key", object, event->what);
+  if (record("key", object, event->what) != noErr)
+    return;
+  if (caretPending)
+  {
+    caretPending = false;
+    object->start = std::min<TXNOffset>(caretStart, object->units.size());
+    object->end = std::max(object->start, std::min<TXNOffset>(caretEnd, object->units.size()));
+  }
+  else if (keyPending)
+  {
+    keyPending = false;
+    replaceUnits(object, object->start, replaceKeySelection ? object->end : object->start, keyUnits);
+  }
+  else if ((event->message & 255) == 8)
+    replaceUnits(object, object->start ? object->start - 1 : 0, object->end, std::vector<unsigned short>());
+  else if ((event->message & 255) >= 32 || (event->message & 255) == 13)
+    replaceUnits(object, object->start, object->end, std::vector<unsigned short>(1, event->message & 255));
+  if (TextensionFake::afterKey)
+    TextensionFake::afterKey();
 }
 void TXNClick(TXNObject object, const EventRecord *event)
 {
-  record("click", object, event->what);
+  if (record("click", object, event->what) != noErr)
+    return;
+  if (clickPending)
+  {
+    clickPending = false;
+    object->start = std::min<TXNOffset>(clickStart, object->units.size());
+    object->end = std::max(object->start, std::min<TXNOffset>(clickEnd, object->units.size()));
+  }
 }
 void TXNSetFrameBounds(TXNObject object, SInt32 top, SInt32 left, SInt32 bottom, SInt32 right, TXNFrameID frame)
 {

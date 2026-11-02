@@ -126,6 +126,11 @@ function(loka_configure_toolbox_core target variant)
   )
 endfunction()
 
+# The 68K rail has no Unicode context, including no stub translation unit.
+if(CMAKE_SYSTEM_NAME STREQUAL "Retro68")
+  list(REMOVE_ITEM LOKA_TOOLBOX_SOURCES src/context/ToolboxUnicodeTextEditorContext.cpp)
+endif()
+
 add_library(LokaAppleToolboxCore STATIC ${LOKA_TOOLBOX_SOURCES} ${COMMON_SOURCES})
 loka_configure_toolbox_core(LokaAppleToolboxCore te)
 

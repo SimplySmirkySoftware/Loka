@@ -1,12 +1,13 @@
 #ifndef LOKA_TOOLBOX_UNICODE_TEXT_EDITOR_CONTEXT_HPP
 #define LOKA_TOOLBOX_UNICODE_TEXT_EDITOR_CONTEXT_HPP
 #include "ToolboxEditorSeat.hpp"
+#include "context/ToolboxUnicodeProjection.hpp"
 #include "context/ToolboxProjectedNodeContext.hpp"
 #include "app/nodes/controls/TextEditor.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/scene/state/RequestSettlement.hpp"
 struct ToolboxUnicodeEditorResource;
-/** Read-only staging seat. The controller ledger owns its borrowed presentation. */
+/** MLTE body seat. The controller ledger owns its borrowed presentation. */
 class ToolboxUnicodeTextEditorContext : public ToolboxProjectedNodeContext, public ToolboxEditorSeat
 {
 public:
@@ -41,6 +42,35 @@ private:
   void settle(loka::app::scene::Settlement, RailOperation &);
   loka::app::EditorResult beginInput();
   loka::app::EditorResult refuseInput();
+  struct Selection
+  {
+    unsigned long start, end;
+    Selection()
+        : start(0),
+          end(0)
+    {
+    }
+  };
+  struct Captured
+  {
+    ToolboxUnicodeProjection::Stamp before;
+    bool accepted, normalized, structure;
+    explicit Captured(const ToolboxUnicodeProjection::Stamp &stamp)
+        : before(stamp),
+          accepted(false),
+          normalized(false),
+          structure(false)
+    {
+    }
+  };
+  loka::app::EditorResult project();
+  loka::app::EditorResult readBack(const Selection &, Captured &, RailOperation &);
+  loka::app::EditorResult finishInput(loka::app::EditorResult, const Selection &, const Captured &, RailOperation &);
+  void repair(const Selection &);
+  void unavailable();
+  Selection selection() const;
+  unsigned long offsetOf(loka::app::LineCursor, const UnicodeLogicalText &) const;
+  loka::app::LineCursor cursorAt(unsigned long) const;
   void updateRect(const Rect &);
   bool queryVisibleLines(unsigned &) const
   {
@@ -50,6 +80,17 @@ private:
   loka::app::TextEditorNode *node_;
   ToolboxUnicodeEditorResource *unicode_;
   Rect rect_, paintRect_;
+  // Platform twin of TE phase_/status_: operation stage and last completion.
+  enum Phase
+  {
+    IDLE,
+    PROJECT,
+    INPUT,
+    RECONCILE
+  };
+  Phase phase_;
+  loka::app::EditorResult status_;
+  ToolboxUnicodeProjection projection_;
 };
 bool RegisterToolboxUnicodeTextEditorNodeHandler(loka::app::scene::PlatformNodeHandlerRegistry &);
 #endif
