@@ -12,6 +12,7 @@
 #include <MacWindows.h>
 #include <Memory.h>
 #include <Menus.h>
+#include <QDOffscreen.h>
 #include <Quickdraw.h>
 #include <StandardFile.h>
 #include <TextEdit.h>
@@ -31,6 +32,13 @@ namespace
   TXNObject gTxn2 = 0;
   TXNFrameID gFrame2 = 0;
   WindowPtr gWindow2 = 0;
+  // Probe 3 (text-body-native-owned page 1 v0.3 §4): a NULL-window object,
+  // attached to win3, typed into, re-attached to an offscreen GWorld ("hide"),
+  // win3 disposed, then attached to win4 and typed into again.
+  const bool kProbe1 = false;
+  TXNObject gTxn3 = 0;
+  TXNFrameID gFrame3 = 0;
+  WindowPtr gWin4 = 0;
   bool gQuit = false;
   ByteCount gLastSize = 0;
   ItemCount gLastChange = 0;
@@ -55,6 +63,7 @@ namespace
     kEditGetFile = 8
   };
 
+  void p3dump(const char *tag, WindowPtr specificTo);
   void logf(const char *fmt, ...)
   {
     if (!gLog)
@@ -257,6 +266,7 @@ namespace
         break;
       case kEditDump:
         dumpBuffer("DUMP", 96);
+        p3dump("DUMP", gWin4);
         break;
       case kEditModal:
       {
@@ -299,6 +309,115 @@ namespace
     HiliteMenu(0);
   }
 
+  void p3dump(const char *tag, WindowPtr specificTo)
+  {
+    if (!gTxn3)
+      return;
+    Handle out = 0;
+    const OSStatus get = TXNGetData(gTxn3, kTXNStartOffset, kTXNEndOffset, &out);
+    const long n = out ? GetHandleSize(out) / 2 : -1;
+    char text[96];
+    int k = 0;
+    for (long i = 0; out && i < n && k < 80; ++i)
+    {
+      const UniChar c = ((const UniChar *)*out)[i];
+      text[k++] = (c >= 32 && c < 127) ? (char)c : (c == 0x000D ? '/' : '?');
+    }
+    text[k] = 0;
+    TXNOffset s0 = 0, s1 = 0;
+    TXNGetSelection(gTxn3, &s0, &s1);
+    TXNActionKey key = 0;
+    const Boolean can = TXNCanUndo(gTxn3, &key);
+    Boolean specific = false;
+    const OSStatus sp = specificTo ? TXNIsObjectAttachedToSpecificWindow(gTxn3, specificTo, &specific) : 0;
+    logf("P3 %s get=%ld units=%ld text=[%s] sel=%lu..%lu canUndo=%d key=%lu chg=%lu attached=%d specific=%d/%ld", tag,
+         (long)get, n, text, (unsigned long)s0, (unsigned long)s1, (int)can, (unsigned long)key,
+         (unsigned long)TXNGetChangeCount(gTxn3), (int)TXNIsObjectAttachedToWindow(gTxn3), (int)specific, (long)sp);
+    if (out)
+      DisposeHandle(out);
+  }
+
+  void p3type(const char *chars)
+  {
+    for (const char *c = chars; *c; ++c)
+    {
+      EventRecord ev;
+      memset(&ev, 0, sizeof ev);
+      ev.what = keyDown;
+      ev.message = (unsigned char)*c;
+      ev.when = TickCount();
+      TXNKeyDown(gTxn3, &ev);
+    }
+  }
+
+  void probe3()
+  {
+    Rect f;
+    SetRect(&f, 4, 4, 120, 280);
+    const OSStatus made = TXNNewObject(0, 0, &f, kTXNAlwaysWrapAtViewEdgeMask, kTXNTextEditStyleFrameType,
+                                       kTXNUnicodeTextFile, kTXNUnicodeEncoding, &gTxn3, &gFrame3, 0);
+    logf("P3 new(NULL)=%ld", (long)made);
+    if (made != noErr || !gTxn3)
+    {
+      gTxn3 = 0;
+      return;
+    }
+    static const UniChar hello[] = {'h', 'e', 'l', 'l', 'o'};
+    logf("P3 setData=%ld", (long)TXNSetData(gTxn3, kTXNUnicodeTextData, (void *)hello, sizeof hello, kTXNStartOffset,
+                                            kTXNEndOffset));
+    p3dump("A-filled", 0);
+
+    Rect b3;
+    SetRect(&b3, 60, 300, 360, 440);
+    WindowPtr win3 = NewCWindow(0, &b3, "\pwin3", true, documentProc, (WindowPtr)-1L, true, 0);
+    logf("P3 attach(win3)=%ld", (long)TXNAttachObjectToWindow(gTxn3, (GWorldPtr)win3, true));
+    TXNSetFrameBounds(gTxn3, 4, 4, 120, 280, gFrame3);
+    SelectWindow(win3);
+    SetPort(win3);
+    TXNFocus(gTxn3, true);
+    TXNActivate(gTxn3, gFrame3, true);
+    TXNSetSelection(gTxn3, kTXNEndOffset, kTXNEndOffset);
+    p3type("XYZ");
+    p3dump("B-typed-win3", win3);
+
+    GWorldPtr gw = 0;
+    Rect gb;
+    SetRect(&gb, 0, 0, 300, 140);
+    const QDErr gwErr = NewGWorld(&gw, 8, &gb, 0, 0, 0);
+    logf("P3 NewGWorld=%d gw=%p", (int)gwErr, (void *)gw);
+    TXNFocus(gTxn3, false);
+    TXNActivate(gTxn3, gFrame3, false);
+    const OSStatus hide = gw ? TXNAttachObjectToWindow(gTxn3, gw, false) : -1;
+    logf("P3 attach(gworld,false)=%ld", (long)hide);
+    p3dump("C-on-gworld", win3);
+    SetPort(win3);
+    EraseRect(&win3->portRect);
+    InvalRect(&win3->portRect);
+
+    DisposeWindow(win3);
+    p3dump("D-win3-disposed", 0);
+
+    Rect b4;
+    SetRect(&b4, 60, 300, 360, 440);
+    gWin4 = NewCWindow(0, &b4, "\pwin4 (re-attached)", true, documentProc, (WindowPtr)-1L, true, 0);
+    logf("P3 attach(win4)=%ld", (long)TXNAttachObjectToWindow(gTxn3, (GWorldPtr)gWin4, true));
+    TXNSetFrameBounds(gTxn3, 4, 4, 120, 280, gFrame3);
+    SelectWindow(gWin4);
+    SetPort(gWin4);
+    InvalRect(&gWin4->portRect);
+    TXNFocus(gTxn3, true);
+    TXNActivate(gTxn3, gFrame3, true);
+    p3dump("E-on-win4", gWin4);
+    TXNSetSelection(gTxn3, kTXNEndOffset, kTXNEndOffset);
+    p3type("!");
+    p3dump("F-typed-win4", gWin4);
+    TXNUndo(gTxn3);
+    p3dump("G-undo-1", gWin4);
+    TXNUndo(gTxn3);
+    p3dump("H-undo-2", gWin4);
+    logf("P3 INTERACTIVE: type into win4 (real keys), Cmd-D = dump, Cmd-Q = quit");
+  }
+
   void buildMenus()
   {
     MenuHandle apple = NewMenu(kMenuApple, "\p\024");
@@ -321,6 +440,8 @@ namespace
       TXNIdle(gTxn);
       if (gTxn2)
         TXNIdle(gTxn2);
+      if (gTxn3 && gWin4)
+        TXNIdle(gTxn3);
       {
         const ByteCount size = TXNDataSize(gTxn);
         const ItemCount change = TXNGetChangeCount(gTxn);
@@ -336,6 +457,8 @@ namespace
     case autoKey:
       if (ev.modifiers & cmdKey)
         doMenu(MenuKey((char)(ev.message & charCodeMask)));
+      else if (gWin4 && FrontWindow() == gWin4)
+        TXNKeyDown(gTxn3, &ev);
       else
         TXNKeyDown(gTxn, &ev);
       break;
@@ -354,6 +477,8 @@ namespace
           TXNClick(gTxn, &ev);
         else if (w == gWindow2 && gTxn2)
           TXNClick(gTxn2, &ev);
+        else if (w == gWin4 && gTxn3)
+          TXNClick(gTxn3, &ev);
         break;
       case inDrag:
         DragWindow(w, ev.where, &qd.screenBits.bounds);
@@ -379,6 +504,12 @@ namespace
         drawInstructions();
         EndUpdate(gWindow);
       }
+      else if ((WindowPtr)ev.message == gWin4 && gTxn3)
+      {
+        BeginUpdate(gWin4);
+        TXNUpdate(gTxn3);
+        EndUpdate(gWin4);
+      }
       else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
       {
         BeginUpdate(gWindow2);
@@ -395,6 +526,12 @@ namespace
         else
           probeFocusOff("DEACTIVATE");
         TXNActivate(gTxn, gFrame, active);
+      }
+      else if ((WindowPtr)ev.message == gWin4 && gTxn3)
+      {
+        const bool active = (ev.modifiers & activeFlag) != 0;
+        TXNFocus(gTxn3, active);
+        TXNActivate(gTxn3, gFrame3, active);
       }
       else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
       {
@@ -496,7 +633,7 @@ int main()
   logf("NULLWIN TXNNewObject(window=NULL)=%ld obj=%p attached=%d", (long)new2, (void *)gTxn2,
        gTxn2 ? (int)TXNIsObjectAttachedToWindow(gTxn2) : -1);
   heapLine("nullwin-new");
-  if (new2 == noErr && gTxn2)
+  if (kProbe1 && new2 == noErr && gTxn2)
   {
     const unsigned long sizes[2] = {1048576UL, 4194303UL};
     for (int k = 0; k < 2; ++k)
@@ -565,7 +702,10 @@ int main()
     gTxn2 = 0;
   SelectWindow(gWindow);
 
-  automaticCases();
+  if (kProbe1)
+    automaticCases();
+  else
+    probe3();
   gLastSize = TXNDataSize(gTxn);
   gLastChange = TXNGetChangeCount(gTxn);
   logf("INTERACTIVE P2: compose (Kotoeri), click win2 / click another app; P3: compose, Cmd-M modal, close box; "
