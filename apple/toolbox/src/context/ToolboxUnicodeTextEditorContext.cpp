@@ -1,4 +1,5 @@
 #include "ToolboxUnicodeTextEditorContext.hpp"
+#include "../ToolboxHeapProbe.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #if LOKA_TOOLBOX_UNICODE
 #include "ToolboxWindow.hpp"
@@ -110,6 +111,7 @@ namespace
       if (GetHandleSize(this->handle_) != static_cast<long>(size))
         return false;
       HLock(this->handle_);
+      loka::toolbox::probe::HeapSample("b-capture", static_cast<long>(size));
       return true;
     }
     const unsigned short *units() const
@@ -209,6 +211,7 @@ EditorResult ToolboxUnicodeTextEditorContext::project()
         {
           staged.changes = TXNGetChangeCount(object);
           preparation.publish(staged);
+          loka::toolbox::probe::HeapSample("a-project", static_cast<long>(count * 2));
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
           this->sampleNativeSize(false);
 #endif
@@ -236,9 +239,11 @@ void ToolboxUnicodeTextEditorContext::repair(const Selection &before)
                                                    ToolboxUnicodeEditorOptions())
       || this->project() != EDITOR_OK)
   {
+    loka::toolbox::probe::HeapSample("c-repair-failed", 0);
     this->unavailable();
     return;
   }
+  loka::toolbox::probe::HeapSample("c-repair", 0);
   TXNObject object = static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_));
   const UnicodeLogicalText &text = this->projection_.committed();
   const unsigned long limit = loka::core::Utf16UnitsAt(text.bytes(), text.length(), text.length());
@@ -627,6 +632,7 @@ EditorResult ToolboxUnicodeTextEditorContext::click(const Point &, const EventRe
 }
 bool ToolboxUnicodeTextEditorContext::offerKeyEvent(const EventRecord &record)
 {
+  const unsigned long probeStart = loka::toolbox::probe::HeapMicros();
   RailOperation op(*this);
   const EditorResult ready = this->beginInput();
   if (ready != EDITOR_OK)
@@ -645,6 +651,8 @@ bool ToolboxUnicodeTextEditorContext::offerKeyEvent(const EventRecord &record)
     return true;
   const EditorResult result = this->readBack(before, captured, op);
   this->finishInput(result, before, captured, op);
+  loka::toolbox::probe::HeapKey(record.what == nullEvent ? "null" : "down", probeStart,
+                                static_cast<long>(this->projection_.committed().length()));
   return true;
 }
 bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
@@ -668,6 +676,7 @@ bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
     if (!op.hasSameContext())
       return true;
     result = this->readBack(before, captured, op);
+    loka::toolbox::probe::HeapSample("d-undo", static_cast<long>(result));
     break;
   case EDIT_CUT:
     loka::toolbox::UnicodeText::noteNativeScrap(TXNCut(object));
@@ -677,6 +686,7 @@ bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
     break;
   case EDIT_COPY:
     loka::toolbox::UnicodeText::noteNativeScrap(TXNCopy(object));
+    loka::toolbox::probe::HeapSample("copy", 0);
     break;
   case EDIT_PASTE:
     if (!loka::toolbox::UnicodeText::scrapReady() || !TXNIsScrapPastable())
@@ -685,12 +695,18 @@ bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
       break;
     }
     TXNPaste(object);
+    loka::toolbox::probe::HeapSample("paste-native", static_cast<long>(TXNDataSize(object)));
     if (!op.hasSameContext())
       return true;
     result = this->readBack(before, captured, op);
+    loka::toolbox::probe::HeapSample("paste", static_cast<long>(result));
     break;
   case EDIT_SELECT_ALL:
-    TXNSelectAll(object);
+    {
+      // PROBE: workload (2) selects [0, 1048576) of fixture A.
+      const unsigned long units = static_cast<unsigned long>(TXNDataSize(object) / 2);
+      TXNSetSelection(object, 0, units < 1048576UL ? units : 1048576UL);
+    }
     if (!op.hasSameContext())
       return true;
     {
@@ -737,6 +753,7 @@ void ToolboxUnicodeTextEditorContext::idleTick()
   if (this->unicode_)
   {
     this->controller()->unicodeEditors_.idle(this->unicode_);
+    loka::toolbox::probe::HeapIdle();
 #if defined(LOKA_DIAG) || defined(LOKA_RETRO68_DIAGNOSTICS)
     this->sampleNativeSize(true);
 #endif

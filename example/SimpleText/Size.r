@@ -46,8 +46,8 @@ resource 'SIZE' (-1) {
 	   The 4 MiB document profile reserves its committed and candidate
 	   snapshots (8 MiB) at attach, before the row arrays, the MLTE object
 	   and the code; the minimum must leave room for all of them. */
-	24 * 1024 * 1024,	/* preferred */
-	16 * 1024 * 1024	/* minimum */
+	64 * 1024 * 1024,	/* PROBE: measurement partition */
+	64 * 1024 * 1024	/* PROBE */
 #elif LOKA_CLASSIC_68K
 	704 * 1024,	/* preferred */
 	480 * 1024	/* minimum */

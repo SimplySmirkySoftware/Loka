@@ -1,4 +1,5 @@
 #include "ToolboxUnicodeStartup.hpp"
+#include "ToolboxHeapProbe.hpp"
 #if LOKA_TOOLBOX_UNICODE
 #include "ToolboxDialogConstruction.hpp"
 #include "unicode/MacTextEditorSubset.h"
@@ -67,6 +68,7 @@ namespace loka
       // (queryLargestContiguousAllocation), so the TE rail stays as it is.
       scrapSync = UNKNOWN;
       MaxApplZone();
+      loka::toolbox::probe::HeapSample("start", 0);
       if (TXNInitTextension(0, 0, 0) != noErr)
       {
         const char message[] = "The text engine could not start. Please quit.";

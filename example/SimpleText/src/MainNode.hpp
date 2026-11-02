@@ -332,7 +332,8 @@ namespace simpletext
                     << MenuItem("Open...").shortcut('o').onClick(this->commands_.slot<simpletext::OPEN_DOCUMENT>())
                     << MenuItem("Close").shortcut('w').onClick(this->commands_.slot<simpletext::CLOSE_DOCUMENT>())
                     << MenuItem("Save").shortcut('s').onClick(this->commands_.slot<simpletext::SAVE_DOCUMENT>())
-                    << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>())));
+                    << MenuItem("Save As...").onClick(this->commands_.slot<simpletext::SAVE_AS_DOCUMENT>()))
+                << EditMenu()); // PROBE: heap workload needs Copy / Paste / Undo
       // One seat on the operation: at most one dialog exists, and none while idle.
       const PolicyScopeDefinition saveDialog = PolicyScopeDefinition().destroyOnDetach()
                                                << SaveFileDialog(String::Literal("untitled.txt"))
