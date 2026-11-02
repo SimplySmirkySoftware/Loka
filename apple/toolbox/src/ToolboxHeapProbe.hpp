@@ -13,11 +13,13 @@ namespace loka
 #if LOKA_TOOLBOX_UNICODE
       void HeapSample(const char *point, long value);
       void HeapIdle();
+      void HeapScrap(const char *point);
       unsigned long HeapMicros();
       void HeapKey(const char *kind, unsigned long startMicros, long size);
 #else
       inline void HeapSample(const char *, long) {}
       inline void HeapIdle() {}
+      inline void HeapScrap(const char *) {}
       inline unsigned long HeapMicros() { return 0; }
       inline void HeapKey(const char *, unsigned long, long) {}
 #endif

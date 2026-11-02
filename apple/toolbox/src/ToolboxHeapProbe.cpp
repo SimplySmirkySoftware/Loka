@@ -3,6 +3,7 @@
 #include <Events.h>
 #include <MacMemory.h>
 #include <Timer.h>
+#include <Scrap.h>
 #include <cstdio>
 
 namespace
@@ -67,6 +68,26 @@ namespace loka
       void HeapSample(const char *point, long value)
       {
         Write(point, value, true);
+      }
+      void HeapScrap(const char *point)
+      {
+        FILE *f = Log();
+        if (!f)
+          return;
+        ScrapStuffPtr info = InfoScrap();
+        if (!info)
+        {
+          std::fprintf(f, "%s scrap info=null\n", point);
+          std::fflush(f);
+          return;
+        }
+        Handle h = info->scrapHandle;
+        const long handleSize = h ? GetHandleSize(h) : -1;
+        const int inApp = h ? (HandleZone(h) == ApplicationZone() ? 1 : 0) : -1;
+        std::fprintf(f, "%s scrap size=%ld handle=%p handleSize=%ld inAppZone=%d count=%d state=%d\n", point,
+                     static_cast<long>(info->scrapSize), static_cast<void *>(h), handleSize, inApp,
+                     static_cast<int>(info->scrapCount), static_cast<int>(info->scrapState));
+        std::fflush(f);
       }
       void HeapIdle()
       {

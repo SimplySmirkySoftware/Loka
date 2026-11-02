@@ -697,6 +697,7 @@ bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
   case EDIT_COPY:
     loka::toolbox::UnicodeText::noteNativeScrap(TXNCopy(object));
     loka::toolbox::probe::HeapSample("copy", 0);
+    loka::toolbox::probe::HeapScrap("copy");
     break;
   case EDIT_PASTE:
     if (!loka::toolbox::UnicodeText::scrapReady() || !TXNIsScrapPastable())

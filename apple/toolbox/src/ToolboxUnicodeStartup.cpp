@@ -68,6 +68,7 @@ namespace loka
       // (queryLargestContiguousAllocation), so the TE rail stays as it is.
       scrapSync = UNKNOWN;
       MaxApplZone();
+      loka::toolbox::probe::HeapScrap("start");
       loka::toolbox::probe::HeapSample("start", 0);
       if (TXNInitTextension(0, 0, 0) != noErr)
       {
