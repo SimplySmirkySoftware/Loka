@@ -1,4 +1,6 @@
 #include "ToolboxIdleClock.hpp"
+#include "ToolboxArrivalProbe.hpp"
+#include <AppleEvents.h>
 
 namespace
 {
@@ -40,6 +42,13 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   const EventRecord original = fetched;
   EventRecord record = fetched;
   loka::core::Operation turn;
+  loka::toolbox::probe::ArrivalSample("wne", &original);
+  if (original.what == kHighLevelEvent && loka::toolbox::probe::ArrivalProcessesAppleEvents())
+  {
+    const OSErr aeErr = AEProcessAppleEvent(&record);
+    loka::toolbox::probe::ArrivalNote("AEProcessAppleEvent", aeErr);
+    loka::toolbox::probe::ArrivalSample("ae", 0);
+  }
   // Consume the OS foreground fact before idle work or hover can write the
   // shared cursor on the iteration that delivers a suspend event.
   if (original.what == osEvt && IsSuspendResumeEvent(original))
@@ -54,7 +63,9 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   const NativeFocusMode mode =
       activationPhase_ == ACTIVATION_FOREGROUND ? NATIVE_FOCUS_NORMAL : NATIVE_FOCUS_SUPPRESSED;
   const bool activeUnicode = this->syncNativeFocusAll(mode);
+  loka::toolbox::probe::ArrivalSample("sync", 0);
   const bool serviced = (!gotEvent || !activeUnicode) && loka::toolbox::UnicodeText::serviceEvent(record);
+  loka::toolbox::probe::ArrivalSample(serviced ? "service=1" : "service=0", 0);
   // TODO: Re-enable invalidation once Classic update flow is stable.
   if (group_)
   {
@@ -311,7 +322,9 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   {
     this->handleIdle(dispatchElapsedSeconds);
   }
+  loka::toolbox::probe::ArrivalSample("dispatched", 0);
   this->present(activationPhase_, turn);
+  loka::toolbox::probe::ArrivalSample("present", 0);
   this->cursorOwner_.assertIdle();
   if (original.what == nullEvent && group_)
   {

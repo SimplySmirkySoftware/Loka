@@ -16,6 +16,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxBootstrap.cpp
   src/ToolboxOperatorNew.cpp
   src/ToolboxUnicodeStartup.cpp
+  src/ToolboxArrivalProbe.cpp
   src/ToolboxUnicodeEditorLedger.cpp
   src/context/ToolboxUnicodeTextEditorContext.cpp
   src/ToolboxSuddenTerminate.cpp

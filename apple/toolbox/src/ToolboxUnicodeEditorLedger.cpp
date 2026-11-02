@@ -5,6 +5,7 @@
 #include "ToolboxEditorFrame.hpp"
 #include "core/Frame.hpp"
 #include "core/LokaAlloc.hpp"
+#include "ToolboxArrivalProbe.hpp"
 #include <cassert>
 
 /** One ledger-owned native object and its borrowed context identity. */
@@ -161,6 +162,7 @@ void ToolboxUnicodeEditorLedger::drain()
   {
     ToolboxUnicodeEditorResource *resource = this->retired_;
     this->retired_ = resource->next;
+    loka::toolbox::probe::ArrivalForget(resource->object);
     TXNDeleteObject(resource->object);
     DisposeWrapper(resource);
   }
@@ -179,7 +181,10 @@ void ToolboxUnicodeEditorLedger::place(ToolboxUnicodeEditorResource *resource, c
 void ToolboxUnicodeEditorLedger::focus(ToolboxUnicodeEditorResource *resource, bool focused)
 {
   if (resource)
+  {
     TXNFocus(resource->object, focused);
+    loka::toolbox::probe::ArrivalFocus(resource->object, focused);
+  }
 }
 void ToolboxUnicodeEditorLedger::draw(ToolboxUnicodeEditorResource *resource)
 {

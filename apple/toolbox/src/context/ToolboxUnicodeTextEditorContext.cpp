@@ -3,6 +3,7 @@
 #if LOKA_TOOLBOX_UNICODE
 #include "ToolboxWindow.hpp"
 #include "ToolboxUnicodeStartup.hpp"
+#include "ToolboxArrivalProbe.hpp"
 #include "app/nodes/controls/TextEditorDiff.hpp"
 #include "app/nodes/controls/TextDocumentLine.hpp"
 #include <Memory.h>
@@ -608,7 +609,9 @@ EditorResult ToolboxUnicodeTextEditorContext::click(const Point &, const EventRe
   }
   const Selection before = this->selection();
   Captured captured(this->projection_.stamp());
+  loka::toolbox::probe::ArrivalSample("click-before", 0);
   TXNClick(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)), &record);
+  loka::toolbox::probe::ArrivalSample("click-after", 0);
   if (!op.hasSameContext())
     return EDITOR_UNAVAILABLE;
   const EditorResult result = this->readBack(before, captured, op);
@@ -626,11 +629,15 @@ bool ToolboxUnicodeTextEditorContext::offerKeyEvent(const EventRecord &record)
   }
   const Selection before = this->selection();
   Captured captured(this->projection_.stamp());
+  loka::toolbox::probe::ArrivalSample("key-before", 0);
   TXNKeyDown(static_cast<TXNObject>(this->controller()->unicodeEditors_.object(this->unicode_)), &record);
+  loka::toolbox::probe::ArrivalSample("key-after", 0);
   if (!op.hasSameContext())
     return true;
   const EditorResult result = this->readBack(before, captured, op);
+  loka::toolbox::probe::ArrivalNote("key-readback result", result);
   this->finishInput(result, before, captured, op);
+  loka::toolbox::probe::ArrivalSample("key-finished", 0);
   return true;
 }
 bool ToolboxUnicodeTextEditorContext::editVerb(EditVerb verb)
