@@ -150,6 +150,20 @@ measure() {
       # Sun.pict and five reach Zbulb.pict (Bulb.pict renamed to sort last).
       steps="c 128 71;w 4;$(printf 'k down;%.0s' 1 2 3 4)k ret;w 8;s;c 128 143;w 2;c 128 167;w 2;c 128 191;w 2;s;"
       steps+="c 128 71;w 4;$(printf 'k down;%.0s' 1 2 3 4 5)k ret;w 8;s;c 128 143;w 2;c 128 191;w 2;s;" ;;
+    smirkycard) dir=SmirkyCard app=LokaSmirkyCard68K; tabs=1 # opt-in, so not in ALL_EXAMPLES
+      # Manifest readers in scripts/mame-*-disk* stay parallel.
+      local manifest entry
+      for manifest in disk-scripts disk-pictures; do
+        while IFS=$' \t\r' read -r entry || [ -n "$entry" ]; do
+          case "$entry" in ''|\#*) continue ;; esac
+          if [ "$manifest" = disk-scripts ]; then extras+=("$PROJECT_DIR/example/SmirkyCard/$entry")
+          else extras+=("$PROJECT_DIR/example/SmirkyCard/assets/$entry.PICT"); fi
+        done < "$PROJECT_DIR/example/SmirkyCard/$manifest.txt"
+      done
+      # MAIN.JS's ./LAPTOP.JS button, then 20 pane switches on the band's lead
+      # (Wide/Tall); maciix needs several seconds to draw a pane. Snapshots
+      # after the 1st, 2nd and 20th show both panes and the return.
+      steps="w 10;s;c 270 356;w 15;s;c 92 93;w 10;s;c 92 93;w 10;s;$(printf 'c 92 93;w 10;%.0s' $(seq 1 18))s;" ;;
     *) fail "unknown example '$example' (known: ${ALL_EXAMPLES[*]})" ;;
   esac
   [ "$CPU" != ppc ] || app="${app%68K}PPC"

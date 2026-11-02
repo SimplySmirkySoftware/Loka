@@ -2,6 +2,7 @@
 #define LOKA_TESTS_TOOLBAR_ROW_MEASUREMENT_SCENE_HPP
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "app/nodes/nestable/Show.hpp"
+#include "app/nodes/controls/Toolbar.hpp"
 #include "ToolbarRowMeasurement.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 namespace loka
@@ -16,6 +17,31 @@ namespace loka
         row << (app::Text(labels[i]) + app::TextStyle(app::TextSizeValue::points(12)).family(app::TEXT_FAMILY_SYSTEM)
                 + app::BlockStyle().truncation(app::TEXT_TRUNCATION_ELLIPSIS));
       return row;
+    }
+    /** Paired retained bands: every shape uses the same lead, title and font.
+        Explicit width isolates the 420 px Classic client from the wider vehicle. */
+    inline app::BoxDefinition LaptopMeasuredBand(bool toolbar, const char *lead, const char *title)
+    {
+      const app::TextStyle style = app::TextStyle(app::TextSizeValue::points(18)).weight(app::TEXT_WEIGHT_BOLD);
+      if (toolbar)
+        return app::Box().width(420).height(30).padding(4)
+               << (app::Toolbar() << app::ToolbarItem(lead) << (app::ToolbarItem::label(title) + style)
+                                  << app::ToolbarItem("Main") << app::ToolbarItem("About"));
+      return app::Box().width(420).height(30).padding(4)
+             << (app::Row() << (app::Row() << app::Button(lead) << app::Button("Main") << app::Button("About"))
+                            << (app::Text(title) + style));
+    }
+    inline const char *LaptopBandId(unsigned index)
+    {
+      const char *ids[] = {"laptop-row-wide-short",
+                           "laptop-row-wide-long",
+                           "laptop-row-back-short",
+                           "laptop-row-back-long",
+                           "laptop-toolbar-wide-short",
+                           "laptop-toolbar-wide-long",
+                           "laptop-toolbar-back-short",
+                           "laptop-toolbar-back-long"};
+      return ids[index];
     }
     class ToolbarRows : public app::scene::BoundaryNodeFor<ToolbarRows>
     {
@@ -40,6 +66,24 @@ namespace loka
                       << app::Button("Back") << (app::Show(*this->shown_.state()) << app::Button("More")) << app::Box()
                       << (app::Text("Title").TEST_ID("aligned-title-label") + app::Title) << app::Box()
                       << app::Button("Done")));
+      }
+    };
+    /** A separate window keeps the existing Row vehicle identical to main. */
+    class LaptopBands : public app::scene::BoundaryNodeFor<LaptopBands>
+    {
+    public:
+      explicit LaptopBands(const app::scene::BoundaryPropsFor<LaptopBands> &props)
+          : app::scene::BoundaryNodeFor<LaptopBands>(props)
+      {
+      }
+      virtual void composeNode(app::scene::NodeComposition &c)
+      {
+        app::ColumnDefinition rows = app::Column();
+        for (unsigned i = 0; i != 8; ++i)
+          rows << LaptopMeasuredBand(
+                      i >= 4, i % 4 < 2 ? "Wide" : "< Back", i % 2 ? "PowerBook G4 Titanium" : "SmirkyTracker")
+                      .TEST_ID(LaptopBandId(i));
+        c.declare(rows);
       }
     };
     /** Counting is a separate untimed probe; the timed source is the rail itself. */
