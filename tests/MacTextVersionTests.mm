@@ -3,6 +3,7 @@
 #include "MacGround.hpp"
 #include "context/MacTextContext.hpp"
 #include "app/nodes/Text.hpp"
+#include "app/nodes/AttributedText.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include "support/TestVerify.hpp"
 #include "support/LifecycleFactTestAccess.hpp"
@@ -134,6 +135,36 @@ namespace
     return label;
   }
 
+  const char *const migrationStrings[] = {"Underlined words near a wrapping threshold",
+                                          "\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d then latin words",
+                                          "line one\nline two longer",
+                                          ""};
+  const int migrationWidths[] = {60, 104, 108, 160, 400};
+
+  TextProps MigrationProps(const char *text, int policy, int font)
+  {
+    TextProps props = Text(text).props;
+    if (policy)
+      props.blockStyle_.wrap(policy >= 4 ? (policy == 5 ? TEXT_WRAP_CHAR : TEXT_WRAP_WORD) : TEXT_WRAP_NONE);
+    if (policy == 2 || policy == 3)
+      props.blockStyle_.truncation(TEXT_TRUNCATION_ELLIPSIS);
+    if (policy == 3)
+      props.blockStyle_.align(TEXT_ALIGN_CENTER);
+    if (policy == 5)
+      props.blockStyle_.align(TEXT_ALIGN_RIGHT);
+    if (font)
+      props.textStyle_ = TextStyle(TextSizeValue::points(15)) + Bold + TextStyle().color(TEXT_COLOR_RED);
+    return props;
+  }
+
+  NSBitmapImageRep *CaptureTextPixels(NSTextField *field)
+  {
+    NSBitmapImageRep *image = [field bitmapImageRepForCachingDisplayInRect:[field bounds]];
+    LOKA_VERIFY(image);
+    [field cacheDisplayInRect:[field bounds] toBitmapImageRep:image];
+    return image;
+  }
+
   void VerifyPixels(NSTextField *actual, NSTextField *control)
   {
     // A window gives both views the same rendering environment. Height 400
@@ -146,11 +177,9 @@ namespace
     [actual retain];
     [[window contentView] addSubview:actual];
     [[window contentView] addSubview:control];
-    NSBitmapImageRep *a = [actual bitmapImageRepForCachingDisplayInRect:[actual bounds]];
-    NSBitmapImageRep *b = [control bitmapImageRepForCachingDisplayInRect:[control bounds]];
+    NSBitmapImageRep *a = CaptureTextPixels(actual);
+    NSBitmapImageRep *b = CaptureTextPixels(control);
     LOKA_VERIFY(a && b);
-    [actual cacheDisplayInRect:[actual bounds] toBitmapImageRep:a];
-    [control cacheDisplayInRect:[control bounds] toBitmapImageRep:b];
     LOKA_VERIFY([a pixelsHigh] == [b pixelsHigh] && [a bytesPerRow] == [b bytesPerRow]);
     for (NSInteger y = 0; y < [a pixelsHigh]; ++y)
       LOKA_VERIFY(std::memcmp([a bitmapData] + y * [a bytesPerRow],
@@ -167,27 +196,12 @@ namespace
 
 void testMacTextVersionMigration()
 {
-  const char *strings[] = {"Underlined words near a wrapping threshold",
-                           "\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d then latin words",
-                           "line one\nline two longer",
-                           ""};
-  const int widths[] = {60, 104, 108, 160, 400};
   for (int policy = 0; policy < 6; ++policy)
     for (int s = 0; s < 4; ++s)
       for (int font = 0; font < (policy ? 2 : 1); ++font)
         for (int w = 0; w < 5; ++w)
         {
-          TextProps props = Text(strings[s]).props;
-          if (policy)
-            props.blockStyle_.wrap(policy >= 4 ? (policy == 5 ? TEXT_WRAP_CHAR : TEXT_WRAP_WORD) : TEXT_WRAP_NONE);
-          if (policy == 2 || policy == 3)
-            props.blockStyle_.truncation(TEXT_TRUNCATION_ELLIPSIS);
-          if (policy == 3)
-            props.blockStyle_.align(TEXT_ALIGN_CENTER);
-          if (policy == 5)
-            props.blockStyle_.align(TEXT_ALIGN_RIGHT);
-          if (font)
-            props.textStyle_ = TextStyle(TextSizeValue::points(15)) + Bold + TextStyle().color(TEXT_COLOR_RED);
+          TextProps props = MigrationProps(migrationStrings[s], policy, font);
           TextVersionFixture f(props);
           for (int retained = 0; retained < 2; ++retained)
           {
@@ -198,10 +212,10 @@ void testMacTextVersionMigration()
               f.node.props = props;
               f.context().onPropsApplied();
             }
-            const NSRect frame = NSMakeRect(0, 0, widths[w], 400);
+            const NSRect frame = NSMakeRect(0, 0, migrationWidths[w], 400);
             [f.label() setFrame:frame];
             NSTextField *control = PlainControl(props, f.controller, frame);
-            const NSRect bounds = NSMakeRect(0, 0, widths[w], 1000);
+            const NSRect bounds = NSMakeRect(0, 0, migrationWidths[w], 1000);
             LOKA_VERIFY(
                 NSEqualSizes([[f.label() cell] cellSizeForBounds:bounds], [[control cell] cellSizeForBounds:bounds]));
             VerifyPixels(f.label(), control);
@@ -969,4 +983,312 @@ void testMacTextVersionNaturalWidth()
       const NSSize size = [cell cellSizeForBounds:NSMakeRect(0, 0, CGFLOAT_MAX, CGFLOAT_MAX)];
       LOKA_VERIFY(width == f.controller.projection().measurementToLu(size.width));
     }
+}
+
+namespace
+{
+  void VerifyUnderline(NSAttributedString *value, bool on)
+  {
+    LOKA_VERIFY(value);
+    for (NSUInteger i = 0; i < [value length]; ++i)
+    {
+      NSRange range;
+      NSNumber *attribute = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:&range];
+      if (on)
+      {
+        LOKA_VERIFY([attribute intValue] == NSUnderlineStyleSingle);
+        LOKA_VERIFY(NSEqualRanges(range, NSMakeRange(0, [value length])));
+      }
+      else
+        LOKA_VERIFY(attribute == nil);
+    }
+  }
+
+  class UnderlineRunFixture : public TextVersionNativeScope
+  {
+  public:
+    MacScenePlatformController controller;
+    AttributedTextNode node;
+    LayoutState state;
+    explicit UnderlineRunFixture(const AttributedTextProps &props)
+        : controller(root, RailMetrics()),
+          node(props)
+    {
+      node.setPropsTypeId(AttributedTextProps::staticTypeId());
+      state.width = 160;
+      NotifySubtreeNodeAttached(&node);
+      LOKA_VERIFY(controller.prepareProjectedLayout(&node, state));
+      node.layout(&controller, state);
+    }
+    ~UnderlineRunFixture()
+    {
+      LifecycleFactTestAccess::MarkSubtreeRetired(&node);
+      LifecycleFactTestAccess::DeliverFacts(&node);
+      node.setContext(0);
+    }
+    NSTextField *label() const
+    {
+      return (NSTextField *)[[root subviews] objectAtIndex:0];
+    }
+
+  private:
+    UnderlineRunFixture(const UnderlineRunFixture &);
+    UnderlineRunFixture &operator=(const UnderlineRunFixture &);
+  };
+
+  /** Host the fixture root without changing ownership of the label. */
+  class UnderlineWindow
+  {
+  public:
+    explicit UnderlineWindow(NSView *root)
+        : window_([[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 500, 500)
+                                              styleMask:0
+                                                backing:NSBackingStoreBuffered
+                                                  defer:NO])
+    {
+      [[this->window_ contentView] addSubview:root];
+    }
+    ~UnderlineWindow()
+    {
+      [this->window_ release];
+    }
+
+  private:
+    NSWindow *window_;
+    UnderlineWindow(const UnderlineWindow &);
+    UnderlineWindow &operator=(const UnderlineWindow &);
+  };
+} // namespace
+
+void testMacTextUnderlineRuns()
+{
+  UnderlineRunFixture f(AttributedTextProps(Styled("AB", Underline) + Styled("CD", TextStyle().underline(false))
+                                            + Styled("EF", TextStyle()) + Styled("GH", Underline)));
+  NSAttributedString *value = [f.label() attributedStringValue];
+  LOKA_VERIFY([[value string] isEqualToString:@"ABCDEFGH"]);
+  for (NSUInteger i = 0; i < 8; ++i)
+  {
+    NSRange range;
+    NSNumber *attribute = [value attribute:NSUnderlineStyleAttributeName atIndex:i effectiveRange:&range];
+    if (i < 2 || i >= 6)
+    {
+      LOKA_VERIFY([attribute intValue] == NSUnderlineStyleSingle);
+      LOKA_VERIFY(NSEqualRanges(range, NSMakeRange(i < 2 ? 0 : 6, 2)));
+    }
+    else
+      LOKA_VERIFY(attribute == nil);
+  }
+}
+
+void testMacTextUnderlineTransitions()
+{
+  const TextStyle styles[] = {Underline, TextStyle().underline(false), TextStyle()};
+  const char *strings[] = {"initial", "changed", "unset"};
+  for (int live = 0; live < 2; ++live)
+    for (int changing = 0; changing < 2; ++changing)
+    {
+      MutableState<String> text(String::Literal(strings[0]));
+      TextVersionFixture f(Text(&text).props);
+      for (int step = 0; step < 3; ++step)
+      {
+        const char *expected = strings[changing ? step : 0];
+        if (live)
+        {
+          LOKA_VERIFY((Text(&text) + styles[step]).applyPropsToNode(&f.node));
+          VerifyUnderline([f.label() attributedStringValue], step == 0);
+          text.set(String::Literal(expected), true);
+        }
+        else
+          LOKA_VERIFY((Text(expected) + styles[step]).applyPropsToNode(&f.node));
+        LOKA_VERIFY([[f.label() stringValue] isEqualToString:[NSString stringWithUTF8String:expected]]);
+        VerifyUnderline([f.label() attributedStringValue], step == 0);
+      }
+    }
+}
+
+void testMacTextUnderlineSizes()
+{
+  for (int policy = 0; policy < 6; ++policy)
+    for (int s = 0; s < 4; ++s)
+      for (int font = 0; font < (policy ? 2 : 1); ++font)
+        for (int w = 0; w < 5; ++w)
+        {
+          const TextProps plain = MigrationProps(migrationStrings[s], policy, font);
+          TextProps underlined = plain;
+          underlined.textStyle_ = underlined.textStyle_ + Underline;
+          TextVersionFixture off(plain), on(underlined);
+          off.state.width = on.state.width = migrationWidths[w];
+          off.layout();
+          on.layout();
+          LOKA_VERIFY(off.state.height == on.state.height && off.state.width == on.state.width);
+          LOKA_VERIFY(Version(off).measure().extent() == Version(on).measure().extent());
+          VerifyUnderline([on.label() attributedStringValue], true);
+          const NSRect bounds = NSMakeRect(0, 0, migrationWidths[w], 1000);
+          [off.label() setFrame:NSMakeRect(0, 0, migrationWidths[w], 400)];
+          [on.label() setFrame:[off.label() frame]];
+          LOKA_VERIFY(NSEqualSizes([[off.label() cell] cellSizeForBounds:bounds],
+                                   [[on.label() cell] cellSizeForBounds:bounds]));
+          LOKA_VERIFY(NSEqualRects([[off.label() cell] titleRectForBounds:bounds],
+                                   [[on.label() cell] titleRectForBounds:bounds]));
+          short a = -1, b = -1;
+          const bool answers = MacTextContext::queryNaturalWidth(&off.node, &off.controller, a);
+          LOKA_VERIFY(answers == MacTextContext::queryNaturalWidth(&on.node, &on.controller, b));
+          if (answers)
+            LOKA_VERIFY(a == b);
+
+          // Keep the same logical segment boundaries in both values (O3).
+          UnderlineRunFixture runOff(
+              (AttributedText(Styled(migrationStrings[s], plain.textStyle_)) + plain.blockStyle_).props);
+          UnderlineRunFixture runOn(
+              (AttributedText(Styled(migrationStrings[s], underlined.textStyle_)) + plain.blockStyle_).props);
+          runOff.state.width = runOn.state.width = migrationWidths[w];
+          runOff.node.layout(&runOff.controller, runOff.state);
+          runOn.node.layout(&runOn.controller, runOn.state);
+          VerifyUnderline([runOn.label() attributedStringValue], true);
+          LOKA_VERIFY(NSEqualSizes([[runOff.label() cell] cellSizeForBounds:bounds],
+                                   [[runOn.label() cell] cellSizeForBounds:bounds]));
+          LOKA_VERIFY(NSEqualRects([[runOff.label() cell] titleRectForBounds:bounds],
+                                   [[runOn.label() cell] titleRectForBounds:bounds]));
+        }
+}
+
+void testMacTextUnderlinePixels()
+{
+  const char *strings[] = {"Underline", "line one\nline two", ""};
+  const int lines[] = {1, 2, 0};
+  for (int s = 0; s < 3; ++s)
+  {
+    TextVersionFixture f((Text(strings[s]) + FontSize<12>() + BlockStyle().wrap(TEXT_WRAP_WORD)).props);
+    UnderlineWindow window(f.root);
+    [f.label() setFrame:NSMakeRect(0, 0, 160, 400)];
+    NSBitmapImageRep *off = [CaptureTextPixels(f.label()) retain];
+    LOKA_VERIFY(
+        (Text(strings[s]) + FontSize<12>() + BlockStyle().wrap(TEXT_WRAP_WORD) + Underline).applyPropsToNode(&f.node));
+    NSBitmapImageRep *on = CaptureTextPixels(f.label());
+    LOKA_VERIFY([off pixelsHigh] == [on pixelsHigh] && [off bytesPerRow] == [on bytesPerRow]);
+    const int limit = [on pixelsHigh] > 400 ? 4 : 2;
+    int bands = 0, bandStart = -1;
+    for (NSInteger y = 0; y <= [on pixelsHigh]; ++y)
+    {
+      const bool differs = y < [on pixelsHigh]
+                           && std::memcmp([off bitmapData] + y * [off bytesPerRow],
+                                          [on bitmapData] + y * [on bytesPerRow],
+                                          static_cast<size_t>([on bytesPerRow]))
+                                  != 0;
+      if (differs && bandStart < 0)
+        bandStart = static_cast<int>(y);
+      if (!differs && bandStart >= 0)
+      {
+        const int thickness = static_cast<int>(y) - bandStart;
+        std::printf("underline pixels: string %d rows %d..%ld thickness %d (limit %d)\n",
+                    s,
+                    bandStart,
+                    static_cast<long>(y) - 1,
+                    thickness,
+                    limit);
+        LOKA_VERIFY(thickness <= limit);
+        ++bands;
+        bandStart = -1;
+      }
+    }
+    if (!lines[s])
+      std::printf("[skip] underline pixels: empty string draws nothing\n");
+    LOKA_VERIFY(bands == lines[s]);
+    [off release];
+  }
+}
+
+void testMacTextUnderlineNoRelayoutAndEmpty()
+{
+  TextVersionFixture f((Text("same wrapped words") + BlockStyle().wrap(TEXT_WRAP_WORD)).props);
+  UnderlineWindow window(f.root);
+  f.installRoot();
+  [f.label() setNeedsDisplay:NO];
+  LOKA_VERIFY((Text("same wrapped words") + BlockStyle().wrap(TEXT_WRAP_WORD) + Underline).applyPropsToNode(&f.node));
+  LOKA_VERIFY(!f.controller.hasPendingRelayout());
+  VerifyUnderline([f.label() attributedStringValue], true);
+  LOKA_VERIFY([f.label() needsDisplay]);
+  TextVersionFixture empty(Text("").props), emptyOn((Text("") + Underline).props);
+  LOKA_VERIFY([[emptyOn.label() attributedStringValue] length] == 0);
+  LOKA_VERIFY(
+      [[emptyOn.label() attributedStringValue] isEqualToAttributedString:[empty.label() attributedStringValue]]);
+}
+
+void testMacTextUnderlineReconciliation()
+{
+  VersionCounters counters;
+  TextVersionFixture f((Text("two lines of wrapped words with explicit style") + FontSize<12>()
+                        + BlockStyle().wrap(TEXT_WRAP_WORD) + Underline)
+                           .props);
+  f.layout();
+  LOKA_VERIFY(Measured(f));
+  VerifyUnderline([f.label() attributedStringValue], true);
+  const unsigned builds = versionBuilds, measures = versionMeasures;
+  [[f.label() cell] setFont:[NSFont systemFontOfSize:30]];
+  [f.label() setAlignment:LOKA_MAC_TEXT_ALIGNMENT_RIGHT];
+  // Force the precise layout-hit leg, independently of logical dirty sources.
+  f.state.inputs = NODE_DIRTY_NONE;
+  f.context().layout(&f.controller, f.state);
+  LOKA_VERIFY(f.state.inputs == NODE_DIRTY_NONE);
+  LOKA_VERIFY(versionBuilds == builds && versionMeasures == measures);
+  VerifyVersion(f);
+  VerifyUnderline([f.label() attributedStringValue], true);
+}
+
+void testMacTextUnderlineColourAppearanceAttach()
+{
+  TextVersionFixture f((Text("dynamic underline") + Underline + TextStyle().color(TEXT_COLOR_RED)).props);
+  LOKA_VERIFY(
+      (Text("dynamic underline") + Underline + TextStyle().color(TEXT_COLOR_PRIMARY)).applyPropsToNode(&f.node));
+  VerifyUnderline([f.label() attributedStringValue], true);
+  NSColor *colour = nil;
+  LOKA_VERIFY(loka::macos::QueryMacTextColor(TEXT_COLOR_PRIMARY, colour));
+  LOKA_VERIFY([[f.label() attributedStringValue] attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:0]
+              == colour);
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 1090
+  if (NSAppKitVersionNumber >= 1671)
+  {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    UnderlineWindow window(f.root);
+    [f.label() setFrame:NSMakeRect(0, 0, 160, 40)];
+    NSAppearance *old = [[NSAppearance currentAppearance] retain];
+    NSBitmapImageRep *images[2];
+    for (int dark = 0; dark < 2; ++dark)
+    {
+      NSAppearance *appearance =
+          [NSAppearance appearanceNamed:dark ? @"NSAppearanceNameDarkAqua" : @"NSAppearanceNameAqua"];
+      [NSAppearance setCurrentAppearance:appearance];
+      [f.label() setAppearance:appearance];
+      f.layout();
+      VerifyUnderline([f.label() attributedStringValue], true);
+      images[dark] = [CaptureTextPixels(f.label()) retain];
+    }
+    LOKA_VERIFY([images[0] bytesPerRow] == [images[1] bytesPerRow]);
+    bool differs = false;
+    for (NSInteger y = 0; y < [images[0] pixelsHigh]; ++y)
+      if (std::memcmp([images[0] bitmapData] + y * [images[0] bytesPerRow],
+                      [images[1] bitmapData] + y * [images[1] bytesPerRow],
+                      static_cast<size_t>([images[0] bytesPerRow]))
+          != 0)
+        differs = true;
+    LOKA_VERIFY(differs);
+    [images[0] release];
+    [images[1] release];
+    [NSAppearance setCurrentAppearance:old];
+    [old release];
+#pragma clang diagnostic pop
+  }
+  else
+    std::printf("[skip] underline appearance: no dark appearance\n");
+#else
+  std::printf("[skip] underline appearance: no dark appearance in SDK\n");
+#endif
+  NotifySubtreeNodeDetached(&f.node);
+  LifecycleFactTestAccess::DeliverFacts(&f.node);
+  LOKA_VERIFY([f.label() isHidden]);
+  NotifySubtreeNodeAttached(&f.node);
+  LifecycleFactTestAccess::DeliverFacts(&f.node);
+  LOKA_VERIFY(![f.label() isHidden]);
+  VerifyUnderline([f.label() attributedStringValue], true);
 }
