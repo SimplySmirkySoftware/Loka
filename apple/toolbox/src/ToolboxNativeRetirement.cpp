@@ -107,6 +107,7 @@ void ToolboxScenePlatformController::hideRetiredControl(ControlRef control)
 
 void ToolboxScenePlatformController::clearControls()
 {
+  this->unitLedger_.reset();
   this->pressLedger_.clear();
   for (size_t i = 0; i < buttonControls_.size(); ++i)
   {

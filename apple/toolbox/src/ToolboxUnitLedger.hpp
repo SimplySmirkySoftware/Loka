@@ -11,6 +11,37 @@ namespace loka
   }
 } // namespace loka
 
+/** Completed final-row comparison; identities are never dereferenced. */
+class ToolboxUnitComparison
+{
+public:
+  ToolboxUnitComparison(unsigned changed = 0, unsigned added = 0, unsigned departed = 0)
+      : changed_(changed),
+        added_(added),
+        departed_(departed)
+  {
+  }
+  bool changed() const
+  {
+    return this->changed_ || this->added_ || this->departed_;
+  }
+  unsigned changedRows() const
+  {
+    return this->changed_;
+  }
+  unsigned addedRows() const
+  {
+    return this->added_;
+  }
+  unsigned departedRows() const
+  {
+    return this->departed_;
+  }
+
+private:
+  unsigned changed_, added_, departed_;
+};
+
 /** Controller-owned facts rebuilt by layout; render and repair only query them. */
 class ToolboxUnitLedger
 {
@@ -27,7 +58,43 @@ public:
   typedef std::vector<UnitSeat>::size_type Mark;
   void clear()
   {
+    this->rows_.swap(this->previous_);
     this->rows_.clear();
+  }
+  /** Controller reset, once; drops both generations without following identities. */
+  void reset()
+  {
+    this->rows_.clear();
+    this->previous_.clear();
+  }
+  /** Controller after publication, once per layout; O(current * previous), own rows only. */
+  ToolboxUnitComparison compareFinalRows() const
+  {
+    unsigned changed = 0, added = 0, departed = 0;
+    for (Mark i = 0; i < this->rows_.size(); ++i)
+    {
+      const UnitSeat &row = this->rows_[i];
+      Mark j = 0;
+      for (; j < this->previous_.size(); ++j)
+        if (row.stack == this->previous_[j].stack && row.index == this->previous_[j].index)
+        {
+          if (!sameRect(row.rect, this->previous_[j].rect) || !sameRect(row.unit, this->previous_[j].unit))
+            ++changed;
+          break;
+        }
+      if (j == this->previous_.size())
+        ++added;
+    }
+    for (Mark i = 0; i < this->previous_.size(); ++i)
+    {
+      Mark j = 0;
+      for (; j < this->rows_.size(); ++j)
+        if (this->previous_[i].stack == this->rows_[j].stack && this->previous_[i].index == this->rows_[j].index)
+          break;
+      if (j == this->rows_.size())
+        ++departed;
+    }
+    return ToolboxUnitComparison(changed, added, departed);
   }
   void push(const UnitSeat &row)
   {
@@ -96,6 +163,10 @@ public:
   }
 
 private:
-  std::vector<UnitSeat> rows_;
+  static bool sameRect(const Rect &a, const Rect &b)
+  {
+    return a.top == b.top && a.left == b.left && a.bottom == b.bottom && a.right == b.right;
+  }
+  std::vector<UnitSeat> rows_, previous_;
 };
 #endif

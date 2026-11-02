@@ -366,6 +366,7 @@ private:
 public:
   /** Borrowed only while the layoutScrollView local's Scope is alive. */
   ToolboxViewportContentObservation *activeViewportContent_;
+  ToolboxViewportContentObservation *outerViewportContent_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   loka::app::scene::Node *rootNode_;
   loka::app::scene::Node *pendingRootNode_;
@@ -546,6 +547,26 @@ public:
   void notePaintRefusal(ToolboxPaintRefusal reason, const char *site)
   {
     this->observation_.notePaintRefusal(reason, site);
+  }
+  /** Window entries, once before render / once per rect request; O(1), no rows. */
+  void notePresentRequestSummary(ToolboxPresentBatch::Summary summary)
+  {
+    this->observation_.noteRequestSummary(summary);
+  }
+  void notePresentRectRequest()
+  {
+    this->observation_.noteRectRequest();
+  }
+  /** Publication re-entry fence; ordinary traversal owns the outer observer. */
+  bool refusePublicationLayout()
+  {
+    if (!this->observation_.paintInProgress() || this->outerViewportContent_)
+      return false;
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(false && "publication must not re-enter layout");
+#endif
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return true;
   }
   void notePresentReason(ToolboxFullDrawReason reason)
   {

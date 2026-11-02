@@ -1394,7 +1394,7 @@ namespace
     }
     virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
     {
-      if (!node || !this->projectLayoutState(state))
+      if (this->refusePublicationLayout() || !node || !this->projectLayoutState(state))
         return false;
       IPlatformNodeHandler *handler = this->nodeHandlerRegistry_.find(node);
       LOKA_VERIFY(handler);
@@ -1415,8 +1415,12 @@ namespace
     NodeState<Frame> viewportState;
     ZStackNode stack;
     ScrollViewNode &viewport;
-    PresentFixture(
-        bool foreground = false, int initialOrigin = 0, Node *content = 0, bool enclosed = false, int fixedHeight = 0)
+    PresentFixture(bool foreground = false,
+                   int initialOrigin = 0,
+                   Node *content = 0,
+                   bool enclosed = false,
+                   int fixedHeight = 0,
+                   Node *outside = 0)
         : port(window.window()),
           controller(&window),
           origin(Frame(0, initialOrigin, 0, 0)),
@@ -1440,6 +1444,15 @@ namespace
             new BoxNode((enclosed ? Box().size(300, fixedHeight).clipChildren() : Box().size(300, fixedHeight)).props);
         wrapper->addChild(root);
         root = wrapper;
+      }
+      if (outside)
+      {
+        BoxNode *viewSeat = new BoxNode(Box().height(100).props);
+        viewSeat->addChild(root);
+        StackNode *column = new StackNode(Column().gap(0).props);
+        column->addChild(viewSeat);
+        column->addChild(outside);
+        root = column;
       }
       this->stack.addChild(root);
       if (foreground)
@@ -1595,7 +1608,7 @@ namespace
       this->state(this->text, String("before"));
       this->state(this->style, TextStyle());
       this->state(this->width, 180);
-      if (Mode == 3)
+      if (Mode == 3 || Mode == 4 || Mode == 5)
         this->state(this->shown, true);
       this->state(this->stationaryViewport, Frame());
       this->state(this->request, ScrollTarget::None());
@@ -1606,7 +1619,18 @@ namespace
     }
     virtual void composeNode(NodeComposition &c)
     {
-      if (Mode == 3)
+      if (Mode == 4)
+        c.declare(Column().gap(0) << (Box().height(100)
+                                      << (ScrollView(this->viewport) << (Box().height(600) << Text("moving"))))
+                                  << (Show(*this->shown.state())
+                                      << (Box().height(100) << (ScrollView(this->stationaryViewport)
+                                                                << (Box().height(600) << Text("sibling"))))));
+      else if (Mode == 5)
+        c.declare(Column().gap(0) << (Box().height(100)
+                                      << (ScrollView(this->viewport) << (Box().height(600) << Text("moving"))))
+                                  << (ZStack() << Box().height(40)
+                                               << (Show(*this->shown.state()) << (Box().height(20) << Text("unit")))));
+      else if (Mode == 3)
         c.declare(ScrollView(this->viewport)
                   << (Box().size(180, 600) << (Show(*this->shown.state()) << Text("shown"))));
       else if (Mode == 1)
@@ -1767,7 +1791,7 @@ namespace
     LOKA_VERIFY(observation.reasonNames() == "layout_dirty+viewport_input");
     LOKA_VERIFY(observation.reasons()
                 == ((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT)));
-    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+    LOKA_VERIFY(observation.rectRequests() && observation.refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
     LOKA_VERIFY(fullPending);
     LOKA_VERIFY(firstRequest && std::strcmp(firstRequest, "viewport_input") == 0);
     LOKA_VERIFY(after.windowFlushFullCount == before.windowFlushFullCount + 1);
@@ -1834,7 +1858,7 @@ namespace
       }
       f.draw();
       LOKA_VERIFY(f.last().contentInputs() == 0);
-      LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+      LOKA_VERIFY(f.last().rectRequests() && f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
     }
   }
   void presentContainerInputNotCounted()
@@ -1892,7 +1916,7 @@ namespace
   {
     ToolboxWindow window;
     HostPortScope port(window.window());
-    ToolboxScenePlatformController controller(&window);
+    PresentController controller(&window);
     MutableState<Frame> firstOrigin((Frame()));
     MutableState<Frame> secondOrigin((Frame()));
     NodeState<Frame> firstState(&firstOrigin, 0), secondState(&secondOrigin, 0);
@@ -1907,6 +1931,7 @@ namespace
       box->addChild(scroll);
       column.addChild(box);
     }
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
     controller.rootNode_ = &column;
     window.scenePlatformController_ = &controller;
     window.requestInvalidate();
@@ -1918,6 +1943,9 @@ namespace
     const ToolboxPresentObservation &second = controller.debugStatsForTesting().lastPresentObservation;
     LOKA_VERIFY(second.viewports() == 1 && second.dy() == 17);
     LOKA_VERIFY(second.viewport().top >= first.bottom);
+    LOKA_VERIFY(second.usedViewports() == 2);
+    LOKA_VERIFY(second.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
+    LOKA_VERIFY(std::strcmp(ToolboxPresentRefusalName(second.refusal()), "several_viewports") == 0);
     firstOrigin.set(Frame(0, 17, 0, 0));
     secondOrigin.set(Frame(0, 34, 0, 0));
     window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
@@ -1929,6 +1957,379 @@ namespace
     window.scenePlatformController_ = 0;
     controller.clearControls();
   }
+
+  void presentBatchSummary()
+  {
+    const Rect rect = {1, 2, 30, 40};
+    ToolboxPresentBatch a, b;
+    LOKA_VERIFY(a.empty() && !a.full() && !a.rectRequested());
+    a.addFull();
+    LOKA_VERIFY(a.full() && !a.rectRequested());
+    a.add(rect);
+    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().empty());
+    a.swap(b);
+    LOKA_VERIFY(a.empty() && b.full() && b.rectRequested());
+    a.addFull();
+    a.swap(b);
+    LOKA_VERIFY(a.rectRequested() && b.full() && !b.rectRequested());
+    a.clear();
+    LOKA_VERIFY(a.empty() && !a.rectRequested());
+    a.add(rect);
+    LOKA_VERIFY(a.rectRequested() && !a.full());
+    a.addFull();
+    a.addFull();
+    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().empty());
+    a.swap(b);
+    LOKA_VERIFY(!a.rectRequested() && b.rectRequested());
+  }
+  class RectPresentText : public TextNode
+  {
+  public:
+    ToolboxWindow *window;
+    bool request;
+    RectPresentText()
+        : TextNode(TextProps("rect writer")),
+          window(0),
+          request(false)
+    {
+    }
+    virtual void render(IPlatformController *c)
+    {
+      TextNode::render(c);
+      if (this->request)
+      {
+        this->request = false;
+        const Rect rect = {10, 10, 30, 50};
+        this->window->requestInvalidateRect(rect);
+      }
+    }
+  };
+  void presentRectAttempts()
+  {
+    RectPresentText *text = new RectPresentText;
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    content->addChild(text);
+    PresentFixture f(false, 0, content);
+    text->window = &f.window;
+    text->request = true;
+    f.scroll(16);
+    LOKA_VERIFY(!f.last().rectRequests()); // paint-time request belongs to next_
+    LOKA_VERIFY(f.window.next_.rectRequested());
+    f.window.drawForUpdate();
+    const Rect dirty = {10, 10, 30, 50};
+    f.window.drawDirty(dirty);
+    LOKA_VERIFY(f.window.next_.rectRequested());
+    f.window.drawForFlush(); // Restore CLEAN after the partial dirty replay; next_ stays sealed later.
+    f.origin.set(Frame(0, 32, 0, 0));
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    LOKA_VERIFY(f.window.next_.full() && f.window.next_.rectRequested());
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().rectRequests());
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+    f.scroll(48);
+    LOKA_VERIFY(!f.last().rectRequests());
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+  }
+  struct ExtentWatcher
+  {
+    PresentFixture &fixture;
+    int action;
+    unsigned calls;
+    ExtentWatcher(PresentFixture &f, int a)
+        : fixture(f),
+          action(a),
+          calls(0)
+    {
+    }
+    static void changed(void *raw)
+    {
+      ExtentWatcher &self = *static_cast<ExtentWatcher *>(raw);
+      ++self.calls;
+      PresentController &c = self.fixture.controller;
+      const ToolboxUnitLedger::Mark rows = c.unitLedger_.mark();
+      const int renders = c.debugStats_.renderCalls;
+      if (self.action == 0)
+      {
+        const Rect rect = {10, 10, 30, 50};
+        self.fixture.window.requestInvalidateRect(rect);
+      }
+      else if (self.action == 1)
+        ToolboxInputDoor::render(c);
+      else
+      {
+        LayoutState state = seat();
+        Node *text = self.fixture.viewport.childrenHead()->asNestable()->childrenHead();
+        LOKA_VERIFY(text && text->asProjectedLayoutNode());
+        LOKA_VERIFY(!c.prepareProjectedLayout(text, state));
+        LOKA_VERIFY(LayoutNode(&self.fixture.viewport, state, &c, 0) == 0);
+      }
+      LOKA_VERIFY(c.unitLedger_.mark() == rows && c.debugStats_.renderCalls == renders);
+    }
+  };
+  void presentPublication(int action)
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    // Diagnostic builds assert before returning; release pins below inspect the refusal and rows.
+    const pid_t child = action ? fork() : 0;
+    LOKA_VERIFY(child >= 0);
+    if (child)
+    {
+      int status = 0;
+      LOKA_VERIFY(waitpid(child, &status, 0) == child);
+      LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+      return;
+    }
+#endif
+    PresentFixture f(action != 0);
+    if (action)
+      LOKA_VERIFY(f.controller.unitLedger_.mark() > 0);
+    MutableState<Frame> extent((Frame()));
+    NodeState<Frame> result(&extent, 0);
+    RectSurfaceNode surface(RectSurfaceProps().laidOutExtent(result));
+    ExtentWatcher watcher(f, action);
+    extent.bind(&ExtentWatcher::changed, &watcher, false);
+    f.controller.recordRectSurfaceExtent(&surface, Frame(0, 0, 10, 20));
+    f.scroll(16);
+    extent.unbind(&ExtentWatcher::changed, &watcher);
+    LOKA_VERIFY(watcher.calls == 1);
+    if (!action)
+    {
+      LOKA_VERIFY(f.last().rectRequests());
+      LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+    }
+    else
+    {
+      LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_REFUSED);
+      LOKA_VERIFY(f.last().firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    }
+#ifdef LOKA_LIFECYCLE_AUDIT
+    if (action)
+      _exit(0); // Reaching here means the audit fence failed to assert.
+#endif
+  }
+  void presentViewportReentry()
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (child)
+    {
+      int status = 0;
+      LOKA_VERIFY(waitpid(child, &status, 0) == child);
+      LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+      return;
+    }
+#endif
+    PresentFixture f;
+    ExtentWatcher watcher(f, 2);
+    // App writes a request with omitted extent; layout republishes the measured extent.
+    f.origin.set(Frame(0, 16, 0, 0));
+    f.origin.bind(&ExtentWatcher::changed, &watcher, false);
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    f.window.flushInvalidate();
+    f.origin.unbind(&ExtentWatcher::changed, &watcher);
+    LOKA_VERIFY(watcher.calls == 1);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_REFUSED);
+    LOKA_VERIFY(f.last().firstRefusal().reason == TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+#ifdef LOKA_LIFECYCLE_AUDIT
+    _exit(0);
+#endif
+  }
+  void presentHiddenViewport()
+  {
+    PresentLiveFixture<4> f;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.controller.scrollBarLedger_.usedViewportCount() == 2);
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->shown.set(false);
+    }
+    f.draw();
+    f.draw();
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->viewport.set(Frame(0, 16, 0, 0));
+    }
+    f.draw();
+    LOKA_VERIFY(f.last().usedViewports() == 1);
+    LOKA_VERIFY(f.last().refusal() != TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
+  }
+  void presentUnitDeparted()
+  {
+    PresentLiveFixture<5> f;
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.controller.unitLedger_.mark() == 1);
+    {
+      StateTrackerGuard transaction(f.root->tracker());
+      f.root->shown.set(false);
+      f.root->viewport.set(Frame(0, 16, 0, 0));
+    }
+    loka::dsl::testing::SceneTestAccess::flushInvalidation(f.scene);
+    // Isolate admission's outside gate from the earlier structure-reason gate.
+    // Debug-stat reset must leave the previous-row baseline intact.
+    f.controller.resetDebugStats();
+    f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    f.window.flushInvalidate();
+    LOKA_VERIFY(f.last().unitChanged() && f.controller.unitLedger_.mark() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
+  }
+  void presentBatchFence()
+  {
+#ifdef LOKA_LIFECYCLE_AUDIT
+    const pid_t child = fork();
+    LOKA_VERIFY(child >= 0);
+    if (child)
+    {
+      int status = 0;
+      LOKA_VERIFY(waitpid(child, &status, 0) == child);
+      LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+      return;
+    }
+#endif
+    PresentFixture f;
+    const int renders = f.controller.debugStats_.renderCalls;
+    f.controller.beginBatchUpdate();
+    ToolboxInputDoor::render(f.controller);
+    LOKA_VERIFY(f.controller.debugStats_.renderCalls == renders);
+    LOKA_VERIFY(f.controller.observation_.eligibility() == TOOLBOX_PAINT_REFUSED);
+    f.controller.endBatchUpdate();
+#ifdef LOKA_LIFECYCLE_AUDIT
+    _exit(0);
+#endif
+  }
+  void presentOutsideText()
+  {
+    TextNode *text = new TextNode(TextProps("before"));
+    PresentFixture f(false, 0, 0, false, 0, text);
+    NodeDefinition<TextProps, TextNode> changed(TextProps("after"));
+    text->setPropsTypeId(TextProps::staticTypeId());
+    LOKA_VERIFY(changed.applyPropsToNode(text));
+    f.scroll(16);
+    LOKA_VERIFY(f.last().outsideInputs() == 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
+    f.scroll(32);
+    LOKA_VERIFY(f.last().outsideInputs() == 0 && f.last().outsideNotTranslated() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+  }
+  void presentOutsideEdit()
+  {
+    MutableState<String> value(String("outside"));
+    NodeState<String> textState(&value, 0);
+    PresentFixture f(false, 0, 0, false, 0, new EditTextNode(EditTextProps(textState)));
+    f.scroll(16);
+    LOKA_VERIFY(f.last().outsideKinds() == 1);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
+  }
+  void presentOutsideBox()
+  {
+    BoxNode *box = new BoxNode(Box().height(30).props);
+    box->addChild(new TextNode(TextProps("stationary")));
+    PresentFixture f(false, 0, 0, false, 0, box);
+    NodeDefinition<BoxProps, BoxNode> changed(Box().height(50).props);
+    box->setPropsTypeId(BoxProps::staticTypeId());
+    LOKA_VERIFY(changed.applyPropsToNode(box));
+    f.scroll(16);
+    LOKA_VERIFY(f.last().outsideInputs() == 0 && f.last().outsideKinds() == 0);
+    LOKA_VERIFY(f.last().outsideNotTranslated() == 0 && !f.last().unitChanged());
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY);
+  }
+  void presentOutsideUnit(bool ground)
+  {
+    ZStackNode *stack = new ZStackNode(ZStackProps());
+    stack->addChild(new BoxNode(Box().height(40).props));
+    BoxNode *fixed = new BoxNode(Box().size(60, 20).props);
+    fixed->addChild(new TextNode(TextProps("fixed")));
+    stack->addChild(fixed);
+    BoxNode *box = new BoxNode(Box().width(180).props);
+    box->addChild(stack);
+    PresentFixture f(false, 0, 0, false, 0, box);
+    if (ground)
+    {
+      ZStackProps props = stack->props;
+      props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+      NodeDefinition<ZStackProps, ZStackNode> changed(props);
+      stack->setPropsTypeId(ZStackProps::staticTypeId());
+      LOKA_VERIFY(changed.applyPropsToNode(stack));
+    }
+    else
+    {
+      NodeDefinition<BoxProps, BoxNode> changed(Box().width(170).props);
+      box->setPropsTypeId(BoxProps::staticTypeId());
+      LOKA_VERIFY(changed.applyPropsToNode(box));
+    }
+    f.scroll(16);
+    LOKA_VERIFY(f.last().foregroundUnits() == 0);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED);
+    if (ground)
+      LOKA_VERIFY(f.last().outsideInputs() == 1);
+    else
+    {
+      LOKA_VERIFY(f.last().unitChanged());
+      LOKA_VERIFY(f.last().outsideNotTranslated() == 0);
+    }
+  }
+  void presentUnitComparison()
+  {
+    ToolboxUnitLedger ledger;
+    ZStackNode stack((ZStackProps()));
+    const Rect rect = {1, 2, 10, 20};
+    ToolboxUnitLedger::UnitSeat row = {&stack, 1, rect, rect};
+    ledger.push(row);
+    LOKA_VERIFY(ledger.compareFinalRows().addedRows() == 1);
+    ledger.clear();
+    ledger.push(row);
+    ledger.push(row);
+    ledger.discard(1);
+    LOKA_VERIFY(!ledger.compareFinalRows().changed());
+    ledger.clear();
+    LOKA_VERIFY(ledger.compareFinalRows().departedRows() == 1);
+    ledger.push(row);
+    row.unit.bottom++;
+    ledger.clear();
+    ledger.push(row);
+    LOKA_VERIFY(ledger.compareFinalRows().changedRows() == 1);
+    ledger.clear();
+    row.rect.right++;
+    ledger.push(row);
+    LOKA_VERIFY(ledger.compareFinalRows().changedRows() == 1); // rect-only change
+    ledger.clear();
+    row.index++;
+    ledger.push(row);
+    LOKA_VERIFY(ledger.compareFinalRows().addedRows() == 1 && ledger.compareFinalRows().departedRows() == 1);
+    ledger.reset();
+    LOKA_VERIFY(!ledger.compareFinalRows().changed());
+    ToolboxWindow window;
+    ToolboxScenePlatformController controller(&window);
+    controller.unitLedger_.push(row);
+    controller.unitLedger_.clear();
+    controller.clearControls();
+    LOKA_VERIFY(!controller.unitLedger_.compareFinalRows().changed());
+
+    union StackStorage
+    {
+      long double alignment;
+      char bytes[sizeof(ZStackNode)];
+    } storage;
+    ZStackNode *old = new (storage.bytes) ZStackNode(ZStackProps());
+    row.stack = old;
+    ledger.push(row);
+    ledger.clear();
+    old->~ZStackNode();
+    // Previous identities may outlive the node. A comparison must never follow them.
+    LOKA_VERIFY(ledger.compareFinalRows().departedRows() == 1);
+    ZStackNode *replacement = new (storage.bytes) ZStackNode(ZStackProps());
+    row.stack = replacement;
+    ledger.push(row);
+    LOKA_VERIFY(!ledger.compareFinalRows().changed());
+    ToolboxPresentObservation observation;
+    observation.noteReason(TOOLBOX_FULL_DRAW_STRUCTURE_SWAP);
+    const ToolboxViewportContentResult content = {0, 0, 0, 0, false};
+    observation.noteViewportMove(rect, 0, 16, content, TOOLBOX_BASELINE_VALID);
+    observation.complete(0);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_REASONS_BEYOND_LAYOUT);
+    replacement->~ZStackNode();
+  }
+
   void presentForeground()
   {
     PresentFixture f(true);
@@ -2953,7 +3354,7 @@ namespace
     observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.noteViewportMove(viewport, 0, 4, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
-    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED);
+    LOKA_VERIFY(observation.refusal() == TOOLBOX_PRESENT_HORIZONTAL_MOVE);
     observation.reset();
     observation.noteViewportMove(viewport, 2, 3, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
     observation.complete(1);
@@ -3528,7 +3929,22 @@ int main(int argc, char **argv)
     runRefusalPin(argv[1]);
     return 0;
   }
-  const char *names[] = {"PaintGroundFrozen",
+  const char *names[] = {"PresentViewportReentry",
+                         "PresentBatchFence",
+                         "PresentUnitDeparted",
+                         "PresentHiddenViewport",
+                         "PresentBatchSummary",
+                         "PresentRectAttempts",
+                         "PresentWalkRect",
+                         "PresentRenderReentry",
+                         "PresentLayoutReentry",
+                         "PresentOutsideText",
+                         "PresentOutsideEdit",
+                         "PresentOutsideBox",
+                         "PresentOutsideUnit",
+                         "PresentOutsideGround",
+                         "PresentUnitComparison",
+                         "PaintGroundFrozen",
                          "PaintGroundLive",
                          "PaintForeground",
                          "PaintConstructorRegion",
@@ -3680,6 +4096,36 @@ int main(int argc, char **argv)
     staticFirstUnit();
   else if (std::strcmp(argv[1], "PresentBatchMaterialization") == 0)
     presentBatchMaterialization();
+  else if (std::strcmp(argv[1], "PresentBatchSummary") == 0)
+    presentBatchSummary();
+  else if (std::strcmp(argv[1], "PresentRectAttempts") == 0)
+    presentRectAttempts();
+  else if (std::strcmp(argv[1], "PresentWalkRect") == 0)
+    presentPublication(0);
+  else if (std::strcmp(argv[1], "PresentRenderReentry") == 0)
+    presentPublication(1);
+  else if (std::strcmp(argv[1], "PresentLayoutReentry") == 0)
+    presentPublication(2);
+  else if (std::strcmp(argv[1], "PresentOutsideText") == 0)
+    presentOutsideText();
+  else if (std::strcmp(argv[1], "PresentOutsideEdit") == 0)
+    presentOutsideEdit();
+  else if (std::strcmp(argv[1], "PresentOutsideBox") == 0)
+    presentOutsideBox();
+  else if (std::strcmp(argv[1], "PresentOutsideUnit") == 0)
+    presentOutsideUnit(false);
+  else if (std::strcmp(argv[1], "PresentOutsideGround") == 0)
+    presentOutsideUnit(true);
+  else if (std::strcmp(argv[1], "PresentUnitComparison") == 0)
+    presentUnitComparison();
+  else if (std::strcmp(argv[1], "PresentHiddenViewport") == 0)
+    presentHiddenViewport();
+  else if (std::strcmp(argv[1], "PresentUnitDeparted") == 0)
+    presentUnitDeparted();
+  else if (std::strcmp(argv[1], "PresentBatchFence") == 0)
+    presentBatchFence();
+  else if (std::strcmp(argv[1], "PresentViewportReentry") == 0)
+    presentViewportReentry();
   else if (std::strcmp(argv[1], "PresentBatchRequests") == 0)
     presentBatchRequests();
   else if (std::strcmp(argv[1], "FlushFirstCapture") == 0)

@@ -19,7 +19,10 @@ void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 void ToolboxWindow::requestInvalidateRect(const Rect &rect)
 {
   if (this->scenePlatformController_)
+  {
     this->scenePlatformController_->noteWindowRectRequest();
+    this->scenePlatformController_->notePresentRectRequest();
+  }
   this->next_.add(rect);
 }
 
@@ -39,7 +42,7 @@ void ToolboxWindow::flushInvalidate()
     {
       if (this->scenePlatformController_)
         this->scenePlatformController_->noteWindowFlushFull();
-      this->drawForFlush();
+      this->drawForFlush(attempt.summary());
     }
     else
     {

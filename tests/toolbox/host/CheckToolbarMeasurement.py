@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pin the native bracket order; exercise the three required wiring mutations."""
+"""Pin the native bracket order; exercise the required wiring mutations."""
 from pathlib import Path
 import re
 import importlib.util
@@ -15,7 +15,13 @@ def check(presenter, window, render, bracket):
     presenter, window, render, bracket = [re.sub(r'\s+', '', x) for x in (presenter, window, render, bracket)]
     assert '#ifdefTEST_BUILDthis->beginEraseForTesting();#endifEraseRect(&this->port_);' in presenter
     assert 'this->drawGrowBox();#ifdefTEST_BUILDpresenter.finishDrawForTesting();#endif' in window
-    assert 'beginLayoutForTesting();#endifLayoutNode(rootNode_,state,this,0);#ifdefTEST_BUILDif(presenter)presenter->endLayoutForTesting();' in render
+    # The stationary observer scopes now surround layout; timing still brackets
+    # the single production root traversal, with both hooks gated by TEST_BUILD.
+    layout = 'LayoutNode(rootNode_,state,this,0);'
+    begin = render.find('#ifdefTEST_BUILDif(presenter)presenter->beginLayoutForTesting();#endif')
+    end = render.find('#ifdefTEST_BUILDif(presenter)presenter->endLayoutForTesting();#endif')
+    assert render.count(layout) == 1
+    assert 0 <= begin < render.find(layout) < end
     assert 'this->measurement_.beginErase();' in presenter
     assert 'this->measurement_.finish();' in presenter
     assert 'this->start_=this->receiver_->now();' in bracket
@@ -103,6 +109,16 @@ class Wiring(unittest.TestCase):
             mutated[index] = mutated[index].replace(before, after)
             with self.assertRaises(AssertionError):
                 check(*mutated)
+        for hook, before_layout in (('beginLayoutForTesting', False), ('endLayoutForTesting', True)):
+            moved = source.copy()
+            block = '#ifdef TEST_BUILD\n  if (presenter)\n    presenter->' + hook + '();\n#endif'
+            self.assertIn(block, moved[2])
+            moved[2] = moved[2].replace(block, '')
+            layout = 'LayoutNode(rootNode_, state, this, 0);'
+            replacement = block + '\n' + layout if before_layout else layout + '\n' + block
+            moved[2] = moved[2].replace(layout, replacement)
+            with self.assertRaises(AssertionError):
+                check(*moved)
         moved = source.copy()
         moved[0] = moved[0].replace('    this->beginEraseForTesting();', '')
         moved[0] = moved[0].replace('    EraseRect(&this->port_);',
