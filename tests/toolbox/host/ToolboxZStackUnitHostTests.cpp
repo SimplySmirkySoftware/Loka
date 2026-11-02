@@ -471,16 +471,40 @@ namespace
   }
   void flushFirstCapture()
   {
-    StaticFixture f;
-    f.window.requestInvalidate();
-    f.window.flushInvalidate();
-    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
-    LOKA_VERIFY(f.unit->renders == 1);
-    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
-                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
-    LOKA_VERIFY(!f.window.hasPendingInvalidate());
-    f.window.flushInvalidate();
-    LOKA_VERIFY(toolbox_host::staticCaptures == 1 && f.unit->renders == 1);
+    for (unsigned live = 0; live != 2; ++live)
+      for (unsigned route = 0; route != 3; ++route)
+      {
+        StaticFixture f;
+        if (live)
+          f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+        const unsigned &captures = live ? toolbox_host::bandCaptures : toolbox_host::staticCaptures;
+        ToolboxInputDoor::render(f.controller); // Establish the unit without erase evidence.
+        LOKA_VERIFY(captures == 0);
+        if (route == 0)
+        {
+          f.window.requestInvalidate();
+          f.window.flushInvalidate();
+        }
+        else
+        {
+          if (route == 2)
+            toolbox_host::refuseRegionAttempt = toolbox_host::regions + 1;
+          ToolboxRenderDirtyInCompositionOrder(f.controller, f.rect());
+          toolbox_host::refuseRegionAttempt = 0;
+        }
+        LOKA_VERIFY(captures == (route == 2 ? 0u : 1u));
+        LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                    == (!live && route != 2 ? ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY
+                                            : ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY));
+        LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.bandBlur_)
+                    == (live && route != 2 ? ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::READY
+                                           : ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::EMPTY));
+        LOKA_VERIFY(!f.controller.erasedPass().isOpen());
+        LOKA_VERIFY(!f.window.hasPendingInvalidate());
+        const unsigned renders = f.unit->renders;
+        f.window.flushInvalidate();
+        LOKA_VERIFY(f.unit->renders == renders);
+      }
   }
   /** EMPTY admission matrix, followed by READY on every later opportunity. */
   void staticOpportunities()
@@ -507,6 +531,7 @@ namespace
             if (open)
             {
               ToolboxErasedPass::Guard guard(pass, area);
+              guard.noteErased(area);
               painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
             }
             else
@@ -520,6 +545,7 @@ namespace
             for (unsigned later = 0; later < 3; ++later)
             {
               ToolboxErasedPass::Guard guard(pass, rect);
+              guard.noteErased(rect);
               const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
               LOKA_VERIFY(copied);
               LOKA_VERIFY(toolbox_host::staticCaptures == 1);
@@ -545,12 +571,42 @@ namespace
         {
           const Rect evidence = o == 0 ? ToolboxCaptureEvidence(areas[a], areas[e]) : areas[a];
           ToolboxErasedPass::Guard guard(pass, evidence);
+          LOKA_VERIFY(!pass.admitsCapture(unit));
+          LOKA_VERIFY(pass.dischargesDamage(unit) == (a == 0 && (o != 0 || e == 0)));
+          guard.noteErased(evidence);
           LOKA_VERIFY(pass.isOpen());
           LOKA_VERIFY(!pass.admitsCapture(empty));
           LOKA_VERIFY(pass.admitsCapture(unit) == (a == 0 && (o != 0 || e == 0)));
         }
         LOKA_VERIFY(!pass.isOpen());
       }
+#ifdef NDEBUG
+    {
+      ToolboxErasedPass::Guard outer(pass, areas[0]);
+      LOKA_VERIFY(pass.dischargesDamage(unit) && !pass.admitsCapture(unit));
+      {
+        ToolboxErasedPass::Guard refused(pass, areas[1]);
+        refused.noteErased(areas[1]);
+        LOKA_VERIFY(pass.dischargesDamage(unit) && !pass.admitsCapture(unit));
+      }
+      outer.noteErased(areas[0]);
+      {
+        ToolboxErasedPass::Guard refused(pass, areas[1]);
+        refused.noteErased(areas[1]);
+        LOKA_VERIFY(pass.admitsCapture(unit));
+      }
+      outer.noteErased(areas[1]); // First note is preserved in release builds.
+      LOKA_VERIFY(pass.admitsCapture(unit));
+    }
+    {
+      ToolboxErasedPass::Guard clipped(pass, areas[1]);
+      clipped.noteErased(areas[0]);
+      LOKA_VERIFY(pass.admitsCapture(areas[1]));
+      LOKA_VERIFY(!pass.admitsCapture(unit));
+    }
+#else
+    std::printf("[skip] refused nested notes, repeated notes and clipping require NDEBUG.\n");
+#endif
     equal(ToolboxCaptureEvidence(areas[0], areas[3]), empty);
     for (short offset = -50; offset <= 50; offset += 100)
     {
@@ -604,6 +660,27 @@ namespace
       LOKA_VERIFY(toolbox_host::invalidations == before);
     }
 #if !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
+    for (unsigned misuse = 0; misuse != 2; ++misuse)
+    {
+      const pid_t noteChild = fork();
+      LOKA_VERIFY(noteChild >= 0);
+      if (!noteChild)
+      {
+        ToolboxErasedPass notePass;
+        ToolboxErasedPass::Guard guard(notePass, areas[1]);
+        if (misuse == 0)
+          guard.noteErased(areas[0]);
+        else
+        {
+          guard.noteErased(areas[1]);
+          guard.noteErased(areas[1]);
+        }
+        _exit(0);
+      }
+      int noteStatus = 0;
+      LOKA_VERIFY(waitpid(noteChild, &noteStatus, 0) == noteChild);
+      LOKA_VERIFY(WIFSIGNALED(noteStatus) && WTERMSIG(noteStatus) == SIGABRT);
+    }
     const pid_t child = fork();
     LOKA_VERIFY(child >= 0);
     if (!child)
@@ -706,6 +783,7 @@ namespace
     ledger.push(second);
     f.controller.staticBlur_.reconcile(ledger.firstBlurUnits());
     ToolboxErasedPass::Guard pass(f.controller.erasedPass(), rect);
+    pass.noteErased(rect);
     const bool laterPainted =
         f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass(), true) == BLUR_PICTURE;
     LOKA_VERIFY(!laterPainted);
@@ -1067,6 +1145,7 @@ namespace
     equal(f.controller.dirtyExtent(frozenRect), frozenRect);
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), f.window.port.portRect);
+      pass.noteErased(f.window.port.portRect);
       const ToolboxBlurPaint a =
           f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass(), true);
       const ToolboxBlurPaint b =
@@ -1132,6 +1211,7 @@ namespace
     stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
     {
       ToolboxErasedPass::Guard erased(controller.erasedPass(), window.window()->portRect);
+      erased.noteErased(window.window()->portRect);
       ToolboxInputDoor::render(controller);
       LOKA_VERIFY(controller.frostCache_.paints == 2);
       LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(controller.bandBlur_)
@@ -2344,6 +2424,7 @@ namespace
     snapshot.reconcile(selection);
     ToolboxErasedPass pass;
     ToolboxErasedPass::Guard guard(pass, rect);
+    guard.noteErased(rect);
     const unsigned &captureCount = K == TOOLBOX_BLUR_FROZEN ? toolbox_host::staticCaptures : toolbox_host::bandCaptures;
     const unsigned requests = toolbox_host::invalidations;
     LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_ABSENT);

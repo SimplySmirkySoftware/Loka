@@ -87,6 +87,7 @@ void ToolboxWindow::drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary
         captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
       ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
       scenePlatformController_->notePresentRequestSummary(summary);
+      presenter.setErasedGuard(erased);
       ToolboxInputDoor::render(*scenePlatformController_, &presenter);
     }
     else

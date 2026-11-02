@@ -40,7 +40,7 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     return;
   }
   const bool coversWindow =
-      this->window_ && this->window_->window() && this->erasedPass_.admitsCapture(this->window_->window()->portRect);
+      this->window_ && this->window_->window() && this->erasedPass_.dischargesDamage(this->window_->window()->portRect);
   ToolboxPresentObservation::Interval interval(
       this->observation_, coversWindow, this->debugStats_, this->scrollBarLedger_);
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::LayoutScope snapshotLayout(this->staticBlur_);

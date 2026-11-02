@@ -875,6 +875,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_executable(LokaToolboxImageViewTests
     tests/toolbox/host/ToolboxImageViewHostTests.cpp
     apple/toolbox/src/context/ToolboxImageViewContext.cpp
+    apple/toolbox/src/ToolboxPictAdmission.cpp
     apple/toolbox/src/ToolboxNativeImage.cpp ${_editor_host_sources})
   target_include_directories(LokaToolboxImageViewTests PRIVATE
     tests/toolbox/host tests apple/toolbox/src)
@@ -892,6 +893,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_executable(LokaToolboxNativeImageTests
     tests/toolbox/host/ToolboxNativeImageHostTests.cpp
     tests/TestingHooks.cpp
+    apple/toolbox/src/ToolboxPictAdmission.cpp
     apple/toolbox/src/ToolboxNativeImage.cpp
     apple/toolbox/src/PictParser.cpp
     apple/toolbox/src/ToolboxPlatformContext.cpp
@@ -927,6 +929,10 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   loka_enable_warnings(LokaToolboxImagePlacementTests)
   set_target_properties(LokaToolboxImagePlacementTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
   add_test(NAME testToolboxImageViewClipPlacement COMMAND LokaToolboxImagePlacementTests clip-placement)
+  foreach(_admission_case admitted raw color empty snapshot cover)
+    add_test(NAME testToolboxImageViewAdmission_${_admission_case}
+      COMMAND LokaToolboxImagePlacementTests admission-${_admission_case})
+  endforeach()
 
   add_executable(LokaToolboxControlTests tests/toolbox/host/ToolboxControlHostTests.cpp ${_editor_host_sources})
   target_include_directories(LokaToolboxControlTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
