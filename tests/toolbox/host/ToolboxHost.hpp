@@ -7,6 +7,7 @@
 #include "context/ToolboxUnicodeTextEditorContext.hpp"
 #include "ToolboxPresentObservation.hpp"
 #include "ToolboxFullDrawReason.hpp"
+#include "ToolboxPresentBatch.hpp"
 #include "ToolboxFullDrawPresenter.hpp"
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxUnitHairline.hpp"
@@ -251,7 +252,6 @@ public:
   {
 #ifdef LOKA_HOST_ZSTACK_UNITS
     this->window_ = &this->port;
-    this->needsInvalidate_ = false;
 #endif
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
@@ -283,8 +283,7 @@ public:
   }
 #ifdef LOKA_HOST_ZSTACK_UNITS
   WindowPort *window_;
-  bool needsInvalidate_;
-  std::vector<Rect> pendingInvalidateRects_;
+  ToolboxPresentBatch next_;
   void requestInvalidate();
   void requestInvalidateImpl();
   void requestInvalidateWithReason(ToolboxFullDrawReason);

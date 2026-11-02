@@ -1,103 +1,59 @@
 /** Shared production invalidation procedure, also compiled by the host fixture. */
 void ToolboxWindow::requestInvalidate()
 {
-  requestInvalidateWithReason(TOOLBOX_FULL_DRAW_UNKNOWN);
+  this->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_UNKNOWN);
 }
 
 void ToolboxWindow::requestInvalidateWithReason(ToolboxFullDrawReason reason)
 {
   // Keep every cause even when the first request already schedules the full draw.
-  if (scenePlatformController_)
-    scenePlatformController_->notePresentReason(reason);
-  if (needsInvalidate_)
-  {
-    return;
-  }
-  if (scenePlatformController_)
-  {
-    scenePlatformController_->noteWindowFullRequest(ToolboxFullDrawReasonName(reason));
-  }
-  needsInvalidate_ = true;
-  pendingInvalidateRects_.clear();
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->notePresentReason(reason);
+  // Count a full request when next has none, including during a full draw.
+  // The source is the last counted source since the stats reset.
+  if (!this->next_.full() && this->scenePlatformController_)
+    this->scenePlatformController_->noteWindowFullRequest(ToolboxFullDrawReasonName(reason));
+  this->next_.addFull();
 }
 
 void ToolboxWindow::requestInvalidateRect(const Rect &rect)
 {
-  if (scenePlatformController_)
-  {
-    scenePlatformController_->noteWindowRectRequest();
-  }
-  if (needsInvalidate_)
-  {
-    return;
-  }
-  for (std::size_t i = 0; i < pendingInvalidateRects_.size(); ++i)
-  {
-    Rect &pending = pendingInvalidateRects_[i];
-    if (rect.right < pending.left || rect.left > pending.right || rect.bottom < pending.top
-        || rect.top > pending.bottom)
-    {
-      continue;
-    }
-    if (rect.left < pending.left)
-    {
-      pending.left = rect.left;
-    }
-    if (rect.top < pending.top)
-    {
-      pending.top = rect.top;
-    }
-    if (rect.right > pending.right)
-    {
-      pending.right = rect.right;
-    }
-    if (rect.bottom > pending.bottom)
-    {
-      pending.bottom = rect.bottom;
-    }
-    return;
-  }
-  pendingInvalidateRects_.push_back(rect);
+  if (this->scenePlatformController_)
+    this->scenePlatformController_->noteWindowRectRequest();
+  this->next_.add(rect);
 }
 
 void ToolboxWindow::flushInvalidate()
 {
-  if (!window_)
-  {
+  if (!this->window_)
     return;
-  }
-  if (!needsInvalidate_ && pendingInvalidateRects_.empty())
-  {
+  if (this->next_.empty())
     return;
-  }
-  if (needsInvalidate_)
+  if (this->scenePlatformController_)
+    assert(!this->scenePlatformController_->erasedPass().isOpen());
   {
-    if (scenePlatformController_)
+    ToolboxPresentBatch sealed;
+    this->next_.swap(sealed);
+    const ToolboxPresentBatch &attempt = sealed;
+    if (attempt.full())
     {
-      scenePlatformController_->noteWindowFlushFull();
+      if (this->scenePlatformController_)
+        this->scenePlatformController_->noteWindowFlushFull();
+      this->drawForFlush();
     }
-    // Projected contexts are materialized during the tree walk and request a
-    // structure present themselves. This draw already includes them, so
-    // consume that request only after the walk completes.
-    this->drawForFlush();
-    needsInvalidate_ = false;
-    pendingInvalidateRects_.clear();
-    return;
-  }
-  needsInvalidate_ = false;
-  std::vector<Rect> rects = pendingInvalidateRects_;
-  pendingInvalidateRects_.clear();
-  for (std::size_t i = 0; i < rects.size(); ++i)
-  {
-    if (scenePlatformController_)
+    else
     {
-      scenePlatformController_->noteWindowFlushDirty();
+      for (std::size_t i = 0; i < attempt.rects().size(); ++i)
+      {
+        if (this->scenePlatformController_)
+          this->scenePlatformController_->noteWindowFlushDirty();
+        this->drawDirty(attempt.rects()[i]);
+      }
     }
-    this->drawDirty(rects[i]);
   }
 }
 
 bool ToolboxWindow::hasPendingInvalidate() const
 {
-  return needsInvalidate_ || !pendingInvalidateRects_.empty();
+  return !this->next_.empty();
 }
