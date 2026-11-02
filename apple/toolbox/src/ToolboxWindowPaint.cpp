@@ -86,6 +86,7 @@ void ToolboxWindow::drawWhole(const Rect &evidence)
       if (clip.isActive())
         captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
       ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
+      presenter.setErasedGuard(erased);
       ToolboxInputDoor::render(*scenePlatformController_, &presenter);
     }
     else

@@ -3,6 +3,7 @@
 
 #include <Quickdraw.h>
 #include "ToolboxDrawMeasurement.hpp"
+#include "ToolboxErasedPass.hpp"
 
 /** Borrowed for one synchronous full render. Called after layout commits and
     extent publication, before paint; also called when render admission fails. */
@@ -41,8 +42,14 @@ class ToolboxPortErasePresenter : public ToolboxFullDrawPresenter
 {
 public:
   explicit ToolboxPortErasePresenter(const Rect &port)
-      : port_(port)
+      : port_(port),
+        erased_(0)
   {
+  }
+  /** Borrow only for the synchronous render inside the guard's scope. */
+  void setErasedGuard(ToolboxErasedPass::Guard &erased)
+  {
+    this->erased_ = &erased;
   }
   virtual void eraseBeforePaint()
   {
@@ -50,10 +57,13 @@ public:
     this->beginEraseForTesting();
 #endif
     EraseRect(&this->port_);
+    if (this->erased_)
+      this->erased_->noteErased(this->erased_->shown());
   }
 
 private:
   const Rect &port_;
+  ToolboxErasedPass::Guard *erased_;
 };
 
 #endif

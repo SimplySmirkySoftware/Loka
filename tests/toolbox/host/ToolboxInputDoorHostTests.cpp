@@ -627,7 +627,10 @@ namespace
     fixture.controller.renderContext = &probe;
     {
       ToolboxErasedPass::Guard erased(fixture.controller.erasedPass(), fixture.native.port.portRect);
+      LOKA_VERIFY(fixture.controller.erasedPass().dischargesDamage(fixture.native.port.portRect));
+      LOKA_VERIFY(!fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
       ToolboxInputDoor::render(fixture.controller, &probe);
+      LOKA_VERIFY(!fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
     }
     LOKA_VERIFY(probe.erases == 1 && probe.paints == 1);
     LOKA_VERIFY(!fixture.controller.borrowPhase().open());
@@ -638,13 +641,25 @@ namespace
     const int before = toolbox_host::erases;
     ToolboxPortErasePresenter presenter(fixture.native.port.portRect);
     fixture.controller.rootNode_ = 0;
-    ToolboxInputDoor::render(fixture.controller, &presenter);
+    {
+      ToolboxErasedPass::Guard erased(fixture.controller.erasedPass(), fixture.native.port.portRect);
+      presenter.setErasedGuard(erased);
+      LOKA_VERIFY(!fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
+      ToolboxInputDoor::render(fixture.controller, &presenter);
+      LOKA_VERIFY(fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
+    }
     LOKA_VERIFY(toolbox_host::erases == before + 1);
     fixture.controller.rootNode_ = fixture.root();
     const Rect saved = fixture.native.port.portRect;
     fixture.native.port.portRect.left = SHRT_MIN;
     fixture.native.port.portRect.right = SHRT_MAX;
-    ToolboxInputDoor::render(fixture.controller, &presenter);
+    {
+      ToolboxErasedPass::Guard erased(fixture.controller.erasedPass(), fixture.native.port.portRect);
+      presenter.setErasedGuard(erased);
+      LOKA_VERIFY(!fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
+      ToolboxInputDoor::render(fixture.controller, &presenter);
+      LOKA_VERIFY(fixture.controller.erasedPass().admitsCapture(fixture.native.port.portRect));
+    }
     LOKA_VERIFY(toolbox_host::erases == before + 2);
     fixture.native.port.portRect = saved;
   }

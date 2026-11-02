@@ -101,8 +101,8 @@ ToolboxOwnControlMoveFootprint ToolboxScenePlatformController::admitOwnControlMo
     // rectangle when admitted: the Control Manager also invalidates its
     // off-port part, which cannot contain visible damage of this window.
     // An empty intersection is pure off-window damage, safe even without a
-    // captured pass; admitsCapture deliberately refuses empty rectangles.
-    if (SectRect(&areas[i], &portRect, &clipped) && !this->erasedPass_.admitsCapture(clipped))
+    // shown pass; dischargesDamage deliberately refuses empty rectangles.
+    if (SectRect(&areas[i], &portRect, &clipped) && !this->erasedPass_.dischargesDamage(clipped))
       SetRect(&areas[i], 0, 0, 0, 0);
   }
   return ToolboxOwnControlMoveFootprint(areas[0], areas[1], areas[2]);
