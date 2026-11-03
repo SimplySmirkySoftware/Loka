@@ -14,19 +14,37 @@ namespace
   {
     return size == 0 ? GetDefFontSize() : size;
   }
+
+  void apply(const ToolboxTextSelection &selection)
+  {
+    TextFont(selection.font == 0 ? GetSysFont() : selection.font);
+    TextSize(selection.size);
+    TextFace(selection.face);
+  }
+} // namespace
+
+ToolboxTextPortFont ToolboxTextPortFont::read(GrafPtr port)
+{
+  return ToolboxTextPortFont(port ? port->txFont : 0, port ? port->txSize : 0, port ? port->txFace : 0);
 }
 
-ToolboxTextMeasureScope::ToolboxTextMeasureScope(
-    const ToolboxScenePlatformController &controller,
-    const ToolboxTextFontDescriptor &descriptor)
+ToolboxTextSelection ToolboxTextSelection::resolve(const ToolboxTextFontDescriptor &descriptor,
+                                                   const ToolboxTextPortFont &port)
+{
+  return ToolboxTextSelection(
+      descriptor.font(port.font), ResolvedFontSize(descriptor.size(port.size)), descriptor.face(port.face));
+}
+
+ToolboxTextMeasureScope::ToolboxTextMeasureScope(const ToolboxScenePlatformController &controller,
+                                                 const ToolboxTextFontDescriptor &descriptor)
     : previousPort_(0),
       measurePort_(controller.window_ ? reinterpret_cast<GrafPtr>(controller.window_->window()) : 0),
-      previousFont_(this->measurePort_ ? this->measurePort_->txFont : 0),
-      previousSize_(this->measurePort_ ? this->measurePort_->txSize : 0),
-      previousFace_(this->measurePort_ ? this->measurePort_->txFace : 0),
+      original_(ToolboxTextPortFont::read(this->measurePort_)),
       busy_(this->measurePort_
-                && ResolvedFontSize(descriptor.size(this->previousSize_)) != ResolvedFontSize(this->previousSize_)
-            ? controller.cursorOwner() : 0)
+                    && ToolboxTextSelection::resolve(descriptor, this->original_).size
+                           != ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), this->original_).size
+                ? controller.cursorOwner()
+                : 0)
 {
   GetPort(&this->previousPort_);
   if (!this->measurePort_)
@@ -43,9 +61,9 @@ ToolboxTextMeasureScope::~ToolboxTextMeasureScope()
   if (this->measurePort_)
   {
     SetPort(this->measurePort_);
-    TextFont(this->previousFont_);
-    TextSize(this->previousSize_);
-    TextFace(this->previousFace_);
+    TextFont(this->original_.font);
+    TextSize(this->original_.size);
+    TextFace(this->original_.face);
   }
   SetPort(this->previousPort_);
 }
@@ -72,46 +90,38 @@ void ToolboxTextMeasureScope::select(const ToolboxTextFontDescriptor &descriptor
 {
   if (!this->measurePort_)
     return;
-  const short font = descriptor.font(this->previousFont_);
-  TextFont(font == 0 ? GetSysFont() : font);
-  TextSize(ResolvedFontSize(descriptor.size(this->previousSize_)));
-  TextFace(descriptor.face(this->previousFace_));
+  apply(ToolboxTextSelection::resolve(descriptor, this->original_));
 }
 
 bool ToolboxTextMeasureScope::sameFont(const ToolboxTextFontDescriptor &a,
                                        const ToolboxTextFontDescriptor &b) const
 {
-  return a.font(this->previousFont_) == b.font(this->previousFont_)
-         && ResolvedFontSize(a.size(this->previousSize_)) == ResolvedFontSize(b.size(this->previousSize_))
-         && a.face(this->previousFace_) == b.face(this->previousFace_);
+  return ToolboxTextSelection::resolve(a, this->original_) == ToolboxTextSelection::resolve(b, this->original_);
 }
 
 namespace
 {
-  bool NeedsBusy(GrafPtr port, const ToolboxTextFontDescriptor *descriptors, std::size_t count)
+  bool NeedsBusy(const ToolboxTextPortFont &original, const ToolboxTextFontDescriptor *descriptors, std::size_t count)
   {
-    if (!port)
-      return false;
-    short largest = count ? ResolvedFontSize(descriptors[0].size(port->txSize)) : ResolvedFontSize(port->txSize);
+    const short baseline = ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), original).size;
+    short largest = count ? ToolboxTextSelection::resolve(descriptors[0], original).size : baseline;
     for (std::size_t i = 1; i < count; ++i)
     {
-      const short size = ResolvedFontSize(descriptors[i].size(port->txSize));
+      const short size = ToolboxTextSelection::resolve(descriptors[i], original).size;
       if (size > largest)
         largest = size;
     }
-    return largest != ResolvedFontSize(port->txSize);
+    return largest != baseline;
   }
 }
 
-ToolboxTextMeasureScope::ToolboxTextMeasureScope(
-    const ToolboxScenePlatformController &controller,
-    const ToolboxTextFontDescriptor *descriptors, std::size_t count)
+ToolboxTextMeasureScope::ToolboxTextMeasureScope(const ToolboxScenePlatformController &controller,
+                                                 const ToolboxTextFontDescriptor *descriptors,
+                                                 std::size_t count)
     : previousPort_(0),
       measurePort_(controller.window_ ? reinterpret_cast<GrafPtr>(controller.window_->window()) : 0),
-      previousFont_(this->measurePort_ ? this->measurePort_->txFont : 0),
-      previousSize_(this->measurePort_ ? this->measurePort_->txSize : 0),
-      previousFace_(this->measurePort_ ? this->measurePort_->txFace : 0),
-      busy_(NeedsBusy(this->measurePort_, descriptors, count) ? controller.cursorOwner() : 0)
+      original_(ToolboxTextPortFont::read(this->measurePort_)),
+      busy_(this->measurePort_ && NeedsBusy(this->original_, descriptors, count) ? controller.cursorOwner() : 0)
 {
   GetPort(&this->previousPort_);
   if (this->measurePort_)

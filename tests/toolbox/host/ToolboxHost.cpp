@@ -12,6 +12,7 @@ namespace toolbox_host
 {
   std::vector<std::string> paintOperations;
   std::vector<Rect> erasedRects;
+  short systemFont = 0, defaultFontSize = 12;
   long systemScript = smRoman;
   long keyboardScript = smRoman;
   unsigned beeps = 0;
@@ -150,11 +151,11 @@ void TextFace(Style value)
 }
 short GetDefFontSize()
 {
-  return 12;
+  return toolbox_host::defaultFontSize;
 }
 short GetSysFont()
 {
-  return 0;
+  return toolbox_host::systemFont;
 }
 void GetFontInfo(FontInfo *out)
 {
