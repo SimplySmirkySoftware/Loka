@@ -151,3 +151,79 @@ void testWebURLNoneAndEquality()
   assigned = WebURL::None();
   LOKA_VERIFY(assigned.isNone() && !first.isNone());
 }
+
+void testWebURLLexicalCharacterization()
+{
+  struct Row
+  {
+    const char *input;
+    const char *expected;
+  };
+  const Row rows[] = {{"https://a/ x", 0},
+                      {"https://a/\"", 0},
+                      {"https://a/<", 0},
+                      {"https://a/>", 0},
+                      {"https://a/\\", 0},
+                      {"https://a/^", 0},
+                      {"https://a/`", 0},
+                      {"https://a/{", 0},
+                      {"https://a/|", 0},
+                      {"https://a/}", 0},
+                      {"https://a/\x7f", 0},
+                      {"https://a/\xc3\xa9", 0},
+                      {"https://a/%", 0},
+                      {"https://a/%4", 0},
+                      {"https://a/%4G", 0},
+                      {"https://a/x%", 0},
+                      {"https://a/%G0", 0},
+                      {"https://a/\t", 0},
+                      {"", 0},
+                      {"file:///x", 0},
+                      {"javascript:x", 0},
+                      {"httpx://a", 0},
+                      {"mailtx:x", 0},
+                      {"http", 0},
+                      {"https", 0},
+                      {"mailto", 0},
+                      {"http:", 0},
+                      {"https:", 0},
+                      {"mailto:", 0},
+                      {":x", 0},
+                      {"https:x", 0},
+                      {"https:/x", 0},
+                      {"https://", 0},
+                      {"https:///x", 0},
+                      {"https://?q", 0},
+                      {"https://#f", 0},
+                      {"HTTP://A/X", "http://A/X"},
+                      {"HtTpS://A/X", "https://A/X"},
+                      {"MaIlTo:A@B", "mailto:A@B"},
+                      {"mailto:?q", "mailto:?q"},
+                      {"https://a/%2f/%2F/../X", "https://a/%2f/%2F/../X"},
+                      {"https://a/-._~:/?#[]@!$&'()*+,;=%00%aF", "https://a/-._~:/?#[]@!$&'()*+,;=%00%aF"},
+                      {"http://a", "http://a"},
+                      {"https://a?q", "https://a?q"},
+                      {"https://a#f", "https://a#f"},
+                      {"http://[::1]/", "http://[::1]/"}};
+  for (std::size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i)
+  {
+    WebURL out;
+    LOKA_VERIFY(WebURL::parse(String("https://seed.example/"), out));
+    const WebURL before(out);
+    const bool accepted = WebURL::parse(String::Utf8(rows[i].input, std::string(rows[i].input).size()), out);
+    LOKA_VERIFY(accepted == (rows[i].expected != 0));
+    if (accepted)
+      LOKA_VERIFY(out.text().equals(String(rows[i].expected)));
+    else
+      LOKA_VERIFY(out == before);
+  }
+  const char embeddedNul[] = "https://a/a\0b";
+  verifyRefused(String::Utf8(embeddedNul, sizeof(embeddedNul) - 1));
+  std::string boundary("https://a/");
+  boundary.append(2048 - boundary.size(), 'x');
+  WebURL out;
+  LOKA_VERIFY(WebURL::parse(String(boundary), out));
+  LOKA_VERIFY(out.text().equals(String(boundary)));
+  boundary += 'x';
+  verifyRefused(String(boundary));
+}
