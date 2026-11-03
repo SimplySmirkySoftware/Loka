@@ -16,6 +16,7 @@
 #include <Quickdraw.h>
 #include <StandardFile.h>
 #include <TextEdit.h>
+#include <TextServices.h>
 #include <Timer.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -39,6 +40,18 @@ namespace
   TXNObject gTxn3 = 0;
   TXNFrameID gFrame3 = 0;
   WindowPtr gWin4 = 0;
+  // Probe 5 (text-body-native-owned page 1b prerequisites): TXNSetData and the
+  // change counts, inline input in a kTXNUseInline object next to the
+  // bottom-line object, TXNTSMCheck modes, and the commit doors reachable on OS 9.
+  const int kProbeMode = 5;
+  TXNObject gTxnI = 0;
+  TXNFrameID gFrameI = 0;
+  WindowPtr gWinI = 0;
+  int gTsmMode = 0; // 0 = no TXNTSMCheck, 1 = TXNTSMCheck(NULL) when WNE is false, 2 = TXNTSMCheck(focused) on every event
+  ByteCount gP5Size = 0;
+  ItemCount gP5Chg = 0;
+  ItemCount gP5Act = 0;
+  TXNObject gP5Obj = 0;
   bool gQuit = false;
   ByteCount gLastSize = 0;
   ItemCount gLastChange = 0;
@@ -60,7 +73,10 @@ namespace
     kEditSelectAll = 4,
     kEditDump = 6,
     kEditModal = 7,
-    kEditGetFile = 8
+    kEditGetFile = 8,
+    kEditFix = 9,
+    kEditTsmMode = 10,
+    kEditFocusOff = 11
   };
 
   void p3dump(const char *tag, WindowPtr specificTo);
@@ -73,6 +89,155 @@ namespace
     vfprintf(gLog, fmt, ap);
     va_end(ap);
     fputc('\r', gLog);
+  }
+
+  TXNObject p5focused()
+  {
+    return (gWinI && FrontWindow() == gWinI) ? gTxnI : gTxn;
+  }
+
+  ItemCount p5act(TXNObject obj, TXNCountOptions mask, OSStatus *st)
+  {
+    ItemCount n = 0;
+    *st = TXNGetActionChangeCount(obj, mask, &n);
+    return n;
+  }
+
+  // One line per probe-5 sample: size, change count, action counts, selection,
+  // undo, and the first units as text.
+  void p5dump(const char *tag, TXNObject obj)
+  {
+    if (!obj)
+      return;
+    Handle out = 0;
+    const OSStatus get = TXNGetData(obj, kTXNStartOffset, kTXNEndOffset, &out);
+    const long n = out ? GetHandleSize(out) / 2 : 0;
+    char text[200];
+    int k = 0;
+    for (long i = 0; out && i < n && i < 24 && k < 180; ++i)
+    {
+      const UniChar c = ((const UniChar *)*out)[i];
+      if (c >= 32 && c < 127)
+        text[k++] = (char)c;
+      else
+        k += sprintf(text + k, "<%04X>", c);
+    }
+    text[k] = 0;
+    if (out)
+      DisposeHandle(out);
+    TXNOffset s0 = 0, s1 = 0;
+    TXNGetSelection(obj, &s0, &s1);
+    TXNActionKey key = 0;
+    const Boolean can = TXNCanUndo(obj, &key);
+    OSStatus st1 = 0, st2 = 0;
+    const ItemCount ti = p5act(obj, kTXNTextInputCountMask, &st1);
+    const ItemCount run = p5act(obj, kTXNRunCountMask, &st2);
+    logf("%s obj=%s size=%lu chg=%lu act(text=%lu/%ld run=%lu/%ld) sel=%lu..%lu canUndo=%d key=%lu get=%ld text=[%s]", tag,
+         obj == gTxnI ? "INLINE" : (obj == gTxn ? "BOTTOM" : "other"), (unsigned long)TXNDataSize(obj),
+         (unsigned long)TXNGetChangeCount(obj), (unsigned long)ti, (long)st1, (unsigned long)run, (long)st2,
+         (unsigned long)s0, (unsigned long)s1, (int)can, (unsigned long)key, (long)get, text);
+  }
+
+  // Sample the focused object after every WaitNextEvent; log when anything
+  // moved or the record is a key TSM consumed (null event with a message).
+  void p5sample(const EventRecord &orig, bool got, bool serviced)
+  {
+    TXNObject obj = p5focused();
+    if (!obj)
+      return;
+    OSStatus st = 0;
+    const ByteCount size = TXNDataSize(obj);
+    const ItemCount chg = TXNGetChangeCount(obj);
+    const ItemCount act = p5act(obj, kTXNAllCountMask, &st);
+    const bool consumed = orig.what == nullEvent && orig.message != 0;
+    const bool moved = obj != gP5Obj || size != gP5Size || chg != gP5Chg || act != gP5Act;
+    if (consumed || moved || serviced || orig.what == keyDown || orig.what == autoKey)
+    {
+      char tag[96];
+      sprintf(tag, "EV what=%d msg=%08lx mods=%04x got=%d svc=%d tsm=%d%s", (int)orig.what, (unsigned long)orig.message,
+              (unsigned)orig.modifiers, (int)got, (int)serviced, gTsmMode, moved ? " MOVED" : "");
+      p5dump(tag, obj);
+    }
+    gP5Obj = obj;
+    gP5Size = size;
+    gP5Chg = chg;
+    gP5Act = act;
+  }
+
+  void p5setCase(const char *tag, TXNObject obj, const UniChar *units, ByteCount count, TXNOffset a, TXNOffset b)
+  {
+    const OSStatus st = TXNSetData(obj, kTXNUnicodeTextData, (void *)units, count * 2, a, b);
+    char t[80];
+    sprintf(t, "%s set=%ld", tag, (long)st);
+    p5dump(t, obj);
+  }
+
+  // Q1: TXNSetData on a fresh NULL-window object, then on an attached object.
+  void p5setDataCases(const char *prefix, TXNObject obj)
+  {
+    static const UniChar hello[] = {'h', 'e', 'l', 'l', 'o'};
+    static const UniChar bang[] = {'!'};
+    char t[64];
+    sprintf(t, "%s-0 new", prefix);
+    p5dump(t, obj);
+    sprintf(t, "%s-1 set whole", prefix);
+    p5setCase(t, obj, hello, 5, kTXNStartOffset, kTXNEndOffset);
+    sprintf(t, "%s-2 set whole same", prefix);
+    p5setCase(t, obj, hello, 5, kTXNStartOffset, kTXNEndOffset);
+    sprintf(t, "%s-3 set insert at end", prefix);
+    p5setCase(t, obj, bang, 1, kTXNEndOffset, kTXNEndOffset);
+    TXNUndo(obj);
+    sprintf(t, "%s-4 undo", prefix);
+    p5dump(t, obj);
+    TXNUndo(obj);
+    sprintf(t, "%s-5 undo", prefix);
+    p5dump(t, obj);
+    const OSStatus cl = TXNClearActionChangeCount(obj, kTXNAllCountMask);
+    sprintf(t, "%s-6 clear action counts=%ld", prefix, (long)cl);
+    p5dump(t, obj);
+    sprintf(t, "%s-7 set whole empty", prefix);
+    p5setCase(t, obj, hello, 0, kTXNStartOffset, kTXNEndOffset);
+  }
+
+  void probe5()
+  {
+    Rect f;
+    SetRect(&f, 4, 4, 280, 120);
+    TXNObject fresh = 0;
+    TXNFrameID freshFrame = 0;
+    const OSStatus made = TXNNewObject(0, 0, &f, kTXNAlwaysWrapAtViewEdgeMask, kTXNTextEditStyleFrameType,
+                                       kTXNUnicodeTextFile, kTXNUnicodeEncoding, &fresh, &freshFrame, 0);
+    logf("P5 new(NULL window)=%ld", (long)made);
+    if (made == noErr && fresh)
+    {
+      p5setDataCases("Q1-NULLWIN", fresh);
+      TXNDeleteObject(fresh);
+    }
+    Rect b;
+    SetRect(&b, 60, 300, 400, 460);
+    gWinI = NewCWindow(0, &b, "\pINLINE (kTXNUseInline)", true, documentProc, (WindowPtr)-1L, true, 0);
+    Rect fr;
+    SetRect(&fr, 4, 4, 336, 156);
+    const OSStatus made2 = TXNNewObject(0, gWinI, &fr, kTXNAlwaysWrapAtViewEdgeMask, kTXNTextEditStyleFrameType,
+                                        kTXNUnicodeTextFile, kTXNUnicodeEncoding, &gTxnI, &gFrameI, 0);
+    TXNControlTag tag = kTXNInlineStateTag;
+    TXNControlData data;
+    data.uValue = kTXNUseInline;
+    const OSStatus inl = made2 == noErr ? TXNSetTXNObjectControls(gTxnI, false, 1, &tag, &data) : -1;
+    logf("P5 new(INLINE window)=%ld inline-control=%ld", (long)made2, (long)inl);
+    if (made2 != noErr)
+    {
+      gTxnI = 0;
+      return;
+    }
+    p5setDataCases("Q1-ATTACHED", gTxnI);
+    p5setDataCases("Q1-BOTTOM", gTxn);
+    SelectWindow(gWinI);
+    SetPort(gWinI);
+    InvalRect(&gWinI->portRect);
+    TXNFocus(gTxnI, true);
+    TXNActivate(gTxnI, gFrameI, true);
+    logf("P5 INTERACTIVE: INLINE window front. Cmd-F FixTSMDocument(0), Cmd-O TXNFocus off/on, Cmd-T cycle TXNTSMCheck mode, Cmd-D dump, Cmd-Q quit");
   }
 
   // Hex of the first `limit` UTF-16 units of the buffer, plus size and line count.
@@ -267,6 +432,7 @@ namespace
       case kEditDump:
         dumpBuffer("DUMP", 96);
         p3dump("DUMP", gWin4);
+        p5dump("DUMP", gTxnI);
         break;
       case kEditModal:
       {
@@ -293,6 +459,32 @@ namespace
         probeFocusOn("DIALOG");
         break;
       }
+      case kEditFix:
+      {
+        TXNObject obj = p5focused();
+        p5dump("FIX-PRE (Cmd-F reached the app)", obj);
+        const OSErr fx = FixTSMDocument(0);
+        char t[64];
+        sprintf(t, "FIX-POST FixTSMDocument(0)=%d", (int)fx);
+        p5dump(t, obj);
+        break;
+      }
+      case kEditFocusOff:
+      {
+        TXNObject obj = p5focused();
+        p5dump("FOCUSOFF-PRE (Cmd-O reached the app)", obj);
+        TXNFocus(obj, false);
+        p5dump("FOCUSOFF-POST TXNFocus(false)", obj);
+        TXNIdle(obj);
+        p5dump("FOCUSOFF-IDLE", obj);
+        TXNFocus(obj, true);
+        p5dump("FOCUSOFF-ON TXNFocus(true)", obj);
+        break;
+      }
+      case kEditTsmMode:
+        gTsmMode = (gTsmMode + 1) % 3;
+        logf("P5 TSM mode -> %d", gTsmMode);
+        break;
       case kEditGetFile:
       {
         probeFocusOff("MODAL");
@@ -427,7 +619,7 @@ namespace
     AppendMenu(file, "\pQuit/Q");
     InsertMenu(file, 0);
     MenuHandle edit = NewMenu(kMenuEdit, "\pEdit");
-    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D;Modal/M;GetFile/G");
+    AppendMenu(edit, "\pCut/X;Copy/C;Paste/V;Select All/A;(-;Dump/D;Modal/M;GetFile/G;Fix/F;TSM mode/T;Focus off-on/O");
     InsertMenu(edit, 0);
     DrawMenuBar();
   }
@@ -442,6 +634,8 @@ namespace
         TXNIdle(gTxn2);
       if (gTxn3 && gWin4)
         TXNIdle(gTxn3);
+      if (gTxnI)
+        TXNIdle(gTxnI);
       {
         const ByteCount size = TXNDataSize(gTxn);
         const ItemCount change = TXNGetChangeCount(gTxn);
@@ -459,6 +653,8 @@ namespace
         doMenu(MenuKey((char)(ev.message & charCodeMask)));
       else if (gWin4 && FrontWindow() == gWin4)
         TXNKeyDown(gTxn3, &ev);
+      else if (gWinI && FrontWindow() == gWinI)
+        TXNKeyDown(gTxnI, &ev);
       else
         TXNKeyDown(gTxn, &ev);
       break;
@@ -479,6 +675,8 @@ namespace
           TXNClick(gTxn2, &ev);
         else if (w == gWin4 && gTxn3)
           TXNClick(gTxn3, &ev);
+        else if (w == gWinI && gTxnI)
+          TXNClick(gTxnI, &ev);
         break;
       case inDrag:
         DragWindow(w, ev.where, &qd.screenBits.bounds);
@@ -510,6 +708,12 @@ namespace
         TXNUpdate(gTxn3);
         EndUpdate(gWin4);
       }
+      else if ((WindowPtr)ev.message == gWinI && gTxnI)
+      {
+        BeginUpdate(gWinI);
+        TXNUpdate(gTxnI);
+        EndUpdate(gWinI);
+      }
       else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
       {
         BeginUpdate(gWindow2);
@@ -532,6 +736,12 @@ namespace
         const bool active = (ev.modifiers & activeFlag) != 0;
         TXNFocus(gTxn3, active);
         TXNActivate(gTxn3, gFrame3, active);
+      }
+      else if ((WindowPtr)ev.message == gWinI && gTxnI)
+      {
+        const bool active = (ev.modifiers & activeFlag) != 0;
+        TXNFocus(gTxnI, active);
+        TXNActivate(gTxnI, gFrameI, active);
       }
       else if ((WindowPtr)ev.message == gWindow2 && gTxn2)
       {
@@ -581,6 +791,24 @@ int main()
   logf("ENV sysv=%lx(%d) tsmv=%lx(%d)", sysv, (int)sysErr, tsmv, (int)tsmErr);
   heapLine("start");
 
+  if (kProbeMode == 5)
+  {
+    FILE *aware = fopen("TSMAWARE", "r");
+    if (aware)
+    {
+      fclose(aware);
+      logf("P5 InitTSMAwareApplication=%d", (int)InitTSMAwareApplication());
+    }
+    else
+      logf("P5 InitTSMAwareApplication not called");
+    FILE *check = fopen("TSMCHECK", "r");
+    if (check)
+    {
+      fclose(check);
+      gTsmMode = 1;
+    }
+    logf("P5 TSM mode at start=%d", gTsmMode);
+  }
   const OSStatus initStatus = TXNInitTextension(0, 0, 0);
   TXNFeatureBits features = 0;
   const TXNVersionValue version = TXNVersionInformation(&features);
@@ -704,6 +932,8 @@ int main()
 
   if (kProbe1)
     automaticCases();
+  else if (kProbeMode == 5)
+    probe5();
   else
     probe3();
   gLastSize = TXNDataSize(gTxn);
@@ -715,7 +945,17 @@ int main()
   while (!gQuit)
   {
     EventRecord ev;
-    WaitNextEvent(everyEvent, &ev, 6, 0);
+    const bool got = WaitNextEvent(everyEvent, &ev, 6, 0);
+    const EventRecord orig = ev;
+    bool serviced = false;
+    if (kProbeMode == 5)
+    {
+      if (gTsmMode == 1 && !got)
+        serviced = TXNTSMCheck(0, &ev);
+      else if (gTsmMode == 2)
+        serviced = TXNTSMCheck(p5focused(), &ev);
+      p5sample(orig, got, serviced);
+    }
     handleEvent(ev);
   }
   dumpBuffer("END", 96);
