@@ -1646,3 +1646,8 @@ LOKA_TEST(testURLReceiveAppLateOffer)
 LOKA_TEST(testURLReceiveAppNeverRan)
 LOKA_TEST(testURLReceiveAppConfigReuse)
 LOKA_TEST(testURLReceiveAppDuplicate)
+
+LOKA_TEST(testTextPositionIdentity)
+LOKA_TEST(testTextPlacementEquality)
+LOKA_TEST(testTextDocumentFactValues)
+LOKA_TEST(testTextPositionRequest)
