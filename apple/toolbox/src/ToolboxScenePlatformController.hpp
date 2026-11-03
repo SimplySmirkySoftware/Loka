@@ -557,9 +557,9 @@ public:
     this->observation_.notePaintRefusal(reason, site);
   }
   /** Window entries, once before render / once per rect request; O(1), no rows. */
-  void notePresentRequestSummary(ToolboxPresentBatch::Summary summary)
+  void notePresentRequestBatch(const ToolboxPresentBatch &sealed)
   {
-    this->observation_.noteRequestSummary(summary);
+    this->observation_.noteRequestBatch(sealed);
   }
   void notePresentRectRequest()
   {

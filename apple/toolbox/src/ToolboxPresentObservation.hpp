@@ -279,14 +279,20 @@ public:
   {
     return this->bar_;
   }
-  /** Once per admission, at most two units. Saturate before multiplying/adding. */
-  bool tooLarge(const Rect &domain, int dv, const Rect &damage) const
+  /** Once per admission, at most two units and four sealed rectangles. Saturate before multiplying/adding. */
+  bool tooLarge(const Rect &domain,
+                int dv,
+                const Rect &damage,
+                const ToolboxPresentRects &sealed = ToolboxPresentRects()) const
   {
     const long limit = area(domain) / 2;
     long sum = 0;
     for (unsigned i = 0; i < this->count(); ++i)
       for (int n = 0; n < 2; ++n)
         add(sum, area(this->units_[i]), limit);
+    for (unsigned i = 0; i < sealed.count(); ++i)
+      for (int n = 0; n < 2; ++n)
+        add(sum, area(sealed.at(i)), limit);
     const long height = dv < 0 ? -static_cast<long>(dv) : static_cast<long>(dv);
     const long width = static_cast<long>(domain.right) - domain.left;
     if (width <= 0 || limit <= 0)
@@ -396,9 +402,9 @@ public:
       this->reasons_ |= 1U << reason;
   }
   /** Window sealed attempt, once before render; reset with the interval, O(1). */
-  void noteRequestSummary(ToolboxPresentBatch::Summary summary)
+  void noteRequestBatch(const ToolboxPresentBatch &sealed)
   {
-    this->summary_ = summary;
+    this->sealedRects_ = sealed.repairRects();
   }
   /** Window rect door, once per request; only WALKING belongs to this interval. */
   void noteRectRequest()
@@ -408,7 +414,7 @@ public:
   }
   bool rectRequests() const
   {
-    return this->summary_ == ToolboxPresentBatch::FULL_WITH_RECTS || this->walkRectRequested_;
+    return this->sealedRects_.requested() || this->walkRectRequested_;
   }
   unsigned usedViewports() const
   {
@@ -497,13 +503,13 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT;
     else if (this->inputs_.repair.refused())
       this->refusal_ = TOOLBOX_PRESENT_FOREGROUND_UNITS;
-    else if (this->rectRequests())
+    else if (this->walkRectRequested_ || this->sealedRects_.refused())
       this->refusal_ = TOOLBOX_PRESENT_RECT_REQUESTS;
     else if (this->inputs_.usedViewports >= 2)
       this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
     else if (this->outsideNotTranslated() || this->outsideInputs() || this->outsideKinds() || this->unitChanged())
       this->refusal_ = TOOLBOX_PRESENT_OUTSIDE_CHANGED;
-    else if (this->inputs_.repair.tooLarge(this->copyDomain_, -this->dy_, this->damage_))
+    else if (this->inputs_.repair.tooLarge(this->copyDomain_, -this->dy_, this->damage_, this->sealedRects_))
       this->refusal_ = TOOLBOX_PRESENT_REPAIR_TOO_LARGE;
     else if (!this->inputs_.suppressionCapable)
       this->refusal_ = TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY;
@@ -516,7 +522,7 @@ public:
   /** O(1) at interval exit or explicit diagnostic reset; no owned resources. */
   void reset()
   {
-    this->summary_ = ToolboxPresentBatch::RECTS_ONLY;
+    this->sealedRects_ = ToolboxPresentRects();
     this->walkRectRequested_ = false;
     this->inputs_ = ToolboxPresentInputs();
     this->reasons_ = this->nextReasons_ = this->walkReasons_ = 0;
@@ -628,6 +634,10 @@ public:
   {
     return this->copyDomain_;
   }
+  const ToolboxPresentRects &sealedRects() const
+  {
+    return this->sealedRects_;
+  }
   const ToolboxForegroundRepair &repair() const
   {
     return this->inputs_.repair;
@@ -689,7 +699,7 @@ private:
   {
     this->eligibility_ = value;
   }
-  ToolboxPresentBatch::Summary summary_;
+  ToolboxPresentRects sealedRects_;
   bool walkRectRequested_;
   ToolboxPresentInputs inputs_;
   ToolboxPaintEligibility eligibility_;
@@ -715,12 +725,14 @@ public:
   const int dv;
   const Rect damage;
   const ToolboxForegroundRepair repair;
+  const ToolboxPresentRects sealedRects;
   ToolboxPresentPlan()
       : verdict(TOOLBOX_PRESENT_ERASE_ALL),
         copyDomain(),
         dv(0),
         damage(),
-        repair()
+        repair(),
+        sealedRects()
   {
   }
   explicit ToolboxPresentPlan(const ToolboxPresentObservation &observation)
@@ -728,7 +740,8 @@ public:
         copyDomain(observation.copyDomain()),
         dv(-observation.dy()),
         damage(observation.damage()),
-        repair(observation.repair())
+        repair(observation.repair()),
+        sealedRects(observation.sealedRects())
   {
   }
 };

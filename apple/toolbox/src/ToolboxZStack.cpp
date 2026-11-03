@@ -168,7 +168,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
           LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
           break;
         case BLUR_GROUND:
-          LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
+          // Screen eligibility selects window ground without a capture obligation.
           break;
         }
         break;
@@ -180,7 +180,7 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
         painted = result == BLUR_PICTURE;
         if (result == BLUR_PARTIAL)
           LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
-        else if (!painted)
+        else if (result == BLUR_ABSENT)
           LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
         break;
       }

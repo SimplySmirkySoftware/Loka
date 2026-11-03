@@ -72,12 +72,11 @@ public:
   void invalidateWindow();
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
-  void drawForFlush(ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void drawForFlush(const ToolboxPresentBatch &sealed = ToolboxPresentBatch());
 
 private:
-  void drawWhole(const Rect &evidence,
-                 ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY,
-                 bool allowCopy = false);
+  void
+  drawWhole(const Rect &evidence, const ToolboxPresentBatch &sealed = ToolboxPresentBatch(), bool allowCopy = false);
 
 public:
   /** Preserves the native content position after a menu-bar rebuild without

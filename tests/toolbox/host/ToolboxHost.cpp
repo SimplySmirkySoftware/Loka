@@ -984,12 +984,12 @@ void ToolboxWindow::drawForUpdate()
   this->drawWhole(evidence);
   EndUpdate(&this->port);
 }
-void ToolboxWindow::drawForFlush(ToolboxPresentBatch::Summary summary)
+void ToolboxWindow::drawForFlush(const ToolboxPresentBatch &sealed)
 {
   if (this->scenePlatformController_)
     this->scenePlatformController_->notePresentDamage(
         ToolboxUpdateDamage(this->port.updateRgn, this->port.portBits.bounds));
-  this->drawWhole(this->port.portRect, summary, true);
+  this->drawWhole(this->port.portRect, sealed, true);
 }
 static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
 #include "ToolboxWindowPaint.cpp"

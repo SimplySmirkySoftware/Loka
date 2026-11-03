@@ -296,13 +296,12 @@ public:
   bool hasPendingInvalidate() const;
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
-  void drawForFlush(ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void drawForFlush(const ToolboxPresentBatch &sealed = ToolboxPresentBatch());
   void drawGrowBox();
 
 private:
-  void drawWhole(const Rect &evidence,
-                 ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY,
-                 bool allowCopy = false);
+  void
+  drawWhole(const Rect &evidence, const ToolboxPresentBatch &sealed = ToolboxPresentBatch(), bool allowCopy = false);
 
 public:
   void drawDirty(const Rect &);
@@ -931,9 +930,9 @@ public:
     ++this->debugStats_.totalDrawDirtyCalls;
   }
   /** Window entries, once before render / once per rect request; O(1), no rows. */
-  void notePresentRequestSummary(ToolboxPresentBatch::Summary summary)
+  void notePresentRequestBatch(const ToolboxPresentBatch &sealed)
   {
-    this->observation_.noteRequestSummary(summary);
+    this->observation_.noteRequestBatch(sealed);
   }
   void notePresentRectRequest()
   {

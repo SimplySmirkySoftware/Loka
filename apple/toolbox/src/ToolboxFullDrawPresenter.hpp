@@ -104,6 +104,9 @@ public:
     for (unsigned i = 0; i < plan.repair.count(); ++i)
       if (!this->addPair(plan.repair.unit(i), plan.dv))
         return this->erase();
+    for (unsigned i = 0; i < plan.sealedRects.count(); ++i)
+      if (!this->addPair(plan.sealedRects.at(i), plan.dv))
+        return this->erase();
     if (!this->addPair(plan.damage, plan.dv) || !this->add(plan.repair.bar())
         || !this->addPair(ToolboxWindowSizeBoxRect(this->port_), plan.dv))
       return this->erase();

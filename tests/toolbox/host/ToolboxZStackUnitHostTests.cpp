@@ -354,7 +354,8 @@ namespace
       if (order == 1)
         f.window.requestInvalidateRect(first);
       LOKA_VERIFY(f.window.next_.full());
-      LOKA_VERIFY(f.window.next_.rects().empty());
+      LOKA_VERIFY(f.window.next_.rects().size() == 1);
+      equal(f.window.next_.rects()[0], first);
       f.window.flushInvalidate();
       LOKA_VERIFY(!f.window.hasPendingInvalidate());
       LOKA_VERIFY(f.controller.debugStatsForTesting().windowFlushFullCount == 1);
@@ -816,14 +817,26 @@ namespace
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
                 == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
   }
-  void staticIneligible()
+  void staticIneligible(bool live)
   {
     StaticFixture f;
+    if (live)
+      f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
     toolbox_host::staticEligible = false;
+    toolbox_host::erasedRects.clear();
     f.update();
     f.window.drawForFlush();
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
                 == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::EMPTY);
+    const ToolboxPresentResult &result = f.controller.debugStatsForTesting().lastPresentObservation;
+    LOKA_VERIFY(!result.firstRefusal().refused());
+    LOKA_VERIFY(result.eligibility() == TOOLBOX_PAINT_CLEAN);
+    LOKA_VERIFY(toolbox_host::bandCaptures == 0 && toolbox_host::staticCaptures == 0);
+    bool groundSeen = false;
+    const Rect unit = f.rect();
+    for (std::size_t i = 0; i < toolbox_host::erasedRects.size(); ++i)
+      groundSeen = groundSeen || EqualRect(&toolbox_host::erasedRects[i], &unit);
+    LOKA_VERIFY(groundSeen);
     const unsigned before = toolbox_host::invalidations;
     toolbox_host::staticEligible = true;
     f.window.flushInvalidate();
@@ -832,9 +845,10 @@ namespace
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     LOKA_VERIFY(!f.window.hasPendingInvalidate());
     f.update();
-    LOKA_VERIFY(toolbox_host::staticCaptures == 1);
-    LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
-                == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
+    LOKA_VERIFY((live ? toolbox_host::bandCaptures : toolbox_host::staticCaptures) == 1);
+    if (!live)
+      LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(f.controller.staticBlur_)
+                  == ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN>::READY);
   }
   void staticFailure()
   {
@@ -1817,6 +1831,60 @@ namespace
     LOKA_VERIFY(duplicate.controller.scrollBarLedger_.queryBarRepair(same).refused());
     duplicate.controller.viewportScroll(1).contentRect = original;
   }
+  void requireRepairPair(const Rect &rect, int dv, const Rect &port)
+  {
+    Rect clipped, moved = rect;
+    OffsetRect(&moved, 0, static_cast<short>(dv));
+    LOKA_VERIFY(SectRect(&rect, &port, &clipped));
+    LOKA_VERIFY(SectRect(&moved, &port, &moved));
+    bool originalSeen = false, movedSeen = false;
+    for (std::size_t i = 0; i < toolbox_host::repairUnions.size(); ++i)
+    {
+      originalSeen = originalSeen || EqualRect(&toolbox_host::repairUnions[i], &clipped);
+      movedSeen = movedSeen || EqualRect(&toolbox_host::repairUnions[i], &moved);
+    }
+    LOKA_VERIFY(originalSeen && movedSeen);
+  }
+  void copySealedRects(unsigned count)
+  {
+    PresentFixture f;
+    toolbox_host::scrollRects.clear();
+    toolbox_host::repairUnions.clear();
+    const Rect rect = {40, -3, 44, 9}; // Both footprints clip at the port's left edge.
+    for (unsigned i = 0; i < count; ++i)
+    {
+      Rect next = rect;
+      OffsetRect(&next, 0, static_cast<short>(i * 10));
+      f.window.requestInvalidateRect(next);
+    }
+    f.scroll(16);
+    LOKA_VERIFY(f.last().rectRequests());
+    if (count > 4)
+    {
+      LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+      LOKA_VERIFY(toolbox_host::scrollRects.empty());
+      return;
+    }
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().lastPresentObservation.executed() == TOOLBOX_PRESENT_COPIED);
+    LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+    for (unsigned i = 0; i < count; ++i)
+    {
+      Rect next = rect;
+      OffsetRect(&next, 0, static_cast<short>(i * 10));
+      requireRepairPair(next, -16, f.window.port.portRect);
+    }
+    // Completed observation keeps a copy after the sealed stack batch has gone.
+    LOKA_VERIFY(f.last().sealedRects().count() == count);
+  }
+  void sealedRepairBudget()
+  {
+    const Rect domain = {0, 0, 100, 100}, rect = {0, 0, 30, 50};
+    const ToolboxPresentRects sealed(&rect, 1);
+    LOKA_VERIFY(!ToolboxForegroundRepair().tooLarge(domain, 16, Rect()));
+    LOKA_VERIFY(ToolboxForegroundRepair().tooLarge(domain, 16, Rect(), sealed));
+  }
   void presentCopy(const char *which)
   {
     BoxNode *content = new BoxNode(Box().size(180, 600).props);
@@ -2077,7 +2145,7 @@ namespace
     LOKA_VERIFY(observation.reasonNames() == "layout_dirty+viewport_input");
     LOKA_VERIFY(observation.reasons()
                 == ((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT)));
-    LOKA_VERIFY(observation.rectRequests() && observation.refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+    LOKA_VERIFY(observation.rectRequests() && observation.refusal() == TOOLBOX_PRESENT_REPAIR_TOO_LARGE);
     LOKA_VERIFY(fullPending);
     LOKA_VERIFY(firstRequest && std::strcmp(firstRequest, "viewport_input") == 0);
     LOKA_VERIFY(after.windowFlushFullCount == before.windowFlushFullCount + 1);
@@ -2144,7 +2212,7 @@ namespace
       }
       f.draw();
       LOKA_VERIFY(f.last().contentInputs() == 0);
-      LOKA_VERIFY(f.last().rectRequests() && f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+      LOKA_VERIFY(f.last().rectRequests() && f.last().refusal() == TOOLBOX_PRESENT_REPAIR_TOO_LARGE);
     }
   }
   void presentContainerInputNotCounted()
@@ -2252,9 +2320,13 @@ namespace
     a.addFull();
     LOKA_VERIFY(a.full() && !a.rectRequested());
     a.add(rect);
-    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().empty());
+    a.add(rect); // Overlap merging remains active after full.
+    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().size() == 1);
+    equal(a.rects()[0], rect);
     a.swap(b);
     LOKA_VERIFY(a.empty() && b.full() && b.rectRequested());
+    LOKA_VERIFY(b.rects().size() == 1);
+    equal(b.rects()[0], rect);
     a.addFull();
     a.swap(b);
     LOKA_VERIFY(a.rectRequested() && b.full() && !b.rectRequested());
@@ -2264,9 +2336,12 @@ namespace
     LOKA_VERIFY(a.rectRequested() && !a.full());
     a.addFull();
     a.addFull();
-    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().empty());
+    LOKA_VERIFY(a.full() && a.rectRequested() && a.rects().size() == 1);
+    equal(a.rects()[0], rect);
     a.swap(b);
     LOKA_VERIFY(!a.rectRequested() && b.rectRequested());
+    LOKA_VERIFY(b.rects().size() == 1);
+    equal(b.rects()[0], rect);
   }
   class RectPresentText : public TextNode
   {
@@ -2309,9 +2384,14 @@ namespace
     f.origin.set(Frame(0, 32, 0, 0));
     f.window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
     LOKA_VERIFY(f.window.next_.full() && f.window.next_.rectRequested());
+    toolbox_host::repairUnions.clear();
+    toolbox_host::scrollRects.clear();
     f.window.flushInvalidate();
     LOKA_VERIFY(f.last().rectRequests());
-    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_RECT_REQUESTS);
+    LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
+    LOKA_VERIFY(f.controller.debugStatsForTesting().lastPresentObservation.executed() == TOOLBOX_PRESENT_COPIED);
+    LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+    requireRepairPair(dirty, -16, f.window.port.portRect);
     f.scroll(48);
     LOKA_VERIFY(!f.last().rectRequests());
     LOKA_VERIFY(f.last().refusal() == TOOLBOX_PRESENT_ADMITTED);
@@ -4296,6 +4376,11 @@ int main(int argc, char **argv)
                          "StaticExternalDraw",
                          "StaticFailure",
                          "StaticIneligible",
+                         "LiveIneligible",
+                         "CopySealedOne",
+                         "CopySealedFour",
+                         "CopySealedFive",
+                         "SealedRepairBudget",
                          "StaticMissingRow",
                          "StaticChangedRect",
                          "StaticChangedGround",
@@ -4410,6 +4495,12 @@ int main(int argc, char **argv)
     copyOversizedCorner();
   else if (std::strcmp(argv[1], "ViewportBarRepair") == 0)
     viewportBarRepair();
+  else if (std::strcmp(argv[1], "CopySealedOne") == 0)
+    copySealedRects(1);
+  else if (std::strcmp(argv[1], "CopySealedFour") == 0)
+    copySealedRects(4);
+  else if (std::strcmp(argv[1], "CopySealedFive") == 0)
+    copySealedRects(5);
   else if (std::strncmp(argv[1], "Copy", 4) == 0)
     presentCopy(argv[1]);
   else if (std::strcmp(argv[1], "RegionEvidence") == 0)
@@ -4455,7 +4546,11 @@ int main(int argc, char **argv)
   else if (std::strcmp(argv[1], "StaticFailure") == 0)
     staticFailure();
   else if (std::strcmp(argv[1], "StaticIneligible") == 0)
-    staticIneligible();
+    staticIneligible(false);
+  else if (std::strcmp(argv[1], "LiveIneligible") == 0)
+    staticIneligible(true);
+  else if (std::strcmp(argv[1], "SealedRepairBudget") == 0)
+    sealedRepairBudget();
   else if (std::strncmp(argv[1], "Static", 6) == 0)
     staticReconcile(argv[1]);
   else if (std::strcmp(argv[1], "BandGeometry") == 0)

@@ -59,7 +59,7 @@ void ToolboxWindow::drawGrowBox()
   DisposeRgn(oldClip);
 }
 
-void ToolboxWindow::drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary, bool allowCopy)
+void ToolboxWindow::drawWhole(const Rect &evidence, const ToolboxPresentBatch &sealed, bool allowCopy)
 {
   if (!window_)
     return;
@@ -89,7 +89,7 @@ void ToolboxWindow::drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary
       if (clip.isActive())
         captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
       ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
-      scenePlatformController_->notePresentRequestSummary(summary);
+      scenePlatformController_->notePresentRequestBatch(sealed);
       presenter.setErasedGuard(erased);
       executed = ToolboxInputDoor::render(*scenePlatformController_, &presenter);
     }

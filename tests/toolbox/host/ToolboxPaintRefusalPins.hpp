@@ -95,7 +95,9 @@ namespace
     else if (std::strstr(mode, "Device"))
     {
       toolbox_host::staticEligible = false;
-      expected = live ? "ToolboxZStack.cpp:171" : "ToolboxZStack.cpp:184";
+      f.controller.renderZStack(&f.stack);
+      LOKA_VERIFY(!f.controller.observation_.outsideRefusal().refused());
+      return;
     }
     else if (std::strstr(mode, "Hairline"))
     {

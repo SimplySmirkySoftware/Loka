@@ -42,7 +42,7 @@ void ToolboxWindow::flushInvalidate()
     {
       if (this->scenePlatformController_)
         this->scenePlatformController_->noteWindowFlushFull();
-      this->drawForFlush(attempt.summary());
+      this->drawForFlush(attempt);
     }
     else
     {

@@ -3415,7 +3415,7 @@ namespace
       controller.notePresentReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
       // A synchronous full entry isolates this attempt from later scene publication.
       const loka_toolbox_probe::Timer copyTimer;
-      window.drawForFlush(ToolboxPresentBatch::FULL_ONLY);
+      window.drawForFlush();
       const unsigned long copyUs = copyTimer.elapsed();
       const ToolboxPresentResult copied = controller.debugStatsForTesting().lastMovedPresentObservation;
       this->recordArm("copy-containment",
@@ -3443,7 +3443,7 @@ namespace
         root->scroll(32);
         controller.notePresentReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
         copyRefusalArmed = true;
-        window.drawForFlush(ToolboxPresentBatch::FULL_ONLY);
+        window.drawForFlush();
         const ToolboxPresentResult failed = controller.debugStatsForTesting().lastMovedPresentObservation;
         const bool recoveryPending = window.hasPendingInvalidate();
         window.flushInvalidate();
