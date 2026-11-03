@@ -31,6 +31,11 @@ namespace loka
           return served;
         }
 
+        static void retireComponents(App &app)
+        {
+          app.retireComponents();
+        }
+
         static size_t pendingWindowCloseCount(const App &app)
         {
           return app.pendingWindowClosures_.size();
