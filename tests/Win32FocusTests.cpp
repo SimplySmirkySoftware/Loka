@@ -214,7 +214,7 @@ namespace
       if (active)
       {
         SetFocus(retired);
-        f.app.reconcileFocus();
+        f.app.reconcileAtCompletion();
         f.expect(key);
       }
       NotifySubtreeNodeDetached(node);
@@ -224,7 +224,7 @@ namespace
       if (active)
         SetFocus(retired); // A hidden HWND must not provide a read source either.
       f.readsNoParticipant(active);
-      f.app.reconcileFocus();
+      f.app.reconcileAtCompletion();
       f.none();
       NotifySubtreeNodeAttached(node);
       LifecycleFactTestAccess::DeliverFacts(node);
@@ -232,7 +232,7 @@ namespace
       if (active)
       {
         SetFocus(retired);
-        f.app.reconcileFocus();
+        f.app.reconcileAtCompletion();
         f.expect(key);
       }
       LifecycleFactTestAccess::MarkSubtreeRetired(node);
@@ -255,14 +255,14 @@ void testWin32FocusReadAndRestore()
                           "the Tab, publication, HELD and reactivation checks",
                           "the participant marks, the inactive read and the lifecycle marks still run.");
     f.readsNoParticipant(false);
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     f.none(); // A declined read publishes nothing.
     verifyLifecycle(f, false);
     return;
   }
   LOKA_VERIFY(GetFocus() == f.window.hwnd());
   f.readsNoParticipant(true);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   f.none();
   // Negative control: even a marked root is not a descendant participant.
   LOKA_VERIFY(Win32FocusParticipant::attach(f.window.hwnd(), f.field(1)->getContext()));
@@ -271,7 +271,7 @@ void testWin32FocusReadAndRestore()
   tab(f.window.hwnd());
   LOKA_VERIFY(GetFocus() != f.window.hwnd());
   LOKA_VERIFY(!Win32FocusParticipant::read(GetFocus()));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   f.none(); // Button has userdata, but no participant atom.
   NodeContext *answer = 0;
   for (unsigned short key = 1; key <= 3; ++key)
@@ -279,7 +279,7 @@ void testWin32FocusReadAndRestore()
     tab(f.window.hwnd());
     LOKA_VERIFY(GetFocus() == f.edit(key));
     LOKA_VERIFY(f.rail().readNativeFocus(answer) && answer == f.field(key)->getContext());
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     f.expect(key);
   }
 
@@ -291,17 +291,17 @@ void testWin32FocusReadAndRestore()
   {
     SetActiveWindow(f.window.hwnd());
     SetFocus(f.edit(key));
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     f.expect(key);
     SetActiveWindow(other.hwnd());
     SetFocus(other.hwnd());
     LOKA_VERIFY(GetActiveWindow() == other.hwnd());
     f.readsNoParticipant(false);
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     f.expect(key);
     SetActiveWindow(f.window.hwnd());
     LOKA_VERIFY(GetFocus() == f.edit(key));
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     f.expect(key);
   }
   // Reactivation restores only an HWND that still bears the published
@@ -637,7 +637,7 @@ void testWin32FocusPostedRequest()
     return;
   }
   SetFocus(f.edit(1));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   f.expect(1);
   LOKA_VERIFY(SetWindowTextW(f.edit(2), L"target text"));
   for (unsigned short key = 2; key <= 3; ++key)
@@ -650,7 +650,7 @@ void testWin32FocusPostedRequest()
     const LRESULT line = SendMessageW(target, EM_GETFIRSTVISIBLELINE, 0, 0);
     const int horizontal = GetScrollPos(target, SB_HORZ);
     f.facts.focus.post(key);
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     LOKA_VERIFY(GetFocus() == target);
     f.expect(key);
     LOKA_VERIFY(GetActiveWindow() == f.window.hwnd());
@@ -678,7 +678,7 @@ void testWin32FocusInactiveRequest()
     return;
   }
   SetFocus(f.edit(1));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   f.facts.focus.post(2);
   const FocusBinding request = EditTextProps().focusedAs(f.facts.focus, static_cast<unsigned short>(2)).focus_;
   Win32Window other(&f.context, WindowProps().frame(500, 60, 160, 120).visible(true));
@@ -691,12 +691,12 @@ void testWin32FocusInactiveRequest()
   // Exercise the door separately: common admission would otherwise mask its guard.
   LOKA_VERIFY(!f.rail().applyNativeFocus(*f.field(2)->getContext()));
   LOKA_VERIFY(GetFocus() == previous && GetActiveWindow() == other.hwnd());
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(request.requested());
   f.expect(1);
   SetActiveWindow(f.window.hwnd());
   LOKA_VERIFY(GetFocus() == f.edit(1));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(!request.requested());
   LOKA_VERIFY(GetFocus() == f.edit(2));
   f.expect(2);
@@ -764,7 +764,7 @@ void testWin32FocusWriteReentry()
   const HWND oldEdit = f.edit(1);
   const HWND target = f.edit(2);
   SetFocus(oldEdit);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   f.expect(1);
   const FocusBinding request = EditTextProps().focusedAs(f.facts.focus, static_cast<unsigned short>(2)).focus_;
   f.facts.text.state()->bind(&retireFocusTarget, &f, false);
@@ -772,7 +772,7 @@ void testWin32FocusWriteReentry()
       SetWindowLongPtrW(oldEdit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&commitOnKillFocus)));
   LOKA_VERIFY(killFocusPrevious);
   f.facts.focus.post(2);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   SetWindowLongPtrW(oldEdit, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(killFocusPrevious));
   killFocusPrevious = 0;
   f.facts.text.state()->unbind(&retireFocusTarget, &f);
@@ -804,7 +804,7 @@ void testWin32FocusInitialRequest()
                           "the declared initial request is verified pending.");
     return;
   }
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(!request.requested());
   LOKA_VERIFY(GetFocus() == f.edit(2));
   f.expect(2);
