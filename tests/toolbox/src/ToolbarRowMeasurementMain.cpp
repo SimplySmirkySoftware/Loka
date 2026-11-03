@@ -12,6 +12,10 @@
 #include "platform/file/AppLocation.hpp"
 #include "platform/file/FileIO.hpp"
 #include <Gestalt.h>
+#include <LowMem.h>
+#include <Script.h>
+#include "platform/ToolboxPascalText.hpp"
+#include <cstring>
 #ifndef TOOLBAR_ROWS_LAPTOP
 #error TOOLBAR_ROWS_LAPTOP must select the measurement vehicle
 #elif TOOLBAR_ROWS_LAPTOP != 0 && TOOLBAR_ROWS_LAPTOP != 1
@@ -148,6 +152,238 @@ namespace
     return true;
   }
 
+#if TOOLBAR_ROWS_LAPTOP == 0
+  /** Each state owns a fresh App and native window, so both build and hit use
+      the real App cache without a test reset door or production counters. */
+  class WidthAuditApp : public ToolboxApp
+  {
+  public:
+    explicit WidthAuditApp(AppConfigurable &config)
+        : ToolboxApp(&config)
+    {
+    }
+    virtual ~WidthAuditApp() {}
+  };
+
+  bool AuditFont(const char *name, short &font)
+  {
+    Str255 requested, actual;
+    requested[0] = static_cast<unsigned char>(std::strlen(name));
+    std::memcpy(requested + 1, name, requested[0]);
+    GetFNum(requested, &font);
+    GetFontName(font, actual);
+    return actual[0] == requested[0] && !std::memcmp(actual + 1, requested + 1, requested[0]);
+  }
+
+  /** Compare the complete door, including encoding, against the selected native
+      answer. Unencodable native probe bytes are reported separately as skips. */
+  unsigned AuditWidth(ToolboxScenePlatformController &controller, const unsigned char *text, unsigned &skipped)
+  {
+    core::String logical;
+    if (!ToolboxDecodeNative(text + 1, text[0], logical))
+    {
+      ++skipped;
+      return 0;
+    }
+    Str255 encoded;
+    if (!ToolboxEncodePascal(logical, encoded) || encoded[0] != text[0] || std::memcmp(encoded + 1, text + 1, text[0]))
+    {
+      ++skipped;
+      return 0;
+    }
+    short measured = 0;
+    const bool answered = controller.measureTextAdvance(app::TextStyle(), logical, measured);
+    ToolboxTextMeasureScope scope(controller);
+    return !answered || measured != StringWidth(encoded) ? 1 : 0;
+  }
+
+  void AuditRandom(Str255 text, unsigned long &seed, bool ascii)
+  {
+    seed = seed * 1664525UL + 1013904223UL;
+    text[0] = static_cast<unsigned char>(1 + ((seed >> 16) % 64));
+    for (unsigned i = 1; i <= text[0]; ++i)
+    {
+      seed = seed * 1664525UL + 1013904223UL;
+      unsigned byte = 32 + ((seed >> 16) % (ascii ? 95 : 223));
+      if (!ascii && byte >= 127)
+        ++byte;
+      text[i] = static_cast<unsigned char>(byte);
+    }
+  }
+
+  bool AuditWidthState(AppConfigurable &config,
+                       const char *name,
+                       short font,
+                       short size,
+                       Style face,
+                       bool ascii,
+                       int outside,
+                       std::FILE *out)
+  {
+    WidthAuditApp appOwner(config);
+    ToolboxWindow window(config.getPlatformContext(), WindowProps().frame(1, 41, 100, 80).title("Width audit"));
+    window.setApp(&appOwner);
+    window.open();
+    if (!window.window())
+    {
+      std::fprintf(out, "width_audit group=%s [fail] no-window\n", name);
+      return false;
+    }
+    ToolboxScenePlatformController controller(&window);
+    ToolboxTextMeasureScope restore(controller);
+    TextFont(font);
+    TextSize(size);
+    TextFace(face);
+    if (outside == 2)
+      SpaceExtra(65536L);
+    const ToolboxTextSelection selection = ToolboxTextSelection::resolve(
+        ToolboxTextFontDescriptor(), ToolboxTextPortFont::read(reinterpret_cast<GrafPtr>(window.window())));
+    unsigned skipped = 0, failures = 0;
+    const unsigned char first[] = {2, 'A', 'V'};
+    failures += AuditWidth(controller, first, skipped);
+    const ToolboxCharWidthCache::Slot *slot = appOwner.charWidthCache().find(selection);
+    const bool built = slot && slot->widths;
+    failures += AuditWidth(controller, first, skipped);
+    if (!outside && !built)
+      ++failures;
+    if (outside)
+    {
+      if (outside >= 2 && built)
+        ++failures;
+      const unsigned char control[] = {3, 'A', 1, 'V'};
+      const unsigned char high[] = {2, 0x80, 0xA0};
+      failures += AuditWidth(controller, control, skipped);
+      failures += AuditWidth(controller, high, skipped);
+      std::fprintf(out, "width_audit group=%s mismatch=%u skipped=%u table=%d\n", name, failures, skipped, built);
+      if (skipped)
+        std::fprintf(out, "[skip] native high bytes cannot round-trip through this system script\n");
+      return failures == 0;
+    }
+    Str255 text;
+    for (unsigned byte = 32; byte <= (ascii ? 126U : 255U); ++byte)
+      if (byte != 127)
+      {
+        text[0] = 1;
+        text[1] = static_cast<unsigned char>(byte);
+        failures += AuditWidth(controller, text, skipped);
+      }
+    unsigned long seed = 0x165302UL;
+    const unsigned strings = ascii ? 200 : 80;
+    for (unsigned i = 0; i < strings; ++i)
+    {
+      if (!ascii && i < 20)
+      {
+        const unsigned firstByte = i == 0 ? 32 : i == 1 ? 128 : 32 + (i - 2) * 11;
+        const unsigned count = i == 0 ? 95 : i == 1 ? 128 : 24;
+        text[0] = 0;
+        for (unsigned byte = firstByte; byte < firstByte + count; ++byte)
+          if (byte != 127 && byte <= 255)
+            text[++text[0]] = static_cast<unsigned char>(byte);
+      }
+      else
+        AuditRandom(text, seed, ascii);
+      failures += AuditWidth(controller, text, skipped);
+    }
+    if (ascii)
+      for (unsigned a = 32; a <= 126; ++a)
+        for (unsigned b = 32; b <= 126; ++b)
+        {
+          const unsigned char pair[] = {2, static_cast<unsigned char>(a), static_cast<unsigned char>(b)};
+          failures += AuditWidth(controller, pair, skipped);
+        }
+    const char *pairs[] = {"AV", "AW", "AY", "AT", "To", "Te",     "Ta",       "Tr",   "Wa",
+                           "We", "Yo", "Ya", "LT", "LV", "LY",     "P.",       "F.",   "V.",
+                           "y.", "r.", "ff", "fi", "fl", "AVAVAV", "Tomorrow", "WAVY", "LYTTA"};
+    unsigned kern = 0;
+    for (unsigned i = 0; i < sizeof(pairs) / sizeof(pairs[0]); ++i)
+    {
+      text[0] = static_cast<unsigned char>(std::strlen(pairs[i]));
+      std::memcpy(text + 1, pairs[i], text[0]);
+      kern += AuditWidth(controller, text, skipped);
+    }
+    std::fprintf(out,
+                 "width_audit group=%s size=%d face=%u first_and_second=2 table=%d mismatch=%u kern=%u skipped=%u\n",
+                 name,
+                 size,
+                 static_cast<unsigned>(face),
+                 built,
+                 failures,
+                 kern,
+                 skipped);
+    if (skipped)
+      std::fprintf(out,
+                   "[skip] %u native probe strings cannot round-trip through this system script's logical encoder\n",
+                   skipped);
+    return failures == 0 && kern == 0;
+  }
+
+  bool RunWidthAudit(AppConfigurable &config, std::FILE *out)
+  {
+    const Boolean originalFractional = LMGetFractEnable();
+    const long originalForce = GetScriptManagerVariable(smFontForce);
+    LMSetFractEnable(false);
+    const OSErr forceError = SetScriptManagerVariable(smFontForce, 0);
+    if (forceError || GetScriptManagerVariable(smFontForce))
+    {
+      std::fprintf(out, "[skip] width audit cannot disable font forcing\nwidth_audit verdict=SKIP\n");
+      LMSetFractEnable(originalFractional);
+      SetScriptManagerVariable(smFontForce, originalForce);
+      return false;
+    }
+    const char *names[] = {"Times", "Helvetica", "Geneva", "New York", "Courier", "Monaco"};
+    const short sizes[] = {9, 10, 12, 14, 18, 24};
+    const Style faces[] = {normal,
+                           bold,
+                           italic,
+                           bold | italic,
+                           underline,
+                           outline,
+                           shadow,
+                           condense,
+                           extend,
+                           bold | italic | underline | shadow};
+    bool ok = true;
+    for (unsigned f = 0; f < 6; ++f)
+    {
+      short font = 0;
+      if (!AuditFont(names[f], font))
+      {
+        std::fprintf(out, "[skip] missing font %s\n", names[f]);
+        continue;
+      }
+      for (unsigned s = 0; s < 6; ++s)
+        for (unsigned face = 0; face < 10; ++face)
+          ok = AuditWidthState(config, names[f], font, sizes[s], faces[face], false, 0, out) && ok;
+    }
+    short osaka = 0;
+    if (AuditFont("Osaka", osaka))
+    {
+      const short osakaSizes[] = {12, 12, 9, 10, 14, 18};
+      for (unsigned s = 0; s < 6; ++s)
+        ok = AuditWidthState(config, "Osaka", osaka, osakaSizes[s], s == 1 ? bold : normal, true, 0, out) && ok;
+      ok = AuditWidthState(config, "controls-Japanese-high", osaka, 12, normal, true, 1, out) && ok;
+    }
+    else
+      std::fprintf(out, "[skip] missing font Osaka\n");
+    // Alias 1 is deliberately classified as 1, not merely logged as an app-font number.
+    ok = AuditWidthState(config, "application-alias-1", 1, 12, normal, true, 0, out) && ok;
+    ok = AuditWidthState(config, "SpaceExtra", 3, 12, normal, true, 2, out) && ok;
+    LMSetFractEnable(true);
+    ok = AuditWidthState(config, "fractional", 3, 12, normal, true, 3, out) && ok;
+    LMSetFractEnable(false);
+    if (!SetScriptManagerVariable(smFontForce, 1) && GetScriptManagerVariable(smFontForce))
+      ok = AuditWidthState(config, "font-forcing", 3, 12, normal, true, 4, out) && ok;
+    else
+      std::fprintf(out, "[skip] cannot enable font forcing\n");
+    SetScriptManagerVariable(smFontForce, originalForce);
+    LMSetFractEnable(originalFractional);
+    std::fprintf(out, "[skip] native trap-call counts unavailable; host pins discriminate fallback routing\n");
+    std::fprintf(out, "[skip] chExtra: audit windows are monochrome NewWindow ports\n");
+    std::fprintf(out, "width_audit verdict=%s\n", ok ? "PASS" : "FAIL");
+    return ok;
+  }
+#endif
+
   /** The App owns the window; the synchronous idle callback owns its report. */
   class RowMeasurementApp : public AppConfigurable
   {
@@ -236,6 +472,7 @@ namespace
                           && MeasureAlignedTitle(*window->scene(), *controller, self, out)
                           && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out);
           std::fprintf(out, "toolbar_row_summary complete=%d cases=8\n", ok);
+          RunWidthAudit(self, out);
 #endif
           std::fclose(out);
         }
