@@ -760,6 +760,8 @@ void App::reconcileAtCompletion()
       return;
     visited.add(next);
     next->reconcileFocus();
+    if (!this->isWindowClosePending(next))
+      next->reconcileTextDocuments();
   }
 }
 

@@ -17,7 +17,8 @@ namespace loka
       class SceneFocus;
       struct SceneFocusTestAccess;
 
-      /** A callback-free, non-owning pair. Either endpoint may die first. */
+      /** Twin of TextStoreLink in app/text/TextStore.hpp. A callback-free, non-owning pair. Either endpoint may die
+       * first. */
       class FocusLink
       {
       public:
@@ -110,6 +111,7 @@ namespace loka
         friend struct SceneFocusTestAccess;
       };
 
+      // Membership twin: SceneTextDocuments; focus additionally owns a publication edge.
       /** Scene-owned focus membership. Teardown reads only kernel hooks and edges. */
       class SceneFocus
       {

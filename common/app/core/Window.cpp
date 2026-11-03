@@ -1,5 +1,6 @@
 #include "app/core/Window.hpp"
 #include "app/FocusPublisher.hpp"
+#include "app/text/TextDocumentPublisher.hpp"
 #include "app/scene/Scene.hpp"
 
 void Window::retireSceneForClose()
@@ -45,6 +46,16 @@ void Window::reconcileFocus()
       || !current->rootNode_ || !this->hasLiveScenePlatform() || !current->platformController_)
     return;
   loka::app::detail::FocusPublisher::complete(current->focus(), *current->platformController_, *current->rootNode_);
+}
+
+void Window::reconcileTextDocuments()
+{
+  loka::app::scene::Scene *current = this->scene();
+  if (this->sceneManager_.applying_ || !current || current->isBorrowOpen() || current->isRunInProgress()
+      || current->focus().isPublishing() || current->textDocuments().isPublishing() || !current->attached_.get()
+      || !current->rootNode_ || !this->hasLiveScenePlatform() || !current->platformController_)
+    return;
+  loka::app::detail::TextDocumentPublisher::complete(current->textDocuments(), *current->platformController_);
 }
 
 loka::app::scene::NodeContext *Window::publishedFocusContext()

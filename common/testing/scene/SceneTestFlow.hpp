@@ -67,6 +67,11 @@ namespace loka
         }
 
       public:
+        /** Exercise repeated initial projection without remounting a declaration. */
+        static void projectInitial(::loka::app::scene::Scene &scene)
+        {
+          scene.projectInitial();
+        }
         /** Prepare a replacement's logical tree before native projection/install. */
         static void prepareComposition(::loka::app::scene::Scene &scene)
         {
