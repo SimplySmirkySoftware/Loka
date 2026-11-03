@@ -12,6 +12,91 @@
 #include <Controls.h>
 #include <Resources.h>
 
+#ifdef TEST_BUILD
+#include "ToolbarMeasurementClock.hpp"
+#include "platform/file/AppLocation.hpp"
+#include "platform/file/FileIO.hpp"
+
+SmirkyCardDrawTiming::SmirkyCardDrawTiming()
+    : last_(0, 0, false),
+      count_(0),
+      copy_()
+{
+}
+unsigned long SmirkyCardDrawTiming::now() const
+{
+  return loka::testing::MeasurementMicroseconds();
+}
+void SmirkyCardDrawTiming::expectDraw()
+{
+  this->last_ = loka::testing::WholeDrawSample(0, 0, false);
+}
+void SmirkyCardDrawTiming::accept(const loka::testing::WholeDrawSample &sample)
+{
+  this->last_ = sample;
+  ++this->count_;
+}
+/** Arrow settled idle, once; O(1). Reject a later draw mislabeled as the moved pass. */
+void SmirkyCardDrawTiming::rememberCopy(const ToolboxPresentResult &result, unsigned long currentFullDraws)
+{
+  this->copy_.elapsed = this->last_;
+  this->copy_.elapsed.complete =
+      this->last_.complete && this->count_ != 0 && result.totalRenderCalls() == currentFullDraws;
+  this->copy_.executed = result.executed();
+  this->copy_.domain = result.copyDomain();
+  this->copy_.dv = -result.dy();
+}
+/** First post-completion linger tick only; one full draw, then bounded stdio output. */
+void SmirkyCardDrawTiming::writeEraseComparison(ToolboxWindow *window)
+{
+  if (!window || !window->scenePlatformController())
+    return;
+  const unsigned long before = this->count_;
+  // The capture count is read before the forced erase: the tracked audit must end with the flow's terminal
+  // record, so the "no full draw between the copy and the capture" fact lives here, beside the timing.
+  const unsigned long captureFullDraws =
+      static_cast<unsigned long>(window->scenePlatformController()->debugStatsForTesting().totalRenderCalls);
+  window->requestInvalidate();
+  window->flushInvalidate();
+  const loka::testing::WholeDrawSample erased = this->last_;
+  const ToolboxPresentExecuted executed =
+      window->scenePlatformController()->debugStatsForTesting().lastPresentObservation.executed();
+  loka::platform::file::FileHandle destination;
+  if (!loka::platform::file::ResolveApplicationSidecar(
+          loka::file::File::Application() << loka::file::File("TIMING.TXT"), destination))
+    return;
+  // Same sidecar resolution and C stdio open as the scenario audit.
+  std::FILE *file = loka::platform::file::OpenWriteTruncate(destination);
+  if (!file)
+    return;
+  std::fprintf(file, "capture full_draws=%lu\n", captureFullDraws);
+  if (this->copy_.elapsed.complete && erased.complete && this->count_ == before + 1)
+  {
+    std::fprintf(file,
+                 "copy executed=%s paint_us=%lu layout_us=%lu\n",
+                 ToolboxPresentExecutedName(this->copy_.executed),
+                 this->copy_.elapsed.paintUs,
+                 this->copy_.elapsed.layoutUs);
+    std::fprintf(file,
+                 "erase executed=%s paint_us=%lu layout_us=%lu\n",
+                 ToolboxPresentExecutedName(executed),
+                 erased.paintUs,
+                 erased.layoutUs);
+    std::fprintf(file,
+                 "domain=%d,%d,%d,%d dv=%d\n",
+                 this->copy_.domain.top,
+                 this->copy_.domain.left,
+                 this->copy_.domain.bottom,
+                 this->copy_.domain.right,
+                 this->copy_.dv);
+  }
+  else
+    std::fprintf(file, "timing unavailable: missing, incomplete, or intervening draw\n");
+  std::fflush(file);
+  std::fclose(file);
+}
+#endif
+
 namespace
 {
   /** Settled arrow cell polls once per idle; walks this window's native controls. */
@@ -85,6 +170,13 @@ void SmirkyCardScenarioAppConfig::OnWindowIdle(Window *window, double elapsedSec
 
 void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
 {
+#ifdef TEST_BUILD
+  if (this->phase_ == LINGERING_TIMING)
+  {
+    this->phase_ = LINGERING;
+    this->drawTiming_.writeEraseComparison(window ? window->asToolboxWindow() : 0);
+  }
+#endif
   if (this->phase_ == LINGERING)
   {
     this->lingerRemaining_ -= elapsedSeconds;
@@ -125,10 +217,65 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         const short value = TallListArrowValue(window);
         if (value <= 0)
           return;
-        char line[40];
+        char line[320];
         std::sprintf(line, "arrow value=%d", value);
         this->audit_.recordLog(line);
-        this->phase_ = RUNNING;
+        const ToolboxSceneDebugStats &stats = controller->debugStatsForTesting();
+#ifdef TEST_BUILD
+        this->drawTiming_.rememberCopy(stats.lastMovedPresentObservation, stats.totalRenderCalls);
+#endif
+        std::sprintf(line,
+                     "arrow attempt=%lu executed=%s full_draws=%lu candidate=%s refusal=%s paint_first=%s "
+                     "rect_requests=%d used_viewports=%u outside_not_translated=%u outside_kinds=%u unit_changed=%d",
+                     stats.lastMovedPresentObservation.renderCalls(),
+                     ToolboxPresentExecutedName(stats.lastMovedPresentObservation.executed()),
+                     stats.lastMovedPresentObservation.totalRenderCalls(),
+                     ToolboxPresentVerdictName(stats.lastMovedPresentObservation.verdict()),
+                     ToolboxPresentRefusalName(stats.lastMovedPresentObservation.refusal()),
+                     ToolboxPaintRefusalName(stats.lastPresentObservation.firstRefusal().reason),
+                     stats.lastMovedPresentObservation.rectRequests() ? 1 : 0,
+                     stats.lastMovedPresentObservation.usedViewports(),
+                     stats.lastMovedPresentObservation.outsideNotTranslated(),
+                     stats.lastMovedPresentObservation.outsideKinds(),
+                     stats.lastMovedPresentObservation.unitChanged() ? 1 : 0);
+        this->audit_.recordLog(line);
+        {
+          const ToolboxPresentResult &moved = stats.lastMovedPresentObservation;
+          const Rect &d = moved.copyDomain();
+          const Rect &dm = moved.damage();
+          const Rect &b = moved.repair().bar();
+          const Rect u = moved.repair().count() ? moved.repair().unit(0) : Rect();
+          std::sprintf(line,
+                       "arrow repair domain=%d,%d,%d,%d damage=%d,%d,%d,%d units=%u unit0=%d,%d,%d,%d bar=%d,%d,%d,%d "
+                       "sealed=%u refused=%d",
+                       d.top,
+                       d.left,
+                       d.bottom,
+                       d.right,
+                       dm.top,
+                       dm.left,
+                       dm.bottom,
+                       dm.right,
+                       moved.repair().count(),
+                       u.top,
+                       u.left,
+                       u.bottom,
+                       u.right,
+                       b.top,
+                       b.left,
+                       b.bottom,
+                       b.right,
+                       moved.sealedRects().count(),
+                       moved.repair().refused() ? 1 : 0);
+          this->audit_.recordLog(line);
+          for (unsigned i = 0; i < moved.sealedRects().count(); ++i)
+          {
+            const Rect &r = moved.sealedRects().at(i);
+            std::sprintf(line, "arrow sealed%u=%d,%d,%d,%d", i, r.top, r.left, r.bottom, r.right);
+            this->audit_.recordLog(line);
+          }
+        }
+        this->phase_ = RUNNING_ARROW;
         return;
       }
       if (!this->audit_.finished() && !this->audit_.failed())
@@ -139,8 +286,13 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
       }
     }
   }
+#ifdef TEST_BUILD
+  const bool published = this->completionPublisher_.publish(window);
+  this->phase_ = published && this->phase_ == RUNNING_ARROW ? LINGERING_TIMING : LINGERING;
+#else
   (void)this->completionPublisher_.publish(window);
   this->phase_ = LINGERING;
+#endif
 }
 
 int RunSmirkyCardScenarioApplication()
@@ -166,6 +318,10 @@ int RunSmirkyCardScenarioApplication()
   if (!app.get())
     return 1;
   config.setApp(app.get());
+#ifdef TEST_BUILD
+  // App construction precedes installation; scope teardown precedes App teardown.
+  loka::testing::WholeDrawReceiverScope receiver(config.drawReceiver());
+#endif
   app->run();
   return 0;
 }

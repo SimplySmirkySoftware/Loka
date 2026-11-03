@@ -21,8 +21,11 @@ namespace loka
 #endif
 
 /** Reconcile one installed control; the controller owns its title cache. */
-bool ReconcileToolboxButtonControl(ControlRef control, const loka::core::String &label,
-                                   loka::core::State<bool> *enabled, std::string &installedLabel);
+bool ReconcileToolboxButtonControl(ControlRef control,
+                                   const loka::core::String &label,
+                                   loka::core::State<bool> *enabled,
+                                   std::string &installedLabel,
+                                   bool *changed = 0);
 
 class ToolboxScenePlatformController;
 namespace loka

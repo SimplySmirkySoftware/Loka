@@ -266,8 +266,11 @@ ToolboxScenePlatformController::layoutScrollView(loka::app::ScrollViewNode *scro
         {
           const int dx = horizontal.clampedOffset - row.placedOrigin.x;
           const int dy = translation - row.placedOrigin.y;
+          Rect domain = Rect();
+          copyDomain.query(domain);
           if (dx != 0 || dy != 0)
             this->observation_.noteViewportMove(contentRect,
+                                                domain,
                                                 dx,
                                                 dy,
                                                 contentObservation.complete(),

@@ -13,8 +13,10 @@ ROOT = Path(__file__).resolve().parents[3]
 def check(presenter, window, render, bracket):
     # Ignore whitespace but keep directives: the hooks must disappear in shipped builds.
     presenter, window, render, bracket = [re.sub(r'\s+', '', x) for x in (presenter, window, render, bracket)]
-    assert '#ifdefTEST_BUILDthis->beginEraseForTesting();#endifEraseRect(&this->port_);' in presenter
-    assert 'this->drawGrowBox();#ifdefTEST_BUILDpresenter.finishDrawForTesting();#endif' in window
+    assert '#ifdefTEST_BUILDthis->beginEraseForTesting();#endif' in presenter
+    assert presenter.index('this->beginEraseForTesting();') < presenter.index('ScrollRect(')
+    assert '#ifdefTEST_BUILDpresenter.finishDrawForTesting();#endif' in window
+    assert window.index('this->drawGrowBox();', window.index('voidToolboxWindow::drawWhole')) < window.index('presenter.finishDrawForTesting();')
     # The stationary observer scopes now surround layout; timing still brackets
     # the single production root traversal, with both hooks gated by TEST_BUILD.
     layout = 'LayoutNode(rootNode_,state,this,0);'
