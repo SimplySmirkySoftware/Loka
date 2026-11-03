@@ -742,3 +742,13 @@ loka_compile_pin(url-inbox-overflow
   REFUSES pins/refuses_url_inbox_overflow.cpp
   ACCEPTS pins/accepts_url_inbox_overflow.cpp
 )
+
+loka_compile_pin(text-position-no-construct
+  REFUSES pins/refuses_text-position-no-construct.cpp
+  ACCEPTS pins/accepts_text-position-no-construct.cpp
+)
+
+loka_compile_pin(text-position-no-arithmetic
+  REFUSES pins/refuses_text-position-no-arithmetic.cpp
+  ACCEPTS pins/accepts_text-position-no-arithmetic.cpp
+)
