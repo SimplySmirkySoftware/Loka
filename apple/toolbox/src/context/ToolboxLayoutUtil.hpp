@@ -71,6 +71,46 @@ private:
   loka::app::TextStyle style_;
 };
 
+/** Original window-port font fields, including unresolved zero defaults. */
+class ToolboxTextPortFont
+{
+public:
+  static ToolboxTextPortFont read(GrafPtr port);
+  const short font;
+  const short size;
+  const Style face;
+
+private:
+  ToolboxTextPortFont(short font, short size, Style face)
+      : font(font),
+        size(size),
+        face(face)
+  {
+  }
+};
+
+/** Resolved text settings. Font zero stays unmapped for selection equality. */
+class ToolboxTextSelection
+{
+public:
+  static ToolboxTextSelection resolve(const ToolboxTextFontDescriptor &descriptor, const ToolboxTextPortFont &port);
+  bool operator==(const ToolboxTextSelection &other) const
+  {
+    return this->font == other.font && this->size == other.size && this->face == other.face;
+  }
+  const short font;
+  const short size;
+  const Style face;
+
+private:
+  ToolboxTextSelection(short font, short size, Style face)
+      : font(font),
+        size(size),
+        face(face)
+  {
+  }
+};
+
 /** Window-bound text measurement and painting transaction.
 
     The controller supplies the window owner. The scope restores both the
@@ -106,9 +146,7 @@ private:
 
   GrafPtr previousPort_;
   GrafPtr measurePort_;
-  short previousFont_;
-  short previousSize_;
-  Style previousFace_;
+  const ToolboxTextPortFont original_;
   BusyScope busy_;
 };
 
