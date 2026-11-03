@@ -545,7 +545,8 @@ passes the corresponding `App::CompletionEntry` to `serveURLsAtCompletion`.
 The open direction takes at most one URL per outer completion, after admission
 and focus reconciliation. An inherited clock or any busy Scene refuses the
 launch; the opener itself refuses while launching, sealed, or delivering.
-An empty opener costs O(1); a pending opener walks App's own window rows once.
+When neither direction has eligible work, the door costs O(1); otherwise it
+walks App's own window rows once for the shared busy check.
 The native call is synchronous and its result is sealed before it returns.
 A true result requires a second admission in the same turn, before close and
 reclaim. Admission delivers after close-detach, before quit advancement and
@@ -554,17 +555,67 @@ closes and dialog work follow the existing later admission paths.
 
 `PlatformContext::openURL` declines with `URL_UNAVAILABLE` by default.
 No rail calls the door or overrides that default yet; rail PRs 1–3 supply those
-pieces. This section covers only opening, not the receive direction.
+pieces. The receive direction below runs before opening.
 The Null test entry `AppTestAccess::completeTurn` captures the clock, opens a
 turn, settles, admits, reconciles focus, serves, admits again if served, closes,
 and reclaims. Its recorder/script supplies native acceptance and reentry probes;
 the existing Null scenario pump remains unchanged.
 
+## Receiving URLs (B3 page 2b)
+
+`ReceiveURLs(inbox, match)` registers an App-owned seat borrowing the
+config-owned `URLInbox<N>` and owning an unexecuted Match copy. App receives
+native offers through `receiveURL`; offering does not run arms or write State.
+The config and every app-borrowed edge in the Match must outlive App, as specified
+in [URLReceiveSeat.hpp](../common/app/url/URLReceiveSeat.hpp).
+
+`serveURLsAtCompletion` first refuses an inherited clock. Receive is due only
+with a registered nonempty inbox and no REQUESTED or ASKING quit attempt; open
+is due only with a registered nonempty IDLE opener. If neither is due, it
+returns without a Scene walk. Otherwise one shared busy check covers both
+directions. It receives one FIFO head, then re-reads open eligibility: an arm's
+direct post can open in this same completion. Either action returns true and
+requires the caller's second admission, turning documents opened by an arm into
+windows. Refusing a quit attempt allows receive to resume; NONE does not mean
+that quit has never been decided. Observer posts wait until a later completion.
+
+Each receive builds a fresh chain over a stack IncomingURL. Arms must finish
+synchronously. PENDING is canceled and resumed once at the Match step, consuming
+cancellation before the step runs, including nested child cleanup. The result is
+CANCELED: child-chain finally runs once and loading clears; the pending step's
+finally does not run, and value handlers receive no cancellation notification.
+OWNED tracker brackets close per segment; JOINED ledgers stay open until the
+completion Operation closes. Debug asserts after cleanup; release continues.
+TEST_BUILD's tolerance hook permits cleanup tests without asserting. External
+asynchronous work started by an arm is not canceled by this protocol.
+
+Arms may write config-owned State under its tracker guard, open or close roster
+documents, and post to an opener. They must not return PENDING, run nested loops,
+call `receiveURL`, write tracked State without a guard, or retain references to
+delivery values. These are contracts, not type-enforced restrictions.
+
+At bootstrap, after composition hands off the seat, App calls the empty default
+`collectLaunchRequests` once. If URLs are waiting, a launch Operation serves
+exactly the entry count and closes before launch document admission. Offers made
+during that batch wait for running completion. Bootstrap assumes no earlier
+`requestQuitAtCompletion`; even if called, the batch runs without quit or busy
+checks. An arm that opens a document can avoid the existing windowless exit;
+otherwise that behavior is unchanged. No rail collector override or completion
+call is installed by this change.
+
+Cost: the completion door is O(1) without eligible work; otherwise it walks only
+App's own group rows once and serves at most one receive and one open. Each
+receive takes O(1) inbox work, copies its seat's arm vector and recursively clones
+child chains twice (StepSpec and RuntimeStep), scans matchers, runs the chosen
+arm, and destroys the copies. The launch batch costs one Operation plus n such
+deliveries, where n is the entry count. The default collector is O(1), once per
+composition bootstrap; the PENDING wall runs only on a contract violation.
+
 ## Where each rail consumes
 
 | Door | Call sites |
 |---|---|
-| `App::serveURLsAtCompletion` (open direction) | No rail calls it yet (rail PRs 1–3); Null tests use `AppTestAccess::completeTurn`. |
+| `App::serveURLsAtCompletion` (receive, then open) | No rail calls it yet (rail PRs 1–3); Null tests use `AppTestAccess::completeTurn`. |
 
 Null: attach, props sync, input completion. Toolbox: `onPropsApplied`,
 `finishInput`, native creation in `render`, `retryProjection`; layout settles

@@ -187,6 +187,7 @@
 #include "URLOpenerTests.hpp"
 #include "URLOpenerAppTests.hpp"
 #include "URLReceiveAppTests.hpp"
+#include "URLReceiveDeliveryTests.hpp"
 #include "TextFamilyTests.hpp"
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.

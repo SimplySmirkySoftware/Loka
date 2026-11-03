@@ -24,13 +24,22 @@ namespace loka
         return this->inbox_;
       }
 
+      /** Takes one head and runs it; empty leaves firstRun untouched. */
+      virtual bool serveOne(loka::dsl::FlowRunResult &firstRun) = 0;
+
+    protected:
+      bool take(IncomingURL &out)
+      {
+        return this->inbox_.take(out);
+      }
+
     private:
       URLInboxBase &inbox_;
       URLReceiveSeatBase(const URLReceiveSeatBase &);
       URLReceiveSeatBase &operator=(const URLReceiveSeatBase &);
     };
 
-    /** Owns a Match copy; delivery to its arms is added separately. */
+    /** Owns the unexecuted Match definition for fresh delivery chains. */
     template <typename OutT> class URLReceiveSeat : public URLReceiveSeatBase
     {
     public:
@@ -38,6 +47,27 @@ namespace loka
           : URLReceiveSeatBase(inbox),
             match_(match)
       {
+      }
+
+      /** A fresh chain per URL: never execute the seat's Match copy. Arms must
+          finish synchronously. Pending runs are canceled and resumed once to
+          finish cleanup before the stack input dies. Per delivery, copies all
+          own arms and recursively clones children twice, scans matchers, runs
+          the selected arm, then destroys the copies. */
+      virtual bool serveOne(loka::dsl::FlowRunResult &firstRun)
+      {
+        IncomingURL url;
+        if (!this->take(url))
+          return false;
+        loka::dsl::FlowChain<IncomingURL, OutT> chain =
+            loka::dsl::Flow() | loka::dsl::Step(this->match_.id(), this->match_.adapter()).input(&url);
+        firstRun = chain.runResult();
+        if (firstRun == loka::dsl::FLOW_RUN_PENDING)
+        {
+          chain.cancel();
+          chain.resumeResult(this->match_.id());
+        }
+        return true;
       }
 
     private:

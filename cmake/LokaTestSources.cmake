@@ -79,6 +79,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/URLOpenerTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/URLOpenerAppTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/URLReceiveAppTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/URLReceiveDeliveryTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextAlignmentTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/OpenFileDialogTransportTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ConfirmDialogTransportTests.cpp

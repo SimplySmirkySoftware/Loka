@@ -31,6 +31,7 @@ namespace loka
     private:
       friend struct testing::URLInboxAccess;
       friend class ::App;
+      friend class URLReceiveSeatBase;
       URLInboxBase(const URLInboxBase &);
       URLInboxBase &operator=(const URLInboxBase &);
       /** Parses before checking capacity; refusal leaves the ring unchanged. */
