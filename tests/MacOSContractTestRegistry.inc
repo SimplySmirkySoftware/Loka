@@ -1,5 +1,10 @@
 // macOS-only contract tests. Kept nested so non-Apple CMake enumeration does
 // not register tests whose Objective-C++ translation unit is absent.
+LOKA_TEST(testMacWindowCreationUsesMenuBarDisplay)
+LOKA_TEST(testMacWindowSecondaryReadBackUsesMenuBarCoordinates)
+LOKA_TEST(testMacWindowSecondarySizeWriteStaysOnSecondary)
+LOKA_TEST(testMacWindowFrameWriteMovesAcrossDisplays)
+LOKA_TEST(testMacWindowOffscreenWriteFallsBackToMenuBarDisplay)
 LOKA_TEST(testMacDisplayAppearanceDeclinesWithoutMatchingCapability)
 LOKA_TEST(testMacDisplayAppearanceUsesNativeBestMatch)
 LOKA_TEST(testMacMainDisplayDepthAnswersFromTheMainScreen)

@@ -43,7 +43,8 @@ bool MacPlatformContext::queryMainDisplayDepth(int &out) const
   // -mainScreen, which follows the key window (bot P2 on #1481). That matches
   // the other rails' answer (Toolbox GetMainDevice, Win32 GetDC(0)). A window
   // asks the screen it overlaps most instead (MacWindow::queryDisplayDepth),
-  // same extraction.
+  // same extraction. Keep the menu-bar choice aligned with PlacementScreen()
+  // in MacWindow.mm.
   NSArray *screens = [NSScreen screens];
   return loka::macos::queryScreenDepth([screens count] ? [screens objectAtIndex:0] : nil, out);
 }

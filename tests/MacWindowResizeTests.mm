@@ -2,6 +2,7 @@
 #include "support/TestVerify.hpp"
 
 #include <AppKit/AppKit.h>
+#include <cstdio>
 
 #include "MacApp.hpp"
 #include "MacWindow.hpp"
@@ -317,4 +318,193 @@ void testMacWindowContentMarginWithoutWindow()
   LOKA_VERIFY(MacWindow::fromRootView(root) == 0);
   verifyRootMargin(root, 16, 268, 108);
   [root release];
+}
+
+namespace
+{
+  // Independent mirror of the placement origin, including the menu-bar fallback.
+  CGFloat placementTop(NSScreen *screen)
+  {
+    const NSRect visible = [screen visibleFrame];
+    const NSRect full = [screen frame];
+    return visible.size.height >= full.size.height - 1.0 ? NSMaxY(full) - [[NSStatusBar systemStatusBar] thickness]
+                                                         : NSMaxY(visible);
+  }
+
+  bool hasDifferentDisplayTops(const char *name)
+  {
+    NSArray *screens = [NSScreen screens];
+    if ([screens count] < 2)
+    {
+      std::printf("[skip] %s: fewer than two screens\n", name);
+      return false;
+    }
+    if (placementTop([screens objectAtIndex:0]) == placementTop([screens objectAtIndex:1]))
+    {
+      std::printf("[skip] %s: screens[0] and screens[1] have equal visible tops\n", name);
+      return false;
+    }
+    return true;
+  }
+
+  // Leave room for the size-only pin's growth. Pins 2/4 choose a top that also
+  // admits non-negative intent coordinates; pin 3 covers either arrangement.
+  bool secondaryTarget(const char *name, NSWindow *native, bool nonNegative, NSRect &target)
+  {
+    NSArray *screens = [NSScreen screens];
+    const NSRect visible = [[screens objectAtIndex:1] visibleFrame];
+    target = [native frame];
+    target.origin.x = NSMinX(visible) + 40;
+    CGFloat top = NSMaxY(visible) - 40;
+    if (nonNegative)
+    {
+      if (target.origin.x < 0)
+        target.origin.x = 0;
+      const CGFloat primaryTop = placementTop([screens objectAtIndex:0]);
+      if (top > primaryTop - 40)
+        top = primaryTop - 40;
+    }
+    target.origin.y = top - target.size.height;
+    if (!NSContainsRect(visible, NSInsetRect(target, -20, -20)))
+    {
+      std::printf("[skip] %s: screens[1] cannot contain target with required coordinates and growth margin\n", name);
+      return false;
+    }
+    std::printf("[run] %s: screens[1], different visible tops, non-negative coordinates required=%d\n",
+                name,
+                nonNegative ? 1 : 0);
+    return true;
+  }
+} // namespace
+
+void testMacWindowCreationUsesMenuBarDisplay()
+{
+  CocoaHost host;
+  NSArray *screens = [NSScreen screens];
+  // Read before constructing/showing any window in this pin. Registered first
+  // among macOS contracts so earlier native windows do not change mainScreen.
+  NSScreen *main = [NSScreen mainScreen];
+  const bool same = [screens count] && main == [screens objectAtIndex:0];
+  std::printf("testMacWindowCreationUsesMenuBarDisplay: screens=%lu mainScreen==screens[0]=%d\n",
+              static_cast<unsigned long>([screens count]),
+              same ? 1 : 0);
+  if ([screens count] < 2 || same)
+  {
+    std::printf("[skip] testMacWindowCreationUsesMenuBarDisplay: needs two screens and mainScreen != screens[0]\n");
+    return;
+  }
+  std::printf("[run] testMacWindowCreationUsesMenuBarDisplay: external mainScreen, placement on screens[0]\n");
+  NullPlatformContext context;
+  MacWindow window(&context, WindowProps().frame(60, 60, 360, 260).visible(true));
+  NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+  LOKA_VERIFY(native != nil);
+  LOKA_VERIFY(NSContainsRect([[screens objectAtIndex:0] visibleFrame], [native frame]));
+  LOKA_VERIFY(window.nativeFrame().get() == Frame(60, 60, 360, 260));
+}
+
+void testMacWindowSecondaryReadBackUsesMenuBarCoordinates()
+{
+  CocoaHost host;
+  const char *name = "testMacWindowSecondaryReadBackUsesMenuBarCoordinates";
+  if (!hasDifferentDisplayTops(name))
+    return;
+  NullPlatformContext context;
+  MacWindow window(&context, WindowProps().frame(60, 60, 240, 160).visible(true));
+  NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+  LOKA_VERIFY(native != nil);
+  NSRect target;
+  if (!secondaryTarget(name, native, true, target))
+    return;
+  [native setFrame:target display:NO];
+  LOKA_VERIFY(NSEqualRects([native frame], target));
+  const Frame fact = window.nativeFrame().get();
+  LOKA_VERIFY(fact.x == static_cast<int>(target.origin.x));
+  LOKA_VERIFY(fact.y == static_cast<int>(placementTop([[NSScreen screens] objectAtIndex:0]) - NSMaxY(target)));
+  LOKA_VERIFY(fact.width == 240 && fact.height == 160);
+  LOKA_VERIFY(fact.hasPosition());
+  {
+    StateTrackerGuard guard(window.getTracker());
+    window.frameState().set(fact);
+  }
+  LOKA_VERIFY(NSEqualRects([native frame], target));
+}
+
+void testMacWindowSecondarySizeWriteStaysOnSecondary()
+{
+  CocoaHost host;
+  const char *name = "testMacWindowSecondarySizeWriteStaysOnSecondary";
+  if (!hasDifferentDisplayTops(name))
+    return;
+  NullPlatformContext context;
+  MacWindow window(&context, WindowProps().frame(60, 60, 240, 160).visible(true));
+  NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+  LOKA_VERIFY(native != nil);
+  NSRect target;
+  if (!secondaryTarget(name, native, false, target))
+    return;
+  [native setFrame:target display:NO];
+  LOKA_VERIFY(NSEqualRects([native frame], target));
+  {
+    StateTrackerGuard guard(window.getTracker());
+    window.frameState().set(Frame(-1, -1, 248, 168));
+  }
+  LOKA_VERIFY(NSContainsRect([[[NSScreen screens] objectAtIndex:1] visibleFrame], [native frame]));
+  LOKA_VERIFY(NSEqualSizes([native contentRectForFrameRect:[native frame]].size,
+                           projectionOf(window).projectClientSize(248, 168).r.size));
+}
+
+void testMacWindowFrameWriteMovesAcrossDisplays()
+{
+  CocoaHost host;
+  const char *name = "testMacWindowFrameWriteMovesAcrossDisplays";
+  if (!hasDifferentDisplayTops(name))
+    return;
+  NullPlatformContext context;
+  MacWindow window(&context, WindowProps().frame(60, 60, 240, 160).visible(true));
+  NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+  LOKA_VERIFY(native != nil);
+  NSArray *screens = [NSScreen screens];
+  LOKA_VERIFY(NSContainsRect([[screens objectAtIndex:0] visibleFrame], [native frame]));
+  NSRect target;
+  if (!secondaryTarget(name, native, true, target))
+    return;
+  const Frame intent(static_cast<int>(target.origin.x),
+                     static_cast<int>(placementTop([screens objectAtIndex:0]) - NSMaxY(target)),
+                     240,
+                     160);
+  LOKA_VERIFY(intent.hasPosition());
+  {
+    StateTrackerGuard guard(window.getTracker());
+    window.frameState().set(intent);
+  }
+  LOKA_VERIFY(NSEqualRects([native frame], target));
+  LOKA_VERIFY(NSContainsRect([[screens objectAtIndex:1] visibleFrame], [native frame]));
+}
+
+void testMacWindowOffscreenWriteFallsBackToMenuBarDisplay()
+{
+  CocoaHost host;
+  NSArray *screens = [NSScreen screens];
+  if (![screens count])
+  {
+    std::printf("[skip] testMacWindowOffscreenWriteFallsBackToMenuBarDisplay: no screens\n");
+    return;
+  }
+  CGFloat right = 0;
+  for (NSUInteger i = 0; i < [screens count]; ++i)
+  {
+    const CGFloat edge = NSMaxX([[screens objectAtIndex:i] frame]);
+    if (edge > right)
+      right = edge;
+  }
+  std::printf("[run] testMacWindowOffscreenWriteFallsBackToMenuBarDisplay: no overlap, screens[0] fallback\n");
+  NullPlatformContext context;
+  MacWindow window(&context, WindowProps().frame(60, 60, 240, 160).visible(true));
+  NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+  LOKA_VERIFY(native != nil);
+  {
+    StateTrackerGuard guard(window.getTracker());
+    window.frameState().set(Frame(static_cast<int>(right) + 1000, 40, 240, 160));
+  }
+  LOKA_VERIFY(NSContainsRect([[screens objectAtIndex:0] visibleFrame], [native frame]));
 }
