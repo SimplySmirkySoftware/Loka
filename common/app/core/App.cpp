@@ -15,6 +15,7 @@ App::App(AppConfigurable *config)
       activeWindow_(0),
       idleAccumulatedSeconds_(0.0),
       windowSeat_(0),
+      urlReceiveSeat_(0),
       urlOpener_(0),
       pendingWindowClosures_(),
       flushingWindowWork_(false)
@@ -50,6 +51,15 @@ void App::retireComponents()
   group_ = 0;
   delete this->windowSeat_;
   this->windowSeat_ = 0;
+  // After group deletion, discard even offers made by component destructors.
+  // Once per retirement: O(waiting <= capacity), then destroy the Match copy.
+  // Later retirements are O(1), like the adjacent window seat.
+  if (this->urlReceiveSeat_)
+  {
+    this->urlReceiveSeat_->inbox().discardAll();
+    delete this->urlReceiveSeat_;
+    this->urlReceiveSeat_ = 0;
+  }
 }
 
 void App::run()
@@ -66,6 +76,7 @@ void App::run()
     this->defaultMenuBar_.reset(bar.empty() ? 0 : bar.clone());
     group_ = new AppComponentGroup(composition.build());
     this->windowSeat_ = composition.takeWindowSeat();
+    this->urlReceiveSeat_ = composition.takeURLReceiveSeat();
     this->urlOpener_ = composition.takeURLOpener();
     const AppComponentGroup::Components components = this->group_->getComponents();
     for (size_t i = 0; i < components.size(); ++i)
@@ -775,4 +786,11 @@ bool App::serveURLsAtCompletion(CompletionEntry entry)
     }
   }
   return this->urlOpener_->launchNext(&App::openURLThunk, this->config_ ? this->config_->getPlatformContext() : 0);
+}
+
+loka::app::ReceiveResult App::receiveURL(const loka::core::String &text)
+{
+  if (!this->urlReceiveSeat_)
+    return loka::app::RECEIVE_NOT_REGISTERED;
+  return this->urlReceiveSeat_->inbox().offer(text);
 }

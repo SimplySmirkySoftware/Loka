@@ -11,6 +11,7 @@
 #include "app/core/DialogResultDelivery.hpp"
 #include <cassert>
 #include "app/url/URLOpenKind.hpp"
+#include "app/url/ReceiveResult.hpp"
 
 class Window;
 class AppComposition;
@@ -20,6 +21,7 @@ namespace loka
   namespace app
   {
     class WindowSeat;
+    class URLReceiveSeatBase;
     class WebURL;
     class URLOpenerBase;
     namespace scene { class Scene; }
@@ -47,6 +49,11 @@ public:
   virtual ~App();
 
   virtual void run();
+  /** Main-thread rail native entry; arms must not call this. Borrows text only
+      for this call. Offers to the config-owned inbox without State writes or
+      Flow execution, so no active clock is required. Once per native URL event:
+      O(input) conversion and bounded parsing, at most one inbox slot written. */
+  loka::app::ReceiveResult receiveURL(const loka::core::String &text);
   /** Rail completion entry; enumerates current live windows after App work. */
   void reconcileFocus();
   enum CompletionEntry
@@ -174,6 +181,7 @@ private:
       edit could have left its snapshot mismatched. */
   unsigned short admitDocumentWindows(AdoptionPhase phase);
   loka::app::WindowSeat *windowSeat_;
+  loka::app::URLReceiveSeatBase *urlReceiveSeat_;
   /** Config-owned borrow; remains valid through App retirement and destruction. */
   loka::app::URLOpenerBase *urlOpener_;
   static loka::app::URLOpenKind openURLThunk(const loka::app::WebURL &url, void *context);

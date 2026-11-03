@@ -12,7 +12,9 @@ namespace loka
       /** Invalid text or a scheme that does not match the declaration. */
       RECEIVE_INVALID,
       /** Valid text refused because the ring is full. */
-      RECEIVE_FULL
+      RECEIVE_FULL,
+      /** No receive declaration has been installed in the App. */
+      RECEIVE_NOT_REGISTERED
     };
   } // namespace app
 } // namespace loka

@@ -5,6 +5,8 @@
 #include "app/url/ReceiveResult.hpp"
 #include "app/scene/state/RequestRing.hpp"
 
+class App;
+
 namespace loka
 {
   namespace app
@@ -28,6 +30,7 @@ namespace loka
 
     private:
       friend struct testing::URLInboxAccess;
+      friend class ::App;
       URLInboxBase(const URLInboxBase &);
       URLInboxBase &operator=(const URLInboxBase &);
       /** Parses before checking capacity; refusal leaves the ring unchanged. */
