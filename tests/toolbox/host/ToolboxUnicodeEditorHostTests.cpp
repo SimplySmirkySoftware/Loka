@@ -682,7 +682,7 @@ static void reconcile()
   ToolboxApp app(x.window, &y.window);
   toolbox_host::frontWindow = x.native.window();
   x.focus.state()->bind(focusSelectsWindow, y.native.window(), false);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(x.focus.state()->get().is(1u) && toolbox_host::frontWindow == y.native.window());
   x.focus.state()->unbind(focusSelectsWindow, y.native.window());
   it::ToolboxWindow wx, wy;

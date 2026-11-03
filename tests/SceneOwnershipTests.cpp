@@ -2623,7 +2623,7 @@ void testWindowCloseFocusClearsInsideTurn()
   turn.close();
   LOKA_VERIFY(owner.focusCommits.size() == 1 && owner.focusCommits[0]);
   app.reclaimWindows();
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(owner.focusCommits.size() == 1);
 }
 
