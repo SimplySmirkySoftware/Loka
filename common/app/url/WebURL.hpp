@@ -2,6 +2,7 @@
 #define LOKA_APP_URL_WEB_URL_HPP
 
 #include "core/String.hpp"
+#include "app/url/URLLexical.hpp"
 
 namespace loka
 {
@@ -17,7 +18,7 @@ namespace loka
     public:
       enum
       {
-        MAX_TEXT_BYTES = 2048
+        MAX_TEXT_BYTES = internal::URL_MAX_TEXT_BYTES
       };
 
       WebURL() {}

@@ -167,6 +167,7 @@
 #include "NullTextLayoutTests.hpp"
 #include "StyleTests.hpp"
 #include "WebURLTests.hpp"
+#include "IncomingURLTests.hpp"
 #include "URLOpenerTests.hpp"
 #include "URLOpenerAppTests.hpp"
 #include "TextFamilyTests.hpp"
