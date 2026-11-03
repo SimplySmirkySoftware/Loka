@@ -1,6 +1,8 @@
 loka_scenario_audit version=1 scenario=laptop-arrow
 log text=seed%3D7
 log text=arrow%20value%3D16
+log text=arrow%20attempt%3D1%20executed%3Dcopy%20full_draws%3D3%20candidate%3Dcopy%20refusal%3Dadmitted%20paint_first%3Dnone%20rect_requests%3D0%20used_viewports%3D1%20outside_not_translated%3D0%20outside_kinds%3D0%20unit_changed%3D0
+log text=arrow%20repair%20domain%3D0%2C0%2C340%2C405%20damage%3D0%2C0%2C0%2C0%20units%3D1%20unit0%3D0%2C0%2C30%2C420%20bar%3D30%2C405%2C326%2C421%20sealed%3D0%20refused%3D0
 log text=status%20
 step id=1 due_tick=1 tick=1 status=succeeded error_kind=0 error_code=0 name=status
 step id=2 due_tick=0 tick=1 status=succeeded error_kind=0 error_code=0 name=
@@ -22,3 +24,4 @@ log text=picture.NEO%20320x200
 step id=5 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=pictures-loaded
 step id=6 due_tick=0 tick=3 status=succeeded error_kind=0 error_code=0 name=
 terminal status=succeeded
+log text=capture%20full_draws%3D3
