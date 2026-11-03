@@ -528,7 +528,43 @@ row. Single-seat behavior and command-free golden records remain unchanged
   replay of discarded work on attach; cancellation subscribers can post new
   endpoint-relative work through the two-pass protocol (#902 item 7).
 
+<a id="config-owned-url-opener"></a>
+## Config-owned URL opener (B3)
+
+`OpenURLs(opener)` registers one config-owned `URLOpener<N>` with App. The
+config outlives App; registration transfers only a borrow, never ownership.
+This is the narrow exception to the command `RequestQueue<T, N>` rule: its
+queue and last outcome belong to the config, with no Scene-owned request slot.
+Capacity is exactly N waiting URLs. Posting does not wake App. The outcome is
+only the last delivered system-acceptance fact, not a reply per post; repeated
+values need not notify. Queued leftovers at loop exit are abandoned and the
+opener's destruction silently discards its storage.
+
+The caller captures `Operation::hasActive()` before constructing its turn and
+passes the corresponding `App::CompletionEntry` to `serveURLsAtCompletion`.
+The open direction takes at most one URL per outer completion, after admission
+and focus reconciliation. An inherited clock or any busy Scene refuses the
+launch; the opener itself refuses while launching, sealed, or delivering.
+An empty opener costs O(1); a pending opener walks App's own window rows once.
+The native call is synchronous and its result is sealed before it returns.
+A true result requires a second admission in the same turn, before close and
+reclaim. Admission delivers after close-detach, before quit advancement and
+menu projection. Observer posts wait for the next completion; observer window
+closes and dialog work follow the existing later admission paths.
+
+`PlatformContext::openURL` declines with `URL_UNAVAILABLE` by default.
+No rail calls the door or overrides that default yet; rail PRs 1–3 supply those
+pieces. This section covers only opening, not the receive direction.
+The Null test entry `AppTestAccess::completeTurn` captures the clock, opens a
+turn, settles, admits, reconciles focus, serves, admits again if served, closes,
+and reclaims. Its recorder/script supplies native acceptance and reentry probes;
+the existing Null scenario pump remains unchanged.
+
 ## Where each rail consumes
+
+| Door | Call sites |
+|---|---|
+| `App::serveURLsAtCompletion` (open direction) | No rail calls it yet (rail PRs 1–3); Null tests use `AppTestAccess::completeTurn`. |
 
 Null: attach, props sync, input completion. Toolbox: `onPropsApplied`,
 `finishInput`, native creation in `render`, `retryProjection`; layout settles

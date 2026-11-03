@@ -15,6 +15,7 @@ App::App(AppConfigurable *config)
       activeWindow_(0),
       idleAccumulatedSeconds_(0.0),
       windowSeat_(0),
+      urlOpener_(0),
       pendingWindowClosures_(),
       flushingWindowWork_(false)
 {
@@ -65,6 +66,7 @@ void App::run()
     this->defaultMenuBar_.reset(bar.empty() ? 0 : bar.clone());
     group_ = new AppComponentGroup(composition.build());
     this->windowSeat_ = composition.takeWindowSeat();
+    this->urlOpener_ = composition.takeURLOpener();
     const AppComponentGroup::Components components = this->group_->getComponents();
     for (size_t i = 0; i < components.size(); ++i)
     {
@@ -424,6 +426,9 @@ void App::admitAndApplyWindows()
     if (scene && !scene->isBusy())
       window->retireSceneForClose();
   }
+  // One phase check per admission; sealed delivery writes one outcome.
+  if (this->urlOpener_)
+    this->urlOpener_->deliverSealed();
   this->advanceQuitAttempt();
   this->projectMenuSources();
   this->flushingWindowWork_ = false;
@@ -745,4 +750,29 @@ void App::reconcileFocus()
     visited.add(next);
     next->reconcileFocus();
   }
+}
+
+loka::app::URLOpenKind App::openURLThunk(const loka::app::WebURL &url, void *context)
+{
+  PlatformContext *platform = static_cast<PlatformContext *>(context);
+  return platform ? platform->openURL(url) : loka::app::URL_UNAVAILABLE;
+}
+
+bool App::serveURLsAtCompletion(CompletionEntry entry)
+{
+  if (entry == COMPLETION_INHERITED_CLOCK)
+    return false;
+  if (!this->urlOpener_ || this->urlOpener_->pending() == 0)
+    return false;
+  if (this->group_)
+  {
+    const AppComponentGroup::Components components = this->group_->getComponents();
+    for (size_t i = 0; i < components.size(); ++i)
+    {
+      Window *window = components[i] ? components[i]->asWindow() : 0;
+      if (window && window->scene() && window->scene()->isBusy())
+        return false;
+    }
+  }
+  return this->urlOpener_->launchNext(&App::openURLThunk, this->config_ ? this->config_->getPlatformContext() : 0);
 }

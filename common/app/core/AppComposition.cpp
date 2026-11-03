@@ -4,7 +4,8 @@ AppComposition::AppComposition(PlatformContext *context)
     : components_(),
       windowList_(),
       context_(context),
-      windowSeat_(0)
+      windowSeat_(0),
+      urlOpener_(0)
 {
   assert(context_ && "AppComposition: PlatformContext* must not be null");
 }
@@ -79,4 +80,19 @@ std::vector<AppComponent *> AppComposition::build()
 void AppComposition::setContext(PlatformContext *ctx)
 {
   context_ = ctx;
+}
+
+AppComposition &AppComposition::operator<<(const loka::app::OpenURLs &urls)
+{
+  assert(!this->urlOpener_ && "one URL opener per composition");
+  if (!this->urlOpener_)
+    this->urlOpener_ = &urls.opener();
+  return *this;
+}
+
+loka::app::URLOpenerBase *AppComposition::takeURLOpener()
+{
+  loka::app::URLOpenerBase *opener = this->urlOpener_;
+  this->urlOpener_ = 0;
+  return opener;
 }

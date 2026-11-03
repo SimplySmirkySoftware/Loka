@@ -2,8 +2,12 @@
 #define LOKA_APP_URL_URL_OPENER_HPP
 
 #include "app/url/WebURL.hpp"
+#include "app/url/URLOpenKind.hpp"
+
 #include "app/scene/state/Request.hpp"
 #include "core/State.hpp"
+
+class App;
 
 namespace loka
 {
@@ -13,17 +17,6 @@ namespace loka
     {
       struct URLOpenerAccess;
     }
-
-    /** System acceptance only; no completion or handler-specific guarantees. */
-    enum URLOpenKind
-    {
-      /** The system accepted the URL; this does not promise browser display. */
-      URL_OPENED,
-      /** The system refused the URL; no particular reason is promised. */
-      URL_NOT_OPENED,
-      /** This system has no URL-opening mechanism; not a handler refusal. */
-      URL_UNAVAILABLE
-    };
 
     /** Last delivered fact. A none URL means no result, regardless of kind. */
     struct URLOpenOutcome
@@ -83,6 +76,7 @@ namespace loka
 
     private:
       friend struct testing::URLOpenerAccess;
+      friend class ::App;
       URLOpenerBase(const URLOpenerBase &);
       URLOpenerBase &operator=(const URLOpenerBase &);
       /** Only these two doors transition IDLE -> LAUNCHING -> SEALED ->

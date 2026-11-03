@@ -99,7 +99,8 @@ namespace loka
       /** True only while the outermost clock drives or cleans up ledgers. */
       static bool isSettling();
       /** True while any clock is active on the main thread. Rails assert the
-          absence of a clock before blocking in the OS; tests observe identity
+          absence of a clock before the outer loop waits in the OS; native
+          modal loops may run inside a turn. Tests observe identity
           through the testing access layer instead. */
       static bool hasActive();
       /** Drives and closes once. The destructor closes if this was not called.
