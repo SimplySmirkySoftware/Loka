@@ -455,7 +455,7 @@ void testDocumentWindowRosterEditAfterLastAdmissionIsPendingWork()
     Operation turn;
     turn.settle();
     app.admitAndApplyWindows();
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     app.admitAndApplyWindows();
     turn.close();
     id = config.roster.open(Document(0));
@@ -468,7 +468,7 @@ void testDocumentWindowRosterEditAfterLastAdmissionIsPendingWork()
     Operation turn;
     turn.settle();
     app.admitAndApplyWindows();
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     app.admitAndApplyWindows();
     turn.close();
     LOKA_VERIFY(config.roster.close(id) == EDIT_OK);
@@ -495,7 +495,7 @@ void testDocumentWindowReentrantOpenUsesNextWalk()
     first = config.roster.open(Document(0));
     second = config.roster.open(Document(1));
     config.reenter = true;
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     app.admitAndApplyWindows();
     turn.close();
     app.reclaimWindows();
@@ -566,7 +566,7 @@ void testDocumentWindowOpenDuringSceneRunIsAdmittedInTheSameAdmission()
     LOKA_VERIFY(facts.opened && facts.openerCompositions == 1);
     LOKA_VERIFY(app.window(facts.openedId) && app.group().getComponents().size() == 2);
     LOKA_VERIFY(config.factories == factories + 1);
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     app.admitAndApplyWindows();
     turn.close();
     app.reclaimWindows();
@@ -661,7 +661,7 @@ void testDocumentWindowCloseDuringWalkTakesNextWalk()
     // As in page 2 pin 10, mutate during the second admission of this tail.
     second = config.roster.open(Document(1));
     config.closeDuringFactory = first;
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     app.admitAndApplyWindows();
     turn.close();
     app.reclaimWindows();

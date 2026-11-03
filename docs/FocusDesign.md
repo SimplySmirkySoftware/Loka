@@ -23,7 +23,7 @@
 Keyboard focus is reported into the fact box of an app-owned
 `loka::app::Focus<K>`, one per screen by convention; its request box carries
 the app's `post`; each Scene owns its single publication. Rails call
-`App::reconcileFocus` at their outer completion and read native focus at an
+`App::reconcileAtCompletion` at their outer completion and read native focus at an
 admitted completion; native notifications never write the fact, and the
 Scene's publication is not duplicated in a rail-owned record.
 
@@ -113,7 +113,7 @@ Debug builds assert only that no publication survives `SceneFocus` destruction.
 ## Reconcile: read, do not listen
 
 Native notifications are not fact-write points. Each admitted outer completion
-calls `App::reconcileFocus`, which re-enumerates the live App-owned windows and
+calls `App::reconcileAtCompletion`, which re-enumerates the live App-owned windows and
 calls private `Window::reconcileFocus` once per visited window identity,
 skipping close-pending windows. Re-enumeration tolerates observers removing
 windows. The ordinary walk uses inline visited storage without allocation;
@@ -264,7 +264,7 @@ Costs below exclude observer work; debug audit costs are listed separately.
 | Leave / retire | Every node lifecycle-fact change, all node kinds | One capability query per node (`Node::asFocusParticipant`); for participant rows, O(1) endpoint cuts, at most one none write if published; O(1) membership unlink on RETIRED |
 | Teardown disconnect | End of each composition teardown | O(M) over this Scene's surviving members, normally empty; no writes |
 | Reconcile | Each eligible live window, once per completion | One admission read; O(M) scan of this Scene's members, including parked/unbound rows, even with no request. A take adds one O(M) identity relookup, at most one native write and one native readback. Publication rewires in O(1) and makes zero to two direct fact writes. |
-| App enumeration | Each outer completion | Repeated scans of App-owned group entries; for W windows, O(W squared) group visits and O(W cubed) worst-case visited-identity comparisons, plus close-pending lookups. No allocation within the inline visited capacity of `App::reconcileFocus`; overflow uses O(W) storage and allocates. Non-window group entries also participate in scans. |
+| App enumeration | Each outer completion | Repeated scans of App-owned group entries; for W windows, O(W squared) group visits and O(W cubed) worst-case visited-identity comparisons, plus close-pending lookups. No allocation within the inline visited capacity of `App::reconcileAtCompletion`; overflow uses O(W) storage and allocates. Non-window group entries also participate in scans. |
 | Busy check | App admission/reclaim and close draining, per window | One focus-phase and one borrow-phase read beside the existing run check |
 | Binding replacement | Participant applier | O(1) exchange and zero to two direct writes when published |
 | Source replacement | Rail, on native/test source change | O(1) endpoint rewire; no fact writes |
@@ -587,7 +587,7 @@ field has focus. Traversal is defined over `editControls_`; future focusable kin
 must join that ledger or extend traversal.
 
 The body writes neither focus box. Completion (`ToolboxApp::present` through
-`reconcileFocus`, `FocusPublisher::complete`, and `readNativeFocus`) publishes the
+`App::reconcileAtCompletion` and `Window::reconcileFocus`, `FocusPublisher::complete`, and `readNativeFocus`) publishes the
 landing field. A same-turn post is consumed when a previously published field
 of that fact has moved natively; with nothing published yet, the post wins.
 

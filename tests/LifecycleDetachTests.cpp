@@ -2672,7 +2672,7 @@ void testLocalRebuildLiveRefusalKeepsFocusReachable()
   Node *editor = findStrandTag(root, 7403);
   LOKA_VERIFY(editor && editor->getContext());
   platform.simulateNativeFocus(editor->getContext());
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(focus.state()->get().is(7u));
   LOKA_VERIFY(SceneFocusTestAccess::published(*editor->asFocusParticipant()));
 
