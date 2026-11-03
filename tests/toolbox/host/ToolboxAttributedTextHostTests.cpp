@@ -112,6 +112,121 @@ namespace
     std::printf("[pin] %s\n", name);
     std::fflush(stdout);
   }
+  void TextSelectionPins()
+  {
+    ToolboxWindow window, other;
+    HostPortScope current(other.window());
+    ToolboxScenePlatformController controller(&window);
+    const ToolboxTextFontDescriptor empty;
+    // QuickDraw outline and shadow bits; the host header names only the DSL bits.
+    const Style inherited = static_cast<Style>(8 | 16);
+    window.port.txFont = 4;
+    window.port.txSize = 17;
+    window.port.txFace = inherited;
+    Pin("ToolboxSelectionInheritAndRestore");
+    {
+      ToolboxTextMeasureScope scope(controller);
+      LOKA_VERIFY(window.port.txFont == 4 && window.port.txSize == 17 && window.port.txFace == inherited);
+      Pin("ToolboxSelectionPointsAndFaces");
+      scope.select(ToolboxTextFontDescriptor(TextStyle(TextSizeValue::points(11)) + Bold + Italic + Underline));
+      LOKA_VERIFY(window.port.txFont == 4 && window.port.txSize == 10);
+      LOKA_VERIFY(window.port.txFace == (inherited | bold | italic | underline));
+      scope.select(ToolboxTextFontDescriptor(SmallLabel));
+      LOKA_VERIFY(window.port.txFont == 3 && window.port.txSize == 9 && window.port.txFace == inherited);
+      scope.select(ToolboxTextFontDescriptor(Bold));
+    }
+    Pin("ToolboxSelectionRestoreOriginalAndCurrentPort");
+    LOKA_VERIFY(window.port.txFont == 4 && window.port.txSize == 17 && window.port.txFace == inherited);
+    GrafPtr selected = 0;
+    GetPort(&selected);
+    LOKA_VERIFY(selected == other.window());
+
+    Pin("ToolboxSelectionExplicitFaceOff");
+    window.port.txFace = inherited | bold | italic | underline;
+    {
+      ToolboxTextMeasureScope scope(
+          controller, ToolboxTextFontDescriptor(TextStyle().weight(TEXT_WEIGHT_NORMAL).italic(false).underline(false)));
+      LOKA_VERIFY(window.port.txFace == inherited);
+    }
+
+    Pin("ToolboxSelectionOriginalAcrossRuns");
+    window.port.txFace = inherited;
+    const ToolboxTextFontDescriptor runs[] = {ToolboxTextFontDescriptor(Bold), empty};
+    {
+      ToolboxTextMeasureScope scope(controller, runs, 2);
+      scope.select(runs[0]);
+      LOKA_VERIFY(window.port.txFace == (inherited | bold));
+      scope.select(runs[1]);
+      LOKA_VERIFY(window.port.txFace == inherited);
+    }
+
+    Pin("ToolboxSelectionSystemFontAndDefaultSize");
+    toolbox_host::systemFont = 16384;
+    toolbox_host::defaultFontSize = 10;
+    window.port.txFont = 0;
+    window.port.txSize = 0;
+    {
+      ToolboxTextMeasureScope scope(controller);
+      LOKA_VERIFY(window.port.txFont == 16384 && window.port.txSize == 10);
+    }
+    LOKA_VERIFY(window.port.txFont == 0 && window.port.txSize == 0);
+    window.port.txFont = 1;
+    {
+      ToolboxTextMeasureScope scope(controller);
+      LOKA_VERIFY(window.port.txFont == 1);
+    }
+    toolbox_host::systemFont = 0;
+    toolbox_host::defaultFontSize = 12;
+
+    Pin("ToolboxSelectionSameFontDefaultAndFace");
+    {
+      ToolboxTextMeasureScope scope(controller);
+      LOKA_VERIFY(scope.sameFont(empty, ToolboxTextFontDescriptor(FontSize<12>())));
+      LOKA_VERIFY(!scope.sameFont(empty, ToolboxTextFontDescriptor(Bold)));
+    }
+    Pin("ToolboxSelectionSameFontUnmappedQuirk");
+    toolbox_host::systemFont = 3;
+    window.port.txFont = 0;
+    window.port.txSize = 9;
+    {
+      ToolboxTextMeasureScope scope(controller);
+      // Preserve today's unmapped-font comparison on purpose; the PR 1 key follows it.
+      LOKA_VERIFY(!scope.sameFont(empty, ToolboxTextFontDescriptor(SmallLabel)));
+    }
+    toolbox_host::systemFont = 0;
+
+    Pin("ToolboxSelectionBusyDifferentSize");
+    window.port.txSize = 12;
+    int entries = controller.cursor.entries;
+    {
+      ToolboxTextMeasureScope scope(controller, ToolboxTextFontDescriptor(FontSize<18>()));
+      LOKA_VERIFY(controller.cursor.depth == 1);
+    }
+    LOKA_VERIFY(controller.cursor.entries == entries + 1 && controller.cursor.depth == 0);
+    Pin("ToolboxSelectionBusyDefaultSize");
+    window.port.txSize = 0;
+    entries = controller.cursor.entries;
+    {
+      ToolboxTextMeasureScope scope(controller, ToolboxTextFontDescriptor(FontSize<12>()));
+      LOKA_VERIFY(controller.cursor.depth == 0);
+    }
+    LOKA_VERIFY(controller.cursor.entries == entries);
+    Pin("ToolboxSelectionBusyLargestOnly");
+    const ToolboxTextFontDescriptor sizes[] = {ToolboxTextFontDescriptor(SmallLabel),
+                                               ToolboxTextFontDescriptor(FontSize<12>())};
+    {
+      ToolboxTextMeasureScope scope(controller, sizes, 2);
+      LOKA_VERIFY(controller.cursor.depth == 0);
+    }
+    LOKA_VERIFY(controller.cursor.entries == entries);
+    Pin("ToolboxSelectionAbsentPortNotBusy");
+    ToolboxScenePlatformController absent(0);
+    {
+      ToolboxTextMeasureScope single(absent, sizes[0]);
+      ToolboxTextMeasureScope multiple(absent, sizes, 2);
+      LOKA_VERIFY(!single.valid() && !multiple.valid() && absent.cursor.entries == 0);
+    }
+  }
   void InkPins()
   {
     Pin("AttributedSpanInkAndEllipsisRestore");
@@ -490,6 +605,12 @@ int main(int argc, char **argv)
   {
     PlainEllipsisPins(true);
     return 0;
+  }
+  if (argc == 1 || (argc == 2 && std::string(argv[1]) == "text-selection"))
+  {
+    TextSelectionPins();
+    if (argc == 2)
+      return 0;
   }
   const ToolboxTextFontDescriptor smallLabel(SmallLabel);
   LOKA_VERIFY(smallLabel.font(0) == 3 && smallLabel.font(4) == 3);
