@@ -1090,6 +1090,7 @@ namespace toolbox_host
   extern PenState pen;
   extern std::vector<Draw> draws;
   extern std::vector<std::string> pascalDraws, windowTitles, widthPayloads, measurePayloads;
+  extern short systemFont, defaultFontSize;
   extern int erases, widths, measures, fonts, metrics;
   extern std::vector<long> backgroundColors, foregroundColors;
   /** Remaining NewRgn calls to refuse with a null handle (Classic memory pressure). */
