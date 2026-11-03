@@ -294,11 +294,11 @@ public:
   bool hasPendingInvalidate() const;
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
-  void drawForFlush();
+  void drawForFlush(ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
   void drawGrowBox();
 
 private:
-  void drawWhole(const Rect &evidence);
+  void drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
 
 public:
   void drawDirty(const Rect &);
@@ -437,9 +437,15 @@ public:
       this->renderContext->render(this);
   }
 #endif
-  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *, const loka::core::Frame &)
+  void recordRectSurfaceExtent(loka::app::RectSurfaceNode *node, const loka::core::Frame &extent)
   {
+#ifdef LOKA_HOST_ZSTACK_UNITS
+    this->rectSurfaceExtentLedger_.record(node, extent);
+#else
+    (void)node;
+    (void)extent;
     LOKA_VERIFY(false);
+#endif
   }
 #endif
   ToolboxPendingDialogs pendingDialogs_;
@@ -828,6 +834,7 @@ public:
         renderContext(0),
         rootNode_(0),
         activeViewportContent_(0),
+        outerViewportContent_(0),
         controlIds_(100)
   {
     SetRect(&projectionClip, -30000, -30000, 30000, 30000);
@@ -913,6 +920,26 @@ public:
     ++this->debugStats_.drawDirtyCalls;
     ++this->debugStats_.totalDrawDirtyCalls;
   }
+  /** Window entries, once before render / once per rect request; O(1), no rows. */
+  void notePresentRequestSummary(ToolboxPresentBatch::Summary summary)
+  {
+    this->observation_.noteRequestSummary(summary);
+  }
+  void notePresentRectRequest()
+  {
+    this->observation_.noteRectRequest();
+  }
+  /** Publication re-entry fence; ordinary traversal owns the outer observer. */
+  bool refusePublicationLayout()
+  {
+    if (!this->observation_.paintInProgress() || this->outerViewportContent_)
+      return false;
+#ifdef LOKA_LIFECYCLE_AUDIT
+    assert(false && "publication must not re-enter layout");
+#endif
+    LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
+    return true;
+  }
   void notePresentReason(ToolboxFullDrawReason reason)
   {
     this->observation_.noteReason(reason);
@@ -956,6 +983,7 @@ public:
     return this->erasedPass_;
   }
   ToolboxViewportContentObservation *activeViewportContent_;
+  ToolboxViewportContentObservation *outerViewportContent_;
   loka::app::scene::ProjectionParentScopeStack projectionParentScopes_;
   ToolboxControlIdAllocator controlIds_;
   std::vector<Rect> pendingDirtyRects_;

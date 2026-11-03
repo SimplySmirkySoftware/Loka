@@ -456,14 +456,14 @@ void ToolboxWindow::drawForUpdate()
   EndUpdate(this->window_);
 }
 
-void ToolboxWindow::drawForFlush()
+void ToolboxWindow::drawForFlush(ToolboxPresentBatch::Summary summary)
 {
   if (this->window_)
   {
     if (this->scenePlatformController_)
       this->scenePlatformController_->notePresentDamage(
           ToolboxUpdateDamage(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->window_->portBits.bounds));
-    this->drawWhole(this->window_->portRect);
+    this->drawWhole(this->window_->portRect, summary);
   }
 }
 

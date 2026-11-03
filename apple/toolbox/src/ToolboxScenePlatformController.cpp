@@ -304,6 +304,7 @@ ToolboxScenePlatformController::ToolboxScenePlatformController(ToolboxWindow *wi
     : textShaping_(loka::app::PER_RUN),
       window_(window),
       activeViewportContent_(0),
+      outerViewportContent_(0),
       projectionParentScopes_(window && window->window() ? static_cast<void *>(window->window()) : 0),
       rootNode_(0),
       pendingRootNode_(0),
@@ -373,6 +374,8 @@ short ToolboxScenePlatformController::measureTextWidth(
 bool ToolboxScenePlatformController::prepareProjectedLayout(loka::app::scene::Node *node,
                                                             loka::app::scene::LayoutState &state)
 {
+  if (this->refusePublicationLayout())
+    return false;
   if (!node)
   {
     return false;

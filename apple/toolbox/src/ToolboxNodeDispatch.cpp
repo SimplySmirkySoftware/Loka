@@ -128,6 +128,23 @@ namespace
     return false;
   }
 
+  /** Outside containers do not paint; all admitted leaves use the inside payload question. */
+  bool ToolboxPresentAdmitsOutsideKind(loka::app::scene::Node &node, loka::app::scene::BoundaryNode *boundary)
+  {
+    using namespace loka::app::scene;
+    if (node.kind() == NODE_KIND_ZSTACK || node.kind() == NODE_KIND_GRID || node.kind() == NODE_KIND_SCROLL_VIEW)
+      return true;
+    return ToolboxPresentAdmitsKind(node, boundary);
+  }
+  bool ToolboxPresentAdmitsActiveKind(ToolboxScenePlatformController &controller,
+                                      loka::app::scene::Node &node,
+                                      loka::app::scene::BoundaryNode *boundary)
+  {
+    return controller.activeViewportContent_ == controller.outerViewportContent_
+               ? ToolboxPresentAdmitsOutsideKind(node, boundary)
+               : ToolboxPresentAdmitsKind(node, boundary);
+  }
+
   /** Restores the caller's gap on every dispatch return. */
   class LayoutSpacingScope
   {
@@ -351,6 +368,8 @@ namespace
                    loka::app::layout::StackSpans *spans)
   {
     assert(controller && "Toolbox layout requires a controller");
+    if (controller->refusePublicationLayout())
+      return 0;
     if (!node)
     {
       return 0;
@@ -362,7 +381,7 @@ namespace
     LayoutSpacingScope spacingScope(state, node);
     loka::app::scene::BoundaryNode *boundary = node->asBoundary();
     if (controller->activeViewportContent_ && !node->asProjectedLayoutNode()
-        && !ToolboxPresentAdmitsKind(*node, boundary))
+        && !ToolboxPresentAdmitsActiveKind(*controller, *node, boundary))
       controller->activeViewportContent_->noteUnsupportedKind();
     loka::app::scene::BoundaryNode *activeBoundary = boundary ? boundary : currentBoundary;
     const short startX = state.x;
@@ -377,7 +396,7 @@ namespace
         inputs.requeue();
         return 0;
       }
-      if (controller->activeViewportContent_ && !ToolboxPresentAdmitsKind(*node, boundary))
+      if (controller->activeViewportContent_ && !ToolboxPresentAdmitsActiveKind(*controller, *node, boundary))
         controller->activeViewportContent_->noteUnsupportedKind();
       if (controller->activeViewportContent_ && node->kind() == loka::app::scene::NODE_KIND_CARD_BAND)
         controller->activeViewportContent_->notePhaseBound();

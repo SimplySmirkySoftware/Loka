@@ -2949,7 +2949,8 @@ namespace
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
                      "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
                      "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s "
-                     "not_translated=%u baseline=%s enclosing_clip=%d\r",
+                     "not_translated=%u baseline=%s enclosing_clip=%d rect_requests=%d used_viewports=%u "
+                     "outside_not_translated=%u outside_inputs=%u outside_kinds=%u unit_changed=%d\r",
                      observation.reasonNames().c_str(),
                      observation.dy(),
                      observation.viewports(),
@@ -2972,7 +2973,13 @@ namespace
                          : "-",
                      observation.notTranslated(),
                      ToolboxBaselineStatusName(observation.baseline()),
-                     observation.enclosingClip() ? 1 : 0);
+                     observation.enclosingClip() ? 1 : 0,
+                     observation.rectRequests() ? 1 : 0,
+                     observation.usedViewports(),
+                     observation.outsideNotTranslated(),
+                     observation.outsideInputs(),
+                     observation.outsideKinds(),
+                     observation.unitChanged() ? 1 : 0);
         std::fprintf(self->log_, "%s\r", ToolboxPaintResultText(observation).c_str());
         // Measured on MAME maciix, 2026-10-31: the preceding composition
         // replay did not cover the window (rule 4). No covering pass intervenes,
