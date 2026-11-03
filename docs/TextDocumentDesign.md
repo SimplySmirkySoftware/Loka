@@ -1,36 +1,58 @@
 # Text document design
 
-> **Status:** Draft. The app-facing shape (this page) is frozen by owner
-> ruling (2026-11-03). The kernel seat that creates the native store and
-> writes the fact is designed separately and is not frozen. Nothing here is
-> implemented yet; until the new editor lands, `TextBuffer` remains the
-> shipped model. The policy in [From AGENTS.md](#from-agentsmd) applies now.
+> **Status:** Draft — target shape, not implemented. The owner ruling of
+> 2026-11-03 ([#1733](https://github.com/SimplySmirkySoftware/Loka/issues/1733))
+> froze [The document](#the-document),
+> [Reads, positions, and requests](#reads-positions-and-requests) and
+> [Migration](#migration). [Kernel obligations](#kernel-obligations) lists
+> what the kernel design must satisfy; that design is not frozen.
+> [Why](#why) and [Native facts](#native-facts) are background. The policy in
+> [From AGENTS.md](#from-agentsmd) applies to new work now; the shipped
+> `TextEditor` keeps its current model until the migration replaces it.
 >
 > **Owns:** where an editable text's body lives, the app-facing document fact,
 > positions, requests, and the migration away from `TextBuffer`
 >
-> **Does not own:** exact API signatures, the kernel seat and its reconcile,
+> **Does not own:** exact API signatures (the names below are frozen; the
+> headers will own the signatures), the kernel seat and its reconcile,
 > Edit-menu routing, capacity, or per-rail native mechanics
 >
-> **Code truth:** none yet. The retiring model is
+> **Code truth:** none yet. The model it replaces is
+> [TextEditor.hpp](../common/app/nodes/controls/TextEditor.hpp),
 > [TextBuffer.hpp](../common/app/TextBuffer.hpp),
 > [LineCursor.hpp](../common/app/style/LineCursor.hpp),
 > [TextEditorDocument.hpp](../common/app/nodes/controls/TextEditorDocument.hpp)
 > and [TextEditorDiff.hpp](../common/app/nodes/controls/TextEditorDiff.hpp).
 >
-> **Verification:** none yet. The native behavior the design relies on was
-> observed on the rigs and is recorded under [Native facts](#native-facts).
+> **Verification:** none yet. The native behavior the design relies on is
+> recorded under [Native facts](#native-facts).
 
 ## From AGENTS.md
 
-An editable text's body lives once, in the native editor's own store (the MLTE
-object, `NSTextStorage`, the EDIT control's `HLOCAL`, TextEdit's text handle).
-Loka keeps no second copy and reads the body out only when an operation needs
-it: save, search, or an app query. The app reads one fact box, written by a
-single kernel reconcile at the outer completion in the
-[Focus](FocusDesign.md#from-agentsmd) shape. Rails answer that reconcile and
-never write the fact from native notifications. `TextBuffer` and `LineCursor`
-are retiring, so new text features are not built on them.
+This is the target shape; it is not implemented yet. New text-editing work
+keeps an editable text's body once, in the native editor's own store (the MLTE
+object, `NSTextStorage`, the EDIT control's `HLOCAL`, TextEdit's text handle),
+and reads the body out only when an operation needs it: save, search, or an
+app query. New work adds no Loka-side copy of the body and does not extend
+`TextBuffer` or `LineCursor`. The shipped `TextEditor` path, which still
+mirrors the body into `TextBuffer`, keeps working and takes fixes until the
+migration removes it.
+
+The document's fact has a single writer in the kernel, in the
+[Focus](FocusDesign.md#from-agentsmd) shape: it is read at the outer
+completion. Rails answer that writer's questions and never write the fact
+from native notifications.
+
+### Names already in the tree
+
+`TextDocument` is a new type; nothing in the tree is it yet. In particular,
+these existing names are not it:
+
+- `TextDocumentFile` (`TextDocumentResult`, `ReadTextDocument`) reads and
+  writes files through `TextBuffer`. What becomes of it is decided with the
+  write requests.
+- `TextEditorDocument` belongs to the shipped editor and is deleted by the
+  migration.
 
 ## Why
 
@@ -45,9 +67,10 @@ under Mac OS 9.2.2 (QEMU):
 | A 3 MiB document open | 22 MB |
 | A second window | 38 MB |
 
-One keystroke in a 4 MiB document costs about 0.9 s. Reading the body out of
-MLTE takes 35 ms of that, twice; the rest is Loka's conversion, diff and
-allocation. The native editors already hold the body; the second copy is
+One keystroke in a 4 MiB document takes about 0.9 s, spent in two whole-body
+reads of about 0.43 s each. A standalone MLTE probe measured MLTE's own read
+(`TXNGetData`) of a 4 MiB body at 35 ms. The rest is Loka's conversion, diff
+and allocation. The native editors already hold the body; the second copy is
 where the cost is.
 
 A rail that draws its own text keeps the body in a Loka-owned store, which
@@ -55,20 +78,22 @@ then plays the native role. It is still the only copy.
 
 ## The document
 
-- `TextDocument` is declared with `this->document(doc_)` only in the
-  constructor of a window's root Boundary. This door is separate from
-  `state()`.
+- `TextDocument` is declared with `document(doc_)` only in the constructor of
+  a window's root Boundary. This door is separate from `state()`.
   - A window may declare several documents.
   - Declaring one inside a Keyed or LazyScope generation is refused.
   - A document used inside a Match arm is declared at the root, so the body
     outlives the arm.
   - A varying number of documents in one window (tabs) is a v1 limit.
   - Replacing the Scene ends its documents together with the root Boundary.
+- A document has at most one view: a new editor node, a separate type from
+  today's `TextEditor`. A second view is a typed refusal.
 - The document has one fact box, `State<TextDocumentFact>`. It carries:
   - the state;
   - `textRevision`, monotonic within the document and continuing across
     store rebuilds;
-  - the union of changed ranges, where the rail can report one;
+  - the union of the ranges changed since the previous fact, where the rail
+    can report them;
   - the caret and selection, as `TextPosition`s.
 
   The same reconcile writes all of them in one transaction.
@@ -83,16 +108,17 @@ then plays the native role. It is still the only copy.
 
 ## Reads, positions, and requests
 
-- **Queries.** Line count, size, line contents, and creating a position
-  answer only in `READY` with no unreconciled native change. Otherwise they
-  refuse, through the `bool queryX(T &out)` shape. A rail that cannot answer
-  a query refuses it.
+- **Queries.** Line count, size, line contents and position creation answer
+  only in `READY` with no unreconciled native change. Otherwise they refuse,
+  answering presence and value from one query. A rail that cannot answer a
+  query refuses it.
 - **Positions.** `TextPosition` is opaque: only the document makes one.
-  - `None()` and copy are public, and `!=` compares full identity.
-  - `queryOrder(a, b, out)` compares order.
-  - `queryUtf16Offset` and `queryUtf8Offset` convert a position to an offset.
-  - All of these refuse when the position's `textRevision` differs from the
-    document's.
+  - `None()` and copy are public.
+  - `!=` compares full identity (revision and content), so `Request<T>` can
+    use it.
+  - `queryOrder` compares two positions, and `queryUtf16Offset` and
+    `queryUtf8Offset` convert a position to an offset. These three refuse
+    when the position's `textRevision` differs from the document's.
   - There is no position arithmetic.
 - **Caret request.** The caret request is `Request<TextPosition>`.
 - **Writes.** A write (open, new, whole replacement) carries its caret as a
@@ -101,48 +127,78 @@ then plays the native role. It is still the only copy.
   - A request never carries the body by value. It names the source or holds
     a Blob handle, so copying it and comparing it with `!=` stay O(1).
   - Whole replacement is a `Request`; partial edits are a `RequestQueue`.
+  - The exact box shapes are decided with the write requests.
 - **Held and dropped requests.**
-  - Requests that arrive in `AWAITING_STORE` or `MARKED` stay in their slot
-    until the document is `READY`, so the first write posted at attach is
-    not lost.
-  - In `UNAVAILABLE`, or on a revision mismatch, a request is taken and
-    dropped (the refusal rule in
-    [Request delivery](RequestDeliveryDesign.md#from-agentsmd)).
-- **Commands.** The rail commits uncommitted IME text before it runs one of
-  these entries, so nothing is saved while `MARKED`:
+  - While the document is `AWAITING_STORE` or `MARKED`, the reconcile does
+    not take its requests; they stay in their slot until `READY`. This keeps
+    the first write posted at attach.
+  - When the document is `UNAVAILABLE`, or the revision differs, a request is
+    taken and dropped, as the refusal rule in
+    [Request delivery](RequestDeliveryDesign.md#from-agentsmd) says.
+  - That rule today drops a request whose native resource is missing. For a
+    document, `AWAITING_STORE` is the exception: the request waits instead.
+    The refusal rule is to name this exception when the kernel lands.
+- **Commands.** Uncommitted IME text is committed before these operations, so
+  none of them acts on a document that is still `MARKED`:
   - an Edit command;
-  - a menu command;
-  - an Apple event (save, the close confirmation, Quit).
+  - save;
+  - close, including the close confirmation;
+  - Quit.
 
-  The kernel design says how each rail does this; the observed native
-  behavior is under [Native facts](#native-facts).
+  It does not matter whether the operation arrives as a menu item, a key, a
+  window's close box or an Apple event. How each rail meets this belongs to
+  the kernel design. MLTE has no commit door, and on Win32 the committed text
+  lands only after the commit call returns (see [Native facts](#native-facts)).
 
 ## Migration
 
 - `TextBuffer` does not become a compatibility layer over the document,
   because returning line ids would need a copy of the body.
 - The new editor node is a separate type. The old `TextEditor`, `TextBuffer`
-  and `LineCursor` stay untouched beside it until every rail has moved.
+  and `LineCursor` stay beside it until every rail has moved; migration PRs
+  do not modify them.
 - The last migration PR deletes them, together with `TextEditorDiff` and
   `TextEditorDocument`, and re-captures the SimpleText golden.
 
+## Kernel obligations
+
+The kernel design decides when the native store is created and who writes the
+fact. Whatever it decides, it must satisfy all of these:
+
+- **Store creation**
+  - A candidate Scene that is being prepared never creates a store.
+  - A store is created when the current Scene attaches. If creation fails,
+    the document becomes `UNAVAILABLE`.
+- **The fact and its requests**
+  - The fact has a single writer in the Focus shape: it reads native changes
+    at the outer completion and writes the fact once.
+  - Rails mark changes and answer questions; they never write the fact.
+  - Requests are taken only by that writer.
+  - Queries refuse while a native change is unreconciled.
+- **Replacing and releasing a store**
+  - Open builds the new store completely before swapping it in.
+  - Detaching a view allocates nothing.
+  - Reclaim happens at the owning clock's boundary and fires nothing.
+- **IME commit:** each rail commits uncommitted IME text before the commands
+  above, or holds them until the committed text has landed.
+
 ## Native facts
 
-These are observed OS behaviors the design relies on. They are recorded
-here, not contracts.
+Observed OS behavior, recorded here, not contracts. A dagger (†) marks a
+documented behavior that no Loka probe has observed yet.
 
 | Rail | Store | Detached from the view by | Undo history lives in |
 |---|---|---|---|
 | Toolbox Unicode | MLTE `TXNObject`, created with no window | attaching it to an offscreen GWorld | the object |
-| Toolbox TextEdit | the `hText` handle | swapping it for an empty handle before `TEDispose` | the TE record |
-| macOS | `NSTextStorage` | exists without a view | the view's undo manager |
+| Toolbox TextEdit | the `hText` handle † | swapping it for an empty handle before `TEDispose` † | the TE record † |
+| macOS | `NSTextStorage` | exists without a view † | the view's undo manager † |
 | Win32 | the EDIT's `HLOCAL`, through `EM_SETHANDLE` | swapping it for an empty handle before `DestroyWindow` | the EDIT; `EM_SETHANDLE` clears it |
 | Null | a host string | not needed | none |
 
 - **Win32** (Windows 11, MS-IME; the comctl32 6 EDIT and the user32 EDIT
   behave alike):
-  - `EM_SETHANDLE` and multiline `WM_SETTEXT` raise no `EN_CHANGE`. They
-    reset `EM_GETMODIFY` and clear undo.
+  - `EM_SETHANDLE` and multiline `WM_SETTEXT` raise no `EN_CHANGE` and reset
+    `EM_GETMODIFY`. `EM_SETHANDLE` also clears undo.
   - `EN_CHANGE` carries no range, and one replacement or undo raises it
     twice.
   - `EM_GETMODIFY` means "touched since Loka last wrote", not "differs from
@@ -150,7 +206,7 @@ here, not contracts.
   - Uncommitted IME text never enters the EDIT's body.
   - When `ImmNotifyIME(CPS_COMPLETE)` returns, the body is still unchanged.
     The committed characters arrive afterwards, as posted `WM_CHAR`.
-- **macOS** (macOS 26, a TextKit 1 `NSTextView` made the way the Loka rail
+- **macOS** (macOS 26; a TextKit 1 `NSTextView` made the way the Loka rail
   makes it; marked text set by the probe itself, not through a real input
   method):
   - Marked text is inside the `NSTextStorage` string while composing;
@@ -160,19 +216,21 @@ here, not contracts.
   - `[[view inputContext] discardMarkedText]` changes neither the body nor
     the marked text.
   - The storage delegate reports an edited range and a change in length for
-    every change, Loka's own writes included. `textDidChange:` fires only for
-    changes made through the view.
-  - Writing the storage directly (`replaceCharactersInRange:withString:`,
-    `setString:`) registers no undo action.
+    every change, Loka's own writes included.
+  - `textDidChange:` fires for typing and for `unmarkText`. It does not fire
+    for the view's `setString:` or `setMarkedText:`, or for writes to the
+    storage.
+  - Neither a storage write (`replaceCharactersInRange:withString:`) nor the
+    view's `setString:` registers an undo action.
   - Not yet observed: the order in which a real input method calls
     `setMarkedText:` and `insertText:`, and Mac OS X 10.4 to 10.6.
 - **Toolbox MLTE 1.3** (Mac OS 9.2):
   - `TXNSetData` advances `TXNGetChangeCount` by two and leaves an undoable
     action.
-  - The change count drops on undo, while `TXNGetActionChangeCount` only
-    rises.
+  - The change count drops on undo. `TXNGetActionChangeCount` never drops on
+    undo; only `TXNClearActionChangeCount` resets it.
   - No API reports the changed range.
   - With the bottom-line input window, uncommitted text stays out of the
     body, and committed text is in the body when `WaitNextEvent` returns.
-  - No commit door is reachable from the application:
-    `FixTSMDocument` cannot name MLTE's TSM document.
+  - No commit door is reachable from the application: `FixTSMDocument`
+    cannot name MLTE's TSM document.
