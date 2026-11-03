@@ -15,13 +15,17 @@ enum ToolboxCharWidthKind
 class ToolboxCharWidths
 {
 public:
-  ToolboxCharWidths(const unsigned char *bytes, const short *positions, unsigned count);
+  /** Call only after the door has admitted every byte for this table's kind. */
   bool sum(const unsigned char *text, short &width) const;
 
 private:
   ToolboxCharWidths(const ToolboxCharWidths &);
   ToolboxCharWidths &operator=(const ToolboxCharWidths &);
-  short widths_[256];
+  friend class ToolboxCharWidthCache;
+  ToolboxCharWidths() {}
+  bool build(ToolboxCharWidthKind kind, const ToolboxTextMeasureScope &selected);
+  // Non-admitted entries are never read: the door checks the whole byte range.
+  short widths_[257];
 };
 
 /** App-owned completed tables; no eviction or resume clearing.
@@ -29,7 +33,9 @@ private:
     the system script, and the Font Manager/QuickDraw measuring implementation
     must stay unchanged for one App run. Guards protect queries, not previously
     derived geometry. Ambient selection changes still require an input mark.
-    Used slots form one prefix: admitted kinds have a table, REFUSED has none.
+    Used slots form one prefix. Each owns either one admitted Entry (key, kind
+    and table together) or one small refused Slot, never both. The returned
+    Slot is a read-only view; no owned pointer crosses the cache boundary.
     Allocation refusal records nothing; a later query may try again. */
 class ToolboxCharWidthCache
 {
@@ -59,7 +65,27 @@ public:
 private:
   ToolboxCharWidthCache(const ToolboxCharWidthCache &);
   ToolboxCharWidthCache &operator=(const ToolboxCharWidthCache &);
-  const Slot *slots_[8];
+  /** Private construction phase; publication follows successful table build. */
+  struct Entry
+  {
+    ToolboxCharWidths table;
+    const Slot slot;
+    Entry(const ToolboxTextSelection &key, ToolboxCharWidthKind kind);
+  };
+  /** Typed ownership avoids a kind-tagged downcast during lookup or deletion. */
+  struct StoredSlot
+  {
+    Entry *entry;
+    Slot *refusal;
+    StoredSlot();
+    ~StoredSlot();
+    const Slot *view() const;
+
+  private:
+    StoredSlot(const StoredSlot &);
+    StoredSlot &operator=(const StoredSlot &);
+  };
+  StoredSlot slots_[8];
   unsigned used_;
 };
 

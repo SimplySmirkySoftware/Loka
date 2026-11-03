@@ -177,6 +177,16 @@ void MeasureText(short count, const void *bytes, void *charLocs)
   toolbox_host::measurePayloads.push_back(std::string(static_cast<const char *>(bytes), count));
   ++toolbox_host::measures;
   short *positions = static_cast<short *>(charLocs);
+  if (toolbox_host::positionMode == 5)
+    return; // No positions written, including the origin.
+  if (toolbox_host::positionMode == 6)
+  {
+    positions[0] = 0;
+    const unsigned char *characters = static_cast<const unsigned char *>(bytes);
+    for (int i = 0; i < count; ++i)
+      positions[i + 1] = static_cast<short>(positions[i] + (characters[i] & 7) + 1);
+    return;
+  }
   for (int i = 0; i <= count; ++i)
   {
     if (toolbox_host::positionMode == 1 && i == count / 2)

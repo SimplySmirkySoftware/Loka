@@ -36,13 +36,13 @@ namespace
   }
   void CharWidthAllocationPins()
   {
-    for (int failure = 0; failure < 3; ++failure)
+    for (int failure = 0; failure < 2; ++failure)
     {
       Pin("CharWidthAllocationRefusalRecordsNothingAndRetries");
       unsigned copies = 0;
       const loka::core::String text(
           loka::core::Managed<loka::platform::String>::Wrap(new ToolboxUtf8TestString("Abc", false, false, copies)));
-      loka::core::testing::failLokaAllocRaw("ToolboxCharWidthCache", failure == 0 ? "ToolboxCharWidths" : "Slot", 1);
+      loka::core::testing::failLokaAllocRaw("ToolboxCharWidthCache", failure == 0 ? "Entry" : "Slot", 1);
       {
         ToolboxWindow window, other;
         HostPortScope current(other.window());
@@ -53,12 +53,20 @@ namespace
         const ToolboxTextSelection key = ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(FontSize<18>() + Bold),
                                                                        ToolboxTextPortFont::read(window.window()));
         toolbox_host::reset();
-        toolbox_host::positionMode = failure == 2 ? 1 : 0;
+        toolbox_host::positionMode = failure == 1 ? 1 : 0;
         short width = -1;
         LOKA_VERIFY(controller.measureTextAdvance(FontSize<18>() + Bold, text, width) && width == 21);
         LOKA_VERIFY(!controller.charWidthCache()->find(key));
         LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == live);
-        LOKA_VERIFY(toolbox_host::measures == 1 && toolbox_host::widths == 1 && copies == 1);
+        std::fprintf(stderr,
+                     "counts first failure=%d measures=%d widths=%d copies=%u live=%d attempts=%d\n",
+                     failure,
+                     toolbox_host::measures,
+                     toolbox_host::widths,
+                     copies,
+                     loka::core::testing::lokaAllocRawLive() - live,
+                     loka::core::testing::lokaAllocRawAttempts() - attempts);
+        LOKA_VERIFY(toolbox_host::measures == failure && toolbox_host::widths == 1 && copies == 1);
         LOKA_VERIFY(toolbox_host::fonts == 2 && controller.cursor.entries == 1 && controller.cursor.depth == 0);
         LOKA_VERIFY(toolbox_host::widthPayloads[0] == "Abc");
         LOKA_VERIFY(window.port.txFont == 3 && window.port.txSize == 12 && window.port.txFace == 0);
@@ -68,12 +76,27 @@ namespace
         toolbox_host::positionMode = 0;
         LOKA_VERIFY(controller.measureTextAdvance(FontSize<18>() + Bold, text, width) && width == 21);
         LOKA_VERIFY(controller.charWidthCache()->find(key));
-        LOKA_VERIFY(toolbox_host::measures == 2 && toolbox_host::widths == 1 && copies == 2);
+        std::fprintf(stderr,
+                     "counts retry failure=%d measures=%d widths=%d copies=%u live=%d attempts=%d\n",
+                     failure,
+                     toolbox_host::measures,
+                     toolbox_host::widths,
+                     copies,
+                     loka::core::testing::lokaAllocRawLive() - live,
+                     loka::core::testing::lokaAllocRawAttempts() - attempts);
+        LOKA_VERIFY(toolbox_host::measures == failure + 1 && toolbox_host::widths == 1 && copies == 2);
+        LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == live + 1);
+        LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == attempts + (failure == 0 ? 2 : 3));
         LOKA_VERIFY(toolbox_host::fontScriptReads == classifications + 2);
-        LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == live + 2);
-        LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == attempts + (failure == 1 ? 4 : 3));
+
         LOKA_VERIFY(controller.measureTextAdvance(FontSize<18>() + Bold, text, width) && width == 21);
-        LOKA_VERIFY(toolbox_host::measures == 2 && toolbox_host::widths == 1 && copies == 3);
+        std::fprintf(stderr,
+                     "counts hit failure=%d measures=%d widths=%d copies=%u\n",
+                     failure,
+                     toolbox_host::measures,
+                     toolbox_host::widths,
+                     copies);
+        LOKA_VERIFY(toolbox_host::measures == failure + 1 && toolbox_host::widths == 1 && copies == 3);
         LOKA_VERIFY(toolbox_host::fonts == 4 && controller.cursor.entries == 2 && controller.cursor.depth == 0);
       }
       LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == 0);
@@ -194,6 +217,8 @@ namespace
       LOKA_VERIFY(toolbox_host::measures == 8 && toolbox_host::widths == 1);
       const std::string &bytes = toolbox_host::measurePayloads[0];
       LOKA_VERIFY(bytes.size() == (japanese ? 95U : 223U));
+      for (unsigned i = 0; i < bytes.size(); ++i)
+        LOKA_VERIFY(static_cast<unsigned char>(bytes[i]) == 0x20 + i + (i >= 95 ? 1 : 0));
       LOKA_VERIFY(static_cast<unsigned char>(bytes[0]) == 32);
       LOKA_VERIFY(static_cast<unsigned char>(bytes[bytes.size() - 1]) == (japanese ? 126 : 255));
       window.port.txFont = 20;
@@ -322,7 +347,7 @@ namespace
   {
     Pin("CharWidthAppLifetimeReleasesCompletedTables");
     const loka::core::String text = loka::core::String::Literal("x");
-    loka::core::testing::failLokaAllocRaw("ToolboxCharWidthCache", "ToolboxCharWidths", 0);
+    loka::core::testing::failLokaAllocRaw("ToolboxCharWidthCache", "Entry", 0);
     {
       ToolboxWindow window;
       ToolboxScenePlatformController controller(&window);
@@ -330,11 +355,55 @@ namespace
       const int attempts = loka::core::testing::lokaAllocRawAttempts();
       const int live = loka::core::testing::lokaAllocRawLive();
       LOKA_VERIFY(controller.measureTextAdvance(TextStyle(), text, width));
-      LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == attempts + 2);
-      LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == live + 2);
+      std::fprintf(stderr,
+                   "counts lifetime attempts=%d live=%d\n",
+                   loka::core::testing::lokaAllocRawAttempts() - attempts,
+                   loka::core::testing::lokaAllocRawLive() - live);
+      LOKA_VERIFY(loka::core::testing::lokaAllocRawAttempts() == attempts + 1);
+      LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == live + 1);
     }
     LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == 0);
     loka::core::testing::allowLokaAllocRaw();
+  }
+  void CharWidthInPlacePins()
+  {
+    Pin("CharWidthUnwrittenPositionsRefuseOnZeroedAllocation");
+    // The allocation hook supplies deterministic zeroed storage, not sentinels.
+    loka::core::testing::failLokaAllocRaw("ToolboxCharWidthCache", "Entry", 0);
+    {
+      ToolboxWindow window;
+      ToolboxScenePlatformController controller(&window);
+      toolbox_host::reset();
+      toolbox_host::positionMode = 5;
+      short width = -1;
+      LOKA_VERIFY(controller.measureTextAdvance(TextStyle(), loka::core::String::Literal("abc"), width));
+      LOKA_VERIFY(width == 12 && toolbox_host::measures == 1 && toolbox_host::widths == 1);
+      toolbox_host::positionMode = 0;
+      LOKA_VERIFY(controller.measureTextAdvance(TextStyle(), loka::core::String::Literal("abc"), width));
+      LOKA_VERIFY(width == 12 && toolbox_host::measures == 1 && toolbox_host::widths == 2);
+    }
+    LOKA_VERIFY(loka::core::testing::lokaAllocRawLive() == 0);
+    loka::core::testing::allowLokaAllocRaw();
+    Pin("CharWidthInPlaceByteIndicesAcrossDelGap");
+    for (int japanese = 0; japanese < 2; ++japanese)
+    {
+      ToolboxWindow window;
+      ToolboxScenePlatformController controller(&window);
+      const ToolboxTextSelection key =
+          ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), ToolboxTextPortFont::read(window.window()));
+      ToolboxTextMeasureScope scope(controller, key);
+      toolbox_host::positionMode = 6;
+      const ToolboxCharWidthKind kind = japanese ? TOOLBOX_CHAR_JAPANESE_ASCII : TOOLBOX_CHAR_ROMAN;
+      const ToolboxCharWidthCache::Slot *slot = controller.charWidthCache()->build(key, kind, scope);
+      LOKA_VERIFY(slot && slot->widths);
+      const unsigned char roman[] = {4, 0x20, 0x7E, 0x80, 0xFF};
+      const unsigned char ascii[] = {2, 0x20, 0x7E};
+      const unsigned char *bytes = japanese ? ascii : roman;
+      short width = 0;
+      LOKA_VERIFY(ToolboxCharWidthBytes(kind, bytes));
+      LOKA_VERIFY(slot->widths->sum(bytes, width) && width == (japanese ? 8 : 17));
+      toolbox_host::positionMode = 0;
+    }
   }
   void CharWidthPins()
   {
@@ -346,6 +415,7 @@ namespace
     CharWidthSemanticsPins();
     CharWidthClassificationPins();
     CharWidthLifetimePins();
+    CharWidthInPlacePins();
   }
 } // namespace
 #endif
