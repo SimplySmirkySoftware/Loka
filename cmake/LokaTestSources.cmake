@@ -65,6 +65,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ToolboxScenePlatformContractTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/NullTextLayoutTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextEditorTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentValuesTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/RequestReasonTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/PendingRequestsTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/RequestRingTests.cpp

@@ -149,7 +149,7 @@ void Win32App::flushIterationTail(loka::core::Operation &turn)
 {
   turn.settle();
   this->admitAndApplyWindows();
-  this->reconcileFocus();
+  this->reconcileAtCompletion();
   this->admitAndApplyWindows();
   turn.close();
   this->reclaimWindows();

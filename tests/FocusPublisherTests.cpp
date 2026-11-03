@@ -246,7 +246,7 @@ namespace
     void focus(Node &node)
     {
       this->platform.simulateNativeFocus(node.getContext());
-      this->app.reconcileFocus();
+      this->app.reconcileAtCompletion();
     }
   };
   void replace(EditTextNode &node, Focus<FocusTestField> &fact, FocusTestField key)
@@ -626,7 +626,7 @@ void testFocusSceneRun()
   f.scene.invalidate(NODE_DIRTY_MYSELF);
   f.platform.duringApply = 0;
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_HEIGHT));
 }
 void testFocusPublicationGate()
@@ -635,7 +635,7 @@ void testFocusPublicationGate()
   f.platform.simulateNativeFocus(f.height.getContext());
   SceneFocusTestAccess::duringPublication(f.scene.focus(), &publicationGate, &f);
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_HEIGHT));
 }
 
@@ -682,7 +682,7 @@ namespace
       const unsigned reads = p.controller->reads;
       loka::app::testing::WindowTestAccess::reconcileFocus(*p.window);
       LOKA_VERIFY(p.controller->reads == reads);
-      p.app->reconcileFocus();
+      p.app->reconcileAtCompletion();
       LOKA_VERIFY(p.controller->reads == reads);
     }
   };
@@ -703,7 +703,7 @@ void testFocusSceneReplacement()
   WindowAdmissionTestApp app(window);
   app.flush();
   controller.simulateNativeFocus(cardField(*window.scene())->getContext());
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   std::vector<int> events;
   data.facts.first.state()->bind(&cardCleared, &events, false, true);
   cardKey = FOCUS_WEIGHT;
@@ -720,11 +720,11 @@ void testFocusSceneReplacement()
     EditTextNode *target = cardField(prepared);
     target->setContext(new NodeContext(target));
     controller.simulateNativeFocus(target->getContext());
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     LOKA_VERIFY(events.size() == 1 && events[0] == 0);
     LOKA_VERIFY(!(data.facts.first.state()->get() != Fact::none()));
     controller.simulateNativeFocus(cardField(*window.scene())->getContext());
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     loka::dsl::testing::SceneTestAccess::unmount(prepared);
   }
   cardData = &replacementData;
@@ -741,7 +741,7 @@ void testFocusSceneReplacement()
   EditTextNode *target = cardField(*next);
   LOKA_VERIFY(events.size() == 1 && events[0] == 0);
   controller.simulateNativeFocus(target->getContext());
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(events.size() == 1 && events[0] == 0);
   LOKA_VERIFY(replacementData.facts.first.state()->get().is(FOCUS_WEIGHT));
 }
@@ -800,7 +800,7 @@ void testFocusAudit()
       {
         // Neither Scene has published: only placement can detect this borrow.
         replace(other.weight, f.facts.first, FOCUS_OTHER);
-        other.app.reconcileFocus();
+        other.app.reconcileAtCompletion();
       }
       _exit(0);
     }
@@ -861,7 +861,7 @@ namespace
       FlushProbe &p = *static_cast<FlushProbe *>(data);
       ++p.calls;
       const unsigned reads = p.other->reads;
-      p.app->reconcileFocus();
+      p.app->reconcileAtCompletion();
       LOKA_VERIFY(p.other->reads == reads);
     }
   };
@@ -880,7 +880,7 @@ void testFocusAppFlushGate()
   first.platform.duringApply = 0;
   LOKA_VERIFY(probe.calls > 0);
   LOKA_VERIFY(!(second.facts.first.state()->get() != Fact::none()));
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(second.facts.first.state()->get().is(FOCUS_HEIGHT));
 }
 
@@ -980,11 +980,11 @@ void testFocusAppReenumerates()
   second.platform.simulateNativeFocus(second.weight.getContext());
   CloseObserver observer = {&app, &first.window};
   first.facts.first.state()->bind(&CloseObserver::changed, &observer, false);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   first.facts.first.state()->unbind(&CloseObserver::changed, &observer);
   LOKA_VERIFY(second.facts.first.state()->get().is(FOCUS_WEIGHT));
   const unsigned reads = first.platform.reads;
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(first.platform.reads == reads);
 }
 
@@ -1000,13 +1000,13 @@ void testFocusAppReenumeratesMultipleRemovals()
   const unsigned firstReads = first.platform.reads;
   const unsigned secondReads = second.platform.reads;
   const unsigned thirdReads = third.platform.reads;
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   second.facts.first.state()->unbind(&ClosePairObserver::changed, &observer);
   LOKA_VERIFY(third.facts.first.state()->get().is(FOCUS_HEIGHT));
   LOKA_VERIFY(first.platform.reads == firstReads + 1);
   LOKA_VERIFY(second.platform.reads == secondReads + 1);
   LOKA_VERIFY(third.platform.reads == thirdReads + 1);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(first.platform.reads == firstReads + 1);
   LOKA_VERIFY(second.platform.reads == secondReads + 1);
   LOKA_VERIFY(third.platform.reads == thirdReads + 2);
@@ -1095,17 +1095,17 @@ void testFocusForeignRow()
   LOKA_VERIFY(controller.readNativeFocus(answer) && !answer);
   // A rail can still answer with a foreign node: the publisher must check it.
   controller.foreign = foreign.getContext();
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!(facts.first.state()->get() != Fact::none()));
   LOKA_VERIFY(!SceneFocusTestAccess::published(foreign.row));
   controller.foreign = 0;
   controller.simulateNativeFocus(field.getContext());
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   // Publishing the real field audits both members, skipping the kernel row.
   LOKA_VERIFY(facts.first.state()->get().is(FOCUS_HEIGHT));
   LOKA_VERIFY(SceneFocusTestAccess::published(field.focusParticipant));
   controller.foreign = foreign.getContext();
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!(facts.first.state()->get() != Fact::none()));
   LOKA_VERIFY(!SceneFocusTestAccess::published(foreign.row));
   controller.foreign = 0;
@@ -1130,7 +1130,7 @@ void testFocusAppVisitedSpill()
       app.add(windows[i]->window);
     for (unsigned completion = 1; completion != 3; ++completion)
     {
-      app.reconcileFocus();
+      app.reconcileAtCompletion();
       for (unsigned i = 0; i != 10; ++i)
       {
         LOKA_VERIFY(windows[i]->platform.reads == before[i] + completion);
@@ -1201,7 +1201,7 @@ void testFocusPostCompletion()
   f.facts.first.post(FOCUS_HEIGHT);
   f.facts.first.post(FOCUS_WEIGHT);
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   NodeContext *native = 0;
   LOKA_VERIFY(f.platform.readNativeFocus(native) && native == f.weight.getContext());
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_WEIGHT));
@@ -1214,18 +1214,18 @@ void testFocusPostDeferred()
 {
   Fixture f;
   f.facts.first.post(FOCUS_OTHER);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
   EditTextNode later(EditTextProps().focusedAs(f.facts.first, FOCUS_OTHER));
   project(f.platform, f.scene, later);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_OTHER));
   NotifySubtreeNodeDetached(&f.height);
   f.facts.first.post(FOCUS_HEIGHT);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.height.props.focus_.requested());
   NotifySubtreeNodeAttached(&f.height);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_HEIGHT));
   LifecycleFactTestAccess::MarkSubtreeRetired(&later);
   later.setContext(0);
@@ -1236,11 +1236,11 @@ void testFocusPostInactive()
   Fixture f;
   f.platform.answered = false;
   f.facts.first.post(FOCUS_HEIGHT);
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.height.props.focus_.requested());
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
   f.platform.answered = true;
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_HEIGHT));
 }
 
@@ -1250,14 +1250,14 @@ void testFocusPostUserMove()
   f.focus(f.height);
   f.facts.first.post(FOCUS_HEIGHT);
   f.platform.simulateNativeFocus(f.weight.getContext());
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_WEIGHT));
   LOKA_VERIFY(!f.height.props.focus_.requested());
   replace(f.weight, f.facts.second, FOCUS_WEIGHT);
   f.focus(f.height);
   f.facts.first.post(FOCUS_HEIGHT);
   f.platform.simulateNativeFocus(f.weight.getContext());
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_HEIGHT));
 }
 
@@ -1280,7 +1280,7 @@ namespace
       }
       if (p.mode == 1) replace(p.fixture.height, p.fixture.facts.second, FOCUS_HEIGHT);
       p.fixture.facts.first.post(FOCUS_WEIGHT);
-      p.fixture.app.reconcileFocus();
+      p.fixture.app.reconcileAtCompletion();
     }
   };
 }
@@ -1294,13 +1294,13 @@ void testFocusPostConsumeCallbacks()
     State<Target> *pending = const_cast<State<Target> *>(static_cast<const State<Target> *>(f.height.props.focus_.request()));
     ConsumeCallback callback = {f, mode, 0};
     pending->bind(&ConsumeCallback::run, &callback, false);
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     pending->unbind(&ConsumeCallback::run, &callback);
     LOKA_VERIFY(callback.calls >= 1);
     LOKA_VERIFY(f.weight.props.focus_.requested());
     LOKA_VERIFY(mode == 2 ? f.facts.first.state()->get().is(FOCUS_HEIGHT)
                           : !(f.facts.first.state()->get() != Fact::none()));
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     LOKA_VERIFY(f.facts.first.state()->get().is(FOCUS_WEIGHT));
   }
 }
@@ -1346,7 +1346,7 @@ void testFocusPostNativeCallback()
   project(platform, *window.scene(), target);
   platform.retire = &target;
   fact.post(FOCUS_HEIGHT);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!platform.retire && !target.getContext());
   LOKA_VERIFY(!(fact.state()->get() != Fact::none()));
   LOKA_VERIFY(!target.props.focus_.requested());
@@ -1392,24 +1392,24 @@ void testFocusPostInitialAndShow()
   app.flush();
   PostScreen &screen = *static_cast<PostScreen *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window.scene()));
   LOKA_VERIFY(!(screen.focus.state()->get() != Fact::none()));
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(FOCUS_HEIGHT));
   screen.parked.set(false);
   screen.focus.post(FOCUS_OTHER);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(FOCUS_HEIGHT));
   screen.parked.set(true);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(FOCUS_OTHER));
   screen.focus.post(FOCUS_HEIGHT);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   screen.shown.set(false);
   screen.focus.post(FOCUS_HEIGHT);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!(screen.focus.state()->get() != Fact::none()));
   screen.shown.set(true);
   screen.focus.state()->bind(&PostScreen::hide, &screen, false);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   screen.focus.state()->unbind(&PostScreen::hide, &screen);
   LOKA_VERIFY(!screen.shown.get());
   LOKA_VERIFY(!(screen.focus.state()->get() != Fact::none()));
@@ -1483,7 +1483,7 @@ void testFocusPostDeclaration()
   app.flush();
   PostDeclarationScreen &screen = *static_cast<PostDeclarationScreen *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window.scene()));
   LOKA_VERIFY(!(screen.focus.state()->get() != Fact::none()));
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(FOCUS_WEIGHT));
 }
 
@@ -1497,7 +1497,7 @@ void testFocusPostD1Continues()
   f.facts.second.post(FOCUS_OTHER);
   f.platform.simulateNativeFocus(f.weight.getContext());
   const unsigned reads = f.platform.reads;
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(!f.height.props.focus_.requested());
   LOKA_VERIFY(f.facts.second.state()->get().is(FOCUS_OTHER));
   // Admission, Null write confirmation, common readback; no D1-only extra read.
@@ -1575,12 +1575,12 @@ void testFocusPostLazyRow()
   app.flush();
   LazyPostScreen &screen = *static_cast<LazyPostScreen *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window.scene()));
   LOKA_VERIFY(!hasFocusKey(&screen, screen.focus, 31));
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!screen.focus.state()->get().is(31));
   screen.viewport.set(Frame(0, 600, 200, 40));
   app.flush();
   LOKA_VERIFY(hasFocusKey(&screen, screen.focus, 31));
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(31));
 }
 
@@ -1622,7 +1622,7 @@ void testFocusPostBatchCapacity()
   app.flush();
   CapacityPostScreen &screen = *static_cast<CapacityPostScreen *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*window.scene()));
   LOKA_VERIFY(screen.focus.isValid());
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(screen.focus.state()->get().is(FOCUS_HEIGHT));
 #else
   std::printf("[skip] capacity death pin requires Linux debug without ASan; release tests overflow fallback.\n");
@@ -1653,7 +1653,7 @@ void testFocusPostConsumeRunsScene()
   const FocusBinding binding = EditTextProps().focusedAs(screen.focus, FOCUS_HEIGHT).focus_;
   State<Target> *pending = const_cast<State<Target> *>(static_cast<const State<Target> *>(binding.request()));
   pending->bind(&hideDuringConsume, &screen, false, true);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!screen.shown.get());
   LOKA_VERIFY(!binding.requested());
   LOKA_VERIFY(!(screen.focus.state()->get() != Fact::none()));
@@ -1723,7 +1723,7 @@ void testFocusPostNativeRefusal()
   EditTextNode target(EditTextProps().focusedAs(fact, FOCUS_HEIGHT));
   project(platform, *window.scene(), target);
   fact.post(FOCUS_HEIGHT);
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   LOKA_VERIFY(!target.props.focus_.requested());
   LOKA_VERIFY(!(fact.state()->get() != Fact::none()));
   LifecycleFactTestAccess::MarkSubtreeRetired(&target);
@@ -1739,7 +1739,7 @@ void testFocusPostD1RetiresObservation()
   pending->bind(&retireD1Observation, &f, false, true);
   f.platform.simulateNativeFocus(f.weight.getContext());
   const unsigned reads = f.platform.reads;
-  f.app.reconcileFocus();
+  f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.platform.reads == reads + 1);
   LOKA_VERIFY(!f.weight.getContext() && !f.height.props.focus_.requested());
   LOKA_VERIFY(!(f.facts.first.state()->get() != Fact::none()));
@@ -1764,7 +1764,7 @@ void testFocusSeatCompletionProjectsNextTurn()
       Operation turn;
       turn.settle();
       app.admitAndApplyWindows();
-      app.reconcileFocus();
+      app.reconcileAtCompletion();
       LOKA_VERIFY(!screen.shown.get() && screen.focus.state()->get().is(FOCUS_HEIGHT));
       // C1: second admission precedes close and cannot consume this commit.
       app.admitAndApplyWindows();
@@ -1778,7 +1778,7 @@ void testFocusSeatCompletionProjectsNextTurn()
     else
     {
       app.admitAndApplyWindows();
-      app.reconcileFocus();
+      app.reconcileAtCompletion();
       app.admitAndApplyWindows();
       app.reclaimWindows();
     }

@@ -55,7 +55,7 @@ public:
       O(input) conversion and bounded parsing, at most one inbox slot written. */
   loka::app::ReceiveResult receiveURL(const loka::core::String &text);
   /** Rail completion entry; enumerates current live windows after App work. */
-  void reconcileFocus();
+  void reconcileAtCompletion();
   enum CompletionEntry
   {
     COMPLETION_OUTERMOST,

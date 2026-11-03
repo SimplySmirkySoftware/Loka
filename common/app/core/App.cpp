@@ -723,7 +723,7 @@ void App::projectMenuSources()
   }
 }
 
-void App::reconcileFocus()
+void App::reconcileAtCompletion()
 {
   if (this->flushingWindowWork_ || !this->group_)
     return;

@@ -1656,3 +1656,8 @@ LOKA_TEST(testURLReceiveDeliveryQuit)
 LOKA_TEST(testURLReceiveDeliveryLaunch)
 LOKA_TEST(testURLReceiveDeliveryPending)
 LOKA_TEST(testURLReceiveDeliveryPendingWall)
+
+LOKA_TEST(testTextPositionIdentity)
+LOKA_TEST(testTextPlacementEquality)
+LOKA_TEST(testTextDocumentFactValues)
+LOKA_TEST(testTextPositionRequest)
