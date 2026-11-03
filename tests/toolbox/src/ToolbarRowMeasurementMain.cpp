@@ -16,6 +16,7 @@
 #include <Script.h>
 #include "platform/ToolboxPascalText.hpp"
 #include <cstring>
+#include <climits>
 #ifndef TOOLBAR_ROWS_LAPTOP
 #error TOOLBAR_ROWS_LAPTOP must select the measurement vehicle
 #elif TOOLBAR_ROWS_LAPTOP != 0 && TOOLBAR_ROWS_LAPTOP != 1
@@ -173,6 +174,123 @@ namespace
     GetFNum(requested, &font);
     GetFontName(font, actual);
     return actual[0] == requested[0] && !std::memcmp(actual + 1, requested + 1, requested[0]);
+  }
+
+  /** Include native scope entry and restoration in the warmed baseline. */
+  short FirstUseNative(const ToolboxScenePlatformController &controller,
+                       const ToolboxTextSelection &selection,
+                       const unsigned char *text)
+  {
+    ToolboxTextMeasureScope scope(controller, selection);
+    return StringWidth(text);
+  }
+
+  /** Fresh owner per key; setup, encoding and report IO are outside the brackets.
+      The complete door still includes its own encoding and both allocations. */
+  template <class Clock>
+  bool FirstUseState(AppConfigurable &config,
+                     Clock &clock,
+                     const char *name,
+                     short font,
+                     short size,
+                     Style face,
+                     std::FILE *out,
+                     long &extra)
+  {
+    WidthAuditApp appOwner(config);
+    ToolboxWindow window(config.getPlatformContext(), WindowProps().frame(1, 41, 100, 80).title("First use"));
+    window.setApp(&appOwner);
+    window.open();
+    if (!window.window())
+    {
+      std::fprintf(out, "[fail] first_use sel=%s no-window\n", name);
+      return false;
+    }
+    ToolboxScenePlatformController controller(&window);
+    ToolboxTextMeasureScope restore(controller);
+    TextFont(font);
+    TextSize(size);
+    TextFace(face);
+    const app::TextStyle style;
+    const ToolboxTextSelection selection = ToolboxTextSelection::resolve(
+        ToolboxTextFontDescriptor(style), ToolboxTextPortFont::read(reinterpret_cast<GrafPtr>(window.window())));
+    const core::String text = core::String::Literal("Medium title");
+    Str255 encoded;
+    if (!ToolboxEncodePascal(text, encoded))
+    {
+      std::fprintf(out, "[fail] first_use sel=%s encode\n", name);
+      return false;
+    }
+    for (unsigned warm = 0; warm < 3; ++warm)
+      FirstUseNative(controller, selection, encoded);
+    unsigned long start = clock.now();
+    const short nativeWidth = FirstUseNative(controller, selection, encoded);
+    const unsigned long nativeUs = clock.now() - start;
+    short firstWidth = 0, hitWidth = 0;
+    start = clock.now();
+    const bool firstAnswered = controller.measureTextAdvance(style, text, firstWidth);
+    const unsigned long firstUs = clock.now() - start;
+    start = clock.now();
+    const bool hitAnswered = controller.measureTextAdvance(style, text, hitWidth);
+    const unsigned long hitUs = clock.now() - start;
+    extra = static_cast<long>(firstUs) - static_cast<long>(nativeUs);
+    // Cache presence cannot prove that the second call opened no native scope.
+    std::fprintf(out,
+                 "first_use sel=%s native_us=%lu first_us=%lu hit_us=%lu extra_us=%ld table=?\n",
+                 name,
+                 nativeUs,
+                 firstUs,
+                 hitUs,
+                 extra);
+    const ToolboxCharWidthCache::Slot *slot = appOwner.charWidthCache().find(selection);
+    if (!firstAnswered || !hitAnswered || firstWidth != nativeWidth || hitWidth != nativeWidth || !slot
+        || !slot->widths)
+    {
+      std::fprintf(out, "[fail] first_use sel=%s missing-table-or-width-mismatch\n", name);
+      return false;
+    }
+    return true;
+  }
+
+  template <class Clock> bool RunFirstUse(AppConfigurable &config, Clock &clock, std::FILE *out)
+  {
+    /** Names are log tokens; null family preserves the application-font alias. */
+    const struct Selection
+    {
+      const char *name;
+      const char *family;
+      short size;
+      Style face;
+    } selections[] = {{"Geneva-12-plain", "Geneva", 12, normal},
+                      {"Times-12-bold", "Times", 12, bold},
+                      {"Monaco-9-plain", "Monaco", 9, normal},
+                      {"application-1-12", 0, 12, normal},
+                      {"Osaka-12-plain", "Osaka", 12, normal}};
+    long maxExtra = LONG_MIN;
+    bool ok = true;
+    for (unsigned i = 0; i < sizeof(selections) / sizeof(selections[0]); ++i)
+    {
+      const Selection &selection = selections[i];
+      short font = 1;
+      if (selection.family && !AuditFont(selection.family, font))
+      {
+        std::fprintf(out, "[fail] first_use sel=%s missing-font\n", selection.name);
+        ok = false;
+        continue;
+      }
+      long extra = 0;
+      const bool measured =
+          FirstUseState(config, clock, selection.name, font, selection.size, selection.face, out, extra);
+      if (extra > maxExtra)
+        maxExtra = extra;
+      if (!measured || extra > 3000)
+        ok = false;
+    }
+    std::fprintf(out,
+                 "first_use summary max_extra_us=%ld gate_us=3000 verdict=%s\n",
+                 maxExtra == LONG_MIN ? 0 : maxExtra,
+                 ok ? "PASS" : "FAIL");
+    return ok;
   }
 
   /** Compare the complete door, including encoding, against the selected native
@@ -472,6 +590,7 @@ namespace
                           && MeasureAlignedTitle(*window->scene(), *controller, self, out)
                           && MeasureAlignedTitleDraw(*window->asToolboxWindow(), self, out);
           std::fprintf(out, "toolbar_row_summary complete=%d cases=8\n", ok);
+          RunFirstUse(self, self, out);
           RunWidthAudit(self, out);
 #endif
           std::fclose(out);
