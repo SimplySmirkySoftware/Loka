@@ -24,4 +24,3 @@ log text=picture.NEO%20320x200
 step id=5 due_tick=3 tick=3 status=succeeded error_kind=0 error_code=0 name=pictures-loaded
 step id=6 due_tick=0 tick=3 status=succeeded error_kind=0 error_code=0 name=
 terminal status=succeeded
-log text=capture%20full_draws%3D3

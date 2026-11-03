@@ -110,7 +110,9 @@ public:
     if (!this->addPair(plan.damage, plan.dv) || !this->add(plan.repair.bar())
         || !this->addPair(ToolboxWindowSizeBoxRect(this->port_), plan.dv))
       return this->erase();
-    ScrollRect(&plan.copyDomain, 0, static_cast<short>(plan.dv), this->exposed_);
+    // Multiversal's ScrollRect takes a non-const Rect pointer; the plan stays const.
+    Rect domain = plan.copyDomain;
+    ScrollRect(&domain, 0, static_cast<short>(plan.dv), this->exposed_);
     if (!ToolboxRegionOK(this->exposed_))
       return this->recover();
     UnionRgn(this->repair_, this->exposed_, this->repair_);

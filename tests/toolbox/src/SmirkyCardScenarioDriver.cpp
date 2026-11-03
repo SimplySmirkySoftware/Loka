@@ -52,6 +52,10 @@ void SmirkyCardDrawTiming::writeEraseComparison(ToolboxWindow *window)
   if (!window || !window->scenePlatformController())
     return;
   const unsigned long before = this->count_;
+  // The capture count is read before the forced erase: the tracked audit must end with the flow's terminal
+  // record, so the "no full draw between the copy and the capture" fact lives here, beside the timing.
+  const unsigned long captureFullDraws =
+      static_cast<unsigned long>(window->scenePlatformController()->debugStatsForTesting().totalRenderCalls);
   window->requestInvalidate();
   window->flushInvalidate();
   const loka::testing::WholeDrawSample erased = this->last_;
@@ -65,6 +69,7 @@ void SmirkyCardDrawTiming::writeEraseComparison(ToolboxWindow *window)
   std::FILE *file = loka::platform::file::OpenWriteTruncate(destination);
   if (!file)
     return;
+  std::fprintf(file, "capture full_draws=%lu\n", captureFullDraws);
   if (this->copy_.elapsed.complete && erased.complete && this->count_ == before + 1)
   {
     std::fprintf(file,
@@ -278,14 +283,6 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
         this->clock_.advanceTo(this->clock_.currentTick() + 1);
         static_cast<smirkycard::CardScene *>(scene)->tickScenario();
         return; // The terminal step may have changed the presentation; capture on the next settled idle.
-      }
-      if (this->phase_ == RUNNING_ARROW)
-      {
-        char line[80];
-        std::sprintf(line,
-                     "capture full_draws=%lu",
-                     static_cast<unsigned long>(controller->debugStatsForTesting().totalRenderCalls));
-        this->audit_.recordLog(line);
       }
     }
   }
