@@ -150,6 +150,22 @@ here, not contracts.
   - Uncommitted IME text never enters the EDIT's body.
   - When `ImmNotifyIME(CPS_COMPLETE)` returns, the body is still unchanged.
     The committed characters arrive afterwards, as posted `WM_CHAR`.
+- **macOS** (macOS 26, a TextKit 1 `NSTextView` made the way the Loka rail
+  makes it; marked text set by the probe itself, not through a real input
+  method):
+  - Marked text is inside the `NSTextStorage` string while composing;
+    `hasMarkedText` and `markedRange` report it.
+  - `unmarkText` commits synchronously: the committed text is in the storage
+    when the call returns.
+  - `[[view inputContext] discardMarkedText]` changes neither the body nor
+    the marked text.
+  - The storage delegate reports an edited range and a change in length for
+    every change, Loka's own writes included. `textDidChange:` fires only for
+    changes made through the view.
+  - Writing the storage directly (`replaceCharactersInRange:withString:`,
+    `setString:`) registers no undo action.
+  - Not yet observed: the order in which a real input method calls
+    `setMarkedText:` and `insertText:`, and Mac OS X 10.4 to 10.6.
 - **Toolbox MLTE 1.3** (Mac OS 9.2):
   - `TXNSetData` advances `TXNGetChangeCount` by two and leaves an undoable
     action.
