@@ -732,3 +732,13 @@ loka_compile_pin(url-opener-overflow
   REFUSES pins/refuses_url_opener_overflow.cpp
   ACCEPTS pins/accepts_url_opener_overflow.cpp
 )
+
+loka_compile_pin(url-inbox-zero
+  REFUSES pins/refuses_url_inbox_zero.cpp
+  ACCEPTS pins/accepts_url_inbox_zero.cpp
+)
+
+loka_compile_pin(url-inbox-overflow
+  REFUSES pins/refuses_url_inbox_overflow.cpp
+  ACCEPTS pins/accepts_url_inbox_overflow.cpp
+)
