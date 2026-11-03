@@ -294,6 +294,7 @@ public:
   void requestInvalidateRectImpl(const Rect &);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
+  bool hasPendingFullInvalidate() const;
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
   void drawForFlush(const ToolboxPresentBatch &sealed = ToolboxPresentBatch());

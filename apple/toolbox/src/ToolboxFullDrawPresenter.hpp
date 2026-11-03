@@ -128,6 +128,7 @@ public:
       this->erased_->noteErased(this->repair_, this->scratch_);
     return TOOLBOX_PRESENT_COPIED;
   }
+
 private:
   ToolboxPresentExecuted erase()
   {

@@ -51,6 +51,8 @@ public:
   void requestInvalidateRect(const Rect &rect);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
+  /** True while the next batch already holds a full request: a rectangle posted now is covered by it. */
+  bool hasPendingFullInvalidate() const;
   bool handleMouseDown(const Point &globalPoint, const EventRecord &event);
   bool offerKeyEvent(const EventRecord &event);
   /** Tracks a grow-box drag from the given global mouse-down point, resizes

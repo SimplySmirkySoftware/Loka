@@ -60,3 +60,8 @@ bool ToolboxWindow::hasPendingInvalidate() const
 {
   return !this->next_.empty();
 }
+
+bool ToolboxWindow::hasPendingFullInvalidate() const
+{
+  return this->next_.full();
+}

@@ -144,6 +144,42 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
                      stats.lastMovedPresentObservation.outsideKinds(),
                      stats.lastMovedPresentObservation.unitChanged() ? 1 : 0);
         this->audit_.recordLog(line);
+        {
+          const ToolboxPresentResult &moved = stats.lastMovedPresentObservation;
+          const Rect &d = moved.copyDomain();
+          const Rect &dm = moved.damage();
+          const Rect &b = moved.repair().bar();
+          const Rect u = moved.repair().count() ? moved.repair().unit(0) : Rect();
+          std::sprintf(line,
+                       "arrow repair domain=%d,%d,%d,%d damage=%d,%d,%d,%d units=%u unit0=%d,%d,%d,%d bar=%d,%d,%d,%d "
+                       "sealed=%u refused=%d",
+                       d.top,
+                       d.left,
+                       d.bottom,
+                       d.right,
+                       dm.top,
+                       dm.left,
+                       dm.bottom,
+                       dm.right,
+                       moved.repair().count(),
+                       u.top,
+                       u.left,
+                       u.bottom,
+                       u.right,
+                       b.top,
+                       b.left,
+                       b.bottom,
+                       b.right,
+                       moved.sealedRects().count(),
+                       moved.repair().refused() ? 1 : 0);
+          this->audit_.recordLog(line);
+          for (unsigned i = 0; i < moved.sealedRects().count(); ++i)
+          {
+            const Rect &r = moved.sealedRects().at(i);
+            std::sprintf(line, "arrow sealed%u=%d,%d,%d,%d", i, r.top, r.left, r.bottom, r.right);
+            this->audit_.recordLog(line);
+          }
+        }
         this->phase_ = RUNNING_ARROW;
         return;
       }

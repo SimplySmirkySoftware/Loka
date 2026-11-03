@@ -2145,13 +2145,17 @@ namespace
     LOKA_VERIFY(observation.reasonNames() == "layout_dirty+viewport_input");
     LOKA_VERIFY(observation.reasons()
                 == ((1U << TOOLBOX_FULL_DRAW_LAYOUT_DIRTY) | (1U << TOOLBOX_FULL_DRAW_VIEWPORT_INPUT)));
-    LOKA_VERIFY(observation.rectRequests() && observation.refusal() == TOOLBOX_PRESENT_REPAIR_TOO_LARGE);
+    // The whole-boundary fallback rectangle is no longer posted behind the pending full request, so the
+    // sealed batch carries no rectangle and the viewport input attempt is a copy candidate.
+    LOKA_VERIFY(!observation.rectRequests() && observation.refusal() == TOOLBOX_PRESENT_ADMITTED
+                && observation.verdict() == TOOLBOX_PRESENT_COPY);
     LOKA_VERIFY(fullPending);
     LOKA_VERIFY(firstRequest && std::strcmp(firstRequest, "viewport_input") == 0);
     LOKA_VERIFY(after.windowFlushFullCount == before.windowFlushFullCount + 1);
     LOKA_VERIFY(after.windowFlushDirtyCount == before.windowFlushDirtyCount);
-    // Scene's later global layout retains its one rectangle fallback request.
-    LOKA_VERIFY(after.windowRectRequestCount == 1);
+    // Scene's later global layout no longer posts its rectangle fallback: the full request already in the
+    // next batch covers it, so the sealed batch stays rectangle-free for copy admission.
+    LOKA_VERIFY(after.windowRectRequestCount == 0);
     if (followUp)
       LOKA_VERIFY(after.requestInvalidateCallCount == 1);
   }
@@ -2212,7 +2216,8 @@ namespace
       }
       f.draw();
       LOKA_VERIFY(f.last().contentInputs() == 0);
-      LOKA_VERIFY(f.last().rectRequests() && f.last().refusal() == TOOLBOX_PRESENT_REPAIR_TOO_LARGE);
+      LOKA_VERIFY(!f.last().rectRequests() && f.last().refusal() == TOOLBOX_PRESENT_ADMITTED
+                  && f.last().verdict() == TOOLBOX_PRESENT_COPY);
     }
   }
   void presentContainerInputNotCounted()
