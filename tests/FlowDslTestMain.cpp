@@ -182,6 +182,7 @@
 #include "StyleTests.hpp"
 #include "WebURLTests.hpp"
 #include "IncomingURLTests.hpp"
+#include "URLInboxTests.hpp"
 #include "URLOpenerTests.hpp"
 #include "URLOpenerAppTests.hpp"
 #include "TextFamilyTests.hpp"
