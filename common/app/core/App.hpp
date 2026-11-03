@@ -10,6 +10,7 @@
 #include "core/util/OwnedDef.hpp"
 #include "app/core/DialogResultDelivery.hpp"
 #include <cassert>
+#include "app/url/URLOpenKind.hpp"
 
 class Window;
 class AppComposition;
@@ -19,6 +20,8 @@ namespace loka
   namespace app
   {
     class WindowSeat;
+    class WebURL;
+    class URLOpenerBase;
     namespace scene { class Scene; }
     namespace testing
     {
@@ -46,6 +49,16 @@ public:
   virtual void run();
   /** Rail completion entry; enumerates current live windows after App work. */
   void reconcileFocus();
+  enum CompletionEntry
+  {
+    COMPLETION_OUTERMOST,
+    COMPLETION_INHERITED_CLOCK
+  };
+  /** Open direction only. Caller captures Operation::hasActive() before
+      constructing its turn. A true result requires another admission before
+      closing that turn. At most one URL per outer completion; empty is O(1),
+      otherwise walks this App's group rows once before the native call. */
+  bool serveURLsAtCompletion(CompletionEntry entry);
   virtual void quit() = 0;
   /** Ask each document in roster order; any decline published after the ask ends this attempt. */
   void requestQuit();
@@ -161,6 +174,9 @@ private:
       edit could have left its snapshot mismatched. */
   unsigned short admitDocumentWindows(AdoptionPhase phase);
   loka::app::WindowSeat *windowSeat_;
+  /** Config-owned borrow; remains valid through App retirement and destruction. */
+  loka::app::URLOpenerBase *urlOpener_;
+  static loka::app::URLOpenKind openURLThunk(const loka::app::WebURL &url, void *context);
   /** One outstanding quit request, with explicit absence and no parallel flags. */
   struct QuitAttempt
   {

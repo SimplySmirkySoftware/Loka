@@ -1726,6 +1726,25 @@ children that have no natural width, taking zero when nothing is left. In a
 shared Row, it takes an equal share with the other children without declared
 widths. It is as tall as an empty Box.
 
+### macOS Window Placement
+
+A declared window frame opens inside the work area of the primary display,
+native chrome included. On macOS the primary display is the one with the menu
+bar, whichever display currently has focus. Window coordinates always use that
+display: x from its left edge and y downward from the top of its visible area,
+so a window on another display reports coordinates in the same space.
+
+When the app writes a new frame later, the window is kept inside the display
+the new frame overlaps most, so an app can move a window to another display. A
+frame that overlaps no display is placed on the menu-bar display. (Windows
+picks the nearest monitor in that case.)
+
+Writing a window's reported frame back leaves the window where it is, as long
+as the window lies fully inside one display's visible area and its size has not
+been changed by the user to a value between layout units. A window on a display
+to the left of or above the menu-bar display reports a negative coordinate,
+which a frame treats as unspecified (`Frame::hasPosition()` is false).
+
 ### Spacing: Gaps, Padding, And The Window Margin
 
 Use `gap(...)` on `VStack`, `HStack`, `Stack`, or `Box` for the space between

@@ -2,6 +2,7 @@
 #define LOKA_PLATFORMCONTEXT_HPP
 
 #include <cstddef>
+#include "app/url/URLOpenKind.hpp"
 #include "app/TextCapacity.hpp"
 #include "app/NativeResourceRetirement.hpp"
 
@@ -46,6 +47,7 @@ namespace loka
 
   namespace app
   {
+    class WebURL;
     namespace scene
     {
       class Scene;
@@ -63,6 +65,12 @@ public:
   {
     (void)out;
     return false;
+  }
+  /** Synchronous system acceptance; targets without a mechanism decline. */
+  virtual loka::app::URLOpenKind openURL(const loka::app::WebURL &url)
+  {
+    (void)url;
+    return loka::app::URL_UNAVAILABLE;
   }
   PlatformContext() {}
   virtual ~PlatformContext() {}

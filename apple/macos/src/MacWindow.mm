@@ -237,6 +237,37 @@ void MacWindow::TitleChangedThunk(void *userData)
 
 namespace
 {
+  // Same menu-bar display choice as MacPlatformContext::queryMainDisplayDepth.
+  // Keep these two selections aligned; mainScreen follows the key window.
+  static NSScreen *PlacementScreen()
+  {
+    NSArray *screens = [NSScreen screens];
+    return [screens count] ? [screens objectAtIndex:0] : nil;
+  }
+
+  // Deliberate twin of Win32Window.cpp's ClampOuterRectToWorkArea: later
+  // writes choose the largest overlap with the proposed outer frame. Win32
+  // falls back to the nearest monitor; macOS deliberately uses PlacementScreen.
+  // #712's primary-display work area applies to declared creation placement.
+  static NSScreen *ClampScreenForFrame(NSRect frame)
+  {
+    NSArray *screens = [NSScreen screens];
+    NSScreen *best = nil;
+    CGFloat largestArea = 0.0;
+    for (NSUInteger i = 0; i < [screens count]; ++i)
+    {
+      NSScreen *screen = [screens objectAtIndex:i];
+      const NSRect overlap = NSIntersectionRect(frame, [screen frame]);
+      const CGFloat area = overlap.size.width * overlap.size.height;
+      if (area > largestArea)
+      {
+        best = screen;
+        largestArea = area;
+      }
+    }
+    return best ? best : PlacementScreen();
+  }
+
   static CGFloat VisibleTopForScreen(NSScreen *screen)
   {
     if (!screen)
@@ -312,11 +343,7 @@ namespace
     }
     const NSRect frameRect = [window frame];
     const NSRect contentRect = [window contentRectForFrameRect:frameRect];
-    NSScreen *screen = [window screen];
-    if (!screen)
-    {
-      screen = [NSScreen mainScreen];
-    }
+    NSScreen *screen = PlacementScreen();
     // The origin is the exact inverse of FrameRectForContent: x and y place
     // the outer frame (y is its top's offset below the visible top), as the
     // intent does, so frameState().set(nativeFrame().get()) does not move the
@@ -349,11 +376,7 @@ void MacWindow::FrameChangedThunk(void *userData)
   const loka::macos::MacRect intent = self->projection().projectClientSize(frame.width, frame.height);
   CGFloat width = frame.width > 0 ? intent.r.size.width : currentContent.size.width;
   CGFloat height = frame.height > 0 ? intent.r.size.height : currentContent.size.height;
-  NSScreen *screen = [window screen];
-  if (!screen)
-  {
-    screen = [NSScreen mainScreen];
-  }
+  NSScreen *screen = PlacementScreen();
   const bool sameContentSize = currentContent.size.width == intent.r.size.width
                                && currentContent.size.height == intent.r.size.height;
   bool samePosition = !frame.hasPosition();
@@ -381,7 +404,7 @@ void MacWindow::FrameChangedThunk(void *userData)
   {
     nextFrame.origin.y = currentFrame.origin.y;
   }
-  nextFrame = ClampFrameToVisibleFrame(nextFrame, screen);
+  nextFrame = ClampFrameToVisibleFrame(nextFrame, ClampScreenForFrame(nextFrame));
   [window setFrame:nextFrame display:YES];
 }
 
@@ -417,7 +440,7 @@ void MacWindow::createNativeWindow()
   // Tab follows AppKit's geometric key-view loop, recomputed as Show, Keyed and
   // LazyView add or remove fields; a chain kept by the rail went stale (129d353a).
   [window setAutorecalculatesKeyViewLoop:YES];
-  NSScreen *screen = [NSScreen mainScreen];
+  NSScreen *screen = PlacementScreen();
   NSRect frame = FrameRectForContent(x, y, width, height, style, screen);
   frame = ClampFrameToVisibleFrame(frame, screen);
   [window setFrame:frame display:NO];

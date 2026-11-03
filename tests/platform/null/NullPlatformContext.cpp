@@ -10,7 +10,10 @@
 #include "platform/null/NullWindow.hpp"
 
 NullPlatformContext::NullPlatformContext()
-    : applicationDirectory_(),
+    : urlScript_(0),
+      urlScriptUser_(0),
+      openedURLs_(),
+      applicationDirectory_(),
       hasApplicationDirectory_(false)
 {
 }
@@ -80,4 +83,10 @@ bool NullPlatformContext::createImageFromBlob(const loka::core::resource::Blob &
   (void)length;
   out = loka::core::resource::Image::Empty();
   return false;
+}
+
+loka::app::URLOpenKind NullPlatformContext::openURL(const loka::app::WebURL &url)
+{
+  this->openedURLs_.push_back(url);
+  return this->urlScript_ ? this->urlScript_(url, this->urlScriptUser_) : loka::app::URL_OPENED;
 }

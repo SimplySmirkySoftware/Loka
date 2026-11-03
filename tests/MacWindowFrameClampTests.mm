@@ -15,15 +15,40 @@ namespace
 {
   typedef loka::dsl::testing::MacWindowTestAccess NativeAccess;
 
-  void verifyPlacedFrame(MacWindow &window, NSSize expectedContentSize)
+  NSScreen *primaryScreen()
+  {
+    NSArray *screens = [NSScreen screens];
+    return [screens count] ? [screens objectAtIndex:0] : nil;
+  }
+
+  NSScreen *expectedClampScreen(NSRect frame)
+  {
+    NSArray *screens = [NSScreen screens];
+    NSScreen *result = primaryScreen();
+    CGFloat largestArea = 0.0;
+    for (NSUInteger i = 0; i < [screens count]; ++i)
+    {
+      NSScreen *screen = [screens objectAtIndex:i];
+      const NSRect overlap = NSIntersectionRect(frame, [screen frame]);
+      const CGFloat area = overlap.size.width * overlap.size.height;
+      if (area > largestArea)
+      {
+        result = screen;
+        largestArea = area;
+      }
+    }
+    return result;
+  }
+
+  void verifyPlacedFrame(MacWindow &window, NSSize expectedContentSize, NSScreen *containmentScreen)
   {
     NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
     LOKA_VERIFY(native != nil);
     LOKA_VERIFY([native isVisible]);
-    NSScreen *screen = [native screen];
+    NSScreen *screen = primaryScreen();
     LOKA_VERIFY(screen != nil);
     const NSRect frame = [native frame];
-    LOKA_VERIFY(NSContainsRect([screen visibleFrame], frame));
+    LOKA_VERIFY(NSContainsRect([containmentScreen visibleFrame], frame));
     const NSRect content = [native contentRectForFrameRect:frame];
     LOKA_VERIFY(NSEqualSizes(content.size, expectedContentSize));
 
@@ -54,7 +79,7 @@ void testMacWindowDeclaredFrameStaysInsideVisibleFrame()
   [NSApplication sharedApplication];
   {
     NullPlatformContext context;
-    NSScreen *screen = [NSScreen mainScreen];
+    NSScreen *screen = primaryScreen();
     LOKA_VERIFY(screen != nil);
     const NSRect visible = [screen visibleFrame];
     WindowProps props;
@@ -66,12 +91,23 @@ void testMacWindowDeclaredFrameStaysInsideVisibleFrame()
     // Like the admission sibling's initial seed, construction enters the
     // visibility path and makeKeyAndOrderFront: synchronously.
     MacWindow window(&context, props);
-    verifyPlacedFrame(window, loka::macos::MacProjection(
-        NativeAccess::contentView(window), loka::macos::DefaultRailMetrics()).projectClientSize(257, 163).r.size);
+    verifyPlacedFrame(window,
+                      loka::macos::MacProjection(NativeAccess::contentView(window), loka::macos::DefaultRailMetrics())
+                          .projectClientSize(257, 163)
+                          .r.size,
+                      screen);
     LOKA_VERIFY(window.nativeFrame().get().width == 257);
     LOKA_VERIFY(window.nativeFrame().get().height == 163);
 
     const loka::core::Frame first = window.nativeFrame().get();
+    NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(window);
+    NSRect requested = [native frame];
+    requested.origin.x = static_cast<int>(NSMaxX(visible)) + 100;
+    CGFloat top = NSMaxY(visible);
+    if (visible.size.height >= [screen frame].size.height - 1.0)
+      top = NSMaxY([screen frame]) - [[NSStatusBar systemStatusBar] thickness];
+    requested.origin.y = top - 40 - requested.size.height;
+    NSScreen *expectedScreen = expectedClampScreen(requested);
     {
       loka::core::StateTrackerGuard guard(window.getTracker());
       // Still off-screen horizontally, but a different y makes a missing
@@ -79,15 +115,18 @@ void testMacWindowDeclaredFrameStaysInsideVisibleFrame()
       window.frameState().set(loka::core::Frame(
           static_cast<int>(NSMaxX(visible)) + 100, 40, 257, 163));
     }
-    verifyPlacedFrame(window, loka::macos::MacProjection(
-        NativeAccess::contentView(window), loka::macos::DefaultRailMetrics()).projectClientSize(257, 163).r.size);
+    verifyPlacedFrame(window,
+                      loka::macos::MacProjection(NativeAccess::contentView(window), loka::macos::DefaultRailMetrics())
+                          .projectClientSize(257, 163)
+                          .r.size,
+                      expectedScreen);
     LOKA_VERIFY(window.nativeFrame().get().width == 257);
     LOKA_VERIFY(window.nativeFrame().get().height == 163);
     LOKA_VERIFY(window.nativeFrame().get() != first);
   }
   {
     NullPlatformContext context;
-    NSScreen *screen = [NSScreen mainScreen];
+    NSScreen *screen = primaryScreen();
     LOKA_VERIFY(screen != nil);
     const NSRect visible = [screen visibleFrame];
     const int width = static_cast<int>(visible.size.width) + 100;
@@ -101,7 +140,7 @@ void testMacWindowDeclaredFrameStaysInsideVisibleFrame()
     // An oversized request fills the work area with the outer frame; content
     // must leave room for the native chrome rather than retaining its request.
     const NSRect expectedContent = [native contentRectForFrameRect:visible];
-    verifyPlacedFrame(window, expectedContent.size);
+    verifyPlacedFrame(window, expectedContent.size, screen);
     LOKA_VERIFY(window.nativeFrame().get().width < width);
     LOKA_VERIFY(window.nativeFrame().get().height < height);
   }
