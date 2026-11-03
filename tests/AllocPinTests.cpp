@@ -544,7 +544,7 @@ void allocpin::RunFocusCompletionAllocPin()
     if (i != 2 && i != 7)
       continue;
     app.settle();
-    app.reconcileFocus();
+    app.reconcileAtCompletion();
     for (int capture = 0; capture != 2; ++capture)
     {
       unsigned before[8];
@@ -552,7 +552,7 @@ void allocpin::RunFocusCompletionAllocPin()
         before[n] = controllers[n].reads;
       BeginCapture(capture);
       for (int completion = 0; completion != 4; ++completion)
-        app.reconcileFocus();
+        app.reconcileAtCompletion();
       EndCapture();
       const unsigned long allocations = CaptureAllocCount(capture);
       std::fprintf(stderr, "Focus completion: windows=%u capture=%d completions=4 allocations=%lu\n",

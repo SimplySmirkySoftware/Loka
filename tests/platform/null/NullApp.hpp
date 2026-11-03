@@ -20,7 +20,7 @@ public:
   virtual void run()
   {
     App::run();
-    this->reconcileFocus();
+    this->reconcileAtCompletion();
   }
 
   virtual void quit()

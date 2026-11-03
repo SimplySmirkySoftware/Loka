@@ -22,7 +22,7 @@ namespace loka
           core::Operation turn;
           turn.settle();
           app.admitAndApplyWindows();
-          app.reconcileFocus();
+          app.reconcileAtCompletion();
           const bool served = app.serveURLsAtCompletion(entry);
           if (served)
             app.admitAndApplyWindows();
@@ -44,7 +44,7 @@ namespace loka
         static void flushWindowInvalidations(App &app)
         {
           app.flushWindowInvalidations();
-          app.reconcileFocus();
+          app.reconcileAtCompletion();
         }
       };
     }

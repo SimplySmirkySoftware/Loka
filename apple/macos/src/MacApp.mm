@@ -221,7 +221,7 @@ void MacApp::flushInvalidationsTick()
     turn.settle();
     this->admitAndApplyWindows();
     MacScenePlatformController::flushPendingRelayouts();
-    this->reconcileFocus();
+    this->reconcileAtCompletion();
     turn.close();
     // Native dealloc chains may autorelease, including on direct tick entry.
     NSAutoreleasePool *retirementPool = [[NSAutoreleasePool alloc] init];
