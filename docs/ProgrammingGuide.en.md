@@ -2100,7 +2100,12 @@ The registration copies the `Match`.
 - Keep the `Match` and all app data its arms point at valid for the app
   config's lifetime. Destroying the copy must do nothing observable: no
   callbacks and no State writes.
-- Delivery to the `Match` arms is not wired yet; it arrives in a later change.
+- Received URLs reach the first matching arm in FIFO order, at most one per
+  outer completion, before outgoing URLs open. Arms must finish synchronously;
+  they may update config-owned state under its guard, open documents, or post
+  outgoing URLs. Delivery pauses during a quit attempt and resumes if it is
+  refused. URLs collected at launch run before document windows are admitted.
+  Native URL entry and completion wiring are still pending on each platform.
 
 ## 18. Ownership And Resource Management
 

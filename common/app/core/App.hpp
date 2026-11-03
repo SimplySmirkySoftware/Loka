@@ -61,10 +61,14 @@ public:
     COMPLETION_OUTERMOST,
     COMPLETION_INHERITED_CLOCK
   };
-  /** Open direction only. Caller captures Operation::hasActive() before
-      constructing its turn. A true result requires another admission before
-      closing that turn. At most one URL per outer completion; empty is O(1),
-      otherwise walks this App's group rows once before the native call. */
+  /** Caller captures inherited clock status before constructing its turn.
+      Refuses inherited clocks and busy Scenes. Receives at most one queued
+      URL from a registered seat when no quit attempt is active, then opens
+      at most one queued URL from a registered idle opener; re-reads open
+      eligibility after the arm. True requires another
+      admission before closing the turn. Once per outer completion: O(1) when
+      neither direction is due, otherwise one walk of this App's group rows,
+      one fresh receive chain and at most one native open. */
   bool serveURLsAtCompletion(CompletionEntry entry);
   virtual void quit() = 0;
   /** Ask each document in roster order; any decline published after the ask ends this attempt. */
@@ -98,6 +102,9 @@ public:
   }
 
 protected:
+  /** Once per composition bootstrap after registration; default O(1), empty. */
+  virtual void collectLaunchRequests() {}
+
   /** Rails that own projection state call this first in their destructor;
       the base destructor's own call is the fallback for rails that own none.
       Repeated calls derive their work from the remaining group and close queue. */
@@ -184,6 +191,10 @@ private:
   loka::app::URLReceiveSeatBase *urlReceiveSeat_;
   /** Config-owned borrow; remains valid through App retirement and destruction. */
   loka::app::URLOpenerBase *urlOpener_;
+  /** One shared walk over this App's rows per completion with work due. */
+  bool anySceneBusy() const;
+  /** One receive from completion, or each entry in the launch batch. */
+  bool serveReceive();
   static loka::app::URLOpenKind openURLThunk(const loka::app::WebURL &url, void *context);
   /** One outstanding quit request, with explicit absence and no parallel flags. */
   struct QuitAttempt
