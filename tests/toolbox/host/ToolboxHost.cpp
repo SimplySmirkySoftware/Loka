@@ -19,7 +19,7 @@ namespace toolbox_host
   long fontForce = 0;
   short fontScript = smRoman;
   short lastScriptFont = -1;
-  unsigned fontScriptReads = 0;
+  unsigned fontScriptReads = 0, defaultFontReads = 0;
   int positionMode = 0;
   unsigned beeps = 0;
   unsigned scriptReads = 0;
@@ -65,7 +65,10 @@ long GetScriptManagerVariable(short selector)
   assert(false);
   return 0;
 }
-bool LMGetFractEnable() { return toolbox_host::fractionalWidths; }
+bool LMGetFractEnable()
+{
+  return toolbox_host::fractionalWidths;
+}
 short FontToScript(short font)
 {
   ++toolbox_host::fontScriptReads;
@@ -74,16 +77,7 @@ short FontToScript(short font)
 }
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}},
-                          7,
-                          12,
-                          0,
-                          blackColor,
-                          HostPortState(),
-                          0,
-                          0
-                          , 0, 0, 0
-  };
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState(), 0, 0, 0, 0, 0};
   GrafPtr port = &initialPort;
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)
@@ -163,6 +157,7 @@ void TextFace(Style value)
 }
 short GetDefFontSize()
 {
+  ++toolbox_host::defaultFontReads;
   return toolbox_host::defaultFontSize;
 }
 short GetSysFont()
@@ -188,8 +183,15 @@ void MeasureText(short count, const void *bytes, void *charLocs)
       continue;
     positions[i] = static_cast<short>(i * (port->txSize / 3 + ((port->txFace & bold) ? 1 : 0)));
   }
-  if (toolbox_host::positionMode == 2 && count > 2) positions[2] = 0;
-  if (toolbox_host::positionMode == 3) positions[0] = 1;
+  if (toolbox_host::positionMode == 2 && count > 2)
+    positions[2] = 0;
+  if (toolbox_host::positionMode == 3)
+    positions[0] = 1;
+  if (toolbox_host::positionMode == 4 && count > 2)
+  {
+    positions[1] = -32768;
+    positions[2] = 32767;
+  }
 }
 short TextWidth(const void *bytes, short offset, short length)
 {
