@@ -70,6 +70,7 @@ struct HostControl
   Rect rect;
   bool visible;
   bool &contrlVis;
+  short &contrlHilite;
   HostControl &operator*()
   {
     return *this;
@@ -84,7 +85,8 @@ struct HostControl
         owner(0),
         rect(),
         visible(false),
-        contrlVis(visible)
+        contrlVis(visible),
+        contrlHilite(hilite)
   {
   }
 };

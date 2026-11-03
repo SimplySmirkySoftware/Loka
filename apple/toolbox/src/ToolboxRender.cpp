@@ -15,11 +15,13 @@ ToolboxPresentObservation::Interval::~Interval()
                                        : this->coversWindow_                         ? TOOLBOX_PAINT_CLEAN
                                                                                      : TOOLBOX_PAINT_REFUSED);
   this->ledger_.settlePresented(this->observation_.eligibility_);
-  this->debugStats_.lastPresentObservation = this->observation_;
+  this->debugStats_.lastPresentObservation = ToolboxPresentResult(
+      this->observation_, this->executed_, this->debugStats_.renderCalls, this->debugStats_.totalRenderCalls);
   this->debugStats_.lastPresentEntryEligibility = this->entryEligibility_;
   if (this->observation_.viewports() > 0)
   {
-    this->debugStats_.lastMovedPresentObservation = this->observation_;
+    this->debugStats_.lastMovedPresentObservation = ToolboxPresentResult(
+        this->observation_, this->executed_, this->debugStats_.renderCalls, this->debugStats_.totalRenderCalls);
     this->debugStats_.lastMovedEntryEligibility = this->entryEligibility_;
   }
   const unsigned next = this->observation_.nextReasons_;
@@ -28,7 +30,7 @@ ToolboxPresentObservation::Interval::~Interval()
 }
 
 /** Included by the production controller and Linux host fixture. */
-void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
+ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
 {
   PROFILE_FUNC();
   if (this->observation_.paintInProgress() || this->inBatchUpdate_)
@@ -37,7 +39,7 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     assert(false && "render must not re-enter an open paint interval");
 #endif
     LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_OBLIGATION_UNMET);
-    return;
+    return TOOLBOX_PRESENT_ERASED;
   }
   const bool coversWindow =
       this->window_ && this->window_->window() && this->erasedPass_.dischargesDamage(this->window_->window()->portRect);
@@ -54,8 +56,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   if (!window_ || !window_->window() || !rootNode_)
   {
     if (presenter)
-      presenter->eraseBeforePaint();
-    return;
+      presenter->eraseBeforePaint(ToolboxPresentPlan());
+    return TOOLBOX_PRESENT_ERASED;
   }
   {
     // Identity rule: an auto id stays with its context for the context's
@@ -100,8 +102,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
     if (width > SHRT_MAX || height > SHRT_MAX)
     {
       if (presenter)
-        presenter->eraseBeforePaint();
-      return;
+        presenter->eraseBeforePaint(ToolboxPresentPlan());
+      return TOOLBOX_PRESENT_ERASED;
     }
     state.width = static_cast<short>(width);
     state.height = static_cast<short>(height);
@@ -118,8 +120,8 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
           static_cast<void *>(window_->window()), rootClip))
   {
     if (presenter)
-      presenter->eraseBeforePaint();
-    return;
+      presenter->eraseBeforePaint(ToolboxPresentPlan());
+    return TOOLBOX_PRESENT_ERASED;
   }
   this->unitLedger_.clear();
   hitLedger_.buttonHits_.clear();
@@ -150,22 +152,39 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   ToolboxPresentInputs inputs;
   inputs.outside = outer.complete();
   inputs.units = this->unitLedger_.compareFinalRows();
+  inputs.suppressionCapable = this->paintSuppressClipRgn_ && this->scrollViewClipRgn_;
   inputs.usedViewports = this->scrollBarLedger_.usedViewportCount();
   // Once per full layout, the unit ledger visits its own rows with one cursor.
   unsigned foregroundUnits = 0;
+  Rect units[2], bar = Rect();
+  bool repairRefused = false;
   if (this->observation_.viewports())
   {
     ToolboxUnitLedger::Mark cursor = 0;
     Rect overlap;
     while (this->unitLedger_.nextOverlap(this->observation_.viewport(), cursor, overlap))
+    {
+      const Rect &rect = this->unitLedger_.at(cursor - 1).rect;
+      if (foregroundUnits < 2)
+        units[foregroundUnits] = rect;
+      if (!ToolboxErasedEvidence::contains(rootPort, rect))
+        repairRefused = true;
       ++foregroundUnits;
+    }
+    const ToolboxViewportBarRepair bars = this->scrollBarLedger_.queryBarRepair(this->observation_.viewport());
+    bars.queryVertical(bar);
+    repairRefused = repairRefused || bars.refused();
   }
+  inputs.repair = ToolboxForegroundRepair(units, foregroundUnits, bar, repairRefused);
   this->observation_.complete(foregroundUnits, inputs);
+  const ToolboxPresentPlan plan(this->observation_);
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
-  if (presenter)
-    presenter->eraseBeforePaint();
+  const ToolboxPresentExecuted executed = presenter ? presenter->eraseBeforePaint(plan) : TOOLBOX_PRESENT_ERASED;
+  interval.noteExecuted(executed);
+  if (executed == TOOLBOX_PRESENT_COPY_FAILED)
+    return executed;
   RenderNode(rootNode_, this);
   debugStats_.refreshHitCounts(static_cast<int>(hitLedger_.buttonHits_.size()),
                                static_cast<int>(hitLedger_.cellHits_.size()),
@@ -205,5 +224,6 @@ void ToolboxScenePlatformController::render(ToolboxFullDrawPresenter *presenter)
   }
   this->pressLedger_.commit();
   this->observation_.markPaintFinished();
+  return executed;
 }
 

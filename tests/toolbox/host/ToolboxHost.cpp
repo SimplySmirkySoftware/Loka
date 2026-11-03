@@ -64,6 +64,7 @@ namespace
                           0,
                           blackColor,
                           HostPortState(),
+                          0,
                           0
 #ifdef LOKA_HOST_IMAGE_VIEW
                           ,
@@ -231,7 +232,8 @@ RgnHandle NewRgn()
   }
   RgnHandle r = new Region *;
   *r = new Region;
-  (*r)->rgnSize = sizeof(Region);
+  (*r)->rgnSize = 10;
+  (*r)->rgnBBox = Rect();
   return r;
 }
 void DisposeRgn(RgnHandle r)
@@ -241,6 +243,7 @@ void DisposeRgn(RgnHandle r)
 }
 void GetClip(RgnHandle r)
 {
+  (*r)->rgnSize = toolbox_host::refuseCopiedClip && !toolbox_host::scrollRects.empty() ? 0 : 10;
   (*r)->rgnBBox = port->native.clip;
 }
 void RectRgn(RgnHandle r, const Rect *rect)
@@ -756,10 +759,51 @@ void FrameRoundRect(const Rect *rect, short, short)
     toolbox_host::cardOperations.push_back('B');
   }
 }
-void DiffRgn(RgnHandle a, RgnHandle, RgnHandle out)
+void DiffRgn(RgnHandle a, RgnHandle b, RgnHandle out)
 {
   ++toolbox_host::regionDifferences;
-  (**out).rgnBBox = (**a).rgnBBox;
+  const Rect x = (**a).rgnBBox, y = (**b).rgnBBox;
+  (**out).rgnBBox = y.left <= x.left && y.top <= x.top && y.right >= x.right && y.bottom >= x.bottom ? Rect() : x;
+}
+bool EmptyRgn(RgnHandle r)
+{
+  return EmptyRect(&(**r).rgnBBox);
+}
+void SetEmptyRgn(RgnHandle r)
+{
+  (**r).rgnBBox = Rect();
+}
+void UnionRgn(RgnHandle a, RgnHandle b, RgnHandle out)
+{
+  if (toolbox_host::refuseExposedUnion && !toolbox_host::scrollRects.empty())
+  {
+    toolbox_host::refuseExposedUnion = false;
+    (**out).rgnSize = 0;
+    return;
+  }
+  const Rect x = (**a).rgnBBox, y = (**b).rgnBBox;
+  toolbox_host::repairUnions.push_back(y);
+  const Rect united = {
+      std::min(x.top, y.top), std::min(x.left, y.left), std::max(x.bottom, y.bottom), std::max(x.right, y.right)};
+  (**out).rgnBBox = EmptyRect(&x) ? y : EmptyRect(&y) ? x : united;
+}
+namespace toolbox_host
+{
+  bool refuseExposedUnion = false, refuseCopiedClip = false;
+  std::vector<Rect> scrollRects, repairUnions;
+  std::vector<Point> scrollOffsets;
+} // namespace toolbox_host
+void ScrollRect(const Rect *r, short dh, short dv, RgnHandle exposed)
+{
+  toolbox_host::scrollRects.push_back(*r);
+  const Point offset = {dv, dh};
+  toolbox_host::scrollOffsets.push_back(offset);
+  Rect strip = *r;
+  if (dv < 0)
+    strip.top = static_cast<short>(std::max<int>(r->top, r->bottom + dv));
+  else
+    strip.bottom = static_cast<short>(std::min<int>(r->bottom, r->top + dv));
+  RectRgn(exposed, &strip);
 }
 void PaintRgn(RgnHandle)
 {
@@ -940,12 +984,12 @@ void ToolboxWindow::drawForUpdate()
   this->drawWhole(evidence);
   EndUpdate(&this->port);
 }
-void ToolboxWindow::drawForFlush(ToolboxPresentBatch::Summary summary)
+void ToolboxWindow::drawForFlush(const ToolboxPresentBatch &sealed)
 {
   if (this->scenePlatformController_)
     this->scenePlatformController_->notePresentDamage(
         ToolboxUpdateDamage(this->port.updateRgn, this->port.portBits.bounds));
-  this->drawWhole(this->port.portRect, summary);
+  this->drawWhole(this->port.portRect, sealed, true);
 }
 static void DrawGrowIcon(ToolboxWindow::WindowPort *) {}
 #include "ToolboxWindowPaint.cpp"

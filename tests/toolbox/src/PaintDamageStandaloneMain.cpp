@@ -1,4 +1,6 @@
 #include "ToolboxPaintResultText.hpp"
+#include "ToolboxProbeTiming.hpp"
+#include "../../support/PictAdmissionFixture.hpp"
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/style/CardShadow.hpp"
 #include "core/Profiler.hpp"
@@ -86,6 +88,89 @@ namespace
     {
       composition.declare(Column() << (Text("First") + FontSize<Size>()) << (Text("Second") + FontSize<Size>()));
     }
+  };
+
+  bool copyRefusalArmed = false;
+  /** Target-only fault: the text has already participated in the copied render. */
+  class CopyRefusalText : public TextNode
+  {
+  public:
+    explicit CopyRefusalText(const TextProps &props)
+        : TextNode(props)
+    {
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      TextNode::render(platform);
+      if (copyRefusalArmed)
+      {
+        copyRefusalArmed = false;
+        static_cast<ToolboxScenePlatformController *>(platform)->notePaintRefusal(TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW,
+                                                                                  "copy-failure-recovery");
+      }
+    }
+  };
+
+  template <int Painter> class CopyPainterNode : public BoundaryNodeFor<CopyPainterNode<Painter> >
+  {
+  public:
+    typedef BoundaryPropsFor<CopyPainterNode<Painter> > Props;
+    explicit CopyPainterNode(const Props &props)
+        : BoundaryNodeFor<CopyPainterNode<Painter> >(props)
+    {
+      this->state(this->origin_, loka::core::Frame());
+      if (Painter == 3)
+      {
+        const pict_fixture::Bytes bytes = pict_fixture::picture(false, 2, 0x90);
+        loka::core::resource::Blob blob = loka::core::resource::Blob::Create();
+        if (blob.tryResize(bytes.size()))
+        {
+          std::memcpy(blob.mutableData(), &bytes[0], bytes.size());
+          blob.sealBytes();
+          ToolboxPlatformContext platform;
+          loka::core::resource::Image image;
+          platform.createImageFromBlob(blob, 0, blob.size(), image);
+          this->state(this->image_, image);
+        }
+      }
+    }
+    void scroll(int y)
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->origin_.set(loka::core::Frame(0, y, 0, 0));
+    }
+    virtual void composeNode(NodeComposition &composition)
+    {
+      // Each arm has one supported painter and enough content for a small scroll.
+      if (Painter == 0)
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32)
+                                         << NodeDefinition<TextProps, CopyRefusalText>(TextProps("Copy Text"))
+                                         << Box().height(600)));
+      else if (Painter == 1)
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32)
+                                         << AttributedText(Styled("Copy AttributedText", loka::app::TextStyle()))
+                                         << Box().height(600)));
+      else if (Painter == 2)
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32) << loka::app::Button("Copy Button") << Box().height(600)));
+      else if (Painter == 3)
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32) << ImageView().image(this->image_.state()).size(64, 32)
+                                         << Box().height(600)));
+      else if (Painter == 4)
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32) << (Card() << Box().size(96, 63)) << Box().height(600)));
+      else
+        composition.declare(ScrollView(this->origin_)
+                            << (Column() << Box().height(32) << (ClipBox().size(100, 32) << Text("Copy ClipBox"))
+                                         << Box().height(600)));
+    }
+
+  private:
+    NodeState<loka::core::Frame> origin_;
+    NodeState<loka::core::resource::Image> image_;
   };
 
   const char kPermutedButtonTitle[] = "IIIIMMMM";
@@ -1438,6 +1523,8 @@ namespace
           unitWindow_(0),
           unitSurfaceWindow_(0)
     {
+      for (unsigned i = 0; i < 6; ++i)
+        this->copyWindows_[i] = 0;
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
         this->log_ = loka::platform::file::OpenWriteTruncate(this->file_);
@@ -1456,6 +1543,13 @@ namespace
     int exitCode() const { return this->result_; }
     virtual void compose(AppComposition &composition)
     {
+      this->declareCopyWindow<0>(composition);
+      this->declareCopyWindow<1>(composition);
+      this->declareCopyWindow<2>(composition);
+      this->declareCopyWindow<3>(composition);
+      this->declareCopyWindow<4>(composition);
+      this->declareCopyWindow<5>(composition);
+
       composition << ObservedWindowDefinition(
           WindowProps()
               .frame(350, 250, 220, 160)
@@ -1694,6 +1788,16 @@ namespace
     bool gate_;
     ToolboxScenePlatformController::EditTextGeometry editGeometry_;
 
+    Window *copyWindows_[6];
+    template <int Painter> void declareCopyWindow(AppComposition &composition)
+    {
+      composition << ObservedWindowDefinition(WindowProps()
+                                                  .frame(350, 250, 220, 180)
+                                                  .title("Scroll copy")
+                                                  .scene(Boundary<CopyPainterNode<Painter> >())
+                                                  .visible(false),
+                                              &this->copyWindows_[Painter]);
+    }
     Window *paintWindow_;
     Window *compositedWindow_;
     Window *editWindow_;
@@ -2947,7 +3051,7 @@ namespace
         const Rect &damage = observation.damage();
         std::fprintf(self->log_,
                      "present_observe reasons=%s dy=%d viewports=%u foreground_units=%u damage=%d,%d,%d,%d "
-                     "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u verdict=%s "
+                     "content_inputs=%u unsupported_kinds=%u walk_reasons=%s phase_bound=%u candidate=%s executed=%s "
                      "refusal=%s last_refusal=%s eligibility_in=%s collecting_first=%s site=%s "
                      "not_translated=%u baseline=%s enclosing_clip=%d rect_requests=%d used_viewports=%u "
                      "outside_not_translated=%u outside_inputs=%u outside_kinds=%u unit_changed=%d\r",
@@ -2964,6 +3068,7 @@ namespace
                      observation.walkReasonNames().c_str(),
                      observation.phaseBound(),
                      ToolboxPresentVerdictName(observation.verdict()),
+                     ToolboxPresentExecutedName(stats.lastMovedPresentObservation.executed()),
                      ToolboxPresentRefusalName(observation.refusal()),
                      ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()),
                      ToolboxPaintEligibilityName(stats.lastMovedEntryEligibility),
@@ -3281,9 +3386,88 @@ namespace
           if (!CloseCardTiming(timing))
             self->result_ = 1;
         }
+        self->checkCopyPainters(*native);
         self->phase_ = UNIT_SHOW;
       }
       SetPort(saved);
+    }
+
+    /** Idle-only bounded probe of an App-owned window and its mounted scene. */
+    template <int Painter> void checkCopyPainter(ToolboxWindow &window, const char *name)
+    {
+      ToolboxScenePlatformController &controller = *window.scenePlatformController();
+      typedef loka::dsl::testing::SceneTestAccess Access;
+      Scene &scene = *window.scene();
+      CopyPainterNode<Painter> *root = static_cast<CopyPainterNode<Painter> *>(Access::rootBoundary(scene));
+      ShowWindow(window.window());
+      SelectWindow(window.window());
+      ToolboxPortScope selected(window.window());
+      window.requestInvalidate();
+      window.flushInvalidate();
+      Access::flushInvalidation(scene);
+      window.requestInvalidate();
+      window.flushInvalidate();
+      const Rect port = window.window()->portRect;
+      const Rect rightEdge = {port.top, port.right, port.bottom, static_cast<short>(port.right + 1)};
+      const Rect bottomEdge = {port.bottom, port.left, static_cast<short>(port.bottom + 1), port.right};
+      CardCapture rightSentinels(rightEdge), bottomSentinels(bottomEdge);
+      root->scroll(16);
+      controller.notePresentReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+      // A synchronous full entry isolates this attempt from later scene publication.
+      const loka_toolbox_probe::Timer copyTimer;
+      window.drawForFlush();
+      const unsigned long copyUs = copyTimer.elapsed();
+      const ToolboxPresentResult copied = controller.debugStatsForTesting().lastMovedPresentObservation;
+      this->recordArm("copy-containment",
+                      rightSentinels.ready() && bottomSentinels.ready() && rightSentinels.differences() == 0
+                          && bottomSentinels.differences() == 0,
+                      UNIT_SHOW);
+      CardCapture capture(window.window()->portRect);
+      const loka_toolbox_probe::Timer eraseTimer;
+      window.requestInvalidate();
+      window.flushInvalidate();
+      const unsigned long eraseUs = eraseTimer.elapsed();
+      this->recordArm(name,
+                      capture.ready() && copied.executed() == TOOLBOX_PRESENT_COPIED
+                          && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0,
+                      UNIT_SHOW);
+      std::fprintf(this->log_,
+                   "copy-timing painter=%s copy_us=%lu erase_us=%lu candidate=%s executed=%s\r",
+                   name,
+                   copyUs,
+                   eraseUs,
+                   ToolboxPresentVerdictName(copied.verdict()),
+                   ToolboxPresentExecutedName(copied.executed()));
+      if (Painter == 0)
+      {
+        root->scroll(32);
+        controller.notePresentReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+        copyRefusalArmed = true;
+        window.drawForFlush();
+        const ToolboxPresentResult failed = controller.debugStatsForTesting().lastMovedPresentObservation;
+        const bool recoveryPending = window.hasPendingInvalidate();
+        window.flushInvalidate();
+        const ToolboxPresentResult recovered = controller.debugStatsForTesting().lastPresentObservation;
+        this->recordArm("copy-failure-recovery",
+                        failed.executed() == TOOLBOX_PRESENT_COPIED && failed.eligibility() == TOOLBOX_PAINT_REFUSED
+                            && recoveryPending && recovered.executed() == TOOLBOX_PRESENT_ERASED
+                            && (recovered.reasons() & (1U << TOOLBOX_FULL_DRAW_PRESENT_FAILED))
+                            && recovered.eligibility() == TOOLBOX_PAINT_CLEAN,
+                        UNIT_SHOW);
+        copyRefusalArmed = false;
+      }
+      HideWindow(window.window());
+    }
+    void checkCopyPainters(ToolboxWindow &window)
+    {
+      this->checkCopyPainter<0>(*this->copyWindows_[0]->asToolboxWindow(), "copy-equals-repaint-Text");
+      this->checkCopyPainter<1>(*this->copyWindows_[1]->asToolboxWindow(), "copy-equals-repaint-AttributedText");
+      this->checkCopyPainter<2>(*this->copyWindows_[2]->asToolboxWindow(), "copy-equals-repaint-Button");
+      this->checkCopyPainter<3>(*this->copyWindows_[3]->asToolboxWindow(),
+                                "copy-equals-repaint-mono-PICT_BYTES-ImageView");
+      this->checkCopyPainter<4>(*this->copyWindows_[4]->asToolboxWindow(), "copy-equals-repaint-CardBand");
+      this->checkCopyPainter<5>(*this->copyWindows_[5]->asToolboxWindow(), "copy-equals-repaint-ClipBox");
+      SelectWindow(window.window());
     }
 
     void checkCardPixels()

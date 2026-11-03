@@ -27,6 +27,39 @@ namespace loka
   }
 }
 
+/** Completed bar repair facts; absence is not an empty installed bar. */
+class ToolboxViewportBarRepair
+{
+public:
+  ToolboxViewportBarRepair()
+      : vertical_(),
+        horizontalUsed_(false)
+  {
+  }
+  ToolboxViewportBarRepair(const ToolboxOptionalRect &vertical, bool horizontalUsed)
+      : vertical_(vertical),
+        horizontalUsed_(horizontalUsed)
+  {
+  }
+  bool queryVertical(Rect &out) const
+  {
+    return this->vertical_.query(out);
+  }
+  bool horizontalUsed() const
+  {
+    return this->horizontalUsed_;
+  }
+  bool refused() const
+  {
+    Rect rect;
+    return this->horizontalUsed_ || !this->vertical_.query(rect);
+  }
+
+private:
+  ToolboxOptionalRect vertical_;
+  bool horizontalUsed_;
+};
+
 /** Owns the Toolbox scrollBarProc bindings and their exact-match handle pool. */
 class ToolboxScrollBarLedger
 {
@@ -89,6 +122,39 @@ public:
       if (this->viewportScrollBars_[i].usedThisFrame)
         ++count;
     return count;
+  }
+
+  /** Controller after publication, once per moved attempt; O(V + S) over this
+      ledger's own rows. A content rectangle must identify one used viewport;
+      absent or ambiguous identity refuses instead of selecting another bar. */
+  ToolboxViewportBarRepair queryBarRepair(const Rect &contentRect) const
+  {
+    const ViewportScrollBarBinding *viewport = 0;
+    for (std::size_t i = 0; i < this->viewportScrollBars_.size(); ++i)
+    {
+      const ViewportScrollBarBinding &row = this->viewportScrollBars_[i];
+      if (row.usedThisFrame && EqualRect(&row.contentRect, &contentRect))
+      {
+        if (viewport)
+          return ToolboxViewportBarRepair();
+        viewport = &row;
+      }
+    }
+    if (!viewport)
+      return ToolboxViewportBarRepair();
+    ToolboxOptionalRect vertical;
+    bool horizontalUsed = false;
+    for (std::size_t i = 0; i < this->scrollBarControls_.size(); ++i)
+    {
+      const ScrollBarControlBinding &row = this->scrollBarControls_[i];
+      if (!row.usedThisFrame)
+        continue;
+      if (row.control && row.resourceId == viewport->barId[loka::app::SCROLL_BAR_VERTICAL])
+        vertical = ToolboxOptionalRect(row.placement.full());
+      if (row.resourceId == viewport->barId[loka::app::SCROLL_BAR_HORIZONTAL])
+        horizontalUsed = true;
+    }
+    return ToolboxViewportBarRepair(vertical, horizontalUsed);
   }
 
   /** Interval calls once per render attempt, O(V) over this ledger's own rows.
