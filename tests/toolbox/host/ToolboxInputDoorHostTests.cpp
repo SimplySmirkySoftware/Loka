@@ -604,13 +604,14 @@ namespace
           paints(0)
     {
     }
-    virtual void eraseBeforePaint()
+    virtual ToolboxPresentExecuted eraseBeforePaint(const ToolboxPresentPlan &)
     {
       LOKA_VERIFY(this->facts.writes == 1 && this->facts.secondWrites == 1);
       LOKA_VERIFY(this->facts.controller->borrowPhase().open());
       LOKA_VERIFY(this->facts.controller->erasedPass().isOpen());
       LOKA_VERIFY(this->paints == 0);
       ++this->erases;
+      return TOOLBOX_PRESENT_ERASED;
     }
     virtual void render(IPlatformController *)
     {

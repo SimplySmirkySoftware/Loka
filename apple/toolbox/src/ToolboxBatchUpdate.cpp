@@ -111,6 +111,10 @@ void ToolboxScenePlatformController::requestInvalidateForChange(loka::app::scene
     return;
   }
 
+  // A full request already in the next batch covers any boundary rectangle; posting the rectangle would only
+  // mark the sealed batch as carrying repair input it does not need (scroll copy admission, page 2c).
+  if (window_->hasPendingFullInvalidate())
+    return;
   Rect fallback = window_->window()->portRect;
   debugStats_.fallbackQueuedByChild = false;
   loka::app::scene::BoundaryNode *boundary = rootNodeForChange->asBoundary();

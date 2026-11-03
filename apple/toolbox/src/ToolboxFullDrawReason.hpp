@@ -13,6 +13,7 @@ enum ToolboxFullDrawReason
   TOOLBOX_FULL_DRAW_PAINT_WIDENED_VIEWPORT_RENDER,
   /** A settled native bar value published as the viewport's requested origin. */
   TOOLBOX_FULL_DRAW_VIEWPORT_INPUT,
+  TOOLBOX_FULL_DRAW_PRESENT_FAILED,
   TOOLBOX_FULL_DRAW_REASON_COUNT
 };
 
@@ -37,6 +38,8 @@ inline const char *ToolboxFullDrawReasonName(ToolboxFullDrawReason reason)
     return "paint-widened-viewport-render";
   case TOOLBOX_FULL_DRAW_VIEWPORT_INPUT:
     return "viewport_input";
+  case TOOLBOX_FULL_DRAW_PRESENT_FAILED:
+    return "present_failed";
   case TOOLBOX_FULL_DRAW_REASON_COUNT:
     break;
   }

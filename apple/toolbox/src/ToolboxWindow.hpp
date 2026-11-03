@@ -51,6 +51,8 @@ public:
   void requestInvalidateRect(const Rect &rect);
   void flushInvalidate();
   bool hasPendingInvalidate() const;
+  /** True while the next batch already holds a full request: a rectangle posted now is covered by it. */
+  bool hasPendingFullInvalidate() const;
   bool handleMouseDown(const Point &globalPoint, const EventRecord &event);
   bool offerKeyEvent(const EventRecord &event);
   /** Tracks a grow-box drag from the given global mouse-down point, resizes
@@ -72,10 +74,11 @@ public:
   void invalidateWindow();
   /** Not re-entrant; does not pump events. Owns the complete OS update bracket. */
   void drawForUpdate();
-  void drawForFlush(ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void drawForFlush(const ToolboxPresentBatch &sealed = ToolboxPresentBatch());
 
 private:
-  void drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary = ToolboxPresentBatch::RECTS_ONLY);
+  void
+  drawWhole(const Rect &evidence, const ToolboxPresentBatch &sealed = ToolboxPresentBatch(), bool allowCopy = false);
 
 public:
   /** Preserves the native content position after a menu-bar rebuild without

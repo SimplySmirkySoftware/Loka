@@ -355,6 +355,14 @@ public:
 private:
   /** Per-pass projected, clipped opaque unit facts; layout writes, replay reads. */
   ToolboxUnitLedger unitLedger_;
+
+public:
+  const ToolboxPresentObservation &observation() const
+  {
+    return this->observation_;
+  }
+
+private:
   ToolboxPresentObservation observation_;
   friend class ToolboxBlurSnapshotInspection;
   ToolboxPressLedger pressLedger_;
@@ -549,9 +557,9 @@ public:
     this->observation_.notePaintRefusal(reason, site);
   }
   /** Window entries, once before render / once per rect request; O(1), no rows. */
-  void notePresentRequestSummary(ToolboxPresentBatch::Summary summary)
+  void notePresentRequestBatch(const ToolboxPresentBatch &sealed)
   {
-    this->observation_.noteRequestSummary(summary);
+    this->observation_.noteRequestBatch(sealed);
   }
   void notePresentRectRequest()
   {

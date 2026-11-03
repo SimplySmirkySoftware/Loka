@@ -59,7 +59,7 @@ void ToolboxWindow::drawGrowBox()
   DisposeRgn(oldClip);
 }
 
-void ToolboxWindow::drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary summary)
+void ToolboxWindow::drawWhole(const Rect &evidence, const ToolboxPresentBatch &sealed, bool allowCopy)
 {
   if (!window_)
     return;
@@ -79,20 +79,27 @@ void ToolboxWindow::drawWhole(const Rect &evidence, ToolboxPresentBatch::Summary
   ValidRect(&window_->portRect);
   {
     ToolboxPaintClip clip(window_->portRect, ToolboxPaintClip::REPLACE);
-    ToolboxPortErasePresenter presenter(window_->portRect);
+    ToolboxPortErasePresenter presenter(window_->portRect,
+                                        allowCopy ? ToolboxPortErasePresenter::COPY_ALLOWED
+                                                  : ToolboxPortErasePresenter::COPY_REFUSED);
+    ToolboxPresentExecuted executed = TOOLBOX_PRESENT_ERASED;
     if (scenePlatformController_)
     {
       Rect captureEvidence = {0, 0, 0, 0};
       if (clip.isActive())
         captureEvidence = ToolboxCaptureEvidence(window_->portRect, evidence);
       ToolboxErasedPass::Guard erased(scenePlatformController_->erasedPass(), captureEvidence);
-      scenePlatformController_->notePresentRequestSummary(summary);
+      scenePlatformController_->notePresentRequestBatch(sealed);
       presenter.setErasedGuard(erased);
-      ToolboxInputDoor::render(*scenePlatformController_, &presenter);
+      executed = ToolboxInputDoor::render(*scenePlatformController_, &presenter);
     }
     else
-      presenter.eraseBeforePaint();
+      presenter.eraseBeforePaint(ToolboxPresentPlan());
     this->drawGrowBox();
+    if (executed == TOOLBOX_PRESENT_COPY_FAILED
+        || (executed == TOOLBOX_PRESENT_COPIED
+            && scenePlatformController_->observation().eligibility() == TOOLBOX_PAINT_REFUSED))
+      this->requestInvalidateWithReason(TOOLBOX_FULL_DRAW_PRESENT_FAILED);
 #ifdef TEST_BUILD
     presenter.finishDrawForTesting();
 #endif

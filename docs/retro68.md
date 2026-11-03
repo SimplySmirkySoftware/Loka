@@ -819,9 +819,11 @@ who explicitly re-enables the Microsoft C/C++ IntelliSense engine.
 ### Toolbox paint eligibility
 
 `ToolboxPresentObservation` carries a window's `CLEAN`/`REFUSED` paint eligibility
-between renders. A completed whole-window erase and paint with no reported
+between renders. A completed whole-window presentation and paint with no reported
 refusal establishes CLEAN; unfinished or noncovering renders and refused screen
-obligations establish REFUSED. Eligibility does not schedule work. The blur
+obligations establish REFUSED. After a copied presentation, the window requests
+a full retry if painting or the grow box refuses; failed copy recovery also
+requests that retry. Erase-only refusals do not schedule a retry. The blur
 capture gate reads only refusals already reported in the current render and
 preserves existing snapshot pixels when acquisition is blocked. PaintDamage's
 `present_observe` and `paint_result` lines distinguish the selected snapshot's
@@ -835,9 +837,18 @@ ledger distinguishes **placed** layout facts from the **presented** certificate
 written at CLEAN render settlement. Its `copyDomain` is the content rectangle
 intersected with the port; missing port evidence stays absent. At the next move,
 `baseline=none|stale|valid` describes that certificate against the new layout.
-Copy admission requires both CLEAN eligibility and a valid baseline; this
-observation still always selects erase. `present_observe` also reports
+Copy admission requires both CLEAN eligibility and a valid baseline. The narrow
+admission also checks final outside rows, request facts, bounded foreground
+repair, and repair area; the authoritative order is in
+[`ToolboxPresentObservation`](../apple/toolbox/src/ToolboxPresentObservation.hpp).
+The presenter receives a completed value plan and either copies with ScrollRect
+and repaints the repair region, erases the whole port, or reports failed recovery
+without reaching the paint tail. REGION capture evidence borrows the presenter's
+regions only during the render. OS update entries decline copying.
+`present_observe` distinguishes `candidate` from `executed` and also reports
 `not_translated` and `enclosing_clip` from shipping observation values.
+Target pixel and timing acceptance for this copy path remains pending; host
+region fakes describe rectangles and bounding boxes, not region holes.
 
 The Unicode loop handles original suspend/resume facts and scrap conversion, aligns native focus, then offers eligible events to TSM before idle and guarded dispatch.
 Native focus follows service, retry, input, modal, logical focus, park, retire, and presentation-lapse boundaries; the controller ledger owns every object.

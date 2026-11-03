@@ -42,7 +42,7 @@ void ToolboxWindow::flushInvalidate()
     {
       if (this->scenePlatformController_)
         this->scenePlatformController_->noteWindowFlushFull();
-      this->drawForFlush(attempt.summary());
+      this->drawForFlush(attempt);
     }
     else
     {
@@ -59,4 +59,9 @@ void ToolboxWindow::flushInvalidate()
 bool ToolboxWindow::hasPendingInvalidate() const
 {
   return !this->next_.empty();
+}
+
+bool ToolboxWindow::hasPendingFullInvalidate() const
+{
+  return this->next_.full();
 }
