@@ -256,8 +256,11 @@ public:
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
     port.updateRgn = 0;
-#ifdef LOKA_HOST_IMAGE_VIEW
     port.grafProcs = 0;
+    port.spExtra = 0;
+    port.chExtra = 0;
+    port.portBits.rowBytes = 0;
+#ifdef LOKA_HOST_IMAGE_VIEW
     port.portBits.baseAddr = 0;
 #endif
     port.portBits.bounds = Rect();
