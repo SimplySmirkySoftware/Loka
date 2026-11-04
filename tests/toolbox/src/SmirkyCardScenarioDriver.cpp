@@ -243,8 +243,8 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
           const ToolboxPresentResult &moved = stats.lastMovedPresentObservation;
           const Rect &d = moved.copyDomain();
           const Rect &dm = moved.damage();
-          const Rect &b = moved.repair().bar();
-          const Rect u = moved.repair().count() ? moved.repair().unit(0) : Rect();
+          const Rect &b = moved.foreground().bar();
+          const Rect u = moved.foreground().count() ? moved.foreground().unit(0) : Rect();
           std::sprintf(line,
                        "arrow repair domain=%d,%d,%d,%d damage=%d,%d,%d,%d units=%u unit0=%d,%d,%d,%d bar=%d,%d,%d,%d "
                        "sealed=%u refused=%d",
@@ -256,7 +256,7 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
                        dm.left,
                        dm.bottom,
                        dm.right,
-                       moved.repair().count(),
+                       moved.foreground().count(),
                        u.top,
                        u.left,
                        u.bottom,
@@ -266,7 +266,7 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
                        b.bottom,
                        b.right,
                        moved.sealedRects().count(),
-                       moved.repair().refused() ? 1 : 0);
+                       moved.foreground().refused() ? 1 : 0);
           this->audit_.recordLog(line);
           for (unsigned i = 0; i < moved.sealedRects().count(); ++i)
           {

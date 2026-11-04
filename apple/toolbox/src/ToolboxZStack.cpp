@@ -142,8 +142,15 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
         break;
       case loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR:
       {
-        const ToolboxBlurPaint result =
-            this->bandBlur_.paint(this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar());
+        ToolboxBandGround ground;
+#ifdef LOKA_LIFECYCLE_AUDIT
+        assert(this->borrowedBandPolicy_);
+#endif
+        const bool eligible = this->borrowedBandPolicy_
+                                  ? (this->borrowedBandPolicy_->querySelectedGround(ground) && ground == BAND_BLUR)
+                                  : ToolboxBlurPixels::eligible(this->window_->window(), row.rect);
+        const ToolboxBlurPaint result = this->bandBlur_.paint(
+            this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar(), eligible);
         switch (result)
         {
         case BLUR_PICTURE:
@@ -175,8 +182,12 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
       }
       case loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR:
       {
-        const ToolboxBlurPaint result = this->staticBlur_.paint(
-            this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar());
+        const ToolboxBlurPaint result =
+            this->staticBlur_.paint(this->window_->window(),
+                                    row,
+                                    this->erasedPass_,
+                                    !this->observation_.refusedSoFar(),
+                                    ToolboxBlurPixels::eligible(this->window_->window(), row.rect));
         painted = result == BLUR_PICTURE;
         if (result == BLUR_PARTIAL)
           LOKA_PAINT_REFUSE(this->observation_, TOOLBOX_PAINT_REFUSAL_PARTIAL_DRAW);
