@@ -7,25 +7,7 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <objc/runtime.h>
 
-/** Uses the same attachment and clock doors as run(), without entering NSApp's loop. */
-class MacQuitEventTestAccess
-{
-public:
-  static void attach(MacApp &app, bool clock)
-  {
-    app.attachQuitEventRouter();
-    if (clock)
-      app.startInvalidationFlushTimer();
-  }
-  static bool held(const MacApp &app)
-  {
-    return app.quitEventReply_.isHeld();
-  }
-  static bool pending(const MacApp &app)
-  {
-    return app.hasPendingWindowAdmission();
-  }
-};
+#include "support/MacQuitEventTestAccess.hpp"
 
 namespace
 {

@@ -1,4 +1,5 @@
 #include "MacPlatformContext.hpp"
+#include "MacOpenURL.hpp"
 #include "app/internal/NativeResourceReservation.hpp"
 
 #include "core/resource/BlobRange.hpp"
@@ -13,6 +14,19 @@
 #include "core/resource/Blob.hpp"
 #include "core/resource/Image.hpp"
 #include <AppKit/AppKit.h>
+
+namespace
+{
+  BOOL OpenWorkspaceURL(NSURL *url)
+  {
+    return [[NSWorkspace sharedWorkspace] openURL:url];
+  }
+} // namespace
+
+loka::app::URLOpenKind MacPlatformContext::openURL(const loka::app::WebURL &url)
+{
+  return MacOpenWebURL(url, &OpenWorkspaceURL);
+}
 
 MacPlatformContext::MacPlatformContext() {}
 MacPlatformContext::~MacPlatformContext() {}

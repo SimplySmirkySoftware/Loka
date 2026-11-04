@@ -18,6 +18,7 @@ public:
   virtual App *createApp(AppConfigurable *config, NativeModuleHandle hInstance, int nCmdShow) const;
   virtual Window *createWindow(const WindowProps &props);
   virtual loka::app::scene::NodeContext *createNodeContext(loka::app::scene::Node *node) const;
+  virtual loka::app::URLOpenKind openURL(const loka::app::WebURL &url);
   virtual bool openFile(const loka::file::File &item, loka::platform::file::FileHandle &out) const;
   virtual bool queryMainDisplayDepth(int &out) const;
   virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,

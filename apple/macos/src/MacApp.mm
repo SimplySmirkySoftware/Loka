@@ -198,9 +198,7 @@ void MacApp::quit()
 
 void MacApp::flushInvalidationsTick()
 {
-#ifdef LOKA_LIFECYCLE_AUDIT
   const bool entryActive = loka::core::Operation::hasActive();
-#endif
   {
     loka::core::Operation turn;
     const unsigned long long now = mach_absolute_time();
@@ -222,6 +220,10 @@ void MacApp::flushInvalidationsTick()
     this->admitAndApplyWindows();
     MacScenePlatformController::flushPendingRelayouts();
     this->reconcileAtCompletion();
+    // Keep serve -> second admission -> close in the same order as
+    // common/testing/app/AppTestAccess.hpp: AppTestAccess::completeTurn.
+    if (this->serveURLsAtCompletion(entryActive ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST))
+      this->admitAndApplyWindows();
     turn.close();
     // Native dealloc chains may autorelease, including on direct tick entry.
     NSAutoreleasePool *retirementPool = [[NSAutoreleasePool alloc] init];
