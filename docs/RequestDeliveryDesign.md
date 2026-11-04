@@ -623,8 +623,7 @@ exactly the entry count and closes before launch document admission. Offers made
 during that batch wait for running completion. Bootstrap assumes no earlier
 `requestQuitAtCompletion`; even if called, the batch runs without quit or busy
 checks. An arm that opens a document can avoid the existing windowless exit;
-otherwise that behavior is unchanged. No native URL collector is installed yet;
-the macOS completion call is listed below.
+otherwise that behavior is unchanged. The macOS native entry and completion calls are listed below.
 
 Cost: the completion door is O(1) without eligible work; otherwise it walks only
 App's own group rows once and serves at most one receive and one open. Each
@@ -638,6 +637,7 @@ composition bootstrap; the PENDING wall runs only on a contract violation.
 
 | Door | Call sites |
 |---|---|
+| `App::receiveURL`, macOS | `LokaQuitEventRouter::handleGetURLEvent:withReplyEvent:` handles `kInternetEventClass` / `kAEGetURL`, offering one direct-object text through `MacURLTextFromDescriptor` (UTF-8, then `typeChar`, explicit byte length). No Operation or arm runs at ingress. A missing owner, failed coercion, or any result except `RECEIVE_QUEUED` writes `errAEEventNotHandled` to the reply. Delivery waits for an eligible outermost timer completion. |
 | `App::serveURLsAtCompletion` (receive, then open), macOS | `MacApp::flushInvalidationsTick`: capture the inherited clock before opening the turn; serve after relayout and focus reconciliation; if served, admit again before closing the turn. Only a Loka-clock-outermost timer takes; clockless native loops are eligible. Stopping the timer in quit does not truncate the current tick. |
 | `App::serveURLsAtCompletion`, other rails | Win32/Toolbox call sites pending; Null tests use `AppTestAccess::completeTurn`. |
 

@@ -1,4 +1,5 @@
 #include "MacApp.hpp"
+#include "MacReceiveURL.hpp"
 #include "core/Operation.hpp"
 #include "MacWindow.hpp"
 #include "MacScenePlatformController.hpp"
@@ -8,7 +9,7 @@
 #include <mach/mach_time.h>
 #include "app/core/AppComponent.hpp"
 
-/** Process-lifetime registration; the attached App is only borrowed. */
+/** Process-lifetime quit and GURL registration; the attached App is only borrowed. */
 @interface LokaQuitEventRouter : NSObject
 {
   MacApp *owner_;
@@ -25,6 +26,19 @@
                                                      andSelector:@selector(handleQuitEvent:withReplyEvent:)
                                                    forEventClass:kCoreEventClass
                                                       andEventID:kAEQuitApplication];
+  [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                     andSelector:@selector(handleGetURLEvent:withReplyEvent:)
+                                                   forEventClass:kInternetEventClass
+                                                      andEventID:kAEGetURL];
+}
+
+- (void)handleGetURLEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply
+{
+  loka::core::String text;
+  if (!self.owner || !MacURLTextFromDescriptor([event paramDescriptorForKeyword:keyDirectObject], text)
+      || self.owner->receiveURL(text) != loka::app::RECEIVE_QUEUED)
+    [reply setParamDescriptor:[NSAppleEventDescriptor descriptorWithInt32:errAEEventNotHandled]
+                   forKeyword:keyErrorNumber];
 }
 
 - (void)handleQuitEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply
