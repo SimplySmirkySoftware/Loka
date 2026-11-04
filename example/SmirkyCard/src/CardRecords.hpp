@@ -2,6 +2,8 @@
 #define SMIRKYCARD_CARD_RECORDS_HPP
 
 #include "ScriptRuntime.hpp"
+#include <cassert>
+#include <cstring>
 #include "app/OpenFileDialog.hpp"
 #include "core/resource/Image.hpp"
 #include "core/Frame.hpp"
@@ -35,6 +37,20 @@ namespace smirkycard
         loka::core::LokaDelete(this->head_, this->site_);
         this->head_ = next;
       }
+    }
+    /** Transfer stable records without allocation; staged is empty on return. */
+    void splice(CardRecords &staged)
+    {
+      assert(this != &staged);
+      assert(std::strcmp(this->site_.typeTag, staged.site_.typeTag) == 0);
+      if (!staged.head_)
+        return;
+      T *tail = staged.head_;
+      while (tail->next)
+        tail = tail->next;
+      tail->next = this->head_;
+      this->head_ = staged.head_;
+      staged.head_ = 0;
     }
     T *head() const
     {

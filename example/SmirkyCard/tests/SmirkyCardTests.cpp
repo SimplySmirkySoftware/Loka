@@ -88,6 +88,10 @@ namespace smirkycard
       {
         return static_cast<JsCardNode *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*scene));
       }
+      static loka::app::scene::NodeDefinitionBase *lowerRoot(JSContext *ctx, JSValueConst tree)
+      {
+        return card()->lowerRoot(ctx, tree);
+      }
       static unsigned handlerCount()
       {
         return card()->handlers_.count();
@@ -6215,7 +6219,7 @@ namespace
                             "lowering pin", JS_EVAL_TYPE_GLOBAL);
       LOKA_VERIFY(!JS_IsException(tree));
       loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
-        smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(!lowered.isSet());
       expectJs(runtime, i == 3 ? "own.c.error.get().includes('tree')"
@@ -6649,7 +6653,7 @@ namespace
       JSValue tree = JS_Eval(runtime.context(), lower[i], std::strlen(lower[i]), "native timing", JS_EVAL_TYPE_GLOBAL);
       LOKA_VERIFY(!JS_IsException(tree));
       loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
-          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(!lowered.isSet());
       LOKA_VERIFY(!windowNode(second, "Prefix"));
@@ -6663,7 +6667,7 @@ namespace
         JS_Eval(runtime.context(), expression, std::strlen(expression), "handler admission", JS_EVAL_TYPE_GLOBAL);
     LOKA_VERIFY(!JS_IsException(tree));
     loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
-        smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+        smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
     JS_FreeValue(runtime.context(), tree);
     LOKA_VERIFY(lowered.isSet() == accepted);
   }
@@ -6810,7 +6814,7 @@ namespace
     LOKA_VERIFY(!JS_IsException(tree));
     {
       loka::core::OwnedDef<ObservedDefinition> lowered(
-          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(lowered.isSet());
       observe(*lowered.get(), runtime);
