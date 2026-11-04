@@ -24,4 +24,5 @@ void testTextCommitAdmissionGate();
 void testTextCommitRetainedRequestInvalidation();
 void testTextCommitReplacesOtherScene();
 void testTextCommitSettlesBeforeQuitReservation();
+void testTextCommitObservationHook();
 #endif

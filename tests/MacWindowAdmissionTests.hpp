@@ -6,4 +6,5 @@ void testMacWindowVisibilityAdmissionAndDelegateClose();
 void testMacPerformCloseAsksKeyedWindowWithoutClosing();
 void testMacPerformCloseClosesUnkeyedWindowAsToday();
 
+void testMacWindowShouldCloseCommitsBeforeAsk();
 #endif

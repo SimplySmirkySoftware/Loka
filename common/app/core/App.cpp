@@ -9,6 +9,7 @@
 #include "core/Operation.hpp"
 #ifdef TEST_BUILD
 #include "testing/app/URLReceiveTestHooks.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #endif
 
 App::App(AppConfigurable *config)
@@ -747,6 +748,9 @@ bool App::commitWindowText(Window &window)
 loka::app::TextInputCommit App::commitTextInput()
 {
   loka::core::Operation turn;
+#ifdef TEST_BUILD
+  loka::testing::noteTextInputCommit();
+#endif
   const bool settled = !this->flushingWindowWork_ && this->visitWindows(&App::commitWindowText);
   turn.close();
   return settled ? loka::app::TEXT_INPUT_SETTLED : loka::app::TEXT_INPUT_UNAVAILABLE;

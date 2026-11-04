@@ -10,6 +10,7 @@
 #include "app/nodes/boundary/StdComposition.hpp"
 #include "core/util/StateTrackerGuard.hpp"
 #include "testing/core/StateTrackerTestAccess.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #if defined(__linux__) && defined(LOKA_LIFECYCLE_AUDIT) && !defined(NDEBUG) && !defined(__SANITIZE_ADDRESS__)
 #include <sys/wait.h>
 #include <unistd.h>
@@ -428,12 +429,20 @@ void testTextCommitMarkedAndRequests()
   doc.post(old);
   f.app.reconcileAtCompletion();
   LOKA_VERIFY(doc.fact()->get().state() == TEXT_DOCUMENT_MARKED);
-  LOKA_VERIFY(!doc.fact()->get().caret().isNone() && !doc.fact()->get().selectionAnchor().isNone());
+  LOKA_VERIFY(doc.fact()->get().textRevision() == 1);
+  LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(1, 3));
+  LOKA_VERIFY(doc.fact()->get().selectionAnchor() == TextPositionTestAccess::make(1, 1));
   LOKA_VERIFY(TextDocumentAccess::pending(doc) && f.controller.applies == 0);
   // Even a stale request waits while marked; the newer post wins in that slot.
   const TextPosition newer = doc.fact()->get().selectionAnchor();
   doc.post(newer);
+  // A second body edit advances the revision while composition remains marked.
+  TextDocumentAccess::edit(doc, TextChangedRange(0, 1, 1));
   f.app.reconcileAtCompletion();
+  LOKA_VERIFY(doc.fact()->get().state() == TEXT_DOCUMENT_MARKED);
+  LOKA_VERIFY(doc.fact()->get().textRevision() == 2);
+  LOKA_VERIFY(doc.fact()->get().caret() == TextPositionTestAccess::make(2, 3));
+  LOKA_VERIFY(doc.fact()->get().selectionAnchor() == TextPositionTestAccess::make(2, 1));
   LOKA_VERIFY(TextDocumentAccess::pending(doc) && f.controller.applies == 0);
   unsigned writes = 0;
   doc.fact()->bind(&count, &writes, false);
@@ -443,7 +452,7 @@ void testTextCommitMarkedAndRequests()
   LOKA_VERIFY(doc.queryLength(length) && length == 7);
   // The command handler reads the committed body after the door returns.
   LOKA_VERIFY(TextDocumentAccess::committedText(doc) == "??hello");
-  LOKA_VERIFY(doc.fact()->get().textRevision() == 2);
+  LOKA_VERIFY(doc.fact()->get().textRevision() == 3);
   LOKA_VERIFY(TextDocumentAccess::pending(doc) && f.controller.applies == 0);
   f.app.reconcileAtCompletion();
   LOKA_VERIFY(!TextDocumentAccess::pending(doc) && f.controller.applies == 0);
@@ -848,4 +857,23 @@ void testTextCommitSettlesBeforeQuitReservation()
     f.app.requestQuitAtCompletion();
   }
   f.text().fact()->unbind(&QuitOrder::changed, &observer);
+}
+
+namespace
+{
+  void observeCommitTurn(void *data)
+  {
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+    ++*static_cast<unsigned *>(data);
+  }
+} // namespace
+void testTextCommitObservationHook()
+{
+  Fixture f;
+  unsigned probes = 0;
+  loka::testing::observeTextInputCommits(&observeCommitTurn, &probes);
+  LOKA_VERIFY(f.app.commitTextInput() == TEXT_INPUT_SETTLED);
+  LOKA_VERIFY(probes == 1 && loka::testing::textInputCommitCount() == 1);
+  loka::testing::observeTextInputCommits(0, 0);
 }

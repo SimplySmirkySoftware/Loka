@@ -12,4 +12,7 @@ void testMacQuitEventSequentialAppsAttach();
 void testMacQuitEventTerminateFallbackCancelsAndReserves();
 void testMacQuitEventQuitTwiceRepliesOnce();
 
+void testMacQuitEventCommitsAfterAcceptanceBeforeReservation();
+void testMacQuitEventRefusalDoesNotCommit();
+void testMacTerminationCommitsBeforeReservation();
 #endif

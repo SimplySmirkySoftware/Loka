@@ -33,4 +33,5 @@ void testMacEditMenuDispatchToTextView();
 void testMacEditMenuValidationUsesRealSender();
 void testMacEditMenuKeyPanelFieldEditor();
 void testMacEditMenuKeyWindowBeforeMainWindow();
+void testMacMenuActionCommitsBeforeDispatch();
 #endif // LOKA_TESTS_MAC_MENU_PROJECTION_TESTS_HPP
