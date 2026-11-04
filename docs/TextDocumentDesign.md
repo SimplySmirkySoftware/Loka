@@ -5,7 +5,8 @@
 > froze [The document](#the-document),
 > [Reads, positions, and requests](#reads-positions-and-requests) and
 > [Migration](#migration). [Kernel obligations](#kernel-obligations) lists
-> the kernel contract and its implementation; IME commit remains a later step.
+> the kernel contract and its implementation, including the common IME commit door
+> (page 1c, owner ruling 2026-11-04); native commit implementations remain pending.
 > [Why](#why) and [Native facts](#native-facts) are background. The policy in
 > [From AGENTS.md](#from-agentsmd) applies to new work now; the shipped
 > `TextEditor` keeps its current model until the migration replaces it.
@@ -44,7 +45,9 @@ migration removes it.
 
 The document's fact has a single writer in the kernel, in the
 [Focus](FocusDesign.md#from-agentsmd) shape: it is read at the outer
-completion. Rails answer that writer's questions and never write the fact
+completion. The command door `App::commitTextInput` enters the same writer
+without taking requests; requests stay while the first reading is `MARKED`,
+even when their revision differs. Rails answer that writer's questions and never write the fact
 from native notifications.
 
 ### Names already in the tree
@@ -142,17 +145,28 @@ then plays the native role. It is still the only copy.
   - That rule today drops a request whose native resource is missing. For a
     document, `AWAITING_STORE` is the exception: the request waits instead.
     The refusal rule names this exception in the common kernel.
-- **Commands.** Uncommitted IME text is committed before these operations, so
-  none of them acts on a document that is still `MARKED`:
+- **Commands.** The command door asks every eligible window to commit uncommitted
+  IME text and refresh its facts before these operations (subject to the v1
+  limits below):
   - an Edit command;
   - save;
   - close, including the close confirmation;
   - Quit.
 
-  It does not matter whether the operation arrives as a menu item, a key, a
-  window's close box or an Apple event. How each rail meets this belongs to
-  the kernel design. MLTE has no commit door, and on Win32 the committed text
-  lands only after the commit call returns (see [Native facts](#native-facts)).
+  Menu actions and their key equivalents, window close boxes, and macOS quit
+  Apple events / termination requests enter the door. A closed window gate
+  leaves that window unchanged and answers `TEXT_INPUT_UNAVAILABLE`; other
+  windows still refresh. Commands proceed with the available facts, without
+  repost or retry. `TEXT_INPUT_SETTLED` means all visited gates opened, including
+  an empty walk, not that every document is `READY`.
+
+  V1 limits: Button, Toolbar and Ribbon commands that do not pass through the
+  menu do not commit. Classic (Toolbox) does not commit uncommitted text before
+  commands: its default store door does nothing. Win32 store creation explicitly
+  refuses until page 1d is frozen and implemented, because committed IME text
+  reaches the body later through the message queue (see [Native facts](#native-facts)).
+  This is a documented refusal marker, not a compile-time wall. Production rails
+  still create no stores, so the shipped `TextEditor` behavior is unchanged.
 
 ## Migration
 
@@ -171,8 +185,10 @@ for creation, [SceneTextDocuments](../common/app/scene/SceneTextDocuments.hpp)
 for membership, and [TextDocumentPublisher](../common/app/text/TextDocument.cpp)
 for the single read/take/apply/read/write sequence. Controller doors in
 [IPlatformController](../common/app/scene/projection/PlatformController.hpp)
-refuse by default; only the Null rail supplies stores in this step. There is
-no uncommitted-text field until the IME commit door lands.
+refuse by default; only the Null rail supplies stores in this step. The
+`commitMarkedText` operation defaults to doing nothing. `TextStoreReading`
+reports marked text; the latest reading determines `MARKED`, with positions
+assembled just as in `READY`.
 
 The obligations are:
 
@@ -182,16 +198,26 @@ The obligations are:
     the document becomes `UNAVAILABLE`, without retry until the root is recreated.
 - **The fact and its requests**
   - The fact has a single writer in the Focus shape: it reads native changes
-    at the outer completion and writes the fact once.
+    at the outer completion and writes the fact once. The command door enters
+    the same assembly through `refresh`, under the same publication and borrow
+    interval, but never takes requests.
   - Rails mark changes and answer questions; they never write the fact.
-  - Requests are taken only by that writer.
+  - Requests are taken only by that writer at completion. A marked first reading
+    retains the caret request before the revision-drop rule; newer posts coalesce
+    over it. After commit, the next completion drops it if the revision advanced,
+    or applies it if the revision still matches. There is no timeout.
   - Queries refuse while a native change is unreconciled.
 - **Replacing and releasing a store** (replacement and view detach are later steps)
   - Open builds the new store completely before swapping it in.
   - Detaching a view allocates nothing.
   - Reclaim happens at the owning clock's boundary and fires nothing.
-- **IME commit** (later step): each rail commits uncommitted IME text before the commands
-  above, or holds them until the committed text has landed.
+- **IME commit:** `App::commitTextInput` opens an Operation (joining an outer turn),
+  shares completion's live window walk, and enters each window's shared document
+  gate. It performs no admission, completion reconcile, or caret delivery.
+  Each linked store is asked to commit before the writer reads it. Rails copy
+  handles and identities before native calls and revalidate afterwards; native
+  callbacks only mark the row's change note. Native implementations follow in
+  the store PRs, with the v1 limits above.
 
 ### Known visibility limit
 

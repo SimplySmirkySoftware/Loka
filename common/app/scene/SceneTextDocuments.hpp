@@ -4,6 +4,10 @@ namespace loka
 {
   namespace app
   {
+    namespace testing
+    {
+      struct TextDocumentAccess;
+    }
     namespace detail
     {
       class TextDocumentPublisher;
@@ -60,6 +64,7 @@ namespace loka
         };
         TextDocumentRegistration *head_;
         Phase phase_;
+        friend struct ::loka::app::testing::TextDocumentAccess;
         friend class TextDocumentRegistration;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };

@@ -6,6 +6,7 @@
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/scene/Scene.hpp"
 #include <algorithm>
+#include "core/Operation.hpp"
 #ifdef TEST_BUILD
 #include "testing/app/URLReceiveTestHooks.hpp"
 #endif
@@ -725,9 +726,38 @@ void App::projectMenuSources()
 
 void App::reconcileAtCompletion()
 {
-  if (this->flushingWindowWork_ || !this->group_)
+  if (this->flushingWindowWork_)
     return;
-  /** Each completion walks live App-owned windows (w), never foreign rows.
+  this->visitWindows(&App::reconcileWindow);
+}
+
+bool App::reconcileWindow(Window &window)
+{
+  window.reconcileFocus();
+  if (!this->isWindowClosePending(&window))
+    window.reconcileTextDocuments();
+  return true;
+}
+
+bool App::commitWindowText(Window &window)
+{
+  return window.commitTextDocuments();
+}
+
+loka::app::TextInputCommit App::commitTextInput()
+{
+  loka::core::Operation turn;
+  const bool settled = !this->flushingWindowWork_ && this->visitWindows(&App::commitWindowText);
+  turn.close();
+  return settled ? loka::app::TEXT_INPUT_SETTLED : loka::app::TEXT_INPUT_UNAVAILABLE;
+}
+
+bool App::visitWindows(bool (App::*visit)(Window &))
+{
+  if (!this->group_)
+    return true;
+  bool accepted = true;
+  /** Each completion or command walks live App-owned windows (w), never foreign rows.
       Repeated scans visit O(w^2) group entries; linear visited lookups cost
       O(w^3) pointer comparisons in the worst case. Local storage is O(1)
       through eight windows and O(w) beyond that; only the overflow allocates.
@@ -773,11 +803,10 @@ void App::reconcileAtCompletion()
       }
     }
     if (!next)
-      return;
+      return accepted;
     visited.add(next);
-    next->reconcileFocus();
-    if (!this->isWindowClosePending(next))
-      next->reconcileTextDocuments();
+    if (!(this->*visit)(*next))
+      accepted = false;
   }
 }
 

@@ -8,11 +8,18 @@ namespace loka
   {
     namespace detail
     {
-      /** Single writer/taker, parallel to FocusPublisher; only Window enters completion. */
+      /** Single writer/taker, parallel to FocusPublisher; only Window enters completion or refresh. */
       class TextDocumentPublisher
       {
         static void complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
-        static void publish(scene::TextDocumentRegistration &row, scene::IPlatformController &controller);
+        enum Requests
+        {
+          TAKE_REQUESTS,
+          KEEP_REQUESTS
+        };
+        static void refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
+        static void
+        publish(scene::TextDocumentRegistration &row, scene::IPlatformController &controller, Requests requests);
         friend class ::Window;
       };
     } // namespace detail

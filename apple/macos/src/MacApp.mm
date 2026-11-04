@@ -35,6 +35,8 @@
     [reply setParamDescriptor:[NSAppleEventDescriptor descriptorWithInt32:userCanceledErr] forKeyword:keyErrorNumber];
     return;
   }
+  // Twin: ToolboxApp::handleMenuSelection (AppMenu Quit).
+  self.owner->commitTextInput();
   self.owner->requestQuitAtCompletion();
 }
 
@@ -42,7 +44,11 @@
 {
   (void)sender;
   if (self.owner)
+  {
+    // Twin: ToolboxApp::handleMenuSelection (AppMenu Quit).
+    self.owner->commitTextInput();
     self.owner->requestQuitAtCompletion();
+  }
   return NSTerminateCancel;
 }
 @end

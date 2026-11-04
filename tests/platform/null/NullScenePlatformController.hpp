@@ -173,6 +173,10 @@ public:
     return true;
   }
   virtual bool createTextStore(loka::app::scene::TextDocumentRegistration &registration);
+  virtual void commitMarkedText(loka::app::scene::TextStoreRow &row)
+  {
+    static_cast<NullTextStore &>(row).commit();
+  }
   virtual bool readTextStore(loka::app::scene::TextStoreRow &row, loka::app::scene::TextStoreReading &out)
   {
     out = static_cast<NullTextStore &>(row).take();
