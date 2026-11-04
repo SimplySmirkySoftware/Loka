@@ -108,10 +108,11 @@ lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchSe
 bounded "$lsregister" -f "$bundle" || fail 'lsregister -f'
 dump=$(bounded "$lsregister" -dump) || fail 'lsregister -dump'
 # Records are separated by dashed lines; identifier and path order varies by OS.
+# Newer lsregister dumps append a record id "(0x...)" to the path.
 paths=$(printf '%s\n' "$dump" | awk -v wanted="$bundle_id" '
   function emit() { if (id == wanted && path != "") print path }
   /^-+$/ { emit(); id=""; path=""; next }
-  /^[ \t]*path:/ { sub(/^[ \t]*path:[ \t]*/, ""); path=$0 }
+  /^[ \t]*path:/ { sub(/^[ \t]*path:[ \t]*/, ""); sub(/[ \t]+\(0x[0-9a-fA-F]+\)$/, ""); path=$0 }
   /^[ \t]*identifier:/ { sub(/^[ \t]*identifier:[ \t]*/, ""); sub(/[ \t]+\(.*$/, ""); id=$0 }
   END { emit() }
 ' | sort -u) || fail 'registration inventory'
