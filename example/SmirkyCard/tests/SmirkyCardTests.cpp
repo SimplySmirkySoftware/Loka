@@ -12,6 +12,8 @@
 #include "JsToolbarNode.hpp"
 #include "app/nodes/controls/Cell.hpp"
 #include "app/nodes/nestable/Grid.hpp"
+#include "app/nodes/nestable/Show.hpp"
+#include "app/nodes/controls/Card.hpp"
 #include "app/nodes/nestable/RowColumn.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "app/style/CardStyle.hpp"
@@ -102,6 +104,11 @@ namespace smirkycard
         for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
           if (s->kind == JsSeatRecord::IMAGE) return s->image.state();
         return 0;
+      }
+      static loka::core::State<loka::core::resource::Image> *imageStateFor(JSContext *ctx, JSValueConst seat)
+      {
+        JsSeatRecord *record = card()->findSeat(ctx, seat);
+        return record && record->kind == JsSeatRecord::IMAGE ? record->image.state() : 0;
       }
       static loka::core::State<loka::app::FileChooserResult> *fileState()
       {
@@ -5876,6 +5883,12 @@ namespace
         LOKA_VERIFY(result == loka::dsl::FLOW_STEP_FAILED
                     && error.code == loka::dsl::testing::FLOW_ERROR_SCENE_TEST_NODE_NOT_FOUND);
     }
+    loka::app::scene::Node *title = windowNode(window, "Laptop.Title");
+    LOKA_VERIFY(title && title->asTextNode());
+    LOKA_VERIFY(title->asTextNode()->props.textStyle_ == (loka::app::FontSize<18>() + loka::app::Bold));
+    loka::app::scene::Node *main = windowNode(window, "SmirkyCard.OpenMain");
+    loka::app::scene::Node *about = windowNode(window, "Laptop.About");
+    LOKA_VERIFY(main && main->asButtonNode() && about && about->asButtonNode());
   }
 
   void checkLaptopPictureChoice(NamedPicturePlatform &context, bool mono)
@@ -6640,8 +6653,296 @@ namespace
     }
   }
 
+  typedef loka::app::scene::NodeDefinitionBase ObservedDefinition;
+
+  template <class Props> const Props &definitionProps(const ObservedDefinition &definition)
+  {
+    const loka::app::scene::PropsBase *props = definition.propsBase();
+    LOKA_VERIFY(props && props->propsTypeId() == Props::staticTypeId());
+    return *static_cast<const Props *>(props);
+  }
+
+  ObservedDefinition &definitionChild(ObservedDefinition &definition, unsigned index)
+  {
+    loka::app::scene::INestableDefinition *nest = definition.asNestableDefinition();
+    LOKA_VERIFY(nest);
+    ObservedDefinition *child = nest->childrenHead();
+    while (child && index--)
+      child = child->nextInComposition;
+    LOKA_VERIFY(child);
+    return *child;
+  }
+
+  void definitionChildren(ObservedDefinition &definition, unsigned count)
+  {
+    LOKA_VERIFY(definition.asNestableDefinition());
+    LOKA_VERIFY(definition.asNestableDefinition()->childrenCount() == count);
+  }
+
+  // One lower per fresh owner: successful lowering admits handlers on that owner.
+  void lowerLaptopObservation(const char *expression,
+                              void (*observe)(ObservedDefinition &, smirkycard::ScriptRuntime &),
+                              bool mono)
+  {
+    std::string source = readCardSource("LAPTOP.JS");
+    const std::string registration = "card('first', class {";
+    const std::string::size_type start = source.find(registration);
+    LOKA_VERIFY(start != std::string::npos);
+    source.replace(start, registration.size(), "class LaptopDefinitionOwner {");
+    const std::string::size_type end = source.rfind("});");
+    LOKA_VERIFY(end != std::string::npos);
+    source.replace(end,
+                   3,
+                   "} card('first', class extends LaptopDefinitionOwner {"
+                   "constructor(c){super(c);globalThis.laptop=this;}compose(){return Text('owner')}});");
+    LaptopPicturePlatform<1> monochrome;
+    LaptopPicturePlatform<8> color;
+    smirkycard::ScriptRuntime runtime(mono ? static_cast<NamedPicturePlatform *>(&monochrome) : &color);
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(mono ? static_cast<NamedPicturePlatform *>(&monochrome) : &color, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    expectJs(runtime, "laptop.c.error.get()", "");
+    smirkycard::testing::CardFlowAccess::scene = window.scene();
+    JSValue tree = JS_Eval(
+        runtime.context(), expression, std::strlen(expression), "laptop native observation", JS_EVAL_TYPE_GLOBAL);
+    LOKA_VERIFY(!JS_IsException(tree));
+    {
+      loka::core::OwnedDef<ObservedDefinition> lowered(
+          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+      JS_FreeValue(runtime.context(), tree);
+      LOKA_VERIFY(lowered.isSet());
+      observe(*lowered.get(), runtime);
+    }
+    smirkycard::testing::CardFlowAccess::scene = 0;
+  }
+
+  // Inspect both retained Show arms. Only synthetic Fragment/content columns
+  // are transparent to descriptor depth; Card's decorative bands are excluded.
+  void walkLaptopDefinition(
+      ObservedDefinition &definition, ObservedDefinition *parent, unsigned depth, unsigned &list, unsigned &carousel)
+  {
+    using namespace loka::app;
+    const scene::PropsBase *base = definition.propsBase();
+    LOKA_VERIFY(base);
+    if (base->propsTypeId() == smirkycard::JsClickProps::staticTypeId())
+    {
+      const smirkycard::JsClickProps &click = definitionProps<smirkycard::JsClickProps>(definition);
+      const loka::core::StringBuffer buffer = click.testId.bufferWithEncoding(loka::core::StringEncodingUtf8);
+      const std::string id(static_cast<const char *>(buffer.data()), buffer.length());
+      if (id.find("Laptop.Open.") == 0 || id.find("Laptop.Narrow.") == 0)
+      {
+        LOKA_VERIFY(depth == 10 && parent);
+        LOKA_VERIFY(definitionProps<StackProps>(*parent).axis_ == STACK_AXIS_COLUMN);
+        definitionChildren(*parent, 2);
+        LOKA_VERIFY(&definitionChild(*parent, 1) == &definition);
+        ObservedDefinition &thumbnail = definitionChild(*parent, 0);
+        LOKA_VERIFY(definitionProps<BoxProps>(thumbnail).childClip_ == ClipBox().props.childClip_);
+        definitionChildren(thumbnail, 1);
+        definitionProps<ImageViewProps>(definitionChild(thumbnail, 0));
+        LOKA_VERIFY(depth + 1 == 11);
+        ++list;
+      }
+    }
+    if (base->propsTypeId() == StackProps::staticTypeId())
+    {
+      scene::INestableDefinition *nest = definition.asNestableDefinition();
+      LOKA_VERIFY(nest);
+      ObservedDefinition *first = nest->childrenHead();
+      ObservedDefinition *second = first ? first->nextInComposition : 0;
+      if (second && second->propsBase()->propsTypeId() == smirkycard::JsClickProps::staticTypeId())
+      {
+        const smirkycard::JsClickProps &click = definitionProps<smirkycard::JsClickProps>(*second);
+        const loka::core::StringBuffer buffer = click.testId.bufferWithEncoding(loka::core::StringEncodingUtf8);
+        const std::string id(static_cast<const char *>(buffer.data()), buffer.length());
+        if (id.find("Laptop.Wide.") == 0)
+        {
+          definitionChildren(definition, 2);
+          LOKA_VERIFY(parent);
+          definitionProps<CardProps>(*parent);
+          LOKA_VERIFY(definitionProps<StackProps>(definition).axis_ == STACK_AXIS_COLUMN);
+          definitionProps<ImageViewProps>(*first);
+          ++carousel;
+        }
+      }
+    }
+    if (base->propsTypeId() == scene::ConditionalProps::staticTypeId())
+    {
+      for (unsigned arm = 0; arm < 2; ++arm)
+      {
+        ObservedDefinition *fragment = definition.retainedDefinitionBranch(arm);
+        LOKA_VERIFY(fragment);
+        definitionProps<FragmentProps>(*fragment);
+        definitionChildren(*fragment, arm == 0 ? 1 : 0);
+        scene::INestableDefinition *nest = fragment->asNestableDefinition();
+        LOKA_VERIFY(nest);
+        for (ObservedDefinition *child = nest->childrenHead(); child; child = child->nextInComposition)
+          walkLaptopDefinition(*child, &definition, depth + 1, list, carousel);
+      }
+      return;
+    }
+    ObservedDefinition *children = &definition;
+    if (base->propsTypeId() == CardProps::staticTypeId())
+    {
+      children = &definitionChild(definition, 0);
+      LOKA_VERIFY(definitionProps<StackProps>(*children).axis_ == STACK_AXIS_COLUMN);
+    }
+    scene::INestableDefinition *nest = children->asNestableDefinition();
+    for (ObservedDefinition *child = nest ? nest->childrenHead() : 0; child; child = child->nextInComposition)
+      walkLaptopDefinition(*child, &definition, depth + 1, list, carousel);
+  }
+
+  void observeLaptopCompose(ObservedDefinition &root, smirkycard::ScriptRuntime &)
+  {
+    std::fputs("[native] laptop compose: static ground, retained clicks, thumbnail shapes and depths\n", stderr);
+    LOKA_VERIFY(definitionProps<loka::app::ZStackProps>(root).unitGround
+                == loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR);
+    unsigned list = 0, carousel = 0;
+    walkLaptopDefinition(root, 0, 0, list, carousel);
+    LOKA_VERIFY(list == 26 && carousel == 13);
+  }
+
+  void observeLaptopPane(ObservedDefinition &root, smirkycard::ScriptRuntime &runtime)
+  {
+    using namespace loka::app;
+    std::fputs("[native] laptop pane: ground, insets, bar and ordered live toolbar rows\n", stderr);
+    LOKA_VERIFY(definitionProps<ZStackProps>(root).unitGround == ZSTACK_UNIT_GROUND_EXP_BLUR);
+    definitionChildren(root, 2);
+    ObservedDefinition &page = definitionChild(root, 0);
+    const bool scroll = page.propsBase()->propsTypeId() == ScrollViewProps::staticTypeId();
+    if (scroll)
+      LOKA_VERIFY(definitionProps<ScrollViewProps>(page).contentInsets_ == ScrollViewContentInsets::of(30, 0));
+    else
+      LOKA_VERIFY(definitionProps<BoxProps>(page).padding == StandardWindowMargin());
+    ObservedDefinition &bar = definitionChild(root, 1);
+    const BoxProps &box = definitionProps<BoxProps>(bar);
+    LOKA_VERIFY(box.height == 30 && box.padding == layout::LayoutGap::of(4));
+    definitionChildren(bar, 1);
+    const smirkycard::JsToolbarProps &toolbar = definitionProps<smirkycard::JsToolbarProps>(definitionChild(bar, 0));
+    LOKA_VERIFY(toolbar.count == 4);
+    // The fixture supplies the method's expected lead as an app fact, not a descriptor read.
+    loka::core::String lead, error;
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("expectedLead"), lead, error));
+    const bool detail = lead.equals(loka::core::String::Literal("< Back"));
+    LOKA_VERIFY(scroll == !lead.equals(loka::core::String::Literal("Tall")));
+    const char *ids[] = {
+        detail ? "Laptop.Back" : "Laptop.Presentation", "Laptop.Title", "SmirkyCard.OpenMain", "Laptop.About"};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      const smirkycard::JsToolbarRow &row = toolbar.rows[i];
+      LOKA_VERIFY(row.testId.equals(loka::core::String::Literal(ids[i])));
+      LOKA_VERIFY(row.kind == (i == 1 ? smirkycard::JS_TOOLBAR_ROW_LABEL : smirkycard::JS_TOOLBAR_ROW_BUTTON));
+      if (i != 1)
+        LOKA_VERIFY(row.handler);
+    }
+    LOKA_VERIFY(toolbar.rows[0].label.equals(lead));
+    LOKA_VERIFY(toolbar.rows[2].label.equals(loka::core::String::Literal("Main")));
+    LOKA_VERIFY(toolbar.rows[3].label.equals(loka::core::String::Literal("About")));
+    LOKA_VERIFY(toolbar.rows[1].text);
+    const TextStyle titleStyle = FontSize<18>() + Bold;
+    LOKA_VERIFY(!(toolbar.rows[1].style < titleStyle) && !(titleStyle < toolbar.rows[1].style));
+    expectJs(runtime, "laptop.toolbarTitle.set('native title');laptop.toolbarTitle.get()", "native title");
+    LOKA_VERIFY(toolbar.rows[1].text->get().equals(loka::core::String::Literal("native title")));
+    if (scroll && !detail)
+    {
+      std::fputs("[native] laptop list: fourteen retained arms and odd row filler\n", stderr);
+      definitionChildren(page, 1);
+      ObservedDefinition &column = definitionChild(page, 0);
+      LOKA_VERIFY(definitionProps<StackProps>(column).axis_ == STACK_AXIS_COLUMN);
+      definitionChildren(column, 14);
+      for (unsigned i = 0; i < 14; ++i)
+      {
+        ObservedDefinition &show = definitionChild(column, i);
+        definitionProps<scene::ConditionalProps>(show);
+        ObservedDefinition *arm = show.retainedDefinitionBranch(0);
+        LOKA_VERIFY(arm);
+        definitionProps<FragmentProps>(*arm);
+        definitionChildren(*arm, 1);
+        ObservedDefinition &row = definitionChild(*arm, 0);
+        LOKA_VERIFY(definitionProps<StackProps>(row).axis_ == (i < 7 ? STACK_AXIS_ROW : STACK_AXIS_COLUMN));
+        definitionChildren(row, i == 13 ? 1 : 2);
+        if (i == 6)
+        {
+          ObservedDefinition &card = definitionChild(row, 0);
+          definitionProps<CardProps>(card);
+          ObservedDefinition &content = definitionChild(card, 0);
+          LOKA_VERIFY(definitionProps<StackProps>(content).axis_ == STACK_AXIS_COLUMN);
+          definitionChildren(content, 1);
+          ObservedDefinition &declared = definitionChild(content, 0);
+          LOKA_VERIFY(definitionProps<StackProps>(declared).axis_ == STACK_AXIS_COLUMN);
+          definitionChildren(declared, 2);
+          const BoxProps defaults;
+          ObservedDefinition &filler = definitionChild(row, 1);
+          const BoxProps &actual = definitionProps<BoxProps>(filler);
+          LOKA_VERIFY(!(actual < defaults) && !(defaults < actual));
+          definitionChildren(filler, 1);
+          const TextProps &text = definitionProps<TextProps>(definitionChild(filler, 0));
+          LOKA_VERIFY(text.text_ && text.text_->get().equals(loka::core::String::Literal("")));
+        }
+      }
+    }
+  }
+
+  void observeLaptopSeat(ObservedDefinition &root, smirkycard::ScriptRuntime &runtime)
+  {
+    using namespace loka::app;
+    std::fputs("[native] laptop machineCard: thumbnail seat identity and image dimensions\n", stderr);
+    definitionProps<CardProps>(root);
+    ObservedDefinition &content = definitionChild(root, 0);
+    LOKA_VERIFY(definitionProps<StackProps>(content).axis_ == STACK_AXIS_COLUMN);
+    definitionChildren(content, 1);
+    ObservedDefinition &declared = definitionChild(content, 0);
+    LOKA_VERIFY(definitionProps<StackProps>(declared).axis_ == STACK_AXIS_COLUMN);
+    definitionChildren(declared, 2);
+    ObservedDefinition &clip = definitionChild(declared, 0);
+    LOKA_VERIFY(definitionProps<BoxProps>(clip).childClip_ == ClipBox().props.childClip_);
+    definitionChildren(clip, 1);
+    const ImageViewProps &image = definitionProps<ImageViewProps>(definitionChild(clip, 0));
+    LOKA_VERIFY(image.width_ == 150 && image.height_ == 94);
+    LOKA_VERIFY(image.hasAttr_ && image.attr_.hasFitValue_ && image.attr_.fitValue_ == IMAGE_FIT_CONTAIN);
+    const char *expression = "laptop.thumbs[0]";
+    JSValue seat =
+        JS_Eval(runtime.context(), expression, std::strlen(expression), "thumbnail seat", JS_EVAL_TYPE_GLOBAL);
+    LOKA_VERIFY(!JS_IsException(seat));
+    loka::core::State<loka::core::resource::Image> *expected =
+        smirkycard::testing::CardFlowAccess::imageStateFor(runtime.context(), seat);
+    JS_FreeValue(runtime.context(), seat);
+    LOKA_VERIFY(expected && image.image_ == expected);
+  }
+
+  void checkLaptopNativeObservations()
+  {
+    // Same named-image fixture as checkLaptopScenario; this independent entry also
+    // runs under --native-observations and removes its files before returning.
+    LOKA_VERIFY(makeDirectory("_named_pictures"));
+    const char *suffixes[] = {"", "M", "MS"};
+    for (unsigned i = 0; i < 13; ++i)
+      for (unsigned j = 0; j < 3; ++j)
+        writeMain((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str(), "img");
+    writeMain("_named_pictures/ICON.PNG", "img");
+    writeMain("_named_pictures/ICONMS.PNG", "img");
+    lowerLaptopObservation("LaptopDefinitionOwner.prototype.compose.call(laptop)", observeLaptopCompose, true);
+    lowerLaptopObservation("globalThis.expectedLead='Tall';laptop.carousel()", observeLaptopPane, true);
+    lowerLaptopObservation("globalThis.expectedLead='Wide';laptop.list()", observeLaptopPane, true);
+    lowerLaptopObservation("globalThis.expectedLead='< Back';laptop.detailPage()", observeLaptopPane, true);
+    lowerLaptopObservation("laptop.machineCard(0,150,94,'x','x',true)", observeLaptopSeat, true);
+    lowerLaptopObservation("laptop.machineCard(0,150,94,'x','x',true)", observeLaptopSeat, false);
+    for (unsigned i = 0; i < 13; ++i)
+      for (unsigned j = 0; j < 3; ++j)
+        LOKA_VERIFY(std::remove((std::string("_named_pictures/") + laptopStems[i] + suffixes[j] + ".PNG").c_str())
+                    == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/ICON.PNG") == 0);
+    LOKA_VERIFY(std::remove("_named_pictures/ICONMS.PNG") == 0);
+    removeDirectory("_named_pictures");
+  }
+
   void checkNativeObservations()
   {
+    checkLaptopNativeObservations();
     checkNativeRegistry();
     mountObservation(
         "card('first',class{constructor(c){this.b=c.state(true)}compose(){"
