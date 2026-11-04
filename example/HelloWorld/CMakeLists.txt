@@ -54,6 +54,7 @@ if(WIN32)
   # Use UTF-8 source/execution charset on MSVC to avoid codepage warnings
   if(MSVC)
     target_compile_options(LokaHelloWin32 PRIVATE /utf-8)
+    target_compile_options(LokaURLOpenProbeWin32 PRIVATE /utf-8)
   endif()
 
   # The test binary compiles the common sources itself so TEST_BUILD applies
