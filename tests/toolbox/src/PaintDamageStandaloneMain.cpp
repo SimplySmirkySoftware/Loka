@@ -1,3 +1,4 @@
+#include "ToolboxAlignedPattern.hpp"
 #include "ToolboxPaintResultText.hpp"
 #include "ToolboxProbeTiming.hpp"
 #include "../../support/PictAdmissionFixture.hpp"
@@ -3580,9 +3581,16 @@ namespace
       ShowWindow(window.window());
       SelectWindow(window.window());
       ToolboxPortScope selected(window.window());
-      const Pattern oldPattern = window.window()->bkPat;
-      const Pattern pattern = {{0x88, 0x22, 0x44, 0x11, 0x88, 0x22, 0x44, 0x11}};
-      BackPat(&pattern);
+      loka::toolbox::ToolboxAlignedPattern oldPattern;
+      oldPattern.pattern = window.window()->bkPat;
+      loka::toolbox::ToolboxAlignedPattern pattern;
+      pattern.pattern = window.window()->bkPat;
+      {
+        const unsigned char rows[8] = {0x88, 0x22, 0x44, 0x11, 0x88, 0x22, 0x44, 0x11};
+        for (unsigned i = 0; i < 8; ++i)
+          pattern.pattern.pat[i] = rows[i];
+      }
+      BackPat(&pattern.pattern);
       Access::flushInvalidation(scene);
       window.requestInvalidate();
       window.flushInvalidate();
@@ -3662,7 +3670,7 @@ namespace
                        liveEligible ? "eligible-LIVE-pair PASS\r"
                                     : "[skip] eligible-LIVE-pair requires eligible 8bpp rig\r");
       }
-      BackPat(&oldPattern);
+      BackPat(&oldPattern.pattern);
       HideWindow(window.window());
     }
 
