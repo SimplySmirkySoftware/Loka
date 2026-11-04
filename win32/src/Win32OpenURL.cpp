@@ -5,10 +5,11 @@
 loka::app::URLOpenKind Win32OpenWebURL(const loka::app::WebURL &url, BOOL(WINAPI *execute)(SHELLEXECUTEINFOW *info))
 {
   const loka::core::StringBuffer bytes = url.text().bufferWithEncoding(loka::core::StringEncodingUtf8);
+  const unsigned char *const chars = static_cast<const unsigned char *>(bytes.data());
   std::vector<wchar_t> wide(bytes.length() + 1, 0);
   for (std::size_t i = 0; i < bytes.length(); ++i)
   {
-    const unsigned char byte = static_cast<unsigned char>(bytes.data()[i]);
+    const unsigned char byte = chars[i];
     if (byte > 127)
       return loka::app::URL_NOT_OPENED;
     wide[i] = static_cast<wchar_t>(byte);
