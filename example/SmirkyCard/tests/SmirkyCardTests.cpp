@@ -2071,6 +2071,8 @@ namespace
       LOKA_VERIFY(label && label->asTextNode());
       const std::string expected = i ? std::string("A\0B", 3) : std::string("short");
       LOKA_VERIFY(textValue(label->asTextNode()) == expected);
+      if (!i)
+        LOKA_VERIFY(label->asTextNode()->props.textStyle_ == loka::app::FontSize<12>());
     }
   }
 
@@ -6324,10 +6326,385 @@ namespace
     expectJs(runtime, "off", "function,undefined,undefined,undefined");
     std::remove("_smirky_scenario.audit");
   }
+  // A0a companions observe genuine descriptors without reading their JS payloads.
+  void mountObservation(const char *source, void (*observe)(NullWindow &))
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(source, error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    if (windowNode(window, "SmirkyCard.Status"))
+      std::fprintf(stderr,
+                   "Observation refusal: %s\n",
+                   textValue(windowNode(window, "SmirkyCard.Status")->asTextNode()).c_str());
+    LOKA_VERIFY(!windowNode(window, "SmirkyCard.Status"));
+    observe(window);
+  }
+
+  void checkNativeRegistry()
+  {
+    smirkycard::JsCardBindingRegistry registry;
+    LOKA_VERIFY(smirkycard::RegisterSmirkyCardBindings(registry));
+    const int kinds[] = {1, 2, 3, 4, 5, 13, 14, 18, 19, 20, 21};
+    const char *names[] = {"VStack",
+                           "Text",
+                           "EditText",
+                           "Button",
+                           "Row",
+                           "Card",
+                           "ZStack",
+                           "ToolbarItem",
+                           "label",
+                           "flexibleSpace",
+                           "fixedSpace"};
+    const smirkycard::JsToolbarRowKind rows[] = {smirkycard::JS_TOOLBAR_ROW_BUTTON,
+                                                 smirkycard::JS_TOOLBAR_ROW_LABEL,
+                                                 smirkycard::JS_TOOLBAR_ROW_FLEXIBLE_SPACE,
+                                                 smirkycard::JS_TOOLBAR_ROW_FIXED_SPACE};
+    for (unsigned i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i)
+    {
+      const smirkycard::IJsNodeLowering *binding = registry.lookup(kinds[i]);
+      LOKA_VERIFY(binding && binding->kind == kinds[i]);
+      LOKA_VERIFY(!std::strcmp(binding->name, names[i]));
+      if (i > 7)
+        LOKA_VERIFY(binding->parent && !std::strcmp(binding->parent, "ToolbarItem"));
+      else
+        LOKA_VERIFY(!binding->parent);
+      smirkycard::JsToolbarRowKind row = smirkycard::JS_TOOLBAR_ROW_BUTTON;
+      LOKA_VERIFY(binding->queryToolbarRowKind(row) == (i >= 7));
+      if (i >= 7)
+        LOKA_VERIFY(row == rows[i - 7]);
+    }
+  }
+
+  void observeCopies(NullWindow &window)
+  {
+    using namespace loka::app;
+    using loka::app::scene::Node;
+    Node *source = windowNode(window, "t");
+    Node *copy = windowNode(window, "u");
+    LOKA_VERIFY(source && copy && source != copy && source->asTextNode() && copy->asTextNode());
+    LOKA_VERIFY(textValue(source->asTextNode()) == "a" && textValue(copy->asTextNode()) == "a");
+    const char *rows[] = {"Row.Source", "Row.x", "Row.y"};
+    const char *columns[] = {"Column.Source", "Column.x", "Column.y"};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      Node *row = windowNode(window, rows[i]);
+      Node *column = windowNode(window, columns[i]);
+      LOKA_VERIFY(row && row->asStackNode() && column && column->asStackNode());
+      LOKA_VERIFY(row->asStackNode()->props.rowUndeclaredWidth_
+                  == (i ? ROW_UNDECLARED_WIDTH_NATURAL : ROW_UNDECLARED_WIDTH_SHARED));
+      LOKA_VERIFY(column->asStackNode()->props.columnUndeclaredHeight_
+                  == (i ? COLUMN_UNDECLARED_HEIGHT_NATURAL : StackProps().columnUndeclaredHeight_));
+      Node *parents[] = {row, column};
+      for (unsigned j = 0; j < 2; ++j)
+      {
+        Node *child = parents[j]->asNestable()->childrenHead();
+        LOKA_VERIFY(child && child->asTextNode() && !child->nextInComposition);
+        LOKA_VERIFY(textValue(child->asTextNode()) == "a");
+      }
+    }
+    const char *depths[] = {
+        "Z.Source", "Z.Static", "Z.Live", "Z.StaticBefore", "Z.LiveBefore", "Z.ToStatic", "Z.ToLive"};
+    for (unsigned i = 0; i < 7; ++i)
+    {
+      Node *node = windowNode(window, depths[i]);
+      LOKA_VERIFY(node && node->asZStackNode());
+      LOKA_VERIFY(node->asZStackNode()->props.unitGround
+                  == (i == 0 ? ZSTACK_UNIT_GROUND_WINDOW
+                             : (i == 1 || i == 3 || i == 5 ? ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR
+                                                           : ZSTACK_UNIT_GROUND_EXP_BLUR)));
+      Node *child = node->asNestable()->childrenHead();
+      LOKA_VERIFY(child && child->asTextNode() && !child->nextInComposition);
+      LOKA_VERIFY(textValue(child->asTextNode()) == "g");
+    }
+    Node *button = windowNode(window, "Identity.Button");
+    LOKA_VERIFY(button && button->asButtonNode());
+    LOKA_VERIFY(button->asButtonNode()->props.getEnabled() && button->asButtonNode()->props.getEnabled()->get());
+  }
+
+  void observeToolbarCopies(NullWindow &window)
+  {
+    using namespace smirkycard;
+    const char *ids[] = {"Copy.Band", "Copy.Spaces", "Registry.Band"};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      loka::app::scene::Node *node = windowNode(window, ids[i]);
+      LOKA_VERIFY(node);
+      // These IDs belong exclusively to Toolbar descriptors in this test source.
+      const JsToolbarProps &props = static_cast<JsToolbarNode *>(node)->props;
+      LOKA_VERIFY(props.count == (i == 2 ? 4u : 3u));
+      if (i == 0)
+      {
+        for (unsigned j = 0; j < 2; ++j)
+        {
+          const JsToolbarRow &row = props.rows[j];
+          LOKA_VERIFY(row.kind == JS_TOOLBAR_ROW_BUTTON && row.handler && row.enabled && row.enabled->get());
+          LOKA_VERIFY(row.label.compare(loka::core::String::Literal(j ? "b" : "a")) == 0);
+          LOKA_VERIFY(row.testId.compare(loka::core::String::Literal(j ? "B" : "A")) == 0);
+          loka::app::scene::Node *button = windowNode(window, j ? "B" : "A");
+          LOKA_VERIFY(button && button->asButtonNode() && button->asButtonNode()->props.getEnabled());
+          LOKA_VERIFY(button->asButtonNode()->props.getEnabled()->get());
+        }
+        LOKA_VERIFY(props.rows[2].kind == JS_TOOLBAR_ROW_LABEL);
+        LOKA_VERIFY(props.rows[2].label.compare(loka::core::String::Literal("l")) == 0);
+        LOKA_VERIFY(props.rows[2].testId.compare(loka::core::String::Literal("L")) == 0);
+        loka::app::scene::Node *label = windowNode(window, "L");
+        LOKA_VERIFY(label && label->asTextNode() && textValue(label->asTextNode()) == "l");
+      }
+      else
+      {
+        const unsigned label = i == 2 ? 1 : 0;
+        if (i == 2)
+        {
+          LOKA_VERIFY(props.rows[0].kind == JS_TOOLBAR_ROW_BUTTON);
+          LOKA_VERIFY(props.rows[0].label.compare(loka::core::String::Literal("x")) == 0);
+        }
+        LOKA_VERIFY(props.rows[label].kind == JS_TOOLBAR_ROW_LABEL);
+        LOKA_VERIFY(props.rows[label].label.compare(loka::core::String::Literal(i == 2 ? "x" : "l")) == 0);
+        LOKA_VERIFY(props.rows[label + 1].kind == JS_TOOLBAR_ROW_FLEXIBLE_SPACE);
+        LOKA_VERIFY(props.rows[label + 2].kind == JS_TOOLBAR_ROW_FIXED_SPACE);
+        LOKA_VERIFY(props.rows[label + 2].width == (i == 2 ? 1 : 2));
+      }
+    }
+  }
+
+  void observeSnapshots(NullWindow &window)
+  {
+    using namespace loka::app;
+    using loka::app::scene::Node;
+    clickCardButton(window, "Captured.Read");
+    Node *count = windowNode(window, "Captured.Count");
+    LOKA_VERIFY(count && count->asTextNode());
+    // A1 reads a genuine label style once; today build, Toolbar build and lower each read it.
+    LOKA_VERIFY(textValue(count->asTextNode()) == "3");
+    Node *grid = windowNode(window, "Grid.Copy");
+    LOKA_VERIFY(grid && grid->asGridNode());
+    LOKA_VERIFY(grid->asGridNode()->props.rows == 1 && grid->asGridNode()->props.cols == 1);
+    LOKA_VERIFY(grid->asNestable()->childrenCount() == 1);
+    Node *child = grid->asNestable()->childrenHead();
+    LOKA_VERIFY(child == windowNode(window, "Grid.X") && child && child->asTextNode());
+    LOKA_VERIFY(textValue(child->asTextNode()) == "x" && !windowNode(window, "Grid.Replacement"));
+    const char *textIds[] = {"Style.Baseline", "Style.Changed", "Captured.Label"};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      Node *text = windowNode(window, textIds[i]);
+      LOKA_VERIFY(text && text->asTextNode());
+      LOKA_VERIFY(textValue(text->asTextNode()) == (i == 2 ? "short" : "a"));
+      // A1 inverts Style.Changed to 24: today's lower rereads the valid dictionary.
+      LOKA_VERIFY(text->asTextNode()->props.textStyle_
+                  == (i == 0 ? TextStyle(FontSize<24>()) : TextStyle(FontSize<12>())));
+    }
+    const char *blockIds[] = {"Block.NullProto", "Block.Empty", "Block.TextSnapshot", "Block.MarkupSnapshot"};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      Node *node = windowNode(window, blockIds[i]);
+      LOKA_VERIFY(node);
+      const BlockStyle expected = i < 2 ? BlockStyle() : BlockStyle().align(TEXT_ALIGN_CENTER);
+      if (i % 2)
+      {
+        LOKA_VERIFY(node->asAttributedTextNode());
+        LOKA_VERIFY(node->asAttributedTextNode()->props.blockStyle_ == expected);
+        LOKA_VERIFY(node->asAttributedTextNode()->props.text_->get() == Styled("x", TextStyle()));
+      }
+      else
+      {
+        LOKA_VERIFY(node->asTextNode() && node->asTextNode()->props.blockStyle_ == expected);
+        LOKA_VERIFY(textValue(node->asTextNode()) == "a");
+      }
+    }
+    const char *boxIds[] = {"Padding.StandardCopy", "Padding.NumberCopy", "Clip.copy", "Box.copy"};
+    for (unsigned i = 0; i < 4; ++i)
+    {
+      Node *node = windowNode(window, boxIds[i]);
+      LOKA_VERIFY(node && node->asBoxNode());
+      Box expected = i == 2 ? ClipBox() : Box();
+      if (i < 3)
+        expected.padding(i == 0 ? layout::LayoutGap::standardWindowMargin() : layout::LayoutGap::of(12));
+      if (i >= 2)
+        expected.width(300).height(8);
+      const BoxProps &actual = node->asBoxNode()->props;
+      LOKA_VERIFY(!(actual < expected.props) && !(expected.props < actual));
+      Node *text = node->asNestable()->childrenHead();
+      LOKA_VERIFY(text && text->asTextNode() && !text->nextInComposition);
+      LOKA_VERIFY(textValue(text->asTextNode()) == (i == 0 ? "s" : i == 1 ? "n" : "x"));
+      if (i >= 2)
+        LOKA_VERIFY(text == windowNode(window, i == 2 ? "Clip.Child" : "Box.Child"));
+    }
+    Node *scroll = windowNode(window, "MaxInsets");
+    LOKA_VERIFY(scroll && scroll->asScrollViewNode());
+    LOKA_VERIFY(scroll->asScrollViewNode()->props.contentInsets_ == ScrollViewContentInsets::of(32767, 32767));
+    Node *image = windowNode(window, "Image.Snapshot");
+    LOKA_VERIFY(image && image->asImageViewNode());
+    const ImageViewProps &actual = image->asImageViewNode()->props;
+    LOKA_VERIFY(actual.image_);
+    ImageViewProps expected;
+    expected.image(actual.image_).size(120, 80).attr(ImageViewAttr().fit(IMAGE_FIT_CONTAIN));
+    LOKA_VERIFY(!(actual < expected) && !(expected < actual));
+  }
+
+  void observeBuildTiming(NullWindow &window)
+  {
+    loka::app::scene::Node *node = windowNode(window, "Timing.Fallback");
+    LOKA_VERIFY(node && node->asTextNode() && textValue(node->asTextNode()) == "TypeError");
+  }
+
+  void checkNativeTiming()
+  {
+    const char *build[] = {"ToolbarItem()",
+                           "ToolbarItem(3,()=>{})",
+                           "ToolbarItem(this.s,()=>{})",
+                           "ToolbarItem('x',3)",
+                           "ToolbarItem('A\\u0000B',()=>{})",
+                           "ToolbarItem('\\u0000A',()=>{})",
+                           "ToolbarItem.label('A\\u0000B')",
+                           "ToolbarItem.label('\\u0000A')",
+                           "ToolbarItem.label('x',{}, {})",
+                           "ToolbarItem.label('x',{wrap:'none'})",
+                           "ToolbarItem.label('x',{align:'center'})",
+                           "ToolbarItem.label(3)",
+                           "ToolbarItem.fixedSpace(0)",
+                           "ToolbarItem.fixedSpace(NaN)",
+                           "ToolbarItem.fixedSpace(32768)",
+                           "ToolbarItem.fixedSpace(1.5)",
+                           "ToolbarItem.fixedSpace(Infinity)",
+                           "ToolbarItem.flexibleSpace(1)",
+                           "Toolbar(Button('x',()=>{}))",
+                           "Toolbar(Text('x'))",
+                           "Toolbar(Row())",
+                           "Toolbar(Array.from({length:17},()=>ToolbarItem.label('x')))",
+                           "Toolbar(Array.from({length:9},()=>ToolbarItem('x',()=>{})))"};
+    for (unsigned i = 0; i < sizeof(build) / sizeof(build[0]); ++i)
+    {
+      const std::string source = toolbarCard(std::string("let result='accepted';try{") + build[i]
+                                             + ";}catch(e){result=e instanceof TypeError?'TypeError':'other'}return "
+                                               "Text(result).TEST_ID('Timing.Fallback')");
+      mountObservation(source.c_str(), observeBuildTiming);
+    }
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(
+        "var own,foreign;card('first',c=>{own={s:c.state('short'),b:c.state(true),c};"
+        "return {compose(){return Toolbar(ToolbarItem.label(own.s).TEST_ID('Foreign.Label'),"
+        "ToolbarItem('x',()=>{}).enabled(own.b).TEST_ID('Foreign.Button')).TEST_ID('Foreign.Band')}}});",
+        error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow first(&context, props, &platform);
+    WindowAdmissionTestApp admission(first);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*first.scene(), true);
+    expectJs(runtime, "foreign=own;'saved'", "saved");
+    WindowProps secondProps;
+    secondProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow second(&context, secondProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*second.scene(), true);
+    LOKA_VERIFY(!windowNode(second, "SmirkyCard.Status"));
+    loka::app::scene::Node *label = windowNode(second, "Foreign.Label");
+    loka::app::scene::Node *button = windowNode(second, "Foreign.Button");
+    LOKA_VERIFY(label && label->asTextNode() && textValue(label->asTextNode()) == "short");
+    LOKA_VERIFY(button && button->asButtonNode() && button->asButtonNode()->props.getEnabled());
+    LOKA_VERIFY(button->asButtonNode()->props.getEnabled()->get());
+    smirkycard::testing::CardFlowAccess::scene = second.scene();
+    const char *lower[] = {"ToolbarItem('x',()=>{})",
+                           "ToolbarItem.label('x')",
+                           "ToolbarItem.flexibleSpace()",
+                           "ToolbarItem.fixedSpace(1)",
+                           "Toolbar(ToolbarItem.label(own.b))",
+                           "Toolbar(ToolbarItem.label({}))",
+                           "Toolbar(ToolbarItem('x',()=>{}).enabled(own.s))",
+                           "Toolbar(ToolbarItem('x',()=>{}).enabled({}))",
+                           "Toolbar(ToolbarItem.label(foreign.s))",
+                           "Toolbar(ToolbarItem('x',()=>{}).enabled(foreign.b))",
+                           "Cell(42,()=>{})",
+                           "Button(42,()=>{})",
+                           "VStack(Button('prefix',()=>{}).TEST_ID('Prefix'),EditText(foreign.s))",
+                           "VStack(Text('prefix').TEST_ID('Prefix'),EditText(foreign.s))"};
+    for (unsigned i = 0; i < sizeof(lower) / sizeof(lower[0]); ++i)
+    {
+      JSValue tree = JS_Eval(runtime.context(), lower[i], std::strlen(lower[i]), "native timing", JS_EVAL_TYPE_GLOBAL);
+      LOKA_VERIFY(!JS_IsException(tree));
+      loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
+          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+      JS_FreeValue(runtime.context(), tree);
+      LOKA_VERIFY(!lowered.isSet());
+      LOKA_VERIFY(!windowNode(second, "Prefix"));
+      expectJs(runtime, "own.c.error.get().length>0", "true");
+    }
+  }
+
+  void checkNativeObservations()
+  {
+    checkNativeRegistry();
+    mountObservation(
+        "card('first',class{constructor(c){this.b=c.state(true)}compose(){"
+        "const source=Text('a').TEST_ID('t'),copy=source.TEST_ID('u');"
+        "const row=Row(Text('a')).TEST_ID('Row.Source'),column=VStack(Text('a')).TEST_ID('Column.Source');"
+        "const z=ZStack(Text('g')).TEST_ID('Z.Source');return VStack(source,copy,"
+        "row,row.naturalWidth().TEST_ID('Row.x'),Row(Text('a')).TEST_ID('Row.y').naturalWidth(),"
+        "column,column.naturalHeight().TEST_ID('Column.x'),VStack(Text('a')).TEST_ID('Column.y').naturalHeight(),"
+        "z,z.expStaticBlurUnit().TEST_ID('Z.Static'),z.expBlurUnit().TEST_ID('Z.Live'),"
+        "z.TEST_ID('Z.StaticBefore').expStaticBlurUnit(),z.TEST_ID('Z.LiveBefore').expBlurUnit(),"
+        "z.expBlurUnit().expStaticBlurUnit().TEST_ID('Z.ToStatic'),"
+        "z.expStaticBlurUnit().expBlurUnit().TEST_ID('Z.ToLive'),"
+        "Button('x',()=>{}).enabled(this.b).TEST_ID('Identity.Button'))}});",
+        observeCopies);
+    mountObservation(
+        "card('first',class{constructor(c){this.b=c.state(true)}compose(){return VStack("
+        "Toolbar(ToolbarItem('a',()=>{}).enabled(this.b).TEST_ID('A'),"
+        "ToolbarItem('b',()=>{}).TEST_ID('B').enabled(this.b),ToolbarItem.label('l').TEST_ID('L')).TEST_ID('Copy.Band')"
+        ","
+        "Toolbar(ToolbarItem.label('l').TEST_ID('l'),ToolbarItem.flexibleSpace(),ToolbarItem.fixedSpace(2)).TEST_ID('"
+        "Copy.Spaces'),"
+        "Toolbar(ToolbarItem('x',()=>{}),ToolbarItem.label('x'),ToolbarItem.flexibleSpace(),ToolbarItem.fixedSpace(1))"
+        ".TEST_ID('Registry.Band'))}});",
+        observeToolbarCopies);
+    mountObservation(
+        "var "
+        "styleReads=0;card('first',class{constructor(c){this.s=c.state('short');this.pic=c.state.image();this.reads=c."
+        "state('pending')}compose(){"
+        "const input=[Text('x').TEST_ID('Grid.X')],grid=Grid(1,1,input).TEST_ID('Grid.Copy');"
+        "input[0]=Text('replacement').TEST_ID('Grid.Replacement');input.pop();input.push(Text('other'));"
+        "const style={size:24},changed=Text('a',style).TEST_ID('Style.Changed');style.size=12;"
+        "let captured=this.s;const label=ToolbarItem.label(captured,{get size(){++styleReads;captured='changed';return "
+        "12}})"
+        ".TEST_ID('Captured.Label');Object.prototype.gap=4;"
+        "const plain=Text('a',undefined,Object.create(null)).TEST_ID('Block.NullProto'),"
+        "empty=Markup('x',undefined,{}).TEST_ID('Block.Empty');"
+        "const o={padding:'standard'},t=Box(Text('s'),o);o.padding=0;"
+        "const n={padding:12},u=Box(Text('n'),n);n.padding=0;"
+        "const "
+        "co={width:300,height:8,padding:12},clip=ClipBox(Text('x').TEST_ID('Clip.Child'),co).TEST_ID('Clip.copy');"
+        "co.width=1;co.height=2;co.padding=0;"
+        "const "
+        "bo={width:300,height:8},box=Box(Text('x').TEST_ID('Box.Child'),bo).TEST_ID('Box.copy');bo.width=1;bo.height=2;"
+        "const io={width:120,height:80,fit:'contain'},image=ImageView(this.pic,io).TEST_ID('Image.Snapshot');"
+        "io.width=1;io.fit='cover';return VStack(grid,Text('a',{size:24}).TEST_ID('Style.Baseline'),changed,"
+        "Toolbar(label),plain,empty,Text('a',undefined,{align:'center'}).TEST_ID('Block.TextSnapshot'),"
+        "Markup('x',undefined,{align:'center'}).TEST_ID('Block.MarkupSnapshot'),"
+        "t.TEST_ID('Padding.StandardCopy'),u.TEST_ID('Padding.NumberCopy'),clip,box,"
+        "ScrollView(Text('x'),{insets:{top:32767,bottom:32767}}).TEST_ID('MaxInsets'),image,"
+        "Button('read',()=>{this.reads.set(String(styleReads));delete Object.prototype.gap}).TEST_ID('Captured.Read'),"
+        "Text(this.reads).TEST_ID('Captured.Count'))}});",
+        observeSnapshots);
+    checkNativeTiming();
+  }
 } // namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--native-observations"))
+  {
+    checkNativeObservations();
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--tree-install-sweep"))
   {
     checkTreeInstallFailureSweep();
@@ -6600,6 +6977,7 @@ int main(int argc, char **argv)
   checkTreePrototypeRefusal();
   checkTextStyleRefusals();
   checkChangedTextStyleRefusal();
+  checkNativeObservations();
   printRecordCosts();
   checkClickableLifetime();
   checkManyClickables("Button");
