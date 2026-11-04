@@ -14,7 +14,7 @@ void RunWindowAdmissionOperation(TestApp &app, void (*collect)(void *) = 0, void
     collect(data);
   turn.settle();
   app.admitAndApplyWindows();
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
   app.admitAndApplyWindows();
   turn.close();
   app.reclaimWindows();

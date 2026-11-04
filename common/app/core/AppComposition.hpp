@@ -3,6 +3,7 @@
 
 #include <vector>
 #include "app/url/OpenURLs.hpp"
+#include "app/url/URLReceiveSeat.hpp"
 #include <cassert>
 #include "app/core/AppComponent.hpp"
 #include "app/core/WindowDefinition.hpp"
@@ -30,6 +31,12 @@ public:
   /** Hands the borrow to App once; never deletes the config-owned opener. */
   loka::app::URLOpenerBase *takeURLOpener();
 
+  /** Once per composition: creates one receive seat, copying the declared Match.
+      Duplicate registration asserts and refuses. */
+  AppComposition &operator<<(const loka::app::URLReceiveSeatDefinitionBase &def);
+  /** Once per App run, O(1) ownership transfer; null means absent or allocation refused. */
+  loka::app::URLReceiveSeatBase *takeURLReceiveSeat();
+
   std::vector<AppComponent *> build();
 
   PlatformContext *context() const
@@ -44,6 +51,7 @@ private:
   loka::dsl::CompositionList<WindowDefinitionBase> windowList_;
   PlatformContext *context_;
   loka::app::WindowSeat *windowSeat_;
+  loka::app::URLReceiveSeatBase *urlReceiveSeat_;
   loka::app::URLOpenerBase *urlOpener_;
   AppComposition(const AppComposition &);
   AppComposition &operator=(const AppComposition &);

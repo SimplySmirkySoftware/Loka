@@ -1,3 +1,4 @@
+#include "TextDocumentValuesTests.hpp"
 #include "EditMenuTests.hpp"
 #include "TextUtf8Tests.hpp"
 #include "TextUnitsTests.hpp"
@@ -32,6 +33,7 @@
 #include "StateStreamEvaluationTests.hpp"
 #include "StateStreamChainTests.hpp"
 #include "FocusPublisherTests.hpp"
+#include "TextDocumentKernelTests.hpp"
 #include "FocusPostTests.hpp"
 #ifdef __APPLE__
 #include "MacImageBlobTests.hpp"
@@ -168,8 +170,11 @@
 #include "StyleTests.hpp"
 #include "WebURLTests.hpp"
 #include "IncomingURLTests.hpp"
+#include "URLInboxTests.hpp"
 #include "URLOpenerTests.hpp"
 #include "URLOpenerAppTests.hpp"
+#include "URLReceiveAppTests.hpp"
+#include "URLReceiveDeliveryTests.hpp"
 #include "TextFamilyTests.hpp"
 #include "TextAlignmentTests.hpp"
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.

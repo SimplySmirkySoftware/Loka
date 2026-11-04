@@ -22,13 +22,18 @@ namespace loka
           core::Operation turn;
           turn.settle();
           app.admitAndApplyWindows();
-          app.reconcileFocus();
+          app.reconcileAtCompletion();
           const bool served = app.serveURLsAtCompletion(entry);
           if (served)
             app.admitAndApplyWindows();
           turn.close();
           app.reclaimWindows();
           return served;
+        }
+
+        static void retireComponents(App &app)
+        {
+          app.retireComponents();
         }
 
         static size_t pendingWindowCloseCount(const App &app)
@@ -39,7 +44,7 @@ namespace loka
         static void flushWindowInvalidations(App &app)
         {
           app.flushWindowInvalidations();
-          app.reconcileFocus();
+          app.reconcileAtCompletion();
         }
       };
     }

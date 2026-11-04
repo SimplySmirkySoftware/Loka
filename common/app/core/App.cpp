@@ -6,6 +6,9 @@
 #include "core/util/StateTrackerGuard.hpp"
 #include "app/scene/Scene.hpp"
 #include <algorithm>
+#ifdef TEST_BUILD
+#include "testing/app/URLReceiveTestHooks.hpp"
+#endif
 
 App::App(AppConfigurable *config)
     : group_(0),
@@ -15,6 +18,7 @@ App::App(AppConfigurable *config)
       activeWindow_(0),
       idleAccumulatedSeconds_(0.0),
       windowSeat_(0),
+      urlReceiveSeat_(0),
       urlOpener_(0),
       pendingWindowClosures_(),
       flushingWindowWork_(false)
@@ -50,6 +54,15 @@ void App::retireComponents()
   group_ = 0;
   delete this->windowSeat_;
   this->windowSeat_ = 0;
+  // After group deletion, discard even offers made by component destructors.
+  // Once per retirement: O(waiting <= capacity), then destroy the Match copy.
+  // Later retirements are O(1), like the adjacent window seat.
+  if (this->urlReceiveSeat_)
+  {
+    this->urlReceiveSeat_->inbox().discardAll();
+    delete this->urlReceiveSeat_;
+    this->urlReceiveSeat_ = 0;
+  }
 }
 
 void App::run()
@@ -66,7 +79,21 @@ void App::run()
     this->defaultMenuBar_.reset(bar.empty() ? 0 : bar.clone());
     group_ = new AppComponentGroup(composition.build());
     this->windowSeat_ = composition.takeWindowSeat();
+    this->urlReceiveSeat_ = composition.takeURLReceiveSeat();
     this->urlOpener_ = composition.takeURLOpener();
+    this->collectLaunchRequests();
+    // Launch batch, once per bootstrap: one Operation serving exactly the entry
+    // count; offers made during the batch wait for a running completion.
+    // Bootstrap assumes no requestQuitAtCompletion before this point; if one was
+    // made, the frozen launch order still runs the batch. Close before admission.
+    if (this->urlReceiveSeat_ && this->urlReceiveSeat_->inbox().count())
+    {
+      loka::core::Operation batch;
+      const unsigned n = this->urlReceiveSeat_->inbox().count();
+      for (unsigned i = 0; i < n; ++i)
+        this->serveReceive();
+      batch.close();
+    }
     const AppComponentGroup::Components components = this->group_->getComponents();
     for (size_t i = 0; i < components.size(); ++i)
     {
@@ -696,7 +723,7 @@ void App::projectMenuSources()
   }
 }
 
-void App::reconcileFocus()
+void App::reconcileAtCompletion()
 {
   if (this->flushingWindowWork_ || !this->group_)
     return;
@@ -749,6 +776,8 @@ void App::reconcileFocus()
       return;
     visited.add(next);
     next->reconcileFocus();
+    if (!this->isWindowClosePending(next))
+      next->reconcileTextDocuments();
   }
 }
 
@@ -758,12 +787,30 @@ loka::app::URLOpenKind App::openURLThunk(const loka::app::WebURL &url, void *con
   return platform ? platform->openURL(url) : loka::app::URL_UNAVAILABLE;
 }
 
-bool App::serveURLsAtCompletion(CompletionEntry entry)
+namespace
 {
-  if (entry == COMPLETION_INHERITED_CLOCK)
-    return false;
-  if (!this->urlOpener_ || this->urlOpener_->pending() == 0)
-    return false;
+  /** Contract violation only; cleanup has already completed in the seat. */
+  void receiveArmWentPending()
+  {
+#ifdef TEST_BUILD
+    if (loka::testing::consumeReceivePendingTolerance())
+      return;
+#endif
+    assert(!"a received-URL arm must finish synchronously");
+  }
+} // namespace
+
+bool App::serveReceive()
+{
+  loka::dsl::FlowRunResult first;
+  const bool took = this->urlReceiveSeat_->serveOne(first);
+  if (took && first == loka::dsl::FLOW_RUN_PENDING)
+    receiveArmWentPending();
+  return took;
+}
+
+bool App::anySceneBusy() const
+{
   if (this->group_)
   {
     const AppComponentGroup::Components components = this->group_->getComponents();
@@ -771,8 +818,35 @@ bool App::serveURLsAtCompletion(CompletionEntry entry)
     {
       Window *window = components[i] ? components[i]->asWindow() : 0;
       if (window && window->scene() && window->scene()->isBusy())
-        return false;
+        return true;
     }
   }
-  return this->urlOpener_->launchNext(&App::openURLThunk, this->config_ ? this->config_->getPlatformContext() : 0);
+  return false;
+}
+
+bool App::serveURLsAtCompletion(CompletionEntry entry)
+{
+  if (entry == COMPLETION_INHERITED_CLOCK)
+    return false;
+  const bool receiveDue =
+      this->urlReceiveSeat_ && this->urlReceiveSeat_->inbox().count() > 0 && !this->hasQuitAttempt();
+  const bool openDue = this->urlOpener_ && this->urlOpener_->isIdle() && this->urlOpener_->pending() > 0;
+  if (!receiveDue && !openDue)
+    return false;
+  if (this->anySceneBusy())
+    return false;
+  bool served = false;
+  if (receiveDue)
+    served = this->serveReceive();
+  if (this->urlOpener_ && this->urlOpener_->isIdle() && this->urlOpener_->pending() > 0)
+    served = this->urlOpener_->launchNext(&App::openURLThunk, this->config_ ? this->config_->getPlatformContext() : 0)
+             || served;
+  return served;
+}
+
+loka::app::ReceiveResult App::receiveURL(const loka::core::String &text)
+{
+  if (!this->urlReceiveSeat_)
+    return loka::app::RECEIVE_NOT_REGISTERED;
+  return this->urlReceiveSeat_->inbox().offer(text);
 }

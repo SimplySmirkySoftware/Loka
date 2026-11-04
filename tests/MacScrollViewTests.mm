@@ -2068,7 +2068,7 @@ namespace
       LOKA_VERIFY(!f.window.scene()->flushInvalidation());
       LOKA_VERIFY(!f.window.flushSceneInvalidation());
       f.app.admitAndApplyWindows();
-      f.app.reconcileFocus();
+      f.app.reconcileAtCompletion();
       LOKA_VERIFY(f.window.syncs == syncs && f.window.drains == drains);
       LOKA_VERIFY(f.window.admissions == admissions && f.controller.focusReads == focus);
     }
@@ -2077,7 +2077,7 @@ namespace
       const unsigned syncs = window.syncs, drains = window.drains;
       const unsigned admissions = window.admissions, focus = controller.focusReads;
       app.flush();
-      app.reconcileFocus();
+      app.reconcileAtCompletion();
       LOKA_VERIFY(window.syncs > syncs && window.drains > drains);
       LOKA_VERIFY(window.admissions > admissions && controller.focusReads > focus);
       LOKA_VERIFY(!window.scene()->hasPendingInvalidation());

@@ -2088,6 +2088,25 @@ Future APIs should make it clear whether a dialog is:
 The DSL should make it hard to accidentally declare multiple competing native
 dialogs when the platform expects one active dialog.
 
+### Receiving URLs
+
+An app that accepts URLs for its own scheme declares a config-owned
+`URLInbox<N>` with that scheme and registers it in `compose` with
+`ReceiveURLs(inbox, match)`, where `match` is a `Match` over `IncomingURL`.
+The registration copies the `Match`.
+
+- Treat every received URL as untrusted input: the scheme is checked, but not
+  who sent it, what `%2F` or `..` in it mean, or whether its target exists.
+- Keep the `Match` and all app data its arms point at valid for the app
+  config's lifetime. Destroying the copy must do nothing observable: no
+  callbacks and no State writes.
+- Received URLs reach the first matching arm in FIFO order, at most one per
+  outer completion, before outgoing URLs open. Arms must finish synchronously;
+  they may update config-owned state under its guard, open documents, or post
+  outgoing URLs. Delivery pauses during a quit attempt and resumes if it is
+  refused. URLs collected at launch run before document windows are admitted.
+  Native URL entry and completion wiring are still pending on each platform.
+
 ## 18. Ownership And Resource Management
 
 Loka should make ordinary application code feel like it has modern lifecycle

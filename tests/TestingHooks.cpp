@@ -4,6 +4,7 @@
 // TEST_BUILD and must stay hook-free, while every test executable compiles
 // this file via LOKA_SHARED_TEST_SOURCES.
 #include "app/Menu.hpp"
+#include "testing/app/URLReceiveTestHooks.hpp"
 #include "core/LokaAlloc.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include <cstring>
@@ -19,7 +20,19 @@ namespace loka
   {
     namespace
     {
+      unsigned receivePendingTolerances = 0;
       unsigned buttonDrawConversionRefusals = 0;
+    }
+    void tolerateReceivePending(unsigned count)
+    {
+      receivePendingTolerances = count;
+    }
+    bool consumeReceivePendingTolerance()
+    {
+      if (!receivePendingTolerances)
+        return false;
+      --receivePendingTolerances;
+      return true;
     }
     void failToolboxButtonDrawConversions(unsigned count)
     {
@@ -867,5 +880,32 @@ namespace loka
       return true;
     }
   } // namespace testing
+} // namespace loka
+#endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textStoreCreationFailures = 0;
+      }
+      void failTextStoreCreations(unsigned count)
+      {
+        textStoreCreationFailures = count;
+      }
+      bool consumeTextStoreCreationFailure()
+      {
+        if (!textStoreCreationFailures)
+          return false;
+        --textStoreCreationFailures;
+        return true;
+      }
+    } // namespace testing
+  } // namespace app
 } // namespace loka
 #endif

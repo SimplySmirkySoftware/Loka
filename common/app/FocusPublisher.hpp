@@ -11,7 +11,8 @@ namespace loka
   {
     namespace detail
     {
-      /** Stateless take and publication policy, entered through Window completion.
+      /** Policy twin of TextDocumentPublisher (independent document facts).
+          Stateless take and publication policy, entered through Window completion.
           Completion audits same-Scene placement for inspected bound rows.
           Publication and published binding exchange additionally audit attached
           duplicates and facts simultaneously published by another live Scene. */

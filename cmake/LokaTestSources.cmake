@@ -30,6 +30,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LazyScopeTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LazyLayoutTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/LazyViewTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentKernelTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TestingHooks.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ExampleAppConfigCompileTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ApplicationFileTests.cpp
@@ -65,6 +66,7 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ToolboxScenePlatformContractTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/NullTextLayoutTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextEditorTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/TextDocumentValuesTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/RequestReasonTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/PendingRequestsTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/RequestRingTests.cpp
@@ -74,8 +76,11 @@ set(LOKA_SHARED_TEST_SOURCES
   ${_LOKA_TEST_SOURCE_ROOT}/tests/StyleTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/WebURLTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/IncomingURLTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/URLInboxTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/URLOpenerTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/URLOpenerAppTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/URLReceiveAppTests.cpp
+  ${_LOKA_TEST_SOURCE_ROOT}/tests/URLReceiveDeliveryTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/TextAlignmentTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/OpenFileDialogTransportTests.cpp
   ${_LOKA_TEST_SOURCE_ROOT}/tests/ConfirmDialogTransportTests.cpp

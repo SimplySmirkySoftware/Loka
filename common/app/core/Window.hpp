@@ -612,6 +612,7 @@ private:
 
   /** App completion only, after admission has left its flushing gate. */
   void reconcileFocus();
+  void reconcileTextDocuments();
   /** Rails without deferred dialog delivery carry no transport storage. */
   virtual loka::app::DialogResultDelivery *dialogResultDelivery() { return 0; }
   virtual void closeDialogResults() {}

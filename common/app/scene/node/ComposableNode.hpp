@@ -1,6 +1,7 @@
 #ifndef LOKA_CORE2_SCENE_NODE_COMPOSABLENODE_HPP
 #define LOKA_CORE2_SCENE_NODE_COMPOSABLENODE_HPP
 
+#include "app/text/TextDocument.hpp"
 #include <cassert>
 #include <vector>
 #include "app/scene/node/BindingToken.hpp"
@@ -407,6 +408,8 @@ namespace loka
         // This does not make ComposableNode a state owner; nodes that need a
         // shorter ownership scope than Boundary should expose an explicit
         // IStateOwner through asStateOwner().
+        void document(TextDocument &out);
+
         template <typename K> void state(Focus<K> &out)
         {
           this->state(out.fact_, Focused<K>::none());
@@ -795,6 +798,8 @@ namespace loka
         friend class LazyScopeNode;
         friend class GenerationRoot;
         friend class BoundaryNode;
+        friend class Scene;
+        friend class TextDocumentRegistration;
         friend class RootBoundaryWrapper;
         template <class PropsT> friend class StdCompositionBoundaryNodeBase;
 #ifdef TEST_BUILD
@@ -871,6 +876,7 @@ namespace loka
         struct Participant
         {
           virtual ~Participant() {}
+          virtual void attach(Node &, Scene &) {}
           virtual void withdraw() = 0;
           virtual void reclaim() = 0;
           virtual NodeStateRegistrationBase *asStateRegistration() { return 0; }
@@ -1081,6 +1087,12 @@ namespace loka
               entry->connect(nodeStateOwner_);
             }
           }
+        }
+
+        void attachParticipants(Scene &scene)
+        {
+          for (size_t i = 0; i < this->participants_.size(); ++i)
+            this->participants_[i]->attach(*this, scene);
         }
 
         void withdrawParticipants()
