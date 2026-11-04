@@ -149,6 +149,10 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
   assert(this->projectionParentScopes_.activeDepth() == 0 &&
          "a Toolbox projection pass must restore the root scope");
   this->rectSurfaceExtentLedger_.flush();
+  const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
+  const ToolboxBandPaintPolicy policy =
+      ToolboxBandPaintPolicy::resolve(this->window_->window(), selection, this->bandBlur_);
+  BandPolicyScope bandPolicyScope(*this, policy);
   ToolboxPresentInputs inputs;
   inputs.outside = outer.complete();
   inputs.units = this->unitLedger_.compareFinalRows();
@@ -156,7 +160,8 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
   inputs.usedViewports = this->scrollBarLedger_.usedViewportCount();
   // Once per full layout, the unit ledger visits its own rows with one cursor.
   unsigned foregroundUnits = 0;
-  Rect units[2], bar = Rect();
+  ToolboxForegroundUnits::Entry units[2];
+  Rect bar = Rect();
   bool repairRefused = false;
   if (this->observation_.viewports())
   {
@@ -164,9 +169,18 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
     Rect overlap;
     while (this->unitLedger_.nextOverlap(this->observation_.viewport(), cursor, overlap))
     {
-      const Rect &rect = this->unitLedger_.at(cursor - 1).rect;
+      const ToolboxUnitLedger::UnitSeat &row = this->unitLedger_.at(cursor - 1);
+      const Rect &rect = row.rect;
       if (foregroundUnits < 2)
-        units[foregroundUnits] = rect;
+      {
+        ToolboxBandGround ground;
+        const bool preserve =
+            row.index >= 2 || row.stack->props.unitGround == loka::app::ZSTACK_UNIT_GROUND_WINDOW
+            || (&row == selection.band && policy.querySelectedGround(ground) && ground == BAND_WINDOW_GROUND);
+        units[foregroundUnits].rect = rect;
+        units[foregroundUnits].treatment =
+            preserve ? TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL : TOOLBOX_SCROLL_REPAIR_PAIR;
+      }
       if (!ToolboxErasedEvidence::contains(rootPort, rect))
         repairRefused = true;
       ++foregroundUnits;
@@ -175,10 +189,9 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
     bars.queryVertical(bar);
     repairRefused = repairRefused || bars.refused();
   }
-  inputs.repair = ToolboxForegroundRepair(units, foregroundUnits, bar, repairRefused);
+  inputs.foreground = ToolboxForegroundUnits(units, foregroundUnits, bar, repairRefused);
   this->observation_.complete(foregroundUnits, inputs);
   const ToolboxPresentPlan plan(this->observation_);
-  const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   snapshotLayout.commit(selection);
   bandLayout.commit(selection);
   const ToolboxPresentExecuted executed = presenter ? presenter->eraseBeforePaint(plan) : TOOLBOX_PRESENT_ERASED;
