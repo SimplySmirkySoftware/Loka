@@ -140,19 +140,25 @@ namespace loka
         }
         virtual void visit(scene::TextDocumentRegistration &row)
         {
-          if (this->requests_ == KEEP_REQUESTS)
-          {
-            scene::TextStoreRow *store = row.store();
-            if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && store)
-              this->controller_.commitMarkedText(*store);
-          }
-          publish(row, this->controller_, this->requests_);
+          visitRow(row, this->controller_, this->requests_);
         }
 
       private:
         scene::IPlatformController &controller_;
         const Requests requests_;
       };
+      void TextDocumentPublisher::visitRow(scene::TextDocumentRegistration &row,
+                                           scene::IPlatformController &controller,
+                                           Requests requests)
+      {
+        if (requests == KEEP_REQUESTS)
+        {
+          scene::TextStoreRow *store = row.store();
+          if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && store)
+            controller.commitMarkedText(*store);
+        }
+        publish(row, controller, requests);
+      }
       void TextDocumentPublisher::complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
         scene::SceneTextDocuments::Publication publication(documents);
