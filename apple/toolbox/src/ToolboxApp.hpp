@@ -8,6 +8,7 @@
 #include <Quickdraw.h>
 #include "ToolboxActivationPhase.hpp"
 #include "ToolboxBusy.hpp"
+#include "ToolboxCharWidthCache.hpp"
 #include "ToolboxMenuAttachment.hpp"
 #include "ToolboxTwoByteKey.hpp"
 #include "ToolboxNativeFocusMode.hpp"
@@ -79,6 +80,10 @@ protected:
   friend class ToolboxPlatformContext;
 
 public:
+  ToolboxCharWidthCache &charWidthCache()
+  {
+    return this->charWidthCache_;
+  }
   CursorOwner &cursorOwner() { return this->cursorOwner_; }
   virtual void run();
   virtual void quit();
@@ -109,6 +114,7 @@ private:
       per-step booleans (see ToolboxActivationPhase.hpp). */
   ActivationPhase activationPhase_;
   CursorOwner cursorOwner_;
+  ToolboxCharWidthCache charWidthCache_;
   /** Background projection or bindings changed menu data; one DrawMenuBar is owed at
       resume. */
   bool menuBarDrawDeferred_;

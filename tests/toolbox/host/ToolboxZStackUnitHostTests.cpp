@@ -32,6 +32,14 @@ namespace loka
 {
   namespace testing
   {
+    class ToolboxBandPolicyAccess
+    {
+    public:
+      static const ToolboxBandPaintPolicy *borrowed(const ToolboxScenePlatformController &controller)
+      {
+        return controller.borrowedBandPolicy_;
+      }
+    };
     class ToolboxTextContextAccess
     {
     public:
@@ -541,10 +549,12 @@ namespace
             {
               ToolboxErasedPass::Guard guard(pass, area);
               guard.noteErased(area);
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible)
+                        == BLUR_PICTURE;
             }
             else
-              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
+              painted = f.controller.staticBlur_.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible)
+                        == BLUR_PICTURE;
             const bool admitted = open && contains == 1 && (o != 2 || covers);
             LOKA_VERIFY(painted == admitted);
             LOKA_VERIFY(toolbox_host::staticCaptures == (admitted ? 1u : 0u));
@@ -555,7 +565,9 @@ namespace
             {
               ToolboxErasedPass::Guard guard(pass, rect);
               guard.noteErased(rect);
-              const bool copied = f.controller.staticBlur_.paint(f.window.window(), row, pass, true) == BLUR_PICTURE;
+              const bool copied =
+                  f.controller.staticBlur_.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible)
+                  == BLUR_PICTURE;
               LOKA_VERIFY(copied);
               LOKA_VERIFY(toolbox_host::staticCaptures == 1);
             }
@@ -794,11 +806,15 @@ namespace
     ToolboxErasedPass::Guard pass(f.controller.erasedPass(), rect);
     pass.noteErased(rect);
     const bool laterPainted =
-        f.controller.staticBlur_.paint(f.window.window(), second, f.controller.erasedPass(), true) == BLUR_PICTURE;
+        f.controller.staticBlur_.paint(
+            f.window.window(), second, f.controller.erasedPass(), true, toolbox_host::staticEligible)
+        == BLUR_PICTURE;
     LOKA_VERIFY(!laterPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 0);
     const bool firstPainted =
-        f.controller.staticBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true) == BLUR_PICTURE;
+        f.controller.staticBlur_.paint(
+            f.window.window(), first, f.controller.erasedPass(), true, toolbox_host::staticEligible)
+        == BLUR_PICTURE;
     LOKA_VERIFY(firstPainted);
     LOKA_VERIFY(toolbox_host::staticCaptures == 1);
   }
@@ -1168,20 +1184,21 @@ namespace
     {
       ToolboxErasedPass::Guard pass(f.controller.erasedPass(), f.window.port.portRect);
       pass.noteErased(f.window.port.portRect);
-      const ToolboxBlurPaint a =
-          f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass(), true);
-      const ToolboxBlurPaint b =
-          f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true);
-      const ToolboxBlurPaint c = f.controller.bandBlur_.paint(f.window.window(), last, f.controller.erasedPass(), true);
+      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(
+          f.window.window(), frozen, f.controller.erasedPass(), true, toolbox_host::staticEligible);
+      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(
+          f.window.window(), first, f.controller.erasedPass(), true, toolbox_host::staticEligible);
+      const ToolboxBlurPaint c = f.controller.bandBlur_.paint(
+          f.window.window(), last, f.controller.erasedPass(), true, toolbox_host::staticEligible);
       LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE && c == BLUR_ABSENT);
     }
     const unsigned requests = toolbox_host::invalidations;
     for (unsigned i = 0; i < 5; ++i)
     {
-      const ToolboxBlurPaint a =
-          f.controller.staticBlur_.paint(f.window.window(), frozen, f.controller.erasedPass(), true);
-      const ToolboxBlurPaint b =
-          f.controller.bandBlur_.paint(f.window.window(), first, f.controller.erasedPass(), true);
+      const ToolboxBlurPaint a = f.controller.staticBlur_.paint(
+          f.window.window(), frozen, f.controller.erasedPass(), true, toolbox_host::staticEligible);
+      const ToolboxBlurPaint b = f.controller.bandBlur_.paint(
+          f.window.window(), first, f.controller.erasedPass(), true, toolbox_host::staticEligible);
       LOKA_VERIFY(a == BLUR_PICTURE && b == BLUR_PICTURE);
     }
     LOKA_VERIFY(toolbox_host::invalidations == requests);
@@ -1878,12 +1895,189 @@ namespace
     // Completed observation keeps a copy after the sealed stack batch has gone.
     LOKA_VERIFY(f.last().sealedRects().count() == count);
   }
+  void bandPolicyFacts()
+  {
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ZStackNode stack((ZStackProps())), other((ZStackProps()));
+    const Rect rect = {0, 0, 40, 100};
+    const ToolboxUnitLedger::UnitSeat row = {&stack, 1, rect, rect};
+    ToolboxUnitLedger::UnitSeat foreign = {&other, 1, rect, rect};
+    ToolboxUnitLedger::FirstBlurUnits selection = {0, 0};
+    ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> live;
+    ToolboxBandGround ground = BAND_WINDOW_GROUND_OVER_PICTURE;
+    LOKA_VERIFY(!ToolboxBandPaintPolicy::resolve(window.window(), selection, live).querySelectedGround(ground));
+    LOKA_VERIFY(ground == BAND_WINDOW_GROUND_OVER_PICTURE);
+    selection.band = &row;
+    toolbox_host::staticEligible = true;
+    LOKA_VERIFY(ToolboxBandPaintPolicy::resolve(window.window(), selection, live).querySelectedGround(ground));
+    LOKA_VERIFY(ground == BAND_BLUR);
+    toolbox_host::staticEligible = false;
+    LOKA_VERIFY(ToolboxBandPaintPolicy::resolve(window.window(), selection, live).querySelectedGround(ground));
+    LOKA_VERIFY(ground == BAND_WINDOW_GROUND);
+    live.reconcile(selection);
+    ToolboxErasedPass pass;
+    ToolboxErasedPass::Guard guard(pass, rect);
+    guard.noteErased(rect);
+    LOKA_VERIFY(live.paint(window.window(), row, pass, true, false) == BLUR_GROUND);
+    LOKA_VERIFY(live.paint(window.window(), foreign, pass, true, false) == BLUR_ABSENT);
+    toolbox_host::staticEligible = true;
+    LOKA_VERIFY(live.paint(window.window(), row, pass, true, true) == BLUR_PICTURE);
+    toolbox_host::staticEligible = false;
+    LOKA_VERIFY(ToolboxBandPaintPolicy::resolve(window.window(), selection, live).querySelectedGround(ground));
+    LOKA_VERIFY(ground == BAND_WINDOW_GROUND_OVER_PICTURE);
+    LOKA_VERIFY(live.paint(window.window(), row, pass, true, false) == BLUR_GROUND);
+    selection.band = &foreign;
+    LOKA_VERIFY(ToolboxBandPaintPolicy::resolve(window.window(), selection, live).querySelectedGround(ground));
+    LOKA_VERIFY(ground == BAND_WINDOW_GROUND);
+    foreign = row;
+    ++foreign.rect.bottom;
+    LOKA_VERIFY(!live.holdsPicture(foreign));
+    foreign = row;
+    foreign.index = 2;
+    LOKA_VERIFY(!live.holdsPicture(foreign));
+    toolbox_host::staticEligible = true;
+    const unsigned captures = toolbox_host::bandCaptures;
+    LOKA_VERIFY(live.paint(window.window(), row, pass, false, true) == BLUR_PICTURE);
+    LOKA_VERIFY(toolbox_host::bandCaptures == captures);
+    ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> frozen;
+    selection.staticBlur = &row;
+    frozen.reconcile(selection);
+    LOKA_VERIFY(frozen.paint(window.window(), row, pass, true, true) == BLUR_PICTURE);
+    LOKA_VERIFY(frozen.paint(window.window(), row, pass, true, false) == BLUR_GROUND);
+    LOKA_VERIFY(frozen.holdsPicture(row));
+    LOKA_VERIFY(frozen.paint(window.window(), row, pass, false, true) == BLUR_PICTURE);
+  }
+  class PolicyPaintProbe : public TextNode
+  {
+  public:
+    bool flip;
+    unsigned reads;
+    PolicyPaintProbe()
+        : TextNode(TextProps("policy probe")),
+          flip(false),
+          reads(0)
+    {
+    }
+    virtual void render(IPlatformController *controller)
+    {
+      ToolboxScenePlatformController &owner = *static_cast<ToolboxScenePlatformController *>(controller);
+      LOKA_VERIFY(loka::testing::ToolboxBandPolicyAccess::borrowed(owner) != 0);
+      ++this->reads;
+      TextNode::render(controller);
+      if (this->flip)
+        toolbox_host::staticEligible = false;
+    }
+  };
+  void bandPolicyBorrow()
+  {
+    PolicyPaintProbe *probe = new PolicyPaintProbe;
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    content->addChild(probe);
+    PresentFixture f(true, 0, content);
+    LOKA_VERIFY(loka::testing::ToolboxBandPolicyAccess::borrowed(f.controller) == 0);
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    probe->flip = true;
+    toolbox_host::staticEligible = true;
+    const unsigned captures = toolbox_host::bandCaptures;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(probe->reads > 1);
+    LOKA_VERIFY(toolbox_host::bandCaptures == captures + 1);
+    LOKA_VERIFY(loka::testing::ToolboxBandPolicyAccess::borrowed(f.controller) == 0);
+    LOKA_VERIFY(!toolbox_host::staticEligible);
+    toolbox_host::staticEligible = true;
+  }
+  void foregroundTreatments()
+  {
+    for (unsigned kind = 0; kind < 3; ++kind)
+    {
+      for (unsigned eligible = 0; eligible < 2; ++eligible)
+      {
+        toolbox_host::staticEligible = eligible != 0;
+        PresentFixture f(true);
+        f.stack.props.unitGround = kind == 0   ? ZSTACK_UNIT_GROUND_WINDOW
+                                   : kind == 1 ? ZSTACK_UNIT_GROUND_EXP_BLUR
+                                               : ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR;
+        f.scroll(16);
+        LOKA_VERIFY(f.last().foreground().count() == 1);
+        const bool preserve = kind == 0 || (kind == 1 && !eligible);
+        LOKA_VERIFY(f.last().foreground().preservedCount() == (preserve ? 1U : 0U));
+        LOKA_VERIFY(f.last().foreground().repairUnitCount() == (preserve ? 0U : 1U));
+        if (kind == 1 && eligible)
+        {
+          toolbox_host::staticEligible = false;
+          f.scroll(32);
+          LOKA_VERIFY(f.last().foreground().repairUnitCount() == 1);
+        }
+      }
+    }
+    toolbox_host::staticEligible = false;
+    PresentFixture f(true);
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    f.stack.addChild(new Probe("index-two", 40));
+    f.scroll(16);
+    LOKA_VERIFY(f.last().foreground().preservedCount() == 2);
+    toolbox_host::staticEligible = true;
+  }
+  void unselectedBandTreatment()
+  {
+    toolbox_host::staticEligible = false;
+    ZStackNode *inner = new ZStackNode(ZStackProps());
+    inner->props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    inner->addChild(new BoxNode(Box().size(180, 600).props));
+    inner->addChild(new Probe("selected-inner-band", 80));
+    PresentFixture f(true, 0, inner);
+    f.stack.props.unitGround = ZSTACK_UNIT_GROUND_EXP_BLUR;
+    const unsigned frosts = f.controller.frostCache_.paints;
+    f.scroll(16);
+    LOKA_VERIFY(f.last().foreground().count() == 2);
+    LOKA_VERIFY(f.last().foreground().preservedCount() == 1);
+    LOKA_VERIFY(f.last().foreground().repairUnitCount() == 1);
+    LOKA_VERIFY(f.controller.frostCache_.paints > frosts);
+    // The fake frost renderer refuses paint, so the erased pass records PARTIAL_DRAW first.
+    LOKA_VERIFY(f.last().firstRefusal().refused());
+    // With the erase interval closed, the same unselected row reports its capture
+    // obligation directly, even on an ineligible screen.
+    f.controller.observation_.reset();
+    const ToolboxBandPaintPolicy policy = ToolboxBandPaintPolicy::resolve(
+        f.window.window(), f.controller.unitLedger_.firstBlurUnits(), f.controller.bandBlur_);
+    {
+      ToolboxScenePlatformController::BandPolicyScope scope(f.controller, policy);
+      f.controller.renderZStack(&f.stack);
+    }
+    LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
+    toolbox_host::staticEligible = true;
+  }
+  void foregroundArithmetic()
+  {
+    const Rect domain = {0, 0, 100, 100};
+    ToolboxForegroundUnits::Entry entries[3] = {{{20, 10, 50, 90}, TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL},
+                                                {{60, 20, 80, 70}, TOOLBOX_SCROLL_REPAIR_PAIR},
+                                                {{0, 0, 10, 10}, TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL}};
+    const ToolboxForegroundUnits mixed(entries, 2, Rect(), false);
+    LOKA_VERIFY(mixed.count() == 2 && mixed.preservedCount() == 1 && mixed.repairUnitCount() == 1);
+    equal(mixed.unit(0), entries[0].rect);
+    equal(mixed.preservedUnit(0), entries[0].rect);
+    equal(mixed.repairUnit(0), entries[1].rect);
+    LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).refused());
+    LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).count() == 0);
+    const ToolboxForegroundUnits one(entries, 1, Rect(), false);
+    // The presenter still pairs every entry: 4800 unit + 1600 exposed + 450 corners > 5000.
+    LOKA_VERIFY(one.tooLarge(domain, 16, Rect()));
+    LOKA_VERIFY(one.tooLarge(domain, -16, Rect()));
+    entries[1].treatment = TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL;
+    const ToolboxForegroundUnits preserved(entries, 2, Rect(), false);
+    LOKA_VERIFY(preserved.preservedCount() == 2 && preserved.repairUnitCount() == 0);
+    equal(preserved.preservedUnit(1), entries[1].rect);
+  }
+
   void sealedRepairBudget()
   {
     const Rect domain = {0, 0, 100, 100}, rect = {0, 0, 30, 50};
     const ToolboxPresentRects sealed(&rect, 1);
-    LOKA_VERIFY(!ToolboxForegroundRepair().tooLarge(domain, 16, Rect()));
-    LOKA_VERIFY(ToolboxForegroundRepair().tooLarge(domain, 16, Rect(), sealed));
+    LOKA_VERIFY(!ToolboxForegroundUnits().tooLarge(domain, 16, Rect()));
+    LOKA_VERIFY(ToolboxForegroundUnits().tooLarge(domain, 16, Rect(), sealed));
   }
   void presentCopy(const char *which)
   {
@@ -1923,6 +2117,7 @@ namespace
     toolbox_host::refuseCopiedClip = false;
     toolbox_host::refuseExposedUnion = false;
     const ToolboxPresentResult &result = f.controller.debugStatsForTesting().lastMovedPresentObservation;
+    LOKA_VERIFY(loka::testing::ToolboxBandPolicyAccess::borrowed(f.controller) == 0);
     LOKA_VERIFY(result.verdict() == TOOLBOX_PRESENT_COPY);
     LOKA_VERIFY(result.refusal() == TOOLBOX_PRESENT_ADMITTED);
     if (allocation || visibility || update)
@@ -1989,7 +2184,7 @@ namespace
     // 1600 exposed + 450 corner pair + 3000 damage exceeds half of 10000.
     // Counting only the original corner would incorrectly admit 4825 pixels.
     const Rect domain = {0, 0, 100, 100}, damageLimit = {0, 0, 30, 50};
-    LOKA_VERIFY(ToolboxForegroundRepair().tooLarge(domain, 16, damageLimit));
+    LOKA_VERIFY(ToolboxForegroundUnits().tooLarge(domain, 16, damageLimit));
     PresentFixture f;
     const Rect damage = f.controller.viewportScroll().contentRect;
     Region region = {10, damage};
@@ -2052,7 +2247,7 @@ namespace
     {
       ToolboxErasedPass::Guard guard(pass, shown);
       guard.noteErased(shown);
-      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true, toolbox_host::staticEligible) == BLUR_PICTURE);
     }
     const unsigned captures = toolbox_host::bandCaptures;
     const unsigned frozenCaptures = toolbox_host::staticCaptures;
@@ -2062,9 +2257,9 @@ namespace
       LOKA_VERIFY(pass.dischargesDamage(outside));
       LOKA_VERIFY(pass.admitsCapture(inside));
       LOKA_VERIFY(!pass.admitsCapture(outside));
-      LOKA_VERIFY(frozen.paint(window.window(), frozenRow, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(frozen.paint(window.window(), frozenRow, pass, true, toolbox_host::staticEligible) == BLUR_PICTURE);
       LOKA_VERIFY(toolbox_host::staticCaptures == frozenCaptures + 1);
-      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(live.paint(window.window(), liveRow, pass, true, toolbox_host::staticEligible) == BLUR_PICTURE);
       LOKA_VERIFY(toolbox_host::bandCaptures == captures);
       LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(live) == ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE>::READY);
     }
@@ -2798,31 +2993,31 @@ namespace
     guard.noteErased(rect);
     const unsigned &captureCount = K == TOOLBOX_BLUR_FROZEN ? toolbox_host::staticCaptures : toolbox_host::bandCaptures;
     const unsigned requests = toolbox_host::invalidations;
-    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_ABSENT);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false, toolbox_host::staticEligible) == BLUR_ABSENT);
     LOKA_VERIFY(captureCount == 0);
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::EMPTY);
-    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_PICTURE);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible) == BLUR_PICTURE);
     LOKA_VERIFY(captureCount == 1);
-    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_PICTURE);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false, toolbox_host::staticEligible) == BLUR_PICTURE);
     LOKA_VERIFY(captureCount == 1);
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::READY);
     toolbox_host::staticCopySucceeds = false;
-    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false) == BLUR_PARTIAL);
+    LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, false, toolbox_host::staticEligible) == BLUR_PARTIAL);
     LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::READY);
     toolbox_host::staticCopySucceeds = true;
     if (K == TOOLBOX_BLUR_LIVE)
     {
       toolbox_host::staticCaptureSucceeds = false;
-      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_ABSENT);
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible) == BLUR_ABSENT);
       LOKA_VERIFY(!ToolboxBlurSnapshotInspection::hasPixels(snapshot));
       LOKA_VERIFY(ToolboxBlurSnapshotInspection::phase(snapshot) == ToolboxBlurSnapshot<K>::DISABLED);
       toolbox_host::staticCaptureSucceeds = true;
       const unsigned captures = captureCount;
-      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_ABSENT);
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible) == BLUR_ABSENT);
       LOKA_VERIFY(captureCount == captures);
       --row.rect.bottom;
       snapshot.reconcile(selection);
-      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true) == BLUR_PICTURE);
+      LOKA_VERIFY(snapshot.paint(f.window.window(), row, pass, true, toolbox_host::staticEligible) == BLUR_PICTURE);
     }
     LOKA_VERIFY(toolbox_host::invalidations == requests);
   }
@@ -4386,6 +4581,10 @@ int main(int argc, char **argv)
                          "CopySealedFour",
                          "CopySealedFive",
                          "SealedRepairBudget",
+                         "BandPolicyFacts",
+                         "BandPolicyBorrow",
+                         "ForegroundTreatments",
+                         "ForegroundArithmetic",
                          "StaticMissingRow",
                          "StaticChangedRect",
                          "StaticChangedGround",
@@ -4554,6 +4753,17 @@ int main(int argc, char **argv)
     staticIneligible(false);
   else if (std::strcmp(argv[1], "LiveIneligible") == 0)
     staticIneligible(true);
+  else if (std::strcmp(argv[1], "BandPolicyFacts") == 0)
+    bandPolicyFacts();
+  else if (std::strcmp(argv[1], "BandPolicyBorrow") == 0)
+    bandPolicyBorrow();
+  else if (std::strcmp(argv[1], "ForegroundTreatments") == 0)
+  {
+    foregroundTreatments();
+    unselectedBandTreatment();
+  }
+  else if (std::strcmp(argv[1], "ForegroundArithmetic") == 0)
+    foregroundArithmetic();
   else if (std::strcmp(argv[1], "SealedRepairBudget") == 0)
     sealedRepairBudget();
   else if (std::strncmp(argv[1], "Static", 6) == 0)

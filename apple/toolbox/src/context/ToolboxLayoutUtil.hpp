@@ -3,7 +3,7 @@
 
 #include "core/String.hpp"
 #include "app/style/Style.hpp"
-#include "ToolboxApp.hpp"
+#include "ToolboxBusy.hpp"
 #include <Quickdraw.h>
 #include <Fonts.h>
 
@@ -98,6 +98,10 @@ public:
   {
     return this->font == other.font && this->size == other.size && this->face == other.face;
   }
+  short nativeFont() const
+  {
+    return this->font == 0 ? GetSysFont() : this->font;
+  }
   const short font;
   const short size;
   const Style face;
@@ -118,14 +122,16 @@ private:
     Measurement reuse assumes this window's port font/size/face and system
     default font/size remain frozen between input marks. Scoped selection is
     restored; ambient font changes require a new input mark before layout.
-    Non-default sizes borrow the app cursor through selection, measurement,
-    drawing and restoration, on every transaction regardless of font family. */
+    Native transactions at non-default sizes borrow the app cursor through
+    selection, measurement, drawing and restoration, regardless of font family.
+    Character-width cache hits open no native transaction and borrow no cursor. */
 class ToolboxTextMeasureScope
 {
 public:
   ToolboxTextMeasureScope(
       const ToolboxScenePlatformController &controller,
       const ToolboxTextFontDescriptor &descriptor = ToolboxTextFontDescriptor());
+  ToolboxTextMeasureScope(const ToolboxScenePlatformController &controller, const ToolboxTextSelection &selection);
   ~ToolboxTextMeasureScope();
   ToolboxTextMeasureScope(const ToolboxScenePlatformController &controller,
                           const ToolboxTextFontDescriptor *descriptors, std::size_t count);
@@ -135,6 +141,8 @@ public:
   /** One-line pitch and baseline for the selected font; no layout state is read. */
   bool queryLineMetrics(long &pitch, short &baseline) const;
   bool valid() const { return this->measurePort_ != 0; }
+  /** Check the current port and native projection, without retaining another selection. */
+  bool applies(const ToolboxTextSelection &selection) const;
   /** Select against the original port, never the preceding run. */
   void select(const ToolboxTextFontDescriptor &descriptor) const;
   /** Compare the actual font settings inherited from this transaction's port. */
@@ -144,6 +152,7 @@ private:
   ToolboxTextMeasureScope(const ToolboxTextMeasureScope &);
   ToolboxTextMeasureScope &operator=(const ToolboxTextMeasureScope &);
 
+  void open(const ToolboxTextSelection &selection) const;
   GrafPtr previousPort_;
   GrafPtr measurePort_;
   const ToolboxTextPortFont original_;

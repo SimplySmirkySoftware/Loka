@@ -185,7 +185,7 @@ namespace
       }
       const int measurements = toolbox_host::widths;
       LOKA_VERIFY(controller.queryNaturalWidth(&node, widths[i]));
-      LOKA_VERIFY(toolbox_host::widths == measurements + 1);
+      LOKA_VERIFY(toolbox_host::widths == measurements);
       LayoutState offer;
       offer.width = 0;
       offer.lineHeight = 16;

@@ -6,6 +6,54 @@
 #include "platform/ToolboxUtf8Bytes.hpp"
 #include "context/ToolboxLayoutUtil.hpp"
 #include <climits>
+#include "ToolboxCharWidthCache.hpp"
+#include "platform/ToolboxPascalText.hpp"
+
+bool ToolboxScenePlatformController::measureTextAdvance(const loka::app::TextStyle &style,
+                                                        const loka::core::String &text,
+                                                        short &width) const
+{
+  GrafPtr port = this->window_ ? reinterpret_cast<GrafPtr>(this->window_->window()) : 0;
+  Str255 bytes;
+  if (!port || !ToolboxEncodePascal(text, bytes))
+    return false;
+  const ToolboxTextSelection selection =
+      ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(style), ToolboxTextPortFont::read(port));
+  ToolboxCharWidthCache *cache = this->charWidthCache();
+  do
+  {
+    if (!ToolboxCharWidthEnvironment(port) || !cache)
+      break;
+    const ToolboxCharWidthCache::Slot *slot = cache->find(selection);
+    if (!slot && cache->full())
+      break;
+    const ToolboxCharWidthKind kind = slot ? slot->kind : ToolboxClassifyCharWidth(selection);
+    if (kind == TOOLBOX_CHAR_REFUSED)
+    {
+      if (!slot)
+        cache->refuse(selection);
+      break;
+    }
+    if (!ToolboxCharWidthBytes(kind, bytes))
+      break;
+    if (slot)
+    {
+      if (slot->widths->sum(bytes, width))
+        return true;
+      break;
+    }
+    ToolboxTextMeasureScope scope(*this, selection);
+    slot = cache->build(selection, kind, scope);
+    if (slot && slot->widths->sum(bytes, width))
+      return true;
+    width = StringWidth(bytes);
+    return true;
+  } while (false);
+
+  ToolboxTextMeasureScope scope(*this, selection);
+  width = StringWidth(bytes);
+  return true;
+}
 
 bool ToolboxScenePlatformController::measurePushButtonNaturalWidth(const loka::core::String &label,
                                                                    short &width) const
@@ -78,11 +126,8 @@ bool ToolboxScenePlatformController::queryNaturalWidth(loka::app::scene::Node *c
   bool singleLine = false;
   if (!QuerySingleLine(value, singleLine) || !singleLine)
     return false;
-  // The Text context measures through this same scope and descriptor, so the
-  // answer is the width it lays the string out at.
-  ToolboxTextMeasureScope scope(*this, ToolboxTextFontDescriptor(text->props.resolvedTextStyle()));
   short measured = 0;
-  if (!scope.measure(value, measured) || measured <= 0)
+  if (!this->measureTextAdvance(text->props.resolvedTextStyle(), value, measured) || measured <= 0)
     return false;
   width = measured;
   return true;

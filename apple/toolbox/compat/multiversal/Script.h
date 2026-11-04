@@ -10,6 +10,7 @@
 // Match Universal Script.h (CharByte byte types).
 enum
 {
+  smJapanese = 1,
   smFirstByte = -1,
   smLastByte = 1
 };
