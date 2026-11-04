@@ -1,4 +1,5 @@
 #include "MacMenuProjectionTests.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "support/TestVerify.hpp"
 #include "support/MacWindowSession.hpp"
 #include <cstdio>
@@ -1470,4 +1471,37 @@ void testMacEditMenuValidationUsesRealSender()
   }
   [target release];
   app.menuAttachment().disconnect();
+}
+
+namespace
+{
+  void observeBeforeMenuCommand(void *data)
+  {
+    LOKA_VERIFY(*static_cast<unsigned *>(data) == 0);
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+  }
+  void menuCommandAfterCommit(void *data)
+  {
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+    ++*static_cast<unsigned *>(data);
+  }
+} // namespace
+void testMacMenuActionCommitsBeforeDispatch()
+{
+  CocoaHost host;
+  unsigned commands = 0;
+  EmitterState command;
+  command.bind(&menuCommandAfterCommit, &commands, false);
+  TestApp app;
+  MenuBarDefinition offered;
+  offered << (Menu("File") << MenuItem("Run").onClick(&command));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered)));
+  NSMenuItem *item = commandItem();
+  LOKA_VERIFY([item action] == @selector(handleMenuAction:));
+  loka::testing::observeTextInputCommits(&observeBeforeMenuCommand, &commands);
+  [[item target] performSelector:[item action] withObject:item];
+  LOKA_VERIFY(commands == 1 && loka::testing::textInputCommitCount() == 1);
+  loka::testing::observeTextInputCommits(0, 0);
+  app.menuAttachment().disconnect();
+  command.unbind(&menuCommandAfterCommit, &commands);
 }

@@ -1,4 +1,5 @@
 #include "ToolboxMenuHost.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "support/TestVerify.hpp"
 #include "support/StandaloneMountTestSupport.hpp"
 #include "app/nodes/boundary/StdComposition.hpp"
@@ -1294,6 +1295,39 @@ void testToolboxSeparatorBeforeOpenerAndTailCollapse()
   LOKA_VERIFY(!app.menuAttachment().dispatch(129, 2) && !app.menuAttachment().dispatch(129, 3));
 }
 
+namespace
+{
+  void observeBeforeToolboxMenu(void *data)
+  {
+    LOKA_VERIFY(*static_cast<unsigned *>(data) == 0);
+    LOKA_VERIFY(Operation::hasActive());
+  }
+  void toolboxMenuAfterCommit(void *data)
+  {
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+    ++*static_cast<unsigned *>(data);
+  }
+} // namespace
+void testToolboxMenuSelectionCommitsBeforeDispatch()
+{
+  unsigned commands = 0;
+  EmitterState command;
+  command.bind(&toolboxMenuAfterCommit, &commands, false);
+  ToolboxApp app;
+  MenuBarDefinition offered;
+  offered << (Menu("File") << MenuItem("Run").onClick(&command));
+  LOKA_VERIFY(app.menuAttachment().project(sources(&offered, 0)));
+  loka::testing::observeTextInputCommits(&observeBeforeToolboxMenu, &commands);
+  app.handleMenuSelection(0, 1);
+  app.handleMenuSelection(129, 0);
+  LOKA_VERIFY(commands == 0 && loka::testing::textInputCommitCount() == 0);
+  app.handleMenuSelection(129, 1);
+  LOKA_VERIFY(commands == 1 && loka::testing::textInputCommitCount() == 1);
+  loka::testing::observeTextInputCommits(0, 0);
+  app.menuAttachment().disconnect();
+  command.unbind(&toolboxMenuAfterCommit, &commands);
+}
+
 int main(int argc, char **argv)
 {
   toolbox_host::resourceMenuItems.push_back("-");
@@ -1341,6 +1375,7 @@ int main(int argc, char **argv)
                         PIN(testToolboxQuitDefaultsToCommandQ),
                         PIN(testToolboxMenuShortcutProjectsItemCmd),
                         PIN(testToolboxMenuAttachmentProjectsOncePerIdentity),
+                        PIN(testToolboxMenuSelectionCommitsBeforeDispatch),
                         PIN(testToolboxMenuAttachmentSeesItemChange),
                         PIN(testToolboxMenuAttachmentChangedOverlayRebuildsFully),
                         PIN(testToolboxMenuAttachmentReleaseFromSourceDisconnects),

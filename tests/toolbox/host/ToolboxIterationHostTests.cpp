@@ -65,7 +65,7 @@ int main()
   iteration_host::part = inMenuBar;
   expect(app, clock, event, HEAD "find-window,menu-select,cursor-reconcile,menu-command,hilite-menu," TAIL);
   iteration_host::part = inGoAway;
-  expect(app, clock, event, HEAD "find-window,track-go-away,close-asked,close-request," TAIL);
+  expect(app, clock, event, HEAD "find-window,track-go-away,commit-text-input,close-asked,close-request," TAIL);
   event.what = activateEvt;
   event.message = reinterpret_cast<unsigned long>(window.window());
   expect(app, clock, event, HEAD "grow-damage," TAIL);

@@ -88,6 +88,12 @@ class Win32ScenePlatformController : public loka::app::scene::IPlatformControlle
                                      public loka::app::layout::INaturalSizeSource
 {
 public:
+  /** Refuse until text body page 1d is frozen and implemented: committed IME text
+      reaches the body later through the message queue. */
+  virtual bool createTextStore(loka::app::scene::TextDocumentRegistration &)
+  {
+    return false;
+  }
   virtual bool queryNaturalHeight(loka::app::scene::Node *child, short &height) const;
   virtual bool queryNaturalWidth(loka::app::scene::Node *child, short &width) const;
   /** Retire door for a RectSurface context: takes back that surface's pending

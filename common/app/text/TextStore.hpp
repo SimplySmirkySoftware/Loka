@@ -51,20 +51,26 @@ namespace loka
         TextStoreLink *peer_;
         TextStoreRow *const row_;
       };
-      /** Consumed native observation. No IME field until the commit door exists. */
+      /** Consumed native observation, including current uncommitted text presence. */
       class TextStoreReading
       {
       public:
         TextStoreReading(bool changed = false,
                          const TextChangedRange *range = 0,
                          unsigned long caret = 0,
-                         unsigned long anchor = 0)
+                         unsigned long anchor = 0,
+                         bool marked = false)
             : changed_(changed),
               range_(range ? *range : TextChangedRange()),
               reported_(range != 0),
               caret_(caret),
-              anchor_(anchor)
+              anchor_(anchor),
+              marked_(marked)
         {
+        }
+        bool marked() const
+        {
+          return this->marked_;
         }
         bool changed() const
         {
@@ -91,6 +97,7 @@ namespace loka
         TextChangedRange range_;
         bool reported_;
         unsigned long caret_, anchor_;
+        bool marked_;
       };
       /** Controller-owned resident. Retirement cuts the link and moves lists without allocation. */
       class TextStoreRow

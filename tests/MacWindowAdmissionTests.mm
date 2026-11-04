@@ -1,4 +1,5 @@
 #include "MacWindowAdmissionTests.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "support/TestVerify.hpp"
 #include "support/NativeCloseTestConfig.hpp"
 
@@ -338,6 +339,39 @@ void testMacPerformCloseClosesUnkeyedWindowAsToday()
     [native performClose:nil];
     LOKA_VERIFY(NativeAccess::nativeWindow(*window) == 0);
     LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 1);
+  }
+  [pool drain];
+}
+
+namespace
+{
+  void observeBeforeCloseAsked(void *data)
+  {
+    NativeCloseTestConfig &config = *static_cast<NativeCloseTestConfig *>(data);
+    LOKA_VERIFY(config.roster.closeAsked().get().id.isNone());
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+  }
+} // namespace
+void testMacWindowShouldCloseCommitsBeforeAsk()
+{
+  NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+  [NSApplication sharedApplication];
+  {
+    NativeCloseTestContext<MacWindow> context;
+    NativeCloseTestConfig config(context, true);
+    const loka::core::ItemId key = config.roster.open(loka::app::DocumentFacts());
+    LOKA_VERIFY(!key.isNone());
+    CloseAskedMacApp app(config);
+    app.App::run();
+    MacWindow *window = app.firstWindow();
+    NSWindow *native = (NSWindow *)NativeAccess::nativeWindow(*window);
+    LOKA_VERIFY(native != nil && [native delegate] != nil);
+    loka::testing::observeTextInputCommits(&observeBeforeCloseAsked, &config);
+    LOKA_VERIFY([[native delegate] windowShouldClose:native] == NO);
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+    LOKA_VERIFY(config.roster.closeAsked().get().id == key);
+    LOKA_VERIFY(AppAccess::pendingWindowCloseCount(app) == 0);
+    loka::testing::observeTextInputCommits(0, 0);
   }
   [pool drain];
 }

@@ -129,6 +129,8 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
     {
       if (TrackGoAway(target, record.where))
       {
+        // Twin: MacWindow::handleWindowShouldClose.
+        this->commitTextInput();
         ToolboxWindow *closing = 0;
         if (group_)
         {
