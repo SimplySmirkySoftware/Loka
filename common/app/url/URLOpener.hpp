@@ -79,6 +79,10 @@ namespace loka
       friend class ::App;
       URLOpenerBase(const URLOpenerBase &);
       URLOpenerBase &operator=(const URLOpenerBase &);
+      bool isIdle() const
+      {
+        return this->phase_ == IDLE;
+      }
       /** Only these two doors transition IDLE -> LAUNCHING -> SEALED ->
           DELIVERING -> IDLE. Launch removes a stack copy before calling open
           synchronously; the callback and user pointer are borrowed only for

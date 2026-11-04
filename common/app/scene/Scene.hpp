@@ -1,6 +1,7 @@
 #ifndef LOKA_CORE2_SCENE_SCENE_HPP
 #define LOKA_CORE2_SCENE_SCENE_HPP
 
+#include "app/scene/SceneTextDocuments.hpp"
 #include "core/Operation.hpp"
 #include "core/diag/LifecycleAudit.hpp"
 #include "core/State.hpp"
@@ -540,6 +541,10 @@ namespace loka
 
         /** Focus membership survives parking and is emptied by composition teardown. */
         SceneFocus &focus() { return this->focus_; }
+        SceneTextDocuments &textDocuments()
+        {
+          return this->textDocuments_;
+        }
 
         /** The controller borrow interval is independent of focus publication. */
         bool isBorrowOpen() const
@@ -550,7 +555,8 @@ namespace loka
         /** Admission and close reclamation exclude all active borrow phases. */
         bool isBusy() const
         {
-          return this->isRunInProgress() || this->focus_.isPublishing() || this->isBorrowOpen();
+          return this->isRunInProgress() || this->focus_.isPublishing() || this->textDocuments_.isPublishing()
+                 || this->isBorrowOpen();
         }
 
         bool hasPendingInvalidation() const
@@ -601,6 +607,7 @@ namespace loka
         loka::core::MutableState<bool> attached_;
         loka::core::OwnedDef<NodeDefinitionBase> rootDefinition_;
         SceneFocus focus_;
+        SceneTextDocuments textDocuments_;
         Node *rootNode_;
         loka::core::OwnedDef<MenuBarDefinition> menuBar_;
         IPlatformController *platformController_;
@@ -624,6 +631,7 @@ namespace loka
         friend class ::Window;
         friend class loka::app::detail::SceneRetirePool;
         friend class SceneDirector;
+        friend class TextDocumentRegistration;
         friend class ::loka::dsl::testing::SceneTestAccess;
 
       private:
@@ -857,6 +865,8 @@ namespace loka
           {
             BoundaryNode::ObservedStatePassScope observedScope(boundary, event);
             prepareRootBoundaryCompose(boundary, rootContext, event);
+            if (event == COMPOSE_EVENT_ATTACH)
+              boundary->attachParticipants(*this);
             boundary->compose(rootContext, event);
             completeRootBoundaryCompose(boundary);
             if (boundary->composeResult().allocationFailed)
@@ -876,8 +886,14 @@ namespace loka
           }
           this->menuBar_.reset(boundary->composition().menuBar_.take());
           if (publish)
-            platformController_->onChange(rootNode_, NODE_DIRTY_INITIAL, true);
+            this->projectInitial();
           composed_ = true;
+        }
+
+        void projectInitial()
+        {
+          this->textDocuments_.createStores(*this->platformController_);
+          this->platformController_->onChange(this->rootNode_, NODE_DIRTY_INITIAL, true);
         }
 
         void notifyComposeEvent(ComposeEvent event)
@@ -905,6 +921,8 @@ namespace loka
           {
             BoundaryNode::ObservedStatePassScope observedScope(boundary, event);
             prepareRootBoundaryCompose(boundary, rootContext, event);
+            if (event == COMPOSE_EVENT_ATTACH)
+              boundary->attachParticipants(*this);
             boundary->compose(rootContext, event);
             if (event == COMPOSE_EVENT_DETACH)
             {
@@ -1074,6 +1092,7 @@ namespace loka
           if (!rootNode_)
           {
             this->focus_.disconnectAll();
+            this->textDocuments_.disconnectAll();
             return;
           }
           Node::MarkSubtreeLifecycleFact(rootNode_, NODE_FACT_RETIRED);
@@ -1092,6 +1111,7 @@ namespace loka
           DestroyHeapNode(rootNode_);
           rootNode_ = 0;
           this->focus_.disconnectAll();
+          this->textDocuments_.disconnectAll();
         }
 
         static size_t countLiveNodes(Node *node)

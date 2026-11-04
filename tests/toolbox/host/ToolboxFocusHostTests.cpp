@@ -651,7 +651,7 @@ namespace
     toolbox_host::frontWindow = 0;
     NodeContext *out = 0;
     LOKA_VERIFY(!f.controller.readNativeFocus(out));
-    f.app.reconcileFocus();
+    f.app.reconcileAtCompletion();
     LOKA_VERIFY(f.focus.state()->get().is(FIRST));
     toolbox_host::frontWindow = f.nativeWindow.window();
     // Reprojecting another field with the same text must not change identity.

@@ -59,7 +59,7 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
       }
     }
   }
-  this->reconcileFocus();
+  this->reconcileAtCompletion();
   turn.close();
   this->reclaimWindows();
 }

@@ -2,6 +2,7 @@
 #define LOKA_CORE2_SCENE_PROJECTION_IPLATFORMCONTROLLER_HPP
 
 #include "app/scene/Node.hpp"
+#include "app/text/TextStore.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/scene/boundary/BoundaryApplyInfo.hpp"
 
@@ -12,6 +13,7 @@ namespace loka
     namespace scene
     {
 
+      class TextDocumentRegistration;
       class Node;
       class BoundaryNode;
       enum NodeDirtyFlags;
@@ -140,6 +142,30 @@ namespace loka
         virtual bool applyNativeFocus(NodeContext &ctx)
         {
           (void)ctx;
+          return false;
+        }
+
+        /** Text store doors refuse on rails without a store implementation. */
+        virtual bool createTextStore(TextDocumentRegistration &)
+        {
+          return false;
+        }
+        virtual bool readTextStore(TextStoreRow &, TextStoreReading &)
+        {
+          return false;
+        }
+        /** True means an unreconciled body change; the refusing default blocks queries. */
+        virtual bool peekTextStore(TextStoreRow &)
+        {
+          return true;
+        }
+        /** Copy handles and identities before native calls; do not touch a context afterwards. */
+        virtual bool applyTextRequest(TextStoreRow &, unsigned long)
+        {
+          return false;
+        }
+        virtual bool queryTextLength(TextStoreRow &, unsigned long &)
+        {
           return false;
         }
 

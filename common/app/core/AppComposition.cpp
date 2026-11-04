@@ -5,6 +5,7 @@ AppComposition::AppComposition(PlatformContext *context)
       windowList_(),
       context_(context),
       windowSeat_(0),
+      urlReceiveSeat_(0),
       urlOpener_(0)
 {
   assert(context_ && "AppComposition: PlatformContext* must not be null");
@@ -14,6 +15,8 @@ AppComposition::~AppComposition()
 {
   windowList_.clear();
   delete this->windowSeat_;
+  // Once per composition: destroy only an untaken Match copy and its child chains.
+  delete this->urlReceiveSeat_;
 }
 
 AppComposition &AppComposition::declare(const WindowDefinitionBase &def)
@@ -95,4 +98,19 @@ loka::app::URLOpenerBase *AppComposition::takeURLOpener()
   loka::app::URLOpenerBase *opener = this->urlOpener_;
   this->urlOpener_ = 0;
   return opener;
+}
+
+AppComposition &AppComposition::operator<<(const loka::app::URLReceiveSeatDefinitionBase &def)
+{
+  assert(!this->urlReceiveSeat_ && "one URL receive seat per composition");
+  if (!this->urlReceiveSeat_)
+    this->urlReceiveSeat_ = def.createSeat();
+  return *this;
+}
+
+loka::app::URLReceiveSeatBase *AppComposition::takeURLReceiveSeat()
+{
+  loka::app::URLReceiveSeatBase *seat = this->urlReceiveSeat_;
+  this->urlReceiveSeat_ = 0;
+  return seat;
 }

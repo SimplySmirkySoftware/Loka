@@ -5,5 +5,5 @@ void pin(App &app, Window &window)
 {
   (void)app;
   (void)window;
-  app.reconcileFocus();
+  app.reconcileAtCompletion();
 }

@@ -2039,6 +2039,8 @@ namespace loka
             Scene *scene = nextBoundary ? nextBoundary->getScene() : 0;
             if (event == COMPOSE_EVENT_ATTACH && scene && !boundary && !composable && !nestable)
               JoinSceneFocus(*scene, *node);
+            if (event == COMPOSE_EVENT_ATTACH && scene && composable)
+              composable->attachParticipants(*scene);
             nodeContext.setScene(scene);
             nodeContext.setWindow(parentContext.window());
             nodeContext.setDirtyFlags(parentContext.dirtyFlags());

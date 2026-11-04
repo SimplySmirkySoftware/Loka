@@ -11,6 +11,7 @@ namespace loka { namespace app { class TextWidthSource; } }
 #include <vector>
 
 #include "app/RectSurface.hpp"
+#include "platform/null/NullTextStore.hpp"
 #include "app/FocusParticipant.hpp"
 #include "app/scene/projection/NativeHandlePool.hpp"
 #include "app/scene/projection/PlatformController.hpp"
@@ -171,6 +172,26 @@ public:
     out = row ? row->context() : 0;
     return true;
   }
+  virtual bool createTextStore(loka::app::scene::TextDocumentRegistration &registration);
+  virtual bool readTextStore(loka::app::scene::TextStoreRow &row, loka::app::scene::TextStoreReading &out)
+  {
+    out = static_cast<NullTextStore &>(row).take();
+    return true;
+  }
+  virtual bool peekTextStore(loka::app::scene::TextStoreRow &row)
+  {
+    return static_cast<NullTextStore &>(row).pending();
+  }
+  virtual bool applyTextRequest(loka::app::scene::TextStoreRow &row, unsigned long target)
+  {
+    static_cast<NullTextStore &>(row).apply(target);
+    return true;
+  }
+  virtual bool queryTextLength(loka::app::scene::TextStoreRow &row, unsigned long &out)
+  {
+    out = static_cast<NullTextStore &>(row).length();
+    return true;
+  }
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
 #ifdef TEST_BUILD
   void simulateNativeFocus(loka::app::scene::NodeContext *context)
@@ -288,6 +309,7 @@ public:
   virtual void onPaintCommitted() {}
 
 private:
+  loka::app::scene::TextStoreLedger textStores_;
   NullMenuAttachment menuAttachment_;
   friend class loka::testing::LazyViewAccess;
   friend class loka::testing::NullClipAccess;
