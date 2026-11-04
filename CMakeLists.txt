@@ -663,6 +663,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/ToolboxUnicodeStartup.cpp
     apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp
     apple/toolbox/src/ToolboxNaturalWidth.cpp
+    apple/toolbox/src/ToolboxCharWidthCache.cpp
     tests/toolbox/host/ToolboxScrollViewHost.cpp
     apple/toolbox/src/ToolboxPlatformLayoutHandlers.cpp
     apple/toolbox/src/ToolboxString.cpp
@@ -688,6 +689,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolboxViewportSuppression_${_suppression}
       COMMAND LokaToolboxAttributedTextTests suppression-${_suppression})
   endforeach()
+  add_test(NAME testToolboxCharWidth COMMAND LokaToolboxAttributedTextTests char-width)
   add_test(NAME testToolboxToolbarPaint COMMAND LokaToolboxAttributedTextTests toolbar)
   add_test(NAME testToolboxScrollViewX COMMAND LokaToolboxAttributedTextTests scroll-x)
   foreach(_ellipsis_case plain-ellipsis plain-ellipsis-refused)

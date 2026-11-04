@@ -112,6 +112,27 @@ namespace
     std::printf("[pin] %s\n", name);
     std::fflush(stdout);
   }
+  void TextWidthCharacterization()
+  {
+    Pin("ToolboxTextNaturalWidthCharacterization");
+    ToolboxWindow window, other;
+    HostPortScope current(other.window());
+    ToolboxScenePlatformController controller(&window);
+    loka::core::MutableState<loka::core::String> value(loka::core::String::Literal("Abc"));
+    TextProps props(&value);
+    props.textStyle_ = FontSize<18>() + Bold;
+    TextNode node(props);
+    toolbox_host::reset();
+    short width = -1;
+    LOKA_VERIFY(controller.queryNaturalWidth(&node, width) && width == 21);
+    LOKA_VERIFY(controller.queryNaturalWidth(&node, width) && width == 21);
+    LOKA_VERIFY(toolbox_host::widths == 0 && toolbox_host::measures == 1 && toolbox_host::fonts == 2);
+    LOKA_VERIFY(controller.cursor.entries == 1 && controller.cursor.depth == 0);
+    LOKA_VERIFY(window.port.txFont == 3 && window.port.txSize == 12 && window.port.txFace == 0);
+    GrafPtr selected = 0;
+    GetPort(&selected);
+    LOKA_VERIFY(selected == other.window());
+  }
   void TextSelectionPins()
   {
     ToolboxWindow window, other;
@@ -542,8 +563,15 @@ namespace
   }
 } // namespace
 
+#include "ToolboxCharWidthPins.hpp"
+
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::string(argv[1]) == "char-width")
+  {
+    CharWidthPins();
+    return 0;
+  }
   if (argc == 2 && std::string(argv[1]) == "refusal-partial")
   {
     ToolboxWindow window;
@@ -609,6 +637,7 @@ int main(int argc, char **argv)
   if (argc == 1 || (argc == 2 && std::string(argv[1]) == "text-selection"))
   {
     TextSelectionPins();
+    TextWidthCharacterization();
     if (argc == 2)
       return 0;
   }

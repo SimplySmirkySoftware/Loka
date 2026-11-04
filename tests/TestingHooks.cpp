@@ -367,7 +367,14 @@ namespace loka
           }
           void *memory = new (std::nothrow) char[size];
           if (memory)
+          {
+            // Deterministic fresh storage lets host pins distinguish a missing
+            // MeasureText sentinel fill from accidental allocator contents.
+            if (site.ownerTag && site.typeTag && std::strcmp(site.ownerTag, "ToolboxCharWidthCache") == 0
+                && std::strcmp(site.typeTag, "Entry") == 0)
+              std::memset(memory, 0, size);
             ++g_allocationLive;
+          }
           return memory;
         }
 
@@ -713,7 +720,7 @@ namespace loka
       {
         std::size_t lastProjectionRequestBytes = 0;
         std::size_t lastProjectionReservationBytes = 0;
-      }
+      } // namespace
       void observeProjectionReservation(std::size_t requested, std::size_t capacity)
       {
         lastProjectionRequestBytes = requested;

@@ -531,6 +531,14 @@ public:
   static void TextStateChangedThunk(void *userData);
 
 public:
+  /** Complete encoded advance query; only absent port or failed encoding refuses. */
+  bool measureTextAdvance(const loka::app::TextStyle &style, const loka::core::String &text, short &width) const;
+  /** Borrow the window's App-owned cache; absent ownership uses native measurement. */
+  ToolboxCharWidthCache *charWidthCache() const
+  {
+    ToolboxApp *app = this->window_ ? this->window_->toolboxApp() : 0;
+    return app ? &app->charWidthCache() : 0;
+  }
   /** Borrow the window's app-wide cursor owner; no controller registry walk. */
   CursorOwner *cursorOwner() const
   {

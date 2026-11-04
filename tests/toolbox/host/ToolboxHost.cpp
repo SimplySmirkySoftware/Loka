@@ -15,6 +15,12 @@ namespace toolbox_host
   short systemFont = 0, defaultFontSize = 12;
   long systemScript = smRoman;
   long keyboardScript = smRoman;
+  bool fractionalWidths = false;
+  long fontForce = 0;
+  short fontScript = smRoman;
+  short lastScriptFont = -1;
+  unsigned fontScriptReads = 0, defaultFontReads = 0;
+  int positionMode = 0;
   unsigned beeps = 0;
   unsigned scriptReads = 0;
   ControlCalls controlCalls;
@@ -47,6 +53,8 @@ namespace toolbox_host
 } // namespace toolbox_host
 long GetScriptManagerVariable(short selector)
 {
+  if (selector == smFontForce)
+    return toolbox_host::fontForce;
   if (selector == smSysScript)
   {
     ++toolbox_host::scriptReads;
@@ -57,21 +65,19 @@ long GetScriptManagerVariable(short selector)
   assert(false);
   return 0;
 }
+bool LMGetFractEnable()
+{
+  return toolbox_host::fractionalWidths;
+}
+short FontToScript(short font)
+{
+  ++toolbox_host::fontScriptReads;
+  toolbox_host::lastScriptFont = font;
+  return toolbox_host::fontScript;
+}
 namespace
 {
-  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}},
-                          7,
-                          12,
-                          0,
-                          blackColor,
-                          HostPortState(),
-                          0,
-                          0
-#ifdef LOKA_HOST_IMAGE_VIEW
-                          ,
-                          0
-#endif
-  };
+  GrafPort initialPort = {{0, 0, {0, 0, 0, 0}}, 7, 12, 0, blackColor, HostPortState(), 0, 0, 0, 0, 0};
   GrafPtr port = &initialPort;
   short penX, penY;
   Rect Intersection(const Rect &a, const Rect &b)
@@ -151,6 +157,7 @@ void TextFace(Style value)
 }
 short GetDefFontSize()
 {
+  ++toolbox_host::defaultFontReads;
   return toolbox_host::defaultFontSize;
 }
 short GetSysFont()
@@ -170,8 +177,31 @@ void MeasureText(short count, const void *bytes, void *charLocs)
   toolbox_host::measurePayloads.push_back(std::string(static_cast<const char *>(bytes), count));
   ++toolbox_host::measures;
   short *positions = static_cast<short *>(charLocs);
+  if (toolbox_host::positionMode == 5)
+    return; // No positions written, including the origin.
+  if (toolbox_host::positionMode == 6)
+  {
+    positions[0] = 0;
+    const unsigned char *characters = static_cast<const unsigned char *>(bytes);
+    for (int i = 0; i < count; ++i)
+      positions[i + 1] = static_cast<short>(positions[i] + (characters[i] & 7) + 1);
+    return;
+  }
   for (int i = 0; i <= count; ++i)
+  {
+    if (toolbox_host::positionMode == 1 && i == count / 2)
+      continue;
     positions[i] = static_cast<short>(i * (port->txSize / 3 + ((port->txFace & bold) ? 1 : 0)));
+  }
+  if (toolbox_host::positionMode == 2 && count > 2)
+    positions[2] = 0;
+  if (toolbox_host::positionMode == 3)
+    positions[0] = 1;
+  if (toolbox_host::positionMode == 4 && count > 2)
+  {
+    positions[1] = -32768;
+    positions[2] = 32767;
+  }
 }
 short TextWidth(const void *bytes, short offset, short length)
 {
