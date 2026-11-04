@@ -875,3 +875,30 @@ namespace loka
   } // namespace testing
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textStoreCreationFailures = 0;
+      }
+      void failTextStoreCreations(unsigned count)
+      {
+        textStoreCreationFailures = count;
+      }
+      bool consumeTextStoreCreationFailure()
+      {
+        if (!textStoreCreationFailures)
+          return false;
+        --textStoreCreationFailures;
+        return true;
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif

@@ -202,7 +202,8 @@ until exchange completes. Reclamation writes nothing. The two controls share
 
 ## Busy exclusion
 
-`Scene::isBusy` means a run is in progress, that Scene is publishing focus,
+`Scene::isBusy` means a run is in progress, that Scene is publishing focus or
+[document facts](TextDocumentDesign.md#kernel-obligations),
 or its controller has an open [controller borrow interval](RequestDeliveryDesign.md#platform-operation-interval-968).
 Window declines focus completion during that interval. A borrow interval opened
 inside an existing focus publication restores its own outer phase independently.

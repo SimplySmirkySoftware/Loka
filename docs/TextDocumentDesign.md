@@ -1,11 +1,11 @@
 # Text document design
 
-> **Status:** Draft — target shape, not implemented. The owner ruling of
+> **Status:** Draft — common kernel and Null store implemented; native rails pending. The owner ruling of
 > 2026-11-03 ([#1733](https://github.com/SimplySmirkySoftware/Loka/issues/1733))
 > froze [The document](#the-document),
 > [Reads, positions, and requests](#reads-positions-and-requests) and
 > [Migration](#migration). [Kernel obligations](#kernel-obligations) lists
-> what the kernel design must satisfy; that design is not frozen.
+> the kernel contract and its implementation; IME commit remains a later step.
 > [Why](#why) and [Native facts](#native-facts) are background. The policy in
 > [From AGENTS.md](#from-agentsmd) applies to new work now; the shipped
 > `TextEditor` keeps its current model until the migration replaces it.
@@ -17,19 +17,23 @@
 > headers will own the signatures), the kernel seat and its reconcile,
 > Edit-menu routing, capacity, or per-rail native mechanics
 >
-> **Code truth:** none yet. The model it replaces is
+> **Code truth:** [TextDocument.hpp](../common/app/text/TextDocument.hpp),
+> [TextDocument.cpp](../common/app/text/TextDocument.cpp), and
+> [SceneTextDocuments.hpp](../common/app/scene/SceneTextDocuments.hpp).
+> The model it replaces is
 > [TextEditor.hpp](../common/app/nodes/controls/TextEditor.hpp),
 > [TextBuffer.hpp](../common/app/TextBuffer.hpp),
 > [LineCursor.hpp](../common/app/style/LineCursor.hpp),
 > [TextEditorDocument.hpp](../common/app/nodes/controls/TextEditorDocument.hpp)
 > and [TextEditorDiff.hpp](../common/app/nodes/controls/TextEditorDiff.hpp).
 >
-> **Verification:** none yet. The native behavior the design relies on is
+> **Verification:** [TextDocumentKernelTests.cpp](../tests/TextDocumentKernelTests.cpp)
+> pins common/Null behavior. The native behavior the design relies on is
 > recorded under [Native facts](#native-facts).
 
 ## From AGENTS.md
 
-This is the target shape; it is not implemented yet. New text-editing work
+Native store rails and editor migration remain target work. New text-editing work
 keeps an editable text's body once, in the native editor's own store (the MLTE
 object, `NSTextStorage`, the EDIT control's `HLOCAL`, TextEdit's text handle),
 and reads the body out only when an operation needs it: save, search, or an
@@ -45,7 +49,7 @@ from native notifications.
 
 ### Names already in the tree
 
-`TextDocument` is a new type; nothing in the tree is it yet. In particular,
+`TextDocument` is the new root-owned declaration. In particular,
 these existing names are not it:
 
 - `TextDocumentFile` (`TextDocumentResult`, `ReadTextDocument`) reads and
@@ -137,7 +141,7 @@ then plays the native role. It is still the only copy.
     [Request delivery](RequestDeliveryDesign.md#from-agentsmd) says.
   - That rule today drops a request whose native resource is missing. For a
     document, `AWAITING_STORE` is the exception: the request waits instead.
-    The refusal rule is to name this exception when the kernel lands.
+    The refusal rule names this exception in the common kernel.
 - **Commands.** Uncommitted IME text is committed before these operations, so
   none of them acts on a document that is still `MARKED`:
   - an Edit command;
@@ -162,25 +166,39 @@ then plays the native role. It is still the only copy.
 
 ## Kernel obligations
 
-The kernel design decides when the native store is created and who writes the
-fact. Whatever it decides, it must satisfy all of these:
+The common kernel uses [Scene::projectInitial](../common/app/scene/Scene.hpp)
+for creation, [SceneTextDocuments](../common/app/scene/SceneTextDocuments.hpp)
+for membership, and [TextDocumentPublisher](../common/app/text/TextDocument.cpp)
+for the single read/take/apply/read/write sequence. Controller doors in
+[IPlatformController](../common/app/scene/projection/PlatformController.hpp)
+refuse by default; only the Null rail supplies stores in this step. There is
+no uncommitted-text field until the IME commit door lands.
+
+The obligations are:
 
 - **Store creation**
   - A candidate Scene that is being prepared never creates a store.
   - A store is created when the current Scene attaches. If creation fails,
-    the document becomes `UNAVAILABLE`.
+    the document becomes `UNAVAILABLE`, without retry until the root is recreated.
 - **The fact and its requests**
   - The fact has a single writer in the Focus shape: it reads native changes
     at the outer completion and writes the fact once.
   - Rails mark changes and answer questions; they never write the fact.
   - Requests are taken only by that writer.
   - Queries refuse while a native change is unreconciled.
-- **Replacing and releasing a store**
+- **Replacing and releasing a store** (replacement and view detach are later steps)
   - Open builds the new store completely before swapping it in.
   - Detaching a view allocates nothing.
   - Reclaim happens at the owning clock's boundary and fires nothing.
-- **IME commit:** each rail commits uncommitted IME text before the commands
+- **IME commit** (later step): each rail commits uncommitted IME text before the commands
   above, or holds them until the committed text has landed.
+
+### Known visibility limit
+
+Hiding a window on Win32/macOS rebuilds its root when shown again and loses
+the body; today's `TextBuffer` has the same limit. The Null visibility pin
+makes root recreation and the fresh document's revision 0 explicit. Preserving
+the root across hiding is separate work.
 
 ## Native facts
 

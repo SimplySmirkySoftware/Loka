@@ -499,6 +499,20 @@ an empty command row to a command-free settle. A taken no-op command keeps its
 row. Single-seat behavior and command-free golden records remain unchanged
 (#902 item 8, PRs a0 and a).
 
+## Document completion delivery
+
+| Delivery site | Caller | Bound and ownership |
+|---|---|---|
+| `Window::reconcileTextDocuments` via `App::reconcileAtCompletion` | Rail outer completion, after focus and a fresh close-pending check | One caret take per document in the current Scene; no view is required. AWAITING_STORE waits; refused creation and stale revisions take and drop. |
+
+[Window](../common/app/core/Window.cpp), [App](../common/app/core/App.cpp), and
+[TextDocumentPublisher](../common/app/text/TextDocument.cpp) own this sequence.
+Document publication holds a controller borrow interval across the membership
+walk, so synchronous fact observers cannot retire its borrowed declaration rows.
+The interval restores without pumping, and the read-to-write sequence has no
+intermediate gate. There is no independent wake-up; a request posted by publication waits for the
+next admitted completion, as focus requests do.
+
 ## From AGENTS.md
 
 - **Delivery sites.** A delivery site is the completion of an entry operation:
@@ -518,7 +532,10 @@ row. Single-seat behavior and command-free golden records remain unchanged
   [#900](https://github.com/SimplySmirkySoftware/Loka/pull/900).
 - **Refusal.** A request that cannot be applied (stale line identity, document
   unavailable, missing native resource) is taken and dropped; the fact stays
-  unchanged. A last-wins slot reads `None` unless a subscriber reposted; a
+  unchanged. A document in `AWAITING_STORE` is the exception: its caret
+  request waits in the slot until store creation has been decided; `UNAVAILABLE`
+  takes and drops it. See [TextDocumentPublisher](../common/app/text/TextDocument.cpp).
+  A last-wins slot reads `None` unless a subscriber reposted; a
   queued slot advances to the next value, or `None` when the ring is empty.
   Source: [#892](https://github.com/SimplySmirkySoftware/Loka/issues/892).
 - **Binding change.** When the node's document binding changes (a different

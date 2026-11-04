@@ -1,3 +1,4 @@
+#include "support/TextDocumentAccess.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/layout/FallbackControlMetrics.hpp"
 #include "support/NullLayoutRefusal.hpp"
@@ -505,6 +506,7 @@ void NullScenePlatformController::drainNativeRetirements()
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(!this->borrowPhase().open());
 #endif
+  this->textStores_.drain();
   if (this->retired_.empty())
   {
     return;
@@ -524,6 +526,7 @@ void NullScenePlatformController::destroy()
 #ifdef LOKA_LIFECYCLE_AUDIT
   assert(!this->borrowPhase().open());
 #endif
+  this->textStores_.retireAll();
   if (this->destroyed_)
   {
     return;
@@ -1300,4 +1303,15 @@ bool NullScenePlatformController::handleEditCommand(loka::app::EditVerb verb)
   if (IsNullTextEditorNodeHandler(handler))
     return static_cast<NullTextEditorContext *>(context)->editCommands.record(verb);
   return false;
+}
+
+bool NullScenePlatformController::createTextStore(loka::app::scene::TextDocumentRegistration &registration)
+{
+  if (loka::app::testing::consumeTextStoreCreationFailure())
+    return false;
+  NullTextStore *row = new (std::nothrow) NullTextStore(this->textStores_, *this);
+  if (!row)
+    return false;
+  registration.connectStore(*row);
+  return true;
 }

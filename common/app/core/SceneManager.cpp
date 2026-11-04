@@ -171,7 +171,7 @@ void SceneManager::installScene(loka::app::scene::Scene *next)
   // project its root, then publish ON_ATTACH; applying protects reentrant adoption.
   next->updateAttached(true);
   if (next->composed_ && next->platformController_)
-    next->platformController_->onChange(next->rootNode_, loka::app::scene::NODE_DIRTY_INITIAL, true);
+    next->projectInitial();
   next->updateLifecycle(ON_ATTACH);
   if (old != this->desired_)
     this->retiredScenes_.retire(old);
