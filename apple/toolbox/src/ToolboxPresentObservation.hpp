@@ -244,23 +244,35 @@ inline const char *ToolboxPresentExecutedName(ToolboxPresentExecuted value)
   return "unknown";
 }
 
-/** Completed bounded repair facts; no row identities escape the controller. */
-class ToolboxForegroundRepair
+/** Treatment recorded at admission; presenter adoption is a separate change. */
+enum ToolboxScrollTreatment
+{
+  TOOLBOX_SCROLL_REPAIR_PAIR,
+  TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL
+};
+
+/** Completed bounded foreground facts; no row identities escape the controller. */
+class ToolboxForegroundUnits
 {
 public:
-  ToolboxForegroundRepair()
-      : units_(),
+  struct Entry
+  {
+    Rect rect;
+    ToolboxScrollTreatment treatment;
+  };
+  ToolboxForegroundUnits()
+      : entries_(),
         count_(0),
         bar_()
   {
   }
-  ToolboxForegroundRepair(const Rect *units, unsigned count, const Rect &bar, bool refused)
-      : units_(),
+  ToolboxForegroundUnits(const Entry *entries, unsigned count, const Rect &bar, bool refused)
+      : entries_(),
         count_(refused || count > 2 ? 3 : count),
         bar_(bar)
   {
     for (unsigned i = 0; i < count && i < 2; ++i)
-      this->units_[i] = units[i];
+      this->entries_[i] = entries[i];
   }
   bool refused() const
   {
@@ -273,7 +285,23 @@ public:
   const Rect &unit(unsigned i) const
   {
     assert(i < this->count());
-    return this->units_[i];
+    return this->entries_[i].rect;
+  }
+  unsigned repairUnitCount() const
+  {
+    return this->filteredCount(TOOLBOX_SCROLL_REPAIR_PAIR);
+  }
+  unsigned preservedCount() const
+  {
+    return this->filteredCount(TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL);
+  }
+  const Rect &repairUnit(unsigned i) const
+  {
+    return this->filteredUnit(i, TOOLBOX_SCROLL_REPAIR_PAIR);
+  }
+  const Rect &preservedUnit(unsigned i) const
+  {
+    return this->filteredUnit(i, TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL);
   }
   const Rect &bar() const
   {
@@ -287,9 +315,10 @@ public:
   {
     const long limit = area(domain) / 2;
     long sum = 0;
+    // PR (a)-2 switches PRESERVE to min(|dv|, h) * w strips when the presenter stops pairing those entries.
     for (unsigned i = 0; i < this->count(); ++i)
       for (int n = 0; n < 2; ++n)
-        add(sum, area(this->units_[i]), limit);
+        add(sum, area(this->entries_[i].rect), limit);
     for (unsigned i = 0; i < sealed.count(); ++i)
       for (int n = 0; n < 2; ++n)
         add(sum, area(sealed.at(i)), limit);
@@ -308,6 +337,23 @@ public:
   }
 
 private:
+  /** Projections rescan this value's at most two entries; no cached counts. */
+  unsigned filteredCount(ToolboxScrollTreatment treatment) const
+  {
+    unsigned result = 0;
+    for (unsigned i = 0; i < this->count(); ++i)
+      if (this->entries_[i].treatment == treatment)
+        ++result;
+    return result;
+  }
+  const Rect &filteredUnit(unsigned ordinal, ToolboxScrollTreatment treatment) const
+  {
+    for (unsigned i = 0; i < this->count(); ++i)
+      if (this->entries_[i].treatment == treatment && ordinal-- == 0)
+        return this->entries_[i].rect;
+    assert(false && "foreground ordinal out of range");
+    return this->entries_[0].rect;
+  }
   static long area(const Rect &r)
   {
     if (r.left >= r.right || r.top >= r.bottom)
@@ -320,7 +366,7 @@ private:
   {
     sum = term >= limit - sum ? limit : sum + term;
   }
-  Rect units_[2];
+  Entry entries_[2];
   unsigned count_;
   Rect bar_;
 };
@@ -328,7 +374,7 @@ private:
 /** Completed admission inputs, built after extent publication. */
 struct ToolboxPresentInputs
 {
-  ToolboxForegroundRepair repair;
+  ToolboxForegroundUnits foreground;
   bool suppressionCapable;
   unsigned usedViewports;
   ToolboxViewportContentResult outside;
@@ -501,7 +547,7 @@ public:
              && (this->damage_.left < this->viewport_.left || this->damage_.top < this->viewport_.top
                  || this->damage_.right > this->viewport_.right || this->damage_.bottom > this->viewport_.bottom))
       this->refusal_ = TOOLBOX_PRESENT_DAMAGE_OUTSIDE_VIEWPORT;
-    else if (this->inputs_.repair.refused())
+    else if (this->inputs_.foreground.refused())
       this->refusal_ = TOOLBOX_PRESENT_FOREGROUND_UNITS;
     else if (this->walkRectRequested_ || this->sealedRects_.refused())
       this->refusal_ = TOOLBOX_PRESENT_RECT_REQUESTS;
@@ -509,7 +555,7 @@ public:
       this->refusal_ = TOOLBOX_PRESENT_SEVERAL_VIEWPORTS_MOVED;
     else if (this->outsideNotTranslated() || this->outsideInputs() || this->outsideKinds() || this->unitChanged())
       this->refusal_ = TOOLBOX_PRESENT_OUTSIDE_CHANGED;
-    else if (this->inputs_.repair.tooLarge(this->copyDomain_, -this->dy_, this->damage_, this->sealedRects_))
+    else if (this->inputs_.foreground.tooLarge(this->copyDomain_, -this->dy_, this->damage_, this->sealedRects_))
       this->refusal_ = TOOLBOX_PRESENT_REPAIR_TOO_LARGE;
     else if (!this->inputs_.suppressionCapable)
       this->refusal_ = TOOLBOX_PRESENT_NO_SUPPRESSION_CAPABILITY;
@@ -638,9 +684,9 @@ public:
   {
     return this->sealedRects_;
   }
-  const ToolboxForegroundRepair &repair() const
+  const ToolboxForegroundUnits &foreground() const
   {
-    return this->inputs_.repair;
+    return this->inputs_.foreground;
   }
   int dy() const
   {
@@ -724,14 +770,14 @@ public:
   const Rect copyDomain;
   const int dv;
   const Rect damage;
-  const ToolboxForegroundRepair repair;
+  const ToolboxForegroundUnits foreground;
   const ToolboxPresentRects sealedRects;
   ToolboxPresentPlan()
       : verdict(TOOLBOX_PRESENT_ERASE_ALL),
         copyDomain(),
         dv(0),
         damage(),
-        repair(),
+        foreground(),
         sealedRects()
   {
   }
@@ -740,7 +786,7 @@ public:
         copyDomain(observation.copyDomain()),
         dv(-observation.dy()),
         damage(observation.damage()),
-        repair(observation.repair()),
+        foreground(observation.foreground()),
         sealedRects(observation.sealedRects())
   {
   }

@@ -104,12 +104,15 @@ public:
   };
   /** Once per first-unit paint, after ground and unit-scope admission. O(w*h)
       plus grid work only for this owner's capture; FROZEN READY never recaptures. */
-  ToolboxBlurPaint
-  paint(GrafPtr window, const ToolboxUnitLedger::UnitSeat &row, const ToolboxErasedPass &pass, bool acquire)
+  ToolboxBlurPaint paint(GrafPtr window,
+                         const ToolboxUnitLedger::UnitSeat &row,
+                         const ToolboxErasedPass &pass,
+                         bool acquire,
+                         bool eligible)
   {
     if (!this->matches(row))
       return BLUR_ABSENT;
-    if (!ToolboxBlurPixels::eligible(window, row.rect))
+    if (!eligible)
       return BLUR_GROUND;
     if (acquire && this->capture_ != CAPTURE_DISABLED && (K == TOOLBOX_BLUR_LIVE || !this->pixels_.hasPixels())
         && pass.admitsCapture(row.rect))
@@ -120,6 +123,12 @@ public:
     if (this->pixels_.hasPixels())
       return this->pixels_.paint(window, row.rect) ? BLUR_PICTURE : BLUR_PARTIAL;
     return BLUR_ABSENT;
+  }
+
+  /** Policy resolution once per render; O(1), no rows walked. */
+  bool holdsPicture(const ToolboxUnitLedger::UnitSeat &row) const
+  {
+    return this->matches(row) && this->pixels_.hasPixels();
   }
 
   /** Once per dirty delivery; no ledger walk. */

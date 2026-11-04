@@ -13,6 +13,7 @@
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxErasedPass.hpp"
 #include "ToolboxBlurSnapshot.hpp"
+#include "ToolboxBandPaintPolicy.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
@@ -847,6 +848,7 @@ public:
         sharedCursor_(sharedCursor),
         renderContext(0),
         rootNode_(0),
+        borrowedBandPolicy_(0),
         activeViewportContent_(0),
         outerViewportContent_(0),
         controlIds_(100)
@@ -898,6 +900,31 @@ public:
   ToolboxPresentObservation observation_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
+  // Mirrors the production controller borrow scope; keep both shapes aligned.
+  /** Borrow of render's completed policy, installed only by BandPolicyScope. */
+  const ToolboxBandPaintPolicy *borrowedBandPolicy_;
+
+  /** One scope per completed layout; O(1), no rows; all render exits unwind. */
+  class BandPolicyScope
+  {
+  public:
+    BandPolicyScope(ToolboxScenePlatformController &owner, const ToolboxBandPaintPolicy &policy)
+        : owner_(owner)
+    {
+      assert(!this->owner_.borrowedBandPolicy_);
+      this->owner_.borrowedBandPolicy_ = &policy;
+    }
+    ~BandPolicyScope()
+    {
+      this->owner_.borrowedBandPolicy_ = 0;
+    }
+
+  private:
+    ToolboxScenePlatformController &owner_;
+    BandPolicyScope(const BandPolicyScope &);
+    BandPolicyScope &operator=(const BandPolicyScope &);
+  };
+
   ToolboxPressLedger pressLedger_;
   ToolboxErasedPass erasedPass_;
   /** Host observes admission only; native pixels are pinned by FrostStandalone. */

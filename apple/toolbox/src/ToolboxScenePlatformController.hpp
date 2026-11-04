@@ -7,6 +7,7 @@
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
+#include "ToolboxBandPaintPolicy.hpp"
 #include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxBlurSnapshot.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
@@ -55,6 +56,10 @@ class ToolboxUnicodeTextEditorContext;
 
 namespace loka
 {
+  namespace testing
+  {
+    class ToolboxBandPolicyAccess;
+  }
   namespace app
   {
     struct ScrollBarProps;
@@ -370,6 +375,29 @@ private:
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   ToolboxErasedPass erasedPass_;
+  /** Borrow of render's completed policy, installed only by BandPolicyScope. */
+  const ToolboxBandPaintPolicy *borrowedBandPolicy_;
+  friend class loka::testing::ToolboxBandPolicyAccess;
+  /** One scope per completed layout; O(1), no rows; all render exits unwind. */
+  class BandPolicyScope
+  {
+  public:
+    BandPolicyScope(ToolboxScenePlatformController &owner, const ToolboxBandPaintPolicy &policy)
+        : owner_(owner)
+    {
+      assert(!this->owner_.borrowedBandPolicy_);
+      this->owner_.borrowedBandPolicy_ = &policy;
+    }
+    ~BandPolicyScope()
+    {
+      this->owner_.borrowedBandPolicy_ = 0;
+    }
+
+  private:
+    ToolboxScenePlatformController &owner_;
+    BandPolicyScope(const BandPolicyScope &);
+    BandPolicyScope &operator=(const BandPolicyScope &);
+  };
 
 public:
   /** Borrowed only while the layoutScrollView local's Scope is alive. */
