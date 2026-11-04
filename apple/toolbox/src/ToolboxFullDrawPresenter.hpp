@@ -101,8 +101,8 @@ public:
     const bool visible = EmptyRgn(this->scratch_);
     if (!ToolboxRegionOK(this->scratch_) || !visible)
       return this->erase();
-    for (unsigned i = 0; i < plan.foreground.count(); ++i)
-      if (!this->addPair(plan.foreground.unit(i), plan.dv))
+    for (unsigned i = 0; i < plan.foreground.repairUnitCount(); ++i)
+      if (!this->addPair(plan.foreground.repairUnit(i), plan.dv))
         return this->erase();
     for (unsigned i = 0; i < plan.sealedRects.count(); ++i)
       if (!this->addPair(plan.sealedRects.at(i), plan.dv))
@@ -112,18 +112,27 @@ public:
       return this->erase();
     // Multiversal's ScrollRect takes a non-const Rect pointer; the plan stays const.
     Rect domain = plan.copyDomain;
+    RectRgn(this->exposed_, &domain);
+    if (!ToolboxRegionOK(this->exposed_))
+      return this->erase();
+    for (unsigned i = 0; i < plan.foreground.preservedCount(); ++i)
+    {
+      RectRgn(this->scratch_, &plan.foreground.preservedUnit(i));
+      if (!ToolboxRegionOK(this->scratch_))
+        return this->erase();
+      DiffRgn(this->exposed_, this->scratch_, this->exposed_);
+      if (!ToolboxRegionOK(this->exposed_))
+        return this->erase();
+    }
+    if (!this->installClip(this->exposed_))
+      return this->recover();
     ScrollRect(&domain, 0, static_cast<short>(plan.dv), this->exposed_);
     if (!ToolboxRegionOK(this->exposed_))
       return this->recover();
     UnionRgn(this->repair_, this->exposed_, this->repair_);
     if (!ToolboxRegionOK(this->repair_))
       return this->recover();
-    SetClip(this->repair_);
-    if (!ToolboxRegionOK(this->repair_))
-      return this->recover();
-    GetClip(this->scratch_);
-    if (!ToolboxRegionOK(this->scratch_) || (**this->scratch_).rgnSize != (**this->repair_).rgnSize
-        || !EqualRect(&(**this->scratch_).rgnBBox, &(**this->repair_).rgnBBox))
+    if (!this->installClip(this->repair_))
       return this->recover();
     EraseRect(&this->port_);
     if (this->erased_)
@@ -132,6 +141,18 @@ public:
   }
 
 private:
+  /** Two clip sites per copy; exact verification walks only the supplied region. */
+  bool installClip(RgnHandle region)
+  {
+    SetClip(region);
+    if (!ToolboxRegionOK(region))
+      return false;
+    GetClip(this->scratch_);
+    if (!ToolboxRegionOK(this->scratch_) || !ToolboxRegionOK(region))
+      return false;
+    const bool equal = EqualRgn(this->scratch_, region);
+    return ToolboxRegionOK(this->scratch_) && ToolboxRegionOK(region) && equal;
+  }
   ToolboxPresentExecuted erase()
   {
     EraseRect(&this->port_);

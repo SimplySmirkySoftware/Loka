@@ -247,7 +247,7 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
           const Rect u = moved.foreground().count() ? moved.foreground().unit(0) : Rect();
           std::sprintf(line,
                        "arrow repair domain=%d,%d,%d,%d damage=%d,%d,%d,%d units=%u unit0=%d,%d,%d,%d bar=%d,%d,%d,%d "
-                       "sealed=%u refused=%d",
+                       "sealed=%u refused=%d preserved=%u",
                        d.top,
                        d.left,
                        d.bottom,
@@ -266,7 +266,8 @@ void SmirkyCardScenarioAppConfig::tick(Window *window, double elapsedSeconds)
                        b.bottom,
                        b.right,
                        moved.sealedRects().count(),
-                       moved.foreground().refused() ? 1 : 0);
+                       moved.foreground().refused() ? 1 : 0,
+                       moved.foreground().preservedCount());
           this->audit_.recordLog(line);
           for (unsigned i = 0; i < moved.sealedRects().count(); ++i)
           {

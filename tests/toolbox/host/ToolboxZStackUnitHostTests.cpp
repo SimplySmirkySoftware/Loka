@@ -2049,6 +2049,178 @@ namespace
     LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
     toolbox_host::staticEligible = true;
   }
+  bool regionHas(const toolbox_host::RegionGeometry &region, const Rect &rect)
+  {
+    return toolbox_host::regionIntersects(region, rect);
+  }
+  ToolboxPresentPlan preservedPlan(const Rect &domain, int dv, bool pair = false)
+  {
+    ToolboxPresentObservation observation;
+    ToolboxSceneDebugStats stats;
+    ToolboxScrollBarLedger ledger(1);
+    {
+      ToolboxPresentObservation::Interval warm(observation, true, stats, ledger);
+      observation.complete(0);
+      observation.markPaintFinished();
+    }
+    observation.noteReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+    observation.noteViewportMove(domain, domain, 0, -dv, ToolboxViewportContentResult(), TOOLBOX_BASELINE_VALID);
+    ToolboxPresentInputs inputs;
+    const ToolboxForegroundUnits::Entry entries[] = {
+        {{70, 40, 100, 100}, TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL},
+        {{130, 120, 140, 160}, pair ? TOOLBOX_SCROLL_REPAIR_PAIR : TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL}};
+    inputs.foreground = ToolboxForegroundUnits(entries, 2, Rect(), false);
+    inputs.suppressionCapable = true;
+    observation.complete(2, inputs);
+    LOKA_VERIFY(observation.verdict() == TOOLBOX_PRESENT_COPY);
+    return ToolboxPresentPlan(observation);
+  }
+  ToolboxPresentExecuted runPreservedPresenter(const ToolboxPresentPlan &plan, unsigned fail = 0, unsigned corrupt = 0)
+  {
+    ToolboxWindow window;
+    HostPortScope selected(window.window());
+    const Rect port = window.port.portRect;
+    ClipRect(&port);
+    ToolboxErasedPass pass;
+    ToolboxErasedPass::Guard guard(pass, port);
+    ToolboxPortErasePresenter presenter(port, ToolboxPortErasePresenter::COPY_ALLOWED);
+    presenter.setErasedGuard(guard);
+    toolbox_host::scrollRects.clear();
+    toolbox_host::scrollClips.clear();
+    toolbox_host::exposedRegions.clear();
+    toolbox_host::erasedClips.clear();
+    toolbox_host::repairUnions.clear();
+    toolbox_host::failRegionOperation(fail);
+    toolbox_host::corruptGetClipOperation(corrupt);
+    const ToolboxPresentExecuted result = presenter.eraseBeforePaint(plan);
+    toolbox_host::corruptGetClipOperation(0);
+    return result;
+  }
+  void preservedPresenter()
+  {
+    const Rect domain = {0, 0, 240, 320};
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+      const ToolboxPresentPlan plan = preservedPlan(domain, sign * 16, true);
+      LOKA_VERIFY(runPreservedPresenter(plan) == TOOLBOX_PRESENT_COPIED);
+      LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+      const Rect p = {80, 50, 81, 51};
+      const Rect pair = {130, 120, 131, 121};
+      const Rect translated = {static_cast<short>(130 + sign * 16), 120, static_cast<short>(131 + sign * 16), 121};
+      const Rect strip = {static_cast<short>(sign < 0 ? 60 : 105), 50, static_cast<short>(sign < 0 ? 61 : 106), 51};
+      LOKA_VERIFY(!regionHas(toolbox_host::scrollClips[0], p));
+      LOKA_VERIFY(!regionHas(toolbox_host::erasedClips[0], p));
+      LOKA_VERIFY(regionHas(toolbox_host::exposedRegions[0], strip));
+      LOKA_VERIFY(regionHas(toolbox_host::erasedClips[0], strip));
+      LOKA_VERIFY(regionHas(toolbox_host::erasedClips[0], pair));
+      LOKA_VERIFY(regionHas(toolbox_host::erasedClips[0], translated));
+      const std::vector<std::string> operations = toolbox_host::regionOperations;
+      unsigned firstClip = 0, scroll = 0, lastClip = 0, exclusion = 0;
+      for (unsigned i = 0; i < operations.size(); ++i)
+      {
+        if (operations[i] == "SetClip")
+        {
+          if (!firstClip)
+            firstClip = i + 1;
+          lastClip = i + 1;
+        }
+        if (operations[i] == "ScrollRect")
+          scroll = i + 1;
+        if (!firstClip && operations[i] == "DiffRgn")
+          exclusion = i + 1;
+      }
+      LOKA_VERIFY(exclusion < firstClip && firstClip < scroll && scroll < lastClip);
+      // A wrong hole has the same bbox and modeled size; only region equality distinguishes it.
+      LOKA_VERIFY(runPreservedPresenter(plan, 0, firstClip + 1) == TOOLBOX_PRESENT_ERASED);
+      LOKA_VERIFY(toolbox_host::scrollRects.empty());
+      LOKA_VERIFY(runPreservedPresenter(plan, 0, lastClip + 1) == TOOLBOX_PRESENT_ERASED);
+      LOKA_VERIFY(toolbox_host::scrollRects.size() == 1);
+      for (unsigned i = exclusion; i < scroll - 1; ++i)
+        LOKA_VERIFY(operations[i] != "UnionRgn");
+      // Every operation failure after the first SetClip must restore the full port.
+      for (unsigned op = firstClip; op <= lastClip + 2; ++op)
+      {
+        LOKA_VERIFY(runPreservedPresenter(plan, op) == TOOLBOX_PRESENT_ERASED);
+        LOKA_VERIFY(toolbox_host::scrollRects.size() == (op < scroll ? 0U : 1U));
+        const Rect full = {0, 0, 260, 360};
+        equal(toolbox_host::erasedClips.back().rgnBBox, full);
+        LOKA_VERIFY(toolbox_host::erasedClips.back().rgnSize == 10);
+      }
+      LOKA_VERIFY(runPreservedPresenter(plan, exclusion) == TOOLBOX_PRESENT_ERASED);
+      LOKA_VERIFY(toolbox_host::scrollRects.empty());
+      // Corrupt GetClip at exclusion, then refuse recovery's ClipRect.
+      LOKA_VERIFY(runPreservedPresenter(plan, firstClip + 3, firstClip + 1) == TOOLBOX_PRESENT_COPY_FAILED);
+      LOKA_VERIFY(toolbox_host::scrollRects.empty());
+      LOKA_VERIFY(toolbox_host::erasedClips.empty());
+    }
+    const ToolboxPresentPlan two = preservedPlan(domain, -16);
+    LOKA_VERIFY(runPreservedPresenter(two) == TOOLBOX_PRESENT_COPIED);
+    const Rect second = {132, 125, 133, 126};
+    LOKA_VERIFY(!regionHas(toolbox_host::scrollClips[0], second));
+    LOKA_VERIFY(!regionHas(toolbox_host::erasedClips[0], second));
+    toolbox_host::failRegionOperation(0);
+  }
+  /** A paint-time state write exercises the real enabled observer after admission. */
+  class LateEnabledText : public TextNode
+  {
+  public:
+    MutableState<bool> *pending;
+    LateEnabledText()
+        : TextNode(TextProps("late enabled")),
+          pending(0)
+    {
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      TextNode::render(platform);
+      if (this->pending)
+      {
+        MutableState<bool> *state = this->pending;
+        this->pending = 0;
+        state->set(false);
+      }
+    }
+  };
+  void preservedLateEnabled()
+  {
+    MutableState<bool> enabled(true);
+    LateEnabledText *text = new LateEnabledText;
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    content->addChild(text);
+    PresentFixture f(false, 0, content);
+    PlacedButton *button = new PlacedButton;
+    button->props.enabled(&enabled);
+    button->setContext(new ToolboxButtonContext(button, &f.controller));
+    f.stack.addChild(button);
+    f.controller.rootNode_ = &f.stack;
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    f.window.requestInvalidate();
+    f.window.flushInvalidate();
+    text->pending = &enabled;
+    toolbox_host::erasedClips.clear();
+    f.scroll(16);
+    const ToolboxPresentResult first = f.controller.debugStatsForTesting().lastMovedPresentObservation;
+    LOKA_VERIFY(first.executed() == TOOLBOX_PRESENT_COPIED);
+    LOKA_VERIFY(first.foreground().preservedCount() == 1);
+    LOKA_VERIFY(!first.rectRequests());
+    LOKA_VERIFY(f.window.next_.rectRequested());
+    LOKA_VERIFY(!enabled.get());
+    Rect p = first.foreground().preservedUnit(0);
+    p.top += 5;
+    p.left += 5;
+    p.bottom = p.top + 1;
+    p.right = p.left + 1;
+    LOKA_VERIFY(!regionHas(toolbox_host::erasedClips.front(), p));
+    // Observe the first frame before the next delivery; no settle in between.
+    toolbox_host::erasedClips.clear();
+    f.window.flushInvalidate();
+    LOKA_VERIFY(!f.window.hasPendingInvalidate());
+    bool repainted = false;
+    for (size_t i = 0; i < toolbox_host::erasedClips.size(); ++i)
+      repainted = repainted || regionHas(toolbox_host::erasedClips[i], p);
+    LOKA_VERIFY(repainted);
+  }
   void foregroundArithmetic()
   {
     const Rect domain = {0, 0, 100, 100};
@@ -2063,13 +2235,47 @@ namespace
     LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).refused());
     LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).count() == 0);
     const ToolboxForegroundUnits one(entries, 1, Rect(), false);
-    // The presenter still pairs every entry: 4800 unit + 1600 exposed + 450 corners > 5000.
-    LOKA_VERIFY(one.tooLarge(domain, 16, Rect()));
-    LOKA_VERIFY(one.tooLarge(domain, -16, Rect()));
+    // 1280 hole strip + 1600 exposed + 450 corners = 3330.
+    LOKA_VERIFY(!one.tooLarge(domain, 16, Rect()));
+    LOKA_VERIFY(!one.tooLarge(domain, -16, Rect()));
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+      // Exact threshold: 3330 + 2*835 = 5000; two fewer pixels admits.
+      const Rect at = {0, 0, 5, 167}, below = {0, 0, 6, 139};
+      LOKA_VERIFY(one.tooLarge(domain, sign * 16, at));
+      LOKA_VERIFY(!one.tooLarge(domain, sign * 16, below));
+      entries[0].rect = Rect();
+      entries[0].rect.top = -10;
+      entries[0].rect.bottom = 5;
+      entries[0].rect.left = -100;
+      entries[0].rect.right = 200;
+      const ToolboxForegroundUnits clipped(entries, 1, Rect(), false);
+      const Rect edgeAt = {0, 0, 35, 35}, edgeBelow = {0, 0, 34, 36};
+      LOKA_VERIFY(clipped.tooLarge(domain, sign * 16, edgeAt));
+      LOKA_VERIFY(!clipped.tooLarge(domain, sign * 16, edgeBelow));
+    }
+    const Rect huge = {-32768, -32768, 32767, 32767};
+    entries[0].rect = huge;
+    LOKA_VERIFY(ToolboxForegroundUnits(entries, 1, Rect(), false).tooLarge(huge, 32767, Rect()));
+    LOKA_VERIFY(ToolboxForegroundUnits(entries, 1, Rect(), false).tooLarge(huge, -32767, Rect()));
+    const Rect interior = {20, 10, 50, 90};
+    entries[0].rect = interior;
     entries[1].treatment = TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL;
     const ToolboxForegroundUnits preserved(entries, 2, Rect(), false);
     LOKA_VERIFY(preserved.preservedCount() == 2 && preserved.repairUnitCount() == 0);
     equal(preserved.preservedUnit(1), entries[1].rect);
+    const Rect atTwo = {0, 0, 5, 87}, belowTwo = {0, 0, 7, 62};
+    for (int sign = -1; sign <= 1; sign += 2)
+    {
+      LOKA_VERIFY(preserved.tooLarge(domain, sign * 16, atTwo));
+      LOKA_VERIFY(!preserved.tooLarge(domain, sign * 16, belowTwo));
+    }
+    const Rect outside = {110, 0, 150, 80};
+    entries[0].rect = outside;
+    const Rect emptyAt = {0, 0, 25, 59}, emptyBelow = {0, 0, 22, 67};
+    const ToolboxForegroundUnits empty(entries, 1, Rect(), false);
+    LOKA_VERIFY(empty.tooLarge(domain, 16, emptyAt));
+    LOKA_VERIFY(!empty.tooLarge(domain, -16, emptyBelow));
   }
 
   void sealedRepairBudget()
@@ -4498,7 +4704,9 @@ int main(int argc, char **argv)
     runRefusalPin(argv[1]);
     return 0;
   }
-  const char *names[] = {"PresentViewportReentry",
+  const char *names[] = {"PreservedLateEnabled",
+                         "CopyPreserved",
+                         "PresentViewportReentry",
                          "PresentBatchFence",
                          "PresentUnitDeparted",
                          "PresentHiddenViewport",
@@ -4699,6 +4907,10 @@ int main(int argc, char **argv)
     copyOversizedCorner();
   else if (std::strcmp(argv[1], "ViewportBarRepair") == 0)
     viewportBarRepair();
+  else if (std::strcmp(argv[1], "PreservedLateEnabled") == 0)
+    preservedLateEnabled();
+  else if (std::strcmp(argv[1], "CopyPreserved") == 0)
+    preservedPresenter();
   else if (std::strcmp(argv[1], "CopySealedOne") == 0)
     copySealedRects(1);
   else if (std::strcmp(argv[1], "CopySealedFour") == 0)

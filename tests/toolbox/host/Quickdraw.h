@@ -2,6 +2,8 @@
 #define LOKA_TEST_QUICKDRAW_H
 #include <cstddef>
 #include <vector>
+#include <map>
+#include <string>
 typedef unsigned char Style;
 struct Pattern
 {
@@ -52,6 +54,7 @@ void OffsetRect(Rect *, short, short);
 void ValidRect(const Rect *);
 void DiffRgn(RgnHandle, RgnHandle, RgnHandle);
 bool EmptyRgn(RgnHandle);
+bool EqualRgn(RgnHandle, RgnHandle);
 void ScrollRect(const Rect *, short, short, RgnHandle);
 namespace toolbox_host
 {
@@ -59,9 +62,41 @@ namespace toolbox_host
   extern std::vector<Point> scrollOffsets;
   extern bool refuseExposedUnion, refuseCopiedClip;
 } // namespace toolbox_host
+namespace toolbox_host
+{
+  struct RegionGeometry : Region
+  {
+    std::vector<Rect> pieces;
+  };
+  extern short regionError;
+  extern std::vector<std::string> regionOperations;
+  extern std::vector<RegionGeometry> scrollClips, exposedRegions, erasedClips;
+  bool regionIntersects(const RegionGeometry &, const Rect &);
+  typedef std::map<const Region *, RegionGeometry> RegionStore;
+  inline RegionStore &regionStore()
+  {
+    static RegionStore storage;
+    return storage;
+  }
+  inline void forgetRegion(Region &region)
+  {
+    regionStore().erase(&region);
+  }
+  inline void copyRegion(const Region &source, Region &destination)
+  {
+    const RegionStore::const_iterator stored = regionStore().find(&source);
+    destination = source;
+    if (stored == regionStore().end())
+      forgetRegion(destination);
+    else
+      regionStore()[&destination] = stored->second;
+  }
+  void failRegionOperation(unsigned);
+  void corruptGetClipOperation(unsigned);
+} // namespace toolbox_host
 inline short MemError()
 {
-  return 0;
+  return toolbox_host::regionError;
 }
 void PaintRgn(RgnHandle);
 typedef char *Ptr;
@@ -88,6 +123,8 @@ struct HostPortState
         clipRegionPointer(&clipRegion),
         clip(clipRegion.rgnBBox)
   {
+    toolbox_host::forgetRegion(visibleRegion);
+    toolbox_host::forgetRegion(clipRegion);
     visibleRegion.rgnSize = 10;
     visibleRegion.rgnBBox = Rect();
     clipRegion.rgnSize = 10;
@@ -103,6 +140,13 @@ struct HostPortState
         update(other.update),
         controls(other.controls)
   {
+    toolbox_host::copyRegion(other.clipRegion, clipRegion);
+    toolbox_host::copyRegion(other.visibleRegion, visibleRegion);
+  }
+  ~HostPortState()
+  {
+    toolbox_host::forgetRegion(clipRegion);
+    toolbox_host::forgetRegion(visibleRegion);
   }
 
 private:

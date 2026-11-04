@@ -81,6 +81,121 @@ namespace
     return r;
   }
 } // namespace
+namespace toolbox_host
+{
+  short regionError = 0;
+  std::vector<std::string> regionOperations;
+  std::vector<RegionGeometry> scrollClips, exposedRegions, erasedClips;
+  namespace
+  {
+    unsigned failedOperation = 0, corruptedOperation = 0;
+  }
+  void failRegionOperation(unsigned n)
+  {
+    regionOperations.clear();
+    failedOperation = n;
+    regionError = 0;
+  }
+  void corruptGetClipOperation(unsigned n)
+  {
+    corruptedOperation = n;
+  }
+} // namespace toolbox_host
+namespace
+{
+  typedef std::vector<Rect> Rects;
+  bool regionOperation(const char *name)
+  {
+    toolbox_host::regionOperations.push_back(name);
+    const bool fail = toolbox_host::failedOperation == toolbox_host::regionOperations.size();
+    toolbox_host::regionError = fail ? -108 : 0;
+    return !fail;
+  }
+  Rects regionRects(const Region &r)
+  {
+    std::map<const Region *, toolbox_host::RegionGeometry>::const_iterator found = toolbox_host::regionStore().find(&r);
+    if (found != toolbox_host::regionStore().end() && found->second.rgnSize == r.rgnSize
+        && EqualRect(&found->second.rgnBBox, &r.rgnBBox))
+      return found->second.pieces;
+    return EmptyRect(&r.rgnBBox) ? Rects() : Rects(1, r.rgnBBox);
+  }
+  Rects subtract(Rects from, const Rects &cuts)
+  {
+    for (size_t i = 0; i < cuts.size(); ++i)
+    {
+      Rects next;
+      for (size_t j = 0; j < from.size(); ++j)
+      {
+        const Rect old = from[j], cut = Intersection(old, cuts[i]);
+        if (EmptyRect(&cut))
+          next.push_back(old);
+        else
+        {
+          const Rect pieces[] = {{old.top, old.left, cut.top, old.right},
+                                 {cut.bottom, old.left, old.bottom, old.right},
+                                 {cut.top, old.left, cut.bottom, cut.left},
+                                 {cut.top, cut.right, cut.bottom, old.right}};
+          for (unsigned k = 0; k < 4; ++k)
+            if (!EmptyRect(&pieces[k]))
+              next.push_back(pieces[k]);
+        }
+      }
+      from.swap(next);
+    }
+    return from;
+  }
+  Rects intersect(const Rects &a, const Rects &b)
+  {
+    Rects result;
+    for (size_t i = 0; i < a.size(); ++i)
+      for (size_t j = 0; j < b.size(); ++j)
+      {
+        const Rect both = Intersection(a[i], b[j]);
+        if (!EmptyRect(&both))
+          result.push_back(both);
+      }
+    return result;
+  }
+  void assignRegion(Region &out, const Rects &rects)
+  {
+    out.rgnSize = rects.size() <= 1 ? 10 : 12;
+    out.rgnBBox = rects.empty() ? Rect() : rects[0];
+    for (size_t i = 1; i < rects.size(); ++i)
+    {
+      out.rgnBBox.top = std::min(out.rgnBBox.top, rects[i].top);
+      out.rgnBBox.left = std::min(out.rgnBBox.left, rects[i].left);
+      out.rgnBBox.bottom = std::max(out.rgnBBox.bottom, rects[i].bottom);
+      out.rgnBBox.right = std::max(out.rgnBBox.right, rects[i].right);
+    }
+    // Rectangular regions retain the fixture's direct bbox initialization convention.
+    if (rects.size() > 1 && subtract(Rects(1, out.rgnBBox), rects).empty())
+      out.rgnSize = 10;
+    if (out.rgnSize == 10)
+    {
+      toolbox_host::regionStore().erase(&out);
+      return;
+    }
+    toolbox_host::RegionGeometry &stored = toolbox_host::regionStore()[&out];
+    stored.rgnBBox = out.rgnBBox;
+    stored.rgnSize = out.rgnSize;
+    stored.pieces = rects;
+  }
+  toolbox_host::RegionGeometry snapshot(const Region &r)
+  {
+    toolbox_host::RegionGeometry result;
+    result.rgnBBox = r.rgnBBox;
+    result.rgnSize = r.rgnSize;
+    result.pieces = regionRects(r);
+    return result;
+  }
+} // namespace
+namespace toolbox_host
+{
+  bool regionIntersects(const RegionGeometry &region, const Rect &rect)
+  {
+    return !intersect(region.pieces, Rects(1, rect)).empty();
+  }
+} // namespace toolbox_host
 void ValidRect(const Rect *area)
 {
   std::vector<Rect> remaining;
@@ -223,6 +338,7 @@ bool SectRect(const Rect *a, const Rect *b, Rect *out)
 }
 RgnHandle NewRgn()
 {
+  toolbox_host::regionError = 0;
   ++toolbox_host::regions;
   if (toolbox_host::regions == toolbox_host::refuseRegionAttempt)
     return 0;
@@ -234,35 +350,55 @@ RgnHandle NewRgn()
   RgnHandle r = new Region *;
   *r = new Region;
   (*r)->rgnSize = 10;
-  (*r)->rgnBBox = Rect();
+  assignRegion(**r, Rects());
   return r;
 }
 void DisposeRgn(RgnHandle r)
 {
+  toolbox_host::regionStore().erase(*r);
   delete *r;
   delete r;
 }
 void GetClip(RgnHandle r)
 {
-  (*r)->rgnSize = toolbox_host::refuseCopiedClip && !toolbox_host::scrollRects.empty() ? 0 : 10;
-  (*r)->rgnBBox = port->native.clip;
+  if (!regionOperation("GetClip"))
+    return;
+  assignRegion(**r, regionRects(port->native.clipRegion));
+  if (toolbox_host::corruptedOperation == toolbox_host::regionOperations.size())
+  {
+    // Move an interior hole while preserving its bbox and modeled region size.
+    Rects pieces = regionRects(**r);
+    for (size_t i = 0; i < pieces.size(); ++i)
+    {
+      if (pieces[i].left != (**r).rgnBBox.left)
+        ++pieces[i].left;
+      if (pieces[i].right != (**r).rgnBBox.right)
+        ++pieces[i].right;
+    }
+    assignRegion(**r, pieces);
+  }
+  if (toolbox_host::refuseCopiedClip && !toolbox_host::scrollRects.empty())
+    (**r).rgnSize = 0;
 }
 void RectRgn(RgnHandle r, const Rect *rect)
 {
-  (*r)->rgnBBox = *rect;
+  if (regionOperation("RectRgn"))
+    assignRegion(**r, EmptyRect(rect) ? Rects() : Rects(1, *rect));
 }
 void SectRgn(RgnHandle a, RgnHandle b, RgnHandle out)
 {
-  (*out)->rgnBBox = Intersection((*a)->rgnBBox, (*b)->rgnBBox);
+  if (regionOperation("SectRgn"))
+    assignRegion(**out, intersect(regionRects(**a), regionRects(**b)));
 }
 void SetClip(RgnHandle r)
 {
-  port->native.clip = (*r)->rgnBBox;
+  // Failure can occur after the port's clip has changed.
+  assignRegion(port->native.clipRegion, regionRects(**r));
+  regionOperation("SetClip");
 }
 bool RectInRgn(const Rect *r, RgnHandle region)
 {
-  const Rect both = Intersection(*r, (*region)->rgnBBox);
-  return !EmptyRect(&both);
+  return !intersect(Rects(1, *r), regionRects(**region)).empty();
 }
 void BackColor(long color)
 {
@@ -274,11 +410,13 @@ void EraseRect(const Rect *rect)
   ++toolbox_host::erases;
   toolbox_host::paintOperations.push_back("erase");
   toolbox_host::erasedRects.push_back(*rect);
+  toolbox_host::erasedClips.push_back(snapshot(port->native.clipRegion));
 }
 
 void ClipRect(const Rect *rect)
 {
-  port->native.clip = *rect;
+  if (regionOperation("ClipRect"))
+    assignRegion(port->native.clipRegion, Rects(1, *rect));
 }
 
 #include "context/ToolboxTextEditorContext.hpp"
@@ -747,7 +885,7 @@ void OpenRgn()
 }
 void CloseRgn(RgnHandle region)
 {
-  (**region).rgnBBox = recordedCardRect;
+  assignRegion(**region, Rects(1, recordedCardRect));
   recordingCardRegion = false;
 }
 void FrameRoundRect(const Rect *rect, short, short)
@@ -763,30 +901,40 @@ void FrameRoundRect(const Rect *rect, short, short)
 void DiffRgn(RgnHandle a, RgnHandle b, RgnHandle out)
 {
   ++toolbox_host::regionDifferences;
-  const Rect x = (**a).rgnBBox, y = (**b).rgnBBox;
-  (**out).rgnBBox = y.left <= x.left && y.top <= x.top && y.right >= x.right && y.bottom >= x.bottom ? Rect() : x;
+  if (regionOperation("DiffRgn"))
+    assignRegion(**out, subtract(regionRects(**a), regionRects(**b)));
 }
 bool EmptyRgn(RgnHandle r)
 {
-  return EmptyRect(&(**r).rgnBBox);
+  regionOperation("EmptyRgn");
+  return regionRects(**r).empty();
+}
+bool EqualRgn(RgnHandle a, RgnHandle b)
+{
+  if (!regionOperation("EqualRgn"))
+    return false;
+  return subtract(regionRects(**a), regionRects(**b)).empty() && subtract(regionRects(**b), regionRects(**a)).empty();
 }
 void SetEmptyRgn(RgnHandle r)
 {
-  (**r).rgnBBox = Rect();
+  if (regionOperation("SetEmptyRgn"))
+    assignRegion(**r, Rects());
 }
 void UnionRgn(RgnHandle a, RgnHandle b, RgnHandle out)
 {
+  if (!regionOperation("UnionRgn"))
+    return;
   if (toolbox_host::refuseExposedUnion && !toolbox_host::scrollRects.empty())
   {
     toolbox_host::refuseExposedUnion = false;
     (**out).rgnSize = 0;
     return;
   }
-  const Rect x = (**a).rgnBBox, y = (**b).rgnBBox;
-  toolbox_host::repairUnions.push_back(y);
-  const Rect united = {
-      std::min(x.top, y.top), std::min(x.left, y.left), std::max(x.bottom, y.bottom), std::max(x.right, y.right)};
-  (**out).rgnBBox = EmptyRect(&x) ? y : EmptyRect(&y) ? x : united;
+  toolbox_host::repairUnions.push_back((**b).rgnBBox);
+  Rects result = regionRects(**a);
+  const Rects extra = subtract(regionRects(**b), result);
+  result.insert(result.end(), extra.begin(), extra.end());
+  assignRegion(**out, result);
 }
 namespace toolbox_host
 {
@@ -799,12 +947,15 @@ void ScrollRect(const Rect *r, short dh, short dv, RgnHandle exposed)
   toolbox_host::scrollRects.push_back(*r);
   const Point offset = {dv, dh};
   toolbox_host::scrollOffsets.push_back(offset);
-  Rect strip = *r;
-  if (dv < 0)
-    strip.top = static_cast<short>(std::max<int>(r->top, r->bottom + dv));
-  else
-    strip.bottom = static_cast<short>(std::min<int>(r->bottom, r->top + dv));
-  RectRgn(exposed, &strip);
+  if (!regionOperation("ScrollRect"))
+    return;
+  toolbox_host::scrollClips.push_back(snapshot(port->native.clipRegion));
+  const Rects clipped = intersect(Rects(1, *r), regionRects(port->native.clipRegion));
+  Rects moved = clipped;
+  for (size_t i = 0; i < moved.size(); ++i)
+    OffsetRect(&moved[i], dh, dv);
+  assignRegion(**exposed, subtract(clipped, moved));
+  toolbox_host::exposedRegions.push_back(snapshot(**exposed));
 }
 void PaintRgn(RgnHandle)
 {
