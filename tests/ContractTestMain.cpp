@@ -85,6 +85,7 @@
 #ifdef _WIN32
 #include "Win32ImageBlobTests.hpp"
 #include "Win32FocusTests.hpp"
+#include "Win32URLOpenTests.hpp"
 #include "Win32NativeResourceRetirementTests.hpp"
 #include "Win32MenuAttachmentTests.hpp"
 #include "Win32RailMetricsTests.hpp"

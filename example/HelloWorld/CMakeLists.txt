@@ -40,6 +40,17 @@ if(WIN32)
 
   target_link_libraries(LokaHelloWin32 PRIVATE LokaWin32Core)
 
+  # Manual VM probe, deliberately excluded from automated tests and Build All.
+  add_executable(LokaURLOpenProbeWin32 EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/win32/URLOpenProbe.cpp)
+  loka_enable_warnings(LokaURLOpenProbeWin32)
+  target_include_directories(LokaURLOpenProbeWin32 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src)
+  target_link_libraries(LokaURLOpenProbeWin32 PRIVATE LokaWin32Core)
+  set_target_properties(LokaURLOpenProbeWin32 PROPERTIES
+    CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+
   # Use UTF-8 source/execution charset on MSVC to avoid codepage warnings
   if(MSVC)
     target_compile_options(LokaHelloWin32 PRIVATE /utf-8)
@@ -76,6 +87,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32OwnedChildWindow.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ZStackContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ClipBoxContext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32OpenURL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32PlatformContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32BitmapCapture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ButtonContext.cpp
@@ -104,6 +116,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ClipBoxTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32ThreadModalScopeTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32EditTextBridgeTests.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32URLOpenTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32FocusTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32MenuAttachmentTests.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/Win32TextEditorTests.cpp
@@ -138,7 +151,7 @@ if(WIN32)
   )
 
   target_compile_definitions(LokaTestsWin32 PRIVATE TEST_BUILD)
-  target_link_libraries(LokaTestsWin32 PRIVATE LokaWin32WideApiContract ole32 windowscodecs)
+  target_link_libraries(LokaTestsWin32 PRIVATE LokaWin32WideApiContract ole32 windowscodecs shell32)
 
   if(MSVC)
     # tests/FlowDslTests.cpp outgrew the default COFF section limit (C1128).

@@ -1,3 +1,12 @@
+LOKA_TEST(testWin32URLOpenSeam)
+LOKA_TEST(testWin32URLOpenCOMBalance)
+LOKA_TEST(testWin32URLOpenSameTail)
+LOKA_TEST(testWin32URLOpenOnePerCompletion)
+LOKA_TEST(testWin32URLOpenInheritedClock)
+LOKA_TEST(testWin32URLOpenQuitDuringInput)
+LOKA_TEST(testWin32URLOpenQuitDuringIdle)
+LOKA_TEST(testWin32URLReceiveSameTail)
+
 LOKA_TEST(testWin32FocusReadAndRestore)
 LOKA_TEST(testWin32FocusCompletion)
 LOKA_TEST(testWin32FocusPostedRequest)

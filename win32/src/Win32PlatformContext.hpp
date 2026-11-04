@@ -21,6 +21,8 @@ public:
   ~Win32PlatformContext();
   virtual App *createApp(AppConfigurable *config, NativeModuleHandle hInstance, int nCmdShow) const;
 
+  virtual loka::app::URLOpenKind openURL(const loka::app::WebURL &url);
+
   virtual Window *createWindow(const WindowProps &props);
 
   virtual loka::app::scene::NodeContext *createNodeContext(loka::app::scene::Node *node) const;
