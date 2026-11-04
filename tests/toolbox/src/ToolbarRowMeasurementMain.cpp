@@ -267,6 +267,8 @@ namespace
                       {"application-1-12", 0, 12, normal},
                       {"Osaka-12-plain", "Osaka", 12, normal}};
     long maxExtra = LONG_MIN;
+    // Owner ruling 2026-11-04 on #1653: at most 5 ms extra per new key.
+    const long gateUs = 5000;
     bool ok = true;
     for (unsigned i = 0; i < sizeof(selections) / sizeof(selections[0]); ++i)
     {
@@ -283,12 +285,13 @@ namespace
           FirstUseState(config, clock, selection.name, font, selection.size, selection.face, out, extra);
       if (extra > maxExtra)
         maxExtra = extra;
-      if (!measured || extra > 3000)
+      if (!measured || extra > gateUs)
         ok = false;
     }
     std::fprintf(out,
-                 "first_use summary max_extra_us=%ld gate_us=3000 verdict=%s\n",
+                 "first_use summary max_extra_us=%ld gate_us=%ld verdict=%s\n",
                  maxExtra == LONG_MIN ? 0 : maxExtra,
+                 gateUs,
                  ok ? "PASS" : "FAIL");
     return ok;
   }
