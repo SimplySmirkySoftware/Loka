@@ -3535,13 +3535,21 @@ namespace
                       capture.ready() && copied.executed() == TOOLBOX_PRESENT_COPIED
                           && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0,
                       UNIT_SHOW);
+      // Microseconds jitter between MAME runs, so they go to the timing sidecar,
+      // never into the tracked audit (LOG.TXT keeps the deterministic facts).
       std::fprintf(this->log_,
-                   "copy-timing painter=%s copy_us=%lu erase_us=%lu candidate=%s executed=%s\r",
+                   "copy-timing painter=%s candidate=%s executed=%s\r",
                    name,
-                   copyUs,
-                   eraseUs,
                    ToolboxPresentVerdictName(copied.verdict()),
                    ToolboxPresentExecutedName(copied.executed()));
+      std::FILE *timing = std::fopen("CARDTIME.TXT", "a");
+      this->recordArm("copy-timing-log-open", timing != 0, UNIT_SHOW);
+      if (timing)
+      {
+        std::fprintf(timing, "copy-timing painter=%s copy_us=%lu erase_us=%lu\r", name, copyUs, eraseUs);
+        if (!CloseCardTiming(timing))
+          this->result_ = 1;
+      }
       if (Painter == 0)
       {
         root->scroll(32);
@@ -3618,15 +3626,36 @@ namespace
             liveEligible ? copied.foreground().repairUnitCount() == 1 && copied.foreground().preservedCount() == 0
                          : copied.foreground().repairUnitCount() == 0
                                && copied.foreground().preservedCount() == (Painter == 8 ? 2U : 1U);
+        std::fprintf(this->log_,
+                     "preserved-detail step=%u executed=%s candidate=%s refusal=%s differences=%ld repair=%u "
+                     "preserved=%u sealed=%u move=%d edge=%d\r",
+                     step,
+                     ToolboxPresentExecutedName(copied.executed()),
+                     ToolboxPresentVerdictName(copied.verdict()),
+                     ToolboxPresentRefusalName(copied.refusal()),
+                     static_cast<long>(capture.ready() ? capture.differences() : -1),
+                     copied.foreground().repairUnitCount(),
+                     copied.foreground().preservedCount(),
+                     copied.sealedRects().count(),
+                     currentMove ? 1 : 0,
+                     edgeOverlap ? 1 : 0);
+        // Step 2 changes the Button's enabled State inside P before admission: a
+        // content input inside the unit is vetoed (outside_changed) and the frame
+        // is erased, pixel-identical; the K2 rectangle is sealed but not consumed.
+        // A K2 rectangle repaired inside a preserved unit during an executed copy is
+        // the laptop-arrow cell (press overlap bar ∩ band), not this arm.
+        const bool stepPass = step == 2
+                                  ? copied.executed() == TOOLBOX_PRESENT_ERASED
+                                        && copied.refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED && enabledIntersects
+                                  : copied.executed() == TOOLBOX_PRESENT_COPIED && treatment;
         this->recordArm(name,
-                        capture.ready() && copied.executed() == TOOLBOX_PRESENT_COPIED
-                            && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0 && treatment
-                            && currentMove && edgeOverlap,
+                        capture.ready() && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0
+                            && stepPass && currentMove && edgeOverlap,
                         UNIT_SHOW);
         this->recordArm(step == 0   ? "preserved-negative-dv"
                         : step == 1 ? "preserved-positive-dv"
-                                    : "preserved-enabled-K2",
-                        step != 2 || enabledIntersects,
+                                    : "preserved-enabled-before-admission-erases",
+                        stepPass,
                         UNIT_SHOW);
         if (Painter == 10 && step == 0)
           std::fprintf(this->log_,

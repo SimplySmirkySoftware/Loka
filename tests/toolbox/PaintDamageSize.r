@@ -39,10 +39,10 @@ resource 'SIZE' (-1) {
 	reserved,
 	reserved,
 #if TARGET_API_MAC_CARBON
-	1024 * 1024,
-	1024 * 1024
+	2048 * 1024,
+	2048 * 1024
 #else
-	1024 * 1024,	/* preferred */
-	896 * 1024	/* minimum */
+	2048 * 1024,	/* preferred */
+	1536 * 1024	/* minimum */
 #endif
 };
