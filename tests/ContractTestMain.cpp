@@ -115,6 +115,7 @@
 #ifdef __APPLE__
 #include "MacWindowAdmissionTests.hpp"
 #include "MacQuitEventTests.hpp"
+#include "MacURLOpenTests.hpp"
 #include "MacWindowFrameClampTests.hpp"
 #include "MacWindowResizeTests.hpp"
 #endif
