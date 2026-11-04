@@ -101,13 +101,13 @@ public:
     const bool visible = EmptyRgn(this->scratch_);
     if (!ToolboxRegionOK(this->scratch_) || !visible)
       return this->erase();
-    for (unsigned i = 0; i < plan.repair.count(); ++i)
-      if (!this->addPair(plan.repair.unit(i), plan.dv))
+    for (unsigned i = 0; i < plan.foreground.count(); ++i)
+      if (!this->addPair(plan.foreground.unit(i), plan.dv))
         return this->erase();
     for (unsigned i = 0; i < plan.sealedRects.count(); ++i)
       if (!this->addPair(plan.sealedRects.at(i), plan.dv))
         return this->erase();
-    if (!this->addPair(plan.damage, plan.dv) || !this->add(plan.repair.bar())
+    if (!this->addPair(plan.damage, plan.dv) || !this->add(plan.foreground.bar())
         || !this->addPair(ToolboxWindowSizeBoxRect(this->port_), plan.dv))
       return this->erase();
     // Multiversal's ScrollRect takes a non-const Rect pointer; the plan stays const.

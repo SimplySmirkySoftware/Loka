@@ -74,6 +74,14 @@ namespace
                                                                       : "ToolboxScrollViewRender.cpp:42");
     }
   }
+  // Direct unit refusal pins bypass render; mirror its lexical policy borrow.
+  void refusalRenderUnitWithPolicy(StaticFixture &f)
+  {
+    const ToolboxBandPaintPolicy policy = ToolboxBandPaintPolicy::resolve(
+        f.window.window(), f.controller.unitLedger_.firstBlurUnits(), f.controller.bandBlur_);
+    ToolboxScenePlatformController::BandPolicyScope scope(f.controller, policy);
+    f.controller.renderZStack(&f.stack);
+  }
   void refusalUnits(const char *mode)
   {
     StaticFixture f;
@@ -85,39 +93,39 @@ namespace
     if (std::strcmp(mode, "RefusalUnitRegion") == 0)
     {
       toolbox_host::failRegions = 2;
-      expected = "ToolboxZStack.cpp:196";
+      expected = "ToolboxZStack.cpp:207";
     }
     else if (std::strstr(mode, "Copy"))
     {
       toolbox_host::staticCopySucceeds = false;
-      expected = live ? "ToolboxZStack.cpp:168" : "ToolboxZStack.cpp:182";
+      expected = live ? "ToolboxZStack.cpp:175" : "ToolboxZStack.cpp:193";
     }
     else if (std::strstr(mode, "Device"))
     {
       toolbox_host::staticEligible = false;
-      f.controller.renderZStack(&f.stack);
+      refusalRenderUnitWithPolicy(f);
       LOKA_VERIFY(!f.controller.observation_.outsideRefusal().refused());
       return;
     }
     else if (std::strstr(mode, "Hairline"))
     {
       toolbox_host::refuseHairlines = 1;
-      expected = "ToolboxZStack.cpp:155";
+      expected = "ToolboxZStack.cpp:162";
     }
     else if (std::strstr(mode, "Frost"))
     {
       f.controller.bandBlur_.clear();
       ToolboxErasedPass::Guard erased(f.controller.erasedPass(), f.window.port.portRect);
-      f.controller.renderZStack(&f.stack);
-      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:163");
+      refusalRenderUnitWithPolicy(f);
+      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:170");
       return;
     }
     else if (std::strstr(mode, "Absent"))
     {
       f.controller.bandBlur_.clear();
-      expected = "ToolboxZStack.cpp:165";
+      expected = "ToolboxZStack.cpp:172";
     }
-    f.controller.renderZStack(&f.stack);
+    refusalRenderUnitWithPolicy(f);
     toolbox_host::failRegions = 0;
     refusalSite(f.controller.observation_.outsideRefusal(), expected);
   }
@@ -205,7 +213,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:200" : "ToolboxRender.cpp:210");
+                    button ? "ToolboxRender.cpp:213" : "ToolboxRender.cpp:223");
         return;
       }
       c.paintSuppressClipRgn_ = 0;
