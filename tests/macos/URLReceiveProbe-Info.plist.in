@@ -7,6 +7,9 @@
   <key>CFBundleName</key><string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <!-- Keep in step with cmake/macos/MacOSXBundleInfo.plist.in; tests/scripts/MacOSBundlePlistTest.py checks every bundle. -->
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSRequiresAquaSystemAppearance</key><false/>
   <key>LokaProbeRevision</key><string>${LOKA_URL_RECEIVE_PROBE_REVISION}</string>
   <key>CFBundleURLTypes</key>
   <array><dict>
