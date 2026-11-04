@@ -872,7 +872,15 @@ namespace loka
 
       protected:
         struct NodeStateRegistrationBase;
-        /** One lifetime axis; only State rows expose reservation/connect operations. */
+
+      public:
+        /** One lifetime axis; only State rows expose reservation/connect operations.
+         *
+         * The name is public only so a participant defined outside this class
+         * (TextDocumentRegistration) can name it as a base: GCC 4.0.1 and 4.2
+         * do not apply friendship to a base-specifier and refuse the protected
+         * name there. Registering a participant still goes through the
+         * protected participants_ ledger, so naming the type grants nothing. */
         struct Participant
         {
           virtual ~Participant() {}
@@ -882,6 +890,7 @@ namespace loka
           virtual NodeStateRegistrationBase *asStateRegistration() { return 0; }
         };
 
+      protected:
         struct NodeStateRegistrationBase : Participant
         {
           virtual ~NodeStateRegistrationBase() {}
