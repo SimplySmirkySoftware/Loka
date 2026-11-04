@@ -1,3 +1,4 @@
+#include "ToolboxAlignedPattern.hpp"
 #include "ToolboxPaintResultText.hpp"
 #include "ToolboxProbeTiming.hpp"
 #include "../../support/PictAdmissionFixture.hpp"
@@ -20,6 +21,7 @@
 #include "ObservedMainDefinition.hpp"
 #include "ToolboxScenePlatformController.hpp"
 #include "ToolboxInputDoor.hpp"
+#include "ToolboxNodeDispatch.hpp"
 #include "ToolboxWindow.hpp"
 #include "ToolboxPortScope.hpp"
 #include "context/ToolboxImageViewContext.hpp"
@@ -111,6 +113,53 @@ namespace
     }
   };
 
+  /** Test-only independent seats: the viewport owns its full domain; later
+      siblings place real ZStack units at general interior/edge geometry. */
+  template <int Geometry> class CopyGeometryNode : public BoxNode, public IProjectedLayoutNode
+  {
+  public:
+    explicit CopyGeometryNode(const BoxProps &props)
+        : BoxNode(props)
+    {
+    }
+    virtual IProjectedLayoutNode *asProjectedLayoutNode()
+    {
+      return this;
+    }
+    virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+    {
+      ToolboxScenePlatformController &controller = *static_cast<ToolboxScenePlatformController *>(platform);
+      this->takeLayoutInputs();
+      unsigned index = 0;
+      for (Node *child = this->childrenHead(); child; child = child->nextInComposition, ++index)
+      {
+        LayoutState seat = state;
+        if (index)
+        {
+          seat.y += Geometry == 9 ? state.height - 28 : index == 1 ? 56 : 104;
+          if (Geometry == 7 || Geometry == 8)
+          {
+            seat.x += index == 1 ? 24 : 112;
+            seat.width = 80;
+          }
+        }
+        LayoutNode(child, seat, &controller, controller.activeLayoutBoundary());
+      }
+      state.y += state.height;
+      return state.width;
+    }
+    virtual void render(IPlatformController *platform)
+    {
+      ToolboxScenePlatformController *controller = static_cast<ToolboxScenePlatformController *>(platform);
+      for (Node *child = this->childrenHead(); child; child = child->nextInComposition)
+        RenderNode(child, controller);
+    }
+  };
+  template <int Geometry>
+  struct CopyGeometry : NestableNodeDefinition<BoxProps, CopyGeometryNode<Geometry>, CopyGeometry<Geometry> >
+  {
+  };
+
   template <int Painter> class CopyPainterNode : public BoundaryNodeFor<CopyPainterNode<Painter> >
   {
   public:
@@ -119,6 +168,8 @@ namespace
         : BoundaryNodeFor<CopyPainterNode<Painter> >(props)
     {
       this->state(this->origin_, loka::core::Frame());
+      if (Painter >= 6)
+        this->state(this->enabled_, true);
       if (Painter == 3)
       {
         const pict_fixture::Bytes bytes = pict_fixture::picture(false, 2, 0x90);
@@ -139,10 +190,33 @@ namespace
       loka::core::StateTrackerGuard guard(this->tracker());
       this->origin_.set(loka::core::Frame(0, y, 0, 0));
     }
+    void disableButton()
+    {
+      loka::core::StateTrackerGuard guard(this->tracker());
+      this->enabled_.set(false);
+    }
     virtual void composeNode(NodeComposition &composition)
     {
       // Each arm has one supported painter and enough content for a small scroll.
-      if (Painter == 0)
+      if (Painter >= 6)
+      {
+        Column rows;
+        for (unsigned i = 0; i < 40; ++i)
+          rows << Text(i & 1 ? "MMMM scroll row" : "iiii scroll row");
+        CopyGeometry<Painter> geometry;
+        geometry << (ScrollView(this->origin_) << rows);
+        ZStack unit;
+        if (Painter == 10)
+          unit.expBlurUnit();
+        unit << Box().height(0)
+             << (Box().height(Painter == 9 ? 40 : 24)
+                 << loka::app::Button("Preserved").enabled(this->enabled_.state()));
+        geometry << unit;
+        if (Painter == 8)
+          geometry << (ZStack() << Box().height(0) << (Box().height(24) << Text("Second unit")));
+        composition.declare(geometry);
+      }
+      else if (Painter == 0)
         composition.declare(ScrollView(this->origin_)
                             << (Column() << Box().height(32)
                                          << NodeDefinition<TextProps, CopyRefusalText>(TextProps("Copy Text"))
@@ -170,6 +244,7 @@ namespace
 
   private:
     NodeState<loka::core::Frame> origin_;
+    NodeState<bool> enabled_;
     NodeState<loka::core::resource::Image> image_;
   };
 
@@ -1523,7 +1598,7 @@ namespace
           unitWindow_(0),
           unitSurfaceWindow_(0)
     {
-      for (unsigned i = 0; i < 6; ++i)
+      for (unsigned i = 0; i < 11; ++i)
         this->copyWindows_[i] = 0;
       if (loka::platform::file::ResolveApplicationSidecar(
               loka::file::File::Application() << loka::file::File("LOG.TXT"), this->file_))
@@ -1549,6 +1624,11 @@ namespace
       this->declareCopyWindow<3>(composition);
       this->declareCopyWindow<4>(composition);
       this->declareCopyWindow<5>(composition);
+      this->declareCopyWindow<6>(composition);
+      this->declareCopyWindow<7>(composition);
+      this->declareCopyWindow<8>(composition);
+      this->declareCopyWindow<9>(composition);
+      this->declareCopyWindow<10>(composition);
 
       composition << ObservedWindowDefinition(
           WindowProps()
@@ -1630,11 +1710,16 @@ namespace
               .idlePolicy(IdlePolicy::everyTick())
               .onIdle(&PaintDamageConfig::DispatchIdle, this),
           &this->editExactWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Popup exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<PopupExactProps, PopupExactNode>(
-                                   PopupExactProps(), &this->popupExact_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->popupExactWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Popup exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<PopupExactProps, PopupExactNode>(PopupExactProps(),
+                                                                                                   &this->popupExact_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->popupExactWindow_);
       composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 220).title("History replay")
                                .scene(loka::scenario_tests::ObservedMainDefinition<HistoryNode<false>::Props, HistoryNode<false> >(
                                    HistoryNode<false>::Props(), &this->history_))
@@ -1645,31 +1730,51 @@ namespace
                                    HistoryNode<true>::Props(), &this->popupHistory_))
                                .visible(false).idlePolicy(IdlePolicy::everyTick())
                                .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->popupHistoryWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Button enabled exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<ButtonExactProps, ButtonExactNode>(
-                                   ButtonExactProps(), &this->buttonEnabled_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->buttonEnabledWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Button label exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<ButtonExactProps, ButtonExactNode>(
-                                   ButtonExactProps(), &this->buttonLabel_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->buttonLabelWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Button enabled exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<ButtonExactProps, ButtonExactNode>(
+                  ButtonExactProps(), &this->buttonEnabled_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->buttonEnabledWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Button label exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<ButtonExactProps, ButtonExactNode>(
+                  ButtonExactProps(), &this->buttonLabel_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->buttonLabelWindow_);
       composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 260, 180).title("Text width refusal")
                                .scene(loka::scenario_tests::ObservedMainDefinition<TextWidthProps, TextWidthNode>(
                                    TextWidthProps(), &this->textWidth_))
                                .visible(false).idlePolicy(IdlePolicy::everyTick())
                                .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->textWidthWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Text style layout")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<TextStyleChangeProps, TextStyleChangeNode>(
-                                   TextStyleChangeProps(), &this->textStyleChange_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->textStyleChangeWindow_);
-      composition << ObservedWindowDefinition(WindowProps().frame(350, 250, 220, 180).title("Column overflow exact")
-                               .scene(loka::scenario_tests::ObservedMainDefinition<OffscreenDamageProps, OffscreenDamageNode>(
-                                   OffscreenDamageProps(), &this->offscreen_))
-                               .visible(false).idlePolicy(IdlePolicy::everyTick())
-                               .onIdle(&PaintDamageConfig::DispatchIdle, this), &this->offscreenWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Text style layout")
+              .scene(loka::scenario_tests::ObservedMainDefinition<TextStyleChangeProps, TextStyleChangeNode>(
+                  TextStyleChangeProps(), &this->textStyleChange_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->textStyleChangeWindow_);
+      composition << ObservedWindowDefinition(
+          WindowProps()
+              .frame(350, 250, 220, 180)
+              .title("Column overflow exact")
+              .scene(loka::scenario_tests::ObservedMainDefinition<OffscreenDamageProps, OffscreenDamageNode>(
+                  OffscreenDamageProps(), &this->offscreen_))
+              .visible(false)
+              .idlePolicy(IdlePolicy::everyTick())
+              .onIdle(&PaintDamageConfig::DispatchIdle, this),
+          &this->offscreenWindow_);
       composition << ObservedWindowDefinition(
           WindowProps()
               .frame(350, 250, 220, 180)
@@ -1788,11 +1893,11 @@ namespace
     bool gate_;
     ToolboxScenePlatformController::EditTextGeometry editGeometry_;
 
-    Window *copyWindows_[6];
+    Window *copyWindows_[11];
     template <int Painter> void declareCopyWindow(AppComposition &composition)
     {
       composition << ObservedWindowDefinition(WindowProps()
-                                                  .frame(350, 250, 220, 180)
+                                                  .frame(300, 200, Painter >= 6 ? 320 : 220, Painter >= 6 ? 260 : 180)
                                                   .title("Scroll copy")
                                                   .scene(Boundary<CopyPainterNode<Painter> >())
                                                   .visible(false),
@@ -3431,13 +3536,21 @@ namespace
                       capture.ready() && copied.executed() == TOOLBOX_PRESENT_COPIED
                           && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0,
                       UNIT_SHOW);
+      // Microseconds jitter between MAME runs, so they go to the timing sidecar,
+      // never into the tracked audit (LOG.TXT keeps the deterministic facts).
       std::fprintf(this->log_,
-                   "copy-timing painter=%s copy_us=%lu erase_us=%lu candidate=%s executed=%s\r",
+                   "copy-timing painter=%s candidate=%s executed=%s\r",
                    name,
-                   copyUs,
-                   eraseUs,
                    ToolboxPresentVerdictName(copied.verdict()),
                    ToolboxPresentExecutedName(copied.executed()));
+      std::FILE *timing = std::fopen("CARDTIME.TXT", "a");
+      this->recordArm("copy-timing-log-open", timing != 0, UNIT_SHOW);
+      if (timing)
+      {
+        std::fprintf(timing, "copy-timing painter=%s copy_us=%lu erase_us=%lu\r", name, copyUs, eraseUs);
+        if (!CloseCardTiming(timing))
+          this->result_ = 1;
+      }
       if (Painter == 0)
       {
         root->scroll(32);
@@ -3458,6 +3571,109 @@ namespace
       }
       HideWindow(window.window());
     }
+    template <int Painter> void checkPreservedPainter(const char *name)
+    {
+      ToolboxWindow &window = *this->copyWindows_[Painter]->asToolboxWindow();
+      ToolboxScenePlatformController &controller = *window.scenePlatformController();
+      typedef loka::dsl::testing::SceneTestAccess Access;
+      Scene &scene = *window.scene();
+      CopyPainterNode<Painter> *root = static_cast<CopyPainterNode<Painter> *>(Access::rootBoundary(scene));
+      ShowWindow(window.window());
+      SelectWindow(window.window());
+      ToolboxPortScope selected(window.window());
+      loka::toolbox::ToolboxAlignedPattern oldPattern;
+      oldPattern.pattern = window.window()->bkPat;
+      loka::toolbox::ToolboxAlignedPattern pattern;
+      pattern.pattern = window.window()->bkPat;
+      {
+        const unsigned char rows[8] = {0x88, 0x22, 0x44, 0x11, 0x88, 0x22, 0x44, 0x11};
+        for (unsigned i = 0; i < 8; ++i)
+          pattern.pattern.pat[i] = rows[i];
+      }
+      BackPat(&pattern.pattern);
+      Access::flushInvalidation(scene);
+      window.requestInvalidate();
+      window.flushInvalidate();
+      window.requestInvalidate();
+      window.flushInvalidate();
+      for (unsigned step = 0; step < 3; ++step)
+      {
+        root->scroll(step == 1 ? 0 : 16);
+        if (step == 2)
+          root->disableButton();
+        window.requestInvalidateWithReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+        window.flushInvalidate();
+        const ToolboxPresentResult copied = controller.debugStatsForTesting().lastMovedPresentObservation;
+        const bool currentMove =
+            copied.dy() == (step == 1 ? -16 : 16)
+            && copied.totalRenderCalls()
+                   == static_cast<unsigned long>(controller.debugStatsForTesting().totalRenderCalls);
+        bool enabledIntersects = false;
+        for (unsigned i = 0; i < copied.sealedRects().count() && copied.foreground().count(); ++i)
+        {
+          Rect overlap;
+          enabledIntersects =
+              enabledIntersects || SectRect(&copied.sealedRects().at(i), &copied.foreground().unit(0), &overlap);
+        }
+        bool edgeOverlap = true;
+        if (Painter == 9)
+        {
+          Rect overlap;
+          const Rect corner = ToolboxWindowSizeBoxRect(window.window()->portRect);
+          edgeOverlap = copied.foreground().count() == 1
+                        && SectRect(&copied.foreground().unit(0), &copied.foreground().bar(), &overlap)
+                        && SectRect(&copied.foreground().unit(0), &corner, &overlap);
+        }
+        CardCapture capture(window.window()->portRect);
+        window.requestInvalidate();
+        window.flushInvalidate();
+        // Query the native environment independently: a wrong treatment must not become a skip.
+        const bool liveEligible = Painter == 10 && copied.foreground().count() == 1
+                                  && ToolboxBlurPixels::eligible(window.window(), copied.foreground().unit(0));
+        const bool treatment =
+            liveEligible ? copied.foreground().repairUnitCount() == 1 && copied.foreground().preservedCount() == 0
+                         : copied.foreground().repairUnitCount() == 0
+                               && copied.foreground().preservedCount() == (Painter == 8 ? 2U : 1U);
+        std::fprintf(this->log_,
+                     "preserved-detail step=%u executed=%s candidate=%s refusal=%s differences=%ld repair=%u "
+                     "preserved=%u sealed=%u move=%d edge=%d\r",
+                     step,
+                     ToolboxPresentExecutedName(copied.executed()),
+                     ToolboxPresentVerdictName(copied.verdict()),
+                     ToolboxPresentRefusalName(copied.refusal()),
+                     static_cast<long>(capture.ready() ? capture.differences() : -1),
+                     copied.foreground().repairUnitCount(),
+                     copied.foreground().preservedCount(),
+                     copied.sealedRects().count(),
+                     currentMove ? 1 : 0,
+                     edgeOverlap ? 1 : 0);
+        // Step 2 changes the Button's enabled State inside P before admission: a
+        // content input inside the unit is vetoed (outside_changed) and the frame
+        // is erased, pixel-identical; the K2 rectangle is sealed but not consumed.
+        // A K2 rectangle repaired inside a preserved unit during an executed copy is
+        // the laptop-arrow cell (press overlap bar ∩ band), not this arm.
+        const bool stepPass = step == 2
+                                  ? copied.executed() == TOOLBOX_PRESENT_ERASED
+                                        && copied.refusal() == TOOLBOX_PRESENT_OUTSIDE_CHANGED && enabledIntersects
+                                  : copied.executed() == TOOLBOX_PRESENT_COPIED && treatment;
+        this->recordArm(name,
+                        capture.ready() && copied.eligibility() == TOOLBOX_PAINT_CLEAN && capture.differences() == 0
+                            && stepPass && currentMove && edgeOverlap,
+                        UNIT_SHOW);
+        this->recordArm(step == 0   ? "preserved-negative-dv"
+                        : step == 1 ? "preserved-positive-dv"
+                                    : "preserved-enabled-before-admission-erases",
+                        stepPass,
+                        UNIT_SHOW);
+        if (Painter == 10 && step == 0)
+          std::fprintf(this->log_,
+                       liveEligible ? "eligible-LIVE-pair PASS\r"
+                                    : "[skip] eligible-LIVE-pair requires eligible 8bpp rig\r");
+      }
+      BackPat(&oldPattern.pattern);
+      HideWindow(window.window());
+    }
+
     void checkCopyPainters(ToolboxWindow &window)
     {
       this->checkCopyPainter<0>(*this->copyWindows_[0]->asToolboxWindow(), "copy-equals-repaint-Text");
@@ -3467,6 +3683,11 @@ namespace
                                 "copy-equals-repaint-mono-PICT_BYTES-ImageView");
       this->checkCopyPainter<4>(*this->copyWindows_[4]->asToolboxWindow(), "copy-equals-repaint-CardBand");
       this->checkCopyPainter<5>(*this->copyWindows_[5]->asToolboxWindow(), "copy-equals-repaint-ClipBox");
+      this->checkPreservedPainter<6>("preserved-interior-pattern");
+      this->checkPreservedPainter<7>("preserved-partial-width-pattern");
+      this->checkPreservedPainter<8>("preserved-two-interior-pattern");
+      this->checkPreservedPainter<9>("preserved-bar-size-box-overlap");
+      this->checkPreservedPainter<10>("preserved-monochrome-LIVE");
       SelectWindow(window.window());
     }
 

@@ -169,7 +169,7 @@ namespace edit_door
 
   void interval(const char *mode)
   {
-    // The host region stores a bounding box only: complex regions are not simulated.
+    // Rectangular and empty enclosing clips exercise both native interval paths.
     for (unsigned shape = 0; shape < 6; ++shape)
     {
       const bool fast = shape >= 3 || std::strcmp(mode, "fast") == 0;
@@ -249,6 +249,8 @@ namespace edit_door
       Rect expected = enclosing[clipShape];
       if (!fast)
         SectRect(&enclosing[clipShape], target ? &targetVisible : &visible, &expected);
+      if (EmptyRect(&expected))
+        expected = Rect();
       const char *operation =
           std::strcmp(mode, "fast") == 0 || std::strcmp(mode, "delete") == 0 || std::strcmp(mode, "navigate") == 0
               ? "key"

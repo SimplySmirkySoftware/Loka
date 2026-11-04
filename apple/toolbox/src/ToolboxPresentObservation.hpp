@@ -244,7 +244,7 @@ inline const char *ToolboxPresentExecutedName(ToolboxPresentExecuted value)
   return "unknown";
 }
 
-/** Treatment recorded at admission; presenter adoption is a separate change. */
+/** Treatment recorded at admission and consumed by the presenter. */
 enum ToolboxScrollTreatment
 {
   TOOLBOX_SCROLL_REPAIR_PAIR,
@@ -315,14 +315,29 @@ public:
   {
     const long limit = area(domain) / 2;
     long sum = 0;
-    // PR (a)-2 switches PRESERVE to min(|dv|, h) * w strips when the presenter stops pairing those entries.
+    const long height = dv < 0 ? -static_cast<long>(dv) : static_cast<long>(dv);
     for (unsigned i = 0; i < this->count(); ++i)
-      for (int n = 0; n < 2; ++n)
+    {
+      if (this->entries_[i].treatment == TOOLBOX_SCROLL_REPAIR_PAIR)
+      {
         add(sum, area(this->entries_[i].rect), limit);
+        add(sum, area(this->entries_[i].rect), limit);
+      }
+      else
+      {
+        Rect clipped;
+        if (SectRect(&this->entries_[i].rect, &domain, &clipped))
+        {
+          const long h = static_cast<long>(clipped.bottom) - clipped.top;
+          const long w = static_cast<long>(clipped.right) - clipped.left;
+          const long strip = height < h ? height : h;
+          add(sum, strip > 2147483647L / w ? 2147483647L : strip * w, limit);
+        }
+      }
+    }
     for (unsigned i = 0; i < sealed.count(); ++i)
       for (int n = 0; n < 2; ++n)
         add(sum, area(sealed.at(i)), limit);
-    const long height = dv < 0 ? -static_cast<long>(dv) : static_cast<long>(dv);
     const long width = static_cast<long>(domain.right) - domain.left;
     if (width <= 0 || limit <= 0)
       return true;
