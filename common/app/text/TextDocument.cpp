@@ -102,6 +102,15 @@ namespace loka
           this->head_->previous_ = &row;
         this->head_ = &row;
       }
+      void SceneTextDocuments::visit(Visitor &visitor)
+      {
+        for (TextDocumentRegistration *row = this->head_; row;)
+        {
+          TextDocumentRegistration *next = row->next_;
+          visitor.visit(*row);
+          row = next;
+        }
+      }
       void SceneTextDocuments::createStores(IPlatformController &controller)
       {
         for (TextDocumentRegistration *row = this->head_; row; row = row->next_)
@@ -121,6 +130,29 @@ namespace loka
     } // namespace scene
     namespace detail
     {
+      class TextDocumentPublisher::Visitor : public scene::SceneTextDocuments::Visitor
+      {
+      public:
+        Visitor(scene::IPlatformController &controller, Requests requests)
+            : controller_(controller),
+              requests_(requests)
+        {
+        }
+        virtual void visit(scene::TextDocumentRegistration &row)
+        {
+          if (this->requests_ == KEEP_REQUESTS)
+          {
+            scene::TextStoreRow *store = row.store();
+            if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && store)
+              this->controller_.commitMarkedText(*store);
+          }
+          publish(row, this->controller_, this->requests_);
+        }
+
+      private:
+        scene::IPlatformController &controller_;
+        const Requests requests_;
+      };
       void TextDocumentPublisher::complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
         scene::SceneTextDocuments::Publication publication(documents);
@@ -128,26 +160,15 @@ namespace loka
         // non-root declaration. Keep the traversal and its borrowed states alive
         // until all readings have been published; scope exit never pumps.
         scene::BorrowScope borrow(controller);
-        for (scene::TextDocumentRegistration *row = documents.head_; row;)
-        {
-          scene::TextDocumentRegistration *next = row->next_;
-          publish(*row, controller, TAKE_REQUESTS);
-          row = next;
-        }
+        Visitor visitor(controller, TAKE_REQUESTS);
+        documents.visit(visitor);
       }
       void TextDocumentPublisher::refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
         scene::SceneTextDocuments::Publication publication(documents);
         scene::BorrowScope borrow(controller);
-        for (scene::TextDocumentRegistration *row = documents.head_; row;)
-        {
-          scene::TextDocumentRegistration *next = row->next_;
-          scene::TextStoreRow *store = row->store();
-          if (row->phase_.value() == scene::TextStorePhase::STORE_LINKED && store)
-            controller.commitMarkedText(*store);
-          publish(*row, controller, KEEP_REQUESTS);
-          row = next;
-        }
+        Visitor visitor(controller, KEEP_REQUESTS);
+        documents.visit(visitor);
       }
       void TextDocumentPublisher::publish(scene::TextDocumentRegistration &row,
                                           scene::IPlatformController &controller,

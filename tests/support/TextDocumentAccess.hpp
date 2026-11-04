@@ -18,6 +18,10 @@ namespace loka
           scene::SceneTextDocuments::Publication publication(documents);
           action(data);
         }
+        static void withdraw(TextDocument &document)
+        {
+          document.registration_->withdraw();
+        }
         static NullTextStore *store(TextDocument &document)
         {
           return document.registration_ ? static_cast<NullTextStore *>(document.registration_->store()) : 0;

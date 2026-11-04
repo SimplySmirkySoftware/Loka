@@ -25,4 +25,5 @@ void testTextCommitRetainedRequestInvalidation();
 void testTextCommitReplacesOtherScene();
 void testTextCommitSettlesBeforeQuitReservation();
 void testTextCommitObservationHook();
+void testTextPublicationContinuesAfterWithdrawal();
 #endif

@@ -877,3 +877,72 @@ void testTextCommitObservationHook()
   LOKA_VERIFY(probes == 1 && loka::testing::textInputCommitCount() == 1);
   loka::testing::observeTextInputCommits(0, 0);
 }
+
+namespace
+{
+  class WithdrawalRoot : public BoundaryNodeFor<WithdrawalRoot>
+  {
+  public:
+    TextDocument first, second;
+    explicit WithdrawalRoot(const BoundaryPropsFor<WithdrawalRoot> &p)
+        : BoundaryNodeFor<WithdrawalRoot>(p)
+    {
+      this->document(this->first);
+      this->document(this->second);
+    }
+    virtual void composeNode(NodeComposition &) {}
+  };
+  struct WithdrawDocument
+  {
+    TextDocument &document;
+    unsigned calls;
+    explicit WithdrawDocument(TextDocument &doc)
+        : document(doc),
+          calls(0)
+    {
+    }
+    static void run(void *data)
+    {
+      WithdrawDocument &self = *static_cast<WithdrawDocument *>(data);
+      ++self.calls;
+      TextDocumentAccess::withdraw(self.document);
+    }
+  };
+} // namespace
+void testTextPublicationContinuesAfterWithdrawal()
+{
+  for (unsigned refresh = 0; refresh != 2; ++refresh)
+  {
+    Controller controller;
+    NullPlatformContext context;
+    WindowProps p;
+    p.scene(new Scene(Boundary<WithdrawalRoot>()));
+    TestWindow window(&context, p, &controller);
+    TextTestApp app(window);
+    app.flush();
+    app.reconcileAtCompletion();
+    WithdrawalRoot &root = *static_cast<WithdrawalRoot *>(SceneAccess::rootBoundary(*window.scene()));
+    WithdrawDocument first(root.first), second(root.second);
+    if (refresh)
+    {
+      TextDocumentAccess::onCommit(root.first, &WithdrawDocument::run, &first);
+      TextDocumentAccess::onCommit(root.second, &WithdrawDocument::run, &second);
+      LOKA_VERIFY(app.commitTextInput() == TEXT_INPUT_SETTLED);
+      LOKA_VERIFY(root.first.fact()->get().state() == TEXT_DOCUMENT_UNAVAILABLE);
+      LOKA_VERIFY(root.second.fact()->get().state() == TEXT_DOCUMENT_UNAVAILABLE);
+    }
+    else
+    {
+      root.first.fact()->bind(&WithdrawDocument::run, &first, false);
+      root.second.fact()->bind(&WithdrawDocument::run, &second, false);
+      TextDocumentAccess::edit(root.first, TextChangedRange(0, 0, 1));
+      TextDocumentAccess::edit(root.second, TextChangedRange(0, 0, 1));
+      app.reconcileAtCompletion();
+      root.first.fact()->unbind(&WithdrawDocument::run, &first);
+      root.second.fact()->unbind(&WithdrawDocument::run, &second);
+      LOKA_VERIFY(root.first.fact()->get().textRevision() == 1);
+      LOKA_VERIFY(root.second.fact()->get().textRevision() == 1);
+    }
+    LOKA_VERIFY(first.calls == 1 && second.calls == 1);
+  }
+}

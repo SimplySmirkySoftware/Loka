@@ -11,6 +11,7 @@ namespace loka
       /** Single writer/taker, parallel to FocusPublisher; only Window enters completion or refresh. */
       class TextDocumentPublisher
       {
+        class Visitor;
         static void complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller);
         enum Requests
         {

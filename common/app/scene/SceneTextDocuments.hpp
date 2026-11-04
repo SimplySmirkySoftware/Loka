@@ -20,6 +20,15 @@ namespace loka
       class SceneTextDocuments
       {
       public:
+        /** Receives rows while membership and traversal remain with the Scene. */
+        class Visitor
+        {
+        public:
+          virtual ~Visitor() {}
+          virtual void visit(TextDocumentRegistration &row) = 0;
+        };
+        /** Visits in membership order; a visit may withdraw its current row. */
+        void visit(Visitor &visitor);
         SceneTextDocuments()
             : head_(0),
               phase_(IDLE)
