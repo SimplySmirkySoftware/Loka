@@ -315,30 +315,10 @@ public:
   {
     const long limit = area(domain) / 2;
     long sum = 0;
+    // PR (a)-2 switches PRESERVE to min(|dv|, h) * w strips when the presenter stops pairing those entries.
     for (unsigned i = 0; i < this->count(); ++i)
-    {
-      const Entry &entry = this->entries_[i];
-      switch (entry.treatment)
-      {
-      case TOOLBOX_SCROLL_REPAIR_PAIR:
-        add(sum, area(entry.rect), limit);
-        add(sum, area(entry.rect), limit);
-        break;
-      case TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL:
-      {
-        Rect clipped;
-        if (SectRect(&entry.rect, &domain, &clipped))
-        {
-          const long h = static_cast<long>(clipped.bottom) - clipped.top;
-          const long w = static_cast<long>(clipped.right) - clipped.left;
-          const long delta = dv < 0 ? -static_cast<long>(dv) : static_cast<long>(dv);
-          const long strip = delta < h ? delta : h;
-          add(sum, strip > limit / w ? limit : strip * w, limit);
-        }
-        break;
-      }
-      }
-    }
+      for (int n = 0; n < 2; ++n)
+        add(sum, area(this->entries_[i].rect), limit);
     for (unsigned i = 0; i < sealed.count(); ++i)
       for (int n = 0; n < 2; ++n)
         add(sum, area(sealed.at(i)), limit);

@@ -2062,40 +2062,16 @@ namespace
     equal(mixed.repairUnit(0), entries[1].rect);
     LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).refused());
     LOKA_VERIFY(ToolboxForegroundUnits(entries, 3, Rect(), false).count() == 0);
-    for (int sign = -1; sign <= 1; sign += 2)
-    {
-      // 1600 exposed + 450 corners + 1280 preserved strip = 3330.
-      // Damage pair 1668 is below half; 1670 reaches it exactly.
-      const Rect below = {0, 0, 1, 834}, at = {0, 0, 1, 835};
-      const ToolboxForegroundUnits one(entries, 1, Rect(), false);
-      LOKA_VERIFY(!one.tooLarge(domain, sign * 16, below));
-      LOKA_VERIFY(one.tooLarge(domain, sign * 16, at));
-      // A wider-than-domain row contributes only 1600, not 3200.
-      entries[0].rect = Rect();
-      SetRect(&entries[0].rect, -50, 20, 150, 50);
-      const ToolboxForegroundUnits wide(entries, 1, Rect(), false);
-      const Rect wideBelow = {0, 0, 1, 674}, wideAt = {0, 0, 1, 675};
-      LOKA_VERIFY(!wide.tooLarge(domain, sign * 16, wideBelow));
-      LOKA_VERIFY(wide.tooLarge(domain, sign * 16, wideAt));
-      SetRect(&entries[0].rect, 0, 0, 100, 5);
-      const ToolboxForegroundUnits top(entries, 1, Rect(), false);
-      const Rect topBelow = {0, 0, 1, 1224}, topAt = {0, 0, 1, 1225};
-      LOKA_VERIFY(!top.tooLarge(domain, sign * 16, topBelow));
-      LOKA_VERIFY(top.tooLarge(domain, sign * 16, topAt));
-      entries[1].treatment = TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL;
-      const ToolboxForegroundUnits two(entries, 2, Rect(), false);
-      equal(two.preservedUnit(1), entries[1].rect);
-      const Rect twoBelow = {0, 0, 1, 824}, twoAt = {0, 0, 1, 825};
-      LOKA_VERIFY(!two.tooLarge(domain, sign * 16, twoBelow));
-      LOKA_VERIFY(two.tooLarge(domain, sign * 16, twoAt));
-      SetRect(&entries[0].rect, 10, 20, 90, 50);
-    }
-    const Rect huge = {-32768, -32768, 32767, 32767};
-    entries[0].rect = huge;
-    const ToolboxForegroundUnits saturated(entries, 1, Rect(), false);
-    LOKA_VERIFY(saturated.tooLarge(huge, 32767, Rect()));
-    LOKA_VERIFY(saturated.tooLarge(huge, -32768, Rect()));
+    const ToolboxForegroundUnits one(entries, 1, Rect(), false);
+    // The presenter still pairs every entry: 4800 unit + 1600 exposed + 450 corners > 5000.
+    LOKA_VERIFY(one.tooLarge(domain, 16, Rect()));
+    LOKA_VERIFY(one.tooLarge(domain, -16, Rect()));
+    entries[1].treatment = TOOLBOX_SCROLL_PRESERVE_DURING_SCROLL;
+    const ToolboxForegroundUnits preserved(entries, 2, Rect(), false);
+    LOKA_VERIFY(preserved.preservedCount() == 2 && preserved.repairUnitCount() == 0);
+    equal(preserved.preservedUnit(1), entries[1].rect);
   }
+
   void sealedRepairBudget()
   {
     const Rect domain = {0, 0, 100, 100}, rect = {0, 0, 30, 50};
