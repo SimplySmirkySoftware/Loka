@@ -2094,6 +2094,7 @@ An app that accepts URLs for its own scheme declares a config-owned
 `URLInbox<N>` with that scheme and registers it in `compose` with
 `ReceiveURLs(inbox, match)`, where `match` is a `Match` over `IncomingURL`.
 The registration copies the `Match`.
+On macOS, declare the scheme in the app’s `Info.plist` under `CFBundleURLTypes`.
 
 - Treat every received URL as untrusted input: the scheme is checked, but not
   who sent it, what `%2F` or `..` in it mean, or whether its target exists.
@@ -2105,7 +2106,8 @@ The registration copies the `Match`.
   they may update config-owned state under its guard, open documents, or post
   outgoing URLs. Delivery pauses during a quit attempt and resumes if it is
   refused. URLs collected at launch run before document windows are admitted.
-  Native URL entry and completion wiring are still pending on each platform.
+  macOS receives GURL Apple Events and delivers at the outermost timer completion;
+  native URL entry and completion wiring on other platforms remain separate work.
 
 ## 18. Ownership And Resource Management
 

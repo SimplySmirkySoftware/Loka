@@ -5,6 +5,7 @@
 // this file via LOKA_SHARED_TEST_SOURCES.
 #include "app/Menu.hpp"
 #include "testing/app/URLReceiveTestHooks.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "core/LokaAlloc.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include <cstring>
@@ -20,8 +21,36 @@ namespace loka
   {
     namespace
     {
+      struct TextInputCommitObservation
+      {
+        TextInputCommitObservation()
+            : count(0),
+              probe(0),
+              data(0)
+        {
+        }
+        unsigned count;
+        void (*probe)(void *);
+        void *data;
+      } textInputCommitObservation;
       unsigned receivePendingTolerances = 0;
       unsigned buttonDrawConversionRefusals = 0;
+    }
+    void observeTextInputCommits(void (*probe)(void *), void *data)
+    {
+      textInputCommitObservation.count = 0;
+      textInputCommitObservation.probe = probe;
+      textInputCommitObservation.data = data;
+    }
+    unsigned textInputCommitCount()
+    {
+      return textInputCommitObservation.count;
+    }
+    void noteTextInputCommit()
+    {
+      ++textInputCommitObservation.count;
+      if (textInputCommitObservation.probe)
+        textInputCommitObservation.probe(textInputCommitObservation.data);
     }
     void tolerateReceivePending(unsigned count)
     {
@@ -367,7 +396,14 @@ namespace loka
           }
           void *memory = new (std::nothrow) char[size];
           if (memory)
+          {
+            // Deterministic fresh storage lets host pins distinguish a missing
+            // MeasureText sentinel fill from accidental allocator contents.
+            if (site.ownerTag && site.typeTag && std::strcmp(site.ownerTag, "ToolboxCharWidthCache") == 0
+                && std::strcmp(site.typeTag, "Entry") == 0)
+              std::memset(memory, 0, size);
             ++g_allocationLive;
+          }
           return memory;
         }
 
@@ -713,7 +749,7 @@ namespace loka
       {
         std::size_t lastProjectionRequestBytes = 0;
         std::size_t lastProjectionReservationBytes = 0;
-      }
+      } // namespace
       void observeProjectionReservation(std::size_t requested, std::size_t capacity)
       {
         lastProjectionRequestBytes = requested;

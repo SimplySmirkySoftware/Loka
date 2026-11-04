@@ -60,6 +60,7 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxScrollBarLedger.cpp
   src/ToolboxScenePlatformController.cpp
   src/ToolboxNaturalWidth.cpp
+  src/ToolboxCharWidthCache.cpp
   src/ToolboxWindow.cpp
   src/ToolboxWindowContext.cpp
   src/ToolboxFileChoice.cpp

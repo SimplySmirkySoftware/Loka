@@ -48,14 +48,30 @@ void Window::reconcileFocus()
   loka::app::detail::FocusPublisher::complete(current->focus(), *current->platformController_, *current->rootNode_);
 }
 
-void Window::reconcileTextDocuments()
+loka::app::scene::Scene *Window::textDocumentScene()
 {
   loka::app::scene::Scene *current = this->scene();
   if (this->sceneManager_.applying_ || !current || current->isBorrowOpen() || current->isRunInProgress()
       || current->focus().isPublishing() || current->textDocuments().isPublishing() || !current->attached_.get()
       || !current->rootNode_ || !this->hasLiveScenePlatform() || !current->platformController_)
-    return;
-  loka::app::detail::TextDocumentPublisher::complete(current->textDocuments(), *current->platformController_);
+    return 0;
+  return current;
+}
+
+void Window::reconcileTextDocuments()
+{
+  loka::app::scene::Scene *current = this->textDocumentScene();
+  if (current)
+    loka::app::detail::TextDocumentPublisher::complete(current->textDocuments(), *current->platformController_);
+}
+
+bool Window::commitTextDocuments()
+{
+  loka::app::scene::Scene *current = this->textDocumentScene();
+  if (!current)
+    return false;
+  loka::app::detail::TextDocumentPublisher::refresh(current->textDocuments(), *current->platformController_);
+  return true;
 }
 
 loka::app::scene::NodeContext *Window::publishedFocusContext()

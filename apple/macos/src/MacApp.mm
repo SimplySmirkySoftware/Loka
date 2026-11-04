@@ -1,4 +1,5 @@
 #include "MacApp.hpp"
+#include "MacReceiveURL.hpp"
 #include "core/Operation.hpp"
 #include "MacWindow.hpp"
 #include "MacScenePlatformController.hpp"
@@ -8,7 +9,7 @@
 #include <mach/mach_time.h>
 #include "app/core/AppComponent.hpp"
 
-/** Process-lifetime registration; the attached App is only borrowed. */
+/** Process-lifetime quit and GURL registration; the attached App is only borrowed. */
 @interface LokaQuitEventRouter : NSObject
 {
   MacApp *owner_;
@@ -25,6 +26,19 @@
                                                      andSelector:@selector(handleQuitEvent:withReplyEvent:)
                                                    forEventClass:kCoreEventClass
                                                       andEventID:kAEQuitApplication];
+  [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                     andSelector:@selector(handleGetURLEvent:withReplyEvent:)
+                                                   forEventClass:kInternetEventClass
+                                                      andEventID:kAEGetURL];
+}
+
+- (void)handleGetURLEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply
+{
+  loka::core::String text;
+  if (!self.owner || !MacURLTextFromDescriptor([event paramDescriptorForKeyword:keyDirectObject], text)
+      || self.owner->receiveURL(text) != loka::app::RECEIVE_QUEUED)
+    [reply setParamDescriptor:[NSAppleEventDescriptor descriptorWithInt32:errAEEventNotHandled]
+                   forKeyword:keyErrorNumber];
 }
 
 - (void)handleQuitEvent:(NSAppleEventDescriptor *)event withReplyEvent:(NSAppleEventDescriptor *)reply
@@ -35,6 +49,8 @@
     [reply setParamDescriptor:[NSAppleEventDescriptor descriptorWithInt32:userCanceledErr] forKeyword:keyErrorNumber];
     return;
   }
+  // Twin: ToolboxApp::handleMenuSelection (AppMenu Quit).
+  self.owner->commitTextInput();
   self.owner->requestQuitAtCompletion();
 }
 
@@ -42,7 +58,11 @@
 {
   (void)sender;
   if (self.owner)
+  {
+    // Twin: ToolboxApp::handleMenuSelection (AppMenu Quit).
+    self.owner->commitTextInput();
     self.owner->requestQuitAtCompletion();
+  }
   return NSTerminateCancel;
 }
 @end
@@ -198,9 +218,7 @@ void MacApp::quit()
 
 void MacApp::flushInvalidationsTick()
 {
-#ifdef LOKA_LIFECYCLE_AUDIT
   const bool entryActive = loka::core::Operation::hasActive();
-#endif
   {
     loka::core::Operation turn;
     const unsigned long long now = mach_absolute_time();
@@ -222,6 +240,10 @@ void MacApp::flushInvalidationsTick()
     this->admitAndApplyWindows();
     MacScenePlatformController::flushPendingRelayouts();
     this->reconcileAtCompletion();
+    // Keep serve -> second admission -> close in the same order as
+    // common/testing/app/AppTestAccess.hpp: AppTestAccess::completeTurn.
+    if (this->serveURLsAtCompletion(entryActive ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST))
+      this->admitAndApplyWindows();
     turn.close();
     // Native dealloc chains may autorelease, including on direct tick entry.
     NSAutoreleasePool *retirementPool = [[NSAutoreleasePool alloc] init];

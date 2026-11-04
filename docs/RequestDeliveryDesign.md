@@ -8,6 +8,9 @@ page holds the contract the rails implement. Source rulings: #873 (frozen
 2026-09-22), the two-take bound accepted on #874, and the entry-completion
 ruling from the #879 review (2026-09-23).
 
+`App::commitTextInput` is not a delivery site: it refreshes document facts through
+the single writer and takes no requests (text body page 1c).
+
 ## Boxes
 
 | Box | Type | Writer | Reader |
@@ -571,8 +574,11 @@ menu projection. Observer posts wait for the next completion; observer window
 closes and dialog work follow the existing later admission paths.
 
 `PlatformContext::openURL` declines with `URL_UNAVAILABLE` by default.
-No rail calls the door or overrides that default yet; rail PRs 1–3 supply those
-pieces. The receive direction below runs before opening.
+macOS overrides it through `MacOpenWebURL`, with a call-local autorelease pool
+and a synchronous `-[NSWorkspace openURL:]` thunk. Native YES maps to URL_OPENED;
+conversion refusal or any other native result maps to URL_NOT_OPENED.
+Win32 and Toolbox retain the default pending their rail PRs.
+The receive direction below runs before opening.
 The Null test entry `AppTestAccess::completeTurn` captures the clock, opens a
 turn, settles, admits, reconciles focus, serves, admits again if served, closes,
 and reclaims. Its recorder/script supplies native acceptance and reentry probes;
@@ -617,8 +623,7 @@ exactly the entry count and closes before launch document admission. Offers made
 during that batch wait for running completion. Bootstrap assumes no earlier
 `requestQuitAtCompletion`; even if called, the batch runs without quit or busy
 checks. An arm that opens a document can avoid the existing windowless exit;
-otherwise that behavior is unchanged. No rail collector override or completion
-call is installed by this change.
+otherwise that behavior is unchanged. The macOS native entry and completion calls are listed below.
 
 Cost: the completion door is O(1) without eligible work; otherwise it walks only
 App's own group rows once and serves at most one receive and one open. Each
@@ -632,7 +637,14 @@ composition bootstrap; the PENDING wall runs only on a contract violation.
 
 | Door | Call sites |
 |---|---|
-| `App::serveURLsAtCompletion` (receive, then open) | No rail calls it yet (rail PRs 1–3); Null tests use `AppTestAccess::completeTurn`. |
+| `App::receiveURL`, macOS | `LokaQuitEventRouter::handleGetURLEvent:withReplyEvent:` handles `kInternetEventClass` / `kAEGetURL`, offering one direct-object text through `MacURLTextFromDescriptor` (UTF-8, then `typeChar`, explicit byte length). No Operation or arm runs at ingress. A missing owner, failed coercion, or any result except `RECEIVE_QUEUED` writes `errAEEventNotHandled` to the reply. Delivery waits for an eligible outermost timer completion. |
+| `App::serveURLsAtCompletion` (receive, then open), macOS | `MacApp::flushInvalidationsTick`: capture the inherited clock before opening the turn; serve after relayout and focus reconciliation; if served, admit again before closing the turn. Only a Loka-clock-outermost timer takes; clockless native loops are eligible. Stopping the timer in quit does not truncate the current tick. |
+| `App::serveURLsAtCompletion`, other rails | Win32/Toolbox call sites pending; Null tests use `AppTestAccess::completeTurn`. |
+
+The macOS pins call the tick directly. Native default/tracking loop blocks are
+loop proxies, not timer-scheduling or deferred-dialog `runModal` tests; sheets
+and native `openURL:` nested-loop behavior are not covered. The Null recorder
+backs tick pins; the real platform override needs a separate runtime probe.
 
 Null: attach, props sync, input completion. Toolbox: `onPropsApplied`,
 `finishInput`, native creation in `render`, `retryProjection`; layout settles

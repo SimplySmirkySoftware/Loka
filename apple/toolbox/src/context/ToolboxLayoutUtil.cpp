@@ -15,9 +15,14 @@ namespace
     return size == 0 ? GetDefFontSize() : size;
   }
 
+  bool NeedsSelectionBusy(const ToolboxTextSelection &selection, const ToolboxTextPortFont &original)
+  {
+    return selection.size != ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), original).size;
+  }
+
   void apply(const ToolboxTextSelection &selection)
   {
-    TextFont(selection.font == 0 ? GetSysFont() : selection.font);
+    TextFont(selection.nativeFont());
     TextSize(selection.size);
     TextFace(selection.face);
   }
@@ -41,19 +46,31 @@ ToolboxTextMeasureScope::ToolboxTextMeasureScope(const ToolboxScenePlatformContr
       measurePort_(controller.window_ ? reinterpret_cast<GrafPtr>(controller.window_->window()) : 0),
       original_(ToolboxTextPortFont::read(this->measurePort_)),
       busy_(this->measurePort_
-                    && ToolboxTextSelection::resolve(descriptor, this->original_).size
-                           != ToolboxTextSelection::resolve(ToolboxTextFontDescriptor(), this->original_).size
+                    && NeedsSelectionBusy(ToolboxTextSelection::resolve(descriptor, this->original_), this->original_)
                 ? controller.cursorOwner()
                 : 0)
 {
   GetPort(&this->previousPort_);
-  if (!this->measurePort_)
-  {
-    return;
-  }
+  this->open(ToolboxTextSelection::resolve(descriptor, this->original_));
+}
 
+ToolboxTextMeasureScope::ToolboxTextMeasureScope(const ToolboxScenePlatformController &controller,
+                                                 const ToolboxTextSelection &selection)
+    : previousPort_(0),
+      measurePort_(controller.window_ ? reinterpret_cast<GrafPtr>(controller.window_->window()) : 0),
+      original_(ToolboxTextPortFont::read(this->measurePort_)),
+      busy_(this->measurePort_ && NeedsSelectionBusy(selection, this->original_) ? controller.cursorOwner() : 0)
+{
+  GetPort(&this->previousPort_);
+  this->open(selection);
+}
+
+void ToolboxTextMeasureScope::open(const ToolboxTextSelection &selection) const
+{
+  if (!this->measurePort_)
+    return;
   SetPort(this->measurePort_);
-  this->select(descriptor);
+  apply(selection);
 }
 
 ToolboxTextMeasureScope::~ToolboxTextMeasureScope()
@@ -139,4 +156,12 @@ bool ToolboxTextMeasureScope::queryLineMetrics(long &pitch, short &baseline) con
   pitch = static_cast<long>(info.ascent) + info.descent + info.leading;
   baseline = info.ascent;
   return true;
+}
+
+bool ToolboxTextMeasureScope::applies(const ToolboxTextSelection &selection) const
+{
+  GrafPtr current = 0;
+  GetPort(&current);
+  return this->measurePort_ && current == this->measurePort_ && this->measurePort_->txFont == selection.nativeFont()
+         && this->measurePort_->txSize == selection.size && this->measurePort_->txFace == selection.face;
 }

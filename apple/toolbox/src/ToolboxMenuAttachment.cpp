@@ -593,6 +593,8 @@ void ToolboxApp::handleMenuSelection(short menuId, short item)
 {
   if (!menuId || !item)
     return;
+  // Twin: MacMenuAttachment handleMenuAction:.
+  this->commitTextInput();
   if (!this->menuAttachment_.dispatch(menuId, item) && menuId == 128)
   {
     Str255 deskAccName;

@@ -12,65 +12,57 @@ namespace loka
       class TextChangeNote
       {
       public:
-        TextChangeNote()
-            : kind_(NONE),
-              range_()
-        {
-        }
         void noteEdit(const TextChangedRange *range)
         {
-          if (!range)
+          TextChangedRange previous;
+          if (!range || (this->reading_.changed() && !this->reading_.queryRange(previous)))
           {
-            this->kind_ = WHOLE;
+            this->reading_ = TextStoreReading(true, 0, 0, 0, this->reading_.marked());
             return;
           }
-          if (this->kind_ == WHOLE)
-            return;
-          if (this->kind_ == NONE)
+          if (!this->reading_.changed())
           {
-            this->range_ = *range;
-            this->kind_ = RANGE;
+            this->reading_ = TextStoreReading(true, range, 0, 0, this->reading_.marked());
             return;
           }
           // The second edit's coordinates follow the first edit. Expand the old and
           // new spans together, preserving the net size change without signed offsets.
-          const unsigned long start = std::min(this->range_.start(), range->start());
-          const unsigned long oldEnd = this->range_.start() + this->range_.length();
-          const unsigned long newEnd = this->range_.start() + this->range_.insertedLength();
+          const unsigned long start = std::min(previous.start(), range->start());
+          const unsigned long oldEnd = previous.start() + previous.length();
+          const unsigned long newEnd = previous.start() + previous.insertedLength();
           const unsigned long editEnd = range->start() + range->length();
           const unsigned long tail = editEnd > newEnd ? editEnd - newEnd : 0;
           const unsigned long oldLength = oldEnd + tail - start;
           const unsigned long newLength = std::max(newEnd, editEnd) - start - range->length() + range->insertedLength();
-          this->range_ = TextChangedRange(start, oldLength, newLength);
+          const TextChangedRange combined(start, oldLength, newLength);
+          this->reading_ = TextStoreReading(true, &combined, 0, 0, this->reading_.marked());
         }
         void note(const TextStoreReading &reading)
         {
-          if (!reading.changed())
-            return;
           TextChangedRange range;
-          this->noteEdit(reading.queryRange(range) ? &range : 0);
+          if (reading.changed())
+            this->noteEdit(reading.queryRange(range) ? &range : 0);
+          this->reading_ = TextStoreReading(this->pending(),
+                                            this->reading_.queryRange(range) ? &range : 0,
+                                            reading.caret(),
+                                            reading.anchor(),
+                                            reading.marked());
         }
         bool pending() const
         {
-          return this->kind_ != NONE;
+          return this->reading_.changed();
         }
         TextStoreReading take(unsigned long caret = 0, unsigned long anchor = 0)
         {
-          const TextStoreReading result(this->pending(), this->kind_ == RANGE ? &this->range_ : 0, caret, anchor);
-          this->kind_ = NONE;
-          this->range_ = TextChangedRange();
+          TextChangedRange range;
+          const TextStoreReading result(
+              this->pending(), this->reading_.queryRange(range) ? &range : 0, caret, anchor, this->reading_.marked());
+          this->reading_ = TextStoreReading(false, 0, 0, 0, this->reading_.marked());
           return result;
         }
 
       private:
-        enum Kind
-        {
-          NONE,
-          RANGE,
-          WHOLE
-        };
-        Kind kind_;
-        TextChangedRange range_;
+        TextStoreReading reading_;
       };
     } // namespace scene
   } // namespace app

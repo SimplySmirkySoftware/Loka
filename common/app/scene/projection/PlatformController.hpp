@@ -150,6 +150,9 @@ namespace loka
         {
           return false;
         }
+        /** Copy handles and identities before the native call and revalidate the row afterwards.
+            Callbacks during the call may only mark the row's change note. */
+        virtual void commitMarkedText(TextStoreRow &) {}
         virtual bool readTextStore(TextStoreRow &, TextStoreReading &)
         {
           return false;

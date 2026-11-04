@@ -102,6 +102,15 @@ namespace loka
           this->head_->previous_ = &row;
         this->head_ = &row;
       }
+      void SceneTextDocuments::visit(Visitor &visitor)
+      {
+        for (TextDocumentRegistration *row = this->head_; row;)
+        {
+          TextDocumentRegistration *next = row->next_;
+          visitor.visit(*row);
+          row = next;
+        }
+      }
       void SceneTextDocuments::createStores(IPlatformController &controller)
       {
         for (TextDocumentRegistration *row = this->head_; row; row = row->next_)
@@ -121,6 +130,35 @@ namespace loka
     } // namespace scene
     namespace detail
     {
+      class TextDocumentPublisher::Visitor : public scene::SceneTextDocuments::Visitor
+      {
+      public:
+        Visitor(scene::IPlatformController &controller, Requests requests)
+            : controller_(controller),
+              requests_(requests)
+        {
+        }
+        virtual void visit(scene::TextDocumentRegistration &row)
+        {
+          visitRow(row, this->controller_, this->requests_);
+        }
+
+      private:
+        scene::IPlatformController &controller_;
+        const Requests requests_;
+      };
+      void TextDocumentPublisher::visitRow(scene::TextDocumentRegistration &row,
+                                           scene::IPlatformController &controller,
+                                           Requests requests)
+      {
+        if (requests == KEEP_REQUESTS)
+        {
+          scene::TextStoreRow *store = row.store();
+          if (row.phase_.value() == scene::TextStorePhase::STORE_LINKED && store)
+            controller.commitMarkedText(*store);
+        }
+        publish(row, controller, requests);
+      }
       void TextDocumentPublisher::complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
       {
         scene::SceneTextDocuments::Publication publication(documents);
@@ -128,14 +166,19 @@ namespace loka
         // non-root declaration. Keep the traversal and its borrowed states alive
         // until all readings have been published; scope exit never pumps.
         scene::BorrowScope borrow(controller);
-        for (scene::TextDocumentRegistration *row = documents.head_; row;)
-        {
-          scene::TextDocumentRegistration *next = row->next_;
-          publish(*row, controller);
-          row = next;
-        }
+        Visitor visitor(controller, TAKE_REQUESTS);
+        documents.visit(visitor);
       }
-      void TextDocumentPublisher::publish(scene::TextDocumentRegistration &row, scene::IPlatformController &controller)
+      void TextDocumentPublisher::refresh(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
+      {
+        scene::SceneTextDocuments::Publication publication(documents);
+        scene::BorrowScope borrow(controller);
+        Visitor visitor(controller, KEEP_REQUESTS);
+        documents.visit(visitor);
+      }
+      void TextDocumentPublisher::publish(scene::TextDocumentRegistration &row,
+                                          scene::IPlatformController &controller,
+                                          Requests requests)
       {
         TextDocument &document = row.document_;
         if (!document.fact_.isValid() || !document.request_.isValid())
@@ -147,7 +190,8 @@ namespace loka
         const bool read = store && controller.readTextStore(*store, first);
         const unsigned long revision = previous.textRevision() + (read && first.changed() ? 1 : 0);
         // No gate or early return after consuming the first reading.
-        if (row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
+        if (requests == TAKE_REQUESTS && !(read && first.marked())
+            && row.phase_.value() != scene::TextStorePhase::STORE_AWAITED)
         {
           const TextPosition request = document.request_.get();
           if (!request.isNone())
@@ -178,14 +222,14 @@ namespace loka
           state = TEXT_DOCUMENT_UNAVAILABLE;
           break;
         case scene::TextStorePhase::STORE_LINKED:
-          state = store ? TEXT_DOCUMENT_READY : TEXT_DOCUMENT_UNAVAILABLE;
+          state = store ? (combined.marked() ? TEXT_DOCUMENT_MARKED : TEXT_DOCUMENT_READY) : TEXT_DOCUMENT_UNAVAILABLE;
           break;
         }
         const scene::TextStoreReading &last = reread ? second : first;
-        const TextPosition caret = state == TEXT_DOCUMENT_READY && (read || reread)
+        const TextPosition caret = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && (read || reread)
                                        ? TextDocument::position(finalRevision, last.caret())
                                        : TextPosition::None();
-        const TextPosition anchor = state == TEXT_DOCUMENT_READY && (read || reread)
+        const TextPosition anchor = (state == TEXT_DOCUMENT_READY || state == TEXT_DOCUMENT_MARKED) && (read || reread)
                                         ? TextDocument::position(finalRevision, last.anchor())
                                         : TextPosition::None();
         TextChangedRange range;

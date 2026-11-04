@@ -1,4 +1,5 @@
 #include "MacQuitEventTests.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "support/TestVerify.hpp"
 #include "support/NativeCloseTestConfig.hpp"
 #include "MacApp.hpp"
@@ -7,25 +8,8 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <objc/runtime.h>
 
-/** Uses the same attachment and clock doors as run(), without entering NSApp's loop. */
-class MacQuitEventTestAccess
-{
-public:
-  static void attach(MacApp &app, bool clock)
-  {
-    app.attachQuitEventRouter();
-    if (clock)
-      app.startInvalidationFlushTimer();
-  }
-  static bool held(const MacApp &app)
-  {
-    return app.quitEventReply_.isHeld();
-  }
-  static bool pending(const MacApp &app)
-  {
-    return app.hasPendingWindowAdmission();
-  }
-};
+#include "support/MacQuitEventTestAccess.hpp"
+#include "testing/app/AppTestAccess.hpp"
 
 namespace
 {
@@ -327,4 +311,69 @@ void testMacQuitEventQuitTwiceRepliesOnce()
     LOKA_VERIFY(observer.result.count == 1);
   }
   LOKA_VERIFY(observer.result.count == 1);
+}
+
+namespace
+{
+  struct QuitCommitProbe
+  {
+    MacApp &app;
+    bool expectHeld;
+    unsigned calls;
+    QuitCommitProbe(MacApp &owner, bool held)
+        : app(owner),
+          expectHeld(held),
+          calls(0)
+    {
+    }
+    static void observe(void *data)
+    {
+      QuitCommitProbe &self = *static_cast<QuitCommitProbe *>(data);
+      LOKA_VERIFY(loka::core::Operation::hasActive());
+      LOKA_VERIFY(MacQuitEventTestAccess::held(self.app) == self.expectHeld);
+      LOKA_VERIFY(!loka::app::testing::AppTestAccess::hasQuitAttempt(self.app));
+      ++self.calls;
+    }
+  };
+} // namespace
+void testMacQuitEventCommitsAfterAcceptanceBeforeReservation()
+{
+  QuitTestPool pool;
+  RawQuit event;
+  QuitFixture fixture;
+  QuitCommitProbe probe(fixture.app, true);
+  loka::testing::observeTextInputCommits(&QuitCommitProbe::observe, &probe);
+  event.dispatch();
+  LOKA_VERIFY(probe.calls == 1 && loka::testing::textInputCommitCount() == 1);
+  LOKA_VERIFY(MacQuitEventTestAccess::held(fixture.app));
+  LOKA_VERIFY(loka::app::testing::AppTestAccess::hasQuitAttempt(fixture.app));
+  LOKA_VERIFY(!event.hasError());
+  loka::testing::observeTextInputCommits(0, 0);
+}
+void testMacQuitEventRefusalDoesNotCommit()
+{
+  QuitTestPool pool;
+  RawQuit event;
+  QuitFixture fixture(false);
+  QuitCommitProbe probe(fixture.app, false);
+  loka::testing::observeTextInputCommits(&QuitCommitProbe::observe, &probe);
+  event.dispatch();
+  LOKA_VERIFY(event.error() == userCanceledErr);
+  LOKA_VERIFY(!MacQuitEventTestAccess::held(fixture.app));
+  LOKA_VERIFY(!loka::app::testing::AppTestAccess::hasQuitAttempt(fixture.app));
+  LOKA_VERIFY(probe.calls == 0 && loka::testing::textInputCommitCount() == 0);
+  loka::testing::observeTextInputCommits(0, 0);
+}
+void testMacTerminationCommitsBeforeReservation()
+{
+  QuitTestPool pool;
+  QuitFixture fixture;
+  QuitCommitProbe probe(fixture.app, false);
+  id delegate = [NSApp delegate];
+  LOKA_VERIFY([delegate respondsToSelector:@selector(applicationShouldTerminate:)]);
+  loka::testing::observeTextInputCommits(&QuitCommitProbe::observe, &probe);
+  LOKA_VERIFY([delegate applicationShouldTerminate:NSApp] == NSTerminateCancel);
+  LOKA_VERIFY(probe.calls == 1 && loka::testing::textInputCommitCount() == 1);
+  LOKA_VERIFY(loka::app::testing::AppTestAccess::hasQuitAttempt(fixture.app));
+  loka::testing::observeTextInputCommits(0, 0);
 }

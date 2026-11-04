@@ -27,6 +27,8 @@
   {
     loka::core::Operation turn;
     NSInteger tag = [sender tag];
+    // Twin: ToolboxApp::handleMenuSelection.
+    self.owner->commitTextInput();
     self.owner->dispatchNativeMenuCommand(static_cast<int>(tag), (void *)sender);
     turn.close();
   }

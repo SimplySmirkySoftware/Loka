@@ -56,6 +56,8 @@ set(LOKA_MACOS_CORE_SOURCES
   src/MacDisplayAppearance.mm
   src/MacBitmapCapture.mm
   src/MacPlatformContext.mm
+  src/MacOpenURL.mm
+  src/MacReceiveURL.mm
   src/MacProfiler.cpp
   src/MacScenePlatformController.mm
   src/MacWindow.mm
@@ -142,6 +144,9 @@ if(NOT LOKA_MAC_OS_10_4)
     ${PROJECT_SOURCE_DIR}/tests/MacFocusTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacBitmapCapture.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacPlatformContext.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/MacOpenURL.mm
+    ${CMAKE_CURRENT_LIST_DIR}/src/MacReceiveURL.mm
+    ${PROJECT_SOURCE_DIR}/tests/MacURLOpenTests.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacApp.mm
     ${CMAKE_CURRENT_LIST_DIR}/src/MacQuitEvent.mm
     ${PROJECT_SOURCE_DIR}/tests/MacQuitEventTests.mm
@@ -256,6 +261,29 @@ function(loka_configure_scenario_test_bundle target bundle_id example_include_di
     MACOSX_BUNDLE_GUI_IDENTIFIER "${bundle_id}"
   )
 endfunction()
+
+if(NOT LOKA_MAC_OS_10_4)
+  execute_process(COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+    OUTPUT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION_RESULT)
+  if(NOT LOKA_URL_RECEIVE_PROBE_REVISION_RESULT EQUAL 0)
+    # Source archives can still build shipping targets without Git metadata.
+    # The evidence script refuses this unattributed probe.
+    set(LOKA_URL_RECEIVE_PROBE_REVISION "unavailable")
+  endif()
+  add_executable(LokaURLReceiveProbeMacOS EXCLUDE_FROM_ALL MACOSX_BUNDLE
+    ${PROJECT_SOURCE_DIR}/tests/macos/URLReceiveProbeMain.mm
+    ${PROJECT_SOURCE_DIR}/tests/TestingHooks.cpp
+    ${LOKA_MACOS_CORE_SOURCES} ${COMMON_SOURCES})
+  loka_configure_scenario_test_bundle(LokaURLReceiveProbeMacOS
+    "com.cubenoy22.loka.URLReceiveProbe" "tests/macos")
+  target_compile_definitions(LokaURLReceiveProbeMacOS PRIVATE
+    LOKA_PROBE_REVISION="${LOKA_URL_RECEIVE_PROBE_REVISION}")
+  set_target_properties(LokaURLReceiveProbeMacOS PROPERTIES
+    MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/tests/macos/URLReceiveProbe-Info.plist.in")
+endif()
 
 if(NOT LOKA_MAC_OS_10_4)
   set(LOKA_MACOS_SCENARIO_COMMON_SOURCES

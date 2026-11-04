@@ -35,6 +35,7 @@ struct ToolboxScrollViewMetrics;
 #define LOKA_TOOLBOX_WINDOW_HPP
 #define LOKA_TOOLBOX_WINDOW_CONTEXT_HPP
 #define LOKA_TOOLBOX_APP_HPP
+#define LOKA_TOOLBOX_BUSY_HPP
 #ifndef LOKA_HOST_CONTROL_WIDTH
 #define LOKA_TOOLBOX_BUTTON_CONTEXT_HPP
 #endif
@@ -257,8 +258,11 @@ public:
     this->tracker_.addState(&this->visible_);
     toolbox_host::frontWindow = &port;
     port.updateRgn = 0;
-#ifdef LOKA_HOST_IMAGE_VIEW
     port.grafProcs = 0;
+    port.spExtra = 0;
+    port.chExtra = 0;
+    port.portBits.rowBytes = 0;
+#ifdef LOKA_HOST_IMAGE_VIEW
     port.portBits.baseAddr = 0;
 #endif
     port.portBits.bounds = Rect();
@@ -411,6 +415,7 @@ public:
 #else
 #include "context/ToolboxPopupMenuContext.hpp"
 #endif
+#include "ToolboxCharWidthCache.hpp"
 class ToolboxScenePlatformController : public loka::app::scene::IPlatformController,
                                        public loka::app::layout::INaturalSizeSource
 {
@@ -812,12 +817,16 @@ public:
   void ensureClipBoxContext(loka::app::scene::Node *node, const loka::app::scene::LayoutState &state);
   virtual bool registerNodeHandler(loka::app::scene::IPlatformNodeHandler *handler);
   loka::app::scene::PlatformNodeHandlerRegistry nodeHandlerRegistry_;
+  mutable ToolboxCharWidthCache ownCharWidthCache;
+  ToolboxCharWidthCache *const sharedCharWidthCache_;
   mutable CursorOwner cursor;
   CursorOwner *const sharedCursor_;
   std::vector<loka::app::scene::NodeContext *> retired;
   Rect projectionClip;
   loka::app::scene::NodeContext *renderContext;
-  explicit ToolboxScenePlatformController(ToolboxWindow *window, CursorOwner *sharedCursor = 0)
+  explicit ToolboxScenePlatformController(ToolboxWindow *window,
+                                          CursorOwner *sharedCursor = 0,
+                                          ToolboxCharWidthCache *sharedCache = 0)
       : leafLayouts(0),
         scrollViewClipRgn_(NewRgn()),
         paintSuppressClipRgn_(NewRgn()),
@@ -835,6 +844,7 @@ public:
         compositionReplay_(compositionReplay),
         forceFullRedraw_(false),
         window_(window),
+        sharedCharWidthCache_(sharedCache),
         sharedCursor_(sharedCursor),
         renderContext(0),
         rootNode_(0),
@@ -860,6 +870,11 @@ public:
   loka::app::TextShaping textShaping() const
   {
     return loka::app::PER_RUN;
+  }
+  bool measureTextAdvance(const loka::app::TextStyle &style, const loka::core::String &text, short &width) const;
+  ToolboxCharWidthCache *charWidthCache() const
+  {
+    return this->sharedCharWidthCache_ ? this->sharedCharWidthCache_ : &this->ownCharWidthCache;
   }
   CursorOwner *cursorOwner() const
   {
