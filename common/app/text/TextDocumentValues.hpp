@@ -18,6 +18,13 @@ namespace loka
       struct TextDocumentFactTestAccess;
     } // namespace testing
 
+    /** Whether every visited window admitted the command refresh; not document availability. */
+    enum TextInputCommit
+    {
+      TEXT_INPUT_SETTLED,
+      TEXT_INPUT_UNAVAILABLE
+    };
+
     /** Availability of the document's native text store. */
     enum TextDocumentState
     {

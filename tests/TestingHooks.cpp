@@ -5,6 +5,7 @@
 // this file via LOKA_SHARED_TEST_SOURCES.
 #include "app/Menu.hpp"
 #include "testing/app/URLReceiveTestHooks.hpp"
+#include "testing/app/TextInputCommitTestHooks.hpp"
 #include "core/LokaAlloc.hpp"
 #include "support/LokaAllocFailure.hpp"
 #include <cstring>
@@ -20,8 +21,36 @@ namespace loka
   {
     namespace
     {
+      struct TextInputCommitObservation
+      {
+        TextInputCommitObservation()
+            : count(0),
+              probe(0),
+              data(0)
+        {
+        }
+        unsigned count;
+        void (*probe)(void *);
+        void *data;
+      } textInputCommitObservation;
       unsigned receivePendingTolerances = 0;
       unsigned buttonDrawConversionRefusals = 0;
+    }
+    void observeTextInputCommits(void (*probe)(void *), void *data)
+    {
+      textInputCommitObservation.count = 0;
+      textInputCommitObservation.probe = probe;
+      textInputCommitObservation.data = data;
+    }
+    unsigned textInputCommitCount()
+    {
+      return textInputCommitObservation.count;
+    }
+    void noteTextInputCommit()
+    {
+      ++textInputCommitObservation.count;
+      if (textInputCommitObservation.probe)
+        textInputCommitObservation.probe(textInputCommitObservation.data);
     }
     void tolerateReceivePending(unsigned count)
     {

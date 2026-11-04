@@ -8,6 +8,9 @@ page holds the contract the rails implement. Source rulings: #873 (frozen
 2026-09-22), the two-take bound accepted on #874, and the entry-completion
 ruling from the #879 review (2026-09-23).
 
+`App::commitTextInput` is not a delivery site: it refreshes document facts through
+the single writer and takes no requests (text body page 1c).
+
 ## Boxes
 
 | Box | Type | Writer | Reader |

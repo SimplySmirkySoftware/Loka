@@ -12,6 +12,7 @@
 #include <cassert>
 #include "app/url/URLOpenKind.hpp"
 #include "app/url/ReceiveResult.hpp"
+#include "app/text/TextDocumentValues.hpp"
 
 class Window;
 class AppComposition;
@@ -56,6 +57,9 @@ public:
   loka::app::ReceiveResult receiveURL(const loka::core::String &text);
   /** Rail completion entry; enumerates current live windows after App work. */
   void reconcileAtCompletion();
+  /** Commit each live window's text input and refresh facts inside a joined turn.
+      Takes no requests and performs no admission or completion reconcile. */
+  loka::app::TextInputCommit commitTextInput();
   enum CompletionEntry
   {
     COMPLETION_OUTERMOST,
@@ -182,6 +186,10 @@ protected:
   }
 
 private:
+  /** One live App-owned window walk; callbacks may add or close windows. */
+  bool visitWindows(bool (App::*visit)(Window &));
+  bool reconcileWindow(Window &window);
+  bool commitWindowText(Window &window);
   enum AdoptionPhase { ADOPT_AT_LAUNCH, ADOPT_RUNNING };
   /** Returns how many window creates this walk attempted; 0 when it did not
       walk. A walk that attempted nothing ran no factory or mount, so no roster

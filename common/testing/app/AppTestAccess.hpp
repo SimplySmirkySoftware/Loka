@@ -36,6 +36,11 @@ namespace loka
           app.retireComponents();
         }
 
+        static bool hasQuitAttempt(const App &app)
+        {
+          return app.hasQuitAttempt();
+        }
+
         static size_t pendingWindowCloseCount(const App &app)
         {
           return app.pendingWindowClosures_.size();

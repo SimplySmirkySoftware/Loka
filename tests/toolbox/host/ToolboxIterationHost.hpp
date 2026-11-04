@@ -348,6 +348,10 @@ namespace iteration_fixture
     {
       note("menu-command");
     }
+    void commitTextInput()
+    {
+      note("commit-text-input");
+    }
     bool closeAsked(Window *)
     {
       note("close-asked");
