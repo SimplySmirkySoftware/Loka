@@ -72,6 +72,7 @@ function(smirkycard_cpp_target target)
     ${SMIRKYCARD_SOURCE_DIR}/src/CardFlow.cpp ${SMIRKYCARD_SOURCE_DIR}/src/CardScenario.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/CardCarry.cpp ${SMIRKYCARD_SOURCE_DIR}/src/ScriptRuntime.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/JsCardNode.cpp ${SMIRKYCARD_SOURCE_DIR}/src/JsCardBindingRegistry.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/JsTreeDescription.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/SmirkyMarkup.cpp)
   loka_enable_warnings(${target})
   set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)

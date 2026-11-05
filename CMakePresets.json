@@ -341,6 +341,7 @@
         "LOKA_COMPILE_PINS": "ON",
         "LOKA_LIFECYCLE_AUDIT": "ON",
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g",
         "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
         "LOKA_WARNINGS_AS_ERRORS": "ON"

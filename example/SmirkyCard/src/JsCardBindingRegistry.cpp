@@ -1,4 +1,5 @@
 #include "JsCardBindingRegistry.hpp"
+#include "JsTreeDescription.hpp"
 #include "CardNodes.hpp"
 #include "JsToolbarNode.hpp"
 #include <climits>
@@ -157,13 +158,14 @@ namespace smirkycard
     IJsNodeLowering *lowering = runtime ? runtime->registry_.lookup(magic) : 0;
     return lowering ? lowering->build(context, argc, argv) : JS_ThrowTypeError(context, "unknown tree helper");
   }
-  JSClassID JsCardBindingRegistry::treeClassId_ = 0;
 
   bool JsCardBindingRegistry::installTreeClass(JSContext *ctx)
   {
     JSClassDef definition = {};
     definition.class_name = "SmirkyTree";
-    if (!RegisterJsNativeClass(JS_GetRuntime(ctx), treeClassId_, definition))
+    definition.finalizer = &JsTreeView::finalize;
+    definition.gc_mark = &JsTreeView::mark;
+    if (!RegisterJsNativeClass(JS_GetRuntime(ctx), JsTreeView::classId, definition))
       return false;
     JSValue proto = JS_NewObject(ctx);
     if (JS_IsException(proto))
@@ -195,18 +197,18 @@ namespace smirkycard
       return false;
     }
     // The context's class-proto table takes ownership; this API cannot fail.
-    JS_SetClassProto(ctx, treeClassId_, proto);
+    JS_SetClassProto(ctx, JsTreeView::classId, proto);
     return true;
   }
 
   bool JsCardBindingRegistry::isTree(JSValueConst value)
   {
-    return JS_GetClassID(value) == treeClassId_;
+    return JS_GetClassID(value) == JsTreeView::classId;
   }
 
   bool JsCardBindingRegistry::isTreePrototype(JSContext *ctx, JSValueConst value)
   {
-    JSValue proto = JS_GetClassProto(ctx, treeClassId_);
+    JSValue proto = JS_GetClassProto(ctx, JsTreeView::classId);
     const bool same = JS_IsObject(proto) && JS_VALUE_GET_PTR(value) == JS_VALUE_GET_PTR(proto);
     JS_FreeValue(ctx, proto);
     return same;
@@ -214,7 +216,7 @@ namespace smirkycard
 
   JSValue JsCardBindingRegistry::newTree(JSContext *ctx, int kind)
   {
-    JSValue node = JS_NewObjectClass(ctx, treeClassId_);
+    JSValue node = JS_NewObjectClass(ctx, JsTreeView::classId);
     JS_DefinePropertyValueStr(ctx, node, "kind", JS_NewInt32(ctx, kind), JS_PROP_ENUMERABLE);
     return node;
   }
@@ -227,7 +229,7 @@ namespace smirkycard
     JsOwnProperties names(ctx);
     if (!names.read(source, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK | JS_GPN_ENUM_ONLY))
       return JS_EXCEPTION;
-    JSValue copy = tree ? JS_NewObjectClass(ctx, treeClassId_) : JS_NewObject(ctx);
+    JSValue copy = tree ? JS_NewObjectClass(ctx, JsTreeView::classId) : JS_NewObject(ctx);
     if (JS_IsException(copy))
       return copy;
     for (uint32_t i = 0; i < names.count(); ++i)
@@ -241,7 +243,7 @@ namespace smirkycard
     }
     if (!tree)
     {
-      JSValue proto = JS_GetClassProto(ctx, treeClassId_);
+      JSValue proto = JS_GetClassProto(ctx, JsTreeView::classId);
       JSValue function = JS_GetPropertyStr(ctx, proto, "TEST_ID");
       JS_FreeValue(ctx, proto);
       if (JS_IsException(function) || JS_SetPropertyStr(ctx, copy, "TEST_ID", function) < 0)

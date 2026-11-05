@@ -96,7 +96,6 @@ namespace smirkycard
     friend class ScriptRuntime;
     /** Copy enumerable facts, preserving the receiver's tree/plain class path. */
     static JSValue copyTree(JSContext *context, JSValueConst source, JSValueConst id);
-    static JSClassID treeClassId_;
     static bool installTreeClass(JSContext *context);
     static bool isTree(JSValueConst value);
     static bool isTreePrototype(JSContext *context, JSValueConst value);

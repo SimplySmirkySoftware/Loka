@@ -7,6 +7,7 @@
 #include "platform/null/NullApp.hpp"
 #include "testing/app/AppTestAccess.hpp"
 #include "JsCardBindingRegistry.hpp"
+#include "JsTreeDescription.hpp"
 #include "SmirkyMarkup.hpp"
 #include "JsClickNode.hpp"
 #include "JsToolbarNode.hpp"
@@ -83,6 +84,22 @@ namespace smirkycard
     class CardFlowAccess
     {
     public:
+      static unsigned treeLive()
+      {
+        return JsTreeView::liveEnvelopes_;
+      }
+      static unsigned treeSlots()
+      {
+        return JsTreeView::liveSlots_;
+      }
+      static bool treeBrand(JSContext *ctx, JSValueConst value)
+      {
+        return JsTreeView(ctx, value).valid();
+      }
+      static JSValue incompleteTree(JSContext *ctx)
+      {
+        return JS_NewObjectClass(ctx, JsTreeView::classId);
+      }
       static loka::app::scene::Scene *scene;
       static JsCardNode *card()
       {
@@ -1371,6 +1388,252 @@ namespace
     loka::app::scene::Node *inset = outermostBox(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()));
     LOKA_VERIFY(inset && inset->asBoxNode()->props.padding == loka::app::StandardWindowMargin()
                 && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
+  }
+
+  /** Per-allocation refusal, using the same aligned block owner as ScriptEngine. */
+  struct TreeAllocationProbe
+  {
+    size_t ordinal;
+    size_t refuse;
+    size_t live;
+    TreeAllocationProbe()
+        : ordinal(0),
+          refuse(0),
+          live(0)
+    {
+    }
+    bool allow()
+    {
+      return !this->refuse || ++this->ordinal != this->refuse;
+    }
+    static void *baseAllocate(size_t size)
+    {
+      return std::malloc(size);
+    }
+    static void baseRelease(void *block)
+    {
+      std::free(block);
+    }
+    static void *allocate(void *opaque, size_t size)
+    {
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      if (!probe.allow())
+        return 0;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      void *block = SmirkyAlignedAllocate(&base, size);
+      if (block)
+        ++probe.live;
+      return block;
+    }
+    static void *zero(void *opaque, size_t count, size_t size)
+    {
+      if (count && size > static_cast<size_t>(-1) / count)
+        return 0;
+      void *block = allocate(opaque, count * size);
+      if (block)
+        std::memset(block, 0, count * size);
+      return block;
+    }
+    static void release(void *opaque, void *block)
+    {
+      if (!block)
+        return;
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      --probe.live;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      SmirkyAlignedRelease(&base, block);
+    }
+    static void *resize(void *opaque, void *block, size_t size)
+    {
+      if (!block)
+        return allocate(opaque, size);
+      if (!size)
+      {
+        release(opaque, block);
+        return 0;
+      }
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      if (!probe.allow())
+        return 0;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      return SmirkyAlignedReallocate(&base, block, size);
+    }
+  };
+
+  void checkTreeStagingFailure()
+  {
+    using namespace smirkycard;
+    ScriptRuntime warm;
+    JsCardBindingRegistry registry;
+    LOKA_VERIFY(RegisterSmirkyCardBindings(registry));
+    static const JsTreeSlot slots[] = {{TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Failure", TREE_DRAWABLE, 1, slots);
+    const JSMallocFunctions functions = {TreeAllocationProbe::zero,
+                                         TreeAllocationProbe::allocate,
+                                         TreeAllocationProbe::release,
+                                         TreeAllocationProbe::resize,
+                                         SmirkyAlignedUsableSize};
+    for (unsigned copy = 0; copy != 2; ++copy)
+    {
+      unsigned failures = 0;
+      bool reachedSuccess = false;
+      for (size_t ordinal = 1; ordinal < 100 && !reachedSuccess; ++ordinal)
+      {
+        TreeAllocationProbe probe;
+        JSRuntime *rt = JS_NewRuntime2(&functions, &probe);
+        LOKA_VERIFY(rt);
+        JSContext *ctx = JS_NewContext(rt);
+        LOKA_VERIFY(ctx && registry.install(ctx));
+        {
+          int fact = 42;
+          JsTreeStaging source(ctx, schema, fact);
+          source.slot(0, JS_NewString(ctx, "original"));
+          JsValueRoot original(ctx, source.publish());
+          JsTreeView view(ctx, original.value());
+          LOKA_VERIFY(view.valid());
+          const unsigned live = testing::CardFlowAccess::treeLive();
+          const unsigned slotsBefore = testing::CardFlowAccess::treeSlots();
+          probe.refuse = ordinal;
+          probe.ordinal = 0;
+          {
+            JsValueRoot result(ctx);
+            if (copy)
+            {
+              JsTreeStaging staging(view);
+              result.adopt(staging.publish());
+            }
+            else
+            {
+              JsTreeStaging staging(ctx, schema, fact);
+              if (staging.valid())
+                staging.slot(0, JS_NewString(ctx, "allocated edge"));
+              result.adopt(staging.publish());
+            }
+            probe.refuse = 0;
+            if (JS_IsException(result.value()))
+            {
+              ++failures;
+              JS_FreeValue(ctx, JS_GetException(ctx));
+            }
+            else
+            {
+              LOKA_VERIFY(testing::CardFlowAccess::treeBrand(ctx, result.value()));
+              // Some engine sites recover from one refused allocation. Sweep
+              // until the requested ordinal was beyond all attempted calls.
+              reachedSuccess = probe.ordinal < ordinal;
+            }
+          }
+          JS_RunGC(rt);
+          LOKA_VERIFY(view.valid() && *view.facts(schema) == 42);
+          JsValueRoot edge(ctx);
+          view.slot(0, edge);
+          const char *text = JS_ToCString(ctx, edge.value());
+          LOKA_VERIFY(text && !std::strcmp(text, "original"));
+          JS_FreeCString(ctx, text);
+          LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live);
+          LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == slotsBefore);
+        }
+        JS_FreeContext(ctx);
+        JS_FreeRuntime(rt);
+        LOKA_VERIFY(probe.live == 0);
+      }
+      LOKA_VERIFY(reachedSuccess);
+#if defined(__SANITIZE_ADDRESS__)
+      // QuickJS routes each logical allocation to its backing allocator in
+      // ASan builds. The preset instruments C as well as C++.
+      LOKA_VERIFY(failures >= 3);
+#else
+      std::printf("[skip] logical allocation sweep: pooled QuickJS build; backing allocations only\n");
+#endif
+      std::printf(
+          "tree staging %s: %u refusing ordinals, no live blocks after teardown\n", copy ? "copy" : "build", failures);
+    }
+  }
+
+  void checkTreeEnvelopeCycle()
+  {
+    using namespace smirkycard;
+    ScriptRuntime runtime;
+    JSContext *ctx = runtime.context();
+    const unsigned before = testing::CardFlowAccess::treeLive();
+    static const JsTreeSlot slots[] = {{TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Cycle", TREE_DRAWABLE, 1, slots);
+    {
+      const char *source = "(()=>{const box={};box.fn=()=>box.tree;return box})()";
+      JsValueRoot box(ctx, JS_Eval(ctx, source, std::strlen(source), "tree-cycle", JS_EVAL_TYPE_GLOBAL));
+      LOKA_VERIFY(!JS_IsException(box.value()));
+      int fact = 1;
+      JsTreeStaging staging(ctx, schema, fact);
+      staging.slot(0, JS_GetPropertyStr(ctx, box.value(), "fn"));
+      JsValueRoot tree(ctx, staging.publish());
+      LOKA_VERIFY(!JS_IsException(tree.value()));
+      LOKA_VERIFY(JS_SetPropertyStr(ctx, box.value(), "tree", JS_DupValue(ctx, tree.value())) >= 0);
+      JS_RunGC(JS_GetRuntime(ctx));
+      LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before + 1);
+    }
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before);
+  }
+
+  /** Stage-one mechanism pin; no public factory can publish an incomplete row. */
+  void checkTreeEnvelope()
+  {
+    using namespace smirkycard;
+    ScriptRuntime runtime;
+    JSContext *ctx = runtime.context();
+    static const JsTreeSlot staticSlots[] = {
+        {TREE_SEAT, TREE_DRAWABLE}, {TREE_SEAT, TREE_DRAWABLE}, {TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Mechanism", TREE_DRAWABLE, 3, staticSlots);
+    const unsigned live = testing::CardFlowAccess::treeLive();
+    const unsigned edges = testing::CardFlowAccess::treeSlots();
+    {
+      int fact = 17;
+      JsValueRoot published(ctx);
+      {
+        JsTreeStaging staging(ctx, schema, fact);
+        LOKA_VERIFY(staging.valid());
+        staging.slot(0, JS_NewString(ctx, "edge"));
+        staging.slot(1, JS_NewString(ctx, "second"));
+        staging.slot(2, JS_NewString(ctx, "third"));
+        published.adopt(staging.publish());
+        LOKA_VERIFY(!JS_IsException(published.value()));
+        LOKA_VERIFY(!staging.valid());
+      }
+      JsTreeView view(ctx, published.value());
+      LOKA_VERIFY(view.valid() && view.schema() == &schema);
+      LOKA_VERIFY(*view.facts(schema) == 17);
+      JsValueRoot edge(ctx);
+      view.slot(0, edge);
+      LOKA_VERIFY(JS_IsString(edge.value()));
+      JsTreeStaging copy(view);
+      copy.slot(0, JS_NewString(ctx, "replacement"));
+      JsValueRoot copied(ctx, copy.publish());
+      LOKA_VERIFY(!JS_IsException(copied.value()));
+      JsTreeView copiedView(ctx, copied.value());
+      LOKA_VERIFY(copiedView.valid());
+      copiedView.slot(2, edge);
+      const char *third = JS_ToCString(ctx, edge.value());
+      LOKA_VERIFY(third && !std::strcmp(third, "third"));
+      JS_FreeCString(ctx, third);
+      view.slot(0, edge);
+      const char *text = JS_ToCString(ctx, edge.value());
+      LOKA_VERIFY(text && !std::strcmp(text, "edge"));
+      JS_FreeCString(ctx, text);
+      JsValueRoot incomplete(ctx, smirkycard::testing::CardFlowAccess::incompleteTree(ctx));
+      JsTreeView incompleteView(ctx, incomplete.value());
+      LOKA_VERIFY(!incompleteView.valid());
+      JsValueRoot fake(ctx, JS_NewObject(ctx));
+      JsTreeView fakeView(ctx, fake.value());
+      LOKA_VERIFY(!fakeView.valid());
+      JS_RunGC(JS_GetRuntime(ctx));
+      LOKA_VERIFY(view.valid() && copiedView.valid());
+      LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live + 2);
+      LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == edges + 6);
+    }
+    JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live);
+    LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == edges);
   }
 
   void checkTreeHelperIdentity()
@@ -7122,6 +7385,9 @@ int main(int argc, char **argv)
   if (argc == 2 && !std::strcmp(argv[1], "--tree-helpers"))
   {
     checkTreePropertyCopy();
+    checkTreeStagingFailure();
+    checkTreeEnvelopeCycle();
+    checkTreeEnvelope();
     checkTreeHelperIdentity();
     checkTreeHelperEngines();
     checkTreeCopyPaths();
@@ -7378,6 +7644,9 @@ int main(int argc, char **argv)
   checkBlockStyle();
   checkMarkupAllocationRefusal();
   checkTreePropertyCopy();
+  checkTreeStagingFailure();
+  checkTreeEnvelopeCycle();
+  checkTreeEnvelope();
   checkTreeHelperIdentity();
   checkTreeHelperEngines();
   checkTreeInstallFailureSweep();
