@@ -26,7 +26,7 @@ protected:
   static void TranslateOrDispatch(MSG &msg);
   virtual bool windowAdopted(Window *window);
   /** Offers the process command line's elements after element zero, once per
-      bootstrap; refused elements are dropped (B3 page 2b R4). */
+      bootstrap; refused elements are dropped. */
   virtual void collectLaunchRequests();
   virtual void projectMenu(Window *window, const loka::app::MenuSources &sources);
 
