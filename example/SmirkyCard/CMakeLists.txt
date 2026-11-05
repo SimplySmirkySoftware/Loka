@@ -180,6 +180,10 @@ if(TARGET LokaCommonTesting)
     ${smirkycard_null_sources}
   )
   smirkycard_cpp_target(LokaSmirkyCardTests)
+  # Test-only global allocation refusal must let native clone return null.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(LokaSmirkyCardTests PRIVATE -fcheck-new)
+  endif()
   target_link_libraries(LokaSmirkyCardTests PRIVATE LokaCommonTesting)
   target_compile_definitions(LokaSmirkyCardTests PRIVATE
     SMIRKYCARD_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -1173,9 +1173,14 @@ namespace smirkycard
     for (uint32_t i = 0; i < names.count(); ++i)
     {
       JSValue key = JS_AtomToValue(ctx, names.atom(i));
+      if (JS_IsException(key))
+        return false;
+      const bool stringKey = JS_IsString(key);
       size_t length = 0;
       const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
       JS_FreeValue(ctx, key);
+      if (stringKey && !name)
+        return false;
       if (!name)
       {
         JS_ThrowTypeError(ctx, "Unknown Text style key");
@@ -1286,9 +1291,14 @@ namespace smirkycard
     for (uint32_t i = 0; i < names.count(); ++i)
     {
       JSValue key = JS_AtomToValue(ctx, names.atom(i));
+      if (JS_IsException(key))
+        return false;
+      const bool stringKey = JS_IsString(key);
       size_t keyLength = 0;
       const char *keyName = JS_IsString(key) ? JS_ToCStringLen(ctx, &keyLength, key) : 0;
       JS_FreeValue(ctx, key);
+      if (stringKey && !keyName)
+        return false;
       const bool isAlign = keyName && keyLength == 5 && !memcmp(keyName, "align", 5);
       const bool isWrap = keyName && keyLength == 4 && !memcmp(keyName, "wrap", 4);
       const bool isTruncation = keyName && keyLength == 10 && !memcmp(keyName, "truncation", 10);
@@ -1307,6 +1317,12 @@ namespace smirkycard
       }
       size_t length = 0;
       const char *name = JS_IsString(value) ? JS_ToCStringLen(ctx, &length, value) : 0;
+      if (JS_IsString(value) && !name)
+      {
+        JS_FreeValue(ctx, value);
+        JS_FreeCString(ctx, keyName);
+        return false;
+      }
       bool accepted = false;
       if (isAlign)
       {

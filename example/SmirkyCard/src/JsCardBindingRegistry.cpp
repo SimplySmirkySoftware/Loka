@@ -261,9 +261,14 @@ namespace smirkycard
       for (uint32_t i = 0; i < names.count(); ++i)
       {
         JSValue key = JS_AtomToValue(ctx, names.atom(i));
+        if (JS_IsException(key))
+          return false;
+        const bool stringKey = JS_IsString(key);
         size_t length = 0;
         const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
         JS_FreeValue(ctx, key);
+        if (stringKey && !name)
+          return false;
         const bool isTop = name && length == 3 && !memcmp(name, "top", 3);
         const bool isBottom = name && length == 6 && !memcmp(name, "bottom", 6);
         if (name)
@@ -413,13 +418,7 @@ namespace smirkycard
                          bool exact = false)
     {
       JsValueRoot children(ctx,
-                           collectChildren(ctx,
-                                           T::schema.name,
-                                           argc,
-                                           argv,
-                                           limit,
-                                           exact,
-                                           T::schema.kind == TREE_TOOLBAR ? TREE_TOOLBAR_ITEM : TREE_DRAWABLE));
+                           collectChildren(ctx, T::schema.name, argc, argv, limit, exact, T::schema.slots[0].category));
       if (JS_IsException(children.value()))
         return JS_EXCEPTION;
       if (T::schema.kind == TREE_TOOLBAR)
@@ -486,7 +485,8 @@ namespace smirkycard
         if (!(padding ? boxPaddingValue(ctx, value.value(), facts.padding)
                       : boxExtentNumber(ctx, value.value(), width ? facts.width : facts.height)))
         {
-          JS_ThrowTypeError(ctx, "%s has invalid width, height or padding", T::schema.name);
+          if (!JS_HasException(ctx))
+            JS_ThrowTypeError(ctx, "%s has invalid width, height or padding", T::schema.name);
           return false;
         }
       }
