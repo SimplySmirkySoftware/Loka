@@ -1,7 +1,9 @@
 #include "Win32App.hpp"
 #include "Win32Window.hpp"
+#include "Win32LaunchURLs.hpp"
 #include <windows.h>
 #include <commdlg.h>
+#include <shellapi.h>
 #include "app/core/App.hpp"
 #include "platform/Win32IdlePacer.hpp"
 
@@ -34,6 +36,11 @@ void Win32App::TranslateOrDispatch(MSG &msg)
     return;
   TranslateMessage(&msg);
   DispatchMessageW(&msg);
+}
+
+void Win32App::collectLaunchRequests()
+{
+  Win32OfferLaunchURLs(*this, GetCommandLineW(), &CommandLineToArgvW, &LocalFree);
 }
 
 bool Win32App::windowAdopted(Window *window)

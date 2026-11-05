@@ -2095,6 +2095,12 @@ An app that accepts URLs for its own scheme declares a config-owned
 `ReceiveURLs(inbox, match)`, where `match` is a `Match` over `IncomingURL`.
 The registration copies the `Match`.
 On macOS, declare the scheme in the app’s `Info.plist` under `CFBundleURLTypes`.
+On Windows, the app registers its scheme itself, for example under
+`HKEY_CURRENT_USER\Software\Classes\<scheme>` with a `URL Protocol` value and a
+`shell\open\command` of `"<exe>" "%1"`; Loka writes no registry key. Windows
+starts a new process for each URL and passes it on the command line, so Loka
+receives it at launch only; command-line arguments that are not URLs for the
+app's scheme, file paths included, are ignored.
 
 - Treat every received URL as untrusted input: the scheme is checked, but not
   who sent it, what `%2F` or `..` in it mean, or whether its target exists.
@@ -2107,7 +2113,8 @@ On macOS, declare the scheme in the app’s `Info.plist` under `CFBundleURLTypes
   outgoing URLs. Delivery pauses during a quit attempt and resumes if it is
   refused. URLs collected at launch run before document windows are admitted.
   macOS receives GURL Apple Events and delivers at the outermost timer completion;
-  native URL entry and completion wiring on other platforms remain separate work.
+  Windows receives command-line URLs at launch; the Classic Mac OS entry
+  remains separate work.
 
 ## 18. Ownership And Resource Management
 
