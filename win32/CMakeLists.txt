@@ -18,6 +18,7 @@ set(SOURCES
   src/Win32BuiltInSupport.cpp
   src/Win32Window.cpp
   src/Win32ScenePlatformController.cpp
+  src/Win32OpenURL.cpp
   src/Win32PlatformContext.cpp
   src/Win32BitmapCapture.cpp
   src/context/Win32ButtonContext.cpp
@@ -68,7 +69,7 @@ target_include_directories(LokaWin32Core PRIVATE
 
 target_link_libraries(LokaWin32Core
   PUBLIC LokaWin32WideApiContract
-  PRIVATE windowscodecs ole32
+  PRIVATE windowscodecs ole32 shell32
 )
 
 if(MSVC)
@@ -117,6 +118,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
       LokaWin32WideApiContract
       windowscodecs
       ole32
+      shell32
     )
     set_target_properties(${target} PROPERTIES
       CXX_STANDARD 98
@@ -335,6 +337,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
         LokaWin32WideApiContract
         windowscodecs
         ole32
+        shell32
       )
       set_target_properties(${_loka_standalone_target} PROPERTIES
         CXX_STANDARD 98
@@ -467,7 +470,7 @@ if(LOKA_WIN32_TOP_LEVEL_SOURCE_NORMALIZED STREQUAL
       ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
     target_compile_definitions(${target} PRIVATE TEST_BUILD)
-    target_link_libraries(${target} PRIVATE LokaWin32WideApiContract windowscodecs ole32 psapi)
+    target_link_libraries(${target} PRIVATE LokaWin32WideApiContract windowscodecs ole32 shell32 psapi)
     set_target_properties(${target} PROPERTIES
       CXX_STANDARD 98
       CXX_STANDARD_REQUIRED YES

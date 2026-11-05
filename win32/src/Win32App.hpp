@@ -29,9 +29,10 @@ protected:
 
 private:
   /** Flushes Scene work produced inside the focus completion's operation in
-      the same iteration with the second window flush. The Null model is
-      WindowAdmissionTestApp::operationLoop(). */
-  void flushIterationTail(loka::core::Operation &turn);
+      the same iteration with the second window flush, and serves URLs before
+      that flush so it delivers their results before the turn closes. The
+      Null model is WindowAdmissionTestApp::operationLoop(). */
+  void flushIterationTail(loka::core::Operation &turn, App::CompletionEntry entry);
   HINSTANCE hInstance_;
   int nCmdShow_;
 };

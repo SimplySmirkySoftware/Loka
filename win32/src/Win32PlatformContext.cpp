@@ -1,4 +1,5 @@
 #include "Win32PlatformContext.hpp"
+#include "Win32OpenURL.hpp"
 #include "app/internal/NativeResourceReservation.hpp"
 
 #include <windows.h>
@@ -22,6 +23,11 @@ App *Win32PlatformContext::createApp(AppConfigurable *config, NativeModuleHandle
 {
   App *app = new Win32App(config, static_cast<HINSTANCE>(hInstance), nCmdShow);
   return app;
+}
+
+loka::app::URLOpenKind Win32PlatformContext::openURL(const loka::app::WebURL &url)
+{
+  return Win32OpenWebURL(url, &ShellExecuteExW);
 }
 
 Window *Win32PlatformContext::createWindow(const WindowProps &props)
@@ -102,6 +108,7 @@ bool Win32PlatformContext::createImageFromBlob(const loka::core::resource::Blob 
   if (!reservation.isValid())
     return false;
 
+  // Win32OpenWebURL uses the same call-local COM ownership and changed-mode fallback.
   HRESULT initResult = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
   const bool shouldUninit = SUCCEEDED(initResult);
   const bool comReady = SUCCEEDED(initResult) || initResult == RPC_E_CHANGED_MODE;

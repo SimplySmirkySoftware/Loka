@@ -65,6 +65,8 @@ void Win32App::run()
     LARGE_INTEGER now;
     loka::app::IdlePolicy waitPolicy;
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
       MSG msg;
       while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
@@ -95,7 +97,7 @@ void Win32App::run()
       if (policy.mode == loka::app::IDLE_MODE_NONE)
       {
         idlePacer.reset();
-        this->flushIterationTail(turn);
+        this->flushIterationTail(turn, entry);
         if (this->hasPendingWindowAdmission())
           continue;
         waitPolicy = policy;
@@ -116,7 +118,7 @@ void Win32App::run()
         {
           this->handleIdle(dispatchElapsedSeconds);
         }
-        this->flushIterationTail(turn);
+        this->flushIterationTail(turn, entry);
         waitPolicy = this->idlePolicy();
         if (waitPolicy.mode == loka::app::IDLE_MODE_NONE)
         {
@@ -145,11 +147,14 @@ void Win32App::run()
   }
 }
 
-void Win32App::flushIterationTail(loka::core::Operation &turn)
+void Win32App::flushIterationTail(loka::core::Operation &turn, App::CompletionEntry entry)
 {
   turn.settle();
   this->admitAndApplyWindows();
   this->reconcileAtCompletion();
+  // Keep serve -> second admission -> close in the same order as
+  // common/testing/app/AppTestAccess.hpp: AppTestAccess::completeTurn.
+  (void)this->serveURLsAtCompletion(entry);
   this->admitAndApplyWindows();
   turn.close();
   this->reclaimWindows();
