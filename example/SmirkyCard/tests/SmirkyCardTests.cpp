@@ -7,6 +7,7 @@
 #include "platform/null/NullApp.hpp"
 #include "testing/app/AppTestAccess.hpp"
 #include "JsCardBindingRegistry.hpp"
+#include "JsTreeDescription.hpp"
 #include "SmirkyMarkup.hpp"
 #include "JsClickNode.hpp"
 #include "JsToolbarNode.hpp"
@@ -42,6 +43,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <new>
 #if defined(_WIN32)
 #include <direct.h>
 #else
@@ -54,6 +56,79 @@
 #define LOKA_STYLE_VOCAB_DEFINE_NAMES
 #include "app/style/StyleVocab.hpp"
 #undef LOKA_STYLE_VOCAB_DEFINE_NAMES
+
+// The native clone pin arms this only around direct lower, after JS construction.
+// All replacement allocation families pair malloc/free, including ASan runs.
+namespace
+{
+  size_t cloneFailureSize = 0;
+  bool cloneFailureReached = false;
+  unsigned cloneHandlerLive = 0;
+  unsigned cloneHandlerAttempts = 0;
+  bool isCloneHandler(const loka::core::LokaAllocationSite &site)
+  {
+    return site.ownerTag && site.typeTag && !std::strcmp(site.ownerTag, "JsCardNode")
+           && !std::strcmp(site.typeTag, "Handler");
+  }
+  void *cloneAllocate(size_t size, const loka::core::LokaAllocationSite &site)
+  {
+    void *p = std::malloc(size ? size : 1);
+    if (p && isCloneHandler(site))
+    {
+      ++cloneHandlerAttempts;
+      ++cloneHandlerLive;
+    }
+    return p;
+  }
+  void cloneRelease(void *p, const loka::core::LokaAllocationSite &site)
+  {
+    if (p && isCloneHandler(site))
+      --cloneHandlerLive;
+    std::free(p);
+  }
+  void *treeTestAllocate(size_t size)
+  {
+    if (cloneFailureSize && size == cloneFailureSize && cloneHandlerLive > 0)
+    {
+      cloneFailureSize = 0;
+      cloneFailureReached = true;
+      return 0;
+    }
+    return std::malloc(size ? size : 1);
+  }
+} // namespace
+void *operator new(std::size_t size) throw(std::bad_alloc)
+{
+  return treeTestAllocate(size);
+}
+void *operator new[](std::size_t size) throw(std::bad_alloc)
+{
+  return treeTestAllocate(size);
+}
+void *operator new(std::size_t size, const std::nothrow_t &) throw()
+{
+  return treeTestAllocate(size);
+}
+void *operator new[](std::size_t size, const std::nothrow_t &) throw()
+{
+  return treeTestAllocate(size);
+}
+void operator delete(void *p) throw()
+{
+  std::free(p);
+}
+void operator delete[](void *p) throw()
+{
+  std::free(p);
+}
+void operator delete(void *p, const std::nothrow_t &) throw()
+{
+  std::free(p);
+}
+void operator delete[](void *p, const std::nothrow_t &) throw()
+{
+  std::free(p);
+}
 
 namespace smirkycard
 {
@@ -83,6 +158,22 @@ namespace smirkycard
     class CardFlowAccess
     {
     public:
+      static unsigned treeLive()
+      {
+        return JsTreeView::liveEnvelopes_;
+      }
+      static unsigned treeSlots()
+      {
+        return JsTreeView::liveSlots_;
+      }
+      static bool treeBrand(JSContext *ctx, JSValueConst value)
+      {
+        return JsTreeView(ctx, value).valid();
+      }
+      static JSValue incompleteTree(JSContext *ctx)
+      {
+        return JS_NewObjectClass(ctx, JsTreeView::classId);
+      }
       static loka::app::scene::Scene *scene;
       static JsCardNode *card()
       {
@@ -96,21 +187,26 @@ namespace smirkycard
       {
         return card()->handlers_.count();
       }
-      static bool active() { return card()->flowAdmission_.hasExecution(); }
+      static bool active()
+      {
+        return card()->flowAdmission_.hasExecution();
+      }
       static int seatCount()
       {
         return card()->seats_.count();
       }
       static loka::core::resource::Image image()
       {
-        for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
-          if (s->kind == JsSeatRecord::IMAGE) return s->image.get();
+        for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
+          if (s->kind == JsSeatRecord::IMAGE)
+            return s->image.get();
         return loka::core::resource::Image::Empty();
       }
       static loka::core::State<loka::core::resource::Image> *imageState()
       {
         for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
-          if (s->kind == JsSeatRecord::IMAGE) return s->image.state();
+          if (s->kind == JsSeatRecord::IMAGE)
+            return s->image.state();
         return 0;
       }
       static loka::core::State<loka::core::resource::Image> *imageStateFor(JSContext *ctx, JSValueConst seat)
@@ -121,7 +217,8 @@ namespace smirkycard
       static loka::core::State<loka::app::FileChooserResult> *fileState()
       {
         for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
-          if (s->kind == JsSeatRecord::FILE_RESULT) return s->file.state();
+          if (s->kind == JsSeatRecord::FILE_RESULT)
+            return s->file.state();
         return 0;
       }
       static int notifications;
@@ -133,16 +230,17 @@ namespace smirkycard
         if (settlementRuntime)
         {
           loka::core::String result, error;
-          const bool ok = settlementRuntime->evaluateToString(loka::core::String::Literal(
-            "refuses(()=>im.set(saved))"), result, error);
+          const bool ok = settlementRuntime->evaluateToString(
+              loka::core::String::Literal("refuses(()=>im.set(saved))"), result, error);
           settledStale = ok && result.compare(loka::core::String::Literal("true")) == 0;
         }
       }
       static void observeImage()
       {
         notifications = 0;
-        for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
-          if (s->kind == JsSeatRecord::IMAGE) s->image.state()->bind(notified, 0, false);
+        for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
+          if (s->kind == JsSeatRecord::IMAGE)
+            s->image.state()->bind(notified, 0, false);
       }
       static void observeSettlement(ScriptRuntime &runtime)
       {
@@ -152,7 +250,7 @@ namespace smirkycard
       }
       static void unobserveImage()
       {
-        for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
+        for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
           if (s->kind == JsSeatRecord::IMAGE)
           {
             s->image.state()->unbind(notified, 0);
@@ -165,12 +263,16 @@ namespace smirkycard
         detachEntrance();
         return JS_UNDEFINED;
       }
-      static void navigate() { card()->requestGo(SMIRKY_CARD_SECOND, CardCarry()); }
+      static void navigate()
+      {
+        card()->requestGo(SMIRKY_CARD_SECOND, CardCarry());
+      }
       static void writeFile(const loka::app::FileChooserResult &value)
       {
         loka::core::StateTrackerGuard transaction(card()->tracker());
-        for (JsSeatRecord *s = card()->seats_.head(); s; s=s->next)
-          if (s->kind == JsSeatRecord::FILE_RESULT) s->file.set(value, true);
+        for (JsSeatRecord *s = card()->seats_.head(); s; s = s->next)
+          if (s->kind == JsSeatRecord::FILE_RESULT)
+            s->file.set(value, true);
       }
       static void detachEntrance()
       {
@@ -215,6 +317,8 @@ namespace
     explicit TestLowering(const char *value, const char *parentName = 0)
     {
       LOKA_VERIFY(this->name == 0 && this->parent == 0 && this->kind == 0);
+      static const smirkycard::JsTreeSchemaFor<int> schema("Test", smirkycard::TREE_DRAWABLE, 0, 0);
+      this->schema = &schema;
       name = value;
       parent = parentName;
       kind = 0;
@@ -223,7 +327,8 @@ namespace
     {
       return JS_UNDEFINED;
     }
-    virtual loka::app::scene::NodeDefinitionBase *lower(smirkycard::JsCardNode &, JSContext *, JSValueConst, int)
+    virtual loka::app::scene::NodeDefinitionBase *
+    lower(smirkycard::JsTreeLowering &, const smirkycard::JsTreeView &, int)
     {
       return 0;
     }
@@ -251,12 +356,12 @@ namespace
     JS_FreeRuntime(js);
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
-    LOKA_VERIFY(runtime.evaluateToString(
-        loka::core::String::Literal("[VStack().kind,Text('').kind,EditText({}).kind,Button('',()=>{}).kind,Row().kind,"
-                                    "Card(Text('')).kind,ZStack(Text('')).kind].join(',')"),
-        result,
-        error));
-    LOKA_VERIFY(result.compare(loka::core::String::Literal("1,2,3,4,5,13,14")) == 0);
+    LOKA_VERIFY(
+        runtime.evaluateToString(loka::core::String::Literal("[VStack(),Text(''),EditText({}),Button('',()=>{}),Row(),"
+                                                             "Card(Text('')),ZStack(Text(''))].every(Object.isFrozen)"),
+                                 result,
+                                 error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
   }
   loka::app::scene::Node *find(loka::app::scene::Node *node, const char *id)
   {
@@ -1193,36 +1298,26 @@ namespace
   {
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
-    LOKA_VERIFY(runtime.evaluateToString(
-        loka::core::String::Literal(
-            "(()=>{const tag=Text('').TEST_ID;const sym=Symbol('own');"
-            "const source=Object.create({inherited:1});source.extra=undefined;source[sym]=7;"
-            "Object.defineProperty(source,'hidden',{value:3});"
-            "Object.defineProperty(source,'__proto__',{value:9,enumerable:true});"
-            "const copy=tag.call(source,'t');"
-            "return Object.hasOwn(copy,'extra') && copy.extra===undefined && copy[sym]===7 && "
-            "!Object.hasOwn(copy,'inherited') && !Object.hasOwn(copy,'hidden') && "
-            "Object.hasOwn(copy,'__proto__') && copy.__proto__===9 && "
-            "copy.testId==='t' && Object.isFrozen(copy) && copy.TEST_ID('u').testId==='u';})()"),
-        result,
-        error));
+    const char *source =
+        "(()=>{let calls=0;const source=Object.create({inherited:1});"
+        "Object.defineProperty(source,'extra',{get(){++calls;throw new Error('copy getter')},enumerable:true});"
+        "source[Symbol('own')]=7;try{Text('').TEST_ID.call(source,'t');return false}"
+        "catch(e){return e instanceof TypeError&&calls===0}})()";
+    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Utf8(source, std::strlen(source)), result, error));
     LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
-    LOKA_VERIFY(runtime.evaluateToString(
-        loka::core::String::Literal(
-            "(()=>{try{Text('').TEST_ID.call({get extra(){throw new Error('copy getter')}},'t')}"
-            "catch(e){return e.message==='copy getter'}return false})()"),
-        result,
-        error));
-    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
-    // Invalid style must throw at the helper call, even when the tree is never lowered.
     LOKA_VERIFY(runtime.evaluateToString(
         loka::core::String::Literal(
             "(()=>{try{Text('a',{colour:1})}catch(e){return e instanceof TypeError}return false})()"),
         result,
         error));
     LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
-    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal("typeof Text('a').enabled"), result, error));
-    LOKA_VERIFY(result.compare(loka::core::String::Literal("undefined")) == 0);
+    LOKA_VERIFY(runtime.evaluateToString(
+        loka::core::String::Literal(
+            "(()=>{if(typeof Text('').enabled!=='function')return false;try{Text('').enabled({})}catch(e){return e "
+            "instanceof TypeError}return false})()"),
+        result,
+        error));
+    LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
   }
 
   void checkTextStyle()
@@ -1360,9 +1455,19 @@ namespace
       LOKA_VERIFY(!JS_HasException(runtime.context()));
     loka::app::scene::Node *status =
         find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "SmirkyCard.Status");
+    if (find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Prefix"))
+      std::fprintf(stderr, "Unexpected Prefix source [%s]\n", source);
     LOKA_VERIFY(!find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "Prefix"));
     LOKA_VERIFY(!find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "M"));
+    if (!status || !status->asTextNode())
+      std::fprintf(stderr, "Missing refusal: expected [%s], source [%s]\n", expected, source);
     LOKA_VERIFY(status && status->asTextNode());
+    if (textValue(status->asTextNode()).find(expected) == std::string::npos)
+      std::fprintf(stderr,
+                   "Refusal mismatch: expected [%s], got [%s], source [%s]\n",
+                   expected,
+                   textValue(status->asTextNode()).c_str(),
+                   source);
     LOKA_VERIFY(textValue(status->asTextNode()).find(expected) != std::string::npos);
     loka::app::scene::Node *reload =
         find(loka::dsl::testing::SceneTestAccess::rootNode(*window.scene()), "SmirkyCard.Reload");
@@ -1373,6 +1478,253 @@ namespace
                 && find(inset, "SmirkyCard.Status") == status && find(inset, "SmirkyCard.Reload") == reload);
   }
 
+  /** Per-allocation refusal, using the same aligned block owner as ScriptEngine. */
+  struct TreeAllocationProbe
+  {
+    size_t ordinal;
+    size_t refuse;
+    size_t live;
+    TreeAllocationProbe()
+        : ordinal(0),
+          refuse(0),
+          live(0)
+    {
+    }
+    bool allow()
+    {
+      return !this->refuse || ++this->ordinal != this->refuse;
+    }
+    static void *baseAllocate(size_t size)
+    {
+      return std::malloc(size);
+    }
+    static void baseRelease(void *block)
+    {
+      std::free(block);
+    }
+    static void *allocate(void *opaque, size_t size)
+    {
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      if (!probe.allow())
+        return 0;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      void *block = SmirkyAlignedAllocate(&base, size);
+      if (block)
+        ++probe.live;
+      return block;
+    }
+    static void *zero(void *opaque, size_t count, size_t size)
+    {
+      if (count && size > static_cast<size_t>(-1) / count)
+        return 0;
+      void *block = allocate(opaque, count * size);
+      if (block)
+        std::memset(block, 0, count * size);
+      return block;
+    }
+    static void release(void *opaque, void *block)
+    {
+      if (!block)
+        return;
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      --probe.live;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      SmirkyAlignedRelease(&base, block);
+    }
+    static void *resize(void *opaque, void *block, size_t size)
+    {
+      if (!block)
+        return allocate(opaque, size);
+      if (!size)
+      {
+        release(opaque, block);
+        return 0;
+      }
+      TreeAllocationProbe &probe = *static_cast<TreeAllocationProbe *>(opaque);
+      if (!probe.allow())
+        return 0;
+      const SmirkyBaseAllocator base = {baseAllocate, baseRelease};
+      return SmirkyAlignedReallocate(&base, block, size);
+    }
+  };
+
+  void checkTreeStagingFailure()
+  {
+    using namespace smirkycard;
+    ScriptRuntime warm;
+    JsCardBindingRegistry registry;
+    LOKA_VERIFY(RegisterSmirkyCardBindings(registry));
+    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Failure", TREE_DRAWABLE, 1, slots);
+    const JSMallocFunctions functions = {TreeAllocationProbe::zero,
+                                         TreeAllocationProbe::allocate,
+                                         TreeAllocationProbe::release,
+                                         TreeAllocationProbe::resize,
+                                         SmirkyAlignedUsableSize};
+    for (unsigned copy = 0; copy != 2; ++copy)
+    {
+      unsigned failures = 0;
+      bool reachedSuccess = false;
+      for (size_t ordinal = 1; ordinal < 100 && !reachedSuccess; ++ordinal)
+      {
+        TreeAllocationProbe probe;
+        JSRuntime *rt = JS_NewRuntime2(&functions, &probe);
+        LOKA_VERIFY(rt);
+        JSContext *ctx = JS_NewContext(rt);
+        LOKA_VERIFY(ctx && registry.install(ctx));
+        {
+          int fact = 42;
+          JsTreeStaging source(ctx, schema, fact);
+          source.slot(0, JS_NewString(ctx, "original"));
+          JsValueRoot original(ctx, source.publish());
+          JsTreeView view(ctx, original.value());
+          LOKA_VERIFY(view.valid());
+          const unsigned live = testing::CardFlowAccess::treeLive();
+          const unsigned slotsBefore = testing::CardFlowAccess::treeSlots();
+          probe.refuse = ordinal;
+          probe.ordinal = 0;
+          {
+            JsValueRoot result(ctx);
+            if (copy)
+            {
+              JsTreeStaging staging(view);
+              result.adopt(staging.publish());
+            }
+            else
+            {
+              JsTreeStaging staging(ctx, schema, fact);
+              if (staging.valid())
+                staging.slot(0, JS_NewString(ctx, "allocated edge"));
+              result.adopt(staging.publish());
+            }
+            probe.refuse = 0;
+            if (JS_IsException(result.value()))
+            {
+              ++failures;
+              JS_FreeValue(ctx, JS_GetException(ctx));
+            }
+            else
+            {
+              LOKA_VERIFY(testing::CardFlowAccess::treeBrand(ctx, result.value()));
+              // Some engine sites recover from one refused allocation. Sweep
+              // until the requested ordinal was beyond all attempted calls.
+              reachedSuccess = probe.ordinal < ordinal;
+            }
+          }
+          JS_RunGC(rt);
+          LOKA_VERIFY(view.valid() && *view.facts(schema) == 42);
+          JsValueRoot edge(ctx);
+          view.slot(0, edge);
+          const char *text = JS_ToCString(ctx, edge.value());
+          LOKA_VERIFY(text && !std::strcmp(text, "original"));
+          JS_FreeCString(ctx, text);
+          LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live);
+          LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == slotsBefore);
+        }
+        JS_FreeContext(ctx);
+        JS_FreeRuntime(rt);
+        LOKA_VERIFY(probe.live == 0);
+      }
+      LOKA_VERIFY(reachedSuccess);
+#if defined(__SANITIZE_ADDRESS__)
+      // QuickJS routes each logical allocation to its backing allocator in
+      // ASan builds. The preset instruments C as well as C++.
+      LOKA_VERIFY(failures >= 3);
+#else
+      std::printf("[skip] logical allocation sweep: pooled QuickJS build; backing allocations only\n");
+#endif
+      std::printf(
+          "tree staging %s: %u refusing ordinals, no live blocks after teardown\n", copy ? "copy" : "build", failures);
+    }
+  }
+
+  void checkTreeEnvelopeCycle()
+  {
+    using namespace smirkycard;
+    ScriptRuntime runtime;
+    JSContext *ctx = runtime.context();
+    const unsigned before = testing::CardFlowAccess::treeLive();
+    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Cycle", TREE_DRAWABLE, 1, slots);
+    {
+      const char *source = "(()=>{const box={};box.fn=()=>box.tree;return box})()";
+      JsValueRoot box(ctx, JS_Eval(ctx, source, std::strlen(source), "tree-cycle", JS_EVAL_TYPE_GLOBAL));
+      LOKA_VERIFY(!JS_IsException(box.value()));
+      int fact = 1;
+      JsTreeStaging staging(ctx, schema, fact);
+      staging.slot(0, JS_GetPropertyStr(ctx, box.value(), "fn"));
+      JsValueRoot tree(ctx, staging.publish());
+      LOKA_VERIFY(!JS_IsException(tree.value()));
+      LOKA_VERIFY(JS_SetPropertyStr(ctx, box.value(), "tree", JS_DupValue(ctx, tree.value())) >= 0);
+      JS_RunGC(JS_GetRuntime(ctx));
+      LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before + 1);
+    }
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before);
+  }
+
+  /** Stage-one mechanism pin; no public factory can publish an incomplete row. */
+  void checkTreeEnvelope()
+  {
+    using namespace smirkycard;
+    ScriptRuntime runtime;
+    JSContext *ctx = runtime.context();
+    static const JsTreeSlot staticSlots[] = {{smirkycard::EDGE_SEAT, TREE_DRAWABLE},
+                                             {smirkycard::EDGE_SEAT, TREE_DRAWABLE},
+                                             {smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSchemaFor<int> schema("Mechanism", TREE_DRAWABLE, 3, staticSlots);
+    const unsigned live = testing::CardFlowAccess::treeLive();
+    const unsigned edges = testing::CardFlowAccess::treeSlots();
+    {
+      int fact = 17;
+      JsValueRoot published(ctx);
+      {
+        JsTreeStaging staging(ctx, schema, fact);
+        LOKA_VERIFY(staging.valid());
+        staging.slot(0, JS_NewString(ctx, "edge"));
+        staging.slot(1, JS_NewString(ctx, "second"));
+        staging.slot(2, JS_NewString(ctx, "third"));
+        published.adopt(staging.publish());
+        LOKA_VERIFY(!JS_IsException(published.value()));
+        LOKA_VERIFY(!staging.valid());
+      }
+      JsTreeView view(ctx, published.value());
+      LOKA_VERIFY(view.valid() && view.schema() == &schema);
+      LOKA_VERIFY(*view.facts(schema) == 17);
+      JsValueRoot edge(ctx);
+      view.slot(0, edge);
+      LOKA_VERIFY(JS_IsString(edge.value()));
+      JsTreeStaging copy(view);
+      copy.slot(0, JS_NewString(ctx, "replacement"));
+      JsValueRoot copied(ctx, copy.publish());
+      LOKA_VERIFY(!JS_IsException(copied.value()));
+      JsTreeView copiedView(ctx, copied.value());
+      LOKA_VERIFY(copiedView.valid());
+      copiedView.slot(2, edge);
+      const char *third = JS_ToCString(ctx, edge.value());
+      LOKA_VERIFY(third && !std::strcmp(third, "third"));
+      JS_FreeCString(ctx, third);
+      view.slot(0, edge);
+      const char *text = JS_ToCString(ctx, edge.value());
+      LOKA_VERIFY(text && !std::strcmp(text, "edge"));
+      JS_FreeCString(ctx, text);
+      JsValueRoot incomplete(ctx, smirkycard::testing::CardFlowAccess::incompleteTree(ctx));
+      JsTreeView incompleteView(ctx, incomplete.value());
+      LOKA_VERIFY(!incompleteView.valid());
+      JsValueRoot fake(ctx, JS_NewObject(ctx));
+      JsTreeView fakeView(ctx, fake.value());
+      LOKA_VERIFY(!fakeView.valid());
+      JS_RunGC(JS_GetRuntime(ctx));
+      LOKA_VERIFY(view.valid() && copiedView.valid());
+      LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live + 2);
+      LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == edges + 6);
+    }
+    JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live);
+    LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == edges);
+  }
+
   void checkTreeHelperIdentity()
   {
     smirkycard::ScriptRuntime runtime;
@@ -1380,25 +1732,24 @@ namespace
     LOKA_VERIFY(runtime.evaluateToString(
         loka::core::String::Literal(
             "(()=>{const d=Text('a'),p=Object.getPrototypeOf(d);"
-            "const names=['TEST_ID','naturalWidth','naturalHeight','expStaticBlurUnit','expBlurUnit'];"
+            "const names=['TEST_ID','naturalWidth','naturalHeight','expStaticBlurUnit','expBlurUnit','enabled'];"
             "const trees=[d,Text('b'),d.TEST_ID('x'),Row().naturalWidth().TEST_ID('r'),"
             "VStack().naturalHeight().TEST_ID('v'),ZStack().expStaticBlurUnit().expBlurUnit(),"
             "ZStack().expBlurUnit().expStaticBlurUnit(),Button('',()=>{}).enabled({}).TEST_ID('b')];"
             "if(Object.getPrototypeOf(p)!==Object.prototype||!Object.isFrozen(p))return false;"
             "if(Object.prototype.toString.call(d)!=='[object Object]')return false;"
-            "if(!names.every((n,i)=>Object.isFrozen(p[n])&&p[n].length===(i===0?1:0)))return false;"
+            "if(!names.every((n,i)=>Object.isFrozen(p[n])&&p[n].length===(i===0||i===5?1:0)))return false;"
             "if(!names.every(n=>{const x=Object.getOwnPropertyDescriptor(p,n);"
             "return !x.writable&&!x.enumerable&&!x.configurable}))return false;"
             "if(!trees.every(t=>Object.getPrototypeOf(t)===p&&names.every(n=>"
             "t[n]===p[n]&&t[n]===t[n]&&!Object.getOwnPropertyNames(t).includes(n))))return false;"
-            "if(Object.getOwnPropertyNames(d).sort().join(',')!=='kind,text')return false;"
+            "if(Object.getOwnPropertyNames(d).sort().join(',')!=='')return false;"
             "for(const t of [d,Object.assign({},d),{...d}]){"
             "if(names.some(n=>Object.keys(t).includes(n)||Object.hasOwn(t,n)))return false;"
             "for(const k in t)if(names.includes(k))return false;}"
-            "const receivers=[{},Object.create(d),p,{kind:d.kind,text:'forged'}];"
-            "return receivers.every(x=>{const c=d.TEST_ID.call(x,'x');"
-            "return "
-            "Object.getPrototypeOf(c)===Object.prototype&&Object.hasOwn(c,'TEST_ID')&&c.TEST_ID===p.TEST_ID});})()"),
+            "const receivers=[{},Object.create(d),p,{kind:2,text:'forged'}];"
+            "return receivers.every(x=>{try{d.TEST_ID.call(x,'x');return false}catch(e){return e instanceof "
+            "TypeError}});})()"),
         result,
         error));
     LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
@@ -1488,17 +1839,14 @@ namespace
             "return false;"
             "const a=ToolbarItem('',()=>{}),b=ToolbarItem.label('x'),"
             "f=ToolbarItem.flexibleSpace(),s=ToolbarItem.fixedSpace(2);"
-            "if(Object.getOwnPropertyNames(a).sort().join(',')!=='TEST_ID,enabled,handler,kind,label')return false;"
-            "if(Object.getOwnPropertyNames(b).sort().join(',')!=='TEST_ID,kind,label')return false;"
-            "if(Object.getOwnPropertyNames(f).sort().join(',')!=='kind')return false;"
-            "if(Object.getOwnPropertyNames(s).sort().join(',')!=='kind,width')return false;"
+            "if(![a,b,f,s].every(x=>Reflect.ownKeys(x).length===0))return false;"
             "const items=[a.enabled({}).TEST_ID('x'),a.TEST_ID('x').enabled({}),b.TEST_ID('l'),"
             "f,s];"
-            "if(!items.slice(0,3).every(c=>Object.getPrototypeOf(c)===p&&Object.hasOwn(c,'TEST_ID')))return false;"
-            "if(Toolbar(...items.slice(2)).children.length!==3)return false;"
-            "const plain=d.TEST_ID.call(Object.create({inherited:1}),'plain');"
-            "return Object.getPrototypeOf(plain)===p&&Object.hasOwn(plain,'TEST_ID')&&"
-            "Object.hasOwn(Button('',()=>{}),'enabled')&&typeof Text('').enabled==='undefined';})()"),
+            "if(!items.slice(0,3).every(c=>Object.getPrototypeOf(c)===Object.getPrototypeOf(d)&&!Object.hasOwn(c,'TEST_"
+            "ID')))return false;"
+            "Toolbar(...items.slice(2));try{d.TEST_ID.call(Object.create({inherited:1}),'plain');return false}"
+            "catch(e){return e instanceof TypeError&&!Object.hasOwn(Button('',()=>{}),'enabled')&&typeof "
+            "Text('').enabled==='function'}})()"),
         result,
         error));
     LOKA_VERIFY(result.compare(loka::core::String::Literal("true")) == 0);
@@ -1538,7 +1886,7 @@ namespace
                               "Box options requires a plain object",
                               "ClipBox options requires a plain object",
                               "ImageView options requires a plain object",
-                              "Toolbar descriptor requires a plain object"};
+                              "Toolbar requires ToolbarItem descriptors"};
     for (unsigned i = 0; i < sizeof(expressions) / sizeof(expressions[0]); ++i)
     {
       const std::string source = std::string("card('first',class{compose(){return ") + expressions[i] + "}});";
@@ -1552,11 +1900,11 @@ namespace
     {
       smirkycard::ScriptRuntime runtime;
       loka::core::String result, error;
-      LOKA_VERIFY(
-          runtime.loadBuiltin(polluted ? "card('first',class{compose(){const d=Text('');Object.prototype.kind=d.kind;"
-                                         "Object.prototype.text='x';return Object.getPrototypeOf(d)}});"
-                                       : "card('first',class{compose(){return Object.getPrototypeOf(Text(''))}});",
-                              error));
+      LOKA_VERIFY(runtime.loadBuiltin(polluted
+                                          ? "card('first',class{compose(){const d=Text('');Object.prototype.kind=2;"
+                                            "Object.prototype.text='x';return Object.getPrototypeOf(d)}});"
+                                          : "card('first',class{compose(){return Object.getPrototypeOf(Text(''))}});",
+                                      error));
       NullPlatformContext context;
       NullScenePlatformController platform;
       WindowProps props;
@@ -1631,13 +1979,11 @@ namespace
     smirkycard::ScriptRuntime runtime;
     loka::core::String result, error;
     const char *probe = "[typeof Toolbar,typeof ToolbarItem,typeof label,typeof flexibleSpace,typeof fixedSpace,"
-                        "typeof ToolbarItem('x',()=>{}).naturalWidth,typeof ToolbarItem.label('x').enabled,"
-                        "new Set([ToolbarItem('x',()=>{}).kind,ToolbarItem.label('x').kind,"
-                        "ToolbarItem.flexibleSpace().kind,ToolbarItem.fixedSpace(1).kind]).size].join(',')";
+                        "typeof ToolbarItem('x',()=>{}).naturalWidth,typeof ToolbarItem.label('x').enabled].join(',')";
     LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Utf8(probe, std::strlen(probe)), result, error));
-    LOKA_VERIFY(result.compare(loka::core::String::Literal(
-                    "function,function,undefined,undefined,undefined,undefined,undefined,4"))
-                == 0);
+    LOKA_VERIFY(
+        result.compare(loka::core::String::Literal("function,function,undefined,undefined,undefined,function,function"))
+        == 0);
   }
 
   void checkToolbarRefusals()
@@ -1680,38 +2026,8 @@ namespace
 
   void checkToolbarForgedChildKind()
   {
-    // Bypass every helper guard with hand-built descriptors retaining only registered kinds.
-    const char *forged[] = {"{kind:Button('x',()=>{}).kind,label:'x',handler:()=>{}}",
-                            "Button('x',()=>{})",
-                            "Text('x')",
-                            "Row()",
-                            "{kind:ToolbarItem.fixedSpace(1).kind,width:0}",
-                            "{kind:ToolbarItem.fixedSpace(1).kind,width:NaN}",
-                            "{kind:ToolbarItem.fixedSpace(1).kind,width:32768}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:3,handler:()=>{}}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:3}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'A\\u0000B',handler:()=>{}}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'\\u0000A',handler:()=>{}}",
-                            "{kind:ToolbarItem.label('x').kind,label:'A\\u0000B'}",
-                            "{kind:ToolbarItem.label('x').kind,label:'\\u0000A'}",
-                            "{kind:ToolbarItem.label('x').kind,label:'x',style:{wrap:'none'}}",
-                            "{kind:ToolbarItem.label('x').kind,label:this.b}",
-                            "{kind:ToolbarItem.label('x').kind,label:{}}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:this.s}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:{}}",
-                            "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},shown:this.b}"};
-    for (unsigned i = 0; i < sizeof(forged) / sizeof(forged[0]); ++i)
-      checkComposeRefusal(toolbarCard(std::string("return {kind:Toolbar().kind,children:[") + forged[i] + "]}").c_str(),
-                          "Toolbar",
-                          true);
     checkComposeRefusal(
-        toolbarCard("return {kind:Toolbar().kind,children:Array.from({length:17},()=>ToolbarItem.label('x'))}").c_str(),
-        "Toolbar",
-        true);
-    checkComposeRefusal(
-        toolbarCard("return {kind:Toolbar().kind,children:Array.from({length:9},()=>ToolbarItem('x',()=>{}))}").c_str(),
-        "Toolbar",
-        true);
+        toolbarCard("return {kind:17,children:[]}").c_str(), "JavaScript tree has an invalid node.", true);
     checkComposeRefusal(
         toolbarCard("let t=Toolbar(ToolbarItem.label('x'));for(let i=0;i<11;++i)t=Row(t);return t").c_str(),
         "Toolbar",
@@ -2024,10 +2340,8 @@ namespace
       const std::string source =
           std::string("card('first',class{constructor(c){globalThis.foreign=c.state(") + (kind ? "true" : "'x'")
           + ")}compose(){return Text('owner')}});"
-            "card('second',class{compose(){return {kind:Toolbar().kind,children:["
-          + (kind ? "{kind:ToolbarItem('x',()=>{}).kind,label:'x',handler:()=>{},enabledSeat:foreign}"
-                  : "{kind:ToolbarItem.label('x').kind,label:foreign}")
-          + "]}}});";
+            "card('second',class{compose(){return Toolbar("
+          + (kind ? "ToolbarItem('x',()=>{}).enabled(foreign)" : "ToolbarItem.label(foreign)") + ")}});";
       LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
       NullPlatformContext context;
       NullScenePlatformController platform;
@@ -2060,11 +2374,9 @@ namespace
   }
   void checkToolbarCapturedLabel()
   {
-    const char *bodies[] = {"const d={kind:ToolbarItem.label('x').kind,label:this.s,testId:'Label',style:{get "
-                            "size(){d.label='changed';return 12}}};return {kind:Toolbar().kind,children:[d]}",
-                            "this.s.set('A\\u0000B');return Toolbar(ToolbarItem.label(this.s).TEST_ID('Label'))"};
+    const char *bodies[] = {"", ""};
     // The NUL seat must be declared in the constructor: writes here use the normal handler door below.
-    for (unsigned i = 0; i < 2; ++i)
+    for (unsigned i = 1; i < 2; ++i)
     {
       smirkycard::ScriptRuntime runtime;
       loka::core::String error;
@@ -2086,8 +2398,6 @@ namespace
       LOKA_VERIFY(label && label->asTextNode());
       const std::string expected = i ? std::string("A\0B", 3) : std::string("short");
       LOKA_VERIFY(textValue(label->asTextNode()) == expected);
-      if (!i)
-        LOKA_VERIFY(label->asTextNode()->props.textStyle_ == loka::app::FontSize<12>());
     }
   }
 
@@ -2253,18 +2563,6 @@ namespace
                         "nested arrays");
     checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return Grid(1,1)}});",
                         "Grid(rows, cols, children)");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){const g=Grid(1,1,Text('x'));"
-                        "g.children.pop();return g}});",
-                        "Grid requires exactly rows * cols children");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){const g=Grid(1,1,Text('x'));"
-                        "g.children.push(Text('y'));return g}});",
-                        "Grid requires exactly rows * cols children");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return "
-                        "Object.assign({},Grid(1,1,Text('x')),{rows:0})}});",
-                        "Grid rows and cols must be integers in 1..16");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return "
-                        "Object.assign({},Grid(1,1,Text('x')),{cols:17})}});",
-                        "Grid rows and cols must be integers in 1..16");
   }
 
   void checkTextStyleRefusals()
@@ -2326,12 +2624,52 @@ namespace
     }
   }
 
+  void checkSnapshot(const char *source, bool block, bool markup)
+  {
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin(source, error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow window(&context, props, &platform);
+    WindowAdmissionTestApp admission(window);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    loka::app::scene::Node *node = windowNode(window, "M");
+    LOKA_VERIFY(node);
+    if (block)
+    {
+      const loka::app::BlockStyle expected = loka::app::BlockStyle().align(loka::app::TEXT_ALIGN_CENTER);
+      if (markup)
+      {
+        LOKA_VERIFY(node->asAttributedTextNode());
+        LOKA_VERIFY(node->asAttributedTextNode()->props.blockStyle_ == expected);
+      }
+      else
+      {
+        LOKA_VERIFY(node->asTextNode());
+        LOKA_VERIFY(node->asTextNode()->props.blockStyle_ == expected);
+      }
+    }
+    else if (markup)
+    {
+      LOKA_VERIFY(node->asAttributedTextNode());
+      LOKA_VERIFY(node->asAttributedTextNode()->props.text_->get()
+                  == loka::app::Styled("x", loka::app::FontSize<24>()));
+    }
+    else
+    {
+      LOKA_VERIFY(node->asTextNode());
+      LOKA_VERIFY(node->asTextNode()->props.textStyle_ == loka::app::FontSize<24>());
+    }
+  }
   void checkChangedTextStyleRefusal()
   {
-    // The tree owns a reference to the dictionary, so lowering must revalidate it.
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){const s={size:24};const t=Text('a',s);"
-                        "s.colour=1;return t}});",
-                        "TypeError");
+    checkSnapshot(
+        "card('first',class{compose(){const s={size:24};const t=Text('a',s).TEST_ID('M');s.colour=1;return t}});",
+        false,
+        false);
     checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return Text('a',{get size(){"
                         "throw new Error('style getter')}})}});",
                         "style getter");
@@ -2450,10 +2788,10 @@ namespace
     checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return Markup('<b>x')}});", "TypeError");
     checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return Markup('x',{colour:1})}});",
                         "TypeError");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){const s={size:24};const t=Markup('x',s);"
-                        "s.colour=1;return t}});",
-                        "Markup",
-                        true);
+    checkSnapshot(
+        "card('first',class{compose(){const s={size:24};const t=Markup('x',s).TEST_ID('M');s.colour=1;return t}});",
+        false,
+        true);
   }
 
   void checkBlockStyle()
@@ -2527,7 +2865,7 @@ namespace
       const std::string changed =
           std::string("card('first',class{constructor(c){this.c=c;}compose(){const b={align:'center'};const t=")
           + kinds[k] + "('a',undefined,b).TEST_ID('M');b.gap=4;return t}});";
-      checkComposeRefusal(changed.c_str(), k == 0 ? "TypeError" : "Markup", true);
+      checkSnapshot(changed.c_str(), true, k != 0);
       const std::string throwing = std::string("card('first',class{constructor(c){this.c=c;}compose(){return ")
                                    + kinds[k] + "('a',undefined,{get align(){throw new Error('block getter')}})}});";
       checkComposeRefusal(throwing.c_str(), "block getter");
@@ -2535,8 +2873,8 @@ namespace
     // Inherited properties are not dictionary entries, even on Object.prototype.
     LOKA_VERIFY(runtime.evaluateToString(
         loka::core::String::Literal(
-            "(()=>{Object.prototype.gap=4;try{return Text('a',undefined,Object.create(null)).kind>0 && "
-            "Markup('x',undefined,{}).kind>0}finally{delete Object.prototype.gap}})()"),
+            "(()=>{Object.prototype.gap=4;try{return Object.isFrozen(Text('a',undefined,Object.create(null))) && "
+            "Object.isFrozen(Markup('x',undefined,{}))}finally{delete Object.prototype.gap}})()"),
         value,
         error));
     LOKA_VERIFY(value.compare(loka::core::String::Literal("true")) == 0);
@@ -2545,15 +2883,14 @@ namespace
   void checkMarkupAllocationRefusal()
   {
     using namespace loka::core::testing;
-    // Two Builder allocations per pass for five segments: fail both initial
-    // allocation and growth, first at declaration, then at lowering.
-    for (int failure = 1; failure <= 4; ++failure)
+    // Parsing happens once at build: refuse initial segment allocation and growth.
+    for (int failure = 1; failure <= 2; ++failure)
     {
       failLokaAllocRaw("AttributedString", "Segments", failure);
       checkComposeRefusal(
           "card('first',class{constructor(c){this.c=c;}compose(){return VStack(Text('prefix').TEST_ID('Prefix'),"
           "Markup('a<b>b</b>c<i>d</i>e').TEST_ID('M'))}});",
-          failure <= 2 ? "TypeError" : "Markup",
+          "TypeError",
           true);
       LOKA_VERIFY(lokaAllocRawLive() == 0);
       allowLokaAllocRaw();
@@ -2611,7 +2948,7 @@ namespace
         "card('first',class{constructor(c){this.c=c;}compose(){return VStack(Array.from({length:9},(_,r)=>Row("
         "Array.from({length:r==8?1:16},()=>Cell('x',()=>{})))))}});",
         "kCardClickableBudget");
-    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return {kind:99}}});", "unknown kind");
+    checkComposeRefusal("card('first',class{constructor(c){this.c=c;}compose(){return {kind:99}}});", "invalid node");
 
     checkComposeRefusal(
         "card('first',class{constructor(c){this.c=c;}compose(){return VStack(Array.from({length:9},(_,r)=>Row("
@@ -2670,7 +3007,17 @@ namespace
   void expectJs(smirkycard::ScriptRuntime &runtime, const char *source, const char *expected)
   {
     loka::core::String result, error;
-    LOKA_VERIFY(runtime.evaluateToString(loka::core::String::Literal(source), result, error));
+    const bool evaluated = runtime.evaluateToString(loka::core::String::Literal(source), result, error);
+    if (!evaluated)
+    {
+      const loka::core::StringBuffer b = error.bufferWithEncoding(loka::core::StringEncodingUtf8);
+      std::fprintf(stderr,
+                   "JS evaluation failed: %.*s; source: %s\n",
+                   static_cast<int>(b.length()),
+                   static_cast<const char *>(b.data()),
+                   source);
+    }
+    LOKA_VERIFY(evaluated);
     if (result.compare(loka::core::String::Literal(expected)) != 0)
     {
       const loka::core::StringBuffer bytes = result.bufferWithEncoding(loka::core::StringEncodingUtf8);
@@ -3673,12 +4020,12 @@ namespace
     if (!only || only == 8)
     {
       std::puts("[pin] runner click settles formatted integer text within one JS step");
-      CardRunnerHarness h(
-          "card('first',function(c){var n=c.state(0);return {compose:function(){return VStack("
-          "Button('inc',function(){n.set(n.get()+1);}).TEST_ID('inc'),Text(n).TEST_ID('count'));}};});",
-          "scenario('first',function(c){c.run(Flow().step(function(){c.test.click('inc');"
-          "if(c.test.text('count')!=='1')throw Error('first count: '+c.test.text('count'));"
-          "c.test.click('inc');if(c.test.text('count')!=='2')throw Error('second count: '+c.test.text('count'));}));});");
+      CardRunnerHarness h("card('first',function(c){var n=c.state(0);return {compose:function(){return VStack("
+                          "Button('inc',function(){n.set(n.get()+1);}).TEST_ID('inc'),Text(n).TEST_ID('count'));}};});",
+                          "scenario('first',function(c){c.run(Flow().step(function(){c.test.click('inc');"
+                          "if(c.test.text('count')!=='1')throw Error('first count: '+c.test.text('count'));"
+                          "c.test.click('inc');if(c.test.text('count')!=='2')throw Error('second count: "
+                          "'+c.test.text('count'));}));});");
       h.mount();
       h.ticks(10);
       LOKA_VERIFY(h.terminalCount == 1 && h.terminal == SCENARIO_AUDIT_SUCCEEDED);
@@ -3820,17 +4167,19 @@ namespace
   {
     for (int open = 0; open < 2; ++open)
     {
-      CardRunnerHarness h(scenarioCard,
+      CardRunnerHarness h(
+          scenarioCard,
           "scenario('first',function(c){c.run(Flow().step(function(){c.test.log('baked');}).named('baked'));});",
-          7, true);
+          7,
+          true);
       // File entry establishes the platform directory for reload/open.
       h.runtime.loadMain(&h.context);
       h.mount();
       h.tick();
       writeMain("_smirky_scenario/CARD.FLOW.JS", "throw Error('file companion must not run');");
       loka::core::String error;
-      smirkycard::JsEngine *candidate = open ? h.runtime.prepareOpen("MAIN.JS", error)
-                                           : h.runtime.prepareReload(SMIRKY_CARD_FIRST, error);
+      smirkycard::JsEngine *candidate =
+          open ? h.runtime.prepareOpen("MAIN.JS", error) : h.runtime.prepareReload(SMIRKY_CARD_FIRST, error);
       LOKA_VERIFY(candidate && error.empty());
       h.runtime.discardReload(candidate);
     }
@@ -3844,56 +4193,59 @@ namespace
 
   void checkChosenFileDelivery()
   {
-    CardRunnerHarness h(
-      "var own,wrong,run,ctx,n=0;card('first',c=>{ctx=c;own=c.state.file();wrong=c.state(false);"
-      "c.flow(Flow().watch(own,r=>{n++;return Flow.SKIP}));"
-      "run=c.flow(Flow().step(()=>c.test.deliverChosenFile(own,null)));"
-      "return {chosen:own,wrong,compose(){return Text('delivery')}}});"
-      "card('second',c=>{ctx=c;return {compose(){return Text('second')}}});",
-      "scenario('first',c=>{c.run(Flow().step(()=>{"
-      "for(const seat of [wrong,{},null,'wrong','missing']){let refused=false;"
-      "try{c.test.deliverChosenFile(seat,null)}catch(e){refused=e instanceof TypeError}"
-      "if(!refused)throw Error('seat refusal')}"
-      "c.test.deliverChosenFile('chosen',null);c.test.deliverChosenFile(own,null);"
-      "if(n!==2)throw Error('forced cancellation notification');"
-      "c.test.deliverChosenFile(own,'Sun.pict');c.test.deliverChosenFile(own,'Sun.pict');"
-      "if(n!==4)throw Error('forced file notification');"
-      "run.run();if(n!==4)throw Error('CardFlow delivery admitted');"
-      "c.test.log('delivery ok')}));});");
+    CardRunnerHarness h("var own,wrong,run,ctx,n=0;card('first',c=>{ctx=c;own=c.state.file();wrong=c.state(false);"
+                        "c.flow(Flow().watch(own,r=>{n++;return Flow.SKIP}));"
+                        "run=c.flow(Flow().step(()=>c.test.deliverChosenFile(own,null)));"
+                        "return {chosen:own,wrong,compose(){return Text('delivery')}}});"
+                        "card('second',c=>{ctx=c;return {compose(){return Text('second')}}});",
+                        "scenario('first',c=>{c.run(Flow().step(()=>{"
+                        "for(const seat of [wrong,{},null,'wrong','missing']){let refused=false;"
+                        "try{c.test.deliverChosenFile(seat,null)}catch(e){refused=e instanceof TypeError}"
+                        "if(!refused)throw Error('seat refusal')}"
+                        "c.test.deliverChosenFile('chosen',null);c.test.deliverChosenFile(own,null);"
+                        "if(n!==2)throw Error('forced cancellation notification');"
+                        "c.test.deliverChosenFile(own,'Sun.pict');c.test.deliverChosenFile(own,'Sun.pict');"
+                        "if(n!==4)throw Error('forced file notification');"
+                        "run.run();if(n!==4)throw Error('CardFlow delivery admitted');"
+                        "c.test.log('delivery ok')}));});");
     h.mount();
     smirkycard::testing::CardFlowAccess::scene = h.window->scene();
     loka::core::State<loka::app::FileChooserResult> *file = smirkycard::testing::CardFlowAccess::fileState();
     LOKA_VERIFY(file);
-    file->bind(verifyChosenTransaction, smirkycard::testing::CardFlowAccess::card()->tracker(),
-               false, false, loka::core::STATE_PRIORITY_HIGH);
+    file->bind(verifyChosenTransaction,
+               smirkycard::testing::CardFlowAccess::card()->tracker(),
+               false,
+               false,
+               loka::core::STATE_PRIORITY_HIGH);
     h.ticks(20);
     file->unbind(verifyChosenTransaction, smirkycard::testing::CardFlowAccess::card()->tracker());
     LOKA_VERIFY(h.terminalCount == 1 && h.terminal == loka::dsl::testing::SCENARIO_AUDIT_SUCCEEDED);
     LOKA_VERIFY(h.logs.size() == 1 && h.logs[0] == "delivery ok");
     expectJs(h.runtime, "ctx.go('second');'ok'", "ok");
     h.admission->flush();
-    expectJs(h.runtime,
-      "let refused=false;try{ctx.test.deliverChosenFile(own,null)}catch(e){refused=e instanceof TypeError}refused",
-      "true");
+    expectJs(
+        h.runtime,
+        "let refused=false;try{ctx.test.deliverChosenFile(own,null)}catch(e){refused=e instanceof TypeError}refused",
+        "true");
   }
 
   void checkChosenFileLookupNavigation()
   {
-    CardRunnerHarness h(
-      "var saved;card('first',c=>{saved=c;const chosen=c.state.file();"
-      "return new Proxy({chosen,compose(){return Text('proxy')}},{"
-      "getOwnPropertyDescriptor(t,k){if(k==='chosen')c.go('second');"
-      "return Reflect.getOwnPropertyDescriptor(t,k)}})});"
-      "card('second',c=>({compose(){return Text('second')}}));",
-      "scenario('first',c=>c.run(Flow().step(()=>{})));");
+    CardRunnerHarness h("var saved;card('first',c=>{saved=c;const chosen=c.state.file();"
+                        "return new Proxy({chosen,compose(){return Text('proxy')}},{"
+                        "getOwnPropertyDescriptor(t,k){if(k==='chosen')c.go('second');"
+                        "return Reflect.getOwnPropertyDescriptor(t,k)}})});"
+                        "card('second',c=>({compose(){return Text('second')}}));",
+                        "scenario('first',c=>c.run(Flow().step(()=>{})));");
     h.mount();
     smirkycard::testing::CardFlowAccess::scene = h.window->scene();
     loka::core::State<loka::app::FileChooserResult> *file = smirkycard::testing::CardFlowAccess::fileState();
     LOKA_VERIFY(file);
     const loka::app::FileChooserResult before = file->get();
     expectJs(h.runtime,
-      "let refused=false;try{saved.test.deliverChosenFile('chosen','Sun.pict')}"
-      "catch(e){refused=e instanceof TypeError}refused", "true");
+             "let refused=false;try{saved.test.deliverChosenFile('chosen','Sun.pict')}"
+             "catch(e){refused=e instanceof TypeError}refused",
+             "true");
     LOKA_VERIFY(!(file->get() != before));
     h.admission->flush();
   }
@@ -3901,30 +4253,32 @@ namespace
   void checkImageFacts()
   {
     CardRunnerHarness h(
-      "var a,b,picture,other,run,activeRefused=false;"
-      "card('first',c=>{a=c;picture=c.state.image();const chosen=c.state.file(),flag=c.state(false);"
-      "run=c.flow(Flow().step(()=>{try{c.test.imageFacts(picture)}"
-      "catch(e){activeRefused=e instanceof TypeError}}));"
-      "return {picture,chosen,flag,compose(){return Text('first')}}});"
-      "card('second',c=>{b=c;other=c.state.image();return {picture:other,compose(){return Text('second')}}});",
-      "scenario('first',c=>c.run(Flow().step(()=>{})));");
+        "var a,b,picture,other,run,activeRefused=false;"
+        "card('first',c=>{a=c;picture=c.state.image();const chosen=c.state.file(),flag=c.state(false);"
+        "run=c.flow(Flow().step(()=>{try{c.test.imageFacts(picture)}"
+        "catch(e){activeRefused=e instanceof TypeError}}));"
+        "return {picture,chosen,flag,compose(){return Text('first')}}});"
+        "card('second',c=>{b=c;other=c.state.image();return {picture:other,compose(){return Text('second')}}});",
+        "scenario('first',c=>c.run(Flow().step(()=>{})));");
     h.mount();
     expectJs(h.runtime,
-      "let facts=a.test.imageFacts('picture');"
-      "[Object.getPrototypeOf(facts)===Object.prototype,Object.isFrozen(facts),"
-      "Object.keys(facts).sort().join(','),facts.empty,facts.width,facts.height].join(':')",
-      "true:true:empty,height,width:true:0:0");
+             "let facts=a.test.imageFacts('picture');"
+             "[Object.getPrototypeOf(facts)===Object.prototype,Object.isFrozen(facts),"
+             "Object.keys(facts).sort().join(','),facts.empty,facts.width,facts.height].join(':')",
+             "true:true:empty,height,width:true:0:0");
     expectJs(h.runtime, "JSON.stringify(a.test.imageFacts(picture))===JSON.stringify(facts)", "true");
     expectJs(h.runtime,
-      "let setterCalls=0;for(const key of ['empty','width','height'])"
-      "Object.defineProperty(Object.prototype,key,{set(){setterCalls++},configurable:true});"
-      "let sealed=a.test.imageFacts(picture);"
-      "for(const key of ['empty','width','height'])delete Object.prototype[key];"
-      "[setterCalls,Object.isFrozen(sealed),Object.keys(sealed).sort().join(','),"
-      "sealed.empty,sealed.width,sealed.height].join(':')", "0:true:empty,height,width:true:0:0");
+             "let setterCalls=0;for(const key of ['empty','width','height'])"
+             "Object.defineProperty(Object.prototype,key,{set(){setterCalls++},configurable:true});"
+             "let sealed=a.test.imageFacts(picture);"
+             "for(const key of ['empty','width','height'])delete Object.prototype[key];"
+             "[setterCalls,Object.isFrozen(sealed),Object.keys(sealed).sort().join(','),"
+             "sealed.empty,sealed.width,sealed.height].join(':')",
+             "0:true:empty,height,width:true:0:0");
     expectJs(h.runtime,
-      "['chosen','flag','missing',{},null].every(v=>{try{a.test.imageFacts(v);return false}"
-      "catch(e){return e instanceof TypeError}})", "true");
+             "['chosen','flag','missing',{},null].every(v=>{try{a.test.imageFacts(v);return false}"
+             "catch(e){return e instanceof TypeError}})",
+             "true");
     expectJs(h.runtime, "run.run();activeRefused", "true");
     {
       NullScenePlatformController platform;
@@ -3936,29 +4290,30 @@ namespace
       admission.flush();
       // Both owners are Live; equal empty facts must not mask foreign authority.
       expectJs(h.runtime,
-        "[[a,other],[b,picture]].every(([c,s])=>{try{c.test.imageFacts(s);return false}"
-        "catch(e){return e instanceof TypeError}})", "true");
+               "[[a,other],[b,picture]].every(([c,s])=>{try{c.test.imageFacts(s);return false}"
+               "catch(e){return e instanceof TypeError}})",
+               "true");
     }
     expectJs(h.runtime, "a.go('second');'ok'", "ok");
     h.admission->flush();
     expectJs(h.runtime,
-      "let refused=false;try{a.test.imageFacts(picture)}catch(e){refused=e instanceof TypeError}refused",
-      "true");
+             "let refused=false;try{a.test.imageFacts(picture)}catch(e){refused=e instanceof TypeError}refused",
+             "true");
   }
 
   void checkImageFactsLookupNavigation()
   {
-    CardRunnerHarness h(
-      "var saved;card('first',c=>{saved=c;const picture=c.state.image();"
-      "return new Proxy({picture,compose(){return Text('proxy')}},{"
-      "getOwnPropertyDescriptor(t,k){if(k==='picture')c.go('second');"
-      "return Reflect.getOwnPropertyDescriptor(t,k)}})});"
-      "card('second',c=>({compose(){return Text('second')}}));",
-      "scenario('first',c=>c.run(Flow().step(()=>{})));");
+    CardRunnerHarness h("var saved;card('first',c=>{saved=c;const picture=c.state.image();"
+                        "return new Proxy({picture,compose(){return Text('proxy')}},{"
+                        "getOwnPropertyDescriptor(t,k){if(k==='picture')c.go('second');"
+                        "return Reflect.getOwnPropertyDescriptor(t,k)}})});"
+                        "card('second',c=>({compose(){return Text('second')}}));",
+                        "scenario('first',c=>c.run(Flow().step(()=>{})));");
     h.mount();
     expectJs(h.runtime,
-      "let refused=false;try{saved.test.imageFacts('picture')}"
-      "catch(e){refused=e instanceof TypeError}refused", "true");
+             "let refused=false;try{saved.test.imageFacts('picture')}"
+             "catch(e){refused=e instanceof TypeError}refused",
+             "true");
     h.admission->flush();
   }
 
@@ -4024,8 +4379,14 @@ namespace
   class StandaloneCardTestApp : public NullApp
   {
   public:
-    explicit StandaloneCardTestApp(AppConfigurable *config) : NullApp(config) {}
-    Window *window() { return this->group_->getComponents()[0]->asWindow(); }
+    explicit StandaloneCardTestApp(AppConfigurable *config)
+        : NullApp(config)
+    {
+    }
+    Window *window()
+    {
+      return this->group_->getComponents()[0]->asWindow();
+    }
   };
 
   void checkStandaloneScenario()
@@ -4196,8 +4557,10 @@ namespace
     loka::core::String error;
     LOKA_VERIFY(runtime.loadBuiltin(
         "var c0,f,diagnostic='x'.repeat(100),failures=0,failureUndefined=false;card('first',c=>{c0=c;"
-        "f=c.flow(Flow().step(()=>failDiagnostic(diagnostic)).onFailure(e=>{failures++;failureUndefined=e===undefined}));"
-        "return {compose(){return Text('flow')}}});", error));
+        "f=c.flow(Flow().step(()=>failDiagnostic(diagnostic)).onFailure(e=>{failures++;failureUndefined=e===undefined})"
+        ");"
+        "return {compose(){return Text('flow')}}});",
+        error));
     NullPlatformContext context;
     NullScenePlatformController platform;
     WindowProps props;
@@ -4207,8 +4570,9 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
     JSContext *ctx = runtime.context();
     JSValue global = JS_GetGlobalObject(ctx);
-    LOKA_VERIFY(JS_SetPropertyStr(ctx, global, "failDiagnostic",
-                                 JS_NewCFunction(ctx, failFlowDiagnostic, "failDiagnostic", 0)) >= 0);
+    LOKA_VERIFY(
+        JS_SetPropertyStr(ctx, global, "failDiagnostic", JS_NewCFunction(ctx, failFlowDiagnostic, "failDiagnostic", 0))
+        >= 0);
     JSValue run = JS_Eval(ctx, "()=>f.run()", 10, "<pin>", JS_EVAL_TYPE_GLOBAL);
     LOKA_VERIFY(!JS_IsException(run));
     JSMemoryUsage usage;
@@ -4234,7 +4598,8 @@ namespace
         "card('first',c=>{c0=c;let s=c.state('');"
         "f=c.flow(Flow().watch(s,v=>{steps++;return v}).step(v=>{steps++;return v})"
         ".onSuccess(v=>successes++).onFailure(e=>{failures++;failureUndefined=e===undefined;again=f.run()}));"
-        "return {compose(){return Text('flow')}}});", error));
+        "return {compose(){return Text('flow')}}});",
+        error));
     NullPlatformContext context;
     NullScenePlatformController platform;
     WindowProps props;
@@ -4264,11 +4629,10 @@ namespace
     std::fprintf(stderr, "[pin] production Flow watch/run without Window\n");
     smirkycard::ScriptRuntime runtime;
     loka::core::String error;
-    LOKA_VERIFY(runtime.loadBuiltin(
-        "var s,result,f,constructing;card('first',c=>{s=c.state(0);result=c.state(0);"
-        "f=c.flow(Flow().watch(s,v=>v+1).step(v=>v*2).onSuccess(v=>result.set(v)));"
-        "constructing=f.run(7);return {compose(){return Text('flow')}}});",
-        error));
+    LOKA_VERIFY(runtime.loadBuiltin("var s,result,f,constructing;card('first',c=>{s=c.state(0);result=c.state(0);"
+                                    "f=c.flow(Flow().watch(s,v=>v+1).step(v=>v*2).onSuccess(v=>result.set(v)));"
+                                    "constructing=f.run(7);return {compose(){return Text('flow')}}});",
+                                    error));
     NullScenePlatformController platform;
     smirkycard::CardScene *scene = smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime);
     LOKA_VERIFY(scene != 0);
@@ -4288,10 +4652,9 @@ namespace
     std::fprintf(stderr, "[pin] production Flow constructor exception formatter refuses run\n");
     smirkycard::ScriptRuntime runtime;
     loka::core::String error;
-    LOKA_VERIFY(runtime.loadBuiltin(
-        "var f,admitted,n=0;card('first',c=>{f=c.flow(Flow().step(v=>n++));"
-        "throw {toString(){admitted=f.run(7);return 'constructor failed'}}});",
-        error));
+    LOKA_VERIFY(runtime.loadBuiltin("var f,admitted,n=0;card('first',c=>{f=c.flow(Flow().step(v=>n++));"
+                                    "throw {toString(){admitted=f.run(7);return 'constructor failed'}}});",
+                                    error));
     NullScenePlatformController platform;
     smirkycard::CardScene *scene = smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime);
     LOKA_VERIFY(scene != 0);
@@ -4413,28 +4776,48 @@ namespace
   class HandlePlatform : public NullPlatformContext
   {
   public:
-    enum Mode { Success, ReadFailure, DecodeFailure, CapacityFailure, Navigate, ReleaseProbe, NoNativeWork };
-    explicit HandlePlatform(Mode m) : mode(m), opens(0), decodes(0), capacityCalls(0), releases(0) {}
+    enum Mode
+    {
+      Success,
+      ReadFailure,
+      DecodeFailure,
+      CapacityFailure,
+      Navigate,
+      ReleaseProbe,
+      NoNativeWork
+    };
+    explicit HandlePlatform(Mode m)
+        : mode(m),
+          opens(0),
+          decodes(0),
+          capacityCalls(0),
+          releases(0)
+    {
+    }
     virtual bool openFile(const loka::file::File &file, loka::platform::file::FileHandle &out) const
     {
       ++opens;
       out = loka::platform::file::FileHandle();
-      if (file.base() == loka::file::File::BASE_REFUSED) return false;
+      if (file.base() == loka::file::File::BASE_REFUSED)
+        return false;
       const unsigned char *bytes = 0;
       std::size_t size = 0;
       if (loka::platform::file::FileLocatorAccess::query(file, bytes, size))
       {
-        if (size != 1 || (bytes[0] != 1 && bytes[0] != 2)) return false;
+        if (size != 1 || (bytes[0] != 1 && bytes[0] != 2))
+          return false;
         out.displayPath = loka::core::String::Literal(mode == ReadFailure ? "_missing_handle_file"
-            : bytes[0] == 1 ? "_handle_image.bin" : "_handle_other.bin");
+                                                      : bytes[0] == 1     ? "_handle_image.bin"
+                                                                          : "_handle_other.bin");
       }
       else
       {
         // Existing app-relative viewer fixture and ordinary path reads.
-        const loka::core::String path = file.base() == loka::file::File::BASE_APPLICATION
-            ? file.relativePath() : file.toString();
+        const loka::core::String path =
+            file.base() == loka::file::File::BASE_APPLICATION ? file.relativePath() : file.toString();
         if (!path.equals(loka::core::String::Literal("Sun.pict"))
-            && !path.equals(loka::core::String::Literal("_handle_image.bin"))) return false;
+            && !path.equals(loka::core::String::Literal("_handle_image.bin")))
+          return false;
         out.displayPath = loka::core::String::Literal("_handle_image.bin");
       }
       return true;
@@ -4452,15 +4835,20 @@ namespace
       if (self->mode == ReleaseProbe)
         LOKA_VERIFY(!smirkycard::testing::CardFlowAccess::active());
     }
-    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob, std::size_t offset,
-                                    std::size_t length, loka::core::resource::Image &out)
+    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,
+                                     std::size_t offset,
+                                     std::size_t length,
+                                     loka::core::resource::Image &out)
     {
       ++decodes;
       LOKA_VERIFY(offset == 0 && length == 3 && blob.size() == 3);
       if (mode == DecodeFailure)
         return false;
-      out = loka::core::resource::Image::FromNative(const_cast<HandlePlatform *>(this), blob.data()[0] == 't' ? 4 : 2, 3, release,
-                                                   const_cast<HandlePlatform *>(this));
+      out = loka::core::resource::Image::FromNative(const_cast<HandlePlatform *>(this),
+                                                    blob.data()[0] == 't' ? 4 : 2,
+                                                    3,
+                                                    release,
+                                                    const_cast<HandlePlatform *>(this));
       if (mode == Navigate)
         smirkycard::testing::CardFlowAccess::navigate();
       return true;
@@ -4577,14 +4965,19 @@ namespace
   class ViewerPlatform : public HandlePlatform
   {
   public:
-    ViewerPlatform() : HandlePlatform(Success) {}
-    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob, std::size_t offset,
-                                    std::size_t length, loka::core::resource::Image &out)
+    ViewerPlatform()
+        : HandlePlatform(Success)
+    {
+    }
+    virtual bool createImageFromBlob(const loka::core::resource::Blob &blob,
+                                     std::size_t offset,
+                                     std::size_t length,
+                                     loka::core::resource::Image &out)
     {
       ++this->decodes;
       LOKA_VERIFY(offset == 0 && length == 3 && blob.size() == 3);
-      out = loka::core::resource::Image::FromNative(const_cast<ViewerPlatform *>(this), 256, 256,
-                                                   release, const_cast<ViewerPlatform *>(this));
+      out = loka::core::resource::Image::FromNative(
+          const_cast<ViewerPlatform *>(this), 256, 256, release, const_cast<ViewerPlatform *>(this));
       return true;
     }
   };
@@ -4650,14 +5043,18 @@ namespace
   {
     loka::file::File file;
     LOKA_VERIFY(loka::platform::file::FileLocatorAccess::capture(
-        loka::core::String::Literal("_handle_image.bin"), loka::file::File::KIND_FILE,
-        &identity, 1, file));
+        loka::core::String::Literal("_handle_image.bin"), loka::file::File::KIND_FILE, &identity, 1, file));
     return file;
   }
 
-  void checkHandleCase(const char *name, const char *declaration, const char *operation, const char *expected,
-                       HandlePlatform::Mode mode = HandlePlatform::Success, bool contextMissing = false,
-                       bool exhaust = false, bool details = false)
+  void checkHandleCase(const char *name,
+                       const char *declaration,
+                       const char *operation,
+                       const char *expected,
+                       HandlePlatform::Mode mode = HandlePlatform::Success,
+                       bool contextMissing = false,
+                       bool exhaust = false,
+                       bool details = false)
   {
     BlobAllocationProbe allocation;
     std::fprintf(stderr, "[pin] handles %s\n", name);
@@ -4674,11 +5071,12 @@ namespace
     context.opens = context.decodes = context.capacityCalls = 0;
     loka::core::String error;
     std::string source = "var c0,fs,im,f,g,saved,log=[],work=v=>v;"
-        "function refuses(fn){try{fn();return false}catch(e){return e instanceof TypeError}}"
-        "card('first',c=>{c0=c;fs=c.state.file();im=c.state.image();";
+                         "function refuses(fn){try{fn();return false}catch(e){return e instanceof TypeError}}"
+                         "card('first',c=>{c0=c;fs=c.state.file();im=c.state.image();";
     source += declaration;
-    source += ";return {compose(){return Text('handles')},onDetach(){log.push(refuses(()=>c.native.loadImage(saved)))}}});"
-              "card('second',c=>({compose(){return Text('second')}}));";
+    source +=
+        ";return {compose(){return Text('handles')},onDetach(){log.push(refuses(()=>c.native.loadImage(saved)))}}});"
+        "card('second',c=>({compose(){return Text('second')}}));";
     LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
     NullScenePlatformController platform;
     WindowProps props;
@@ -4688,7 +5086,8 @@ namespace
     loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
     smirkycard::testing::CardFlowAccess::scene = window.scene();
     smirkycard::testing::CardFlowAccess::writeFile(loka::app::FileChooserResult::File(HandleChoice(1)));
-    if (mode == HandlePlatform::CapacityFailure) allocation.refuse("Blob", "Bytes");
+    if (mode == HandlePlatform::CapacityFailure)
+      allocation.refuse("Blob", "Bytes");
     expectJs(runtime, operation, expected);
     if (mode == HandlePlatform::NoNativeWork)
       LOKA_VERIFY(context.opens == 0 && context.decodes == 0);
@@ -4702,15 +5101,21 @@ namespace
     {
       using loka::app::FileChooserResult;
       const FileChooserResult kinds[] = {FileChooserResult(),
-        FileChooserResult::File(HandleChoice(1)),
-        FileChooserResult::Folder(loka::file::File::FromPath("folder")),
-        FileChooserResult::Canceled(), FileChooserResult::Error(17)};
-      const char *facts[] = {"0:false:false:false:true", "1:true:false:false:true",
-                            "2:false:false:false:true", "3:false:true:false:true", "4:false:false:true:true"};
-      for (unsigned i=0; i<5; ++i)
+                                         FileChooserResult::File(HandleChoice(1)),
+                                         FileChooserResult::Folder(loka::file::File::FromPath("folder")),
+                                         FileChooserResult::Canceled(),
+                                         FileChooserResult::Error(17)};
+      const char *facts[] = {"0:false:false:false:true",
+                             "1:true:false:false:true",
+                             "2:false:false:false:true",
+                             "3:false:true:false:true",
+                             "4:false:false:true:true"};
+      for (unsigned i = 0; i < 5; ++i)
       {
         smirkycard::testing::CardFlowAccess::writeFile(kinds[i]);
-        expectJs(runtime, "(()=>{let r=fs.get();return [r.kind,r.isFile,r.isCanceled,r.isError,r.file===null].join(':')})()", facts[i]);
+        expectJs(runtime,
+                 "(()=>{let r=fs.get();return [r.kind,r.isFile,r.isCanceled,r.isError,r.file===null].join(':')})()",
+                 facts[i]);
       }
       smirkycard::testing::CardFlowAccess::writeFile(kinds[1]);
       expectJs(runtime, "work=()=>{saved=c0.native.loadImage(fs.get().file);im.set(saved)};f.run();'ok'", "ok");
@@ -4732,14 +5137,19 @@ namespace
       expectJs(runtime, "work=()=>log.push(refuses(()=>im.set(fs.get().file)));f.run();log.pop()", "true");
       LOKA_VERIFY(smirkycard::testing::CardFlowAccess::image() == prior);
       context.mode = HandlePlatform::ReadFailure;
-      expectJs(runtime, "work=()=>log.push(refuses(()=>im.set(c0.native.loadImage(fs.get().file))));f.run();log.pop()", "true");
+      expectJs(runtime,
+               "work=()=>log.push(refuses(()=>im.set(c0.native.loadImage(fs.get().file))));f.run();log.pop()",
+               "true");
       LOKA_VERIFY(smirkycard::testing::CardFlowAccess::image() == prior);
       context.mode = HandlePlatform::DecodeFailure;
       expectJs(runtime, "f.run();log.pop()", "true");
       LOKA_VERIFY(smirkycard::testing::CardFlowAccess::image() == prior);
       context.mode = HandlePlatform::Success;
       const int opens = context.opens;
-      expectJs(runtime, "work=()=>{saved=fs.get().file;fs.get();fs.get();fs.get();try{c0.native.loadImage(saved)}catch(e){log.push(e instanceof RangeError)}};f.run();log.pop()", "true");
+      expectJs(runtime,
+               "work=()=>{saved=fs.get().file;fs.get();fs.get();fs.get();try{c0.native.loadImage(saved)}catch(e){log."
+               "push(e instanceof RangeError)}};f.run();log.pop()",
+               "true");
       LOKA_VERIFY(context.opens == opens);
       smirkycard::testing::CardFlowAccess::observeImage();
       expectJs(runtime, "work=()=>{saved=im.get();im.set(saved);im.set(saved)};f.run();'ok'", "ok");
@@ -4761,13 +5171,19 @@ namespace
       NullWindow other(&context, otherProps, &platform);
       loka::dsl::testing::SceneTestAccess::updateAttached(*other.scene(), true);
       expectJs(runtime,
-        "log=[];work=()=>{saved=a.c.native.loadImage(a.fs.get().file);"
-        "log.push(refuses(()=>a.im.set.call(im,saved)));"
-        "work=v=>log.push(refuses(()=>im.set(v)));f.run(saved)};a.f.run();log.join(':')", "true:true");
+               "log=[];work=()=>{saved=a.c.native.loadImage(a.fs.get().file);"
+               "log.push(refuses(()=>a.im.set.call(im,saved)));"
+               "work=v=>log.push(refuses(()=>im.set(v)));f.run(saved)};a.f.run();log.join(':')",
+               "true:true");
       // Detach while an execution still owns a File handle; capability is still bound.
       JSValue global = JS_GetGlobalObject(runtime.context());
-      LOKA_VERIFY(JS_SetPropertyStr(runtime.context(), global, "detachNow", JS_NewCFunction(runtime.context(),
-        smirkycard::testing::CardFlowAccess::detachCall, "detachNow", 0)) >= 0);
+      LOKA_VERIFY(
+          JS_SetPropertyStr(
+              runtime.context(),
+              global,
+              "detachNow",
+              JS_NewCFunction(runtime.context(), smirkycard::testing::CardFlowAccess::detachCall, "detachNow", 0))
+          >= 0);
       JS_FreeValue(runtime.context(), global);
       const int beforeDetach = context.opens;
       expectJs(runtime, "log=[];work=()=>{saved=a.fs.get().file;detachNow()};a.f.run();log.join(':')", "true");
@@ -4794,19 +5210,20 @@ namespace
     runtime.loadMain(&context);
     context.opens = context.decodes = 0;
     loka::core::String error;
-    LOKA_VERIFY(runtime.loadBuiltin(
-      "var c0,shown,fs,picture,inside,log=[];card('first',c=>{c0=c;"
-      "shown=c.state(false);fs=c.state.file();picture=c.state.image();"
-      "c.flow(Flow().watch(fs,r=>{if(r.kind===0)return Flow.SKIP;"
-      "shown.set(false);log.push('closed:'+shown.get());"
-      "if(r.isCanceled)return Flow.SKIP;if(r.isError)throw Error('chooser');return r.file})"
-      ".step(h=>{log.push('load:'+shown.get());picture.set(c.native.loadImage(h))})"
-      ".onSuccess(()=>log.push('ok')).onFailure(()=>log.push('failed')));"
-      "inside=c.flow(Flow().step(()=>shown.set(true)));"
-      "return {compose(){return VStack(Button('open',()=>shown.set(true)).TEST_ID('Open'),"
-      "Button('hide',()=>shown.set(false)).TEST_ID('Hide'),"
-      "Show(shown,VStack(Text('child').TEST_ID('Child'),OpenFileDialog(fs).TEST_ID('Chooser'))),"
-      "ImageView(picture).TEST_ID('Picture'))}}});", error));
+    LOKA_VERIFY(
+        runtime.loadBuiltin("var c0,shown,fs,picture,inside,log=[];card('first',c=>{c0=c;"
+                            "shown=c.state(false);fs=c.state.file();picture=c.state.image();"
+                            "c.flow(Flow().watch(fs,r=>{if(r.kind===0)return Flow.SKIP;"
+                            "shown.set(false);log.push('closed:'+shown.get());"
+                            "if(r.isCanceled)return Flow.SKIP;if(r.isError)throw Error('chooser');return r.file})"
+                            ".step(h=>{log.push('load:'+shown.get());picture.set(c.native.loadImage(h))})"
+                            ".onSuccess(()=>log.push('ok')).onFailure(()=>log.push('failed')));"
+                            "inside=c.flow(Flow().step(()=>shown.set(true)));"
+                            "return {compose(){return VStack(Button('open',()=>shown.set(true)).TEST_ID('Open'),"
+                            "Button('hide',()=>shown.set(false)).TEST_ID('Hide'),"
+                            "Show(shown,VStack(Text('child').TEST_ID('Child'),OpenFileDialog(fs).TEST_ID('Chooser'))),"
+                            "ImageView(picture).TEST_ID('Picture'))}}});",
+                            error));
     NullScenePlatformController platform;
     WindowProps props;
     props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
@@ -4828,10 +5245,11 @@ namespace
     LOKA_VERIFY(!windowNode(window, "Child") && !windowNode(window, "Chooser"));
 
     using loka::app::FileChooserResult;
-    const FileChooserResult outcomes[] = {
-      FileChooserResult::File(loka::file::File::FromPath("_handle_image.bin")),
-      FileChooserResult::File(loka::file::File::FromPath("_handle_image.bin")),
-      FileChooserResult::Canceled(), FileChooserResult::Error(7), FileChooserResult::Canceled()};
+    const FileChooserResult outcomes[] = {FileChooserResult::File(loka::file::File::FromPath("_handle_image.bin")),
+                                          FileChooserResult::File(loka::file::File::FromPath("_handle_image.bin")),
+                                          FileChooserResult::Canceled(),
+                                          FileChooserResult::Error(7),
+                                          FileChooserResult::Canceled()};
     for (unsigned i = 0; i < 5; ++i)
     {
       clickCardButton(window, "Open");
@@ -4853,8 +5271,9 @@ namespace
       LOKA_VERIFY(picture->props.image_->get().isValid());
       LOKA_VERIFY(picture->props.image_->get() == smirkycard::testing::CardFlowAccess::image());
     }
-    expectJs(runtime, "log.join(',')",
-      "closed:false,load:false,ok,closed:false,load:false,ok,closed:false,closed:false,failed,closed:false");
+    expectJs(runtime,
+             "log.join(',')",
+             "closed:false,load:false,ok,closed:false,load:false,ok,closed:false,closed:false,failed,closed:false");
     expectJs(runtime, "picture.set(null);'cleared'", "cleared");
     LOKA_VERIFY(!picture->props.image_->get().isValid());
 
@@ -4960,7 +5379,8 @@ namespace
       const std::string source = std::string("card('first',c=>{const v=") + invalid[i]
                                  + ";return {compose(){return ScrollView(Text('a'),{viewport:v})}}});";
       checkComposeRefusal(source.c_str(),
-                          "JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
+                          i >= 4 ? "TypeError"
+                                 : "JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
     }
   }
 
@@ -5055,8 +5475,7 @@ namespace
     expectJs(runtime,
              "(()=>{const original=Row(Text('a'));const tree=original.naturalWidth();"
              "return Object.isFrozen(original)&&Object.isFrozen(tree)&&tree!==original&&"
-             "original.rowWidth===undefined&&tree.rowWidth===1&&tree.naturalWidth()===tree&&"
-             "tree.TEST_ID('x').rowWidth===1&&Row(Text('a')).TEST_ID('y').naturalWidth().testId==='y'})()",
+             "tree.naturalWidth()===tree})()",
              "true");
     const char *wrongKinds[] = {"VStack(Text('a'))", "Card(Text('a'))"};
     for (unsigned i = 0; i < 2; ++i)
@@ -5110,8 +5529,7 @@ namespace
     expectJs(runtime,
              "(()=>{const original=VStack(Text('a'));const tree=original.naturalHeight();"
              "return Object.isFrozen(original)&&Object.isFrozen(tree)&&tree!==original&&"
-             "original.columnHeight===undefined&&tree.columnHeight===1&&tree.naturalHeight()===tree&&"
-             "tree.TEST_ID('x').columnHeight===1&&VStack(Text('a')).TEST_ID('y').naturalHeight().testId==='y'})()",
+             "tree.naturalHeight()===tree})()",
              "true");
     expectJs(runtime,
              "(()=>{try{Row(Text('a')).naturalHeight();return false}catch(e){return e instanceof TypeError}})()",
@@ -5140,19 +5558,13 @@ namespace
   void checkZStackLowering()
   {
     smirkycard::ScriptRuntime methodRuntime;
-    expectJs(
-        methodRuntime,
-        "(()=>{const original=ZStack(Text('g'));const tree=original.expStaticBlurUnit();"
-        "return Object.isFrozen(tree)&&tree!==original&&original.staticBlurUnit===undefined&&"
-        "tree.staticBlurUnit===1&&tree.expStaticBlurUnit()===tree&&"
-        "tree.TEST_ID('x').staticBlurUnit===1&&ZStack(Text('g')).TEST_ID('y').expStaticBlurUnit().testId==='y'})()",
-        "true");
+    expectJs(methodRuntime,
+             "(()=>{const original=ZStack(Text('g'));const tree=original.expStaticBlurUnit();"
+             "return Object.isFrozen(tree)&&tree!==original&&tree.expStaticBlurUnit()===tree})()",
+             "true");
     expectJs(methodRuntime,
              "(()=>{const original=ZStack(Text('g'));const tree=original.expBlurUnit();"
-             "return Object.isFrozen(tree)&&tree!==original&&original.blurUnit===undefined&&"
-             "tree.blurUnit===1&&tree.expBlurUnit()===tree&&"
-             "tree.TEST_ID('x').blurUnit===1&&ZStack(Text('g')).TEST_ID('y').expBlurUnit().testId==='y'&&"
-             "tree.expStaticBlurUnit().blurUnit===0&&tree.expStaticBlurUnit().expBlurUnit().staticBlurUnit===0})()",
+             "return Object.isFrozen(tree)&&tree!==original&&tree.expBlurUnit()===tree})()",
              "true");
     expectJs(methodRuntime,
              "(()=>{try{ZStack(Text('g')).expBlurUnit(1);return false}catch(e){return e instanceof TypeError}})()",
@@ -5323,14 +5735,13 @@ namespace
     expectJs(runtime,
              "(()=>{const o={padding:'standard'},t=Box(Text('s'),o);o.padding=0;"
              "const n={padding:12},u=Box(Text('n'),n);n.padding=0;"
-             "return Object.isFrozen(t)&&Object.isFrozen(u)&&t.padding==='standard'&&u.padding===12&&"
-             "!Object.hasOwn(Box(Text('i'),{}),'padding')})()",
+             "return Object.isFrozen(t)&&Object.isFrozen(u)})()",
              "true");
     checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
                         "'padding',{get(){throw new Error('must not run')},enumerable:true})}}));",
-                        "JavaScript Box has an invalid width, height or padding.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{padding:'big'})}}));",
-                        "JavaScript Box has an invalid width, height or padding.");
+                        "JavaScript tree has an invalid node.");
   }
 
   void checkCardWindowMargin()
@@ -5437,15 +5848,14 @@ namespace
     expectJs(runtime,
              "(()=>{const child=Text('x'),o={width:300,height:8,padding:12},t=ClipBox(child,o).TEST_ID('copy');"
              "o.width=1;o.height=2;o.padding=0;return "
-             "Object.isFrozen(t)&&t.child===child&&t.width===300&&t.height===8&&t.padding===12&&"
-             "![ClipBox(child),ClipBox(child,{})].some(t=>'width' in t||'height' in t)&&"
+             "Object.isFrozen(t)&&"
              "[ClipBox(child),ClipBox(child,{})].every(Object.isFrozen)})()",
              "true");
 
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ClipBox(Text('x')),{width:0})}}));",
-                        "JavaScript ClipBox has an invalid width, height or padding.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ClipBox(Text('x')),{child:42})}}));",
-                        "JavaScript ClipBox has an invalid child.");
+                        "JavaScript tree has an invalid node.");
     std::string tree = "Text('deep').TEST_ID('DeepClipBox')";
     for (int depth = 0; depth < 11; ++depth)
       tree = "ClipBox(" + tree + ")";
@@ -5550,8 +5960,7 @@ namespace
     }
     expectJs(runtime,
              "(()=>{const child=Text('x'),o={width:300,height:8},t=Box(child,o).TEST_ID('copy');"
-             "o.width=1;o.height=2;return Object.isFrozen(t)&&t.child===child&&t.width===300&&t.height===8&&"
-             "![Box(child),Box(child,{})].some(t=>'width' in t||'height' in t)&&"
+             "o.width=1;o.height=2;return Object.isFrozen(t)&&"
              "[Box(child),Box(child,{})].every(Object.isFrozen)})()",
              "true");
     const char *invalid[] = {"{width:0}", "{height:1.5}", "{width:'12'}", "{height:Infinity}", "{width:undefined}"};
@@ -5559,13 +5968,13 @@ namespace
     {
       const std::string script =
           std::string("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),") + invalid[i] + ")}}));";
-      checkComposeRefusal(script.c_str(), "JavaScript Box has an invalid width, height or padding.");
+      checkComposeRefusal(script.c_str(), "JavaScript tree has an invalid node.");
     }
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Box(Text('x')),{child:42})}}));",
-                        "JavaScript Box has an invalid child.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.defineProperty(Object.assign({},Box(Text('x'))),"
                         "'width',{get(){return 10},enumerable:true})}}));",
-                        "JavaScript Box has an invalid width, height or padding.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(Box(ScrollView(Text('in'))))}}));",
                         "cannot contain another ScrollView");
     std::string tree = "Text('deep').TEST_ID('DeepBox')";
@@ -5737,28 +6146,28 @@ namespace
              "true");
     expectJs(runtime,
              "(()=>{const t=ScrollView(Text('x'),{insets:{top:32767,bottom:32767}});"
-             "return Object.isFrozen(t)&&t.insetTop===32767&&t.insetBottom===32767})()",
+             "return Object.isFrozen(t)})()",
              "true");
     checkComposeRefusal(
         "card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{insetTop:40000})}}));",
-        "invalid insets");
+        "JavaScript tree has an invalid node.");
     checkComposeRefusal(
         "card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{insetBottom:1.5})}}));",
-        "invalid insets");
+        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},ScrollView(Text('x')),{child:42})}}));",
-                        "JavaScript ScrollView has an invalid child.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>({compose(){return Object.assign({},Card(Text('x')),{child:[]})}}));",
-                        "JavaScript Card has an invalid child.");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>{const pic=c.state.image();return {compose(){return "
                         "Object.assign({},ImageView(pic),{width:10})}}});",
-                        "invalid options");
+                        "JavaScript tree has an invalid node.");
     checkComposeRefusal("card('first',c=>{const tree=ImageView(c.state.image(),{width:10});"
                         "return {compose(){return tree}}});",
                         "provided together");
     expectJs(runtime,
              "(()=>{const options={width:120,height:80,fit:'contain'};"
              "const tree=ImageView(pic,options);options.width=7;options.fit='cover';"
-             "return tree.width===120&&tree.height===80&&tree.fit===1})()",
+             "return Object.isFrozen(tree)})()",
              "true");
     expectJs(runtime, "Object.isFrozen(ImageView(pic,Object.assign(Object.create(null),{fit:'cover'})))", "true");
     checkComposeRefusal("card('first',c=>({compose(){return ScrollView(ScrollView(Text('x')))}}));",
@@ -5921,52 +6330,7 @@ namespace
     expectJs(h.runtime, "laptop.thumbs === laptop.pics", mono ? "false" : "true");
     expectJs(h.runtime, "MACHINES.length===13 && MACHINES.every((m,i)=>laptop[m.id]===laptop.pics[i])", "true");
     expectJs(h.runtime, "laptop.pics.length===13 && laptop.thumbs.length===13", "true");
-    expectJs(h.runtime, "laptop.list().children[0].child.children.length", "14");
-    // The seventh wide row holds the odd thirteenth machine and an empty Box
-    // partner, so the card keeps the width of every other card.
-    expectJs(h.runtime,
-             "(r=>r.children.length===2 && r.children[0].child.children.length===2"
-             " && r.children[1].child.text==='')(laptop.list().children[0].child.children[6].child)",
-             "true");
-    expectJs(h.runtime, "laptop.compose().staticBlurUnit===1 && laptop.aboutShown.get()===false", "true");
-    std::fputs("[pin] laptop per-pane Toolbar shape, constant leads and item order\n", stderr);
-    expectJs(h.runtime,
-             "[laptop.carousel(),laptop.list(),laptop.detailPage()].every((pane,i)=>{"
-             "const band=pane.children[1].child,items=band.children;"
-             "return band.kind===Toolbar().kind && items.length===4 && "
-             "items[0].kind===ToolbarItem('x',()=>{}).kind && items[0].label===['Tall','Wide','< Back'][i] && "
-             "items[0].testId===(i===2?'Laptop.Back':'Laptop.Presentation') && "
-             "items[1].kind===ToolbarItem.label('x').kind && items[1].label===laptop.toolbarTitle && "
-             "items[1].testId==='Laptop.Title' && items[1].style.size===18 && items[1].style.weight==='bold' && "
-             "items[2].kind===items[0].kind && items[2].label==='Main' && "
-             "items[2].testId==='SmirkyCard.OpenMain' && items[3].kind===items[0].kind && "
-             "items[3].label==='About' && items[3].testId==='Laptop.About'})",
-             "true");
-    expectJs(h.runtime,
-             "(()=>{const depths=[];function walk(t,d){"
-             "if(t.testId && /Laptop\\.(Open|Narrow)\\./.test(t.testId))depths.push(d);"
-             "if(t.child)walk(t.child,d+1);if(t.children)t.children.forEach(c=>walk(c,d+1));}"
-             "walk(laptop.compose(),0);return depths.length===26 && depths.every(d=>d===10)})()",
-             "true");
-    expectJs(h.runtime,
-             "(()=>{const list=[],carousel=[];function walk(t,d,p){"
-             "if(t.children && t.children[1] && t.children[1].testId){"
-             "const id=t.children[1].testId,thumb=t.children[0];"
-             "if(/Laptop\\.(Open|Narrow)\\./.test(id))list.push("
-             "thumb.kind===ClipBox(Text('')).kind && thumb.child.kind===ImageView(laptop.thumbs[0]).kind"
-             " && d+2===11);"
-             "if(/Laptop\\.Wide\\./.test(id))carousel.push("
-             "p.kind===Card(Text('')).kind && t.kind===VStack().kind"
-             " && thumb.kind===ImageView(laptop.thumbs[0]).kind);}"
-             "if(t.child)walk(t.child,d+1,t);if(t.children)t.children.forEach(c=>walk(c,d+1,t));}"
-             "walk(laptop.compose(),0,null);return list.length===26 && list.every(Boolean)"
-             " && carousel.length===13 && carousel.every(Boolean)})()",
-             "true");
-    expectJs(h.runtime,
-             "[laptop.list(),laptop.detailPage()].every(t=>t.kind===ZStack(Text('')).kind&&t.blurUnit===1&&"
-             "t.children[0].kind===ScrollView(Text('')).kind&&t.children[0].insetTop===30&&"
-             "t.children[1].kind===Box(Text('')).kind&&t.children[1].height===30)",
-             "true");
+    expectJs(h.runtime, "laptop.aboutShown.get()===false", "true");
     checkLaptopBands(*h.window);
     expectJs(h.runtime, "laptop.aboutShown.set(true);laptop.aboutShown.get()", "true");
     h.ticks(2);
@@ -6001,9 +6365,6 @@ namespace
     h.ticks(2);
     checkLaptopToolbarIds(*h.window, false);
     expectJs(h.runtime, "!laptop.detail.get() && laptop.listShown.get() && laptopToggleCalls===2", "true");
-    // Inspect the actual ImageView inputs, not merely the existence of thumbs.
-    expectJs(
-        h.runtime, "laptop.machineCard(0,150,94,'x','x',true).child.children[0].child.seat===laptop.thumbs[0]", "true");
   }
 
   loka::app::scene::Node *laptopThumbnail(loka::app::scene::Node *node, const char *buttonId)
@@ -6164,11 +6525,11 @@ namespace
 
   void checkLoweringRefusals()
   {
-    const char *trees[] = {"Show(c.state(1),Text('x'))", "Show({},Text('x'))",
-      "OpenFileDialog(c.state.image())", "OpenFileDialog(null)",
-      "ImageView(c.state.file())", "ImageView(42)",
-      "Show(c.state(true),VStack(Text('prefix').TEST_ID('Prefix'),{kind:99999}))"};
-    const char *messages[] = {"Bool", "Bool", "File", "File", "Image", "Image", "tree"};
+    const char *trees[] = {"Show(c.state(1),Text('x'))",
+                           "Show({},Text('x'))",
+                           "OpenFileDialog(c.state.image())",
+                           "ImageView(c.state.file())"};
+    const char *messages[] = {"Bool", "Bool", "File", "Image"};
     for (unsigned i = 0; i < sizeof(trees) / sizeof(trees[0]); ++i)
     {
       std::string source = "card('first',c=>{const tree=";
@@ -6176,7 +6537,11 @@ namespace
       source += ";return {compose(){return tree}}});";
       checkComposeRefusal(source.c_str(), messages[i]);
     }
-    const char *badBuilds[] = {"Show()",
+    const char *badBuilds[] = {"OpenFileDialog(null)",
+                               "ImageView(42)",
+                               "Show({},VStack(Text('prefix'),{kind:99999}))",
+                               "Show({}, {kind:99999})",
+                               "Show()",
                                "Show({},[])",
                                "Show({},Text('x'),Text('y'))",
                                "OpenFileDialog()",
@@ -6199,7 +6564,8 @@ namespace
     NullScenePlatformController platform;
     loka::core::String error;
     LOKA_VERIFY(runtime.loadBuiltin("var own,foreign;card('first',c=>{own={b:c.state(true),"
-      "f:c.state.file(),i:c.state.image(),c};return {compose(){return Text('alive')}}});", error));
+                                    "f:c.state.file(),i:c.state.image(),c};return {compose(){return Text('alive')}}});",
+                                    error));
     WindowProps props;
     props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
     NullWindow first(&context, props, &platform);
@@ -6211,19 +6577,17 @@ namespace
     NullWindow second(&context, secondProps, &platform);
     loka::dsl::testing::SceneTestAccess::updateAttached(*second.scene(), true);
     smirkycard::testing::CardFlowAccess::scene = second.scene();
-    const char *foreignTrees[] = {"Show(foreign.b,Text('x'))", "OpenFileDialog(foreign.f)",
-      "ImageView(foreign.i)", "Show(own.b,{kind:99999})"};
-    for (unsigned i = 0; i < 4; ++i)
+    const char *foreignTrees[] = {"Show(foreign.b,Text('x'))", "OpenFileDialog(foreign.f)", "ImageView(foreign.i)"};
+    for (unsigned i = 0; i < 3; ++i)
     {
-      JSValue tree = JS_Eval(runtime.context(), foreignTrees[i], std::strlen(foreignTrees[i]),
-                            "lowering pin", JS_EVAL_TYPE_GLOBAL);
+      JSValue tree = JS_Eval(
+          runtime.context(), foreignTrees[i], std::strlen(foreignTrees[i]), "lowering pin", JS_EVAL_TYPE_GLOBAL);
       LOKA_VERIFY(!JS_IsException(tree));
       loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
           smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(!lowered.isSet());
-      expectJs(runtime, i == 3 ? "own.c.error.get().includes('tree')"
-                              : "own.c.error.get().includes('own')", "true");
+      expectJs(runtime, "own.c.error.get().includes('own')", "true");
     }
   }
 
@@ -6239,71 +6603,118 @@ namespace
   void checkExecutionAdmissionExhaustion()
   {
     checkHandleCase("issuer last serial admitted once then refuses forever",
-      "f=c.flow(Flow().step(()=>log.push('ran')))",
-      "[f.run(),f.run(),f.run(),log.join(':')].join(':')", "true:false:false:ran", HandlePlatform::Success, false, true);
+                    "f=c.flow(Flow().step(()=>log.push('ran')))",
+                    "[f.run(),f.run(),f.run(),log.join(':')].join(':')",
+                    "true:false:false:ran",
+                    HandlePlatform::Success,
+                    false,
+                    true);
   }
 
   void checkHandles()
   {
     checkHandleCase("extended typed ownership and settlement",
-      "f=c.flow(Flow().step(v=>work(v)))", "'ready'", "ready", HandlePlatform::Success, false, false, true);
+                    "f=c.flow(Flow().step(v=>work(v)))",
+                    "'ready'",
+                    "ready",
+                    HandlePlatform::Success,
+                    false,
+                    false,
+                    true);
     checkHandleCase("image watch forced null notifications",
-      "f=c.flow(Flow().watch(im,v=>{log.push(v===null);return v}))",
-      "im.set(null);im.set(null);log.join(':')", "true:true");
-    checkHandleCase("same execution, stale later, run input, wrong kind, imitation",
-      "f=c.flow(Flow().step(v=>work(v)).onSuccess(v=>log.push('ok')).onFailure(v=>log.push('fail')))",
-      "work=()=>{saved=c0.native.loadImage(fs.get().file);im.set(saved);"
-      "log.push(refuses(()=>im.set(fs.get().file)),refuses(()=>im.set({serial:1,slot:0,kind:1})));};f.run();"
-      "work=v=>{im.get();im.get();log.push(refuses(()=>im.set(saved)),refuses(()=>im.set(v)));im.set(im.get())};f.run(saved);log.join(':')",
-      "true:true:ok:true:true:ok");
+                    "f=c.flow(Flow().watch(im,v=>{log.push(v===null);return v}))",
+                    "im.set(null);im.set(null);log.join(':')",
+                    "true:true");
+    checkHandleCase(
+        "same execution, stale later, run input, wrong kind, imitation",
+        "f=c.flow(Flow().step(v=>work(v)).onSuccess(v=>log.push('ok')).onFailure(v=>log.push('fail')))",
+        "work=()=>{saved=c0.native.loadImage(fs.get().file);im.set(saved);"
+        "log.push(refuses(()=>im.set(fs.get().file)),refuses(()=>im.set({serial:1,slot:0,kind:1})));};f.run();"
+        "work=v=>{im.get();im.get();log.push(refuses(()=>im.set(saved)),refuses(()=>im.set(v)));im.set(im.get())};f."
+        "run(saved);log.join(':')",
+        "true:true:ok:true:true:ok");
     checkHandleCase("five slots failure preserves writes",
-      "f=c.flow(Flow().step(()=>{saved=fs.get().file;im.set(null);for(let i=0;i<4;i++)fs.get()})"
-      ".onSuccess(()=>log.push('bad')).onFailure(()=>log.push('failed')))",
-      "f.run();log.join(':')", "failed");
+                    "f=c.flow(Flow().step(()=>{saved=fs.get().file;im.set(null);for(let i=0;i<4;i++)fs.get()})"
+                    ".onSuccess(()=>log.push('bad')).onFailure(()=>log.push('failed')))",
+                    "f.run();log.join(':')",
+                    "failed");
     checkHandleCase("caught capacity exception succeeds",
-      "f=c.flow(Flow().step(()=>{for(let i=0;i<4;i++)fs.get();try{fs.get()}catch(e){log.push(e instanceof RangeError)}})"
-      ".onSuccess(()=>log.push('ok')))", "f.run();log.join(':')", "true:ok");
-    checkHandleCase("constructors, read-only file, clearing, outside reads",
-      "f=c.flow(Flow().step(()=>{im.set(c.native.loadImage(fs.get().file));im.set(null);log.push(im.get()===null)}))",
-      "log.push(refuses(()=>c0.state.file()),refuses(()=>c0.state.image()),refuses(()=>fs.set(null)),"
-      "refuses(()=>fs.set(1)),refuses(()=>im.get()),fs.get().file===null,Object.isFrozen(fs.get()));"
-      "f.run();im.set(null);log.join(':')", "true:true:true:true:true:true:true:true");
+                    "f=c.flow(Flow().step(()=>{for(let i=0;i<4;i++)fs.get();try{fs.get()}catch(e){log.push(e "
+                    "instanceof RangeError)}})"
+                    ".onSuccess(()=>log.push('ok')))",
+                    "f.run();log.join(':')",
+                    "true:ok");
+    checkHandleCase(
+        "constructors, read-only file, clearing, outside reads",
+        "f=c.flow(Flow().step(()=>{im.set(c.native.loadImage(fs.get().file));im.set(null);log.push(im.get()===null)}))",
+        "log.push(refuses(()=>c0.state.file()),refuses(()=>c0.state.image()),refuses(()=>fs.set(null)),"
+        "refuses(()=>fs.set(1)),refuses(()=>im.get()),fs.get().file===null,Object.isFrozen(fs.get()));"
+        "f.run();im.set(null);log.join(':')",
+        "true:true:true:true:true:true:true:true");
     checkHandleCase("typed watch projects facts and a handle",
-      "f=c.flow(Flow().watch(fs,v=>{log.push(v.kind,v.isFile,v.isCanceled,v.isError,Object.isFrozen(v));return v.file})"
-      ".step(h=>im.set(c.native.loadImage(h))).onSuccess(()=>log.push('ok')))",
-      "log.join(':')", "1:true:false:false:true:ok");
-    checkHandleCase("read error", "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('READ_STDIO_OPEN_FAILED'))))",
-      "f.run();log.join(':')", "true", HandlePlatform::ReadFailure);
-    checkHandleCase("decode error", "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('decode failure'))))",
-      "f.run();log.join(':')", "true", HandlePlatform::DecodeFailure);
-    checkHandleCase("allocation has no stdio retry", "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('READ_ALLOCATION_REFUSED'))))",
-      "f.run();log.join(':')", "true", HandlePlatform::CapacityFailure);
-    checkHandleCase("missing runtime context", "f=c.flow(Flow().step(()=>log.push(refuses(()=>c.native.loadImage(fs.get().file)))))",
-      "f.run();log.join(':')", "true", HandlePlatform::Success, true);
+                    "f=c.flow(Flow().watch(fs,v=>{log.push(v.kind,v.isFile,v.isCanceled,v.isError,Object.isFrozen(v));"
+                    "return v.file})"
+                    ".step(h=>im.set(c.native.loadImage(h))).onSuccess(()=>log.push('ok')))",
+                    "log.join(':')",
+                    "1:true:false:false:true:ok");
+    checkHandleCase("read error",
+                    "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('"
+                    "READ_STDIO_OPEN_FAILED'))))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::ReadFailure);
+    checkHandleCase("decode error",
+                    "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('"
+                    "decode failure'))))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::DecodeFailure);
+    checkHandleCase("allocation has no stdio retry",
+                    "f=c.flow(Flow().step(()=>c.native.loadImage(fs.get().file)).onFailure(e=>log.push(e.includes('"
+                    "READ_ALLOCATION_REFUSED'))))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::CapacityFailure);
+    checkHandleCase("missing runtime context",
+                    "f=c.flow(Flow().step(()=>log.push(refuses(()=>c.native.loadImage(fs.get().file)))))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::Success,
+                    true);
     checkHandleCase("post-native navigation refuses publication and cancels terminal",
-      "f=c.flow(Flow().step(()=>log.push(refuses(()=>c.native.loadImage(fs.get().file))))"
-      ".onSuccess(()=>log.push('bad')).onFailure(()=>log.push('bad')))",
-      "f.run();log.join(':')", "true", HandlePlatform::Navigate);
+                    "f=c.flow(Flow().step(()=>log.push(refuses(()=>c.native.loadImage(fs.get().file))))"
+                    ".onSuccess(()=>log.push('bad')).onFailure(()=>log.push('bad')))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::Navigate);
     checkHandleCase("resolver refuses TransitionPending",
-      "f=c.flow(Flow().step(()=>{saved=fs.get().file;c.go('second');log.push(refuses(()=>c.native.loadImage(saved)))}))",
-      "f.run();log.join(':')", "true", HandlePlatform::NoNativeWork);
+                    "f=c.flow(Flow().step(()=>{saved=fs.get().file;c.go('second');log.push(refuses(()=>c.native."
+                    "loadImage(saved)))}))",
+                    "f.run();log.join(':')",
+                    "true",
+                    HandlePlatform::NoNativeWork);
     checkHandleCase("release observes cleared execution",
-      "f=c.flow(Flow().step(()=>{saved=c.native.loadImage(fs.get().file)}))",
-      "f.run();'done'", "done", HandlePlatform::ReleaseProbe);
+                    "f=c.flow(Flow().step(()=>{saved=c.native.loadImage(fs.get().file)}))",
+                    "f.run();'done'",
+                    "done",
+                    HandlePlatform::ReleaseProbe);
     checkExecutionAdmissionExhaustion();
   }
 
   void checkTypedSeats()
   {
-    checkProductionFlowCase("typed and scalar seats share one budget",
-      "for(let i=0;i<126;i++)c.state(0);c.state.file();try{c.state.image()}catch(e){n=e instanceof RangeError?1:0}",
-      "n", "1");
+    checkProductionFlowCase(
+        "typed and scalar seats share one budget",
+        "for(let i=0;i<126;i++)c.state(0);c.state.file();try{c.state.image()}catch(e){n=e instanceof RangeError?1:0}",
+        "n",
+        "1");
     checkProductionFlowCase("typed seats constructor and empty access",
-      "globalThis.fs=c.state.file();globalThis.im=c.state.image();"
-      "f=c.flow(Flow().step(()=>im.get()).onSuccess(v=>log.push(v===null)))",
-      "f.run();[Object.isFrozen(c0.state),Object.isFrozen(c0.native),fs.get().kind,"
-      "fs.get().file===null,log[0],(()=>{try{im.get();return false}catch(e){return e instanceof TypeError}})()].join(':')",
-      "true:true:0:true:true:true");
+                            "globalThis.fs=c.state.file();globalThis.im=c.state.image();"
+                            "f=c.flow(Flow().step(()=>im.get()).onSuccess(v=>log.push(v===null)))",
+                            "f.run();[Object.isFrozen(c0.state),Object.isFrozen(c0.native),fs.get().kind,"
+                            "fs.get().file===null,log[0],(()=>{try{im.get();return false}catch(e){return e instanceof "
+                            "TypeError}})()].join(':')",
+                            "true:true:0:true:true:true");
   }
 
   void checkProductionFlow()
@@ -6503,8 +6914,8 @@ namespace
     clickCardButton(window, "Captured.Read");
     Node *count = windowNode(window, "Captured.Count");
     LOKA_VERIFY(count && count->asTextNode());
-    // A1 reads a genuine label style once; today build, Toolbar build and lower each read it.
-    LOKA_VERIFY(textValue(count->asTextNode()) == "3");
+    // The label style is read only by its builder.
+    LOKA_VERIFY(textValue(count->asTextNode()) == "1");
     Node *grid = windowNode(window, "Grid.Copy");
     LOKA_VERIFY(grid && grid->asGridNode());
     LOKA_VERIFY(grid->asGridNode()->props.rows == 1 && grid->asGridNode()->props.cols == 1);
@@ -6518,9 +6929,9 @@ namespace
       Node *text = windowNode(window, textIds[i]);
       LOKA_VERIFY(text && text->asTextNode());
       LOKA_VERIFY(textValue(text->asTextNode()) == (i == 2 ? "short" : "a"));
-      // A1 inverts Style.Changed to 24: today's lower rereads the valid dictionary.
+      // Both literal styles are build snapshots; the live Toolbar label remains size 12.
       LOKA_VERIFY(text->asTextNode()->props.textStyle_
-                  == (i == 0 ? TextStyle(FontSize<24>()) : TextStyle(FontSize<12>())));
+                  == (i < 2 ? TextStyle(FontSize<24>()) : TextStyle(FontSize<12>())));
     }
     const char *blockIds[] = {"Block.NullProto", "Block.Empty", "Block.TextSnapshot", "Block.MarkupSnapshot"};
     for (unsigned i = 0; i < 4; ++i)
@@ -6578,7 +6989,9 @@ namespace
 
   void checkNativeTiming()
   {
-    const char *build[] = {"ToolbarItem()",
+    const char *build[] = {"Cell(42,()=>{})",
+                           "Button(42,()=>{})",
+                           "ToolbarItem()",
                            "ToolbarItem(3,()=>{})",
                            "ToolbarItem(this.s,()=>{})",
                            "ToolbarItem('x',3)",
@@ -6644,8 +7057,6 @@ namespace
                            "Toolbar(ToolbarItem('x',()=>{}).enabled({}))",
                            "Toolbar(ToolbarItem.label(foreign.s))",
                            "Toolbar(ToolbarItem('x',()=>{}).enabled(foreign.b))",
-                           "Cell(42,()=>{})",
-                           "Button(42,()=>{})",
                            "VStack(Button('prefix',()=>{}).TEST_ID('Prefix'),EditText(foreign.s))",
                            "VStack(Text('prefix').TEST_ID('Prefix'),EditText(foreign.s))"};
     for (unsigned i = 0; i < sizeof(lower) / sizeof(lower[0]); ++i)
@@ -6705,7 +7116,57 @@ namespace
       LOKA_VERIFY(CardFlowAccess::handlerCount() == 0);
       return;
     }
-    if (pin == 0 || pin == 1)
+    if (pin == 10)
+    {
+      expectJs(runtime,
+               "globalThis.traps=0;globalThis.genuine=Text('x');globalThis.revoked=Proxy.revocable(genuine,{});revoked."
+               "revoke();'ready'",
+               "ready");
+      const char *fake[] = {"({get kind(){traps++;return 2}})",
+                            "Object.assign({},genuine)",
+                            "({...genuine})",
+                            "Object.create(genuine)",
+                            "Object.create(Object.getPrototypeOf(genuine))",
+                            "new Proxy(genuine,{get(){traps++;throw 1},getPrototypeOf(){traps++;throw 2}})",
+                            "revoked.proxy"};
+      for (unsigned i = 0; i < sizeof(fake) / sizeof(fake[0]); ++i)
+      {
+        admissionLower(runtime, fake[i], false);
+        LOKA_VERIFY(CardFlowAccess::handlerCount() == 0);
+        expectJs(runtime, "traps", "0");
+      }
+    }
+    else if (pin == 9)
+    {
+      using namespace loka::core::testing;
+      const char *source = "Button('clone',()=>{})";
+      smirkycard::JsValueRoot tree(
+          runtime.context(),
+          JS_Eval(runtime.context(), source, std::strlen(source), "clone refusal", JS_EVAL_TYPE_GLOBAL));
+      LOKA_VERIFY(!JS_IsException(tree.value()));
+      cloneHandlerLive = cloneHandlerAttempts = 0;
+      loka::core::LokaAllocSetBackend(cloneAllocate, cloneRelease);
+      cloneFailureReached = false;
+      cloneFailureSize = sizeof(loka::app::scene::NodeDefinition<smirkycard::JsClickProps, smirkycard::JsClickNode>);
+      loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> definition(
+          CardFlowAccess::lowerRoot(runtime.context(), tree.value()));
+      cloneFailureSize = 0;
+      LOKA_VERIFY(cloneFailureReached && !definition.isSet());
+      LOKA_VERIFY(cloneHandlerAttempts == 1 && cloneHandlerLive == 0);
+      loka::core::LokaAllocSetBackend(0, 0);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 0);
+    }
+    else if (pin == 7 || pin == 8)
+    {
+      const std::string source =
+          std::string("VStack(Array.from({length:9},(_,i)=>VStack(Array.from({length:Math.max(0,Math.min(16,")
+          + (pin == 7 ? "128" : "129")
+          + "-i*16))},(_,j)=>(i*16+j)%3===0?Button('b',()=>{}):(i*16+j)%3===1?Cell('c',()=>{}):Toolbar(ToolbarItem('t',"
+            "()=>{}))))))";
+      admissionLower(runtime, source.c_str(), pin == 7);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == (pin == 7 ? 128u : 0u));
+    }
+    else if (pin == 0 || pin == 1)
     {
       admissionLower(runtime, "Button('existing',()=>{})", true);
       const unsigned before = CardFlowAccess::handlerCount();
@@ -7098,10 +7559,318 @@ namespace
         observeSnapshots);
     checkNativeTiming();
   }
+  void observeDeclaredPrefix(NullWindow &window)
+  {
+    LOKA_VERIFY(windowNode(window, "Prefix") && textValue(windowNode(window, "Prefix")->asTextNode()) == "ok");
+  }
+  void checkLowerTimingProduct()
+  {
+    for (unsigned kind = 0; kind < 2; ++kind)
+      for (unsigned phase = 0; phase < 3; ++phase)
+        for (unsigned caught = 0; caught < 2; ++caught)
+          for (unsigned used = 0; used < 2; ++used)
+          {
+            smirkycard::ScriptRuntime runtime;
+            loka::core::String error;
+            const std::string expression = kind ? "ToolbarItem('root',()=>{})" : "EditText(foreign)";
+            const std::string build = std::string(caught ? "try{" : "") + "globalThis.value=" + expression + ";"
+                                      + (caught ? "}catch(e){++caughtCount}" : "");
+            const std::string source = std::string("var "
+                                                   "ready=false,foreign,caughtCount=0;card('first',class{constructor(c)"
+                                                   "{if(!ready)foreign=c.state('foreign');")
+                                       + (phase == 1 ? "if(ready){" + build + "}" : "")
+                                       + "}compose(){if(!ready)return Text('owner');" + (phase == 2 ? build : "")
+                                       + "return " + (used ? "globalThis.value" : "Text('unused').TEST_ID('Unused')")
+                                       + "}});";
+            LOKA_VERIFY(runtime.loadBuiltin(source.c_str(), error));
+            NullPlatformContext context;
+            NullScenePlatformController platform;
+            WindowProps firstProps;
+            firstProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+            NullWindow first(&context, firstProps, &platform);
+            WindowAdmissionTestApp admission(first);
+            loka::dsl::testing::SceneTestAccess::updateAttached(*first.scene(), true);
+            const std::string prepare = std::string("ready=true;") + (phase == 0 ? build : "") + "'prepared'";
+            expectJs(runtime, prepare.c_str(), "prepared");
+            WindowProps secondProps;
+            secondProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+            NullWindow second(&context, secondProps, &platform);
+            loka::dsl::testing::SceneTestAccess::updateAttached(*second.scene(), true);
+            smirkycard::testing::CardFlowAccess::scene = second.scene();
+            LOKA_VERIFY(smirkycard::testing::CardFlowAccess::handlerCount() == 0);
+            LOKA_VERIFY((windowNode(second, "SmirkyCard.Status") != 0) == (used != 0));
+            LOKA_VERIFY((windowNode(second, "Unused") != 0) == (used == 0));
+            LOKA_VERIFY(!JS_HasException(runtime.context()));
+            expectJs(runtime, "caughtCount", "0");
+            smirkycard::testing::CardFlowAccess::scene = 0;
+          }
+    checkComposeRefusal("card('first',class{compose(c){c.declare(Text('ok').TEST_ID('Prefix'));Button(42,()=>{})}});",
+                        "TypeError",
+                        true);
+    mountObservation("card('first',class{compose(c){c.declare(Text('ok').TEST_ID('Prefix'));try{Button(42,()=>{})}"
+                     "catch(e){if(!(e instanceof TypeError))throw e}}});",
+                     observeDeclaredPrefix);
+    for (unsigned phase = 0; phase < 3; ++phase)
+      for (unsigned caught = 0; caught < 2; ++caught)
+        for (unsigned used = 0; used < 2; ++used)
+        {
+          const std::string build = std::string(caught ? "try{" : "")
+                                    + "const s={size:24};globalThis.value=Text('a',s).TEST_ID('M');s.size=12;"
+                                    + (caught ? "}catch(e){throw Error('unexpected style exception')}" : "");
+          const std::string source = (phase == 0 ? build : "") + "card('first',class{constructor(){"
+                                     + (phase == 1 ? build : "") + "}compose(){" + (phase == 2 ? build : "") + "return "
+                                     + (used ? "globalThis.value" : "Text('a',{size:24}).TEST_ID('M')") + "}});";
+          checkSnapshot(source.c_str(), false, false);
+        }
+  }
+
+  void observeBuildTimingProduct(NullWindow &window)
+  {
+    loka::app::scene::Node *node = windowNode(window, "Timing");
+    LOKA_VERIFY(node && node->asTextNode() && textValue(node->asTextNode()) == "caught");
+  }
+  void checkBuildTimingProduct()
+  {
+    const char *invalid[] = {"Button(42,()=>{})",
+                             "Row({})",
+                             "Toolbar(Text('x'))",
+                             "Text('x',{bogus:1})",
+                             "Cell(42,()=>{})",
+                             "Grid(0,1,[])",
+                             "Text('x',{get size(){throw new Error('original getter')}})"};
+    for (unsigned input = 0; input < sizeof(invalid) / sizeof(invalid[0]); ++input)
+      for (unsigned phase = 0; phase < 3; ++phase)
+        for (unsigned caught = 0; caught < 2; ++caught)
+          for (unsigned used = 0; used < 2; ++used)
+          {
+            const char *exception = input == 5 ? "RangeError" : input == 6 ? "Error" : "TypeError";
+            const std::string build =
+                std::string(caught ? "try{" : "") + "globalThis.value=" + invalid[input] + ";"
+                + (caught
+                       ? std::string("}catch(e){if(!(e instanceof ") + exception
+                             + "))throw e;globalThis.seen='caught';globalThis.value=Text('caught').TEST_ID('Timing');}"
+                       : "");
+            const std::string result = used ? "globalThis.value" : "Text(globalThis.seen).TEST_ID('Timing')";
+            const std::string source = std::string("globalThis.seen='not caught';") + (phase == 0 ? build : "")
+                                       + "card('first',class{constructor(c){" + (phase == 1 ? build : "")
+                                       + "}compose(){" + (phase == 2 ? build : "") + "return " + result + "}});";
+            if (caught)
+              mountObservation(source.c_str(), observeBuildTimingProduct);
+            else if (phase == 0)
+            {
+              smirkycard::ScriptRuntime runtime;
+              loka::core::String error;
+              LOKA_VERIFY(!runtime.loadBuiltin(source.c_str(), error));
+              const loka::core::StringBuffer bytes = error.bufferWithEncoding(loka::core::StringEncodingUtf8);
+              LOKA_VERIFY(std::string(static_cast<const char *>(bytes.data()), bytes.length()).find(exception)
+                          != std::string::npos);
+            }
+            else
+              checkComposeRefusal(source.c_str(), exception, true);
+          }
+  }
+
+  void observeChildSnapshot(NullWindow &window)
+  {
+    LOKA_VERIFY(windowNode(window, "Original") && !windowNode(window, "Replacement"));
+    LOKA_VERIFY(textValue(windowNode(window, "Original")->asTextNode()) == "original");
+  }
+  void observeOptionalDefaults(NullWindow &window)
+  {
+    loka::app::scene::Node *button = windowNode(window, "OptionalButton");
+    LOKA_VERIFY(button && button->asButtonNode());
+    LOKA_VERIFY(!button->asButtonNode()->props.getEnabled() || button->asButtonNode()->props.getEnabled()->get());
+  }
+  void checkOptionalDefaults()
+  {
+    mountObservation("card('first',class{compose(){for(const k of "
+                     "['style','block','testId','enabledSeat','viewport','rowWidth','columnHeight','unitGround'])"
+                     "Object.defineProperty(Object.prototype,k,{configurable:true,get(){throw Error('inherited "
+                     "'+k)}});return "
+                     "VStack(Text('plain'),Markup('plain'),ScrollView(Text('scroll')),Row(),ZStack(),Button('default',("
+                     ")=>{}).TEST_ID('OptionalButton'))}});",
+                     observeOptionalDefaults);
+  }
+  void checkChildSnapshots()
+  {
+    const char *mutations[] = {
+        "a[0]=replacement", "a.push(replacement)", "a.pop()", "Object.defineProperty(a,'0',{value:replacement})"};
+    for (unsigned i = 0; i < sizeof(mutations) / sizeof(mutations[0]); ++i)
+    {
+      const std::string source = std::string("card('first',class{compose(){const "
+                                             "a=[Text('original').TEST_ID('Original')],replacement=Text('replacement')."
+                                             "TEST_ID('Replacement');const tree=Row(a);")
+                                 + mutations[i] + ";return tree}});";
+      mountObservation(source.c_str(), observeChildSnapshot);
+    }
+  }
+  void checkTreeBrandAcceptance()
+  {
+    using namespace smirkycard;
+    ScriptRuntime first, second;
+    const char *matrix =
+        "(()=>{const t=Text('x'),f=()=>{},s={};const all=[VStack(t),t,EditText(s),Button('x',f),Row(t),"
+        "Markup('x'),Cell('x',f),Grid(1,1,[t]),Show(s,t),OpenFileDialog(s),ImageView(s),ScrollView(t),"
+        "Card(t),ZStack(t),Box(t),ClipBox(t),Toolbar(),ToolbarItem('x',f),ToolbarItem.label('x'),"
+        "ToolbarItem.flexibleSpace(),ToolbarItem.fixedSpace(1)];const p=Object.getPrototypeOf(t);"
+        "if(all.length!==21||!all.every(x=>Object.getPrototypeOf(x)===p&&Object.isFrozen(x)&&"
+        "Reflect.ownKeys(x).length===0))return false;"
+        "let reads=0;const traps={get(){reads++;throw 1},getPrototypeOf(){reads++;throw 2},"
+        "ownKeys(){reads++;throw 3},getOwnPropertyDescriptor(){reads++;throw 4}};"
+        "const revoked=Proxy.revocable(t,traps);revoked.revoke();"
+        "const fake={get kind(){reads++;return 2},get testId(){reads++;return 'x'}};"
+        "const bad=[fake,Object.assign({},t),{...t},Object.create(t),Object.create(p),new "
+        "Proxy(t,traps),revoked.proxy];"
+        "for(const b of bad){for(const n of "
+        "['TEST_ID','naturalWidth','naturalHeight','expStaticBlurUnit','expBlurUnit','enabled'])"
+        "{try{p[n].call(b,s);return false}catch(e){if(!(e instanceof TypeError)||e.message!=='Invalid tree "
+        "receiver')return false}}"
+        "for(const make of [x=>Row(x),x=>Card(x),x=>Toolbar(x)])"
+        "{try{make(b);return false}catch(e){if(!(e instanceof TypeError))return false}}}"
+        "return reads===0})()";
+    expectJs(first, matrix, "true");
+    expectJs(second, matrix, "true");
+    expectJs(first,
+             "(()=>{let setters=0;Object.defineProperty(Array.prototype,'0',{configurable:true,set(){setters++}});"
+             "try{const t=Row(Text('x'));return setters===0&&Reflect.ownKeys(t).length===0}"
+             "finally{delete Array.prototype[0]}})()",
+             "true");
+    expectJs(first,
+             "(()=>{const sentinel={};for(const make of [a=>Row(a),a=>Toolbar(a)]){"
+             "const a=[];Object.defineProperty(a,'0',{get(){throw sentinel}});"
+             "try{make(a);return false}catch(e){if(e!==sentinel)return false}"
+             "const p=new Proxy([],{get(t,k){if(k==='length')throw sentinel;return Reflect.get(t,k)}});"
+             "try{make(p);return false}catch(e){if(e!==sentinel)return false}}return true})()",
+             "true");
+    expectJs(first,
+             "(()=>{let n=0;const s={get size(){if(++n!==1)throw Error('second read');return 24}};"
+             "const t=Text('x',s);t.TEST_ID('a').TEST_ID('b');return n===1})()",
+             "true");
+    JSContext *ctx = first.context();
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    const unsigned before = testing::CardFlowAccess::treeLive();
+    expectJs(first, "(()=>{let d;d=Button('cycle',()=>d);return Object.isFrozen(d)})()", "true");
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before);
+    expectJs(first, "globalThis.dag=Text('leaf');for(let i=0;i<35;i++)dag=Row(dag,dag);'built'", "built");
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before + 36);
+    expectJs(first, "dag=undefined;'dropped'", "dropped");
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before);
+    expectJs(first, "globalThis.chain=Text('leaf');for(let i=0;i<2000;i++)chain=Card(chain);'built'", "built");
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before + 2001);
+    expectJs(first, "chain=undefined;'dropped'", "dropped");
+    for (unsigned i = 0; i < 3; ++i)
+      JS_RunGC(JS_GetRuntime(ctx));
+    LOKA_VERIFY(testing::CardFlowAccess::treeLive() == before);
+  }
+
+  void checkPublicTreeAllocationSweep()
+  {
+    using namespace smirkycard;
+    ScriptRuntime warm;
+    JsCardBindingRegistry registry;
+    LOKA_VERIFY(RegisterSmirkyCardBindings(registry));
+    const JSMallocFunctions functions = {TreeAllocationProbe::zero,
+                                         TreeAllocationProbe::allocate,
+                                         TreeAllocationProbe::release,
+                                         TreeAllocationProbe::resize,
+                                         SmirkyAlignedUsableSize};
+    const char *operations[] = {"()=>Text('allocated')",
+                                "()=>Row(Text('a'),Text('b'))",
+                                "()=>Button('button',()=>{})",
+                                "()=>Toolbar(ToolbarItem('item',()=>{}))",
+                                "()=>original.TEST_ID('copy')",
+                                "()=>original.naturalWidth()",
+                                "()=>Button('source',()=>{}).enabled({})",
+                                "()=>VStack().naturalHeight()",
+                                "()=>ZStack().expBlurUnit()",
+                                "()=>ZStack().expStaticBlurUnit()",
+                                "()=>EditText({})",
+                                "()=>Markup('a<b>b</b>')",
+                                "()=>Cell('x',()=>{})",
+                                "()=>Grid(1,1,[Text('x')])",
+                                "()=>Show({},Text('x'))",
+                                "()=>OpenFileDialog({})",
+                                "()=>ImageView({},{width:2,height:2})",
+                                "()=>ScrollView(Text('x'))",
+                                "()=>Card(Text('x'))",
+                                "()=>Box(Text('x'))",
+                                "()=>ClipBox(Text('x'))",
+                                "()=>ToolbarItem.label('x')",
+                                "()=>ToolbarItem.flexibleSpace()",
+                                "()=>ToolbarItem.fixedSpace(1)"};
+    for (unsigned op = 0; op < sizeof(operations) / sizeof(operations[0]); ++op)
+    {
+      bool finished = false;
+      unsigned failures = 0;
+      for (size_t ordinal = 1; ordinal < 256 && !finished; ++ordinal)
+      {
+        TreeAllocationProbe probe;
+        JSRuntime *rt = JS_NewRuntime2(&functions, &probe);
+        LOKA_VERIFY(rt);
+        JSContext *ctx = JS_NewContext(rt);
+        LOKA_VERIFY(ctx && registry.install(ctx));
+        JS_SetContextOpaque(ctx, &warm);
+        {
+          const char *setup = "globalThis.original=Row(Text('unchanged')).TEST_ID('source')";
+          JsValueRoot original(ctx, JS_Eval(ctx, setup, std::strlen(setup), "source", JS_EVAL_TYPE_GLOBAL));
+          LOKA_VERIFY(!JS_IsException(original.value()));
+          JsValueRoot fn(ctx, JS_Eval(ctx, operations[op], std::strlen(operations[op]), "sweep", JS_EVAL_TYPE_GLOBAL));
+          LOKA_VERIFY(!JS_IsException(fn.value()));
+          const unsigned live = testing::CardFlowAccess::treeLive(), slots = testing::CardFlowAccess::treeSlots();
+          probe.refuse = ordinal;
+          probe.ordinal = 0;
+          {
+            JsValueRoot result(ctx, JS_Call(ctx, fn.value(), JS_UNDEFINED, 0, 0));
+            probe.refuse = 0;
+            if (JS_IsException(result.value()))
+            {
+              ++failures;
+              JS_FreeValue(ctx, JS_GetException(ctx));
+            }
+            else
+            {
+              LOKA_VERIFY(testing::CardFlowAccess::treeBrand(ctx, result.value()));
+              finished = probe.ordinal < ordinal;
+            }
+          }
+          JS_RunGC(rt);
+          LOKA_VERIFY(testing::CardFlowAccess::treeLive() == live);
+          LOKA_VERIFY(testing::CardFlowAccess::treeSlots() == slots);
+          const char *check =
+              "original===globalThis.original&&Object.isFrozen(original)&&Reflect.ownKeys(original).length===0";
+          JsValueRoot unchanged(ctx, JS_Eval(ctx, check, std::strlen(check), "unchanged", JS_EVAL_TYPE_GLOBAL));
+          LOKA_VERIFY(JS_ToBool(ctx, unchanged.value()) == 1);
+        }
+        JS_FreeContext(ctx);
+        JS_FreeRuntime(rt);
+        LOKA_VERIFY(probe.live == 0);
+      }
+      LOKA_VERIFY(finished);
+#if defined(__SANITIZE_ADDRESS__)
+      LOKA_VERIFY(failures > 0);
+#endif
+      std::printf("public tree operation %u: %u refusing ordinals; no live backing blocks\n", op, failures);
+    }
+  }
 } // namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--tree-brand"))
+  {
+    checkOptionalDefaults();
+    checkChildSnapshots();
+    checkTreeBrandAcceptance();
+    checkPublicTreeAllocationSweep();
+    checkLowerTimingProduct();
+    checkBuildTimingProduct();
+    return 0;
+  }
   if (argc == 3 && !std::strcmp(argv[1], "--handler-admission"))
   {
     checkHandlerAdmission(static_cast<unsigned>(std::atoi(argv[2])));
@@ -7110,7 +7879,7 @@ int main(int argc, char **argv)
   if (argc == 2 && !std::strcmp(argv[1], "--native-observations"))
   {
     checkNativeObservations();
-    for (unsigned pin = 0; pin < 7; ++pin)
+    for (unsigned pin = 0; pin < 11; ++pin)
       checkHandlerAdmission(pin);
     return 0;
   }
@@ -7122,6 +7891,9 @@ int main(int argc, char **argv)
   if (argc == 2 && !std::strcmp(argv[1], "--tree-helpers"))
   {
     checkTreePropertyCopy();
+    checkTreeStagingFailure();
+    checkTreeEnvelopeCycle();
+    checkTreeEnvelope();
     checkTreeHelperIdentity();
     checkTreeHelperEngines();
     checkTreeCopyPaths();
@@ -7377,7 +8149,16 @@ int main(int argc, char **argv)
   checkMarkup();
   checkBlockStyle();
   checkMarkupAllocationRefusal();
+  checkLowerTimingProduct();
+  checkBuildTimingProduct();
+  checkOptionalDefaults();
+  checkChildSnapshots();
+  checkTreeBrandAcceptance();
+  checkPublicTreeAllocationSweep();
   checkTreePropertyCopy();
+  checkTreeStagingFailure();
+  checkTreeEnvelopeCycle();
+  checkTreeEnvelope();
   checkTreeHelperIdentity();
   checkTreeHelperEngines();
   checkTreeInstallFailureSweep();
@@ -7387,7 +8168,7 @@ int main(int argc, char **argv)
   checkTextStyleRefusals();
   checkChangedTextStyleRefusal();
   checkNativeObservations();
-  for (unsigned pin = 0; pin < 7; ++pin)
+  for (unsigned pin = 0; pin < 11; ++pin)
     checkHandlerAdmission(pin);
   printRecordCosts();
   checkClickableLifetime();

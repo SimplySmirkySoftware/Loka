@@ -72,6 +72,7 @@ function(smirkycard_cpp_target target)
     ${SMIRKYCARD_SOURCE_DIR}/src/CardFlow.cpp ${SMIRKYCARD_SOURCE_DIR}/src/CardScenario.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/CardCarry.cpp ${SMIRKYCARD_SOURCE_DIR}/src/ScriptRuntime.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/JsCardNode.cpp ${SMIRKYCARD_SOURCE_DIR}/src/JsCardBindingRegistry.cpp
+    ${SMIRKYCARD_SOURCE_DIR}/src/JsTreeDescription.cpp ${SMIRKYCARD_SOURCE_DIR}/src/JsTreeFacts.cpp
     ${SMIRKYCARD_SOURCE_DIR}/src/SmirkyMarkup.cpp)
   loka_enable_warnings(${target})
   set_target_properties(${target} PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
@@ -179,6 +180,10 @@ if(TARGET LokaCommonTesting)
     ${smirkycard_null_sources}
   )
   smirkycard_cpp_target(LokaSmirkyCardTests)
+  # Test-only global allocation refusal must let native clone return null.
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(LokaSmirkyCardTests PRIVATE -fcheck-new)
+  endif()
   target_link_libraries(LokaSmirkyCardTests PRIVATE LokaCommonTesting)
   target_compile_definitions(LokaSmirkyCardTests PRIVATE
     SMIRKYCARD_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
