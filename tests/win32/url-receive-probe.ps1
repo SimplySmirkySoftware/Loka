@@ -35,7 +35,8 @@ $keyCreated = $false
 $patchApplied = $false
 $exe = $null
 
-function Note([string]$line) { Add-Content $manifest $line; Write-Output $line }
+# Write-Host, not the pipeline: helpers that note must still return one value.
+function Note([string]$line) { Add-Content $manifest $line; Write-Host $line }
 function Verdict([string]$phase, [string]$result, [string]$detail) {
   [void]$verdicts.Add("$phase $result $detail"); Note "VERDICT $phase $result $detail"
 }
