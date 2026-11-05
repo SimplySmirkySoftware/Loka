@@ -232,6 +232,7 @@ namespace smirkycard
         seats_("Seat"),
         scrollViewports_("ScrollViewport"),
         handlers_("Handler"),
+        admission_(0),
         flows_("Flow"),
         errorSeat_(JS_UNDEFINED),
         tree_(JS_UNDEFINED),
@@ -1049,7 +1050,8 @@ namespace smirkycard
       return;
     }
     ScriptRuntime::InterruptWindow interrupt(*props.runtime, *this->engine_);
-    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> definition(lower(this->engine_->context(), tree_, 0));
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> definition(
+        this->lowerRoot(this->engine_->context(), tree_));
     if (!definition.isSet())
     {
       this->declareRefusal(c);
@@ -1798,6 +1800,25 @@ namespace smirkycard
                                                     testId))
         .clone();
   }
+  JsCardNode::JsHandlerAdmission::JsHandlerAdmission(JsCardNode &card)
+      : staged_("Handler"),
+        card_(card)
+  {
+    assert(!this->card_.admission_);
+    this->card_.admission_ = this;
+  }
+  JsCardNode::JsHandlerAdmission::~JsHandlerAdmission()
+  {
+    this->card_.admission_ = 0;
+  }
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerRoot(JSContext *ctx, JSValueConst tree)
+  {
+    JsHandlerAdmission admission(*this);
+    loka::app::scene::NodeDefinitionBase *definition = this->lower(ctx, tree, 0);
+    if (definition)
+      this->handlers_.splice(admission.staged_);
+    return definition;
+  }
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerChild(JSContext *ctx, JSValueConst tree, int depth)
   {
     return lower(ctx, tree, depth);
@@ -1811,12 +1832,18 @@ namespace smirkycard
   }
   JsHandlerRecord *JsCardNode::addHandler(JSContext *ctx, JSValueConst handler)
   {
-    if (this->handlers_.count() >= kCardClickableBudget)
+    assert(this->admission_);
+    if (!this->admission_)
+    {
+      this->fail("JavaScript handler admitted outside a lower.");
+      return 0;
+    }
+    if (this->handlers_.count() + this->admission_->staged_.count() >= kCardClickableBudget)
     {
       fail("kCardClickableBudget exceeded (128 clickables).");
       return 0;
     }
-    JsHandlerRecord *record = this->handlers_.add(JsHandlerRecord::Initial(this, ctx, handler));
+    JsHandlerRecord *record = this->admission_->staged_.add(JsHandlerRecord::Initial(this, ctx, handler));
     if (!record)
       fail("Could not allocate clickable handler.");
     return record;

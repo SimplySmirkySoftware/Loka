@@ -88,6 +88,14 @@ namespace smirkycard
       {
         return static_cast<JsCardNode *>(loka::dsl::testing::SceneTestAccess::rootBoundary(*scene));
       }
+      static loka::app::scene::NodeDefinitionBase *lowerRoot(JSContext *ctx, JSValueConst tree)
+      {
+        return card()->lowerRoot(ctx, tree);
+      }
+      static unsigned handlerCount()
+      {
+        return card()->handlers_.count();
+      }
       static bool active() { return card()->flowAdmission_.hasExecution(); }
       static int seatCount()
       {
@@ -6211,7 +6219,7 @@ namespace
                             "lowering pin", JS_EVAL_TYPE_GLOBAL);
       LOKA_VERIFY(!JS_IsException(tree));
       loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
-        smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(!lowered.isSet());
       expectJs(runtime, i == 3 ? "own.c.error.get().includes('tree')"
@@ -6645,11 +6653,104 @@ namespace
       JSValue tree = JS_Eval(runtime.context(), lower[i], std::strlen(lower[i]), "native timing", JS_EVAL_TYPE_GLOBAL);
       LOKA_VERIFY(!JS_IsException(tree));
       loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
-          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(!lowered.isSet());
       LOKA_VERIFY(!windowNode(second, "Prefix"));
       expectJs(runtime, "own.c.error.get().length>0", "true");
+    }
+  }
+
+  void admissionLower(smirkycard::ScriptRuntime &runtime, const char *expression, bool accepted)
+  {
+    JSValue tree =
+        JS_Eval(runtime.context(), expression, std::strlen(expression), "handler admission", JS_EVAL_TYPE_GLOBAL);
+    LOKA_VERIFY(!JS_IsException(tree));
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> lowered(
+        smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
+    JS_FreeValue(runtime.context(), tree);
+    LOKA_VERIFY(lowered.isSet() == accepted);
+  }
+
+  void checkHandlerAdmission(unsigned pin)
+  {
+    std::fprintf(stderr, "[pin] handler admission %u\n", pin);
+    using smirkycard::testing::CardFlowAccess;
+    smirkycard::ScriptRuntime runtime;
+    loka::core::String error;
+    LOKA_VERIFY(runtime.loadBuiltin("var own,foreign;card('first',c=>{own={s:c.state('text'),c};"
+                                    "return {compose(){return foreign && globalThis.failCompose ? "
+                                    "VStack(Button('prefix',()=>{}),EditText(foreign.s)):Text('owner')}}});",
+                                    error));
+    NullPlatformContext context;
+    NullScenePlatformController platform;
+    WindowProps props;
+    props.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow first(&context, props, &platform);
+    WindowAdmissionTestApp admission(first);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*first.scene(), true);
+    expectJs(runtime, "foreign=own;'saved'", "saved");
+    if (pin == 5)
+      expectJs(runtime, "globalThis.failCompose=true", "true");
+    WindowProps secondProps;
+    secondProps.scene(smirkycard::CreateCard(SMIRKY_CARD_FIRST, runtime));
+    NullWindow second(&context, secondProps, &platform);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*second.scene(), true);
+    CardFlowAccess::scene = second.scene();
+    if (pin == 5)
+    {
+      loka::app::scene::Node *status = windowNode(second, "SmirkyCard.Status");
+      LOKA_VERIFY(status && status->asTextNode());
+      expectJs(runtime, "own.c.error.get().length>0", "true");
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 0);
+      return;
+    }
+    if (pin == 0 || pin == 1)
+    {
+      admissionLower(runtime, "Button('existing',()=>{})", true);
+      const unsigned before = CardFlowAccess::handlerCount();
+      admissionLower(runtime,
+                     pin == 0 ? "VStack(Button('prefix',()=>{}),EditText(foreign.s))"
+                              : "Toolbar(ToolbarItem('prefix',()=>{}),ToolbarItem.label(foreign.s))",
+                     false);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == before);
+    }
+    else if (pin == 2)
+    {
+      admissionLower(
+          runtime,
+          "VStack(Button('b',()=>{}),Cell('c',()=>{}),Toolbar(ToolbarItem('t',()=>{}),ToolbarItem.label('l')))",
+          true);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 3);
+    }
+    else if (pin == 3)
+    {
+      admissionLower(runtime,
+                     "VStack(Array.from({length:9},(_,i)=>VStack(Array.from({length:Math.max(0,Math.min(16,127-i*16))},"
+                     "()=>Button('b',()=>{})))))",
+                     true);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 127);
+      admissionLower(runtime, "Button('128',()=>{})", true);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 128);
+      admissionLower(runtime, "Button('129',()=>{})", false);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 128);
+    }
+    else if (pin == 4)
+    {
+      admissionLower(runtime, "VStack(Button('prefix',()=>{}),EditText(foreign.s))", false);
+      admissionLower(runtime,
+                     "VStack(Array.from({length:9},(_,i)=>VStack(Array.from({length:Math.max(0,Math.min(16,128-i*16))},"
+                     "()=>Button('b',()=>{})))))",
+                     true);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 128);
+    }
+    else
+    {
+      admissionLower(runtime,
+                     "VStack(Array.from({length:9},(_,i)=>VStack(Array.from({length:Math.max(0,Math.min(16,129-i*16))},"
+                     "()=>Button('b',()=>{})))))",
+                     false);
+      LOKA_VERIFY(CardFlowAccess::handlerCount() == 0);
     }
   }
 
@@ -6713,7 +6814,7 @@ namespace
     LOKA_VERIFY(!JS_IsException(tree));
     {
       loka::core::OwnedDef<ObservedDefinition> lowered(
-          smirkycard::testing::CardFlowAccess::card()->lowerChild(runtime.context(), tree, 0));
+          smirkycard::testing::CardFlowAccess::lowerRoot(runtime.context(), tree));
       JS_FreeValue(runtime.context(), tree);
       LOKA_VERIFY(lowered.isSet());
       observe(*lowered.get(), runtime);
@@ -7001,9 +7102,16 @@ namespace
 
 int main(int argc, char **argv)
 {
+  if (argc == 3 && !std::strcmp(argv[1], "--handler-admission"))
+  {
+    checkHandlerAdmission(static_cast<unsigned>(std::atoi(argv[2])));
+    return 0;
+  }
   if (argc == 2 && !std::strcmp(argv[1], "--native-observations"))
   {
     checkNativeObservations();
+    for (unsigned pin = 0; pin < 7; ++pin)
+      checkHandlerAdmission(pin);
     return 0;
   }
   if (argc == 2 && !std::strcmp(argv[1], "--tree-install-sweep"))
@@ -7279,6 +7387,8 @@ int main(int argc, char **argv)
   checkTextStyleRefusals();
   checkChangedTextStyleRefusal();
   checkNativeObservations();
+  for (unsigned pin = 0; pin < 7; ++pin)
+    checkHandlerAdmission(pin);
   printRecordCosts();
   checkClickableLifetime();
   checkManyClickables("Button");

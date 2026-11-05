@@ -118,7 +118,21 @@ namespace smirkycard
     CardScenario *scenario_;
     static JSValue testMethod(JSContext *, JSValueConst, int, JSValueConst *, int, JSValue *);
 #endif
+    /** Root-lower ownership: publish handlers only after the whole tree succeeds. */
+    class JsHandlerAdmission
+    {
+    public:
+      explicit JsHandlerAdmission(JsCardNode &card);
+      ~JsHandlerAdmission();
+      CardRecords<JsHandlerRecord> staged_;
+
+    private:
+      JsHandlerAdmission(const JsHandlerAdmission &);
+      JsHandlerAdmission &operator=(const JsHandlerAdmission &);
+      JsCardNode &card_;
+    };
     void fail(const loka::core::String &message);
+    loka::app::scene::NodeDefinitionBase *lowerRoot(JSContext *context, JSValueConst tree);
     loka::app::scene::NodeDefinitionBase *lower(JSContext *context, JSValueConst tree, int depth);
     JsSeatRecord *findSeat(JSContext *context, JSValueConst value) const;
     JsHandlerRecord *addHandler(JSContext *context, JSValueConst handler);
@@ -152,6 +166,7 @@ namespace smirkycard
     CardRecords<JsSeatRecord> seats_;
     CardRecords<JsScrollViewport> scrollViewports_;
     CardRecords<JsHandlerRecord> handlers_;
+    JsHandlerAdmission *admission_;
     CardRecords<CardFlow> flows_;
     CardFlow::Admission flowAdmission_;
     JSValue errorSeat_, tree_, onAttach_, onDetach_;
