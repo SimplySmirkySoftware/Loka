@@ -2,6 +2,7 @@
 #define SMIRKYCARD_JS_CARD_BINDING_REGISTRY_HPP
 
 #include "quickjs.h"
+#include "JsTreeDescription.hpp"
 
 namespace loka
 {
@@ -19,6 +20,7 @@ namespace loka
 namespace smirkycard
 {
   class JsCardNode;
+  class JsTreeLowering;
   struct JsToolbarRow;
 
   /** Read a plain style dictionary; leave out unchanged and throw on refusal. */
@@ -44,7 +46,8 @@ namespace smirkycard
     IJsNodeLowering()
         : name(0),
           parent(0),
-          kind(0)
+          kind(0),
+          schema(0)
     {
     }
     /** JavaScript function name: a global when parent is null, otherwise a
@@ -52,6 +55,7 @@ namespace smirkycard
     const char *name;
     const char *parent;
     int kind;
+    const JsTreeSchema *schema;
     virtual ~IJsNodeLowering() {}
     /** Report descriptor identity when this lowering is a Toolbar item factory. */
     virtual bool queryToolbarRowKind(JsToolbarRowKind &out) const
@@ -61,7 +65,7 @@ namespace smirkycard
     }
     virtual JSValue build(JSContext *context, int argc, JSValueConst *argv) = 0;
     virtual loka::app::scene::NodeDefinitionBase *
-    lower(JsCardNode &node, JSContext *context, JSValueConst tree, int depth) = 0;
+    lower(JsTreeLowering &lowering, const JsTreeView &tree, int depth) = 0;
   };
 
   struct IJsGlobal
@@ -85,20 +89,13 @@ namespace smirkycard
     bool registerLowering(IJsNodeLowering *lowering);
     bool registerGlobal(const IJsGlobal &global);
     IJsNodeLowering *lookup(int kind) const;
+    IJsNodeLowering *lookup(const JsTreeSchema *schema) const;
     bool install(JSContext *context) const;
-    /** Create a tree with the context-owned helper prototype. */
-    static JSValue newTree(JSContext *context, int kind);
-    /** Validate descriptor facts at build and lower; seat provenance is card-owned. */
-    static bool readToolbarDescriptor(JSContext *context, JSValueConst tree, JsToolbarRow &row);
 
   private:
     friend class JsCardNode;
     friend class ScriptRuntime;
-    /** Copy enumerable facts, preserving the receiver's tree/plain class path. */
-    static JSValue copyTree(JSContext *context, JSValueConst source, JSValueConst id);
     static bool installTreeClass(JSContext *context);
-    static bool isTree(JSValueConst value);
-    static bool isTreePrototype(JSContext *context, JSValueConst value);
     struct LoweringEntry;
     struct GlobalEntry;
     LoweringEntry *lowerings_;

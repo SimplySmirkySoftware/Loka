@@ -121,7 +121,10 @@ namespace smirkycard
     {
       return this->currentEngine_;
     }
-    PlatformContext *nativeContext() const { return this->mainContext_; }
+    PlatformContext *nativeContext() const
+    {
+      return this->mainContext_;
+    }
     /** A picture stem is 1..26 ASCII letters, digits, underscores or hyphens.
         No suffix, separator, dot or embedded NUL is admitted (31-byte HFS limit). */
     static bool IsPictureName(const std::string &stem);
@@ -259,13 +262,7 @@ namespace smirkycard
     /** Raw entry: callers gate before formatting a possible exception. */
     JSValue rawCall(JsEngine &engine, JSValueConst fn, int argc, JSValueConst *argv);
     bool captureException(JsEngine &engine, loka::core::String &error);
-    static JSValue withTreePolicy(JSContext *ctx,
-                                  JSValueConst tree,
-                                  int argc,
-                                  const char *nodeName,
-                                  const char *method,
-                                  const char *property,
-                                  const char *replacedProperty = 0);
+
     static JSValue card(JSContext *ctx, JSValueConst, int argc, JSValueConst *argv);
     /** MISSING: the file cannot be opened. FAILED: it opened, but its size or
         content was refused (unreadable, over 64 KiB). */

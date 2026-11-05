@@ -80,17 +80,17 @@ namespace smirkycard
     void requestReload();
     void requestOpen(const char *name, size_t length, const CardCarry &carry);
     bool setComposeTree(JSContext *context, JSValueConst tree);
-    loka::app::scene::NodeDefinitionBase *lowerText(JSContext *context, JSValueConst tree);
-    loka::app::scene::NodeDefinitionBase *lowerEditText(JSContext *context, JSValueConst tree);
-    loka::app::scene::NodeDefinitionBase *lowerToolbar(JSContext *context, JSValueConst tree, int depth);
-    loka::app::scene::NodeDefinitionBase *lowerClickable(JSContext *context, JSValueConst tree, bool cell);
-    loka::app::scene::NodeDefinitionBase *lowerShow(JSContext *context, JSValueConst tree, int depth);
-    loka::app::scene::NodeDefinitionBase *lowerOpenFileDialog(JSContext *context, JSValueConst tree);
-    loka::app::scene::NodeDefinitionBase *lowerImageView(JSContext *context, JSValueConst tree);
+    loka::app::scene::NodeDefinitionBase *lowerText(JsTreeLowering &lowering, const JsTreeView &tree);
+    loka::app::scene::NodeDefinitionBase *lowerEditText(JsTreeLowering &lowering, const JsTreeView &tree);
+    loka::app::scene::NodeDefinitionBase *lowerToolbar(JsTreeLowering &lowering, const JsTreeView &tree, int depth);
+    loka::app::scene::NodeDefinitionBase *lowerClickable(JsTreeLowering &lowering, const JsTreeView &tree, bool cell);
+    loka::app::scene::NodeDefinitionBase *lowerShow(JsTreeLowering &lowering, const JsTreeView &tree, int depth);
+    loka::app::scene::NodeDefinitionBase *lowerOpenFileDialog(JsTreeLowering &lowering, const JsTreeView &tree);
+    loka::app::scene::NodeDefinitionBase *lowerImageView(JsTreeLowering &lowering, const JsTreeView &tree);
     loka::app::ScrollView *
-    createScrollView(JSContext *context, JSValueConst tree, const loka::core::Frame &initialViewport);
+    createScrollView(JsTreeLowering &lowering, const JsTreeView &tree, const loka::core::Frame &initialViewport);
     void fail(const char *message);
-    loka::app::scene::NodeDefinitionBase *lowerChild(JSContext *context, JSValueConst tree, int depth);
+    loka::app::scene::NodeDefinitionBase *lowerChild(JsTreeLowering &lowering, JSValueConst tree, int depth);
     virtual void declareBindings(loka::app::scene::BindingToken &token);
     virtual void composeNode(loka::app::scene::NodeComposition &composition);
     virtual void attachNode(loka::app::scene::NodeComposition &composition);
@@ -99,6 +99,7 @@ namespace smirkycard
   private:
     friend struct IJsNodeLowering;
     friend class ScriptRuntime;
+    friend class JsTreeLowering;
     friend class JsClickNode;
     friend class JsToolbarNode;
     friend class CardFlow;
@@ -122,20 +123,19 @@ namespace smirkycard
     class JsHandlerAdmission
     {
     public:
-      explicit JsHandlerAdmission(JsCardNode &card);
+      JsHandlerAdmission();
       ~JsHandlerAdmission();
       CardRecords<JsHandlerRecord> staged_;
 
     private:
       JsHandlerAdmission(const JsHandlerAdmission &);
       JsHandlerAdmission &operator=(const JsHandlerAdmission &);
-      JsCardNode &card_;
     };
     void fail(const loka::core::String &message);
     loka::app::scene::NodeDefinitionBase *lowerRoot(JSContext *context, JSValueConst tree);
-    loka::app::scene::NodeDefinitionBase *lower(JSContext *context, JSValueConst tree, int depth);
+    loka::app::scene::NodeDefinitionBase *lower(JsTreeLowering &lowering, JSValueConst tree, int depth);
     JsSeatRecord *findSeat(JSContext *context, JSValueConst value) const;
-    JsHandlerRecord *addHandler(JSContext *context, JSValueConst handler);
+    JsHandlerRecord *addHandler(JsTreeLowering &lowering, JSValueConst handler);
     void fire(const JsHandlerRecord &handler);
     JSValue callHook(JSValueConst hook);
     void finishCall(JSValue result);
@@ -166,11 +166,28 @@ namespace smirkycard
     CardRecords<JsSeatRecord> seats_;
     CardRecords<JsScrollViewport> scrollViewports_;
     CardRecords<JsHandlerRecord> handlers_;
-    JsHandlerAdmission *admission_;
     CardRecords<CardFlow> flows_;
     CardFlow::Admission flowAdmission_;
     JSValue errorSeat_, tree_, onAttach_, onDetach_;
     loka::app::scene::NodeState<loka::core::String> error_;
+  };
+  /** Root-lower context borrows exactly one handler admission for all recursion. */
+  class JsTreeLowering
+  {
+  public:
+    JsTreeLowering(JSContext *context, JsCardNode &card, JsCardNode::JsHandlerAdmission &admission)
+        : context(context),
+          card(card),
+          admission(admission)
+    {
+    }
+    JSContext *const context;
+    JsCardNode &card;
+    JsCardNode::JsHandlerAdmission &admission;
+
+  private:
+    JsTreeLowering(const JsTreeLowering &);
+    JsTreeLowering &operator=(const JsTreeLowering &);
   };
   CardScene *CreateCard(SmirkyCardId card, ScriptRuntime &runtime, const CardCarry &carry = CardCarry());
 } // namespace smirkycard

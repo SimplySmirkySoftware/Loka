@@ -4,6 +4,7 @@
 #undef LOKA_STYLE_VOCAB_DEFINE_NAMES
 
 #include "CardNodes.hpp"
+#include "JsTreeFacts.hpp"
 #include "JsClickNode.hpp"
 #include "JsToolbarNode.hpp"
 #include <climits>
@@ -232,7 +233,6 @@ namespace smirkycard
         seats_("Seat"),
         scrollViewports_("ScrollViewport"),
         handlers_("Handler"),
-        admission_(0),
         flows_("Flow"),
         errorSeat_(JS_UNDEFINED),
         tree_(JS_UNDEFINED),
@@ -249,13 +249,6 @@ namespace smirkycard
       return;
     }
     ScriptRuntime::InterruptWindow interrupt(*p.runtime, *this->engine_);
-    if (!ensureCapabilityClass(this->engine_->jsRuntime())
-        || !CardFlow::Admission::installHandles(this->engine_->jsRuntime()))
-    {
-      JS_FreeValue(ctx, ctor);
-      fail("Could not create card context.");
-      return;
-    }
     this->capability_ = JS_NewObjectClass(ctx, capabilityClassId);
     if (JS_IsException(this->capability_))
     {
@@ -594,8 +587,7 @@ namespace smirkycard
     loka::core::resource::Blob blob;
     const loka::platform::file::ReadResult read = loka::app::ReadFileImageBlob(platform, file, blob);
     loka::core::resource::Image image;
-    const bool decoded = read == loka::platform::file::READ_OK
-                         && loka::app::DecodeFileImageBlob(platform, blob, image);
+    const bool decoded = read == loka::platform::file::READ_OK && loka::app::DecodeFileImageBlob(platform, blob, image);
     // Gate before creating a JS result or exception, including native failure.
     if (capabilityNode(this->capability_) != this || !this->flowLive())
       return JS_ThrowTypeError(ctx, "loadImage card is no longer Live");
@@ -728,9 +720,9 @@ namespace smirkycard
         return image.isValid() ? this->flowAdmission_.project(ctx, image) : JS_NULL;
       }
       const loka::app::FileChooserResult result = record->file.get();
-      JSValue file = result.kind == loka::app::FileChooserResult::RESULT_FILE
-                             && this->flowAdmission_.hasExecution()
-                         ? this->flowAdmission_.project(ctx, result.item) : JS_NULL;
+      JSValue file = result.kind == loka::app::FileChooserResult::RESULT_FILE && this->flowAdmission_.hasExecution()
+                         ? this->flowAdmission_.project(ctx, result.item)
+                         : JS_NULL;
       if (JS_IsException(file))
         return file;
       JSValue facts = JS_NewObject(ctx);
@@ -739,12 +731,21 @@ namespace smirkycard
         JS_FreeValue(ctx, file);
         return facts;
       }
-      bool ok = JS_SetPropertyStr(ctx, facts, "file", file) >= 0
-                && JS_SetPropertyStr(ctx, facts, "kind", JS_NewInt32(ctx, result.kind)) >= 0
-                && JS_SetPropertyStr(ctx, facts, "isFile", JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_FILE)) >= 0
-                && JS_SetPropertyStr(ctx, facts, "isCanceled", JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_CANCELED)) >= 0
-                && JS_SetPropertyStr(ctx, facts, "isError", JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_ERROR)) >= 0
-                && JS_FreezeObject(ctx, facts) >= 0;
+      bool ok =
+          JS_SetPropertyStr(ctx, facts, "file", file) >= 0
+          && JS_SetPropertyStr(ctx, facts, "kind", JS_NewInt32(ctx, result.kind)) >= 0
+          && JS_SetPropertyStr(
+                 ctx, facts, "isFile", JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_FILE))
+                 >= 0
+          && JS_SetPropertyStr(ctx,
+                               facts,
+                               "isCanceled",
+                               JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_CANCELED))
+                 >= 0
+          && JS_SetPropertyStr(
+                 ctx, facts, "isError", JS_NewBool(ctx, result.kind == loka::app::FileChooserResult::RESULT_ERROR))
+                 >= 0
+          && JS_FreezeObject(ctx, facts) >= 0;
       if (!ok)
       {
         JS_FreeValue(ctx, facts);
@@ -1093,128 +1094,38 @@ namespace smirkycard
     tree_ = JS_DupValue(ctx, value);
     return true;
   }
-  namespace
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lower(JsTreeLowering &context, JSValueConst value, int depth)
   {
-    // Descriptor payloads are data, not getters that can change between validation and use.
-    JSValue toolbarValue(JSContext *ctx, JSValueConst tree, const char *name)
+    JsTreeView tree(context.context, value);
+    if (!tree.valid())
     {
-      JSAtom atom = JS_NewAtom(ctx, name);
-      if (atom == JS_ATOM_NULL)
-        return JS_EXCEPTION;
-      JSPropertyDescriptor property;
-      const int found = JS_GetOwnProperty(ctx, &property, tree, atom);
-      JS_FreeAtom(ctx, atom);
-      if (found <= 0)
-        return found < 0 ? JS_EXCEPTION : JS_UNDEFINED;
-      const bool accessor = !JS_IsUndefined(property.getter) || !JS_IsUndefined(property.setter);
-      JS_FreeValue(ctx, property.getter);
-      JS_FreeValue(ctx, property.setter);
-      if (accessor)
-      {
-        JS_FreeValue(ctx, property.value);
-        return JS_ThrowTypeError(ctx, "Toolbar descriptor requires data properties");
-      }
-      return property.value;
-    }
-    JSValue snapshotToolbarDescriptor(JSContext *ctx, JSValueConst tree)
-    {
-      if (!requirePlainObject(ctx, tree, "Toolbar descriptor"))
-        return JS_EXCEPTION;
-      JsOwnProperties names(ctx);
-      if (!names.read(tree, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
-        return JS_EXCEPTION;
-      JSValue copy = JS_NewObjectProto(ctx, JS_NULL);
-      if (JS_IsException(copy))
-        return copy;
-      for (uint32_t i = 0; i < names.count(); ++i)
-      {
-        JSPropertyDescriptor property;
-        const int found = JS_GetOwnProperty(ctx, &property, tree, names.atom(i));
-        if (found <= 0)
-        {
-          JS_FreeValue(ctx, copy);
-          return JS_EXCEPTION;
-        }
-        const bool accessor = !JS_IsUndefined(property.getter) || !JS_IsUndefined(property.setter);
-        JS_FreeValue(ctx, property.getter);
-        JS_FreeValue(ctx, property.setter);
-        if (accessor)
-        {
-          JS_FreeValue(ctx, property.value);
-          JS_FreeValue(ctx, copy);
-          return JS_ThrowTypeError(ctx, "Toolbar descriptor requires data properties");
-        }
-        if (JS_DefinePropertyValue(ctx, copy, names.atom(i), property.value, JS_PROP_ENUMERABLE) < 0)
-        {
-          JS_FreeValue(ctx, copy);
-          return JS_EXCEPTION;
-        }
-      }
-      return copy;
-    }
-    bool treeString(JSContext *ctx,
-                    JSValueConst tree,
-                    const char *name,
-                    loka::core::String &out,
-                    bool rejectNul = false,
-                    bool own = false)
-    {
-      JSValue value = own ? toolbarValue(ctx, tree, name) : JS_GetPropertyStr(ctx, tree, name);
-      size_t length = 0;
-      const char *text = JS_IsString(value) ? JS_ToCStringLen(ctx, &length, value) : 0;
-      const bool accepted = text && (!rejectNul || strlen(text) == length);
-      if (text)
-      {
-        if (accepted)
-          out = loka::core::String::Utf8(text, length);
-        JS_FreeCString(ctx, text);
-      }
-      JS_FreeValue(ctx, value);
-      return accepted;
-    }
-  } // namespace
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lower(JSContext *ctx, JSValueConst tree, int depth)
-  {
-    using namespace loka::app;
-    if (depth > kMaximumTreeDepth || !JS_IsObject(tree) || JS_IsArray(tree))
-    {
-      fail(depth > kMaximumTreeDepth ? "JavaScript tree exceeds depth 11." : "JavaScript tree has an invalid node.");
+      this->fail("JavaScript tree has an invalid node.");
       return 0;
     }
-    if (JsCardBindingRegistry::isTreePrototype(ctx, tree))
+    if (depth > kMaximumTreeDepth)
     {
-      fail("JavaScript tree has an invalid node.");
+      this->fail("JavaScript tree exceeds depth 11.");
       return 0;
     }
-    JSValue kindValue = JS_GetPropertyStr(ctx, tree, "kind");
-    int32_t kind = 0;
-    int converted = JS_ToInt32(ctx, &kind, kindValue);
-    JS_FreeValue(ctx, kindValue);
-    if (converted)
-    {
-      fail("JavaScript tree node has an unknown kind.");
-      return 0;
-    }
-    IJsNodeLowering *lowering = props.runtime->registry_.lookup(kind);
+    IJsNodeLowering *lowering = this->props.runtime->registry_.lookup(tree.schema());
     if (!lowering)
     {
-      fail("JavaScript tree node has an unknown kind.");
+      this->fail("JavaScript tree has an invalid node.");
       return 0;
     }
-    loka::app::scene::NodeDefinitionBase *out = lowering->lower(*this, ctx, tree, depth);
+    loka::app::scene::NodeDefinitionBase *out = lowering->lower(context, tree, depth);
     if (!out)
     {
-      if (!failed_)
-        fail("Could not allocate JavaScript tree.");
+      if (!this->failed_)
+        this->fail("Could not allocate JavaScript tree.");
       return 0;
     }
-    loka::core::String id;
-    if (treeString(ctx, tree, "testId", id)
-        && (!out->propsBase() || out->propsBase()->propsTypeId() != JsClickProps::staticTypeId()))
+    const loka::core::String *id = tree.testId();
+    if (id && (!out->propsBase() || out->propsBase()->propsTypeId() != JsClickProps::staticTypeId()))
     {
-      const loka::core::StringBuffer b = id.bufferWithEncoding(loka::core::StringEncodingUtf8);
-      const std::string utf8(static_cast<const char *>(b.data()), b.length());
-      out->setTestId(utf8.c_str());
+      const loka::core::StringBuffer bytes = id->bufferWithEncoding(loka::core::StringEncodingUtf8);
+      const std::string text(static_cast<const char *>(bytes.data()), bytes.length());
+      out->setTestId(text.c_str());
     }
     return out;
   }
@@ -1436,89 +1347,55 @@ namespace smirkycard
     out = result;
     return true;
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerText(JSContext *ctx, JSValueConst tree)
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerText(JsTreeLowering &lowering, const JsTreeView &tree)
   {
     using namespace loka::app;
-    loka::app::TextStyle style;
-    JSValue dict = JS_GetPropertyStr(ctx, tree, "style");
-    bool valid = !JS_IsException(dict) && (JS_IsUndefined(dict) || readTextStyle(ctx, dict, style));
-    JS_FreeValue(ctx, dict);
-    BlockStyle block;
-    if (valid)
+    const TextFacts &facts = *tree.facts(TextFacts::schema);
+    if (facts.source == TREE_LITERAL)
+      return new (std::nothrow) TextDefinitionWithAttr(Text(facts.text) + facts.style + facts.block);
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_TEXT, value);
+    if (JS_IsStrictEqual(lowering.context, value.value(), this->errorSeat_))
+      return new (std::nothrow) TextDefinitionWithAttr(Text(this->error_.state()) + facts.style + facts.block);
+    JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
+    if (!seat
+        || (seat->kind != JsSeatRecord::STRING && seat->kind != JsSeatRecord::INTEGER
+            && seat->kind != JsSeatRecord::BOOLEAN))
     {
-      dict = JS_GetPropertyStr(ctx, tree, "block");
-      valid = !JS_IsException(dict) && (JS_IsUndefined(dict) || readBlockStyle(ctx, dict, block));
-      JS_FreeValue(ctx, dict);
-    }
-    if (!valid)
-    {
-      loka::core::String error;
-      props.runtime->captureException(*this->engine_, error);
-      fail(error);
+      this->fail("JavaScript Text requires a literal string or state seat.");
       return 0;
     }
-    JSValue value = JS_GetPropertyStr(ctx, tree, "text");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    loka::app::scene::NodeDefinitionBase *out = 0;
-    if (JS_IsStrictEqual(ctx, value, errorSeat_))
-      out = new (std::nothrow) TextDefinitionWithAttr(Text(error_.state()) + style + block);
-    else if (seat && (seat->kind == JsSeatRecord::STRING || seat->kind == JsSeatRecord::INTEGER
-                      || seat->kind == JsSeatRecord::BOOLEAN))
-      out = new (std::nothrow) TextDefinitionWithAttr(
-          Text(seat->kind == JsSeatRecord::STRING ? seat->string.state() : seat->formatted.state()) + style + block);
-    if (!out && JS_IsString(value))
-    {
-      loka::core::String text;
-      treeString(ctx, tree, "text", text);
-      out = new (std::nothrow) TextDefinitionWithAttr(Text(text) + style + block);
-    }
-    if (!out && !JS_IsString(value))
-      fail("JavaScript Text requires a literal string or state seat.");
-    JS_FreeValue(ctx, value);
-    return out;
+    return new (std::nothrow)
+        TextDefinitionWithAttr(Text(seat->kind == JsSeatRecord::STRING ? seat->string.state() : seat->formatted.state())
+                               + facts.style + facts.block);
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerEditText(JSContext *ctx, JSValueConst tree)
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerEditText(JsTreeLowering &lowering, const JsTreeView &tree)
   {
-    JSValue value = JS_GetPropertyStr(ctx, tree, "seat");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    JS_FreeValue(ctx, value);
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_SEAT, value);
+    JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
     if (!seat || seat->kind != JsSeatRecord::STRING)
     {
-      fail("JavaScript EditText requires a String state seat.");
+      this->fail("JavaScript EditText requires a String state seat.");
       return 0;
     }
     return new (std::nothrow) loka::app::EditText(seat->string);
   }
-  loka::app::ScrollView *
-  JsCardNode::createScrollView(JSContext *ctx, JSValueConst tree, const loka::core::Frame &initialViewport)
+  loka::app::ScrollView *JsCardNode::createScrollView(JsTreeLowering &lowering,
+                                                      const JsTreeView &tree,
+                                                      const loka::core::Frame &initialViewport)
   {
-    JSAtom key = JS_NewAtom(ctx, "viewport");
-    const int supplied = JS_GetOwnProperty(ctx, 0, tree, key);
-    JS_FreeAtom(ctx, key);
-    if (supplied < 0)
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_VIEWPORT, value);
+    if (!JS_IsUndefined(value.value()))
     {
-      this->fail("JavaScript ScrollView viewport lookup refused.");
-      return 0;
-    }
-    JsSeatRecord *seat = 0;
-    if (supplied)
-    {
-      JSValue value = JS_GetPropertyStr(ctx, tree, "viewport");
-      seat = this->findSeat(ctx, value);
-      JS_FreeValue(ctx, value);
+      JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
       if (!seat || seat->kind != JsSeatRecord::VIEWPORT)
       {
         this->fail("JavaScript ScrollView viewport must be a c.state.viewport() seat of this card");
         return 0;
       }
-      // A supplied seat needs no record: the seat owns the handle. Binding the
-      // same seat twice is the app's choice, as with the C++ ScrollView(viewport);
-      // a per-card ledger would outlive a refused declaration capture and turn
-      // its retry into a false "already bound" (bot P2 on #1475).
-      loka::app::ScrollView *bound = new (std::nothrow) loka::app::ScrollView(seat->viewport);
-      if (!bound)
-        this->fail("JavaScript ScrollView allocation refused.");
-      return bound;
+      return new (std::nothrow) loka::app::ScrollView(seat->viewport);
     }
     JsScrollViewport *record = this->scrollViewports_.add();
     if (!record)
@@ -1527,25 +1404,23 @@ namespace smirkycard
       return 0;
     }
     this->state(record->viewport, initialViewport);
-    loka::app::ScrollView *scroll =
-        record->viewport.isValid() ? new (std::nothrow) loka::app::ScrollView(record->viewport) : 0;
-    if (!scroll)
-      this->fail("JavaScript ScrollView allocation refused.");
-    return scroll;
+    return record->viewport.isValid() ? new (std::nothrow) loka::app::ScrollView(record->viewport) : 0;
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerShow(JSContext *ctx, JSValueConst tree, int depth)
+  loka::app::scene::NodeDefinitionBase *
+  JsCardNode::lowerShow(JsTreeLowering &lowering, const JsTreeView &tree, int depth)
   {
-    JSValue value = JS_GetPropertyStr(ctx, tree, "seat");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    JS_FreeValue(ctx, value);
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_SEAT, value);
+    JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
     if (!seat || seat->kind != JsSeatRecord::BOOLEAN)
     {
       this->fail("JavaScript Show requires an own Bool state seat.");
       return 0;
     }
-    JSValue childTree = JS_GetPropertyStr(ctx, tree, "child");
-    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> child(this->lowerChild(ctx, childTree, depth + 1));
-    JS_FreeValue(ctx, childTree);
+    JsValueRoot childTree(lowering.context);
+    tree.edge(EDGE_CHILD, childTree);
+    loka::core::OwnedDef<loka::app::scene::NodeDefinitionBase> child(
+        this->lowerChild(lowering, childTree.value(), depth + 1));
     if (!child.isSet())
       return 0;
     loka::app::ShowDefinition *show = new (std::nothrow) loka::app::ShowDefinition(seat->boolean.state());
@@ -1554,11 +1429,12 @@ namespace smirkycard
     *show << child.take();
     return show;
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerOpenFileDialog(JSContext *ctx, JSValueConst tree)
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerOpenFileDialog(JsTreeLowering &lowering,
+                                                                        const JsTreeView &tree)
   {
-    JSValue value = JS_GetPropertyStr(ctx, tree, "seat");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    JS_FreeValue(ctx, value);
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_SEAT, value);
+    JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
     if (!seat || seat->kind != JsSeatRecord::FILE_RESULT)
     {
       this->fail("JavaScript OpenFileDialog requires an own File state seat.");
@@ -1566,262 +1442,158 @@ namespace smirkycard
     }
     return new (std::nothrow) loka::app::OpenFileDialog(loka::app::OpenFileDialog().result(seat->file));
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerImageView(JSContext *ctx, JSValueConst tree)
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerImageView(JsTreeLowering &lowering, const JsTreeView &tree)
   {
-    JSValue value = JS_GetPropertyStr(ctx, tree, "seat");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    JS_FreeValue(ctx, value);
+    JsValueRoot value(lowering.context);
+    tree.edge(EDGE_SEAT, value);
+    JsSeatRecord *seat = this->findSeat(lowering.context, value.value());
     if (!seat || seat->kind != JsSeatRecord::IMAGE)
     {
       this->fail("JavaScript ImageView requires an own Image state seat.");
       return 0;
     }
+    const ImageFacts &facts = *tree.facts(ImageFacts::schema);
     loka::app::ImageViewProps props;
     props.image(seat->image.state());
-    JSValue width = JS_GetPropertyStr(ctx, tree, "width");
-    JSValue height = JS_GetPropertyStr(ctx, tree, "height");
-    JSValue fit = JS_GetPropertyStr(ctx, tree, "fit");
-    int32_t w = 0, h = 0, f = 0;
-    const bool hasSize = !JS_IsUndefined(width) || !JS_IsUndefined(height);
-    const bool hasFit = !JS_IsUndefined(fit);
-    const bool valid =
-        (!hasSize
-         || (integerNumber(ctx, width, w) && integerNumber(ctx, height, h) && w >= 1 && w <= 4096 && h >= 1
-             && h <= 4096))
-        && (!hasFit
-            || (integerNumber(ctx, fit, f) && f >= loka::app::IMAGE_FIT_CONTAIN && f <= loka::app::IMAGE_FIT_STRETCH));
-    JS_FreeValue(ctx, width);
-    JS_FreeValue(ctx, height);
-    JS_FreeValue(ctx, fit);
-    if (!valid)
-    {
-      this->fail("JavaScript ImageView has invalid options.");
-      return 0;
-    }
-    if (hasSize)
-      props.size(w, h);
-    if (hasFit)
-      props.attr(loka::app::ImageViewAttr().fit(static_cast<loka::app::ImageFit>(f)));
+    if (facts.width)
+      props.size(facts.width, facts.height);
+    if (facts.hasFit)
+      props.attr(loka::app::ImageViewAttr().fit(facts.fit));
     return new (std::nothrow) loka::app::ImageView(props);
   }
-  bool JsCardBindingRegistry::readToolbarDescriptor(JSContext *ctx, JSValueConst tree, JsToolbarRow &row)
+  loka::app::scene::NodeDefinitionBase *
+  JsCardNode::lowerToolbar(JsTreeLowering &lowering, const JsTreeView &tree, int depth)
   {
-    ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
-    if (!runtime || !requirePlainObject(ctx, tree, "Toolbar descriptor"))
-      return false;
-    JSValue kindValue = toolbarValue(ctx, tree, "kind");
-    int32_t kind = 0;
-    bool ok = JS_IsNumber(kindValue) && JS_ToInt32(ctx, &kind, kindValue) == 0;
-    JS_FreeValue(ctx, kindValue);
-    IJsNodeLowering *lowering = ok ? runtime->registry_.lookup(kind) : 0;
-    ok = lowering && lowering->queryToolbarRowKind(row.kind);
-    if (!ok)
+    const unsigned length = tree.childCount();
+    if (length && depth + 1 > kMaximumTreeDepth)
     {
-      JS_ThrowTypeError(ctx, "Toolbar requires ToolbarItem descriptors");
-      return false;
-    }
-    JsOwnProperties keys(ctx);
-    if (!keys.read(tree, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
-      return false;
-    for (uint32_t i = 0; i < keys.count(); ++i)
-    {
-      JSValue key = JS_AtomToValue(ctx, keys.atom(i));
-      size_t length = 0;
-      const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
-      JS_FreeValue(ctx, key);
-      const bool text = row.kind == JS_TOOLBAR_ROW_BUTTON || row.kind == JS_TOOLBAR_ROW_LABEL;
-      const bool known =
-          name && strlen(name) == length
-          && (!strcmp(name, "kind")
-              || (text && (!strcmp(name, "label") || !strcmp(name, "testId") || !strcmp(name, "TEST_ID")))
-              || (row.kind == JS_TOOLBAR_ROW_BUTTON
-                  && (!strcmp(name, "handler") || !strcmp(name, "enabled") || !strcmp(name, "enabledSeat")))
-              || (row.kind == JS_TOOLBAR_ROW_LABEL && !strcmp(name, "style"))
-              || (row.kind == JS_TOOLBAR_ROW_FIXED_SPACE && !strcmp(name, "width")));
-      if (name)
-        JS_FreeCString(ctx, name);
-      if (!known)
-      {
-        JS_ThrowTypeError(ctx, "Unknown ToolbarItem field");
-        return false;
-      }
-    }
-    if (row.kind == JS_TOOLBAR_ROW_BUTTON || row.kind == JS_TOOLBAR_ROW_LABEL)
-    {
-      JSValue label = toolbarValue(ctx, tree, "label");
-      const bool literal = JS_IsString(label);
-      ok = literal || (row.kind == JS_TOOLBAR_ROW_LABEL && JS_IsObject(label));
-      JS_FreeValue(ctx, label);
-      if (literal)
-        ok = treeString(ctx, tree, "label", row.label, true, true);
-      JSValue id = toolbarValue(ctx, tree, "testId");
-      ok = ok && (JS_IsUndefined(id) || JS_IsString(id));
-      JS_FreeValue(ctx, id);
-      treeString(ctx, tree, "testId", row.testId, false, true);
-    }
-    switch (row.kind)
-    {
-    case JS_TOOLBAR_ROW_BUTTON:
-    {
-      JSValue handler = toolbarValue(ctx, tree, "handler");
-      ok = ok && JS_IsFunction(ctx, handler);
-      JS_FreeValue(ctx, handler);
-      break;
-    }
-    case JS_TOOLBAR_ROW_LABEL:
-    {
-      JSValue style = toolbarValue(ctx, tree, "style");
-      ok = ok && (JS_IsUndefined(style) || readTextStyle(ctx, style, row.style));
-      JS_FreeValue(ctx, style);
-      break;
-    }
-    case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
-      break;
-    case JS_TOOLBAR_ROW_FIXED_SPACE:
-    {
-      JSValue width = toolbarValue(ctx, tree, "width");
-      double value = 0;
-      ok = JS_IsNumber(width) && JS_ToFloat64(ctx, &value, width) == 0 && value >= 1 && value <= SHRT_MAX
-           && value == static_cast<short>(value);
-      JS_FreeValue(ctx, width);
-      if (ok)
-        row.width = static_cast<short>(value);
-      break;
-    }
-    }
-    if (!ok)
-      JS_ThrowTypeError(ctx, "Invalid ToolbarItem payload");
-    return ok;
-  }
-
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerToolbar(JSContext *ctx, JSValueConst tree, int depth)
-  {
-    JSValue children = toolbarValue(ctx, tree, "children");
-    int64_t length = 0;
-    bool ok = JS_IsArray(children) && JS_GetLength(ctx, children, &length) == 0 && length >= 0
-              && length <= kMaximumTreeChildren && (!length || depth + 1 <= kMaximumTreeDepth);
-    JsToolbarProps toolbar;
-    unsigned buttons = 0;
-    for (int64_t i = 0; ok && i < length; ++i)
-    {
-      JSValue original = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
-      // Style getters may mutate the source descriptor. Hold its data properties
-      // once so validation and seat/handler admission consume the same facts.
-      JSValue child = snapshotToolbarDescriptor(ctx, original);
-      JS_FreeValue(ctx, original);
-      JsToolbarRow &row = toolbar.rows[toolbar.count];
-      ok = !JS_IsException(child) && JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
-      if (ok && row.kind == JS_TOOLBAR_ROW_LABEL)
-      {
-        JSValue value = toolbarValue(ctx, child, "label");
-        if (!JS_IsString(value))
-        {
-          JsSeatRecord *seat = this->findSeat(ctx, value);
-          ok = seat && seat->kind == JsSeatRecord::STRING;
-          if (ok)
-            row.text = seat->string.state();
-        }
-        JS_FreeValue(ctx, value);
-      }
-      if (ok && row.kind == JS_TOOLBAR_ROW_BUTTON)
-      {
-        ok = ++buttons <= JS_TOOLBAR_SLOT_COUNT;
-        JSValue enabled = toolbarValue(ctx, child, "enabledSeat");
-        if (ok && !JS_IsUndefined(enabled))
-        {
-          JsSeatRecord *seat = this->findSeat(ctx, enabled);
-          ok = seat && seat->kind == JsSeatRecord::BOOLEAN;
-          if (ok)
-            row.enabled = seat->boolean.state();
-        }
-        JS_FreeValue(ctx, enabled);
-        JSValue handler = toolbarValue(ctx, child, "handler");
-        if (ok && JS_IsFunction(ctx, handler))
-          row.handler = this->addHandler(ctx, handler);
-        ok = ok && row.handler;
-        JS_FreeValue(ctx, handler);
-      }
-      JS_FreeValue(ctx, child);
-      if (ok)
-        ++toolbar.count;
-    }
-    JS_FreeValue(ctx, children);
-    if (!ok)
-    {
-      JS_FreeValue(ctx, JS_GetException(ctx));
-      if (!this->failed_)
-        this->fail("JavaScript Toolbar has invalid descriptors, seats, count or depth.");
+      this->fail("JavaScript Toolbar has invalid descriptors, seats, count or depth.");
       return 0;
+    }
+    JsToolbarProps toolbar;
+    for (unsigned i = 0; i < length; ++i)
+    {
+      JsValueRoot value(lowering.context);
+      tree.childAt(i, value);
+      JsTreeView item(lowering.context, value.value());
+      JsToolbarRow &row = toolbar.rows[toolbar.count];
+      const loka::core::String *id = item.testId();
+      if (id)
+        row.testId = *id;
+      if (item.schema() == &ItemButtonFacts::schema)
+      {
+        row.kind = JS_TOOLBAR_ROW_BUTTON;
+        row.label = item.facts(ItemButtonFacts::schema)->label;
+        JsValueRoot enabled(lowering.context);
+        item.edge(EDGE_ENABLED, enabled);
+        if (!JS_IsUndefined(enabled.value()))
+        {
+          JsSeatRecord *seat = this->findSeat(lowering.context, enabled.value());
+          if (!seat || seat->kind != JsSeatRecord::BOOLEAN)
+          {
+            this->fail("JavaScript Toolbar has invalid descriptors, seats, count or depth.");
+            return 0;
+          }
+          row.enabled = seat->boolean.state();
+        }
+        JsValueRoot handler(lowering.context);
+        item.edge(EDGE_HANDLER, handler);
+        row.handler = this->addHandler(lowering, handler.value());
+        if (!row.handler)
+          return 0;
+      }
+      else if (item.schema() == &ItemLabelFacts::schema)
+      {
+        const ItemLabelFacts &facts = *item.facts(ItemLabelFacts::schema);
+        row.kind = JS_TOOLBAR_ROW_LABEL;
+        row.label = facts.label;
+        row.style = facts.style;
+        if (facts.source == TREE_LIVE_SEAT)
+        {
+          JsValueRoot label(lowering.context);
+          item.edge(EDGE_LABEL, label);
+          JsSeatRecord *seat = this->findSeat(lowering.context, label.value());
+          if (!seat || seat->kind != JsSeatRecord::STRING)
+          {
+            this->fail("JavaScript Toolbar has invalid descriptors, seats, count or depth.");
+            return 0;
+          }
+          row.text = seat->string.state();
+        }
+      }
+      else if (item.schema() == &ItemFlexFacts::schema)
+        row.kind = JS_TOOLBAR_ROW_FLEXIBLE_SPACE;
+      else
+      {
+        row.kind = JS_TOOLBAR_ROW_FIXED_SPACE;
+        row.width = static_cast<short>(item.facts(ItemFixedFacts::schema)->width);
+      }
+      ++toolbar.count;
     }
     return loka::app::scene::Component(toolbar).clone();
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerClickable(JSContext *ctx, JSValueConst tree, bool cell)
+  loka::app::scene::NodeDefinitionBase *
+  JsCardNode::lowerClickable(JsTreeLowering &lowering, const JsTreeView &tree, bool cell)
   {
-    JSValue value = JS_GetPropertyStr(ctx, tree, "label");
-    JsSeatRecord *seat = this->findSeat(ctx, value);
-    loka::core::String label;
-    const bool validLabel = (seat && seat->kind == JsSeatRecord::STRING) || treeString(ctx, tree, "label", label);
-    JS_FreeValue(ctx, value);
-    if (!validLabel)
+    const JsTreeTextSource source =
+        cell ? tree.facts(CellFacts::schema)->source : tree.facts(ButtonFacts::schema)->source;
+    const loka::core::String &label =
+        cell ? tree.facts(CellFacts::schema)->label : tree.facts(ButtonFacts::schema)->label;
+    JsSeatRecord *seat = 0;
+    if (source == TREE_LIVE_SEAT)
     {
-      fail("JavaScript clickable requires a literal string or String state seat.");
-      return 0;
+      JsValueRoot value(lowering.context);
+      tree.edge(EDGE_LABEL, value);
+      seat = this->findSeat(lowering.context, value.value());
+      if (!seat || seat->kind != JsSeatRecord::STRING)
+      {
+        this->fail("JavaScript clickable requires a literal string or String state seat.");
+        return 0;
+      }
     }
     loka::core::State<bool> *enabledState = 0;
-    JSValue enabled = JS_GetPropertyStr(ctx, tree, "enabledSeat");
-    if (!JS_IsUndefined(enabled))
+    JsValueRoot enabled(lowering.context);
+    tree.edge(EDGE_ENABLED, enabled);
+    if (!JS_IsUndefined(enabled.value()))
     {
-      JsSeatRecord *enabledSeat = this->findSeat(ctx, enabled);
-      if (cell || !enabledSeat || enabledSeat->kind != JsSeatRecord::BOOLEAN)
+      JsSeatRecord *enabledSeat = this->findSeat(lowering.context, enabled.value());
+      if (!enabledSeat || enabledSeat->kind != JsSeatRecord::BOOLEAN)
       {
-        JS_FreeValue(ctx, enabled);
-        fail("JavaScript Button enabled() requires a Bool state seat.");
+        this->fail("JavaScript Button enabled() requires a Bool state seat.");
         return 0;
       }
       enabledState = enabledSeat->boolean.state();
     }
-    JS_FreeValue(ctx, enabled);
-    JSValue handler = JS_GetPropertyStr(ctx, tree, "handler");
-    JsHandlerRecord *record = JS_IsFunction(ctx, handler) ? this->addHandler(ctx, handler) : 0;
-    JS_FreeValue(ctx, handler);
+    JsValueRoot handler(lowering.context);
+    tree.edge(EDGE_HANDLER, handler);
+    JsHandlerRecord *record = this->addHandler(lowering, handler.value());
     if (!record)
-    {
-      if (!failed_)
-        fail("JavaScript clickable requires a handler.");
       return 0;
-    }
-    loka::core::String testId;
-    treeString(ctx, tree, "testId", testId);
     return loka::app::scene::Component(JsClickProps(label,
                                                     seat ? seat->string.state() : 0,
                                                     enabledState,
                                                     cell ? JsClickProps::CELL : JsClickProps::BUTTON,
                                                     record,
-                                                    testId))
+                                                    *tree.testId()))
         .clone();
   }
-  JsCardNode::JsHandlerAdmission::JsHandlerAdmission(JsCardNode &card)
-      : staged_("Handler"),
-        card_(card)
+  JsCardNode::JsHandlerAdmission::JsHandlerAdmission()
+      : staged_("Handler")
   {
-    assert(!this->card_.admission_);
-    this->card_.admission_ = this;
   }
-  JsCardNode::JsHandlerAdmission::~JsHandlerAdmission()
-  {
-    this->card_.admission_ = 0;
-  }
+  JsCardNode::JsHandlerAdmission::~JsHandlerAdmission() {}
   loka::app::scene::NodeDefinitionBase *JsCardNode::lowerRoot(JSContext *ctx, JSValueConst tree)
   {
-    JsHandlerAdmission admission(*this);
-    loka::app::scene::NodeDefinitionBase *definition = this->lower(ctx, tree, 0);
+    JsHandlerAdmission admission;
+    JsTreeLowering lowering(ctx, *this, admission);
+    loka::app::scene::NodeDefinitionBase *definition = this->lower(lowering, tree, 0);
     if (definition)
       this->handlers_.splice(admission.staged_);
     return definition;
   }
-  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerChild(JSContext *ctx, JSValueConst tree, int depth)
+  loka::app::scene::NodeDefinitionBase *JsCardNode::lowerChild(JsTreeLowering &lowering, JSValueConst tree, int depth)
   {
-    return lower(ctx, tree, depth);
+    return this->lower(lowering, tree, depth);
   }
   JsSeatRecord *JsCardNode::findSeat(JSContext *ctx, JSValueConst value) const
   {
@@ -1830,22 +1602,16 @@ namespace smirkycard
         return seat;
     return 0;
   }
-  JsHandlerRecord *JsCardNode::addHandler(JSContext *ctx, JSValueConst handler)
+  JsHandlerRecord *JsCardNode::addHandler(JsTreeLowering &lowering, JSValueConst handler)
   {
-    assert(this->admission_);
-    if (!this->admission_)
+    if (this->handlers_.count() + lowering.admission.staged_.count() >= kCardClickableBudget)
     {
-      this->fail("JavaScript handler admitted outside a lower.");
+      this->fail("kCardClickableBudget exceeded (128 clickables).");
       return 0;
     }
-    if (this->handlers_.count() + this->admission_->staged_.count() >= kCardClickableBudget)
-    {
-      fail("kCardClickableBudget exceeded (128 clickables).");
-      return 0;
-    }
-    JsHandlerRecord *record = this->admission_->staged_.add(JsHandlerRecord::Initial(this, ctx, handler));
+    JsHandlerRecord *record = lowering.admission.staged_.add(JsHandlerRecord::Initial(this, lowering.context, handler));
     if (!record)
-      fail("Could not allocate clickable handler.");
+      this->fail("Could not allocate clickable handler.");
     return record;
   }
   void JsCardNode::fire(const JsHandlerRecord &handler)

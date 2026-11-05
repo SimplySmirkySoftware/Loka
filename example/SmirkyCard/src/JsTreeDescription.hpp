@@ -2,6 +2,7 @@
 #define SMIRKYCARD_JS_TREE_DESCRIPTION_HPP
 
 #include "quickjs.h"
+#include "core/String.hpp"
 #include <cassert>
 #include <new>
 
@@ -45,6 +46,43 @@ namespace smirkycard
     JsValueRoot &operator=(const JsValueRoot &);
   };
 
+  enum JsTreeKind
+  {
+    TREE_CUSTOM,
+    TREE_VSTACK,
+    TREE_TEXT,
+    TREE_EDIT,
+    TREE_BUTTON,
+    TREE_ROW,
+    TREE_MARKUP,
+    TREE_CELL,
+    TREE_GRID,
+    TREE_SHOW,
+    TREE_FILE,
+    TREE_IMAGE,
+    TREE_SCROLL,
+    TREE_CARD,
+    TREE_ZSTACK,
+    TREE_BOX,
+    TREE_CLIPBOX,
+    TREE_TOOLBAR,
+    TREE_ITEM_BUTTON,
+    TREE_ITEM_LABEL,
+    TREE_ITEM_FLEX,
+    TREE_ITEM_FIXED,
+    TREE_KIND_COUNT
+  };
+  enum JsTreeEdge
+  {
+    EDGE_SEAT,
+    EDGE_TEXT,
+    EDGE_LABEL,
+    EDGE_ENABLED,
+    EDGE_CHILD,
+    EDGE_CHILDREN,
+    EDGE_HANDLER,
+    EDGE_VIEWPORT
+  };
   /** Slot meaning and permitted child category have one static schema owner. */
   enum JsTreeCategory
   {
@@ -60,6 +98,7 @@ namespace smirkycard
   };
   struct JsTreeSlot
   {
+    JsTreeEdge edge;
     JsTreeSlotRole role;
     JsTreeCategory category;
   };
@@ -68,6 +107,9 @@ namespace smirkycard
   struct JsTreeSchema
   {
     const char *name;
+    JsTreeKind kind;
+    const loka::core::String *(*readId)(const void *);
+    void (*writeId)(void *, const loka::core::String &);
     JsTreeCategory category;
     unsigned slotCount;
     const JsTreeSlot *slots;
@@ -96,9 +138,15 @@ namespace smirkycard
     JsTreeSchemaFor(const char *displayName,
                     JsTreeCategory acceptedCategory,
                     unsigned count,
-                    const JsTreeSlot *orderedSlots)
+                    const JsTreeSlot *orderedSlots,
+                    JsTreeKind kind = TREE_CUSTOM,
+                    const loka::core::String *(*readId)(const void *) = 0,
+                    void (*writeId)(void *, const loka::core::String &) = 0)
     {
       this->name = displayName;
+      this->kind = kind;
+      this->readId = readId;
+      this->writeId = writeId;
       this->category = acceptedCategory;
       this->slotCount = count;
       this->slots = orderedSlots;
@@ -107,6 +155,8 @@ namespace smirkycard
     }
   };
 
+  /** Normalize a literal once; nonempty native String refusal becomes OOM. */
+  bool ReadJsTreeString(JSContext *ctx, JSValueConst value, loka::core::String &out, bool rejectNul = false);
   class JsTreeStaging;
   /** Rooted read-only descriptor; facts cannot outlive this noncopyable view. */
   class JsTreeView
@@ -124,6 +174,10 @@ namespace smirkycard
       return this->root_.context();
     }
     void slot(unsigned index, JsValueRoot &out) const;
+    void edge(JsTreeEdge edge, JsValueRoot &out) const;
+    unsigned childCount() const;
+    void childAt(unsigned index, JsValueRoot &out) const;
+    const loka::core::String *testId() const;
     template <class T> const T *facts(const JsTreeSchemaFor<T> &expected) const
     {
       const bool matches = this->schema() == &expected;
@@ -172,10 +226,23 @@ namespace smirkycard
     /** Consume the value on both success and failure. */
     void slot(unsigned index, JSValue value);
     JSValue publish();
+    void edge(JsTreeEdge edge, JSValue value);
+    void copySlots(const JsTreeView &source);
+    void testId(const loka::core::String &id);
+    template <class T> T *facts(const JsTreeSchemaFor<T> &schema)
+    {
+      return this->valid() ? static_cast<T *>(this->mutableFacts(schema)) : 0;
+    }
 
   private:
     void initialize(const JsTreeSchema &schema, const void *facts);
-    enum Phase { BUILDING, REFUSED, PUBLISHED };
+    void *mutableFacts(const JsTreeSchema &schema);
+    enum Phase
+    {
+      BUILDING,
+      REFUSED,
+      PUBLISHED
+    };
     JsValueRoot destination_;
     JsTreeView::Envelope *envelope_;
     Phase phase_;

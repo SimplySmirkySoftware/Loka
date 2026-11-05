@@ -1,5 +1,6 @@
 #include "JsCardBindingRegistry.hpp"
 #include "JsTreeDescription.hpp"
+#include "JsTreeFacts.hpp"
 #include "CardNodes.hpp"
 #include "JsToolbarNode.hpp"
 #include <climits>
@@ -60,7 +61,7 @@ namespace smirkycard
   }
   bool JsCardBindingRegistry::registerLowering(IJsNodeLowering *lowering)
   {
-    if (!lowering || !lowering->name || lowering->kind)
+    if (!lowering || !lowering->name || !lowering->schema || lowering->kind)
       return false;
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
     {
@@ -103,6 +104,13 @@ namespace smirkycard
   {
     for (LoweringEntry *entry = lowerings_; entry; entry = entry->next_)
       if (entry->value_->kind == kind)
+        return entry->value_;
+    return 0;
+  }
+  IJsNodeLowering *JsCardBindingRegistry::lookup(const JsTreeSchema *schema) const
+  {
+    for (LoweringEntry *entry = this->lowerings_; entry; entry = entry->next_)
+      if (entry->value_->schema == schema)
         return entry->value_;
     return 0;
   }
@@ -174,7 +182,8 @@ namespace smirkycard
                                  {"naturalWidth", &ScriptRuntime::naturalWidth, 0},
                                  {"naturalHeight", &ScriptRuntime::naturalHeight, 0},
                                  {"expStaticBlurUnit", &ScriptRuntime::expStaticBlurUnit, 0},
-                                 {"expBlurUnit", &ScriptRuntime::expBlurUnit, 0}};
+                                 {"expBlurUnit", &ScriptRuntime::expBlurUnit, 0},
+                                 {"enabled", &ScriptRuntime::enabled, 1}};
     for (unsigned i = 0; i < sizeof(methods) / sizeof(methods[0]); ++i)
     {
       const IJsGlobal &method = methods[i];
@@ -201,238 +210,8 @@ namespace smirkycard
     return true;
   }
 
-  bool JsCardBindingRegistry::isTree(JSValueConst value)
-  {
-    return JS_GetClassID(value) == JsTreeView::classId;
-  }
-
-  bool JsCardBindingRegistry::isTreePrototype(JSContext *ctx, JSValueConst value)
-  {
-    JSValue proto = JS_GetClassProto(ctx, JsTreeView::classId);
-    const bool same = JS_IsObject(proto) && JS_VALUE_GET_PTR(value) == JS_VALUE_GET_PTR(proto);
-    JS_FreeValue(ctx, proto);
-    return same;
-  }
-
-  JSValue JsCardBindingRegistry::newTree(JSContext *ctx, int kind)
-  {
-    JSValue node = JS_NewObjectClass(ctx, JsTreeView::classId);
-    JS_DefinePropertyValueStr(ctx, node, "kind", JS_NewInt32(ctx, kind), JS_PROP_ENUMERABLE);
-    return node;
-  }
-
-  JSValue JsCardBindingRegistry::copyTree(JSContext *ctx, JSValueConst source, JSValueConst id)
-  {
-    const bool tree = isTree(source);
-    // Every modifier copies the whole node, including the other modifiers'
-    // results ("testId", "enabledSeat", "rowWidth"), so modifiers chain in either order.
-    JsOwnProperties names(ctx);
-    if (!names.read(source, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK | JS_GPN_ENUM_ONLY))
-      return JS_EXCEPTION;
-    JSValue copy = tree ? JS_NewObjectClass(ctx, JsTreeView::classId) : JS_NewObject(ctx);
-    if (JS_IsException(copy))
-      return copy;
-    for (uint32_t i = 0; i < names.count(); ++i)
-    {
-      JSValue value = JS_GetProperty(ctx, source, names.atom(i));
-      if (JS_IsException(value) || JS_DefinePropertyValue(ctx, copy, names.atom(i), value, JS_PROP_C_W_E) < 0)
-      {
-        JS_FreeValue(ctx, copy);
-        return JS_EXCEPTION;
-      }
-    }
-    if (!tree)
-    {
-      JSValue proto = JS_GetClassProto(ctx, JsTreeView::classId);
-      JSValue function = JS_GetPropertyStr(ctx, proto, "TEST_ID");
-      JS_FreeValue(ctx, proto);
-      if (JS_IsException(function) || JS_SetPropertyStr(ctx, copy, "TEST_ID", function) < 0)
-      {
-        JS_FreeValue(ctx, copy);
-        return JS_EXCEPTION;
-      }
-    }
-    if (!JS_IsUndefined(id) && JS_SetPropertyStr(ctx, copy, "testId", JS_DupValue(ctx, id)) < 0)
-    {
-      JS_FreeValue(ctx, copy);
-      return JS_EXCEPTION;
-    }
-    return copy;
-  }
   namespace
   {
-    bool installDescriptorFunction(JSContext *ctx, JSValueConst tree, const char *name, JSCFunction *function)
-    {
-      JSValue value = JS_NewCFunction(ctx, function, name, 1);
-      return !JS_IsException(value) && JS_SetPropertyStr(ctx, tree, name, value) >= 0;
-    }
-    JSValue collectChildren(JSContext *ctx, const char *name, int argc, JSValueConst *argv, uint32_t limit, bool exact)
-    {
-      JSValue children = JS_NewArray(ctx);
-      if (JS_IsException(children))
-        return children;
-      uint32_t count = 0;
-      for (int i = 0; i < argc; ++i)
-      {
-        int64_t length = 0;
-        const bool array = JS_IsArray(argv[i]);
-        if (array && JS_GetLength(ctx, argv[i], &length))
-        {
-          JS_FreeValue(ctx, children);
-          return JS_ThrowTypeError(ctx, "%s children must be tree nodes", name);
-        }
-        const uint32_t entries = array ? static_cast<uint32_t>(length) : 1;
-        for (uint32_t j = 0; j < entries; ++j)
-        {
-          JSValue child = array ? JS_GetPropertyUint32(ctx, argv[i], j) : JS_DupValue(ctx, argv[i]);
-          JSValue childKind = JS_GetPropertyStr(ctx, child, "kind");
-          if (!JS_IsObject(child) || JS_IsArray(child) || !JS_IsNumber(childKind))
-          {
-            JS_FreeValue(ctx, childKind);
-            JS_FreeValue(ctx, child);
-            JS_FreeValue(ctx, children);
-            return JS_ThrowTypeError(ctx, "%s children must be tree nodes (nested arrays are not allowed)", name);
-          }
-          JS_FreeValue(ctx, childKind);
-          if (count == limit)
-          {
-            JS_FreeValue(ctx, child);
-            JS_FreeValue(ctx, children);
-            return exact ? JS_ThrowRangeError(ctx, "%s requires exactly rows * cols children (%u)", name, static_cast<unsigned>(limit))
-                         : JS_ThrowRangeError(ctx, "%s accepts at most %u children", name, static_cast<unsigned>(limit));
-          }
-          if (JS_SetPropertyUint32(ctx, children, count++, child) < 0)
-          {
-            JS_FreeValue(ctx, children);
-            return JS_EXCEPTION;
-          }
-        }
-      }
-      if (exact && count != limit)
-      {
-        JS_FreeValue(ctx, children);
-        return JS_ThrowRangeError(ctx, "%s requires exactly rows * cols children (%u)", name, static_cast<unsigned>(limit));
-      }
-      return children;
-    }
-    bool lowerChildren(JsCardNode &node,
-                       JSContext *ctx,
-                       JSValueConst tree,
-                       int depth,
-                       loka::app::scene::INestableDefinition &nest,
-                       int limit,
-                       bool exact,
-                       const char *name)
-    {
-      JSValue children = JS_GetPropertyStr(ctx, tree, "children");
-      int64_t length = 0;
-      if (!JS_IsArray(children) || JS_GetLength(ctx, children, &length) || length < 0 || length > limit
-          || (exact && length != limit))
-      {
-        JS_FreeValue(ctx, children);
-        node.fail(name);
-        return false;
-      }
-      for (uint32_t i = 0; i < static_cast<uint32_t>(length); ++i)
-      {
-        JSValue child = JS_GetPropertyUint32(ctx, children, i);
-        loka::app::scene::NodeDefinitionBase *definition = node.lowerChild(ctx, child, depth + 1);
-        JS_FreeValue(ctx, child);
-        if (!definition)
-        {
-          JS_FreeValue(ctx, children);
-          return false;
-        }
-        nest.addOwnedChild(definition);
-      }
-      JS_FreeValue(ctx, children);
-      return true;
-    }
-    class StackLowering : public IJsNodeLowering
-    {
-    public:
-      enum Axis
-      {
-        STACK_ROW,
-        STACK_COLUMN,
-        STACK_DEPTH
-      };
-
-      StackLowering(const char *n, Axis axis)
-          : axis_(axis)
-      {
-        name = n;
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        JSValue children = collectChildren(ctx, name, argc, argv, kMaximumTreeChildren, false);
-        if (JS_IsException(children))
-          return children;
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
-        if (JS_IsException(tree))
-        {
-          JS_FreeValue(ctx, children);
-          return tree;
-        }
-        JS_SetPropertyStr(ctx, tree, "children", children);
-        JS_FreezeObject(ctx, tree);
-        return tree;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        loka::app::scene::NodeDefinitionBase *stack = 0;
-        loka::app::scene::INestableDefinition *nest = 0;
-        switch (this->axis_)
-        {
-        case STACK_ROW:
-        {
-          loka::app::Row *row = new (std::nothrow) loka::app::Row();
-          if (row && ownTreePolicy(ctx, tree, "rowWidth"))
-            row->naturalWidth();
-          stack = row;
-          nest = row;
-          break;
-        }
-        case STACK_COLUMN:
-        {
-          loka::app::VStack *column = new (std::nothrow) loka::app::VStack();
-          if (column && ownTreePolicy(ctx, tree, "columnHeight"))
-            column->naturalHeight();
-          stack = column;
-          nest = column;
-          break;
-        }
-        case STACK_DEPTH:
-        {
-          loka::app::ZStack *depthStack = new (std::nothrow) loka::app::ZStack();
-          if (depthStack && ownTreePolicy(ctx, tree, "staticBlurUnit"))
-            depthStack->expStaticBlurUnit();
-          else if (depthStack && ownTreePolicy(ctx, tree, "blurUnit"))
-            depthStack->expBlurUnit();
-          stack = depthStack;
-          nest = depthStack;
-          break;
-        }
-        }
-        if (!stack)
-        {
-          node.fail("JavaScript stack allocation refused.");
-          return 0;
-        }
-        if (!lowerChildren(
-                node, ctx, tree, depth, *nest, kMaximumTreeChildren, false, "JavaScript stack has invalid children."))
-        {
-          delete stack;
-          return 0;
-        }
-        return stack;
-      }
-
-    private:
-      const Axis axis_;
-    };
     bool readGridDimension(JSContext *ctx, JSValueConst value, short &out)
     {
       double number = 0;
@@ -442,105 +221,6 @@ namespace smirkycard
       out = static_cast<short>(number);
       return true;
     }
-    class GridLowering : public IJsNodeLowering
-    {
-    public:
-      GridLowering()
-      {
-        name = "Grid";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc != 3)
-          return JS_ThrowTypeError(ctx, "Grid(rows, cols, children) requires three arguments");
-        short rows = 0, cols = 0;
-        if (!readGridDimension(ctx, argv[0], rows) || !readGridDimension(ctx, argv[1], cols))
-          return JS_ThrowRangeError(ctx, "Grid rows and cols must be integers in 1..16");
-        JSValue children = collectChildren(ctx, name, 1, argv + 2, rows * cols, true);
-        if (JS_IsException(children))
-          return children;
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
-        if (JS_IsException(tree))
-        {
-          JS_FreeValue(ctx, children);
-          return tree;
-        }
-        if (JS_SetPropertyStr(ctx, tree, "children", children) < 0
-            || JS_SetPropertyStr(ctx, tree, "rows", JS_NewInt32(ctx, rows)) < 0
-            || JS_SetPropertyStr(ctx, tree, "cols", JS_NewInt32(ctx, cols)) < 0 || JS_FreezeObject(ctx, tree) < 0)
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        return tree;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        short rows = 0, cols = 0;
-        JSValue rowValue = JS_GetPropertyStr(ctx, tree, "rows");
-        JSValue colValue = JS_GetPropertyStr(ctx, tree, "cols");
-        const bool valid = readGridDimension(ctx, rowValue, rows) && readGridDimension(ctx, colValue, cols);
-        JS_FreeValue(ctx, rowValue);
-        JS_FreeValue(ctx, colValue);
-        if (!valid)
-        {
-          node.fail("Grid rows and cols must be integers in 1..16");
-          return 0;
-        }
-        loka::app::Grid *grid = new (std::nothrow) loka::app::Grid();
-        if (!grid)
-        {
-          node.fail("JavaScript Grid allocation refused.");
-          return 0;
-        }
-        grid->rows(rows).cols(cols);
-        if (!lowerChildren(
-                node, ctx, tree, depth, *grid, rows * cols, true, "Grid requires exactly rows * cols children"))
-        {
-          delete grid;
-          return 0;
-        }
-        return grid;
-      }
-    };
-    class TextLowering : public IJsNodeLowering
-    {
-    public:
-      TextLowering()
-      {
-        name = "Text";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc < 1 || argc > 3)
-          return JS_ThrowTypeError(ctx, "Text(value, style?, block?) requires a value and optional style and block");
-        loka::app::TextStyle style;
-        if (argc >= 2 && !JS_IsUndefined(argv[1]) && !readTextStyle(ctx, argv[1], style))
-          return JS_EXCEPTION;
-        loka::app::BlockStyle block;
-        if (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], block))
-          return JS_EXCEPTION;
-        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
-        if (JS_IsException(n))
-          return n;
-        if (JS_SetPropertyStr(ctx, n, "text", JS_DupValue(ctx, argv[0])) < 0
-            || (argc >= 2 && JS_SetPropertyStr(ctx, n, "style", JS_DupValue(ctx, argv[1])) < 0)
-            || (argc == 3 && JS_SetPropertyStr(ctx, n, "block", JS_DupValue(ctx, argv[2])) < 0)
-            || JS_FreezeObject(ctx, n) < 0)
-        {
-          JS_FreeValue(ctx, n);
-          return JS_EXCEPTION;
-        }
-        return n;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
-      {
-        return node.lowerText(ctx, tree);
-      }
-    };
     bool readMarkup(JSContext *ctx, JSValueConst value, JSValueConst dict, loka::app::AttributedString &out)
     {
       if (!JS_IsString(value))
@@ -562,214 +242,6 @@ namespace smirkycard
       return valid;
     }
 
-    class MarkupLowering : public IJsNodeLowering
-    {
-    public:
-      MarkupLowering()
-      {
-        name = "Markup";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc < 1 || argc > 3)
-          return JS_ThrowTypeError(ctx,
-                                   "Markup(markup, style?, block?) requires a string and optional style and block");
-        loka::app::AttributedString parsed;
-        if (!readMarkup(ctx, argv[0], argc >= 2 ? argv[1] : JS_UNDEFINED, parsed))
-          return JS_EXCEPTION;
-        loka::app::BlockStyle block;
-        if (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], block))
-          return JS_EXCEPTION;
-        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
-        if (JS_IsException(n))
-          return n;
-        if (JS_SetPropertyStr(ctx, n, "markup", JS_DupValue(ctx, argv[0])) < 0
-            || (argc >= 2 && JS_SetPropertyStr(ctx, n, "style", JS_DupValue(ctx, argv[1])) < 0)
-            || (argc == 3 && JS_SetPropertyStr(ctx, n, "block", JS_DupValue(ctx, argv[2])) < 0)
-            || JS_FreezeObject(ctx, n) < 0)
-        {
-          JS_FreeValue(ctx, n);
-          return JS_EXCEPTION;
-        }
-        return n;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
-      {
-        JSValue value = JS_GetPropertyStr(ctx, tree, "markup");
-        JSValue dict = JS_GetPropertyStr(ctx, tree, "style");
-        loka::app::AttributedString parsed;
-        bool valid = readMarkup(ctx, value, dict, parsed);
-        JS_FreeValue(ctx, dict);
-        JS_FreeValue(ctx, value);
-        loka::app::BlockStyle block;
-        if (valid)
-        {
-          dict = JS_GetPropertyStr(ctx, tree, "block");
-          valid = !JS_IsException(dict) && (JS_IsUndefined(dict) || readBlockStyle(ctx, dict, block));
-          JS_FreeValue(ctx, dict);
-        }
-        if (!valid)
-        {
-          JS_FreeValue(ctx, JS_GetException(ctx));
-          node.fail("JavaScript Markup parse, style, block or allocation refused.");
-          return 0;
-        }
-        return new (std::nothrow)
-            loka::app::AttributedTextDefinitionWithAttr(loka::app::AttributedText(parsed) + block);
-      }
-    };
-    class EditTextLowering : public IJsNodeLowering
-    {
-    public:
-      EditTextLowering()
-      {
-        name = "EditText";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc != 1)
-          return JS_ThrowTypeError(ctx, "EditText(seat) requires one seat");
-        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
-        JS_SetPropertyStr(ctx, n, "seat", JS_DupValue(ctx, argv[0]));
-        JS_FreezeObject(ctx, n);
-        return n;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
-      {
-        return node.lowerEditText(ctx, tree);
-      }
-    };
-    JSValue seatTree(JSContext *ctx, int kind, JSValueConst seat, JSValueConst child = JS_UNDEFINED)
-    {
-      JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
-      if (JS_IsException(tree))
-        return tree;
-      if (JS_SetPropertyStr(ctx, tree, "seat", JS_DupValue(ctx, seat)) < 0
-          || (!JS_IsUndefined(child) && JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, child)) < 0)
-          || JS_FreezeObject(ctx, tree) < 0)
-      {
-        JS_FreeValue(ctx, tree);
-        return JS_EXCEPTION;
-      }
-      return tree;
-    }
-    class ShowLowering : public IJsNodeLowering
-    {
-    public:
-      ShowLowering()
-      {
-        this->name = "Show";
-        this->kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc != 2 || !JS_IsObject(argv[1]) || JS_IsArray(argv[1]))
-          return JS_ThrowTypeError(ctx, "Show(boolSeat, child) requires a seat and one tree");
-        JSValue childKind = JS_GetPropertyStr(ctx, argv[1], "kind");
-        const bool valid = JS_IsNumber(childKind);
-        JS_FreeValue(ctx, childKind);
-        if (!valid)
-          return JS_ThrowTypeError(ctx, "Show child must be a tree");
-        return seatTree(ctx, this->kind, argv[0], argv[1]);
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        return node.lowerShow(ctx, tree, depth);
-      }
-    };
-    class OpenFileDialogLowering : public IJsNodeLowering
-    {
-    public:
-      OpenFileDialogLowering()
-      {
-        this->name = "OpenFileDialog";
-        this->kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc != 1)
-          return JS_ThrowTypeError(ctx, "OpenFileDialog(fileSeat) requires one seat");
-        return seatTree(ctx, this->kind, argv[0]);
-      }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
-      {
-        return node.lowerOpenFileDialog(ctx, tree);
-      }
-    };
-    JSValue singleChildTree(JSContext *ctx, int kind, const char *name, int argc, JSValueConst *argv)
-    {
-      if (argc != 1 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
-        return JS_ThrowTypeError(ctx, "%s(child) requires one tree", name);
-      JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
-      const bool valid = JS_IsNumber(childKind);
-      JS_FreeValue(ctx, childKind);
-      if (!valid)
-        return JS_ThrowTypeError(ctx, "%s(child) requires one tree", name);
-      JSValue tree = JsCardBindingRegistry::newTree(ctx, kind);
-      if (JS_IsException(tree))
-        return tree;
-      if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0 || JS_FreezeObject(ctx, tree) < 0)
-      {
-        JS_FreeValue(ctx, tree);
-        return JS_EXCEPTION;
-      }
-      return tree;
-    }
-    loka::app::scene::NodeDefinitionBase *
-    lowerSingleChild(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth, const char *refusal)
-    {
-      JSValue child = JS_GetPropertyStr(ctx, tree, "child");
-      if (!JS_IsObject(child) || JS_IsArray(child))
-      {
-        JS_FreeValue(ctx, child);
-        node.fail(refusal);
-        return 0;
-      }
-      loka::app::scene::NodeDefinitionBase *content = node.lowerChild(ctx, child, depth + 1);
-      JS_FreeValue(ctx, child);
-      return content;
-    }
-    /** Every rail refuses a viewport scope inside another: the inner subtree
-        would materialize nothing. Walk the child tree's `child` and `children`
-        properties once per ScrollView lowering (bounded by the card's own tree)
-        so the script sees a refusal instead of a silently empty region. */
-    bool containsKind(JSContext *ctx, JSValueConst tree, int kind, int depth)
-    {
-      if (depth > kMaximumTreeDepth || !JS_IsObject(tree) || JS_IsArray(tree))
-        return false;
-      JSValue own = JS_GetPropertyStr(ctx, tree, "kind");
-      int32_t value = 0;
-      const bool match = JS_IsNumber(own) && !JS_ToInt32(ctx, &value, own) && value == kind;
-      JS_FreeValue(ctx, own);
-      if (match)
-        return true;
-      JSValue child = JS_GetPropertyStr(ctx, tree, "child");
-      const bool inChild = containsKind(ctx, child, kind, depth + 1);
-      JS_FreeValue(ctx, child);
-      if (inChild)
-        return true;
-      JSValue children = JS_GetPropertyStr(ctx, tree, "children");
-      bool inChildren = false;
-      if (JS_IsArray(children))
-      {
-        JSValue lengthValue = JS_GetPropertyStr(ctx, children, "length");
-        int32_t length = 0;
-        if (JS_IsNumber(lengthValue))
-          JS_ToInt32(ctx, &length, lengthValue);
-        JS_FreeValue(ctx, lengthValue);
-        for (int32_t i = 0; i < length && !inChildren; ++i)
-        {
-          JSValue entry = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
-          inChildren = containsKind(ctx, entry, kind, depth + 1);
-          JS_FreeValue(ctx, entry);
-        }
-      }
-      JS_FreeValue(ctx, children);
-      return inChildren;
-    }
     bool scrollInsetNumber(JSContext *ctx, JSValueConst value, int &out)
     {
       double number = 0;
@@ -816,149 +288,6 @@ namespace smirkycard
       }
       return true;
     }
-    bool readScrollOptions(JSContext *ctx, JSValueConst options, JSValueConst tree, int &top, int &bottom)
-    {
-      if (!requirePlainObject(ctx, options, "ScrollView options"))
-        return false;
-      JsOwnProperties names(ctx);
-      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
-        return false;
-      for (uint32_t i = 0; i < names.count(); ++i)
-      {
-        JSValue key = JS_AtomToValue(ctx, names.atom(i));
-        size_t length = 0;
-        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
-        JS_FreeValue(ctx, key);
-        const bool isInsets = name && length == 6 && !memcmp(name, "insets", 6);
-        const bool isViewport = name && length == 8 && !memcmp(name, "viewport", 8);
-        if (name)
-          JS_FreeCString(ctx, name);
-        if (!isInsets && !isViewport)
-        {
-          JS_ThrowTypeError(ctx, "ScrollView options accept only insets and viewport");
-          return false;
-        }
-        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
-        const bool valid =
-            !JS_IsException(value)
-            && (isInsets
-                    ? readScrollInsets(ctx, value, top, bottom)
-                    : JS_DefinePropertyValueStr(ctx, tree, "viewport", JS_DupValue(ctx, value), JS_PROP_C_W_E) >= 0);
-        JS_FreeValue(ctx, value);
-        if (!valid)
-          return false;
-      }
-      return true;
-    }
-    class ScrollViewLowering : public IJsNodeLowering
-    {
-    public:
-      ScrollViewLowering()
-      {
-        this->name = "ScrollView";
-        this->kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc < 1 || argc > 2 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
-          return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
-        JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
-        const bool valid = JS_IsNumber(childKind);
-        JS_FreeValue(ctx, childKind);
-        if (!valid)
-          return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
-        int top = 0, bottom = 0;
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
-        if (JS_IsException(tree))
-          return tree;
-        if (argc == 2 && !readScrollOptions(ctx, argv[1], tree, top, bottom))
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
-            || JS_SetPropertyStr(ctx, tree, "insetTop", JS_NewInt32(ctx, top)) < 0
-            || JS_SetPropertyStr(ctx, tree, "insetBottom", JS_NewInt32(ctx, bottom)) < 0
-            || JS_FreezeObject(ctx, tree) < 0)
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        return tree;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        JSValue child = JS_GetPropertyStr(ctx, tree, "child");
-        const bool nested = containsKind(ctx, child, this->kind, depth + 1);
-        JS_FreeValue(ctx, child);
-        if (nested)
-        {
-          node.fail("JavaScript ScrollView cannot contain another ScrollView.");
-          return 0;
-        }
-        int top = 0, bottom = 0;
-        JSValue topValue = JS_GetPropertyStr(ctx, tree, "insetTop");
-        JSValue bottomValue = JS_GetPropertyStr(ctx, tree, "insetBottom");
-        const bool valid = (JS_IsUndefined(topValue) || scrollInsetNumber(ctx, topValue, top))
-                           && (JS_IsUndefined(bottomValue) || scrollInsetNumber(ctx, bottomValue, bottom));
-        JS_FreeValue(ctx, topValue);
-        JS_FreeValue(ctx, bottomValue);
-        if (!valid)
-        {
-          node.fail("JavaScript ScrollView has invalid insets.");
-          return 0;
-        }
-        // Only a top inset has a gap to show: origin.y reaches down to -top, never below 0 for bottom alone.
-        loka::app::ScrollView *scroll = node.createScrollView(
-            ctx, tree, top ? loka::app::ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0));
-        if (!scroll)
-          return 0;
-        scroll->contentInsets(top, bottom);
-        loka::app::scene::NodeDefinitionBase *content =
-            lowerSingleChild(node, ctx, tree, depth, "JavaScript ScrollView has an invalid child.");
-        if (!content)
-        {
-          delete scroll;
-          return 0;
-        }
-        scroll->asNestableDefinition()->addOwnedChild(content);
-        return scroll;
-      }
-    };
-    class CardLowering : public IJsNodeLowering
-    {
-    public:
-      CardLowering()
-      {
-        this->name = "Card";
-        this->kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        return singleChildTree(ctx, this->kind, this->name, argc, argv);
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        loka::app::CardDefinition *card = new (std::nothrow) loka::app::CardDefinition();
-        if (!card || card->childrenCount() != 1 + loka::app::CARD_BAND_COUNT)
-        {
-          delete card;
-          node.fail("JavaScript Card allocation refused.");
-          return 0;
-        }
-        loka::app::scene::NodeDefinitionBase *content =
-            lowerSingleChild(node, ctx, tree, depth, "JavaScript Card has an invalid child.");
-        if (!content)
-        {
-          delete card;
-          return 0;
-        }
-        *card << content;
-        return card;
-      }
-    };
     bool boxExtentNumber(JSContext *ctx, JSValueConst value, int &out, int minimum = 1)
     {
       double number = 0;
@@ -987,477 +316,765 @@ namespace smirkycard
         out = loka::app::layout::LayoutGap::standardWindowMargin();
       return standard;
     }
-    /** Immutable global identity, literal diagnostics and creation-time clipping policy. */
-    struct BoxGlobal
+    bool textValue(JSContext *ctx,
+                   JSValueConst value,
+                   JsTreeTextSource &source,
+                   loka::core::String &text,
+                   bool rejectNul = false,
+                   bool literalOnly = false)
     {
-      const char *const name;
-      const char *const optionsLabel;
-      const char *const allocationRefused;
-      const char *const invalidClaims;
-      const char *const invalidChild;
-      const bool clipsChild;
-    };
-    const BoxGlobal kBoxGlobal = {"Box",
-                                  "Box options",
-                                  "JavaScript Box allocation refused.",
-                                  "JavaScript Box has an invalid width, height or padding.",
-                                  "JavaScript Box has an invalid child.",
-                                  false};
-    const BoxGlobal kClipBoxGlobal = {"ClipBox",
-                                      "ClipBox options",
-                                      "JavaScript ClipBox allocation refused.",
-                                      "JavaScript ClipBox has an invalid width, height or padding.",
-                                      "JavaScript ClipBox has an invalid child.",
-                                      true};
-    bool copyBoxOptions(JSContext *ctx, JSValueConst options, JSValue tree, const BoxGlobal &global)
+      if (JS_IsString(value))
+      {
+        source = TREE_LITERAL;
+        return ReadJsTreeString(ctx, value, text, rejectNul);
+      }
+      if (!literalOnly && JS_IsObject(value))
+      {
+        source = TREE_LIVE_SEAT;
+        return true;
+      }
+      JS_ThrowTypeError(ctx, "Tree text requires a literal string or state seat");
+      return false;
+    }
+    bool childValue(JSContext *ctx, JSValueConst value, JsTreeCategory category)
     {
-      if (!requirePlainObject(ctx, options, global.optionsLabel))
+      JsTreeView child(ctx, value);
+      if (child.valid() && child.schema()->category == category)
+        return true;
+      JS_ThrowTypeError(ctx,
+                        category == TREE_TOOLBAR_ITEM
+                            ? "Toolbar requires ToolbarItem descriptors"
+                            : "Child must be a drawable tree (nested arrays are not allowed)");
+      return false;
+    }
+    bool seatValue(JSContext *ctx, JSValueConst value)
+    {
+      if (JS_IsObject(value))
+        return true;
+      JS_ThrowTypeError(ctx, "Tree requires a state seat object");
+      return false;
+    }
+    bool collectionArray(JSContext *ctx, JSValueConst input)
+    {
+      JsValueRoot target(ctx, JS_DupValue(ctx, input));
+      while (JS_IsProxy(target.value()))
+        target.adopt(JS_GetProxyTarget(ctx, target.value()));
+      return JS_IsArray(target.value());
+    }
+    JSValue collectChildren(JSContext *ctx,
+                            const char *name,
+                            int argc,
+                            JSValueConst *argv,
+                            unsigned limit,
+                            bool exact,
+                            JsTreeCategory category)
+    {
+      JsValueRoot children(ctx, JS_NewArray(ctx));
+      if (JS_IsException(children.value()) || JS_SetPrototype(ctx, children.value(), JS_NULL) < 0)
+        return JS_EXCEPTION;
+      unsigned count = 0;
+      for (int i = 0; i < argc; ++i)
+      {
+        JsValueRoot input(ctx, JS_DupValue(ctx, argv[i]));
+        const bool array = collectionArray(ctx, input.value());
+        int64_t length = 1;
+        if (array && JS_GetLength(ctx, input.value(), &length) < 0)
+          return JS_EXCEPTION;
+        if (length < 0 || length > static_cast<int64_t>(limit - count))
+          return category == TREE_TOOLBAR_ITEM
+                     ? JS_ThrowTypeError(ctx, "Toolbar accepts at most 16 descriptors")
+                     : (exact ? JS_ThrowRangeError(ctx, "%s requires exactly rows * cols children (%u)", name, limit)
+                              : JS_ThrowRangeError(ctx, "%s accepts at most %u children", name, limit));
+        for (int64_t j = 0; j < length; ++j)
+        {
+          JsValueRoot child(ctx,
+                            array ? JS_GetPropertyUint32(ctx, input.value(), static_cast<uint32_t>(j))
+                                  : JS_DupValue(ctx, input.value()));
+          if (JS_IsException(child.value()))
+            return JS_EXCEPTION;
+          if (!childValue(ctx, child.value(), category))
+            return JS_EXCEPTION;
+          if (JS_DefinePropertyValueUint32(ctx, children.value(), count++, child.take(), JS_PROP_C_W_E) < 0)
+            return JS_EXCEPTION;
+        }
+      }
+      if (exact && count != limit)
+        return JS_ThrowRangeError(ctx, "%s requires exactly rows * cols children (%u)", name, limit);
+      if (JS_FreezeObject(ctx, children.value()) < 0)
+        return JS_EXCEPTION;
+      return children.take();
+    }
+    template <class T>
+    JSValue childrenTree(JSContext *ctx,
+                         int argc,
+                         JSValueConst *argv,
+                         const T &facts,
+                         unsigned limit = kMaximumTreeChildren,
+                         bool exact = false)
+    {
+      JsValueRoot children(ctx,
+                           collectChildren(ctx,
+                                           T::schema.name,
+                                           argc,
+                                           argv,
+                                           limit,
+                                           exact,
+                                           T::schema.kind == TREE_TOOLBAR ? TREE_TOOLBAR_ITEM : TREE_DRAWABLE));
+      if (JS_IsException(children.value()))
+        return JS_EXCEPTION;
+      if (T::schema.kind == TREE_TOOLBAR)
+      {
+        int64_t length = 0;
+        if (JS_GetLength(ctx, children.value(), &length) < 0)
+          return JS_EXCEPTION;
+        unsigned buttons = 0;
+        for (int64_t i = 0; i < length; ++i)
+        {
+          JsValueRoot value(ctx, JS_GetPropertyUint32(ctx, children.value(), static_cast<uint32_t>(i)));
+          JsTreeView item(ctx, value.value());
+          if (item.schema()->kind == TREE_ITEM_BUTTON && ++buttons > JS_TOOLBAR_SLOT_COUNT)
+            return JS_ThrowTypeError(ctx, "Toolbar accepts at most eight buttons");
+        }
+      }
+      JsTreeStaging staging(ctx, T::schema, facts);
+      staging.edge(EDGE_CHILDREN, children.take());
+      return staging.publish();
+    }
+    template <class T> JSValue seatTree(JSContext *ctx, JSValueConst seat, const T &facts)
+    {
+      if (!seatValue(ctx, seat))
+        return JS_EXCEPTION;
+      JsTreeStaging staging(ctx, T::schema, facts);
+      staging.edge(EDGE_SEAT, JS_DupValue(ctx, seat));
+      return staging.publish();
+    }
+    template <class T> JSValue singleTree(JSContext *ctx, JSValueConst child, const T &facts)
+    {
+      JsTreeStaging staging(ctx, T::schema, facts);
+      staging.edge(EDGE_CHILD, JS_DupValue(ctx, child));
+      return staging.publish();
+    }
+    template <class T> bool boxOptions(JSContext *ctx, JSValueConst dict, T &facts)
+    {
+      if (!requirePlainObject(ctx, dict, T::schema.kind == TREE_BOX ? "Box options" : "ClipBox options"))
         return false;
       JsOwnProperties names(ctx);
-      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+      if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
         return false;
-      for (uint32_t i = 0; i < names.count(); ++i)
+      for (unsigned i = 0; i < names.count(); ++i)
       {
-        JSValue key = JS_AtomToValue(ctx, names.atom(i));
-        size_t length = 0;
-        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
-        JS_FreeValue(ctx, key);
-        const bool isWidth = name && length == 5 && !memcmp(name, "width", 5);
-        const bool isHeight = name && length == 6 && !memcmp(name, "height", 6);
-        const bool isPadding = name && length == 7 && !memcmp(name, "padding", 7);
+        JsValueRoot key(ctx, JS_AtomToValue(ctx, names.atom(i)));
+        if (JS_IsException(key.value()))
+          return false;
+        size_t keyLength = 0;
+        const char *name = JS_IsString(key.value()) ? JS_ToCStringLen(ctx, &keyLength, key.value()) : 0;
+        if (JS_IsString(key.value()) && !name)
+          return false;
+        const bool width = name && strlen(name) == keyLength && !strcmp(name, "width"),
+                   height = name && strlen(name) == keyLength && !strcmp(name, "height"),
+                   padding = name && strlen(name) == keyLength && !strcmp(name, "padding");
         if (name)
           JS_FreeCString(ctx, name);
-        if (!isWidth && !isHeight && !isPadding)
+        if (!width && !height && !padding)
         {
-          JS_ThrowTypeError(ctx, "%s options accept only width, height and padding", global.name);
+          JS_ThrowTypeError(ctx, "%s options accept only width, height and padding", T::schema.name);
           return false;
         }
-        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
-        if (JS_IsException(value))
+        JsValueRoot value(ctx, JS_GetProperty(ctx, dict, names.atom(i)));
+        if (JS_IsException(value.value()))
           return false;
-        int number = 0;
-        loka::app::layout::LayoutGap padding;
-        const bool valid = isPadding ? boxPaddingValue(ctx, value, padding) : boxExtentNumber(ctx, value, number);
-        if (!valid)
+        if (!(padding ? boxPaddingValue(ctx, value.value(), facts.padding)
+                      : boxExtentNumber(ctx, value.value(), width ? facts.width : facts.height)))
         {
-          JS_FreeValue(ctx, value);
-          JS_ThrowTypeError(ctx,
-                            isPadding ? "%s padding must be standard or an integer in 0..4096"
-                                      : "%s width and height must be integers in 1..4096",
-                            global.name);
+          JS_ThrowTypeError(ctx, "%s has invalid width, height or padding", T::schema.name);
           return false;
         }
-        if (JS_SetPropertyStr(ctx, tree, isPadding ? "padding" : isWidth ? "width" : "height", value) < 0)
-          return false;
       }
       return true;
     }
-    /** Returns presence (1), absence (0), or refusal (-1). Only an own data
-        property transfers its value to the caller; inherited claims are absent. */
-    int readBoxDataProperty(JSContext *ctx, JSValueConst tree, const char *name, JSValue &out)
+    bool scrollOptions(JSContext *ctx, JSValueConst dict, ScrollFacts &facts, JsValueRoot &viewport)
     {
-      JSAtom key = JS_NewAtom(ctx, name);
-      if (key == JS_ATOM_NULL)
-        return -1;
-      JSPropertyDescriptor property;
-      const int found = JS_GetOwnProperty(ctx, &property, tree, key);
-      JS_FreeAtom(ctx, key);
-      if (found <= 0)
-        return found;
-      JS_FreeValue(ctx, property.getter);
-      JS_FreeValue(ctx, property.setter);
-      if (property.flags & JS_PROP_GETSET)
-      {
-        JS_FreeValue(ctx, property.value);
-        return -1;
-      }
-      out = property.value;
-      return 1;
-    }
-    bool readBoxExtent(JSContext *ctx, JSValueConst tree, const char *name, int &out)
-    {
-      JSValue value;
-      const int found = readBoxDataProperty(ctx, tree, name, value);
-      if (found <= 0)
-        return found == 0;
-      const bool valid = boxExtentNumber(ctx, value, out);
-      JS_FreeValue(ctx, value);
-      return valid;
-    }
-    bool readBoxPadding(JSContext *ctx, JSValueConst tree, loka::app::layout::LayoutGap &out)
-    {
-      JSValue value;
-      const int found = readBoxDataProperty(ctx, tree, "padding", value);
-      if (found <= 0)
-        return found == 0;
-      const bool valid = boxPaddingValue(ctx, value, out);
-      JS_FreeValue(ctx, value);
-      return valid;
-    }
-    class BoxLowering : public IJsNodeLowering
-    {
-    public:
-      BoxLowering(const BoxGlobal &global)
-          : global_(global)
-      {
-        this->name = global.name;
-        this->kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc < 1 || argc > 2 || !JS_IsObject(argv[0]) || JS_IsArray(argv[0]))
-          return JS_ThrowTypeError(
-              ctx, "%s(child, options?) requires one tree and an optional options object", this->name);
-        JSValue childKind = JS_GetPropertyStr(ctx, argv[0], "kind");
-        const bool valid = JS_IsNumber(childKind);
-        JS_FreeValue(ctx, childKind);
-        if (!valid)
-          return JS_ThrowTypeError(
-              ctx, "%s(child, options?) requires one tree and an optional options object", this->name);
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
-        if (JS_IsException(tree))
-          return tree;
-        if (JS_SetPropertyStr(ctx, tree, "child", JS_DupValue(ctx, argv[0])) < 0
-            || (argc == 2 && !copyBoxOptions(ctx, argv[1], tree, this->global_)) || JS_FreezeObject(ctx, tree) < 0)
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        return tree;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        loka::app::BoxDefinition *box = new (std::nothrow)
-            loka::app::BoxDefinition(this->global_.clipsChild ? loka::app::ClipBox() : loka::app::Box());
-        if (!box)
-        {
-          node.fail(this->global_.allocationRefused);
-          return 0;
-        }
-        int width = 0, height = 0;
-        loka::app::layout::LayoutGap padding;
-        const bool valid = readBoxExtent(ctx, tree, "width", width) && readBoxExtent(ctx, tree, "height", height)
-                           && readBoxPadding(ctx, tree, padding);
-        if (!valid)
-        {
-          delete box;
-          node.fail(this->global_.invalidClaims);
-          return 0;
-        }
-        box->padding(padding);
-        if (width)
-          box->width(width);
-        if (height)
-          box->height(height);
-        loka::app::scene::NodeDefinitionBase *content =
-            lowerSingleChild(node, ctx, tree, depth, this->global_.invalidChild);
-        if (!content)
-        {
-          delete box;
-          return 0;
-        }
-        box->asNestableDefinition()->addOwnedChild(content);
-        return box;
-      }
-
-    private:
-      const BoxGlobal &global_;
-    };
-    bool copyImageOptions(JSContext *ctx, JSValueConst options, JSValue tree)
-    {
-      if (!requirePlainObject(ctx, options, "ImageView options"))
+      if (!requirePlainObject(ctx, dict, "ScrollView options"))
         return false;
       JsOwnProperties names(ctx);
-      if (!names.read(options, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+      if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
         return false;
-      // Zero is outside the accepted range and denotes an absent dimension.
-      int width = 0, height = 0;
-      for (uint32_t i = 0; i < names.count(); ++i)
+      for (unsigned i = 0; i < names.count(); ++i)
       {
-        JSValue key = JS_AtomToValue(ctx, names.atom(i));
-        size_t length = 0;
-        const char *name = JS_IsString(key) ? JS_ToCStringLen(ctx, &length, key) : 0;
-        JS_FreeValue(ctx, key);
-        const bool isWidth = name && length == 5 && !memcmp(name, "width", 5);
-        const bool isHeight = name && length == 6 && !memcmp(name, "height", 6);
-        const bool isFit = name && length == 3 && !memcmp(name, "fit", 3);
+        JsValueRoot key(ctx, JS_AtomToValue(ctx, names.atom(i)));
+        if (JS_IsException(key.value()))
+          return false;
+        size_t keyLength = 0;
+        const char *name = JS_IsString(key.value()) ? JS_ToCStringLen(ctx, &keyLength, key.value()) : 0;
+        if (JS_IsString(key.value()) && !name)
+          return false;
+        const bool insets = name && strlen(name) == keyLength && !strcmp(name, "insets"),
+                   vp = name && strlen(name) == keyLength && !strcmp(name, "viewport");
         if (name)
           JS_FreeCString(ctx, name);
-        if (!isWidth && !isHeight && !isFit)
+        if (!insets && !vp)
+        {
+          JS_ThrowTypeError(ctx, "ScrollView options accept only insets and viewport");
+          return false;
+        }
+        JsValueRoot value(ctx, JS_GetProperty(ctx, dict, names.atom(i)));
+        if (JS_IsException(value.value()))
+          return false;
+        if (insets)
+        {
+          if (!readScrollInsets(ctx, value.value(), facts.insetTop, facts.insetBottom))
+            return false;
+        }
+        else
+        {
+          if (!seatValue(ctx, value.value()))
+            return false;
+          viewport.adopt(value.take());
+        }
+      }
+      return true;
+    }
+    bool imageOptions(JSContext *ctx, JSValueConst dict, ImageFacts &facts)
+    {
+      if (!requirePlainObject(ctx, dict, "ImageView options"))
+        return false;
+      JsOwnProperties names(ctx);
+      if (!names.read(dict, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK))
+        return false;
+      for (unsigned i = 0; i < names.count(); ++i)
+      {
+        JsValueRoot key(ctx, JS_AtomToValue(ctx, names.atom(i)));
+        if (JS_IsException(key.value()))
+          return false;
+        size_t keyLength = 0;
+        const char *name = JS_IsString(key.value()) ? JS_ToCStringLen(ctx, &keyLength, key.value()) : 0;
+        if (JS_IsString(key.value()) && !name)
+          return false;
+        const bool width = name && strlen(name) == keyLength && !strcmp(name, "width"),
+                   height = name && strlen(name) == keyLength && !strcmp(name, "height"),
+                   fit = name && strlen(name) == keyLength && !strcmp(name, "fit");
+        if (name)
+          JS_FreeCString(ctx, name);
+        if (!width && !height && !fit)
         {
           JS_ThrowTypeError(ctx, "Unknown ImageView options key");
           return false;
         }
-        JSValue value = JS_GetProperty(ctx, options, names.atom(i));
-        if (JS_IsException(value))
+        JsValueRoot value(ctx, JS_GetProperty(ctx, dict, names.atom(i)));
+        if (JS_IsException(value.value()))
           return false;
-        int normalized = 0;
-        if (isFit)
+        if (fit)
         {
-          size_t size = 0;
-          const char *fit = JS_IsString(value) ? JS_ToCStringLen(ctx, &size, value) : 0;
-          if (fit)
+          size_t n = 0;
+          const char *text = JS_IsString(value.value()) ? JS_ToCStringLen(ctx, &n, value.value()) : 0;
+          bool ok = false;
+          if (JS_IsString(value.value()) && !text)
+            return false;
+          if (text)
           {
-            if (size == 7 && !memcmp(fit, "contain", 7))
-              normalized = loka::app::IMAGE_FIT_CONTAIN;
-            else if (size == 5 && !memcmp(fit, "cover", 5))
-              normalized = loka::app::IMAGE_FIT_COVER;
-            else if (size == 7 && !memcmp(fit, "stretch", 7))
-              normalized = loka::app::IMAGE_FIT_STRETCH;
-            JS_FreeCString(ctx, fit);
+            if (n == 7 && !memcmp(text, "contain", 7))
+            {
+              facts.fit = loka::app::IMAGE_FIT_CONTAIN;
+              ok = true;
+            }
+            else if (n == 5 && !memcmp(text, "cover", 5))
+            {
+              facts.fit = loka::app::IMAGE_FIT_COVER;
+              ok = true;
+            }
+            else if (n == 7 && !memcmp(text, "stretch", 7))
+            {
+              facts.fit = loka::app::IMAGE_FIT_STRETCH;
+              ok = true;
+            }
+            JS_FreeCString(ctx, text);
           }
+          if (!ok)
+          {
+            JS_ThrowTypeError(ctx, "ImageView fit must be contain, cover or stretch");
+            return false;
+          }
+          facts.hasFit = true;
         }
-        else
+        else if (!boxExtentNumber(ctx, value.value(), width ? facts.width : facts.height))
         {
-          double number = 0;
-          if (JS_IsNumber(value) && !JS_ToFloat64(ctx, &number, value) && number >= 1 && number <= 4096
-              && number == static_cast<int>(number))
-            normalized = static_cast<int>(number);
-        }
-        JS_FreeValue(ctx, value);
-        if (!normalized)
-        {
-          JS_ThrowTypeError(ctx,
-                            isFit ? "ImageView fit must be contain, cover or stretch"
-                                  : "ImageView width and height must be integers in 1..4096");
+          JS_ThrowTypeError(ctx, "ImageView width and height must be integers in 1..4096");
           return false;
         }
-        if (isWidth)
-          width = normalized;
-        if (isHeight)
-          height = normalized;
-        if (JS_SetPropertyStr(
-                ctx, tree, isWidth ? "width" : (isHeight ? "height" : "fit"), JS_NewInt32(ctx, normalized))
-            < 0)
-          return false;
       }
-      if ((width == 0) != (height == 0))
+      if ((facts.width == 0) != (facts.height == 0))
       {
         JS_ThrowTypeError(ctx, "ImageView width and height must be provided together");
         return false;
       }
       return true;
     }
-    class ImageViewLowering : public IJsNodeLowering
+    template <class T> JSValue clickableTree(JSContext *ctx, int argc, JSValueConst *argv)
     {
-    public:
-      ImageViewLowering()
+      if (argc != 2 || !JS_IsFunction(ctx, argv[1]))
+        return JS_ThrowTypeError(ctx, "%s(label, handler) requires a label and function", T::schema.name);
+      T facts;
+      if (!textValue(ctx, argv[0], facts.source, facts.label))
+        return JS_EXCEPTION;
+      JsTreeStaging staging(ctx, T::schema, facts);
+      if (facts.source == TREE_LIVE_SEAT)
+        staging.edge(EDGE_LABEL, JS_DupValue(ctx, argv[0]));
+      staging.edge(EDGE_HANDLER, JS_DupValue(ctx, argv[1]));
+      return staging.publish();
+    }
+    JSValue buildTree(JSContext *ctx, const JsTreeSchema &schema, int argc, JSValueConst *argv)
+    {
+      switch (schema.kind)
       {
-        this->name = "ImageView";
-        this->kind = 0;
+      case TREE_VSTACK:
+        return childrenTree(ctx, argc, argv, VStackFacts());
+      case TREE_ROW:
+        return childrenTree(ctx, argc, argv, RowFacts());
+      case TREE_ZSTACK:
+        return childrenTree(ctx, argc, argv, ZStackFacts());
+      case TREE_TOOLBAR:
+        return childrenTree(ctx, argc, argv, ToolbarFacts());
+      case TREE_GRID:
+      {
+        short rows = 0, cols = 0;
+        if (argc != 3)
+          return JS_ThrowTypeError(ctx, "Grid(rows, cols, children) requires three arguments");
+        if (!readGridDimension(ctx, argv[0], rows) || !readGridDimension(ctx, argv[1], cols))
+          return JS_ThrowRangeError(ctx, "Grid rows and cols must be integers in 1..16");
+        GridFacts facts;
+        facts.rows = rows;
+        facts.cols = cols;
+        return childrenTree(ctx, 1, argv + 2, facts, rows * cols, true);
       }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
+      case TREE_TEXT:
+      {
+        if (argc < 1 || argc > 3)
+          return JS_ThrowTypeError(ctx, "Text(value, style?, block?) requires a value and optional style and block");
+        TextFacts facts;
+        if (!textValue(ctx, argv[0], facts.source, facts.text)
+            || (argc >= 2 && !JS_IsUndefined(argv[1]) && !readTextStyle(ctx, argv[1], facts.style))
+            || (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], facts.block)))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, TextFacts::schema, facts);
+        if (facts.source == TREE_LIVE_SEAT)
+          staging.edge(EDGE_TEXT, JS_DupValue(ctx, argv[0]));
+        return staging.publish();
+      }
+      case TREE_MARKUP:
+      {
+        if (argc < 1 || argc > 3)
+          return JS_ThrowTypeError(ctx,
+                                   "Markup(markup, style?, block?) requires a string and optional style and block");
+        MarkupFacts facts;
+        if (!readMarkup(ctx, argv[0], argc >= 2 ? argv[1] : JS_UNDEFINED, facts.text)
+            || (argc == 3 && !JS_IsUndefined(argv[2]) && !readBlockStyle(ctx, argv[2], facts.block)))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, MarkupFacts::schema, facts);
+        return staging.publish();
+      }
+      case TREE_EDIT:
+        if (argc != 1)
+          return JS_ThrowTypeError(ctx, "EditText(seat) requires one seat");
+        return seatTree(ctx, argv[0], EditFacts());
+      case TREE_FILE:
+        if (argc != 1)
+          return JS_ThrowTypeError(ctx, "OpenFileDialog(fileSeat) requires one seat");
+        return seatTree(ctx, argv[0], FileFacts());
+      case TREE_IMAGE:
       {
         if (argc < 1 || argc > 2)
           return JS_ThrowTypeError(ctx, "ImageView(imageSeat, options?) requires a seat and optional options");
-        if (argc == 1)
-          return seatTree(ctx, this->kind, argv[0]);
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
-        if (JS_IsException(tree))
-          return tree;
-        if (JS_SetPropertyStr(ctx, tree, "seat", JS_DupValue(ctx, argv[0])) < 0 || !copyImageOptions(ctx, argv[1], tree)
-            || JS_FreezeObject(ctx, tree) < 0)
-        {
-          JS_FreeValue(ctx, tree);
+        ImageFacts facts;
+        if (!seatValue(ctx, argv[0]) || (argc == 2 && !imageOptions(ctx, argv[1], facts)))
           return JS_EXCEPTION;
-        }
-        return tree;
+        return seatTree(ctx, argv[0], facts);
       }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
+      case TREE_SHOW:
       {
-        return node.lowerImageView(ctx, tree);
+        if (argc != 2)
+          return JS_ThrowTypeError(ctx, "Show(boolSeat, child) requires a seat and one tree");
+        if (!seatValue(ctx, argv[0]) || !childValue(ctx, argv[1], TREE_DRAWABLE))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, ShowFacts::schema, ShowFacts());
+        staging.edge(EDGE_SEAT, JS_DupValue(ctx, argv[0]));
+        staging.edge(EDGE_CHILD, JS_DupValue(ctx, argv[1]));
+        return staging.publish();
       }
-    };
-    class ToolbarDescriptorLowering : public IJsNodeLowering
+      case TREE_BUTTON:
+        return clickableTree<ButtonFacts>(ctx, argc, argv);
+      case TREE_CELL:
+        return clickableTree<CellFacts>(ctx, argc, argv);
+      case TREE_CARD:
+        if (argc != 1)
+          return JS_ThrowTypeError(ctx, "Card(child) requires one tree");
+        if (!childValue(ctx, argv[0], TREE_DRAWABLE))
+          return JS_EXCEPTION;
+        return singleTree(ctx, argv[0], CardFacts());
+      case TREE_BOX:
+      case TREE_CLIPBOX:
+        if (argc < 1 || argc > 2)
+          return JS_ThrowTypeError(
+              ctx, "%s(child, options?) requires one tree and an optional options object", schema.name);
+        if (!childValue(ctx, argv[0], TREE_DRAWABLE))
+          return JS_EXCEPTION;
+        if (schema.kind == TREE_BOX)
+        {
+          BoxFacts facts;
+          if (argc == 2 && !boxOptions(ctx, argv[1], facts))
+            return JS_EXCEPTION;
+          return singleTree(ctx, argv[0], facts);
+        }
+        else
+        {
+          ClipBoxFacts facts;
+          if (argc == 2 && !boxOptions(ctx, argv[1], facts))
+            return JS_EXCEPTION;
+          return singleTree(ctx, argv[0], facts);
+        }
+      case TREE_SCROLL:
+      {
+        if (argc < 1 || argc > 2)
+          return JS_ThrowTypeError(ctx, "ScrollView(child, options?) requires one tree and an optional options object");
+        if (!childValue(ctx, argv[0], TREE_DRAWABLE))
+          return JS_EXCEPTION;
+        ScrollFacts facts;
+        JsValueRoot viewport(ctx);
+        if (argc == 2 && !scrollOptions(ctx, argv[1], facts, viewport))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, ScrollFacts::schema, facts);
+        staging.edge(EDGE_CHILD, JS_DupValue(ctx, argv[0]));
+        staging.edge(EDGE_VIEWPORT, viewport.take());
+        return staging.publish();
+      }
+      case TREE_ITEM_BUTTON:
+      {
+        if (argc != 2 || !JS_IsFunction(ctx, argv[1]))
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
+        ItemButtonFacts facts;
+        JsTreeTextSource source = TREE_LITERAL;
+        if (!textValue(ctx, argv[0], source, facts.label, true, true))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, ItemButtonFacts::schema, facts);
+        staging.edge(EDGE_HANDLER, JS_DupValue(ctx, argv[1]));
+        return staging.publish();
+      }
+      case TREE_ITEM_LABEL:
+      {
+        if (argc < 1 || argc > 2)
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
+        ItemLabelFacts facts;
+        if (!textValue(ctx, argv[0], facts.source, facts.label, true)
+            || (argc == 2 && !JS_IsUndefined(argv[1]) && !readTextStyle(ctx, argv[1], facts.style)))
+          return JS_EXCEPTION;
+        JsTreeStaging staging(ctx, ItemLabelFacts::schema, facts);
+        if (facts.source == TREE_LIVE_SEAT)
+          staging.edge(EDGE_LABEL, JS_DupValue(ctx, argv[0]));
+        return staging.publish();
+      }
+      case TREE_ITEM_FLEX:
+      {
+        if (argc)
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
+        JsTreeStaging staging(ctx, ItemFlexFacts::schema, ItemFlexFacts());
+        return staging.publish();
+      }
+      case TREE_ITEM_FIXED:
+      {
+        if (argc != 1)
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
+        ItemFixedFacts facts;
+        if (!scrollInsetNumber(ctx, argv[0], facts.width) || !facts.width)
+          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem payload");
+        JsTreeStaging staging(ctx, ItemFixedFacts::schema, facts);
+        return staging.publish();
+      }
+      case TREE_CUSTOM:
+      case TREE_KIND_COUNT:
+        break;
+      }
+      return JS_ThrowTypeError(ctx, "unknown tree helper");
+    }
+    bool lowerChildren(JsTreeLowering &lowering,
+                       const JsTreeView &tree,
+                       int depth,
+                       loka::app::scene::INestableDefinition &nest)
+    {
+      for (unsigned i = 0; i < tree.childCount(); ++i)
+      {
+        JsValueRoot child(lowering.context);
+        tree.childAt(i, child);
+        loka::app::scene::NodeDefinitionBase *definition = lowering.card.lowerChild(lowering, child.value(), depth + 1);
+        if (!definition)
+          return false;
+        nest.addOwnedChild(definition);
+      }
+      return true;
+    }
+    loka::app::scene::NodeDefinitionBase *lowerSingle(JsTreeLowering &lowering, const JsTreeView &tree, int depth)
+    {
+      JsValueRoot child(lowering.context);
+      tree.edge(EDGE_CHILD, child);
+      return lowering.card.lowerChild(lowering, child.value(), depth + 1);
+    }
+    bool containsScroll(const JsTreeView &tree, int depth)
+    {
+      if (depth > kMaximumTreeDepth || !tree.valid())
+        return false;
+      if (tree.schema()->kind == TREE_SCROLL)
+        return true;
+      for (unsigned i = 0; i < tree.schema()->slotCount; ++i)
+      {
+        if (tree.schema()->slots[i].role == TREE_CHILD)
+        {
+          JsValueRoot child(tree.context());
+          tree.slot(i, child);
+          JsTreeView view(tree.context(), child.value());
+          if (containsScroll(view, depth + 1))
+            return true;
+        }
+        else if (tree.schema()->slots[i].role == TREE_CHILDREN)
+          for (unsigned j = 0; j < tree.childCount(); ++j)
+          {
+            JsValueRoot child(tree.context());
+            tree.childAt(j, child);
+            JsTreeView view(tree.context(), child.value());
+            if (containsScroll(view, depth + 1))
+              return true;
+          }
+      }
+      return false;
+    }
+    template <class T>
+    loka::app::scene::NodeDefinitionBase *
+    lowerBox(JsTreeLowering &lowering, const JsTreeView &tree, int depth, bool clip)
+    {
+      const T &facts = *tree.facts(T::schema);
+      loka::app::BoxDefinition *box =
+          new (std::nothrow) loka::app::BoxDefinition(clip ? loka::app::ClipBox() : loka::app::Box());
+      if (!box)
+        return 0;
+      box->padding(facts.padding);
+      if (facts.width)
+        box->width(facts.width);
+      if (facts.height)
+        box->height(facts.height);
+      loka::app::scene::NodeDefinitionBase *child = lowerSingle(lowering, tree, depth);
+      if (!child)
+      {
+        delete box;
+        return 0;
+      }
+      box->asNestableDefinition()->addOwnedChild(child);
+      return box;
+    }
+    loka::app::scene::NodeDefinitionBase *lowerTree(JsTreeLowering &lowering, const JsTreeView &tree, int depth)
+    {
+      using namespace loka::app;
+      switch (tree.schema()->kind)
+      {
+      case TREE_ROW:
+      {
+        Row *row = new (std::nothrow) Row();
+        if (!row)
+          return 0;
+        if (tree.facts(RowFacts::schema)->rowWidth == ROW_UNDECLARED_WIDTH_NATURAL)
+          row->naturalWidth();
+        if (!lowerChildren(lowering, tree, depth, *row))
+        {
+          delete row;
+          return 0;
+        }
+        return row;
+      }
+      case TREE_VSTACK:
+      {
+        VStack *column = new (std::nothrow) VStack();
+        if (!column)
+          return 0;
+        if (tree.facts(VStackFacts::schema)->columnHeight == COLUMN_UNDECLARED_HEIGHT_NATURAL)
+          column->naturalHeight();
+        if (!lowerChildren(lowering, tree, depth, *column))
+        {
+          delete column;
+          return 0;
+        }
+        return column;
+      }
+      case TREE_ZSTACK:
+      {
+        ZStack *stack = new (std::nothrow) ZStack();
+        if (!stack)
+          return 0;
+        switch (tree.facts(ZStackFacts::schema)->unitGround)
+        {
+        case ZSTACK_UNIT_GROUND_WINDOW:
+          break;
+        case ZSTACK_UNIT_GROUND_EXP_BLUR:
+          stack->expBlurUnit();
+          break;
+        case ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR:
+          stack->expStaticBlurUnit();
+          break;
+        }
+        if (!lowerChildren(lowering, tree, depth, *stack))
+        {
+          delete stack;
+          return 0;
+        }
+        return stack;
+      }
+      case TREE_GRID:
+      {
+        const GridFacts &facts = *tree.facts(GridFacts::schema);
+        Grid *grid = new (std::nothrow) Grid();
+        if (!grid)
+          return 0;
+        grid->rows(static_cast<short>(facts.rows)).cols(static_cast<short>(facts.cols));
+        if (!lowerChildren(lowering, tree, depth, *grid))
+        {
+          delete grid;
+          return 0;
+        }
+        return grid;
+      }
+      case TREE_MARKUP:
+      {
+        const MarkupFacts &facts = *tree.facts(MarkupFacts::schema);
+        return new (std::nothrow) AttributedTextDefinitionWithAttr(AttributedText(facts.text) + facts.block);
+      }
+      case TREE_CARD:
+      {
+        CardDefinition *card = new (std::nothrow) CardDefinition();
+        if (!card || card->childrenCount() != 1 + CARD_BAND_COUNT)
+        {
+          delete card;
+          return 0;
+        }
+        scene::NodeDefinitionBase *child = lowerSingle(lowering, tree, depth);
+        if (!child)
+        {
+          delete card;
+          return 0;
+        }
+        *card << child;
+        return card;
+      }
+      case TREE_BOX:
+        return lowerBox<BoxFacts>(lowering, tree, depth, false);
+      case TREE_CLIPBOX:
+        return lowerBox<ClipBoxFacts>(lowering, tree, depth, true);
+      case TREE_SCROLL:
+      {
+        JsValueRoot child(lowering.context);
+        tree.edge(EDGE_CHILD, child);
+        JsTreeView view(lowering.context, child.value());
+        if (containsScroll(view, depth + 1))
+        {
+          lowering.card.fail("JavaScript ScrollView cannot contain another ScrollView.");
+          return 0;
+        }
+        const ScrollFacts &facts = *tree.facts(ScrollFacts::schema);
+        ScrollView *scroll = lowering.card.createScrollView(
+            lowering, tree, facts.insetTop ? ScrollViewProps::topOrigin() : loka::core::Frame(0, 0, 0, 0));
+        if (!scroll)
+          return 0;
+        scroll->contentInsets(facts.insetTop, facts.insetBottom);
+        scene::NodeDefinitionBase *content = lowerSingle(lowering, tree, depth);
+        if (!content)
+        {
+          delete scroll;
+          return 0;
+        }
+        scroll->asNestableDefinition()->addOwnedChild(content);
+        return scroll;
+      }
+      case TREE_TEXT:
+        return lowering.card.lowerText(lowering, tree);
+      case TREE_EDIT:
+        return lowering.card.lowerEditText(lowering, tree);
+      case TREE_BUTTON:
+        return lowering.card.lowerClickable(lowering, tree, false);
+      case TREE_CELL:
+        return lowering.card.lowerClickable(lowering, tree, true);
+      case TREE_SHOW:
+        return lowering.card.lowerShow(lowering, tree, depth);
+      case TREE_FILE:
+        return lowering.card.lowerOpenFileDialog(lowering, tree);
+      case TREE_IMAGE:
+        return lowering.card.lowerImageView(lowering, tree);
+      case TREE_TOOLBAR:
+        return lowering.card.lowerToolbar(lowering, tree, depth);
+      case TREE_ITEM_BUTTON:
+      case TREE_ITEM_LABEL:
+      case TREE_ITEM_FLEX:
+      case TREE_ITEM_FIXED:
+        lowering.card.fail("ToolbarItem descriptors require a Toolbar.");
+        return 0;
+      case TREE_CUSTOM:
+      case TREE_KIND_COUNT:
+        break;
+      }
+      lowering.card.fail("JavaScript tree has an invalid node.");
+      return 0;
+    }
+    /** Registry identity points to the static schema, never to a numeric facts cast. */
+    class TreeBinding : public IJsNodeLowering
     {
     public:
-      explicit ToolbarDescriptorLowering(JsToolbarRowKind value)
-          : rowKind_(value)
+      TreeBinding(const JsTreeSchema &schema, const char *parent = 0)
       {
-        kind = 0;
-        parent = value == JS_TOOLBAR_ROW_BUTTON ? 0 : "ToolbarItem";
-        switch (value)
-        {
-        case JS_TOOLBAR_ROW_BUTTON:
-          name = "ToolbarItem";
-          break;
-        case JS_TOOLBAR_ROW_LABEL:
-          name = "label";
-          break;
-        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
-          name = "flexibleSpace";
-          break;
-        case JS_TOOLBAR_ROW_FIXED_SPACE:
-          name = "fixedSpace";
-          break;
-        }
+        this->schema = &schema;
+        this->name = schema.name;
+        this->parent = parent;
       }
       virtual bool queryToolbarRowKind(JsToolbarRowKind &out) const
       {
-        out = this->rowKind_;
+        if (this->schema == &ItemButtonFacts::schema)
+          out = JS_TOOLBAR_ROW_BUTTON;
+        else if (this->schema == &ItemLabelFacts::schema)
+          out = JS_TOOLBAR_ROW_LABEL;
+        else if (this->schema == &ItemFlexFacts::schema)
+          out = JS_TOOLBAR_ROW_FLEXIBLE_SPACE;
+        else if (this->schema == &ItemFixedFacts::schema)
+          out = JS_TOOLBAR_ROW_FIXED_SPACE;
+        else
+          return false;
         return true;
       }
       virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
       {
-        const bool arity = (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON && argc == 2)
-                           || (this->rowKind_ == JS_TOOLBAR_ROW_LABEL && argc >= 1 && argc <= 2)
-                           || (this->rowKind_ == JS_TOOLBAR_ROW_FLEXIBLE_SPACE && argc == 0)
-                           || (this->rowKind_ == JS_TOOLBAR_ROW_FIXED_SPACE && argc == 1);
-        if (!arity)
-          return JS_ThrowTypeError(ctx, "Invalid ToolbarItem arguments");
-        JSValue tree = JS_NewObject(ctx);
-        if (JS_IsException(tree))
-          return tree;
-        bool ok = JS_SetPropertyStr(ctx, tree, "kind", JS_NewInt32(ctx, this->kind)) >= 0;
-        switch (this->rowKind_)
-        {
-        case JS_TOOLBAR_ROW_BUTTON:
-          ok = ok && JS_SetPropertyStr(ctx, tree, "handler", JS_DupValue(ctx, argv[1])) >= 0
-               && installDescriptorFunction(ctx, tree, "enabled", &ScriptRuntime::enabled);
-          // Button and label share the text and test-id descriptor doors.
-          break;
-        case JS_TOOLBAR_ROW_LABEL:
-          if (argc == 2)
-            ok = ok && JS_SetPropertyStr(ctx, tree, "style", JS_DupValue(ctx, argv[1])) >= 0;
-          break;
-        case JS_TOOLBAR_ROW_FLEXIBLE_SPACE:
-          break;
-        case JS_TOOLBAR_ROW_FIXED_SPACE:
-          ok = ok && JS_SetPropertyStr(ctx, tree, "width", JS_DupValue(ctx, argv[0])) >= 0;
-          break;
-        }
-        if (this->rowKind_ == JS_TOOLBAR_ROW_BUTTON || this->rowKind_ == JS_TOOLBAR_ROW_LABEL)
-          ok = ok && JS_SetPropertyStr(ctx, tree, "label", JS_DupValue(ctx, argv[0])) >= 0
-               && installDescriptorFunction(ctx, tree, "TEST_ID", &ScriptRuntime::testId);
-        JsToolbarRow row;
-        ok = ok && JsCardBindingRegistry::readToolbarDescriptor(ctx, tree, row) && JS_FreezeObject(ctx, tree) >= 0;
-        if (!ok)
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        return tree;
+        return buildTree(ctx, *this->schema, argc, argv);
       }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *, JSValueConst, int)
+      virtual loka::app::scene::NodeDefinitionBase *lower(JsTreeLowering &lowering, const JsTreeView &tree, int depth)
       {
-        node.fail("ToolbarItem descriptors require a Toolbar.");
-        return 0;
-      }
-
-    private:
-      const JsToolbarRowKind rowKind_;
-    };
-
-    class ToolbarLowering : public IJsNodeLowering
-    {
-    public:
-      ToolbarLowering()
-      {
-        name = "Toolbar";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        JSValue children = collectChildren(ctx, name, argc, argv, kMaximumTreeChildren, false);
-        if (JS_IsException(children))
+        if (tree.schema() != this->schema)
         {
-          JS_FreeValue(ctx, JS_GetException(ctx));
-          return JS_ThrowTypeError(ctx, "Toolbar accepts at most 16 descriptors");
+          lowering.card.fail("JavaScript tree has an invalid node.");
+          return 0;
         }
-        int64_t count = 0;
-        bool ok = JS_GetLength(ctx, children, &count) == 0;
-        unsigned buttons = 0;
-        for (int64_t i = 0; ok && i < count; ++i)
-        {
-          JSValue child = JS_GetPropertyUint32(ctx, children, static_cast<uint32_t>(i));
-          JsToolbarRow row;
-          ok = JsCardBindingRegistry::readToolbarDescriptor(ctx, child, row);
-          JS_FreeValue(ctx, child);
-          if (ok && row.kind == JS_TOOLBAR_ROW_BUTTON && ++buttons > JS_TOOLBAR_SLOT_COUNT)
-          {
-            JS_ThrowTypeError(ctx, "Toolbar accepts at most eight buttons");
-            ok = false;
-          }
-        }
-        if (!ok)
-        {
-          JS_FreeValue(ctx, children);
-          return JS_EXCEPTION;
-        }
-        JSValue tree = JsCardBindingRegistry::newTree(ctx, this->kind);
-        if (JS_IsException(tree))
-        {
-          JS_FreeValue(ctx, children);
-          return tree;
-        }
-        if (JS_SetPropertyStr(ctx, tree, "children", children) < 0 || JS_FreezeObject(ctx, tree) < 0)
-        {
-          JS_FreeValue(ctx, tree);
-          return JS_EXCEPTION;
-        }
-        return tree;
+        return lowerTree(lowering, tree, depth);
       }
-      virtual loka::app::scene::NodeDefinitionBase *
-      lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int depth)
-      {
-        return node.lowerToolbar(ctx, tree, depth);
-      }
-    };
-    class ClickableLowering : public IJsNodeLowering
-    {
-    public:
-      explicit ClickableLowering(bool cell)
-          : cell_(cell)
-      {
-        name = cell ? "Cell" : "Button";
-        kind = 0;
-      }
-      virtual JSValue build(JSContext *ctx, int argc, JSValueConst *argv)
-      {
-        if (argc != 2 || !JS_IsFunction(ctx, argv[1]))
-          return JS_ThrowTypeError(ctx, "%s(label, handler) requires a label and function", name);
-        JSValue n = JsCardBindingRegistry::newTree(ctx, kind);
-        JS_SetPropertyStr(ctx, n, "label", JS_DupValue(ctx, argv[0]));
-        JS_SetPropertyStr(ctx, n, "handler", JS_DupValue(ctx, argv[1]));
-        if (!this->cell_)
-          JS_SetPropertyStr(ctx, n, "enabled", JS_NewCFunction(ctx, &ScriptRuntime::enabled, "enabled", 1));
-        JS_FreezeObject(ctx, n);
-        return n;
-      }
-      virtual loka::app::scene::NodeDefinitionBase *lower(JsCardNode &node, JSContext *ctx, JSValueConst tree, int)
-      {
-        return node.lowerClickable(ctx, tree, this->cell_);
-      }
-
-    private:
-      const bool cell_;
     };
   } // namespace
   bool RegisterSmirkyCardBindings(JsCardBindingRegistry &registry)
   {
+    const JsTreeSchema *schemas[] = {&VStackFacts::schema,    &TextFacts::schema,     &EditFacts::schema,
+                                     &ButtonFacts::schema,    &RowFacts::schema,      &MarkupFacts::schema,
+                                     &CellFacts::schema,      &GridFacts::schema,     &ShowFacts::schema,
+                                     &FileFacts::schema,      &ImageFacts::schema,    &ScrollFacts::schema,
+                                     &CardFacts::schema,      &ZStackFacts::schema,   &BoxFacts::schema,
+                                     &ClipBoxFacts::schema,   &ToolbarFacts::schema,  &ItemButtonFacts::schema,
+                                     &ItemLabelFacts::schema, &ItemFlexFacts::schema, &ItemFixedFacts::schema};
+    for (unsigned i = 0; i < sizeof(schemas) / sizeof(schemas[0]); ++i)
+    {
+      TreeBinding *binding = new (std::nothrow) TreeBinding(*schemas[i], i >= 18 ? "ToolbarItem" : 0);
+      if (!registry.registerLowering(binding))
+      {
+        delete binding;
+        return false;
+      }
+    }
     IJsGlobal card = {"card", &ScriptRuntime::card, 2};
-    return registry.registerLowering(new (std::nothrow) StackLowering("VStack", StackLowering::STACK_COLUMN))
-           && registry.registerLowering(new (std::nothrow) TextLowering())
-           && registry.registerLowering(new (std::nothrow) EditTextLowering())
-           && registry.registerLowering(new (std::nothrow) ClickableLowering(false))
-           && registry.registerLowering(new (std::nothrow) StackLowering("Row", StackLowering::STACK_ROW))
-           && registry.registerLowering(new (std::nothrow) MarkupLowering())
-           && registry.registerLowering(new (std::nothrow) ClickableLowering(true))
-           && registry.registerLowering(new (std::nothrow) GridLowering())
-           && registry.registerLowering(new (std::nothrow) ShowLowering())
-           && registry.registerLowering(new (std::nothrow) OpenFileDialogLowering())
-           && registry.registerLowering(new (std::nothrow) ImageViewLowering())
-           && registry.registerLowering(new (std::nothrow) ScrollViewLowering())
-           && registry.registerLowering(new (std::nothrow) CardLowering())
-           && registry.registerLowering(new (std::nothrow) StackLowering("ZStack", StackLowering::STACK_DEPTH))
-           && registry.registerLowering(new (std::nothrow) BoxLowering(kBoxGlobal))
-           && registry.registerLowering(new (std::nothrow) BoxLowering(kClipBoxGlobal))
-           && registry.registerLowering(new (std::nothrow) ToolbarLowering())
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_BUTTON))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_LABEL))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FLEXIBLE_SPACE))
-           && registry.registerLowering(new (std::nothrow) ToolbarDescriptorLowering(JS_TOOLBAR_ROW_FIXED_SPACE))
-           && registry.registerGlobal(card);
+    return registry.registerGlobal(card);
   }
 } // namespace smirkycard
