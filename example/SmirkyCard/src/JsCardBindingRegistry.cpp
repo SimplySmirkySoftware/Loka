@@ -824,7 +824,7 @@ namespace smirkycard
         return true;
       for (unsigned i = 0; i < tree.schema()->slotCount; ++i)
       {
-        if (tree.schema()->slots[i].role == TREE_CHILD)
+        if (tree.schema()->slots[i].edge == EDGE_CHILD)
         {
           JsValueRoot child(tree.context());
           tree.slot(i, child);
@@ -832,7 +832,7 @@ namespace smirkycard
           if (containsScroll(view, depth + 1))
             return true;
         }
-        else if (tree.schema()->slots[i].role == TREE_CHILDREN)
+        else if (tree.schema()->slots[i].edge == EDGE_CHILDREN)
           for (unsigned j = 0; j < tree.childCount(); ++j)
           {
             JsValueRoot child(tree.context());

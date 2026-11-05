@@ -89,17 +89,9 @@ namespace smirkycard
     TREE_DRAWABLE,
     TREE_TOOLBAR_ITEM
   };
-  enum JsTreeSlotRole
-  {
-    TREE_SEAT,
-    TREE_CHILD,
-    TREE_CHILDREN,
-    TREE_HANDLER
-  };
   struct JsTreeSlot
   {
     JsTreeEdge edge;
-    JsTreeSlotRole role;
     JsTreeCategory category;
   };
 

@@ -3,22 +3,18 @@ namespace smirkycard
 {
   namespace
   {
-    const JsTreeSlot childrenSlots[] = {{EDGE_CHILDREN, TREE_CHILDREN, TREE_DRAWABLE}};
-    const JsTreeSlot textSlots[] = {{EDGE_TEXT, TREE_SEAT, TREE_DRAWABLE}};
-    const JsTreeSlot seatSlots[] = {{EDGE_SEAT, TREE_SEAT, TREE_DRAWABLE}};
-    const JsTreeSlot buttonSlots[] = {{EDGE_LABEL, TREE_SEAT, TREE_DRAWABLE},
-                                      {EDGE_ENABLED, TREE_SEAT, TREE_DRAWABLE},
-                                      {EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE}};
-    const JsTreeSlot cellSlots[] = {{EDGE_LABEL, TREE_SEAT, TREE_DRAWABLE},
-                                    {EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE}};
-    const JsTreeSlot showSlots[] = {{EDGE_SEAT, TREE_SEAT, TREE_DRAWABLE}, {EDGE_CHILD, TREE_CHILD, TREE_DRAWABLE}};
-    const JsTreeSlot scrollSlots[] = {{EDGE_CHILD, TREE_CHILD, TREE_DRAWABLE},
-                                      {EDGE_VIEWPORT, TREE_SEAT, TREE_DRAWABLE}};
-    const JsTreeSlot childSlots[] = {{EDGE_CHILD, TREE_CHILD, TREE_DRAWABLE}};
-    const JsTreeSlot itemsSlots[] = {{EDGE_CHILDREN, TREE_CHILDREN, TREE_TOOLBAR_ITEM}};
-    const JsTreeSlot itemButtonSlots[] = {{EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE},
-                                          {EDGE_ENABLED, TREE_SEAT, TREE_DRAWABLE}};
-    const JsTreeSlot labelSlots[] = {{EDGE_LABEL, TREE_SEAT, TREE_DRAWABLE}};
+    const JsTreeSlot childrenSlots[] = {{EDGE_CHILDREN, TREE_DRAWABLE}};
+    const JsTreeSlot textSlots[] = {{EDGE_TEXT, TREE_DRAWABLE}};
+    const JsTreeSlot seatSlots[] = {{EDGE_SEAT, TREE_DRAWABLE}};
+    const JsTreeSlot buttonSlots[] = {
+        {EDGE_LABEL, TREE_DRAWABLE}, {EDGE_ENABLED, TREE_DRAWABLE}, {EDGE_HANDLER, TREE_DRAWABLE}};
+    const JsTreeSlot cellSlots[] = {{EDGE_LABEL, TREE_DRAWABLE}, {EDGE_HANDLER, TREE_DRAWABLE}};
+    const JsTreeSlot showSlots[] = {{EDGE_SEAT, TREE_DRAWABLE}, {EDGE_CHILD, TREE_DRAWABLE}};
+    const JsTreeSlot scrollSlots[] = {{EDGE_CHILD, TREE_DRAWABLE}, {EDGE_VIEWPORT, TREE_DRAWABLE}};
+    const JsTreeSlot childSlots[] = {{EDGE_CHILD, TREE_DRAWABLE}};
+    const JsTreeSlot itemsSlots[] = {{EDGE_CHILDREN, TREE_TOOLBAR_ITEM}};
+    const JsTreeSlot itemButtonSlots[] = {{EDGE_HANDLER, TREE_DRAWABLE}, {EDGE_ENABLED, TREE_DRAWABLE}};
+    const JsTreeSlot labelSlots[] = {{EDGE_LABEL, TREE_DRAWABLE}};
   } // namespace
   const JsTreeSchemaFor<VStackFacts> VStackFacts::schema(
       "VStack", TREE_DRAWABLE, 1, childrenSlots, TREE_VSTACK, &VStackFacts::readId, &VStackFacts::writeId);

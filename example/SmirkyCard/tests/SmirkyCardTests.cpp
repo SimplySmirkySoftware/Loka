@@ -1554,7 +1554,7 @@ namespace
     ScriptRuntime warm;
     JsCardBindingRegistry registry;
     LOKA_VERIFY(RegisterSmirkyCardBindings(registry));
-    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
     static const JsTreeSchemaFor<int> schema("Failure", TREE_DRAWABLE, 1, slots);
     const JSMallocFunctions functions = {TreeAllocationProbe::zero,
                                          TreeAllocationProbe::allocate,
@@ -1644,7 +1644,7 @@ namespace
     ScriptRuntime runtime;
     JSContext *ctx = runtime.context();
     const unsigned before = testing::CardFlowAccess::treeLive();
-    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSlot slots[] = {{smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
     static const JsTreeSchemaFor<int> schema("Cycle", TREE_DRAWABLE, 1, slots);
     {
       const char *source = "(()=>{const box={};box.fn=()=>box.tree;return box})()";
@@ -1670,9 +1670,9 @@ namespace
     using namespace smirkycard;
     ScriptRuntime runtime;
     JSContext *ctx = runtime.context();
-    static const JsTreeSlot staticSlots[] = {{smirkycard::EDGE_SEAT, TREE_SEAT, TREE_DRAWABLE},
-                                             {smirkycard::EDGE_SEAT, TREE_SEAT, TREE_DRAWABLE},
-                                             {smirkycard::EDGE_HANDLER, TREE_HANDLER, TREE_DRAWABLE}};
+    static const JsTreeSlot staticSlots[] = {{smirkycard::EDGE_SEAT, TREE_DRAWABLE},
+                                             {smirkycard::EDGE_SEAT, TREE_DRAWABLE},
+                                             {smirkycard::EDGE_HANDLER, TREE_DRAWABLE}};
     static const JsTreeSchemaFor<int> schema("Mechanism", TREE_DRAWABLE, 3, staticSlots);
     const unsigned live = testing::CardFlowAccess::treeLive();
     const unsigned edges = testing::CardFlowAccess::treeSlots();
