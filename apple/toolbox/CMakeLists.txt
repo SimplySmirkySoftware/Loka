@@ -144,6 +144,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "^Retro(68|PPC)$")
     ${LOKA_TOOLBOX_SOURCES}
     ${COMMON_SOURCES}
   )
+  target_sources(LokaAppleToolboxTestCore PRIVATE ${PROJECT_SOURCE_DIR}/tests/toolbox/ToolboxButtonFollowHooks.cpp)
   target_compile_definitions(LokaAppleToolboxTestCore PRIVATE
     TEST_BUILD
     LOKA_DIAG=1

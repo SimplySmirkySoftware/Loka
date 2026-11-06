@@ -1,5 +1,35 @@
 // Shared by the controller and host fixture.
 #include "ToolboxPaintSuppressScope.hpp"
+#include "ToolboxButtonFollow.hpp"
+#include "ToolboxButtonMoveCapability.hpp"
+#ifdef TEST_BUILD
+#include "../../../tests/toolbox/ToolboxButtonFollowAccess.hpp"
+#endif
+namespace
+{
+  /** Retain the handle, never a relocatable record pointer, across MoveControl. */
+  class SilentButtonVisibility
+  {
+  public:
+    explicit SilentButtonVisibility(ControlRef control)
+        : control_(control),
+          saved_((**control).contrlVis)
+    {
+      (**this->control_).contrlVis = 0;
+    }
+    ~SilentButtonVisibility()
+    {
+      (**this->control_).contrlVis = this->saved_;
+    }
+
+  private:
+    ControlRef const control_;
+    const unsigned char saved_;
+    SilentButtonVisibility(const SilentButtonVisibility &);
+    SilentButtonVisibility &operator=(const SilentButtonVisibility &);
+  };
+} // namespace
+
 bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
                                                          const Rect &rect,
                                                          const loka::core::String &label,
@@ -78,6 +108,25 @@ bool ToolboxScenePlatformController::ensureButtonControl(short resourceId,
   const Rect before = binding->placement.full();
   const bool moved = created || before.left != controlRect.left || before.top != controlRect.top
                      || before.right != controlRect.right || before.bottom != controlRect.bottom;
+  if (moved && !created && ToolboxCanSilentlyMoveButton()
+      && ToolboxButtonFollowsCopy(
+          binding->placement, ToolboxNativePlacement(controlRect, visible), this->borrowedPaintPass_)
+      && (**binding->control).contrlVis && EqualRect(&(**binding->control).contrlRect, &before)
+      && ToolboxButtonFaceInstalled(binding->control, label, binding->enabled, binding->label))
+  {
+#ifdef TEST_BUILD
+    loka::testing::BeforeSilentButtonMove(binding->control);
+#endif
+    {
+      SilentButtonVisibility visibility(binding->control);
+      MoveControl(binding->control, controlRect.left, controlRect.top);
+    }
+#ifdef TEST_BUILD
+    loka::testing::AfterSilentButtonMove(binding->control);
+#endif
+    binding->placement = ToolboxNativePlacement(controlRect, visible);
+    return true;
+  }
   const ToolboxOwnControlMoveFootprint admittedMove =
       moved ? this->admitOwnControlMove(before, controlRect) : ToolboxOwnControlMoveFootprint();
   if (moved && !created)

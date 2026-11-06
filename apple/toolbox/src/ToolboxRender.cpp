@@ -152,7 +152,6 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
   const ToolboxUnitLedger::FirstBlurUnits selection = this->unitLedger_.firstBlurUnits();
   const ToolboxBandPaintPolicy policy =
       ToolboxBandPaintPolicy::resolve(this->window_->window(), selection, this->bandBlur_);
-  BandPolicyScope bandPolicyScope(*this, policy);
   ToolboxPresentInputs inputs;
   inputs.outside = outer.complete();
   inputs.units = this->unitLedger_.compareFinalRows();
@@ -198,6 +197,8 @@ ToolboxPresentExecuted ToolboxScenePlatformController::render(ToolboxFullDrawPre
   interval.noteExecuted(executed);
   if (executed == TOOLBOX_PRESENT_COPY_FAILED)
     return executed;
+  const ToolboxPaintPassFacts facts(policy, executed == TOOLBOX_PRESENT_COPIED ? &plan : 0);
+  PaintPassScope paintPassScope(*this, facts);
   RenderNode(rootNode_, this);
   debugStats_.refreshHitCounts(static_cast<int>(hitLedger_.buttonHits_.size()),
                                static_cast<int>(hitLedger_.cellHits_.size()),

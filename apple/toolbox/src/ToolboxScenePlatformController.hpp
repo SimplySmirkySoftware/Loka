@@ -7,7 +7,7 @@
 #include "ToolboxUnitLedger.hpp"
 #include "ToolboxPressLedger.hpp"
 #include "ToolboxErasedPass.hpp"
-#include "ToolboxBandPaintPolicy.hpp"
+#include "ToolboxPaintPassFacts.hpp"
 #include "ToolboxOwnControlMoveFootprint.hpp"
 #include "ToolboxBlurSnapshot.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
@@ -375,28 +375,28 @@ private:
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   ToolboxErasedPass erasedPass_;
-  /** Borrow of render's completed policy, installed only by BandPolicyScope. */
-  const ToolboxBandPaintPolicy *borrowedBandPolicy_;
+  /** Borrow of render's completed paint facts, installed only by PaintPassScope. */
+  const ToolboxPaintPassFacts *borrowedPaintPass_;
   friend class loka::testing::ToolboxBandPolicyAccess;
   /** One scope per completed layout; O(1), no rows; all render exits unwind. */
-  class BandPolicyScope
+  class PaintPassScope
   {
   public:
-    BandPolicyScope(ToolboxScenePlatformController &owner, const ToolboxBandPaintPolicy &policy)
+    PaintPassScope(ToolboxScenePlatformController &owner, const ToolboxPaintPassFacts &facts)
         : owner_(owner)
     {
-      assert(!this->owner_.borrowedBandPolicy_);
-      this->owner_.borrowedBandPolicy_ = &policy;
+      assert(!this->owner_.borrowedPaintPass_);
+      this->owner_.borrowedPaintPass_ = &facts;
     }
-    ~BandPolicyScope()
+    ~PaintPassScope()
     {
-      this->owner_.borrowedBandPolicy_ = 0;
+      this->owner_.borrowedPaintPass_ = 0;
     }
 
   private:
     ToolboxScenePlatformController &owner_;
-    BandPolicyScope(const BandPolicyScope &);
-    BandPolicyScope &operator=(const BandPolicyScope &);
+    PaintPassScope(const PaintPassScope &);
+    PaintPassScope &operator=(const PaintPassScope &);
   };
 
 public:

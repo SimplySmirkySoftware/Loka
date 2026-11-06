@@ -13,7 +13,7 @@
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxErasedPass.hpp"
 #include "ToolboxBlurSnapshot.hpp"
-#include "ToolboxBandPaintPolicy.hpp"
+#include "ToolboxPaintPassFacts.hpp"
 #include "ToolboxBlurDirtyExtent.hpp"
 #include "ToolboxScrollKey.hpp"
 #include "ToolboxTabKey.hpp"
@@ -848,7 +848,7 @@ public:
         sharedCursor_(sharedCursor),
         renderContext(0),
         rootNode_(0),
-        borrowedBandPolicy_(0),
+        borrowedPaintPass_(0),
         activeViewportContent_(0),
         outerViewportContent_(0),
         controlIds_(100)
@@ -901,28 +901,28 @@ public:
   ToolboxBlurSnapshot<TOOLBOX_BLUR_FROZEN> staticBlur_;
   ToolboxBlurSnapshot<TOOLBOX_BLUR_LIVE> bandBlur_;
   // Mirrors the production controller borrow scope; keep both shapes aligned.
-  /** Borrow of render's completed policy, installed only by BandPolicyScope. */
-  const ToolboxBandPaintPolicy *borrowedBandPolicy_;
+  /** Borrow of render's completed paint facts, installed only by PaintPassScope. */
+  const ToolboxPaintPassFacts *borrowedPaintPass_;
 
   /** One scope per completed layout; O(1), no rows; all render exits unwind. */
-  class BandPolicyScope
+  class PaintPassScope
   {
   public:
-    BandPolicyScope(ToolboxScenePlatformController &owner, const ToolboxBandPaintPolicy &policy)
+    PaintPassScope(ToolboxScenePlatformController &owner, const ToolboxPaintPassFacts &facts)
         : owner_(owner)
     {
-      assert(!this->owner_.borrowedBandPolicy_);
-      this->owner_.borrowedBandPolicy_ = &policy;
+      assert(!this->owner_.borrowedPaintPass_);
+      this->owner_.borrowedPaintPass_ = &facts;
     }
-    ~BandPolicyScope()
+    ~PaintPassScope()
     {
-      this->owner_.borrowedBandPolicy_ = 0;
+      this->owner_.borrowedPaintPass_ = 0;
     }
 
   private:
     ToolboxScenePlatformController &owner_;
-    BandPolicyScope(const BandPolicyScope &);
-    BandPolicyScope &operator=(const BandPolicyScope &);
+    PaintPassScope(const PaintPassScope &);
+    PaintPassScope &operator=(const PaintPassScope &);
   };
 
   ToolboxPressLedger pressLedger_;

@@ -35,9 +35,11 @@ namespace toolbox_host
     GrafPtr currentPort;
     Rect currentClip, ownerClip;
     bool painted;
+    unsigned char visibility;
   };
   extern short popupItem;
   extern unsigned tracks;
+  extern unsigned validations;
   extern unsigned refuseControls;
   extern void (*beforeHide)(ControlRef);
   Rect currentClip();
@@ -68,8 +70,9 @@ struct HostControl
   short value, minimum, maximum, hilite;
   GrafPtr owner;
   Rect rect;
-  bool visible;
-  bool &contrlVis;
+  unsigned char visible;
+  unsigned char &contrlVis;
+  Rect &contrlRect;
   short &contrlHilite;
   HostControl &operator*()
   {
@@ -86,6 +89,7 @@ struct HostControl
         rect(),
         visible(false),
         contrlVis(visible),
+        contrlRect(rect),
         contrlHilite(hilite)
   {
   }

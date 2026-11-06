@@ -2,6 +2,7 @@
 #include "ToolboxPlatformContext.hpp"
 #include "ToolboxDeviceDepth.hpp"
 #include <Gestalt.h>
+#include "ToolboxButtonMoveCapability.cpp"
 
 #include "core/resource/BlobRange.hpp"
 #include "PictParser.hpp"
