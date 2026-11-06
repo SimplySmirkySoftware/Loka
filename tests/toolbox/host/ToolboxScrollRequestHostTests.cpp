@@ -10,6 +10,8 @@
 #include "support/WindowAdmissionTestApp.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 #include "ToolboxLayoutMetrics.hpp"
 #include "app/layout/LayoutHeuristics.hpp"
 #include "context/ToolboxTextContext.hpp"
@@ -302,11 +304,15 @@ namespace
       this->state(this->props.storage->viewport, Frame());
       this->state(this->props.storage->request, ScrollTarget::None());
     }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(
           ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
-          << Box().width(400).height(500));
+          << (Box().width(400).height(500) << (Column() << Box().height(30) << Text("placement"))));
     }
   };
   /** Runs real dispatch from the Scene apply seam to exercise an active run. */
@@ -324,6 +330,21 @@ namespace
       LOKA_VERIFY(RegisterToolboxBuiltInSupport(*this));
       LOKA_VERIFY(RegisterToolboxPlatformLayoutHandlers(this->gapLayoutRegistry));
     }
+    // Same host preparation as PresentController in ToolboxZStackUnitHostTests:
+    // use real contexts so placement and hit registration consume layout inputs.
+    virtual bool prepareProjectedLayout(Node *node, LayoutState &state)
+    {
+      if (this->refusePublicationLayout() || !node || !this->projectLayoutState(state))
+        return false;
+      IPlatformNodeHandler *handler = this->nodeHandlerRegistry_.find(node);
+      LOKA_VERIFY(handler);
+      NodeContext *context = handler->ensureContext(node, this, state);
+      if (!context)
+        return false;
+      if (IBoundaryTaggedContext *tagged = context->asBoundaryTagged())
+        tagged->setBoundary(this->activeLayoutBoundary());
+      return true;
+    }
     virtual void onBoundaryApply(Node *root,
                                  BoundaryNode *boundary,
                                  const BoundaryLocalApplyInfo &info,
@@ -333,11 +354,20 @@ namespace
       if (this->projectInApply && (info.hasLayoutWork || plan.hasLayoutWork()))
       {
         ++this->visits;
-        LayoutState state;
-        state.width = 100;
-        state.height = 80;
+        LayoutState state = this->layoutBounds();
         LayoutNode(root, state, this, boundary);
+#ifdef LOKA_HOST_CLIP_PAINT
+        // Present only when the ordinary Scene apply carries layout work.
+        RenderNode(root, this);
+#endif
       }
+    }
+    virtual LayoutState layoutBounds() const
+    {
+      LayoutState state;
+      state.width = 100;
+      state.height = 80;
+      return state;
     }
     virtual bool readNativeFocus(NodeContext *&out)
     {
@@ -467,6 +497,183 @@ namespace
       LOKA_VERIFY(f.controller.visits == visits + 2);
     f.probe = false;
     f.ordinaryFlush();
+  }
+  ScrollViewNode *sceneScroll(Scene &scene)
+  {
+    return loka::dsl::testing::SceneTestAccess::rootBoundary(scene)->childrenHead()->asScrollViewNode();
+  }
+  void inputNextFlush()
+  {
+    SceneFixture f;
+    ScrollViewNode *scroll = sceneScroll(*f.window.scene());
+    LOKA_VERIFY(scroll != 0);
+    LOKA_VERIFY(!f.controller.textHits().empty());
+    const Rect before = f.controller.textHits().back().rect;
+    const unsigned visits = f.controller.visits;
+    LOKA_VERIFY(scroll->takeLayoutInputs() == NODE_DIRTY_NONE);
+    LOKA_VERIFY(f.storage.request.get().isNone());
+    Trace::instance().clear();
+    ControlRef bar = f.controller.scrollControl(0).control;
+    bar->tracking = toolbox_host::TrackScript(129, 129, 20);
+    f.controller.publishFixturePressOrder();
+    Point point = {static_cast<short>(bar->rect.top + 20), static_cast<short>(bar->rect.left + 3)};
+    ToolboxInputDoor::mouseDown(f.controller, point);
+    LOKA_VERIFY(f.storage.viewport.get().y == 20);
+    const NodeDirtyFlags inputs = scroll->takeLayoutInputs();
+    LOKA_VERIFY(inputs == NODE_DIRTY_LAYOUT);
+    scroll->requeueLayoutInputs(inputs);
+    LOKA_VERIFY(f.window.scene()->hasPendingInvalidation());
+    LOKA_VERIFY(f.controller.visits == visits);
+    LOKA_VERIFY(f.controller.textHits().back().rect.top == before.top);
+    f.ordinaryFlush();
+    LOKA_VERIFY(f.controller.visits == visits + 1);
+    LOKA_VERIFY(scroll->takeLayoutInputs() == NODE_DIRTY_NONE);
+    LOKA_VERIFY(!f.controller.textHits().empty());
+    const Rect after = f.controller.textHits().back().rect;
+    LOKA_VERIFY(after.top == before.top - 20 && after.bottom == before.bottom - 20);
+    const Rect child = loka::testing::ToolboxTextContextAccess::rect(*f.controller.textHits().back().context);
+    LOKA_VERIFY(child.top == after.top && child.bottom == after.bottom);
+    Point moved = {after.top, after.left};
+    Point old = {static_cast<short>(before.bottom - 1), before.left};
+    LOKA_VERIFY(PtInRect(moved, &after) && !PtInRect(moved, &before));
+    LOKA_VERIFY(PtInRect(old, &before) && !PtInRect(old, &after));
+    LOKA_VERIFY(f.storage.request.get().isNone());
+    unsigned takes = 0;
+    for (unsigned i = 0; i < Trace::instance().size(); ++i)
+      takes += Trace::instance().at(i).count;
+    LOKA_VERIFY(takes == 0);
+  }
+  /** Reuses the Scene apply fixture with an explicit offered seat. */
+  class OfferedSceneController : public SceneController
+  {
+  public:
+    Frame offer;
+    explicit OfferedSceneController(ToolboxWindow &window)
+        : SceneController(window),
+          offer(0, 0, 421, 340)
+    {
+    }
+    virtual LayoutState layoutBounds() const
+    {
+      LayoutState state;
+      state.width = this->offer.width;
+      state.height = this->offer.height;
+      return state;
+    }
+  };
+  void countSize(void *data)
+  {
+    ++*static_cast<unsigned *>(data);
+  }
+  void sizeOnly(bool sentinel)
+  {
+    Storage storage(false);
+    ToolboxWindow native;
+    HostPortScope port(native.window());
+    OfferedSceneController controller(native);
+    LogicalWindow window(native, storage);
+    WindowAdmissionTestApp app(window);
+    LOKA_VERIFY(window.scene()->mount(&controller));
+    ScrollViewNode *scroll = sceneScroll(*window.scene());
+    LOKA_VERIFY(scroll != 0);
+    LOKA_VERIFY((NodePropsApplier<ScrollViewNode, ScrollViewProps>::apply(
+        scroll,
+        ScrollViewProps(storage.viewport)
+            .scrollTo(storage.request)
+            .contentInsets(ScrollViewContentInsets::of(30, 0)))));
+    storage.viewport.set(Frame(0, sentinel ? -32768 : 10, 0, 0));
+    const Frame origin = scroll->requestedOrigin();
+    unsigned writes = 0;
+    storage.viewport.state()->bind(&countSize, &writes, false);
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    // The initial owner layout must not depend on viewport self-observation.
+    window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+    const unsigned visits = controller.visits;
+    app.flush();
+    for (int i = 0; window.scene()->hasPendingInvalidation() && i < 12; ++i)
+      app.flush();
+    LOKA_VERIFY(storage.viewport.get() == Frame(0, sentinel ? -30 : 10, 405, 340));
+    LOKA_VERIFY(scroll->requestedOrigin().x == origin.x && scroll->requestedOrigin().y == origin.y);
+    LOKA_VERIFY(writes == 1);
+    LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+    // One outside initial layout; no self-originated echo is permitted.
+    LOKA_VERIFY(controller.visits == visits + 1);
+    storage.viewport.state()->unbind(&countSize, &writes);
+  }
+  void yClamp(const char *mode)
+  {
+    Storage storage(false);
+    ToolboxWindow native;
+    HostPortScope port(native.window());
+    OfferedSceneController controller(native);
+    controller.offer = Frame(0, 0, 100, 80);
+    LogicalWindow window(native, storage);
+    WindowAdmissionTestApp app(window);
+    LOKA_VERIFY(window.scene()->mount(&controller));
+    ScrollViewNode *scroll = sceneScroll(*window.scene());
+    LOKA_VERIFY(scroll != 0);
+    BoxNode *content = static_cast<BoxNode *>(scroll->childrenHead());
+    LOKA_VERIFY((NodePropsApplier<ScrollViewNode, ScrollViewProps>::apply(
+        scroll,
+        ScrollViewProps(storage.viewport)
+            .scrollTo(storage.request)
+            .contentInsets(ScrollViewContentInsets::of(30, 0)))));
+    const bool shortStart = !std::strcmp(mode, "y-clamp-short");
+    const bool grow = !std::strcmp(mode, "y-clamp-grow");
+    if (shortStart || grow)
+      LOKA_VERIFY((NodePropsApplier<BoxNode, BoxProps>::apply(
+          content, Box().width(shortStart ? 10 : 400).height(shortStart ? 20 : 100).props)));
+    storage.viewport.set(Frame(0, shortStart ? 50 : -30, 0, 0));
+    loka::dsl::testing::SceneTestAccess::updateAttached(*window.scene(), true);
+    // The initial owner layout must not depend on viewport self-observation.
+    window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+    unsigned before = controller.visits;
+    if (!shortStart)
+    {
+      app.flush();
+      ControlRef bar = controller.scrollControl(0).control;
+      bar->tracking = toolbox_host::TrackScript(129, 129, 60);
+      controller.publishFixturePressOrder();
+      Point point = {static_cast<short>(bar->rect.top + 20), static_cast<short>(bar->rect.left + 3)};
+      ToolboxInputDoor::mouseDown(controller, point);
+      app.flush();
+      LOKA_VERIFY(storage.viewport.get().y == 30);
+      if (grow)
+      {
+        LOKA_VERIFY(controller.scrollControl(1).control->visible);
+        controller.offer = Frame(0, 0, 421, 340);
+      }
+      else
+        LOKA_VERIFY((NodePropsApplier<BoxNode, BoxProps>::apply(content, Box().width(10).height(20).props)));
+      window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+      before = controller.visits;
+    }
+    Trace::instance().clear();
+    const int oldY = storage.viewport.get().y;
+    app.flush();
+    LOKA_VERIFY(storage.viewport.get().y == -30);
+    LOKA_VERIFY(controller.visits == before + 1);
+    LOKA_VERIFY(window.scene()->hasPendingInvalidation());
+    Node *text = content->childrenHead()->asNestable()->childrenHead()->nextInComposition;
+    LOKA_VERIFY(text && text->getContext());
+    ToolboxTextContext *context = static_cast<ToolboxTextContext *>(text->getContext());
+    const Rect first = loka::testing::ToolboxTextContextAccess::rect(*context);
+    app.flush();
+    const Rect corrected = loka::testing::ToolboxTextContextAccess::rect(*context);
+    LOKA_VERIFY(corrected.top == first.top + oldY + 30);
+    LOKA_VERIFY(corrected.bottom == first.bottom + oldY + 30);
+    LOKA_VERIFY(controller.visits == before + 2);
+    LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
+    if (grow)
+      LOKA_VERIFY(!controller.scrollControl(1).control->visible);
+    // A third ordinary flush must do no layout work.
+    app.flush();
+    LOKA_VERIFY(controller.visits == before + 2);
+    LOKA_VERIFY(storage.request.get().isNone());
+    unsigned takes = 0;
+    for (unsigned i = 0; i < Trace::instance().size(); ++i)
+      takes += Trace::instance().at(i).count;
+    LOKA_VERIFY(takes == 0);
   }
   struct MountProbe
   {
@@ -758,7 +965,23 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *name = argv[1];
-  if (!std::strncmp(name, "range-", 6))
+  if (!std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlySentinel1513")
+      || !std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlyOrdinary1513"))
+  {
+    // Match TestRunnerMain.inc: opt in to red, otherwise report CTest skip 77.
+    const char *enabled = std::getenv("LOKA_EXPECTED_RED");
+    if (!enabled || std::strcmp(enabled, "1") != 0)
+    {
+      std::printf("SKIP expected-red: %s (set LOKA_EXPECTED_RED=1)\n", name);
+      return 77;
+    }
+    sizeOnly(!std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlySentinel1513"));
+  }
+  else if (!std::strncmp(name, "y-clamp-", 8))
+    yClamp(name);
+  else if (!std::strcmp(name, "input-next-flush"))
+    inputNextFlush();
+  else if (!std::strncmp(name, "range-", 6))
     shrinkRange(name);
   else if (!std::strcmp(name, "delivery"))
     delivery(false);

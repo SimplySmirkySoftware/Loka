@@ -3,6 +3,7 @@
 #include "app/nodes/nestable/ScrollView.hpp"
 #include "app/nodes/nestable/ScrollViewSettlement.hpp"
 #include "app/nodes/Text.hpp"
+#include "app/nodes/boundary/StdComposition.hpp"
 #include "app/scene/Scene.hpp"
 #include "support/Headless.hpp"
 #include "support/TestVerify.hpp"
@@ -474,5 +475,76 @@ inline void testScrollRequestVisitTwoNodes()
   LOKA_VERIFY(storage.request.get().isNone());
   LOKA_VERIFY(storage.otherViewport.get() == Frame(3, 4, 80, 30));
   LOKA_VERIFY(storage.other.get() == ScrollTarget::Origin(31, 32));
+}
+namespace scroll_request_tests
+{
+  class SizePresenter : public Presenter
+  {
+    int &writes_;
+
+  public:
+    explicit SizePresenter(int &writes)
+        : writes_(writes)
+    {
+    }
+    virtual void onChange(Node *root, NodeDirtyFlags, bool)
+    {
+      ScrollViewNode *scroll = root->asNestable()->childrenHead()->asScrollViewNode();
+      LOKA_VERIFY(scroll != 0);
+      // An outside subscriber observes each publication without dirtying a node.
+      scroll->props.viewport_.state()->bind(&count, &this->writes_, false);
+      LayoutState state;
+      state.width = 405;
+      state.height = 340;
+      this->projectLayoutForTesting(root, state);
+      scroll->props.viewport_.state()->unbind(&count, &this->writes_);
+    }
+  };
+  template <bool Sentinel> class SizeRoot : public BoundaryNodeFor<SizeRoot<Sentinel> >
+  {
+  public:
+    NodeState<Frame> viewport;
+    explicit SizeRoot(const BoundaryPropsFor<SizeRoot<Sentinel> > &props)
+        : BoundaryNodeFor<SizeRoot<Sentinel> >(props)
+    {
+      this->state(this->viewport, Frame(0, Sentinel ? -32768 : 10, 0, 0));
+    }
+    virtual bool flushViewDirtyImmediately(NodeDirtyFlags) const
+    {
+      return false;
+    }
+    virtual void composeNode(NodeComposition &c)
+    {
+      c.declare(ScrollView(this->viewport).contentInsets(30, 0) << Text("child"));
+    }
+  };
+  template <bool Sentinel> inline void sizeOnly1513()
+  {
+    int writes = 0;
+    SizePresenter platform(writes);
+    Scene scene((Boundary<SizeRoot<Sentinel> >()));
+    LOKA_VERIFY(scene.mount(&platform));
+    const unsigned long visits = platform.leafLayoutVisitsForTesting();
+    loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+    for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+      LOKA_VERIFY(scene.flushInvalidation());
+    SizeRoot<Sentinel> *root =
+        static_cast<SizeRoot<Sentinel> *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+    LOKA_VERIFY(root->viewport.get() == Frame(0, Sentinel ? -30 : 10, 405, 340));
+    LOKA_VERIFY(writes == 1);
+    LOKA_VERIFY(!scene.hasPendingInvalidation());
+    // The initial outside layout is allowed; a self-originated echo is not.
+    LOKA_VERIFY(platform.leafLayoutVisitsForTesting() == visits + 1);
+    loka::dsl::testing::SceneTestAccess::unmount(scene);
+  }
+
+} // namespace scroll_request_tests
+inline void testExpectedRedNullScrollSizeOnlySentinel1513()
+{
+  scroll_request_tests::sizeOnly1513<true>();
+}
+inline void testExpectedRedNullScrollSizeOnlyOrdinary1513()
+{
+  scroll_request_tests::sizeOnly1513<false>();
 }
 #endif

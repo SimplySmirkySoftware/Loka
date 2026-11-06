@@ -19,4 +19,6 @@ void testScrollViewContentInsetsValueAndPropsIdentity();
 void testScrollViewPublishViewportWritesSizeAndOrigin();
 void testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges();
 
+void testNullScrollInputMovesChildrenNextFlush1513();
+
 #endif // LOKA_TESTS_SCROLL_VIEW_SCOPE_TESTS_HPP
