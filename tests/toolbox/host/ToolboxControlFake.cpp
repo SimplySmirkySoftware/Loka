@@ -13,7 +13,7 @@ namespace
     const Rect ownerClip = c->owner->native.clip;
     const Rect intersection = Intersection(c->rect, ownerClip);
     const bool painted = draws && !EmptyRect(&intersection);
-    const toolbox_host::ControlCall call = {operation, current, current->native.clip, ownerClip, painted};
+    const toolbox_host::ControlCall call = {operation, current, current->native.clip, ownerClip, painted, c->visible};
     c->calls.push_back(call);
   }
 } // namespace

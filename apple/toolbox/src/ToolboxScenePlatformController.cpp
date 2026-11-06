@@ -303,7 +303,7 @@ static const std::size_t kNativePoolBucketDepthCap = 8;
 ToolboxScenePlatformController::ToolboxScenePlatformController(ToolboxWindow *window)
     : textShaping_(loka::app::PER_RUN),
       window_(window),
-      borrowedBandPolicy_(0),
+      borrowedPaintPass_(0),
       activeViewportContent_(0),
       outerViewportContent_(0),
       projectionParentScopes_(window && window->window() ? static_cast<void *>(window->window()) : 0),

@@ -144,11 +144,12 @@ void ToolboxScenePlatformController::renderZStack(loka::app::ZStackNode *stack)
       {
         ToolboxBandGround ground;
 #ifdef LOKA_LIFECYCLE_AUDIT
-        assert(this->borrowedBandPolicy_);
+        assert(this->borrowedPaintPass_);
 #endif
-        const bool eligible = this->borrowedBandPolicy_
-                                  ? (this->borrowedBandPolicy_->querySelectedGround(ground) && ground == BAND_BLUR)
-                                  : ToolboxBlurPixels::eligible(this->window_->window(), row.rect);
+        const bool eligible =
+            this->borrowedPaintPass_
+                ? (this->borrowedPaintPass_->bandPolicy.querySelectedGround(ground) && ground == BAND_BLUR)
+                : ToolboxBlurPixels::eligible(this->window_->window(), row.rect);
         const ToolboxBlurPaint result = this->bandBlur_.paint(
             this->window_->window(), row, this->erasedPass_, !this->observation_.refusedSoFar(), eligible);
         switch (result)

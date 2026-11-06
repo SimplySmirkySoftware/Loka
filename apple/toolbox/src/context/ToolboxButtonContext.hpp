@@ -20,6 +20,12 @@ namespace loka
 } // namespace loka
 #endif
 
+/** Reads the installed face without native mutation or drawing. */
+bool ToolboxButtonFaceInstalled(ControlRef control,
+                                const loka::core::String &label,
+                                loka::core::State<bool> *enabled,
+                                const std::string &installedLabel);
+
 /** Reconcile one installed control; the controller owns its title cache. */
 bool ReconcileToolboxButtonControl(ControlRef control,
                                    const loka::core::String &label,

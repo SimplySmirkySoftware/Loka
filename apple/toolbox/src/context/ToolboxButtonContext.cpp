@@ -204,6 +204,37 @@ void ToolboxButtonContext::draw(ToolboxScenePlatformController *controller)
   }
 }
 
+namespace
+{
+  enum ButtonLabelCheck
+  {
+    LABEL_FAILED,
+    LABEL_SAME,
+    LABEL_DIFFERENT
+  };
+  ButtonLabelCheck
+  ReadButtonLabel(const loka::core::String &label, const std::string &installedLabel, std::string &utf8)
+  {
+    if (!loka::platform::CollectUtf8(label, utf8))
+      return LABEL_FAILED;
+    return installedLabel == utf8 ? LABEL_SAME : LABEL_DIFFERENT;
+  }
+} // namespace
+
+bool ToolboxButtonFaceInstalled(ControlRef control,
+                                const loka::core::String &label,
+                                loka::core::State<bool> *enabled,
+                                const std::string &installedLabel)
+{
+  if (!control)
+    return false;
+  std::string utf8;
+  if (ReadButtonLabel(label, installedLabel, utf8) != LABEL_SAME)
+    return false;
+  const short hilite = enabled && !enabled->get() ? 255 : 0;
+  return (**control).contrlHilite == hilite;
+}
+
 bool ReconcileToolboxButtonControl(ControlRef control,
                                    const loka::core::String &label,
                                    loka::core::State<bool> *enabled,
@@ -213,9 +244,10 @@ bool ReconcileToolboxButtonControl(ControlRef control,
   if (!control)
     return false;
   std::string labelUtf8;
-  if (!loka::platform::CollectUtf8(label, labelUtf8))
+  const ButtonLabelCheck check = ReadButtonLabel(label, installedLabel, labelUtf8);
+  if (check == LABEL_FAILED)
     return false;
-  if (installedLabel != labelUtf8)
+  if (check == LABEL_DIFFERENT)
   {
     Str255 title;
     if (!ToolboxEncodePascal(label, title))

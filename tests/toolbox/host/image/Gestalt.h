@@ -5,6 +5,9 @@
 
 enum
 {
+  gestaltSystemVersion = 0x73797376,
+  gestaltAppearanceAttr = 0x61707072,
+  gestaltUndefSelectorErr = -5551,
   gestaltQuickdrawVersion = 0x71642020,
   gestalt8BitQD = 0x100
 };

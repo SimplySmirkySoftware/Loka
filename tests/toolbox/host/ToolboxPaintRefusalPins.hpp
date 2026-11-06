@@ -79,7 +79,8 @@ namespace
   {
     const ToolboxBandPaintPolicy policy = ToolboxBandPaintPolicy::resolve(
         f.window.window(), f.controller.unitLedger_.firstBlurUnits(), f.controller.bandBlur_);
-    ToolboxScenePlatformController::BandPolicyScope scope(f.controller, policy);
+    const ToolboxPaintPassFacts facts(policy, 0);
+    ToolboxScenePlatformController::PaintPassScope scope(f.controller, facts);
     f.controller.renderZStack(&f.stack);
   }
   void refusalUnits(const char *mode)
@@ -93,12 +94,12 @@ namespace
     if (std::strcmp(mode, "RefusalUnitRegion") == 0)
     {
       toolbox_host::failRegions = 2;
-      expected = "ToolboxZStack.cpp:207";
+      expected = "ToolboxZStack.cpp:208";
     }
     else if (std::strstr(mode, "Copy"))
     {
       toolbox_host::staticCopySucceeds = false;
-      expected = live ? "ToolboxZStack.cpp:175" : "ToolboxZStack.cpp:193";
+      expected = live ? "ToolboxZStack.cpp:176" : "ToolboxZStack.cpp:194";
     }
     else if (std::strstr(mode, "Device"))
     {
@@ -110,20 +111,20 @@ namespace
     else if (std::strstr(mode, "Hairline"))
     {
       toolbox_host::refuseHairlines = 1;
-      expected = "ToolboxZStack.cpp:162";
+      expected = "ToolboxZStack.cpp:163";
     }
     else if (std::strstr(mode, "Frost"))
     {
       f.controller.bandBlur_.clear();
       ToolboxErasedPass::Guard erased(f.controller.erasedPass(), f.window.port.portRect);
       refusalRenderUnitWithPolicy(f);
-      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:170");
+      refusalSite(f.controller.observation_.outsideRefusal(), "ToolboxZStack.cpp:171");
       return;
     }
     else if (std::strstr(mode, "Absent"))
     {
       f.controller.bandBlur_.clear();
-      expected = "ToolboxZStack.cpp:172";
+      expected = "ToolboxZStack.cpp:173";
     }
     refusalRenderUnitWithPolicy(f);
     toolbox_host::failRegions = 0;
@@ -213,7 +214,7 @@ namespace
         c.rootNode_ = 0;
         c.paintSuppressClipRgn_ = saved;
         refusalSite(c.debugStats_.lastPresentObservation.firstRefusal(),
-                    button ? "ToolboxRender.cpp:213" : "ToolboxRender.cpp:223");
+                    button ? "ToolboxRender.cpp:214" : "ToolboxRender.cpp:224");
         return;
       }
       c.paintSuppressClipRgn_ = 0;
@@ -348,7 +349,7 @@ namespace
       toolbox_host::refuseControls = 0;
       expected = std::strstr(mode, "Props")     ? "ToolboxContextProps.cpp:90"
                  : std::strstr(mode, "Acquire") ? "ToolboxButtonContext.cpp:183"
-                                                : "ToolboxButtonControl.cpp:102";
+                                                : "ToolboxButtonControl.cpp:151";
       refusalSite(c.observation_.outsideRefusal(), expected);
       return;
     }

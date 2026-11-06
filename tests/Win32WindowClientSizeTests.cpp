@@ -1,3 +1,5 @@
+#include "testing/app/TextInputCommitTestHooks.hpp"
+#include "core/Operation.hpp"
 #include "support/WindowAdmissionTestApp.hpp"
 #include "support/NativeCloseTestConfig.hpp"
 #include "testing/app/AppTestAccess.hpp"
@@ -765,6 +767,90 @@ namespace
     }
   };
 } // namespace
+
+namespace
+{
+  void observeBeforeCloseAsked(void *data)
+  {
+    NativeCloseTestConfig &config = *static_cast<NativeCloseTestConfig *>(data);
+    LOKA_VERIFY(config.roster.closeAsked().get().id.isNone());
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+  }
+
+  void detachIdentityBeforeCloseAsked(void *data)
+  {
+    SessionQuitWin32Fixture &h = *static_cast<SessionQuitWin32Fixture *>(data);
+    observeBeforeCloseAsked(&h.config);
+    // Keep the keyed row alive so skipping the liveness guard publishes an ask.
+    LOKA_VERIFY(SetWindowLongPtrW(h.hwnd(), GWLP_USERDATA, 0) != 0);
+  }
+
+  void destroyBeforeCloseAsked(void *data)
+  {
+    SessionQuitWin32Fixture &h = *static_cast<SessionQuitWin32Fixture *>(data);
+    observeBeforeCloseAsked(&h.config);
+    LOKA_VERIFY(DestroyWindow(h.hwnd()));
+  }
+} // namespace
+
+void testWin32WmCloseCommitsBeforeAsk()
+{
+  SessionQuitWin32Fixture h(false);
+  loka::testing::observeTextInputCommits(&observeBeforeCloseAsked, &h.config);
+  SendMessageW(h.hwnd(), WM_CLOSE, 0, 0);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+  LOKA_VERIFY(h.config.roster.closeAsked().get().id == h.key);
+  LOKA_VERIFY(IsWindow(h.hwnd()));
+  loka::testing::observeTextInputCommits(0, 0);
+}
+
+void testWin32WmCloseCommitDestroyedWindowSkipsAsk()
+{
+  SessionQuitWin32Fixture h(false);
+  const HWND hwnd = h.hwnd();
+  loka::testing::observeTextInputCommits(&destroyBeforeCloseAsked, &h);
+  SendMessageW(hwnd, WM_CLOSE, 0, 0);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+  LOKA_VERIFY(!IsWindow(hwnd));
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  loka::testing::observeTextInputCommits(0, 0);
+  // WM_DESTROY queued the owned wrapper for removal; let the App drop it.
+  h.tail();
+}
+
+void testWin32WmCloseCommitDetachedIdentitySkipsAsk()
+{
+  SessionQuitWin32Fixture h(false);
+  Win32Window *window = h.app.firstWindow();
+  const HWND hwnd = window->hwnd();
+  loka::testing::observeTextInputCommits(&detachIdentityBeforeCloseAsked, &h);
+  SendMessageW(hwnd, WM_CLOSE, 0, 0);
+  // Restore the native association before any fixture cleanup uses the HWND.
+  SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
+  LOKA_VERIFY(Win32Window::FromHwnd(hwnd) == window);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+  LOKA_VERIFY(h.config.roster.closeAsked().get() == loka::app::CloseAsk::none());
+  loka::testing::observeTextInputCommits(0, 0);
+}
+
+void testWin32QueryEndSessionCommitsTextInputWithoutChangingAnswer()
+{
+  for (int edited = 0; edited != 2; ++edited)
+  {
+    SessionQuitWin32Fixture h(edited != 0);
+    loka::testing::observeTextInputCommits(&observeBeforeCloseAsked, &h.config);
+    const LRESULT answer = SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, static_cast<LPARAM>(ENDSESSION_LOGOFF));
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+    LOKA_VERIFY(edited ? answer == 0 : answer != 0);
+    loka::testing::observeTextInputCommits(0, 0);
+  }
+  SessionQuitWin32Fixture h(true);
+  loka::testing::observeTextInputCommits(&observeBeforeCloseAsked, &h.config);
+  const LRESULT answer =
+      SendMessageW(h.hwnd(), WM_QUERYENDSESSION, 0, static_cast<LPARAM>(ENDSESSION_CRITICAL | ENDSESSION_LOGOFF));
+  LOKA_VERIFY(answer != 0 && loka::testing::textInputCommitCount() == 0);
+  loka::testing::observeTextInputCommits(0, 0);
+}
 
 void testWin32QueryEndSessionRefusesWhileDocumentEdited()
 {

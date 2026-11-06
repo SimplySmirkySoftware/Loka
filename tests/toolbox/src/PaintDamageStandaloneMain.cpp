@@ -1,3 +1,6 @@
+#include "../ToolboxButtonFollowAccess.hpp"
+#include "ToolboxButtonMoveCapability.hpp"
+#include <Gestalt.h>
 #include "ToolboxAlignedPattern.hpp"
 #include "ToolboxPaintResultText.hpp"
 #include "ToolboxProbeTiming.hpp"
@@ -168,7 +171,7 @@ namespace
         : BoundaryNodeFor<CopyPainterNode<Painter> >(props)
     {
       this->state(this->origin_, loka::core::Frame());
-      if (Painter >= 6)
+      if (Painter >= 6 || Painter == 2)
         this->state(this->enabled_, true);
       if (Painter == 3)
       {
@@ -227,8 +230,14 @@ namespace
                                          << AttributedText(Styled("Copy AttributedText", loka::app::TextStyle()))
                                          << Box().height(600)));
       else if (Painter == 2)
-        composition.declare(ScrollView(this->origin_)
-                            << (Column() << Box().height(32) << loka::app::Button("Copy Button") << Box().height(600)));
+      {
+        Column rows;
+        rows << Box().height(32);
+        for (unsigned i = 0; i < 6; ++i)
+          rows << loka::app::Button("Copy Button").enabled(this->enabled_.state()) << Box().height(12);
+        rows << Box().height(600);
+        composition.declare(ScrollView(this->origin_) << rows);
+      }
       else if (Painter == 3)
         composition.declare(ScrollView(this->origin_)
                             << (Column() << Box().height(32) << ImageView().image(this->image_.state()).size(64, 32)
@@ -832,6 +841,11 @@ namespace
     {
       return this->pixels_ != 0;
     }
+    void recapture()
+    {
+      if (this->pixels_)
+        this->capture(this->pixels_);
+    }
     /** Small independent native pin for packed capture phase and right padding. */
     bool matchesProbe() const
     {
@@ -918,6 +932,91 @@ namespace
     }
     CardCapture(const CardCapture &);
     CardCapture &operator=(const CardCapture &);
+  };
+
+  /** Preallocated immediate observer; no control handle survives either callback. */
+  class ButtonFollowObservation : public loka::testing::SilentButtonMoveObserver
+  {
+  public:
+    ButtonFollowObservation(WindowPtr window, int dv, bool pending)
+        : window_(window),
+          dv_(dv),
+          pending_(pending),
+          pixels_(window->portRect),
+          update_(NewRgn()),
+          actual_(NewRgn()),
+          before_(),
+          owner_(0),
+          port_(0),
+          visibility_(0),
+          visits(0),
+          valid(true)
+    {
+      this->valid = this->pixels_.ready() && this->update_ && this->actual_;
+    }
+    ~ButtonFollowObservation()
+    {
+      if (this->update_)
+        DisposeRgn(this->update_);
+      if (this->actual_)
+        DisposeRgn(this->actual_);
+    }
+    virtual void before(ControlRef control)
+    {
+      if (!this->valid)
+        return;
+      // Inject unrelated pending damage before taking the immediate snapshot.
+      // This fixture never changes a control inside its native move interval.
+      const Rect unrelated = {0, 0, 2, 2};
+      if (this->pending_)
+        InvalRect(&unrelated);
+      else
+        ValidRect(&this->window_->portRect);
+      this->before_ = (**control).contrlRect;
+      this->visibility_ = (**control).contrlVis;
+      this->owner_ = (**control).contrlOwner;
+      GetPort(&this->port_);
+      this->pixels_.recapture();
+      CopyRgn(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->update_);
+      this->valid = MemError() == noErr && (EmptyRgn(this->update_) == !this->pending_);
+    }
+    virtual void after(ControlRef control)
+    {
+      if (!this->valid)
+        return;
+      GrafPtr port;
+      GetPort(&port);
+      Rect expected = this->before_;
+      OffsetRect(&expected, 0, this->dv_);
+      CopyRgn(reinterpret_cast<WindowPeek>(this->window_)->updateRgn, this->actual_);
+      this->valid = MemError() == noErr && EqualRgn(this->update_, this->actual_)
+                    && (**control).contrlVis == this->visibility_ && (**control).contrlOwner == this->owner_
+                    && port == this->port_ && EqualRect(&expected, &(**control).contrlRect)
+                    && this->pixels_.differences() == 0;
+      // Probe points carried out of the old face and into the new face.
+      const short center = static_cast<short>((expected.left + expected.right) / 2);
+      const Point oldOnly = {static_cast<short>(this->dv_ < 0 ? this->before_.bottom - 2 : this->before_.top + 2),
+                             center};
+      const Point newOnly = {static_cast<short>(this->dv_ < 0 ? expected.top + 2 : expected.bottom - 2), center};
+      const short wanted = (**control).contrlHilite == 255 ? 0 : 10;
+      this->valid = this->valid && TestControl(control, oldOnly) == 0 && TestControl(control, newOnly) == wanted;
+      ++this->visits;
+    }
+
+  private:
+    WindowPtr window_;
+    const int dv_;
+    const bool pending_;
+    CardCapture pixels_;
+    RgnHandle update_, actual_;
+    Rect before_;
+    WindowPtr owner_;
+    GrafPtr port_;
+    unsigned char visibility_;
+
+  public:
+    unsigned visits;
+    bool valid;
   };
 
   /** Pixel fixture using production framed placement and production band contexts.
@@ -3674,8 +3773,102 @@ namespace
       HideWindow(window.window());
     }
 
+    void checkButtonFollow()
+    {
+      ToolboxWindow &window = *this->copyWindows_[2]->asToolboxWindow();
+      ToolboxScenePlatformController &controller = *window.scenePlatformController();
+      typedef loka::dsl::testing::SceneTestAccess Access;
+      CopyPainterNode<2> *root = static_cast<CopyPainterNode<2> *>(Access::rootBoundary(*window.scene()));
+      ShowWindow(window.window());
+      SelectWindow(window.window());
+      ToolboxPortScope selected(window.window());
+      long version = 0, appearance = 0;
+      const OSErr systemError = Gestalt(gestaltSystemVersion, &version);
+      const OSErr appearanceError = Gestalt(0x61707072 /* appr; absent from the Multiversal Interfaces */, &appearance);
+      const bool open = ToolboxCanSilentlyMoveButton();
+      std::fprintf(this->log_,
+                   "button-follow system=%04lx system_error=%d appearance_error=%d path=%s\r",
+                   version,
+                   systemError,
+                   appearanceError,
+                   open ? "silent" : "ordinary");
+      root->scroll(0);
+      window.requestInvalidate();
+      window.flushInvalidate();
+      // Two consecutive forward copies, then the reverse direction, then disabled.
+      const int origins[] = {16, 32, 16, 32};
+      int previous = 0;
+      for (unsigned step = 0; step < 4; ++step)
+      {
+        if (step == 3)
+        {
+          root->disableButton();
+          window.requestInvalidate();
+          window.flushInvalidate();
+        }
+        ButtonFollowObservation observer(window.window(), previous - origins[step], (step & 1) != 0);
+        {
+          loka::testing::SilentButtonMoveScope scope(observer);
+          root->scroll(origins[step]);
+          controller.notePresentReason(TOOLBOX_FULL_DRAW_LAYOUT_DIRTY);
+          window.drawForFlush();
+        }
+        previous = origins[step];
+        const ToolboxPresentResult copied = controller.debugStatsForTesting().lastMovedPresentObservation;
+        this->recordArm("button-follow-immediate",
+                        observer.valid && (open ? observer.visits > 0 : observer.visits == 0),
+                        UNIT_SHOW);
+        CardCapture first(window.window()->portRect);
+        // A later Draw1Control must agree at the moved place, followed by erase.
+        controller.drawControlsInRect(window.window()->portRect);
+        this->recordArm("button-follow-next-draw", first.ready() && first.differences() == 0, UNIT_SHOW);
+        window.requestInvalidate();
+        window.flushInvalidate();
+        this->recordArm("button-follow-first-frame",
+                        first.ready() && first.differences() == 0 && copied.executed() == TOOLBOX_PRESENT_COPIED,
+                        UNIT_SHOW);
+        bool tested = false, tracking = true;
+        // HiliteControl draws unclipped: probe only buttons wholly inside the
+        // viewport, whose vertical extent is the scroll bar's.
+        short viewBottom = window.window()->portRect.bottom;
+        for (ControlHandle bar =
+                 reinterpret_cast<ControlHandle>(reinterpret_cast<WindowPeek>(window.window())->controlList);
+             bar;
+             bar = (**bar).nextControl)
+          if (GetControlMaximum(bar) != 1)
+            viewBottom = (**bar).contrlRect.bottom;
+        for (ControlHandle control =
+                 reinterpret_cast<ControlHandle>(reinterpret_cast<WindowPeek>(window.window())->controlList);
+             control;
+             control = (**control).nextControl)
+        {
+          const Rect bounds = (**control).contrlRect;
+          // Built-in push buttons have value range 0..1; skip scrollbars.
+          if (GetControlMaximum(control) != 1 || !(**control).contrlVis || bounds.top < 0 || bounds.bottom > viewBottom)
+            continue;
+          Point inside = {static_cast<short>((bounds.top + bounds.bottom) / 2),
+                          static_cast<short>((bounds.left + bounds.right) / 2)};
+          Point outside = {inside.v, static_cast<short>(bounds.right + 1)};
+          if (step == 3)
+            tracking = tracking && TestControl(control, inside) == 0;
+          else
+          {
+            tracking = tracking && TestControl(control, inside) == 10;
+            HiliteControl(control, 10); // down
+            tracking = tracking && TestControl(control, outside) == 0;
+            HiliteControl(control, 0); // drag out
+            tracking = tracking && TestControl(control, inside) == 10;
+            HiliteControl(control, 10); // drag in
+            HiliteControl(control, 0);  // up
+          }
+          tested = true;
+        }
+        this->recordArm("button-follow-native-hit", tested && tracking, UNIT_SHOW);
+      }
+    }
     void checkCopyPainters(ToolboxWindow &window)
     {
+      this->checkButtonFollow();
       this->checkCopyPainter<0>(*this->copyWindows_[0]->asToolboxWindow(), "copy-equals-repaint-Text");
       this->checkCopyPainter<1>(*this->copyWindows_[1]->asToolboxWindow(), "copy-equals-repaint-AttributedText");
       this->checkCopyPainter<2>(*this->copyWindows_[2]->asToolboxWindow(), "copy-equals-repaint-Button");

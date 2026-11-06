@@ -37,7 +37,7 @@ namespace loka
     public:
       static const ToolboxBandPaintPolicy *borrowed(const ToolboxScenePlatformController &controller)
       {
-        return controller.borrowedBandPolicy_;
+        return controller.borrowedPaintPass_ ? &controller.borrowedPaintPass_->bandPolicy : 0;
       }
     };
     class ToolboxTextContextAccess
@@ -1570,6 +1570,31 @@ namespace
     leaf.scroll(17);
     LOKA_VERIFY(leaf.last().unsupportedKinds() >= 1);
     LOKA_VERIFY(leaf.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    // An unaudited foreground painter can cover a button without a UNIT seat.
+    // Admission, not the per-button shortcut, must refuse this whole copy.
+    BoxNode *overlap = new BoxNode(Box().size(180, 600).props);
+    class OverlapButton : public PlacedButton
+    {
+    public:
+      virtual short layoutProjected(IPlatformController *platform, LayoutState &state)
+      {
+        if (!this->getContext())
+          this->setContext(new ToolboxButtonContext(this, static_cast<ToolboxScenePlatformController *>(platform)));
+        return PlacedButton::layoutProjected(platform, state);
+      }
+    };
+    overlap->addChild(new OverlapButton());
+    UnknownPresentLeaf *foreground = new UnknownPresentLeaf;
+    overlap->addChild(foreground);
+    PresentFixture covered(false, 0, overlap);
+    covered.scroll(16);
+    Rect intersection;
+    LOKA_VERIFY(!covered.controller.buttonControls_.empty());
+    LOKA_VERIFY(SectRect(&foreground->clip, &covered.controller.buttonControls_[0].placement.full(), &intersection));
+    LOKA_VERIFY(covered.controller.unitLedger_.mark() == 0);
+    LOKA_VERIFY(covered.last().refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND);
+    LOKA_VERIFY(covered.controller.debugStatsForTesting().lastMovedPresentObservation.executed()
+                == TOOLBOX_PRESENT_ERASED);
     TransparentPresentNode *component = new TransparentPresentNode();
     BoxNode *box = new BoxNode(Box().size(180, 600).props);
     box->addChild(new TextNode(TextProps("transparent content")));
@@ -1768,16 +1793,19 @@ namespace
     Action action;
     unsigned paints;
     ToolboxErasedEvidence::Kind erasedKind;
+    bool copyProof;
     CopyPaintProbe()
         : TextNode(TextProps("copy probe")),
           action(PAINT),
           paints(0),
-          erasedKind(ToolboxErasedEvidence::NONE)
+          erasedKind(ToolboxErasedEvidence::NONE),
+          copyProof(false)
     {
     }
     virtual void render(IPlatformController *controller)
     {
       ++this->paints;
+      this->copyProof = static_cast<ToolboxScenePlatformController *>(controller)->borrowedPaintPass_->copiedPlan != 0;
       this->erasedKind =
           ToolboxErasedPassInspection::kind(static_cast<ToolboxScenePlatformController *>(controller)->erasedPass());
       TextNode::render(controller);
@@ -1969,8 +1997,87 @@ namespace
         toolbox_host::staticEligible = false;
     }
   };
+  class PassFactsProbe : public TextNode
+  {
+  public:
+    const ToolboxPresentPlan *expected;
+    unsigned paints;
+    PassFactsProbe()
+        : TextNode(TextProps("facts")),
+          expected(0),
+          paints(0)
+    {
+    }
+    virtual void render(IPlatformController *controller)
+    {
+      ToolboxScenePlatformController &owner = *static_cast<ToolboxScenePlatformController *>(controller);
+      LOKA_VERIFY(owner.borrowedPaintPass_);
+      LOKA_VERIFY(owner.borrowedPaintPass_->copiedPlan == this->expected);
+      if (this->expected)
+      {
+#ifdef LOKA_LIFECYCLE_AUDIT
+        const pid_t child = fork();
+        LOKA_VERIFY(child >= 0);
+        if (!child)
+        {
+          ToolboxInputDoor::render(owner);
+          _exit(0);
+        }
+        int status = 0;
+        LOKA_VERIFY(waitpid(child, &status, 0) == child);
+        LOKA_VERIFY(WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT);
+#else
+        const ToolboxPaintPassFacts *outer = owner.borrowedPaintPass_;
+        LOKA_VERIFY(ToolboxInputDoor::render(owner) == TOOLBOX_PRESENT_ERASED);
+        LOKA_VERIFY(owner.borrowedPaintPass_ == outer && outer->copiedPlan == this->expected);
+#endif
+      }
+      ++this->paints;
+      TextNode::render(controller);
+    }
+  };
+  class FactsPresenter : public ToolboxFullDrawPresenter
+  {
+  public:
+    ToolboxScenePlatformController &owner;
+    PassFactsProbe &probe;
+    const ToolboxPresentExecuted result;
+    FactsPresenter(ToolboxScenePlatformController &c, PassFactsProbe &p, ToolboxPresentExecuted r)
+        : owner(c),
+          probe(p),
+          result(r)
+    {
+    }
+    virtual ToolboxPresentExecuted eraseBeforePaint(const ToolboxPresentPlan &plan)
+    {
+      LOKA_VERIFY(!this->owner.borrowedPaintPass_);
+      this->probe.expected = this->result == TOOLBOX_PRESENT_COPIED ? &plan : 0;
+      return this->result;
+    }
+  };
+  void passFacts()
+  {
+    PassFactsProbe *probe = new PassFactsProbe;
+    BoxNode *content = new BoxNode(Box().size(180, 600).props);
+    content->addChild(probe);
+    PresentFixture f(false, 0, content);
+    const ToolboxPresentExecuted results[] = {
+        TOOLBOX_PRESENT_COPIED, TOOLBOX_PRESENT_ERASED, TOOLBOX_PRESENT_COPY_FAILED};
+    for (unsigned i = 0; i < 3; ++i)
+    {
+      FactsPresenter presenter(f.controller, *probe, results[i]);
+      const unsigned paints = probe->paints;
+      LOKA_VERIFY(ToolboxInputDoor::render(f.controller, &presenter) == results[i]);
+      LOKA_VERIFY(!f.controller.borrowedPaintPass_);
+      LOKA_VERIFY(probe->paints == paints + (i == 2 ? 0u : 1u));
+    }
+    probe->expected = 0;
+    ToolboxInputDoor::render(f.controller); // Dirty replay has policy but no copy proof.
+    LOKA_VERIFY(!f.controller.borrowedPaintPass_);
+  }
   void bandPolicyBorrow()
   {
+    passFacts();
     PolicyPaintProbe *probe = new PolicyPaintProbe;
     BoxNode *content = new BoxNode(Box().size(180, 600).props);
     content->addChild(probe);
@@ -2043,7 +2150,8 @@ namespace
     const ToolboxBandPaintPolicy policy = ToolboxBandPaintPolicy::resolve(
         f.window.window(), f.controller.unitLedger_.firstBlurUnits(), f.controller.bandBlur_);
     {
-      ToolboxScenePlatformController::BandPolicyScope scope(f.controller, policy);
+      const ToolboxPaintPassFacts facts(policy, 0);
+      ToolboxScenePlatformController::PaintPassScope scope(f.controller, facts);
       f.controller.renderZStack(&f.stack);
     }
     LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason == TOOLBOX_PAINT_REFUSAL_CAPTURE_REFUSED);
@@ -2341,6 +2449,8 @@ namespace
                       : exposed ? TOOLBOX_PRESENT_ERASED
                                 : TOOLBOX_PRESENT_COPIED));
     }
+    if (result.executed() != TOOLBOX_PRESENT_COPY_FAILED)
+      LOKA_VERIFY(probe->copyProof == (result.executed() == TOOLBOX_PRESENT_COPIED));
     if (result.executed() == TOOLBOX_PRESENT_COPIED)
       LOKA_VERIFY(probe->erasedKind == ToolboxErasedEvidence::REGION);
     if (clip || refuse || grow)
