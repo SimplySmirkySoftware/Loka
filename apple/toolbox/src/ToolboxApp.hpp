@@ -109,7 +109,7 @@ private:
   void iterate(ToolboxIdleClock &clock, bool gotEvent, const EventRecord &fetched);
   /** Applies recorded scene changes and, while foreground, paints each window
       once at the run-loop tick's presentation boundary. */
-  void present(ActivationPhase phase, loka::core::Operation &turn);
+  void present(ActivationPhase phase, App::CompletionEntry entry, loka::core::Operation &turn);
   /** The run loop owns this; every step branches on it rather than taking
       per-step booleans (see ToolboxActivationPhase.hpp). */
   ActivationPhase activationPhase_;

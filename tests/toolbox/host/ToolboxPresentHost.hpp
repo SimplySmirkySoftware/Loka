@@ -7,13 +7,13 @@ class ToolboxApp : public WindowAdmissionTestApp
 public:
   struct Cursor { void reconcile() {} } cursorOwner_;
   bool running_;
-  explicit ToolboxApp(Window &window, Window *second = 0)
-      : WindowAdmissionTestApp(window, second),
+  explicit ToolboxApp(Window &window, Window *second = 0, AppConfigurable *config = 0)
+      : WindowAdmissionTestApp(window, second, config),
         running_(true)
   {
   }
   bool syncNativeFocusAll(NativeFocusMode);
-  void present(ActivationPhase, loka::core::Operation &turn);
+  void present(ActivationPhase, App::CompletionEntry, loka::core::Operation &turn);
 };
 #include "ToolboxNativeFocusAll.cpp"
 #include "ToolboxPresent.cpp"

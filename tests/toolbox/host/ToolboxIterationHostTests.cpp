@@ -1,3 +1,4 @@
+#include <cstring>
 #include "ToolboxIterationHost.hpp"
 #include <cstdio>
 #include <cstdlib>
@@ -23,7 +24,7 @@ static void expect(ToolboxApp &app, ToolboxIdleClock &clock, EventRecord event, 
   }
   std::printf("%s\n", actual.c_str());
 }
-int main()
+int main(int argc, char **argv)
 {
   ToolboxWindow window;
   AppComponentGroup group;
@@ -33,6 +34,21 @@ int main()
   iteration_host::front = iteration_host::target = window.window();
   ToolboxIdleClock clock(0);
   EventRecord event = {nullEvent, 0, 0, {0, 0}, 0};
+  if (argc == 2)
+  {
+    if (std::strcmp(argv[1], "outermost") == 0)
+    {
+      app.iterate(clock, false, event);
+      LOKA_VERIFY(app.receivedEntry == App::COMPLETION_OUTERMOST);
+    }
+    else
+    {
+      iteration_fixture::loka::core::Operation outer;
+      app.iterate(clock, false, event);
+      LOKA_VERIFY(app.receivedEntry == App::COMPLETION_INHERITED_CLOCK);
+    }
+    return 0;
+  }
 #define HEAD "operation,idle-foreground,hover,"
 #define TAIL "tick,consume-idle,app-idle,present,cursor-idle,oom,end-operation"
   expect(app, clock, event, HEAD "tick,consume-idle,app-idle,present,cursor-idle,diagnostic-tail,oom,end-operation");

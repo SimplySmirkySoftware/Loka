@@ -472,6 +472,35 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaUpstreamGaugePins PRIVATE LokaCommonTesting)
   add_test(NAME LokaUpstreamGaugePins COMMAND LokaUpstreamGaugePins)
 
+  set(_toolbox_null_host_sources
+    tests/platform/null/NullPlatformContext.cpp
+    tests/platform/null/NullScenePlatformController.cpp
+    tests/platform/null/context/NullButtonContext.cpp
+    tests/platform/null/context/NullEditTextContext.cpp
+    tests/platform/null/context/NullTextEditorContext.cpp
+    tests/platform/null/context/NullScrollBarContext.cpp
+    tests/platform/null/context/NullTextMetrics.cpp
+    tests/platform/null/context/NullAttributedTextContext.cpp
+    tests/platform/null/context/NullTextContext.cpp
+    tests/platform/null/context/NullRectSurfaceContext.cpp)
+
+  add_executable(LokaToolboxOpenURLTests tests/toolbox/host/ToolboxOpenURLHostTests.cpp
+    apple/toolbox/src/ToolboxOpenURL.cpp)
+  target_include_directories(LokaToolboxOpenURLTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_link_libraries(LokaToolboxOpenURLTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxOpenURLTests)
+  set_target_properties(LokaToolboxOpenURLTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  foreach(pin outcomes dispatch words)
+    add_test(NAME testToolboxOpenURL_${pin} COMMAND LokaToolboxOpenURLTests ${pin})
+  endforeach()
+  foreach(pin outermost inherited)
+    add_test(NAME testToolboxIterationEntry_${pin} COMMAND LokaToolboxIterationTests ${pin})
+  endforeach()
+  add_test(NAME testToolboxPresentURL_quit-focus COMMAND LokaToolboxFocusTests url-quit-focus)
+  foreach(pin dialog delivery quit background quit-delivery)
+    add_test(NAME testToolboxPresentURL_${pin} COMMAND LokaToolboxFileChoiceTests url-${pin})
+  endforeach()
+
   add_executable(LokaToolboxIterationTests tests/toolbox/host/ToolboxIterationHostTests.cpp apple/toolbox/src/ToolboxUnicodeStartup.cpp)
   target_include_directories(LokaToolboxIterationTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_options(LokaToolboxIterationTests PRIVATE -fno-exceptions -fno-rtti)
@@ -499,16 +528,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/ToolboxUnicodeEditorLedger.cpp)
   target_sources(LokaToolboxUnicodeLedgerTests PRIVATE
     tests/toolbox/host/ToolboxUnicodeTeardownHostTests.cpp
-    tests/platform/null/NullPlatformContext.cpp
-    tests/platform/null/NullScenePlatformController.cpp
-    tests/platform/null/context/NullButtonContext.cpp
-    tests/platform/null/context/NullEditTextContext.cpp
-    tests/platform/null/context/NullTextEditorContext.cpp
-    tests/platform/null/context/NullScrollBarContext.cpp
-    tests/platform/null/context/NullTextMetrics.cpp
-    tests/platform/null/context/NullAttributedTextContext.cpp
-    tests/platform/null/context/NullTextContext.cpp
-    tests/platform/null/context/NullRectSurfaceContext.cpp)
+    ${_toolbox_null_host_sources})
   target_include_directories(LokaToolboxUnicodeLedgerTests PRIVATE
     tests/toolbox/host/unicode tests/toolbox/host/startup tests/toolbox/host
     tests/toolbox/host/oom apple/toolbox/src tests)
@@ -554,6 +574,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   list(FILTER LOKA_TOOLBOX_FILE_COMMON_SOURCES EXCLUDE REGEX "/platform/GenericString\\.cpp$")
   add_executable(LokaToolboxFileChoiceTests
     tests/toolbox/host/ToolboxFileChoiceHostTests.cpp
+    ${_toolbox_null_host_sources}
     apple/toolbox/src/ToolboxUnicodeStartup.cpp
     tests/toolbox/host/ToolboxFileHost.cpp
     apple/toolbox/src/ToolboxFileChoice.cpp
@@ -900,6 +921,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/ToolboxNativeImage.cpp
     apple/toolbox/src/PictParser.cpp
     tests/toolbox/ToolboxButtonFollowHooks.cpp
+    apple/toolbox/src/ToolboxOpenURL.cpp
+    tests/toolbox/host/ToolboxInternetConfigUnavailable.cpp
     apple/toolbox/src/ToolboxPlatformContext.cpp
     apple/toolbox/src/ToolboxBusy.cpp)
   target_include_directories(LokaToolboxNativeImageTests PRIVATE tests/toolbox/host/image tests/toolbox/host tests apple/toolbox/src)
@@ -950,6 +973,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endforeach()
 
   add_executable(LokaToolboxFocusTests tests/toolbox/host/ToolboxFocusHostTests.cpp ${_editor_host_sources})
+  target_sources(LokaToolboxFocusTests PRIVATE
+    ${_toolbox_null_host_sources})
   target_include_directories(LokaToolboxFocusTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
   target_compile_options(LokaToolboxFocusTests PRIVATE -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
   target_link_libraries(LokaToolboxFocusTests PRIVATE LokaCommonTesting)

@@ -583,8 +583,10 @@ Win32 overrides it through `Win32OpenWebURL` and `ShellExecuteExW`, with
 Shell extensions. Other COM initialization failures decline without executing.
 Native TRUE/FALSE maps to URL_OPENED/URL_NOT_OPENED; acceptance does not mean
 the browser finished or came to the front. COM uninitialization remains inside
-the protected launch interval, since it can pump too. Toolbox retains the default
-pending its rail PR.
+the protected launch interval, since it can pump too. Toolbox overrides it with a
+call-local Internet Config session and a watch cursor: absent Component Manager
+or launcher maps to URL_UNAVAILABLE, session or launch failure to URL_NOT_OPENED,
+and IC acceptance to URL_OPENED. Stop and close return acquired resources in reverse order.
 The receive direction below runs before opening.
 The Null test entry `AppTestAccess::completeTurn` captures the clock, opens a
 turn, settles, admits, reconciles focus, serves, admits again if served, closes,
@@ -647,9 +649,10 @@ composition bootstrap; the PENDING wall runs only on a contract violation.
 |---|---|
 | `App::receiveURL`, macOS | `LokaQuitEventRouter::handleGetURLEvent:withReplyEvent:` handles `kInternetEventClass` / `kAEGetURL`, offering one direct-object text through `MacURLTextFromDescriptor` (UTF-8, then `typeChar`, explicit byte length). No Operation or arm runs at ingress. A missing owner, failed coercion, or any result except `RECEIVE_QUEUED` writes `errAEEventNotHandled` to the reply. Delivery waits for an eligible outermost timer completion. |
 | `App::receiveURL`, Win32 | `Win32App::collectLaunchRequests`, once per bootstrap: `Win32OfferLaunchURLs` splits `GetCommandLineW()` with `CommandLineToArgvW`, offers every parsed element after element zero in order, and releases the split with `LocalFree`. Refused elements (other schemes, file paths, non-ASCII, a full inbox, no seat) are dropped silently; a failed split offers nothing. There is no running-process entry: with a `shell\open\command` registration, Windows starts a new process for each URL. The launch batch delivers before launch admission. |
+| `App::serveURLsAtCompletion` (receive, then open), Toolbox | `iterate` captures the entry before its turn. Foreground `present` with a group serves after focus reconciliation, only while still running and if no dialog was presented. Only a served pass adds an admission to deliver before close and reclaim. |
 | `App::serveURLsAtCompletion` (receive, then open), Win32 | `Win32App::run` captures inherited clock status immediately before each iteration's turn; `flushIterationTail` serves after focus reconciliation. The existing second admission delivers before close and reclaim. A dispatched-input quit exits the drain without serving; an idle quit can serve in that iteration. |
 | `App::serveURLsAtCompletion` (receive, then open), macOS | `MacApp::flushInvalidationsTick`: capture the inherited clock before opening the turn; serve after relayout and focus reconciliation; if served, admit again before closing the turn. Only a Loka-clock-outermost timer takes; clockless native loops are eligible. Stopping the timer in quit does not truncate the current tick. |
-| `App::serveURLsAtCompletion`, other rails | Toolbox call site pending; Null tests use `AppTestAccess::completeTurn`. |
+| `App::serveURLsAtCompletion`, other rails | Null tests use `AppTestAccess::completeTurn`. |
 
 The macOS pins call the tick directly. Native default/tracking loop blocks are
 loop proxies, not timer-scheduling or deferred-dialog `runModal` tests; sheets

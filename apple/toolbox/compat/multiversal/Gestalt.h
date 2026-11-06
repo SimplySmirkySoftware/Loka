@@ -7,7 +7,8 @@
 // value but not the family selector; match the Universal Interfaces name.
 enum
 {
-  gestaltNativeCPUfamily = 'cpuf'
+  gestaltNativeCPUfamily = 'cpuf',
+  gestaltComponentMgr = 'cpnt'
 };
 
 // Multiversal names only gestalt68881 among the gestaltFPUType answers;

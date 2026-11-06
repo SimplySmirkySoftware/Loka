@@ -103,8 +103,8 @@ public:
   CursorOwner cursorOwner_;
   CursorOwner &cursorOwner() { return this->cursorOwner_; }
   bool running_;
-  ToolboxApp(Window &first, Window *second = 0)
-      : WindowAdmissionTestApp(first, second),
+  ToolboxApp(Window &first, Window *second = 0, AppConfigurable *config = 0)
+      : WindowAdmissionTestApp(first, second, config),
         running_(true)
   {
   }
@@ -112,7 +112,7 @@ public:
   {
     return false;
   }
-  void present(ActivationPhase, loka::core::Operation &);
+  void present(ActivationPhase, App::CompletionEntry, loka::core::Operation &);
   void addComponent(AppComponent *component) { this->group_->adopt(component); }
   void noGroupTick()
   {
@@ -122,7 +122,12 @@ public:
     this->group_ = saved;
   }
   void tick(ActivationPhase phase = ACTIVATION_FOREGROUND)
-  { loka::core::Operation turn; this->present(phase, turn); }
+  {
+    const App::CompletionEntry entry =
+        loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
+    loka::core::Operation turn;
+    this->present(phase, entry, turn);
+  }
 };
 
 #endif

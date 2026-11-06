@@ -38,6 +38,9 @@ namespace loka
 } // namespace loka
 #include "ToolboxActivationPhase.hpp"
 #include "ToolboxPresentHost.hpp"
+#include "app/core/AppComposition.hpp"
+#include "app/url/URLOpener.hpp"
+#include "platform/null/NullPlatformContext.hpp"
 namespace
 {
   class Root : public BoundaryNodeFor<Root>
@@ -80,6 +83,18 @@ namespace
   private:
     ToolboxWindow *native_;
   };
+  struct FocusURLConfig : AppConfigurable
+  {
+    URLOpener<2> opener;
+    explicit FocusURLConfig(PlatformContext &platform)
+        : AppConfigurable(&platform)
+    {
+    }
+    virtual void compose(AppComposition &c)
+    {
+      c << OpenURLs(this->opener);
+    }
+  };
   struct Fixture : HeadlessStateOwner
   {
     loka::app::Focus<FieldKey> focus;
@@ -90,10 +105,10 @@ namespace
     FocusWindow window;
     ToolboxApp app;
     EditTextNode first, second;
-    Fixture()
+    explicit Fixture(AppConfigurable *config = 0)
         : controller(&nativeWindow),
           window(&platform, controller),
-          app(window),
+          app(window, 0, config),
           first(EditTextProps()),
           second(EditTextProps())
     {
@@ -157,8 +172,10 @@ namespace
       LOKA_VERIFY(controller.readNativeFocus(out));
       LOKA_VERIFY(out == (node ? node->getContext() : 0));
       {
+        const App::CompletionEntry entry =
+            loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
         loka::core::Operation turn;
-        app.present(ACTIVATION_FOREGROUND, turn);
+        app.present(ACTIVATION_FOREGROUND, entry, turn);
         LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
       }
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -264,8 +281,10 @@ namespace
     fresh.tab(TAB_FORWARD, fresh.first);
     fresh.focus.post(SECOND);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      fresh.app.present(ACTIVATION_FOREGROUND, turn);
+      fresh.app.present(ACTIVATION_FOREGROUND, entry, turn);
     }
     fresh.expect(&fresh.second); // No publication yet: the post wins.
   }
@@ -346,8 +365,10 @@ namespace
     SetPort(&ambient);
     f.focus.post(SECOND);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -410,8 +431,10 @@ namespace
     const ListRevision revision = lines.revision().get();
     f.focus.post(SECOND);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -466,6 +489,32 @@ namespace
     LifecycleFactTestAccess::MarkSubtreeRetired(&f.second);
     LOKA_VERIFY(!f.controller.applyNativeFocus(*f.context(f.second)));
   }
+  void quitFromFocus(void *data)
+  {
+    static_cast<ToolboxApp *>(data)->running_ = false;
+  }
+  void urlQuitAtFocus()
+  {
+    NullPlatformContext platform;
+    FocusURLConfig config(platform);
+    Fixture f(&config);
+    f.native(f.first);
+    f.hit(f.second, 80);
+    f.click();
+    f.expect(&f.first);
+    WebURL url;
+    LOKA_VERIFY(WebURL::parse(String::Literal("https://example.com/"), url));
+    LOKA_VERIFY(config.opener.post(url) == POST_ACCEPTED);
+    f.focus.state()->bind(&quitFromFocus, &f.app, false);
+    f.focus.post(SECOND);
+    const App::CompletionEntry entry =
+        Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
+    Operation turn;
+    f.app.present(ACTIVATION_FOREGROUND, entry, turn);
+    f.focus.state()->unbind(&quitFromFocus, &f.app);
+    LOKA_VERIFY(!f.app.running_);
+    LOKA_VERIFY(config.opener.pending() == 1 && platform.openedURLs().empty());
+  }
   void postedFallback()
   {
     Fixture f;
@@ -477,8 +526,10 @@ namespace
     TEHandle native = f.controller.editControls_[0].te;
     f.focus.post(SECOND);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -490,8 +541,10 @@ namespace
     LOKA_VERIFY(f.replacement.get().equals(String::Literal("bx")));
     f.focus.post(FIRST);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -514,8 +567,10 @@ namespace
     f.hit(f.second, 80);
     f.focus.post(SECOND);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -525,8 +580,10 @@ namespace
     SetRect(&f.controller.projectionClip, 0, 0, 200, 200);
     f.native(f.second, 80);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -548,16 +605,20 @@ namespace
     f.nativeWindow.onFlush = &renderClick;
     f.nativeWindow.flushData = &f;
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_BACKGROUND, turn);
+      f.app.present(ACTIVATION_BACKGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     LOKA_VERIFY(!loka::core::Operation::isSettling());
     LOKA_VERIFY(f.focus.state()->get().is(FIRST));
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      f.app.present(ACTIVATION_FOREGROUND, turn);
+      f.app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -990,6 +1051,12 @@ namespace
 } // namespace
 int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "url-quit-focus"))
+  {
+    urlQuitAtFocus();
+    return 0;
+  }
+
   if (argc == 2)
   {
     if (edit_door::run(argv[1]))

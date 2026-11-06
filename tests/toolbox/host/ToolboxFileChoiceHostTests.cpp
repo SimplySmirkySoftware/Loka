@@ -47,6 +47,10 @@ void StandardPutFile(const unsigned char *prompt, const unsigned char *name, Sta
 // are linked from the same production translation unit as Classic builds.
 ToolboxPlatformContext::ToolboxPlatformContext() {}
 ToolboxPlatformContext::~ToolboxPlatformContext() {}
+loka::app::URLOpenKind ToolboxPlatformContext::openURL(const loka::app::WebURL &)
+{
+  return loka::app::URL_UNAVAILABLE;
+}
 App *ToolboxPlatformContext::createApp(AppConfigurable *, NativeModuleHandle, int) const { return 0; }
 Window *ToolboxPlatformContext::createWindow(const WindowProps &) { return 0; }
 loka::app::scene::NodeContext *ToolboxPlatformContext::createNodeContext(loka::app::scene::Node *) const { return 0; }
@@ -716,6 +720,7 @@ static void Busy()
   LOKA_VERIFY(RegisteredToolboxBusyOwner() == 0);
 }
 #include "ToolboxDialogPresentHostTests.hpp"
+#include "ToolboxPresentURLHostTests.hpp"
 
 int main(int argc, char **argv)
 {
@@ -724,8 +729,11 @@ int main(int argc, char **argv)
   LOKA_VERIFY(capacityRail.queryTextEditorCapacity(maximum));
   LOKA_VERIFY(maximum.lines == 256 && maximum.bytes == 8192);
   LOKA_VERIFY(argc == 2);
-  if (!std::strncmp(argv[1], "confirm-", 8) || !std::strcmp(argv[1], "mixed-fifo-order")
-      || !std::strcmp(argv[1], "close-during-pending-revokes-both-payloads")) ConfirmPinTest(argv[1]);
+  if (!std::strncmp(argv[1], "url-", 4))
+    PresentURLPin(argv[1] + 4);
+  else if (!std::strncmp(argv[1], "confirm-", 8) || !std::strcmp(argv[1], "mixed-fifo-order")
+           || !std::strcmp(argv[1], "close-during-pending-revokes-both-payloads"))
+    ConfirmPinTest(argv[1]);
   else if (!std::strncmp(argv[1], "present-", 8)) PresentPin(argv[1] + 8);
   else if (!std::strcmp(argv[1], "tuple")) Tuple();
   else if (!std::strcmp(argv[1], "single")) Single();

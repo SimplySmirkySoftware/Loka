@@ -934,3 +934,9 @@ loka_add_toolbox_test_application(LokaMeasureLaptopBand${LOKA_CLASSIC_TARGET_SUF
   src/ToolbarRowMeasurementMain.cpp ${CMAKE_SOURCE_DIR}/tests/TestingHooks.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/TutorialSize.r)
 target_compile_definitions(LokaMeasureLaptopBand${LOKA_CLASSIC_TARGET_SUFFIX} PRIVATE TEST_BUILD LOKA_DIAG=1 TOOLBAR_ROWS_LAPTOP=1)
+
+# Standalone IC probe: no scenario cell or golden identity is introduced.
+loka_add_toolbox_test_application(LokaToolboxOpenURLProbe LokaAppleToolboxCore
+  src/ToolboxOpenURLProbe.cpp ${CMAKE_CURRENT_SOURCE_DIR}/ScenarioLoopSize.r)
+set_property(TARGET LokaToolboxOpenURLProbe PROPERTY EXCLUDE_FROM_ALL TRUE)
+set_property(TARGET LokaToolboxOpenURLProbe_APPL PROPERTY EXCLUDE_FROM_ALL TRUE)

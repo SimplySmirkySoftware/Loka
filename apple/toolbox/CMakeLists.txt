@@ -64,6 +64,8 @@ set(LOKA_TOOLBOX_SOURCES
   src/ToolboxWindow.cpp
   src/ToolboxWindowContext.cpp
   src/ToolboxFileChoice.cpp
+  src/ToolboxOpenURL.cpp
+  src/ToolboxInternetConfigNative.cpp
   src/ToolboxPlatformContext.cpp
   src/ToolboxBusy.cpp
   src/platform/ToolboxAppLocation.cpp

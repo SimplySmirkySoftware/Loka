@@ -144,15 +144,22 @@ namespace iteration_fixture
   {
     namespace core
     {
+      static unsigned operationDepth = 0;
       class Operation
       {
       public:
+        static bool hasActive()
+        {
+          return operationDepth != 0;
+        }
         Operation()
         {
+          ++operationDepth;
           note("operation");
         }
         ~Operation()
         {
+          --operationDepth;
           note("end-operation");
         }
       };
@@ -305,6 +312,14 @@ namespace iteration_fixture
     }
     return 0;
   }
+  struct App
+  {
+    enum CompletionEntry
+    {
+      COMPLETION_OUTERMOST,
+      COMPLETION_INHERITED_CLOCK
+    };
+  };
   class ToolboxApp
   {
   public:
@@ -319,13 +334,15 @@ namespace iteration_fixture
         note("cursor-idle");
       }
     } cursorOwner_;
+    App::CompletionEntry receivedEntry;
     AppComponentGroup *group_;
     Window *active_;
     ActivationPhase activationPhase_;
     bool menuBarDrawDeferred_;
     ToolboxTwoByteKey twoByteKey_;
     explicit ToolboxApp(AppComponentGroup &g)
-        : group_(&g),
+        : receivedEntry(App::COMPLETION_OUTERMOST),
+          group_(&g),
           active_(0),
           activationPhase_(ACTIVATION_FOREGROUND),
           menuBarDrawDeferred_(false)
@@ -376,8 +393,9 @@ namespace iteration_fixture
     {
       note("app-idle");
     }
-    void present(ActivationPhase, loka::core::Operation &)
+    void present(ActivationPhase, App::CompletionEntry entry, loka::core::Operation &)
     {
+      this->receivedEntry = entry;
       note("present");
     }
     void iterate(ToolboxIdleClock &, bool, const EventRecord &);

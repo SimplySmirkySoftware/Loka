@@ -397,8 +397,10 @@ namespace
       LOKA_VERIFY(!controller.borrowPhase().open());
       facts.unbind();
       {
+        const App::CompletionEntry entry =
+            loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
         loka::core::Operation turn;
-        app.present(ACTIVATION_FOREGROUND, turn);
+        app.present(ACTIVATION_FOREGROUND, entry, turn);
         LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
       }
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -523,6 +525,8 @@ namespace
     }
     if (clocked)
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       Operation turn;
       const unsigned admissions = logical.admissions;
       controller.publishFixturePressOrder();
@@ -531,7 +535,7 @@ namespace
       // move from before present to present's settle. The no-clock twin stays.
       LOKA_VERIFY(owner->value.get() == 3 && owner->doubled.get() == 0);
       LOKA_VERIFY(owner->tracker()->phase() == TRACKER_PRECOMMIT);
-      app.present(ACTIVATION_FOREGROUND, turn);
+      app.present(ACTIVATION_FOREGROUND, entry, turn);
       LOKA_VERIFY(logical.admissions == admissions + 1);
       LOKA_VERIFY(!Operation::hasActive());
     }
@@ -575,10 +579,12 @@ namespace
     ledger.addState(&value);
     PresentSettleProbe probe = { fixture.window.scene(), 0 };
     ledger.setInvalidateCallback(&PresentSettleProbe::invalidate, &probe);
+    const App::CompletionEntry entry =
+        loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
     Operation turn;
     LOKA_VERIFY(turn.open(&ledger) == OPEN_OK);
     value.set(1);
-    fixture.app.present(phase, turn);
+    fixture.app.present(phase, entry, turn);
     LOKA_VERIFY(probe.calls == 1);
     LOKA_VERIFY(!probe.scene->hasPendingInvalidation());
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -678,8 +684,10 @@ namespace
       LOKA_VERIFY(!fixture.controller.borrowPhase().open());
       fixture.facts.unbind();
       {
+        const App::CompletionEntry entry =
+            loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
         loka::core::Operation turn;
-        fixture.app.present(ACTIVATION_FOREGROUND, turn);
+        fixture.app.present(ACTIVATION_FOREGROUND, entry, turn);
         LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
       }
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
@@ -705,8 +713,10 @@ namespace
     LOKA_VERIFY(!controller.borrowPhase().open());
     facts.unbind();
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      app.present(phase, turn);
+      app.present(phase, entry, turn);
       LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());
     }
     LOKA_VERIFY(!loka::core::testing::OperationTestAccess::active());

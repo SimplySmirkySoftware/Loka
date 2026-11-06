@@ -48,6 +48,8 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
 {
   const EventRecord original = fetched;
   EventRecord record = fetched;
+  const App::CompletionEntry entry =
+      loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
   loka::core::Operation turn;
   // Consume the OS foreground fact before idle work or hover can write the
   // shared cursor on the iteration that delivers a suspend event.
@@ -330,7 +332,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
   {
     this->handleIdle(dispatchElapsedSeconds);
   }
-  this->present(activationPhase_, turn);
+  this->present(activationPhase_, entry, turn);
   this->cursorOwner_.assertIdle();
   if (original.what == nullEvent && group_)
   {

@@ -1,3 +1,4 @@
+#include "ToolboxOpenURL.hpp"
 #include "ToolboxBusy.hpp"
 #include "ToolboxPlatformContext.hpp"
 #include "ToolboxDeviceDepth.hpp"
@@ -135,4 +136,10 @@ bool ToolboxPlatformContext::createImageFromBlob(const loka::core::resource::Blo
   out = loka::toolbox::MakeImageFromPictBlob(
       source, picture.pictureOffset, limit, picture.width, picture.height);
   return out.isValid();
+}
+
+loka::app::URLOpenKind ToolboxPlatformContext::openURL(const loka::app::WebURL &url)
+{
+  const BusyScope busy(RegisteredToolboxBusyOwner());
+  return ToolboxOpenWebURL(url, ToolboxInternetConfigNativeCalls());
 }

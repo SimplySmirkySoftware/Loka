@@ -366,8 +366,10 @@ static void PresentPin(const char *name)
       modalApp = &pair;
       closeOnDelivery = secondWindow;
       first.storage.bind(&CloseWindowOnDelivery, 0, false);
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      pair.present(ACTIVATION_FOREGROUND, turn);
+      pair.present(ACTIVATION_FOREGROUND, entry, turn);
       first.storage.unbind(&CloseWindowOnDelivery, 0);
       LOKA_VERIFY(getCalls == 1 && putCalls == 0);
     }
@@ -376,8 +378,10 @@ static void PresentPin(const char *name)
       // A delivery that quits stops the pass; the later row stays enrolled.
       modalApp = &pair;
       first.storage.bind(&QuitOnDelivery, 0, false);
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       loka::core::Operation turn;
-      pair.present(ACTIVATION_FOREGROUND, turn);
+      pair.present(ACTIVATION_FOREGROUND, entry, turn);
       first.storage.unbind(&QuitOnDelivery, 0);
       LOKA_VERIFY(getCalls == 1 && putCalls == 0 && second.emits == 0);
       LOKA_VERIFY(!Access::empty(secondWindow->controller.pendingDialogs()));

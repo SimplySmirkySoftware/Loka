@@ -2116,6 +2116,8 @@ URLs for the app's scheme, file paths included, are ignored.
   Windows receives command-line URLs at launch; the Classic Mac OS entry
   remains separate work.
 
+On Classic Mac OS, opening a URL requires Internet Config; without it the outcome is `URL_UNAVAILABLE`.
+
 ## 18. Ownership And Resource Management
 
 Loka should make ordinary application code feel like it has modern lifecycle
