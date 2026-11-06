@@ -362,16 +362,25 @@ short ToolboxTextContext::visibleWidth()
 {
   if (!this->reconcileProjection() || !this->node_ || !this->controller())
     return 0;
-  const ToolboxTextFontDescriptor descriptor(this->node_->props.resolvedTextStyle());
-  ToolboxTextMeasureScope measure(*this->controller(), descriptor);
-  if (!measure.valid())
+  Constraint constraint;
+  short width;
+  // Layout commits this width together with maxWidth_; a text change clears the
+  // measurement, so redrawTextHit still reaches the measuring path below.
+  if (this->measurement_.queryConstraint(constraint))
+    width = this->measurement_.extent().measuredWidth;
+  else
   {
-    this->clearMeasurement();
-    return 0;
+    const ToolboxTextFontDescriptor descriptor(this->node_->props.resolvedTextStyle());
+    ToolboxTextMeasureScope measure(*this->controller(), descriptor);
+    if (!measure.valid())
+    {
+      this->clearMeasurement();
+      return 0;
+    }
+    Str255 text;
+    PlainDisplay(this->projection_, this->maxWidth_, this->truncationMode_, text);
+    width = StringWidth(text);
   }
-  Str255 text;
-  PlainDisplay(this->projection_, this->maxWidth_, this->truncationMode_, text);
-  short width = StringWidth(text);
   const short maxWidth = static_cast<short>(rect_.right - rect_.left);
   if (maxWidth > 0 && width > maxWidth)
     width = maxWidth;
