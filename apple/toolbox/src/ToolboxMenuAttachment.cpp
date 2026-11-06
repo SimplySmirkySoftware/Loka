@@ -593,7 +593,7 @@ void ToolboxApp::handleMenuSelection(short menuId, short item)
 {
   if (!menuId || !item)
     return;
-  // Twin: MacMenuAttachment handleMenuAction:.
+  // Twin: MacMenuAttachment handleMenuAction: and Win32Window::WndProc WM_COMMAND.
   this->commitTextInput();
   if (!this->menuAttachment_.dispatch(menuId, item) && menuId == 128)
   {

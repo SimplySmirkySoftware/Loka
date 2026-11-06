@@ -612,7 +612,7 @@ bool MacWindow::hasPendingScenePlatformSync() const
 
 bool MacWindow::handleWindowShouldClose()
 {
-  // Twin: ToolboxApp go-away path in ToolboxIteration.cpp.
+  // Twin: ToolboxApp go-away in ToolboxIteration.cpp and Win32Window::WndProc WM_CLOSE.
   if (this->app_)
     this->app_->commitTextInput();
   // Same request/terminal split as NullWindow::simulateCloseAsked.

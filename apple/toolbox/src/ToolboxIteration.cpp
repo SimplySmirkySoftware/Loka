@@ -129,7 +129,7 @@ void ToolboxApp::iterate(ToolboxIdleClock &clock, bool gotEvent, const EventReco
     {
       if (TrackGoAway(target, record.where))
       {
-        // Twin: MacWindow::handleWindowShouldClose.
+        // Twin: MacWindow::handleWindowShouldClose and Win32Window::WndProc WM_CLOSE.
         this->commitTextInput();
         ToolboxWindow *closing = 0;
         if (group_)

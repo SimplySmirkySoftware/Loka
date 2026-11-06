@@ -32,6 +32,17 @@ namespace
   static const UINT kWindowDpiChangedMessage = 0x02E0;
   static const UINT kMouseHorizontalWheelMessage = 0x020E;
 
+  // Refresh text facts before a command (rally page 1d §2.3); ignore the answer.
+  // Turn close runs observers, so the window can be gone after the door.
+  // Twin: Toolbox/Mac menu and close callers below. Only Win32 re-checks
+  // liveness: its menu attachment is a window member, and WM_CLOSE reads self.
+  bool CommitTextInputBefore(HWND hwnd, Win32Window *self)
+  {
+    if (self->win32App())
+      self->win32App()->commitTextInput();
+    return Win32Window::FromHwnd(hwnd) == self;
+  }
+
   /** One policy for window geometry and scene admission, including bootstrap
       before an HWND exists. Native chrome and font queries stay DPI-only. */
   loka::win32::Win32DisplayScale WindowProjection(HWND hwnd)
@@ -396,6 +407,9 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       }
       break;
     case WM_COMMAND:
+      // Twin: ToolboxApp::handleMenuSelection and MacMenuAttachment handleMenuAction:.
+      if (lParam == 0 && !CommitTextInputBefore(hwnd, self))
+        return 0;
       if (self->handleCommand(wParam, lParam))
       {
         return 0;
@@ -476,6 +490,9 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       break;
     }
     case WM_QUERYENDSESSION:
+      // Twin: MacApp termination callers; the commit answer never decides session exit.
+      if (!(lParam & ENDSESSION_CRITICAL) && self->app_ && !CommitTextInputBefore(hwnd, self))
+        return DefWindowProcW(hwnd, msg, wParam, lParam);
       // Answer from the fact now; the Quit waits for App admission (any pump can deliver this).
       if ((lParam & ENDSESSION_CRITICAL) || !self->app_ || !self->app_->hasEditedDocuments())
         return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -486,6 +503,9 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
       }
       return FALSE;
     case WM_CLOSE:
+      // Twin: ToolboxApp go-away (ToolboxIteration.cpp), MacWindow::handleWindowShouldClose.
+      if (!CommitTextInputBefore(hwnd, self))
+        return 0;
       // Same request/terminal split as NullWindow::simulateCloseAsked.
       if (self->app_ && self->app_->closeAsked(static_cast<Window *>(self)))
         return 0;
