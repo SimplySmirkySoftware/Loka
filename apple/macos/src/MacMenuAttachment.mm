@@ -27,7 +27,7 @@
   {
     loka::core::Operation turn;
     NSInteger tag = [sender tag];
-    // Twin: ToolboxApp::handleMenuSelection.
+    // Twin: ToolboxApp::handleMenuSelection and Win32Window::WndProc WM_COMMAND.
     self.owner->commitTextInput();
     self.owner->dispatchNativeMenuCommand(static_cast<int>(tag), (void *)sender);
     turn.close();

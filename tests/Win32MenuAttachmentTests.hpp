@@ -34,4 +34,9 @@ void testWin32EditMenuTargetWalls();
 void testWin32EditMenuSelectAllInput();
 void testWin32EditMenuPasteShortcut();
 void testWin32EditMenuSelectAllReentry();
+void testWin32MenuCommandCommitsBeforeDispatch();
+void testWin32MenuAcceleratorCommitsBeforeDispatch();
+void testWin32ControlNotificationDoesNotCommitTextInput();
+void testWin32MenuCommitDestroyedWindowSkipsCommand();
+void testWin32MenuCommitDetachedIdentitySkipsCommand();
 #endif
