@@ -1,5 +1,5 @@
 #include "ScriptRuntime.hpp"
-#include "JsOwnProperties.hpp"
+#include "JsTreeFacts.hpp"
 #include "CardNodes.hpp"
 #include "CardFlowDescription.hpp"
 #include "app/PlatformContext.hpp"
@@ -41,6 +41,7 @@ namespace smirkycard
     JS_SetContextOpaque(this->context(), &runtime);
     JS_SetRuntimeOpaque(this->jsRuntime(), this);
     if (!registry.install(this->context()) || !JsFlowDescription::install(this->context())
+        || !CardFlow::Admission::installHandles(this->jsRuntime())
 #ifdef TEST_BUILD
         || (runtime.runnerEnabled() && !runtime.installRunner(*this))
 #endif
@@ -323,84 +324,88 @@ namespace smirkycard
     return JS_UNDEFINED;
   }
 
-  JSValue ScriptRuntime::testId(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *argv)
+  namespace
   {
+    JSValue treePolicy(JSContext *ctx, JSValueConst receiver, int argc, JsTreeKind kind, int policy)
+    {
+      JsTreeView view(ctx, receiver);
+      if (!view.valid())
+        return JS_ThrowTypeError(ctx, "Invalid tree receiver");
+      const char *name = kind == TREE_ROW ? "Row" : kind == TREE_VSTACK ? "VStack" : "ZStack";
+      const char *method = kind == TREE_ROW                                   ? "naturalWidth"
+                           : kind == TREE_VSTACK                              ? "naturalHeight"
+                           : policy == loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR ? "expBlurUnit"
+                                                                              : "expStaticBlurUnit";
+      if (view.schema()->kind != kind)
+        return JS_ThrowTypeError(ctx, "%s() applies to %s", method, name);
+      if (argc)
+        return JS_ThrowTypeError(ctx, "Tree policy takes no arguments");
+      bool same = false;
+      if (kind == TREE_ROW)
+        same = view.facts(RowFacts::schema)->rowWidth == loka::app::ROW_UNDECLARED_WIDTH_NATURAL;
+      else if (kind == TREE_VSTACK)
+        same = view.facts(VStackFacts::schema)->columnHeight == loka::app::COLUMN_UNDECLARED_HEIGHT_NATURAL;
+      else
+        same = view.facts(ZStackFacts::schema)->unitGround == static_cast<loka::app::ZStackUnitGround>(policy);
+      if (same)
+        return JS_DupValue(ctx, view.value());
+      JsTreeStaging staging(view);
+      if (staging.valid())
+      {
+        if (kind == TREE_ROW)
+          staging.facts(RowFacts::schema)->rowWidth = loka::app::ROW_UNDECLARED_WIDTH_NATURAL;
+        else if (kind == TREE_VSTACK)
+          staging.facts(VStackFacts::schema)->columnHeight = loka::app::COLUMN_UNDECLARED_HEIGHT_NATURAL;
+        else
+          staging.facts(ZStackFacts::schema)->unitGround = static_cast<loka::app::ZStackUnitGround>(policy);
+      }
+      return staging.publish();
+    }
+  } // namespace
+  JSValue ScriptRuntime::testId(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *argv)
+  {
+    JsTreeView view(ctx, receiver);
+    if (!view.valid())
+      return JS_ThrowTypeError(ctx, "Invalid tree receiver");
+    if (!view.schema()->writeId)
+      return JS_ThrowTypeError(ctx, "TEST_ID does not apply to spaces");
     if (argc != 1 || !JS_IsString(argv[0]))
       return JS_ThrowTypeError(ctx, "TEST_ID(id) requires a string");
-    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, argv[0]);
-    if (JS_IsException(copy))
-      return copy;
-    if (JS_FreezeObject(ctx, copy) < 0)
-    {
-      JS_FreeValue(ctx, copy);
+    loka::core::String id;
+    if (!ReadJsTreeString(ctx, argv[0], id))
       return JS_EXCEPTION;
-    }
-    return copy;
+    JsTreeStaging staging(view);
+    staging.testId(id);
+    return staging.publish();
   }
-  JSValue ScriptRuntime::withTreePolicy(JSContext *ctx,
-                                        JSValueConst thisValue,
-                                        int argc,
-                                        const char *nodeName,
-                                        const char *method,
-                                        const char *property,
-                                        const char *replacedProperty)
+  JSValue ScriptRuntime::enabled(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *argv)
   {
-    ScriptRuntime *runtime = static_cast<ScriptRuntime *>(JS_GetContextOpaque(ctx));
-    JSValue kind = JS_GetPropertyStr(ctx, thisValue, "kind");
-    int32_t number = 0;
-    const int converted = JS_ToInt32(ctx, &number, kind);
-    JS_FreeValue(ctx, kind);
-    if (converted < 0)
-      return JS_EXCEPTION;
-    IJsNodeLowering *lowering = runtime ? runtime->registry_.lookup(number) : 0;
-    if (!lowering || std::strcmp(lowering->name, nodeName))
-      return JS_ThrowTypeError(ctx, "%s() applies to %s", method, nodeName);
-    if (argc != 0)
-      return JS_ThrowTypeError(ctx, "%s() takes no arguments", method);
-    // Only the tree's own claim counts, as in lowering: an inherited one would
-    // return the unclaimed tree.
-    if (ownTreePolicy(ctx, thisValue, property))
-      return JS_DupValue(ctx, thisValue);
-    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, JS_UNDEFINED);
-    if (JS_IsException(copy))
-      return copy;
-    if ((replacedProperty && JS_SetPropertyStr(ctx, copy, replacedProperty, JS_NewInt32(ctx, 0)) < 0)
-        || JS_SetPropertyStr(ctx, copy, property, JS_NewInt32(ctx, 1)) < 0 || JS_FreezeObject(ctx, copy) < 0)
-    {
-      JS_FreeValue(ctx, copy);
-      return JS_EXCEPTION;
-    }
-    return copy;
+    JsTreeView view(ctx, receiver);
+    if (!view.valid())
+      return JS_ThrowTypeError(ctx, "Invalid tree receiver");
+    if (view.schema() != &ButtonFacts::schema && view.schema() != &ItemButtonFacts::schema)
+      return JS_ThrowTypeError(ctx, "enabled applies to Button or ToolbarItem");
+    if (argc != 1 || (!JS_IsUndefined(argv[0]) && !JS_IsObject(argv[0])))
+      return JS_ThrowTypeError(ctx, "enabled(seat) requires a state seat object");
+    JsTreeStaging staging(view);
+    staging.edge(EDGE_ENABLED, JS_DupValue(ctx, argv[0]));
+    return staging.publish();
   }
-  JSValue ScriptRuntime::naturalWidth(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  JSValue ScriptRuntime::naturalWidth(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "Row", "naturalWidth", "rowWidth");
+    return treePolicy(ctx, receiver, argc, TREE_ROW, 0);
   }
-  JSValue ScriptRuntime::naturalHeight(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  JSValue ScriptRuntime::naturalHeight(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "VStack", "naturalHeight", "columnHeight");
+    return treePolicy(ctx, receiver, argc, TREE_VSTACK, 0);
   }
-  JSValue ScriptRuntime::expBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  JSValue ScriptRuntime::expBlurUnit(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expBlurUnit", "blurUnit", "staticBlurUnit");
+    return treePolicy(ctx, receiver, argc, TREE_ZSTACK, loka::app::ZSTACK_UNIT_GROUND_EXP_BLUR);
   }
-  JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *)
+  JSValue ScriptRuntime::expStaticBlurUnit(JSContext *ctx, JSValueConst receiver, int argc, JSValueConst *)
   {
-    return withTreePolicy(ctx, thisValue, argc, "ZStack", "expStaticBlurUnit", "staticBlurUnit", "blurUnit");
-  }
-  JSValue ScriptRuntime::enabled(JSContext *ctx, JSValueConst thisValue, int argc, JSValueConst *argv)
-  {
-    if (argc != 1)
-      return JS_ThrowTypeError(ctx, "enabled(seat) requires one seat");
-    JSValue copy = JsCardBindingRegistry::copyTree(ctx, thisValue, JS_UNDEFINED);
-    if (JS_IsException(copy))
-      return copy;
-    if (JS_SetPropertyStr(ctx, copy, "enabledSeat", JS_DupValue(ctx, argv[0])) < 0 || JS_FreezeObject(ctx, copy) < 0)
-    {
-      JS_FreeValue(ctx, copy);
-      return JS_EXCEPTION;
-    }
-    return copy;
+    return treePolicy(ctx, receiver, argc, TREE_ZSTACK, loka::app::ZSTACK_UNIT_GROUND_EXP_STATIC_BLUR);
   }
 
   bool ScriptRuntime::loadBuiltin(const char *source, loka::core::String &error)
@@ -656,9 +661,9 @@ namespace smirkycard
                                    const char *companion,
                                    const char *bakedCompanion)
   {
-    if (!sink || !clock || !companion || !*companion || (bakedCompanion && !*bakedCompanion)
-        || this->runner_ || !this->currentEngine_
-        || this->currentEngine_->cardCount_ || this->currentEngine_->hasConstructor(SMIRKY_CARD_FIRST)
+    if (!sink || !clock || !companion || !*companion || (bakedCompanion && !*bakedCompanion) || this->runner_
+        || !this->currentEngine_ || this->currentEngine_->cardCount_
+        || this->currentEngine_->hasConstructor(SMIRKY_CARD_FIRST)
         || this->currentEngine_->hasConstructor(SMIRKY_CARD_SECOND))
       return false;
     this->runner_ = new (std::nothrow) Runner(sink, clock, seed, companion, bakedCompanion);
