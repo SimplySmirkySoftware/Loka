@@ -81,10 +81,14 @@ namespace
       context.render(&controller);
   }
 }
+#include "ToolboxLeafPreflightPins.hpp"
+
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *mode = argv[1];
+  if (std::strcmp(mode, "text") == 0)
+    leafPreflightPins();
   const std::string id(mode, std::strcspn(mode, "-"));
   ToolboxWindow window;
   HostPortScope port(window.window());

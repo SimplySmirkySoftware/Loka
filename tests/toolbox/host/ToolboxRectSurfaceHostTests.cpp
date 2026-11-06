@@ -9,11 +9,23 @@
 
 namespace
 {
-  Rect clip = {SHRT_MIN, SHRT_MIN, SHRT_MAX, SHRT_MAX};
+  GrafPort paintPort;
+  Rect &clip = paintPort.native.clip;
   std::vector<Rect> paints;
   std::vector<Rect> unions;
   unsigned refuseRegions = 0;
 }
+namespace toolbox_host
+{
+  short regionError = 0;
+  int regions = 0;
+} // namespace toolbox_host
+void GetPort(GrafPtr *out)
+{
+  paintPort.clipRgn = &paintPort.native.clipRegionPointer;
+  *out = &paintPort;
+}
+
 // Rectangular QuickDraw subset: these pins union only one visible sprite, so
 // a bounding rectangle is an exact region. Record inputs before native clipping.
 void SetRect(Rect *r, short l, short t, short right, short b)
@@ -30,6 +42,7 @@ bool SectRect(const Rect *a, const Rect *b, Rect *out)
 }
 RgnHandle NewRgn()
 {
+  ++toolbox_host::regions;
   if (refuseRegions)
   {
     --refuseRegions;
@@ -216,9 +229,60 @@ namespace
     }
   }
 }
+void surfacePreflightPins()
+{
+  using namespace loka::app;
+  using namespace loka::app::scene;
+  ToolboxScenePlatformController controller;
+  RectSurfaceModel sprites;
+  sprites.rectCount = 1;
+  sprites.rects[0] = RectSprite(3, 4, 5, 6);
+  loka::core::MutableState<RectSurfaceModel> model(sprites);
+  RectSurfaceNode node(RectSurfaceProps().model(&model));
+  ToolboxRectSurfaceContext context(&node, &controller);
+  LayoutState state;
+  state.x = state.y = 20;
+  state.width = state.height = 100;
+  context.layout(&controller, state);
+  const Rect original = clip, broad = {0, 0, 300, 300}, miss = {200, 200, 210, 210};
+  clip = broad;
+  context.render(&controller);
+  Rect prior;
+  const bool dirty = context.dirtyRect(prior);
+  for (int hit = 0; hit < 2; ++hit)
+  {
+    clip = hit ? broad : miss;
+    controller.paintObservation.reset();
+    const int before = toolbox_host::regions;
+    context.render(&controller);
+    LOKA_VERIFY(toolbox_host::regions - before == (hit ? 2 : 0));
+    LOKA_VERIFY(EqualRect(&clip, hit ? &broad : &miss));
+    LOKA_VERIFY(controller.paintObservation.outsideRefusal().reason != TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    Rect after;
+    LOKA_VERIFY(context.dirtyRect(after) == dirty);
+    if (dirty)
+      LOKA_VERIFY(EqualRect(&prior, &after));
+  }
+  // Removing the current sprite exposes the retained painted position alone.
+  RectSurfaceModel empty;
+  model.set(empty);
+  clip = miss;
+  context.render(&controller);
+  Rect history;
+  LOKA_VERIFY(context.dirtyRect(history));
+  checkRect(history, 23, 24, 28, 30);
+  clip = broad;
+  context.render(&controller);
+  LOKA_VERIFY(context.dirtyRect(history));
+  checkRect(history, 20, 20, 120, 120);
+  clip = original;
+  std::puts("clip preflight RectSurface pair/history passed");
+}
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
+  if (std::strcmp(argv[1], "normal") == 0)
+    surfacePreflightPins();
   if (std::strncmp(argv[1], "paint-", 6) == 0)
     paintRefusalPin(argv[1]);
   else if (std::strncmp(argv[1], "sprite-", 7) == 0 || std::strncmp(argv[1], "dirty-", 6) == 0

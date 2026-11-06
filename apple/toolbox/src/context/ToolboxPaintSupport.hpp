@@ -2,6 +2,7 @@
 #define LOKA_TOOLBOX_PAINT_SUPPORT_HPP
 
 #include <Quickdraw.h>
+#include "ToolboxRegionCheck.hpp"
 #include "app/scene/projection/PaintFact.hpp"
 #include "app/scene/Node.hpp"
 
@@ -42,6 +43,32 @@ class ToolboxPaintClip
 {
 public:
   enum Operation { INTERSECT, REPLACE };
+  /** True proves that a successful INTERSECT clip would miss this rectangle;
+      false means continue the existing path, including unknown. The caller
+      passes the current port immediately before INTERSECT construction, with
+      no intervening port or clip change. Creates, installs and retains no
+      region, switches no port, ignores visRgn, records no refusal, and is not
+      a coverage certificate. */
+  static bool intersectionIsEmpty(GrafPtr paintPort, const Rect &paintRect)
+  {
+    if (EmptyRect(&paintRect))
+      return true;
+    if (!paintPort)
+      return false;
+    RgnHandle clip = paintPort->clipRgn;
+    if (!ToolboxRegionOK(clip))
+      return false;
+    const bool touches = RectInRgn(&paintRect, clip) != 0;
+    return ToolboxRegionOK(clip) && !touches;
+  }
+  /** Query the current port at a paint-only INTERSECT construction site. */
+  static bool currentClipMisses(const Rect &paintRect)
+  {
+    GrafPtr paintPort;
+    GetPort(&paintPort);
+    return intersectionIsEmpty(paintPort, paintRect);
+  }
+
   explicit ToolboxPaintClip(const Rect &rect, Operation operation = INTERSECT)
       : saved_(NewRgn()), clip_(NewRgn())
   {

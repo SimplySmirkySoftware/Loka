@@ -593,8 +593,42 @@ void CardPins()
     }
   }
 }
+void DecorativePreflightPins()
+{
+  ToolboxWindow window;
+  HostPortScope port(window.window());
+  ToolboxScenePlatformController controller(&window);
+  CardBandNode band((CardBandProps()));
+  RibbonGroupEdgeNode edge((RibbonGroupEdgeProps(RIBBON_GROUP_EDGE_LEFT)));
+  ToolboxCardBandContext bandContext(&band, &controller);
+  ToolboxRibbonGroupEdgeContext edgeContext(&edge, &controller);
+  ToolboxProjectedNodeContext *contexts[] = {&bandContext, &edgeContext};
+  const Rect broad = {0, 0, 300, 300}, miss = {200, 200, 210, 210};
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    LayoutState seat = Seat(10, 20, 34);
+    seat.height = 24;
+    contexts[i]->layout(&controller, seat);
+    const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+    const PaintAnswer history = contexts[i]->queryPaintDamage(query);
+    for (int hit = 0; hit < 2; ++hit)
+    {
+      ClipRect(hit ? &broad : &miss);
+      controller.observation_.reset();
+      const int before = toolbox_host::regions;
+      contexts[i]->render(&controller);
+      LOKA_VERIFY(toolbox_host::regions - before == (hit ? 2 : 0));
+      LOKA_VERIFY(EqualRect(&window.port.native.clip, hit ? &broad : &miss));
+      LOKA_VERIFY(controller.observation_.outsideRefusal().reason != TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+      const PaintAnswer after = contexts[i]->queryPaintDamage(query);
+      LOKA_VERIFY(after.kind == history.kind && after.damage.width == history.damage.width);
+    }
+  }
+  std::puts("clip preflight CardBand/RibbonGroupEdge pairs passed");
+}
 int main()
 {
+  DecorativePreflightPins();
   ToolboxSceneDebugStats stats;
   ToolboxPaintAnswerSource source(stats);
   CardNode card((CardProps()));

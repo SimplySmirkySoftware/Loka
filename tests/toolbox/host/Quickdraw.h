@@ -69,6 +69,8 @@ namespace toolbox_host
     std::vector<Rect> pieces;
   };
   extern short regionError;
+  extern short rectQueryError;
+  extern bool conservativeRectQuery;
   extern std::vector<std::string> regionOperations;
   extern std::vector<RegionGeometry> scrollClips, exposedRegions, erasedClips;
   bool regionIntersects(const RegionGeometry &, const Rect &);

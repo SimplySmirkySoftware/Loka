@@ -90,6 +90,8 @@ namespace
 namespace toolbox_host
 {
   short regionError = 0;
+  short rectQueryError = 0;
+  bool conservativeRectQuery = false;
   std::vector<std::string> regionOperations;
   std::vector<RegionGeometry> scrollClips, exposedRegions, erasedClips;
   namespace
@@ -428,6 +430,14 @@ void SetClip(RgnHandle r)
 }
 bool RectInRgn(const Rect *r, RgnHandle region)
 {
+  // Model a query failure and QuickDraw's permitted bbox-only positive.
+  if (toolbox_host::rectQueryError)
+    toolbox_host::regionError = toolbox_host::rectQueryError;
+  if (toolbox_host::conservativeRectQuery)
+  {
+    Rect overlap;
+    return SectRect(r, &(**region).rgnBBox, &overlap);
+  }
   return !intersect(Rects(1, *r), regionRects(**region)).empty();
 }
 void BackColor(long color)

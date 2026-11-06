@@ -393,6 +393,8 @@ void ToolboxTextContext::paint(bool erase)
   }
   const ToolboxTextFontDescriptor descriptor(this->node_->props.resolvedTextStyle());
   ToolboxTextMeasureScope measure(*this->controller(), descriptor);
+  if (ToolboxPaintClip::currentClipMisses(this->paintRect_))
+    return;
   ToolboxPaintClip clip(this->paintRect_);
   if (!clip.isActive())
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);

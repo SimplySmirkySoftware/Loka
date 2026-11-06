@@ -805,6 +805,8 @@ void ToolboxUnicodeTextEditorContext::repaintNative()
     this->controller()->unicodeEditors_.draw(this->unicode_);
     return;
   }
+  if (ToolboxPaintClip::currentClipMisses(this->paintRect_))
+    return;
   ToolboxPaintClip clip(this->paintRect_);
   if (!clip.isActive())
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);

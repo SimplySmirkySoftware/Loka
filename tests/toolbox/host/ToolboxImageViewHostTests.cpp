@@ -238,10 +238,45 @@ namespace
 } // namespace
 #endif
 
+void imagePreflightPins()
+{
+  ToolboxWindow window;
+  HostPortScope port(window.window());
+  ToolboxScenePlatformController controller(&window);
+  MutableState<Image> image(picture(false));
+  ImageViewProps props;
+  props.image(&image).size(20, 20);
+  ImageViewNode node(props);
+  ToolboxImageViewContext context(&node, &controller);
+  LayoutState state = seat();
+  context.layout(&controller, state);
+  const Rect broad = {0, 0, 300, 300}, miss = {200, 200, 210, 210};
+  ClipRect(&broad);
+  context.render(&controller);
+  const PaintQuery query = {ToolboxPaintScope(), PLACEMENT_ELIGIBLE};
+  const PaintAnswer history = context.queryPaintDamage(query);
+  for (int hit = 0; hit < 2; ++hit)
+  {
+    ClipRect(hit ? &broad : &miss);
+    controller.observation_.reset();
+    const int before = toolbox_host::regions;
+    const std::size_t draws = pictureClips.size();
+    context.render(&controller);
+    LOKA_VERIFY(toolbox_host::regions - before == (hit ? 2 : 0));
+    LOKA_VERIFY(pictureClips.size() - draws == static_cast<unsigned>(hit));
+    LOKA_VERIFY(EqualRect(&window.port.native.clip, hit ? &broad : &miss));
+    LOKA_VERIFY(controller.observation_.outsideRefusal().reason != TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+    const PaintAnswer after = context.queryPaintDamage(query);
+    LOKA_VERIFY(after.kind == history.kind && after.damage.width == history.damage.width);
+  }
+  std::puts("clip preflight ImageView pair/history passed");
+}
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const std::string mode(argv[1]);
+  if (mode == "ambient")
+    imagePreflightPins();
 #ifdef LOKA_HOST_GAP_DISPATCH
   if (mode == "clip-placement" || mode.find("admission-") == 0)
   {
