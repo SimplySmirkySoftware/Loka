@@ -1,3 +1,5 @@
+#include "testing/app/TextInputCommitTestHooks.hpp"
+#include "core/Operation.hpp"
 #include "Win32TextEditorAccess.hpp"
 #include "support/TextEditorAccess.hpp"
 #include "context/Win32EditTextBridge.hpp"
@@ -590,6 +592,103 @@ namespace
       return consumed;
     }
   };
+}
+
+namespace
+{
+  void observeBeforeMenuCommand(void *data)
+  {
+    LOKA_VERIFY(*static_cast<int *>(data) == 0);
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+  }
+
+  void verifyMenuCommandAfterCommit(void *)
+  {
+    LOKA_VERIFY(loka::testing::textInputCommitCount() == 1);
+  }
+
+  void detachWindowIdentityDuringCommit(void *data)
+  {
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+    // Keep the command table intact so skipping the liveness guard is visible.
+    LOKA_VERIFY(SetWindowLongPtrW(*static_cast<HWND *>(data), GWLP_USERDATA, 0) != 0);
+  }
+
+  void destroyWindowDuringCommit(void *data)
+  {
+    LOKA_VERIFY(loka::core::Operation::hasActive());
+    LOKA_VERIFY(DestroyWindow(*static_cast<HWND *>(data)));
+  }
+} // namespace
+
+void testWin32MenuCommandCommitsBeforeDispatch()
+{
+  ShortcutFixture f;
+  f.project('s');
+  f.emitter.bind(&verifyMenuCommandAfterCommit, 0, false);
+  loka::testing::observeTextInputCommits(&observeBeforeMenuCommand, &f.calls);
+  SendMessageW(f.window.hwnd(), WM_COMMAND, MAKEWPARAM(firstCommand(f.window), 0), 0);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1 && f.calls == 1);
+  loka::testing::observeTextInputCommits(0, 0);
+  f.emitter.unbind(&verifyMenuCommandAfterCommit, 0);
+}
+
+void testWin32MenuAcceleratorCommitsBeforeDispatch()
+{
+  ShortcutFixture f;
+  f.project('s');
+  ControlKey control;
+  f.emitter.bind(&verifyMenuCommandAfterCommit, 0, false);
+  loka::testing::observeTextInputCommits(&observeBeforeMenuCommand, &f.calls);
+  LOKA_VERIFY(f.translate('S'));
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1 && f.calls == 1);
+  loka::testing::observeTextInputCommits(0, 0);
+  f.emitter.unbind(&verifyMenuCommandAfterCommit, 0);
+}
+
+void testWin32ControlNotificationDoesNotCommitTextInput()
+{
+  ShortcutFixture f;
+  f.project('s');
+  const UINT id = firstCommand(f.window);
+  HWND child = CreateWindowExW(
+      0, L"BUTTON", L"Child", WS_CHILD, 0, 0, 20, 20, f.window.hwnd(), NULL, GetModuleHandleW(NULL), NULL);
+  LOKA_VERIFY(child);
+  loka::testing::observeTextInputCommits(0, 0);
+  SendMessageW(f.window.hwnd(), WM_COMMAND, MAKEWPARAM(id, BN_CLICKED), reinterpret_cast<LPARAM>(child));
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 0 && f.calls == 0);
+  loka::testing::observeTextInputCommits(0, 0);
+  LOKA_VERIFY(DestroyWindow(child));
+}
+
+void testWin32MenuCommitDestroyedWindowSkipsCommand()
+{
+  ShortcutFixture f;
+  f.project('s');
+  HWND hwnd = f.window.hwnd();
+  const UINT id = firstCommand(f.window);
+  loka::testing::observeTextInputCommits(&destroyWindowDuringCommit, &hwnd);
+  SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1 && f.calls == 0);
+  LOKA_VERIFY(!IsWindow(hwnd) && f.window.hwnd() == NULL);
+  loka::testing::observeTextInputCommits(0, 0);
+  // ShortcutFixture owns the wrapper on the stack; its hide admission and
+  // Win32Window destructor both tolerate the HWND already being gone.
+}
+
+void testWin32MenuCommitDetachedIdentitySkipsCommand()
+{
+  ShortcutFixture f;
+  f.project('s');
+  HWND hwnd = f.window.hwnd();
+  const UINT id = firstCommand(f.window);
+  loka::testing::observeTextInputCommits(&detachWindowIdentityDuringCommit, &hwnd);
+  SendMessageW(hwnd, WM_COMMAND, MAKEWPARAM(id, 0), 0);
+  // Restore the native association before any fixture cleanup uses the HWND.
+  SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&f.window));
+  LOKA_VERIFY(Win32Window::FromHwnd(hwnd) == &f.window);
+  LOKA_VERIFY(loka::testing::textInputCommitCount() == 1 && f.calls == 0);
+  loka::testing::observeTextInputCommits(0, 0);
 }
 
 void testWin32MenuAcceleratorTranslatesDeclaredShortcut()
