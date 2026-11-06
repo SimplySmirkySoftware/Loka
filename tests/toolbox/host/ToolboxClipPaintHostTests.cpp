@@ -680,6 +680,23 @@ namespace
     }
     f.controller.releaseNodeContexts(&row);
   }
+  void clippedTextHitWidth()
+  {
+    Fixture f;
+    TextNode text(Text("abcdefgh").props);
+    ToolboxTextContext context(&text, &f.controller);
+    LayoutState seat = f.seat();
+    context.layout(&f.controller, seat);
+    const Rect outside = {250, 250, 260, 260};
+    ClipRect(&outside);
+    toolbox_host::draws.clear();
+    const int widths = toolbox_host::widths;
+    context.draw(&f.controller);
+    LOKA_VERIFY(toolbox_host::draws.empty());
+    LOKA_VERIFY(f.controller.textHits().size() == 1);
+    LOKA_VERIFY(f.controller.textHits()[0].lastMeasuredWidth == 32);
+    LOKA_VERIFY(toolbox_host::widths == widths);
+  }
   void hits()
   {
     Fixture f;
@@ -739,7 +756,10 @@ int main(int argc, char **argv)
   else if (!std::strcmp(mode, "ribbon"))
     ribbon();
   else if (!std::strcmp(mode, "hits"))
+  {
     hits();
+    clippedTextHitWidth();
+  }
   else
     fallback(mode);
   std::printf("Toolbox clip paint %s passed\n", mode);
