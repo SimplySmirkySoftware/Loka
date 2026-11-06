@@ -836,8 +836,39 @@ static void editorLedgerRefusal()
   LOKA_VERIFY(lokaAllocRawLive() == 0);
   allowLokaAllocRaw();
 }
+void editorPreflightPins()
+{
+  Fixture f;
+  HostPortScope port(f.window.window());
+  const Rect broad = {0, 0, 300, 300}, miss = {250, 250, 260, 260};
+  for (int hit = 0; hit < 2; ++hit)
+  {
+    ClipRect(hit ? &broad : &miss);
+    f.controller.observation_.reset();
+    const int before = toolbox_host::regions, updates = toolbox_host::updates;
+    ToolboxTextEditorAccess::repaint(*f.context, f.te());
+    LOKA_VERIFY(toolbox_host::regions - before == (hit ? 2 : 0));
+    LOKA_VERIFY(toolbox_host::updates - updates == hit);
+    LOKA_VERIFY(EqualRect(&f.window.port.native.clip, hit ? &broad : &miss));
+    LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason != TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+  }
+  ClipRect(&miss);
+  const TEHandle te = f.te();
+  f.controller.editControls_[0].usedThisFrame = false;
+  f.controller.pressLedger_.begin();
+  f.context->render(&f.controller);
+  LOKA_VERIFY(f.te() == te && f.controller.editControls_.size() == 1);
+  LOKA_VERIFY(f.controller.editControls_[0].usedThisFrame);
+  f.controller.pressLedger_.commit();
+  const Rect visible = f.controller.editControls_[0].placement.visible();
+  const Point point = {static_cast<short>(visible.top + 1), static_cast<short>(visible.left + 1)};
+  LOKA_VERIFY(f.controller.isPointInEdit(point));
+  std::puts("clip preflight TextEditor pair and outer ensure/reach passed");
+}
 int main(int argc, char **argv)
 {
+  if (argc == 2 && std::strcmp(argv[1], "clip-omission") == 0)
+    editorPreflightPins();
   if (argc == 2 && (std::strcmp(argv[1], "clip-omission") == 0 || std::strcmp(argv[1], "clip-visible-refused") == 0))
   {
     const bool offscreen = std::strcmp(argv[1], "clip-omission") == 0;
@@ -904,17 +935,17 @@ int main(int argc, char **argv)
       toolbox_host::failRegions = 2;
       ToolboxTextEditorAccess::repaint(*f.context, f.te());
       toolbox_host::failRegions = 0;
-      site = "ToolboxTextEditorContext.cpp:975";
+      site = "ToolboxTextEditorContext.cpp:977";
     }
     else if (mode == "debt-unavailable")
     {
       ToolboxTextEditorAccess::repaint(*f.context, 0);
-      site = "ToolboxTextEditorContext.cpp:998";
+      site = "ToolboxTextEditorContext.cpp:1000";
     }
     else if (mode == "debt-node")
     {
       ToolboxTextEditorAccess::renderMissingNode(*f.context, &f.controller);
-      site = "ToolboxTextEditorContext.cpp:1012";
+      site = "ToolboxTextEditorContext.cpp:1014";
     }
     else if (mode == "debt-context-change")
     {
@@ -923,7 +954,7 @@ int main(int argc, char **argv)
       ToolboxTextEditorAccess::forgetTE(*f.context);
       f.context->render(&f.controller);
       f.request.state()->unbind(&retireContext, &f);
-      site = "ToolboxTextEditorContext.cpp:1054";
+      site = "ToolboxTextEditorContext.cpp:1056";
     }
     else if (mode == "debt-bar-hide")
     {

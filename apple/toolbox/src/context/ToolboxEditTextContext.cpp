@@ -117,6 +117,8 @@ void ToolboxEditTextContext::updateRect(const Rect &outerRect, const Rect &textR
 void ToolboxEditTextContext::repaint(const ToolboxEditPresentation &presentation)
 {
   TEHandle te = presentation.te;
+  if (ToolboxPaintClip::currentClipMisses(this->paintRect_))
+    return;
   ToolboxPaintClip clip(this->paintRect_);
   if (!clip.isActive())
     LOKA_PAINT_REFUSE(ToolboxPaintRefusals(this->controller()), TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);

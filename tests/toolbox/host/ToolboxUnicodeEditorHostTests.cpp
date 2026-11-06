@@ -1642,9 +1642,37 @@ static void testUnicodeEditorServiceKeyCompletion()
   f.cursor.state()->unbind(emitted, &writes);
 }
 
+void unicodePreflightPins()
+{
+  TextensionFake::reset();
+  Fixture f;
+  const Rect broad = {0, 0, 300, 300}, miss = {250, 250, 260, 260};
+  // Before native creation, exercise the fallback clip alone.
+  for (int hit = 0; hit < 2; ++hit)
+  {
+    ClipRect(hit ? &broad : &miss);
+    f.controller.observation_.reset();
+    const int before = toolbox_host::regions;
+    f.context->repaintNative();
+    LOKA_VERIFY(toolbox_host::regions - before == (hit ? 2 : 0));
+    LOKA_VERIFY(EqualRect(&f.window.port.native.clip, hit ? &broad : &miss));
+    LOKA_VERIFY(f.controller.observation_.outsideRefusal().reason != TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+  }
+  f.render();
+  ClipRect(&miss);
+  const std::size_t draws = TextensionFake::draws().size();
+  const int before = toolbox_host::regions;
+  f.context->repaintNative();
+  LOKA_VERIFY(TextensionFake::draws().size() == draws + 1);
+  LOKA_VERIFY(toolbox_host::regions == before);
+  LOKA_VERIFY(EqualRect(&f.window.port.native.clip, &miss));
+  std::puts("clip preflight Unicode fallback pair/native precedence passed");
+}
 int main(int argc, char **argv)
 {
   const char *which = argc > 1 ? argv[1] : "all";
+  if (!std::strcmp(which, "all") || !std::strcmp(which, "testUnicodeEditorNewObjectProjection"))
+    unicodePreflightPins();
 #define RUN(name)                                                                                                      \
   if (!std::strcmp(which, "all") || !std::strcmp(which, #name))                                                        \
   name()

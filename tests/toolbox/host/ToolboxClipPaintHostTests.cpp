@@ -718,11 +718,136 @@ namespace
     equal(f.controller.textHits()[0].rect, expected);
   }
 } // namespace
+void outerPreflightPins()
+{
+  const Rect miss = {250, 250, 260, 260};
+  const Point point = {35, 25};
+  EventRecord event = {};
+  {
+    Fixture f;
+    ButtonNode node(Button("button").props);
+    node.setContext(new ToolboxButtonContext(&node, &f.controller));
+    NotifySubtreeNodeAttached(&node);
+    LayoutState seat = f.seat();
+    node.getContext()->layout(&f.controller, seat);
+    node.getContext()->render(&f.controller);
+    LOKA_VERIFY(f.controller.buttonControls_.size() == 1);
+    ControlRef control = f.controller.buttonControls_[0].control;
+    f.controller.buttonControls_[0].usedThisFrame = false;
+    f.controller.pressLedger_.begin();
+    ClipRect(&miss);
+    node.getContext()->render(&f.controller);
+    LOKA_VERIFY(f.controller.buttonControls_.size() == 1);
+    LOKA_VERIFY(f.controller.buttonControls_[0].control == control);
+    LOKA_VERIFY(f.controller.buttonControls_[0].usedThisFrame);
+    f.controller.pressLedger_.commit();
+    const Point buttonPoint = {static_cast<short>(control->rect.top + 2), static_cast<short>(control->rect.left + 2)};
+    const unsigned tracks = toolbox_host::tracks;
+    ToolboxInputDoor::mouseDown(f.controller, buttonPoint, event);
+    LOKA_VERIFY(toolbox_host::tracks == tracks + 1);
+    f.controller.clearControls();
+  }
+  {
+    Fixture f;
+    MutableState<int> selected(0);
+    NodeState<int> selection(&selected, 0);
+    const char *items[] = {"one", "two"};
+    PopupMenuNode node(PopupMenuProps().items(items, 2).selectedIndex(selection));
+    node.setContext(new ToolboxPopupMenuContext(&node, &f.controller));
+    NotifySubtreeNodeAttached(&node);
+    LayoutState seat = f.seat();
+    seat.lineHeight = 16;
+    node.getContext()->layout(&f.controller, seat);
+    f.controller.pressLedger_.begin();
+    ClipRect(&miss);
+    node.getContext()->render(&f.controller);
+    f.controller.pressLedger_.commit();
+    toolbox_host::popupItem = 2;
+    ToolboxInputDoor::mouseDown(f.controller, point, event);
+    LOKA_VERIFY(selected.get() == 1);
+  }
+  {
+    Fixture f;
+    MutableState<String> value(String("edit"));
+    NodeState<String> text(&value, 0);
+    EditTextNode node(EditText(text).props);
+    node.setContext(new ToolboxEditTextContext(&node, &f.controller));
+    NotifySubtreeNodeAttached(&node);
+    LayoutState seat = f.seat();
+    seat.lineHeight = 16;
+    node.getContext()->layout(&f.controller, seat);
+    node.getContext()->render(&f.controller);
+    LOKA_VERIFY(f.controller.editControls_.size() == 1);
+    const TEHandle te = f.controller.editControls_[0].te;
+    f.controller.editControls_[0].usedThisFrame = false;
+    f.controller.pressLedger_.begin();
+    ClipRect(&miss);
+    node.getContext()->render(&f.controller);
+    LOKA_VERIFY(f.controller.editControls_.size() == 1);
+    LOKA_VERIFY(f.controller.editControls_[0].te == te);
+    LOKA_VERIFY(f.controller.editControls_[0].usedThisFrame);
+    f.controller.pressLedger_.commit();
+    LOKA_VERIFY(f.controller.isPointInEdit(point));
+    // Native refusal takes the excluded fallback draw; its hit still follows
+    // a pixel miss, independently of the native reach asserted above.
+    f.controller.retireEditTextControl(node.getContext(), NATIVE_HINT_EAGER_RELEASE);
+    f.controller.flushTE();
+    f.controller.pressLedger_.begin();
+    toolbox_host::failNew = 1;
+    node.getContext()->render(&f.controller);
+    LOKA_VERIFY(toolbox_host::failNew == 0);
+    LOKA_VERIFY(f.controller.editControls_.size() == 0);
+    f.controller.pressLedger_.commit();
+    LOKA_VERIFY(f.controller.isPointInEdit(point));
+  }
+  std::puts("clip preflight Button/Popup/Edit outer ensure/reach/hit passed");
+}
+void siblingPreflightPin()
+{
+  Fixture f;
+  StackNode row(Row().naturalWidth().props);
+  CellNode *first = new CellNode(Cell("miss").props);
+  first->setContext(new ToolboxCellContext(first, &f.controller));
+  row.addChild(first);
+  Node *second = new TextNode(Text("visible").props);
+  second->setContext(new ToolboxTextContext(second->asTextNode(), &f.controller));
+  row.addChild(second);
+  LayoutState offer = f.seat();
+  offer.inputs = NODE_DIRTY_LAYOUT;
+  first->getContext()->layout(&f.controller, offer);
+  offer.x = 120;
+  offer.y = 30;
+  second->getContext()->layout(&f.controller, offer);
+  // Derive the visible sibling rectangle from its completed layout.
+  const Rect visible =
+      loka::testing::ToolboxTextContextAccess::rect(*static_cast<ToolboxTextContext *>(second->getContext()));
+  ClipRect(&visible);
+  f.controller.observation_.reset();
+  toolbox_host::failRegions = 1;
+  const int before = toolbox_host::regions;
+  RenderNode(&row, &f.controller);
+  LOKA_VERIFY(toolbox_host::regions - before == 2);
+  LOKA_VERIFY(toolbox_host::failRegions == 0);
+  const ToolboxPaintRefusalRecord refusal = f.controller.observation_.outsideRefusal();
+  LOKA_VERIFY(refusal.reason == TOOLBOX_PAINT_REFUSAL_CLIP_ALLOCATION);
+  LOKA_VERIFY(refusal.site && std::strstr(refusal.site, "ToolboxTextContext.cpp"));
+  LOKA_VERIFY(EqualRect(&f.window.port.native.clip, &visible));
+  f.controller.releaseNodeContexts(&row);
+  std::puts("clip preflight missed Cell then visible Text refusal passed");
+}
+#include "ToolboxClipPreflightPins.hpp"
+
 int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   toolbox_host::reset();
   const char *mode = argv[1];
+  if (!std::strcmp(mode, "region"))
+  {
+    clipPreflightHelperPins();
+    siblingPreflightPin();
+    outerPreflightPins();
+  }
   if (!std::strcmp(mode, "edit-paint-evidence"))
     editPaintEvidence();
   else if (!std::strcmp(mode, "multi-two") || !std::strcmp(mode, "multi-four"))
