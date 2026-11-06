@@ -488,10 +488,70 @@ namespace
     loka::core::testing::allowLokaAllocRaw();
   }
 
+  void PlainVisibleWidthPins()
+  {
+    Pin("PlainVisibleWidthUsesCompletedLayout");
+    ToolboxWindow window;
+    HostPortScope port(window.window());
+    ToolboxScenePlatformController controller(&window);
+    LOKA_VERIFY(RegisterToolboxBuiltInSupport(controller));
+    const short offers[] = {0, -1, 20, 40, 20};
+    const short expected[] = {32, 32, 20, 32, 20};
+    for (int i = 0; i != 5; ++i)
+    {
+      TextDefinitionWithAttr definition = Text("abcdefgh")
+                                          + BlockStyle()
+                                                .wrap(i == 4 ? TEXT_WRAP_CHAR : TEXT_WRAP_NONE)
+                                                .truncation(i == 4 ? TEXT_TRUNCATION_NONE : TEXT_TRUNCATION_ELLIPSIS);
+      TextNode *node = static_cast<TextNode *>(definition.create());
+      LOKA_VERIFY(node);
+      LayoutState seat = Seat(offers[i]);
+      NodeContext *installed = controller.nodeHandlerRegistry_.find(node)->ensureContext(node, &controller, seat);
+      LOKA_VERIFY(installed);
+      ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(installed);
+      node->layout(&controller, seat);
+      const int widths = toolbox_host::widths;
+      const int fonts = toolbox_host::fonts;
+      LOKA_VERIFY(context.visibleWidth() == expected[i]);
+      LOKA_VERIFY(toolbox_host::widths == widths);
+      LOKA_VERIFY(toolbox_host::fonts == fonts);
+      DestroyHeapNode(node);
+    }
+
+    Pin("PlainVisibleWidthLatestLayoutAndRectCap");
+    MutableState<String> value(String::Literal("abcdefgh"));
+    TextDefinitionWithAttr definition = Text(&value) + BlockStyle().truncation(TEXT_TRUNCATION_ELLIPSIS);
+    TextNode *node = static_cast<TextNode *>(definition.create());
+    LOKA_VERIFY(node);
+    LayoutState seat = Seat(20);
+    NodeContext *installed = controller.nodeHandlerRegistry_.find(node)->ensureContext(node, &controller, seat);
+    LOKA_VERIFY(installed);
+    ToolboxTextContext &context = *static_cast<ToolboxTextContext *>(installed);
+    node->layout(&controller, seat);
+    LOKA_VERIFY(context.visibleWidth() == 20);
+    seat = Seat(40);
+    node->layout(&controller, seat);
+    int widths = toolbox_host::widths;
+    LOKA_VERIFY(context.visibleWidth() == 32);
+    LOKA_VERIFY(toolbox_host::widths == widths);
+    Rect rect = MeasurementRect(context);
+    rect.right = static_cast<short>(rect.left + 24);
+    context.updateRect(rect, rect.left, loka::testing::ToolboxTextContextAccess::baseline(context));
+    LOKA_VERIFY(context.visibleWidth() == 24);
+    LOKA_VERIFY(toolbox_host::widths == widths);
+
+    Pin("PlainVisibleWidthTextChangeWithoutLayout");
+    value.set(String::Literal("abc"));
+    LOKA_VERIFY(context.visibleWidth() == 12);
+    LOKA_VERIFY(toolbox_host::widths > widths);
+    DestroyHeapNode(node);
+  }
+
   void MeasurementPins(bool plainPins, bool attributedPins)
   {
     if (plainPins)
     {
+      PlainVisibleWidthPins();
       PlainWordBoundaryPins();
       PlainWrappedPaintPins();
       PlainWrappedEdgePins();
