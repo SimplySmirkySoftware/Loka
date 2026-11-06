@@ -726,9 +726,15 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   target_link_libraries(LokaToolboxScrollRequestTests PRIVATE LokaCommonTesting)
   loka_enable_warnings(LokaToolboxScrollRequestTests)
   set_target_properties(LokaToolboxScrollRequestTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
-  foreach(_scroll_request_case range-row range-frame range-carousel empty-rows own-rows delivery clamp cancel input creation heightless no-horizontal stale clipped borrow render two-visits mount zero-range late-refusal)
+  foreach(_scroll_request_case y-clamp-short y-clamp-shrink y-clamp-grow range-row range-frame range-carousel empty-rows own-rows delivery clamp cancel input creation heightless no-horizontal stale clipped borrow render two-visits mount zero-range late-refusal)
     add_test(NAME testToolboxScrollRequest_${_scroll_request_case}
       COMMAND LokaToolboxScrollRequestTests ${_scroll_request_case})
+  endforeach()
+
+  foreach(_size_case Sentinel Ordinary)
+    set(_size_name testExpectedRedToolboxScrollSizeOnly${_size_case}1513)
+    add_test(NAME ${_size_name} COMMAND LokaToolboxScrollRequestTests ${_size_name})
+    set_tests_properties(${_size_name} PROPERTIES LABELS "expected-red" SKIP_RETURN_CODE 77)
   endforeach()
 
   foreach(_gap_case height-row height-facts column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)
@@ -1078,6 +1084,20 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endforeach()
   get_target_property(_clip_paint_sources LokaToolboxZStackUnitTests SOURCES)
   list(REMOVE_ITEM _clip_paint_sources tests/toolbox/host/ToolboxZStackUnitHostTests.cpp)
+  # Reuse the ScrollView Scene fixture with the real hit registration arm.
+  add_executable(LokaToolboxScrollInputTests tests/toolbox/host/ToolboxScrollRequestHostTests.cpp
+    apple/toolbox/src/ToolboxHitLedger.cpp ${_clip_paint_sources})
+  target_include_directories(LokaToolboxScrollInputTests PRIVATE tests/toolbox/host tests apple/toolbox/src)
+  target_compile_definitions(LokaToolboxScrollInputTests PRIVATE LOKA_HOST_CONTROL_WIDTH=1 LOKA_HOST_CELL_PAINT=1
+    LOKA_HOST_CONTROL_ORDER=1 LOKA_HOST_GAP_DISPATCH=1 LOKA_HOST_EDITOR_SCROLL=1 LOKA_HOST_CLIP_PAINT=1
+    LOKA_HOST_CLIP_ALLOCATIONS=1)
+  target_compile_options(LokaToolboxScrollInputTests PRIVATE
+    -include ${PROJECT_SOURCE_DIR}/tests/toolbox/host/ToolboxHost.hpp)
+  target_link_libraries(LokaToolboxScrollInputTests PRIVATE LokaCommonTesting)
+  loka_enable_warnings(LokaToolboxScrollInputTests)
+  set_target_properties(LokaToolboxScrollInputTests PROPERTIES CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+  add_test(NAME testToolboxScrollInputNextFlush1513 COMMAND LokaToolboxScrollInputTests input-next-flush)
+
   add_executable(LokaToolboxClipPaintTests tests/toolbox/host/ToolboxClipPaintHostTests.cpp
     apple/toolbox/src/ToolboxHitLedger.cpp ${_clip_paint_sources})
   target_include_directories(LokaToolboxClipPaintTests PRIVATE tests/toolbox/host tests apple/toolbox/src)

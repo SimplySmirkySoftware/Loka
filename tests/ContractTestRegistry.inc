@@ -1688,3 +1688,7 @@ LOKA_TEST(testTextCommitReplacesOtherScene)
 LOKA_TEST(testTextCommitSettlesBeforeQuitReservation)
 LOKA_TEST(testTextCommitObservationHook)
 LOKA_TEST(testTextPublicationContinuesAfterWithdrawal)
+
+LOKA_TEST(testExpectedRedNullScrollSizeOnlySentinel1513)
+LOKA_TEST(testExpectedRedNullScrollSizeOnlyOrdinary1513)
+LOKA_TEST(testNullScrollInputMovesChildrenNextFlush1513)
