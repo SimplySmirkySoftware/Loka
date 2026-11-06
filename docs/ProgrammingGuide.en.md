@@ -2097,10 +2097,10 @@ The registration copies the `Match`.
 On macOS, declare the scheme in the app’s `Info.plist` under `CFBundleURLTypes`.
 On Windows, the app registers its scheme itself, for example under
 `HKEY_CURRENT_USER\Software\Classes\<scheme>` with a `URL Protocol` value and a
-`shell\open\command` of `"<exe>" "%1"`; Loka writes no registry key. Windows
-starts a new process for each URL and passes it on the command line, so Loka
-receives it at launch only; command-line arguments that are not URLs for the
-app's scheme, file paths included, are ignored.
+`shell\open\command` of `"<exe>" "%1"`; Loka writes no registry key. With that
+command, Windows starts a new process for each URL and passes it on the command
+line, so Loka receives it at launch only; command-line arguments that are not
+URLs for the app's scheme, file paths included, are ignored.
 
 - Treat every received URL as untrusted input: the scheme is checked, but not
   who sent it, what `%2F` or `..` in it mean, or whether its target exists.
