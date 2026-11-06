@@ -1,6 +1,6 @@
 #include "app/scene/node/ComposableNode.hpp"
 #include "app/scene/projection/PlatformController.hpp"
-#include "app/scene/boundary/detail/BoundaryObservedState.hpp"
+#include "app/scene/boundary/Boundary.hpp"
 
 namespace loka
 {
@@ -10,7 +10,51 @@ namespace loka
     {
       namespace
       {
+        char OwnInputSentinel;
         const loka::core::LokaAllocationSite ObservedUseSite("Node", "ObservedUse");
+      }
+
+      DirtySourceKey DirtySourceKey::ownInput()
+      {
+        return DirtySourceKey(&OwnInputSentinel);
+      }
+
+      bool DirtySourceKey::isOwnInput() const
+      {
+        return this->value_ == &OwnInputSentinel;
+      }
+
+      void BoundaryObservedState::registerUse(
+          ObservedUse &use, ObservedUseChain &chain, DirtySourceKey source, Node *node, NodeDirtyFlags flags)
+      {
+        if (use.subscription && use.subscription != &chain)
+          use.subscription->boundary->observedState_.withdraw(use);
+        if (!use.subscription)
+          chain.link(use, source, node);
+        if (use.generation != this->pass.generation)
+          use.flags = NODE_DIRTY_NONE;
+        use.generation = this->pass.generation;
+        use.flags = static_cast<NodeDirtyFlags>(use.flags | flags);
+      }
+
+      void Node::requestOwnInput(NodeDirtyFlags flags)
+      {
+        if (flags == NODE_DIRTY_NONE)
+          return;
+        if (this->lifecycleFact() != NODE_FACT_ATTACHED)
+          return;
+        for (ObservedUse *use = this->uses_.head; use; use = use->next)
+        {
+          if (!use->source.isOwnInput())
+            continue;
+          if (!use->subscription)
+            return;
+          if ((flags & ~use->flags) != 0)
+            return;
+          this->uses_.include(flags);
+          use->subscription->boundary->requestOwnInputUpdate(flags);
+          return;
+        }
       }
 
       ObservedUses::~ObservedUses()
@@ -24,13 +68,15 @@ namespace loka
         }
       }
 
-      ObservedUse *ObservedUses::reserve(loka::core::StateBase *state)
+      ObservedUse *ObservedUses::reserve(DirtySourceKey source)
       {
         ObservedUse *unused = 0;
         for (ObservedUse *row = this->head; row; row = row->next)
         {
-          if (row->state == state) return row;
-          if (!row->state) unused = row;
+          if (row->source == source)
+            return row;
+          if (row->source.isFree())
+            unused = row;
         }
         if (!unused)
         {
@@ -39,14 +85,15 @@ namespace loka
           unused->next = this->head;
           this->head = unused;
         }
-        unused->state = state;
+        unused->source = source;
         return unused;
       }
 
       void ObservedUses::discardPrepared()
       {
         for (ObservedUse *row = this->head; row; row = row->next)
-          if (!row->subscription) row->state = 0;
+          if (!row->subscription)
+            row->source = DirtySourceKey::none();
       }
 
       void Node::render(IPlatformController *controller)
@@ -65,7 +112,12 @@ namespace loka
           explicit Reserve(ObservedUses &uses) : uses_(uses), complete(true) {}
           virtual void markDirtyOnChange(loka::core::StateBase *state, NodeDirtyFlags flags)
           {
-            if (state && flags != NODE_DIRTY_NONE && !this->uses_.reserve(state))
+            if (state && flags != NODE_DIRTY_NONE && !this->uses_.reserve(DirtySourceKey::ofState(state)))
+              this->complete = false;
+          }
+          virtual void markDirtyOnOwnInput(NodeDirtyFlags flags)
+          {
+            if (flags != NODE_DIRTY_NONE && acceptsOwnInput(flags) && !this->uses_.reserve(DirtySourceKey::ownInput()))
               this->complete = false;
           }
           ObservedUses &uses_;
@@ -80,7 +132,7 @@ namespace loka
       {
         for (ObservedUse *row = this->head; row; row = row->next)
           if (row->subscription)
-            row->subscription->owner->withdraw(*row);
+            row->subscription->boundary->observedState_.withdraw(*row);
         this->discardPrepared();
       }
 

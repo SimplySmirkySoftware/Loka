@@ -209,3 +209,45 @@ void testScrollViewOwnLayoutInputs()
   LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_NONE);
   owner.clearObservedStateEntries();
 }
+
+#include "testing/scene/SceneTestFlow.hpp"
+namespace
+{
+  class SpanOwnInputLeaf : public TextNode
+  {
+  public:
+    SpanOwnInputLeaf()
+        : TextNode(TextProps("span own input"))
+    {
+    }
+    virtual void declareDirtySources(DirtySourceRegistrar &registrar)
+    {
+      registrar.markDirtyOnOwnInput(NODE_DIRTY_LAYOUT);
+    }
+    void request()
+    {
+      this->requestOwnInput(NODE_DIRTY_LAYOUT);
+    }
+  };
+} // namespace
+void testStackSpansOwnInputIndependentOwner()
+{
+  using loka::dsl::testing::SceneTestAccess;
+  NullScenePlatformController platform;
+  Scene scene((StdCompositionBoundary(StdCompositionProps())));
+  scene.mount(&platform);
+  SceneTestAccess::updateAttached(scene, true);
+  StdCompositionNode independent((StdCompositionProps()));
+  independent.setScene(&scene);
+  StackNode column((StackProps(STACK_AXIS_COLUMN)));
+  SpanOwnInputLeaf *leaf = new SpanOwnInputLeaf();
+  column.addChild(leaf);
+  BoundaryNode::declareBoundaryDirtySources(leaf, &independent);
+  leaf->request();
+  LOKA_VERIFY(leaf->takeLayoutInputs() == NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(SceneTestAccess::director(scene).pendingDirtyFlagsForBoundary(&independent) == NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(SceneTestAccess::director(scene).pendingDirtyFlagsForBoundary(SceneTestAccess::rootBoundary(scene))
+              == NODE_DIRTY_NONE);
+  independent.clearObservedStateEntries();
+  SceneTestAccess::unmount(scene);
+}

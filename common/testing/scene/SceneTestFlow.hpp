@@ -298,6 +298,15 @@ namespace loka
       class BoundaryObservedStateTestAccess
       {
       public:
+        static size_t ownInputUseCount(const ::loka::app::scene::BoundaryObservedState &observedState)
+        {
+          size_t count = 0;
+          for (const ::loka::app::scene::ObservedUse *use = observedState.ownInputRoute.uses; use;
+               use = use->nextSubscription)
+            ++count;
+          return count;
+        }
+
         static size_t entryCount(
             const ::loka::app::scene::BoundaryObservedState &observedState)
         {

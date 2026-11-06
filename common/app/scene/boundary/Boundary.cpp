@@ -596,19 +596,23 @@ namespace loka
         this->compositionState_.completeCompose();
       }
 
+      Scene *BoundaryNode::admitViewUpdate() const
+      {
+        return this->isFrozen() ? 0 : this->getScene();
+      }
+
       void BoundaryNode::markViewDirty(NodeDirtyFlags flags)
       {
-        if (this->isFrozen())
-        {
-          return;
-        }
-        Scene *scene = this->getScene();
-        if (!scene)
-        {
-          return;
-        }
-        const bool flushImmediately = this->flushViewDirtyImmediately(flags);
-        scene->requestBoundaryUpdate(this, flags, flushImmediately);
+        Scene *scene = this->admitViewUpdate();
+        if (scene)
+          scene->requestBoundaryUpdate(this, flags, this->flushViewDirtyImmediately(flags));
+      }
+
+      void BoundaryNode::requestOwnInputUpdate(NodeDirtyFlags flags)
+      {
+        Scene *scene = this->admitViewUpdate();
+        if (scene)
+          scene->requestBoundaryUpdate(this, flags, false);
       }
 
       void BoundaryNode::InvalidateSceneThunk(void *userData)
@@ -640,22 +644,22 @@ namespace loka
       void BoundaryNode::ObservedStateChangedThunk(void *userData)
       {
         BoundaryObservedStateBinding *binding = static_cast<BoundaryObservedStateBinding *>(userData);
-        if (!binding || !binding->boundary)
+        if (!binding || !binding->chain.boundary)
         {
           return;
         }
-        for (ObservedUse *use = binding->uses; use; use = use->nextSubscription)
+        for (ObservedUse *use = binding->chain.uses; use; use = use->nextSubscription)
         {
 #ifdef LOKA_LIFECYCLE_AUDIT
           assert(use->node->lifecycleFact() != NODE_FACT_RETIRED);
 #endif
           use->node->uses_.include(use->flags);
         }
-        if (binding->state && binding->state->trackerOwner() == binding->boundary->tracker())
+        if (binding->state && binding->state->trackerOwner() == binding->chain.boundary->tracker())
         {
           return;
         }
-        if (!binding->boundary->getScene())
+        if (!binding->chain.boundary->getScene())
         {
           return;
         }
@@ -670,7 +674,7 @@ namespace loka
         // is already the invalidation. Marking here too would apply twice.
         loka::core::PushStateTracker *pushOwner =
             ownerTracker ? ownerTracker->asPushTracker() : 0;
-        if (pushOwner && pushOwner->invalidatesTarget(binding->boundary))
+        if (pushOwner && pushOwner->invalidatesTarget(binding->chain.boundary))
         {
           return;
         }
@@ -680,7 +684,7 @@ namespace loka
           ownerTracker->defer(loka::core::TrackerDeferKey(), &BoundaryNode::ObservedStateDeferredInvalidateThunk, binding);
           return;
         }
-        binding->boundary->markViewDirty(flags);
+        binding->chain.boundary->markViewDirty(flags);
       }
 
       void BoundaryNode::ObservedStateDeferredInvalidateThunk(void *userData)
@@ -690,7 +694,7 @@ namespace loka
         {
           return;
         }
-        if (!binding->boundary)
+        if (!binding->chain.boundary)
         {
           if (binding->release())
           {
@@ -707,7 +711,7 @@ namespace loka
           }
           return;
         }
-        binding->boundary->markViewDirty(flags);
+        binding->chain.boundary->markViewDirty(flags);
         if (binding->release())
         {
           delete binding;

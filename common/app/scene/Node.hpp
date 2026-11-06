@@ -75,23 +75,67 @@ namespace loka
       };
 
       class Node;
-      struct BoundaryObservedStateBinding;
+      struct ObservedUseChain;
       struct BoundaryObservedState;
+
+      /** Identity of a dirty source: free storage, a live State, or the
+          node's own input. The own-input sentinel is never exposed as State. */
+      class DirtySourceKey
+      {
+      public:
+        static DirtySourceKey none()
+        {
+          return DirtySourceKey(0);
+        }
+        static DirtySourceKey ofState(loka::core::StateBase *state)
+        {
+          return DirtySourceKey(state);
+        }
+        static DirtySourceKey ownInput();
+        bool isFree() const
+        {
+          return this->value_ == 0;
+        }
+        bool isOwnInput() const;
+        loka::core::StateBase *stateOrNull() const
+        {
+          return this->isOwnInput() ? 0 : static_cast<loka::core::StateBase *>(this->value_);
+        }
+        bool operator==(const DirtySourceKey &other) const
+        {
+          return this->value_ == other.value_;
+        }
+
+      private:
+        explicit DirtySourceKey(void *value)
+            : value_(value)
+        {
+        }
+        void *value_;
+      };
 
       /** A node-owned observation edge. Withdrawal clears the subscription
           edge synchronously; storage stays with the node until reclaim. */
       struct ObservedUse
       {
         ObservedUse()
-            : state(0), flags(NODE_DIRTY_NONE), generation(0), next(0),
-              nextSubscription(0), node(0), subscription(0) {}
-        loka::core::StateBase *state;
+            : source(DirtySourceKey::none()),
+              flags(NODE_DIRTY_NONE),
+              generation(0),
+              next(0),
+              nextSubscription(0),
+              node(0),
+              subscription(0)
+        {
+        }
+        DirtySourceKey source;
         NodeDirtyFlags flags;
         unsigned long generation;
         ObservedUse *next;
         ObservedUse *nextSubscription;
         Node *node;
-        BoundaryObservedStateBinding *subscription;
+        ObservedUseChain *subscription;
+
       private:
         ObservedUse(const ObservedUse &);
         ObservedUse &operator=(const ObservedUse &);
@@ -114,7 +158,7 @@ namespace loka
         }
         void withdraw();
         void discardPrepared();
-        ObservedUse *reserve(loka::core::StateBase *state);
+        ObservedUse *reserve(DirtySourceKey source);
         ObservedUse *head;
         NodeDirtyFlags mark;
       private:
@@ -556,6 +600,11 @@ namespace loka
           composeAttachLifecycle_.markPendingAttach();
         }
       protected:
+        /** Marks only this node's declared own input and requests its current
+            registration owner for a later flush. This is not a transaction
+            barrier; callers supply any required borrow interval. */
+        void requestOwnInput(NodeDirtyFlags flags);
+
         /** The second observation point (the first is the context's
             onFactChanged): nodes without contexts that own lifecycle
             reactions of their own hear their door writes here. Fires from
@@ -1000,6 +1049,13 @@ namespace loka
       struct DirtySourceRegistrar
       {
         virtual ~DirtySourceRegistrar() {}
+        /** Own input accepts only PROPS and LAYOUT. Invalid masks are refused
+            in full, in every build; NONE is a no-op. */
+        virtual void markDirtyOnOwnInput(NodeDirtyFlags flags) = 0;
+        static bool acceptsOwnInput(NodeDirtyFlags flags)
+        {
+          return (flags & ~(NODE_DIRTY_PROPS | NODE_DIRTY_LAYOUT)) == 0;
+        }
         // Register a live state as a source of the given dirty flags.
         virtual void markDirtyOnChange(loka::core::StateBase *state, NodeDirtyFlags flags) = 0;
       };
