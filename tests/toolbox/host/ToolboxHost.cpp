@@ -31,6 +31,7 @@ namespace toolbox_host
   std::vector<long> backgroundColors, foregroundColors;
   int erases = 0, widths = 0, measures = 0, fonts = 0, metrics = 0;
   unsigned invalidations = 0;
+  unsigned validations = 0;
   std::vector<Rect> invalidatedRects;
   void (*afterIdle)(TEHandle) = 0;
   GrafPtr activationPort = 0, deactivationPort = 0;
@@ -206,6 +207,7 @@ namespace toolbox_host
 } // namespace toolbox_host
 void ValidRect(const Rect *area)
 {
+  ++toolbox_host::validations;
   std::vector<Rect> remaining;
   for (size_t i = 0; i < port->native.update.size(); ++i)
   {
@@ -1051,6 +1053,28 @@ namespace
     pushButProc = 0
   };
 } // namespace
+#include <Gestalt.h>
+#ifndef LOKA_HOST_UNICODE_EDITOR
+namespace toolbox_host
+{
+  long systemVersion = 0x0800;
+  OSErr systemVersionError = noErr, appearanceError = gestaltUndefSelectorErr;
+  unsigned systemVersionQueries = 0, appearanceQueries = 0;
+} // namespace toolbox_host
+OSErr Gestalt(OSType selector, long *response)
+{
+  if (selector == gestaltSystemVersion)
+  {
+    ++toolbox_host::systemVersionQueries;
+    *response = toolbox_host::systemVersion;
+    return toolbox_host::systemVersionError;
+  }
+  ++toolbox_host::appearanceQueries;
+  *response = 0;
+  return toolbox_host::appearanceError;
+}
+#endif
+#include "ToolboxButtonMoveCapability.cpp"
 #include "ToolboxButtonControl.cpp"
 #include "ToolboxEnabledControls.cpp"
 #include "ToolboxContextProps.cpp"

@@ -845,6 +845,9 @@ The presenter receives a completed value plan and either copies with ScrollRect
 and repaints the repair region, erases the whole port, or reports failed recovery
 without reaching the paint tail. REGION capture evidence borrows the presenter's
 regions only during the render. OS update entries decline copying.
+The paint-pass facts borrow is installed after the presenter, before the tree
+paint. Render does not pump events; during the native `MoveControl` of a built-in
+push button, the app does not destroy or change the control.
 `present_observe` distinguishes `candidate` from `executed` and also reports
 `not_translated` and `enclosing_clip` from shipping observation values.
 Target pixel and timing acceptance for this copy path remains pending; host

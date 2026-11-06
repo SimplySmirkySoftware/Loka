@@ -704,6 +704,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   add_test(NAME LokaToolboxAttributedTextTests COMMAND LokaToolboxAttributedTextTests)
 
   # Gap routing runs the real dispatch and ScrollView body against the OS host neighbors.
+  target_sources(LokaToolboxAttributedTextTests PRIVATE tests/toolbox/ToolboxButtonFollowHooks.cpp)
   get_target_property(_gap_host_sources LokaToolboxAttributedTextTests SOURCES)
   list(REMOVE_ITEM _gap_host_sources tests/toolbox/host/ToolboxAttributedTextHostTests.cpp)
   add_executable(LokaToolboxGapTests tests/toolbox/host/ToolboxGapHostTests.cpp
@@ -898,6 +899,7 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     apple/toolbox/src/ToolboxPictAdmission.cpp
     apple/toolbox/src/ToolboxNativeImage.cpp
     apple/toolbox/src/PictParser.cpp
+    tests/toolbox/ToolboxButtonFollowHooks.cpp
     apple/toolbox/src/ToolboxPlatformContext.cpp
     apple/toolbox/src/ToolboxBusy.cpp)
   target_include_directories(LokaToolboxNativeImageTests PRIVATE tests/toolbox/host/image tests/toolbox/host tests apple/toolbox/src)
@@ -1048,6 +1050,9 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
     add_test(NAME testToolbox${_order_case} COMMAND LokaToolboxControlOrderTests ${_order_case})
   endforeach()
 
+  foreach(_follow NoScratch Face Gate Closed Up Down Edge Below Disabled Proof Horizontal Translation OldClip NewClip Domain Preserve Hidden NativeRect Label Hilite Transient Collection)
+    add_test(NAME testToolboxButtonFollow${_follow} COMMAND LokaToolboxControlOrderTests Follow${_follow})
+  endforeach()
   foreach(_door Button Bar Replay Draw)
     foreach(_clip Normal Empty Refused)
       add_test(NAME testToolboxNativeDoor${_door}${_clip}

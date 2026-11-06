@@ -291,3 +291,20 @@ certificate, including the port intersection (`copyDomain`). REFUSED settlement
 clears every certificate. An enclosing ClipBox is observed separately. These
 values run in shipping builds; formatting alone is diagnostic.
 The updated target measurements and audit remain pending the delegator's run.
+
+## Button follow (#1043) staged acceptance
+
+The button copy fixture now has six real push buttons. Before the existing copy
+arms it runs two forward steps, a reverse step, and a disabled step. A scoped
+test receiver preallocates pixel planes and regions, then compares visibility,
+owner/current port, pixels, exact update region, and translated bounds around
+each silent move. The fixture injects unrelated pending damage before the
+snapshot on alternating steps; other steps start with an empty update region.
+Later Draw1Control, forced erase, and native TestControl/HiliteControl sequences
+check the moved location. The latter are deterministic Control Manager face/hit
+checks, not a synthesized physical mouse gesture through TrackControl.
+
+The expected audit additions are staged for KanjiTalk 7.1 without Appearance;
+they are not a captured runtime result. A closed capability gate logs `ordinary`
+and requires zero silent-move notifications. Runtime verification and the MAME
+scenario run are delegated to the owner for this change.
