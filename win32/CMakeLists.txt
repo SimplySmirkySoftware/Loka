@@ -19,6 +19,7 @@ set(SOURCES
   src/Win32Window.cpp
   src/Win32ScenePlatformController.cpp
   src/Win32OpenURL.cpp
+  src/Win32LaunchURLs.cpp
   src/Win32PlatformContext.cpp
   src/Win32BitmapCapture.cpp
   src/context/Win32ButtonContext.cpp

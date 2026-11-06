@@ -51,10 +51,33 @@ if(WIN32)
   set_target_properties(LokaURLOpenProbeWin32 PROPERTIES
     CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
 
+  # Manual VM probe for launch URLs (B3 page 2b R4); tests/win32/url-receive-probe.ps1.
+  execute_process(COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../.."
+    OUTPUT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    RESULT_VARIABLE LOKA_URL_RECEIVE_PROBE_REVISION_RESULT)
+  if(NOT LOKA_URL_RECEIVE_PROBE_REVISION_RESULT EQUAL 0)
+    # The evidence script refuses this unattributed probe.
+    set(LOKA_URL_RECEIVE_PROBE_REVISION "unavailable")
+  endif()
+  add_executable(LokaURLReceiveProbeWin32 WIN32 EXCLUDE_FROM_ALL
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tests/win32/URLReceiveProbe.cpp)
+  loka_enable_warnings(LokaURLReceiveProbeWin32)
+  target_include_directories(LokaURLReceiveProbeWin32 PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../common
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src)
+  target_link_libraries(LokaURLReceiveProbeWin32 PRIVATE LokaWin32Core)
+  target_compile_definitions(LokaURLReceiveProbeWin32 PRIVATE
+    LOKA_PROBE_REVISION="${LOKA_URL_RECEIVE_PROBE_REVISION}")
+  set_target_properties(LokaURLReceiveProbeWin32 PROPERTIES
+    CXX_STANDARD 98 CXX_STANDARD_REQUIRED YES)
+
   # Use UTF-8 source/execution charset on MSVC to avoid codepage warnings
   if(MSVC)
     target_compile_options(LokaHelloWin32 PRIVATE /utf-8)
     target_compile_options(LokaURLOpenProbeWin32 PRIVATE /utf-8)
+    target_compile_options(LokaURLReceiveProbeWin32 PRIVATE /utf-8)
   endif()
 
   # The test binary compiles the common sources itself so TEST_BUILD applies
@@ -89,6 +112,7 @@ if(WIN32)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ZStackContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ClipBoxContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32OpenURL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32LaunchURLs.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32PlatformContext.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/Win32BitmapCapture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../win32/src/context/Win32ButtonContext.cpp
