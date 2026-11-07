@@ -99,8 +99,8 @@ then plays the native role. It is still the only copy.
   - the state;
   - `textRevision`, monotonic within the document and continuing across
     store rebuilds;
-  - the union of the ranges changed since the previous fact, where the rail
-    can report them;
+  - an optional invalidation interval at the current revision (changed start
+    and inserted end), where the rail can report it; removed length is not exposed;
   - the caret and selection, as `TextPosition`s.
 
   The same reconcile writes all of them in one transaction.
@@ -167,6 +167,14 @@ then plays the native role. It is still the only copy.
   reaches the body later through the message queue (see [Native facts](#native-facts)).
   This is a documented refusal marker, not a compile-time wall. Production rails
   still create no stores, so the shipped `TextEditor` behavior is unchanged.
+
+`TextReader` pulls a revision's logical UTF-8 body in bounded chunks, with CR,
+LF, and CRLF each represented by one LF. Malformed content refuses the read;
+it is never replaced silently. A reader refuses after a revision change,
+withdrawal, or destruction of its document or registration. Do not pump while
+a reader is open: finish dialogs before constructing it. Queries scan through
+the same chunk door using fixed stack scratch. Do not call `queryLineRange`
+per line to walk all lines; use one reader and count LF separators instead.
 
 ## Migration
 
