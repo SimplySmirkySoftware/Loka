@@ -10,14 +10,14 @@
 #include "app/core/AppComponent.hpp"
 
 /** Process-lifetime quit and GURL registration; the attached App is only borrowed. */
-@interface LokaQuitEventRouter : NSObject
+@interface LokaAppleEventRouter : NSObject
 {
   MacApp *owner_;
 }
 @property(nonatomic, assign) MacApp *owner;
 @end
 
-@implementation LokaQuitEventRouter
+@implementation LokaAppleEventRouter
 @synthesize owner = owner_;
 - (void)applicationWillFinishLaunching:(NSNotification *)notification
 {
@@ -71,7 +71,7 @@ namespace
 {
   // Removing an Apple Event handler does not restore AppKit's handler.
   // Keep both registration and delegate alive across sequential Apps.
-  LokaQuitEventRouter *quitEventRouter = nil;
+  LokaAppleEventRouter *appleEventRouter = nil;
 } // namespace
 
 @interface LokaFlushTarget : NSObject
@@ -124,8 +124,8 @@ MacApp::MacApp(AppConfigurable *config)
 
 MacApp::~MacApp()
 {
-  if ([quitEventRouter owner] == this)
-    [quitEventRouter setOwner:0];
+  if ([appleEventRouter owner] == this)
+    [appleEventRouter setOwner:0];
   this->quitEventReply_.decline();
   this->retireComponents();
   this->stopInvalidationFlushTimer();
@@ -148,7 +148,7 @@ void MacApp::run()
 #endif
 
   [NSApplication sharedApplication];
-  this->attachQuitEventRouter();
+  this->attachAppleEventRouter();
   if ([NSApp respondsToSelector:@selector(setActivationPolicy:)])
   {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -169,12 +169,12 @@ void MacApp::run()
   stopInvalidationFlushTimer();
 }
 
-void MacApp::attachQuitEventRouter()
+void MacApp::attachAppleEventRouter()
 {
-  if (!quitEventRouter)
-    quitEventRouter = [[LokaQuitEventRouter alloc] init];
-  [NSApp setDelegate:(id)quitEventRouter];
-  [quitEventRouter setOwner:this];
+  if (!appleEventRouter)
+    appleEventRouter = [[LokaAppleEventRouter alloc] init];
+  [NSApp setDelegate:(id)appleEventRouter];
+  [appleEventRouter setOwner:this];
 }
 
 bool MacApp::holdQuitEvent()

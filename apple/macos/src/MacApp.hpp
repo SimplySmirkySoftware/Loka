@@ -33,7 +33,7 @@ protected:
 
 private:
   friend class MacQuitEventTestAccess;
-  void attachQuitEventRouter();
+  void attachAppleEventRouter();
   MacQuitEventReply quitEventReply_;
   void startInvalidationFlushTimer();
   void stopInvalidationFlushTimer();
