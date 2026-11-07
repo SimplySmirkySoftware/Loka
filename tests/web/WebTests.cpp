@@ -156,9 +156,16 @@ namespace
     }
     session.wake(IMMEDIATE, 3);
     const uint32_t fresh = webtest::token(BUTTON);
-    LOKA_VERIFY(fresh != old && fresh != 0);
-    LOKA_VERIFY(session.click(old, 4) == WebSession::REFUSED_TOKEN);
-    LOKA_VERIFY(session.click(fresh, 5) == WebSession::ACCEPTED);
+    LOKA_VERIFY(fresh != 0);
+    // B is installed and its current callback works before replaying A's saved
+    // token callback. Under mutation 3 both retired leaf slots are reused, so
+    // this fails on stale delivery into live B, not on an allocator collision.
+    LOKA_VERIFY(session.click(fresh, 4) == WebSession::ACCEPTED);
+    const unsigned beforeStale = fixture.bodyCalls;
+    const WebSession::Ingress stale = session.click(old, 5);
+    LOKA_VERIFY(fixture.bodyCalls == beforeStale);
+    LOKA_VERIFY(stale == WebSession::REFUSED_TOKEN);
+    LOKA_VERIFY(fresh != old);
     LOKA_VERIFY(retirementChecks >= 2);
     webtest::probe = 0;
     // Pending retirement is also discharged by teardown without another ordinary tail.
