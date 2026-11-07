@@ -191,10 +191,14 @@ public:
     static_cast<NullTextStore &>(row).apply(target);
     return true;
   }
-  virtual bool queryTextLength(loka::app::scene::TextStoreRow &row, unsigned long &out)
+  virtual loka::app::scene::TextChunkResult readTextChunk(loka::app::scene::TextStoreRow &row,
+                                                          unsigned long &offset,
+                                                          unsigned long end,
+                                                          char *out,
+                                                          unsigned long capacity,
+                                                          unsigned long &written)
   {
-    out = static_cast<NullTextStore &>(row).length();
-    return true;
+    return static_cast<NullTextStore &>(row).readChunk(offset, end, out, capacity, written);
   }
   virtual bool applyNativeFocus(loka::app::scene::NodeContext &ctx);
 #ifdef TEST_BUILD

@@ -135,45 +135,7 @@ namespace loka
       unsigned long offset_;
     };
 
-    /** Changed span in the rail's native unit: start and replaced length, plus inserted length. */
-    class TextChangedRange
-    {
-    public:
-      TextChangedRange(unsigned long start = 0, unsigned long length = 0, unsigned long insertedLength = 0)
-          : start_(start),
-            length_(length),
-            insertedLength_(insertedLength)
-      {
-      }
-      unsigned long start() const
-      {
-        return this->start_;
-      }
-      unsigned long length() const
-      {
-        return this->length_;
-      }
-      unsigned long insertedLength() const
-      {
-        return this->insertedLength_;
-      }
-      bool operator==(const TextChangedRange &other) const
-      {
-        return this->start_ == other.start_ && this->length_ == other.length_
-               && this->insertedLength_ == other.insertedLength_;
-      }
-      bool operator!=(const TextChangedRange &other) const
-      {
-        return !(*this == other);
-      }
-
-    private:
-      unsigned long start_;
-      unsigned long length_;
-      unsigned long insertedLength_;
-    };
-
-    /** One immutable document snapshot; changed range is optional and covers changes since the previous fact. */
+    /** One immutable document snapshot; the optional changed interval is an invalidation hint. */
     class TextDocumentFact
     {
     public:
@@ -182,8 +144,8 @@ namespace loka
             textRevision_(0),
             caret_(),
             selectionAnchor_(),
-            changedRange_(),
-            rangeReported_(false)
+            changedStart_(),
+            insertedEnd_()
       {
       }
       TextDocumentState state() const
@@ -203,18 +165,19 @@ namespace loka
         return this->selectionAnchor_;
       }
       /** Refusal leaves out unchanged; an empty reported range is still present. */
-      bool queryChangedRange(TextChangedRange &out) const
+      bool queryChangedRange(TextPosition &start, TextPosition &insertedEnd) const
       {
-        if (!this->rangeReported_)
+        if (this->changedStart_.isNone())
           return false;
-        out = this->changedRange_;
+        start = this->changedStart_;
+        insertedEnd = this->insertedEnd_;
         return true;
       }
       bool operator==(const TextDocumentFact &other) const
       {
         return this->state_ == other.state_ && this->textRevision_ == other.textRevision_
                && this->caret_ == other.caret_ && this->selectionAnchor_ == other.selectionAnchor_
-               && this->rangeReported_ == other.rangeReported_ && this->changedRange_ == other.changedRange_;
+               && this->changedStart_ == other.changedStart_ && this->insertedEnd_ == other.insertedEnd_;
       }
       bool operator!=(const TextDocumentFact &other) const
       {
@@ -226,21 +189,22 @@ namespace loka
                        unsigned long revision,
                        const TextPosition &caret,
                        const TextPosition &selectionAnchor,
-                       const TextChangedRange *range)
+                       const TextPosition &changedStart,
+                       const TextPosition &insertedEnd)
           : state_(state),
             textRevision_(revision),
             caret_(caret),
             selectionAnchor_(selectionAnchor),
-            changedRange_(range ? *range : TextChangedRange()),
-            rangeReported_(range != 0)
+            changedStart_(changedStart),
+            insertedEnd_(insertedEnd)
       {
       }
       TextDocumentState state_;
       unsigned long textRevision_;
       TextPosition caret_;
       TextPosition selectionAnchor_;
-      TextChangedRange changedRange_;
-      bool rangeReported_;
+      TextPosition changedStart_;
+      TextPosition insertedEnd_;
       friend class detail::TextDocumentPublisher;
       friend struct testing::TextDocumentFactTestAccess;
     };

@@ -1,0 +1,24 @@
+#ifndef LOKA_TESTS_TEXT_READER_HPP
+#define LOKA_TESTS_TEXT_READER_HPP
+void testTextReaderChunks();
+void testTextReaderCapacity();
+void testTextReaderRanges();
+void testTextReaderNotReady();
+void testTextReaderPending();
+void testTextReaderMarked();
+void testTextReaderRevision();
+void testTextReaderWithdraw();
+void testTextReaderDirectReclaim();
+void testTextReaderSceneReplacement();
+void testTextReaderDocumentFirst();
+void testTextReaderRegistrationFirst();
+void testTextReaderDestroyAfterCut();
+void testTextReaderStoreRetired();
+void testTextReaderRefusalReasons();
+void testTextReaderLineQueries();
+void testTextReaderBridges();
+void testTextChunkDoor();
+void testTextPublisherDocumentDestroyedDuringCommit();
+void testTextMembershipPrimitives();
+void testTextReaderEndedRechecks();
+#endif
