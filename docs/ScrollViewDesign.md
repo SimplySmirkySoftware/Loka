@@ -57,8 +57,12 @@ introduced in #1357; content insets use the conversions below):
   converts extent Y to content Y and publishes only when origin or size changes.
 - `publishOrigin(x, extentY)` is the report door for input completion and request
   delivery: it keeps the stored size because input contexts own no seat. Both doors share one conversion,
-  comparison and write path. The same-value no-op breaks layout echoes: the
-  size publication dirties layout once, and an unchanged next pass writes nothing.
+  comparison and write path. Before writing, they compare the normalized extent
+  origin with the incoming extent origin. After publication, an origin change
+  requests layout through the node's own-input door using its current registered
+  owner. Size-only reports still notify app observers but request no layout.
+  A same-value publication clears neither an earlier mark nor a pending request.
+  macOS retains the same conservative extra pass for an origin change.
 
 Option D (one `Frame`, frozen 2026-10-15) was chosen over a second
 `NodeState<int>` for X because every other two-axis carrier in Loka is one

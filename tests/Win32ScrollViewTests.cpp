@@ -222,9 +222,8 @@ namespace
 
   // Gives the host window the client size an explicit relayout will use. A
   // Scene-driven pass lays out at the window's real client size, and the
-  // first layout now publishes the viewport size, which dirties layout once;
-  // a host that disagrees with the explicit size would let that second pass
-  // replace the geometry under test.
+  // origin correction can request another pass. Keep that pass on the same
+  // offer so it does not replace the geometry under test.
   void sizeHostClient(HWND root, int width, int height)
   {
     RECT frame = {0, 0, width, height};
@@ -1937,7 +1936,7 @@ namespace
     {
       composition.declare(
           ScrollView(ScrollViewProps(this->props.storage->viewport).scrollTo(this->props.storage->request))
-          << Box().width(400).height(500));
+          << (Box().width(400).height(500) << Button("scroll witness")));
     }
   };
   class ScrollSceneController : public Win32ScenePlatformController
@@ -2123,6 +2122,62 @@ namespace
     LOKA_VERIFY(!window.scene()->hasPendingInvalidation());
   }
 } // namespace
+
+// Mirrors the Toolbox input-next-flush and y-clamp-shrink pins.
+void testWin32ScrollInputMovesChildrenNextFlush1513()
+{
+  ScrollSceneFixture f;
+  HWND viewport = findChildWindowByClass(f.host, L"LOKA_SCROLL_VIEW");
+  LOKA_VERIFY(viewport);
+  HWND child = findChildWindowByClass(viewport, L"Button");
+  LOKA_VERIFY(child);
+  const RECT before = childRectInParent(child, viewport);
+  SendMessageW(GetParent(viewport),
+               WM_VSCROLL,
+               MAKEWPARAM(SB_LINEDOWN, 0),
+               reinterpret_cast<LPARAM>(FindWindowExW(GetParent(viewport), NULL, L"SCROLLBAR", NULL)));
+  LOKA_VERIFY(f.storage.viewport.get().y == 16);
+  LOKA_VERIFY(f.window.scene()->hasPendingInvalidation());
+  const RECT pending = childRectInParent(child, viewport);
+  LOKA_VERIFY(EqualRect(&before, &pending));
+  f.ordinaryFlush();
+  const RECT after = childRectInParent(child, viewport);
+  LOKA_VERIFY(after.top == before.top - 16 && after.bottom == before.bottom - 16);
+  LOKA_VERIFY(!f.window.scene()->hasPendingInvalidation());
+}
+
+void testWin32ScrollYClampCorrectsOnce1513()
+{
+  ScrollSceneFixture f;
+  ScrollViewNode *scroll =
+      loka::dsl::testing::SceneTestAccess::rootBoundary(*f.window.scene())->childrenHead()->asScrollViewNode();
+  LOKA_VERIFY(scroll);
+  (loka::app::scene::detail::InputInvocation(f.controller))(*scroll, &ScrollViewNode::publishOrigin, 0, 40);
+  f.ordinaryFlush();
+  LOKA_VERIFY(f.storage.viewport.get().y == 40);
+  BoxNode *content = static_cast<BoxNode *>(scroll->childrenHead());
+  LOKA_VERIFY((NodePropsApplier<BoxNode, BoxProps>::apply(content, Box().width(10).height(20).props)));
+  f.window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
+  const unsigned publications = f.callbacks;
+  LOKA_VERIFY(f.window.scene()->flushInvalidation());
+  LOKA_VERIFY(f.storage.viewport.get().y == 0);
+  LOKA_VERIFY(f.window.scene()->hasPendingInvalidation());
+  HWND viewport = findChildWindowByClass(f.host, L"LOKA_SCROLL_VIEW");
+  LOKA_VERIFY(viewport);
+  HWND child = findChildWindowByClass(viewport, L"Button");
+  LOKA_VERIFY(child);
+  const RECT first = childRectInParent(child, viewport);
+  const unsigned corrected = f.callbacks;
+  LOKA_VERIFY(corrected > publications);
+  LOKA_VERIFY(f.window.scene()->flushInvalidation());
+  const RECT second = childRectInParent(child, viewport);
+  LOKA_VERIFY(second.top == first.top + 40 && second.bottom == first.bottom + 40);
+  LOKA_VERIFY(f.callbacks == corrected);
+  LOKA_VERIFY(!f.window.scene()->hasPendingInvalidation());
+  LOKA_VERIFY(!f.window.scene()->flushInvalidation());
+  const RECT third = childRectInParent(child, viewport);
+  LOKA_VERIFY(EqualRect(&second, &third));
+}
 
 void testWin32ScrollRequestSceneBorrow()
 {

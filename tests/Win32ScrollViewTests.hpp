@@ -43,6 +43,8 @@ void testWin32ScrollRequestHeightlessKeepsUnmovedX();
 void testWin32ScrollRequestZeroRange();
 void testWin32ScrollRequestRefusedVisits();
 void testWin32ScrollViewSettledInputSequences();
+void testWin32ScrollInputMovesChildrenNextFlush1513();
+void testWin32ScrollYClampCorrectsOnce1513();
 void testWin32ScrollRequestSceneBorrow();
 void testWin32ScrollRequestDeferredMount();
 void testWin32ScrollRequestNativeSizeOuterBorrow();

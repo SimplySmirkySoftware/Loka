@@ -203,6 +203,9 @@ void testScrollViewOwnLayoutInputs()
   scroll.publishOrigin(0, 10);
   LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_LAYOUT);
   LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_NONE);
+  scroll.publishViewport(0, 10, 80, 30);
+  LOKA_VERIFY(storage.get() == loka::core::Frame(0, 10, 80, 30));
+  LOKA_VERIFY(scroll.takeLayoutInputs() == NODE_DIRTY_NONE);
   ScrollViewDefinition next((ScrollViewProps(offset)));
   LOKA_VERIFY(next.applyPropsToNode(&scroll));
   LOKA_VERIFY(scroll.takeLayoutInputs() == (NODE_DIRTY_PROPS | NODE_DIRTY_LAYOUT));

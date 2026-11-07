@@ -965,17 +965,10 @@ int main(int argc, char **argv)
 {
   LOKA_VERIFY(argc == 2);
   const char *name = argv[1];
-  if (!std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlySentinel1513")
-      || !std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlyOrdinary1513"))
+  if (!std::strcmp(name, "testToolboxScrollSizeOnlySentinel1513")
+      || !std::strcmp(name, "testToolboxScrollSizeOnlyOrdinary1513"))
   {
-    // Match TestRunnerMain.inc: opt in to red, otherwise report CTest skip 77.
-    const char *enabled = std::getenv("LOKA_EXPECTED_RED");
-    if (!enabled || std::strcmp(enabled, "1") != 0)
-    {
-      std::printf("SKIP expected-red: %s (set LOKA_EXPECTED_RED=1)\n", name);
-      return 77;
-    }
-    sizeOnly(!std::strcmp(name, "testExpectedRedToolboxScrollSizeOnlySentinel1513"));
+    sizeOnly(!std::strcmp(name, "testToolboxScrollSizeOnlySentinel1513"));
   }
   else if (!std::strncmp(name, "y-clamp-", 8))
     yClamp(name);

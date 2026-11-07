@@ -754,9 +754,8 @@ if(NOT WIN32 AND NOT APPLE AND NOT LOKA_CLASSIC_MAC)
   endforeach()
 
   foreach(_size_case Sentinel Ordinary)
-    set(_size_name testExpectedRedToolboxScrollSizeOnly${_size_case}1513)
+    set(_size_name testToolboxScrollSizeOnly${_size_case}1513)
     add_test(NAME ${_size_name} COMMAND LokaToolboxScrollRequestTests ${_size_name})
-    set_tests_properties(${_size_name} PROPERTIES LABELS "expected-red" SKIP_RETURN_CODE 77)
   endforeach()
 
   foreach(_gap_case height-row height-facts column siblings resets row measurement origin edge spans overflow-default root clip-box clip-card clip-unflagged clip-ribbon clip-refusal clip-registry clip-lifecycle clip-foreign-context clip-placement clip-width clip-latest clip-nested clip-admission clip-projection clip-scroll clip-unit clip-card-scroll clip-grid clip-restart clip-partial clip-native clip-result clip-card-unconstrained clip-declared-wider)

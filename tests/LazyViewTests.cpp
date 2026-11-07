@@ -179,15 +179,6 @@ namespace
     {
       this->declareStates(2).state(this->offset, loka::core::Frame(0, 0, 0, 0)).state(this->shown, true);
     }
-    virtual void declareBindings(BindingToken &token)
-    {
-      if (record->scrolling)
-        token.watch(*record->viewport, this, &Root::copyOffset, true);
-    }
-    void copyOffset()
-    {
-      this->offset.set(loka::core::Frame(0, record->viewport->get().y, 0, 0));
-    }
     NodeState<loka::core::Frame> offset;
     NodeState<bool> shown;
     virtual void composeNode(NodeComposition &c)
@@ -512,6 +503,12 @@ void testLazyViewRefusedGenerationKeepsOldPresentation()
     const Frame full = extent(f.flex());
     f.platform.watchedNumber = 3;
     loka::core::testing::failLokaAllocRaw("LazyView", "ItemIndex", 1);
+    ScrollViewNode *scroll =
+        loka::dsl::testing::SceneTestAccess::rootBoundary(f.scene)->childrenHead()->asScrollViewNode();
+    LOKA_VERIFY(scroll != 0);
+    (loka::app::scene::detail::InputInvocation(f.platform))(*scroll, &ScrollViewNode::publishOrigin, 0, 200);
+    // Project the input before changing the independent lazy-window test source.
+    LOKA_VERIFY(f.scene.flushInvalidation());
     {
       StateTrackerGuard guard(&f.tracker);
       f.view.set(Frame(0, 200, 200, 160));
