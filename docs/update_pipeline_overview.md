@@ -464,3 +464,31 @@ sequenceDiagram
 
     Note over L,H: the host always sees a slightly delayed image<br/>truth lives only in the logical UI
 ```
+
+## Node own-input registrations
+
+`ObservedUse` stores a `DirtySourceKey`: free storage, a State, or own input.
+Only `isFree()` identifies reusable storage; `stateOrNull()` deliberately
+returns null for both free and own-input keys. A node may declare
+`markDirtyOnOwnInput(PROPS | LAYOUT)` (either flag alone is also accepted).
+`NONE` does nothing; a mask containing any other bit is refused in full in
+all builds.
+
+The Boundary embeds one `ObservedUseChain` for own input, separate from its
+State entries and their scheduling union. State subscriptions use the same
+link, unlink, prune, and clear mechanics. A successful declaration pass prunes
+unvisited rows; a refused pass preserves them. The existing ledger clear door
+clears both kinds on detach and destruction, and node retirement withdraws
+its row synchronously. `OwnershipDump` reports `observed` State subscriptions
+and `own-input` uses separately.
+
+The protected `Node::requestOwnInput(flags)` checks the attached lifecycle
+fact, a linked current registration, and the declared flag subset, then ORs
+only that node's input mark and requests its registration owner. Shared owner
+admission refuses a frozen owner or an owner without a Scene. The request
+never flushes immediately; it is not a transaction barrier. Callers supply
+any required controller borrow interval. A leaf's DETACH hook can still
+request while its fact is attached and its registration survives; retirement
+withdraws that edge before the retirement hook. No production resident uses
+this door yet. The contract pins live in `NodeObservedUsesTests.cpp` and
+`StackSpansTests.cpp`.

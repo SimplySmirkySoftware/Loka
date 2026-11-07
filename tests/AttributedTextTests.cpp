@@ -36,6 +36,7 @@ namespace
   class Registrar : public DirtySourceRegistrar
   {
   public:
+    virtual void markDirtyOnOwnInput(NodeDirtyFlags) {}
     Registrar()
         : calls(0),
           source(0),

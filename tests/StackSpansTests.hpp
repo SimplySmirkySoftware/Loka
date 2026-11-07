@@ -5,4 +5,5 @@ void testStackSpansAllocationRefusal();
 void testStackSpansColumnCollection();
 void testStackSpansEligibility();
 void testScrollViewOwnLayoutInputs();
+void testStackSpansOwnInputIndependentOwner();
 #endif

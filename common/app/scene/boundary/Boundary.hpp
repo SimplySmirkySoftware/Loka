@@ -262,6 +262,8 @@ namespace loka
           return this->localApplyInfo(plan).bounds;
         }
         void markViewDirty(NodeDirtyFlags flags);
+        /** Requests an admitted owner without synchronously flushing. */
+        void requestOwnInputUpdate(NodeDirtyFlags flags);
         void setFrozen(bool frozen)
         {
           this->runtimeState_.setFrozen(frozen);
@@ -508,7 +510,7 @@ namespace loka
           const std::vector<BoundaryBranchSeatPlanEntry> &plans = scope.plans();
           for (size_t i = 0; i < plans.size(); ++i)
           {
-            if (plans[i].dirtySource && !this->uses_.reserve(plans[i].dirtySource))
+            if (plans[i].dirtySource && !this->uses_.reserve(DirtySourceKey::ofState(plans[i].dirtySource)))
             {
               this->uses_.discardPrepared();
               this->noteComposeAllocationFailure();
@@ -599,6 +601,12 @@ namespace loka
                 return;
               }
               boundary_->registerObservedState(state, flags, node_);
+            }
+
+            virtual void markDirtyOnOwnInput(NodeDirtyFlags flags)
+            {
+              if (!this->boundary_->observedState_.registerOwnInput(this->boundary_, this->node_, flags))
+                this->boundary_->noteComposeAllocationFailure();
             }
 
           private:
@@ -2234,6 +2242,9 @@ namespace loka
         std::vector<detail::NodeArena::RetiredNodeGeneration> retiredGenerations_;
         bool drainingRetiredSubtrees_;
 
+        Scene *admitViewUpdate() const;
+        friend class ObservedUses;
+        friend struct BoundaryObservedState;
         template <class PropsT> friend class StdCompositionBoundaryNodeBase;
         friend class RootBoundaryWrapper;
         friend class ::loka::dsl::testing::SceneTestAccess;

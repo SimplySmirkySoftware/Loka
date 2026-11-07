@@ -24,14 +24,94 @@ namespace loka
     {
       class BoundaryNode;
 
+      /** Noncopyable owner route shared by State subscriptions and own input.
+          Node storage outlives unlink; clearing a route never reclaims nodes. */
+      struct ObservedUseChain
+      {
+        ObservedUseChain()
+            : boundary(0),
+              uses(0)
+        {
+        }
+
+        void link(ObservedUse &use, DirtySourceKey source, Node *node)
+        {
+          use.source = source;
+          use.node = node;
+          use.subscription = this;
+          use.nextSubscription = this->uses;
+          this->uses = &use;
+#ifdef TEST_BUILD
+          ++testing::paintBaselineStats().observedUses;
+#endif
+        }
+
+        void unlink(ObservedUse &use)
+        {
+          ObservedUse **link = &this->uses;
+          while (*link && *link != &use)
+            link = &(*link)->nextSubscription;
+          assert(*link == &use);
+          *link = use.nextSubscription;
+          clearUse(use);
+        }
+
+        void prune(unsigned long generation)
+        {
+          ObservedUse **link = &this->uses;
+          while (*link)
+          {
+            ObservedUse *use = *link;
+            if (use->generation == generation)
+              link = &use->nextSubscription;
+            else
+            {
+              *link = use->nextSubscription;
+              clearUse(*use);
+            }
+          }
+        }
+
+        void clear()
+        {
+          while (this->uses)
+          {
+            ObservedUse *use = this->uses;
+            this->uses = use->nextSubscription;
+            clearUse(*use);
+          }
+          this->boundary = 0;
+        }
+
+        BoundaryNode *boundary;
+        ObservedUse *uses;
+
+      private:
+        ObservedUseChain(const ObservedUseChain &);
+        ObservedUseChain &operator=(const ObservedUseChain &);
+        static void clearUse(ObservedUse &use)
+        {
+#ifdef TEST_BUILD
+          assert(testing::paintBaselineStats().observedUses != 0);
+          --testing::paintBaselineStats().observedUses;
+#endif
+          use.source = DirtySourceKey::none();
+          use.flags = NODE_DIRTY_NONE;
+          use.generation = 0;
+          use.nextSubscription = 0;
+          use.subscription = 0;
+        }
+      };
+
       struct BoundaryObservedStateBinding
       {
         BoundaryObservedStateBinding()
-            : boundary(0),
+            : chain(),
               state(0),
               flags(NODE_DIRTY_NONE),
               refs(1),
-              stateLifetimeToken(0), uses(0), owner(0), changedThunk(0)
+              stateLifetimeToken(0),
+              changedThunk(0)
         {
         }
 
@@ -55,13 +135,11 @@ namespace loka
           return refs == 0;
         }
 
-        BoundaryNode *boundary;
+        ObservedUseChain chain;
         loka::core::StateBase *state;
         NodeDirtyFlags flags;
         int refs;
         void *stateLifetimeToken;
-        ObservedUse *uses;
-        BoundaryObservedState *owner;
         void (*changedThunk)(void *);
       };
 
@@ -152,6 +230,7 @@ namespace loka
             releaseEntry(entries[i], changedThunk);
           }
           entries.clear();
+          this->ownInputRoute.clear();
         }
 
         void forgetState(loka::core::StateBase *state,
@@ -198,30 +277,20 @@ namespace loka
             {
               BoundaryObservedStateEntry &entry = entries[i];
               entry.flags = NODE_DIRTY_NONE;
-              for (ObservedUse *use = entry.binding ? entry.binding->uses : 0;
-                   use; use = use->nextSubscription)
+              for (ObservedUse *use = entry.binding ? entry.binding->chain.uses : 0; use; use = use->nextSubscription)
                 entry.flags = static_cast<NodeDirtyFlags>(entry.flags | use->flags);
               if (entry.binding) entry.binding->flags = entry.flags;
               dirty.include(entry.flags);
             }
             return;
           }
+          this->ownInputRoute.prune(this->pass.generation);
           for (size_t i = 0; i < entries.size();)
           {
             BoundaryObservedStateBinding *binding = entries[i].binding;
-            ObservedUse **link = binding ? &binding->uses : 0;
-            while (link && *link)
-            {
-              ObservedUse *use = *link;
-              if (use->generation == pass.generation)
-                link = &use->nextSubscription;
-              else
-              {
-                *link = use->nextSubscription;
-                clearUse(*use);
-              }
-            }
-            if (binding && binding->uses)
+            if (binding)
+              binding->chain.prune(this->pass.generation);
+            if (binding && binding->chain.uses)
             {
               ++i;
               continue;
@@ -231,19 +300,38 @@ namespace loka
           }
         }
 
-        /** Called by the node's synchronous withdrawal door. The subscription
-            owner unlinks its edge and cancels an empty subscription. */
+        /** Called by the node's synchronous withdrawal door. Identity chooses
+            the embedded route or the State subscription; only the latter can
+            release an entry. */
         void withdraw(ObservedUse &use)
         {
-          BoundaryObservedStateBinding *binding = use.subscription;
-          if (!binding) return;
-          ObservedUse **link = &binding->uses;
-          while (*link && *link != &use) link = &(*link)->nextSubscription;
-          assert(*link == &use);
-          *link = use.nextSubscription;
-          clearUse(use);
-          if (!binding->uses)
-            this->forgetState(binding->state, binding->changedThunk);
+          ObservedUseChain *chain = use.subscription;
+          if (!chain)
+            return;
+          chain->unlink(use);
+          if (chain == &this->ownInputRoute || chain->uses)
+            return;
+          for (size_t i = 0; i < this->entries.size(); ++i)
+          {
+            BoundaryObservedStateBinding *binding = this->entries[i].binding;
+            if (!binding || &binding->chain != chain)
+              continue;
+            releaseEntry(this->entries[i], binding->changedThunk);
+            this->entries.erase(this->entries.begin() + i);
+            return;
+          }
+        }
+
+        bool registerOwnInput(BoundaryNode *boundary, Node *node, NodeDirtyFlags flags)
+        {
+          if (!boundary || !node || flags == NODE_DIRTY_NONE || !DirtySourceRegistrar::acceptsOwnInput(flags))
+            return true;
+          ObservedUse *use = node->uses_.reserve(DirtySourceKey::ownInput());
+          if (!use)
+            return false;
+          this->ownInputRoute.boundary = boundary;
+          this->registerUse(*use, this->ownInputRoute, DirtySourceKey::ownInput(), node, flags);
+          return true;
         }
 
         void addDirtyFlags(NodeDirtyFlags flagsToAdd)
@@ -259,7 +347,7 @@ namespace loka
         {
           if (!boundary || !node || !state || flagsToAdd == NODE_DIRTY_NONE)
             return true;
-          ObservedUse *use = node->uses_.reserve(state);
+          ObservedUse *use = node->uses_.reserve(DirtySourceKey::ofState(state));
           if (!use) return false;
           BoundaryObservedStateEntry *entry = 0;
           for (size_t i = 0; i < entries.size(); ++i)
@@ -269,32 +357,15 @@ namespace loka
             BoundaryObservedStateEntry added;
             added.state = state;
             added.binding = new BoundaryObservedStateBinding();
-            added.binding->boundary = boundary;
+            added.binding->chain.boundary = boundary;
             added.binding->state = state;
-            added.binding->owner = this;
             added.binding->changedThunk = changedThunk;
             added.binding->stateLifetimeToken = state->retainExternalLifetimeToken();
             state->bind(changedThunk, added.binding, false, false, 0);
             entries.push_back(added);
             entry = &entries.back();
           }
-          if (use->subscription && use->subscription != entry->binding)
-            use->subscription->owner->withdraw(*use);
-          if (!use->subscription)
-          {
-            use->state = state;
-            use->node = node;
-            use->subscription = entry->binding;
-            use->nextSubscription = entry->binding->uses;
-            entry->binding->uses = use;
-#ifdef TEST_BUILD
-            ++testing::paintBaselineStats().observedUses;
-#endif
-          }
-          if (use->generation != pass.generation)
-            use->flags = NODE_DIRTY_NONE;
-          use->generation = pass.generation;
-          use->flags = static_cast<NodeDirtyFlags>(use->flags | flagsToAdd);
+          this->registerUse(*use, entry->binding->chain, DirtySourceKey::ofState(state), node, flagsToAdd);
           addDirtyFlags(flagsToAdd);
           entry->flags = static_cast<NodeDirtyFlags>(entry->flags | flagsToAdd);
           entry->binding->flags = entry->flags;
@@ -339,27 +410,14 @@ namespace loka
         }
 
       private:
-        static void clearUse(ObservedUse &use)
-        {
-#ifdef TEST_BUILD
-          assert(testing::paintBaselineStats().observedUses != 0);
-          --testing::paintBaselineStats().observedUses;
-#endif
-          use.state = 0;
-          use.flags = NODE_DIRTY_NONE;
-          use.generation = 0;
-          use.nextSubscription = 0;
-          use.subscription = 0;
-        }
+        void
+        registerUse(ObservedUse &use, ObservedUseChain &chain, DirtySourceKey source, Node *node, NodeDirtyFlags flags);
+
         static void releaseEntry(BoundaryObservedStateEntry &entry,
                                  void (*changedThunk)(void *))
         {
-          while (entry.binding && entry.binding->uses)
-          {
-            ObservedUse *use = entry.binding->uses;
-            entry.binding->uses = use->nextSubscription;
-            clearUse(*use);
-          }
+          if (entry.binding)
+            entry.binding->chain.clear();
           if (entry.state && entry.binding)
           {
             if (entry.binding->stateLifetimeToken &&
@@ -371,7 +429,7 @@ namespace loka
           }
           if (entry.binding)
           {
-            entry.binding->boundary = 0;
+            entry.binding->chain.boundary = 0;
             entry.binding->state = 0;
             entry.binding->flags = NODE_DIRTY_NONE;
             if (entry.binding->release())
@@ -384,6 +442,7 @@ namespace loka
           entry.binding = 0;
         }
 
+        ObservedUseChain ownInputRoute;
         ObservedPassState pass;
         ObservedDirtyState dirty;
         std::vector<BoundaryObservedStateEntry> entries;
