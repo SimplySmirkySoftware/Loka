@@ -473,6 +473,7 @@ namespace
       this->state(this->hidden_, loka::core::String::Literal("MMMM"));
       this->state(this->edit_, loka::core::String::Literal("Edit"));
       this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
+      this->state(this->scrollTo_, loka::app::ScrollTarget::None());
       this->state(this->button_, loka::core::String::Literal("Button"));
       this->state(this->drawersShown_, true);
       this->items_.push_back(loka::core::String::Literal("Fruit"));
@@ -480,10 +481,10 @@ namespace
     virtual void composeNode(NodeComposition &composition)
     {
       composition.declare(Box().size(180, 110)
-                          << (ScrollView(this->offset_)
-                              << (Column() << Text(this->sibling_.state())
-                                  << Text(this->text_.state()).TEST_ID("Offscreen.VisibleText")
-                                  << Box().size(150, 140)
+                          << (ScrollView(this->offset_).scrollTo(this->scrollTo_)
+                              << (Column()
+                                  << Text(this->sibling_.state())
+                                  << Text(this->text_.state()).TEST_ID("Offscreen.VisibleText") << Box().size(150, 140)
                                   << (Show(*this->drawersShown_.state())
                                       << Text(this->hidden_.state()).TEST_ID("Offscreen.Text")
                                       << EditText(this->edit_).TEST_ID("Offscreen.Edit")
@@ -516,16 +517,30 @@ namespace
     void scrollToTop()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(loka::core::Frame(0, 0, 0, 0));
+      this->scrollTo_.set(loka::app::ScrollTarget::Origin(0, 0));
     }
     void reveal()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(loka::core::Frame(0, 160, 0, 0));
+      this->scrollTo_.set(loka::app::ScrollTarget::Origin(0, 160));
     }
   private:
+    virtual void declareBindings(BindingToken &token)
+    {
+      token.watch(*this->offset_.state(), this, &OffscreenDamageNode::updateRevealedContent, false);
+    }
+    void updateRevealedContent()
+    {
+      if (this->offset_.get().y == 160)
+      {
+        // The first reveal already shows IIII; the content arm resets to MMMM.
+        loka::core::StateTrackerGuard guard(this->tracker());
+        this->text_.set(loka::core::String::Literal("IIII"));
+      }
+    }
     NodeState<loka::core::String> sibling_, text_, hidden_, edit_, button_;
     NodeState<loka::core::Frame> offset_;
+    loka::app::scene::Request<loka::app::ScrollTarget> scrollTo_;
     NodeState<bool> drawersShown_;
     loka::Vector<loka::core::String> items_;
   };
@@ -1347,6 +1362,7 @@ namespace
     {
       this->state(this->width_, 96);
       this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
+      this->state(this->scrollTo_, loka::app::ScrollTarget::None());
     }
     virtual void composeNode(NodeComposition &composition)
     {
@@ -1354,7 +1370,7 @@ namespace
       composition.declare(Column() << (Row() << (Box().width(this->width_.state())
                                                  << (Card().TEST_ID("Card.Replay") << Box().size(1, 63))))
                                    << (Box().size(180, 70)
-                                       << (ScrollView(this->offset_).TEST_ID("Card.Viewport")
+                                       << (ScrollView(this->offset_).scrollTo(this->scrollTo_).TEST_ID("Card.Viewport")
                                            << (Column() << (Card(CardStyle(CARD_SHADOW_WIDE)).TEST_ID("Card.Scrolled")
                                                             << Box().size(220, 80))
                                                         << Box().size(220, 80)))));
@@ -1362,7 +1378,7 @@ namespace
     void scroll()
     {
       loka::core::StateTrackerGuard guard(this->tracker());
-      this->offset_.set(loka::core::Frame(3, 5, 0, 0));
+      this->scrollTo_.set(loka::app::ScrollTarget::Origin(3, 5));
     }
     void narrow(bool narrow)
     {
@@ -1373,6 +1389,7 @@ namespace
   private:
     NodeState<int> width_;
     NodeState<loka::core::Frame> offset_;
+    loka::app::scene::Request<loka::app::ScrollTarget> scrollTo_;
   };
 
   /** Snapshot owned by the finite attached-Card replay fixture. */
@@ -3290,26 +3307,25 @@ namespace
                      observation.outsideKinds(),
                      observation.unitChanged() ? 1 : 0);
         std::fprintf(self->log_, "%s\r", ToolboxPaintResultText(observation).c_str());
-        // Measured on MAME maciix, 2026-10-31: the preceding composition
-        // replay did not cover the window (rule 4). No covering pass intervenes,
-        // so this admission sees REFUSED before content inputs or unsupported
-        // kinds. This reveal itself covers the window and exits CLEAN (rule 3).
+        // Measured on MAME maciix, 2026-11-07: removing viewport self-observation
+        // removes its content input (now zero). Request delivery leaves a covering
+        // pass before the move, so entry eligibility is CLEAN. The two unsupported
+        // kinds now supply the first refusal, UNSUPPORTED_KIND, instead of the old
+        // PAINT_REFUSED history. This reveal covers the window and exits CLEAN (rule 3).
         self->recordArm(
             "viewport-full-draw-observed",
             observation.dy() == 160 && observation.viewports() == 1
-                && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 1
-                && observation.unsupportedKinds() == 2 && observation.refusal() == TOOLBOX_PRESENT_PAINT_REFUSED
-                && stats.lastMovedEntryEligibility == TOOLBOX_PAINT_REFUSED && observation.paintFinished()
+                && observation.verdict() == TOOLBOX_PRESENT_ERASE_ALL && observation.contentInputs() == 0
+                && observation.unsupportedKinds() == 2 && observation.refusal() == TOOLBOX_PRESENT_UNSUPPORTED_KIND
+                && stats.lastMovedEntryEligibility == TOOLBOX_PAINT_CLEAN && observation.paintFinished()
                 && !observation.firstRefusal().refused() && observation.eligibility() == TOOLBOX_PAINT_CLEAN,
             OFFSCREEN_REVEAL_CHECK);
         // Re-entry must establish history before another paint-only write.
         self->initial_ = stats;
         self->offscreen_->writeText(true, "MMMM");
         const PaintAnswer changed = offscreenAnswer(window, "Offscreen.Text", query);
-        // The reveal is a scroll (layout) apply: the rail takes the broad
-        // path and the debug counters reset at the global change, so the
-        // whole-window delta is not observable here; the revealed Text's
-        // current value and exact answer are the pin.
+        // The reveal request is delivered after layout. Pin the revealed Text's
+        // current value and exact answer.
         self->recordArm("column-scroll-reveals-current-text",
                         changed.kind == PAINT_ANSWER_EXACT && changed.damage.width > 0
                         && changed.damage.height > 0 && changed.damage.y >= kRootY
@@ -3333,7 +3349,9 @@ namespace
                      ToolboxPresentRefusalName(stats.lastPresentObservation.refusal()),
                      ToolboxPaintEligibilityName(stats.lastPresentEntryEligibility),
                      ToolboxPaintResultText(stats.lastPresentObservation).c_str());
-        // One completion: retain the visible Text's input until the reveal walk.
+        // Reset the content before requesting the reveal. This write is consumed
+        // before the move; the viewport watch changes MMMM back to IIII when
+        // the rail publishes y=160, supplying content input for the moved pass.
         loka::core::StateTrackerGuard transaction(self->offscreen_->tracker());
         self->offscreen_->writeText(false, "MMMM");
         self->offscreen_->reveal();

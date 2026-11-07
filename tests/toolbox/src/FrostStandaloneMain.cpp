@@ -143,6 +143,7 @@ namespace
       this->state(this->visible_, false);
       this->state(this->insetMode_, -1);
       this->state(this->viewport_, loka::core::Frame());
+      this->state(this->scrollTo_, loka::app::ScrollTarget::None());
     }
     virtual void composeNode(NodeComposition &c)
     {
@@ -169,13 +170,13 @@ namespace
     {
       if (this->insetMode_.get() >= 0)
       {
-        c.declare(ZStack().expBlurUnit() << (ScrollView(this->viewport_).contentInsets(this->insetMode_.get(), 0)
-                                             << (VStack().naturalHeight().gap(0)
-                                                 << Text("First striped row") << Text("Second row") << Text("Third row")
-                                                 << Text("Fourth row") << Text("Fifth row") << Text("Sixth row")
-                                                 << Text("Seventh row") << Text("Eighth row") << Text("Ninth row")
-                                                 << Text("Tenth row") << Text("Eleventh row") << Text("Twelfth row")))
-                                         << Box().size(Width, UnitHeight));
+        c.declare(ZStack().expBlurUnit()
+                  << (ScrollView(this->viewport_).scrollTo(this->scrollTo_).contentInsets(this->insetMode_.get(), 0)
+                      << (VStack().naturalHeight().gap(0)
+                          << Text("First striped row") << Text("Second row") << Text("Third row") << Text("Fourth row")
+                          << Text("Fifth row") << Text("Sixth row") << Text("Seventh row") << Text("Eighth row")
+                          << Text("Ninth row") << Text("Tenth row") << Text("Eleventh row") << Text("Twelfth row")))
+                  << Box().size(Width, UnitHeight));
         return;
       }
       c.declare(Column().gap(0) << (ZStack().expBlurUnit()
@@ -196,10 +197,10 @@ namespace
     }
     void scrollForProbe()
     {
-      // Fixture-only input, matching PaintDamage's controlled scroll probe.
+      // Post an origin request; the next idle phase observes rail delivery.
       loka::core::StateTrackerGuard guard(this->tracker());
       const loka::core::Frame current = this->viewport_.get();
-      this->viewport_.set(loka::core::Frame(current.x, current.y + 17, current.width, current.height));
+      this->scrollTo_.set(loka::app::ScrollTarget::Origin(current.x, current.y + 17));
     }
     void show()
     {
@@ -230,6 +231,7 @@ namespace
     NodeState<bool> visible_;
     NodeState<int> insetMode_;
     NodeState<loka::core::Frame> viewport_;
+    loka::app::scene::Request<loka::app::ScrollTarget> scrollTo_;
   };
 
   /** Owns readbacks and the temporary covering window for the native sequence. */
@@ -590,11 +592,21 @@ namespace
         this->record("inset-bar-below-band", part != 0 && bar && (**bar).contrlRect.top == UnitHeight);
         this->insetReplay(window, "inset-zero-to-top-equals-full");
         this->observation_.before->read(window->window());
+        this->observation_.waits = 0;
         this->node_->scrollForProbe();
         return;
       }
       if (this->phase_ == 9)
       {
+        // Request delivery publishes the origin during layout; the children
+        // move on the next pass. Capture once the window has no pending work.
+        if ((window->hasPendingSceneInvalidation() || window->hasPendingScenePlatformSync()
+             || window->hasPendingInvalidate())
+            && ++this->observation_.waits < 120)
+        {
+          --this->phase_;
+          return;
+        }
         Capture scrolled;
         this->record("inset-scroll-retakes-band",
                      scrolled.read(window->window()) && !scrolled.equals(*this->observation_.before, Unit));

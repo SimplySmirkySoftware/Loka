@@ -31,9 +31,14 @@ namespace loka
     class ToolboxAttributedTextContextAccess
     {
     public:
-      static bool completed(const ToolboxAttributedTextContext &context)
+      static bool completed(const ToolboxAttributedTextContext &context, bool requirePresented)
       {
-        return context.table_.valid() && (EmptyRect(&context.paintRect_) || context.presented_.isKnown());
+        // A scroll that the rail presents by moving pixels leaves a moved
+        // placement's paint history unknown by design (measured 2026-11-08:
+        // the window then matches a full redraw), so scroll steps require a
+        // valid table only; first paint still requires the presented value.
+        return context.table_.valid()
+               && (!requirePresented || EmptyRect(&context.paintRect_) || context.presented_.isKnown());
       }
     };
   } // namespace testing
@@ -106,6 +111,7 @@ namespace
         : StdCompositionBoundaryNodeBase<DocumentProps>(props)
     {
       this->state(this->offset_, loka::core::Frame(0, 0, 0, 0));
+      this->state(this->scrollTo_, ScrollTarget::None());
       this->state(this->viewport_, Frame(0, 0, 300, 192));
     }
     int offset() const
@@ -114,7 +120,8 @@ namespace
     }
     void scrollOneLine()
     {
-      this->offset_.set(loka::core::Frame(0, this->offset_.get().y + 16, 0, 0));
+      StateTrackerGuard guard(this->tracker());
+      this->scrollTo_.set(ScrollTarget::Origin(0, this->offset_.get().y + 16));
     }
     virtual void declareBindings(BindingToken &token)
     {
@@ -122,6 +129,7 @@ namespace
     }
     void updateViewport()
     {
+      // LazyColumn selection input follows the rail-published ScrollView fact.
       this->viewport_.set(Frame(0, this->offset_.get().y, 300, 192));
     }
     virtual void composeNode(NodeComposition &composition)
@@ -131,20 +139,26 @@ namespace
         Column column;
         for (unsigned short i = 0; i < this->props.model->size(); ++i)
           column << (AttributedText(this->props.model->at(i).value.text) + BlockStyle().wrap(TEXT_WRAP_WORD));
-        composition.declare(Box().size(316, 192) << (ScrollView(this->offset_) << column));
+        composition.declare(Box().size(316, 192) << (ScrollView(this->offset_).scrollTo(this->scrollTo_) << column));
       }
       else
       {
         // LazyView selects in content coordinates; ScrollView translates once.
-        composition.declare(Box().size(316, 192)
-                            << (ScrollView(this->offset_)
-                                << LazyColumn(*this->props.model, reservation::SeatNodes<reservation::Nodes<Paragraph, 1,
-                                    reservation::Nodes<AttributedTextNode, 1> > >(), 6).cells(300, 64).viewport(*this->viewport_.state())));
+        composition.declare(
+            Box().size(316, 192)
+            << (ScrollView(this->offset_).scrollTo(this->scrollTo_)
+                << LazyColumn(*this->props.model,
+                              reservation::SeatNodes<
+                                  reservation::Nodes<Paragraph, 1, reservation::Nodes<AttributedTextNode, 1> > >(),
+                              6)
+                       .cells(300, 64)
+                       .viewport(*this->viewport_.state())));
       }
     }
 
   private:
     NodeState<loka::core::Frame> offset_;
+    loka::app::scene::Request<loka::app::ScrollTarget> scrollTo_;
     NodeState<Frame> viewport_;
   };
   typedef BoundaryDefinition<DocumentProps, Document> DocumentDefinition;
@@ -207,7 +221,7 @@ namespace
     std::FILE *log_;
   };
 
-  int CountCompleted(Node *node)
+  int CountCompleted(Node *node, bool requirePresented)
   {
     if (!node)
       return 0;
@@ -215,7 +229,7 @@ namespace
     if (node->asAttributedTextNode())
     {
       ToolboxAttributedTextContext *context = static_cast<ToolboxAttributedTextContext *>(node->getContext());
-      if (!context || !loka::testing::ToolboxAttributedTextContextAccess::completed(*context))
+      if (!context || !loka::testing::ToolboxAttributedTextContextAccess::completed(*context, requirePresented))
         return -1;
       ++count;
     }
@@ -224,7 +238,7 @@ namespace
     INestable *nestable = node->asNestable();
     for (Node *child = nestable ? nestable->childrenHead() : 0; child; child = child->nextInComposition)
     {
-      const int nested = CountCompleted(child);
+      const int nested = CountCompleted(child, requirePresented);
       if (nested < 0)
         return -1;
       count += nested;
@@ -337,7 +351,7 @@ namespace
       UnsignedWide now;
       Microseconds(&now);
       const unsigned long elapsed = now.lo - this->interval_.lo;
-      const int count = CountCompleted(document);
+      const int count = CountCompleted(document, this->phase_ == 0);
       const int offset = document->offset();
       const layout::LazyLayout policy = layout::FixedGrid(300, 64, 1, this->model_.size());
       const int expected = this->selected_ > 0
