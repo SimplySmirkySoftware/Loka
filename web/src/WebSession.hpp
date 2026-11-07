@@ -45,9 +45,15 @@ public:
   /** Cost: controller check twice per click; <=33 route probes and one App-owned
       pending-close query, O(pending closures). No caller walks App rows. */
   bool acceptsRoot(loka::web::Token token) const;
-  /** Cost: App or wrapper once per request; O(1) own lifecycle and task slot. */
+  /** User quit request; the roster may decline and keep this session running.
+      Cost: wrapper once per request; phase check, one App request, then one
+      bounded immediate entry whose admission doors walk App-owned rows. */
+  Ingress requestQuit(double now);
+  /** Terminal rail door called by App after quit acceptance (or forced dispose).
+      Cost: once per terminal request; O(1) own lifecycle and task slot. */
   void quit();
-  /** Cost: wrapper once per request; O(1), repeated disposal has no work. */
+  /** Forced disposal request; bypasses the roster, destruction remains task-only.
+      Cost: wrapper once per request; O(1), repeated disposal has no work. */
   void dispose();
   WebInputRoutes &routes()
   {

@@ -521,16 +521,17 @@ namespace
     LOKA_VERIFY(session.start(&CreateRoster, 0) == WebSession::STARTED);
     session.wake(IMMEDIATE, 1);
     rosterConfig->decline = true;
-    Access::requestQuit(session);
-    session.wake(IMMEDIATE, 2);
+    LOKA_VERIFY(session.requestQuit(2) == WebSession::ACCEPTED);
     LOKA_VERIFY(webtest::task(SHUTDOWN) == 0 && !Access::disposed(session));
+    LOKA_VERIFY(session.click(webtest::token(BUTTON), 3) == WebSession::ACCEPTED);
+    LOKA_VERIFY(webtest::task(SHUTDOWN) == 0 && webtest::completed == 0);
     rosterConfig->decline = false;
-    Access::requestQuit(session);
+    LOKA_VERIFY(session.requestQuit(4) == WebSession::ACCEPTED);
     for (unsigned i = 0; i < 20 && !webtest::task(SHUTDOWN); ++i)
-      session.wake(IMMEDIATE, 3 + i);
+      session.wake(IMMEDIATE, 5 + i);
     LOKA_VERIFY(webtest::task(SHUTDOWN) != 0);
     webtest::fire(webtest::task(SHUTDOWN), 30);
-    LOKA_VERIFY(Access::disposed(session) && webtest::resources.empty());
+    LOKA_VERIFY(Access::disposed(session) && webtest::resources.empty() && webtest::completed == 1);
   }
   void IdleTest()
   {

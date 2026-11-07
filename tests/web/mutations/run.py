@@ -89,8 +89,11 @@ try:
     elif number==12:
         change('web/src/WebIdle.cpp','this->deadline_ = now + this->policy_.intervalSeconds * 1000;',
                '/* interval deadline advance removed */')
+    elif number==13:
+        change('web/src/WebSession.cpp','this->app_->requestQuitAtCompletion();',
+               'this->quit();')
     else:
-        raise RuntimeError('mutation number must be 1..12')
+        raise RuntimeError('mutation number must be 1..13')
     if command(['cmake','--build',str(build),'--target','LokaWebTests','-j','8'],'build')!=0:
         raise RuntimeError('mutant did not compile; not counted as killed')
     result=command([str(build/'web/LokaWebTests')] + (['dispose-input'] if number == 10 else []),'test')

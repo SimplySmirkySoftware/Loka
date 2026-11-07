@@ -44,10 +44,6 @@ namespace loka
         }
 
 #endif
-        static void requestQuit(WebSession &session)
-        {
-          session.app_->requestQuitAtCompletion();
-        }
         static void close(WebSession &session, Window *window)
         {
           session.app_->requestWindowClose(window);

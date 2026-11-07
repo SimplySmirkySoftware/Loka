@@ -59,7 +59,7 @@ extern "C"
   }
   EMSCRIPTEN_KEEPALIVE void web_quit()
   {
-    session->quit();
+    session->requestQuit(emscripten_get_now());
   }
   EMSCRIPTEN_KEEPALIVE void web_dispose()
   {

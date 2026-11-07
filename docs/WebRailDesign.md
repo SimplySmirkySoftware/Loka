@@ -58,7 +58,7 @@ Scheduling runs once after an outer batch. EVERY_TICK independently arms rAF. Pe
 
 Bootstrap runs App without a Regime. A windowless bootstrap may move STARTING directly to QUITTING; it creates no Regime and schedules shutdown directly. Ordinary runtime declares the Regime after bootstrap and starts with an empty completion entry.
 
-Quit and dispose are requests. Only an internal shutdown task, at IDLE, releases the Regime and destroys App, Config and PlatformContext in reverse order. Adapter services remain callable through all teardown and final resource drain. The JS resource ledger must then be empty before `completed` resolves. Repeated disposal is inert. This task boundary keeps bootstrap, input borrows, Operations and producers off the destruction stack.
+User-facing quit is an ingress-checked request that the roster may decline, leaving the module running; App calls the terminal rail quit door only after acceptance. Dispose is a forced request that bypasses the roster. Only an internal shutdown task, at IDLE, releases the Regime and destroys App, Config and PlatformContext in reverse order. Adapter services remain callable through all teardown and final resource drain. The JS resource ledger must then be empty before `completed` resolves. Repeated disposal is inert. This task boundary keeps bootstrap, input borrows, Operations and producers off the destruction stack.
 
 ## PR 1 projection and limits
 

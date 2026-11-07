@@ -77,6 +77,14 @@ WebSession::StartResult WebSession::start(ConfigFactory factory, double now)
   this->wake(loka::web::IMMEDIATE, now);
   return STARTED;
 }
+WebSession::Ingress WebSession::requestQuit(double now)
+{
+  const Ingress entry = this->ingress();
+  if (entry != ACCEPTED && entry != NESTED)
+    return entry;
+  this->app_->requestQuitAtCompletion();
+  return WebEntry::run(*this, entry, loka::web::KIND_COUNT, 0, 0, 0, loka::web::IMMEDIATE, now);
+}
 void WebSession::quit()
 {
   if (this->lifecycle_ == DISPOSED)
