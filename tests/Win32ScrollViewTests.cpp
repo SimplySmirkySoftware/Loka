@@ -2152,9 +2152,16 @@ void testWin32ScrollYClampCorrectsOnce1513()
   ScrollViewNode *scroll =
       loka::dsl::testing::SceneTestAccess::rootBoundary(*f.window.scene())->childrenHead()->asScrollViewNode();
   LOKA_VERIFY(scroll);
+  HWND viewport = findChildWindowByClass(f.host, L"LOKA_SCROLL_VIEW");
+  LOKA_VERIFY(viewport);
+  HWND child = findChildWindowByClass(viewport, L"Button");
+  LOKA_VERIFY(child);
+  const RECT unscrolled = childRectInParent(child, viewport);
   (loka::app::scene::detail::InputInvocation(f.controller))(*scroll, &ScrollViewNode::publishOrigin, 0, 40);
   f.ordinaryFlush();
   LOKA_VERIFY(f.storage.viewport.get().y == 40);
+  const RECT scrolled = childRectInParent(child, viewport);
+  LOKA_VERIFY(scrolled.top == unscrolled.top - 40);
   BoxNode *content = static_cast<BoxNode *>(scroll->childrenHead());
   LOKA_VERIFY((NodePropsApplier<BoxNode, BoxProps>::apply(content, Box().width(10).height(20).props)));
   f.window.scene()->requestInvalidate(NODE_DIRTY_LAYOUT);
@@ -2162,16 +2169,17 @@ void testWin32ScrollYClampCorrectsOnce1513()
   LOKA_VERIFY(f.window.scene()->flushInvalidation());
   LOKA_VERIFY(f.storage.viewport.get().y == 0);
   LOKA_VERIFY(f.window.scene()->hasPendingInvalidation());
-  HWND viewport = findChildWindowByClass(f.host, L"LOKA_SCROLL_VIEW");
-  LOKA_VERIFY(viewport);
-  HWND child = findChildWindowByClass(viewport, L"Button");
-  LOKA_VERIFY(child);
+  // Win32 clamps Y before placing children, so the first pass already puts
+  // the child back at its unscrolled top (measured on the VM rig; the narrower
+  // content changes its width, not its top); the
+  // queued correction pass is the conservative one and must not move it.
   const RECT first = childRectInParent(child, viewport);
+  LOKA_VERIFY(first.top == unscrolled.top);
   const unsigned corrected = f.callbacks;
   LOKA_VERIFY(corrected > publications);
   LOKA_VERIFY(f.window.scene()->flushInvalidation());
   const RECT second = childRectInParent(child, viewport);
-  LOKA_VERIFY(second.top == first.top + 40 && second.bottom == first.bottom + 40);
+  LOKA_VERIFY(EqualRect(&second, &first));
   LOKA_VERIFY(f.callbacks == corrected);
   LOKA_VERIFY(!f.window.scene()->hasPendingInvalidation());
   LOKA_VERIFY(!f.window.scene()->flushInvalidation());
