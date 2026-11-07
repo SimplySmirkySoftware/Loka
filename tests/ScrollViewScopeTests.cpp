@@ -1,4 +1,5 @@
 #include "ScrollViewScopeTests.hpp"
+#include "ScrollViewRequestTests.hpp"
 
 #include <cassert>
 #include "support/TestVerify.hpp"
@@ -574,4 +575,52 @@ void testScrollViewNullPublishesSeatSizeWithoutClampingAndConverges()
   LOKA_VERIFY(platform.projectLayoutForTesting(&node, makeState(10, 20, 80, 30)) == 50);
   LOKA_VERIFY(writes == 0);
   fact.state().state()->unbind(&countOriginWrites, &writes);
+}
+
+void testNullScrollInputMovesChildrenNextFlush1513()
+{
+  using namespace scroll_request_tests;
+  Presenter platform;
+  Scene scene((Boundary<Root>()));
+  LOKA_VERIFY(scene.mount(&platform));
+  loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
+  for (int i = 0; scene.hasPendingInvalidation() && i < 12; ++i)
+    LOKA_VERIFY(scene.flushInvalidation());
+  Root *root = static_cast<Root *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
+  ScrollViewNode *scroll = root->childrenHead()->asScrollViewNode();
+  LOKA_VERIFY(scroll != 0);
+  FixedLayoutProbeNode *child = new FixedLayoutProbeNode(7);
+  scroll->addChild(child);
+  NotifySubtreeNodeAttached(child);
+  scene.requestInvalidate(NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(scene.flushInvalidation());
+  const short before = child->geometry().y;
+  const unsigned long visits = platform.leafLayoutVisitsForTesting();
+  // Null projects every child and does not consume a ScrollView input mark.
+  scroll->takeLayoutInputs();
+  LOKA_VERIFY(!scene.hasPendingInvalidation());
+  LOKA_VERIFY(root->request.get().isNone());
+  VisitTrace::instance().clear();
+  // Null has no native viewport scrollbar. Enter the same input borrow door
+  // as NullInputDoor, publishing the synthetic input's settled origin.
+  (loka::app::scene::detail::InputInvocation(platform))(*scroll, &ScrollViewNode::publishOrigin, 0, 6);
+  LOKA_VERIFY(root->viewport.get() == Frame(0, 6, 80, 30));
+  const NodeDirtyFlags inputs = scroll->takeLayoutInputs();
+  LOKA_VERIFY(inputs == NODE_DIRTY_LAYOUT);
+  LOKA_VERIFY(scene.hasPendingInvalidation());
+  const short beforeFlush = child->geometry().y;
+  LOKA_VERIFY(beforeFlush == before);
+  LOKA_VERIFY(platform.leafLayoutVisitsForTesting() == visits);
+  LOKA_VERIFY(scene.flushInvalidation());
+  const short afterFlush = child->geometry().y;
+  LOKA_VERIFY(afterFlush == before - 6);
+  // The retained Text and the geometry probe are the two projected leaves.
+  LOKA_VERIFY(platform.leafLayoutVisitsForTesting() == visits + 2);
+  LOKA_VERIFY(!scene.hasPendingInvalidation());
+  LOKA_VERIFY(root->request.get().isNone());
+  unsigned takes = 0;
+  for (unsigned i = 0; i < VisitTrace::instance().size(); ++i)
+    takes += VisitTrace::instance().at(i).count;
+  LOKA_VERIFY(takes == 0);
+  loka::dsl::testing::SceneTestAccess::unmount(scene);
 }
