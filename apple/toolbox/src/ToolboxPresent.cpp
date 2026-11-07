@@ -3,7 +3,7 @@
 #include "ToolboxUnicodeStartup.hpp"
 
 /** Outer admission/render completion, shared with the host fixture. */
-void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
+void ToolboxApp::present(ActivationPhase phase, App::CompletionEntry entry, loka::core::Operation &turn)
 {
   turn.settle();
   this->admitAndApplyWindows();
@@ -32,6 +32,7 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
   }
   // One group walk and at most one modal for the entire App. No group borrow
   // is read after native code: the modal may have changed the Window group.
+  bool presentedDialog = false;
   if (this->running_)
   {
     const AppComponentGroup::Components dialogs = this->group_->getComponents();
@@ -49,6 +50,7 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
       {
         this->syncNativeFocusAll(NATIVE_FOCUS_SUPPRESSED);
         loka::toolbox::UnicodeText::scrapToPublic();
+        presentedDialog = true;
         dialog->present(*this);
         loka::toolbox::UnicodeText::scrapFromPublic();
         // One more admission only on the tick that ran a modal: it delivers the
@@ -60,6 +62,10 @@ void ToolboxApp::present(ActivationPhase phase, loka::core::Operation &turn)
     }
   }
   this->reconcileAtCompletion();
+  // A modal excludes a launch; re-read running_ after delivery and focus.
+  // Deliberate twin of AppTestAccess::completeTurn: serve, admit, then close.
+  if (this->running_ && !presentedDialog && this->serveURLsAtCompletion(entry))
+    this->admitAndApplyWindows();
   turn.close();
   this->reclaimWindows();
 }

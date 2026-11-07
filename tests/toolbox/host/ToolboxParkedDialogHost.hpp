@@ -132,8 +132,10 @@ namespace parked_dialog
     Presenter dialog(button, window.results, root->completed);
     controller.pendingDialogs().enroll(dialog.enrollment);
     {
+      const App::CompletionEntry entry =
+          loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
       Operation turn;
-      app.present(ACTIVATION_FOREGROUND, turn);
+      app.present(ACTIVATION_FOREGROUND, entry, turn);
     }
     LOKA_VERIFY(!root->shown.get());
     LOKA_VERIFY(button->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);

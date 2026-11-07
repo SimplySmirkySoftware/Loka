@@ -478,8 +478,10 @@ static void modal()
   ToolboxApp app(x.window, &y.window);
   TextensionFake::clearCalls();
   {
+    const App::CompletionEntry entry =
+        loka::core::Operation::hasActive() ? App::COMPLETION_INHERITED_CLOCK : App::COMPLETION_OUTERMOST;
     Operation operation;
-    app.present(ACTIVATION_FOREGROUND, operation);
+    app.present(ACTIVATION_FOREGROUND, entry, operation);
   }
   LOKA_VERIFY(count("scrap-from") == 1);
   TextensionFake::clearCalls();

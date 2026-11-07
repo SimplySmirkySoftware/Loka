@@ -25,9 +25,16 @@ void RunWindowAdmissionOperation(TestApp &app, void (*collect)(void *) = 0, void
 class WindowAdmissionTestApp : public App
 {
 public:
-  explicit WindowAdmissionTestApp(Window &first, Window *second = 0) : App(0)
+  explicit WindowAdmissionTestApp(Window &first, Window *second = 0, AppConfigurable *config = 0)
+      : App(config)
   {
-    this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, &first));
+    if (config)
+    {
+      App::run();
+      this->group_->adopt(&first);
+    }
+    else
+      this->group_ = new AppComponentGroup(std::vector<AppComponent *>(1, &first));
     if (second)
       this->group_->adopt(second);
   }
