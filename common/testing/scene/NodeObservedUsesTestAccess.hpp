@@ -17,6 +17,14 @@ public:
       if (row->subscription) ++count;
     return count;
   }
+  static unsigned reservedCount(const scene::Node &node)
+  {
+    unsigned count = 0;
+    for (const scene::ObservedUse *row = node.uses_.head; row; row = row->next)
+      if (!row->source.isFree())
+        ++count;
+    return count;
+  }
   static unsigned storageCount(const scene::Node &node)
   {
     unsigned count = 0;

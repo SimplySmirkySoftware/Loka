@@ -341,6 +341,13 @@ namespace loka
             row << "observed: " << observedCount;
             this->line(depth + 1, row.str());
           }
+          const size_t ownInputCount = BoundaryObservedStateTestAccess::ownInputUseCount(boundary.observedState_);
+          if (ownInputCount != 0)
+          {
+            std::ostringstream row;
+            row << "own-input: " << ownInputCount;
+            this->line(depth + 1, row.str());
+          }
         }
 
         void renderSection(::loka::app::BoundarySectionNode &section,

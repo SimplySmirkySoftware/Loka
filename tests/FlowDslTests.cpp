@@ -457,6 +457,7 @@ namespace
   static loka::core::MutableState<int> *g_pendingLayoutWidthState = 0;
   struct RecordingDirtySourceRegistrar : public loka::app::scene::DirtySourceRegistrar
   {
+    virtual void markDirtyOnOwnInput(loka::app::scene::NodeDirtyFlags) {}
     RecordingDirtySourceRegistrar()
         : calls(0),
           lastState(0),
