@@ -34,10 +34,12 @@ namespace loka
     once per outer entry; each call addresses one adapter-owned row. */
 extern "C"
 {
+  /** Cost: session start once before allocation; probes the private service's fixed Env table. */
+  bool web_text_admit(unsigned long fingerprint, unsigned count);
   int web_create(int kind, uint32_t token, uint32_t parent, int *width, int *height);
   void web_set_rect(uint32_t token, int x, int y, int width, int height);
   void web_set_text(uint32_t token, const char *bytes, unsigned length);
-  void web_set_text_style(uint32_t token, const int *descriptor, unsigned count);
+  bool web_set_text_style(uint32_t token, const int *descriptor, unsigned count);
   void web_set_enabled(uint32_t token, int enabled);
   int web_set_hidden(uint32_t token, int hidden);
   void web_revoke(uint32_t token);

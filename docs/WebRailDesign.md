@@ -1,10 +1,10 @@
 # Web Rail
 
-> **Status:** Normative; frozen Web rally pages 1 and 2, with the delegator's applied-root-visibility clarification.
+> **Status:** Normative; frozen Web rally pages 1, 2 and 3a, with the delegator's applied-root-visibility clarification.
 >
-> **Owns:** DOM resource ownership, browser entries, completion and shutdown.
+> **Owns:** DOM resource ownership, browser entries, completion, shutdown, text wire and typography environment.
 >
-> **Does not own:** Text geometry beyond the PR 1 fixed metrics, native typography, browser scheduling guarantees, or common lifecycle semantics.
+> **Does not own:** Text geometry beyond the PR 1 fixed metrics, font loading/raster guarantees, browser scheduling guarantees, or common lifecycle semantics.
 >
 > **Code truth:** [`web/src`](../web/src), [`web/js`](../web/js).
 >
@@ -62,7 +62,7 @@ User-facing quit is an ingress-checked request that the roster may decline, leav
 
 ## PR 1 projection and limits
 
-Text is one line; geometry uses the existing INaturalSizeSource seam with fixed metrics (eight CSS pixels per scalar, sixteen-pixel Text height, twenty-four-pixel Button height and sixteen-pixel horizontal inset). It does not claim wrapping or accurate browser font measurement. The preview style descriptor carries all six TextStyle axes, preserving absence and signed point values; actual size resolution remains fixed until page 3 replaces measurement and rendering together. Style constants come from `tools/ci/gen_style_vocab.py`.
+Text is one line; geometry uses the existing INaturalSizeSource seam with fixed metrics (eight CSS pixels per scalar, sixteen-pixel Text height, twenty-four-pixel Button height and sixteen-pixel horizontal inset). It does not claim wrapping or accurate browser font measurement. The preview style descriptor carries all six TextStyle axes, preserving absence and signed point values; wire v2 and font resolution are specified below; geometry remains fixed until the next projection PR. Style constants come from `tools/ci/gen_style_vocab.py`.
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers have no DOM elements.
 
@@ -75,3 +75,65 @@ Build `LokaWebTests` with the existing testing and testing-asan presets and run 
 After sourcing emsdk, use `emcmake cmake --preset testing-web`, then build `build/wasm/testing`. The node fixture alone links NODERAWFS. The browser fixture links production Web/common libraries without TEST_BUILD and keeps EXIT_RUNTIME disabled. Run `node tests/web/driver/run.mjs build/wasm/testing/web`; absence of Chromium is an explicit skip. No npm installation is needed.
 
 Each `tests/web/mutations/NN.sh <worktree>` builds and verifies a baseline, patches one behavior, requires the mutant to compile, runs the fixture, restores exact source bytes, rebuilds, and reports dirty counts. A compilation failure is never a killed mutation. Generated build/log artifacts stay under build/.
+
+## Text vocabulary and environment
+
+Wire v2 is nine signed 32-bit words: version, count, size kind, signed size
+payload, weight, italic, family, underline, color. The stack-owned
+`WebTextDescriptor` borrows the existing TextStyle queries; the boundary borrows
+its words only for the call. NONE requires payload zero, POINTS accepts the full
+signed short range, and ROLE accepts only generated roles. Unset toggles and
+weight remain -1. The decoder validates count, unsigned aligned heap bounds,
+headers and discriminated values before projection; protocol refusal remains
+active in release. The C++ caller consumes the boolean result before asserting.
+
+The generator owns every output path and the freshness checker imports that
+inventory. The generated schema fingerprint is FNV-1a 32-bit over UTF-8 canonical
+JSON (sorted object keys, compact separators, array order preserved), including
+ordered fields, headers, signed ranges and enum name-to-number maps. It detects
+accidental skew, not adversarial collisions. `web_text_admit` compares unsigned
+fingerprint and count inside BOOTSTRAP, before PlatformContext/Config/App
+allocation. Failure returns the existing FAILED and schedules the existing
+shutdown path. JS emits one `[web-text] refused: wire|canvas|lang` diagnostic.
+
+Admission builds a private detached canvas, context, fixed session language and
+Env Map, publishing only after all probes pass. The same ordered property table
+powers canvas and element application and capability probes: accessor presence
+before assignment, a non-default round trip, restoration, CSS declaration-name
+support, and finite font bounding ascent/descent. Language is an attribute on
+the element. The language is captured once from document lang, navigator
+language, or `en`, rejecting empty and `inherit` candidates. Completion drops
+the service after native teardown, including subsequent bootstrap failure.
+
+Font keys resolve to 48 combinations: six generated sizes, bold, italic and
+monospace. NONE is 12; SmallLabel is 10; numeric points snap nearest, ties low.
+Unset resolves to normal, non-italic and system. Color and underline do not
+participate. Envs are immutable, allocated lazily once per key and owned by the
+session Map. Their font shorthand has no line-height. The next projection PR
+must write line-height after every font write. Metric-affecting styling enters
+through shared Env resolution.
+
+The Env explicitly resets kerning, spacing, caps, stretch, rendering, direction,
+bidi, language, synthesis, size adjustment, font features/variations, optical
+sizing, text transformation, writing mode/orientation, indent, CJK spacing,
+text size adjustment (including the WebKit spelling), palette and white space.
+Font is written first so shorthand resets cannot undo later longhands. This
+isolation covers inherited typography, not unrelated element properties.
+
+The support target is current evergreen browsers that pass admission; CI
+verification covers Chromium only, not Firefox or Safari. Older engines missing
+required controls refuse startup. Advance parity assumes the same Env, available
+fonts, and no ancestor zoom/transform. Direct host CSS selecting the element,
+fonts loaded after admission, changing document language during the session,
+fallback ink overflow and DPR raster differences are outside this contract.
+PR 1 fixed geometry remains: this PR adds no runtime measurement door, snapshots,
+wrapping, natural-size changes or Button geometry. The one admission metric
+probe establishes service capability, not layout.
+
+Reproduce the JS pins with `node tests/web/js/decode.test.mjs` and
+`node tests/web/js/boundary.test.mjs`, and
+`python3 tests/web/js/schema.test.py`; run the six `text-*.py` mutations under
+`tests/web/mutations/` with the worktree path. Browser cells use
+`node tests/web/driver/run.mjs build/wasm/testing/web`; no Chromium prints an
+explicit skip. The fake boundary's header/fingerprint checks are limited host
+evidence, not evidence of browser decoding or typography.

@@ -41,5 +41,19 @@
   "fields": {
     "TextStyle": ["fontSize", "weight", "italic", "underline", "color", "family"],
     "BlockStyle": ["wrap", "truncation", "align"]
+  },
+  "wire": {
+    "textDescriptor": {
+      "version": 2,
+      "fields": [
+        "sizeKind",
+        "sizePayload",
+        "weight",
+        "italic",
+        "family",
+        "underline",
+        "color"
+      ]
+    }
   }
 }

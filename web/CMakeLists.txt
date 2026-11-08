@@ -43,10 +43,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     -sMODULARIZE=1 -sEXPORT_NAME=LokaWebCounter -sENVIRONMENT=web
     "--js-library=${CMAKE_CURRENT_SOURCE_DIR}/js/library.js"
     "--pre-js=${CMAKE_CURRENT_SOURCE_DIR}/js/style-vocab.js"
+    "--pre-js=${CMAKE_CURRENT_SOURCE_DIR}/js/text.js"
     "--post-js=${CMAKE_CURRENT_SOURCE_DIR}/js/api.js")
   set_property(TARGET LokaWebCounter APPEND PROPERTY LINK_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/js/library.js
     ${CMAKE_CURRENT_SOURCE_DIR}/js/style-vocab.js
+    ${CMAKE_CURRENT_SOURCE_DIR}/js/text.js
     ${CMAKE_CURRENT_SOURCE_DIR}/js/api.js)
   configure_file(../tests/web/driver/index.html ${CMAKE_CURRENT_BINARY_DIR}/index.html COPYONLY)
 endif()

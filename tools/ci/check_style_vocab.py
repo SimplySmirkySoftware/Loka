@@ -9,11 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUTS = (
-    Path("common/app/style/StyleVocab.hpp"),
-    Path("docs/smirkycard/loka-style.d.ts"),
-    Path("tools/style-vocab.runtime.js"),
-)
+from gen_style_vocab import OUTPUTS
 
 
 def main():

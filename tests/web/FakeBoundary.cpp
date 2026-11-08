@@ -1,11 +1,12 @@
 #include "FakeBoundary.hpp"
+#include "WebStyleWire.hpp"
 #include <sstream>
 namespace webtest
 {
   std::map<uint32_t, Resource> resources;
   std::map<unsigned, Task> tasks;
   std::vector<std::string> calls;
-  unsigned completed = 0, failCreate = 0, failHidden = 0;
+  unsigned completed = 0, failCreate = 0, failHidden = 0, failTextAdmit = 0, failTextStyle = 0;
   void (*probe)(const char *, uint32_t) = 0;
   static unsigned nextHandle = 1;
   void reset()
@@ -13,7 +14,7 @@ namespace webtest
     resources.clear();
     tasks.clear();
     calls.clear();
-    completed = failCreate = failHidden = 0;
+    completed = failCreate = failHidden = failTextAdmit = failTextStyle = 0;
     probe = 0;
   }
   void fire(unsigned handle, double now)
@@ -187,8 +188,26 @@ namespace loka
     } // namespace testing
   } // namespace web
 } // namespace loka
-extern "C" void web_set_text_style(uint32_t token, const int *values, unsigned count)
+// Limited evidence: host validates headers and fingerprint, not browser decoding or typography.
+extern "C" bool web_text_admit(unsigned long fingerprint, unsigned count)
 {
+  if (webtest::failTextAdmit)
+  {
+    --webtest::failTextAdmit;
+    return false;
+  }
+  return fingerprint == kWebTextWireFingerprint && count == WEB_TEXT_FIELD_COUNT;
+}
+extern "C" bool web_set_text_style(uint32_t token, const int *values, unsigned count)
+{
+  if (webtest::failTextStyle)
+  {
+    --webtest::failTextStyle;
+    return false;
+  }
+  if (count != WEB_TEXT_FIELD_COUNT || values[WEB_TEXT_FIELD_VERSION] != kWebTextDescriptorVersion
+      || values[WEB_TEXT_FIELD_WORD_COUNT] != WEB_TEXT_FIELD_COUNT)
+    return false;
   std::ostringstream args;
   args << "=";
   for (unsigned i = 0; i < count; ++i)
@@ -198,4 +217,5 @@ extern "C" void web_set_text_style(uint32_t token, const int *values, unsigned c
     args << values[i];
   }
   webtest::record("style", token, args.str());
+  return true;
 }

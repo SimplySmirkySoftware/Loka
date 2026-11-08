@@ -97,7 +97,11 @@ def tested_documentation_inputs(root=Path(__file__).resolve().parents[2]):
     examples, not documentation reads, and must not create self-dependencies.
     """
     inputs = set()
-    for pattern in ("tests/scripts/*.py", "tests/scripts/*.sh", "tools/ci/check_*.py"):
+    # gen_*.py: a checker may import its output inventory from the generator
+    # (check_style_vocab.py reads gen_style_vocab.OUTPUTS), so the literal docs
+    # path lives there and the scanner follows it.
+    for pattern in ("tests/scripts/*.py", "tests/scripts/*.sh", "tools/ci/check_*.py",
+                    "tools/ci/gen_*.py"):
         for script in root.glob(pattern):
             if script == root / "tests/scripts/CiPathsTest.py":
                 continue
