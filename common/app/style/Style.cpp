@@ -16,6 +16,7 @@ namespace loka
 
     typedef char TextWeightValueSizePin[sizeof(TextWeightValue) == 1 ? 1 : -1];
 
+    // Deliberate cross-language twin: web/js/text.js fontKey, generated sizes, ties low.
     int detail::SnapTextSizePoints(int logicalUnits)
     {
       int selected = detail::StyleVocabularySizes[0];

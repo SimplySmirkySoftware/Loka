@@ -1,3 +1,4 @@
+#include "WebTextDescriptor.hpp"
 #include "WebScenePlatformController.hpp"
 #include "WebSession.hpp"
 #include "WebTestHooks.hpp"
@@ -342,28 +343,12 @@ void WebElementContext::render(IPlatformController *)
   if (TextNode *node = this->owner()->asTextNode())
   {
     text = node->props.text_;
-    const TextStyle style = node->props.resolvedTextStyle();
-    int points = 0;
-    TextSizeRole role = TEXT_SIZE_ROLE_SMALL_LABEL;
-    const bool hasPoints = style.size_.queryPoints(points);
-    const bool hasRole = style.size_.queryRole(role);
-    TextWeight weight = TEXT_WEIGHT_NORMAL;
-    bool italic = false, underline = false;
-    const int descriptor[] = {1,
-                              10,
-                              hasPoints ? 1
-                              : hasRole ? 2
-                                        : 0,
-                              hasPoints ? points
-                              : hasRole ? static_cast<int>(role)
-                                        : 0,
-                              style.queryWeight(weight) ? static_cast<int>(weight) : -1,
-                              style.queryItalic(italic) ? static_cast<int>(italic) : -1,
-                              static_cast<int>(style.color_),
-                              static_cast<int>(style.family_.family()),
-                              style.queryUnderline(underline) ? static_cast<int>(underline) : -1,
-                              16};
-    web_set_text_style(this->element_.token(), descriptor, 10);
+    const WebTextDescriptor descriptor(node->props.resolvedTextStyle());
+    if (!web_set_text_style(this->element_.token(), descriptor.data(), descriptor.count()))
+    {
+      assert(false && "Web text protocol refusal");
+      return;
+    }
   }
   else if (ButtonNode *button = this->owner()->asButtonNode())
   {
