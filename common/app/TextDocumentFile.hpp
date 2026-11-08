@@ -2,6 +2,7 @@
 #define LOKA_APP_TEXT_DOCUMENT_FILE_HPP
 
 #include "app/TextBuffer.hpp"
+#include "app/text/TextReplacement.hpp"
 #include "core/String.hpp"
 #include "core/io/File.hpp"
 
@@ -11,29 +12,6 @@ namespace loka
 {
   namespace app
   {
-    /** Synchronous document IO outcome. OPEN/WRITE/FLUSH/CLOSE failures mean
-        the destination may have changed, including an OPEN failure. */
-    enum TextDocumentResult
-    {
-      TEXT_DOCUMENT_OK,
-      TEXT_DOCUMENT_READ_FAILED,
-      TEXT_DOCUMENT_TOO_LARGE,
-      TEXT_DOCUMENT_NON_ASCII,
-      TEXT_DOCUMENT_ALLOCATION,
-      TEXT_DOCUMENT_CAPACITY,
-      TEXT_DOCUMENT_STALE_ID,
-      TEXT_DOCUMENT_INVALID_INDEX,
-      TEXT_DOCUMENT_ID_EXHAUSTED,
-      TEXT_DOCUMENT_UNATTACHED,
-      TEXT_DOCUMENT_REENTRANT,
-      TEXT_DOCUMENT_PREPARE_FAILED,
-      TEXT_DOCUMENT_NOT_TEXT,
-      TEXT_DOCUMENT_OPEN_FAILED,
-      TEXT_DOCUMENT_WRITE_FAILED,
-      TEXT_DOCUMENT_FLUSH_FAILED,
-      TEXT_DOCUMENT_CLOSE_FAILED
-    };
-
     /** The rail's serialized separator; no separator follows the last row. */
 #if defined(LOKA_RETRO68)
     const char kTextDocumentNewline[] = "\r";
@@ -50,6 +28,13 @@ namespace loka
         Located/refused Files never retry their display name as a path.
         Completed row handles are sealed before allocation-free list replay. */
     TextDocumentResult ReadTextDocument(PlatformContext *context, const loka::file::File &file, TextBuffer &buffer);
+
+    /** Read raw UTF-8, removing only the leading file BOM. Failure preserves out.
+        This is the only factory that attaches a source. */
+    TextDocumentResult ReadTextReplacement(PlatformContext &context,
+                                           const file::File &file,
+                                           TextPlacement placement,
+                                           TextReplacement &out);
 
     /** Validate and stage the complete editor document before filesystem work,
         then prepare and destructively truncate/write/flush/close. The caller
