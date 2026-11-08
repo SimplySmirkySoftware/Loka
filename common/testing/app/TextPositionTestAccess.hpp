@@ -4,6 +4,7 @@
 #error TextPositionTestAccess is available only in TEST_BUILD
 #endif
 #include "app/text/TextDocumentValues.hpp"
+#include "app/text/TextStore.hpp"
 namespace loka
 {
   namespace app
@@ -35,7 +36,14 @@ namespace loka
                                      const TextPosition &anchor,
                                      const TextChangedRange *range = 0)
         {
-          return TextDocumentFact(state, revision, caret, anchor, range);
+          return TextDocumentFact(state,
+                                  revision,
+                                  caret,
+                                  anchor,
+                                  range ? TextPositionTestAccess::make(revision, range->start()) : TextPosition::None(),
+                                  range
+                                      ? TextPositionTestAccess::make(revision, range->start() + range->insertedLength())
+                                      : TextPosition::None());
         }
       };
     } // namespace testing

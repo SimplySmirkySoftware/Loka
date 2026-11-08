@@ -2,6 +2,8 @@
 #define LOKA_TESTS_NULL_TEXT_STORE_HPP
 #include "app/text/TextChangeNote.hpp"
 #include <string>
+#include "core/Utf8Decode.hpp"
+#include "app/scene/projection/PlatformController.hpp"
 namespace loka
 {
   namespace app
@@ -9,6 +11,10 @@ namespace loka
     namespace testing
     {
       struct TextDocumentAccess;
+#ifdef TEST_BUILD
+      void failTextChunkReads(unsigned count);
+      bool consumeTextChunkReadFailure();
+#endif
     }
   } // namespace app
 } // namespace loka
@@ -67,7 +73,60 @@ public:
     this->caret_ = this->anchor_ = std::min(caret, this->length());
   }
 
+  loka::app::scene::TextChunkResult
+  readChunk(unsigned long &offset, unsigned long end, char *out, unsigned long capacity, unsigned long &written) const
+  {
+    using namespace loka::app::scene;
+    written = 0;
+    if (!capacity || !out)
+      return TEXT_CHUNK_REFUSED_RANGE;
+    if (end == kTextNativeEnd)
+      end = this->length();
+    if (offset > end || end > this->length() || !this->canonical(offset) || !this->canonical(end))
+      return TEXT_CHUNK_REFUSED_RANGE;
+#ifdef TEST_BUILD
+    if (loka::app::testing::consumeTextChunkReadFailure())
+      return TEXT_CHUNK_REFUSED_RESOURCE;
+#endif
+    if (offset == end)
+      return TEXT_CHUNK_END;
+    unsigned long cursor = offset, count = 0;
+    while (cursor < end)
+    {
+      std::size_t next = cursor;
+      unsigned int scalar = 0;
+      if (!loka::core::detail::DecodeUtf8Codepoint(
+              this->committedText_.data(), this->committedText_.size(), next, scalar))
+        return TEXT_CHUNK_REFUSED_MALFORMED;
+      const bool newline = scalar == '\r' || scalar == '\n';
+      if (scalar == '\r' && next < this->committedText_.size() && this->committedText_[next] == '\n')
+        ++next;
+      const unsigned long bytes = newline ? 1 : static_cast<unsigned long>(next - cursor);
+      if (bytes > capacity - count)
+        break;
+      if (newline)
+        out[count] = '\n';
+      else
+        for (unsigned long i = 0; i < bytes; ++i)
+          out[count + i] = this->committedText_[cursor + i];
+      count += bytes;
+      cursor = static_cast<unsigned long>(next);
+    }
+    if (!count)
+      return TEXT_CHUNK_NO_ROOM;
+    offset = cursor;
+    written = count;
+    return TEXT_CHUNK_PROGRESS;
+  }
+
 private:
+  bool canonical(unsigned long offset) const
+  {
+    if (offset == 0 || offset == this->length())
+      return true;
+    const unsigned char byte = static_cast<unsigned char>(this->committedText_[offset]);
+    return (byte & 0xc0) != 0x80 && !(this->committedText_[offset - 1] == '\r' && byte == '\n');
+  }
   /** Test-native composition, independent of committed length and edit notifications. */
   struct Composition
   {

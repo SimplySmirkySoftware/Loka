@@ -34,6 +34,7 @@
 #include "StateStreamChainTests.hpp"
 #include "FocusPublisherTests.hpp"
 #include "TextDocumentKernelTests.hpp"
+#include "TextReaderTests.hpp"
 #include "FocusPostTests.hpp"
 #ifdef __APPLE__
 #include "MacImageBlobTests.hpp"

@@ -13,6 +13,19 @@ namespace loka
     namespace scene
     {
 
+      /** Chunk results distinguish completion, a short output buffer, and refusal. */
+      enum TextChunkResult
+      {
+        TEXT_CHUNK_PROGRESS,
+        TEXT_CHUNK_END,
+        TEXT_CHUNK_NO_ROOM,
+        TEXT_CHUNK_REFUSED_MALFORMED,
+        TEXT_CHUNK_REFUSED_RESOURCE,
+        TEXT_CHUNK_REFUSED_RANGE,
+        TEXT_CHUNK_REFUSED_UNSUPPORTED
+      };
+      const unsigned long kTextNativeEnd = ~0UL;
+
       class TextDocumentRegistration;
       class Node;
       class BoundaryNode;
@@ -167,9 +180,14 @@ namespace loka
         {
           return false;
         }
-        virtual bool queryTextLength(TextStoreRow &, unsigned long &)
+        /** Both native ends must be canonical. Progress emits maximal whole UTF-8
+            units, normalizing CR, LF and CRLF to LF. Every other result leaves
+            the offset unchanged and written zero. Capacity must be positive. */
+        virtual TextChunkResult
+        readTextChunk(TextStoreRow &, unsigned long &, unsigned long, char *, unsigned long, unsigned long &written)
         {
-          return false;
+          written = 0;
+          return TEXT_CHUNK_REFUSED_UNSUPPORTED;
         }
 
         // Project a changed node tree into native UI.

@@ -1,55 +1,66 @@
 #ifndef LOKA_APP_TEXT_STORE_HPP
 #define LOKA_APP_TEXT_STORE_HPP
 #include "app/text/TextDocumentValues.hpp"
+#include "app/scene/TwinLink.hpp"
 namespace loka
 {
   namespace app
   {
+    /** Changed span in the rail's native unit: start and replaced length, plus inserted length. */
+    class TextChangedRange
+    {
+    public:
+      TextChangedRange(unsigned long start = 0, unsigned long length = 0, unsigned long insertedLength = 0)
+          : start_(start),
+            length_(length),
+            insertedLength_(insertedLength)
+      {
+      }
+      unsigned long start() const
+      {
+        return this->start_;
+      }
+      unsigned long length() const
+      {
+        return this->length_;
+      }
+      unsigned long insertedLength() const
+      {
+        return this->insertedLength_;
+      }
+      bool operator==(const TextChangedRange &other) const
+      {
+        return this->start_ == other.start_ && this->length_ == other.length_
+               && this->insertedLength_ == other.insertedLength_;
+      }
+      bool operator!=(const TextChangedRange &other) const
+      {
+        return !(*this == other);
+      }
+
+    private:
+      unsigned long start_;
+      unsigned long length_;
+      unsigned long insertedLength_;
+    };
+
     namespace scene
     {
       class IPlatformController;
       class TextStoreRow;
       class TextStoreLedger;
-      /** Callback-free twin of FocusLink. Either endpoint's destruction severs the borrow. */
-      class TextStoreLink
+      /** Store-specific name for the callback-free paired borrow. */
+      class TextStoreLink : public TwinLink<TextStoreRow, TextStoreRow>
       {
       public:
         explicit TextStoreLink(TextStoreRow *row = 0)
-            : peer_(0),
-              row_(row)
+            : TwinLink<TextStoreRow, TextStoreRow>(row)
         {
-        }
-        ~TextStoreLink()
-        {
-          this->cut();
-        }
-        void connect(TextStoreLink &other)
-        {
-          this->cut();
-          other.cut();
-          if (&other == this)
-            return;
-          this->peer_ = &other;
-          other.peer_ = this;
-        }
-        void cut()
-        {
-          if (this->peer_)
-          {
-            this->peer_->peer_ = 0;
-            this->peer_ = 0;
-          }
         }
         TextStoreRow *row() const
         {
-          return this->peer_ ? this->peer_->row_ : 0;
+          return this->remote();
         }
-
-      private:
-        TextStoreLink(const TextStoreLink &);
-        TextStoreLink &operator=(const TextStoreLink &);
-        TextStoreLink *peer_;
-        TextStoreRow *const row_;
       };
       /** Consumed native observation, including current uncommitted text presence. */
       class TextStoreReading
