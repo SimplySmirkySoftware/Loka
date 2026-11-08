@@ -59,6 +59,7 @@ const server=createServer(async(req,res)=>{
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
+        replaceService:service=>{WebDOM.text=service},
         resources:()=>WebDOM.resources.size,
         admit:()=>LokaWebText.admit(LokaWebStyle.wire.fingerprint,LokaWebStyle.wire.count,
           document,navigator,CSS,message=>console.error(message)),
@@ -118,6 +119,8 @@ try {
                      {type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9}])
     await client.send('Input.dispatchKeyEvent',event);
   assert.equal(await client.evaluate('document.activeElement.tagName'),'BUTTON');
+  assert.equal(await client.evaluate(`(() => {const el=document.activeElement,s=getComputedStyle(el);
+    return el.matches(':focus-visible') && s.outlineStyle!=='none' && parseFloat(s.outlineWidth)>0;})()`),true);
   for(const [key,code,vk] of [[' ','Space',32],['Enter','Enter',13]]) {
     const before=await client.evaluate('clickExports');
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:vk});

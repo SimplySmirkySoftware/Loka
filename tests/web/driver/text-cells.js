@@ -39,9 +39,70 @@ window.runTextCells = async function() {
   }
   check(new Set(widths).size === 3, 'language positive control: three distinct advances '+widths);
   const element = document.querySelector('span[data-loka-token]');
+  const token=+element.dataset.lokaToken, originalService=normal.service(), service=normal.admit();
+  normal.replaceService(service);
+  const measure=service.ctx.measureText.bind(service.ctx);
+  let calls=0, bytes=0;
+  service.ctx.measureText=function(text) {
+    this.font=this.font.replace('system-ui','"Loka Text Probe"');
+    ++calls; bytes+=new TextEncoder().encode(text).length;
+    return measure(text);
+  };
+  const project=(kind,width)=>{
+    const height=fixture._fixture_text_probe(kind,width,token);
+    element.style.fontFamily='"Loka Text Probe"';
+    return height;
+  };
+  const h=project(0,9);
+  check(element.textContent==='A\nV\nx','standalone range kerning at line start');
+  const H=parseFloat(element.style.lineHeight);
+  check(h===3*H,'three allocated lines');
+  check(project(1,100)===2*H && element.textContent==='a\nb','explicit newline = 2H');
+  project(2,100);
+  check(element.textContent==='漢字😀','CJK and emoji intact');
+  const range=document.createRange(); range.selectNodeContents(element);
+  const rangeWidth=range.getBoundingClientRect().width;
+  const canvasWidth=service.ctx.measureText(element.textContent).width;
+  check(Math.abs(rangeWidth-canvasWidth)<1,'Range vs standalone canvas');
+  const metrics=service.ctx.measureText('x');
+  const half=(H-metrics.fontBoundingBoxAscent-metrics.fontBoundingBoxDescent)/2;
+  check(half>=0 && half<1,'conditional half-leading');
+  const baselineBox=document.createElement('div');
+  service.environment(16).applyToElement(baselineBox);
+  Object.assign(baselineBox.style,{fontFamily:'"Loka Text Probe"',lineHeight:H+'px',
+    position:'absolute',padding:'0',border:'0',margin:'0'});
+  baselineBox.appendChild(document.createTextNode('x'));
+  const marker=document.createElement('span');
+  marker.style.cssText='display:inline-block;width:0;height:0;padding:0;border:0;vertical-align:baseline';
+  baselineBox.appendChild(marker); document.body.appendChild(baselineBox);
+  const baseline=marker.getBoundingClientRect().top-baselineBox.getBoundingClientRect().top;
+  check(Math.abs(baseline-(metrics.fontBoundingBoxAscent+half))<0.1,'fractional CSS baseline');
+  baselineBox.remove();
+  check(getComputedStyle(element).overflow==='hidden','clip');
+  const costs=[];
+  for(const kind of [3,4]) {
+    calls=bytes=0; const start=performance.now(); project(kind,80);
+    costs.push({kind,calls,bytes,ms:performance.now()-start});
+  }
+  service.ctx.measureText=measure;
+  normal.replaceService(originalService);
+  const button=document.querySelector('button[data-loka-token]');
+  const original=button.textContent;
+  for(const label of [original,'']) {
+    button.textContent=label; const css=getComputedStyle(button), rect=button.getBoundingClientRect();
+    check(css.appearance==='none' && css.boxSizing==='border-box','Button appearance');
+    check(parseFloat(css.paddingLeft)===8 && parseFloat(css.paddingTop)===4,'Button padding');
+    check(parseFloat(css.borderLeftWidth)===1 && parseFloat(css.borderTopWidth)===1,'Button border');
+    check(rect.height===parseFloat(css.lineHeight)+10,'Button height H+10');
+    const width=button.style.width; button.style.width='10px';
+    check(button.getBoundingClientRect().width>=18,'narrow Button preserves padding and border minimum');
+    button.style.width=width;
+  }
+  button.textContent=original;
+  console.log('text projection costs '+JSON.stringify(costs));
   const before = element.style.cssText;
   check(normal.badDescriptor(+element.dataset.lokaToken) === false, 'release-active protocol refusal');
   check(element.style.cssText === before, 'protocol refusal preserves element');
-  return {widths, cells: ['polluted ancestor', 'language positive control', 'regular-only bold synthesis',
+  return {widths, costs, cells: ['polluted ancestor', 'language positive control', 'regular-only bold synthesis',
     'detached canvas', 'language fixed after first key', 'protocol refusal']};
 };

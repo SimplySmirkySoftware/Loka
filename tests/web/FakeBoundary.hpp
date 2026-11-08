@@ -45,6 +45,8 @@ namespace webtest
   extern std::vector<std::string> calls;
   extern unsigned completed, failCreate, failHidden, failTextAdmit, failTextStyle;
   extern void (*probe)(const char *, uint32_t);
+  extern unsigned measureCalls, metricCalls, measureBytes, textBuilds, textScans;
+  extern int failMeasure, measureStatus, measuredWidth;
   void reset();
   void fire(unsigned handle, double now);
   unsigned task(int kind);
