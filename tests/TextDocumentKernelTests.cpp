@@ -175,9 +175,10 @@ void testTextKernelCompletion()
   LOKA_VERIFY(doc.queryLength(length) && length == 10);
   LOKA_VERIFY(!doc.queryOrder(old, doc.fact()->get().caret(), order));
   LOKA_VERIFY(doc.queryOrder(doc.fact()->get().selectionAnchor(), doc.fact()->get().caret(), order) && order == -1);
-  TextChangedRange range;
-  LOKA_VERIFY(doc.fact()->get().queryChangedRange(range));
-  LOKA_VERIFY(range == TextChangedRange(0, 0, 10));
+  TextPosition rangeStart, rangeEnd;
+  LOKA_VERIFY(doc.fact()->get().queryChangedRange(rangeStart, rangeEnd));
+  LOKA_VERIFY(rangeStart == TextPositionTestAccess::make(1, 0));
+  LOKA_VERIFY(rangeEnd == TextPositionTestAccess::make(1, 10));
   // No view exists: the document still delivers a current caret request.
   doc.post(doc.fact()->get().selectionAnchor());
   f.app.reconcileAtCompletion();
@@ -409,9 +410,10 @@ void testTextKernelReadApplyRead()
   f.app.reconcileAtCompletion();
   LOKA_VERIFY(f.controller.applies == 1 && writes == 1);
   LOKA_VERIFY(doc.fact()->get().textRevision() == 1);
-  TextChangedRange range;
-  LOKA_VERIFY(doc.fact()->get().queryChangedRange(range));
-  LOKA_VERIFY(range == TextChangedRange(0, 0, 7));
+  TextPosition rangeStart, rangeEnd;
+  LOKA_VERIFY(doc.fact()->get().queryChangedRange(rangeStart, rangeEnd));
+  LOKA_VERIFY(rangeStart == TextPositionTestAccess::make(doc.fact()->get().textRevision(), 0));
+  LOKA_VERIFY(rangeEnd == TextPositionTestAccess::make(doc.fact()->get().textRevision(), 7));
   unsigned long length = 0;
   LOKA_VERIFY(doc.queryLength(length) && length == 7);
   LOKA_VERIFY(!TextDocumentAccess::pending(doc));
@@ -928,8 +930,12 @@ void testTextPublicationContinuesAfterWithdrawal()
       TextDocumentAccess::onCommit(root.first, &WithdrawDocument::run, &first);
       TextDocumentAccess::onCommit(root.second, &WithdrawDocument::run, &second);
       LOKA_VERIFY(app.commitTextInput() == TEXT_INPUT_SETTLED);
-      LOKA_VERIFY(root.first.fact()->get().state() == TEXT_DOCUMENT_UNAVAILABLE);
-      LOKA_VERIFY(root.second.fact()->get().state() == TEXT_DOCUMENT_UNAVAILABLE);
+      // Withdrawal cuts the document link, so refresh cannot publish after the callback.
+      LOKA_VERIFY(root.first.fact()->get().state() == TEXT_DOCUMENT_READY);
+      LOKA_VERIFY(root.second.fact()->get().state() == TEXT_DOCUMENT_READY);
+      unsigned long length = 99;
+      LOKA_VERIFY(!root.first.queryLength(length) && length == 99);
+      LOKA_VERIFY(!root.second.queryLength(length) && length == 99);
     }
     else
     {

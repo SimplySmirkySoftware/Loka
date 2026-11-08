@@ -1,5 +1,6 @@
 #ifndef LOKA_APP_SCENE_TEXT_DOCUMENTS_HPP
 #define LOKA_APP_SCENE_TEXT_DOCUMENTS_HPP
+#include "app/scene/MemberList.hpp"
 namespace loka
 {
   namespace app
@@ -30,8 +31,7 @@ namespace loka
         /** Visits in membership order; a visit may withdraw its current row. */
         void visit(Visitor &visitor);
         SceneTextDocuments()
-            : head_(0),
-              phase_(IDLE)
+            : phase_(IDLE)
         {
         }
         ~SceneTextDocuments();
@@ -71,7 +71,8 @@ namespace loka
           SceneTextDocuments &owner_;
           const Phase previous_;
         };
-        TextDocumentRegistration *head_;
+        MemberList<TextDocumentRegistration> members_;
+        class StoreCreator;
         Phase phase_;
         friend struct ::loka::app::testing::TextDocumentAccess;
         friend class TextDocumentRegistration;
