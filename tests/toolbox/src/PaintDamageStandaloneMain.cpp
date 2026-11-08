@@ -1,3 +1,6 @@
+#if defined(LOKA_PAINT_DAMAGE_DEPTH) && LOKA_PAINT_DAMAGE_DEPTH != 0
+#include "StandaloneScreenDepth.hpp"
+#endif
 #include "../ToolboxButtonFollowAccess.hpp"
 #include "ToolboxButtonMoveCapability.hpp"
 #include <Gestalt.h>
@@ -2001,6 +2004,9 @@ namespace
     EditDamageNode *edit_;
     loka::platform::file::FileHandle file_;
     std::FILE *log_;
+#if defined(LOKA_PAINT_DAMAGE_DEPTH) && LOKA_PAINT_DAMAGE_DEPTH != 0
+    StandaloneScreenDepth depth_;
+#endif
     Phase phase_;
     int result_;
     ToolboxSceneDebugStats initial_;
@@ -2074,6 +2080,18 @@ namespace
     static void DispatchIdle(Window *, double elapsed, void *data)
     {
       PaintDamageConfig *self = static_cast<PaintDamageConfig *>(data);
+#if defined(LOKA_PAINT_DAMAGE_DEPTH) && LOKA_PAINT_DAMAGE_DEPTH != 0
+      if (self->phase_ == SETTLE)
+      {
+        self->depth_.request(LOKA_PAINT_DAMAGE_DEPTH);
+        std::fprintf(self->log_,
+                     "depth requested=%d original=%d accepted=%d\r",
+                     LOKA_PAINT_DAMAGE_DEPTH,
+                     self->depth_.originalDepth(),
+                     self->depth_.accepted());
+        loka::platform::file::FlushWrite(self->log_, self->file_);
+      }
+#endif
       Window *target = 0;
       switch (self->phase_)
       {
@@ -2349,6 +2367,15 @@ namespace
 
     void finish(bool pass)
     {
+#if defined(LOKA_PAINT_DAMAGE_DEPTH) && LOKA_PAINT_DAMAGE_DEPTH != 0
+      if (this->depth_.accepted())
+      {
+        const OSErr result = this->depth_.restore();
+        std::fprintf(this->log_, "restore-depth err=%d\r", result);
+        if (result != noErr)
+          this->result_ = 1;
+      }
+#endif
       this->phase_ = COMPLETE;
       pass = pass && this->result_ == 0;
       this->result_ = pass ? 0 : 1;
