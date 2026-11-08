@@ -2083,12 +2083,18 @@ namespace
 #if defined(LOKA_PAINT_DAMAGE_DEPTH) && LOKA_PAINT_DAMAGE_DEPTH != 0
       if (self->phase_ == SETTLE)
       {
-        self->depth_.request(LOKA_PAINT_DAMAGE_DEPTH);
+        const OSErr depthResult = self->depth_.request(LOKA_PAINT_DAMAGE_DEPTH);
         std::fprintf(self->log_,
                      "depth requested=%d original=%d accepted=%d\r",
                      LOKA_PAINT_DAMAGE_DEPTH,
                      self->depth_.originalDepth(),
                      self->depth_.accepted());
+        // A depth build that runs at another depth must not report PASS.
+        if (!self->depth_.accepted())
+        {
+          std::fprintf(self->log_, "FAIL depth-request err=%d\r", depthResult);
+          self->result_ = 1;
+        }
         loka::platform::file::FlushWrite(self->log_, self->file_);
       }
 #endif
