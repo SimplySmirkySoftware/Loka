@@ -3,6 +3,7 @@
 
 #include "app/scene/Node.hpp"
 #include "app/text/TextStore.hpp"
+#include "app/text/TextStoreSource.hpp"
 #include "app/scene/projection/PlatformNodeHandler.hpp"
 #include "app/scene/boundary/BoundaryApplyInfo.hpp"
 
@@ -158,10 +159,17 @@ namespace loka
           return false;
         }
 
-        /** Text store doors refuse on rails without a store implementation. */
-        virtual bool createTextStore(TextDocumentRegistration &)
+        /** Build completely before returning BORN; old is borrowed and untouched on refusal.
+            BORN transfers views without allocation, applies selection, and consumes all
+            construction marks. Its unchanged, unmarked reading carries [0, native end].
+            The kernel connects fresh and retires old; the rail retires partial failures.
+            Called once per declaration and once per taken replacement, walking only
+            the new row's input. Rails without a store implementation refuse. */
+        virtual TextStoreBirth
+        createTextStore(TextStoreSource &, TextStoreRow *, TextStoreRow *&fresh, TextStoreReading &)
         {
-          return false;
+          fresh = 0;
+          return TEXT_STORE_REFUSED_UNSUPPORTED;
         }
         /** Copy handles and identities before the native call and revalidate the row afterwards.
             Callbacks during the call may only mark the row's change note. */

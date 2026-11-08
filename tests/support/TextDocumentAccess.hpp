@@ -2,6 +2,7 @@
 #define LOKA_TESTS_TEXT_DOCUMENT_ACCESS_HPP
 #include "app/text/TextDocumentRegistration.hpp"
 #include "app/text/TextReader.hpp"
+#include "app/text/TextDocumentPublisher.hpp"
 #include "app/scene/SceneTextDocuments.hpp"
 #include "platform/null/NullTextStore.hpp"
 namespace loka
@@ -14,6 +15,10 @@ namespace loka
       bool consumeTextStoreCreationFailure();
       struct TextDocumentAccess
       {
+        static void complete(scene::SceneTextDocuments &documents, scene::IPlatformController &controller)
+        {
+          detail::TextDocumentPublisher::complete(documents, controller);
+        }
         static scene::TextDocumentRegistration *registration(TextDocument &document)
         {
           return document.registration_.remote();

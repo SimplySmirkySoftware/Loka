@@ -1742,3 +1742,5 @@ LOKA_TEST(testTextReplacementReceipt)
 LOKA_TEST(testTextReplacementOrigin)
 LOKA_TEST(testTextStoreSource)
 LOKA_TEST(testReadTextReplacement)
+
+LOKA_TEST(testTextWholeReplacementContracts)
