@@ -40,6 +40,12 @@ namespace loka
       static String FromPlatform(const loka::core::Managed<platform::String> &platformValue);
       static String FromInt(int value);
 
+      /** Equal representation implies equal value, not the reverse. Never allocates. */
+      bool sharesRepresentation(const String &other) const
+      {
+        return this->handle_ == other.handle_;
+      }
+
       bool empty() const;
       StringCompareResult compare(const String &other, bool allowAllocateBuffer) const;
       int compare(const String &other) const;
