@@ -28,10 +28,9 @@ TEHandle ToolboxScenePlatformController::ensureTextEditorControl(ToolboxTextEdit
   }
   if (!this->editControls_.prepareAppend())
     return 0;
-  ToolboxTextMeasureScope fontScope(*this);
+  ToolboxTextMeasureScope fontScope(*this, ToolboxTextFontDescriptor(loka::app::FontSize<9>()));
   // Plain TextEdit captures the port font and its metrics at creation.
   TextFont(4); // Monaco; Universal Interfaces omit the legacy monaco constant.
-  TextSize(9);
   TextFace(0);
   TEHandle te = TENew(&textRect, &clipped);
   if (!te)

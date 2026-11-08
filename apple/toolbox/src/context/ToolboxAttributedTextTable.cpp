@@ -332,10 +332,13 @@ bool ToolboxAttributedTextTable::draw(short x,
       if (budget < 0)
         budget = 0;
     }
+    // Twin: ToolboxTextContext.cpp PlainDisplay emits nothing when even dots
+    // exceed a positive width. Keep this line's advance even when it is empty.
+    const bool omitLine = ellipsis && dotsWidth > availableWidth;
     std::size_t paintedEnd = line.fragmentCount
         ? this->lines_->fragment(line.firstFragment + line.fragmentCount - 1).end : 0;
-    int paintedWidth = line.width;
-    if (ellipsis)
+    int paintedWidth = omitLine ? 0 : line.width;
+    if (ellipsis && !omitLine)
     {
       paintedWidth = dotsWidth;
       for (std::size_t f = 0; f < line.fragmentCount; ++f)
@@ -378,7 +381,7 @@ bool ToolboxAttributedTextTable::draw(short x,
     // lines. Both use AlignedLineOffset; this path reuses table prefix widths.
     int cursor = x + AlignedLineOffset(availableWidth, paintedWidth,
         block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT);
-    for (std::size_t f = 0; f < line.fragmentCount; ++f)
+    for (std::size_t f = 0; !omitLine && f < line.fragmentCount; ++f)
     {
       const TextFragment &fragment = this->lines_->fragment(line.firstFragment + f);
       const std::size_t end = fragment.end < paintedEnd ? fragment.end : paintedEnd;
@@ -402,7 +405,7 @@ bool ToolboxAttributedTextTable::draw(short x,
       if (end != fragment.end)
         break;
     }
-    if (ellipsis)
+    if (ellipsis && !omitLine)
     {
       measure.select(this->fonts_[lastSpan]);
       MoveTo(Coordinate(cursor), Coordinate(y + line.metrics.ascent));

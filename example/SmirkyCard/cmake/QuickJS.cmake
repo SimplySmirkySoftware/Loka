@@ -65,13 +65,16 @@ if(SMIRKYCARD_C_STANDARD EQUAL 99)
       "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSLegacyC.h\"")
   endif()
 endif()
-# A separate question from the dialect: does the configured Apple SDK declare
-# the monotonic clock QuickJS reads? The 10.4u SDK does not, with GCC 4.0 or
-# with clang; SDKs from 10.12 do, and keep their own clock_gettime.
+# A separate question from the dialect: can the monotonic clock QuickJS reads
+# be bound where the binary runs? The 10.4u SDK declares no CLOCK_MONOTONIC,
+# with GCC 4.0 or with clang. SDKs from 10.12 declare clock_gettime, but
+# libSystem exports it only from 10.12, so a deployment target below 10.12
+# takes the shim even when the SDK declares the symbol (#1563).
 if(APPLE)
   include(CheckSymbolExists)
   check_symbol_exists(CLOCK_MONOTONIC "time.h" SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
-  if(NOT SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC)
+  if(NOT SMIRKYCARD_SDK_HAS_CLOCK_MONOTONIC
+     OR (CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 10.12))
     target_compile_options(smirkycard_quickjs PRIVATE
       "SHELL:-include \"${CMAKE_CURRENT_LIST_DIR}/QuickJSMachClock.h\"")
   endif()

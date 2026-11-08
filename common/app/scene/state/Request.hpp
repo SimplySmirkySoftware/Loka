@@ -26,6 +26,17 @@ namespace loka
         POST_QUEUE_FULL,
         POST_INVALID
       };
+      /** What a Reply keeps of the requested and applied values. The primary keeps T itself;
+          a specialization may keep a smaller receipt so a heavy request value does not outlive its take.
+          In C++98, a specialization must restate both Type and of. */
+      template <typename T> struct ReplyReceipt
+      {
+        typedef T Type;
+        static Type of(const T &value)
+        {
+          return value;
+        }
+      };
       /** Result of one take, not a promise for every post. */
       template <typename T> class Reply
       {
@@ -46,26 +57,28 @@ namespace loka
         }
         static Reply Granted(const T &applied)
         {
-          return Reply(GRANTED, applied, applied, RequestTraits<T>::accepted());
+          return Reply(
+              GRANTED, ReplyReceipt<T>::of(applied), ReplyReceipt<T>::of(applied), RequestTraits<T>::accepted());
         }
         static Reply Clamped(const T &requested, const T &applied)
         {
-          return Reply(CLAMPED, requested, applied, RequestTraits<T>::accepted());
+          return Reply(
+              CLAMPED, ReplyReceipt<T>::of(requested), ReplyReceipt<T>::of(applied), RequestTraits<T>::accepted());
         }
         static Reply Refused(const T &requested, typename RequestTraits<T>::Reason reason)
         {
-          return Reply(REFUSED, requested, T(), reason);
+          return Reply(REFUSED, ReplyReceipt<T>::of(requested), typename ReplyReceipt<T>::Type(), reason);
         }
         Kind kind() const
         {
           return this->kind_;
         }
-        const T &requested() const
+        const typename ReplyReceipt<T>::Type &requested() const
         {
           assert(this->kind_ != NO_REPLY);
           return this->requested_;
         }
-        const T &applied() const
+        const typename ReplyReceipt<T>::Type &applied() const
         {
           assert(this->kind_ == GRANTED || this->kind_ == CLAMPED);
           return this->applied_;
@@ -82,7 +95,10 @@ namespace loka
         }
 
       private:
-        Reply(Kind kind, const T &requested, const T &applied, typename RequestTraits<T>::Reason reason)
+        Reply(Kind kind,
+              const typename ReplyReceipt<T>::Type &requested,
+              const typename ReplyReceipt<T>::Type &applied,
+              typename RequestTraits<T>::Reason reason)
             : kind_(kind),
               requested_(requested),
               applied_(applied),
@@ -90,8 +106,8 @@ namespace loka
         {
         }
         Kind kind_;
-        T requested_;
-        T applied_;
+        typename ReplyReceipt<T>::Type requested_;
+        typename ReplyReceipt<T>::Type applied_;
         typename RequestTraits<T>::Reason reason_;
       };
       template <typename T> class RequestWithReply;

@@ -3,6 +3,7 @@
 #include "WebTestHooks.hpp"
 #include "WebTestAccess.hpp"
 #include "WebWindow.hpp"
+#include "WebTextLayout.hpp"
 #include <emscripten.h>
 namespace webtest
 {
@@ -35,6 +36,34 @@ namespace loka
 } // namespace loka
 extern "C"
 {
+  /** Fixture-only projection exercise. Cost: driver once per cell, its own temporary rows. */
+  EMSCRIPTEN_KEEPALIVE int fixture_text_probe(int kind, int width, uint32_t token)
+  {
+    using namespace loka::app;
+    const std::string prose = "The quick brown fox jumps over the lazy dog. ";
+    const std::string value = kind == 0   ? "AVx"
+                              : kind == 1 ? "a\nb"
+                              : kind == 2 ? "漢字😀"
+                              : kind == 3 ? (prose + prose + prose + prose + prose).substr(0, 200)
+                              : kind == 4 ? "x " + std::string(198, 'a')
+                                          : "";
+    const loka::core::String text(value);
+    const BlockStyle block = BlockStyle().wrap(TEXT_WRAP_WORD);
+    WebTextSnapshot *snapshot = 0;
+    const int status =
+        WebTextLayout::build(text, WebTextConstraint(16, block, static_cast<short>(width)), false, snapshot);
+    if (status != WEB_MEASURE_OK)
+      return -1;
+    WebTextSlot slot;
+    slot.replace(snapshot);
+    const WebTextDescriptor d = WebMetricDescriptor(16);
+    web_set_text_style(token, d.data(), d.count());
+    web_set_line_height(token, snapshot->metrics().ascent + snapshot->metrics().descent);
+    web_set_block(token, TEXT_ALIGN_LEFT, TEXT_TRUNCATION_CLIP);
+    web_set_text(token, snapshot->joined(), snapshot->joinedLength());
+    web_set_rect(token, 0, 0, width, snapshot->extent().height);
+    return snapshot->extent().height;
+  }
   EMSCRIPTEN_KEEPALIVE int web_start(int config)
   {
     if (!session)
