@@ -1,0 +1,4 @@
+#ifndef LOKA_TESTS_TEXT_SPAN_WIN32_TESTS_HPP
+#define LOKA_TESTS_TEXT_SPAN_WIN32_TESTS_HPP
+void testWin32LinkedSpanCharacterization();
+#endif

@@ -119,8 +119,8 @@ namespace loka
 
     /** Borrowed width provider for one synchronous break. Ranges never split a code
         point, may cross adjacent equal-style segments, and use the source's native
-        units. Sources own ordered, contiguous character spans, coalescing adjacent
-        equal styles before breaking. Each character names its containing span.
+        units. Sources own ordered, contiguous character spans; adjacent spans differ
+        in style or link target. Each character names its containing span.
         A refusal invalidates the complete result. Widths must be nonnegative.
         Successful probes must be repeatable during construction: the breaker
         counts and fills using the same probe sequence.
@@ -163,7 +163,11 @@ namespace loka
     private:
       detail::TextMeasureTable<TextBreakCharacter> characters_;
       detail::TextMeasureTable<TextStyleSpan> spans_;
-      void append(const core::StringBuffer &, const TextStyle &, std::size_t segment);
+      bool append(const core::StringBuffer &,
+                  const AttributedString::Segment *previous,
+                  const AttributedString::Segment &segment,
+                  std::size_t segmentIndex,
+                  std::size_t &filledSpans);
       std::size_t length_;
       bool valid_;
       SyntheticTextWidthSource(const SyntheticTextWidthSource &);

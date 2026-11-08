@@ -184,6 +184,7 @@
 // UTF-8 route, edge, and style-boundary pins are registered in ContractTestRegistry.inc.
 #include "AttributedStringTests.hpp"
 #include "AttributedTextTests.hpp"
+#include "TextSpanWin32Tests.hpp"
 #include "RectSurfaceSeatExtentTests.hpp"
 #include "NullPlatformContractTests.hpp"
 #include "OpenFileDialogTransportTests.hpp"
