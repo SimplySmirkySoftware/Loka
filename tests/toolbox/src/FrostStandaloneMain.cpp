@@ -110,7 +110,9 @@ namespace
         if (size > 1024L * 1024L)
           size = 1024L * 1024L;
         Ptr storage = 0;
-        for (; size >= 1024 && !storage; size /= 2)
+        // Halve on refusal, but never below what is left above the reserve:
+        // a 1 KiB floor stopped short at 4,938 bytes once the heap moved.
+        for (; size >= static_cast<Size>(sizeof(Block)) && !storage; size /= 2)
           storage = NewPtr(size);
         if (!storage)
           return false;
