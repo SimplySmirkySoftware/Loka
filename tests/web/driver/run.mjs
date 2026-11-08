@@ -59,6 +59,7 @@ const server=createServer(async(req,res)=>{
       // Driver-only closure access, never a production export or a C++ test-shaped door.
       const hook=`Module['textTest']={
         service:()=>WebDOM.text,
+        replaceService:service=>{WebDOM.text=service},
         resources:()=>WebDOM.resources.size,
         admit:()=>LokaWebText.admit(LokaWebStyle.wire.fingerprint,LokaWebStyle.wire.count,
           document,navigator,CSS,message=>console.error(message)),
@@ -98,6 +99,7 @@ try {
   // Inspect bootstrap synchronously, before ResizeObserver can repair a wrong box.
   const initial=await client.evaluate(`(() => {
     const style=document.createElement('style');
+    style.id='loka-bootstrap-box-probe';
     style.textContent='body > div[data-loka-token] { padding:7px; border:3px solid; transform:scale(.9); }';
     document.head.appendChild(style);
     const result=web.start(2);
@@ -118,6 +120,8 @@ try {
                      {type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9}])
     await client.send('Input.dispatchKeyEvent',event);
   assert.equal(await client.evaluate('document.activeElement.tagName'),'BUTTON');
+  assert.equal(await client.evaluate(`(() => {const el=document.activeElement,s=getComputedStyle(el);
+    return el.matches(':focus-visible') && s.outlineStyle!=='none' && parseFloat(s.outlineWidth)>0;})()`),true);
   for(const [key,code,vk] of [[' ','Space',32],['Enter','Enter',13]]) {
     const before=await client.evaluate('clickExports');
     await client.send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:vk});
@@ -152,6 +156,7 @@ try {
   assert.equal(await client.evaluate('document.querySelectorAll("[data-loka-token]").length'),0);
   assert.deepEqual(client.errors,[],'browser console/runtime errors');
   console.log('text cells:', await client.evaluate(`(async()=>{
+    document.getElementById('loka-bootstrap-box-probe').remove();
     window.fixture=await LokaWebCounter(); window.web=fixture.web;
     if(web.start(1)!==0) throw new Error('text fixture start');
     await new Promise((resolve,reject)=>{const s=document.createElement('script');

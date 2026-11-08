@@ -1,5 +1,6 @@
 #include "FakeBoundary.hpp"
 #include "WebStyleWire.hpp"
+#include "WebTextConstants.hpp"
 #include <sstream>
 namespace webtest
 {
@@ -16,6 +17,10 @@ namespace webtest
     calls.clear();
     completed = failCreate = failHidden = failTextAdmit = failTextStyle = 0;
     probe = 0;
+    measureCalls = metricCalls = measureBytes = textBuilds = textScans = 0;
+    failMeasure = 0;
+    measureStatus = WEB_MEASURE_REFUSED;
+    measuredWidth = -1;
   }
   void fire(unsigned handle, double now)
   {
@@ -75,6 +80,13 @@ extern "C"
     std::ostringstream args;
     args << "=" << x << "," << y << "," << width << "," << height;
     webtest::record("rect", token, args.str());
+  }
+  void web_set_projected(uint32_t token, int projected)
+  {
+    if (webtest::resources.find(token) == webtest::resources.end())
+      return;
+    webtest::resources[token].projected = projected != 0;
+    webtest::record("projected", token, projected ? "=1" : "=0");
   }
   void web_set_text(uint32_t token, const char *bytes, unsigned length)
   {
@@ -218,4 +230,57 @@ extern "C" bool web_set_text_style(uint32_t token, const int *values, unsigned c
   }
   webtest::record("style", token, args.str());
   return true;
+}
+
+namespace webtest
+{
+  unsigned measureCalls = 0, metricCalls = 0, measureBytes = 0, textBuilds = 0, textScans = 0;
+  int failMeasure = 0, measureStatus = WEB_MEASURE_REFUSED, measuredWidth = -1;
+  int MeasureStatus()
+  {
+    if (failMeasure < 0 || (failMeasure > 0 && --failMeasure == 0))
+      return measureStatus;
+    return WEB_MEASURE_OK;
+  }
+} // namespace webtest
+extern "C" int web_measure(const int *, const char *, unsigned len, int *out)
+{
+  ++webtest::measureCalls;
+  webtest::measureBytes += len;
+  const int status = webtest::MeasureStatus();
+  if (status == WEB_MEASURE_OK)
+    *out = webtest::measuredWidth >= 0 ? webtest::measuredWidth : static_cast<int>(len * 7);
+  return status;
+}
+extern "C" int web_metrics(const int *, int *ascent, int *descent)
+{
+  ++webtest::metricCalls;
+  const int status = webtest::MeasureStatus();
+  if (status == WEB_MEASURE_OK)
+  {
+    *ascent = 10;
+    *descent = 3;
+  }
+  return status;
+}
+extern "C" void web_set_line_height(uint32_t token, int height)
+{
+  std::ostringstream args;
+  args << "=" << height;
+  webtest::record("line-height", token, args.str());
+}
+extern "C" void web_set_block(uint32_t token, int align, int truncation)
+{
+  std::ostringstream args;
+  args << "=" << align << "," << truncation;
+  webtest::record("block", token, args.str());
+}
+
+void loka::web::testing::textBuilt()
+{
+  ++webtest::textBuilds;
+}
+void loka::web::testing::textCompared()
+{
+  ++webtest::textScans;
 }

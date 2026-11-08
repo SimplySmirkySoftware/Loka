@@ -1,3 +1,4 @@
+#include "TextReplacementTests.hpp"
 #include "TextDocumentValuesTests.hpp"
 #include "EditMenuTests.hpp"
 #include "TextUtf8Tests.hpp"

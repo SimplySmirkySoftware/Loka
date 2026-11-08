@@ -558,6 +558,38 @@ void testTextDocumentWriteFailures()
   maxOriginal.unchanged(maximum.lines);
 }
 
+void testReadTextReplacement()
+{
+  BlobAllocationProbe allocation;
+  TempFile source;
+  source.put("\xef\xbb\xbf"
+             "a\r\nb\xef\xbb\xbf");
+  TextReplacement out;
+  LOKA_VERIFY(ReadTextReplacement(source.context, source.file, TextPlacement::End(), out) == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(out.stage() == TextReplacement::BYTES && out.logicalLength() == 6);
+  LOKA_VERIFY(out.bytes().isCompleted() && out.bytes().size() == 7);
+  LOKA_VERIFY(std::memcmp(out.bytes().data(), "a\r\nb\xef\xbb\xbf", 7) == 0);
+  File origin;
+  LOKA_VERIFY(out.querySource(origin) && origin.sharesRepresentation(source.file));
+  LOKA_VERIFY(out.placement() == TextPlacement::End());
+  const TextReplacement before(out);
+  source.put("\xff");
+  LOKA_VERIFY(ReadTextReplacement(source.context, source.file, TextPlacement::Start(), out) == TEXT_DOCUMENT_NOT_TEXT);
+  LOKA_VERIFY(!(out != before));
+  source.put("valid");
+  allocation.refuse("Blob", "Bytes");
+  LOKA_VERIFY(ReadTextReplacement(source.context, source.file, TextPlacement::Start(), out)
+              == TEXT_DOCUMENT_ALLOCATION);
+  LOKA_VERIFY(!(out != before));
+  LOKA_VERIFY(std::remove(source.path.c_str()) == 0);
+  LOKA_VERIFY(ReadTextReplacement(source.context, source.file, TextPlacement::Start(), out)
+              == TEXT_DOCUMENT_READ_FAILED);
+  LOKA_VERIFY(!(out != before));
+  source.put("\xef\xbb\xbf");
+  LOKA_VERIFY(ReadTextReplacement(source.context, source.file, TextPlacement::Start(), out) == TEXT_DOCUMENT_OK);
+  LOKA_VERIFY(out.stage() == TextReplacement::BYTES && out.logicalLength() == 0 && out.bytes().size() == 0);
+}
+
 void testTextDocumentRawAdmission()
 {
   BlobAllocationProbe allocation;
@@ -623,6 +655,10 @@ void testTextAlphabetFileAdapter()
 }
 
 #else
+void testReadTextReplacement()
+{
+  std::puts("[skip] replacement file IO pins require generic Linux stdio");
+}
 #define LOKA_GENERIC_TEXT_SKIP(name)                                                                                   \
   void name()                                                                                                          \
   {                                                                                                                    \
