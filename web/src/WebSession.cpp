@@ -1,4 +1,5 @@
 #include "WebSession.hpp"
+#include "WebStyleWire.hpp"
 #include "app/bootstrap/PlatformBootstrap.hpp"
 #include "WebPlatformContext.hpp"
 #include "WebInputDoor.hpp"
@@ -40,12 +41,15 @@ WebSession::StartResult WebSession::start(ConfigFactory factory, double now)
   if (this->lifecycle_ != STARTING || this->execution_ != IDLE)
     return FAILED;
   this->execution_ = BOOTSTRAP;
-  loka::platform::InitPlatformRuntime();
-  this->platform_ = new (std::nothrow) WebPlatformContext(*this);
-  if (this->platform_ && factory)
-    this->config_ = factory(this->platform_);
-  if (this->config_)
-    this->app_ = static_cast<WebApp *>(this->platform_->createApp(this->config_, 0, 0));
+  if (web_text_admit(kWebTextWireFingerprint, WEB_TEXT_FIELD_COUNT))
+  {
+    loka::platform::InitPlatformRuntime();
+    this->platform_ = new (std::nothrow) WebPlatformContext(*this);
+    if (this->platform_ && factory)
+      this->config_ = factory(this->platform_);
+    if (this->config_)
+      this->app_ = static_cast<WebApp *>(this->platform_->createApp(this->config_, 0, 0));
+  }
   if (!this->app_)
   {
     // Pre-commit construction rollback, not runtime shutdown.

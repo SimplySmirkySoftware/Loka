@@ -2,6 +2,7 @@
  * Buffers are consumed synchronously; callbacks retain session/token identities. */
 addToLibrary({
   $WebDOM: {
+    text: null,
     resources: new Map(), tasks: new Map(), next: 1,
     row(token) { return WebDOM.resources.get(token >>> 0); },
     /** Cost: bootstrap once per root, reads only its computed content-box dimensions.
@@ -86,24 +87,31 @@ addToLibrary({
   },
   web_set_text__deps:['$WebDOM','$UTF8ToString'],
   web_set_text(token,bytes,length) { const row=WebDOM.row(token); if(row) row.element.textContent=UTF8ToString(bytes,length); },
+  web_text_admit__deps:['$WebDOM'],
+  /** Cost: session start once; publish only a fully admitted private service. */
+  web_text_admit(fingerprint,count) {
+    const service=LokaWebText.admit(fingerprint,count,document,navigator,globalThis.CSS,
+      message => console.error(message));
+    if (!service) return false;
+    WebDOM.text=service;
+    return true;
+  },
   web_set_text_style__deps:['$WebDOM'],
+  /** Cost: Text render once per visit; nine borrowed words and one element's Env rows. */
   web_set_text_style(token,descriptor,count) {
-    const row=WebDOM.row(token); if(!row || count!==10) return;
-    const d=HEAP32.subarray(descriptor>>2,(descriptor>>2)+count);
-    if(d[0]!==1 || d[1]!==10) return;
+    const d=LokaWebStyle.decodeTextDescriptor(HEAP32,descriptor>>>0,count);
+    const row=WebDOM.row(token);
+    if (!d || !row || !WebDOM.text) return false;
+    WebDOM.text.environment(LokaWebStyle.fontKey(d)).applyToElement(row.element);
     const s=row.element.style;
-    // PR 1 fixed metrics. Page 3 replaces font resolution and geometry together.
-    s.fontSize='16px'; s.lineHeight='16px';
-    s.fontFamily=d[7]===LokaWebStyle.family.MONOSPACE ? 'monospace' : 'system-ui';
-    s.fontWeight=d[4]===LokaWebStyle.weights.BOLD ? 'bold' : 'normal';
-    s.fontStyle=d[5]===1 ? 'italic':'normal';
-    s.textDecoration=d[8]===1 ? 'underline':'none';
+    s.textDecoration=d.underline===1 ? 'underline':'none';
     const colors=LokaWebStyle.colors;
     const palette={ [colors.UNSET]:'CanvasText', [colors.PRIMARY]:'CanvasText',
       [colors.SECONDARY]:'GrayText', [colors.BLACK]:'black', [colors.WHITE]:'white',
       [colors.RED]:'red', [colors.GREEN]:'green', [colors.BLUE]:'blue',
       [colors.CYAN]:'cyan', [colors.MAGENTA]:'magenta', [colors.YELLOW]:'yellow' };
-    s.color=palette[d[6]] || 'CanvasText';
+    s.color=palette[d.color];
+    return true;
   },
   web_set_enabled__deps:['$WebDOM'],
   web_set_enabled(token,value) { const row=WebDOM.row(token); if(row) row.element.disabled=!value; },
@@ -140,8 +148,10 @@ addToLibrary({
     return row && row.element.contains(active) ? Number(active.dataset.lokaToken || 0)>>>0 : 0;
   },
   web_completed__deps:['$WebDOM'],
+  /** Cost: completion once after native drain; drops this session's canvas/context and <=48 Env values. */
   web_completed() {
     if(WebDOM.resources.size) throw new Error('undischarged Web resources');
+    WebDOM.text=null;
     Module['web']._complete();
   }
 });

@@ -1,3 +1,4 @@
+#include "WebTextDescriptor.hpp"
 #include "WebSession.hpp"
 #include "WebWindow.hpp"
 #include "WebTestAccess.hpp"
@@ -573,6 +574,53 @@ namespace
   {
     return 0;
   }
+  void TextProtocolRefusalTest()
+  {
+#ifdef NDEBUG
+    webtest::Fixture fixture;
+    Reset(fixture);
+    webtest::failTextStyle = 1000;
+    WebSession session;
+    LOKA_VERIFY(session.start(&webtest::CreateCounter, 0) == WebSession::STARTED);
+    const uint32_t text = webtest::token(TEXT);
+    LOKA_VERIFY(text != 0 && webtest::resources[text].text.empty());
+    LOKA_VERIFY(webtest::failTextStyle < 1000);
+    webtest::failTextStyle = 0;
+    LOKA_VERIFY(session.click(webtest::token(BUTTON), 1) == WebSession::ACCEPTED);
+    LOKA_VERIFY(webtest::resources[text].text == "Count: 1");
+    Shutdown(session);
+#else
+    std::puts("[skip] protocol refusal render: requires NDEBUG; debug intentionally asserts");
+#endif
+  }
+  void TextDescriptorTest()
+  {
+    using namespace loka::app;
+    const WebTextDescriptor absent((TextStyle()));
+    const int *words = absent.data();
+    LOKA_VERIFY(absent.count() == 9);
+    LOKA_VERIFY(words[0] == 2 && words[1] == 9 && words[2] == 0 && words[3] == 0);
+    LOKA_VERIFY(words[4] == -1 && words[5] == -1 && words[6] == 0 && words[7] == -1 && words[8] == 0);
+    const WebTextDescriptor role(SmallLabel + Bold + Italic + Monospace + Underline + Red);
+    words = role.data();
+    LOKA_VERIFY(words[2] == 2 && words[3] == TEXT_SIZE_ROLE_SMALL_LABEL);
+    LOKA_VERIFY(words[4] == 1 && words[5] == 1 && words[6] == TEXT_FAMILY_MONOSPACE);
+    LOKA_VERIFY(words[7] == 1 && words[8] == TEXT_COLOR_RED);
+    const int points[] = {-32768, 0, 32767};
+    for (unsigned i = 0; i < sizeof(points) / sizeof(points[0]); ++i)
+    {
+      const WebTextDescriptor value(TextStyle(TextSizeValue::points(points[i])).italic(false).underline(false));
+      LOKA_VERIFY(value.data()[2] == 1 && value.data()[3] == points[i]);
+      LOKA_VERIFY(value.data()[5] == 0 && value.data()[7] == 0);
+    }
+    LOKA_VERIFY(!web_text_admit(kWebTextWireFingerprint ^ 1UL, WEB_TEXT_FIELD_COUNT));
+    LOKA_VERIFY(!web_text_admit(kWebTextWireFingerprint, WEB_TEXT_FIELD_COUNT + 1));
+  }
+  AppConfigurable *UnexpectedConfig(PlatformContext *)
+  {
+    LOKA_VERIFY(false && "admission must precede Config construction");
+    return 0;
+  }
   void BootstrapTest()
   {
     webtest::Fixture fixture;
@@ -583,6 +631,17 @@ namespace
     LOKA_VERIFY(!Access::regime(session));
     LOKA_VERIFY(session.click(1, 0) == WebSession::REFUSED_CLOSED);
     Shutdown(session);
+    Reset(fixture);
+    webtest::failTextAdmit = 1;
+    WebSession refused;
+    LOKA_VERIFY(refused.start(&UnexpectedConfig, 0) == WebSession::FAILED);
+    LOKA_VERIFY(webtest::resources.empty());
+    for (unsigned i = 0; i < webtest::calls.size(); ++i)
+      LOKA_VERIFY(webtest::calls[i].find("create:") != 0);
+    LOKA_VERIFY(refused.click(1, 0) == WebSession::REFUSED_CLOSED);
+    LOKA_VERIFY(!Access::regime(refused));
+    Shutdown(refused);
+    LOKA_VERIFY(webtest::completed == 1);
     WebSession failed;
     LOKA_VERIFY(failed.start(&RefuseConfig, 0) == WebSession::FAILED);
     Shutdown(failed);
@@ -724,12 +783,14 @@ int main(int argc, char **argv)
   RUN(ContinuationTest);
   RUN(QuitTest);
   RUN(IdleTest);
+  RUN(TextProtocolRefusalTest);
+  RUN(TextDescriptorTest);
   RUN(BootstrapTest);
   RUN(OldModuleTest);
   RUN(CloseDuringTailTest);
   RUN(RootVisibilityTest);
   RUN(TwoRootTest);
 #undef RUN
-  std::puts("18 Web tests passed");
+  std::puts("20 Web tests passed");
   return 0;
 }

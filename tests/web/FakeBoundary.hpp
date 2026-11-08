@@ -43,7 +43,7 @@ namespace webtest
   extern std::map<uint32_t, Resource> resources;
   extern std::map<unsigned, Task> tasks;
   extern std::vector<std::string> calls;
-  extern unsigned completed, failCreate, failHidden;
+  extern unsigned completed, failCreate, failHidden, failTextAdmit, failTextStyle;
   extern void (*probe)(const char *, uint32_t);
   void reset();
   void fire(unsigned handle, double now);

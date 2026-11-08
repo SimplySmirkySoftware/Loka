@@ -4,6 +4,8 @@ import {createServer} from 'node:http';
 import {readFile, mkdtemp, rm} from 'node:fs/promises';
 import {resolve, join, extname, basename} from 'node:path';
 import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
+const driverDir=fileURLToPath(new URL('.',import.meta.url));
 import assert from 'node:assert/strict';
 
 const build=resolve(process.argv[2] || 'build/wasm/testing/web');
@@ -45,11 +47,28 @@ class CDP {
     return result.result.value;
   }
 }
+assert.equal(spawnSync('python3',[join(driverDir,'make-font.py'),join(build,'text-probe.ttf')],{stdio:'inherit'}).status,0);
 const profile=await mkdtemp(join(tmpdir(),'loka-web-chrome-'));
 const server=createServer(async(req,res)=>{
   try {
     const file=basename(new URL(req.url,'http://localhost').pathname) || 'index.html';
-    const data=await readFile(join(build,file));
+    let data;
+    if(file === 'text-cells.js') data=await readFile(join(driverDir,file));
+    else if(file === 'skew.js' || file === 'LokaWebCounter.js') {
+      data=await readFile(join(build,'LokaWebCounter.js'),'utf8');
+      // Driver-only closure access, never a production export or a C++ test-shaped door.
+      const hook=`Module['textTest']={
+        service:()=>WebDOM.text,
+        resources:()=>WebDOM.resources.size,
+        admit:()=>LokaWebText.admit(LokaWebStyle.wire.fingerprint,LokaWebStyle.wire.count,
+          document,navigator,CSS,message=>console.error(message)),
+        badDescriptor:token=>_web_set_text_style(token,0,8)
+      };
+`;
+      assert(data.includes('// Captures this module forever;'));
+      data=data.replace('// Captures this module forever;',hook+'// Captures this module forever;');
+      if(file === 'skew.js') data=data.replace(/"fingerprint":\d+/, '"fingerprint":0');
+    } else data=await readFile(join(build,file));
     const type={'.html':'text/html','.js':'application/javascript','.wasm':'application/wasm'}[extname(file)];
     res.writeHead(200,{'Content-Type':type || 'application/octet-stream'});res.end(data);
   } catch {res.writeHead(404);res.end();}
@@ -132,7 +151,28 @@ try {
   await client.evaluate('web.quit();web.completed.then(()=>true)');
   assert.equal(await client.evaluate('document.querySelectorAll("[data-loka-token]").length'),0);
   assert.deepEqual(client.errors,[],'browser console/runtime errors');
-  console.log('browser driver: passed');
+  console.log('text cells:', await client.evaluate(`(async()=>{
+    window.fixture=await LokaWebCounter(); window.web=fixture.web;
+    if(web.start(1)!==0) throw new Error('text fixture start');
+    await new Promise((resolve,reject)=>{const s=document.createElement('script');
+      s.src='text-cells.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
+    const result=await runTextCells(); web.dispose(); await web.completed;
+    if(fixture.textTest.service()!==null || fixture.textTest.resources()!==0) throw new Error('service cleanup');
+    return result;
+  })()`));
+  assert.deepEqual(client.errors,[],'text runtime errors');
+  const skew=await client.evaluate(`(async()=>{
+    await new Promise((resolve,reject)=>{const s=document.createElement('script');
+      s.src='skew.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});
+    const m=await LokaWebCounter(); const result=m.web.start(1);
+    const mounted=document.querySelectorAll('[data-loka-token]').length;
+    await m.web.completed;
+    return {result,mounted,resources:m.textTest.resources(),service:m.textTest.service(),ingress:m.web.click(1)};
+  })()`);
+  assert.deepEqual(skew,{result:2,mounted:0,resources:0,service:null,ingress:4});
+  assert.equal(client.errors.length,1,'one refusal diagnostic');
+  assert.equal(client.errors[0].params.args[0].value,'[web-text] refused: wire');
+  console.log('browser driver: passed (including skewed module refusal)');
 } finally {
   if(client) client.socket.close(); child.kill();
   await new Promise(resolve=>server.close(resolve));
