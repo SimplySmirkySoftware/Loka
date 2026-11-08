@@ -276,6 +276,8 @@ namespace loka
     static const TextStyle Bold = TextStyle().weight(TEXT_WEIGHT_BOLD);
     static const TextStyle Italic = TextStyle().italic();
     static const TextStyle Underline = TextStyle().underline();
+    /** Convenience appearance; link destinations do not impose styling. */
+    static const TextStyle Link = Underline + TextStyle().color(TEXT_COLOR_BLUE);
     static const TextStyle Monospace = TextStyle().family(TEXT_FAMILY_MONOSPACE);
     static const TextStyle Body = FontSize<12>();
     static const TextStyle Caption = FontSize<9>();
