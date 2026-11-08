@@ -16,6 +16,12 @@ namespace loka
     public:
       FileLocator() : payload_() {}
 
+      /** Equal representation implies equal value, not the reverse. Never allocates. */
+      bool sharesRepresentation(const FileLocator &other) const
+      {
+        return this->payload_ == other.payload_;
+      }
+
       bool empty() const { return !this->payload_.isValid(); }
 
       bool operator==(const FileLocator &other) const

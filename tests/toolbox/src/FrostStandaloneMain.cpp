@@ -1,7 +1,8 @@
 #include <cstdio>
 #include <cstring>
 #include <Gestalt.h>
-#include <Palettes.h>
+#include <Memory.h>
+#include "StandaloneScreenDepth.hpp"
 #include "ToolboxProbeTiming.hpp"
 #include "FrostStandaloneSupport.hpp"
 #include "StandaloneFlowRunner.hpp"
@@ -69,6 +70,68 @@ namespace
   using namespace loka::app;
   using namespace loka::app::scene;
   using namespace frost_standalone;
+
+  /** Stack-owned application-heap ballast; each block carries its own link. */
+  class ApplicationHeapBallast
+  {
+  public:
+    enum
+    {
+      ReserveBytes = 4096
+    };
+    ApplicationHeapBallast()
+        : head_(0)
+    {
+    }
+    ~ApplicationHeapBallast()
+    {
+      while (this->head_)
+      {
+        Block *block = this->head_;
+        this->head_ = block->next;
+        DisposePtr(reinterpret_cast<Ptr>(block));
+      }
+    }
+    bool fill()
+    {
+      // Grow the heap to its limit first: MaxMem's result excludes the space
+      // the zone can still grow into, and NewGWorld would otherwise take it
+      // (measured on maciix: free rose during the refused paint). MaxMem then
+      // purges and compacts, so NewGWorld cannot recover purgeable space.
+      // Leave 4 KiB for QuickDraw bookkeeping, below the 8,800-byte pixel body.
+      MaxApplZone();
+      for (int attempt = 0; attempt < 4096; ++attempt)
+      {
+        Size grow;
+        const Size available = MaxMem(&grow);
+        if (available + grow <= ReserveBytes)
+          return true;
+        Size size = available - ReserveBytes;
+        if (size > 1024L * 1024L)
+          size = 1024L * 1024L;
+        Ptr storage = 0;
+        // Halve on refusal, but never below what is left above the reserve:
+        // a 1 KiB floor stopped short at 4,938 bytes once the heap moved.
+        for (; size >= static_cast<Size>(sizeof(Block)) && !storage; size /= 2)
+          storage = NewPtr(size);
+        if (!storage)
+          return false;
+        Block *block = reinterpret_cast<Block *>(storage);
+        block->next = this->head_;
+        this->head_ = block;
+      }
+      return false;
+    }
+
+  private:
+    struct Block
+    {
+      Block *next;
+    };
+    Block *head_;
+    ApplicationHeapBallast(const ApplicationHeapBallast &);
+    ApplicationHeapBallast &operator=(const ApplicationHeapBallast &);
+  };
 
   /** Test backdrop reads owner state without registering automatic damage:
       each freshness probe explicitly delivers exactly one dirty rectangle. */
@@ -274,8 +337,6 @@ namespace
           phase_(0),
           pass_(0),
           fail_(0),
-          originalDepth_(0),
-          depthReady_(false),
           eligible_(false)
     {
       if (loka::platform::file::ResolveApplicationSidecar(
@@ -290,8 +351,7 @@ namespace
     {
       // finish() restores the depth and writes the verdict while the runner can
       // still read exitCode(); this only covers a run that never reached it.
-      if (this->depthReady_)
-        SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
+      this->depth_.restore();
       if (this->log_)
         std::fclose(this->log_);
     }
@@ -322,8 +382,8 @@ namespace
     FrostNode *node_;
     FILE *log_;
     int phase_, pass_, fail_;
-    short originalDepth_;
-    bool depthReady_, eligible_;
+    StandaloneScreenDepth depth_;
+    bool eligible_;
     loka::platform::file::FileHandle file_;
 
     void record(const char *name, bool ok)
@@ -336,10 +396,9 @@ namespace
     }
     void finish()
     {
-      if (this->depthReady_)
+      if (this->depth_.accepted())
       {
-        const OSErr result = SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
-        this->depthReady_ = false;
+        const OSErr result = this->depth_.restore();
         std::fprintf(this->log_, "restore-depth err=%d\r", result);
         if (result != noErr)
           ++this->fail_;
@@ -358,14 +417,12 @@ namespace
     {
       if (this->phase_++ == 0)
       {
-        this->originalDepth_ = (**(**GetMainDevice()).gdPMap).pixelSize;
-        this->depthReady_ = HasDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1)
-                            && SetDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1) == noErr;
+        this->depth_.request(LOKA_FROST_STANDALONE_DEPTH);
         std::fprintf(this->log_,
                      "depth requested=%d original=%d accepted=%d\r",
                      LOKA_FROST_STANDALONE_DEPTH,
-                     this->originalDepth_,
-                     this->depthReady_);
+                     this->depth_.originalDepth(),
+                     this->depth_.accepted());
         loka::platform::file::FlushWrite(this->log_, this->file_);
         this->node_->show();
         return;
@@ -395,9 +452,9 @@ namespace
                      depth,
                      contained);
         this->record("gates", qdAnswered && contained);
-        this->eligible_ = this->depthReady_ && qd >= gestalt32BitQD && fpuAnswered && fpu != TOOLBOX_FPU_NONE
+        this->eligible_ = this->depth_.accepted() && qd >= gestalt32BitQD && fpuAnswered && fpu != TOOLBOX_FPU_NONE
                           && depth >= 8 && contained;
-        if (!this->depthReady_)
+        if (!this->depth_.accepted())
         {
           std::fprintf(this->log_, "[skip] depth-dependent checks: HasDepth/SetDepth refused\r");
           this->finish();
@@ -435,6 +492,7 @@ namespace
         {
           loka::toolbox::ToolboxPaintGround(SURFACE_GROUND_WINDOW, Unit);
           this->record("white-at-1bit", captured && reference.read(window->window()) && actual.equals(reference, Unit));
+          std::fprintf(this->log_, "[skip] growth-allocation: 1-bit hardware gate\r");
         }
         else if (this->eligible_)
         {
@@ -468,9 +526,11 @@ namespace
           const bool cutOk = cut.paint(window->window(), visible, Unit) && cutCapture.read(window->window());
           this->record("clipped-unit-hairline", milkPainted && cutOk && cutCapture.equals(actual, visible));
           this->tinyAndGrowth(window);
+          this->growthAllocationRefused(window);
         }
         else
-          std::fprintf(this->log_, "[skip] milk-sample hairline tiny-units growth-refusal: hardware gate\r");
+          std::fprintf(this->log_,
+                       "[skip] milk-sample hairline tiny-units growth-refusal growth-allocation: hardware gate\r");
         window->drawForFlush();
         const bool saved = actual.read(window->window());
         ToolboxInputDoor::render(*controller);
@@ -697,6 +757,64 @@ namespace
                  right = {UnitHeight - 1, Width / 2, UnitHeight, Width};
       this->record("band-hairline-caller-clip",
                    ok && read && clipped.equals(picture, left) && !clipped.equals(picture, right));
+    }
+    void growthAllocationRefused(ToolboxWindow *window)
+    {
+      ToolboxFrostCache cache;
+      Capture before, after;
+      const Rect tiny = {60, 60, 61, 61};
+      this->backdrop(window);
+      const bool seeded = before.valid() && after.valid() && cache.paint(window->window(), tiny, tiny);
+      this->backdrop(window);
+      const bool captured = before.read(window->window());
+      this->record("growth-allocation-setup", seeded && captured);
+      if (!seeded || !captured)
+        return;
+      const GWorldPtr old = ToolboxFrostCacheInspection::world(cache);
+      CGrafPtr savedPort;
+      GDHandle savedDevice;
+      GetGWorld(&savedPort, &savedDevice);
+      std::fprintf(this->log_, "growth-allocation before free=%ld max=%ld\r", FreeMem(), MaxBlock());
+      // No logging or capture allocation inside the pressure interval.
+      bool reached, refused = false, retained = false, restored = false;
+      long freeAfter, maxAfter;
+      {
+        ApplicationHeapBallast ballast;
+        reached = ballast.fill();
+        freeAfter = FreeMem();
+        maxAfter = MaxBlock();
+        reached = reached && maxAfter <= ApplicationHeapBallast::ReserveBytes;
+        if (reached)
+        {
+          refused = !cache.paint(window->window(), Unit, Unit);
+          retained = ToolboxFrostCacheInspection::world(cache) == old;
+          CGrafPtr port;
+          GDHandle device;
+          GetGWorld(&port, &device);
+          restored = port == savedPort && device == savedDevice && reinterpret_cast<GrafPtr>(port) == window->window();
+        }
+      }
+      std::fprintf(this->log_,
+                   "growth-allocation pressure free=%ld max=%ld target=%d\r",
+                   freeAfter,
+                   maxAfter,
+                   ApplicationHeapBallast::ReserveBytes);
+      if (!reached)
+      {
+        std::fprintf(this->log_, "[skip] growth-allocation: bounded ballast could not reach target\r");
+        return;
+      }
+      this->record("growth-allocation-refused", refused);
+      this->record("growth-allocation-kept-world", retained);
+      this->record("growth-allocation-port-restored", restored);
+      // Releasing ballast cannot draw; read back with memory available so a
+      // CopyBits scratch allocation is not another failure under test.
+      this->record("growth-allocation-unchanged", after.read(window->window()) && before.equals(after, Whole));
+      const bool recovered = cache.paint(window->window(), Unit, Unit);
+      const GWorldPtr replacement = ToolboxFrostCacheInspection::world(cache);
+      const Rect bounds = replacement ? (**GetGWorldPixMap(replacement)).bounds : Rect();
+      this->record("growth-allocation-recovered",
+                   recovered && replacement != old && bounds.right >= Width && bounds.bottom >= UnitHeight);
     }
     void tinyAndGrowth(ToolboxWindow *window)
     {

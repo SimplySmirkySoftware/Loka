@@ -14,6 +14,9 @@ namespace loka
       bool refuseCommit();
       bool refuseInstallation();
       void tailCompleted();
+      /** Cost: build/predicate once; test-only operation census, no production storage. */
+      void textBuilt();
+      void textCompared();
     } // namespace testing
   } // namespace web
 } // namespace loka
