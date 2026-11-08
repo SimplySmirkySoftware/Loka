@@ -193,3 +193,12 @@ unsigned loka::app::testing::NullTextMeasurementAccess::builds(const NullAttribu
 {
   return context.measurementBuilds_;
 }
+
+/** Synthetic acceptance against current props, not native hit testing. */
+bool NullAttributedTextContext::activateLink(std::size_t segmentIndex)
+{
+#ifdef LOKA_LIFECYCLE_AUDIT
+  assert(this->controller_.borrowPhase().open());
+#endif
+  return this->node_->writeActivatedLink(segmentIndex);
+}

@@ -1,3 +1,4 @@
+#include "LinkActivationTests.hpp"
 #include "TextReplacementTests.hpp"
 #include "TextDocumentValuesTests.hpp"
 #include "EditMenuTests.hpp"
