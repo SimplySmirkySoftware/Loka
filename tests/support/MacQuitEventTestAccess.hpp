@@ -10,7 +10,7 @@ class MacQuitEventTestAccess
 public:
   static void attach(MacApp &app, bool clock)
   {
-    app.attachQuitEventRouter();
+    app.attachAppleEventRouter();
     if (clock)
       app.startInvalidationFlushTimer();
   }

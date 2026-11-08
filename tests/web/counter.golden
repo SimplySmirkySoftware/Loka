@@ -1,0 +1,13 @@
+create:1=0,0,320,200
+hidden:1=1
+create:2=1,1,0,0
+hidden:2=0
+rect:2=0,0,320,16
+style:2=1,10,0,0,-1,-1,0,0,-1,16
+text:2=Count: 0
+create:3=2,1,0,0
+hidden:3=0
+rect:3=0,28,320,24
+enabled:3=1
+text:3=Increment
+hidden:1=0

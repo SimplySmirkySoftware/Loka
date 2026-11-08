@@ -54,9 +54,9 @@ void testTextDocumentFactValues()
   LOKA_VERIFY(initial.textRevision() == 0);
   LOKA_VERIFY(initial.caret().isNone() && initial.selectionAnchor().isNone());
   LOKA_VERIFY(initial == TextDocumentFact() && !(initial != TextDocumentFact()));
-  TextChangedRange out(99, 98, 97);
-  LOKA_VERIFY(!initial.queryChangedRange(out));
-  LOKA_VERIFY(out == TextChangedRange(99, 98, 97));
+  TextPosition out = TextPositionTestAccess::make(99, 98), insertedEnd;
+  LOKA_VERIFY(!initial.queryChangedRange(out, insertedEnd));
+  LOKA_VERIFY(out == TextPositionTestAccess::make(99, 98));
   const TextPosition caret = TextPositionTestAccess::make(4, 10);
   const TextPosition anchor = TextPositionTestAccess::make(4, 3);
   const TextChangedRange range(3, 7, 8);
@@ -65,26 +65,29 @@ void testTextDocumentFactValues()
   LOKA_VERIFY(fact == copy && !(fact != copy));
   LOKA_VERIFY(fact.state() == TEXT_DOCUMENT_READY && fact.textRevision() == 4);
   LOKA_VERIFY(fact.caret() == caret && fact.selectionAnchor() == anchor);
-  LOKA_VERIFY(fact.queryChangedRange(out));
-  LOKA_VERIFY(out.start() == 3 && out.length() == 7 && out.insertedLength() == 8);
+  LOKA_VERIFY(fact.queryChangedRange(out, insertedEnd));
+  LOKA_VERIFY(out == TextPositionTestAccess::make(4, 3) && insertedEnd == TextPositionTestAccess::make(4, 11));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_MARKED, 4, caret, anchor, &range));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_UNAVAILABLE, 4, caret, anchor, &range));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_AWAITING_STORE, 4, caret, anchor, &range));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 5, caret, anchor, &range));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 4, anchor, anchor, &range));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 4, caret, caret, &range));
-  const TextChangedRange variants[] = {TextChangedRange(4, 7, 8), TextChangedRange(3, 8, 8), TextChangedRange(3, 7, 9)};
-  for (unsigned i = 0; i < 3; ++i)
+  const TextChangedRange variants[] = {TextChangedRange(4, 7, 8), TextChangedRange(3, 7, 9)};
+  for (unsigned i = 0; i < 2; ++i)
   {
     LOKA_VERIFY(range != variants[i]);
     LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 4, caret, anchor, &variants[i]));
   }
+  const TextChangedRange differentRemovedLength(3, 99, 8);
+  LOKA_VERIFY(fact == TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 4, caret, anchor, &differentRemovedLength));
   LOKA_VERIFY(fact != TextDocumentFactTestAccess::make(TEXT_DOCUMENT_READY, 4, caret, anchor));
   const TextChangedRange empty;
   const TextDocumentFact reportedEmpty = TextDocumentFactTestAccess::make(
       TEXT_DOCUMENT_AWAITING_STORE, 0, TextPosition::None(), TextPosition::None(), &empty);
   LOKA_VERIFY(reportedEmpty != initial);
-  LOKA_VERIFY(reportedEmpty.queryChangedRange(out) && out == empty);
+  LOKA_VERIFY(reportedEmpty.queryChangedRange(out, insertedEnd) && out == TextPositionTestAccess::make(0, 0)
+              && insertedEnd == out);
 }
 
 namespace

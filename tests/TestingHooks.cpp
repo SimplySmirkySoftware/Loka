@@ -938,3 +938,30 @@ namespace loka
   } // namespace app
 } // namespace loka
 #endif
+
+#ifdef TEST_BUILD
+namespace loka
+{
+  namespace app
+  {
+    namespace testing
+    {
+      namespace
+      {
+        unsigned textChunkReadFailures = 0;
+      }
+      void failTextChunkReads(unsigned count)
+      {
+        textChunkReadFailures = count;
+      }
+      bool consumeTextChunkReadFailure()
+      {
+        if (!textChunkReadFailures)
+          return false;
+        --textChunkReadFailures;
+        return true;
+      }
+    } // namespace testing
+  } // namespace app
+} // namespace loka
+#endif

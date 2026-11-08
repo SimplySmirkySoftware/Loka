@@ -3,10 +3,12 @@
 #include "app/scene/node/ComposableNode.hpp"
 #include "app/text/TextStore.hpp"
 #include "app/scene/SceneTextDocuments.hpp"
+#include "app/scene/MemberList.hpp"
 namespace loka
 {
   namespace app
   {
+    class TextReader;
     namespace scene
     {
       /** Only initial projection or root refusal can finish an awaited declaration. */
@@ -42,15 +44,14 @@ namespace loka
         Value value_;
       };
       /** Participant-owned declaration and Scene membership, borrowing the root's document. */
-      class TextDocumentRegistration : public ComposableNode::Participant
+      class TextDocumentRegistration : public ComposableNode::Participant, private MemberList<TextReader>
       {
       public:
         explicit TextDocumentRegistration(TextDocument &document)
-            : document_(document),
-              owner_(0),
-              previous_(0),
-              next_(0)
+            : document_(this),
+              membership_(*this)
         {
+          this->document_.connect(document.registration_);
         }
         virtual ~TextDocumentRegistration()
         {
@@ -74,12 +75,11 @@ namespace loka
       private:
         TextDocumentRegistration(const TextDocumentRegistration &);
         TextDocumentRegistration &operator=(const TextDocumentRegistration &);
-        void unlink();
-        TextDocument &document_;
+        TwinLink<TextDocumentRegistration, TextDocument> document_;
         TextStorePhase phase_;
         TextStoreLink store_;
-        SceneTextDocuments *owner_;
-        TextDocumentRegistration *previous_, *next_;
+        MemberHook<TextDocumentRegistration> membership_;
+        friend class ::loka::app::TextReader;
         friend class SceneTextDocuments;
         friend class ::loka::app::detail::TextDocumentPublisher;
       };

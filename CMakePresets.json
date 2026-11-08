@@ -351,6 +351,19 @@
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
       }
+    },
+    {
+      "name": "testing-web",
+      "displayName": "Web wasm tests (run with emcmake)",
+      "generator": "Ninja",
+      "binaryDir": "build/wasm/testing",
+      "cacheVariables": {
+        "TEST_BUILD": "ON",
+        "LOKA_COMPILE_PINS": "OFF",
+        "LOKA_LIFECYCLE_AUDIT": "ON",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LOKA_WARNINGS_AS_ERRORS": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -686,6 +699,10 @@
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
       }
+    },
+    {
+      "name": "testing-web",
+      "configurePreset": "testing-web"
     }
   ],
   "testPresets": [
@@ -759,6 +776,18 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
+      }
+    },
+    {
+      "name": "testing-web",
+      "configurePreset": "testing-web",
+      "filter": {
+        "include": {
+          "name": "^webRail$"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
       }
     }
   ]

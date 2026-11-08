@@ -1,6 +1,7 @@
 #ifndef LOKA_TESTS_TEXT_DOCUMENT_ACCESS_HPP
 #define LOKA_TESTS_TEXT_DOCUMENT_ACCESS_HPP
 #include "app/text/TextDocumentRegistration.hpp"
+#include "app/text/TextReader.hpp"
 #include "app/scene/SceneTextDocuments.hpp"
 #include "platform/null/NullTextStore.hpp"
 namespace loka
@@ -13,6 +14,21 @@ namespace loka
       bool consumeTextStoreCreationFailure();
       struct TextDocumentAccess
       {
+        static scene::TextDocumentRegistration *registration(TextDocument &document)
+        {
+          return document.registration_.remote();
+        }
+        static bool connected(const TextReader &reader)
+        {
+          return reader.membership_.owner() != 0;
+        }
+        static void body(TextDocument &document, const std::string &body)
+        {
+          NullTextStore *row = store(document);
+          const TextChangedRange range(0, row->length(), static_cast<unsigned long>(body.size()));
+          row->committedText_ = body;
+          row->changes_.noteEdit(&range);
+        }
         static void duringPublication(scene::SceneTextDocuments &documents, void (*action)(void *), void *data)
         {
           scene::SceneTextDocuments::Publication publication(documents);
@@ -20,11 +36,13 @@ namespace loka
         }
         static void withdraw(TextDocument &document)
         {
-          document.registration_->withdraw();
+          document.registration_.remote()->withdraw();
         }
         static NullTextStore *store(TextDocument &document)
         {
-          return document.registration_ ? static_cast<NullTextStore *>(document.registration_->store()) : 0;
+          return document.registration_.remote()
+                     ? static_cast<NullTextStore *>(document.registration_.remote()->store())
+                     : 0;
         }
         static const std::string &committedText(TextDocument &document)
         {

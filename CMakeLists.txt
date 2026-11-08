@@ -166,6 +166,12 @@ if(TEST_BUILD OR (LOKA_CLASSIC_MAC AND LOKA_RETRO68_DIAGNOSTICS))
   )
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_subdirectory(web)
+  loka_verify_warning_floor()
+  return()
+endif()
+
 if(WIN32)
   add_subdirectory(win32)
 endif()
@@ -1413,4 +1419,7 @@ endif()
 
 # Pin the target-local warning contract after every platform/example target
 # has been declared. New Loka targets must opt in explicitly.
+if(TARGET LokaCommonTesting)
+  add_subdirectory(web)
+endif()
 loka_verify_warning_floor()
