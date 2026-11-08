@@ -79,6 +79,7 @@ facts into native behavior.
 | What applies to Classic Mac and Retro68? | [docs/retro68.md](docs/retro68.md) | [`apple/toolbox/`](apple/toolbox/), Retro68 presets, and Toolbox CI |
 | Where do the Toolbox Unicode flavor's MLTE declarations and lifecycle live? | [docs/retro68.md](docs/retro68.md#unicode-flavor) | [`MacTextEditorSubset.h`](apple/toolbox/src/unicode/MacTextEditorSubset.h), [`tests/toolbox/unicode-abi/`](tests/toolbox/unicode-abi/), [`ToolboxUnicodeEditorLedger.hpp`](apple/toolbox/src/ToolboxUnicodeEditorLedger.hpp), [`tests/toolbox/unicode-lifecycle/`](tests/toolbox/unicode-lifecycle/) |
 | What applies to macOS native code? | [AGENTS.md](AGENTS.md) and [docs/environments.md](docs/environments.md) | [`apple/macos/`](apple/macos/) and macOS CI |
+| Who owns Web DOM resources, browser completion and shutdown? | [Web rail design](docs/WebRailDesign.md) | [`web/`](web/) and [`tests/web/`](tests/web/) |
 | What applies to Win32 text, paths, and native windows? | The Win32 rules in [AGENTS.md](AGENTS.md) | [`win32/`](win32/) and the Win32 bridge/path tests |
 | What must a PR claim and verify? | [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ReviewPolicy.md](docs/ReviewPolicy.md) | Presets, CI workflows, and the PR's exact diff |
 
