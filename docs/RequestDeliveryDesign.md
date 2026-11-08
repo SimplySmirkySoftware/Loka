@@ -261,6 +261,7 @@ Sources: [#898, ruling item 5](https://github.com/SimplySmirkySoftware/Loka/issu
 `Granted` means the seam accepted that take, not that subscribers left the fact
 unchanged afterward. `Clamped` records requested and applied values; `Refused`
 records the reason and leaves the fact unchanged. Replies are not dirty sources.
+A reply keeps `ReplyReceipt<T>::Type`, which is `T` itself by default.
 If native apply succeeded but report refused, `finishTake` restores the native
 selection/projection from the committed fact before reopening native admission.
 Refusal before a successful native apply does not itself require a native write.
