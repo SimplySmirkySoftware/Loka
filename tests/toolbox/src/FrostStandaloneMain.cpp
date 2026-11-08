@@ -94,13 +94,17 @@ namespace
     }
     bool fill()
     {
-      // Purge/compact first so NewGWorld cannot simply recover purgeable space.
+      // Grow the heap to its limit first: MaxMem's result excludes the space
+      // the zone can still grow into, and NewGWorld would otherwise take it
+      // (measured on maciix: free rose during the refused paint). MaxMem then
+      // purges and compacts, so NewGWorld cannot recover purgeable space.
       // Leave 4 KiB for QuickDraw bookkeeping, below the 8,800-byte pixel body.
+      MaxApplZone();
       for (int attempt = 0; attempt < 4096; ++attempt)
       {
         Size grow;
         const Size available = MaxMem(&grow);
-        if (available <= ReserveBytes)
+        if (available + grow <= ReserveBytes)
           return true;
         Size size = available - ReserveBytes;
         if (size > 1024L * 1024L)
