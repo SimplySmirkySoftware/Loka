@@ -1,10 +1,10 @@
 # Web Rail
 
-> **Status:** Normative; frozen Web rally pages 1, 2 and 3a, with the delegator's applied-root-visibility clarification.
+> **Status:** Normative; frozen Web rally pages 1, 2, 3a and 3b, with the delegator's applied-root-visibility clarification.
 >
 > **Owns:** DOM resource ownership, browser entries, completion, shutdown, text wire and typography environment.
 >
-> **Does not own:** Text geometry beyond the PR 1 fixed metrics, font loading/raster guarantees, browser scheduling guarantees, or common lifecycle semantics.
+> **Does not own:** Font loading/raster guarantees, browser scheduling guarantees, or common lifecycle semantics.
 >
 > **Code truth:** [`web/src`](../web/src), [`web/js`](../web/js).
 >
@@ -62,7 +62,7 @@ User-facing quit is an ingress-checked request that the roster may decline, leav
 
 ## PR 1 projection and limits
 
-Text is one line; geometry uses the existing INaturalSizeSource seam with fixed metrics (eight CSS pixels per scalar, sixteen-pixel Text height, twenty-four-pixel Button height and sixteen-pixel horizontal inset). It does not claim wrapping or accurate browser font measurement. The preview style descriptor carries all six TextStyle axes, preserving absence and signed point values; wire v2 and font resolution are specified below; geometry remains fixed until the next projection PR. Style constants come from `tools/ci/gen_style_vocab.py`.
+PR 1 initially projected one-line Text through INaturalSizeSource with fixed metrics (eight CSS pixels per scalar, sixteen-pixel Text height, twenty-four-pixel Button height and sixteen-pixel horizontal inset). The Text projection section below replaces those metrics and adds wrapping. The preview style descriptor carries all six TextStyle axes, preserving absence and signed point values; wire v2 and font resolution are specified below. Style constants come from `tools/ci/gen_style_vocab.py`.
 
 Buttons are native `<button type="button">` elements. Mouse, Space and Enter use the same click export. Browser focus is read at completion; no keyboard or focus-event export is added. Layout containers have no DOM elements.
 
@@ -109,8 +109,8 @@ Font keys resolve to 48 combinations: six generated sizes, bold, italic and
 monospace. NONE is 12; SmallLabel is 10; numeric points snap nearest, ties low.
 Unset resolves to normal, non-italic and system. Color and underline do not
 participate. Envs are immutable, allocated lazily once per key and owned by the
-session Map. Their font shorthand has no line-height. The next projection PR
-must write line-height after every font write. Metric-affecting styling enters
+session Map. Their font shorthand has no line-height. Text projection
+writes line-height after every font write. Metric-affecting styling enters
 through shared Env resolution.
 
 The Env explicitly resets kerning, spacing, caps, stretch, rendering, direction,
@@ -126,8 +126,8 @@ required controls refuse startup. Advance parity assumes the same Env, available
 fonts, and no ancestor zoom/transform. Direct host CSS selecting the element,
 fonts loaded after admission, changing document language during the session,
 fallback ink overflow and DPR raster differences are outside this contract.
-PR 1 fixed geometry remains: this PR adds no runtime measurement door, snapshots,
-wrapping, natural-size changes or Button geometry. The one admission metric
+The wire/environment slice originally retained PR 1 fixed geometry; the Text
+projection section below supersedes that geometry. The one admission metric
 probe establishes service capability, not layout.
 
 Reproduce the JS pins with `node tests/web/js/decode.test.mjs` and
@@ -137,3 +137,81 @@ Reproduce the JS pins with `node tests/web/js/decode.test.mjs` and
 `node tests/web/driver/run.mjs build/wasm/testing/web`; no Chromium prints an
 explicit skip. The fake boundary's header/fingerprint checks are limited host
 evidence, not evidence of browser decoding or typography.
+
+## Text projection
+
+Each Text or Button context owns one immutable `WebTextSnapshot`: prepared UTF-8,
+code-point byte ranges, line byte ranges and widths, joined display bytes, font
+metrics, extent, and `WebTextConstraint {fontKey, BlockStyle, availableWidth}`.
+Only prepared-byte offsets enter measurement or the breaker. The context compares
+the constraint first, then scans normalized current text once. Equal values reuse
+the snapshot, including equal values arriving through a different State handle.
+No revision, last-seen flag, or additional subscription is retained.
+
+| Input | Prepared text |
+| --- | --- |
+| CRLF or lone CR | LF |
+| Tab or form feed | Space |
+| NUL | U+FFFD |
+| Invalid UTF-8 | U+FFFD using WHATWG decoder error consumption |
+| LF in a Button label | Space |
+
+The normalizer wraps the shared strict scalar decoder. A stray continuation byte
+produces its own replacement; an incomplete valid prefix consumes only the bytes
+accepted before the error. Build and equality use that same normalizer. Borrowed
+UTF-8 needs no allocation for equality; a non-borrowable String uses the deliberate
+Web-local twin of ToolboxUtf8Bytes. Expansion and table/join allocation sizes are
+checked before allocating.
+
+Build owns all temporary storage and commits only a complete projection. Metrics
+must succeed before the breaker runs. Every wrap mode, including NONE, uses
+TextLineBreaker. Each range is measured standalone, never by subtracting prefix
+widths. A per-build open-addressed memo shares probes across the count/fill passes;
+it grows with checked allocation and is discarded after the build. WORD lookahead
+can still process quadratic bytes. Browser cost cells report calls, bytes and time
+for 200 characters of prose and `x ` plus a 198-character word; there is no budget.
+
+The generated C ABI status distinguishes OK, REFUSED, and PROTOCOL. Width is
+`ceil(measureText().width)`; finite/nonnegative and INT_MAX checks precede narrowing.
+Metrics use A = ceil(raw ascent), D = ceil(raw descent), H = A + D, checked within
+1..SHRT_MAX before writing. Outputs are unchanged on failure. JS consumes exact
+byte lengths through TextDecoder and retains no heap view. Context loss and
+allocation failure return REFUSED. A null descriptor decode returns PROTOCOL.
+
+REFUSED retains the last successful snapshot and uses the existing requeue and
+after-flush relayout seam. Persistent refusal is persistent work: one build
+attempt per run, without a retry budget. PROTOCOL asserts in debug and ends the
+build without requeue or a relayout request in release. Later legitimate input
+may try again. A first failure displays empty text at height zero. Neither failure
+clears an existing snapshot. Retire drops the slot; park retains it.
+
+Each render with a snapshot unconditionally makes five writes: projected, style,
+line-height, block properties, then joined text. Font, line step and block come from the successful snapshot;
+current color and underline overlay that descriptor without rebuilding geometry.
+The order restores line-height after the Env's font shorthand. An absent snapshot
+writes projected=false, then empty text without line-height; projection visibility
+hides chrome and prevents native hit testing without changing lifecycle display. ELLIPSIS suppresses wrapping and projects
+only the first explicit line. NONE and CLIP retain all explicit lines. Overflow is
+hidden; CSS performs no wrapping.
+
+The allocated line step is H CSS pixels. **Conditionally**, if CSS uses the same
+raw ascent/descent as canvas, half-leading is `(H - asc - desc) / 2` in [0, 1),
+and the baseline is `asc + half-leading`, less than 0.5 px from A. Different
+fallback metrics invalidate this conditional equation. Ink position and fitting
+inside the line box are not promised. CHAR wraps at code points, not graphemes.
+
+Natural-size queries use temporary normalized text and the same service, without
+publishing a snapshot, consuming a token, writing State, or requesting relayout.
+Text width declines empty or multiline input; height declines multiline input or
+wrap other than NONE. Answers must fit 1..SHRT_MAX; decline leaves the output
+untouched. The PR 1 fixed metric table is no longer used.
+
+Button chrome is Web-specific generated geometry: insetX 8, insetY 4, border 1.
+It is not common style vocabulary or a claim about Win32 theme geometry. Creation
+sets appearance none, border-box, padding 4px 8px, border 1px solid, margin zero,
+minimum width/height zero, preformatted whitespace, and hidden overflow. Outline
+is untouched. Every render applies the default Env and measured line-height.
+Natural width is label advance + 18 and height is H + 10, including empty labels;
+the upper bound is checked before addition. Browser cells exercise native Tab,
+Space, Enter and focus-visible outline, content/padding/border geometry and narrow
+offers. A missing Chromium is a reported skip, not runtime verification.
