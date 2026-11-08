@@ -99,6 +99,13 @@ class CiPathsTest(unittest.TestCase):
             script.write_text('read("docs/fixture.md")\n'
                               'names = ("split-fixture.md",)\nROOT / "docs" / name\n')
             self.assertEqual(scanner(root), {"docs/fixture.md", "docs/split-fixture.md"})
+            # A checker may import its output inventory from a generator
+            # (check_style_vocab.py reads gen_style_vocab.OUTPUTS), so a docs
+            # literal in tools/ci/gen_*.py is a tested documentation input too.
+            generator = root / "tools/ci/gen_fixture.py"
+            generator.parent.mkdir(parents=True)
+            generator.write_text('OUTPUTS = {Path("docs/generated.d.ts"): render}\n')
+            self.assertIn("docs/generated.d.ts", scanner(root))
             with patch.object(CI, "tested_documentation_inputs", lambda: scanner(root)):
                 self.assertTrue(CI.classify("linux-headless", ["docs/fixture.md"])[0])
                 script.write_text('read("docs/replacement.md")\n')
