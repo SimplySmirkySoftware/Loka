@@ -2,6 +2,7 @@
 #include "support/LokaAllocFailure.hpp"
 #include "app/layout/ColumnLayout.hpp"
 #include "ToolboxUpdateEvidence.hpp"
+#include "ToolboxPaintResultText.hpp"
 #include "ToolboxUnitHairline.hpp"
 #include "ToolboxHost.hpp"
 #include "context/ToolboxTextContext.hpp"
@@ -3296,6 +3297,41 @@ namespace
     f.window.port.portRect = saved;
     f.controller.rootNode_ = &f.viewport;
   }
+  void paintResetRootEarlyReturn()
+  {
+#ifdef NDEBUG
+    PresentFixture f;
+    // A distinct root clip makes an accidental overwrite observable after pop.
+    LOKA_VERIFY(f.controller.projectionParentScopes_.resetRoot(f.window.window(), Frame(7, 9, 111, 123)));
+    const ProjectionParentScope root = f.controller.projectionParentScopes_.current();
+    ToolboxErasedPass::Guard erased(f.controller.erasedPass(), f.window.port.portRect);
+    ToolboxPortErasePresenter presenter(f.window.port.portRect, ToolboxPortErasePresenter::COPY_ALLOWED);
+    presenter.setErasedGuard(erased);
+    toolbox_host::erasedRects.clear();
+    LOKA_VERIFY(f.controller.projectionParentScopes_.pushClip(root));
+    const ToolboxPresentExecuted result = ToolboxInputDoor::render(f.controller, &presenter);
+    const bool popped = f.controller.projectionParentScopes_.pop();
+    // Balance the deliberately leaked scope before checking the refused pass.
+    LOKA_VERIFY(popped);
+    LOKA_VERIFY(result == TOOLBOX_PRESENT_ERASED);
+    const std::string text = ToolboxPaintResultText(f.last());
+    std::fprintf(stderr, "[pin] resetRoot early-return under NDEBUG: %s\n", text.c_str());
+    LOKA_VERIFY(text == "paint_result=refused rule=2 first=none site=- coverage=-");
+    LOKA_VERIFY(f.controller.projectionParentScopes_.activeDepth() == 0);
+    const ProjectionParentScope &after = f.controller.projectionParentScopes_.current();
+    LOKA_VERIFY(after.nativeParent == root.nativeParent);
+    LOKA_VERIFY(after.translationX == root.translationX && after.translationY == root.translationY);
+    LOKA_VERIFY(after.clipRect == root.clipRect);
+    LOKA_VERIFY(after.channel == root.channel);
+    LOKA_VERIFY(toolbox_host::erasedRects.size() == 1);
+    equal(toolbox_host::erasedRects.front(), f.window.port.portRect);
+    LOKA_VERIFY(ToolboxInputDoor::render(f.controller, &presenter) == TOOLBOX_PRESENT_ERASED);
+    LOKA_VERIFY(f.last().paintFinished());
+    LOKA_VERIFY(f.last().eligibility() == TOOLBOX_PAINT_CLEAN);
+#else
+    std::puts("[skip] resetRoot early-return pin requires NDEBUG (the assert precedes the return)");
+#endif
+  }
   template <ToolboxBlurKind K> void paintCaptureGate()
   {
     StaticFixture f;
@@ -4853,6 +4889,7 @@ int main(int argc, char **argv)
                          "PaintShellDirtyNested",
                          "PaintEligibility",
                          "PaintNullRoot",
+                         "PaintResetRoot",
                          "PaintOversizedPort",
                          "PaintCaptureFrozen",
                          "PaintCaptureLive",
@@ -4971,6 +5008,8 @@ int main(int argc, char **argv)
     viewportInput(argv[1]);
   else if (std::strcmp(argv[1], "PaintNullRoot") == 0)
     paintEarlyReturn(false);
+  else if (std::strcmp(argv[1], "PaintResetRoot") == 0)
+    paintResetRootEarlyReturn();
   else if (std::strcmp(argv[1], "PaintOversizedPort") == 0)
     paintEarlyReturn(true);
   else if (std::strcmp(argv[1], "PaintCaptureFrozen") == 0)
