@@ -605,6 +605,8 @@ void testNullScrollInputMovesChildrenNextFlush1513()
   // as NullInputDoor, publishing the synthetic input's settled origin.
   (loka::app::scene::detail::InputInvocation(platform))(*scroll, &ScrollViewNode::publishOrigin, 0, 6);
   LOKA_VERIFY(root->viewport.get() == Frame(0, 6, 80, 30));
+  // A later identical publication must preserve the pending input.
+  scroll->publishOrigin(0, 6);
   const NodeDirtyFlags inputs = scroll->takeLayoutInputs();
   LOKA_VERIFY(inputs == NODE_DIRTY_LAYOUT);
   LOKA_VERIFY(scene.hasPendingInvalidation());

@@ -237,10 +237,7 @@ namespace loka
       {
         if (this->props.scrollTo_.isValid())
           registrar.markDirtyOnChange(this->props.scrollTo_.state(), scene::NODE_DIRTY_LAYOUT);
-        if (this->props.viewport_.isValid())
-        {
-          registrar.markDirtyOnChange(this->props.viewport_.state(), scene::NODE_DIRTY_LAYOUT);
-        }
+        registrar.markDirtyOnOwnInput(scene::NODE_DIRTY_LAYOUT);
       }
 
       ScrollViewProps props;
@@ -257,10 +254,14 @@ namespace loka
       {
         if (!this->props.viewport_.isValid())
           return;
+        const loka::core::Frame origin = this->requestedOrigin();
+        const bool originChanged = origin.x != x || origin.y != extentY;
         const int y = extentY - this->props.contentInsets_.top();
         const loka::core::Frame current = this->props.viewport_.state()->get();
         if (current.x != x || current.y != y || current.width != width || current.height != height)
           this->props.viewport_.set(loka::core::Frame(x, y, width, height));
+        if (originChanged)
+          this->requestOwnInput(scene::NODE_DIRTY_LAYOUT);
       }
     };
 

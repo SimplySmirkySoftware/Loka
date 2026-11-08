@@ -668,20 +668,21 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
   LOKA_VERIFY(scroll != 0);
   // Null offers 100 x 20; the 200-wide navigation pane exhausts the Row's
   // width, leaving this content seat 0 x 20 (confirmed by the layout probe).
-  scroll->props.viewport_.set(loka::core::Frame(11, 73, 0, 0));
+  scroll->publishOrigin(11, 73);
+  flushScene(*harness.scene);
   LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 20));
 
   int writes = 0;
   scroll->props.viewport_.state()->bind(&countViewportWrites, &writes, false);
   {
     loka::core::Operation operation;
-    // A size-only change is corrected by layout, then the next settle is inert.
-    scroll->props.viewport_.set(loka::core::Frame(11, 73, 1, 1));
+    // A rail size report notifies observers without requesting a layout echo.
+    scroll->publishViewport(11, 73, 1, 1);
     operation.settle();
     flushScene(*harness.scene);
     operation.settle();
-    LOKA_VERIFY(writes == 2);
-    LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 0, 20));
+    LOKA_VERIFY(writes == 1);
+    LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(11, 73, 1, 1));
     writes = 0;
     operation.settle();
     flushScene(*harness.scene);
@@ -717,7 +718,7 @@ void testSimpleViewerCommittedImageResetsRailScrollOffset()
   LOKA_VERIFY(MainAccess::pendingScroll(*main).isNone());
   LOKA_VERIFY(scroll->props.viewport_.state()->get() == loka::core::Frame(0, 0, 0, 20));
 
-  scroll->props.viewport_.set(loka::core::Frame(11, 73, 0, 20));
+  scroll->publishOrigin(11, 73);
   MainAccess::setDisplayMode(*main, simpleviewer::DISPLAY_FIT);
   flushScene(*harness.scene);
   MainAccess::setLoadedImage(*main, tallImage);

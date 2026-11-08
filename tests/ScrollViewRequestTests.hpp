@@ -8,6 +8,7 @@
 #include "support/Headless.hpp"
 #include "support/TestVerify.hpp"
 #include "testing/scene/SceneTestFlow.hpp"
+#include "testing/scene/OwnershipDump.hpp"
 #include "platform/null/NullScenePlatformController.hpp"
 namespace scroll_request_tests
 {
@@ -532,6 +533,9 @@ namespace scroll_request_tests
         static_cast<SizeRoot<Sentinel> *>(loka::dsl::testing::SceneTestAccess::rootBoundary(scene));
     LOKA_VERIFY(root->viewport.get() == Frame(0, Sentinel ? -30 : 10, 405, 340));
     LOKA_VERIFY(writes == 1);
+    const std::string ownership = loka::dsl::testing::OwnershipDump::dump(scene);
+    LOKA_VERIFY(ownership.find("own-input: 1") != std::string::npos);
+    LOKA_VERIFY(ownership.find("observed:") == std::string::npos);
     LOKA_VERIFY(!scene.hasPendingInvalidation());
     // The initial outside layout is allowed; a self-originated echo is not.
     LOKA_VERIFY(platform.leafLayoutVisitsForTesting() == visits + 1);
@@ -539,11 +543,11 @@ namespace scroll_request_tests
   }
 
 } // namespace scroll_request_tests
-inline void testExpectedRedNullScrollSizeOnlySentinel1513()
+inline void testNullScrollSizeOnlySentinel1513()
 {
   scroll_request_tests::sizeOnly1513<true>();
 }
-inline void testExpectedRedNullScrollSizeOnlyOrdinary1513()
+inline void testNullScrollSizeOnlyOrdinary1513()
 {
   scroll_request_tests::sizeOnly1513<false>();
 }

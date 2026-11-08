@@ -743,11 +743,11 @@ void testOwnershipDumpPinsRepresentativeHelloWorld()
   scene.mount(&platform);
   loka::dsl::testing::SceneTestAccess::updateAttached(scene, true);
 
-  const std::string expected(
-      "scene\n"
-      "  boundary\n"
-      "    states: 17 (arena 17, heap 0)\n"
-      "    observed: 10\n");
+  const std::string expected("scene\n"
+                             "  boundary\n"
+                             "    states: 17 (arena 17, heap 0)\n"
+                             "    observed: 9\n"
+                             "    own-input: 1\n");
   verifyOwnershipDump(
       loka::dsl::testing::OwnershipDump::dump(scene), expected);
 }
