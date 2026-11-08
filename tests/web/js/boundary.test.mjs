@@ -29,7 +29,9 @@ for(const [ptr,count] of [[4,8],[4,10],[3,9],[124,9]]) {
   assert.equal(imports.web_set_text_style(1,ptr,count),false);
   assert.equal(JSON.stringify(style),before);
 }
-context.WebDOM.resources.clear(); imports.web_completed(); assert.equal(context.WebDOM.text,null);
+context.WebDOM.resources.clear();
+assert.equal(imports.web_set_text_style(1,4,9),true,'a released token is a no-op, not a protocol refusal');
+imports.web_completed(); assert.equal(context.WebDOM.text,null);
 assert.equal(imports.web_text_admit(fingerprint^1,expected.count),false);
 assert.equal(context.WebDOM.text,null);
 assert.deepEqual(logs,['[web-text] refused: wire']);

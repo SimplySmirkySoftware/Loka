@@ -100,8 +100,8 @@ addToLibrary({
   /** Cost: Text render once per visit; nine borrowed words and one element's Env rows. */
   web_set_text_style(token,descriptor,count) {
     const d=LokaWebStyle.decodeTextDescriptor(HEAP32,descriptor>>>0,count);
-    const row=WebDOM.row(token);
-    if (!d || !row || !WebDOM.text) return false;
+    if (!d || !WebDOM.text) return false; // protocol refusal, not a lifecycle miss
+    const row=WebDOM.row(token); if(!row) return true; // released token: a no-op like web_set_text
     WebDOM.text.environment(LokaWebStyle.fontKey(d)).applyToElement(row.element);
     const s=row.element.style;
     s.textDecoration=d.underline===1 ? 'underline':'none';
