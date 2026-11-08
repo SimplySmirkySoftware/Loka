@@ -14,4 +14,5 @@ void testTextDocumentEditorParity();
 void testTextDocumentResolution();
 void testTextDocumentWriteFailures();
 void testTextDocumentRawAdmission();
+void testReadTextReplacement();
 #endif

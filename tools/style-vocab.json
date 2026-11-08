@@ -42,6 +42,8 @@
     "TextStyle": ["fontSize", "weight", "italic", "underline", "color", "family"],
     "BlockStyle": ["wrap", "truncation", "align"]
   },
+  "webMeasureStatus": {"OK": 0, "REFUSED": 1, "PROTOCOL": 2},
+  "webButtonGeometry": {"insetX": 8, "insetY": 4, "border": 1},
   "wire": {
     "textDescriptor": {
       "version": 2,

@@ -136,6 +136,15 @@ namespace loka
       /** Opaque immutable address snapshot; display text is not its identity. */
       const FileLocator &locator() const { return this->locator_; }
 
+      /** Equal representation implies equal value, not the reverse. O(1), without conversion or allocation. */
+      bool sharesRepresentation(const File &other) const
+      {
+        return this->base_ == other.base_ && this->kind_ == other.kind_
+               && this->basePath_.sharesRepresentation(other.basePath_)
+               && this->relative_.sharesRepresentation(other.relative_)
+               && this->locator_.sharesRepresentation(other.locator_);
+      }
+
       Kind kind() const
       {
         return this->kind_;

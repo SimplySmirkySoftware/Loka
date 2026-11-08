@@ -1,6 +1,7 @@
 #ifndef LOKA_WEB_SCENE_PLATFORM_CONTROLLER_HPP
 #define LOKA_WEB_SCENE_PLATFORM_CONTROLLER_HPP
 #include "WebResources.hpp"
+#include "WebTextLayout.hpp"
 #include "app/scene/projection/PlatformController.hpp"
 #include "app/scene/projection/PlatformLayoutHandler.hpp"
 #include "app/scene/projection/NativeNodeContext.hpp"
@@ -33,7 +34,7 @@ public:
   virtual bool readNativeFocus(loka::app::scene::NodeContext *&out);
   /** Cost: layout natural-size query; one own text run, O(scalars), no tree walk. */
   virtual bool queryNaturalWidth(loka::app::scene::Node *, short &) const;
-  /** Cost: layout natural-size query; O(1) fixed metric table for one leaf. */
+  /** Cost: layout natural-size query; one normalized temporary and service query for one leaf. */
   virtual bool queryNaturalHeight(loka::app::scene::Node *, short &) const;
   /** Cost: input receiver twice per click; bounded ancestor route lookup and
       App-owned pending-close query, O(pending closures), no scene walk. */
@@ -97,6 +98,7 @@ protected:
 #endif
   WebScenePlatformController &controller_;
   WebElement element_;
+  WebTextSlot projection_;
 };
 class WebTextContext : public WebElementContext
 {

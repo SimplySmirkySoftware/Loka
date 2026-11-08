@@ -639,6 +639,16 @@ int main(int argc, char **argv)
     ToolbarPaintPins();
     return 0;
   }
+  if (argc > 1 && std::string(argv[1]) == "attributed-ellipsis")
+  {
+    AttributedEllipsisPins(false);
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "attributed-ellipsis-refused")
+  {
+    AttributedEllipsisPins(true);
+    return 0;
+  }
   if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")
   {
     PlainEllipsisPins(false);
