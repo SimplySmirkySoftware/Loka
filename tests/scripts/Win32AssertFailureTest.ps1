@@ -12,9 +12,13 @@ $process = $null
 New-Item -ItemType Directory -Path $workDirectory | Out-Null
 try {
     $stopwatch = [Diagnostics.Stopwatch]::StartNew()
+    # -NoNewWindow keeps the console child in this console. Without it an
+    # interactive session gives the child its own console window, which is
+    # the process's MainWindowHandle and read as a dialog below (#1210).
     $process = Start-Process `
         -FilePath $TestExecutable `
         -ArgumentList "--win32-assert-probe" `
+        -NoNewWindow `
         -RedirectStandardOutput $stdoutPath `
         -RedirectStandardError $stderrPath `
         -PassThru
