@@ -1,8 +1,8 @@
 #include <cstdio>
 #include <cstring>
 #include <Gestalt.h>
-#include <Palettes.h>
 #include <Memory.h>
+#include "StandaloneScreenDepth.hpp"
 #include "ToolboxProbeTiming.hpp"
 #include "FrostStandaloneSupport.hpp"
 #include "StandaloneFlowRunner.hpp"
@@ -110,7 +110,9 @@ namespace
         if (size > 1024L * 1024L)
           size = 1024L * 1024L;
         Ptr storage = 0;
-        for (; size >= 1024 && !storage; size /= 2)
+        // Halve on refusal, but never below what is left above the reserve:
+        // a 1 KiB floor stopped short at 4,938 bytes once the heap moved.
+        for (; size >= static_cast<Size>(sizeof(Block)) && !storage; size /= 2)
           storage = NewPtr(size);
         if (!storage)
           return false;
@@ -335,8 +337,6 @@ namespace
           phase_(0),
           pass_(0),
           fail_(0),
-          originalDepth_(0),
-          depthReady_(false),
           eligible_(false)
     {
       if (loka::platform::file::ResolveApplicationSidecar(
@@ -351,8 +351,7 @@ namespace
     {
       // finish() restores the depth and writes the verdict while the runner can
       // still read exitCode(); this only covers a run that never reached it.
-      if (this->depthReady_)
-        SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
+      this->depth_.restore();
       if (this->log_)
         std::fclose(this->log_);
     }
@@ -383,8 +382,8 @@ namespace
     FrostNode *node_;
     FILE *log_;
     int phase_, pass_, fail_;
-    short originalDepth_;
-    bool depthReady_, eligible_;
+    StandaloneScreenDepth depth_;
+    bool eligible_;
     loka::platform::file::FileHandle file_;
 
     void record(const char *name, bool ok)
@@ -397,10 +396,9 @@ namespace
     }
     void finish()
     {
-      if (this->depthReady_)
+      if (this->depth_.accepted())
       {
-        const OSErr result = SetDepth(GetMainDevice(), this->originalDepth_, 1, 1);
-        this->depthReady_ = false;
+        const OSErr result = this->depth_.restore();
         std::fprintf(this->log_, "restore-depth err=%d\r", result);
         if (result != noErr)
           ++this->fail_;
@@ -419,14 +417,12 @@ namespace
     {
       if (this->phase_++ == 0)
       {
-        this->originalDepth_ = (**(**GetMainDevice()).gdPMap).pixelSize;
-        this->depthReady_ = HasDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1)
-                            && SetDepth(GetMainDevice(), LOKA_FROST_STANDALONE_DEPTH, 1, 1) == noErr;
+        this->depth_.request(LOKA_FROST_STANDALONE_DEPTH);
         std::fprintf(this->log_,
                      "depth requested=%d original=%d accepted=%d\r",
                      LOKA_FROST_STANDALONE_DEPTH,
-                     this->originalDepth_,
-                     this->depthReady_);
+                     this->depth_.originalDepth(),
+                     this->depth_.accepted());
         loka::platform::file::FlushWrite(this->log_, this->file_);
         this->node_->show();
         return;
@@ -456,9 +452,9 @@ namespace
                      depth,
                      contained);
         this->record("gates", qdAnswered && contained);
-        this->eligible_ = this->depthReady_ && qd >= gestalt32BitQD && fpuAnswered && fpu != TOOLBOX_FPU_NONE
+        this->eligible_ = this->depth_.accepted() && qd >= gestalt32BitQD && fpuAnswered && fpu != TOOLBOX_FPU_NONE
                           && depth >= 8 && contained;
-        if (!this->depthReady_)
+        if (!this->depth_.accepted())
         {
           std::fprintf(this->log_, "[skip] depth-dependent checks: HasDepth/SetDepth refused\r");
           this->finish();
