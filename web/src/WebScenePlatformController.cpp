@@ -202,49 +202,50 @@ bool WebScenePlatformController::readNativeFocus(NodeContext *&out)
   out = row && row->leaf && &row->leaf->controller() == this ? row->leaf : 0;
   return true;
 }
-/** PR 1 uses a fixed metric table: 8 CSS px per scalar, Text height 16,
-    Button height 24 and horizontal inset 16. The INaturalSizeSource seam is
-    real; page 3 owns native font metrics and wrapping. Cost: one own text run
-    per natural-size query, O(scalars); no foreign rows. */
+namespace
+{
+  /** Cost: layout/query once per leaf; snapshots only the leaf's own current props. */
+  struct TextInput
+  {
+    explicit TextInput(Node *node)
+        : button(node && node->asButtonNode()),
+          style(),
+          block(),
+          text()
+    {
+      loka::core::State<loka::core::String> *state = 0;
+      if (TextNode *t = node ? node->asTextNode() : 0)
+      {
+        state = t->props.text_;
+        style = t->props.resolvedTextStyle();
+        block = t->props.blockStyle_;
+      }
+      else if (ButtonNode *b = node ? node->asButtonNode() : 0)
+        state = b->props.text_;
+      if (state)
+        text = state->get();
+    }
+    const bool button;
+    TextStyle style;
+    BlockStyle block;
+    loka::core::String text;
+  };
+} // namespace
 bool WebScenePlatformController::queryNaturalWidth(Node *node, short &out) const
 {
-  loka::core::State<loka::core::String> *state = 0;
-  int inset = 0;
-  if (TextNode *text = node ? node->asTextNode() : 0)
-    state = text->props.text_;
-  else if (ButtonNode *button = node ? node->asButtonNode() : 0)
-  {
-    state = button->props.text_;
-    inset = 16;
-  }
-  else
+  if (!node || (!node->asTextNode() && !node->asButtonNode()))
     return false;
-  if (!state)
-    return false;
-  loka::core::StringBuffer buffer(loka::core::StringEncodingUtf32);
-  if (!state->get().assignToBuffer(buffer))
-    return false;
-  const std::size_t length = buffer.length();
-  if (length > static_cast<std::size_t>((SHRT_MAX - inset) / 8))
-    return false;
-  if (length == 0 && inset == 0)
-    return false;
-  out = static_cast<short>(length * 8 + inset);
-  return true;
+  const TextInput input(node);
+  return WebTextLayout::natural(
+      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), input.button, false, out);
 }
 bool WebScenePlatformController::queryNaturalHeight(Node *node, short &out) const
 {
-  if (node && node->asTextNode())
-  {
-    out = 16;
-    return true;
-  }
-  if (node && node->asButtonNode())
-  {
-    out = 24;
-    return true;
-  }
-  return false;
+  if (!node || (!node->asTextNode() && !node->asButtonNode()))
+    return false;
+  const TextInput input(node);
+  return WebTextLayout::natural(
+      input.text, WebTextConstraint(WebFontKey(input.style), input.block, 0), input.button, true, out);
 }
 int WebScenePlatformController::layoutNode(Node *node, const LayoutState &received)
 {
@@ -308,7 +309,10 @@ void WebElementContext::readLifecycleFactOnAttach()
 void WebElementContext::onFactChanged(NodeLifecycleFact, NodeLifecycleFact next)
 {
   if (next == NODE_FACT_RETIRED)
+  {
+    this->projection_.clear();
     this->controller_.retire(this->element_);
+  }
   else
     web_set_hidden(this->element_.token(), next != NODE_FACT_ATTACHED);
 }
@@ -327,37 +331,54 @@ bool WebElementContext::active() const
 }
 short WebElementContext::layout(IPlatformController *, LayoutState &state)
 {
-  short height = 0;
-  if (!this->controller_.queryNaturalHeight(this->owner(), height))
+  const TextInput input(this->owner());
+  const WebTextConstraint constraint(WebFontKey(input.style), input.block, state.width);
+  bool reusable = false;
+  int status = WEB_MEASURE_OK;
+  if (this->projection_.get() && this->projection_.get()->constraint() == constraint)
+    status = this->projection_.get()->matches(input.text, input.button, reusable);
+  if (status == WEB_MEASURE_OK && !reusable)
   {
-    this->controller_.refuseTextMeasurement(this->owner(), state);
-    return state.y;
+    WebTextSnapshot *built = 0;
+    status = WebTextLayout::build(input.text, constraint, input.button, built);
+    if (status == WEB_MEASURE_OK)
+      this->projection_.replace(built);
   }
-  state.height = height;
-  web_set_rect(this->element_.token(), state.x, state.y, state.width, height);
-  return Narrow(state.y + height);
+  if (status == WEB_MEASURE_REFUSED)
+    this->controller_.refuseTextMeasurement(this->owner(), state);
+  int height = this->projection_.get() ? this->projection_.get()->extent().height : 0;
+  if (input.button && this->projection_.get())
+    height += 2 * (kWebButtonInsetY + kWebButtonBorder);
+  state.height = Narrow(height);
+  web_set_rect(this->element_.token(), state.x, state.y, state.width, state.height);
+  return Narrow(state.y + state.height);
 }
 void WebElementContext::render(IPlatformController *)
 {
-  loka::core::State<loka::core::String> *text = 0;
-  if (TextNode *node = this->owner()->asTextNode())
-  {
-    text = node->props.text_;
-    const WebTextDescriptor descriptor(node->props.resolvedTextStyle());
-    if (!web_set_text_style(this->element_.token(), descriptor.data(), descriptor.count()))
-    {
-      assert(false && "Web text protocol refusal");
-      return;
-    }
-  }
-  else if (ButtonNode *button = this->owner()->asButtonNode())
-  {
-    text = button->props.text_;
+  const TextInput input(this->owner());
+  if (ButtonNode *button = this->owner()->asButtonNode())
     web_set_enabled(this->element_.token(), !button->props.enabled_ || button->props.enabled_->get());
+  const WebTextSnapshot *snapshot = this->projection_.get();
+  if (!snapshot)
+  {
+    web_set_projected(this->element_.token(), 0);
+    web_set_text(this->element_.token(), "", 0);
+    return;
   }
-  std::string bytes;
-  if (text && loka::platform::CollectUtf8(text->get(), bytes))
-    web_set_text(this->element_.token(), bytes.data(), static_cast<unsigned>(bytes.size()));
+  // Unconditional projection order: projected, style, line-height, block, text.
+  web_set_projected(this->element_.token(), 1);
+  const WebTextDescriptor descriptor = WebMetricDescriptor(snapshot->constraint().fontKey, input.style);
+  if (!web_set_text_style(this->element_.token(), descriptor.data(), descriptor.count()))
+  {
+    assert(false && "Web text protocol refusal");
+    return;
+  }
+  web_set_line_height(this->element_.token(), snapshot->metrics().ascent + snapshot->metrics().descent);
+  const BlockStyle &block = snapshot->constraint().block;
+  web_set_block(this->element_.token(),
+                block.hasAlign_ ? block.align_ : TEXT_ALIGN_LEFT,
+                block.hasTruncation_ ? block.truncation_ : TEXT_TRUNCATION_NONE);
+  web_set_text(this->element_.token(), snapshot->joined(), snapshot->joinedLength());
 }
 bool WebElementContext::acceptsInstallation() const
 {

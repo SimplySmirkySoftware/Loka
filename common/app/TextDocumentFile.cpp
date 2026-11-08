@@ -75,6 +75,45 @@ namespace loka
         std::size_t position_;
       };
 
+      /** Shared byte-read routing; callers own validation, sealing and publication. */
+      TextDocumentResult readTextBytes(PlatformContext *context,
+                                       const file::File &file,
+                                       const platform::file::ReadCapacity *capacity,
+                                       core::resource::Blob &bytes)
+      {
+        using namespace platform::file;
+        if (file.base() == loka::file::File::BASE_REFUSED)
+          return TEXT_DOCUMENT_READ_FAILED;
+        FileHandle handle;
+        const bool resolved = context && context->openFile(file, handle);
+        const bool located = !file.locator().empty();
+        if (located && !resolved)
+          return TEXT_DOCUMENT_READ_FAILED;
+        bytes = core::resource::Blob::Create();
+        if (!bytes.isValid())
+          return TEXT_DOCUMENT_ALLOCATION;
+        ReadResult result;
+        if (resolved)
+        {
+          result = ReadBytes(handle, bytes, capacity);
+          if (!located && result != READ_OK && result != READ_CAPACITY_REFUSED && result != READ_ALLOCATION_REFUSED)
+            result = ReadBytes(file.base() == loka::file::File::BASE_APPLICATION ? handle.displayPath : file.toString(),
+                               bytes,
+                               capacity);
+        }
+        else if (file.base() == loka::file::File::BASE_APPLICATION)
+          return TEXT_DOCUMENT_READ_FAILED; // unresolved: no path to flatten
+        else
+          result = ReadBytes(file.toString(), bytes, capacity);
+        if (result == READ_ALLOCATION_REFUSED)
+          return TEXT_DOCUMENT_ALLOCATION;
+        if (result == READ_CAPACITY_REFUSED || result == READ_SIZE_OVERFLOW)
+          return TEXT_DOCUMENT_TOO_LARGE;
+        if (result != READ_OK)
+          return TEXT_DOCUMENT_READ_FAILED;
+        return TEXT_DOCUMENT_OK;
+      }
+
       TextDocumentResult commitResult(core::ListEditResult result)
       {
         switch (result)
@@ -119,36 +158,11 @@ namespace loka
       const core::ListEditResult ready = lines.queryMutationTracker(tracker);
       if (ready != core::EDIT_OK)
         return commitResult(ready);
-      if (file.base() == loka::file::File::BASE_REFUSED)
-        return TEXT_DOCUMENT_READ_FAILED;
-      FileHandle handle;
-      const bool resolved = context && context->openFile(file, handle);
-      const bool located = !file.locator().empty();
-      if (located && !resolved)
-        return TEXT_DOCUMENT_READ_FAILED;
-      core::resource::Blob bytes = core::resource::Blob::Create();
-      if (!bytes.isValid())
-        return TEXT_DOCUMENT_ALLOCATION;
+      core::resource::Blob bytes;
       const TextReadCapacity capacity(buffer.capacity());
-      ReadResult result;
-      if (resolved)
-      {
-        result = ReadBytes(handle, bytes, &capacity);
-        if (!located && result != READ_OK && result != READ_CAPACITY_REFUSED && result != READ_ALLOCATION_REFUSED)
-          result = ReadBytes(file.base() == loka::file::File::BASE_APPLICATION ? handle.displayPath : file.toString(),
-                             bytes,
-                             &capacity);
-      }
-      else if (file.base() == loka::file::File::BASE_APPLICATION)
-        return TEXT_DOCUMENT_READ_FAILED; // unresolved: no path to flatten
-      else
-        result = ReadBytes(file.toString(), bytes, &capacity);
-      if (result == READ_ALLOCATION_REFUSED)
-        return TEXT_DOCUMENT_ALLOCATION;
-      if (result == READ_CAPACITY_REFUSED || result == READ_SIZE_OVERFLOW)
-        return TEXT_DOCUMENT_TOO_LARGE;
-      if (result != READ_OK)
-        return TEXT_DOCUMENT_READ_FAILED;
+      const TextDocumentResult result = readTextBytes(context, file, &capacity, bytes);
+      if (result != TEXT_DOCUMENT_OK)
+        return result;
 
       PreparedTextReplacement replacement;
       if (!replacement.reserve(buffer.capacity().lines))
@@ -193,6 +207,33 @@ namespace loka
       replacement.seal();
       DocumentReplaceCursor ops(lines, replacement.data(), static_cast<unsigned short>(count));
       return commitResult(lines.apply(ops));
+    }
+
+    TextDocumentResult
+    ReadTextReplacement(PlatformContext &context, const file::File &file, TextPlacement placement, TextReplacement &out)
+    {
+      core::resource::Blob bytes;
+      const TextDocumentResult read = readTextBytes(&context, file, 0, bytes);
+      if (read != TEXT_DOCUMENT_OK)
+        return read;
+      if (bytes.size() >= sizeof(kTextDocumentBom)
+          && std::memcmp(bytes.data(), kTextDocumentBom, sizeof(kTextDocumentBom)) == 0)
+      {
+        const std::size_t length = bytes.size() - sizeof(kTextDocumentBom);
+        if (length)
+          std::memmove(bytes.mutableData(), bytes.data() + sizeof(kTextDocumentBom), length);
+        if (!bytes.tryResize(length))
+          return TEXT_DOCUMENT_ALLOCATION;
+      }
+      unsigned long length = 0;
+      const TextDocumentResult valid = TextReplacement::measure(bytes, length);
+      if (valid != TEXT_DOCUMENT_OK)
+        return valid;
+      bytes.sealBytes();
+      TextReplacement replacement(TextReplacement::BYTES, bytes, placement, length);
+      replacement.source_ = file;
+      out = replacement;
+      return TEXT_DOCUMENT_OK;
     }
 
     TextDocumentResult

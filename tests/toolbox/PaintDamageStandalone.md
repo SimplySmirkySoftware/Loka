@@ -277,7 +277,9 @@ paint, and 4 for a finished noncovering paint. `coverage` is `window` for rule 3
 retain entry coverage. Site literals exist only in diagnostic builds; a missing
 site prints `-`. These lines describe the same selected snapshot, not a history
 of every pass. Every render exit publishes `lastPresentObservation`, including
-early returns; host tests read that copy directly. A window-shell failure after
+early returns; host tests read that copy directly. The retained `resetRoot()` failure
+return publishes rule 2 under `NDEBUG`; the host pin skips assertion builds because
+the scope-balance assert precedes that return. A window-shell failure after
 render (for example, allocating the grow-box clip) can lower the live eligibility
 after a clean published result, so the next admission can enter refused.
 The tracked target audit requires delegator capture; Linux does not establish its

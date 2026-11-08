@@ -45,7 +45,8 @@ namespace
             const std::string &text = "abcd",
             unsigned short capacity = 256,
             bool preContextRequest = false,
-            std::size_t byteCapacity = 8192)
+            std::size_t byteCapacity = 8192,
+            short fontSize = 12)
         : tracker(*HeadlessStateOwner::tracker()->asPushTracker()),
           controller(&window),
           node(TextEditorProps(lines, cursor)),
@@ -80,6 +81,7 @@ namespace
       LOKA_VERIFY(context->layout(&controller, state) == 200);
       LOKA_VERIFY(state.y == 100);
       LOKA_VERIFY(!ToolboxTextEditorAccess::te(*context));
+      this->window.port.txSize = fontSize;
       context->render(&controller);
       // Seed native editing through its input seam; request tests post explicitly.
       if (!preContextRequest && count && ToolboxTextEditorAccess::status(*context) == EDITOR_OK)
@@ -865,8 +867,28 @@ void editorPreflightPins()
   LOKA_VERIFY(f.controller.isPointInEdit(point));
   std::puts("clip preflight TextEditor pair and outer ensure/reach passed");
 }
+static void editorBusyPins()
+{
+  for (short size = 12; size >= 9; size -= 3)
+  {
+    std::printf("[pin] ToolboxTextEditorCreationBusy port=%d\n", size);
+    std::fflush(stdout);
+    Fixture f(3, "abcd", 256, false, 8192, size);
+    LOKA_VERIFY(f.controller.cursor.entries == (size == 12 ? 1 : 0));
+    LOKA_VERIFY(f.controller.cursor.depth == 0);
+    LOKA_VERIFY((**f.te()).txFont == 4 && (**f.te()).txSize == 9);
+    LOKA_VERIFY((**f.te()).lineHeight == 14 && (**f.te()).fontAscent == 9);
+    LOKA_VERIFY(f.window.port.txFont == 3 && f.window.port.txSize == size && f.window.port.txFace == 0);
+  }
+}
 int main(int argc, char **argv)
 {
+  if (argc == 1 || (argc == 2 && std::strcmp(argv[1], "busy-creation") == 0))
+  {
+    editorBusyPins();
+    if (argc == 2)
+      return 0;
+  }
   if (argc == 2 && std::strcmp(argv[1], "clip-omission") == 0)
     editorPreflightPins();
   if (argc == 2 && (std::strcmp(argv[1], "clip-omission") == 0 || std::strcmp(argv[1], "clip-visible-refused") == 0))

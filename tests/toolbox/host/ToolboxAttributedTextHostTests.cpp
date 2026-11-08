@@ -232,11 +232,26 @@ namespace
       LOKA_VERIFY(controller.cursor.depth == 0);
     }
     LOKA_VERIFY(controller.cursor.entries == entries);
-    Pin("ToolboxSelectionBusyLargestOnly");
+    Pin("ToolboxSelectionBusyAnyDifferentSize");
+    window.port.txSize = 12;
     const ToolboxTextFontDescriptor sizes[] = {ToolboxTextFontDescriptor(SmallLabel),
                                                ToolboxTextFontDescriptor(FontSize<12>())};
+    const ToolboxTextFontDescriptor reversed[] = {sizes[1], sizes[0]};
+    for (int order = 0; order < 2; ++order)
     {
-      ToolboxTextMeasureScope scope(controller, sizes, 2);
+      entries = controller.cursor.entries;
+      {
+        ToolboxTextMeasureScope scope(controller, order ? reversed : sizes, 2);
+        LOKA_VERIFY(controller.cursor.depth == 1);
+      }
+      LOKA_VERIFY(controller.cursor.entries == entries + 1 && controller.cursor.depth == 0);
+    }
+    Pin("ToolboxSelectionBusyAllBaselineSizes");
+    window.port.txSize = 0;
+    const ToolboxTextFontDescriptor baselineSizes[] = {empty, ToolboxTextFontDescriptor(FontSize<12>())};
+    entries = controller.cursor.entries;
+    {
+      ToolboxTextMeasureScope scope(controller, baselineSizes, 2);
       LOKA_VERIFY(controller.cursor.depth == 0);
     }
     LOKA_VERIFY(controller.cursor.entries == entries);
@@ -622,6 +637,16 @@ int main(int argc, char **argv)
   if (argc > 1 && std::string(argv[1]) == "toolbar")
   {
     ToolbarPaintPins();
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "attributed-ellipsis")
+  {
+    AttributedEllipsisPins(false);
+    return 0;
+  }
+  if (argc > 1 && std::string(argv[1]) == "attributed-ellipsis-refused")
+  {
+    AttributedEllipsisPins(true);
     return 0;
   }
   if (argc > 1 && std::string(argv[1]) == "plain-ellipsis")
