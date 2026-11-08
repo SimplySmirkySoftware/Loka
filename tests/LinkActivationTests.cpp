@@ -58,7 +58,7 @@ namespace
   void *retiringData = 0;
   unsigned retiredRuns = 0;
   class LinkRoot;
-  LinkRoot *root = 0;
+  LinkRoot *linkRoot = 0;
   class LinkRoot : public BoundaryNodeFor<LinkRoot>
   {
   public:
@@ -82,7 +82,7 @@ namespace
           paragraph(0),
           input(0)
     {
-      root = this;
+      linkRoot = this;
       this->state(this->a, LinkTarget());
       this->state(this->b, LinkTarget());
       this->state(this->shown, true);
@@ -158,17 +158,17 @@ namespace
           app(window)
     {
       this->app.flush();
-      root->paragraph = findText(loka::dsl::testing::SceneTestAccess::rootBoundary(*this->window.scene()));
-      LOKA_VERIFY(root->paragraph);
+      linkRoot->paragraph = findText(loka::dsl::testing::SceneTestAccess::rootBoundary(*this->window.scene()));
+      LOKA_VERIFY(linkRoot->paragraph);
       LayoutState layout;
       layout.width = 200;
-      this->platform.projectLayoutForTesting(root->paragraph, layout);
-      root->input = static_cast<NullAttributedTextContext *>(root->paragraph->getContext());
-      LOKA_VERIFY(root->input);
+      this->platform.projectLayoutForTesting(linkRoot->paragraph, layout);
+      linkRoot->input = static_cast<NullAttributedTextContext *>(linkRoot->paragraph->getContext());
+      LOKA_VERIFY(linkRoot->input);
     }
     bool activate(std::size_t index)
     {
-      return NullInputDoor::activateLink(*root->input, index);
+      return NullInputDoor::activateLink(*linkRoot->input, index);
     }
   };
 } // namespace
@@ -179,23 +179,23 @@ void testLinkActivationDelivery()
   Operation::Regime regime;
   Operation turn;
   LOKA_VERIFY(f.activate(0));
-  LOKA_VERIFY(root->a.get() == anchor() && root->notificationsA == 1 && root->runs == 1);
+  LOKA_VERIFY(linkRoot->a.get() == anchor() && linkRoot->notificationsA == 1 && linkRoot->runs == 1);
   LOKA_VERIFY(f.activate(0));
-  LOKA_VERIFY(root->notificationsA == 2 && root->runs == 2);
+  LOKA_VERIFY(linkRoot->notificationsA == 2 && linkRoot->runs == 2);
   LOKA_VERIFY(f.activate(1));
-  LOKA_VERIFY(root->a.get() == web() && root->opener.pending() == 1);
+  LOKA_VERIFY(linkRoot->a.get() == web() && linkRoot->opener.pending() == 1);
   for (unsigned i = 2; i != 5; ++i)
     LOKA_VERIFY(!f.activate(i));
-  LOKA_VERIFY(root->notificationsA == 3 && root->a.get() == web());
+  LOKA_VERIFY(linkRoot->notificationsA == 3 && linkRoot->a.get() == web());
   AttributedText noBox(links());
-  LOKA_VERIFY(noBox.applyPropsToNode(root->paragraph));
+  LOKA_VERIFY(noBox.applyPropsToNode(linkRoot->paragraph));
   LOKA_VERIFY(!f.activate(0));
-  LOKA_VERIFY(root->notificationsA == 3);
+  LOKA_VERIFY(linkRoot->notificationsA == 3);
   AttributedText noText;
-  noText.activatedLink(root->a);
-  LOKA_VERIFY(noText.applyPropsToNode(root->paragraph));
+  noText.activatedLink(linkRoot->a);
+  LOKA_VERIFY(noText.applyPropsToNode(linkRoot->paragraph));
   LOKA_VERIFY(!f.activate(0));
-  LOKA_VERIFY(root->notificationsA == 3);
+  LOKA_VERIFY(linkRoot->notificationsA == 3);
 }
 
 void testLinkActivationProps()
@@ -204,26 +204,26 @@ void testLinkActivationProps()
   Operation::Regime regime;
   Operation turn;
   LOKA_VERIFY(f.activate(0));
-  LOKA_VERIFY(root->notificationsA == 1);
+  LOKA_VERIFY(linkRoot->notificationsA == 1);
   MutableState<AttributedString> borrowed(links());
   for (unsigned owned = 0; owned != 2; ++owned)
   {
     AttributedTextProps a = owned ? AttributedTextProps(links()) : AttributedTextProps(&borrowed);
-    a.activatedLink(root->a);
+    a.activatedLink(linkRoot->a);
     AttributedTextProps b(a);
-    LOKA_VERIFY(b.activatedLink_.state() == root->a.state());
-    b.activatedLink(root->b);
+    LOKA_VERIFY(b.activatedLink_.state() == linkRoot->a.state());
+    b.activatedLink(linkRoot->b);
     LOKA_VERIFY((a < b) || (b < a));
     a = b;
-    LOKA_VERIFY(a.activatedLink_.state() == root->b.state());
+    LOKA_VERIFY(a.activatedLink_.state() == linkRoot->b.state());
     LOKA_VERIFY(a.text_ == (owned ? &a.ownedText : &borrowed));
-    AttributedTextDefinitionWithAttr styled = (AttributedText(a) + BlockStyle()).activatedLink(root->b);
-    LOKA_VERIFY(styled.applyPropsToNode(root->paragraph));
+    AttributedTextDefinitionWithAttr styled = (AttributedText(a) + BlockStyle()).activatedLink(linkRoot->b);
+    LOKA_VERIFY(styled.applyPropsToNode(linkRoot->paragraph));
     LOKA_VERIFY(f.activate(0));
-    LOKA_VERIFY(root->notificationsA == 1 && root->notificationsB == owned + 1);
+    LOKA_VERIFY(linkRoot->notificationsA == 1 && linkRoot->notificationsB == owned + 1);
   }
-  AttributedTextDefinitionWithAttr styled = AttributedText(links()).activatedLink(root->a) + BlockStyle();
-  LOKA_VERIFY(styled.props.activatedLink_.state() == root->a.state());
+  AttributedTextDefinitionWithAttr styled = AttributedText(links()).activatedLink(linkRoot->a) + BlockStyle();
+  LOKA_VERIFY(styled.props.activatedLink_.state() == linkRoot->a.state());
 }
 
 void testLinkActivationReentrancy()
@@ -233,28 +233,28 @@ void testLinkActivationReentrancy()
     Fixture f;
     Operation::Regime regime;
     Operation turn;
-    root->mode = mode;
+    linkRoot->mode = mode;
     LOKA_VERIFY(f.activate(0));
-    LOKA_VERIFY(root->runs == 1);
+    LOKA_VERIFY(linkRoot->runs == 1);
     if (mode == 1)
     {
-      LOKA_VERIFY(root->notificationsA == 1 && root->notificationsB == 1);
-      LOKA_VERIFY(root->a.get() == anchor() && root->b.get() == web());
+      LOKA_VERIFY(linkRoot->notificationsA == 1 && linkRoot->notificationsB == 1);
+      LOKA_VERIFY(linkRoot->a.get() == anchor() && linkRoot->b.get() == web());
     }
     if (mode == 3)
     {
-      LOKA_VERIFY(root->notificationsA == 2 && root->a.get() == web());
-      LOKA_VERIFY(root->opener.pending() == 0);
+      LOKA_VERIFY(linkRoot->notificationsA == 2 && linkRoot->a.get() == web());
+      LOKA_VERIFY(linkRoot->opener.pending() == 0);
     }
     if (mode == 2)
     {
       LOKA_VERIFY(f.activate(1));
-      LOKA_VERIFY(root->runs == 1 && root->a.get() == web() && root->opener.pending() == 0);
-      root->ready = true;
-      LOKA_VERIFY(root->flow.resumeResult(1) == FLOW_RUN_SUCCEEDED);
-      LOKA_VERIFY(root->runs == 2 && root->opener.pending() == 0);
+      LOKA_VERIFY(linkRoot->runs == 1 && linkRoot->a.get() == web() && linkRoot->opener.pending() == 0);
+      linkRoot->ready = true;
+      LOKA_VERIFY(linkRoot->flow.resumeResult(1) == FLOW_RUN_SUCCEEDED);
+      LOKA_VERIFY(linkRoot->runs == 2 && linkRoot->opener.pending() == 0);
       LOKA_VERIFY(f.activate(0));
-      LOKA_VERIFY(root->runs == 3 && root->notificationsA == 3);
+      LOKA_VERIFY(linkRoot->runs == 3 && linkRoot->notificationsA == 3);
     }
   }
 }
@@ -266,29 +266,29 @@ void testLinkActivationLifecycle()
   {
     Operation turn;
     LOKA_VERIFY(f.activate(0));
-    NotifySubtreeNodeDetached(root->paragraph);
-    LOKA_VERIFY(root->paragraph->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
+    NotifySubtreeNodeDetached(linkRoot->paragraph);
+    LOKA_VERIFY(linkRoot->paragraph->lifecycleFact() == NODE_FACT_DETACHED_RETAINED);
     LOKA_VERIFY(!f.activate(0));
-    LOKA_VERIFY(root->notificationsA == 1);
+    LOKA_VERIFY(linkRoot->notificationsA == 1);
   }
   {
     Operation turn;
-    root->shown.set(false);
+    linkRoot->shown.set(false);
   }
   f.app.operationLoop();
   {
     Operation turn;
-    root->shown.set(true);
+    linkRoot->shown.set(true);
   }
   f.app.operationLoop();
-  LOKA_VERIFY(root->notificationsA == 1);
+  LOKA_VERIFY(linkRoot->notificationsA == 1);
   {
     Operation turn;
     LOKA_VERIFY(f.activate(0));
-    LOKA_VERIFY(root->notificationsA == 2);
-    LifecycleFactTestAccess::MarkSubtreeRetired(root->paragraph);
+    LOKA_VERIFY(linkRoot->notificationsA == 2);
+    LifecycleFactTestAccess::MarkSubtreeRetired(linkRoot->paragraph);
     LOKA_VERIFY(!f.activate(0));
-    LOKA_VERIFY(root->notificationsA == 2);
+    LOKA_VERIFY(linkRoot->notificationsA == 2);
   }
 }
 
@@ -313,14 +313,14 @@ void testLinkActivationRegimes()
   {
     Fixture f;
     LOKA_VERIFY(f.activate(0));
-    LOKA_VERIFY(root->notificationsA == 1 && root->tracker()->phase() == TRACKER_IDLE);
+    LOKA_VERIFY(linkRoot->notificationsA == 1 && linkRoot->tracker()->phase() == TRACKER_IDLE);
   }
 #if defined(NDEBUG)
   Fixture f;
   Operation::Regime regime;
-  LOKA_VERIFY(Operation::openActive(root->tracker()) == OPEN_NO_CLOCK);
+  LOKA_VERIFY(Operation::openActive(linkRoot->tracker()) == OPEN_NO_CLOCK);
   LOKA_VERIFY(f.activate(0));
-  LOKA_VERIFY(root->notificationsA == 1 && root->tracker()->phase() == TRACKER_IDLE);
+  LOKA_VERIFY(linkRoot->notificationsA == 1 && linkRoot->tracker()->phase() == TRACKER_IDLE);
 #elif defined(__linux__) && !defined(__SANITIZE_ADDRESS__)
   const pid_t child = fork();
   LOKA_VERIFY(child >= 0);
@@ -378,11 +378,11 @@ namespace
   void retireScene(void *data)
   {
     Fixture &f = *static_cast<Fixture *>(data);
-    AttributedTextNode *paragraph = root->paragraph;
-    NullAttributedTextContext *input = root->input;
+    AttributedTextNode *paragraph = linkRoot->paragraph;
+    NullAttributedTextContext *input = linkRoot->input;
     // Existing Flow withdrawal fixture: retire synchronously, reclaim only
     // after the running arm returns through the real Scene replacement clock.
-    LifecycleFactTestAccess::MarkSubtreeRetired(root);
+    LifecycleFactTestAccess::MarkSubtreeRetired(linkRoot);
     LOKA_VERIFY(paragraph->lifecycleFact() == NODE_FACT_RETIRED);
     LOKA_VERIFY(!NullInputDoor::activateLink(*input, 0));
     LOKA_VERIFY(f.window.sceneManager()->commitTransaction(0, new Scene(Boundary<LinkRoot>())));
@@ -397,17 +397,17 @@ void testLinkActivationPlacement()
   Operation turn;
   LayoutState bounds;
   bounds.width = 200;
-  f.platform.projectLayoutForTesting(root->paragraph, bounds);
+  f.platform.projectLayoutForTesting(linkRoot->paragraph, bounds);
   f.window.scene()->requestInvalidate();
   turn.settle();
   f.app.admitAndApplyWindows();
-  LOKA_VERIFY(root->notificationsA == 0);
+  LOKA_VERIFY(linkRoot->notificationsA == 0);
   DirtyCount dirty;
-  root->paragraph->declareDirtySources(dirty);
+  linkRoot->paragraph->declareDirtySources(dirty);
   LOKA_VERIFY(dirty.calls == 0);
   layout.inject = true;
-  layout.prepareProjectedLayout(root->paragraph, bounds);
-  LOKA_VERIFY(root->notificationsA == 1);
+  layout.prepareProjectedLayout(linkRoot->paragraph, bounds);
+  LOKA_VERIFY(linkRoot->notificationsA == 1);
 }
 void testLinkActivationRetiringArm()
 {
@@ -418,7 +418,7 @@ void testLinkActivationRetiringArm()
     retiringAction = &retireScene;
     retiringData = &f;
     retiredRuns = 0;
-    root->mode = 4;
+    linkRoot->mode = 4;
     {
       Operation turn;
       LOKA_VERIFY(f.activate(0));
@@ -454,9 +454,9 @@ void testLinkActivationCompletion()
   LinkConfig config(f.context);
   NullWindow window(&f.context, WindowProps());
   WindowAdmissionTestApp app(window, 0, &config);
-  root->flow.set(Flow() | Match<LinkTarget, bool>(1).otherwise(&OpenWebLink, &config.opener))
-      .bindTrigger(root->a.state())
-      .withTracker(root->tracker());
+  linkRoot->flow.set(Flow() | Match<LinkTarget, bool>(1).otherwise(&OpenWebLink, &config.opener))
+      .bindTrigger(linkRoot->a.state())
+      .withTracker(linkRoot->tracker());
   Operation::Regime regime;
   {
     Operation turn;
@@ -498,17 +498,17 @@ void testLinkActivationClosingArm()
   app.run();
   loka::app::testing::AppTestAccess::completeTurn(app);
   NullWindow *window = static_cast<NullWindow *>(app.adoptedWindows()[0]);
-  root->paragraph = findText(loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene()));
-  root->input = static_cast<NullAttributedTextContext *>(root->paragraph->getContext());
-  LOKA_VERIFY(root->input);
-  root->mode = 4;
+  linkRoot->paragraph = findText(loka::dsl::testing::SceneTestAccess::rootBoundary(*window->scene()));
+  linkRoot->input = static_cast<NullAttributedTextContext *>(linkRoot->paragraph->getContext());
+  LOKA_VERIFY(linkRoot->input);
+  linkRoot->mode = 4;
   retiringAction = &closeOwnedWindow;
   retiringData = &app;
   retiredRuns = 0;
   Operation::Regime regime;
   {
     Operation turn;
-    LOKA_VERIFY(NullInputDoor::activateLink(*root->input, 0));
+    LOKA_VERIFY(NullInputDoor::activateLink(*linkRoot->input, 0));
     LOKA_VERIFY(retiredRuns == 1);
     LOKA_VERIFY(loka::app::testing::AppTestAccess::pendingWindowCloseCount(app) == 1);
   }
